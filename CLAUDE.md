@@ -14,8 +14,8 @@ Code comments are largely written in German — match that style when editing ex
 ## Build Commands
 
 ```bash
-make dev          # Recommended: release build in its own .build-dev (no lock contention with parallel chats), in-place sync to /Applications (preserves TCC permissions), launch
-make dev-release  # Same, but builds in the shared .build (old behaviour)
+make dev          # Recommended: incremental release build (no WMO, ~5 s per typical change) in its own .build-dev, in-place sync to /Applications (preserves TCC permissions), launch
+make dev-release  # Full release build (WMO, ~98 s) in the shared .build — as shipped, for performance measurements
 make run          # Quick debug build, runs from project dir (separate TCC entry)
 make build        # Release build only (creates local .app)
 make clean-install # Full reset (removes all app data + reinstall) — use to test onboarding/migrations
@@ -25,7 +25,7 @@ make skills       # Sync agent skills (Resources → Claude-Code-Plugin whisperm
 
 ```
 
-**`make dev` baut seit 11.10.2026 in einem eigenen Build-Ordner `.build-dev`** (Release): sonst hielt ein `swift build`/`swift test` anderer Chats den gemeinsamen `.build`-Lock. Debug mit `-O` wäre inkrementell ~6 s statt ~98 s, ist aber **bewusst nicht** aktiv: Debug baut SwiftTerm mit `-DDEBUG`, dort brechen vier Setter in `Buffer.swift` bei negativem Cursorwert per `abort()` ab (Release verwirft den Wert still) — erst nach einem Patch im SwiftTerm-Fork umstellen. Release ohne WMO hilft nicht (gemessen 132 s). Aus einem WhisperM8-Chat/-Terminal (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`, `dev-release`, `install`, `run`, `clean-install` ab; `FORCE=1` lässt `dev` nach dem Build abgekoppelt (`nohup`, Log in `$TMPDIR/whisperm8-make-dev.log`) weiterlaufen.
+**`make dev` baut seit 11.10.2026 Release ohne Whole-Module-Optimierung, mit `-incremental`, in einem eigenen Build-Ordner `.build-dev`**: typische Änderungen ~4–5 s statt ~98 s (WMO übersetzte immer das ganze Modul auf einem Kern); Änderungen an zentralen Modellen kaskadieren weiter (~45–80 s). SwiftPM schaltet `-incremental` im Release nicht selbst ein — ohne das Flag baute auch „ohne WMO" jedes Mal alles. **Kein Debug+O:** Debug definiert `DEBUG` für SwiftTerm, dort brechen vier Setter in `Buffer.swift` bei negativem Cursorwert per `abort()` ab. Ohne WMO fehlen dateiübergreifende Optimierungen — Messläufe gegen die Budgets mit `make dev-release`. Der eigene Ordner verhindert, dass `swift build`/`swift test` anderer Chats den `.build`-Lock halten. Nach dem Accessor-Patch werden die `resource_bundle_accessor.swift` wieder auf 444 gesetzt (sonst baute jeder Lauf doppelt). Aus einem WhisperM8-Chat/-Terminal (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`, `dev-release`, `install`, `run`, `clean-install` ab; `FORCE=1` lässt `dev` nach dem Build abgekoppelt (`nohup`, Log in `$TMPDIR/whisperm8-make-dev.log`) weiterlaufen.
 
 `make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).
 
