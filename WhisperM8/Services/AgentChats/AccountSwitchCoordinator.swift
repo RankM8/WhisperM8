@@ -30,8 +30,9 @@ final class AccountSwitchCoordinator {
     struct Dependencies {
         var isRunning: (UUID) -> Bool
         var processID: (UUID) -> pid_t?
-        /// Graceful beenden und den Store-Status von `running` auf `closed` setzen.
-        var terminate: (UUID) -> Void
+        /// Graceful beenden (gemeinsam, eine Wartezeit für alle) und den
+        /// Store-Status von `running` auf `closed` setzen.
+        var terminate: ([UUID]) -> Void
         var waitForExit: @Sendable (pid_t) async -> Bool
         var status: (UUID) -> AgentSessionRuntimeStatus?
         var mayHaveUnsentInput: (UUID) -> Bool
@@ -189,12 +190,9 @@ final class AccountSwitchCoordinator {
         inFlight.formUnion(ids)
         defer { inFlight.subtract(ids) }
 
-        var stopped: [(id: UUID, pid: pid_t?)] = []
-        for id in ids {
-            let pid = dependencies.processID(id)
-            dependencies.terminate(id)
-            stopped.append((id, pid))
-        }
+        // PIDs VOR dem Anhalten sichern — danach ist der Controller weg.
+        let stopped: [(id: UUID, pid: pid_t?)] = ids.map { ($0, dependencies.processID($0)) }
+        dependencies.terminate(ids)
 
         let waitForExit = dependencies.waitForExit
         let exited: Set<UUID> = await withTaskGroup(of: UUID?.self) { group in
@@ -269,10 +267,13 @@ extension AccountSwitchCoordinator.Dependencies {
         Self(
             isRunning: { AgentTerminalRegistry.shared.controller(for: $0)?.isRunning == true },
             processID: { AgentTerminalRegistry.shared.controller(for: $0)?.processID },
-            terminate: { id in
-                AgentTerminalRegistry.shared.terminate(sessionID: id)
-                try? AgentSessionStore().updateSession(id: id) { updated in
-                    if updated.status == .running { updated.status = .closed }
+            terminate: { ids in
+                AgentTerminalRegistry.shared.terminate(sessionIDs: ids)
+                let store = AgentSessionStore()
+                for id in ids {
+                    try? store.updateSession(id: id) { updated in
+                        if updated.status == .running { updated.status = .closed }
+                    }
                 }
             },
             waitForExit: { pid in await ProcessExitWaiter.waitForExit(pid: pid) },

@@ -399,6 +399,27 @@ final class AgentTerminalRegistry: ObservableObject {
         notifyRunningSetChanged()
     }
 
+    /// Mehrere Chats gemeinsam graceful anhalten (Kontowechsel „Alle Chats
+    /// hierher"): 2× Ctrl+C an alle, EINE gemeinsame Wartezeit, dann
+    /// terminieren — der Main Thread steht ~260 ms statt 260 ms pro Chat.
+    func terminate(sessionIDs: [UUID]) {
+        let targets = sessionIDs.compactMap { id in controllers[id].map { (id, $0) } }
+        guard !targets.isEmpty else { return }
+        if targets.count == 1 {
+            terminate(sessionID: targets[0].0)
+            return
+        }
+        for (_, controller) in targets { controller.sendInterruptForAppQuit() }
+        usleep(80_000)
+        for (_, controller) in targets { controller.sendInterruptForAppQuit() }
+        usleep(180_000)
+        for (id, controller) in targets {
+            controller.terminateAfterInterrupt()
+            controllers[id] = nil
+        }
+        notifyRunningSetChanged()
+    }
+
     private func notifyRunningSetChanged() {
         onRunningSetChanged?(activeSessionIDs)
     }
@@ -900,6 +921,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             terminal.send([0x03])
             usleep(180_000)
         }
+        terminateAfterInterrupt()
+    }
+
+    /// Zweiter Teil von `terminate()` — für das gemeinsame Anhalten mehrerer
+    /// Chats (`AgentTerminalRegistry.terminate(sessionIDs:)`), das die
+    /// Ctrl+C-Wartezeit einmal für alle zahlt statt einmal pro Chat.
+    func terminateAfterInterrupt() {
         // Gepufferte PTY-Bytes (Feed-Drosselung) VOR dem Terminieren
         // verarbeiten — sonst könnten die letzten ≤80 ms Output einer
         // gedrosselten Hintergrund-Pane verloren gehen (Review-Finding:

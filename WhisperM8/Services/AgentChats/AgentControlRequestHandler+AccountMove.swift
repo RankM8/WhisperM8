@@ -214,16 +214,17 @@ extension AgentControlRequestHandler {
             var stopped: [(id: UUID, pid: pid_t?)] = []
             if stopAndResume, !dryRun {
                 let store = AgentSessionStore()
-                for candidate in selection.toStop {
-                    let id = candidate.sessionID
-                    let pid = registry.controller(for: id)?.processID
-                    // Graceful wie `close --stop`: 2× Ctrl+C, letzter Flush,
-                    // dann SIGTERM. Der Tab bleibt offen.
-                    registry.terminate(sessionID: id)
+                let ids = selection.toStop.map(\.sessionID)
+                // PIDs vor dem Anhalten sichern — danach ist der Controller weg.
+                stopped = ids.map { ($0, registry.controller(for: $0)?.processID) }
+                // Graceful wie `close --stop` (2× Ctrl+C, letzter Flush, dann
+                // SIGTERM), aber gemeinsam: eine Wartezeit für alle Chats.
+                // Die Tabs bleiben offen.
+                registry.terminate(sessionIDs: ids)
+                for id in ids {
                     try? store.updateSession(id: id) { updated in
                         if updated.status == .running { updated.status = .closed }
                     }
-                    stopped.append((id, pid))
                 }
             }
 

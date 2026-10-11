@@ -90,6 +90,7 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         var hanging: Set<UUID> = []
         var pids: [UUID: pid_t] = [:]
         var terminated: [UUID] = []
+        var terminateCalls = 0
         var moved: [AccountMoveService.Move] = []
         var batchIDs: Set<UUID> = []
         var resumed: [UUID] = []
@@ -109,9 +110,12 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
             AccountSwitchCoordinator.Dependencies(
                 isRunning: { [unowned self] in running.contains($0) },
                 processID: { [unowned self] in pids[$0] },
-                terminate: { [unowned self] id in
-                    terminated.append(id)
-                    if !hanging.contains(id) { running.remove(id) }
+                terminate: { [unowned self] ids in
+                    terminateCalls += 1
+                    for id in ids {
+                        terminated.append(id)
+                        if !hanging.contains(id) { running.remove(id) }
+                    }
                 },
                 waitForExit: { [unowned self] pid in
                     await MainActor.run {
@@ -165,6 +169,18 @@ final class AccountSwitchCoordinatorTests: XCTestCase {
         XCTAssertEqual(world.moved.first?.toProfile, "ai2")
         XCTAssertEqual(world.resumed, [id])
         XCTAssertTrue(coordinator.pending.isEmpty)
+    }
+
+    func testSeveralIdleChatsAreStoppedTogether() async {
+        let world = World()
+        let ids = (1...4).map { world.addSession("ruht \($0)", running: true, status: .idle) }
+        let coordinator = AccountSwitchCoordinator(dependencies: world.dependencies)
+
+        _ = await decideAndRun(world, coordinator, ids)
+
+        XCTAssertEqual(world.terminateCalls, 1, "eine gemeinsame Ctrl+C-Wartezeit statt einer pro Chat")
+        XCTAssertEqual(Set(world.terminated), Set(ids))
+        XCTAssertEqual(Set(world.resumed), Set(ids))
     }
 
     func testStoppedAndIdleChatsShareOneJournalBatch() async {
