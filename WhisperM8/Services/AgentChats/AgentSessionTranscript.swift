@@ -316,20 +316,22 @@ enum AgentTranscriptLocator {
     }
 
     /// Claude legt seine Files unter `~/.claude/projects/<encoded-cwd>/<sessionID>.jsonl` ab.
-    /// Encoding: jeder Nicht-Alphanumerik-Char wird zu `-`.
+    /// Dieselbe Regel wie Claude Code (2.1.296, nachgebaut in
+    /// `ClaudeSharedMemoryPath`): realpath des cwd (Claude nutzt das physische
+    /// `process.cwd()`), jede UTF-16-Einheit außer `[A-Za-z0-9]` → `-`, über
+    /// 200 Zeichen gekürzt plus Hash. Für Transcripts zählt das cwd selbst,
+    /// NICHT der Git-Root (der gilt nur fürs Memory). Bis 11.10.2026 behielt
+    /// diese Funktion Unicode-Buchstaben, kürzte nie und machte über
+    /// `standardizedFileURL` aus `/private/tmp` wieder `/tmp` — solche Chats
+    /// fand nur die Glob-Stufe, und `moveTranscript` (ohne Glob) verfehlte sie.
     static func encodeClaudeCwd(_ cwd: String) -> String {
-        let standardized = URL(fileURLWithPath: cwd).standardizedFileURL.path
-        var result = ""
-        result.reserveCapacity(standardized.count)
-        for char in standardized {
-            if char.isLetter || char.isNumber {
-                result.append(char)
-            } else {
-                result.append("-")
-            }
-        }
-        return result
+        ClaudeSharedMemoryPath.encodedProjectName(ClaudeSharedMemoryPath.realPath(cwd))
     }
+
+    /// Treffer der Glob-Stufe — ohne Cache wiederholte sich die Suche für
+    /// dieselbe Session im Sekundentakt (Analyse 11.10.2026: 9× in 2 min).
+    /// Vor der Wiederverwendung wird die Existenz geprüft.
+    private static let claudeFallbackCache = NSCache<NSString, NSURL>()
 
     private static func locateClaude(externalSessionID: String, cwd: String, globFallback: Bool = true) -> URL? {
         locateClaude(
@@ -371,6 +373,13 @@ enum AgentTranscriptLocator {
         }
         guard globFallback else { return nil }
 
+        let cacheKey = "\(externalSessionID)|\(cwd)" as NSString
+        if let cached = claudeFallbackCache.object(forKey: cacheKey) as URL?,
+           fileManager.fileExists(atPath: cached.path),
+           roots.contains(where: { cached.path.hasPrefix($0.path + "/") }) {
+            return cached
+        }
+
         for root in roots {
             guard let projectDirs = try? fileManager.contentsOfDirectory(
                 at: root,
@@ -394,6 +403,7 @@ enum AgentTranscriptLocator {
                 Logger.agentStore.notice(
                     "claude_transcript_located_by_fallback session=\(externalSessionID, privacy: .public) dir=\(dir.lastPathComponent, privacy: .public) expected=\(encoded, privacy: .public)"
                 )
+                claudeFallbackCache.setObject(candidate as NSURL, forKey: cacheKey)
                 return candidate
             }
         }

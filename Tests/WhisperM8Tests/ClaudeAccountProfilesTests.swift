@@ -240,6 +240,26 @@ extension ClaudeAccountProfilesTests {
         ))
     }
 
+    /// Analyse 11.10.2026: Weicht Claudes Ordnername von unserer Kodierung ab,
+    /// fand der Umzug „kein Transcript", die Session wurde trotzdem umgestempelt
+    /// und `--resume` scheiterte. Jetzt: Glob-Rückfall, Zielordner = Claudes Name.
+    func testMoveTranscriptFindsFileInUnexpectedFolderAndKeepsItsName() throws {
+        let service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "firma")
+        let cwd = "/Users/x/repos/demo"
+        let oddDir = mainProjectsRoot.appendingPathComponent("-claude-schrieb-es-so", isDirectory: true)
+        try FileManager.default.createDirectory(at: oddDir, withIntermediateDirectories: true)
+        try #"{"type":"user","cwd":"/Users/x/repos/demo"}"#.appending("\n")
+            .write(to: oddDir.appendingPathComponent("odd-1.jsonl"), atomically: true, encoding: .utf8)
+
+        XCTAssertFalse(service.transcriptConflictExists(externalSessionID: "odd-1", cwd: cwd, toProfile: "firma"))
+        let moved = try service.moveTranscript(externalSessionID: "odd-1", cwd: cwd, toProfile: "firma")
+
+        XCTAssertTrue(moved)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: home.appendingPathComponent(
+            ".claude-profiles/firma/projects/-claude-schrieb-es-so/odd-1.jsonl").path))
+    }
+
     func testMoveTranscriptBackToMain() throws {
         let service = ClaudeAccountProfiles(homeDirectory: home)
         _ = try service.createProfile(named: "firma")

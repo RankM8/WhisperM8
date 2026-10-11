@@ -17,6 +17,17 @@ final class AgentTranscriptUtilityTests: XCTestCase {
         )
     }
 
+    /// Analyse 11.10.2026: gleiche Regel wie Claude Code — realpath, nur ASCII
+    /// alnum, Kürzung über 200 Zeichen (Vektoren in ClaudeSharedMemoryPathTests).
+    func testClaudeCwdEncodingFollowsClaudeCodeRule() {
+        XCTAssertEqual(AgentTranscriptLocator.encodeClaudeCwd("/tmp"), "-private-tmp",
+                       "physisches cwd — früher machte standardizedFileURL daraus /tmp")
+        XCTAssertEqual(AgentTranscriptLocator.encodeClaudeCwd("/Users/x/Projekte/Bücher & Co"),
+                       "-Users-x-Projekte-B-cher---Co", "Umlaute werden zu -, wie bei Claude")
+        let long = "/Users/test/" + String(repeating: "sehr-langer-ordnername/", count: 10) + "projekt"
+        XCTAssertEqual(AgentTranscriptLocator.encodeClaudeCwd(long).count, 200 + 1 + "mmgdka".count)
+    }
+
     func testLocateClaudeFindsTranscriptAcrossRoots() throws {
         // Multi-Account: das Transcript liegt im ZWEITEN Root (Profil) —
         // der deterministische Lookup muss über alle Roots laufen.

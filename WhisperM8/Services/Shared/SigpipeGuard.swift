@@ -49,11 +49,26 @@ enum SigpipeGuard {
 
     /// Nur der Handler, ohne Log-Quelle — für Tests und als eigentlicher Schutz.
     static func installNoOpHandler() {
+        installNoOpHandler(for: SIGPIPE)
+    }
+
+    /// Leerer Handler statt `SIG_IGN` für ein beliebiges Signal: Die
+    /// Default-Aktion entfällt, aber `execve` setzt ein abgefangenes Signal in
+    /// Kindprozessen auf Default zurück — ein ignoriertes bliebe ignoriert.
+    /// Auch für SIGTERM (Analyse 11.10.2026: mit `SIG_IGN` erbten Terminal-Tabs
+    /// und alles daraus „SIGTERM ignorieren", `kill` und SwiftTerms
+    /// `terminate()` blieben dort wirkungslos). Eine `DispatchSourceSignal`
+    /// sieht abgefangene Signale weiterhin.
+    /// - Returns: die vorherige Aktion (für Tests, die sie zurücksetzen).
+    @discardableResult
+    static func installNoOpHandler(for signal: Int32) -> sigaction {
         var action = sigaction()
         // Leerer Handler: nichts darin muss async-signal-safe sein.
         action.__sigaction_u.__sa_handler = { _ in }
         sigemptyset(&action.sa_mask)
         action.sa_flags = SA_RESTART
-        sigaction(SIGPIPE, &action, nil)
+        var previous = sigaction()
+        sigaction(signal, &action, &previous)
+        return previous
     }
 }

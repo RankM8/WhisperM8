@@ -503,6 +503,17 @@ struct ClaudeAccountProfiles {
         }
     }
 
+    /// Transcript einer Session über alle Roots — deterministischer Pfad,
+    /// sonst Glob-Rückfall mit cwd-Prüfung (`AgentTranscriptLocator`).
+    func locateTranscript(externalSessionID: String, cwd: String) -> URL? {
+        AgentTranscriptLocator.locateClaude(
+            externalSessionID: externalSessionID,
+            cwd: cwd,
+            roots: claudeProjectsRoots(),
+            fileManager: fileManager
+        )
+    }
+
     /// Liegt im Ziel-Root schon eine Datei (oder ein Subagent-Ordner) mit
     /// dieser Session-ID? Reine Vorschau-Pruefung fuer den Umzugs-Planer —
     /// `moveTranscript` prueft vor der Bewegung erneut, weil zwischen Vorschau
@@ -513,22 +524,17 @@ struct ClaudeAccountProfiles {
         toProfile targetName: String?
     ) -> Bool {
         let target = targetName ?? Self.mainProfileName
-        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        let source = locateTranscript(externalSessionID: externalSessionID, cwd: cwd)
         let targetDir = configDir(forProfile: target)
             .appendingPathComponent("projects", isDirectory: true)
-            .appendingPathComponent(encoded, isDirectory: true)
+            .appendingPathComponent(
+                source?.deletingLastPathComponent().lastPathComponent
+                    ?? AgentTranscriptLocator.encodeClaudeCwd(cwd),
+                isDirectory: true)
         let targetFile = targetDir.appendingPathComponent("\(externalSessionID).jsonl")
         // Liegt die Datei bereits im Ziel, ist das kein Konflikt, sondern ein
         // No-op — das trennt `moveTranscript` ueber den Pfadvergleich ebenso.
-        for root in claudeProjectsRoots() {
-            let candidate = root
-                .appendingPathComponent(encoded, isDirectory: true)
-                .appendingPathComponent("\(externalSessionID).jsonl")
-            if fileManager.fileExists(atPath: candidate.path) {
-                if candidate.path == targetFile.path { return false }
-                break
-            }
-        }
+        if source?.path == targetFile.path { return false }
         return fileManager.fileExists(atPath: targetFile.path)
             || fileManager.fileExists(atPath: targetFile.deletingPathExtension().path)
     }
@@ -555,24 +561,19 @@ struct ClaudeAccountProfiles {
             throw MoveError.targetProfileMissing(target)
         }
 
-        let encoded = AgentTranscriptLocator.encodeClaudeCwd(cwd)
+        // Quelle ueber alle Roots suchen (main + Profile), notfalls per
+        // Glob-Rueckfall. Der Zielordner uebernimmt den Ordnernamen, den Claude
+        // selbst geschrieben hat — dort sucht `--resume` im Zielkonto, und er
+        // stimmt auch dann, wenn unsere Kodierung einmal abweicht (vorher
+        // meldete der Umzug dann „kein Transcript", die Session wurde trotzdem
+        // umgestempelt, und das Fortsetzen scheiterte).
+        guard let sourceFile = locateTranscript(externalSessionID: externalSessionID, cwd: cwd) else {
+            return false
+        }
         let targetDir = configDir(forProfile: target)
             .appendingPathComponent("projects", isDirectory: true)
-            .appendingPathComponent(encoded, isDirectory: true)
+            .appendingPathComponent(sourceFile.deletingLastPathComponent().lastPathComponent, isDirectory: true)
         let targetFile = targetDir.appendingPathComponent("\(externalSessionID).jsonl")
-
-        // Quelle ueber alle Roots suchen (main + Profile).
-        var sourceFile: URL?
-        for root in claudeProjectsRoots() {
-            let candidate = root
-                .appendingPathComponent(encoded, isDirectory: true)
-                .appendingPathComponent("\(externalSessionID).jsonl")
-            if fileManager.fileExists(atPath: candidate.path) {
-                sourceFile = candidate
-                break
-            }
-        }
-        guard let sourceFile else { return false }
         guard sourceFile.path != targetFile.path else { return false }
         guard !fileManager.fileExists(atPath: targetFile.path) else {
             throw MoveError.targetTranscriptExists(targetFile.path)

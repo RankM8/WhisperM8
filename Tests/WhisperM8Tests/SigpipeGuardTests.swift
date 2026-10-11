@@ -61,4 +61,33 @@ final class SigpipeGuardTests: XCTestCase {
 
         XCTAssertEqual(String(decoding: output, as: UTF8.self), "DEFAULT")
     }
+
+    /// Analyse 11.10.2026: Mit `SIG_IGN` für SIGTERM erbten Terminal-Tabs und
+    /// alles daraus „SIGTERM ignorieren". Mit leerem Handler muss ein ohne
+    /// Signal-Reset gestartetes Kind auf SIGTERM wieder sterben.
+    func testChildDiesOnSIGTERMWhenParentUsesNoOpHandler() throws {
+        let previous = SigpipeGuard.installNoOpHandler(for: SIGTERM)
+        var restore = previous
+        defer { sigaction(SIGTERM, &restore, nil) }
+
+        let args = ["/bin/sleep", "30"]
+        var cArgs = args.map { strdup($0) } + [nil]
+        defer { cArgs.forEach { free($0) } }
+        var pid: pid_t = 0
+        XCTAssertEqual(posix_spawn(&pid, args[0], nil, nil, &cArgs, environ), 0)
+        usleep(100_000)
+        kill(pid, SIGTERM)
+
+        var status: Int32 = 0
+        let deadline = Date().addingTimeInterval(3)
+        var reaped: pid_t = 0
+        while reaped == 0, Date() < deadline {
+            reaped = waitpid(pid, &status, WNOHANG)
+            if reaped == 0 { usleep(20_000) }
+        }
+        if reaped == 0 { kill(pid, SIGKILL); waitpid(pid, &status, 0) }
+        XCTAssertEqual(reaped, pid, "Kind hat SIGTERM ignoriert")
+        // WIFSIGNALED/WTERMSIG als Makros nicht verfügbar: Low-Byte = Signal.
+        XCTAssertEqual(status & 0x7f, SIGTERM)
+    }
 }

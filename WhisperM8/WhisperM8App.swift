@@ -223,9 +223,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // applicationShouldTerminate/willTerminate und damit ohne die
         // Terminate-Flushes der debounced Stores (AgentWorkspaceStore,
         // AgentWindowStore). Frisch angelegte Chats und Tab-State gingen so
-        // beim Dev-Neustart verloren. SIG_IGN + DispatchSource ist dasselbe
-        // Muster wie im Agent-Supervisor (AgentSuperviseCommand).
-        signal(SIGTERM, SIG_IGN)
+        // beim Dev-Neustart verloren. Leerer Handler + DispatchSource statt
+        // SIG_IGN: ein ignoriertes Signal erbten alle Chat-Kinder über
+        // forkpty+execve (Terminal-Tabs reagierten nicht mehr auf `kill`),
+        // ein abgefangenes setzt execve auf Default zurück (SigpipeGuard).
+        SigpipeGuard.installNoOpHandler(for: SIGTERM)
         let sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         sigterm.setEventHandler {
             NSApp.terminate(nil)

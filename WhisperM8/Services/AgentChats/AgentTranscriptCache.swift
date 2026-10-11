@@ -169,7 +169,15 @@ actor AgentTranscriptCache {
     private static func transcriptURL(for key: Key) -> URL? {
         switch key.provider {
         case .claude:
-            return ClaudeTranscriptReader.transcriptURL(forCwd: key.cwd, sessionID: key.externalSessionID)
+            // Über alle Roots (main + Profile), ohne Glob — vorher nur `~/.claude`:
+            // für Chats von Zusatzkonten war die Identität immer leer und der
+            // Cache traf nie (Analyse 11.10.2026).
+            return AgentTranscriptLocator.locate(
+                provider: .claude,
+                externalSessionID: key.externalSessionID,
+                cwd: AgentSessionStore.canonicalProjectPath(key.cwd),
+                globFallback: false
+            ) ?? ClaudeTranscriptReader.transcriptURL(forCwd: key.cwd, sessionID: key.externalSessionID)
         case .codex:
             return CodexTranscriptReader.transcriptURL(forSessionID: key.externalSessionID)
         }
