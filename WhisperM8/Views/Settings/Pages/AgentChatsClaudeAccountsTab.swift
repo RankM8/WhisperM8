@@ -53,6 +53,8 @@ struct AgentChatsClaudeAccountsTab: View {
                 SettingsHelpText("A Terminal window opens with the new profile — complete the one-time browser login there (Claude asks for it automatically), then come back and refresh. No re-login is ever needed afterwards.")
             }
 
+            ClaudeMCPSyncSection()
+
             if let feedback {
                 SettingsHelpText(feedback, tone: feedbackTone)
             }

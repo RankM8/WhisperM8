@@ -293,6 +293,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             // Geteilte Einträge (agents, output-styles, …) in allen Profilen
             // als Link — inhaltsgleiche Kopien werden ersetzt, Abweichendes bleibt.
             ClaudeAccountProfiles.healSharedItemsAtLaunch()
+            // MCP-Server über alle Konten angleichen — nur bei eingeschaltetem
+            // Auto-Angleich (Konten-Seite), nur ergänzen.
+            await ClaudeMCPSync.runAtLaunchIfEnabled()
         }
 
         // CLI-Symlink (~/.local/bin/whisperm8) idempotent anlegen, damit

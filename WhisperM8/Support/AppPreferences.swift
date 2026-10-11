@@ -449,6 +449,21 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryEnabled) }
     }
 
+    /// MCP-Server beim App-Start über alle Claude-Konten angleichen (nur
+    /// ergänzen, per `claude mcp add-json -s user`). Default aus — für neue
+    /// Nutzer soll nichts ungefragt in ihre Konten geschrieben werden.
+    /// `defaults write com.whisperm8.app mcpAutoSyncEnabled -bool YES`
+    var isMCPAutoSyncEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.mcpAutoSyncEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.mcpAutoSyncEnabled) }
+    }
+
+    /// Server, die nie über Konten verteilt werden (z. B. kontogebundene).
+    var mcpSyncExcludedServers: [String] {
+        get { defaults.stringArray(forKey: Keys.mcpSyncExcludedServers) ?? [] }
+        nonmutating set { defaults.set(newValue, forKey: Keys.mcpSyncExcludedServers) }
+    }
+
     /// Kontowechsel ohne Stoppen: laufende Chats wechseln selbst — ruhende
     /// sofort (anhalten, umziehen, im Tab neu starten), arbeitende nach dem
     /// Turn (Plan claude-account-switch-ohne-stopp.md, Slice 2). Aus = laufende
@@ -835,6 +850,8 @@ enum PreferenceKeys {
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
+    static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
+    static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"

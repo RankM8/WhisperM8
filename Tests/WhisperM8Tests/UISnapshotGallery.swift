@@ -102,6 +102,19 @@ final class UISnapshotGallery: XCTestCase {
                 }
                 .padding(24))
             },
+            // MCP-Angleich über Konten: vollständig, fehlend, Konflikt.
+            Fixture(name: "mcp-sync-section", size: CGSize(width: 640, height: 420)) {
+                let snapshot = ClaudeMCPSync.Snapshot(
+                    profileNames: ["main", "ai", "ai2"],
+                    servers: [
+                        "atlassian": ["main": "{}", "ai": "{}", "ai2": "{}"],
+                        "figma": ["ai2": "{\"url\":\"a\"}"],
+                        "playwright": ["main": "{\"cmd\":\"x\"}", "ai2": "{\"cmd\":\"y\"}"],
+                    ])
+                return AnyView(ClaudeMCPSyncSection(dependencies: ClaudeMCPSyncDependencies(
+                    snapshot: { snapshot }, apply: { _ in ClaudeMCPSync.Outcome() }))
+                    .padding(24))
+            },
             // Kontowechsel ohne Stoppen: alle Gruppen und Hinweise auf einmal.
             Fixture(name: "konto-wechsel-vorschau", size: CGSize(width: 520, height: 600)) {
                 func candidate(_ title: String) -> AccountMovePlanner.Candidate {
