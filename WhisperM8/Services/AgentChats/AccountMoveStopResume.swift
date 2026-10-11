@@ -139,19 +139,26 @@ struct TerminalComposerDraftTracker: Equatable {
 /// Verlauf laege danach in zwei Dateien.
 enum ProcessExitWaiter {
     /// `true`, wenn der Prozess nicht mehr existiert oder nur noch als Zombie
-    /// auf sein `waitpid` wartet (SwiftTerm raeumt nach `terminate()` nicht
-    /// mehr ab — beendet ist er trotzdem, schreiben kann er nicht mehr).
+    /// auf sein `waitpid` wartet — beendet ist er dann, schreiben kann er
+    /// nicht mehr.
+    ///
+    /// Der Status kommt bewusst aus `sysctl(KERN_PROC_PID)`: `proc_pidinfo`
+    /// liefert für einen Zombie 0 Bytes, und genau daran scheiterte der
+    /// Kontowechsel im Feld (Vorfall 11.10.2026: Claude meldete `SessionEnd`
+    /// und war weg, der Zombie galt 5 s lang als „läuft noch" → `stopTimeout`,
+    /// kein Umzug, kein Neustart).
     static func hasExited(pid: pid_t) -> Bool {
         if kill(pid, 0) != 0 {
             // EPERM hiesse: existiert, gehoert aber jemand anderem.
             return errno == ESRCH
         }
-        var info = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else {
             return false
         }
-        return info.pbi_status == UInt32(SZOMB)
+        return info.kp_proc.p_stat == SZOMB
     }
 
     /// - Returns: `true`, sobald `hasExited` zutrifft; `false` nach Ablauf
@@ -168,5 +175,40 @@ enum ProcessExitWaiter {
             if Date() >= deadline { return false }
             try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
         }
+    }
+}
+
+/// Holt einen beendeten PTY-Kindprozess ab (`waitpid`). SwiftTerms
+/// `terminate()` bricht seinen eigenen Prozess-Monitor ab — danach ruft
+/// niemand mehr `waitpid`, und jeder angehaltene Chat blieb bis zum App-Ende
+/// als Zombie in der Prozesstabelle (Befund 11.10.2026). Eine Dispatch-Quelle
+/// meldet das Prozessende, dann wird abgeholt; ein Prozess, der schon vor dem
+/// Einrichten endete, wird sofort abgeholt.
+enum ChildProcessReaper {
+    private static let queue = DispatchQueue(label: "com.whisperm8.child-reaper")
+    private static var sources: [pid_t: DispatchSourceProcess] = [:]
+
+    static func reap(pid: pid_t) {
+        guard pid > 0 else { return }
+        queue.async {
+            guard sources[pid] == nil else { return }
+            let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
+            source.setEventHandler {
+                collect(pid)
+            }
+            sources[pid] = source
+            source.resume()
+            // Schon vorher beendet? Dann feuert die Quelle unter Umständen nie.
+            collect(pid)
+        }
+    }
+
+    /// Nur auf `queue`. `WNOHANG`: läuft er noch, bleibt die Quelle bestehen.
+    private static func collect(_ pid: pid_t) {
+        var status: Int32 = 0
+        let result = waitpid(pid, &status, WNOHANG)
+        // pid = abgeholt; -1/ECHILD = schon abgeholt bzw. nicht unser Kind.
+        guard result == pid || (result == -1 && errno == ECHILD) else { return }
+        sources.removeValue(forKey: pid)?.cancel()
     }
 }

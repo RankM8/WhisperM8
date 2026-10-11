@@ -905,10 +905,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // gedrosselten Hintergrund-Pane verloren gehen (Review-Finding:
         // „nie Byte-Verlust" hatte am Teardown eine Lücke).
         terminal.flushPendingOutput()
+        let pid = processID
         // Terminal-Stand JETZT sichern — nach dem Flush steht der komplette
         // Exit-Output (inkl. `claude --resume …`-Hinweis) im Normal-Buffer,
         // und die Registry entfernt den Controller direkt nach terminate().
         terminal.terminate()
+        // SwiftTerm ruft nach terminate() kein waitpid mehr — ohne Abholen
+        // bliebe der Prozess bis zum App-Ende ein Zombie.
+        if let pid { ChildProcessReaper.reap(pid: pid) }
         isRunning = false
         releaseEventMonitors()
     }

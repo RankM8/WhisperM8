@@ -280,6 +280,31 @@ final class ProcessExitWaiterTests: XCTestCase {
         XCTAssertTrue(ProcessExitWaiter.hasExited(pid: process.processIdentifier))
     }
 
+    /// Vorfall 11.10.2026: `proc_pidinfo` liefert für Zombies nichts — der
+    /// beendete, aber nicht abgeholte Claude-Prozess galt als laufend.
+    func testUnreapedZombieHasExited() throws {
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("/usr/bin/true"), nil]
+        defer { argv.forEach { free($0) } }
+        XCTAssertEqual(posix_spawn(&pid, "/usr/bin/true", nil, nil, argv, nil), 0)
+        usleep(300_000)  // beendet, aber (noch) nicht abgeholt → Zombie
+        XCTAssertTrue(ProcessExitWaiter.hasExited(pid: pid))
+        var status: Int32 = 0
+        waitpid(pid, &status, 0)
+    }
+
+    func testReaperCollectsZombie() throws {
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("/bin/sleep"), strdup("0.2"), nil]
+        defer { argv.forEach { free($0) } }
+        XCTAssertEqual(posix_spawn(&pid, "/bin/sleep", nil, nil, argv, nil), 0)
+        ChildProcessReaper.reap(pid: pid)
+        let deadline = Date().addingTimeInterval(3)
+        while kill(pid, 0) == 0, Date() < deadline { usleep(20_000) }
+        XCTAssertEqual(kill(pid, 0), -1, "abgeholt — kein Zombie mehr")
+        XCTAssertEqual(errno, ESRCH)
+    }
+
     func testWaitReturnsTrueOnceExited() async {
         var polls = 0
         let exited = await ProcessExitWaiter.waitForExit(
