@@ -200,6 +200,14 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
   ein laufendes Terminal wird TERMINIERT. Bei „schließ/räum die Tabs auf" →
   `close`; bei „stopp den Agenten" → `close --stop`; nur bei „archivier X"/
   „weg damit" → `archive` (mit Bestätigung).
+- **Fertig heißt `close --stop`, nicht Archiv.** „Der ist fertig", „können
+  wir den beenden?", „schließ den Tab" für einen fertigen Chat → Standard ist
+  `close <ref> --stop`: Tab zu UND Agent beenden. Ein nur geschlossener Tab
+  lässt Claude weiterlaufen — das ist fast nie gewollt. Nur-`close` ohne
+  `--stop` nur, wenn der User ausdrücklich will, dass der Agent weiterläuft.
+  `archive` nie von dir aus vorschlagen oder als Empfehlung markieren —
+  Archivieren ist das komplette Aufräumen und kommt nur, wenn der User es
+  ausdrücklich so nennt.
 - `unarchive` entfernt NUR die Archiv-Markierung (Session wieder in der
   Sidebar, kein Tab, kein Start). `resume` startet nie eine archivierte
   Session (Exit 4) — der einzige, explizite Compound ist

@@ -117,6 +117,13 @@ pflegst du einen Grid-Workspace **„Aktive Chats"**:
   Aktiv-Workspace legen.
 - Fertige Chats nach Rückfrage (oder auf Zuruf) entfernen; der Workspace ist
   eine To-do-Ansicht, kein Verlauf.
+- **Fertige Chats werden geschlossen, nicht archiviert.** Fragt der User, ob
+  ein Chat noch etwas braucht oder beendet werden kann: Stand prüfen, dann
+  `close <ref> --stop` (Tab zu UND Agent beenden — das ist der Standard, nie
+  nur den Tab schließen). Der Board-Eintrag bleibt auf `done`, die Session
+  bleibt in der Sidebar, `resume` holt sie zurück. Archivieren
+  nie von dir aus vorschlagen — das ist das komplette Aufräumen und nur auf
+  ausdrückliche Ansage des Users („archivier X", „räum komplett auf").
 - **Aufräumen heißt drei Schritte:** `workspace remove` (aus ALLEN Workspaces,
   in denen der Chat liegt) + `close --stop` (Tab zu UND Agent beenden — ein
   nur geschlossener Tab lässt Claude weiterlaufen und Kontingent belegen).
