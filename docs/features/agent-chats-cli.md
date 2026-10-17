@@ -30,7 +30,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 
 | Befehl | Klasse | Pfad |
 |---|---|---|
-| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived` | Lesen | Disk (+ optionaler Live-Merge) |
+| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
 | `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 ### Claude-Account-Profil neuer Chats
@@ -586,16 +586,30 @@ AskUserQuestion, Ein-Hop-Regel, Batch-Aufräumen, Supervisor-Loop
 User-Freigabe.
 
 **Verhältnis zum nativen Cross-Session-Messaging** (Claude Code
-`ListAgents`/`SendMessage`, geprüft 10.10.2026): Es ersetzt `chats send` nicht.
-Die native Erkennung liest nur `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` des
-eigenen Profils. Von 7 laufenden WhisperM8-Chats in drei Konten waren
-deshalb nur die 2 anderen im selben Konto sichtbar, unter abgeleiteten
-Namen (`listm8-00`) statt der WhisperM8-Titel. Codex-Chats und geschlossene
-Chats fehlen ganz. Der Skill nimmt `SendMessage` deshalb nur für Rückfragen
-an laufende Claude-Chats im selben Konto, weil es dort einen Antwortkanal und
-`notify_when_idle` gibt. Für alles andere bleibt es bei `chats send`/`enqueue`.
-Die Zuordnung läuft über `externalSessionID` ↔ `sessionId` der
-Registry-Datei.
+`ListAgents`/`SendMessage`, geprüft 10.10. und 17.10.2026): Es ersetzt
+`chats send` nicht, ergänzt es aber über alle Konten. Die native **Erkennung**
+liest nur `<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` des eigenen Profils (von
+7 laufenden Chats in drei Konten waren nur die 2 im selben Konto sichtbar,
+unter abgeleiteten Namen wie `listm8-00`). Die **Zustellung** dagegen geht über
+alle Konten: Die Postfächer liegen gemeinsam in `/tmp/cc-socks/<pid>.sock`,
+`SendMessage` nimmt `to: "uds:<pfad>"`, und auf macOS verlangt der Empfänger
+kein Token (live geprüft 17.10.: PowerUser → ai2 und → PowerUser2 zugestellt,
+Antworten und `notify_when_idle` kamen zurück).
+
+`whisperm8 chats address <ref> [--json]` ist das fehlende Adressbuch
+(`ChatsAddressCommand` + `ClaudeSessionRegistry`, liest nur Claudes Registry
+aller Konten, app-unabhängig): stdout = `uds:`-Adresse, `--json` zusätzlich
+nativer Name, Konto, Status, PID. Exit 4 mit Grund (`notClaude`, `notBound`,
+`notRunning`, `noInbox`), wenn der Chat nicht nativ erreichbar ist. Die
+Zuordnung läuft über `externalSessionID` ↔ `sessionId`; ein Eintrag zählt nur,
+wenn die PID lebt und ihre Startzeit zu `procStart` passt (Claude schreibt sie
+in UTC). Der Skill nimmt `SendMessage` für Rückfragen an laufende Claude-Chats
+(Antwortkanal, `notify_when_idle`), `chats send`/`enqueue` für Codex,
+geschlossene Chats, Arbeitsaufträge und „erst nach dem Turn“. Grenzen:
+Rechte-Modus-Parität (Bypass vs. Rest → Nachricht wird im Ziel zur Freigabe
+gehalten), Adresse wechselt mit jedem Neustart, und erzwingt Anthropic das
+Socket-Token auch auf macOS, bricht der Weg über Konten — `chats send` bleibt
+deshalb vollwertig. Plan: `docs/plans/claude-status-aus-registry.md`.
 
 ## Zentrale Dateien
 

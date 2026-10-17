@@ -133,41 +133,47 @@ Kandidaten, rate nie selbst.**
 ## Zwei Wege zu einem anderen Chat: `chats send` oder natives `SendMessage`
 
 Claude Code kann selbst Nachrichten an andere lokale Sessions schicken
-(`ListAgents` + `SendMessage`). Das ersetzt `chats send` NICHT, denn es sieht
-nur einen Teil der Chats. **Die native Erkennung gilt nur innerhalb eines
-Claude-Kontos:** Jede Session meldet sich unter
-`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json` an, und `ListAgents` liest nur das
-eigene Profil. Chats in anderen Konten (ai3, PowerUser, …), Codex-Chats und
-geschlossene Chats tauchen dort nicht auf. Außerdem heißen Peers dort nach
-dem Ordner (`listm8-00`), nicht nach dem WhisperM8-Titel.
+(`ListAgents` + `SendMessage`). **Finden** geht nativ nur im eigenen Konto:
+`ListAgents` liest nur die Registry des eigenen Profils
+(`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`), und Peers heißen dort nach dem
+Ordner (`listm8-0a`), nicht nach dem WhisperM8-Titel. **Zustellen** geht aber
+über alle Claude-Konten: Die Postfächer (`/tmp/cc-socks/<pid>.sock`) liegen
+für alle Konten gemeinsam, und `SendMessage` nimmt eine `uds:`-Adresse.
+Die Adresse liefert `whisperm8 chats address <ref>` (liest nur Claudes
+Registry, braucht keine laufende App).
 
 **Natives `SendMessage` nehmen**, wenn ALLES zutrifft:
 - Du willst etwas **fragen oder abstimmen** und brauchst die Antwort zurück
   (die Antwort kommt als Nachricht zu dir, statt dass du ein Transcript
   abwartest und liest).
-- Das Ziel ist ein **laufender Claude-Chat im selben Konto**, also ein Peer
-  in `ListAgents`.
+- Das Ziel ist ein **laufender Claude-Chat** — egal in welchem Konto.
 
-So findest du den nativen Namen eines WhisperM8-Chats (leer = nicht im
-eigenen Konto oder läuft nicht → `chats send`):
 ```bash
-ext=$(whisperm8 chats show <ref> --json | jq -r .externalSessionID)
-jq -r --arg id "$ext" 'select(.sessionId==$id) | .name' \
-  "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/sessions/*.json
+whisperm8 chats address <ref>          # → uds:/tmp/cc-socks/<pid>.sock
+whisperm8 chats address <ref> --json   # + nativer Name, Konto, Status
 ```
-Dann `SendMessage({to: "<name>", message: "…"})`. Wenn du nur wissen willst,
-wann der Chat fertig ist, nimm `notify_when_idle: true` statt `chats wait`.
+Exit 0 = Adresse auf stdout. Exit 4 = nicht nativ erreichbar (Codex-Chat,
+läuft nicht, noch keine Session-ID) → `chats send`/`enqueue`.
+
+Dann `SendMessage({to: "uds:/tmp/cc-socks/<pid>.sock", message: "…"})`.
+Die Antwort kommt als `<cross-session-message from="uds:…">` — zum
+Antworten das `from` als `to` nehmen. Wenn du nur wissen willst, wann der
+Chat fertig ist, nimm `notify_when_idle: true` statt `chats wait` (geht auch
+über Konten; die Meldung kommt, sobald du selbst wieder frei bist).
+Die Adresse gilt nur, solange der Prozess läuft — nach einem Neustart des
+Chats neu holen, nicht merken.
 Meldet ein `[Cross-session delivery notice]`, dass die Nachricht zurückgehalten
-oder abgelehnt wurde (das passiert z. B. bei anderem Permission-Mode des
-Ziels), dann melde das dem User und biete `chats send` an.
+oder abgelehnt wurde (das passiert, wenn Absender und Ziel in verschiedenen
+Rechte-Klassen laufen: Bypass vs. alles andere), dann melde das dem User und
+biete `chats send` an.
 
 **`chats send` / `enqueue` nehmen** in allen anderen Fällen:
-- Das Ziel liegt in einem anderen Konto, ist ein Codex-Chat oder ist
-  geschlossen (vorher `resume`).
+- Das Ziel ist ein Codex-Chat oder geschlossen (vorher `resume`).
 - Es ist ein **Arbeitsauftrag**, der als normaler Prompt im Chat stehen soll
-  (sichtbar für den User, mit Send-Guard und Queue).
-- Das Ziel arbeitet gerade und der Auftrag soll erst danach kommen
-  (`enqueue`).
+  (sichtbar für den User, mit Send-Guard und Queue, in `chats audit`).
+- Das Ziel arbeitet gerade und der Auftrag soll erst nach dem Turn kommen
+  (`enqueue`) — `SendMessage` landet schon beim nächsten Arbeitsschritt des
+  Ziels, also mitten im Turn.
 
 ## Ansichten & Reviven
 

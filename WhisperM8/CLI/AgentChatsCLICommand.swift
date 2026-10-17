@@ -44,6 +44,8 @@ enum AgentChatsCLICommand {
             return await ChatsShowCommand.run(rest)
         case "tail":
             return await ChatsTailCommand.run(rest)
+        case "address":
+            return ChatsAddressCommand.run(rest)
         case "wait":
             return ChatsWaitCommand.run(rest)
         case "send":
@@ -846,6 +848,11 @@ enum ChatsCLIHelp {
                            die drei neuesten — Lesehilfe für Board-Notizen.
                            Codex-Chats und Chats ohne Rückblick: leere Liste.
       whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--all] [--json]
+      whisperm8 chats address <ref> [--json]
+                           uds:-Adresse eines laufenden Claude-Chats für natives
+                           SendMessage({to: "uds:…"}) — über alle Claude-Konten.
+                           Nicht erreichbar (Codex, gestoppt, kein Postfach) →
+                           Exit 4, dann `send`/`enqueue` nehmen.
       whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange]
                            [--since REV] [--timeout SEC] [--json]
       whisperm8 chats audit [--limit N] [--session <ref>] [--json]

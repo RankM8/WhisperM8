@@ -63,7 +63,12 @@ struct ClaudeAccountProfiles {
     /// ein nicht leerer Lock-Ordner blockiert Claudes Stale-Lock-Steal, also
     /// den Token-Refresh von `PowerUser`).
     func profiles() -> [ClaudeAccountProfile] {
-        var result = [profile(named: Self.mainProfileName)]
+        profileNames().map { profile(named: $0) }
+    }
+
+    /// Nur die Namen (main zuerst) — ohne die Konto-Metadaten aus
+    /// `.claude.json`, für Pfade wie Claudes Session-Registry.
+    func profileNames() -> [String] {
         let entries = (try? fileManager.contentsOfDirectory(
             at: profilesRoot,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -74,8 +79,7 @@ struct ClaudeAccountProfiles {
             .map(\.lastPathComponent)
             .filter(Self.isValidProfileName)
             .sorted()
-        result.append(contentsOf: names.map { profile(named: $0) })
-        return result
+        return [Self.mainProfileName] + names
     }
 
     func profile(named name: String) -> ClaudeAccountProfile {
