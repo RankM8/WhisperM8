@@ -1060,7 +1060,15 @@ extension AgentChatsView {
         // Klick in eine Jarvis-Notiz oder auf ihren Pfeil: kein Fokuswechsel —
         // der würde die Karte sofort zuklappen (Hineingehen klappt die eigene
         // Notiz zu) bzw. dem Klappen per Pfeil in die Quere kommen.
-        guard hoveredNoteCardID == nil else { return }
+        if let noteCard = hoveredNoteCardID {
+            // Karte und Pfeil liegen in ihrer eigenen Pane. Zeigt der
+            // Pane-Hover woandershin, hat SwiftUI ein `onHover(false)`
+            // verloren (Fensterwechsel, Menü, Drag — Muster Scroll-Ausfall
+            // 23.08.2026): verwerfen, statt jeden Fokus-Klick im Grid zu
+            // blockieren.
+            guard noteCard != hoveredGridPaneID else { return }
+            hoveredNoteCardID = nil
+        }
         guard let hostWindow, event.window === hostWindow,
               isGridActive,
               let hovered = hoveredGridPaneID,
