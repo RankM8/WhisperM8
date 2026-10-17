@@ -258,6 +258,31 @@ final class TerminalComposerDraftTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.mayHaveUnsentInput)
     }
 
+    func testInterruptedTurnAsksForClearUntilSubmitted() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordTurnInterrupted()
+        XCTAssertTrue(tracker.shouldClearBeforeSubmit, "zurückgelegter Prompt vor dem Versand leeren")
+        tracker.recordSubmitted()
+        XCTAssertFalse(tracker.shouldClearBeforeSubmit)
+    }
+
+    func testEditedRestoredPromptIsNeverCleared() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordTurnInterrupted()
+        tracker.recordKeyDown(keyCode: 0, modifiers: []) // User bearbeitet den Rückleger
+        XCTAssertFalse(tracker.shouldClearBeforeSubmit, "eigener Entwurf bleibt")
+    }
+
+    func testOwnClearOrEnterEndsRestoredPrompt() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordTurnInterrupted()
+        tracker.recordKeyDown(keyCode: 8, modifiers: .control) // Ctrl+C
+        XCTAssertFalse(tracker.shouldClearBeforeSubmit)
+        tracker.recordTurnInterrupted()
+        tracker.recordKeyDown(keyCode: 36, modifiers: [])      // Enter
+        XCTAssertFalse(tracker.shouldClearBeforeSubmit)
+    }
+
     func testProgrammaticInsertAndSubmit() {
         var tracker = TerminalComposerDraftTracker()
         tracker.recordTextInserted()

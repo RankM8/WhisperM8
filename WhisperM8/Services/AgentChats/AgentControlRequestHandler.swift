@@ -261,6 +261,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 return .failure(.conflict, "Ziel ist \(runtime.rawValue), nicht working")
             }
             controller.sendInterrupt()
+            if runtime == .working { controller.noteTurnInterrupted() }
             // Abort-Verdacht anmelden: Der Stop-Hook feuert bei
             // ESC-Interrupts nicht — ohne die Verifikation bliebe die
             // Session im working-Stau (QA-Befund 2026-08-17). Der

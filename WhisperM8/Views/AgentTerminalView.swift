@@ -725,6 +725,22 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// die 1,0-s-Grace im `AgentPromptRoutingService`).
     func sendPrompt(_ text: String, submit: Bool) {
         guard isRunning else { return }
+        // Nach einem Abbruch steht vermutlich der alte Prompt im Composer
+        // (`TerminalComposerDraftTracker.mayHoldRestoredPrompt`): erst mit
+        // Ctrl+C leeren, sonst hängt der neue Prompt daran und der Send-Guard
+        // blockt beide. Kurz warten, bis die TUI das Leeren verarbeitet hat.
+        if submit, composerDraft.shouldClearBeforeSubmit {
+            sendComposerClear()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.pastePrompt(text, submit: submit)
+            }
+            return
+        }
+        pastePrompt(text, submit: submit)
+    }
+
+    private func pastePrompt(_ text: String, submit: Bool) {
+        guard isRunning else { return }
         terminal.send(txt: "\u{1B}[200~")
         terminal.send(txt: text)
         terminal.send(txt: "\u{1B}[201~")
@@ -747,6 +763,12 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendInterrupt() {
         guard isRunning else { return }
         terminal.send([0x1B])
+    }
+
+    /// Ein laufender Turn wurde abgebrochen — die CLI legt seinen Prompt in
+    /// den Composer zurück (siehe `sendPrompt`).
+    func noteTurnInterrupted() {
+        composerDraft.recordTurnInterrupted()
     }
 
     /// Sendet ein einzelnes Ctrl+C — leert in Claude Code den NICHT-leeren
@@ -824,7 +846,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             profile: command.keyboardProfile
         )
         keyboardShortcutHandler?.onTerminalKeyDownEvent = { [weak self] event in
-            self?.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            guard let self else { return }
+            self.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            // ESC mitten im Turn bricht ab — die CLI legt den Prompt zurück.
+            if event.keyCode == 53,
+               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
+               AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID) == .working {
+                self.composerDraft.recordTurnInterrupted()
+            }
         }
 
         // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.

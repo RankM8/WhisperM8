@@ -90,6 +90,23 @@ enum AccountMoveStopResumePlanner {
 /// nur ein `--force`, ein uebersehener Entwurf waere verlorene Eingabe.
 struct TerminalComposerDraftTracker: Equatable {
     private(set) var mayHaveUnsentInput = false
+    /// Ein Turn wurde abgebrochen (ESC, `chats interrupt`): Die Claude-CLI legt
+    /// dessen Prompt in den Composer zurück. Ein programmatischer Versand
+    /// hängte seinen Text daran an — der Send-Guard blockte die Wiedervorlage
+    /// samt neuem Prompt, der verloren ging, obwohl `chats send` „zugestellt“
+    /// meldete (E2E 17.10.2026).
+    private(set) var mayHoldRestoredPrompt = false
+
+    /// Vor einem programmatischen Versand zuerst leeren? Nur bei vermutetem
+    /// zurückgelegtem Prompt — der steht schon im Transcript. Ein eigener
+    /// Entwurf des Users (auch ein bearbeiteter Rückleger) bleibt unangetastet.
+    var shouldClearBeforeSubmit: Bool {
+        mayHoldRestoredPrompt && !mayHaveUnsentInput
+    }
+
+    mutating func recordTurnInterrupted() {
+        mayHoldRestoredPrompt = true
+    }
 
     /// Tastendruck, der an die Terminal-View ging.
     mutating func recordKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
@@ -102,10 +119,12 @@ struct TerminalComposerDraftTracker: Equatable {
                 mayHaveUnsentInput = true
             } else {
                 mayHaveUnsentInput = false
+                mayHoldRestoredPrompt = false
             }
         case 8 where flags.contains(.control):
             // Ctrl+C leert in Claude Code den Composer (bzw. bricht ab).
             mayHaveUnsentInput = false
+            mayHoldRestoredPrompt = false
         case 9 where flags.contains(.command):
             // Cmd+V fuegt ein.
             mayHaveUnsentInput = true
@@ -130,6 +149,7 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Programmatisch abgeschickt (`chats send`, Queue-Zustellung).
     mutating func recordSubmitted() {
         mayHaveUnsentInput = false
+        mayHoldRestoredPrompt = false
     }
 }
 
