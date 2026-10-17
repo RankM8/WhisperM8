@@ -271,6 +271,31 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
     }
 
+    func testClearBindsNewSessionIDOnFirstRegistryTurn() throws {
+        // `/clear`: gleicher Prozess, neue Session-ID ohne Transcript — die
+        // Bindung wird zurückgestellt; kein Turn-Hook mehr, der sie auflöst.
+        let f = try makeFixture()
+        f.coordinator.transcriptExistsOverride = { _, ext, _ in ext == "ext-1" }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle"))
+        var clear = hook(.sessionStart)
+        clear.sessionID = "ext-2"
+        clear.source = "clear"
+        f.coordinator.handleHookEvent(localID: f.sessionID, event: clear)
+        f.coordinator.handleRegistryRecord(record("idle", sessionID: "ext-2"))
+        XCTAssertEqual(try currentExternalID(f), "ext-1", "ohne Turn bleibt die alte ID")
+
+        f.coordinator.handleRegistryRecord(record("busy", sessionID: "ext-2"))
+        XCTAssertEqual(try currentExternalID(f), "ext-2")
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
+        f.coordinator.handleRegistryRecord(record("idle", sessionID: "ext-2"))
+        XCTAssertEqual(f.poster.posted.count, 1, "Turn-Ende nach /clear meldet „fertig“")
+    }
+
+    private func currentExternalID(_ f: Fixture) throws -> String? {
+        try XCTUnwrap(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }).externalSessionID
+    }
+
     func testRecordWithoutOwnTerminalIsIgnored() throws {
         // Dieselbe Session läuft in einem fremden Terminal (`claude --resume`).
         let f = try makeFixture()

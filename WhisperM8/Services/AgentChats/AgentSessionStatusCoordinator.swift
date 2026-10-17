@@ -583,7 +583,8 @@ final class AgentSessionStatusCoordinator {
         // belebte sonst den gestoppten PTY-Chat (Status „arbeitet“ ohne
         // Terminal, Fertig-Meldung für einen Chat ohne Prozess).
         guard isRegistryStatusEnabled(), !record.isBackground,
-              let sessionID = registrySessionID(forExternalID: record.sessionID) else { return }
+              let sessionID = registrySessionID(forExternalID: record.sessionID)
+                ?? bindPendingExternalID(from: record) else { return }
         // Ohne eigenes PTY gehört der Prozess nicht zu diesem Chat (fremdes
         // Terminal, Headless-Lauf): sonst kämen Ton und Meldungen für einen
         // Lauf außerhalb der App, und endete er mitten im Turn, bliebe der
@@ -605,6 +606,23 @@ final class AgentSessionStatusCoordinator {
         apply(.registryStatus(observation), to: sessionID)
         updateRegistryAwaitingToolName(sessionID)
         noteShadowDiff(sessionID)
+    }
+
+    /// Zurückgestellte externe ID (`/clear`, frische Vordergrund-Session nach
+    /// `/background`, siehe `externalIDBindingDecision`): Früher löste sie das
+    /// erste Turn-Event dieser ID auf — mit dem reduzierten Hook-Satz gibt es
+    /// keins mehr, der Chat blieb an der alten ID hängen (kein Status mehr,
+    /// `--resume` mit dem Verlauf von vor `/clear`). Claude meldet den ersten
+    /// Turn selbst: `busy`/`waiting` unter der zurückgestellten ID bindet sie.
+    private func bindPendingExternalID(from record: ClaudeSessionRecord) -> UUID? {
+        guard record.status == .busy || record.status == .waiting,
+              let localID = pendingExternalIDs.first(where: { $0.value == record.sessionID })?.key,
+              hasRunningTerminal(localID) else { return nil }
+        pendingExternalIDs[localID] = nil
+        Logger.claudeBinding.info(
+            "binding_resolved_by_registry localID=\(localID.uuidString, privacy: .public) id=\(record.sessionID, privacy: .public)")
+        setExternalSessionID(localID: localID, newID: record.sessionID)
+        return registrySessionID(forExternalID: record.sessionID)
     }
 
     /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
