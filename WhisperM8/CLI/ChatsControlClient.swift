@@ -149,15 +149,23 @@ enum ChatsControlClient {
         }
     }
 
+    /// Liest blockweise bis zum ersten Zeilenende. Pro Verbindung kommt genau
+    /// eine Antwortzeile, Bytes danach gibt es nicht. Vorher ein `read` je
+    /// Byte: bei ~700 KB `sessions.live` über 1 s CPU und Hunderttausende
+    /// Syscalls (gemessen 17.10.2026 in einem 16-s-Hänger von `chats list`).
     private static func readLine(_ fd: Int32) -> Data? {
         var buffer = Data()
-        var byte: UInt8 = 0
+        var chunk = [UInt8](repeating: 0, count: 64 * 1024)
         while buffer.count <= ChatsControlCodec.maxLineBytes {
-            let n = read(fd, &byte, 1)
+            let n = chunk.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
             if n == -1 && errno == EINTR { continue }   // Signal — wiederholen
             if n <= 0 { return buffer.isEmpty ? nil : buffer }
-            if byte == 0x0A { return buffer }
-            buffer.append(byte)
+            let received = chunk[0..<n]
+            if let newline = received.firstIndex(of: 0x0A) {
+                buffer.append(contentsOf: received[..<newline])
+                return buffer
+            }
+            buffer.append(contentsOf: received)
         }
         return buffer
     }

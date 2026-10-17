@@ -459,7 +459,7 @@ enum ChatsListCommand {
         // Live-Merge zuerst — der App-Status (laufende PTYs) speist sowohl den
         // active-Scope als auch den Status-Merge.
         let live = ChatsLiveMerge.fetch()
-        let liveRunningIDs = Set((live ?? [:]).filter { $0.value.isAttachedPTY }.map(\.key))
+        let liveRunningIDs = live?.attachedIDs ?? []
 
         // Scope auflösen: explizites --scope gewinnt, sonst --all → all, sonst
         // recent. --open/--pinned sind explizite Mitgliedschafts-Filter (offener
@@ -541,7 +541,7 @@ enum ChatsListCommand {
                 truncated: truncated,
                 countsCoverFullScope: plan.countsCoverFullScope,
                 queuedCounts: queuedCounts,
-                liveStatuses: live ?? [:]
+                liveStatuses: live
             )
             CLIIO.out(ChatsOutput.encodeJSON(payload))
             if truncated {

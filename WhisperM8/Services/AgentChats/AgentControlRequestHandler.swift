@@ -101,15 +101,19 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Autoritative Runtime-Daten für die Lese-Befehle: die App kennt
     /// PTY-Existenz und den hook-getrackten Status, die der CLI-Schätzer nicht
     /// sieht.
+    /// `onlyActive` (neue CLI): nur Sessions mit PTY oder bekanntem Status —
+    /// die übrigen sind getrennt und ohne Status, die CLI ergänzt sie selbst.
     private func sessionsLive(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let onlyActive = request.params["onlyActive"]?.boolValue ?? false
         let live = await MainActor.run { () -> [[String: Any]] in
             let statusStore = AgentSessionStatusCoordinator.shared.statusStore
             let registry = AgentTerminalRegistry.shared
             let workspace = AgentWorkspaceUIModel.shared.workspace
-            return workspace.sessions.map { session in
+            return workspace.sessions.compactMap { session in
                 let controller = registry.controller(for: session.id)
                 let isRunning = controller?.isRunning ?? false
                 let runtime = statusStore.status(for: session.id)
+                if onlyActive, !isRunning, runtime == nil { return nil }
                 return [
                     "sessionID": session.id.uuidString,
                     "runtimeStatus": runtime?.rawValue ?? "unknown",
@@ -119,7 +123,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 ]
             }
         }
-        return .success(requestID: request.requestID, result: .object(["sessions": live]))
+        return .success(requestID: request.requestID,
+                        result: .object(["sessions": live, "omittedDetached": onlyActive]))
     }
 
     // MARK: session.send

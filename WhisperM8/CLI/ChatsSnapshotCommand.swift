@@ -65,7 +65,7 @@ enum ChatsSnapshotCommand {
 
         let context = ChatsCommandContext.load()
         let live = ChatsLiveMerge.fetch()
-        let liveRunningIDs = Set((live ?? [:]).filter { $0.value.isAttachedPTY }.map(\.key))
+        let liveRunningIDs = live?.attachedIDs ?? []
 
         // Kandidatenmenge: alles Nicht-Archivierte. Der Snapshot rechnet über
         // den vollen Bestand und liefert nur das Handlungsrelevante aus.

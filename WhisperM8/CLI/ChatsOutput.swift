@@ -34,7 +34,7 @@ enum ChatsOutput {
         truncated: Bool = false,
         countsCoverFullScope: Bool = true,
         queuedCounts: [UUID: Int] = [:],
-        liveStatuses: [UUID: ChatsLiveStatus] = [:]
+        liveStatuses: ChatsLiveSnapshot? = nil
     ) -> [String: Any] {
         var countsDict: [String: Any] = [:]
         for category in ChatsAttentionCategory.allCases {
@@ -60,7 +60,7 @@ enum ChatsOutput {
                 // laufende Sessions — ein Orchestrator hätte daraus nie eine
                 // Sendeentscheidung ableiten können.
                 var dict = sessionJSON(entry: item.entry, runtime: item.runtime, selfID: selfID, live: live, attention: item,
-                                       liveStatus: liveStatuses[item.entry.session.id],
+                                       liveStatus: liveStatuses?[item.entry.session.id],
                                        isOpen: openTabIDs.contains(item.entry.session.id),
                                        isPinned: pinnedIDs.contains(item.entry.session.id))
                 if let queued = queuedCounts[item.entry.session.id], queued > 0 {
