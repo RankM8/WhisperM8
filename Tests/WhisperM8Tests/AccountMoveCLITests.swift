@@ -283,6 +283,21 @@ final class TerminalComposerDraftTrackerTests: XCTestCase {
         XCTAssertFalse(tracker.shouldClearBeforeSubmit)
     }
 
+    @MainActor
+    func testClearOnlyForIdleClaudeChats() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordTurnInterrupted()
+        XCTAssertTrue(AgentTerminalController.clearsBeforeSubmit(
+            draft: tracker, profile: .claudeCodeChat, status: .idle))
+        XCTAssertFalse(AgentTerminalController.clearsBeforeSubmit(
+            draft: tracker, profile: .claudeCodeChat, status: .awaitingInput),
+            "Ctrl+C in eine offene Rückfrage bräche sie ab")
+        XCTAssertFalse(AgentTerminalController.clearsBeforeSubmit(
+            draft: tracker, profile: .claudeCodeChat, status: .working))
+        XCTAssertFalse(AgentTerminalController.clearsBeforeSubmit(
+            draft: tracker, profile: .codexChat, status: .idle))
+    }
+
     func testProgrammaticInsertAndSubmit() {
         var tracker = TerminalComposerDraftTracker()
         tracker.recordTextInserted()
