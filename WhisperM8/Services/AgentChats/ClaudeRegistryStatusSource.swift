@@ -27,6 +27,8 @@ final class ClaudeRegistryStatusSource {
     private let queue = DispatchQueue(label: "com.whisperm8.app.claude-registry", qos: .utility)
 
     private var stream: FSEventStreamRef?
+    /// Die Ordner, die der laufende Stream tatsächlich beobachtet.
+    private(set) var watchedPaths: [String] = []
     private var watchedRoots: [ClaudeSessionRegistry.Root] = [] {
         didSet {
             let map = Dictionary(watchedRoots.map { ($0.url.path, $0.profileName) },
@@ -79,6 +81,8 @@ final class ClaudeRegistryStatusSource {
         rescanTask?.cancel()
         rescanTask = nil
         stopStream()
+        watchedRoots = []
+        watchedPaths = []
         recordsByPID = [:]
         eventTouchedAt = [:]
     }
@@ -87,7 +91,12 @@ final class ClaudeRegistryStatusSource {
 
     func rescan() async {
         let roots = rootsProvider()
-        if roots != watchedRoots { restartStream(roots: roots) }
+        // Auch neu: ein `sessions`-Ordner, den es beim letzten Start des
+        // Streams noch nicht gab (erste Session eines Kontos) — sonst kämen
+        // dessen Wechsel nur im Takt des Voll-Scans.
+        if roots != watchedRoots || Self.existingPaths(of: roots) != watchedPaths {
+            restartStream(roots: roots)
+        }
         let isAlive = self.isAlive
         let started = now()
         let records = await withCheckedContinuation { continuation in
@@ -140,8 +149,9 @@ final class ClaudeRegistryStatusSource {
         stopStream()
         watchedRoots = roots
         // Nur existierende Ordner: ein Profil ohne laufende Session hat noch
-        // keinen `sessions`-Ordner; der Voll-Scan nimmt ihn später auf.
-        let paths = roots.map(\.url.path).filter { FileManager.default.fileExists(atPath: $0) }
+        // keinen `sessions`-Ordner; `rescan` startet neu, sobald es ihn gibt.
+        let paths = Self.existingPaths(of: roots)
+        watchedPaths = paths
         guard !paths.isEmpty else { return }
 
         var context = FSEventStreamContext()
@@ -164,6 +174,10 @@ final class ClaudeRegistryStatusSource {
         FSEventStreamSetDispatchQueue(stream, queue)
         FSEventStreamStart(stream)
         self.stream = stream
+    }
+
+    nonisolated static func existingPaths(of roots: [ClaudeSessionRegistry.Root]) -> [String] {
+        roots.map(\.url.path).filter { FileManager.default.fileExists(atPath: $0) }
     }
 
     private func stopStream() {

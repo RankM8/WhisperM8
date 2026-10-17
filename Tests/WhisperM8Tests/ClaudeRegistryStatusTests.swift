@@ -433,6 +433,18 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(source.recordsByPID[4711]?.status, .busy, "neuer Prozess mit gleicher PID")
     }
 
+    func testRescanWatchesSessionsFolderCreatedLater() async throws {
+        let root = ClaudeSessionRegistry.Root(
+            profileName: "neu", url: tempDir.appendingPathComponent("neu/sessions", isDirectory: true))
+        let source = ClaudeRegistryStatusSource(rootsProvider: { [root] }, isAlive: { _, _ in true })
+        await source.rescan()
+        XCTAssertTrue(source.watchedPaths.isEmpty)
+        try FileManager.default.createDirectory(at: root.url, withIntermediateDirectories: true)
+        await source.rescan()
+        XCTAssertEqual(source.watchedPaths, [root.url.path])
+        source.stop()
+    }
+
     func testReadChangeSeparatesUnreadableFromRemoved() throws {
         let file = tempDir.appendingPathComponent("4711.json")
         XCTAssertEqual(ClaudeRegistryStatusSource.readChange(fileURL: file, profileName: "ai2", isAlive: { _, _ in true }),
