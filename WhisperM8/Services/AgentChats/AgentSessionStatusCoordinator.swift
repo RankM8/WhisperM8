@@ -572,7 +572,11 @@ final class AgentSessionStatusCoordinator {
     /// Zuordnung über Claudes Session-ID; Background-Agents, Terminals und
     /// Codex bleiben auf ihren bisherigen Wegen.
     func handleRegistryRecord(_ record: ClaudeSessionRecord) {
-        guard isRegistryStatusEnabled(),
+        // `kind: bg`: Läuft die Session eines Chats per `/background` beim
+        // Supervisor weiter, trägt sie dieselbe Session-ID — ihr Eintrag
+        // belebte sonst den gestoppten PTY-Chat (Status „arbeitet“ ohne
+        // Terminal, Fertig-Meldung für einen Chat ohne Prozess).
+        guard isRegistryStatusEnabled(), !record.isBackground,
               let sessionID = registrySessionID(forExternalID: record.sessionID) else { return }
         if let ended = terminatedAt[sessionID], now().timeIntervalSince(ended) < 5 { return }
         let previous = registryRecords[sessionID]

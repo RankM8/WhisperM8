@@ -73,7 +73,10 @@ enum ChatsStatusProbe {
     /// Pur: Claudes eigener Status schlägt die Transcript-Schätzung. Revision
     /// und Transcript-Pfad bleiben (Grundlage von `wait --since`).
     static func overlayRegistry(_ estimate: ChatsRuntimeInfo, record: ClaudeSessionRecord?) -> ChatsRuntimeInfo {
-        guard let record, let status = ClaudeSessionRegistry.runtimeStatus(for: record) else { return estimate }
+        // `kind: bg` = Session läuft beim Supervisor weiter, nicht im Chat —
+        // wie in der App kein Status für den Chat selbst.
+        guard let record, !record.isBackground,
+              let status = ClaudeSessionRegistry.runtimeStatus(for: record) else { return estimate }
         var info = estimate
         info.status = status
         info.source = "claudeRegistry"

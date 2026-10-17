@@ -252,6 +252,23 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
     }
 
+    func testBackgroundRecordNeverRevivesStoppedChat() throws {
+        // `/background`: Die Session läuft beim Supervisor mit derselben ID
+        // weiter, der PTY-Chat ist beendet.
+        let f = try makeFixture()
+        var clock = Date(timeIntervalSince1970: 1_792_000_000)
+        f.coordinator.now = { clock }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("busy"))
+        f.coordinator.sessionTerminated(sessionID: f.sessionID, exitCode: 0)
+        clock = clock.addingTimeInterval(30)
+        f.coordinator.handleRegistryRecord(record("busy", pid: 5000, kind: "bg"))
+        f.coordinator.handleRegistryRecord(record("idle", pid: 5000, kind: "bg"))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .stopped)
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertTrue(f.poster.posted.isEmpty)
+    }
+
     // MARK: S4 — Hook-Satz
 
     func testReducedHookSetKeepsBindingAndGuardOnly() throws {
@@ -394,6 +411,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(overlaid.revision, 42)
         XCTAssertEqual(ChatsStatusProbe.overlayRegistry(estimate, record: nil), estimate)
         XCTAssertEqual(ChatsStatusProbe.overlayRegistry(estimate, record: record("dreaming")), estimate)
+        XCTAssertEqual(ChatsStatusProbe.overlayRegistry(estimate, record: record("busy", kind: "bg")), estimate,
+                       "bg-Eintrag gehört nicht zum Chat")
     }
 
     func testRegistryCacheRefreshesAfterMaxAge() {
