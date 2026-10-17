@@ -1001,13 +1001,19 @@ final class AgentWindowStore {
     /// Deterministischer Fokus-Fallback nach Entfernen des fokussierten
     /// Slots: nächster belegter Slot nach dem entfernten Index, sonst der
     /// vorherige, sonst `nil`.
+    ///
+    /// `removedIndex` stammt aus dem Layout VOR dem Entfernen; das Verdichten
+    /// kann `slots` kürzer machen (Chat hinter einer Lücke: [A, nil, nil, B]
+    /// → [A, nil]). Ohne Klemmung lag der Index hinter dem Ende, und
+    /// `slots[3...]` beendete die App samt aller Chats (Delta-Audit D2-01).
     private static func gridFocusFallback(
         in entity: AgentGridWorkspace, removedIndex: Int
     ) -> UUID? {
-        if let next = entity.slots[removedIndex...].compactMap({ $0 }).first {
+        let anchor = min(max(removedIndex, 0), entity.slots.count)
+        if let next = entity.slots[anchor...].compactMap({ $0 }).first {
             return next
         }
-        return entity.slots[..<removedIndex].compactMap { $0 }.last
+        return entity.slots[..<anchor].compactMap { $0 }.last
     }
 
     /// Entfernt ein leeres Sekundaerfenster aus dem State. Gibt `true` zurueck,

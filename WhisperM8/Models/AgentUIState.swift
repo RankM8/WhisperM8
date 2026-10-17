@@ -560,8 +560,11 @@ struct AgentUIState: Codable, Equatable {
                 continue
             }
             let ownTabs = Set(windows[index].openTabIDs)
-            let after = entity.slots[anchor.index...].compactMap { $0 }
-            let before = entity.slots[..<anchor.index].compactMap { $0 }
+            // Geklemmt wie `AgentWindowStore.gridFocusFallback`: schrumpft das
+            // Layout, läge ein alter Anker hinter dem Ende (Range-Trap).
+            let anchorIndex = min(max(anchor.index, 0), entity.slots.count)
+            let after = entity.slots[anchorIndex...].compactMap { $0 }
+            let before = entity.slots[..<anchorIndex].compactMap { $0 }
             let fallback = after.first { ownTabs.contains($0) }
                 ?? before.last { ownTabs.contains($0) }
                 ?? after.first

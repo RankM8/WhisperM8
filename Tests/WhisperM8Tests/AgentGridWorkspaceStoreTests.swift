@@ -643,6 +643,20 @@ final class AgentGridWorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(store.openTabIDs(in: w).contains(s[1]), "Tab bleibt offen")
     }
 
+    /// Delta-Audit D2-01: Chat hinter einer Lücke entfernen — das Verdichten
+    /// kürzt die Slots unter den alten Index; früher Range-Trap (App weg).
+    func testRemoveFocusedSessionBehindGapDoesNotTrap() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 2)
+        let id = store.createGridWorkspace(name: "G", slots: [s[0], nil, nil, s[1]], activateIn: w)
+        store.setGridFocusedSession(s[1], in: w)
+
+        XCTAssertTrue(store.removeSession(s[1], fromGridWorkspace: id, compacting: true))
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots.compactMap { $0 }, [s[0]])
+        XCTAssertEqual(store.selectedSession(in: w), s[0], "vorheriger belegter Slot")
+    }
+
     /// CLI `remove --keep-slot`: Der Override erzwingt stabile Positionen
     /// für genau diesen Aufruf — trotz eingeschaltetem Auto-Compact-Default.
     func testRemoveWithKeepSlotOverridesCompaction() throws {
