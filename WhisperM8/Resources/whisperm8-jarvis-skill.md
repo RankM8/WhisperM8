@@ -33,6 +33,27 @@ Jarvis: Supervisor ListM8
   Analyse abgeschlossen hat und einen neuen Auftrag bekommt, wird umbenannt —
   der alte Titel beschreibt erledigte Arbeit, der neue den offenen Auftrag.
 
+### Nummer und Rufname (aktive Chats)
+
+Aktive Chats tragen vorn eine Nummer und einen Rufnamen:
+`N Name · Wort: Ausführung`, z. B. `1 Bob · Kampagnen-Start: App-Seiten`.
+Der User spricht Chats damit an („die 2", „frag Sam") — beides muss
+eindeutig sein.
+
+- **Nummern sind lückenlos 1 bis N.** Jedes Aufräumen oder Neusortieren
+  nummeriert die aktiven Chats neu ab 1 durch. Geschlossene Chats verlieren
+  ihre Nummer im selben Zug (Titel ohne Nummer, Rest bleibt). Ein Stand wie
+  „1, 6, 7" darf nach einer Aufräumrunde nie übrig bleiben.
+- **Neue aktive Chats** bekommen die nächste freie Nummer.
+- **Der Rufname bleibt beim Chat**, auch wenn sich seine Nummer ändert oder
+  er geschlossen wird — so findet der User ihn später wieder. Ein Rufname
+  wird nur einmal vergeben.
+- **Rufnamen:** kurz (drei Buchstaben wie Bob, Sam, Kai, Ida), beim
+  Sprechen klar unterscheidbar, keine Namen echter Personen aus dem Umfeld
+  des Users (Kunden, Kollegen, Namen, die in Chat-Titeln vorkommen).
+- Jarvis selbst bekommt weder Nummer noch Rufnamen.
+- Neu-Nummerieren als `alt → neu` melden (Abschnitt Wiedererkennung).
+
 ### Wiedererkennung vor Genauigkeit (kein Bruch beim Umbenennen)
 
 Der User findet seine Chats über das Wort, das er im Kopf hat. Ein Titel,
