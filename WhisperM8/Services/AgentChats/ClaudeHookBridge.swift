@@ -86,7 +86,8 @@ final class ClaudeHookBridge {
     func prepareSettingsFile(
         localSessionID: UUID,
         extraFragment: [String: Any]? = nil,
-        includeHooks: Bool = true
+        includeHooks: Bool = true,
+        hookEventNames: [String] = ClaudeHookSettingsBuilder.trackedEventNames
     ) -> String? {
         let settingsURL = paths.settingsFileURL(localSessionID: localSessionID)
         var fragments: [[String: Any]] = []
@@ -115,7 +116,8 @@ final class ClaudeHookBridge {
                 }
                 fragments.append(ClaudeHookSettingsBuilder.makeSettings(
                     eventFilePath: eventURL.path,
-                    promptGuardCommand: guardCommand))
+                    promptGuardCommand: guardCommand,
+                    eventNames: hookEventNames))
             }
             if let extraFragment, !extraFragment.isEmpty {
                 fragments.append(extraFragment)

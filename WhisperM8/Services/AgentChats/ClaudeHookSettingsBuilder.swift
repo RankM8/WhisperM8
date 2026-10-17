@@ -39,9 +39,17 @@ enum ClaudeHookSettingsBuilder {
     /// keine externen Tools wie `jq`. Background-Sessions setzen das
     /// beim `--bg`-Spawn (siehe `BackgroundAgentSpawner`), normale
     /// Chats beim Launch des PTY.
+    /// Mit Registry-Status (Plan claude-status-aus-registry.md, S4): Claude
+    /// meldet arbeitet/wartet/frei selbst in `<config>/sessions/<pid>.json`.
+    /// Übrig bleiben nur Binding der externen ID und Lebenszyklus — kein
+    /// Shell-Aufruf mehr pro Tool-Aufruf. Der Send-Guard hängt unabhängig
+    /// davon als eigener `UserPromptSubmit`-Eintrag dran.
+    static let registryModeEventNames: [String] = ["SessionStart", "SessionEnd"]
+
     static func makeSettings(
         eventFilePath: String,
-        promptGuardCommand: String? = nil
+        promptGuardCommand: String? = nil,
+        eventNames: [String] = trackedEventNames
     ) -> [String: Any] {
         let command = appendCommand(eventFilePath: eventFilePath)
         let entry: [String: Any] = [
@@ -54,7 +62,7 @@ enum ClaudeHookSettingsBuilder {
             ]
         ]
         var hooks: [String: Any] = [:]
-        for name in trackedEventNames {
+        for name in eventNames {
             hooks[name] = [entry]
         }
         // Send-Guard: zweiter, additiver UserPromptSubmit-Eintrag. Exit 2

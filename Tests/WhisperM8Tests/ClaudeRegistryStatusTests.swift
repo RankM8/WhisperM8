@@ -239,6 +239,41 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
     }
 
+    // MARK: S4 — Hook-Satz
+
+    func testReducedHookSetKeepsBindingAndGuardOnly() throws {
+        let settings = ClaudeHookSettingsBuilder.makeSettings(
+            eventFilePath: "/tmp/events.jsonl", promptGuardCommand: "guard",
+            eventNames: ClaudeHookSettingsBuilder.registryModeEventNames)
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "SessionEnd", "UserPromptSubmit"])
+        let guardEntries = try XCTUnwrap(hooks["UserPromptSubmit"] as? [[String: Any]])
+        XCTAssertEqual(guardEntries.count, 1, "nur der Send-Guard, kein Status-Append")
+        XCTAssertTrue(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: true, isBackground: false))
+        XCTAssertFalse(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: true, isBackground: true))
+        XCTAssertFalse(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: false, isBackground: false))
+    }
+
+    func testPrepareLaunchWritesReducedHooksAndSessionStartIsNotHookLive() throws {
+        let f = try makeFixture()
+        let prep = f.coordinator.prepareLaunchSettings(localSessionID: f.sessionID)
+        let path = try XCTUnwrap(prep.settingsFilePath)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any])
+        let hooks = try XCTUnwrap(json["hooks"] as? [String: Any])
+        XCTAssertNil(hooks["PreToolUse"])
+        XCTAssertNil(hooks["Stop"])
+        XCTAssertNotNil(hooks["SessionStart"])
+        XCTAssertTrue(f.coordinator.reducedHookSessions.contains(f.sessionID))
+
+        // Kill-Switch aus → voller Satz.
+        f.registryEnabled.value = false
+        let full = f.coordinator.prepareLaunchSettings(localSessionID: f.sessionID)
+        let fullJSON = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(full.settingsFilePath)))) as? [String: Any])
+        XCTAssertNotNil((fullJSON["hooks"] as? [String: Any])?["PreToolUse"])
+        XCTAssertFalse(f.coordinator.reducedHookSessions.contains(f.sessionID))
+    }
+
     // MARK: Quelle
 
     func testSourceDiffsScansAndReportsRemovals() {

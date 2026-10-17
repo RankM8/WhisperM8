@@ -156,6 +156,12 @@ final class AgentSessionStatusCoordinator {
     nonisolated static let shadowDiffLogSeconds: TimeInterval = 5
 
     var isRegistryStatusEnabled: () -> Bool = { AppPreferences.shared.isClaudeRegistryStatusEnabled }
+    /// Sessions, deren Launch nur SessionStart/SessionEnd-Hooks bekam (S4).
+    private(set) var reducedHookSessions: Set<UUID> = []
+
+    nonisolated static func usesReducedHooks(registryEnabled: Bool, isBackground: Bool) -> Bool {
+        registryEnabled && !isBackground
+    }
     var registryRecordLookup: (String) -> ClaudeSessionRecord? = {
         ClaudeRegistryStatusSource.shared.record(forExternalSessionID: $0)
     }
@@ -244,10 +250,23 @@ final class AgentSessionStatusCoordinator {
             memoryFragment,
         ])
         guard hooksEnabled || !fragment.isEmpty else { return .none }
+        // S4: Mit Registry-Status nur noch Binding-/Lebenszyklus-Hooks.
+        // Background-Agents behalten den vollen Satz (eigener Status-Pfad).
+        let reducedHooks = Self.usesReducedHooks(
+            registryEnabled: isRegistryStatusEnabled(),
+            isBackground: session?.isBackgroundChat ?? false)
+        if reducedHooks {
+            reducedHookSessions.insert(localSessionID)
+        } else {
+            reducedHookSessions.remove(localSessionID)
+        }
         let path = hookBridge.prepareSettingsFile(
             localSessionID: localSessionID,
             extraFragment: fragment,
-            includeHooks: hooksEnabled
+            includeHooks: hooksEnabled,
+            hookEventNames: reducedHooks
+                ? ClaudeHookSettingsBuilder.registryModeEventNames
+                : ClaudeHookSettingsBuilder.trackedEventNames
         )
         return LaunchSettingsPreparation(
             settingsFilePath: path,
@@ -352,7 +371,12 @@ final class AgentSessionStatusCoordinator {
     /// `AgentChatsView.handleClaudeHookEvent`). Jedes Event markiert die
     /// Session als hook-live — ab dann sind Hooks die alleinige Statusquelle.
     func handleHookEvent(localID: UUID, event: ClaudeHookEvent) {
-        hookLiveSessions.insert(localID)
+        // Mit reduziertem Hook-Satz (S4) beweist ein SessionStart keinen
+        // vollständigen Hook-Strom — ohne Registry-Eintrag muss dann der
+        // Transcript-Pfad den Status tragen, deshalb nicht hook-live.
+        if !reducedHookSessions.contains(localID) {
+            hookLiveSessions.insert(localID)
+        }
         lastHookEventAt[localID] = Date()
         if event.hookEventName == .sessionStart {
             bindExternalSessionID(localID: localID, event: event)
