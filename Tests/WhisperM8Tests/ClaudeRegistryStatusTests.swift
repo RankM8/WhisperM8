@@ -296,6 +296,18 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         try XCTUnwrap(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }).externalSessionID
     }
 
+    func testPromptGuardBlockIsNoTurnEnd() throws {
+        let f = try makeFixture()
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", updatedAt: Date().addingTimeInterval(-10)))
+        f.coordinator.handleRegistryRecord(record("busy", updatedAt: Date().addingTimeInterval(-1)))
+        f.coordinator.handleHookEvent(localID: f.sessionID, event: hook(.promptGuardBlock))
+        f.coordinator.handleRegistryRecord(record("idle", updatedAt: Date()))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle)
+        XCTAssertTrue(f.poster.posted.isEmpty, "geblockter Prompt ist kein „fertig“")
+        XCTAssertTrue(f.sounds.isEmpty)
+    }
+
     func testRecordWithoutOwnTerminalIsIgnored() throws {
         // Dieselbe Session läuft in einem fremden Terminal (`claude --resume`).
         let f = try makeFixture()

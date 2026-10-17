@@ -444,7 +444,12 @@ final class AgentSessionStatusCoordinator {
         Logger.claudeBinding.notice(
             "prompt_guard_block localID=\(localID.uuidString, privacy: .public)")
         // Registry-live: Claude meldet den nie gelaufenen Turn selbst als idle.
-        if !registryLiveSessions.contains(localID) {
+        // Meldet es davor kurz busy, wäre das folgende idle ein „fertig“ (Ton,
+        // Meldung, Queue-Zustellung für einen geblockten Prompt) — der Block
+        // zählt deshalb wie ein beobachteter Abbruch.
+        if registryLiveSessions.contains(localID) {
+            interruptMarks[localID] = now()
+        } else {
             apply(.turnAborted, to: localID)
         }
         Task { @MainActor in
