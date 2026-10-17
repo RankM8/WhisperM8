@@ -377,24 +377,8 @@ struct ChatTabButton: View {
                 .onTapGesture { onClose() }
                 .help("Tab schließen")
         } else {
-            switch resolvedStatus {
-            case .working:
-                Circle().fill(Color.green).frame(width: 5, height: 5)
-                    .help("Arbeitet …")
-            case .awaitingInput:
-                Circle().fill(Color.orange).frame(width: 5, height: 5)
-                    .help("Wartet möglicherweise auf User-Input")
-            case .idle:
-                Circle().fill(Color.green.opacity(0.55)).frame(width: 5, height: 5)
-                    .help("Bereit")
-            case .errored:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Color.red.opacity(0.8))
-                    .help("Mit Fehler beendet")
-            case .stopped, .none:
-                Color.clear.frame(width: 1, height: 1)
-            }
+            // Dieselbe Status-Sprache wie die Sidebar (grün nur bei „arbeitet").
+            AgentStatusIndicator(status: resolvedStatus, compact: true)
         }
     }
 
@@ -563,27 +547,44 @@ struct HeaderIconButton: View {
     }
 }
 
-/// Kleiner Live-Status-Dot für die selektierte Session (Topbar). Eigene
-/// Komponente mit Per-Item-Subscription, damit Status-Änderungen die Farbe
-/// zuverlässig invalidieren (der Parent-Body darf `.statuses` nicht lesen).
+/// Live-Status-Dot im Chat-Kopf und im Kopf jeder Grid-Kachel. Zeigt
+/// denselben Laufzeitstatus wie die Sidebar (`AgentStatusIndicator`) — früher
+/// war er grün, sobald der Prozess lief, auch wenn der Chat nur ruhte.
+/// Eigene Komponente mit Per-Item-Subscription, damit Status-Änderungen die
+/// Farbe zuverlässig invalidieren (der Parent-Body darf `.statuses` nicht lesen).
 struct SessionLiveStatusDot: View {
     let sessionID: UUID
-    /// PTY-Prozess läuft (Terminal offen) — grün, solange kein needs-input.
     let isProcessRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
 
     @State private var liveStatus: AgentSessionRuntimeStatus?
 
     var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 7, height: 7)
-            .onReceive(statusStore.statusPublisher(for: sessionID)) { liveStatus = $0 }
+        Group {
+            if let status = SessionHeaderStatus.resolve(live: liveStatus, isProcessRunning: isProcessRunning) {
+                AgentStatusIndicator(status: status)
+            } else {
+                // Kein Prozess: ruhiger Platzhalter, damit der Titel nicht springt.
+                Circle()
+                    .fill(AgentTheme.textTertiary.opacity(0.4))
+                    .frame(width: 7, height: 7)
+                    .help("Nicht gestartet")
+            }
+        }
+        .frame(width: 7, height: 7)
+        .onReceive(statusStore.statusPublisher(for: sessionID)) { liveStatus = $0 }
     }
+}
 
-    private var color: Color {
-        if liveStatus == .awaitingInput { return .orange }
-        if isProcessRunning { return .green }
-        return AgentTheme.textTertiary
+/// Welcher Status im Kopf erscheint. Der Live-Status gewinnt; fehlt er noch,
+/// obwohl der Prozess läuft (kurz nach dem Start), gilt der Chat als bereit.
+/// `nil` = Platzhalter (kein Prozess, kein Status).
+enum SessionHeaderStatus {
+    static func resolve(live: AgentSessionRuntimeStatus?, isProcessRunning: Bool) -> AgentSessionRuntimeStatus? {
+        switch live {
+        case .working, .awaitingInput, .idle, .errored: return live
+        case .stopped: return isProcessRunning ? .idle : nil
+        case .none: return isProcessRunning ? .idle : nil
+        }
     }
 }

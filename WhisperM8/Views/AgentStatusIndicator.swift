@@ -18,10 +18,42 @@ import SwiftUI
 /// damit viele ruhende Zeilen keine Dauerlast erzeugen.
 struct AgentStatusIndicator: View {
     let status: AgentSessionRuntimeStatus?
+    /// Tab-Leiste: dieselben Farben und Bedeutungen, aber 5 pt und ohne Puls —
+    /// eine Reihe pulsierender Tabs wäre unruhig.
+    var compact = false
 
-    private let core: CGFloat = 7
+    private var core: CGFloat { compact ? 5 : 7 }
 
     var body: some View {
+        if compact {
+            compactBody
+        } else {
+            fullBody
+        }
+    }
+
+    @ViewBuilder
+    private var compactBody: some View {
+        switch status {
+        case .working:
+            Circle().fill(AgentTheme.statusWorking).frame(width: core, height: core)
+                .help("Arbeitet …")
+        case .awaitingInput:
+            Circle().fill(AgentTheme.statusAwaiting).frame(width: core, height: core)
+                .help("Wartet möglicherweise auf User-Input")
+        case .idle:
+            Circle().fill(AgentTheme.textTertiary.opacity(0.55)).frame(width: core, height: core)
+                .help("Bereit — wartet auf einen Prompt")
+        case .errored:
+            Circle().strokeBorder(AgentTheme.statusError, lineWidth: 1.2).frame(width: core, height: core)
+                .help("Mit Fehler beendet")
+        case .stopped, .none:
+            Color.clear.frame(width: 1, height: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var fullBody: some View {
         switch status {
         case .working:
             PulsingDot(color: AgentTheme.statusWorking, maxScale: 2.7, duration: 2.1, filledRing: true)
