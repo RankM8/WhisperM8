@@ -1,0 +1,8 @@
+{
+ "variante": "03 – Minimal: nur Punkt und Pfeil",
+ "frage": "Wie unauffällig darf es sein?",
+ "generator": "codex image_gen · gpt-5.6-sol · ein Agent je Bild",
+ "timestamp": "2026-10-17T13:53:00Z",
+ "hinweis": "Stilbild, Texte aus dem Stand vom 17.10.2026; keine Spezifikation.",
+ "abweichung": "Jarvis-Kachel zeigt kein Chevron (gemeint: kleines graues Chevron neben dem Badge)."
+}

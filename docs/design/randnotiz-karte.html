@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Randnotiz-Karte</title>
+<!--
+  Entwurf 17.10.2026: Randnotiz eines Chats als „hängende Karte" im Kachelkopf.
+  Form = ChromeTabShape (WhisperM8/Views/AgentChatChromeViews.swift) umgedreht:
+  das Grau des Notizstreifens fließt mit konkaven Füßen nach unten, bildet die
+  Karte und läuft wieder in den Streifen zurück. Die Haarlinie unter dem
+  Streifen ist dort unterbrochen, wo die Karte hängt (wie unter dem aktiven Tab).
+  URL-Parameter für Screenshots: ?shot=1&open=eli&variant=links&foot=7&shadow=0&fill=grau&active=jarvis
+-->
+<style>
+:root {
+  --bg: #ffffff;
+  --header: #f2f2f4;
+  --header-strong: #ececef;
+  --line: rgba(0,0,0,0.08);
+  --line-strong: rgba(0,0,0,0.13);
+  --text: rgba(0,0,0,0.90);
+  --text-2: rgba(0,0,0,0.58);
+  --text-3: rgba(0,0,0,0.42);
+  --accent: #5e6ad2;
+  --working: #3fa873;
+  --awaiting: #d6473d;
+  --info: #c9962a;
+  --term: #2b2b2b;
+  --term-dim: #8a8a8a;
+  --term-red: #d14b6a;
+  --badge-power: #fbe3cc;
+  --badge-power-text: #a0612a;
+  --badge-ai2: #f6ecb8;
+  --badge-ai2-text: #8a7420;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #e9e9ec; color: var(--text); font-family: var(--font); font-size: 13px; -webkit-font-smoothing: antialiased; }
+
+/* ---------- Steuerleiste ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: flex-end; padding: 14px 16px 12px; background: #fff; border-bottom: 1px solid var(--line-strong); }
+.controls h1 { font-size: 15px; font-weight: 650; margin-right: 10px; }
+.controls h1 small { display: block; font-size: 11.5px; font-weight: 400; color: var(--text-2); margin-top: 2px; }
+.grp .lbl { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); margin-bottom: 4px; font-weight: 600; }
+.seg { display: inline-flex; background: #ececf0; border-radius: 7px; padding: 2px; }
+.seg button { border: 0; background: transparent; font: inherit; font-size: 11.5px; padding: 4px 10px; border-radius: 5px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+body.shot .controls { display: none; }
+body.shot { background: #fff; }
+body.shot .hang .clip, body.shot .hang .body, body.shot .head .chev { transition: none !important; }
+
+/* ---------- Grid ---------- */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 1px; background: var(--line-strong); height: calc(100vh - 66px - 34px); min-height: 640px; }
+body.shot .grid { height: calc(100vh - 34px); }
+.tile { position: relative; background: var(--bg); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.tile.active::after { content: ""; position: absolute; inset: 0; border: 1.5px solid var(--accent); pointer-events: none; z-index: 5; }
+
+.head { height: 24px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 8px 0 10px; background: var(--header); font-size: 12px; white-space: nowrap; }
+.head .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.head .title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.head .link { color: var(--accent); font-size: 11px; }
+.badge { font-size: 9.5px; padding: 1px 14px; border-radius: 4px; flex: none; }
+.badge.power { background: var(--badge-power); color: var(--badge-power-text); }
+.badge.ai2 { background: var(--badge-ai2); color: var(--badge-ai2-text); }
+.head .tools { margin-left: auto; display: flex; gap: 11px; color: var(--text-3); font-size: 11px; flex: none; }
+/* Kachelkopf trägt die Notiz: Pfeil neben dem Badge, Haarlinie darunter */
+.head { position: relative; cursor: pointer; user-select: none; }
+.head::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--line); }
+.head .chev { color: var(--text-3); font-size: 12px; width: 12px; text-align: center; flex: none; display: inline-block; transition: transform .22s cubic-bezier(.2,.8,.2,1); }
+.head.open .chev { transform: rotate(90deg); }
+.head .chev.none { visibility: hidden; }
+.head .info { width: 12px; height: 12px; border-radius: 50%; background: var(--info); color: #fff; font-size: 8.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.lead { font-size: 12.5px; font-weight: 600; color: var(--text); line-height: 1.38; }
+.lead .age { font-weight: 400; color: var(--text-3); font-size: 11px; margin-left: 4px; }
+.lead.alarm { color: var(--awaiting); }
+
+/* ---------- Terminal-Andeutung ---------- */
+.term { flex: 1; padding: 8px 12px 0 14px; font-family: var(--mono); font-size: 10.5px; line-height: 1.42; color: var(--term); overflow: hidden; white-space: pre-wrap; word-break: break-word; }
+.term .b { color: var(--working); }
+.term .dim { color: var(--term-dim); }
+.term .h { font-weight: 700; }
+.term .lnk { color: #3b6fd6; }
+.foot { flex: none; padding: 4px 14px 8px; font-family: var(--mono); font-size: 10px; line-height: 1.45; border-top: 1px solid var(--line); margin: 0 10px; }
+.foot .r { color: var(--term-red); }
+.foot .g { color: var(--working); }
+
+/* ---------- Hängende Karte ---------- */
+.hang { position: absolute; z-index: 4; pointer-events: none; }
+.hang .clip { clip-path: inset(0 0 100% 0); transition: clip-path .26s cubic-bezier(.2,.8,.2,1); pointer-events: auto; position: relative; }
+.hang.open .clip { clip-path: inset(0 0 -20px 0); }
+.hang svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.hang .shape-fill { fill: var(--header); }
+.hang .shape-stroke { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.hang.shadow svg { filter: drop-shadow(0 3px 6px rgba(0,0,0,0.07)); }
+.hang.active-own .shape-stroke { stroke: rgba(94,106,210,0.55); }
+.hang .body { position: relative; padding: 10px 14px 10px; opacity: 0; transform: translateY(-4px); transition: opacity .18s ease .08s, transform .22s cubic-bezier(.2,.8,.2,1) .04s; }
+.hang.open .body { opacity: 1; transform: none; }
+.hang.weiss .body { background: #fff; border-radius: 6px; border: 1px solid var(--line); margin: 0 6px 6px; }
+
+.sec { margin-top: 9px; }
+.sec:first-child { margin-top: 0; }
+.cap { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); font-weight: 600; margin-bottom: 2px; }
+.val { font-size: 12px; color: var(--text); line-height: 1.4; }
+.val.dim { color: var(--text-3); }
+.live { font-size: 9.5px; color: var(--working); background: rgba(63,168,115,.12); border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+.alert { font-size: 12px; font-weight: 600; color: var(--awaiting); background: rgba(214,71,61,.08); border-radius: 5px; padding: 6px 9px; }
+.alert.info { color: #9b7317; background: rgba(201,150,42,.10); }
+.chip { display: inline-block; font-size: 10px; color: var(--text-2); background: rgba(0,0,0,.06); border-radius: 4px; padding: 1px 6px; }
+.hist { display: grid; grid-template-columns: 38px 1fr auto; gap: 2px 8px; font-size: 11.5px; color: var(--text-2); }
+.hist .t { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); padding-top: 1px; }
+.hist .src { font-size: 9.5px; color: var(--text-3); }
+.more { font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.meta { font-size: 10px; color: var(--text-3); margin-top: 9px; }
+
+/* Workspace-Leiste (wie in der App): Name links, Layout-Wahl rechts, davor der Notizen-Schalter */
+.wsbar { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; background: var(--header); border-bottom: 1px solid var(--line-strong); font-size: 12.5px; }
+.wsbar .ws-ico { color: var(--accent); font-size: 13px; }
+.wsbar .ws-name { font-weight: 600; }
+.wsbar .ws-count { color: var(--text-3); font-size: 11.5px; }
+.wsbar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.wsbar .layouts { display: flex; gap: 2px; font-size: 10.5px; color: var(--text-2); }
+.wsbar .layouts span { padding: 3px 7px; border-radius: 5px; }
+.wsbar .layouts span.on { background: #fff; color: var(--text); box-shadow: 0 0 0 1px var(--line-strong); font-weight: 600; }
+.notes-toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; font: inherit; font-size: 11.5px; color: var(--text-2); background: transparent; padding: 3px 9px; border-radius: 6px; cursor: pointer; box-shadow: 0 0 0 1px var(--line-strong); }
+.notes-toggle:hover { background: rgba(0,0,0,.04); }
+.notes-toggle .nt-ico { display: inline-block; width: 12px; height: 10px; border: 1.3px solid currentColor; border-radius: 2px; position: relative; }
+.notes-toggle .nt-ico::after { content: ""; position: absolute; left: 2px; right: 2px; top: 2.5px; height: 1.3px; background: currentColor; box-shadow: 0 2.5px 0 currentColor; }
+.notes-toggle.on { color: var(--accent); box-shadow: 0 0 0 1px rgba(94,106,210,.45); background: rgba(94,106,210,.07); }
+.notes-toggle .nt-state { color: var(--text-3); }
+.notes-toggle.on .nt-state { color: var(--accent); }
+.wsbar .sep { width: 1px; height: 16px; background: var(--line-strong); }
+
+/* Jarvis-Board-Andeutung */
+.board { margin: 6px 12px 4px; border: 1px solid #e07a7a; border-radius: 3px; padding: 4px 8px; font-family: var(--mono); font-size: 10px; line-height: 1.45; }
+.board .r { color: var(--awaiting); } .board .y { color: #c98a1a; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <h1>Randnotiz als hängende Karte<small>Notizen nur an Chats auf Jarvis' Board · Schalter „Notizen“ rechts in der Workspace-Leiste = Standard für alle · Klick ins Terminal = in den Chat gehen, seine Notiz klappt zu · Klick auf einen Kachelkopf klappt nur diesen Chat</small></h1>
+  <div class="grp"><div class="lbl">Ansatz</div><div class="seg" data-k="variant">
+    <button data-v="links">Schmal, links</button><button data-v="breit">Breit</button><button data-v="voll">Volle Breite</button></div></div>
+  <div class="grp"><div class="lbl">Füße</div><div class="seg" data-k="foot">
+    <button data-v="7">7 px wie Tabs</button><button data-v="12">12 px weich</button></div></div>
+  <div class="grp"><div class="lbl">Fläche</div><div class="seg" data-k="fill">
+    <button data-v="grau">Grau durchgehend</button><button data-v="weiss">Weiß mit grauem Rand</button></div></div>
+  <div class="grp"><div class="lbl">Tiefe</div><div class="seg" data-k="shadow">
+    <button data-v="0">Flach</button><button data-v="1">Leiser Schatten</button></div></div>
+  <div class="grp"><div class="lbl">Jarvis</div><div class="seg" data-k="jarvis">
+    <button data-v="an">Aktiv</button><button data-v="aus">Nicht aktiv</button></div></div>
+</div>
+
+<div class="wsbar">
+  <span class="ws-ico">▦</span><span class="ws-name">Aktiver Workspace</span><span class="ws-count">6/6 belegt</span>
+  <div class="right">
+    <button class="notes-toggle" id="notesToggle" title="Jarvis-Notizen standardmäßig auf- oder zuklappen (⌥⌘N)"><span class="nt-ico"></span>Notizen <span class="nt-state"></span></button>
+    <span class="sep"></span>
+    <div class="layouts"><span>1×2</span><span>2+1</span><span>2×2</span><span>3+2</span><span class="on">3×2</span><span>3+3+1</span><span>3+3+2</span><span>3×3</span></div>
+  </div>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+const CHATS = [
+  { id: "bob", onBoard: true, head: "1 Bob · Kampagnen-Start: App-Seiten", badge: "power", status: "working",
+    short: "Belegt die Verlauf-Ansicht und committet die Sequenz-Dateien", age: "jetzt", stale: true,
+    goal: "Verlauf-Ansicht der Kampagnen-Seiten fertig belegen",
+    now: "Skript macht Bildschirmfotos von „Verlauf“",
+    hist: [["13:20","Sequenzen-Reiter umgebaut, noch nicht committet","Jarvis"],["11:48","Kampagnen-Seiten A bis Z angelegt","Commit"]],
+    meta: "Aktualisiert 13:20 · Jarvis",
+    term: `<span class="dim">  M client/src/pages/admin/designs/kampagne-a-z/index.tsx
+  M client/src/pages/admin/designs/kampagne-a-z/preview.webp
+  +35 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(git diff -- client/src/pages/admin/designs/kampagne-a-z/index.tsx client/src/pages/admin/designs/kampagne-a-z/reiter/sequenzen/SequenzenReiter.tsx …)
+  <span class="dim">⎿ diff --git a/client/src/pages/admin/designs/kampagne-a-z/index.tsx
+    index 40a23b347..4bf96f4af 100644
+    +354 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(cd /Users/giulianocosta/repos/ListM8/playwright &amp;&amp; S=/private/tmp/claude-501/…/scratchpad/s…)
+  <span class="dim">⎿ 1024-verlauf-akquise.png
+    1024-verlauf-beispiel.png
+    1024-verlauf-feld.png
+    +25 lines (ctrl+o to expand)
+    (timeout 6m 40s)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(S=/private/tmp/claude-501/…/sequenzen-verlauf-shots &amp;&amp; node sandbox/az-sequenzen…)
+  <span class="dim">⎿ name: 'TimeoutError'
+    Node.js v26.0.0
+    +4 lines (2m 33s · timeout 10m)</span>
+
+<span style="color:#c96a3a">· Lollygagging… (3m 11s · ↓ 1.5k tokens)</span>`,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">15%</span> 130k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle)</span>` },
+  { id: "sam", onBoard: true, head: "2 Sam · Rebranding: Marke & Lead-Ansicht", badge: "power", status: "working",
+    short: "Baut die letzte Variante der Lead-Ansicht (L22)", age: "1m",
+    goal: "Lead-Ansicht, die alles Wichtige oben zeigt",
+    now: "Teammate baut L22 „Zwei Spalten mit DealBots“",
+    hist: [["13:31","L21 „Zwei Spalten mit Sinn“ fertig und im Vorschau-Fenster","Jarvis"],["12:50","L1 bis L20 committet (8be77ff, 151ae1c)","Commit"]],
+    meta: "Aktualisiert 13:31 · Jarvis",
+    term: `Eine Schwäche ist mir aufgefallen: Die Urteilskarte ist schmal, deshalb wird die Begründung schon nach drei Zeilen abgeschnitten.
+
+Die Variante mit DealBots (Bot im Kopf von Urteil, Empfänger und Mail) baut der Agent gerade noch. Sie bekommt den Code L22, und ich melde mich, sobald sie fertig ist.
+
+<span class="b">●</span> Teammate <span class="lnk">@lead-konzept-design</span> finished
+  <span class="dim">Beide Teile sind fertig und committed (8be77ff91 und 151ae1ccc, ohne Trailer, nicht gepusht).</span>
+
+<span>●</span> Der Agent hatte die Bots-Variante beim ersten Durchgang nicht mitgenommen. Ich habe sie ihm eben noch einmal ausdrücklich gegeben. Sie heißt L22 <span class="h">„Zwei Spalten mit DealBots“</span>: L21, aber in Urteil, Empfänger und Mail sitzt jeweils der Agent, der das geliefert hat.
+
+<span class="dim">※ recap: <i>Ziel ist eine Lead-Ansicht, die alles Wichtige oben zeigt. L21 „Zwei Spalten mit Sinn“ ist fertig und im Vorschau-Fenster mit allen Varianten durchklickbar.</i></span>`,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">68%</span> 579k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle) · ← for agents</span>` },
+  { id: "kai", onBoard: true, head: "3 Kai · Intro-Qualität", badge: "power", status: "working", info: true,
+    short: "Schließt die Intro-Regeln ab: Push von ListM8 und Plugin", age: "18m",
+    alertInfo: "Deploy auf Prod: der Weg ist deine Entscheidung",
+    goal: "Intro-Qualität der Lead-Mails verbessern",
+    now: "Pusht ListM8 und Plugin",
+    hist: [["13:20","Intro-Regeln gelockert, 1.090 Tests grün, committet (dd83dbd, ee4a1c4)","Commit"],["12:10","Prüf-Agent im Plugin nachgeschärft","Jarvis"],["11:05","Auftrag übernommen: Intros aus dem Dump auswerten","Jarvis"]],
+    
+    meta: "Aktualisiert 13:21 · Jarvis",
+    term: `- Die Reaktion je Lead ist nur noch ein <span class="h">Vorschlag</span>. Die Klausel „gilt auch, wenn Beispiele etwas anderes zeigen“ ist raus.
+- <span class="h">Prüf-Agent im Plugin:</span> Fehlt der Schluss hinter einer Kundenstimme, ist das kein Befund mehr. Doppeltes Lob meldet er als Hinweis.
+
+Bewusst nicht angefasst habe ich die Reihenfolge Nutzen vor Reaktion und die Rangfolge der Bewertungszahl.
+
+<span class="h">Geprüft:</span> Die Server-Tests sind grün (Unit AI, 1.090 Tests, darunter ein neuer Test für die Lockerung), und PHPStan meldet keinen Fehler.
+
+<span class="h">Commits:</span>
+- ListM8 <span class="lnk">dd83dbdfe</span>, mit Protokolleintrag
+- Plugin <span class="lnk">ee4a1c4</span>, Version 0.3.32
+
+Nichts ist gepusht. Der Plugin-Branch <span class="lnk">main</span> ist jetzt zwei Commits voraus.
+
+<span class="h">Wichtig vor einem Deploy:</span> Alle Copy-Änderungen liegen auf <span class="lnk">feat/dealsupply-rebranding-basis</span>.
+
+<span class="dim">✻ Crunched for 7m 8s · done 1:20 PM</span>`,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">31%</span> 270k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle)</span>` },
+  { id: "ole", onBoard: true, head: "4 Ole · Vorschau: Varianten für alle Designs", badge: "ai2", status: "working",
+    short: "Baut ein gemeinsames Vorschau-Bauteil für alle Designs", age: "1m",
+    goal: "Vorschau-Varianten für alle sieben Designs",
+    now: "Prüft Parameterwerte in den Fixtures",
+    hist: [["13:10","Sams Varianten-Wähler übernommen","Commit"]],
+    meta: "Aktualisiert 13:33 · Jarvis",
+    term: `<span class="dim">  b/client/src/pages/admin/designs/kampagne-a-z/index.tsx
+  index 40a23b347..4bf96f4af 100644
+  +97 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(sed -n 100,124p docs/plans/dealsupply-rebranding/lead-ansicht-konzept.md; git log --oneline -15 -- client/src/pages/admin/designs/kampagne-a-z/reiter/lead | cat)
+  <span class="dim">⎿ ## 7. Breiten
+    Im Review bleiben neben Seitenleiste und Queue 700 bis 960 px für d
+    +39 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(git log -1 --format=%B 230bcf9cf; git log -1 --format=%B 8be77ff91; git log -1 --format=%B 10884ad7c | head -20)
+  <span class="dim">⎿ feat(designs): E-Mail-Agent neben der Mail, unten Qualifizierung und Recherche (?bots=spalte)
+    +31 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(cd /Users/giulianocosta/repos/ListM8/client/src/pages/admin/designs &amp;&amp; for d in dealsupply-leads-listen dealsupply-mcp; do …)
+  <span class="dim">⎿ === dealsupply-leads-listen
+    FRAGE: Wo sieht ein Kunde seine Lead-Listen, wenn er keinen eigenen Menüpunkt dafür bekommt?</span>
+
+<span style="color:#c96a3a">· Smooshing… (3m 4s · ↓ 13.8k tokens · thinking with high effort)</span>`,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">20%</span> 175k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle) · ← 1 agent</span>` },
+  { id: "eli", onBoard: true, head: "5 Eli · SMTP-Verifizierung: Ticket für Richard", badge: "ai2", status: "awaiting", alarm: true,
+    short: "Wartet auf dich: Ticket für Richard erstellen", age: "2m",
+    alert: "Entscheidung: Chat ansehen und das Ticket mit ihm erstellen",
+    goal: "Prüfdienst für SMTP wählen und Ticket für Richard schreiben",
+    now: "Wartet auf deine Antwort",
+    hist: [["13:28","Empfehlung steht: MillionVerifier zuerst, Apify als zweite Meinung","Jarvis"],["12:47","Beide Dienste an 80 Adressen verglichen","Commit"]],
+    meta: "Aktualisiert 13:34 · Jarvis",
+    term: `des einen den anderen, bleiben von den 80 vorhandenen Adressen nur 3 unklar. Mit einem Anbieter allein sind es 7 bis 10.
+4. <span class="h">Beim Preis gibt es keinen klaren Sieger.</span>
+   - Apify kostet auf eurem Business-Plan pauschal 0,60 $ je 1.000.
+   - MillionVerifier erreicht das erst mit dem 500k-Paket. Bei 100k kostet er 1,49 $ je 1.000, bei 10k 3,90 $.
+   - In jedem Fall bleibt es unter 0,2 Cent pro Lead.
+
+<span class="h">Angepasste Empfehlung</span>
+
+- <span class="h">MillionVerifier als erste Prüfung.</span> Unbekannt und Catch-all sind dort gratis, die Abfrage ist eine einfache Echtzeit-API.
+- <span class="h">Apify nur als zweite Meinung</span>, wenn MillionVerifier „unbekannt“ liefert. Das betrifft nur etwa 5 bis 10 % der Prüfungen.
+- <span class="h">Regel für blockierte Domains:</span> Meldet MillionVerifier auf einer Domain <span class="lnk">ip_blocked</span>, gelten seine „ungültig“-Urteile dort nicht.
+- <span class="h">Raten bleibt sparsam:</span> höchstens 3 Muster, Stopp beim ersten Treffer.
+
+Für den Einbau in den Apify-Branch (Client, Kostenrechnung und Tests) plane ich gern auf Zuruf.
+
+<span class="dim">✻ Sautéed for 3m 41s · done Friday 9:16 PM</span>`,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">18%</span> 160k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle) · ← 1 agent</span>` },
+  { id: "jarvis", head: "Jarvis: Chats aufräumen ListM8", badge: "ai2", status: "working", jarvisTile: true,
+    short: "Betreut 5 Chats, 1 wartet auf dich", age: "jetzt",
+    goal: "Chats in ListM8 aufräumen und die fünf Arbeits-Chats betreuen",
+    now: "Wartet, bis Bob seinen Commit macht",
+    hist: [["13:36","Bob nachgefasst: Board stand zu früh auf fertig","Jarvis"],["13:34","Eli auf „wartet auf dich“ gesetzt","Jarvis"]],
+    meta: "Aktualisiert 13:36",
+    term: `<span class="b">●</span> <span class="h">Bash</span>(cd /Users/giulianocosta/repos/ListM8; git status --short client/src/pages/admin/designs/kampagne-a-z/reiter/sequenzen …)
+  <span class="dim">⎿ M client/src/pages/admin/designs/kampagne-a-z/reiter/sequenzen/SequenzenReiter.tsx
+    +7 lines (ctrl+o to expand)</span>
+
+<span class="b">●</span> <span class="h">Bash</span>(whisperm8 chats board set a9c5daa6 --light running --next "macht Screenshots von „Verlauf“, danach Commit der Sequenz-Dateien")
+  <span class="dim">⎿ ok</span>
+
+<span class="b">●</span> Bob (<span class="lnk">a9c5daa6</span>) ist noch nicht fertig. Das Board hat zu früh „fertig“ gemeldet. Bob prüft gerade „Verlauf als Standard“ und lässt dafür vor 3 Minuten ein Skript laufen. Ich melde mich, sobald der Commit da ist.
+
+<span class="dim">✻ Crunched for 30s · done 1:36 PM</span>`,
+    board: true,
+    foot: `<span class="r">ListM8 (feat/dealsupply-rebranding-basis) ×</span> | <span class="g">24%</span> 206k/1000k | [Opus 5.5…
+<span class="r">▸▸ bypass permissions on</span> <span class="dim">(shift+tab to cycle)</span>` },
+];
+
+const P = new URLSearchParams(location.search);
+const state = {
+  variant: P.get("variant") || "links",
+  foot: +(P.get("foot") || 7),
+  fill: P.get("fill") || "grau",
+  shadow: P.get("shadow") || "0",
+  jarvis: P.get("jarvis") || "an",
+  active: P.get("active") || "jarvis",
+  notesOpen: (P.get("notes") || "auf") === "auf",   // Einstellung „Notizen auf/zu“
+};
+// Handklick pro Chat übersteuert den Standard, bis der Standard umgeschaltet wird.
+const overrides = new Map();
+if (P.get("open") !== null) {
+  const forced = new Set(P.get("open").split(",").filter(Boolean));
+  for (const c of CHATS) overrides.set(c.id, forced.has(c.id));
+}
+if (P.get("shot")) document.body.classList.add("shot");
+
+const STATUS = { working: "var(--working)", awaiting: "var(--awaiting)" };
+
+// Eine Notiz hat nur, wer auf Jarvis' Board steht; ohne Jarvis gibt es keine.
+const managed = (c) => state.jarvis === "an" && !!c.onBoard;
+function isOpen(c) {
+  if (!managed(c)) return false;
+  if (overrides.has(c.id)) return overrides.get(c.id);
+  if (state.active === c.id) return false;   // im Chat, in dem du arbeitest, ist die Notiz zu
+  return state.notesOpen;
+}
+
+function cardHTML(c) {
+  const off = false;
+  let h = `<div class="sec"><div class="lead ${c.alarm ? "alarm" : ""}">${c.short}<span class="age">· ${c.age}</span></div></div>`;
+  if (c.alert && !off) h += `<div class="sec"><div class="alert">${c.alert}</div></div>`;
+  if (c.alertInfo && !off) h += `<div class="sec"><div class="alert info">${c.alertInfo}</div></div>`;
+  h += `<div class="sec"><div class="cap">Ziel</div><div class="val">${c.goal}</div></div>`;
+  h += `<div class="sec"><div class="cap">Meilensteine</div><div class="hist">${c.hist.map(([t, x, s]) =>
+        `<span class="t">${t}</span><span>${x}</span><span class="src">${off ? s : ""}</span>`).join("")}</div>${c.more ? `<div class="more">▸ ${c.more}</div>` : ""}</div>`;
+  h += `<div class="meta">${off ? "Quellen: Claude-Rückblick, Commits, Tests" : c.meta}</div>`;
+  return h;
+}
+
+// Umgedrehte ChromeTabShape: Füße oben (konkav), Ecken unten (konvex).
+function shapePath(w, h, f, r) {
+  const W = w + 2 * f;
+  if (f === 0) {
+    return `M0,0 L0,${h - r} A${r},${r} 0 0 0 ${r},${h} L${w - r},${h} A${r},${r} 0 0 0 ${w},${h - r} L${w},0`;
+  }
+  return `M0,0 A${f},${f} 0 0 1 ${f},${f} L${f},${h - r} A${r},${r} 0 0 0 ${f + r},${h} L${W - f - r},${h} ` +
+         `A${r},${r} 0 0 0 ${W - f},${h - r} L${W - f},${f} A${f},${f} 0 0 1 ${W},0`;
+}
+
+function render() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  const jarvisOff = state.jarvis === "aus";
+  for (const c of CHATS) {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.dataset.id = c.id;
+    tile.innerHTML = `
+      <div class="head">
+        <span class="dot" style="background:${c.alarm && jarvisOff ? "var(--text-3)" : STATUS[c.status]}"></span>
+        <span class="title">${c.head}</span><span class="link">⧉</span>
+        <span class="badge ${c.badge}">${c.badge === "power" ? "PowerUser" : "ai2"}</span>
+        ${c.info && !jarvisOff ? `<span class="info">i</span>` : ""}
+        ${managed(c) ? `<span class="chev">›</span>` : ""}
+        <span class="tools"><span>&lt;/&gt;</span><span>⟳</span><span>⤢</span><span>–</span></span>
+      </div>
+      <div class="term">${c.term}</div>
+      ${c.board && !jarvisOff ? `<div class="board"><span class="r">Jarvis · Board ● 1 wartet</span> <span class="y">● 4 läuft</span>      <span class="dim" style="color:#999">Ziffer = Tab öffnen</span><br>
+<span class="r">● 1: 5 Eli · SMTP-Veri…  Chat ansehen und das Ticket mit ihm er…   2m</span><br>
+<span class="y">●</span> 2: 3 Kai · Intro-Qua…  arbeitet an deiner Antwort          20m<br>
+<span class="y">●</span> 3: 4 Ole · Vorschau:…  Sams Wähler ist committet (151ae…    3m<br>
+<span class="y">●</span> 4: 2 Sam · Rebrandin…  wartet auf L22 (Zwei Spalten mit…    3m<br>
+<span class="y">●</span> 5: 1 Bob · Kampagnen…  macht Screenshots von „Verlauf“, …  jetzt</div>` : ""}
+      <div class="foot">${c.foot}</div>`;
+    grid.appendChild(tile);
+
+    if (managed(c)) {
+      tile.querySelector(".head").addEventListener("click", () => {
+        overrides.set(c.id, !isOpen(c)); apply();
+      });
+      mountCard(tile, c);
+    } else {
+      tile.querySelector(".head").style.cursor = "default";
+    }
+    tile.querySelector(".term").addEventListener("click", () => focusTile(c.id));
+  }
+  apply(true);
+}
+
+// Hineingehen klappt die Notiz dieses Chats zu; der verlassene Chat folgt wieder dem Standard.
+function focusTile(id) {
+  if (state.active === id) return;
+  overrides.delete(state.active);
+  overrides.delete(id);
+  state.active = id;
+  apply();
+}
+
+// Setzt Zustände ohne Neuaufbau, damit Auf- und Zuklappen animiert.
+function apply(initial) {
+  for (const c of CHATS) {
+    const tile = document.querySelector(`.tile[data-id="${c.id}"]`);
+    const open = isOpen(c);
+    const active = state.active === c.id;
+    tile.classList.toggle("active", active);
+    tile.querySelector(".head").classList.toggle("open", open);
+    const nt = document.getElementById("notesToggle");
+    nt.classList.toggle("on", state.notesOpen);
+    nt.querySelector(".nt-state").textContent = state.notesOpen ? "auf" : "zu";
+    const hang = tile.querySelector(".hang");
+    if (!hang) continue;
+    hang.classList.toggle("active-own", active);
+    if (initial && open) requestAnimationFrame(() => requestAnimationFrame(() => hang.classList.add("open")));
+    else hang.classList.toggle("open", open);
+  }
+}
+
+function mountCard(tile, c) {
+  const head = tile.querySelector(".head");
+  const hang = document.createElement("div");
+  const f = state.variant === "voll" ? 0 : state.foot;
+  const r = 7;
+  hang.className = "hang" + (state.shadow === "1" ? " shadow" : "") + (state.fill === "weiss" ? " weiss" : "");
+  hang.innerHTML = `<div class="clip"><svg><path class="shape-fill"/><path class="shape-stroke"/></svg><div class="body">${cardHTML(c)}</div></div>`;
+  tile.appendChild(hang);
+
+  const tw = tile.clientWidth;
+  const top = head.offsetTop + head.offsetHeight - 1;   // überdeckt die Haarlinie
+  let w, left;
+  if (state.variant === "voll") { w = tw; left = 0; }
+  else if (state.variant === "breit") { w = tw - 2 * f - 16; left = 8; }
+  else { w = Math.min(Math.round(tw * 0.72), 420); left = 10; }
+  left -= f;
+  hang.style.top = top + "px";
+  hang.style.left = left + "px";
+  const body = hang.querySelector(".body");
+  body.style.width = w + "px";
+  body.style.marginLeft = f + "px";
+  if (state.fill === "weiss") { body.style.width = (w - 12) + "px"; body.style.marginLeft = (f + 6) + "px"; }
+  const h = body.offsetHeight + (state.fill === "weiss" ? 6 : 0) + 1;
+  const W = w + 2 * f;
+  const svg = hang.querySelector("svg");
+  svg.setAttribute("width", W); svg.setAttribute("height", h + 1);
+  const d = shapePath(w, h, f, r);
+  hang.querySelector(".shape-fill").setAttribute("d", d + " Z");
+  hang.querySelector(".shape-stroke").setAttribute("d", d);
+  const clip = hang.querySelector(".clip");
+  clip.style.width = W + "px";
+  clip.style.height = (h + 1) + "px";
+}
+
+for (const seg of document.querySelectorAll(".seg")) {
+  const k = seg.dataset.k;
+  for (const b of seg.querySelectorAll("button")) {
+    if (String(state[k]) === b.dataset.v) b.classList.add("on");
+    b.addEventListener("click", () => {
+      seg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+      state[k] = k === "foot" ? +b.dataset.v : b.dataset.v;
+      if (k === "jarvis") overrides.clear();
+      render();
+    });
+  }
+}
+function toggleNotes() { state.notesOpen = !state.notesOpen; overrides.clear(); apply(); }
+document.getElementById("notesToggle").addEventListener("click", toggleNotes);
+document.addEventListener("keydown", (e) => { if (e.altKey && e.metaKey && e.code === "KeyN") { e.preventDefault(); toggleNotes(); } });
+window.addEventListener("resize", render);
+render();
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - board.* (`whisperm8 chats board set|remove|clear|activate|deactivate`)
+// MARK: - board.* (`whisperm8 chats board set|remove|clear|activate|deactivate|milestone`)
 
 /// Jarvis-Board: Die App ist der einzige Schreiber (wie beim Workspace), die
 /// CLI liest direkt von Disk. Owner ist IMMER der aufrufende Chat — und zwar
@@ -8,7 +8,7 @@ import Foundation
 /// spoofbar und schriebe sonst auf das Board eines fremden Jarvis.
 extension AgentControlRequestHandler {
     static let boardMethods: Set<String> = [
-        "board.set", "board.remove", "board.clear", "board.activate", "board.deactivate",
+        "board.set", "board.remove", "board.clear", "board.activate", "board.deactivate", "board.milestone",
     ]
 
     /// Zustand des Zielchats aus Sicht der App (für `set`).
@@ -35,6 +35,12 @@ extension AgentControlRequestHandler {
         let response = Self.performBoardMutation(
             request, store: .shared, enabled: AppPreferences.shared.isJarvisBoardEnabled,
             verifiedOwner: verifiedOwner, targetState: { _ in targetState })
+
+        // Notiz-Karten im Grid nachziehen (die App ist einziger Schreiber,
+        // es gibt keinen Datei-Beobachter).
+        if response.ok, response.result?["changed"]?.boolValue == true {
+            await MainActor.run { JarvisNotesStore.shared.reload() }
+        }
 
         let short = String(request.method.dropFirst("board.".count))
         var label: String?
@@ -67,9 +73,9 @@ extension AgentControlRequestHandler {
                         + "(WHISPERM8_SESSION_ID/WHISPERM8_SESSION_TOKEN) — das Board gehört dem aufrufenden Chat.")
         }
 
-        // Ziel nur für set/remove.
+        // Ziel nur für set/remove/milestone.
         var targetID: UUID?
-        if op == .set || op == .remove {
+        if op == .set || op == .remove || op == .milestone {
             guard let raw = request.params["targetSessionID"]?.stringValue, let id = UUID(uuidString: raw) else {
                 return fail(.invalid, "targetSessionID fehlt/ungültig")
             }
@@ -94,7 +100,15 @@ extension AgentControlRequestHandler {
             }
             patch.mission = request.params["mission"]?.stringValue
             patch.needs = request.params["needs"]?.stringValue
-            patch.next = request.params["next"]?.stringValue
+            // `next` ist der frühere Name von `work` (ältere CLIs und Mods).
+            patch.work = request.params["work"]?.stringValue ?? request.params["next"]?.stringValue
+            patch.blocker = request.params["blocker"]?.stringValue
+        }
+
+        var milestoneText = ""
+        if op == .milestone {
+            milestoneText = JarvisBoardText.sanitize(request.params["text"]?.stringValue ?? "")
+            guard !milestoneText.isEmpty else { return fail(.invalid, "text fehlt — ein Meilenstein braucht einen Text") }
         }
 
         let change: JarvisBoardChange
@@ -106,10 +120,16 @@ extension AgentControlRequestHandler {
                 case .clear: return JarvisBoardLogic.clear(&file, owner: owner, now: now)
                 case .activate: return JarvisBoardLogic.setActive(&file, owner: owner, active: true, now: now)
                 case .deactivate: return JarvisBoardLogic.setActive(&file, owner: owner, active: false, now: now)
+                case .milestone:
+                    return JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: targetID!,
+                                                            text: milestoneText, now: now)
                 }
             }
         } catch {
             return fail(.internalError, error.localizedDescription)
+        }
+        if change.targetMissing {
+            return fail(.notFound, "Chat steht nicht auf deinem Board — erst `board set`, dann Meilensteine")
         }
         return .success(requestID: request.requestID, result: .object(boardChangeResult(change)))
     }
@@ -128,13 +148,25 @@ extension AgentControlRequestHandler {
             result["ref"] = ChatsOutput.shortID(sessionID)
         }
         if let light = change.light { result["light"] = light.rawValue }
-        if change.op == .set, let entry = change.entry {
-            result["entry"] = [
-                "light": entry.light.rawValue, "mission": entry.mission, "needs": entry.needs,
-                "next": entry.next, "updatedAt": ChatsOutput.iso(entry.updatedAt),
-            ]
+        if change.op == .set || change.op == .milestone, let entry = change.entry {
+            result["entry"] = entryResult(entry)
         }
         if change.op == .remove || change.op == .clear { result["removedCount"] = change.removedCount }
         return result
+    }
+
+    /// Eintrag als JSON. `next` spiegelt `work` (Vertrag mit der Mod: Felder
+    /// nur ergänzen, nie umbenennen).
+    static func entryResult(_ entry: JarvisBoardEntry) -> [String: Any] {
+        [
+            "light": entry.light.rawValue, "mission": entry.mission, "needs": entry.needs,
+            "work": entry.work, "next": entry.work, "blocker": entry.blocker,
+            "milestones": entry.milestones.map(milestoneJSON),
+            "updatedAt": ChatsOutput.iso(entry.updatedAt),
+        ]
+    }
+
+    static func milestoneJSON(_ milestone: JarvisBoardMilestone) -> [String: Any] {
+        ["at": ChatsOutput.iso(milestone.at), "text": milestone.text]
     }
 }

@@ -465,13 +465,17 @@ erzwingt `/2`. Cursor sind opak und nur innerhalb derselben Generation gültig.
 
 Ein Board je Jarvis-Session (`owner` = deren WhisperM8-Session-ID): die Chats,
 die Jarvis aktiv betreut, mit Ampel (`needsYou | running | done | parked`),
-`mission`, `needs`, `next`. Die Anzeige über dem Prompt übernimmt die Mod des
-Plugins `whisperm8`, siehe `docs/features/jarvis-board.md`.
+`mission` (Ziel), `work` (Arbeitspaket), `needs` (Eingriff), `blocker` und
+`milestones` (seit 17.10.2026). Die Anzeige über dem Prompt übernimmt die Mod
+des Plugins `whisperm8`, die Notiz-Karte am Kachelkopf im Grid die App, siehe
+`docs/features/jarvis-board.md`.
 
 ```bash
 whisperm8 chats board [--owner @self|<ref>] [--all] [--json]   # lesen, App optional
-whisperm8 chats board set <ref> [--light L] [--mission M] [--needs N] [--next X] [--json]
+whisperm8 chats board set <ref> [--light L] [--mission M] [--work W] [--needs N] [--blocker B] [--json]
+whisperm8 chats board milestone <ref> "<Ergebnis>" [--json]
 whisperm8 chats board remove <ref> | clear | activate | deactivate [--json]
+whisperm8 chats show <ref> --recap [--json]   # Claudes Rückblicke als Lesehilfe
 ```
 
 - **Lesen** direkt von der Platte (`jarvis-board.json`, `wm8.board/1`): je
@@ -485,12 +489,26 @@ whisperm8 chats board remove <ref> | clear | activate | deactivate [--json]
   getrimmt und auf 160 Zeichen gekürzt. Ein neuer Eintrag ohne `--light` ist
   `running`; ein `set` ohne Änderung liefert `changed: false` und kein
   Ereignis.
+- **`work` statt `next`:** `work` löst `next` ab, ohne den Vertrag zu brechen:
+  Die App schreibt beide Felder gleich, liest alte Dateien mit nur `next` als
+  `work`, und `--next` bzw. der Socket-Parameter `next` bleiben Alias.
+- **Meilensteine:** `milestone` hängt vorn an (`{at, text}`, neueste zuerst,
+  die 20 neuesten bleiben). Die Zeit setzt die App; derselbe Text wie der
+  jüngste ist `changed: false`. Steht der Chat nicht auf dem Board, antwortet
+  die App `notFound` (Exit 3) statt still anzulegen. `set` ändert
+  Meilensteine nie.
+- **Rückblick (`show --recap`):** die drei neuesten `away_summary`-Einträge,
+  die Claude Code selbst ins Transcript schreibt, solange der User woanders
+  ist („Ziel ist … Zuletzt … Als Nächstes …"). Rückwärtssuche nach dem
+  Merkmal, höchstens 64 MB vom Dateiende, Zeilen über 64 KB werden
+  übersprungen; nicht dokumentiertes Format, deshalb fail-soft (leere Liste
+  plus `note`). Codex-Chats: immer leer.
 - **Exit-Codes:** 3 unbekannter Ref, 4 eigener Chat auf eigenem Board
   (`selfSend`), 5 App nicht erreichbar, 1 Kill-Switch/ungültige Eingabe.
   `remove` auf einen nicht eingetragenen oder archivierten Chat ist ok.
 - **Ereignisse:** Jede echte Änderung ist ein Journal-Eintrag, den `since` und
   `watch` mit demselben Cursor wie die Konversationsereignisse liefern:
-  `{"kind":"board","op":"set|remove|clear|activate|deactivate","owner","ownerRef","ref","sessionID","light",…}`
+  `{"kind":"board","op":"set|remove|clear|activate|deactivate|milestone","owner","ownerRef","ref","sessionID","light",…}`
   (bei `clear`/`activate`/`deactivate` ohne `ref`, `sessionID`, `light`).
   Konversationsereignisse sind unverändert; die Statushistorie von `show`
   blendet Board-Ereignisse aus.

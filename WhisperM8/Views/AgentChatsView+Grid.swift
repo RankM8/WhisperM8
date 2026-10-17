@@ -379,8 +379,13 @@ extension AgentChatsView {
                     onCommit: { commitGridShrink(gridShrinkSelection) },
                     onCancel: { self.gridShrinkSelection = nil }
                 )
-            } else if entity.sourceProjectID == nil {
-                gridCapacityPicker(entity: entity, available: gridAreaSize)
+            } else {
+                if AppPreferences.shared.isJarvisNotesEnabled {
+                    JarvisNotesToggleButton(windowID: windowID, sessionIDs: Set(entity.occupiedSessionIDs))
+                }
+                if entity.sourceProjectID == nil {
+                    gridCapacityPicker(entity: entity, available: gridAreaSize)
+                }
             }
         }
         // Gleiche Mindesthöhe wie der zweizeilige Chat-Header — der Wechsel
@@ -832,6 +837,19 @@ extension AgentChatsView {
             }
         }
         .background(AgentTheme.background)
+        // Jarvis-Notiz: hängt unter dem Kopf über dem Terminal (verschiebt es nicht).
+        .overlay(alignment: .topLeading) {
+            if AppPreferences.shared.isJarvisNotesEnabled {
+                JarvisNoteCardOverlay(
+                    sessionID: session.id,
+                    windowID: windowID,
+                    isFocused: isFocused,
+                    headerHeight: Self.gridPaneHeaderHeight,
+                    headerOpacity: Self.gridPaneHeaderOpacity(isFocused: isFocused),
+                    onHoverChanged: noteHoverHandler(for: session.id)
+                )
+            }
+        }
         // Fokus als 2-px-Inset auf der bündigen Pane — dauerhaft sichtbar,
         // kein Karten-Rahmen (Divider kommen aus dem 1-px-Gap).
         .overlay {
@@ -853,6 +871,24 @@ extension AgentChatsView {
             }
         }
     }
+
+    static let gridPaneHeaderHeight: CGFloat = 28
+
+    /// Maus über Notiz-Karte oder -Pfeil: `handleGridPaneMouseDown` verschiebt
+    /// dann den Fokus nicht (sonst klappte der Fokuswechsel die Karte zu bzw.
+    /// liefe dem Klick auf den Pfeil in die Quere).
+    func noteHoverHandler(for sessionID: UUID) -> (Bool) -> Void {
+        { hovering in
+            if hovering {
+                hoveredNoteCardID = sessionID
+            } else if hoveredNoteCardID == sessionID {
+                hoveredNoteCardID = nil
+            }
+        }
+    }
+
+    /// Die Notiz-Karte setzt genau diese Fläche fort.
+    static func gridPaneHeaderOpacity(isFocused: Bool) -> Double { isFocused ? 1 : 0.55 }
 
     private func gridPaneHeader(
         _ session: AgentChatSession,
@@ -878,6 +914,10 @@ extension AgentChatsView {
                     .help(project.name)
             }
             accountBadge(for: session)
+            if AppPreferences.shared.isJarvisNotesEnabled {
+                JarvisNoteChevron(sessionID: session.id, windowID: windowID, isFocused: isFocused,
+                                  onHoverChanged: noteHoverHandler(for: session.id))
+            }
             Spacer(minLength: 6)
             // Repo im Editor öffnen (PhpStorm etc.) — nutzt dasselbe
             // gemerkte Öffnen-Ziel wie der IDE-Opener im Chat-Header
@@ -968,8 +1008,8 @@ extension AgentChatsView {
                 : "\(session.title) aus dem Workspace nehmen")
         }
         .padding(.horizontal, 10)
-        .frame(height: 28)
-        .background(isFocused ? AgentTheme.header : AgentTheme.header.opacity(0.55))
+        .frame(height: Self.gridPaneHeaderHeight)
+        .background(AgentTheme.header.opacity(Self.gridPaneHeaderOpacity(isFocused: isFocused)))
         .contentShape(Rectangle())
         // Doppelklick auf den Header = schneller Maximize-Weg. Der einfache
         // Klick (Fokus) läuft über den leftMouseDown-Monitor — bewusst KEIN
@@ -1017,6 +1057,10 @@ extension AgentChatsView {
         // Während des Ctrl+Tab-Durchlaufs gehört der Klick der Markierung
         // (`TabSwitcherGridPaneMarking` committet bzw. bricht ab).
         guard tabSwitcher == nil else { return }
+        // Klick in eine Jarvis-Notiz oder auf ihren Pfeil: kein Fokuswechsel —
+        // der würde die Karte sofort zuklappen (Hineingehen klappt die eigene
+        // Notiz zu) bzw. dem Klappen per Pfeil in die Quere kommen.
+        guard hoveredNoteCardID == nil else { return }
         guard let hostWindow, event.window === hostWindow,
               isGridActive,
               let hovered = hoveredGridPaneID,

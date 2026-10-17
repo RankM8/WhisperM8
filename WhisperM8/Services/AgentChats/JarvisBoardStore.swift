@@ -24,31 +24,52 @@ enum JarvisBoardLight: String, Codable, CaseIterable, Equatable {
     static var allowedList: String { allCases.map(\.rawValue).joined(separator: "|") }
 }
 
+/// Ein Ergebnis, das ein betreuter Chat erreicht hat (Commit, Tests grün,
+/// Entscheidung gefallen …). Die Zeit setzt immer die App, nie der Aufrufer.
+struct JarvisBoardMilestone: Codable, Equatable {
+    var at: Date
+    var text: String
+}
+
 /// Ein betreuter Chat auf dem Board einer Jarvis-Session.
 struct JarvisBoardEntry: Codable, Equatable {
     var sessionID: UUID
     var light: JarvisBoardLight
-    /// Eine Zeile: was der Chat tut.
+    /// Eine Zeile: der Auftrag des Chats (Ziel).
     var mission: String
-    /// Was er von wem braucht.
+    /// Was er vom User braucht (Eingriff, bei `needsYou`).
     var needs: String
-    /// Nächster Schritt.
-    var next: String
+    /// Woran der Chat gerade arbeitet — ein Arbeitspaket, kein Einzelschritt.
+    /// Löst das frühere Feld `next` ab: Auf Disk und im JSON steht derselbe
+    /// Wert zusätzlich unter `next`, weil die Mod und ältere CLIs ihn dort lesen.
+    var work: String
+    /// Was den Chat aufhält, ohne dass der User gefragt ist.
+    var blocker: String
+    /// Neueste zuerst, höchstens `JarvisBoardLogic.maxMilestones`.
+    var milestones: [JarvisBoardMilestone]
     var updatedAt: Date
 
     init(sessionID: UUID, light: JarvisBoardLight, mission: String = "", needs: String = "",
-         next: String = "", updatedAt: Date) {
+         work: String = "", blocker: String = "", milestones: [JarvisBoardMilestone] = [],
+         updatedAt: Date) {
         self.sessionID = sessionID
         self.light = light
         self.mission = mission
         self.needs = needs
-        self.next = next
+        self.work = work
+        self.blocker = blocker
+        self.milestones = milestones
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionID, light, mission, needs, work, next, blocker, milestones, updatedAt
     }
 
     /// Tolerant gegenüber fehlenden Textfeldern und unbekannten Ampelwerten
     /// einer späteren Version — sonst machte ein einziger fremder Wert die
     /// ganze Datei unlesbar und der nächste Schreibvorgang verwürfe sie.
+    /// Dateien von vor `work` tragen das Arbeitspaket noch unter `next`.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sessionID = try container.decode(UUID.self, forKey: .sessionID)
@@ -56,8 +77,24 @@ struct JarvisBoardEntry: Codable, Equatable {
         light = JarvisBoardLight(rawValue: rawLight) ?? .running
         mission = try container.decodeIfPresent(String.self, forKey: .mission) ?? ""
         needs = try container.decodeIfPresent(String.self, forKey: .needs) ?? ""
-        next = try container.decodeIfPresent(String.self, forKey: .next) ?? ""
+        work = try container.decodeIfPresent(String.self, forKey: .work)
+            ?? container.decodeIfPresent(String.self, forKey: .next) ?? ""
+        blocker = try container.decodeIfPresent(String.self, forKey: .blocker) ?? ""
+        milestones = (try? container.decodeIfPresent([JarvisBoardMilestone].self, forKey: .milestones)) ?? []
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sessionID, forKey: .sessionID)
+        try container.encode(light, forKey: .light)
+        try container.encode(mission, forKey: .mission)
+        try container.encode(needs, forKey: .needs)
+        try container.encode(work, forKey: .work)
+        try container.encode(work, forKey: .next)
+        try container.encode(blocker, forKey: .blocker)
+        try container.encode(milestones, forKey: .milestones)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 
@@ -95,15 +132,17 @@ struct JarvisBoardFile: Codable, Equatable {
 // MARK: - Pure Mutationslogik
 
 /// Teil-Änderung eines Eintrags: `nil` = Feld bleibt, wie es ist.
+/// Meilensteine ändert ein Patch nie — die hängt nur `milestone` an.
 struct JarvisBoardPatch: Equatable {
     var light: JarvisBoardLight?
     var mission: String?
     var needs: String?
-    var next: String?
+    var work: String?
+    var blocker: String?
 }
 
 enum JarvisBoardOp: String, Equatable {
-    case set, remove, clear, activate, deactivate
+    case set, remove, clear, activate, deactivate, milestone
 }
 
 /// Ergebnis einer Mutation. `changed == false` heißt: Der Bestand war schon
@@ -120,6 +159,9 @@ struct JarvisBoardChange: Equatable {
     var removedCount = 0
     /// Board-Zustand nach der Mutation (`nil`, wenn es keines gibt).
     var board: JarvisBoard?
+    /// `milestone` auf einen Chat, der nicht auf dem Board steht — kein
+    /// stilles Anlegen, der Aufrufer bekommt einen Fehler.
+    var targetMissing = false
 }
 
 enum JarvisBoardLogic {
@@ -151,7 +193,8 @@ enum JarvisBoardLogic {
         if let light = patch.light { entry.light = light }
         if let mission = patch.mission { entry.mission = mission }
         if let needs = patch.needs { entry.needs = needs }
-        if let next = patch.next { entry.next = next }
+        if let work = patch.work { entry.work = work }
+        if let blocker = patch.blocker { entry.blocker = blocker }
 
         let entryChanged = before.map { !sameContent($0, entry) } ?? true
         guard entryChanged else {
@@ -213,15 +256,46 @@ enum JarvisBoardLogic {
         return JarvisBoardChange(op: op, owner: owner, changed: true, board: file.boards[index])
     }
 
+    /// So viele Meilensteine bleiben je Eintrag erhalten (die Karte zeigt drei).
+    static let maxMilestones = 20
+
+    /// Hängt einen Meilenstein vorn an. Wörtlich derselbe Text wie der
+    /// jüngste ist keine Änderung (Jarvis darf nach einem Weckruf ruhig
+    /// noch einmal melden). Steht der Chat nicht auf dem Board, wird nichts
+    /// angelegt (`targetMissing`).
+    static func appendMilestone(_ file: inout JarvisBoardFile, owner: UUID, sessionID: UUID,
+                                text: String, now: Date) -> JarvisBoardChange {
+        let text = JarvisBoardText.sanitize(text)
+        guard let boardIndex = file.boards.firstIndex(where: { $0.owner == owner }),
+              let entryIndex = file.boards[boardIndex].entries.firstIndex(where: { $0.sessionID == sessionID }) else {
+            return JarvisBoardChange(op: .milestone, owner: owner, changed: false, sessionID: sessionID,
+                                     board: file.board(owner: owner), targetMissing: true)
+        }
+        var entry = file.boards[boardIndex].entries[entryIndex]
+        guard !text.isEmpty, entry.milestones.first?.text != text else {
+            return JarvisBoardChange(op: .milestone, owner: owner, changed: false, sessionID: sessionID,
+                                     light: entry.light, entry: entry, board: file.boards[boardIndex])
+        }
+        entry.milestones.insert(JarvisBoardMilestone(at: now, text: text), at: 0)
+        entry.milestones = Array(entry.milestones.prefix(maxMilestones))
+        entry.updatedAt = now
+        file.boards[boardIndex].entries[entryIndex] = entry
+        file.boards[boardIndex].updatedAt = now
+        return JarvisBoardChange(op: .milestone, owner: owner, changed: true, sessionID: sessionID,
+                                 light: entry.light, entry: entry, board: file.boards[boardIndex])
+    }
+
     static func sanitized(_ patch: JarvisBoardPatch) -> JarvisBoardPatch {
         JarvisBoardPatch(light: patch.light,
                          mission: patch.mission.map(JarvisBoardText.sanitize),
                          needs: patch.needs.map(JarvisBoardText.sanitize),
-                         next: patch.next.map(JarvisBoardText.sanitize))
+                         work: patch.work.map(JarvisBoardText.sanitize),
+                         blocker: patch.blocker.map(JarvisBoardText.sanitize))
     }
 
     private static func sameContent(_ lhs: JarvisBoardEntry, _ rhs: JarvisBoardEntry) -> Bool {
-        lhs.light == rhs.light && lhs.mission == rhs.mission && lhs.needs == rhs.needs && lhs.next == rhs.next
+        lhs.light == rhs.light && lhs.mission == rhs.mission && lhs.needs == rhs.needs
+            && lhs.work == rhs.work && lhs.blocker == rhs.blocker
     }
 }
 

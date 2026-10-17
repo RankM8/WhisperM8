@@ -160,6 +160,8 @@ struct ChatsShowOptions: Equatable {
     var ref = ""
     var all = false
     var json = false
+    /// Nur Claudes Rückblicke (Lesehilfe für Jarvis' Notizen).
+    var recap = false
 }
 
 struct ChatsTailOptions: Equatable {
@@ -287,6 +289,7 @@ enum ChatsCLIParser {
             switch arg {
             case "--all": options.all = true
             case "--json": options.json = true
+            case "--recap": options.recap = true
             default:
                 if arg.hasPrefix("-") { throw ParseError.unknownFlag(arg) }
                 positionals.append(arg)
@@ -560,6 +563,44 @@ enum ChatsListCommand {
 
 // MARK: - show
 
+/// `chats show <ref> --recap`: Claudes Rückblicke knapp, neueste zuerst.
+enum ChatsRecapOutput {
+    static func note(provider: AgentProvider, isEmpty: Bool) -> String? {
+        guard isEmpty else { return nil }
+        return provider == .claude
+            ? "Noch kein Rückblick — Claude schreibt ihn nur, während du woanders bist (abschaltbar in /config)."
+            : "Codex-Chats schreiben keinen Rückblick."
+    }
+
+    static func json(entry: ChatsSessionEntry, recaps: [ClaudeRecap], now: Date) -> [String: Any] {
+        var payload: [String: Any] = [
+            "schemaVersion": 1,
+            "generatedAt": ChatsOutput.iso(now),
+            "ref": ChatsOutput.shortID(entry.session.id),
+            "sessionID": entry.session.id.uuidString,
+            "title": entry.session.title,
+            "provider": entry.session.provider.rawValue,
+            "recaps": recaps.map { recap -> [String: Any] in
+                ["at": recap.at.map(ChatsOutput.iso) ?? NSNull(), "text": recap.text]
+            },
+        ]
+        if let note = note(provider: entry.session.provider, isEmpty: recaps.isEmpty) { payload["note"] = note }
+        return payload
+    }
+
+    static func lines(entry: ChatsSessionEntry, recaps: [ClaudeRecap], now: Date) -> [String] {
+        var lines = ["Rückblicke · \(ChatsOutput.shortID(entry.session.id)) · \(entry.session.title)"]
+        if let note = note(provider: entry.session.provider, isEmpty: recaps.isEmpty) {
+            lines.append("  \(note)")
+        }
+        for recap in recaps {
+            let age = recap.at.map { "vor " + ChatsOutput.relative(from: $0, to: now) } ?? "Zeit unbekannt"
+            lines.append("  \(age): \(recap.text)")
+        }
+        return lines
+    }
+}
+
 enum ChatsShowCommand {
     static func run(_ arguments: [String]) async -> Int32 {
         let options: ChatsShowOptions
@@ -577,10 +618,22 @@ enum ChatsShowCommand {
         case .failure(let code): return code
         }
 
+        let estimate = ChatsStatusProbe.probe(entry: entry, now: context.now)
+        if options.recap {
+            // Nur der Transcript-Pfad zählt — kein Live-Abruf bei der App.
+            let recaps = entry.session.provider == .claude
+                ? estimate.transcriptPath.map { ClaudeRecapReader.recaps(fileURL: URL(fileURLWithPath: $0)) } ?? []
+                : []
+            if options.json {
+                CLIIO.out(ChatsOutput.encodeJSON(ChatsRecapOutput.json(entry: entry, recaps: recaps, now: context.now)))
+            } else {
+                for line in ChatsRecapOutput.lines(entry: entry, recaps: recaps, now: context.now) { CLIIO.out(line) }
+            }
+            return ChatsCLIExit.ok
+        }
+
         let live = ChatsLiveMerge.fetch()
-        let runtime = ChatsLiveMerge.merge(
-            estimate: ChatsStatusProbe.probe(entry: entry, now: context.now),
-            live: live?[entry.session.id])
+        let runtime = ChatsLiveMerge.merge(estimate: estimate, live: live?[entry.session.id])
 
         let isOpen = context.isOpen(entry.session.id)
         let isPinned = context.isPinned(entry.session.id)
@@ -788,6 +841,10 @@ enum ChatsCLIHelp {
                            die Kürzung meldet eine Zeile auf stderr.
       whisperm8 chats overview [--json]        Alias: list --sort attention --format board
       whisperm8 chats show <ref> [--all] [--json]
+      whisperm8 chats show <ref> --recap [--json]
+                           Nur Claudes eigene Rückblicke („Ziel ist … Zuletzt …“),
+                           die drei neuesten — Lesehilfe für Board-Notizen.
+                           Codex-Chats und Chats ohne Rückblick: leere Liste.
       whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--all] [--json]
       whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange]
                            [--since REV] [--timeout SEC] [--json]
@@ -818,11 +875,20 @@ enum ChatsCLIHelp {
                                ältestes updatedAt zuerst. Kein Board → isActive
                                false, entries leer (Exit 0).
       whisperm8 chats board set <ref> [--light needsYou|running|done|parked]
-                          [--mission "…"] [--needs "…"] [--next "…"] [--json]
+                          [--mission "…"] [--work "…"] [--needs "…"] [--blocker "…"] [--json]
                                Eintrag auf dem EIGENEN Board anlegen/ändern; nicht
                                genannte Felder bleiben, neu ohne --light = running.
-                               Texte einzeilig, max. 160 Zeichen. Legt das Board
-                               bei Bedarf an (aktiv). Der eigene Chat nie.
+                               mission = Ziel, work = Arbeitspaket (woran er
+                               arbeitet, kein Einzelschritt), needs = Eingriff des
+                               Users, blocker = was ihn aufhält. --next ist der
+                               alte Name von --work. Texte einzeilig, max. 160
+                               Zeichen. Legt das Board bei Bedarf an (aktiv).
+                               Der eigene Chat nie.
+      whisperm8 chats board milestone <ref> "<text>" [--json]
+                               Meilenstein (Ergebnis: Commit, Tests grün,
+                               Entscheidung) vorn anhängen; Zeit setzt die App,
+                               die 20 neuesten bleiben. Chat muss auf dem Board
+                               stehen.
       whisperm8 chats board remove <ref> [--json]        Eintrag entfernen
       whisperm8 chats board clear [--json]               alle Einträge entfernen
       whisperm8 chats board activate|deactivate [--json] eigenes Board ein-/ausschalten

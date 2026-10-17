@@ -19,6 +19,10 @@ extension AgentChatsView {
         if autoNamer == nil {
             autoNamer = AgentSessionStatusCoordinator.shared.autoNamer
         }
+        // Jarvis-Notizen: brauchen den Live-Status der Jarvis-Sessions
+        // (ohne laufenden Jarvis keine Notizen). Einmal je App-Lauf.
+        JarvisNotesStore.shared.startIfNeeded(
+            ownerStatus: { AgentSessionStatusCoordinator.shared.statusStore.statusPublisher(for: $0) })
     }
 
     /// Notification fuer den ambiguous-rebind-Picker (Phase 6).

@@ -58,6 +58,53 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
+        let noteNow = Date(timeIntervalSince1970: 1_792_000_000)
+        func jarvisNoteEntry(light: JarvisBoardLight = .running, work: String, needs: String = "",
+                             blocker: String = "", milestones: [String]) -> JarvisBoardEntry {
+            JarvisBoardEntry(
+                sessionID: UUID(), light: light, mission: "Prüfdienst wählen und Ticket für Richard schreiben",
+                needs: needs, work: work, blocker: blocker,
+                milestones: milestones.enumerated().map { index, text in
+                    JarvisBoardMilestone(at: noteNow.addingTimeInterval(Double(-(index + 1) * 1_500)), text: text)
+                },
+                updatedAt: noteNow.addingTimeInterval(-120))
+        }
+        func jarvisNoteFixture(_ name: String, entry: JarvisBoardEntry, focused: Bool = false) -> Fixture {
+            Fixture(name: name, size: CGSize(width: 560, height: 420)) {
+                let headerHeight = AgentChatsView.gridPaneHeaderHeight
+                let opacity = AgentChatsView.gridPaneHeaderOpacity(isFocused: focused)
+                return AnyView(
+                    VStack(spacing: 0) {
+                        HStack(spacing: 8) {
+                            Circle().fill(AgentTheme.statusWorking).frame(width: 7, height: 7)
+                            Text("5 Eli · SMTP-Verifizierung: Ticket für Richard")
+                                .font(.system(size: 12, weight: focused ? .semibold : .regular))
+                                .foregroundStyle(focused ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                            Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
+                                .rotationEffect(.degrees(90)).foregroundStyle(AgentTheme.textTertiary)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(height: headerHeight)
+                        .background(AgentTheme.header.opacity(opacity))
+                        Text(String(repeating: "● Bash(git log --oneline -15 -- client/src/pages/admin)\n  ⎿ feat(designs): E-Mail-Agent neben der Mail\n", count: 12))
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(14)
+                    }
+                    .background(AgentTheme.background)
+                    .overlay(alignment: .topLeading) {
+                        JarvisNoteCard(entry: entry, width: 400, maxHeight: 300, headerOpacity: opacity,
+                                       isOwnNote: focused, now: noteNow)
+                            .padding(.leading, JarvisNoteCardOverlay.leadingInset)
+                            .padding(.top, headerHeight)
+                    }
+                    .overlay { if focused { Rectangle().strokeBorder(AgentTheme.accent.opacity(0.8), lineWidth: 2) } }
+                )
+            }
+        }
+
         func sidebarAlertLevel(_ level: AgentAlertLevel) -> Fixture {
             Fixture(
                 name: "sidebar-glocke-\(level.rawValue)",
@@ -138,6 +185,21 @@ final class UISnapshotGallery: XCTestCase {
                     pending: pending, phase: .constant(.preview),
                     onConfirm: {}, onCancelRun: {}, onUndo: {}, onClose: {}))
             },
+            // Jarvis-Notiz: Karte hängt am Kachelkopf über Terminal-Text.
+            jarvisNoteFixture("jarvis-notiz-eingriff", entry: jarvisNoteEntry(
+                light: .needsYou, work: "Wartet auf dich: Ticket für Richard erstellen",
+                needs: "Entscheidung: Chat ansehen und das Ticket mit ihm erstellen",
+                milestones: ["Empfehlung steht: MillionVerifier zuerst, Apify als zweite Meinung",
+                             "Beide Dienste an 80 Adressen verglichen"])),
+            jarvisNoteFixture("jarvis-notiz-meilensteine", entry: jarvisNoteEntry(
+                work: "Schließt die Intro-Regeln ab: Push von ListM8 und Plugin",
+                blocker: "Deploy auf Prod: der Weg ist deine Entscheidung",
+                milestones: ["Intro-Regeln gelockert, 1.090 Tests grün, committet (dd83dbd, ee4a1c4)",
+                             "Prüf-Agent im Plugin nachgeschärft", "Auftrag übernommen: Intros aus dem Dump auswerten",
+                             "Dump ausgewertet", "Erster Entwurf"])),
+            jarvisNoteFixture("jarvis-notiz-eigene", entry: jarvisNoteEntry(
+                work: "Baut die letzte Variante der Lead-Ansicht (L22)",
+                milestones: ["L21 „Zwei Spalten mit Sinn“ fertig und im Vorschau-Fenster"]), focused: true),
             // Glocken-Schalter im Sidebar-Footer: eine Fixture je Ruhe-Stufe.
             sidebarAlertLevel(.all),
             sidebarAlertLevel(.soundOff),

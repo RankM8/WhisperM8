@@ -172,6 +172,8 @@ struct AgentChatsView: View {
     /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
     /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
     @State var hoveredGridPaneID: UUID?
+    /// Maus über einer Jarvis-Notiz-Karte: Klick fokussiert die Kachel nicht.
+    @State var hoveredNoteCardID: UUID?
     /// Ein Session-Drag schwebt über dem Grid — steuert die Growzone
     /// („voll + Drop = wächst", Plan F8). internal für +Grid.
     @State var gridDropTargeted = false
@@ -1023,7 +1025,11 @@ struct AgentChatsView: View {
                 AppState.shared.activeAgentChat = nil
             }
         }
-        .onChange(of: selectedSessionID) { _, newValue in
+        .onChange(of: selectedSessionID) { oldValue, newValue in
+            // Jarvis-Notizen: Hineingehen und Verlassen verwerfen den Handklick
+            // beider Chats — fensterweit, auch wenn die Einzelansicht gerade
+            // keine Karten zeigt (Regel `JarvisNoteExpansion`).
+            JarvisNotesStore.shared.selectionChanged(from: oldValue, to: newValue, windowID: windowID)
             // Externe Selektion (Sidebar-Row, Tab-Klick, ⌘1–⌘9) mitten im
             // Ctrl+Tab-Durchlauf bricht den Switcher ab — sonst würde das
             // spätere Ctrl-Loslassen die frische Wahl wieder überstimmen.

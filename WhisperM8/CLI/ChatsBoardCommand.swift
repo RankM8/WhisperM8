@@ -9,6 +9,7 @@ import Foundation
 enum ChatsBoardInvocation: Equatable {
     case read(ChatsBoardReadOptions)
     case set(ref: String, patch: JarvisBoardPatch, json: Bool)
+    case milestone(ref: String, text: String, json: Bool)
     case remove(ref: String, json: Bool)
     case clear(json: Bool)
     case activate(json: Bool)
@@ -28,6 +29,7 @@ enum ChatsBoardParser {
     static func parse(_ arguments: [String]) throws -> ChatsBoardInvocation {
         switch arguments.first {
         case "set": return try parseSet(Array(arguments.dropFirst()))
+        case "milestone": return try parseMilestone(Array(arguments.dropFirst()))
         case "remove":
             let (positionals, json) = try parseSimple(Array(arguments.dropFirst()))
             guard positionals.count == 1 else {
@@ -81,7 +83,9 @@ enum ChatsBoardParser {
                 patch.light = light
             case "--mission": patch.mission = try value(arguments, &index, for: arg)
             case "--needs": patch.needs = try value(arguments, &index, for: arg)
-            case "--next": patch.next = try value(arguments, &index, for: arg)
+            // `--next` ist der frühere Name von `--work` und bleibt als Alias.
+            case "--work", "--next": patch.work = try value(arguments, &index, for: arg)
+            case "--blocker": patch.blocker = try value(arguments, &index, for: arg)
             case "--json": json = true
             default:
                 if arg.hasPrefix("-") { throw ParseError.unknownFlag(arg) }
@@ -96,6 +100,23 @@ enum ChatsBoardParser {
         // dieselben Werte sieht, die die App speichert (die App säubert
         // trotzdem autoritativ noch einmal).
         return .set(ref: positionals[0], patch: JarvisBoardLogic.sanitized(patch), json: json)
+    }
+
+    /// `milestone <ref> "<text>" [--json]`. Der Text darf mit „-" beginnen
+    /// („- Commit abc"), deshalb ist außer `--json` alles nach dem Ref Text.
+    private static func parseMilestone(_ arguments: [String]) throws -> ChatsBoardInvocation {
+        var json = false
+        var positionals: [String] = []
+        for arg in arguments {
+            if arg == "--json" { json = true; continue }
+            if positionals.isEmpty, arg.hasPrefix("-") { throw ParseError.unknownFlag(arg) }
+            positionals.append(arg)
+        }
+        guard positionals.count <= 2 else { throw ParseError.tooManyPositionals }
+        guard let ref = positionals.first else { throw ParseError.missingShortID }
+        let text = JarvisBoardText.sanitize(positionals.count == 2 ? positionals[1] : "")
+        guard !text.isEmpty else { throw ParseError.missingValue("<text>") }
+        return .milestone(ref: ref, text: text, json: json)
     }
 
     private static func parseSimple(_ arguments: [String]) throws -> (positionals: [String], json: Bool) {
@@ -196,7 +217,10 @@ enum ChatsBoardReadModel {
             "light": row.entry.light.rawValue,
             "mission": row.entry.mission,
             "needs": row.entry.needs,
-            "next": row.entry.next,
+            "work": row.entry.work,
+            "next": row.entry.work,   // früherer Name von `work`; Mod und ältere Leser
+            "blocker": row.entry.blocker,
+            "milestones": row.entry.milestones.map(AgentControlRequestHandler.milestoneJSON),
             "updatedAt": ChatsOutput.iso(row.entry.updatedAt),
             "status": row.status,
             "statusSince": row.statusSince.map(ChatsOutput.iso) ?? NSNull(),
@@ -223,7 +247,8 @@ enum ChatsBoardReadModel {
             let since = row.statusSince.map { " " + ChatsOutput.relative(from: $0, to: now) } ?? ""
             let name = row.project.isEmpty ? row.title : "\(row.project)/\(row.title)"
             let detail = !row.entry.needs.isEmpty ? "braucht: \(row.entry.needs)"
-                : (!row.entry.next.isEmpty ? "als Nächstes: \(row.entry.next)" : row.entry.mission)
+                : !row.entry.blocker.isEmpty ? "hängt: \(row.entry.blocker)"
+                : (!row.entry.work.isEmpty ? "arbeitet an: \(row.entry.work)" : row.entry.mission)
             let others = row.otherOwners.isEmpty ? ""
                 : "  (auch bei \(row.otherOwners.map(ChatsOutput.shortID).joined(separator: ", ")))"
             CLIIO.out("  \(pad(lightSymbol(row.entry.light) + " " + row.entry.light.rawValue, 11))"
@@ -266,6 +291,8 @@ enum ChatsBoardCommand {
             return await read(options)
         case .set(let ref, let patch, let json):
             return mutate(.set, ref: ref, patch: patch, json: json)
+        case .milestone(let ref, let text, let json):
+            return mutate(.milestone, ref: ref, patch: nil, text: text, json: json)
         case .remove(let ref, let json):
             return mutate(.remove, ref: ref, patch: nil, json: json)
         case .clear(let json):
@@ -366,7 +393,8 @@ enum ChatsBoardCommand {
 
     // MARK: Handeln
 
-    private static func mutate(_ op: JarvisBoardOp, ref: String?, patch: JarvisBoardPatch?, json: Bool) -> Int32 {
+    private static func mutate(_ op: JarvisBoardOp, ref: String?, patch: JarvisBoardPatch?, text: String? = nil,
+                               json: Bool) -> Int32 {
         guard JarvisBoardSettings.isEnabled() else {
             CLIIO.err("Fehler: \(JarvisBoardSettings.disabledMessage)")
             return ChatsCLIExit.usage
@@ -394,8 +422,10 @@ enum ChatsBoardCommand {
             if let light = patch.light { params["light"] = light.rawValue }
             if let mission = patch.mission { params["mission"] = mission }
             if let needs = patch.needs { params["needs"] = needs }
-            if let next = patch.next { params["next"] = next }
+            if let work = patch.work { params["work"] = work }
+            if let blocker = patch.blocker { params["blocker"] = blocker }
         }
+        if let text { params["text"] = text }
 
         switch ChatsLiveSupport.perform(method: "board.\(op.rawValue)", params: params) {
         case .failed(let code): return code
@@ -424,6 +454,8 @@ enum ChatsBoardCommand {
             return changed ? "✓ Board aktiv" : "Board war schon aktiv"
         case .deactivate:
             return changed ? "✓ Board inaktiv" : "Board war schon inaktiv"
+        case .milestone:
+            return changed ? "✓ Meilenstein bei \(ref)" : "Board: \(ref) — derselbe Meilenstein steht schon oben"
         }
     }
 }

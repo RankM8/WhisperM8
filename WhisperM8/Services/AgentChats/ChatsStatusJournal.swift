@@ -34,7 +34,7 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// Konversation; `board` = Änderung am Jarvis-Board. Die folgenden Felder
     /// sind optional, damit alte Zeilen unverändert lesbar bleiben.
     var kind: String? = nil
-    /// Board: `set|remove|clear|activate|deactivate`.
+    /// Board: `set|remove|clear|activate|deactivate|milestone`.
     var op: String? = nil
     /// Board: Session-ID des Jarvis, dem das Board gehört.
     var owner: UUID? = nil

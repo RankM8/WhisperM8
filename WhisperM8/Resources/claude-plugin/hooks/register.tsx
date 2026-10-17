@@ -171,16 +171,21 @@ const syncTool = async ($: EngineInterface, active: boolean) => {
   await $.tool.register({
     name: 'board',
     description:
-      'Jarvis-Board pflegen: die Chats, die du gerade aktiv betreust, mit Ampel (needsYou | running | done | parked), Auftrag (mission), was der Chat vom User braucht (needs) und nächstem Schritt (next). action: set | remove | clear | activate | deactivate | read. ref = Kurz-Ref des Chats wie in whisperm8 chats list.',
+      'Jarvis-Board pflegen: die Chats, die du gerade aktiv betreust. Die App zeigt daraus auch die Notiz-Karte am Kachelkopf. set: Ampel (needsYou | running | done | parked), mission (Ziel), work (Arbeitspaket), needs (Eingriff des Users), blocker. milestone: ein erreichtes Ergebnis anhängen (text). Nur bei echten Änderungen schreiben, nie Einzelschritte. action: set | milestone | remove | clear | activate | deactivate | read. ref = Kurz-Ref des Chats wie in whisperm8 chats list.',
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['set', 'remove', 'clear', 'activate', 'deactivate', 'read'] },
-        ref: { type: 'string', description: 'Chat-Ref (für set und remove)' },
+        action: { type: 'string', enum: ['set', 'milestone', 'remove', 'clear', 'activate', 'deactivate', 'read'] },
+        ref: { type: 'string', description: 'Chat-Ref (für set, milestone und remove)' },
         light: { type: 'string', enum: ['needsYou', 'running', 'done', 'parked'] },
-        mission: { type: 'string', description: 'Eine Zeile: was der Chat tut' },
-        needs: { type: 'string', description: 'Was der Chat vom User braucht (bei needsYou)' },
-        next: { type: 'string', description: 'Nächster Schritt' },
+        mission: { type: 'string', description: 'Ziel: der Auftrag des Chats in einem Satz' },
+        work: {
+          type: 'string',
+          description: 'Arbeitspaket: woran der Chat arbeitet, ein Ergebnis für die nächsten 30 min bis wenige Stunden — kein Einzelschritt',
+        },
+        needs: { type: 'string', description: 'Eingriff: Frage oder Entscheidung an den User (bei needsYou), sonst leer' },
+        blocker: { type: 'string', description: 'Was den Chat aufhält, ohne dass der User gefragt ist; leer = keine' },
+        text: { type: 'string', description: 'Meilenstein (milestone): Commit, Tests grün, Entscheidung gefallen, übergeben' },
       },
       required: ['action'],
     },
@@ -337,12 +342,16 @@ const age = (iso: string, at: number, short: boolean) => {
   return short ? `${Math.floor(h / 24)}d` : `${Math.floor(h / 24)} d`
 }
 
-/** Beim Warten das Anliegen, sonst der nächste Schritt (Rückfall: Auftrag). */
+/** Arbeitspaket; CLIs von vor dem Feld liefern es nur unter `next`. */
+const workOf = (e: BoardEntry) => e.work || e.next
+
+/** Beim Warten das Anliegen, sonst Blockade oder Arbeitspaket (Rückfall: Auftrag). */
 const say = (e: BoardEntry) => {
-  const next = e.next || e.mission
-  if (e.light === 'needsYou') return e.needs || next
-  if (e.light === 'done') return next ? `fertig · ${next}` : 'fertig'
-  return next
+  const work = workOf(e) || e.mission
+  if (e.light === 'needsYou') return e.needs || work
+  if (e.light === 'done') return work ? `fertig · ${work}` : 'fertig'
+  if (e.blocker) return `hängt · ${e.blocker}`
+  return work
 }
 
 const sorted = (entries: readonly BoardEntry[]) =>
@@ -492,7 +501,17 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
-    const input = e as unknown as { action?: string; ref?: string; light?: string; mission?: string; needs?: string; next?: string }
+    const input = e as unknown as {
+      action?: string
+      ref?: string
+      light?: string
+      mission?: string
+      work?: string
+      next?: string
+      needs?: string
+      blocker?: string
+      text?: string
+    }
     const action = input.action ?? 'read'
     let args: string[]
     switch (action) {
@@ -501,10 +520,17 @@ export const register: Register = (on, options) => {
         args = ['chats', 'board', 'set', input.ref]
         if (input.light) args.push('--light', input.light)
         if (input.mission !== undefined) args.push('--mission', input.mission)
+        // `next` ist der frühere Name von `work` (ältere Jarvis-Turns).
+        const work = input.work ?? input.next
+        if (work !== undefined) args.push('--work', work)
         if (input.needs !== undefined) args.push('--needs', input.needs)
-        if (input.next !== undefined) args.push('--next', input.next)
+        if (input.blocker !== undefined) args.push('--blocker', input.blocker)
         break
       }
+      case 'milestone':
+        if (!input.ref || !input.text?.trim()) return { result: 'FEHLER: milestone braucht ref und text.' }
+        args = ['chats', 'board', 'milestone', input.ref, input.text]
+        break
       case 'remove':
         if (!input.ref) return { result: 'FEHLER: remove braucht ref.' }
         args = ['chats', 'board', 'remove', input.ref]
@@ -684,9 +710,16 @@ export const register: Register = (on, options) => {
                 {entry.ref} · {entry.project} · {LABEL[entry.light]} · Status {entry.status} · {age(entry.updatedAt, t, false)}
               </Text>
             </Text>
-            {entry.mission !== '' && <Text>  Auftrag: {entry.mission}</Text>}
+            {entry.mission !== '' && <Text>  Ziel: {entry.mission}</Text>}
+            {workOf(entry) !== '' && <Text>  Arbeitet an: {workOf(entry)}</Text>}
             {entry.needs !== '' && <Text color="error">  Braucht: {entry.needs}</Text>}
-            {entry.next !== '' && <Text dimColor>  Weiter: {entry.next}</Text>}
+            {(entry.blocker ?? '') !== '' && <Text color="warning">  Hängt: {entry.blocker}</Text>}
+            {(entry.milestones ?? []).slice(0, 3).map(m => (
+              <Text key={`${entry.sessionID}-${m.at}`} dimColor>
+                {'  ✓ '}
+                {m.text} · {age(m.at, t, true)}
+              </Text>
+            ))}
             {entry.otherOwners.length > 0 && <Text dimColor>  Auch auf dem Board von {entry.otherOwners.join(', ')}</Text>}
             <Box flexDirection="row" columnGap={2}>
               <Button

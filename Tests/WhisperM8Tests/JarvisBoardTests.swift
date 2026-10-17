@@ -24,14 +24,14 @@ final class JarvisBoardLogicTests: XCTestCase {
     func testSetMergesOnlyGivenFieldsAndBumpsUpdatedAtOnlyOnChange() {
         var file = JarvisBoardFile()
         _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat,
-                                 patch: JarvisBoardPatch(light: .running, mission: "M", needs: "N", next: "X"), now: t0)
+                                 patch: JarvisBoardPatch(light: .running, mission: "M", needs: "N", work: "X"), now: t0)
         let t1 = t0.addingTimeInterval(60)
         let change = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat,
                                           patch: JarvisBoardPatch(light: .needsYou), now: t1)
         XCTAssertTrue(change.changed)
         let entry = file.board(owner: owner)!.entries[0]
         XCTAssertEqual(entry.light, .needsYou)
-        XCTAssertEqual([entry.mission, entry.needs, entry.next], ["M", "N", "X"], "nicht genannte Felder bleiben")
+        XCTAssertEqual([entry.mission, entry.needs, entry.work], ["M", "N", "X"], "nicht genannte Felder bleiben")
         XCTAssertEqual(entry.updatedAt, t1)
 
         let t2 = t1.addingTimeInterval(60)
@@ -109,6 +109,103 @@ final class JarvisBoardLogicTests: XCTestCase {
         XCTAssertEqual(file.board(owner: owner)?.entries.first?.light, .running, "Boards sind voneinander unabhängig")
         _ = JarvisBoardLogic.remove(&file, owner: secondOwner, sessionID: chat, now: t0)
         XCTAssertEqual(file.owners(containing: chat), [owner])
+    }
+
+    func testWorkAndBlockerAreSetLikeTheOtherFields() {
+        var file = JarvisBoardFile()
+        _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat,
+                                 patch: JarvisBoardPatch(work: "Baut L22", blocker: "Wartet\nauf Staging"), now: t0)
+        let entry = file.board(owner: owner)!.entries[0]
+        XCTAssertEqual(entry.work, "Baut L22")
+        XCTAssertEqual(entry.blocker, "Wartet auf Staging", "einzeilig wie die übrigen Texte")
+
+        let t1 = t0.addingTimeInterval(60)
+        let change = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat,
+                                          patch: JarvisBoardPatch(blocker: ""), now: t1)
+        XCTAssertTrue(change.changed, "Blockade aufheben ist eine Änderung")
+        XCTAssertEqual(file.board(owner: owner)!.entries[0].blocker, "")
+        XCTAssertEqual(file.board(owner: owner)!.entries[0].work, "Baut L22")
+    }
+
+    func testMilestonesAreNewestFirstDedupedAndCapped() {
+        var file = JarvisBoardFile()
+        _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat, patch: JarvisBoardPatch(), now: t0)
+        let first = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat,
+                                                     text: "L1 bis L20 committet", now: t0.addingTimeInterval(10))
+        XCTAssertTrue(first.changed)
+        XCTAssertEqual(first.entry?.updatedAt, t0.addingTimeInterval(10), "ein Meilenstein frischt den Eintrag auf")
+
+        let duplicate = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat,
+                                                         text: "  L1 bis L20 committet ", now: t0.addingTimeInterval(20))
+        XCTAssertFalse(duplicate.changed, "derselbe Text wie der jüngste ist keine Änderung")
+
+        for index in 0..<25 {
+            _ = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat,
+                                                 text: "M\(index)", now: t0.addingTimeInterval(Double(100 + index)))
+        }
+        let milestones = file.board(owner: owner)!.entries[0].milestones
+        XCTAssertEqual(milestones.count, JarvisBoardLogic.maxMilestones)
+        XCTAssertEqual(milestones.first?.text, "M24", "neueste zuerst")
+        XCTAssertEqual(milestones.first?.at, t0.addingTimeInterval(124), "die Zeit setzt die App")
+        XCTAssertEqual(milestones.last?.text, "M5")
+    }
+
+    func testMilestoneNeedsAnEntryAndText() {
+        var file = JarvisBoardFile()
+        let missing = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat, text: "x", now: t0)
+        XCTAssertTrue(missing.targetMissing)
+        XCTAssertFalse(missing.changed)
+        XCTAssertTrue(file.boards.isEmpty, "nichts wird still angelegt")
+
+        _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat, patch: JarvisBoardPatch(), now: t0)
+        let empty = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat, text: " \n ", now: t0)
+        XCTAssertFalse(empty.changed)
+        XCTAssertFalse(empty.targetMissing)
+    }
+
+    func testSetNeverTouchesMilestones() {
+        var file = JarvisBoardFile()
+        _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat, patch: JarvisBoardPatch(), now: t0)
+        _ = JarvisBoardLogic.appendMilestone(&file, owner: owner, sessionID: chat, text: "Tests grün", now: t0)
+        _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chat, patch: JarvisBoardPatch(light: .done), now: t0)
+        XCTAssertEqual(file.board(owner: owner)!.entries[0].milestones.map(\.text), ["Tests grün"])
+    }
+
+    func testOldFileWithNextReadsAsWorkAndIsWrittenWithBothKeys() throws {
+        let json = """
+        {"schema":"wm8.board/1","boards":[{"owner":"\(owner.uuidString)","isActive":true,
+          "updatedAt":"2026-10-08T10:00:00Z",
+          "entries":[{"sessionID":"\(chat.uuidString)","light":"running","mission":"M","needs":"",
+                      "next":"Leads prüfen","updatedAt":"2026-10-08T10:00:00Z"}]}]}
+        """
+        let file = try JarvisBoardStore.decoder.decode(JarvisBoardFile.self, from: Data(json.utf8))
+        let entry = try XCTUnwrap(file.boards.first?.entries.first)
+        XCTAssertEqual(entry.work, "Leads prüfen", "Dateien von vor `work` tragen das Arbeitspaket unter `next`")
+        XCTAssertEqual(entry.blocker, "")
+        XCTAssertEqual(entry.milestones, [])
+
+        let written = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: JarvisBoardStore.encoder.encode(entry)) as? [String: Any])
+        XCTAssertEqual(written["work"] as? String, "Leads prüfen")
+        XCTAssertEqual(written["next"] as? String, "Leads prüfen", "die Mod und ältere CLIs lesen `next`")
+    }
+
+    func testWorkWinsOverNextWhenBothArePresent() throws {
+        let json = """
+        {"sessionID":"\(chat.uuidString)","light":"running","work":"neu","next":"alt",
+         "milestones":[{"at":"2026-10-08T10:00:00Z","text":"Commit"}],"updatedAt":"2026-10-08T10:00:00Z"}
+        """
+        let entry = try JarvisBoardStore.decoder.decode(JarvisBoardEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.work, "neu")
+        XCTAssertEqual(entry.milestones.map(\.text), ["Commit"])
+    }
+
+    func testBrokenMilestonesFromLaterVersionDoNotBreakTheEntry() throws {
+        let json = """
+        {"sessionID":"\(chat.uuidString)","light":"running","milestones":"kaputt","updatedAt":"2026-10-08T10:00:00Z"}
+        """
+        let entry = try JarvisBoardStore.decoder.decode(JarvisBoardEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.milestones, [])
     }
 
     func testUnknownLightFromLaterVersionDoesNotBreakTheFile() throws {
@@ -272,6 +369,51 @@ final class JarvisBoardHandlerTests: XCTestCase {
         let ops = ChatsStatusJournal.readAll(fileURL: journalURL).compactMap(\.op)
         XCTAssertEqual(ops, ["set", "remove", "deactivate", "activate"])
     }
+
+    func testSetAcceptsWorkBlockerAndLegacyNext() {
+        let response = perform("board.set", params: [
+            "targetSessionID": chat.uuidString, "work": "Baut L22", "blocker": "Wartet auf Sam",
+        ])
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?["entry"]?["work"]?.stringValue, "Baut L22")
+        XCTAssertEqual(response.result?["entry"]?["next"]?.stringValue, "Baut L22", "Spiegel für die Mod")
+        XCTAssertEqual(response.result?["entry"]?["blocker"]?.stringValue, "Wartet auf Sam")
+
+        let legacy = perform("board.set", params: ["targetSessionID": chat.uuidString, "next": "Pusht beide Repos"])
+        XCTAssertEqual(legacy.result?["entry"]?["work"]?.stringValue, "Pusht beide Repos",
+                       "ältere CLIs und Mods schicken noch `next`")
+    }
+
+    func testMilestoneAppendsJournalsAndReportsEntry() {
+        _ = perform("board.set", params: ["targetSessionID": chat.uuidString])
+        let response = perform("board.milestone", params: [
+            "targetSessionID": chat.uuidString, "text": "Intro-Regeln gelockert,\n1.090 Tests grün",
+        ])
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(response.result?["op"]?.stringValue, "milestone")
+        XCTAssertEqual(response.result?["changed"]?.boolValue, true)
+        let milestones = response.result?["entry"]?["milestones"]?.arrayValue
+        XCTAssertEqual(milestones?.first?["text"]?.stringValue, "Intro-Regeln gelockert, 1.090 Tests grün")
+        XCTAssertNotNil(milestones?.first?["at"]?.stringValue)
+
+        let again = perform("board.milestone", params: [
+            "targetSessionID": chat.uuidString, "text": "Intro-Regeln gelockert, 1.090 Tests grün",
+        ])
+        XCTAssertEqual(again.result?["changed"]?.boolValue, false)
+        let ops = ChatsStatusJournal.readAll(fileURL: journalURL).compactMap(\.op)
+        XCTAssertEqual(ops, ["set", "milestone"], "Dublette erzeugt kein Ereignis")
+    }
+
+    func testMilestoneRejectsMissingTextTargetAndEntry() {
+        XCTAssertEqual(perform("board.milestone", params: ["text": "x"]).error?.code, "invalid", "Ziel fehlt")
+        XCTAssertEqual(perform("board.milestone", params: ["targetSessionID": chat.uuidString, "text": "  "])
+            .error?.code, "invalid")
+        XCTAssertEqual(perform("board.milestone", params: ["targetSessionID": chat.uuidString, "text": "x"])
+            .error?.code, "notFound", "nicht auf dem Board → kein stilles Anlegen")
+        XCTAssertEqual(perform("board.milestone", params: ["targetSessionID": owner.uuidString, "text": "x"])
+            .error?.code, "selfSend")
+        XCTAssertTrue(ChatsStatusJournal.readAll(fileURL: journalURL).isEmpty)
+    }
 }
 
 // MARK: - CLI-Parser
@@ -292,8 +434,28 @@ final class ChatsBoardParserTests: XCTestCase {
         ])
         XCTAssertEqual(invocation, .set(ref: "abcd1234",
                                         patch: JarvisBoardPatch(light: .done, mission: "Zeile zwei",
-                                                                needs: "- Freigabe", next: ""),
+                                                                needs: "- Freigabe", work: ""),
                                         json: true))
+    }
+
+    func testSetParsesWorkBlockerAndNextAlias() throws {
+        XCTAssertEqual(try ChatsBoardParser.parse(["set", "x1", "--work", "Baut L22", "--blocker", "Staging"]),
+                       .set(ref: "x1", patch: JarvisBoardPatch(work: "Baut L22", blocker: "Staging"), json: false))
+        XCTAssertEqual(try ChatsBoardParser.parse(["set", "x1", "--next", "Alt"]),
+                       .set(ref: "x1", patch: JarvisBoardPatch(work: "Alt"), json: false),
+                       "--next ist der alte Name von --work")
+    }
+
+    func testMilestoneParsesRefAndText() throws {
+        XCTAssertEqual(try ChatsBoardParser.parse(["milestone", "x1", "Tests\ngrün", "--json"]),
+                       .milestone(ref: "x1", text: "Tests grün", json: true))
+        XCTAssertEqual(try ChatsBoardParser.parse(["milestone", "x1", "- Commit abc"]),
+                       .milestone(ref: "x1", text: "- Commit abc", json: false), "Text darf mit „-“ beginnen")
+        XCTAssertThrowsError(try ChatsBoardParser.parse(["milestone", "--banane", "x"]), "Ref zuerst")
+        XCTAssertThrowsError(try ChatsBoardParser.parse(["milestone"]))
+        XCTAssertThrowsError(try ChatsBoardParser.parse(["milestone", "x1"]), "Text fehlt")
+        XCTAssertThrowsError(try ChatsBoardParser.parse(["milestone", "x1", "   "]), "leerer Text")
+        XCTAssertThrowsError(try ChatsBoardParser.parse(["milestone", "x1", "a", "b"]))
     }
 
     func testSetOmittedFieldsStayNil() throws {
@@ -344,7 +506,7 @@ final class ChatsBoardReadContractTests: XCTestCase {
     private func fixture() -> (JarvisBoardFile, JarvisBoard) {
         var file = JarvisBoardFile()
         _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chatA,
-                                 patch: JarvisBoardPatch(light: .running, mission: "Kampagne Q4", next: "Leads prüfen"),
+                                 patch: JarvisBoardPatch(light: .running, mission: "Kampagne Q4", work: "Leads prüfen"),
                                  now: t0)
         _ = JarvisBoardLogic.set(&file, owner: owner, sessionID: chatB,
                                  patch: JarvisBoardPatch(light: .needsYou, mission: "Opener",
@@ -380,7 +542,8 @@ final class ChatsBoardReadContractTests: XCTestCase {
         XCTAssertEqual(entries.map { $0["ref"] as? String }, ["bbbbbbbb", "aaaaaaaa"], "needsYou vor running")
         let first = entries[0]
         XCTAssertEqual(Set(first.keys), ["ref", "sessionID", "title", "project", "light", "mission", "needs",
-                                         "next", "updatedAt", "status", "statusSince", "otherOwners"])
+                                         "work", "next", "blocker", "milestones", "updatedAt", "status",
+                                         "statusSince", "otherOwners"])
         XCTAssertEqual(first["title"] as? String, "Copy")
         XCTAssertEqual(first["project"] as? String, "outreach")
         XCTAssertEqual(first["light"] as? String, "needsYou")

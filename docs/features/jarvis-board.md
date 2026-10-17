@@ -32,7 +32,7 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 | Wer | Wie |
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
-| Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …` |
+| Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
 | User | `/board` Details (Panel, öffnet mit Fokus, Escape schließt), `/board an` / `aus`, `/board zu` / `auf` (einklappen) |
 | User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt (ohne Enter) öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). Im Panel `[ 1 Tab öffnen ]` je Chat, ebenfalls per Ziffer. |
 
@@ -114,12 +114,52 @@ mehreren Boards stehen (`otherOwners`).
   Umräumen des Aktiv-Workspaces bleibt bei Jarvis, der seine Slot-Regeln
   kennt.
 
+## Notiz-Karte im Grid (Jarvis-Randnotizen, seit 17.10.2026)
+
+Plan und Entscheidungen: `docs/plans/jarvis-randnotizen.md`, klickbarer
+Entwurf: `docs/design/randnotiz-karte.html`.
+
+- **Was:** Jeder Chat auf dem Board einer **laufenden** Jarvis-Session bekommt
+  im Grid-Workspace eine Karte, die am Kachelkopf hängt (Form: umgedrehte
+  `ChromeTabShape`, Grau des Kopfes läuft in die Karte). Inhalt: Arbeitspaket
+  (`work`, fett, mit Alter), Eingriff (`needs`, rot), Blockade (`blocker`,
+  bernstein), Ziel (`mission`), die drei neuesten Meilensteine (ältere per
+  „▸ N ältere") und „Aktualisiert HH:MM · Jarvis". Ohne laufenden Jarvis gibt
+  es keine Karten; die App erzeugt nie eigene Notizen.
+- **Felder im Board:** `work` löst `next` ab (beide werden gleich geschrieben,
+  alte Dateien mit nur `next` lesen sich als `work`), dazu `blocker` und
+  `milestones` (`{at, text}`, neueste zuerst, 20 bleiben, `whisperm8 chats board
+  milestone`). Inhaltsregeln für Jarvis: Skill `whisperm8:jarvis`, Abschnitt 6.
+- **Auf/zu:** Schalter „Notizen auf/zu" in der Workspace-Leiste neben dem
+  Kapazitäts-Picker (sichtbar, sobald ein Chat des Workspaces eine Notiz hat),
+  dazu ⌥⌘N im Grid. Er setzt den Standard für alle Karten (App-weit,
+  `jarvisNotesDefaultOpen`) und löscht die Handklicks dieses Fensters. Der
+  Pfeil neben dem Konto-Badge klappt eine einzelne Karte. In der Kachel, in
+  der der User arbeitet (Fokus), ist die eigene Karte zu; ein Fokuswechsel
+  verwirft den Handklick der verlassenen und der betretenen Kachel. Mehr
+  Automatik gibt es bewusst nicht (auch kein Selbst-Aufklappen bei „wartet").
+- **Technik:** `JarvisNotesStore` (MainActor) hält die Projektion
+  (`JarvisNotesProjection`: nur aktive Boards, nur lebende Owner, bei mehreren
+  Boards der neueste Eintrag) und die flüchtigen Handklicks je Fenster, beides
+  über Publisher je Session wie `statusPublisher(for:)` — die Kachelköpfe sind
+  Funktionen im Body von `AgentChatsView`, eine Observable-Property dort würde
+  das ganze Grid neu auswerten. Gefüttert beim Start
+  (`setupRuntimeServicesIfNeeded`) und nach jeder erfolgreichen Board-Mutation
+  im Socket-Handler; die App ist einziger Schreiber, ein Datei-Beobachter ist
+  nicht nötig. Die Karte liegt als Overlay über dem Terminal (kein PTY-Resize),
+  ist so hoch wie ihr Inhalt (max. 60 % der Kachel, darüber scrollt sie) und
+  setzt die Deckkraft des Kopf-Graus fort. Ein Klick in die Karte fokussiert
+  die Kachel nicht (`hoveredNoteCardID`), sonst klappte sie sofort zu.
+- **Kill-Switch:** `defaults write com.whisperm8.app jarvisNotesEnabled -bool NO`
+  (keine Karten, kein Schalter; das Board bleibt unberührt).
+
 ## Entwickeln und prüfen
 
 ```bash
 make plugin-test   # claude plugin validate + claude plugin test auf die Mod
 make skills        # Plugin aus dem Repo ablegen (ohne App-Build); neue Sessions sehen es
-swift test --filter "WhisperM8ClaudePluginTests|JarvisBoardTests"
+swift test --filter "WhisperM8ClaudePluginTests|JarvisBoard|ChatsBoard|JarvisNotes|JarvisNoteExpansion|HangingNoteShape|ClaudeRecap"
+make snapshots ONLY=jarvis-notiz   # Karte hell + dunkel ansehen
 ```
 
 ## Kill-Switches

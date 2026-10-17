@@ -490,6 +490,21 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.jarvisBoardEnabled) }
     }
 
+    /// Jarvis-Notizen (Karte am Kachelkopf im Grid, Daten aus dem Board):
+    /// Aus = keine Karten, kein Schalter; das Board selbst bleibt unberührt.
+    /// `defaults write com.whisperm8.app jarvisNotesEnabled -bool NO`
+    var isJarvisNotesEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.jarvisNotesEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.jarvisNotesEnabled) }
+    }
+
+    /// Schalter „Notizen auf/zu“ in der Workspace-Leiste: Standard für alle
+    /// Notiz-Karten, App-weit. Gelesen per `@AppStorage` in den Ansichten.
+    var jarvisNotesDefaultOpen: Bool {
+        get { boolWithDefault(true, forKey: Keys.jarvisNotesDefaultOpen) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.jarvisNotesDefaultOpen) }
+    }
+
     /// Gesprochene Ansagen (`whisperm8 speak`, Skill `whisperm8:callout`):
     /// Aus = die App lehnt jede Ansage ab, der Stumm-Schalter verschwindet aus
     /// der Menüleiste.
@@ -853,6 +868,8 @@ enum PreferenceKeys {
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
+    static let jarvisNotesEnabled = "jarvisNotesEnabled"
+    static let jarvisNotesDefaultOpen = "jarvisNotesDefaultOpen"
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"
     static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"

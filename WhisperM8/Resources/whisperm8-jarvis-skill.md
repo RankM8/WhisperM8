@@ -207,21 +207,49 @@ das **Jarvis-Board** ein: ein Band über dem Prompt mit den Chats, die du
 gerade aktiv betreust. Die Liste pflegst **du**, die App hält sie, die Mod
 zeigt sie an und weckt dich.
 
-- **Werkzeug:** Tool `mcp__whisperm8__board` (`action: set | remove | clear |
-  activate | deactivate | read`), gleichwertig per CLI
-  `whisperm8 chats board set <ref> --light … --mission … --needs … --next …`.
+- **Werkzeug:** Tool `mcp__whisperm8__board` (`action: set | milestone | remove |
+  clear | activate | deactivate | read`), gleichwertig per CLI
+  `whisperm8 chats board set <ref> --light … --mission … --work … --needs … --blocker …`
+  und `whisperm8 chats board milestone <ref> "<Ergebnis>"`.
 - **Was auf das Board kommt:** nur Chats, die du aktiv betreust (Auftrag
   vergeben, Abnahme offen, Blocker). Keine Fremd-Chats, die der User selbst
   führt, nicht dich selbst.
 - **Ampel (`light`):** `needsYou` = der User muss entscheiden oder freigeben,
   `running` = arbeitet am Auftrag, `done` = fertig, Abnahme offen, `parked` =
   bewusst angehalten (wartet auf etwas Drittes).
-- **Felder:** `mission` eine Zeile, was der Chat tut. `needs` nur bei
-  `needsYou`, als Frage oder Entscheidung, die der User beantworten kann
-  („Entscheidung: Opener A oder B"). `next` der nächste konkrete Schritt.
-- **Nachführen nach jedem verifizierten Ereignis** (Abschnitt 5): Ampel und
-  `next` stimmen immer mit dem echten Stand überein. Ein `done`-Chat bleibt
-  stehen, bis der User ihn zur Kenntnis genommen hat; dann `remove`.
+- **Notiz-Karte:** Aus deinen Einträgen zeigt die App im Grid an jedem
+  Board-Chat eine Karte am Kachelkopf (nur solange du läufst). Der User liest
+  sie, statt in den Chat zu gehen — schreib sie für ihn, kurz und ohne
+  Fachjargon.
+
+### Inhalt der Felder
+
+| Feld | Inhalt | Ändert sich | Gut | Zu detailliert |
+|---|---|---|---|---|
+| `mission` (Ziel) | Auftrag des Chats, ein Satz | nur bei Missionswechsel (dann auch der Name) | „Intro-Qualität der Lead-Mails verbessern" | – |
+| `work` (Arbeitspaket) | Ergebnis, das in 30 min bis wenigen Stunden fertig wird | erst, wenn das Paket fertig ist / ein neues beginnt | „Baut die letzte Variante der Lead-Ansicht (L22)" | „Macht Screenshots", „liest Datei X", „führt Tests aus" |
+| `milestone` | nur Ergebnisse: Commit, Tests grün, Entscheidung gefallen, Blocker gelöst, übergeben | wenn eins erreicht ist | „Intro-Regeln gelockert, 1.090 Tests grün, committet" | „Bash ausgeführt", „Datei gelesen" |
+| `needs` (Eingriff) | nur bei `needsYou`: Frage oder Entscheidung, die der User beantworten kann | entsteht / erledigt (dann leeren) | „Entscheidung: Ticket mit Eli erstellen" | – |
+| `blocker` | was den Chat aufhält, ohne dass der User gefragt ist | entsteht / erledigt (dann leeren) | „Wartet auf Staging-Deploy von Sam" | – |
+
+- **Faustregel:** Würde sich der Satz in 10 Minuten wieder ändern, ist er zu
+  detailliert. Kein „gerade"-Feld, keine Werkzeuge, keine Einzelschritte.
+- **Wann schreiben:** nur, wenn dich die Mod ohnehin weckt (Turn-Ende oder
+  „wartet" eines Board-Chats) **und** sich `work`, ein Meilenstein, `needs` oder
+  `blocker` wirklich geändert hat. Höchstens ein `set` und ein `milestone` je
+  Chat und Weckruf. Nie nach der Uhr, nie „zur Sicherheit". Erwartung: ein bis
+  drei Änderungen pro Chat und Stunde.
+- **Lesen:** zuerst `whisperm8 chats show <ref> --recap` — Claudes eigener
+  Rückblick („Ziel ist … Zuletzt … Als Nächstes …") reicht meist für `work` und
+  den Meilenstein. Erst wenn er fehlt oder unklar ist, den Tail lesen
+  (Abschnitt 5). Codex-Chats haben keinen Rückblick.
+- **Nachführen nach jedem verifizierten Ereignis** (Abschnitt 5): Ampel,
+  `work`, `needs` und `blocker` stimmen immer mit dem echten Stand überein. Ein
+  `done`-Chat bleibt stehen, bis der User ihn zur Kenntnis genommen hat; dann
+  `remove` (die Notiz verschwindet mit).
+
+### Wecken und Bedienung
+
 - **Wecken übernimmt die Mod:** Wechselt ein Board-Chat auf „wartet auf
   dich" oder beendet seinen Turn, bekommst du einen Prompt
   `[Board] <Name> (<ref>): …`. Dann verifizieren (5), Board nachführen, beim

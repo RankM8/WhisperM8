@@ -31,6 +31,7 @@ whisperm8 chats list [--project P] [--status S] [--scope active|recent|all] \
                      # höchstens 50 Zeilen (--limit 0 = alle); Kürzungs-Hinweis
                      # steht auf stderr — nicht wegfiltern (2>&1 | grep …)
 whisperm8 chats show <ref> [--json]
+whisperm8 chats show <ref> --recap [--json]          # nur Claudes eigene Rückblicke (die drei neuesten)
 whisperm8 chats tail <ref> [--turns N] [--chars N] [--raw] [--json]
 whisperm8 chats wait [--ref R]… [--until attention|idle|statusChange] \
                      [--since REV] [--timeout SEC] [--json]     # blockiert bis Ereignis
@@ -39,15 +40,18 @@ whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|co
                          [--since 30d|2026-06-01] [--until D] [--content "text"] [--json]
 whisperm8 chats board [--owner @self|<ref>] [--all] [--json]
                                                      # Jarvis-Board lesen (wm8.board/1): betreute Chats mit
-                                                     # Ampel, Auftrag, Anliegen, nächstem Schritt + Live-Status
+                                                     # Ampel, Ziel, Arbeitspaket, Eingriff, Blockade,
+                                                     # Meilensteinen + Live-Status
 ```
 
 Board pflegen (App muss laufen; ändert nur das **eigene** Board, keine fremde
-Session — deshalb ohne Rückfrage erlaubt). Arbeitsweise: Skill `jarvis`,
+Session — deshalb ohne Rückfrage erlaubt). Aus dem Board baut die App auch die
+Notiz-Karte am Kachelkopf im Grid. `--next` ist der alte Name von `--work`. Arbeitsweise: Skill `jarvis`,
 Abschnitt „Board". In der App gleichwertig über das Tool `mcp__whisperm8__board`.
 ```bash
 whisperm8 chats board set <ref> [--light needsYou|running|done|parked] \
-                                [--mission "…"] [--needs "…"] [--next "…"]
+                                [--mission "…"] [--work "…"] [--needs "…"] [--blocker "…"]
+whisperm8 chats board milestone <ref> "<Ergebnis>"   # Meilenstein vorn anhängen (Zeit setzt die App)
 whisperm8 chats board remove <ref> | clear | activate | deactivate
 ```
 

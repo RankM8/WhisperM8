@@ -189,6 +189,87 @@ describe('Steuerung', () => {
   })
 })
 
+describe('Arbeitspaket, Blockade, Meilensteine', () => {
+  test('das Band zeigt work, fällt auf next zurück und nennt eine Blockade', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    world(on, {
+      board: {
+        ...BOARD,
+        entries: [
+          entry({ work: 'Baut die letzte Variante (L22)', next: 'Baut die letzte Variante (L22)' }),
+          entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Alt-CLI', next: 'Nur next gesetzt' }),
+          entry({ ref: 'e45d0000', sessionID: 'CE45D000-0000-0000-0000-000000000003', title: 'Blockiert', work: 'Deploy', blocker: 'Wartet auf Staging' }),
+        ],
+      },
+    })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ ...band(179), surface: 'terminal' })
+    expect(await ui.find({ text: /Baut die letzte Variante \(L22\)/ })).toBeDefined()
+    expect(await ui.find({ text: /Nur next gesetzt/ })).toBeDefined()
+    expect(await ui.find({ text: /hängt · Wartet auf Staging/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('das Panel zeigt Ziel, Arbeitspaket, Blockade und die drei neuesten Meilensteine', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    world(on, {
+      board: {
+        ...BOARD,
+        entries: [
+          entry({
+            work: 'Schließt die Intro-Regeln ab',
+            blocker: 'Wartet auf Sams Merge',
+            milestones: [
+              { at: minutesAgo(10), text: 'Tests grün' },
+              { at: minutesAgo(30), text: 'Commit dd83dbd' },
+              { at: minutesAgo(50), text: 'Prüf-Agent nachgeschärft' },
+              { at: minutesAgo(90), text: 'Auftrag übernommen' },
+            ],
+          }),
+        ],
+      },
+    })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    const pane = await $.ui.mount({
+      plugin: 'whisperm8', surface: 'terminal', component: 'Pane', requestId: 'whisperm8-board', props: {},
+      viewport: { columns: 120, rows: 40 },
+    } as never)
+    expect(await pane.find({ text: /Ziel: Copy für Kampagne 12/ })).toBeDefined()
+    expect(await pane.find({ text: /Arbeitet an: Schließt die Intro-Regeln ab/ })).toBeDefined()
+    expect(await pane.find({ text: /Hängt: Wartet auf Sams Merge/ })).toBeDefined()
+    expect(await pane.find({ text: /Tests grün/ })).toBeDefined()
+    expect(await pane.find({ text: /Prüf-Agent nachgeschärft/ })).toBeDefined()
+    expect(await pane.find({ text: /Auftrag übernommen/ })).toBeUndefined()
+    await pane.unmount()
+  })
+
+  test('das Tool reicht work, blocker und milestone weiter; next wird zu --work', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on)
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    const call = (input: Record<string, unknown>) =>
+      $.tool.call({ tool: 'mcp__whisperm8__board', ...input } as unknown as Parameters<typeof $.tool.call>[0])
+    await call({ action: 'set', ref: 'a3f2', work: 'Baut L22', blocker: '' })
+    await call({ action: 'set', ref: 'a3f2', next: 'Alter Name' })
+    await call({ action: 'milestone', ref: 'a3f2', text: 'Tests grün' })
+    expect(calls.argv).toContainEqual(['whisperm8', 'chats', 'board', 'set', 'a3f2', '--work', 'Baut L22', '--blocker', '', '--json'])
+    expect(calls.argv).toContainEqual(['whisperm8', 'chats', 'board', 'set', 'a3f2', '--work', 'Alter Name', '--json'])
+    expect(calls.argv).toContainEqual(['whisperm8', 'chats', 'board', 'milestone', 'a3f2', 'Tests grün', '--json'])
+  })
+
+  test('milestone ohne Text ruft die CLI nicht auf', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on)
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    const before = calls.argv.length
+    const result = await $.tool.call({
+      tool: 'mcp__whisperm8__board', action: 'milestone', ref: 'a3f2', text: '  ',
+    } as unknown as Parameters<typeof $.tool.call>[0])
+    expect(JSON.stringify(result)).toContain('milestone braucht ref und text')
+    expect(calls.argv.slice(before).some(a => a.includes('milestone'))).toBe(false)
+  })
+})
+
 describe('Wecken', () => {
   test('ein Board-Chat wartet: ein gebündelter Prompt an Jarvis, nur einmal je Zustand', async ($, on) => {
     const clock = mock.clock(on, { now: NOW })

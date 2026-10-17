@@ -42,6 +42,7 @@ extension AgentChatsView {
             guard let event = handleTabSwitcherKeyDown(event) else { return nil }
             guard let event = handleNextWaitingChatShortcut(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
+            guard let event = handleJarvisNotesShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
             guard let event = handleGridFocusShortcut(event) else { return nil }
             observeTerminalInterruptKey(event)
@@ -127,6 +128,19 @@ extension AgentChatsView {
         guard modifiers == .command,
               event.charactersIgnoringModifiers == "n" else { return event }
         showNewChatProjectPicker = true
+        return nil
+    }
+
+    /// ⌥⌘N im Grid: Jarvis-Notizen standardmäßig auf/zu (wie der Schalter in
+    /// der Workspace-Leiste). Über den Monitor statt `.keyboardShortcut`, damit
+    /// es auch bei Fokus im Terminal greift. KeyCode statt Zeichen — mit ⌥
+    /// liefert `charactersIgnoringModifiers` je nach Layout ein anderes Zeichen.
+    private func handleJarvisNotesShortcut(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow, isGridActive,
+              AppPreferences.shared.isJarvisNotesEnabled else { return event }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard modifiers == [.command, .option], event.keyCode == JarvisNotesShortcut.keyCodeN else { return event }
+        JarvisNotesShortcut.toggleDefault(windowID: windowID)
         return nil
     }
 
