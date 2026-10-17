@@ -338,6 +338,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.
         AgentDirectoryEventMonitor.shared.start()
+        // Claude-Chat-Status aus Claudes eigener Registry
+        // (`<config>/sessions/<pid>.json`, Plan claude-status-aus-registry.md)
+        // statt aus Hooks + Transcript-Heuristik. Kill-Switch:
+        // `defaults write com.whisperm8.app claudeRegistryStatusEnabled -bool NO`.
+        MainActor.assumeIsolated {
+            guard AppPreferences.shared.isClaudeRegistryStatusEnabled else { return }
+            let source = ClaudeRegistryStatusSource.shared
+            let coordinator = AgentSessionStatusCoordinator.shared
+            source.onRecord = { coordinator.handleRegistryRecord($0) }
+            source.onRemoved = { coordinator.handleRegistryRecordRemoved(externalSessionID: $0) }
+            source.start()
+        }
         // Subagent-Jobs (whisperm8-CLI-Supervisor): FSEvents auf agent-jobs/
         // + Launch/Foreground-Sync — spiegelt Jobs als .subagentJob-Sessions
         // in den Workspace und pflegt Status/Zähler/Unread.

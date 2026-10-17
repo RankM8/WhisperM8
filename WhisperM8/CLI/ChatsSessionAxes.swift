@@ -134,7 +134,7 @@ enum ChatsSessionAxesBuilder {
 
         let quality: ChatsEvidenceAxis.Quality = {
             switch source {
-            case "app", "hook", "supervisorJob": return .observed
+            case "app", "hook", "supervisorJob", "claudeRegistry", "registry": return .observed
             case "transcriptEstimate", "transcript": return .inferred
             default: return .unknown
             }

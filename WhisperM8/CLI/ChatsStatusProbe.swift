@@ -51,9 +51,34 @@ enum ChatsStatusProbe {
                                     availability: .unsupported)
         case .backgroundChat:
             return probeBackground(session: session, now: now)
-        case .chat, .subagentJob:
+        case .chat:
+            let estimate = probeTranscript(session: session, projectPath: entry.projectPath, now: now)
+            guard session.provider == .claude, registryEnabled(),
+                  let ext = session.externalSessionID, !ext.isEmpty else { return estimate }
+            return overlayRegistry(estimate, record: registryCache.index(now: now)[ext])
+        case .subagentJob:
             return probeTranscript(session: session, projectPath: entry.projectPath, now: now)
         }
+    }
+
+    // MARK: - Claudes Registry
+
+    /// Kill-Switch wie in der App (`claudeRegistryStatusEnabled`).
+    static var registryEnabled: () -> Bool = { AppPreferences().isClaudeRegistryStatusEnabled }
+
+    static let registryCache = ChatsRegistryCache {
+        ClaudeSessionRegistry.indexBySessionID(ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots()))
+    }
+
+    /// Pur: Claudes eigener Status schlägt die Transcript-Schätzung. Revision
+    /// und Transcript-Pfad bleiben (Grundlage von `wait --since`).
+    static func overlayRegistry(_ estimate: ChatsRuntimeInfo, record: ClaudeSessionRecord?) -> ChatsRuntimeInfo {
+        guard let record, let status = ClaudeSessionRegistry.runtimeStatus(for: record) else { return estimate }
+        var info = estimate
+        info.status = status
+        info.source = "claudeRegistry"
+        info.since = record.statusUpdatedAt ?? estimate.since
+        return info
     }
 
     /// Alle Einträge parallel proben (TaskGroup) — Budget: < 2 s bei 50 Sessions.
@@ -381,5 +406,30 @@ final class ThrottledTranscriptIndex<Value>: @unchecked Sendable {
     private func rebuild() {
         index = build()
         builtAt = now()
+    }
+}
+
+/// Registry-Index für einen CLI-Lauf: höchstens 1 s alt, damit `wait`-
+/// Schleifen frische Werte sehen und `list` nicht je Session neu scannt.
+final class ChatsRegistryCache: @unchecked Sendable {
+    private let build: () -> [String: ClaudeSessionRecord]
+    private let maxAge: TimeInterval
+    private let lock = NSLock()
+    private var cached: [String: ClaudeSessionRecord]?
+    private var builtAt: Date = .distantPast
+
+    init(maxAge: TimeInterval = 1, build: @escaping () -> [String: ClaudeSessionRecord]) {
+        self.build = build
+        self.maxAge = maxAge
+    }
+
+    func index(now: Date) -> [String: ClaudeSessionRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached, abs(now.timeIntervalSince(builtAt)) < maxAge { return cached }
+        let fresh = build()
+        cached = fresh
+        builtAt = now
+        return fresh
     }
 }

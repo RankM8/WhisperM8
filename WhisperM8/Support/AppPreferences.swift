@@ -438,6 +438,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.chatsPromptGuardEnabled) }
     }
 
+    /// Claude-Chat-Status aus Claudes eigener Registry
+    /// (`<config>/sessions/<pid>.json`) statt aus Hooks + Transcript-Heuristik
+    /// (Plan claude-status-aus-registry.md). Aus = alter Weg: voller Hook-Satz
+    /// für NEU gestartete Chats, Status aus Hooks und Transcript.
+    /// `defaults write com.whisperm8.app claudeRegistryStatusEnabled -bool NO`
+    var isClaudeRegistryStatusEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeRegistryStatusEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeRegistryStatusEnabled) }
+    }
+
     /// Gemeinsames Auto-Memory: Chats von Zusatzprofilen bekommen per
     /// `autoMemoryDirectory` das Memory von `main` (Plan
     /// claude-account-switch-ohne-stopp.md, Slice 1). Aus = jedes Profil nutzt
@@ -862,6 +872,7 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
+    static let claudeRegistryStatusEnabled = "claudeRegistryStatusEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"

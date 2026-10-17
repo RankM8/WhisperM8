@@ -92,6 +92,9 @@ enum AgentSessionSignal: Equatable {
     /// kein Anlass für Fertig-Notification/Ton.
     case turnAborted
     case processTerminated(exitCode: Int32?)
+    /// Claudes eigener Status aus der Registry (`<config>/sessions/<pid>.json`).
+    /// Für Registry-live Sessions die einzige Statusquelle.
+    case registryStatus(ClaudeRegistryObservation)
 
     /// Mapping Hook-Event → Signal. `nil` für Events ohne Status-Relevanz
     /// (defensive `Notification`, unbekannte Namen).
@@ -123,6 +126,15 @@ enum AgentSessionSignal: Equatable {
             return nil
         }
     }
+}
+
+/// Was die Registry über eine Session sagt, schon eingeordnet: Die Warte-Art
+/// leitet der Coordinator aus `waitingFor` + Transcript-Tail ab, „abgebrochen“
+/// aus einem kurz vorher beobachteten ESC (Registry meldet beides als `idle`).
+enum ClaudeRegistryObservation: Equatable {
+    case busy
+    case waiting(AwaitingInputKind)
+    case idle(interrupted: Bool)
 }
 
 // MARK: - Effekte
@@ -173,6 +185,14 @@ enum AgentSessionStateMachine {
                 return Transition(state: .ready)
             case .userPromptSubmitted:
                 return Transition(state: .working)
+            case .registryStatus(let observation):
+                // Ein lebender Registry-Eintrag beweist einen laufenden
+                // Prozess (PID + Startzeit geprüft) — wie SessionStart.
+                switch observation {
+                case .busy: return Transition(state: .working)
+                case .waiting(let kind): return Transition(state: .awaitingInput(kind), effects: [.inputRequested(kind)])
+                case .idle: return Transition(state: .ready)
+                }
             default:
                 return Transition(state: state)
             }
@@ -275,6 +295,43 @@ enum AgentSessionStateMachine {
         case .processTerminated(let exitCode):
             let failed = (exitCode ?? 0) != 0
             return Transition(state: failed ? .errored : .stopped)
+
+        case .registryStatus(let observation):
+            return reduceRegistry(state: state, observation: observation)
+        }
+    }
+
+    /// Registry-Signale: Claude meldet seinen Zustand selbst, deshalb gibt es
+    /// hier keinen Vorrang anderer Quellen mehr. Effekte nur bei echten
+    /// Übergängen; die erste Sicht einer Session (nach App-Start) erzeugt
+    /// kein „fertig“, weil sie nie aus `.working` kommt.
+    private static func reduceRegistry(
+        state: AgentSessionLifecycleState,
+        observation: ClaudeRegistryObservation
+    ) -> Transition {
+        switch observation {
+        case .busy:
+            return Transition(state: .working)
+        case .waiting(let kind):
+            if state == .awaitingInput(kind) { return Transition(state: state) }
+            if case .awaitingInput = state {
+                // Nur die Art wird genauer (Tail kam nach der Registry) —
+                // die Rückfrage-Meldung ist schon raus.
+                return Transition(state: .awaitingInput(kind))
+            }
+            return Transition(state: .awaitingInput(kind), effects: [.inputRequested(kind)])
+        case .idle(let interrupted):
+            switch state {
+            case .working:
+                if interrupted { return Transition(state: .ready) }
+                return Transition(state: .turnDone, effects: [.turnCompleted])
+            case .awaitingInput, .created, .launching:
+                // Dialog weggeklickt/abgebrochen bzw. erste Sicht: bereit,
+                // aber kein Turn-Ende.
+                return Transition(state: .ready)
+            case .ready, .turnDone, .stopped, .errored:
+                return Transition(state: state)
+            }
         }
     }
 

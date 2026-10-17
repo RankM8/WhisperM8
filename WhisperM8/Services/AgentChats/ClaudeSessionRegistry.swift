@@ -186,14 +186,21 @@ enum ClaudeSessionRegistry {
     /// `13:05:05` bei lokal `16:05:05` EEST). Weil das nirgends zugesagt ist,
     /// gelten UTC und lokale Zeit gleichermaßen als Treffer.
     static func parseProcStartCandidates(_ raw: String) -> [Date] {
-        let collapsed = raw.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
         procStartLock.lock()
         defer { procStartLock.unlock() }
-        return [TimeZone(identifier: "UTC")!, TimeZone.current].compactMap { zone in
+        // `procStart` ändert sich je Prozess nie — der DateFormatter ist der
+        // teuerste Schritt des Scans, deshalb einmal je Wert.
+        if let cached = procStartCache[raw] { return cached }
+        let collapsed = raw.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        let dates = [TimeZone(identifier: "UTC")!, TimeZone.current].compactMap { zone in
             procStartFormatter.timeZone = zone
             return procStartFormatter.date(from: collapsed)
         }
+        if procStartCache.count > 512 { procStartCache.removeAll() }
+        procStartCache[raw] = dates
+        return dates
     }
+    nonisolated(unsafe) private static var procStartCache: [String: [Date]] = [:]
 
     private static let procStartFormatter: DateFormatter = {
         let formatter = DateFormatter()

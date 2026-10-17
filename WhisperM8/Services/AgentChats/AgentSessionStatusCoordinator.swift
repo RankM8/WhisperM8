@@ -134,6 +134,32 @@ final class AgentSessionStatusCoordinator {
     /// IDs der Background-Forks pro lokaler Session — werden nie gebunden.
     private var forkExternalIDs: [UUID: Set<String>] = [:]
 
+    // MARK: Registry-Zustand (Plan claude-status-aus-registry.md)
+
+    /// Sessions, deren Status aus Claudes eigener Registry kommt
+    /// (`<config>/sessions/<pid>.json`). Für sie zählen Hook-Status-Signale
+    /// und Transcript-Meinungen nicht mehr; die alten Heilungen sind aus.
+    private(set) var registryLiveSessions: Set<UUID> = []
+    /// Letzter Registry-Eintrag je lokaler Session (Warte-Art nachziehen).
+    private var registryRecords: [UUID: ClaudeSessionRecord] = [:]
+    /// Beobachteter Abbruch (ESC im Terminal, `chats interrupt`): Registry
+    /// meldet Abbruch und Turn-Ende gleich (`idle`) — ein `idle` kurz nach
+    /// dem Abbruch ist kein „fertig“ (keine Meldung, keine Queue-Zustellung).
+    private var interruptMarks: [UUID: Date] = [:]
+    nonisolated static let interruptWindowSeconds: TimeInterval = 10
+    /// Prozessende je Session — späte Registry-Events danach ignorieren.
+    private var terminatedAt: [UUID: Date] = [:]
+    /// Was der alte Weg (Hooks + Transcript) gesagt hätte — nur für das
+    /// Abweichungs-Log während der Umstellung (QA nach `make dev`).
+    private var shadowStates: [UUID: AgentSessionLifecycleState] = [:]
+    private var shadowDiffSince: [UUID: Date] = [:]
+    nonisolated static let shadowDiffLogSeconds: TimeInterval = 5
+
+    var isRegistryStatusEnabled: () -> Bool = { AppPreferences.shared.isClaudeRegistryStatusEnabled }
+    var registryRecordLookup: (String) -> ClaudeSessionRecord? = {
+        ClaudeRegistryStatusSource.shared.record(forExternalSessionID: $0)
+    }
+
     /// Test-Injection: Existiert das Transcript der Claude-Session
     /// (localID, externalID, transcript_path aus dem Hook)? Default prüft
     /// erst den Hook-Pfad, sonst den Locator mit dem Projekt-cwd.
@@ -242,6 +268,7 @@ final class AgentSessionStatusCoordinator {
     /// deaktiviert sein).
     func sessionLaunched(sessionID: UUID) {
         hookLiveSessions.remove(sessionID)
+        resetRegistryState(sessionID)
         apply(.processLaunched, to: sessionID)
 
         // Terminals haben weder Transcript noch Hooks: kein Watch, kein
@@ -258,6 +285,7 @@ final class AgentSessionStatusCoordinator {
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.
     func externalSessionIDBound(sessionID: UUID) {
         attachWatch(sessionID: sessionID)
+        adoptRegistryRecord(sessionID: sessionID)
     }
 
     func sessionTerminated(sessionID: UUID, exitCode: Int32?) {
@@ -273,6 +301,8 @@ final class AgentSessionStatusCoordinator {
         }
 
         hookLiveSessions.remove(sessionID)
+        resetRegistryState(sessionID)
+        terminatedAt[sessionID] = now()
         apply(.processTerminated(exitCode: exitCode), to: sessionID)
         watcher.markTerminated(sessionID: sessionID)
         hookBridge.stopTracking(localSessionID: sessionID)
@@ -337,6 +367,18 @@ final class AgentSessionStatusCoordinator {
             let reason = event.reason ?? "unknown"
             Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
         }
+        if registryLiveSessions.contains(localID) {
+            // Status kommt aus der Registry; Hooks bleiben nur Binding,
+            // Send-Guard und Detail („Freigabe: Bash …“).
+            if let signal = AgentSessionSignal(hookEvent: event) {
+                applyShadow(signal, to: localID)
+            }
+            if event.hookEventName == .permissionRequest,
+               states[localID] == .awaitingInput(.permission) {
+                activityStore.setAwaiting(.permission, toolName: event.toolName, for: localID)
+            }
+            return
+        }
         guard let signal = AgentSessionSignal(hookEvent: event) else { return }
         apply(signal, to: localID)
 
@@ -371,7 +413,10 @@ final class AgentSessionStatusCoordinator {
     private func handlePromptGuardBlock(localID: UUID) {
         Logger.claudeBinding.notice(
             "prompt_guard_block localID=\(localID.uuidString, privacy: .public)")
-        apply(.turnAborted, to: localID)
+        // Registry-live: Claude meldet den nie gelaufenen Turn selbst als idle.
+        if !registryLiveSessions.contains(localID) {
+            apply(.turnAborted, to: localID)
+        }
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard let controller = AgentTerminalRegistry.shared.controller(for: localID),
@@ -391,6 +436,13 @@ final class AgentSessionStatusCoordinator {
     ///   Decider-Pfad belassen — erst wenn das Transkript das Turn-Ende
     ///   zeigt, ist es vollständig genug für den Auto-Namer.
     func handleTranscriptDecision(sessionID: UUID, decision: AgentTranscriptStatusDecider.Decision) {
+        if registryLiveSessions.contains(sessionID) {
+            applyShadowTranscriptDecision(decision, sessionID: sessionID)
+            if decision.turnFinished {
+                performTurnFinishedBookkeeping(sessionID: sessionID)
+            }
+            return
+        }
         if decision.turnAborted {
             apply(.turnAborted, to: sessionID)
         } else if !hookLiveSessions.contains(sessionID) {
@@ -456,6 +508,10 @@ final class AgentSessionStatusCoordinator {
     /// Transcript-Wachstum als lebendig erweist. Damit bleibt ein ESC, das
     /// in der TUI etwas anderes tat (Menü zu, Rewind-Picker), folgenlos.
     func suspectTurnAborted(_ sessionID: UUID) {
+        if registryLiveSessions.contains(sessionID) {
+            interruptMarks[sessionID] = now()
+            return
+        }
         guard hookLiveSessions.contains(sessionID),
               states[sessionID]?.runtimeStatus == .working else { return }
         abortSuspicions[sessionID] = AbortSuspicion(
@@ -486,6 +542,188 @@ final class AgentSessionStatusCoordinator {
             ?? watcher.cachedTranscriptMTime(sessionID: sessionID)
     }
 
+    // MARK: - Claudes Registry als Statusquelle
+
+    /// Neuer/geänderter Registry-Eintrag (`ClaudeRegistryStatusSource`).
+    /// Zuordnung über Claudes Session-ID; Background-Agents, Terminals und
+    /// Codex bleiben auf ihren bisherigen Wegen.
+    func handleRegistryRecord(_ record: ClaudeSessionRecord) {
+        guard isRegistryStatusEnabled(),
+              let sessionID = registrySessionID(forExternalID: record.sessionID) else { return }
+        if let ended = terminatedAt[sessionID], now().timeIntervalSince(ended) < 5 { return }
+        let previous = registryRecords[sessionID]
+        guard let observation = registryObservation(for: record, previous: previous, sessionID: sessionID) else {
+            return
+        }
+        if !registryLiveSessions.contains(sessionID) {
+            registryLiveSessions.insert(sessionID)
+            shadowStates[sessionID] = states[sessionID]
+            abortSuspicions[sessionID] = nil
+            Logger.claudeBinding.info(
+                "registry_live sessionID=\(sessionID.uuidString, privacy: .public) account=\(record.profileName, privacy: .public) pid=\(record.pid, privacy: .public)")
+        }
+        registryRecords[sessionID] = record
+        apply(.registryStatus(observation), to: sessionID)
+        updateRegistryAwaitingToolName(sessionID)
+        noteShadowDiff(sessionID)
+    }
+
+    /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
+    /// PTY-Pfad (`processTerminated`); extern gestartete Sessions fallen
+    /// zurück auf den Transcript-Pfad.
+    func handleRegistryRecordRemoved(externalSessionID: String) {
+        guard let sessionID = registrySessionID(forExternalID: externalSessionID),
+              registryLiveSessions.contains(sessionID) else { return }
+        resetRegistryState(sessionID)
+    }
+
+    /// Pur: Warte-Art aus `waitingFor` + jüngstem Transcript-Detail.
+    /// `waitingFor` allein trennt Plan- und Tool-Freigabe nicht (beides
+    /// `permission prompt`, gemessen 17.10.2026); der Tail zeigt das Tool.
+    nonisolated static func registryAwaitingKind(
+        waitingFor: String?,
+        detail: AgentSessionActivity.Detail?
+    ) -> AwaitingInputKind {
+        switch detail {
+        case .question:
+            return .question
+        case .tool(let name, _):
+            return name == "ExitPlanMode" ? .planApproval : .permission
+        case .reply, nil:
+            return waitingFor == "input needed" ? .question : .permission
+        }
+    }
+
+    private func registryObservation(
+        for record: ClaudeSessionRecord,
+        previous: ClaudeSessionRecord?,
+        sessionID: UUID
+    ) -> ClaudeRegistryObservation? {
+        switch record.status {
+        case .busy:
+            // Ein neuer Turn (Wechsel IN busy) entwertet einen alten
+            // Abbruch-Merker — sonst verschluckte er dessen Turn-Ende.
+            if previous?.status != .busy { interruptMarks[sessionID] = nil }
+            return .busy
+        case .waiting:
+            return .waiting(Self.registryAwaitingKind(
+                waitingFor: record.waitingFor,
+                detail: activityStore.activity(for: sessionID)?.detail))
+        case .idle, .shell:
+            return .idle(interrupted: consumeInterruptMark(sessionID))
+        case nil:
+            return nil
+        }
+    }
+
+    private func consumeInterruptMark(_ sessionID: UUID) -> Bool {
+        guard let mark = interruptMarks.removeValue(forKey: sessionID) else { return false }
+        return now().timeIntervalSince(mark) <= Self.interruptWindowSeconds
+    }
+
+    /// Transcript-Detail kam nach dem Registry-Wechsel → Warte-Art nachziehen.
+    private func refineRegistryAwaiting(_ sessionID: UUID) {
+        guard registryLiveSessions.contains(sessionID),
+              case .awaitingInput(let current) = states[sessionID],
+              let record = registryRecords[sessionID], record.status == .waiting else { return }
+        let kind = Self.registryAwaitingKind(
+            waitingFor: record.waitingFor,
+            detail: activityStore.activity(for: sessionID)?.detail)
+        if kind != current {
+            apply(.registryStatus(.waiting(kind)), to: sessionID)
+        }
+        updateRegistryAwaitingToolName(sessionID)
+    }
+
+    /// „Freigabe: Bash …“: Tool-Name aus dem Tail statt aus dem
+    /// `PermissionRequest`-Hook.
+    private func updateRegistryAwaitingToolName(_ sessionID: UUID) {
+        guard registryLiveSessions.contains(sessionID),
+              states[sessionID] == .awaitingInput(.permission),
+              case .tool(let name, _)? = activityStore.activity(for: sessionID)?.detail,
+              activityStore.activity(for: sessionID)?.awaitingToolName != name else { return }
+        activityStore.setAwaiting(.permission, toolName: name, for: sessionID)
+    }
+
+    /// Nach der Bindung der externen ID den schon bekannten Eintrag übernehmen.
+    private func adoptRegistryRecord(sessionID: UUID) {
+        guard isRegistryStatusEnabled(),
+              let ext = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID,
+              let record = registryRecordLookup(ext) else { return }
+        handleRegistryRecord(record)
+    }
+
+    private func resetRegistryState(_ sessionID: UUID) {
+        registryLiveSessions.remove(sessionID)
+        registryRecords[sessionID] = nil
+        interruptMarks[sessionID] = nil
+        shadowStates[sessionID] = nil
+        shadowDiffSince[sessionID] = nil
+        terminatedAt[sessionID] = nil
+    }
+
+    private func registrySessionID(forExternalID externalID: String) -> UUID? {
+        store.loadWorkspace().sessions.first { session in
+            session.provider == .claude
+                && session.externalSessionID == externalID
+                && !session.isBackgroundChat
+                && !session.isTerminal
+        }?.id
+    }
+
+    // MARK: Schatten des alten Wegs (nur Log)
+
+    private func applyShadow(_ signal: AgentSessionSignal, to sessionID: UUID) {
+        let old = shadowStates[sessionID] ?? states[sessionID] ?? .created
+        shadowStates[sessionID] = AgentSessionStateMachine.reduce(state: old, signal: signal).state
+        noteShadowDiff(sessionID)
+    }
+
+    /// Spiegelt die Transcript-Regeln von `handleTranscriptDecision` auf den
+    /// Schatten — ohne die zeitbasierten Heilungen (die bleiben im Log als
+    /// Abweichung sichtbar, genau das soll die QA zählen).
+    private func applyShadowTranscriptDecision(
+        _ decision: AgentTranscriptStatusDecider.Decision,
+        sessionID: UUID
+    ) {
+        if decision.turnAborted {
+            applyShadow(.turnAborted, to: sessionID)
+        } else if !hookLiveSessions.contains(sessionID) {
+            switch decision.status {
+            case .idle: applyShadow(.transcriptIdle(turnFinished: decision.turnFinished), to: sessionID)
+            case .working, .awaitingInput: applyShadow(.transcriptActivity, to: sessionID)
+            case .stopped, .errored: break
+            }
+        }
+    }
+
+    /// Loggt Abweichungen Registry ↔ alter Weg, die länger als
+    /// `shadowDiffLogSeconds` dauern (kurze Versätze sind normal).
+    private func noteShadowDiff(_ sessionID: UUID) {
+        guard registryLiveSessions.contains(sessionID),
+              let current = states[sessionID]?.runtimeStatus,
+              let shadow = shadowStates[sessionID]?.runtimeStatus else { return }
+        if current == shadow {
+            if let since = shadowDiffSince.removeValue(forKey: sessionID),
+               now().timeIntervalSince(since) >= Self.shadowDiffLogSeconds {
+                Logger.claudeBinding.info(
+                    "registry_status_diff_resolved sessionID=\(sessionID.uuidString, privacy: .public) ms=\(Int(self.now().timeIntervalSince(since) * 1000), privacy: .public)")
+            }
+            return
+        }
+        guard shadowDiffSince[sessionID] == nil else { return }
+        let since = now()
+        shadowDiffSince[sessionID] = since
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.shadowDiffLogSeconds * 1_000_000_000))
+            guard let self, self.shadowDiffSince[sessionID] == since,
+                  let registry = self.states[sessionID]?.runtimeStatus,
+                  let old = self.shadowStates[sessionID]?.runtimeStatus else { return }
+            Logger.claudeBinding.info(
+                "registry_status_diff sessionID=\(sessionID.uuidString, privacy: .public) registry=\(registry.rawValue, privacy: .public) old=\(old.rawValue, privacy: .public)")
+        }
+    }
+
     // MARK: - Stand-Zeile (Tab-Switcher)
 
     /// Neue Stand-Zeile aus dem Transcript-Tail (Watcher meldet nur
@@ -493,6 +731,7 @@ final class AgentSessionStatusCoordinator {
     /// Inhalt ist keine Statusmeinung, nur die Beschreibung.
     func handleTranscriptActivity(sessionID: UUID, activity: AgentSessionActivity?) {
         activityStore.setTranscriptDetail(activity?.detail, for: sessionID)
+        refineRegistryAwaiting(sessionID)
     }
 
     /// Einziger Schreibpfad in den `statusStore`. Setzt `statusSince` NUR bei
@@ -551,7 +790,9 @@ final class AgentSessionStatusCoordinator {
             from: oldState.runtimeStatus?.rawValue,
             to: transition.state.runtimeStatus?.rawValue,
             signal: Self.journalLabel(for: signal),
-            source: hookLiveSessions.contains(sessionID) ? "hook" : "transcript")
+            source: registryLiveSessions.contains(sessionID)
+                ? "registry"
+                : hookLiveSessions.contains(sessionID) ? "hook" : "transcript")
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
@@ -576,6 +817,7 @@ final class AgentSessionStatusCoordinator {
         case .transcriptIdle: return "transcriptIdle"
         case .turnAborted: return "turnAborted"
         case .processTerminated: return "processTerminated"
+        case .registryStatus: return "registryStatus"
         }
     }
 
@@ -794,6 +1036,7 @@ final class AgentSessionStatusCoordinator {
                 store.flushNow(reason: "binding")
                 terminalExternalIDUpdater(localID, newID)
                 attachWatch(sessionID: localID)
+                adoptRegistryRecord(sessionID: localID)
             }
         } catch {
             Logger.claudeBinding.warning("binding_launch_set_failed localID=\(localID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
