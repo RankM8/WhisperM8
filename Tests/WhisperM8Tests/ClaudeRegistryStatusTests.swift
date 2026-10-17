@@ -111,6 +111,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         coordinator.sharedMemoryFragmentResolver = { _, _ in nil }
         coordinator.isRegistryStatusEnabled = { flag.value }
         coordinator.registryRecordLookup = { _ in nil }
+        coordinator.hasRunningTerminal = { _ in true }
         return Fixture(coordinator: coordinator, store: store, sessionID: session.id,
                        poster: poster, soundBox: sounds, registryEnabled: flag)
     }
@@ -268,6 +269,17 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         f.coordinator.handleRegistryRecordRemoved(record("idle", pid: 4711))
         XCTAssertTrue(f.coordinator.registryLiveSessions.contains(f.sessionID))
         XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
+    }
+
+    func testRecordWithoutOwnTerminalIsIgnored() throws {
+        // Dieselbe Session läuft in einem fremden Terminal (`claude --resume`).
+        let f = try makeFixture()
+        f.coordinator.hasRunningTerminal = { _ in false }
+        f.coordinator.handleRegistryRecord(record("busy"))
+        f.coordinator.handleRegistryRecord(record("idle"))
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertTrue(f.poster.posted.isEmpty)
+        XCTAssertTrue(f.sounds.isEmpty)
     }
 
     func testBackgroundRecordNeverRevivesStoppedChat() throws {

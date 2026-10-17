@@ -162,6 +162,12 @@ final class AgentSessionStatusCoordinator {
     nonisolated static func usesReducedHooks(registryEnabled: Bool, isBackground: Bool) -> Bool {
         registryEnabled && !isBackground
     }
+    /// Läuft der Chat in einem PTY dieser App? Nur dann gilt Claudes
+    /// Registry-Eintrag als sein Status — dieselbe Session kann auch in einem
+    /// fremden Terminal laufen (`claude --resume …`).
+    var hasRunningTerminal: (UUID) -> Bool = {
+        AgentTerminalRegistry.shared.controller(for: $0)?.isRunning ?? false
+    }
     var registryRecordLookup: (String) -> ClaudeSessionRecord? = {
         ClaudeRegistryStatusSource.shared.record(forExternalSessionID: $0)
     }
@@ -578,6 +584,11 @@ final class AgentSessionStatusCoordinator {
         // Terminal, Fertig-Meldung für einen Chat ohne Prozess).
         guard isRegistryStatusEnabled(), !record.isBackground,
               let sessionID = registrySessionID(forExternalID: record.sessionID) else { return }
+        // Ohne eigenes PTY gehört der Prozess nicht zu diesem Chat (fremdes
+        // Terminal, Headless-Lauf): sonst kämen Ton und Meldungen für einen
+        // Lauf außerhalb der App, und endete er mitten im Turn, bliebe der
+        // Chat für immer „arbeitet“ — ohne PTY meldet niemand das Ende.
+        guard hasRunningTerminal(sessionID) else { return }
         if let ended = terminatedAt[sessionID], now().timeIntervalSince(ended) < 5 { return }
         let previous = registryRecords[sessionID]
         guard let observation = registryObservation(for: record, previous: previous, sessionID: sessionID) else {
