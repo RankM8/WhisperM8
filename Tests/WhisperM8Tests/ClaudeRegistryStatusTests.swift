@@ -180,12 +180,30 @@ final class ClaudeRegistryStatusTests: XCTestCase {
 
     func testNewTurnClearsStaleInterruptMark() throws {
         let f = try makeFixture()
+        let clock = Date(timeIntervalSince1970: 1_792_000_000)
+        f.coordinator.now = { clock }
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
         f.coordinator.handleRegistryRecord(record("idle"))
         f.coordinator.suspectTurnAborted(f.sessionID) // ESC im Leerlauf
-        f.coordinator.handleRegistryRecord(record("busy"))
-        f.coordinator.handleRegistryRecord(record("idle"))
+        f.coordinator.handleRegistryRecord(record("busy", updatedAt: clock.addingTimeInterval(3)))
+        f.coordinator.handleRegistryRecord(record("idle", updatedAt: clock.addingTimeInterval(9)))
         XCTAssertEqual(f.poster.posted.count, 1)
+    }
+
+    func testInterruptRightAfterSendSurvivesLateBusyEvent() throws {
+        // Prompt geschickt, sofort ESC — Claudes busy-Eintrag (geschrieben vor
+        // dem ESC) kommt erst danach an und darf den Merker nicht löschen.
+        let f = try makeFixture()
+        let clock = Date(timeIntervalSince1970: 1_792_000_000)
+        f.coordinator.now = { clock }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", updatedAt: clock.addingTimeInterval(-10)))
+        f.coordinator.suspectTurnAborted(f.sessionID)
+        f.coordinator.handleRegistryRecord(record("busy", updatedAt: clock.addingTimeInterval(-0.5)))
+        f.coordinator.handleRegistryRecord(record("idle", updatedAt: clock.addingTimeInterval(0.5)))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle)
+        XCTAssertTrue(f.poster.posted.isEmpty, "Abbruch ist kein „fertig“")
+        XCTAssertTrue(f.sounds.isEmpty)
     }
 
     func testWaitingUsesTranscriptDetailForKind() throws {

@@ -632,9 +632,14 @@ final class AgentSessionStatusCoordinator {
     ) -> ClaudeRegistryObservation? {
         switch record.status {
         case .busy:
-            // Ein neuer Turn (Wechsel IN busy) entwertet einen alten
-            // Abbruch-Merker — sonst verschluckte er dessen Turn-Ende.
-            if previous?.status != .busy { interruptMarks[sessionID] = nil }
+            // Ein neuer Turn (Wechsel IN busy) entwertet einen ÄLTEREN
+            // Abbruch-Merker — sonst verschluckte er dessen Turn-Ende. Ein ESC
+            // nach Claudes Wechsel (Prompt geschickt und sofort abgebrochen,
+            // die Registry-Meldung kommt erst danach an) gilt diesem Turn.
+            if previous?.status != .busy, let mark = interruptMarks[sessionID],
+               mark < (record.statusUpdatedAt ?? .distantFuture) {
+                interruptMarks[sessionID] = nil
+            }
             return .busy
         case .waiting:
             return .waiting(Self.registryAwaitingKind(
