@@ -16,8 +16,10 @@ final class ClaudeRegistryStatusSource {
 
     /// Änderung eines lebenden Eintrags.
     var onRecord: ((ClaudeSessionRecord) -> Void)?
-    /// Eintrag verschwunden (Prozess beendet) — Claudes Session-ID.
-    var onRemoved: ((String) -> Void)?
+    /// Eintrag verschwunden (Prozess beendet) — der zuletzt bekannte Stand,
+    /// damit der Empfänger die PID prüfen kann: beim Resume leben kurz zwei
+    /// Prozesse mit derselben Session-ID.
+    var onRemoved: ((ClaudeSessionRecord) -> Void)?
 
     private let rootsProvider: () -> [ClaudeSessionRegistry.Root]
     private let isAlive: ClaudeSessionRegistry.LivenessCheck
@@ -38,7 +40,9 @@ final class ClaudeRegistryStatusSource {
     /// Letzter gemeldeter Stand je PID — Basis für Diff und Entfernen.
     private(set) var recordsByPID: [Int32: ClaudeSessionRecord] = [:]
     /// Wann ein Datei-Ereignis eine PID zuletzt angefasst hat. Ein Voll-Scan,
-    /// der davor begann, darf diese PID weder überschreiben noch entfernen.
+    /// der davor begann, darf diese PID weder überschreiben noch entfernen —
+    /// auch nach einem Löschen nicht (Grabstein): sonst holte ein Scan, der
+    /// die Datei kurz vor dem Prozessende noch las, den toten Eintrag zurück.
     private var eventTouchedAt: [Int32: Date] = [:]
     var now: () -> Date = { Date() }
 
@@ -108,12 +112,14 @@ final class ClaudeRegistryStatusSource {
         for (pid, old) in recordsByPID where fresh[pid] == nil && !touchedLater(pid) {
             recordsByPID[pid] = nil
             eventTouchedAt[pid] = nil
-            onRemoved?(old.sessionID)
+            onRemoved?(old)
         }
         for (pid, record) in fresh where recordsByPID[pid] != record && !touchedLater(pid) {
             recordsByPID[pid] = record
             onRecord?(record)
         }
+        // Ereignisse vor diesem Scan kann kein späterer Scan mehr überholen.
+        eventTouchedAt = eventTouchedAt.filter { $0.value > startedAt }
     }
 
     /// Einzelne Datei geändert/gelöscht (FSEvents).
@@ -124,9 +130,8 @@ final class ClaudeRegistryStatusSource {
             recordsByPID[pid] = record
             onRecord?(record)
         } else if let old = recordsByPID.removeValue(forKey: pid) {
-            onRemoved?(old.sessionID)
+            onRemoved?(old)
         }
-        if record == nil { eventTouchedAt[pid] = nil }
     }
 
     // MARK: - FSEvents
@@ -188,8 +193,13 @@ final class ClaudeRegistryStatusSource {
             }
         }
         guard !updates.isEmpty else { return }
-        Task { @MainActor [weak self] in
-            for (pid, record) in updates { self?.apply(pid: pid, record: record) }
+        // `DispatchQueue.main` statt `Task { @MainActor }`: nur so ist die
+        // Reihenfolge zweier schneller Schreibvorgänge derselben Datei
+        // garantiert (busy → idle darf nicht als idle → busy ankommen).
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                for (pid, record) in updates { self?.apply(pid: pid, record: record) }
+            }
         }
     }
 

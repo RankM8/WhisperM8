@@ -347,7 +347,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             let source = ClaudeRegistryStatusSource.shared
             let coordinator = AgentSessionStatusCoordinator.shared
             source.onRecord = { coordinator.handleRegistryRecord($0) }
-            source.onRemoved = { coordinator.handleRegistryRecordRemoved(externalSessionID: $0) }
+            source.onRemoved = { coordinator.handleRegistryRecordRemoved($0) }
             source.start()
         }
         // Subagent-Jobs (whisperm8-CLI-Supervisor): FSEvents auf agent-jobs/

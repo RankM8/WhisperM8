@@ -115,11 +115,15 @@ final class ClaudeRegistryStatusTests: XCTestCase {
                        poster: poster, soundBox: sounds, registryEnabled: flag)
     }
 
-    private func record(_ status: String, waitingFor: String? = nil, sessionID: String = "ext-1") -> ClaudeSessionRecord {
+    private func record(
+        _ status: String, waitingFor: String? = nil, sessionID: String = "ext-1",
+        pid: Int32 = 4711, kind: String = "interactive",
+        updatedAt: Date = Date(timeIntervalSince1970: 1_792_000_000)
+    ) -> ClaudeSessionRecord {
         ClaudeSessionRecord(
-            profileName: "ai2", pid: 4711, sessionID: sessionID, cwd: nil, kind: "interactive",
+            profileName: "ai2", pid: pid, sessionID: sessionID, cwd: nil, kind: kind,
             name: "repo-ab", rawStatus: status, status: ClaudeRegistryStatus(rawValue: status),
-            waitingFor: waitingFor, statusUpdatedAt: Date(timeIntervalSince1970: 1_792_000_000),
+            waitingFor: waitingFor, statusUpdatedAt: updatedAt,
             messagingSocketPath: "/tmp/cc-socks/4711.sock",
             procStart: nil, version: "2.1.302")
     }
@@ -235,8 +239,17 @@ final class ClaudeRegistryStatusTests: XCTestCase {
     func testRemovedRecordFallsBackToOldPath() throws {
         let f = try makeFixture()
         f.coordinator.handleRegistryRecord(record("idle"))
-        f.coordinator.handleRegistryRecordRemoved(externalSessionID: "ext-1")
+        f.coordinator.handleRegistryRecordRemoved(record("idle"))
         XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
+    }
+
+    func testEndOfOldProcessKeepsResumedChatRegistryLive() throws {
+        let f = try makeFixture()
+        f.coordinator.handleRegistryRecord(record("idle", pid: 4711))
+        f.coordinator.handleRegistryRecord(record("busy", pid: 4712)) // Resume, neuer Prozess
+        f.coordinator.handleRegistryRecordRemoved(record("idle", pid: 4711))
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
     }
 
     // MARK: S4 — Hook-Satz
@@ -281,7 +294,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         var changed: [String] = []
         var removed: [String] = []
         source.onRecord = { changed.append("\($0.sessionID):\($0.rawStatus ?? "-")") }
-        source.onRemoved = { removed.append($0) }
+        source.onRemoved = { removed.append($0.sessionID) }
         source.apply(scanned: [record("busy")])
         source.apply(scanned: [record("busy")])
         XCTAssertEqual(changed, ["ext-1:busy"], "unveränderter Eintrag meldet nichts")
@@ -297,7 +310,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         var clock = Date(timeIntervalSince1970: 1000)
         source.now = { clock }
         var removed: [String] = []
-        source.onRemoved = { removed.append($0) }
+        source.onRemoved = { removed.append($0.sessionID) }
         let scanStart = clock
         clock = clock.addingTimeInterval(1)
         source.apply(pid: 4711, record: record("busy"))   // Ereignis nach Scan-Beginn
@@ -308,6 +321,32 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         // Ein späterer Scan darf wieder entfernen.
         source.apply(scanned: [], startedAt: clock.addingTimeInterval(1))
         XCTAssertEqual(removed, ["ext-1"])
+    }
+
+    func testScanBeforeDeletionNeverRevivesEndedProcess() {
+        // Scan liest die Datei, Claude beendet sich und löscht sie, das
+        // Lösch-Ereignis kommt vor dem Scan-Ergebnis an.
+        let source = ClaudeRegistryStatusSource(rootsProvider: { [] }, isAlive: { _, _ in true })
+        var clock = Date(timeIntervalSince1970: 1000)
+        source.now = { clock }
+        var changed = 0
+        var removed = 0
+        source.onRecord = { _ in changed += 1 }
+        source.onRemoved = { _ in removed += 1 }
+        source.apply(pid: 4711, record: record("busy"))
+        clock = clock.addingTimeInterval(1)
+        let scanStart = clock
+        clock = clock.addingTimeInterval(1)
+        source.apply(pid: 4711, record: nil)
+        source.apply(scanned: [record("idle")], startedAt: scanStart)
+        XCTAssertNil(source.recordsByPID[4711], "toter Eintrag kommt nicht zurück")
+        XCTAssertEqual(changed, 1)
+        XCTAssertEqual(removed, 1)
+        // Ein Scan nach dem Löschen sieht die Wahrheit; der Grabstein ist weg.
+        source.apply(scanned: [], startedAt: clock.addingTimeInterval(1))
+        XCTAssertEqual(removed, 1)
+        source.apply(scanned: [record("busy")], startedAt: clock.addingTimeInterval(2))
+        XCTAssertEqual(source.recordsByPID[4711]?.status, .busy, "neuer Prozess mit gleicher PID")
     }
 
     func testReadChangeSeparatesUnreadableFromRemoved() throws {

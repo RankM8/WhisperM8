@@ -595,9 +595,12 @@ final class AgentSessionStatusCoordinator {
     /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
     /// PTY-Pfad (`processTerminated`); extern gestartete Sessions fallen
     /// zurück auf den Transcript-Pfad.
-    func handleRegistryRecordRemoved(externalSessionID: String) {
-        guard let sessionID = registrySessionID(forExternalID: externalSessionID),
+    func handleRegistryRecordRemoved(_ record: ClaudeSessionRecord) {
+        guard let sessionID = registrySessionID(forExternalID: record.sessionID),
               registryLiveSessions.contains(sessionID) else { return }
+        // Beim Resume endet der alte Prozess, während der neue mit derselben
+        // Session-ID schon läuft — dessen Ende betrifft den Chat nicht mehr.
+        if let current = registryRecords[sessionID], current.pid != record.pid { return }
         resetRegistryState(sessionID)
     }
 
