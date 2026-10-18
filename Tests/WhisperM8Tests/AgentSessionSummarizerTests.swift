@@ -69,6 +69,14 @@ final class AgentSummaryGeneratorTests: XCTestCase {
         XCTAssertNil(AgentSummaryGenerator.parseOutput("kein json"))
     }
 
+    /// LR-AK-001: vertauschte/unvollständige Klammern dürfen nie trappen.
+    func testParseOutputWithSwappedOrIncompleteBracesReturnsNil() {
+        XCTAssertNil(AgentSummaryGenerator.parseOutput("}{"))
+        XCTAssertNil(AgentSummaryGenerator.parseOutput("} text {"))
+        XCTAssertNil(AgentSummaryGenerator.parseOutput("{ unvollständig"))
+        XCTAssertNil(AgentSummaryGenerator.parseOutput("nur zu }"))
+    }
+
     func testExcerptIsBoundedAndContainsRoles() {
         let messages = [
             AgentChatMessage(id: UUID(), role: .user, timestamp: nil, blocks: [.text("Frage")]),

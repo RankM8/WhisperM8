@@ -54,7 +54,8 @@ struct AgentSummaryGenerator {
                 text = String(text[..<closing.lowerBound])
             }
         }
-        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}") else { return nil }
+        guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"),
+              start <= end else { return nil } // vertauschte Klammern (`}{`) wären sonst ein Range-Trap
         let json = String(text[start...end])
         guard let data = json.data(using: .utf8),
               let output = try? JSONDecoder().decode(Output.self, from: data),
