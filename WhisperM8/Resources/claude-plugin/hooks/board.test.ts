@@ -46,7 +46,7 @@ const band = (bodyColumns: number, maxRows = 12) => ({
 type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number }
 
 /** Engine unter der Mod: Session, CLI (`whisperm8 …`) und watch-Strom gespielt. */
-const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null } = {}): Calls => {
+const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null; hangBoard?: boolean } = {}): Calls => {
   const calls: Calls = { argv: [], prompts: [], toasts: [], sounds: 0 }
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine'] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -54,6 +54,7 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
   mock.env(on, opts.sid === null ? { HOME: '/home' } : { WHISPERM8_SESSION_ID: opts.sid ?? SID, HOME: '/home' })
   on('process.run', (_$, e) => {
     calls.argv.push([...e.argv])
+    if (opts.hangBoard && e.argv.includes('board') && e.argv.length <= 4) return new Promise<never>(() => undefined)
     const stdout = e.argv.includes('board') && e.argv.length <= 4 ? JSON.stringify(opts.board ?? BOARD) : '{"ok":true}'
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -283,5 +284,37 @@ describe('Wecken', () => {
     expect(calls.sounds).toBe(0) // Wecken bewusst ohne Ton
     expect(calls.prompts.length).toBe(1)
     expect(calls.prompts[0]).toContain('[Board] ListM8 Lead-Run (e45d0000): wartet auf dich')
+  })
+})
+
+// LR-PJ-003: session.start darf nicht auf das Board-Lesen warten und pro Start
+// nur EINEN 30-s-Takt anlegen (Start, Resume, /clear, Compact feuern erneut).
+describe('session.start', () => {
+  test('wartet nicht auf das Lesen des Boards', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    // Das Board-Lesen hängt: session.start muss trotzdem zurückkehren.
+    world(on, { hangBoard: true })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+  })
+
+  test('wiederholtes session.start legt genau einen 30-s-Takt an', async ($, on) => {
+    let intervals = 0
+    // Registrierungen von clock.every mitzählen (mock.clock hängt den Handler ein).
+    const counting = ((name: string, ...rest: unknown[]) => {
+      if (name === 'clock.every') {
+        const handler = rest[rest.length - 1] as (...args: unknown[]) => unknown
+        rest[rest.length - 1] = (...args: unknown[]) => {
+          intervals += 1
+          return handler(...args)
+        }
+      }
+      return (on as unknown as (...args: unknown[]) => unknown)(name, ...rest)
+    }) as unknown as On
+    mock.clock(counting, { now: NOW })
+    world(on)
+    for (let i = 0; i < 3; i++) {
+      await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    }
+    expect(intervals).toBe(1)
   })
 })

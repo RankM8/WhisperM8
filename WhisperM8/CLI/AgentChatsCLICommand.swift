@@ -367,6 +367,19 @@ struct ChatsCommandContext {
         )
     }
 
+    /// Nur Identität, leere Workspace-Sicht — für Befehle, die den Workspace
+    /// nachweislich nicht brauchen (spart das Dekodieren der Workspace-Datei).
+    static func loadWithoutWorkspace(now: Date = Date()) -> ChatsCommandContext {
+        ChatsCommandContext(
+            view: ChatsWorkspaceReader.View(
+                workspace: .empty, uiState: nil, entries: [], projects: [],
+                openTabIDs: [], pinnedSessionIDs: []
+            ),
+            caller: .fromEnvironment(),
+            now: now
+        )
+    }
+
     /// Default-Scope der Lese-Befehle: aktive Sessions (nicht archiviert,
     /// Aktivität < 14 Tage). `all` hebt beides auf.
     func scopedEntries(all: Bool) -> [ChatsSessionEntry] {

@@ -306,10 +306,25 @@ enum ChatsBoardCommand {
 
     // MARK: Lesen
 
+    /// Ob `read` den Workspace braucht (LR-PJ-003): Die Mod ruft `board --json`
+    /// in jedem Chat beim Start — ohne Board-Eintrag und mit direkt
+    /// auflösbarem Owner (`@self`/UUID/`--all`) wäre das Laden der
+    /// mehrere MB großen Workspace-Datei reine Verschwendung.
+    static func needsWorkspace(options: ChatsBoardReadOptions, file: JarvisBoardFile) -> Bool {
+        // Statuszeilen der Board-Einträge brauchen die Session-Einträge.
+        if file.boards.contains(where: { !$0.entries.isEmpty }) { return true }
+        if options.all { return false }
+        let owner = options.owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `@self` und Voll-UUID löst `resolveOwner` ohne Workspace auf.
+        return !(owner == "@self" || UUID(uuidString: owner) != nil)
+    }
+
     private static func read(_ options: ChatsBoardReadOptions) async -> Int32 {
-        let context = ChatsCommandContext.load()
         let enabled = JarvisBoardSettings.isEnabled()
         let file = visibleFile(enabled: enabled) { JarvisBoardStore.load() }
+        let context = needsWorkspace(options: options, file: file)
+            ? ChatsCommandContext.load()
+            : ChatsCommandContext.loadWithoutWorkspace()
         let cursor = ChatsStatusJournal.currentCursor()
 
         let owners: [UUID]

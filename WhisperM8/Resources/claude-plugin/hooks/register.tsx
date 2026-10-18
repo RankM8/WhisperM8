@@ -43,6 +43,8 @@ let watchStream: { return?: (value?: undefined) => unknown } | null = null
 let watchRunning = false
 let sessionEnded = false
 let refreshPending = false
+/** Der 30-s-Takt der Band-Uhr läuft einmal je Mod-Instanz — session.start feuert bei Start, Resume, /clear und Compact erneut. */
+let tickerStarted = false
 let toolDeferred: boolean | null = null
 let speakToolDeferred: boolean | null = null
 let wakeQueue: string[] = []
@@ -453,8 +455,14 @@ export const register: Register = (on, options) => {
       // Ohne Tool pflegt Jarvis das Board per CLI.
     }
     // Nach Neustart oder Reload: ein aktives Board ist sofort wieder da.
-    await refresh($).catch(() => undefined)
-    $.clock.every(30_000, () => void $.clock.now().then(at => update($, now, () => at)).catch(() => undefined))
+    // Nicht awaiten: das Lesen startet einen CLI-Prozess (App-Binary im
+    // CLI-Modus), der den Chatstart sonst bremst — das Band erscheint, sobald
+    // die Antwort da ist (Atom-Update).
+    void refresh($).catch(() => undefined)
+    if (!tickerStarted) {
+      tickerStarted = true
+      $.clock.every(30_000, () => void $.clock.now().then(at => update($, now, () => at)).catch(() => undefined))
+    }
     return started
   })
 
