@@ -56,10 +56,13 @@ final class AgentScanCoordinator {
 
     /// LR-AK-033 (D): Der Cooldown ist mindestens das Dreifache der zuletzt
     /// gemessenen Scandauer — ein 8-s-Scan darf nicht alle 10 s neu starten
-    /// und damit dauerhaft einen Kern belegen.
+    /// und damit dauerhaft einen Kern belegen. Gedeckelt bei 60 s: ein kalter
+    /// Erst-Scan (30 s) soll Foreground-Scans nicht 90 s lang sperren.
     nonisolated static func adaptiveCooldown(base: TimeInterval, lastScanDuration: TimeInterval?) -> TimeInterval {
-        max(base, (lastScanDuration ?? 0) * 3)
+        max(base, min((lastScanDuration ?? 0) * 3, maxAdaptiveCooldown))
     }
+
+    nonisolated static let maxAdaptiveCooldown: TimeInterval = 60
 
     private var lastScanDuration: TimeInterval?
 

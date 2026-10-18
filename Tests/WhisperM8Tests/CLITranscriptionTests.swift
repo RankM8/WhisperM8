@@ -100,6 +100,13 @@ final class CLITranscriptionTests: XCTestCase {
         XCTAssertTrue(conflicts[0].contains("meeting.txt"))
     }
 
+    /// APFS ist case-insensitiv: A.mp3 und a.wav schreiben in dieselbe Datei.
+    func testBatchOutputConflictsTreatsCaseVariantsAsCollision() throws {
+        let options = try CLIArgumentParser.parse(["/tmp/x/Meeting.mp3", "/tmp/x/meeting.wav"])
+        let conflicts = CLITranscribeCommand.batchOutputConflicts(options: options, fileExists: { _ in false })
+        XCTAssertEqual(conflicts.count, 1)
+    }
+
     func testBatchOutputConflictsIgnoresSingleInput() throws {
         let options = try CLIArgumentParser.parse(["/tmp/x/meeting.mp3"])
         XCTAssertTrue(CLITranscribeCommand.batchOutputConflicts(options: options, fileExists: { _ in true }).isEmpty)

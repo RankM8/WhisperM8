@@ -418,7 +418,7 @@ struct AppPreferences {
 
     /// A/B-Schalter für die Dauer-Pulse der Status-Punkte und das 30-fps-Lauflicht
     /// des Subagent-Chips (LR-AU-002). Default AUS = ruhiges Verhalten (statischer
-    /// Ring statt `repeatForever`, einmaliger Puls beim Statuswechsel); AN bringt
+    /// Halo bzw. Ring statt `repeatForever`, keine Bewegung); AN bringt
     /// die alte Dauerbewegung zurück, um die CPU-/WindowServer-Last zu vergleichen:
     /// `defaults write com.whisperm8.app agentStatusPulseEnabled -bool YES`
     /// (wirkt nach App-Neustart, wird einmal pro Prozess gelesen).

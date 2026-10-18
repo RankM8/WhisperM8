@@ -282,7 +282,8 @@ enum CLITranscribeCommand {
         var seen: [String: String] = [:]
         for input in options.inputs {
             let dest = batchDestination(for: input, options: options)
-            let key = dest.standardizedFileURL.path
+            // APFS ist standardmäßig case-insensitiv: A.txt und a.txt sind dieselbe Datei.
+            let key = dest.standardizedFileURL.path.lowercased()
             if let first = seen[key] {
                 conflicts.append("'\(first)' und '\(input)' würden beide nach \(dest.lastPathComponent) schreiben.")
             } else {

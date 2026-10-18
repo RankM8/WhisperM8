@@ -53,9 +53,19 @@ struct TranscriptEmptyStateView: View {
         session.isBackgroundChat && !session.hasBackgroundShortID
     }
 
+    /// Leer nur im Lesefenster: Die letzte Zeile war größer als das Fenster,
+    /// davor liegt Verlauf (LR-AK-007). Der Container zeigt dann oben
+    /// „Früheren Verlauf laden“.
+    private var isTruncatedOnly: Bool {
+        transcript?.hasTruncatedHead == true
+    }
+
     private var bannerTitle: String {
         if isOrphanedBackgroundChat {
             return "Hintergrund-Agent unvollständig gespawnt"
+        }
+        if isTruncatedOnly {
+            return "Letzter Eintrag zu groß für die Vorschau"
         }
         return transcript == nil
             ? "Session noch nicht gestartet"
@@ -106,6 +116,9 @@ struct TranscriptEmptyStateView: View {
         if isOrphanedBackgroundChat {
             return "Hintergrund-Agent wurde nicht vollständig gestartet"
         }
+        if isTruncatedOnly {
+            return "Ältere Nachrichten sind vorhanden"
+        }
         return transcript == nil
             ? "Diese Session hat noch keine Konversation"
             : "Diese Konversation enthaelt noch keine Nachrichten"
@@ -114,6 +127,9 @@ struct TranscriptEmptyStateView: View {
     private var emptyStateDetail: String {
         if isOrphanedBackgroundChat {
             return "Der Spawn dieses Hintergrund-Agents wurde unterbrochen, sodass keine Short-ID gespeichert ist. Schließe den Tab über das Kontextmenü und starte bei Bedarf einen neuen Hintergrund-Agent."
+        }
+        if isTruncatedOnly {
+            return "Der letzte Eintrag (z. B. ein großes Tool-Ergebnis) passt nicht ins Vorschaufenster. Über **Früheren Verlauf laden** oben erscheinen die Nachrichten davor."
         }
         return "Klick **Resume** oben in der Header-Leiste, um \(session.provider.displayName) zu starten und mit dieser Session weiterzumachen."
     }

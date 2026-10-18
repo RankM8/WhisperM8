@@ -192,6 +192,8 @@ final class AgentIndexGrowthTests: XCTestCase {
         XCTAssertEqual(AgentScanCoordinator.adaptiveCooldown(base: 10, lastScanDuration: 0.2), 10)
         XCTAssertEqual(AgentScanCoordinator.adaptiveCooldown(base: 10, lastScanDuration: 8), 24)
         XCTAssertEqual(AgentScanCoordinator.adaptiveCooldown(base: 30, lastScanDuration: nil), 30)
+        // Deckel: ein kalter 30-s-Erst-Scan sperrt Foreground-Scans höchstens 60 s.
+        XCTAssertEqual(AgentScanCoordinator.adaptiveCooldown(base: 30, lastScanDuration: 30), 60)
     }
 
     // MARK: Benchmark
