@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -73,6 +74,12 @@ final class MainThreadStallMonitor {
     var now: () -> TimeInterval = {
         TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
     }
+    /// Darf macOS die App gerade drosseln (App Nap)? Verdeckt UND inaktiv. Test-Hook.
+    var isThrottled: () -> Bool = {
+        guard let app = NSApp else { return false }
+        return !app.isActive && !app.occlusionState.contains(.visible)
+    }
+
     /// Test-Hook: ersetzt das Logging. Parameter: Dauer in Sekunden.
     var onStall: ((TimeInterval) -> Void)?
     /// Test-Hook: Meldung einer noch LAUFENDEN Blockade (vom Watchdog).
@@ -93,6 +100,9 @@ final class MainThreadStallMonitor {
         // `.common` ist Pflicht: im Default-Mode schweigt der Timer waehrend
         // eines Menue- oder Fenster-Drags — also genau dann, wenn ein
         // Stillstand am ehesten auffaellt.
+        // Toleranz: erlaubt macOS, die Ticks mit anderen Timern zusammenzulegen
+        // (weniger Wakeups) — 20 ms bleiben weit unter der 100-ms-Schwelle.
+        timer.tolerance = 0.02
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         watchdog.start()
@@ -112,7 +122,7 @@ final class MainThreadStallMonitor {
         // Herzschlag fuer den Watchdog: Solange dieser Wert frisch bleibt,
         // reagiert der Main Thread. Bleibt er stehen, steht die App — und
         // zwar SICHTBAR, waehrend es passiert.
-        watchdog.beat()
+        watchdog.beat(throttled: isThrottled())
         defer { lastTick = current }
         guard let previous = lastTick else { return }
 

@@ -46,6 +46,47 @@ final class StallWatchdogTests: XCTestCase {
         XCTAssertLessThan(meldungen, 12, "aber sie darf das Log nicht fluten — war: \(meldungen)")
     }
 
+    // MARK: - LR-SH-014: App Nap
+
+    func testSeverityDependsOnThrottleState() {
+        XCTAssertEqual(StallWatchdog.severity(appThrottled: false), .error)
+        XCTAssertEqual(StallWatchdog.severity(appThrottled: true), .throttledHint)
+    }
+
+    /// Verdeckt + inaktiv: verspäteter Herzschlag ist ein Hinweis, kein Fehler.
+    func testThrottledAppDoesNotRaiseOngoingBlockAlarm() {
+        let watchdog = StallWatchdog()
+        var clock: TimeInterval = 100
+        watchdog.now = { clock }
+        var errors: [TimeInterval] = []
+        var hints: [TimeInterval] = []
+        watchdog.onBlock = { errors.append($0) }
+        watchdog.onThrottledBlock = { hints.append($0) }
+
+        watchdog.beat(throttled: true)
+        clock += 2.0
+        watchdog.check()
+        XCTAssertTrue(errors.isEmpty)
+        XCTAssertEqual(hints.count, 1)
+    }
+
+    /// Sichtbar/aktiv: weiterhin Fehler-Alarm.
+    func testVisibleAppStillRaisesOngoingBlockAlarm() {
+        let watchdog = StallWatchdog()
+        var clock: TimeInterval = 100
+        watchdog.now = { clock }
+        var errors: [TimeInterval] = []
+        var hints: [TimeInterval] = []
+        watchdog.onBlock = { errors.append($0) }
+        watchdog.onThrottledBlock = { hints.append($0) }
+
+        watchdog.beat(throttled: false)
+        clock += 2.0
+        watchdog.check()
+        XCTAssertEqual(errors.count, 1)
+        XCTAssertTrue(hints.isEmpty)
+    }
+
     // MARK: - Verhalten mit gesteuerter Uhr
 
     func testLaufendeBlockadeWirdWaehrendSieLaeuftGemeldet() {

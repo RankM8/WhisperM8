@@ -35,10 +35,17 @@ final class StallWatchdog: @unchecked Sendable {
     private var lastBeat: TimeInterval = 0
     /// Dauer der letzten Meldung dieser Blockade — Grundlage der Staffelung.
     private var lastReported: TimeInterval?
+    /// Stand beim LETZTEN Herzschlag: war die App verdeckt + inaktiv (App-Nap-
+    /// Kandidat)? Der Main Thread stempelt das mit; während einer Blockade
+    /// bleibt der letzte bekannte Zustand gültig (LR-SH-014).
+    private var throttled = false
     private var timer: DispatchSourceTimer?
 
     /// Test-Hook: ersetzt das Logging. Parameter: bisherige Dauer in Sekunden.
     var onBlock: ((TimeInterval) -> Void)?
+    /// Test-Hook: Meldung einer Verzögerung, während die App gedrosselt sein darf
+    /// (verdeckt + inaktiv, App Nap) — KEIN Fehler, nur Hinweis.
+    var onThrottledBlock: ((TimeInterval) -> Void)?
     /// Test-Hook: monotone Uhr (Sekunden seit Systemstart).
     var now: () -> TimeInterval = {
         TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
@@ -52,10 +59,20 @@ final class StallWatchdog: @unchecked Sendable {
         return elapsed >= lastReported * 2
     }
 
-    func beat() {
+    /// Wie ein Fehlalarm-freier Alarm eingestuft wird: im gedrosselten Zustand
+    /// (App verdeckt und inaktiv) zählt eine verspätete Timer-Zustellung nicht als
+    /// Blockade, weil macOS Timer dann bewusst zusammenfasst. Pur + getestet.
+    enum Severity: Equatable { case error, throttledHint }
+
+    static func severity(appThrottled: Bool) -> Severity {
+        appThrottled ? .throttledHint : .error
+    }
+
+    func beat(throttled: Bool = false) {
         let stamp = now()
         lock.lock()
         lastBeat = stamp
+        self.throttled = throttled
         // Der Main Thread lebt wieder — die naechste Blockade meldet von vorn.
         lastReported = nil
         lock.unlock()
@@ -88,10 +105,21 @@ final class StallWatchdog: @unchecked Sendable {
         let previous = lastReported
         let report = Self.shouldReport(elapsed: elapsed, lastReported: previous)
         if report { lastReported = elapsed }
+        let severity = Self.severity(appThrottled: throttled)
         lock.unlock()
 
         guard report else { return }
-        if let onBlock {
+        if severity == .throttledHint {
+            if let onThrottledBlock {
+                onThrottledBlock(elapsed)
+            } else {
+                // Kein Fehler-Level: sonst verfälscht App Nap die Messung
+                // „kein main_thread_blocked_ongoing" (LR-SH-014).
+                Logger.agentPerformance.notice(
+                    "main_thread_delayed_throttled durationMs=\(Int(elapsed * 1000), privacy: .public)"
+                )
+            }
+        } else if let onBlock {
             onBlock(elapsed)
         } else {
             // `error`-Level, weil genau diese Zeile im Nachhinein die Frage
