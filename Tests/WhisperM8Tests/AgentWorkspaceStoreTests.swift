@@ -322,16 +322,14 @@ final class AgentWorkspaceStoreTests: XCTestCase {
         try store.mutate { $0.sessions.append(self.makeSession(title: "Neuester Stand")) }
         XCTAssertEqual(spy.saveCount, 0)
 
-        let startedAt = Date()
+        // Keine Wandzeit-Grenze (Scheduler-Verzögerung unter Last ist kein Blockieren,
+        // siehe TestTiming). Die Nichtblockierung trägt die Reihenfolge: wartete flush
+        // auf den Persist, bliebe er am Semaphor hängen, bis dessen 2-s-Timeout ihn
+        // durchlässt — der Save wäre dann schon gezählt, bevor die Assertion läuft.
         store.flush()
-        XCTAssertLessThan(
-            Date().timeIntervalSince(startedAt),
-            0.1,
-            "flush darf nicht auf den injizierten Persist warten"
-        )
 
-        wait(for: [persistStarted], timeout: 1)
-        XCTAssertEqual(spy.saveCount, 0, "Der blockierte Persist darf noch nicht abgeschlossen sein")
+        wait(for: [persistStarted], timeout: 5)
+        XCTAssertEqual(spy.saveCount, 0, "flush darf nicht auf den Persist warten: der blockierte Persist ist noch nicht abgeschlossen")
         allowPersist.signal()
         wait(for: [persistFinished], timeout: 1)
         XCTAssertEqual(spy.saveCount, 1)
