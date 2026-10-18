@@ -62,21 +62,45 @@ final class AgentDirectoryEventMonitor {
         }
     }
 
+    /// LR-AK-033 (C): Nur Strukturaenderungen (neue, umbenannte, geloeschte
+    /// Datei) sind Scan-Ausloeser. Ein reines Modify einer bekannten Datei
+    /// aendert nichts, was der Scan nicht ueber seine Laufzeit-Pfade ohnehin
+    /// sieht — und jeder extern aktive Chat schreibt sekuendlich, das hielt den
+    /// Indexer in einer Dauerschleife. Verlorene Events (Dropped/MustScan)
+    /// zaehlen als Strukturaenderung, weil dann unklar ist, was passiert ist.
+    nonisolated static func triggersScan(flags: UInt32) -> Bool {
+        let structural = UInt32(
+            kFSEventStreamEventFlagItemCreated
+                | kFSEventStreamEventFlagItemRenamed
+                | kFSEventStreamEventFlagItemRemoved
+                | kFSEventStreamEventFlagMustScanSubDirs
+                | kFSEventStreamEventFlagUserDropped
+                | kFSEventStreamEventFlagKernelDropped
+        )
+        return flags & structural != 0
+    }
+
     func start() {
         guard stream == nil else { return }
 
         var context = FSEventStreamContext()
         context.info = Unmanaged.passUnretained(self).toOpaque()
 
-        let callback: FSEventStreamCallback = { _, info, eventCount, eventPaths, _, _ in
+        let callback: FSEventStreamCallback = { _, info, eventCount, eventPaths, eventFlags, _ in
             guard let info else { return }
             let monitor = Unmanaged<AgentDirectoryEventMonitor>.fromOpaque(info).takeUnretainedValue()
             guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else {
                 return
             }
-            _ = eventCount
+            // Nur Pfade mit strukturellem Flag weiterreichen (siehe `triggersScan`).
+            var structuralPaths: [String] = []
+            for index in 0..<min(eventCount, paths.count)
+            where AgentDirectoryEventMonitor.triggersScan(flags: UInt32(eventFlags[index])) {
+                structuralPaths.append(paths[index])
+            }
+            guard !structuralPaths.isEmpty else { return }
             Task { @MainActor in
-                monitor.handleEvents(paths: paths)
+                monitor.handleEvents(paths: structuralPaths)
             }
         }
 

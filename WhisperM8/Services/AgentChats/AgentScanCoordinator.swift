@@ -54,6 +54,15 @@ final class AgentScanCoordinator {
         AgentTerminalRegistry.shared.activeSessionIDs
     }
 
+    /// LR-AK-033 (D): Der Cooldown ist mindestens das Dreifache der zuletzt
+    /// gemessenen Scandauer — ein 8-s-Scan darf nicht alle 10 s neu starten
+    /// und damit dauerhaft einen Kern belegen.
+    nonisolated static func adaptiveCooldown(base: TimeInterval, lastScanDuration: TimeInterval?) -> TimeInterval {
+        max(base, (lastScanDuration ?? 0) * 3)
+    }
+
+    private var lastScanDuration: TimeInterval?
+
     private init() {}
 
     /// Registriert die App-Lifecycle-Hooks. Idempotent — kann mehrmals
@@ -129,7 +138,10 @@ final class AgentScanCoordinator {
         }
         if reason != .manual, let last = lastCompletedAt {
             let elapsed = Date().timeIntervalSince(last)
-            let limit = reason == .fsEvent ? fsEventCooldown : cooldown
+            let limit = Self.adaptiveCooldown(
+                base: reason == .fsEvent ? fsEventCooldown : cooldown,
+                lastScanDuration: lastScanDuration
+            )
             if elapsed < limit {
                 pendingReason = pendingReason ?? reason
                 scheduleCooldownRetry(after: limit - elapsed)
@@ -194,13 +206,14 @@ final class AgentScanCoordinator {
 
                 let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
                 Logger.agentPerformance.info("agent_scan_completed reason=\(reason.rawValue, privacy: .public) durationMs=\(durationMs) codex=\(codex.stats.scannedFiles) claude=\(claude.stats.scannedFiles)")
-                coordinator.markScanCompleted()
+                coordinator.markScanCompleted(duration: Date().timeIntervalSince(startedAt))
             }
         }
     }
 
-    private func markScanCompleted() {
+    private func markScanCompleted(duration: TimeInterval) {
         inFlight = false
+        lastScanDuration = duration
         lastCompletedAt = Date()
         // Während des Laufs angeforderte Scans nachholen — requestScan
         // landet dabei im Cooldown-Pfad und plant den Retry zeitgenau.

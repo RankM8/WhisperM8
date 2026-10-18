@@ -49,8 +49,10 @@ enum NativeSessionTitle {
         var firstPrompt: String?
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             // Schneller Vorfilter: nur Zeilen parsen, die relevant sein können.
-            let isTitle = line.contains("\"custom-title\"") || line.contains("\"ai-title\"")
-            let isUser = firstPrompt == nil && line.contains("\"type\":\"user\"")
+            // LR-AK-033 (A): Byte-Suche (memmem) statt zeichenweisem
+            // `Substring.contains` — auf 1-MB-Koepfen der groesste Einzelposten.
+            let isTitle = bytesContain(line, "\"custom-title\"") || bytesContain(line, "\"ai-title\"")
+            let isUser = firstPrompt == nil && bytesContain(line, "\"type\":\"user\"")
             guard isTitle || isUser,
                   let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else {
                 continue
@@ -70,6 +72,17 @@ enum NativeSessionTitle {
             }
         }
         return customTitle ?? aiTitle ?? firstPrompt
+    }
+
+    /// Byte-Teilsuche ohne Unicode-Normalisierung (die Marker sind reines ASCII,
+    /// ein Treffer ist damit bytegenau identisch zu `contains` bei diesen
+    /// Nadeln).
+    static func bytesContain(_ haystack: Substring, _ needle: StaticString) -> Bool {
+        var haystack = haystack
+        return haystack.withUTF8 { buffer in
+            guard let base = buffer.baseAddress, buffer.count >= needle.utf8CodeUnitCount else { return false }
+            return memmem(base, buffer.count, needle.utf8Start, needle.utf8CodeUnitCount) != nil
+        }
     }
 
     // MARK: Codex

@@ -17,6 +17,20 @@ struct BoundedJSONLReader {
     }
 
     static func lines(from fileURL: URL, maxLines: Int, maxBytes: Int) -> (lines: [String], bytesRead: Int)? {
+        guard let read = linesWithSaturation(from: fileURL, maxLines: maxLines, maxBytes: maxBytes) else {
+            return nil
+        }
+        return (read.lines, read.bytesRead)
+    }
+
+    /// Wie `lines`, meldet zusaetzlich `saturated`: Die Grenze (Zeilen oder
+    /// Bytes) hat den Kopf abgeschnitten — spaeteres Anhaengen an die Datei
+    /// aendert das Gelesene nicht mehr (LR-AK-033).
+    static func linesWithSaturation(
+        from fileURL: URL,
+        maxLines: Int,
+        maxBytes: Int
+    ) -> (lines: [String], bytesRead: Int, saturated: Bool)? {
         guard var data = readPrefix(from: fileURL, maxBytes: maxBytes) else { return nil }
         let bytesRead = data.count
         // Das Leselimit kann mitten in einer Zeile (und in einem Mehrbyte-Zeichen)
@@ -30,11 +44,9 @@ struct BoundedJSONLReader {
             }
         }
         let text = String(decoding: data, as: UTF8.self)
-        let lines = text
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .prefix(maxLines)
-            .map(String.init)
-        return (lines, bytesRead)
+        let all = text.split(separator: "\n", omittingEmptySubsequences: true)
+        let lines = all.prefix(maxLines).map(String.init)
+        return (lines, bytesRead, all.count > maxLines || bytesRead >= maxBytes)
     }
 
     private static func readPrefix(from fileURL: URL, maxBytes: Int) -> Data? {

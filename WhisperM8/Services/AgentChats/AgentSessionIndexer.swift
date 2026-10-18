@@ -11,6 +11,9 @@ struct AgentSessionIndexStats: Equatable {
     var parsedFiles = 0
     var cacheHits = 0
     var cacheMisses = 0
+    /// Wachstums-Treffer (LR-AK-033): Cache-Miss durch reines Anhaengen an ein
+    /// Transcript mit gesaettigtem Kopf — ohne Dateilesen nachgezogen.
+    var growthRefreshes = 0
     var skippedFiles = 0
     var prunedCacheEntries = 0
     var bytesRead: Int64 = 0
@@ -55,6 +58,49 @@ struct AgentSessionIndexCache {
             entries[cacheKey] = entry
             isDirty = true
         }
+    }
+
+    /// Speichert ein Parse-Ergebnis samt Saettigungs-Marker (`headSaturated`:
+    /// der gelesene Kopf war durch Zeilen-/Bytegrenze abgeschnitten, ein
+    /// spaeteres Anhaengen aendert ihn nicht mehr).
+    mutating func store(
+        provider: AgentProvider,
+        fileURL: URL,
+        metadata: FileMetadata,
+        session: IndexedAgentSession?,
+        headSaturated: Bool
+    ) {
+        let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
+        let entry = Entry(
+            fileSize: metadata.fileSize,
+            modifiedAtStamp: Self.stamp(metadata.modifiedAt),
+            session: session,
+            headSaturated: headSaturated ? true : nil
+        )
+        guard entries[cacheKey] != entry else { return }
+        entries[cacheKey] = entry
+        isDirty = true
+    }
+
+    /// LR-AK-033 (B): Wuchs eine Datei mit gesaettigtem Kopf nur (groesser,
+    /// nicht aelter), ist das Parse-Ergebnis bis auf `lastActivityAt` gleich —
+    /// Titel, ID und cwd stehen im unveraenderlichen Kopf. Liefert die
+    /// nachgezogene Session; `nil` heisst: voller Neu-Parse noetig (kein
+    /// gesaettigter Eintrag, geschrumpft/umgeschrieben, ohne Session).
+    func growthRefresh(provider: AgentProvider, fileURL: URL, metadata: FileMetadata) -> IndexedAgentSession? {
+        let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
+        guard let entry = entries[cacheKey],
+              entry.headSaturated == true,
+              var session = entry.session,
+              metadata.fileSize > entry.fileSize,
+              let oldStamp = entry.modifiedAtStamp,
+              let newStamp = Self.stamp(metadata.modifiedAt),
+              newStamp >= oldStamp,
+              let modifiedAt = metadata.modifiedAt else {
+            return nil
+        }
+        session.lastActivityAt = max(session.lastActivityAt, modifiedAt)
+        return session
     }
 
     func lookup(provider: AgentProvider, fileURL: URL, metadata: FileMetadata) -> Lookup {
@@ -111,6 +157,9 @@ struct AgentSessionIndexCache {
         /// `Date`. Begruendung bei `stamp(_:)`.
         var modifiedAtStamp: Int64?
         var session: IndexedAgentSession?
+        /// LR-AK-033: Kopf war abgeschnitten (nur Wachstum, kein Neu-Parse).
+        /// Optional, damit Alt-Caches weiter dekodieren.
+        var headSaturated: Bool?
     }
 
     /// Wandelt eine Aenderungszeit in einen ganzzahligen Stempel.

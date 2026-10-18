@@ -69,13 +69,22 @@ struct CodexSessionIndexer {
             }
 
             stats.cacheMisses += 1
+            // LR-AK-033 (B): die erste Zeile (`session_meta`) ist nach dem
+            // ersten Zeilenumbruch unveraenderlich — Wachstum zieht nur
+            // lastActivityAt nach.
+            if let grown = cache.growthRefresh(provider: .codex, fileURL: fileURL, metadata: metadata) {
+                stats.growthRefreshes += 1
+                cache.store(provider: .codex, fileURL: fileURL, metadata: metadata, session: grown, headSaturated: true)
+                sessions.append(grown)
+                continue
+            }
             if let parsed = parseSession(fileURL, metadata: metadata, stats: &stats) {
                 stats.parsedFiles += 1
-                cache[.codex, fileURL, metadata] = parsed
-                sessions.append(parsed)
+                cache.store(provider: .codex, fileURL: fileURL, metadata: metadata, session: parsed.session, headSaturated: parsed.saturated)
+                sessions.append(parsed.session)
             } else {
                 stats.skippedFiles += 1
-                cache[.codex, fileURL, metadata] = nil
+                cache.store(provider: .codex, fileURL: fileURL, metadata: metadata, session: nil, headSaturated: false)
             }
         }
 
@@ -97,7 +106,7 @@ struct CodexSessionIndexer {
         _ fileURL: URL,
         metadata: AgentSessionIndexCache.FileMetadata,
         stats: inout AgentSessionIndexStats
-    ) -> IndexedAgentSession? {
+    ) -> (session: IndexedAgentSession, saturated: Bool)? {
         guard let read = BoundedJSONLReader.firstLine(from: fileURL, maxBytes: 256 * 1024) else {
             return nil
         }
@@ -118,7 +127,7 @@ struct CodexSessionIndexer {
         let model = payload["model"] as? String
         let title = URL(fileURLWithPath: cwd).lastPathComponent
 
-        return IndexedAgentSession(
+        let session = IndexedAgentSession(
             provider: .codex,
             externalSessionID: sessionID,
             cwd: cwd,
@@ -128,6 +137,10 @@ struct CodexSessionIndexer {
             createdAt: createdAt,
             lastActivityAt: lastActivityAt
         )
+        // Gesaettigt, sobald die erste Zeile durch einen Zeilenumbruch
+        // abgeschlossen ist (bytesRead > Zeilenlaenge): ohne ihn koennte sie
+        // beim Wachsen noch laenger werden.
+        return (session, read.bytesRead > read.line.utf8.count)
     }
 
     private static func metadata(for fileURL: URL) -> AgentSessionIndexCache.FileMetadata? {

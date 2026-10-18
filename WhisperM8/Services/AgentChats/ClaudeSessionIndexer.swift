@@ -122,13 +122,21 @@ struct ClaudeSessionIndexer {
             }
 
             stats.cacheMisses += 1
+            // LR-AK-033 (B): wachsendes Transcript mit gesaettigtem Kopf —
+            // nur lastActivityAt/Groesse/mtime nachziehen, nicht neu parsen.
+            if let grown = cache.growthRefresh(provider: .claude, fileURL: fileURL, metadata: metadata) {
+                stats.growthRefreshes += 1
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: grown, headSaturated: true)
+                sessions.append(grown)
+                continue
+            }
             if let parsed = parseSessionFile(fileURL, metadata: metadata, stats: &stats) {
                 stats.parsedFiles += 1
-                cache[.claude, fileURL, metadata] = parsed
-                sessions.append(parsed)
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: parsed.session, headSaturated: parsed.saturated)
+                sessions.append(parsed.session)
             } else {
                 stats.skippedFiles += 1
-                cache[.claude, fileURL, metadata] = nil
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: nil, headSaturated: false)
             }
         }
 
@@ -145,8 +153,8 @@ struct ClaudeSessionIndexer {
         _ fileURL: URL,
         metadata: AgentSessionIndexCache.FileMetadata,
         stats: inout AgentSessionIndexStats
-    ) -> IndexedAgentSession? {
-        guard let read = BoundedJSONLReader.lines(from: fileURL, maxLines: 200, maxBytes: 1 * 1024 * 1024) else {
+    ) -> (session: IndexedAgentSession, saturated: Bool)? {
+        guard let read = BoundedJSONLReader.linesWithSaturation(from: fileURL, maxLines: 200, maxBytes: 1 * 1024 * 1024) else {
             return nil
         }
         stats.bytesRead += Int64(read.bytesRead)
@@ -176,7 +184,8 @@ struct ClaudeSessionIndexer {
             }
 
             if sessionID != nil, cwd != nil, createdAt != nil,
-               line.contains("\"ai-title\"") || line.contains("\"custom-title\"") {
+               NativeSessionTitle.bytesContain(line[...], "\"ai-title\"")
+                || NativeSessionTitle.bytesContain(line[...], "\"custom-title\"") {
                 break
             }
         }
@@ -197,7 +206,7 @@ struct ClaudeSessionIndexer {
         let created = createdAt ?? fallbackDate
         let lastActivity = max(lastMessageDate ?? created, metadata.modifiedAt ?? created)
 
-        return IndexedAgentSession(
+        let session = IndexedAgentSession(
             provider: .claude,
             externalSessionID: sessionID ?? fallbackID,
             cwd: cwd,
@@ -210,6 +219,7 @@ struct ClaudeSessionIndexer {
             // Profil-Root muessen spaeter unter demselben Config-Dir resumen.
             claudeProfileName: ClaudeAccountProfiles.profileName(forTranscriptPath: fileURL.path)
         )
+        return (session, read.saturated)
     }
 
     private static func metadata(for fileURL: URL) -> AgentSessionIndexCache.FileMetadata? {
@@ -225,10 +235,18 @@ struct ClaudeSessionIndexer {
         )
     }
 
-    private func parseDate(_ string: String?) -> Date? {
-        guard let string else { return nil }
+    // LR-AK-033 (A): Formatter einmal statt je Zeile anlegen (bis 200 Zeilen
+    // pro Datei, jede Anlage kostet Mikrosekunden im zweistelligen Bereich).
+    // `date(from:)` ist auf ISO8601DateFormatter thread-sicher.
+    private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: string) ?? ISO8601DateFormatter().date(from: string)
+        return formatter
+    }()
+    private static let plainFormatter = ISO8601DateFormatter()
+
+    private func parseDate(_ string: String?) -> Date? {
+        guard let string else { return nil }
+        return Self.fractionalFormatter.date(from: string) ?? Self.plainFormatter.date(from: string)
     }
 }
