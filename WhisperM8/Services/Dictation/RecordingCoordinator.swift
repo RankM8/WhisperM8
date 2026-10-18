@@ -312,7 +312,7 @@ final class RecordingCoordinator {
         // Letzte Wahrheit vor dem Transcription-Call: was geht jetzt wirklich
         // raus? Inkludiert User-Edits aus dem Overlay (z. B. Pill entfernt).
         Logger.transcription.info(
-            "recording_context_committed agentChatPresent=\(frozenContextBundle.agentChat != nil, privacy: .public) provider=\(frozenContextBundle.agentChat?.provider.rawValue ?? "none", privacy: .public) project=\(frozenContextBundle.agentChat?.projectName ?? "none", privacy: .public) chatTitle=\(frozenContextBundle.agentChat?.title ?? "none", privacy: .public) externalID=\(frozenContextBundle.agentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(frozenContextBundle.agentChatTail?.count ?? 0, privacy: .public) selectedTextChars=\(frozenContextBundle.selectedText.text.count, privacy: .public) attachments=\(frozenContextBundle.attachmentCount, privacy: .public)"
+            "recording_context_committed agentChatPresent=\(frozenContextBundle.agentChat != nil, privacy: .public) provider=\(frozenContextBundle.agentChat?.provider.rawValue ?? "none", privacy: .public) project=\(frozenContextBundle.agentChat?.projectName ?? "none", privacy: .public) hasChatTitle=\(frozenContextBundle.agentChat?.title != nil, privacy: .public) externalID=\(frozenContextBundle.agentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(frozenContextBundle.agentChatTail?.count ?? 0, privacy: .public) selectedTextChars=\(frozenContextBundle.selectedText.text.count, privacy: .public) attachments=\(frozenContextBundle.attachmentCount, privacy: .public)"
         )
 
         recordingTimer.stop()
