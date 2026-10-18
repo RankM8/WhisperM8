@@ -388,39 +388,31 @@ final class ClaudeGPTMixRouter {
         stopped.connections.forEach { $0.cancel() }
     }
 
+    /// `model` des Request-Bodys: Byte-Scan der obersten Objektebene, nur bei
+    /// Unsicherheit voller Parse (LR-GPT-008, siehe `+RequestBody`).
     static func model(in body: Data) -> String? {
-        guard
-            let object = try? JSONSerialization.jsonObject(with: body),
-            let dictionary = object as? [String: Any],
-            let model = dictionary["model"] as? String
-        else {
+        switch scanTopLevelModel(in: body) {
+        case .found(let model):
+            return model
+        case .absent:
             return nil
+        case .unsure:
+            guard
+                let object = parseBody(body),
+                let dictionary = object as? [String: Any],
+                let model = dictionary["model"] as? String
+            else {
+                return nil
+            }
+            return model
         }
-        return model
     }
 
     /// Ersetzt `auto`, `gpt-auto` (jeweils optional `-fast`, `[1m]`) im
     /// Request-Body durch den kanonischen Frontier-Alias. Alle anderen
     /// Bodies bleiben byte-identisch.
     static func resolvingAutoModel(in body: Data) -> Data {
-        guard let model = model(in: body) else { return body }
-        let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let stripped = normalized.hasSuffix("[1m]") ? String(normalized.dropLast(4)) : normalized
-        let base = stripped.hasSuffix("-fast") ? String(stripped.dropLast("-fast".count)) : stripped
-        guard ClaudeGPTModelAlias.isAutoModel(base),
-              let resolved = ClaudeGPTModelAlias.canonicalGPTModel(stripped),
-              let object = try? JSONSerialization.jsonObject(with: body),
-              var dictionary = object as? [String: Any] else {
-            return body
-        }
-        dictionary["model"] = resolved
-        guard let rewritten = try? JSONSerialization.data(withJSONObject: dictionary) else {
-            return body
-        }
-        Logger.claudeGPTRouter.info(
-            "gpt_auto_model_resolved requested=\(model, privacy: .public) resolved=\(resolved, privacy: .public)"
-        )
-        return rewritten
+        resolvingAutoModel(in: body, requestedModel: model(in: body)).body
     }
 
     struct ToolSchemaSanitization: Equatable {
@@ -440,7 +432,10 @@ final class ClaudeGPTMixRouter {
     /// Backend ablehnen würde. Bodies ohne Befund bleiben byte-identisch.
     static func sanitizingToolSchemas(in body: Data) -> ToolSchemaSanitization {
         let untouched = ToolSchemaSanitization(body: body, removedPatterns: 0, affectedTools: [])
-        guard let object = try? JSONSerialization.jsonObject(with: body),
+        // Rohtext-Vorfilter: ohne Bytefolge eines Unicode-Klassen-Patterns ist
+        // nichts zu entfernen — dann kein Parse (LR-GPT-008).
+        guard mayContainUnsupportedPattern(body),
+              let object = parseBody(body),
               var dictionary = object as? [String: Any],
               var tools = dictionary["tools"] as? [[String: Any]] else {
             return untouched
@@ -482,7 +477,11 @@ final class ClaudeGPTMixRouter {
     }
 
     static func upstream(for body: Data) -> Upstream {
-        guard let model = model(in: body) else { return .anthropic }
+        upstream(forModel: model(in: body))
+    }
+
+    static func upstream(forModel model: String?) -> Upstream {
+        guard let model else { return .anthropic }
         let normalized = model.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.hasPrefix("gpt-") ? .codexProxy : .anthropic
     }
@@ -887,23 +886,21 @@ private extension ClaudeGPTMixRouter {
             // `auto`/`gpt-auto` (z. B. aus Agent-Frontmatter) wird hier auf das
             // neueste Katalogmodell umgeschrieben — der Aufrufer muss keine
             // konkrete ID kennen, die morgen veraltet ist.
-            var body = ClaudeGPTMixRouter.resolvingAutoModel(in: body)
-            let model = ClaudeGPTMixRouter.model(in: body)
-            let upstream = ClaudeGPTMixRouter.upstream(for: body)
-            if upstream == .codexProxy {
+            // Body wird dabei höchstens einmal voll geparst (LR-GPT-008).
+            let prepared = ClaudeGPTMixRouter.prepareRequestBody(body)
+            let body = prepared.body
+            let model = prepared.model
+            let upstream = prepared.upstream
+            if let sanitized = prepared.sanitization {
                 // Das OpenAI-Backend validiert Tool-Schemas mit einer Regex-
                 // Engine ohne Unicode-Klassen; Claude Codes Artifact-Tool
                 // trägt `\p{Cc}…` im `pattern` → 400 „is not a 'regex'" und
                 // jeder gpt-/general-purpose-Subagent starb sofort
                 // (Befund 2026-09-09/12). Nur für den Codex-Upstream, Anthropic
                 // versteht die Patterns.
-                let sanitized = ClaudeGPTMixRouter.sanitizingToolSchemas(in: body)
-                if sanitized.removedPatterns > 0 {
-                    Logger.claudeGPTRouter.info(
-                        "gpt_tool_schema_patterns_stripped count=\(sanitized.removedPatterns) tools=\(sanitized.affectedTools.joined(separator: ","), privacy: .public)"
-                    )
-                    body = sanitized.body
-                }
+                Logger.claudeGPTRouter.info(
+                    "gpt_tool_schema_patterns_stripped count=\(sanitized.removedPatterns) tools=\(sanitized.affectedTools.joined(separator: ","), privacy: .public)"
+                )
             }
             if let errorBody = ClaudeGPTMixRouter.gptModelValidationErrorResponse(
                 for: model,
