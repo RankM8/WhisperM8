@@ -14,6 +14,20 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>OSLogPreferences</key>
+	<dict>
+		<key>com.whisperm8.app</key>
+		<dict>
+			<key>DEFAULT-OPTIONS</key>
+			<dict>
+				<key>Level</key>
+				<dict>
+					<key>Persist</key>
+					<string>Info</string>
+				</dict>
+			</dict>
+		</dict>
+	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
 	<key>NSScreenCaptureUsageDescription</key>
