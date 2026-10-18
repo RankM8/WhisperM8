@@ -229,8 +229,8 @@ struct AgentChatsView: View {
     /// Pending ambiguous-rebind-Picker. `nil` solange keine
     /// Mehrdeutigkeit erkannt wurde.
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
-    @SceneStorage("agentChatsInspectorVisible") private var isInspectorVisible = false
-    @SceneStorage("agentChatsSidebarVisible") private var isSidebarVisible = true
+    @SceneStorage("agentChatsInspectorVisible") var isInspectorVisible = false
+    @SceneStorage("agentChatsSidebarVisible") var isSidebarVisible = true
     /// Gemerktes Ziel für „Projekt öffnen in …" (Default PhpStorm, Finder
     /// wählbar). Die Wahl im Menü setzt den neuen Default.
     @AppStorage("agentProjectOpenTarget") private var projectOpenTargetRaw = ProjectOpenTarget.phpStorm.rawValue
@@ -802,7 +802,12 @@ struct AgentChatsView: View {
                 windowStore.windowDidBecomeKey(windowID)
                 syncActiveAgentChat()
             },
-            onResignKey: { windowStore.windowDidResignKey(windowID) }
+            onResignKey: {
+                windowStore.windowDidResignKey(windowID)
+                // Hover-Ereignisse gehen beim Fensterwechsel verloren — Verschieben
+                // nie gesperrt zurücklassen (LR-AU-008).
+                hostWindow?.isMovable = true
+            }
         ))
         .coordinateSpace(.named(Self.windowCoordinateSpaceName))
         .ignoresSafeArea(.all, edges: .top)
@@ -1172,7 +1177,7 @@ struct AgentChatsView: View {
     }
 
     /// Die zu layoutende Inspector-Breite — Spiegel von `currentSidebarWidth`.
-    private func currentInspectorWidth(windowWidth: CGFloat) -> CGFloat {
+    func currentInspectorWidth(windowWidth: CGFloat) -> CGFloat {
         if let live = inspectorLiveWidth { return live }
         return InspectorWidthResolver.effectiveWidth(
             stored: CGFloat(storedInspectorWidth),
@@ -1212,7 +1217,7 @@ struct AgentChatsView: View {
     /// sonst der persistierte Wunschwert — beide immer frisch gegen die
     /// aktuelle Fensterbreite geclampt (Resize/Fullscreen/kleine Fenster
     /// brauchen so kein Event-Handling).
-    private func currentSidebarWidth(windowWidth: CGFloat) -> CGFloat {
+    func currentSidebarWidth(windowWidth: CGFloat) -> CGFloat {
         if let live = sidebarLiveWidth { return live }
         return SidebarWidthResolver.effectiveWidth(
             stored: CGFloat(storedSidebarWidth),

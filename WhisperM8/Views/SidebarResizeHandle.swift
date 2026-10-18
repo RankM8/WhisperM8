@@ -58,6 +58,12 @@ struct SidebarResizeHandle: View {
                 // Sidebar-Toggle unterm Cursor: Resize-Cursor nicht
                 // haengenlassen.
                 if isHovering || isDragging { NSCursor.arrow.set() }
+                // Der Rand ist weg, `onHover(false)` kommt nie mehr: Hover
+                // zurückmelden, sonst blieb `isMovable` aus (LR-AU-008).
+                if isHovering {
+                    isHovering = false
+                    onHoverChanged(false)
+                }
             }
     }
 

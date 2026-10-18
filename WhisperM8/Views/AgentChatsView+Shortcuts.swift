@@ -547,6 +547,9 @@ extension AgentChatsView {
     func installTitleBarZoomHandlerIfNeeded() {
         guard titleBarZoomMonitor == nil else { return }
         titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            // Verschiebbarkeit zustandslos aus der Zeigerposition (LR-AU-008):
+            // die Hover-Flags (Tab-Strip, Resize-Ränder) können hängen bleiben.
+            refreshWindowMovability(for: event)
             // Grid-Ansicht: Klick in eine nicht-fokussierte Pane verschiebt
             // die Selektion dorthin (Dictation-Routing folgt). Beobachtend —
             // das Event läuft danach unverändert weiter (Terminal-Klick,
@@ -554,6 +557,27 @@ extension AgentChatsView {
             handleGridPaneMouseDown(event)
             return handleTitleBarMouse(event)
         }
+    }
+
+    /// Setzt `window.isMovable` VOR der Zustellung des Klicks neu: aus über dem
+    /// Tab-Strip und den Resize-Rändern von Sidebar/Inspector, sonst an. Die
+    /// Hover-Toggles bleiben als frühe Näherung, dieser Gegencheck gewinnt.
+    func refreshWindowMovability(for event: NSEvent) {
+        guard let window = hostWindow,
+              event.window === window,
+              let contentView = window.contentView else { return }
+        let windowWidth = contentView.bounds.width
+        let ranges = WindowMovability.resizeHandleRanges(
+            sidebarWidth: isSidebarVisible ? currentSidebarWidth(windowWidth: windowWidth) : nil,
+            inspectorWidth: isInspectorVisible ? currentInspectorWidth(windowWidth: windowWidth) : nil,
+            windowWidth: windowWidth
+        )
+        window.isMovable = WindowMovability.isMovable(
+            pointInWindow: event.locationInWindow,
+            contentViewHeight: contentView.bounds.height,
+            stripFrame: stripFrameInWindow,
+            resizeHandleRanges: ranges
+        )
     }
 
     func removeTitleBarZoomHandler() {
