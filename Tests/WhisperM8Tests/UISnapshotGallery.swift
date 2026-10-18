@@ -122,7 +122,35 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
+        // Status-Punkte im Ruhig-Modus (LR-AU-002): working muss ohne Bewegung
+        // von idle/Rückfrage unterscheidbar sein.
+        func statusDots() -> Fixture {
+            Fixture(name: "status-punkte", size: CGSize(width: 360, height: 150)) {
+                func row(_ label: String, _ status: AgentSessionRuntimeStatus) -> some View {
+                    HStack(spacing: 12) {
+                        AgentStatusIndicator(status: status).frame(width: 18, height: 18)
+                        AgentStatusIndicator(status: status, compact: true)
+                        Text(label).font(.system(size: 11))
+                    }
+                }
+                return AnyView(VStack(alignment: .leading, spacing: 8) {
+                    row("arbeitet", .working)
+                    row("wartet", .awaitingInput)
+                    row("bereit", .idle)
+                    row("Fehler", .errored)
+                    HStack(spacing: 8) {
+                        SubagentRoad(barCount: 4)
+                        Text("4 Subagents").font(.system(size: 11))
+                    }
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .background(AppTheme.sidebar))
+            }
+        }
+
         return [
+            statusDots(),
             transcription("transcription-groq-ohne-key", provider: .groq, model: .groq_whisper_v3),
             transcription("transcription-groq-mit-key", provider: .groq, model: .groq_whisper_v3, hasKey: true),
             transcription("transcription-openai-mit-key", provider: .openai, model: .openai_gpt4o, hasKey: true),

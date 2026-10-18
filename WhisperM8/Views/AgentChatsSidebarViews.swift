@@ -625,21 +625,35 @@ struct SubagentRoad: View {
     nonisolated static let stagger: Double = 0.13
 
     var body: some View {
-        // 30 fps reichen für einen 7-px-Opazitätsverlauf und halbieren die
-        // Frame-Last gegenüber .animation-Default.
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            let now = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 2) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    Capsule()
-                        .fill(AgentTheme.statusWorking)
-                        .frame(width: 2, height: 7)
-                        .opacity(Self.opacity(at: now, index: index))
+        Group {
+            if AgentStatusPulse.continuousEnabled {
+                // A/B-Schalter an: altes Lauflicht (30 fps). Jeder Frame gleicht die
+                // Display-List des ganzen Fensters ab (LR-AU-002).
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    bars(at: timeline.date.timeIntervalSinceReferenceDate)
                 }
+            } else {
+                // Ruhig-Modus: eingefrorene Welle (versetzte Opazitäten), keine
+                // TimelineView — die Anzahl der Balken trägt die Information.
+                bars(at: Self.restTime)
             }
         }
         .fixedSize()
         .accessibilityHidden(true) // die Zahl daneben trägt die Information
+    }
+
+    /// Fester Zeitpunkt der eingefrorenen Welle im Ruhig-Modus.
+    nonisolated static let restTime: Double = 0.2
+
+    private func bars(at now: TimeInterval) -> some View {
+        HStack(spacing: 2) {
+            ForEach(0..<barCount, id: \.self) { index in
+                Capsule()
+                    .fill(AgentTheme.statusWorking)
+                    .frame(width: 2, height: 7)
+                    .opacity(Self.opacity(at: now, index: index))
+            }
+        }
     }
 
     /// Helligkeit eines Balkens zum Zeitpunkt `time` — pur + getestet

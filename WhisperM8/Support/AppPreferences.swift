@@ -416,6 +416,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentPerfDetailEnabled) }
     }
 
+    /// A/B-Schalter für die Dauer-Pulse der Status-Punkte und das 30-fps-Lauflicht
+    /// des Subagent-Chips (LR-AU-002). Default AUS = ruhiges Verhalten (statischer
+    /// Ring statt `repeatForever`, einmaliger Puls beim Statuswechsel); AN bringt
+    /// die alte Dauerbewegung zurück, um die CPU-/WindowServer-Last zu vergleichen:
+    /// `defaults write com.whisperm8.app agentStatusPulseEnabled -bool YES`
+    /// (wirkt nach App-Neustart, wird einmal pro Prozess gelesen).
+    var isAgentStatusPulseEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.agentStatusPulseEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentStatusPulseEnabled) }
+    }
+
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
     /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
     /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
@@ -899,6 +910,7 @@ enum PreferenceKeys {
     static let subagentJobRetentionInitialPurgeDone = "subagentJobRetentionInitialPurgeDone"
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
     static let agentPerfDetailEnabled = "agentPerfDetailEnabled"
+    static let agentStatusPulseEnabled = "agentStatusPulseEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"
     static let claudeHooksEnabled = "claudeHooksEnabled"

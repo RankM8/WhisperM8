@@ -14,8 +14,20 @@ import SwiftUI
 ///
 /// Die Animation läuft rein render-seitig über eigenen `@State` und kollidiert
 /// nicht mit dem Equatable-Skip der Row (Status kommt via onReceive+@State rein).
-/// Nur `working`/`awaitingInput` animieren — `idle`/`stopped` sind statisch,
-/// damit viele ruhende Zeilen keine Dauerlast erzeugen.
+/// Ruhig-Modus (Default seit LR-AU-002): KEIN Endlos-Animation. Der Status bleibt
+/// ohne Bewegung erkennbar — working = grüner Kern + gefüllter Halo, awaitingInput
+/// = Amber-Kern + Ring (Form + Farbe, nicht nur Animation). Jeder Dauer-Puls hielt die Layout-Schleife
+/// des ganzen Fensters am Laufen (WindowServer ~50 %). Die alte Dauerbewegung
+/// gibt es nur mit `defaults write … agentStatusPulseEnabled -bool YES`.
+/// Nur `working`/`awaitingInput` haben einen Halo — `idle`/`stopped` sind statisch.
+enum AgentStatusPulse {
+    /// Einmal pro Prozess gelesen (Schalter wirkt nach Neustart).
+    static let continuousEnabled: Bool = AppPreferences().isAgentStatusPulseEnabled
+
+    /// Pur: bewegt sich der Halo dauerhaft?
+    static func isContinuous(switchEnabled: Bool) -> Bool { switchEnabled }
+}
+
 struct AgentStatusIndicator: View {
     let status: AgentSessionRuntimeStatus?
     /// Tab-Leiste: dieselben Farben und Bedeutungen, aber 5 pt und ohne Puls —
@@ -56,10 +68,12 @@ struct AgentStatusIndicator: View {
     private var fullBody: some View {
         switch status {
         case .working:
-            PulsingDot(color: AgentTheme.statusWorking, maxScale: 2.7, duration: 2.1, filledRing: true)
+            PulsingDot(color: AgentTheme.statusWorking, maxScale: 2.7, duration: 2.1, filledRing: true,
+                       continuous: AgentStatusPulse.isContinuous(switchEnabled: AgentStatusPulse.continuousEnabled))
                 .help("Arbeitet …")
         case .awaitingInput:
-            PulsingDot(color: AgentTheme.statusAwaiting, maxScale: 2.2, duration: 1.5, filledRing: false)
+            PulsingDot(color: AgentTheme.statusAwaiting, maxScale: 2.2, duration: 1.5, filledRing: false,
+                       continuous: AgentStatusPulse.isContinuous(switchEnabled: AgentStatusPulse.continuousEnabled))
                 .help("Wartet möglicherweise auf User-Input")
         case .idle:
             Circle()
@@ -77,13 +91,20 @@ struct AgentStatusIndicator: View {
     }
 }
 
-/// Gefüllter Kern + ein nach außen laufender Ring, der ausblendet.
-/// `filledRing` = Sonar (gefüllt, working), sonst Halo (Outline, awaiting).
+/// Gefüllter Kern + Ring. `filledRing` = Sonar (gefüllt, working), sonst Halo
+/// (Outline, awaiting). `continuous` = Dauer-Puls (nur per A/B-Schalter);
+/// sonst steht der Ring ruhig (statischer Halo, keine Animation).
 private struct PulsingDot: View {
     let color: Color
     let maxScale: CGFloat
     let duration: Double
     let filledRing: Bool
+    var continuous = false
+
+    /// Ruhe-Größe/-Deckkraft des Halos im Ruhig-Modus: sichtbar größer als der
+    /// Idle-Punkt, ohne Bewegung.
+    private let restScale: CGFloat = 1.7
+    private let restOpacity: Double = 0.35
 
     @State private var animate = false
     private let core: CGFloat = 7
@@ -92,20 +113,31 @@ private struct PulsingDot: View {
         ZStack {
             ring
                 .frame(width: core, height: core)
-                .scaleEffect(animate ? maxScale : 1)
-                .opacity(animate ? 0 : (filledRing ? 0.45 : 0.65))
+                .scaleEffect(ringScale)
+                .opacity(ringOpacity)
             Circle()
                 .fill(color)
                 .frame(width: core, height: core)
         }
         .frame(width: core, height: core)
         .onAppear {
+            guard continuous else { return }
             // Aus dem Ruhezustand starten, dann unendlich nach außen pulsen.
             animate = false
             withAnimation(.easeOut(duration: duration).repeatForever(autoreverses: false)) {
                 animate = true
             }
         }
+    }
+
+    private var ringScale: CGFloat {
+        if continuous { return animate ? maxScale : 1 }
+        return restScale
+    }
+
+    private var ringOpacity: Double {
+        if continuous { return animate ? 0 : (filledRing ? 0.45 : 0.65) }
+        return restOpacity
     }
 
     @ViewBuilder

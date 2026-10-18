@@ -14,7 +14,14 @@ struct TimelinePulsingDot: View {
             .fill(color)
             .frame(width: 7, height: 7)
             .opacity(pulsing ? 0.35 : 1.0)
-            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulsing)
-            .onAppear { pulsing = true }
+            // Ruhig-Modus (Default, LR-AU-002): kein Dauer-Puls — der Punkt steht
+            // in voller Deckkraft. Dauer-Puls nur mit `agentStatusPulseEnabled`.
+            .animation(
+                AgentStatusPulse.continuousEnabled
+                    ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
+                    : nil,
+                value: pulsing
+            )
+            .onAppear { if AgentStatusPulse.continuousEnabled { pulsing = true } }
     }
 }
