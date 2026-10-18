@@ -155,9 +155,14 @@ enum CodexTranscriptReader {
         case "tool_search_call":
             let input: String
             if let arguments = payload["arguments"],
+               JSONSerialization.isValidJSONObject(arguments), // skalar → NSException
                let data = try? JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys]),
                let str = String(data: data, encoding: .utf8) {
                 input = str
+            } else if let text = payload["arguments"] as? String {
+                input = text
+            } else if let number = payload["arguments"] as? NSNumber {
+                input = number.stringValue
             } else {
                 input = ""
             }

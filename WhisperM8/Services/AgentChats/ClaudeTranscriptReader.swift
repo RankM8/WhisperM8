@@ -374,7 +374,16 @@ enum ClaudeTranscriptReader {
     private static func formatToolInput(_ raw: Any?) -> String {
         guard let raw else { return "" }
         if let str = raw as? String { return str }
-        if let data = try? JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys]),
+        // Skalare Top-Level-Werte (`1`, `true`, `null`) wirft JSONSerialization als
+        // NSException — `try?` fängt die nicht; also vorher prüfen.
+        if JSONSerialization.isValidJSONObject(raw),
+           let data = try? JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .sortedKeys]),
+           let str = String(data: data, encoding: .utf8) {
+            return str
+        }
+        if raw is NSNull { return "" }
+        if let number = raw as? NSNumber,
+           let data = try? JSONSerialization.data(withJSONObject: number, options: [.fragmentsAllowed]),
            let str = String(data: data, encoding: .utf8) {
             return str
         }

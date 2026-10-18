@@ -135,6 +135,42 @@ final class AgentTranscriptReaderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(statistics.fullLinesParsed, 1)
     }
 
+    /// LR-AK-004: skalare Tool-Payloads (`input: 1/true/null`) lösen in
+    /// `JSONSerialization.data` eine NSException aus, die `try?` nicht fängt.
+    func testClaudeParseEntryHandlesScalarToolInputsWithoutCrashing() throws {
+        let inputs: [(Any, String)] = [(1, "1"), (true, "true"), (NSNull(), ""), ("x", "x")]
+        for (value, expected) in inputs {
+            let entry: [String: Any] = [
+                "type": "assistant",
+                "message": ["content": [["type": "tool_use", "name": "T", "input": value]]]
+            ]
+            let message = try XCTUnwrap(ClaudeTranscriptReader.parseEntry(entry))
+            guard case let .toolUse(_, input)? = message.blocks.first else { return XCTFail("kein toolUse") }
+            XCTAssertEqual(input, expected)
+        }
+        let array: [String: Any] = [
+            "type": "assistant",
+            "message": ["content": [["type": "tool_use", "name": "T", "input": [1, 2]]]]
+        ]
+        XCTAssertNotNil(ClaudeTranscriptReader.parseEntry(array))
+    }
+
+    func testCodexToolSearchCallWithScalarArgumentsDoesNotCrash() throws {
+        for value in [1, true] as [Any] {
+            let entry: [String: Any] = [
+                "type": "response_item",
+                "payload": ["type": "tool_search_call", "arguments": value]
+            ]
+            let message = try XCTUnwrap(CodexTranscriptReader.parseEntry(entry))
+            guard case .toolUse? = message.blocks.first else { return XCTFail("kein toolUse") }
+        }
+        let nullEntry: [String: Any] = [
+            "type": "response_item",
+            "payload": ["type": "tool_search_call", "arguments": NSNull()]
+        ]
+        XCTAssertNotNil(CodexTranscriptReader.parseEntry(nullEntry))
+    }
+
     func testCodexTranscriptReaderParsesUserAndAgentMessages() throws {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-codex-\(UUID().uuidString).jsonl")
