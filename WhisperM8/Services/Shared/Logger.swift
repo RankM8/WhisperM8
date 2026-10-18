@@ -29,12 +29,13 @@ enum Logger {
 
     // MARK: - Optional File Logging
 
-    private static let logFileURL: URL = {
+    /// Rotiert ab 10 MB (eine Vorversion `.1`), schreibt nur per `write(contentsOf:)`.
+    private static let fileSink: LoggerFileSink = {
         let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Logs", isDirectory: true)
             .appendingPathComponent("WhisperM8", isDirectory: true)
-        return logsDirectory.appendingPathComponent("WhisperM8-debug.log")
+        return LoggerFileSink(url: logsDirectory.appendingPathComponent("WhisperM8-debug.log"))
     }()
 
     private static var isFileLoggingEnabled: Bool {
@@ -68,28 +69,11 @@ enum Logger {
         guard isFileLoggingEnabled else { return }
 
         let timestamp = ISO8601DateFormatter().string(from: Date())
-        let logLine = "[\(timestamp)] \(message)\n"
-
-        if let data = logLine.data(using: .utf8) {
-            try? FileManager.default.createDirectory(
-                at: logFileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-
-            if FileManager.default.fileExists(atPath: logFileURL.path) {
-                if let handle = try? FileHandle(forWritingTo: logFileURL) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    handle.closeFile()
-                }
-            } else {
-                try? data.write(to: logFileURL)
-            }
-        }
+        fileSink.append("[\(timestamp)] \(message)\n")
     }
 
     static func clearDebugLog() {
-        try? FileManager.default.removeItem(at: logFileURL)
+        fileSink.clear()
         debug("=== Log cleared ===")
     }
 }
