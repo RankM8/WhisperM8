@@ -251,6 +251,8 @@ extension AgentChatsView {
         // Karten: die Panes nutzen die volle Fläche.
         .background(AgentTheme.border)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Pane-Rechtecke für das zustandslose Klick-Routing (LR-AU-016).
+        .onPreferenceChange(GridPaneFramesKey.self) { gridPaneFrameCache.frames = $0 }
         // Grid-Fläche messen (nicht das Fenster — Sidebar/Inspector gehen
         // sonst in die Passt-Rechnung ein; Review-Finding). Der Kapazitäts-
         // Picker sitzt seit dem Umzug in die Workspace-Header-Zeile
@@ -304,6 +306,7 @@ extension AgentChatsView {
         }
         .onDisappear {
             hoveredGridPaneID = nil
+            gridPaneFrameCache.frames = [:]
             gridDropTargeted = false
             gridSlotDropTargetCount = 0
             gridShrinkSelection = nil
@@ -860,9 +863,21 @@ extension AgentChatsView {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Pane-Rechteck messen: Der Monitor prüft damit die Klickposition,
+        // statt dem Hover-Flag allein zu trauen (LR-AU-016).
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: GridPaneFramesKey.self,
+                    value: [session.id: geo.frame(in: .named(Self.windowCoordinateSpaceName))]
+                )
+            }
+        )
         // Hover-Flag fürs Klick-Routing (Muster `isHoveringTabStrip`): der
         // leftMouseDown-Monitor setzt die Selektion auf die gehoverte Pane,
         // ohne das Event zu schlucken — der Klick erreicht das Terminal.
+        // Das Flag allein reicht nicht (kann hängen bleiben) — der Monitor
+        // gleicht es mit den gemessenen Rechtecken ab.
         .onHover { hovering in
             if hovering {
                 hoveredGridPaneID = session.id
@@ -1071,8 +1086,21 @@ extension AgentChatsView {
         }
         guard let hostWindow, event.window === hostWindow,
               isGridActive,
-              let hovered = hoveredGridPaneID,
-              hovered != selectedSessionID else { return }
+              let contentView = hostWindow.contentView else { return }
+        // Zustandslos: Klick wirklich in einer Pane? Ein hängendes Hover-Flag
+        // (Kontextmenü, Drag, Cmd+Tab) darf Klicks ins Suchfeld/auf Header-Buttons
+        // nicht zur Fokus-Verschiebung machen (LR-AU-016). Der Body ignoriert die
+        // obere Safe Area, der Koordinatenraum beginnt also am Fensterrand.
+        let point = GridPaneHitResolver.swiftUIPoint(
+            locationInWindow: event.locationInWindow,
+            contentViewHeight: contentView.bounds.height,
+            safeAreaTopInset: 0
+        )
+        guard let hovered = GridPaneHitResolver.focusTarget(
+            hovered: hoveredGridPaneID,
+            point: point,
+            frames: gridPaneFrameCache.frames
+        ), hovered != selectedSessionID else { return }
         selectedSessionID = hovered
         // Wie Tab-/Sidebar-Klick: einfacher Klick verwirft die Mehrfach-Auswahl.
         multiSelection = []

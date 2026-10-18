@@ -24,6 +24,14 @@ private struct TabStripContentWidthKey: PreferenceKey {
 
 /// Sichtbare Frame des Tab-Strip-ScrollViews in `.global` (Viewport-Breite +
 /// X-Spanne fürs Mausrad-Hit-Test-Gating).
+/// Pane-Rechtecke des Grids im Fenster-Koordinatenraum (LR-AU-016).
+struct GridPaneFramesKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 private struct TabStripFrameKey: PreferenceKey {
     static let defaultValue: CGRect = .zero
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
@@ -32,7 +40,7 @@ private struct TabStripFrameKey: PreferenceKey {
 struct AgentChatsView: View {
     /// Benannter Coordinate-Space am Body-Root (window-relativ) — der
     /// Tab-Strip misst seine Frame darin fürs Mausrad-Hit-Test-Gating.
-    private static let windowCoordinateSpaceName = "agentChatsWindow"
+    static let windowCoordinateSpaceName = "agentChatsWindow"
     /// Inhalts-Koordinatenraum der Tab-Leiste — Frame-Messung UND Drop-Location
     /// liegen darin (scroll-sicher, kein `.global`/`.local`-Mismatch).
     private static let tabStripContentSpace = "tabStripContent"
@@ -174,6 +182,10 @@ struct AgentChatsView: View {
     @State var hoveredGridPaneID: UUID?
     /// Maus über einer Jarvis-Notiz-Karte: Klick fokussiert die Kachel nicht.
     @State var hoveredNoteCardID: UUID?
+    /// Gemessene Pane-Rechtecke (Fensterraum) fürs zustandslose Klick-Routing
+    /// (`GridPaneHitResolver`, LR-AU-016). Klasse im @State: Messungen lösen
+    /// keinen Neuaufbau aus.
+    @State var gridPaneFrameCache = GridPaneFrameCache()
     /// Ein Session-Drag schwebt über dem Grid — steuert die Growzone
     /// („voll + Drop = wächst", Plan F8). internal für +Grid.
     @State var gridDropTargeted = false
