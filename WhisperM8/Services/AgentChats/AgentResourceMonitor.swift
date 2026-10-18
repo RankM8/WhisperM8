@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct AgentResourceSessionDescriptor: Equatable, Hashable {
@@ -72,12 +73,36 @@ struct AgentResourceSnapshot: Equatable {
     }
 }
 
+/// Takt- und Entprellregeln des Ressourcen-Badges (LR-AU-003) — pur, damit die
+/// Fork-Last testbar bleibt.
+enum AgentResourceRefreshPolicy {
+    /// Badge-Betrieb (Popover zu): Zähler + Summe brauchen keine 10-s-Auflösung.
+    static let badgeInterval: Duration = .seconds(30)
+    /// Popover offen: der User schaut aktiv hin.
+    static let popoverInterval: Duration = .seconds(2)
+    /// Wartezeit, bis eine Änderung der Chat-Prozesse einen Refresh auslöst.
+    static let changeDebounce: Duration = .seconds(1)
+
+    /// Nur was die Messung ändert: Session-ID + Wurzel-PID. Titel-, Status- oder
+    /// Projektwechsel verändern den Schlüssel nicht und lösen keinen Fork aus.
+    static func processKey(_ descriptors: [AgentResourceSessionDescriptor]) -> String {
+        descriptors
+            .map { "\($0.id.uuidString):\($0.rootProcessID ?? 0)" }
+            .sorted()
+            .joined(separator: ",")
+    }
+}
+
 struct AgentResourceMonitor {
-    var processSamples: () -> [AgentResourceProcessSample] = Self.currentProcessSamples
+    /// Bekommt die Wurzel-PIDs der Chats und liefert nur deren Prozessbäume —
+    /// kein `ps -ax`-Vollscan mehr (LR-AU-003).
+    var processSamples: ([Int32]) -> [AgentResourceProcessSample] = { Self.currentProcessSamples(rootPIDs: $0) }
     var totalMemoryBytes: () -> Int64? = Self.currentTotalMemoryBytes
 
     func snapshot(for descriptors: [AgentResourceSessionDescriptor]) -> AgentResourceSnapshot {
-        let samples = processSamples()
+        let rootPIDs = descriptors.compactMap(\.rootProcessID)
+        // Ohne laufende Chats gibt es nichts zu messen — dann auch kein Fork.
+        let samples = rootPIDs.isEmpty ? [] : processSamples(rootPIDs)
         let byPID = Dictionary(uniqueKeysWithValues: samples.map { ($0.pid, $0) })
         let childrenByParent = Dictionary(grouping: samples, by: \.parentPID)
 
@@ -174,10 +199,47 @@ struct AgentResourceMonitor {
         }
     }
 
-    static func currentProcessSamples() -> [AgentResourceProcessSample] {
-        let output = runProcess(
-            executable: "/bin/ps",
-            arguments: ["-axo", "pid=,ppid=,%cpu=,rss=,comm="]
+    /// Alle Nachfahren der Wurzel-PIDs (inkl. Wurzeln) über libproc — ohne Fork.
+    static func descendantPIDs(of rootPIDs: [Int32]) -> [Int32] {
+        var result: [Int32] = []
+        var seen = Set<Int32>()
+        var queue = rootPIDs
+        while !queue.isEmpty {
+            let pid = queue.removeFirst()
+            guard pid > 0, seen.insert(pid).inserted else { continue }
+            result.append(pid)
+            queue.append(contentsOf: childPIDs(of: pid))
+        }
+        return result
+    }
+
+    private static func childPIDs(of pid: Int32) -> [Int32] {
+        var capacity = 64
+        while true {
+            var buffer = [Int32](repeating: 0, count: capacity)
+            let bytes = buffer.withUnsafeMutableBytes {
+                proc_listchildpids(pid, $0.baseAddress, Int32($0.count))
+            }
+            guard bytes > 0 else { return [] }
+            // libproc liefert je nach Version Anzahl oder Bytes — beides abfangen.
+            let count = bytes > Int32(capacity) ? Int(bytes) / MemoryLayout<Int32>.stride : Int(bytes)
+            if count >= capacity { capacity *= 4; continue }
+            return buffer.prefix(count).filter { $0 > 0 }
+        }
+    }
+
+    /// `ps` nur für die Chat-PIDs samt Kindern (`-p`), nicht für alle Prozesse.
+    /// `descendants` und `run` sind injizierbar (Process-Runner-Spy im Test).
+    static func currentProcessSamples(
+        rootPIDs: [Int32],
+        descendants: ([Int32]) -> [Int32] = { descendantPIDs(of: $0) },
+        run: (String, [String]) -> String = { runProcess(executable: $0, arguments: $1) }
+    ) -> [AgentResourceProcessSample] {
+        let pids = descendants(rootPIDs)
+        guard !pids.isEmpty else { return [] }
+        let output = run(
+            "/bin/ps",
+            ["-p", pids.map(String.init).joined(separator: ","), "-o", "pid=,ppid=,%cpu=,rss=,comm="]
         )
         return parseProcessSamples(output)
     }

@@ -7,6 +7,7 @@ struct AgentResourceSummaryButton: View {
     @State private var isPopoverPresented = false
     @State private var isHovered = false
     @State private var refreshTask: Task<Void, Never>?
+    @State private var debounceTask: Task<Void, Never>?
     /// P2 S5: Bei inaktivem Fenster pausiert das Badge-Polling komplett —
     /// die .task-Loop terminiert, statt im Hintergrund zu schlafen-und-forken.
     @Environment(\.controlActiveState) private var controlActiveState
@@ -17,9 +18,7 @@ struct AgentResourceSummaryButton: View {
     }
 
     private var pollingKey: String {
-        let processKey = descriptors
-            .map { "\($0.id.uuidString):\($0.rootProcessID ?? 0)" }
-            .joined(separator: ",")
+        let processKey = AgentResourceRefreshPolicy.processKey(descriptors)
         return "\(shouldPoll)-\(processKey)-\(controlActiveState != .inactive)"
     }
 
@@ -53,8 +52,11 @@ struct AgentResourceSummaryButton: View {
                 .frame(width: 420)
         }
         .onAppear(perform: refresh)
-        .onChange(of: descriptors) { _, _ in
-            refresh()
+        // Nur eine Änderung der Chat-Prozesse (ID/PID) zählt, und auch die
+        // entprellt: Status-/Titelwechsel feuern `descriptors` laufend, jeder
+        // Refresh war ein Fork (LR-AU-003).
+        .onChange(of: AgentResourceRefreshPolicy.processKey(descriptors)) { _, _ in
+            debouncedRefresh()
         }
         .task(id: pollingKey) {
             guard shouldPoll else {
@@ -63,14 +65,14 @@ struct AgentResourceSummaryButton: View {
             }
 
             // Schnelles Refresh nur wenn der Popover offen ist — der User
-            // schaut aktiv hin. Badge-Betrieb: 10 s reichen für Counter +
-            // Total. Mit der Inaktiv-Pause oben: ≤6 /bin/ps-Forks pro Minute
-            // im Badge-Betrieb, 0 bei inaktivem Fenster (vorher 12-30/min).
+            // schaut aktiv hin. Badge-Betrieb: 30 s reichen für Counter +
+            // Total. Mit der Inaktiv-Pause oben: ≤2 /bin/ps-Forks pro Minute
+            // im Badge-Betrieb, 0 bei inaktivem Fenster.
             while !Task.isCancelled {
                 refresh()
                 let interval: Duration = isPopoverPresented
-                    ? .seconds(2)
-                    : .seconds(10)
+                    ? AgentResourceRefreshPolicy.popoverInterval
+                    : AgentResourceRefreshPolicy.badgeInterval
                 try? await Task.sleep(for: interval)
             }
         }
@@ -87,6 +89,15 @@ struct AgentResourceSummaryButton: View {
     private var summaryText: String {
         guard snapshot.runningSessionCount > 0 else { return "0" }
         return "\(snapshot.runningSessionCount) · \(AgentResourceFormat.cpu(snapshot.totalCPUPercent)) · \(AgentResourceFormat.memory(snapshot.totalMemoryBytes))"
+    }
+
+    private func debouncedRefresh() {
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(for: AgentResourceRefreshPolicy.changeDebounce)
+            guard !Task.isCancelled else { return }
+            refresh()
+        }
     }
 
     private func refresh() {
