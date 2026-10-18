@@ -125,13 +125,35 @@ struct OutputModeStore {
 
         do {
             let data = try loader(fileURL)
-            let modes = try JSONDecoder().decode([OutputMode].self, from: data)
+            let decoded = try JSONDecoder().decode([OutputMode].self, from: data)
+            let modes = Self.deduplicatedByID(decoded)
+            if modes.count != decoded.count {
+                backUpFileWithDuplicateIDs(data: data, removed: decoded.count - modes.count)
+            }
             OutputModeDiskCache.shared.store(modes, forPath: fileURL.path, mtime: stat.mtime, size: stat.size)
             return modes
         } catch {
             Logger.debug("Failed to load output modes: \(error.localizedDescription)")
             return []
         }
+    }
+
+    /// Doppelte IDs deterministisch auflösen: das erste Vorkommen gewinnt, die
+    /// Reihenfolge bleibt. `Dictionary(uniqueKeysWithValues:)` würde sonst per
+    /// Precondition den ganzen Prozess beenden (handbearbeitete/zusammengeführte Datei).
+    static func deduplicatedByID(_ modes: [OutputMode]) -> [OutputMode] {
+        var seen = Set<String>()
+        return modes.filter { seen.insert($0.id).inserted }
+    }
+
+    /// Sichert die Originaldatei vor dem Neuschreiben (nur wenn noch keine
+    /// Sicherung existiert) und warnt im Log.
+    private func backUpFileWithDuplicateIDs(data: Data, removed: Int) {
+        let backupURL = fileURL.appendingPathExtension("duplicate-ids.bak")
+        if !FileManager.default.fileExists(atPath: backupURL.path) {
+            try? data.write(to: backupURL, options: .atomic)
+        }
+        Logger.info("output_modes_duplicate_ids removed=\(removed) backup=\(backupURL.lastPathComponent)")
     }
 
     private static func stat(atPath path: String) -> (mtime: Date, size: Int)? {
@@ -159,7 +181,7 @@ struct OutputModeStore {
                 return updatedMode
             }
 
-        var byID = Dictionary(uniqueKeysWithValues: migratedModes.map { ($0.id, $0) })
+        var byID = Dictionary(uniqueKeysWithValues: Self.deduplicatedByID(migratedModes).map { ($0.id, $0) })
 
         for builtInMode in OutputMode.builtInModes where byID[builtInMode.id] == nil {
             byID[builtInMode.id] = builtInMode

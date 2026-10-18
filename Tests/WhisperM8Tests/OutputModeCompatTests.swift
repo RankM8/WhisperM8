@@ -32,6 +32,38 @@ final class OutputModeCompatTests: XCTestCase {
         }
     }
 
+    /// LR-DIK-020: doppelte IDs in OutputModes.json trappten in `Dictionary(uniqueKeysWithValues:)`.
+    func testDuplicateModeIDsInFileAreDeduplicatedWithoutTrapAndBackedUp() throws {
+        try withIsolatedOutputModePreferences { _ in
+            let fileURL = temporaryJSONURL(prefix: "WhisperM8OutputModesDup")
+            let backupURL = fileURL.appendingPathExtension("duplicate-ids.bak")
+            defer {
+                try? FileManager.default.removeItem(at: fileURL)
+                try? FileManager.default.removeItem(at: backupURL)
+            }
+            let store = OutputModeStore(fileURL: fileURL)
+
+            var first = store.createCustomMode()
+            first.name = "Erster"
+            var second = first
+            second.name = "Zweiter"
+            var builtInCopy = try XCTUnwrap(OutputMode.builtInModes.first { $0.id == OutputMode.emailID })
+            builtInCopy.shortLabel = "Dup"
+            let original = try XCTUnwrap(OutputMode.builtInModes.first { $0.id == OutputMode.emailID })
+
+            let data = try JSONEncoder().encode([original, first, second, builtInCopy])
+            try data.write(to: fileURL)
+
+            let modes = store.modes
+            XCTAssertEqual(Set(modes.map(\.id)).count, modes.count, "IDs müssen eindeutig sein")
+            XCTAssertEqual(modes.first { $0.id == first.id }?.name, "Erster", "erstes Vorkommen gewinnt")
+            XCTAssertEqual(modes.first { $0.id == OutputMode.emailID }?.shortLabel, original.shortLabel)
+            XCTAssertEqual(modes.prefix(OutputMode.builtInModes.count).map(\.id), OutputMode.builtInModes.map(\.id),
+                           "Built-in-Reihenfolge bleibt erhalten")
+            XCTAssertEqual(try Data(contentsOf: backupURL), data, "Originaldatei gesichert")
+        }
+    }
+
     func testLegacyOutputModesJSONDecodesMissingContextVisualAndCodexFields() throws {
         let json = """
         [
