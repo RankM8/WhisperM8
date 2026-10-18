@@ -204,6 +204,9 @@ extension ClaudeGPTMixRouter {
             backslash + "u005C",
             backslash + "u0070{",
             backslash + "u0050{",
+            // `{` selbst kann maskiert sein: `\\p\u007bCc}` dekodiert zu `\p{Cc}`.
+            backslash + "u007b",
+            backslash + "u007B",
         ].map { Array($0.utf8) }
         return body.withUnsafeBytes { raw -> Bool in
             guard let base = raw.baseAddress, raw.count > 0 else { return false }

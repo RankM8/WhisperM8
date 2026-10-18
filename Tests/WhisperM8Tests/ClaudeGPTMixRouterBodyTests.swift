@@ -95,4 +95,25 @@ final class ClaudeGPTMixRouterBodyTests: XCTestCase {
         XCTAssertNotNil(try? JSONSerialization.jsonObject(with: masked), "Fixture muss gueltiges JSON sein")
         XCTAssertEqual(ClaudeGPTMixRouter.sanitizingToolSchemas(in: masked).removedPatterns, 1)
     }
+
+    /// Vertrag des Vorfilters: Wo der Sanitizer etwas entfernen würde, darf
+    /// `mayContainUnsupportedPattern` nie `false` liefern — auch nicht, wenn
+    /// Backslash, `p` oder `{` per Unicode-Escape maskiert sind.
+    func testPrefilterIsTrueWheneverSanitizerWouldRemoveSomething() {
+        let u = backslash + "u"
+        let patterns = [
+            #"\\p{Cc}"#,                       // roh: \p{Cc}
+            #"\\P{L}"#,
+            u + "005cp{Cc}",                      // Backslash maskiert
+            #"\\"# + u + "0070{Cc}",            // p maskiert
+            #"\\p"# + u + "007bCc}",            // { maskiert
+            #"\\p"# + u + "007BCc}",
+        ]
+        for pattern in patterns {
+            let body = Data((#"{"model":"gpt-6-astra","tools":[{"name":"M","input_schema":{"pattern":"^["# + pattern + #"]$"}}]}"#).utf8)
+            XCTAssertNotNil(try? JSONSerialization.jsonObject(with: body), "Fixture muss gueltiges JSON sein: \(pattern)")
+            XCTAssertEqual(ClaudeGPTMixRouter.sanitizingToolSchemas(in: body).removedPatterns, 1, "Sanitizer greift nicht: \(pattern)")
+            XCTAssertTrue(ClaudeGPTMixRouter.mayContainUnsupportedPattern(body), "Vorfilter verfehlt: \(pattern)")
+        }
+    }
 }
