@@ -236,6 +236,25 @@ final class AgentTranscriptReaderTests: XCTestCase {
         } else { XCTFail("Finale Antwort erwartet") }
     }
 
+    /// LR-AK-007: Endet die Datei mit einer Zeile > Tail-Fenster, bleibt der Tail leer
+    /// (hasTruncatedHead) — der Container muss dann den Nachlade-Button anbieten.
+    func testHugeLastLineLeavesEmptyTruncatedTailAndContainerOffersHistory() throws {
+        let small = (0..<5).map { #"{"type":"user","message":{"content":"frage \#($0)"}}"# }
+        let huge = #"{"type":"user","message":{"content":""# + String(repeating: "x", count: 4_000) + #""}}"#
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8HugeLast-\(UUID().uuidString).jsonl")
+        try (small + [huge]).joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let transcript = ClaudeTranscriptReader.readTail(fileURL: url, tailBytes: 1_000)
+
+        XCTAssertTrue(transcript.messages.isEmpty)
+        XCTAssertTrue(transcript.hasTruncatedHead)
+        XCTAssertTrue(AgentTranscriptContainerView.offersEarlierHistoryWhenEmpty(transcript: transcript, canLoad: true))
+        XCTAssertFalse(AgentTranscriptContainerView.offersEarlierHistoryWhenEmpty(transcript: transcript, canLoad: false))
+        XCTAssertFalse(AgentTranscriptContainerView.offersEarlierHistoryWhenEmpty(transcript: .empty, canLoad: true))
+    }
+
     func testCodexReaderMarksNonZeroExitAsError() throws {
         let tempURL = try writeCodexFixture([CodexRolloutFixtures.functionCallOutputFailed])
         defer { try? FileManager.default.removeItem(at: tempURL) }

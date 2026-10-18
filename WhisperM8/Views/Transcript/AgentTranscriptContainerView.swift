@@ -45,10 +45,23 @@ struct AgentTranscriptContainerView: View {
         transcript?.messages.isEmpty ?? true
     }
 
+    /// Leeres, aber kopfgekürztes Transcript (die letzte JSONL-Zeile war größer
+    /// als das Tail-Fenster): davor liegt lesbarer Verlauf, also statt des
+    /// reinen Empty-States den Nachlade-Button zeigen (LR-AK-007).
+    static func offersEarlierHistoryWhenEmpty(transcript: AgentChatTranscript?, canLoad: Bool) -> Bool {
+        guard let transcript else { return false }
+        return transcript.messages.isEmpty && transcript.hasTruncatedHead && canLoad
+    }
+
     var body: some View {
         Group {
             if isEmpty {
-                TranscriptEmptyStateView(transcript: transcript, session: session)
+                VStack(spacing: 0) {
+                    if Self.offersEarlierHistoryWhenEmpty(transcript: transcript, canLoad: onLoadEarlierHistory != nil) {
+                        historyStrip
+                    }
+                    TranscriptEmptyStateView(transcript: transcript, session: session)
+                }
             } else {
                 VStack(spacing: 0) {
                     metaStrip
