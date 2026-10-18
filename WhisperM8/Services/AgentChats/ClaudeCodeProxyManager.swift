@@ -322,6 +322,9 @@ final class ClaudeCodeProxyManager {
 
     /// Abstand zum main-Port, ab dem Profil-Instanzen Ports bekommen — genug
     /// Luft fuer den Router (main + 1) und manuelle Zweitinstanzen.
+    /// Zulässiger Portbereich für Backend-/Router-/Profilports.
+    static let minPort = 1_024
+    static let maxPort = 65_535
     static let profilePortOffset = 10
     static let profilePortSearchWidth = 40
 
@@ -728,8 +731,12 @@ final class ClaudeCodeProxyManager {
         processLock.lock()
         let taken = Set(profileInstances.values.map(\.port))
         processLock.unlock()
+        // Bereich vor der Addition begrenzen: ein Main-Port nahe 65535 darf
+        // weder überlaufen noch einen Trap in `isPortFree` auslösen.
         let start = mainPortResolver() + Self.profilePortOffset
-        for port in start..<(start + Self.profilePortSearchWidth)
+        let end = min(start + Self.profilePortSearchWidth, Self.maxPort + 1)
+        guard start >= Self.minPort, start < end else { return nil }
+        for port in start..<end
         where !taken.contains(port) && port != routerPortResolver() && port != mainPortResolver() {
             if portAvailabilityResolver(port) {
                 return port
@@ -740,6 +747,7 @@ final class ClaudeCodeProxyManager {
 
     /// Bind-Probe: gelingt ein Bind auf 127.0.0.1:<port>, ist er frei.
     static func isPortFree(_ port: Int) -> Bool {
+        guard let port16 = UInt16(exactly: port) else { return false }
         let socketFD = socket(AF_INET, SOCK_STREAM, 0)
         guard socketFD >= 0 else { return false }
         defer { close(socketFD) }
@@ -748,7 +756,7 @@ final class ClaudeCodeProxyManager {
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = in_port_t(UInt16(port).bigEndian)
+        address.sin_port = in_port_t(port16.bigEndian)
         address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
         let result = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in

@@ -273,7 +273,8 @@ struct AppPreferences {
     var claudeGPTBackendPort: Int {
         get {
             let value = defaults.integer(forKey: Keys.claudeGPTBackendPort)
-            return value > 0 ? value : 18_765
+            // Ungültige Werte (Trap-Gefahr bei Port + Offset) fallen auf den Standard zurück.
+            return (1_024...65_535).contains(value) ? value : 18_765
         }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTBackendPort) }
     }
@@ -281,7 +282,8 @@ struct AppPreferences {
     var claudeGPTRouterPort: Int {
         get {
             let value = defaults.integer(forKey: Keys.claudeGPTRouterPort)
-            return value > 0 ? value : 18_766
+            // Ungültige Werte (Trap-Gefahr bei Port + Offset) fallen auf den Standard zurück.
+            return (1_024...65_535).contains(value) ? value : 18_766
         }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeGPTRouterPort) }
     }

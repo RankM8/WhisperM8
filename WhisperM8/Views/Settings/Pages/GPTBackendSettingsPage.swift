@@ -267,12 +267,17 @@ struct GPTBackendSettingsPage: View {
 
     private var configurationSection: some View {
         SettingsSection("Konfiguration") {
-            SettingsRow(title: "Port", subtitle: "Lokaler Port des claude-code-proxy (Standard: 18765).") {
+            SettingsRow(title: "Port", subtitle: "Lokaler Port des claude-code-proxy (Standard: 18765, zulässig 1024–65535).") {
                 TextField("18765", value: $port, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .multilineTextAlignment(.trailing)
                     .frame(width: 100)
+                    .onChange(of: port) { _, newValue in
+                        // Zulässig 1024…65535 — Profilports liegen oberhalb (LR-GPT-003).
+                        let clamped = min(max(newValue, ClaudeCodeProxyManager.minPort), ClaudeCodeProxyManager.maxPort)
+                        if clamped != newValue { port = clamped }
+                    }
             }
 
             SettingsToggleRow(

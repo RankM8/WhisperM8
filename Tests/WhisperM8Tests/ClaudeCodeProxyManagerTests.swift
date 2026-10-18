@@ -436,6 +436,33 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertTrue(manager.runningProfileInstances().isEmpty)
     }
 
+    /// LR-GPT-003: Port nahe 65535 + Profil-Offset ließ `UInt16(port)` in `isPortFree` trappen.
+    func testEnsureRunningProfileWithHighMainPortFailsInsteadOfTrapping() {
+        let manager = makeManager(
+            reachability: { _ in false },
+            launcher: { _, _, _ in
+                XCTFail("kein Start ohne gültigen Port")
+                return ClaudeCodeProxyProcessHandle(isRunning: { false }, terminate: {})
+            },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 65_530 }
+        // portAvailabilityResolver bewusst NICHT überschrieben: echter Bind-Probe.
+        manager.profileEnvironmentResolver = { _ in ["CCP_CONFIG_DIR": "/p"] }
+        manager.storedAccountIDResolver = { _ in "acct" }
+
+        let result = manager.ensureRunning(profile: "zweit")
+        guard case .failure(let error) = result, case .noFreePort = error else {
+            return XCTFail("erwartet noFreePort, bekam \(result)")
+        }
+    }
+
+    func testIsPortFreeRejectsOutOfRangePortsWithoutTrapping() {
+        XCTAssertFalse(ClaudeCodeProxyManager.isPortFree(65_536))
+        XCTAssertFalse(ClaudeCodeProxyManager.isPortFree(Int.max))
+        XCTAssertFalse(ClaudeCodeProxyManager.isPortFree(-1))
+    }
+
     func testEnsureRunningProfileRelaunchesDeadInstance() throws {
         var firstDied = false
         var launches = 0
