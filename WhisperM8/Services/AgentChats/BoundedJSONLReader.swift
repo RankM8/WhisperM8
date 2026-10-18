@@ -17,15 +17,24 @@ struct BoundedJSONLReader {
     }
 
     static func lines(from fileURL: URL, maxLines: Int, maxBytes: Int) -> (lines: [String], bytesRead: Int)? {
-        guard let data = readPrefix(from: fileURL, maxBytes: maxBytes),
-              let text = String(data: data, encoding: .utf8) else {
-            return nil
+        guard var data = readPrefix(from: fileURL, maxBytes: maxBytes) else { return nil }
+        let bytesRead = data.count
+        // Das Leselimit kann mitten in einer Zeile (und in einem Mehrbyte-Zeichen)
+        // enden: die angeschnittene Schlusszeile verwerfen, statt den ganzen
+        // Prefix an der UTF-8-Dekodierung scheitern zu lassen (LR-AK-008).
+        if bytesRead >= maxBytes, data.last != 10 {
+            if let lastNewline = data.lastIndex(of: 10) {
+                data = data[..<lastNewline]
+            } else {
+                data = Data()
+            }
         }
+        let text = String(decoding: data, as: UTF8.self)
         let lines = text
             .split(separator: "\n", omittingEmptySubsequences: true)
             .prefix(maxLines)
             .map(String.init)
-        return (lines, data.count)
+        return (lines, bytesRead)
     }
 
     private static func readPrefix(from fileURL: URL, maxBytes: Int) -> Data? {
