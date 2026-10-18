@@ -65,6 +65,51 @@ final class AgentIndexGrowthTests: XCTestCase {
         XCTAssertEqual(third.stats.cacheHits, 1)
     }
 
+    /// Review W0: Worktree-Sessions verwirft der Indexer — das erste cwd steht
+    /// im Kopf und ändert sich durch Anhängen nie. Wachstum darf sie deshalb
+    /// nicht bei jedem Scan neu parsen (Worktree-Chats sind der Normalfall).
+    func testGrowingWorktreeSessionIsNotReparsed() throws {
+        let (root, project) = try makeRoot("WhisperM8GrowthWorktree")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = project.appendingPathComponent("22222222-2222-4222-8222-222222222222.jsonl")
+        try (#"{"type":"user","timestamp":"2026-05-09T12:00:00.000Z","sessionId":"22222222-2222-4222-8222-222222222222","cwd":"/Users/test/repo/.claude/worktrees/w0","message":{"role":"user","content":"Arbeite"}}"# + "\n")
+            .write(to: file, atomically: true, encoding: .utf8)
+
+        var cache = AgentSessionIndexCache()
+        let indexer = ClaudeSessionIndexer(projectsDirectory: root)
+        let first = indexer.indexedSessionResult(cache: &cache)
+        XCTAssertEqual(first.stats.skippedFiles, 1)
+        XCTAssertTrue(first.sessions.isEmpty)
+
+        try append(#"{"type":"assistant","timestamp":"2026-05-09T12:05:00.000Z","message":{"content":"mehr"}}"# + "\n", to: file)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(120)], ofItemAtPath: file.path)
+
+        let second = indexer.indexedSessionResult(cache: &cache)
+        XCTAssertEqual(second.stats.bytesRead, 0, "verworfener Worktree-Kopf darf nicht neu gelesen werden")
+        XCTAssertEqual(second.stats.parsedFiles, 0)
+        XCTAssertTrue(second.sessions.isEmpty)
+    }
+
+    /// Gegenprobe: Fehlt das cwd in einem noch nicht gesättigten Kopf, kann es
+    /// mit der nächsten Zeile kommen — dann muss neu geparst werden.
+    func testGrowingFileWithoutCwdIsReparsedUntilCwdArrives() throws {
+        let (root, project) = try makeRoot("WhisperM8GrowthNoCwd")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = project.appendingPathComponent("33333333-3333-4333-8333-333333333333.jsonl")
+        try (#"{"type":"summary","summary":"leer"}"# + "\n").write(to: file, atomically: true, encoding: .utf8)
+
+        var cache = AgentSessionIndexCache()
+        let indexer = ClaudeSessionIndexer(projectsDirectory: root)
+        XCTAssertTrue(indexer.indexedSessionResult(cache: &cache).sessions.isEmpty)
+
+        try append(#"{"type":"user","timestamp":"2026-05-09T12:00:00.000Z","sessionId":"33333333-3333-4333-8333-333333333333","cwd":"/Users/test/repo","message":{"role":"user","content":"Jetzt"}}"# + "\n", to: file)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(120)], ofItemAtPath: file.path)
+
+        let second = indexer.indexedSessionResult(cache: &cache)
+        XCTAssertEqual(second.stats.parsedFiles, 1)
+        XCTAssertEqual(second.sessions.first?.cwd, "/Users/test/repo")
+    }
+
     func testGrowingFileWithoutSaturatedHeadIsStillReparsed() throws {
         let (root, project) = try makeRoot("WhisperM8GrowthSmall")
         defer { try? FileManager.default.removeItem(at: root) }

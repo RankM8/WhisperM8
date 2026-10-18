@@ -103,6 +103,23 @@ struct AgentSessionIndexCache {
         return session
     }
 
+    /// Gegenstück zu `growthRefresh` für verworfene Dateien: Der Kopf führte
+    /// nachweislich zu keiner Session (z. B. Worktree-cwd) und ändert sich durch
+    /// Anhängen nicht mehr. Dann bleibt die Datei bei reinem Wachstum verworfen,
+    /// ohne erneut gelesen zu werden (Review W0 zu LR-AK-033).
+    func isSaturatedRejectionGrowth(provider: AgentProvider, fileURL: URL, metadata: FileMetadata) -> Bool {
+        let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
+        guard let entry = entries[cacheKey],
+              entry.headSaturated == true,
+              entry.session == nil,
+              metadata.fileSize > entry.fileSize,
+              let oldStamp = entry.modifiedAtStamp,
+              let newStamp = Self.stamp(metadata.modifiedAt) else {
+            return false
+        }
+        return newStamp >= oldStamp
+    }
+
     func lookup(provider: AgentProvider, fileURL: URL, metadata: FileMetadata) -> Lookup {
         let cacheKey = Self.cacheKey(provider: provider, fileURL: fileURL)
         guard let entry = entries[cacheKey],

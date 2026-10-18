@@ -130,11 +130,21 @@ struct ClaudeSessionIndexer {
                 sessions.append(grown)
                 continue
             }
-            if let parsed = parseSessionFile(fileURL, metadata: metadata, stats: &stats) {
+            if cache.isSaturatedRejectionGrowth(provider: .claude, fileURL: fileURL, metadata: metadata) {
+                stats.growthRefreshes += 1
+                stats.skippedFiles += 1
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: nil, headSaturated: true)
+                continue
+            }
+            switch parseSessionFile(fileURL, metadata: metadata, stats: &stats) {
+            case let .session(session, saturated):
                 stats.parsedFiles += 1
-                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: parsed.session, headSaturated: parsed.saturated)
-                sessions.append(parsed.session)
-            } else {
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: session, headSaturated: saturated)
+                sessions.append(session)
+            case let .rejected(saturated):
+                stats.skippedFiles += 1
+                cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: nil, headSaturated: saturated)
+            case .unreadable:
                 stats.skippedFiles += 1
                 cache.store(provider: .claude, fileURL: fileURL, metadata: metadata, session: nil, headSaturated: false)
             }
@@ -149,13 +159,22 @@ struct ClaudeSessionIndexer {
         }
     }
 
+    /// `rejected(saturated: true)`: Der Kopf ergibt sicher nie eine Session,
+    /// auch nicht nach weiterem Anhängen — der Cache darf sie bei Wachstum
+    /// überspringen. `unreadable` wird beim nächsten Scan erneut versucht.
+    enum ParseOutcome {
+        case session(IndexedAgentSession, saturated: Bool)
+        case rejected(saturated: Bool)
+        case unreadable
+    }
+
     private func parseSessionFile(
         _ fileURL: URL,
         metadata: AgentSessionIndexCache.FileMetadata,
         stats: inout AgentSessionIndexStats
-    ) -> (session: IndexedAgentSession, saturated: Bool)? {
+    ) -> ParseOutcome {
         guard let read = BoundedJSONLReader.linesWithSaturation(from: fileURL, maxLines: 200, maxBytes: 1 * 1024 * 1024) else {
-            return nil
+            return .unreadable
         }
         stats.bytesRead += Int64(read.bytesRead)
 
@@ -196,10 +215,11 @@ struct ClaudeSessionIndexer {
         title = NativeSessionTitle.claudeTitle(fromJSONL: read.lines.joined(separator: "\n"))
 
         guard let cwd else {
-            return nil
+            return .rejected(saturated: read.saturated)
         }
+        // Das erste cwd gewinnt und steht im Kopf — Anhängen ändert es nie.
         guard !AgentSessionStore.isClaudeWorktreePath(cwd) else {
-            return nil
+            return .rejected(saturated: true)
         }
 
         let fallbackDate = metadata.createdAt ?? metadata.modifiedAt ?? Date()
@@ -219,7 +239,7 @@ struct ClaudeSessionIndexer {
             // Profil-Root muessen spaeter unter demselben Config-Dir resumen.
             claudeProfileName: ClaudeAccountProfiles.profileName(forTranscriptPath: fileURL.path)
         )
-        return (session, read.saturated)
+        return .session(session, saturated: read.saturated)
     }
 
     private static func metadata(for fileURL: URL) -> AgentSessionIndexCache.FileMetadata? {

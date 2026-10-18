@@ -13,12 +13,15 @@ final class AgentDirectoryEventMonitor {
 
     private var stream: FSEventStreamRef?
     private var debounceTask: Task<Void, Never>?
+    private var settleTask: Task<Void, Never>?
     private let debounceInterval: TimeInterval
+    private let settleInterval: TimeInterval
     private let rootURLs: [URL]
 
     init(
         rootURLs: [URL]? = nil,
-        debounceInterval: TimeInterval = 5.0
+        debounceInterval: TimeInterval = 5.0,
+        settleInterval: TimeInterval = 30.0
     ) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         // `.claude-profiles` statt der einzelnen Profil-projects-Dirs: so
@@ -30,6 +33,7 @@ final class AgentDirectoryEventMonitor {
             home.appendingPathComponent(".codex/sessions", isDirectory: true),
         ]
         self.debounceInterval = debounceInterval
+        self.settleInterval = settleInterval
     }
 
     /// Pure, testbarer Filter: nur .jsonl-Transcript-Pfade sind relevant, und
@@ -131,6 +135,8 @@ final class AgentDirectoryEventMonitor {
         self.stream = nil
         debounceTask?.cancel()
         debounceTask = nil
+        settleTask?.cancel()
+        settleTask = nil
     }
 
     private func handleEvents(paths: [String]) {
@@ -146,6 +152,19 @@ final class AgentDirectoryEventMonitor {
         debounceTask?.cancel()
         debounceTask = Task { @MainActor [debounceInterval] in
             try? await Task.sleep(for: .seconds(debounceInterval))
+            guard !Task.isCancelled else { return }
+            AgentScanCoordinator.shared.requestScan(reason: .fsEvent)
+        }
+
+        // Nachzügler-Scan: Eine frisch angelegte Datei kann beim ersten Scan
+        // noch ohne cwd sein und wird dann als „skipped“ gecacht. Ihr weiteres
+        // Wachstum ist nur Modify und löst seit LR-AK-033 keinen Scan mehr aus —
+        // ohne diesen zweiten Durchlauf bliebe sie bis zum nächsten
+        // Foreground-Scan unsichtbar. Ein Folge-Event ersetzt den Task; der
+        // Coordinator-Cooldown verschiebt ihn höchstens, er verfällt nicht.
+        settleTask?.cancel()
+        settleTask = Task { @MainActor [settleInterval] in
+            try? await Task.sleep(for: .seconds(settleInterval))
             guard !Task.isCancelled else { return }
             AgentScanCoordinator.shared.requestScan(reason: .fsEvent)
         }
