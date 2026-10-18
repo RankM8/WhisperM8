@@ -66,7 +66,12 @@ Audiospur, zerlegt lange Dateien bei Bedarf in Chunks, transkribiert diese mit
 bounded concurrency und fügt Text sowie Segment-Timestamps wieder zusammen.
 Audio und Video laufen durch denselben Pfad; Videos liefern ihre Audiospur.
 Bei mehreren Eingaben ist `-o` verboten, und jedes Ergebnis wird neben die
-jeweilige Quelldatei mit der gewählten Format-Endung geschrieben.
+jeweilige Quelldatei mit der gewählten Format-Endung geschrieben. Vor dem
+ersten Schreiben werden alle Zielpfade geprüft: existiert eine Ausgabedatei
+bereits oder würden zwei Eingaben (z. B. `meeting.mp3` und `meeting.wav`) in
+dieselbe Datei schreiben, bricht der Lauf mit Exit `65` ab und schreibt nichts.
+`--force` erlaubt das Überschreiben vorhandener Dateien; Kollisionen innerhalb
+des Batches bleiben ein Fehler.
 
 Die CLI ist hier Adapter und Batch-Hülle. Die fachlichen STT- und
 Nachbearbeitungs-Schichten sind unter
@@ -85,6 +90,7 @@ Wichtige Optionen:
 | `--api-key` | Hat Vorrang vor Umgebungsvariable und Keychain. |
 | `--chunk-seconds` | Überschreibt die Ziel-Chunk-Länge. |
 | `--dry-run` | Prüft Datei, Dauer, Chunk-Schätzung und Kosten ohne API-Calls. |
+| `--force` | Batch (mehrere Eingaben): vorhandene Ausgabedateien neben den Quellen überschreiben. |
 
 Der API-Key wird in dieser Reihenfolge gesucht: explizites `--api-key`,
 Provider-Umgebungsvariable (`GROQ_API_KEY` oder `OPENAI_API_KEY`) und danach

@@ -34,6 +34,8 @@ struct TranscribeOptions {
     var apiKey: String?
     var chunkSeconds: Double?
     var dryRun = false
+    /// Erlaubt im Batch-Modus das Überschreiben vorhandener Ausgabedateien.
+    var force = false
 
     var resolvedModel: TranscriptionModel {
         if let model { return model }
@@ -127,6 +129,8 @@ enum CLIArgumentParser {
                 options.chunkSeconds = value
             case "--dry-run":
                 options.dryRun = true
+            case "--force":
+                options.force = true
             default:
                 if arg.hasPrefix("-") && arg != "-" {
                     throw ParseError.unknownFlag(arg)

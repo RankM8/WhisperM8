@@ -208,6 +208,9 @@ enum CLIHelp {
           --api-key <key>       API-Key explizit (sonst env bzw. Keychain).
           --chunk-seconds <n>   Ziel-Chunk-Länge erzwingen (v. a. für Tests).
           --dry-run             Nur Datei-Infos + Schätzung, keine API-Calls.
+          --force               Bei mehreren Eingaben vorhandene Ausgabedateien
+                                (neben den Quelldateien) überschreiben. Ohne
+                                --force bricht der Lauf vor dem ersten Schreiben ab.
 
     BEISPIELE
       whisperm8 transcribe vortrag.mp4

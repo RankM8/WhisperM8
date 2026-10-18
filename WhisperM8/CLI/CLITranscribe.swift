@@ -43,6 +43,18 @@ enum CLITranscribeCommand {
             return 64
         }
 
+        // Batch: alle Zielpfade VOR dem ersten Schreiben prüfen — sonst ersetzt ein
+        // Lauf still eine handbearbeitete `meeting.txt` bzw. lässt `meeting.mp3`
+        // und `meeting.wav` sich gegenseitig überschreiben (LR-DIK-003).
+        if !options.dryRun {
+            let conflicts = batchOutputConflicts(options: options)
+            if !conflicts.isEmpty {
+                for conflict in conflicts { CLIIO.err("Fehler: \(conflict)") }
+                CLIIO.err("Nichts wurde geschrieben. Mit --force vorhandene Dateien überschreiben (Kollisionen im Batch bleiben ein Fehler).")
+                return 65
+            }
+        }
+
         var apiKey = ""
         if !options.dryRun {
             guard let key = CLIKeyResolver.resolve(provider: options.provider, explicit: options.apiKey) else {
@@ -250,6 +262,38 @@ enum CLITranscribeCommand {
     }
 
     // MARK: Ausgabe
+
+    /// Zielpfad einer Batch-Eingabe: neben der Quelldatei, mit Format-Endung.
+    static func batchDestination(for input: String, options: TranscribeOptions) -> URL {
+        URL(fileURLWithPath: (input as NSString).expandingTildeInPath)
+            .deletingPathExtension()
+            .appendingPathExtension(options.format.rawValue)
+    }
+
+    /// Konflikte der Batch-Ausgabe (nur bei mehreren Eingaben): Kollisionen
+    /// zwischen Eingaben desselben Aufrufs (immer ein Fehler) und vorhandene
+    /// Dateien (nur ohne `--force`). Leer = unbedenklich.
+    static func batchOutputConflicts(
+        options: TranscribeOptions,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
+    ) -> [String] {
+        guard options.inputs.count > 1 else { return [] }
+        var conflicts: [String] = []
+        var seen: [String: String] = [:]
+        for input in options.inputs {
+            let dest = batchDestination(for: input, options: options)
+            let key = dest.standardizedFileURL.path
+            if let first = seen[key] {
+                conflicts.append("'\(first)' und '\(input)' würden beide nach \(dest.lastPathComponent) schreiben.")
+            } else {
+                seen[key] = input
+                if !options.force && fileExists(dest.path) {
+                    conflicts.append("\(dest.path) existiert bereits.")
+                }
+            }
+        }
+        return conflicts
+    }
 
     private static func emit(_ rendered: String, for sourceURL: URL, options: TranscribeOptions) throws {
         if options.inputs.count > 1 {

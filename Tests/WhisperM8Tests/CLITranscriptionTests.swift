@@ -73,6 +73,38 @@ final class CLITranscriptionTests: XCTestCase {
         XCTAssertEqual(options.apiKey, "sk-x")
     }
 
+    // LR-DIK-003: Batch-Ausgabe darf nichts still überschreiben.
+    func testBatchOutputConflictsDetectsExistingFileAndForceAllowsIt() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8Batch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let existing = dir.appendingPathComponent("meeting.txt")
+        try "handbearbeitet".write(to: existing, atomically: true, encoding: .utf8)
+
+        var options = try CLIArgumentParser.parse([dir.appendingPathComponent("meeting.mp3").path, dir.appendingPathComponent("other.mp3").path])
+        let conflicts = CLITranscribeCommand.batchOutputConflicts(options: options)
+        XCTAssertEqual(conflicts.count, 1)
+        XCTAssertTrue(conflicts[0].contains("meeting.txt"))
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "handbearbeitet")
+
+        options = try CLIArgumentParser.parse(["--force"] + options.inputs)
+        XCTAssertTrue(options.force)
+        XCTAssertTrue(CLITranscribeCommand.batchOutputConflicts(options: options).isEmpty)
+    }
+
+    func testBatchOutputConflictsDetectsCollisionWithinBatchEvenWithForce() throws {
+        let options = try CLIArgumentParser.parse(["--force", "/tmp/x/meeting.mp3", "/tmp/x/meeting.wav"])
+        let conflicts = CLITranscribeCommand.batchOutputConflicts(options: options, fileExists: { _ in false })
+        XCTAssertEqual(conflicts.count, 1)
+        XCTAssertTrue(conflicts[0].contains("meeting.txt"))
+    }
+
+    func testBatchOutputConflictsIgnoresSingleInput() throws {
+        let options = try CLIArgumentParser.parse(["/tmp/x/meeting.mp3"])
+        XCTAssertTrue(CLITranscribeCommand.batchOutputConflicts(options: options, fileExists: { _ in true }).isEmpty)
+    }
+
     func testParseErrors() {
         XCTAssertThrowsError(try CLIArgumentParser.parse([]))                       // kein Input
         XCTAssertThrowsError(try CLIArgumentParser.parse(["a.mp4", "--bogus"]))     // unbekanntes Flag
