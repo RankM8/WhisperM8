@@ -95,3 +95,9 @@ extension XCTestCase {
 func useFallbackGPTCatalogForTests() {
     ClaudeGPTModelAlias.catalogResolver = { .fallback }
 }
+
+/// Zählt Schlaf-Aufrufe statt zu schlafen (z. B. `AgentTerminalRegistry`).
+final class SleepSpy {
+    private(set) var calls: [useconds_t] = []
+    func callAsFunction(_ microseconds: useconds_t) { calls.append(microseconds) }
+}

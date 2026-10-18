@@ -349,6 +349,14 @@ final class AgentTerminalRegistry: ObservableObject {
 
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
 
+    /// Wartezeit zwischen den Ctrl+C-Wellen (Mikrosekunden). Injizierbar, damit
+    /// Tests die Anzahl der Pausen zählen können, statt sie abzusitzen.
+    private let sleep: (useconds_t) -> Void
+
+    init(sleep: @escaping (useconds_t) -> Void = { usleep($0) }) {
+        self.sleep = sleep
+    }
+
     /// Meldet jede Änderung des Satzes laufender PTYs — Quelle des
     /// Absturz-Markers (`AgentCrashRecoveryMarker`).
     var onRunningSetChanged: ((Set<UUID>) -> Void)?
@@ -410,9 +418,9 @@ final class AgentTerminalRegistry: ObservableObject {
             return
         }
         for (_, controller) in targets { controller.sendInterruptForAppQuit() }
-        usleep(80_000)
+        sleep(80_000)
         for (_, controller) in targets { controller.sendInterruptForAppQuit() }
-        usleep(180_000)
+        sleep(180_000)
         for (id, controller) in targets {
             controller.terminateAfterInterrupt()
             controllers[id] = nil
@@ -431,9 +439,9 @@ final class AgentTerminalRegistry: ObservableObject {
     @discardableResult
     func terminateAll() -> [UUID] {
         let ids = runningControllers.map(\.sessionID)
-        for id in ids {
-            terminate(sessionID: id)
-        }
+        // Gemeinsamer Mehrfach-Pfad: 2× Ctrl+C an alle, EINE Wartezeit — vorher
+        // stand der Main Thread 260 ms pro Chat (LR-TRM-001).
+        terminate(sessionIDs: ids)
         return ids
     }
 
@@ -449,9 +457,9 @@ final class AgentTerminalRegistry: ObservableObject {
         let running = runningControllers
         guard !running.isEmpty else { return }
         for controller in running { controller.sendInterruptForAppQuit() }
-        usleep(80_000)
+        sleep(80_000)
         for controller in running { controller.sendInterruptForAppQuit() }
-        usleep(180_000)
+        sleep(180_000)
         for controller in running { controller.captureSnapshotForAppQuit() }
     }
 }
