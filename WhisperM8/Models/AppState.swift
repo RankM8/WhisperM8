@@ -28,6 +28,9 @@ final class AppState {
     var audioLevel: Float = 0
     var recordingDuration: TimeInterval = 0
     var lastError: String?
+    /// `true`, wenn eine gesicherte Aufnahme zum erneuten Transkribieren bereitliegt
+    /// (Menüleisten-Eintrag). Gepflegt vom RecordingCoordinator.
+    var hasPreservedRecording = false
     var lastTranscription: String?
     var selectedOutputMode = OutputMode.defaultMode()
     var isPostProcessing = false
@@ -104,6 +107,16 @@ final class AppState {
 
     func cancelRecording() {
         recordingCoordinator.cancelRecording()
+    }
+
+    /// Menüleiste: neueste gesicherte Aufnahme erneut transkribieren.
+    func retryLastPreservedRecording() async {
+        await recordingCoordinator.retryLastPreservedRecording()
+    }
+
+    /// Synchrone Quit-Vorbereitung (laufende Aufnahme/Upload sichern).
+    func prepareDictationForTermination() {
+        recordingCoordinator.prepareForTermination()
     }
 
     func cancelPostProcessing() {

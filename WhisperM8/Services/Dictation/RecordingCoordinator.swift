@@ -22,6 +22,15 @@ struct PendingTranscriptionRetry {
     var contextBundle: TranscriptContextBundle
 }
 
+/// Der gerade laufende Transkriptions-Upload — damit die Quit-Vorbereitung
+/// weiß, welche tmp-Datei sie noch retten muss.
+struct InFlightTranscription {
+    var audioURL: URL
+    var audioDuration: TimeInterval
+    var outputMode: OutputMode
+    var contextBundle: TranscriptContextBundle
+}
+
 /// Seam für den Audiostopp (Tests setzen einen Spy ein, ohne AVAudioEngine).
 protocol AudioRecordingStopping: AnyObject {
     func stopRecording() -> URL?
@@ -69,6 +78,9 @@ final class RecordingCoordinator {
     var isDeliveringTranscription = false
     /// Letzter fehlgeschlagener Lauf — Grundlage für "Erneut versuchen".
     var pendingRetry: PendingTranscriptionRetry?
+    /// Läuft gerade eine Transkription, steht hier ihre Audio-Datei (siehe
+    /// `prepareForTermination`).
+    var inFlightTranscription: InFlightTranscription?
 
     // Phase-3-Test-Seams: Diktat-Abhängigkeiten als Resolver-Closures.
     // Defaults = bisherige Statics → Produktionsverhalten unverändert; Tests
@@ -122,6 +134,7 @@ final class RecordingCoordinator {
         self.apiKeyResolver = apiKeyResolver
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer
+        refreshPreservedRecordingFlag()
     }
 
     func startRecording() async {
@@ -420,6 +433,12 @@ final class RecordingCoordinator {
         contextBundle: TranscriptContextBundle
     ) async {
         isDeliveringTranscription = false
+        inFlightTranscription = InFlightTranscription(
+            audioURL: audioURL,
+            audioDuration: audioDuration,
+            outputMode: outputMode,
+            contextBundle: contextBundle
+        )
         let task = Task {
             try await self.transcribeAndDeliver(
                 audioURL: audioURL,
@@ -435,6 +454,7 @@ final class RecordingCoordinator {
         // Fehler-Alert offen ist, darf der ESC-Monitor ESC nicht mehr
         // schlucken (sein Guard prüft `transcriptionTask != nil`).
         transcriptionTask = nil
+        inFlightTranscription = nil
 
         switch result {
         case .success:
@@ -444,6 +464,7 @@ final class RecordingCoordinator {
             if let pending = pendingRetry, pending.recording.audioURL == audioURL {
                 failedRecordingsStore.remove(pending.recording)
                 pendingRetry = nil
+                refreshPreservedRecordingFlag()
             }
         case .failure(is CancellationError):
             handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)

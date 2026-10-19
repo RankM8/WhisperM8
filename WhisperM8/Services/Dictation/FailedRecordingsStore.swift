@@ -9,6 +9,10 @@ struct FailedRecordingMetadata: Codable, Equatable {
     var language: String?
     var errorMessage: String
     var originalFilename: String
+    /// ID des Output-Modus beim Diktat — damit ein späterer Retry (auch nach
+    /// App-Neustart) denselben Modus nimmt. Optional: ältere Sidecars kennen
+    /// das Feld nicht.
+    var outputModeID: String?
 }
 
 /// Eine aufbewahrte Aufnahme: Audio-Datei + Sidecar + dekodierte Metadaten.
@@ -65,7 +69,8 @@ final class FailedRecordingsStore {
         audioURL: URL,
         audioDuration: TimeInterval,
         language: String?,
-        errorMessage: String
+        errorMessage: String,
+        outputModeID: String? = nil
     ) throws -> FailedRecording {
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
@@ -95,7 +100,8 @@ final class FailedRecordingsStore {
             audioDuration: audioDuration,
             language: language,
             errorMessage: errorMessage,
-            originalFilename: audioURL.lastPathComponent
+            originalFilename: audioURL.lastPathComponent,
+            outputModeID: outputModeID
         )
         let sidecarURL = Self.sidecarURL(for: destinationURL)
         let encoder = JSONEncoder()

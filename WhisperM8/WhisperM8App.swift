@@ -457,6 +457,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             // die Terminal-Views noch leben — nach diesem Hook baut AppKit
             // die Fenster ab und die PTY-Kinder sterben ohne Capture.
             AgentTerminalRegistry.shared.captureAllSnapshotsForAppQuit()
+            // Laufende Aufnahme/Upload retten (LR-DIK-001): synchron und ohne
+            // Warten auf Netzwerk — Quit bleibt sofort (kein terminateLater).
+            AppState.shared.prepareDictationForTermination()
         }
         return .terminateNow
     }
