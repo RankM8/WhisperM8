@@ -53,34 +53,47 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
     }
 
     /// Bedienflächen: Einstellungen plus die wenigen Oberflächen, die Schalter direkt anbieten.
-    private func surfaceSource() throws -> String {
+    /// Je Datei getrennt, damit ein Binding nur in der Datei seiner Deklaration zählt.
+    private func surfaceSource() throws -> [String] {
         var files = swiftFiles(under: "WhisperM8/Views/Settings")
         files.append(Self.root.appendingPathComponent("WhisperM8/Views/SettingsView.swift").path)
         for extra in PreferenceBedienweg.additionalSurfaces {
             files.append(Self.root.appendingPathComponent(extra).path)
         }
-        return try files.map { try String(contentsOfFile: $0, encoding: .utf8) }.joined(separator: "\n")
+        return try files.map { try String(contentsOfFile: $0, encoding: .utf8) }
     }
 
     /// Ein UI-Weg ist ein Binding (`$name`) oder eine Zuweisung — bloßes Lesen
     /// (z. B. um eine Seite auszublenden) zählt nicht.
-    private func hasUIPath(_ key: Key, in surface: String) -> Bool {
-        // `@AppStorage(PreferenceKeys.x) private var name` → wird `name` gebunden/gesetzt?
+    private func hasUIPath(_ key: Key, in surface: [String]) -> Bool {
+        // `@AppStorage(PreferenceKeys.x) private var name` → wird `name` IN DERSELBEN
+        // Datei gebunden/gesetzt? Sonst machte ein gleichnamiges Property einer
+        // fremden Datei (`port`, `enabled` …) einen Schlüssel ohne UI grün.
         let declaration = "@AppStorage\\(\\s*(?:PreferenceKeys\\.\(key.constant)\\b|\"\(key.value)\")[^\\n]*?\\bvar (\\w+)"
         if let regex = try? NSRegularExpression(pattern: declaration) {
-            let range = NSRange(surface.startIndex..., in: surface)
-            for match in regex.matches(in: surface, range: range) {
-                guard let nameRange = Range(match.range(at: 1), in: surface) else { continue }
-                if isWritten(String(surface[nameRange]), in: surface) { return true }
+            for file in surface {
+                let range = NSRange(file.startIndex..., in: file)
+                for match in regex.matches(in: file, range: range) {
+                    guard let nameRange = Range(match.range(at: 1), in: file) else { continue }
+                    if isWritten(String(file[nameRange]), in: file) { return true }
+                }
             }
         }
-        return key.properties.contains { isWritten($0, in: surface) }
+        // Properties von `AppPreferences` nur qualifiziert (`prefs.name = …`,
+        // `$prefs.name`) — ein nacktes `name =` gehört fast immer zu etwas anderem.
+        return key.properties.contains { name in surface.contains { isWrittenQualified(name, in: $0) } }
     }
 
     private func isWritten(_ name: String, in surface: String) -> Bool {
         surface.range(of: "\\$\(name)\\b", options: .regularExpression) != nil
             || surface.range(of: "(?<!var )\\b\(name)\\s*=[^=]", options: .regularExpression) != nil
             || surface.range(of: "\\b\(name)\\.toggle\\(", options: .regularExpression) != nil
+    }
+
+    private func isWrittenQualified(_ name: String, in surface: String) -> Bool {
+        surface.range(of: "\\$\\w+(?:\\.\\w+)*\\.\(name)\\b", options: .regularExpression) != nil
+            || surface.range(of: "\\w\\.\(name)\\s*=[^=]", options: .regularExpression) != nil
+            || surface.range(of: "\\w\\.\(name)\\.toggle\\(", options: .regularExpression) != nil
     }
 
     private var allExceptions: [PreferenceBedienweg.Entry] {
@@ -121,5 +134,14 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
             guard let key = keys.first(where: { $0.value == entry.key }) else { continue }
             XCTAssertFalse(hasUIPath(key, in: surface), "„\(entry.key)“ hat inzwischen einen UI-Weg — aus killSwitches streichen")
         }
+    }
+
+    func testBindingInForeignFileDoesNotCount() {
+        let key = Key(constant: "demoPort", value: "demoPort", properties: ["port"])
+        let declaring = "@AppStorage(PreferenceKeys.demoPort) private var port = 1\nText(\"\\(port)\")"
+        let foreign = "TextField(\"Port\", value: $port)\nport = 2"
+        XCTAssertFalse(hasUIPath(key, in: [declaring, foreign]))
+        XCTAssertTrue(hasUIPath(key, in: [declaring + "\nTextField(\"Port\", value: $port)"]))
+        XCTAssertTrue(hasUIPath(key, in: ["Toggle(isOn: $preferences.port)"]))
     }
 }

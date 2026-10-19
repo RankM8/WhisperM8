@@ -18,6 +18,9 @@ struct AgentChatsVoiceAgentTab: View {
     @AppStorage(PreferenceKeys.codexVoiceGateVerboseLogging) private var verboseLogging = false
 
     @State private var gate = VoiceGateCoordinator.shared
+    /// Einmal beim Erscheinen gelesen — der Body rendert bei jedem
+    /// Zustandswechsel des Gates neu, ein Verzeichnis-Scan gehört nicht hinein.
+    @State private var availableSounds: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -30,6 +33,13 @@ struct AgentChatsVoiceAgentTab: View {
                 diagnosticsSection
             }
         }
+        .onAppear { availableSounds = SystemSoundCatalog.availableSoundNames() }
+    }
+
+    /// Wie die Stop-Sound-Zeile: ein gespeicherter Name, der nicht (mehr)
+    /// installiert ist, bleibt wählbar statt den Picker leer zu zeigen.
+    private var soundChoices: [String] {
+        availableSounds.contains(soundName) ? availableSounds : [soundName] + availableSounds
     }
 
     // MARK: - Voraussetzung in Codex
@@ -89,7 +99,7 @@ struct AgentChatsVoiceAgentTab: View {
                     SettingsPickerRow(
                         title: "Sound",
                         selection: $soundName,
-                        options: SystemSoundCatalog.availableSoundNames()
+                        options: soundChoices
                     ) { name in
                         Text(verbatim: name)
                     }

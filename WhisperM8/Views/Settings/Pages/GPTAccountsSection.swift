@@ -658,17 +658,11 @@ struct GPTAccountsSection: View {
 
     private static func resetText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-        return "→ \(formatter.string(from: resetsAt))"
+        return "→ \(UsageResetDateFormat.short(resetsAt))"
     }
 
     private static func untilText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE dd.MM. HH:mm" : "HH:mm"
-        return String(localized: " · free from \(formatter.string(from: resetsAt))")
+        return String(localized: " · free from \(UsageResetDateFormat.long(resetsAt))")
     }
 }
