@@ -75,6 +75,8 @@ extension RecordingCoordinator {
             }
 
             appState.audioLevel = self.audioRecorder.audioLevel
+            // Engine-Laufzustand: fängt Geräteverlust/Ruhezustand ohne Notification ab.
+            self.audioRecorder.checkEngineHealth()
             self.overlayController.update(appState: appState)
         }
     }

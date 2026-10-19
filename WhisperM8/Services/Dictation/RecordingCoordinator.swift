@@ -36,7 +36,7 @@ final class RecordingCoordinator {
     let reportStore: TranscriptRunReportStore
 
     var recordingStartTime: Date?
-    private var isProcessing = false
+    private(set) var isProcessing = false
     var escKeyMonitor: Any?
     var contextSourceApp: NSRunningApplication?
     var screenClipLimitTask: Task<Void, Never>?
@@ -111,6 +111,12 @@ final class RecordingCoordinator {
         self.apiKeyResolver = apiKeyResolver
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer
+
+        // Recorder beendet die Aufnahme von selbst (Gerät weg, Schreibfehler):
+        // Teilaufnahme sichern und sichtbar beenden (LR-DIK-004/006/026).
+        self.audioRecorder.onInterruption = { [weak self] interruption in
+            Task { @MainActor in self?.handleRecorderInterruption(interruption) }
+        }
     }
 
     func startRecording() async {

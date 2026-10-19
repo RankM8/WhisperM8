@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Combine
 import CoreAudio
@@ -16,6 +17,19 @@ class AudioRecorder {
     private var isRestarting: Bool = false
     private var lastConfigChangeTime: Date = .distantPast
     private var buffersWritten: Int = 0
+    /// Erster Writer-/Converterfehler dieser Aufnahme (unter `resourceLock`).
+    /// Der Audio-Callback setzt nur dieses Flag; die Eskalation läuft async auf Main.
+    private var writeFailureMessage: String?
+
+    /// Zählt jede Aufnahme/Engine-Instanz. Fortsetzungen nach einem `await`
+    /// (Gerätewechsel) und asynchrone Tap-Meldungen prüfen ihn und tun nichts
+    /// mehr, wenn inzwischen gestoppt, unterbrochen oder neu gestartet wurde.
+    private var sessionGeneration = 0
+    private var reconfigurationTask: Task<Void, Never>?
+    /// Teilaufnahme nach einer Unterbrechung — wartet auf das nächste `stopRecording()`.
+    private var interruptedPartialURL: URL?
+    private var notRunningTicks = 0
+    private var wakeObserver: NSObjectProtocol?
 
     // Target format: 16kHz Mono for optimal API compatibility
     private let targetFormat: AVAudioFormat = {
@@ -30,6 +44,7 @@ class AudioRecorder {
     /// Test-Seams: Benachrichtigungszentrale und Wartefunktion (300-ms-
     /// Stabilisierung, Format-Retries). Defaults = Produktionsverhalten.
     @ObservationIgnored var notificationCenter: NotificationCenter = .default
+    @ObservationIgnored var workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter
     @ObservationIgnored var sleeper: (UInt64) async -> Void = { nanos in
         try? await Task.sleep(nanoseconds: nanos)
     }
@@ -40,9 +55,29 @@ class AudioRecorder {
     /// Wird (auf dem Main Thread) gemeldet, wenn die Aufnahme von selbst endet.
     @ObservationIgnored var onInterruption: ((RecordingInterruption) -> Void)?
 
-    /// Vom Pegel-Timer aufgerufen: Prüft, ob die Engine noch läuft.
+    /// Anzahl aufeinanderfolgender Pegel-Timer-Ticks (100 ms) mit stehender Engine,
+    /// bevor die Wiederherstellung angestoßen wird.
     static let healthCheckTicksBeforeRecovery = 3
-    func checkEngineHealth() {}
+
+    /// Vom Pegel-Timer aufgerufen: Steht die Engine ohne Notification still
+    /// (Geräteverlust, Ruhezustand), wird sie neu aufgebaut — scheitert das,
+    /// endet die Aufnahme sichtbar mit gesicherter Teilaufnahme.
+    @MainActor
+    func checkEngineHealth() {
+        guard isRecording, !isRestarting, let engine else {
+            notRunningTicks = 0
+            return
+        }
+        if engine.isRunning {
+            notRunningTicks = 0
+            return
+        }
+        notRunningTicks += 1
+        guard notRunningTicks >= Self.healthCheckTicksBeforeRecovery else { return }
+        notRunningTicks = 0
+        Logger.info("[AudioRecorder] Engine steht ohne Konfigurationswechsel still — baue sie neu auf")
+        scheduleReconfiguration()
+    }
 
     func startRecording() async throws {
         Logger.debug("[AudioRecorder] ========== START RECORDING ==========")
@@ -56,10 +91,12 @@ class AudioRecorder {
         // Reset state
         audioLevel = 0
         recordingURL = nil
+        interruptedPartialURL = nil
         resourceLock.withLock {
             audioFile = nil
             converter = nil
             buffersWritten = 0
+            writeFailureMessage = nil
         }
         isRestarting = false
         lastConfigChangeTime = .distantPast
@@ -164,6 +201,9 @@ class AudioRecorder {
         file: RecordingFileWriter,
         url: URL
     ) throws {
+        // Neue Generation VOR dem Tap: seine Meldungen gehören zu genau diesem Lauf.
+        sessionGeneration += 1
+
         // Create converter if needed
         if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
             Logger.debug("[AudioRecorder] Creating audio converter (input differs from target)")
@@ -175,8 +215,11 @@ class AudioRecorder {
 
         resourceLock.withLock {
             audioFile = file
+            buffersWritten = 0
+            writeFailureMessage = nil
         }
         recordingURL = url
+        interruptedPartialURL = nil
 
         // Install tap for recording + level metering
         Logger.debug("[AudioRecorder] Installing tap on inputNode...")
@@ -211,21 +254,36 @@ class AudioRecorder {
         }
 
         self.engine = engine
+        notRunningTicks = 0
         isRecording = true
 
-        // Setup observer for configuration changes (only for System Default mode)
+        // Gerätewechsel und Aufwachen beobachten — in JEDEM Modus: Auch ein
+        // fest gewähltes Mikrofon kann verschwinden (abgezogen, Ruhezustand).
         setupConfigurationObserver()
+        setupWakeObserver()
     }
 
     func stopRecording() -> URL? {
         Logger.debug("[AudioRecorder] ========== STOP RECORDING ==========")
         guard isRecording else {
+            // Von selbst beendet (Unterbrechung): die gesicherte Teilaufnahme
+            // wird genau einmal ausgeliefert, damit der Coordinator sie retten kann.
+            if let partial = interruptedPartialURL {
+                interruptedPartialURL = nil
+                Logger.debug("[AudioRecorder] Not recording, delivering partial file: \(partial.path)")
+                return partial
+            }
             Logger.debug("[AudioRecorder] Not recording, nothing to stop")
             return nil
         }
 
-        // Remove configuration observer
+        // Alles Hängende abschalten: Beobachter, laufende Rekonfiguration
+        // (sie prüft die Generation und fasst nichts mehr an).
         removeConfigurationObserver()
+        removeWakeObserver()
+        reconfigurationTask?.cancel()
+        reconfigurationTask = nil
+        sessionGeneration += 1
 
         // Remove tap first. Beides ist synchron und kann auf die CoreAudio-HAL
         // warten — siehe `PerfBudgets.engineStop`: der laengste gemessene
@@ -259,13 +317,14 @@ class AudioRecorder {
     // MARK: - Configuration Change Handling
 
     private func setupConfigurationObserver() {
-        // Only observe for System Default mode (Bluetooth devices trigger config changes)
-        guard isUsingSystemDefault, let engine = engine else {
-            Logger.debug("[AudioRecorder] Not setting up config observer (not System Default or no engine)")
+        guard let engine = engine else {
+            Logger.debug("[AudioRecorder] Not setting up config observer (no engine)")
             return
         }
+        // Vorhandenen Beobachter ersetzen statt verdoppeln.
+        removeConfigurationObserver()
 
-        Logger.debug("[AudioRecorder] Setting up config observer for System Default mode")
+        Logger.debug("[AudioRecorder] Setting up config observer (systemDefault=\(isUsingSystemDefault))")
 
         configurationObserver = notificationCenter.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -277,9 +336,93 @@ class AudioRecorder {
 
             // Handle config change asynchronously
             Task { @MainActor in
-                await self.handleConfigurationChange()
+                self.scheduleReconfiguration()
             }
         }
+    }
+
+    /// Nach dem Aufwachen aus dem Ruhezustand steht die Engine oft still, ohne
+    /// dass eine Konfigurations-Notification kommt: kurz warten, dann prüfen.
+    private func setupWakeObserver() {
+        removeWakeObserver()
+        wakeObserver = workspaceNotificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Logger.info("[AudioRecorder] System aufgewacht während der Aufnahme — prüfe Engine")
+            let generation = self.sessionGeneration
+            Task { @MainActor in
+                await self.sleeper(1_000_000_000)
+                guard generation == self.sessionGeneration, self.isRecording, !self.isRestarting,
+                      let engine = self.engine, !engine.isRunning else { return }
+                self.scheduleReconfiguration()
+            }
+        }
+    }
+
+    private func removeWakeObserver() {
+        if let observer = wakeObserver {
+            workspaceNotificationCenter.removeObserver(observer)
+            wakeObserver = nil
+        }
+    }
+
+    /// Startet die Rekonfiguration als speicherbaren Task, damit `stopRecording`
+    /// sie abbrechen kann.
+    @MainActor
+    func scheduleReconfiguration() {
+        guard isRecording, !isRestarting else { return }
+        reconfigurationTask = Task { @MainActor [weak self] in
+            await self?.handleConfigurationChange()
+        }
+    }
+
+    /// Beendet die Aufnahme kontrolliert, weil sie nicht fortgesetzt werden kann
+    /// (Gerät weg, Engine/Tap nicht neu startbar, Schreibfehler). Das bis dahin
+    /// geschriebene Audio bleibt erhalten und wird vom nächsten `stopRecording()`
+    /// geliefert; der Coordinator erfährt es über `onInterruption`.
+    /// `generation`: Meldungen aus veralteten Läufen werden verworfen.
+    @MainActor
+    func interrupt(_ reason: RecordingInterruption, generation: Int? = nil) {
+        guard isRecording else { return }
+        if let generation, generation != sessionGeneration { return }
+
+        Logger.info("[AudioRecorder] Aufnahme unterbrochen: \(reason)")
+        removeConfigurationObserver()
+        removeWakeObserver()
+        reconfigurationTask?.cancel()
+        reconfigurationTask = nil
+        sessionGeneration += 1
+
+        if let engine {
+            PerfBudgets.engineStop.withInterval {
+                engine.removeTap()
+                engine.stop()
+            }
+        }
+        engine = nil
+        let hadAudio = resourceLock.withLock { () -> Bool in
+            let written = buffersWritten > 0
+            // Datei schließen (AAC-Container finalisieren), bevor sie weitergereicht wird.
+            audioFile = nil
+            converter = nil
+            return written
+        }
+        isRecording = false
+        isRestarting = false
+        isUsingSystemDefault = false
+        audioLevel = 0
+
+        if hadAudio {
+            interruptedPartialURL = recordingURL
+        } else if let url = recordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        recordingURL = nil
+
+        onInterruption?(reason)
     }
 
     private func removeConfigurationObserver() {
@@ -298,6 +441,12 @@ class AudioRecorder {
             return
         }
 
+        let generation = sessionGeneration
+        // Nach jedem await: Ist das noch DIESER Lauf? Sonst hat stop/neuer Start
+        // alles aufgeräumt — die alte Fortsetzung darf weder Tap noch Converter
+        // noch Flags eines neuen Laufs anfassen (LR-DIK-005).
+        func isCurrent() -> Bool { generation == sessionGeneration && isRecording }
+
         isRestarting = true
 
         // Remove observer to prevent re-entry during handling
@@ -311,6 +460,10 @@ class AudioRecorder {
         // 2. Wait for Bluetooth HFP profile switch to stabilize (300ms is sufficient)
         Logger.debug("[AudioRecorder] Waiting 300ms for HFP stabilization...")
         await sleeper(300_000_000)
+        guard isCurrent() else {
+            Logger.debug("[AudioRecorder] Config change obsolete (stopped during stabilization)")
+            return
+        }
 
         // 3. Query NEW format with retry logic (format may be temporarily invalid)
         var newFormat: AVAudioFormat?
@@ -325,13 +478,15 @@ class AudioRecorder {
             }
             Logger.debug("[AudioRecorder] Format invalid (attempt \(attempt)), retrying...")
             await sleeper(100_000_000) // 100ms
+            guard isCurrent() else {
+                Logger.debug("[AudioRecorder] Config change obsolete (stopped during format retry)")
+                return
+            }
         }
 
         guard let inputFormat = newFormat else {
-            Logger.debug("[AudioRecorder] ERROR: Could not get valid format after \(maxRetries) retries")
-            isRestarting = false
-            isRecording = false
-            audioLevel = 0
+            Logger.info("[AudioRecorder] ERROR: Kein gültiges Format nach \(maxRetries) Versuchen — Aufnahme wird mit Teilaufnahme beendet")
+            interrupt(.deviceLost, generation: generation)
             return
         }
 
@@ -364,7 +519,7 @@ class AudioRecorder {
             // Aufnahme verloren — aber die App bleibt am Leben. Ohne Tap
             // weiterzulaufen wäre schlimmer als ein sauberer Stopp.
             Logger.info("[AudioRecorder] ERROR: Tap-Reinstall fehlgeschlagen — \(error.localizedDescription)")
-            isRestarting = false
+            interrupt(.engineFailed(error.localizedDescription), generation: generation)
             return
         }
 
@@ -375,17 +530,23 @@ class AudioRecorder {
             try engine.start()
             Logger.debug("[AudioRecorder] Engine restarted successfully!")
 
-            // Re-setup observer after short delay to avoid immediate re-trigger
-            await sleeper(100_000_000) // 100ms
-            setupConfigurationObserver()
-            Logger.debug("[AudioRecorder] Config observer re-installed")
         } catch {
-            Logger.debug("[AudioRecorder] ERROR restarting engine: \(error)")
-            isRecording = false
-            audioLevel = 0
+            Logger.info("[AudioRecorder] ERROR: Engine-Neustart fehlgeschlagen — \(error.localizedDescription)")
+            interrupt(.engineFailed(error.localizedDescription), generation: generation)
+            return
         }
 
+        // Re-setup observer after short delay to avoid immediate re-trigger
+        await sleeper(100_000_000) // 100ms
+        guard isCurrent() else {
+            Logger.debug("[AudioRecorder] Config change obsolete (stopped before observer re-install)")
+            return
+        }
+        setupConfigurationObserver()
+        Logger.debug("[AudioRecorder] Config observer re-installed")
+
         isRestarting = false
+        reconfigurationTask = nil
         Logger.debug("[AudioRecorder] ========== CONFIG CHANGE DONE ==========")
     }
 
@@ -436,6 +597,7 @@ class AudioRecorder {
         var tapCallCount = 0
         let capturedTargetFormat = self.targetFormat
         let capturedFormat = inputFormat
+        let capturedGeneration = sessionGeneration
         // Installation (inkl. ObjC-Exception-Schutz) liegt im Engine-Adapter.
         try engine.installTap(format: capturedFormat) { [weak self] buffer in
             guard let self else { return }
@@ -454,7 +616,13 @@ class AudioRecorder {
                 self.audioLevel = level
             }
 
-            self.writeBuffer(buffer, inputFormat: capturedFormat, targetFormat: capturedTargetFormat)
+            let newFailure = self.writeBuffer(buffer, inputFormat: capturedFormat, targetFormat: capturedTargetFormat)
+            if let newFailure {
+                // Audio-Callback: nur melden, nie selbst UI/Teardown ausführen.
+                DispatchQueue.main.async { [weak self] in
+                    self?.interrupt(.writeFailed(newFailure), generation: capturedGeneration)
+                }
+            }
         }
     }
 
@@ -484,13 +652,20 @@ class AudioRecorder {
         )
     }
 
-    private func writeBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
+    /// Gibt die Fehlermeldung nur beim ERSTEN Schreib-/Converterfehler zurück
+    /// (danach `nil`), damit die Eskalation genau einmal passiert.
+    private func writeBuffer(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) -> String? {
         resourceLock.withLock {
+            let hadFailure = writeFailureMessage != nil
             writeBufferLocked(buffer, inputFormat: inputFormat, targetFormat: targetFormat)
+            return hadFailure ? nil : writeFailureMessage
         }
     }
 
     private func writeBufferLocked(_ buffer: AVAudioPCMBuffer, inputFormat: AVAudioFormat, targetFormat: AVAudioFormat) {
+        // Nach dem ersten Fehler nichts mehr schreiben — bis zur Unterbrechung
+        // (async auf Main) kommen noch Buffer an.
+        guard writeFailureMessage == nil else { return }
         guard let audioFile else {
             // Log only first time
             if buffersWritten == 0 {
@@ -530,6 +705,9 @@ class AudioRecorder {
                     } else if buffersWritten % 100 == 0 {
                         Logger.debug("[AudioRecorder] Buffers written: \(buffersWritten)")
                     }
+                } else if status == .error {
+                    writeFailureMessage = error?.localizedDescription ?? "Converter-Fehler"
+                    Logger.info("[AudioRecorder] writeBuffer: Converter-Fehler — \(writeFailureMessage ?? "")")
                 } else {
                     if buffersWritten == 0 {
                         Logger.debug("[AudioRecorder] writeBuffer: Converter status = \(status.rawValue), error = \(error?.localizedDescription ?? "nil")")
@@ -544,9 +722,10 @@ class AudioRecorder {
                 }
             }
         } catch {
-            if buffersWritten == 0 {
-                Logger.debug("[AudioRecorder] writeBuffer ERROR: \(error.localizedDescription)")
-            }
+            // Erster Schreibfehler (Platte voll, Dateisystem weg): merken; die
+            // Eskalation macht der Aufrufer außerhalb des Locks.
+            writeFailureMessage = error.localizedDescription
+            Logger.info("[AudioRecorder] writeBuffer ERROR nach \(buffersWritten) Buffern: \(error.localizedDescription)")
         }
     }
 
