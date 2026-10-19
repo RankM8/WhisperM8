@@ -115,6 +115,30 @@ final class AgentTranscriptStatusTests: XCTestCase {
         XCTAssertEqual(decision?.turnFinished, true)
     }
 
+    func testCodex16xTailWithItemCompletedAndNewMetaLinesStaysWorking() {
+        // LR-AK-006: item_completed, token_usage_record, world_state, thread_settings_applied
+        // sind statusneutral und dürfen das laufende Tool nicht überdecken.
+        let tail = [CodexRolloutFixtures.taskStarted, CodexRolloutFixtures.customToolCallOutput16x,
+                    CodexRolloutFixtures.itemCompleted16x, CodexRolloutFixtures.tokenUsageRecord16x,
+                    CodexRolloutFixtures.worldState16x, CodexRolloutFixtures.threadSettingsApplied16x].joined(separator: "\n")
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        guard case .toolResult = event else { return XCTFail("erwartet .toolResult, war \(String(describing: event))") }
+        let now = Date()
+        let decision = AgentTranscriptStatusDecider.decide(lastEvent: event, fileMTime: now, now: now, priorTurnFinishedAt: nil)
+        XCTAssertEqual(decision?.status, .working)
+    }
+
+    func testCodex16xTaskCompleteFollowedByNewMetaLinesIsTurnEnd() {
+        let tail = [CodexRolloutFixtures.agentMessageFinal, CodexRolloutFixtures.taskComplete,
+                    CodexRolloutFixtures.itemCompleted16x, CodexRolloutFixtures.tokenUsageRecord16x,
+                    CodexRolloutFixtures.worldState16x].joined(separator: "\n")
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        let now = Date()
+        let decision = AgentTranscriptStatusDecider.decide(lastEvent: event, fileMTime: now, now: now, priorTurnFinishedAt: nil)
+        XCTAssertEqual(decision?.status, .idle)
+        XCTAssertEqual(decision?.turnFinished, true)
+    }
+
     func testCodexRealRolloutLongSilentToolRunStaysWorking() {
         let tail = [CodexRolloutFixtures.taskStarted, CodexRolloutFixtures.functionCall].joined(separator: "\n")
         let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)

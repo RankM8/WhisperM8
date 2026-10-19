@@ -169,8 +169,10 @@ enum AgentTranscriptParser {
         switch type {
         case "session_meta":
             return .sessionMeta
-        case "turn_context", "compacted":
-            // Pro Turn geschrieben, ohne Aussage über Arbeit oder Ende.
+        case "turn_context", "compacted", "token_usage_record", "world_state":
+            // Pro Turn geschrieben, ohne Aussage über Arbeit oder Ende. Seit
+            // codex-cli 0.16x kommen `token_usage_record` und `world_state` als
+            // eigene Top-Level-Zeilen dazu (LR-AK-006).
             return .meta
         case "event_msg":
             switch payloadType {
@@ -183,10 +185,13 @@ enum AgentTranscriptParser {
                 return .userMessage(timestamp: timestamp)
             case "agent_message", "agent_reasoning", "agent_reasoning_raw_content":
                 return .assistantMessageOngoing(timestamp: timestamp)
-            case "token_count", "context_compacted", "thread_rolled_back":
-                return .meta
             default:
-                return .other
+                // `token_count`, `item_completed`, `thread_settings_applied`,
+                // `context_compacted`, … und künftige Typen: statusneutral. Ein
+                // unbekannter Typ darf den Rückwärts-Scan nie als „letztes Event"
+                // beenden und so ein laufendes Tool als `.other` erscheinen lassen
+                // (LR-AK-006).
+                return .meta
             }
         case "response_item":
             switch payloadType {
@@ -202,6 +207,8 @@ enum AgentTranscriptParser {
                 return .assistantMessageOngoing(timestamp: timestamp)
             case "function_call_output", "custom_tool_call_output", "tool_search_output":
                 return .toolResult(timestamp: timestamp)
+            case "additional_tools":
+                return .meta
             default:
                 return .other
             }

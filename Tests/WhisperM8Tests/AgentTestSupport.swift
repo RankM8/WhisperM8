@@ -60,6 +60,14 @@ enum CodexRolloutFixtures {
     static let agentMessageFinal = #"{"timestamp": "2026-07-04T22:20:38.660Z", "type": "event_msg", "payload": {"type": "agent_message", "message": "{\"status\":\"success\",\"summary\":\"Review abgeschlossen, keine Edits.\",\"filesChanged\":[],\"commits\":[],\"testsRun\":null,\"openQuestions\":[]}", "phase": "final_answer", "memory_citation": null}}"#
     static let taskComplete = #"{"timestamp": "2026-07-04T22:20:38.665Z", "type": "event_msg", "payload": {"type": "task_complete", "turn_id": "019f2f37-8284-7911-bd3f-ed67ab571371", "last_agent_message": "{\"status\":\"success\"}", "completed_at": 1783203638, "duration_ms": 43778}}"#
 
+    // Synthetisch nachgebaut nach dem Rollout-Format von codex-cli 0.160.x (LR-AK-006):
+    // nur Struktur, keine echten Inhalte.
+    static let itemCompleted16x = #"{"timestamp": "2026-10-19T09:00:03.100Z", "type": "event_msg", "payload": {"type": "item_completed", "turn_id": "t-1", "item": {"type": "Reasoning", "id": "i-1"}}}"#
+    static let tokenUsageRecord16x = #"{"timestamp": "2026-10-19T09:00:03.200Z", "type": "token_usage_record", "payload": {"input_tokens": 10, "output_tokens": 2}}"#
+    static let worldState16x = #"{"timestamp": "2026-10-19T09:00:03.300Z", "type": "world_state", "payload": {"cwd": "/tmp/x"}}"#
+    static let threadSettingsApplied16x = #"{"timestamp": "2026-10-19T09:00:03.400Z", "type": "event_msg", "payload": {"type": "thread_settings_applied", "settings": {}}}"#
+    static let customToolCallOutput16x = #"{"timestamp": "2026-10-19T09:00:03.000Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "c-1", "output": "ok"}}"#
+
     /// Ein kompletter Turn in echter Datei-Reihenfolge (inkl. Duplikat +
     /// Skip-Typen) — Basis für Reader-Tests.
     static let fullTurnLines: [String] = [
