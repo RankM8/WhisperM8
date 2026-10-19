@@ -32,7 +32,7 @@ enum PromptDeliveryGate {
         mayHaveUnsentInput && !force
     }
 
-    static let draftMessage = "Im Eingabefeld des Ziel-Chats steht ein nicht abgeschickter Entwurf — "
-        + "der Prompt würde daran angehängt und beides abgeschickt. Ausweg: `whisperm8 chats enqueue` "
-        + "(wird nach dem nächsten Turn zugestellt) oder bewusst `--force`."
+    static let draftMessage = "Im Eingabefeld des Ziel-Chats steht vermutlich ein nicht abgeschickter Entwurf — "
+        + "der Prompt würde daran angehängt und beides abgeschickt. Ausweg: `whisperm8 chats enqueue <ref> \"…\"` "
+        + "(wird zugestellt, sobald der Chat fertig ist) oder bewusst `whisperm8 chats send <ref> --force …`."
 }

@@ -104,6 +104,13 @@ struct TerminalComposerDraftTracker: Equatable {
         mayHoldRestoredPrompt && !mayHaveUnsentInput
     }
 
+    /// Ein Turn läuft an — also wurde abgeschickt. Ein danach Getipptes
+    /// setzt die Schätzung wieder.
+    mutating func recordSubmittedByTurnStart() {
+        mayHaveUnsentInput = false
+        mayHoldRestoredPrompt = false
+    }
+
     mutating func recordTurnInterrupted() {
         mayHoldRestoredPrompt = true
     }

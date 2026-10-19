@@ -309,7 +309,13 @@ unterbrochen.
    UUIDs; „seit"-Angaben menschlich („seit 4 min").
 8. **Fehler sauber erklären:** Exit 4 → Konflikt benennen (z. B. „arbeitet
    gerade") + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
-   weiter.
+   weiter. Sonderfall **„vermutlich nicht abgeschickter Entwurf"**: Der User
+   hat im Ziel-Chat etwas getippt, das noch nicht abgeschickt ist — `send`
+   hängt nie daran an. Ausweg `enqueue` (Zustellung, sobald der Chat fertig
+   ist und das Eingabefeld leer); `--force` nur nach Rückfrage beim User.
+   Die Queue zeigt solche Aufträge als „Entwurf im Eingabefeld". Ein Chat,
+   der nur auf Hintergrundarbeit (Subagents, Background-Tasks) wartet, gilt
+   weiter als `working` (LR-AK-037, offen) — dann `enqueue` statt warten.
 9. **Nie Sichtbarkeit behaupten.** Was der User auf dem Bildschirm sieht,
    weiß die CLI NICHT. `workspace list --json` sagt nur, welchem Fenster ein
    Workspace zugeordnet ist (`hostWindowID`) und ob dieses Fenster das Grid
