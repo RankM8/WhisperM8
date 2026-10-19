@@ -181,6 +181,43 @@ enum ClaudeExternalIDRecovery {
             locateTranscript: locateTranscript ?? defaultLocator(projectPath: projectPath))
     }
 
+    /// Größe des Dateiendes, das der Start-Pfad (Main-Thread) höchstens liest.
+    static let unboundResumeTailBytes = 2 * 1024 * 1024
+
+    /// Letzte `maxBytes` des Event-Files (mapped, ohne die ganze Datei zu laden).
+    /// Die erste, angeschnittene Zeile scheitert beim Parsen und wird übersprungen.
+    static func tailData(of url: URL, maxBytes: Int) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil else { return nil }
+        return try? handle.readToEnd()
+    }
+
+    /// Resume-Kandidat für einen gestarteten Chat OHNE gebundene ID (Start-Pfad,
+    /// Main-Thread): liest nur das Dateiende und übernimmt keine ID, die schon an
+    /// einen anderen Chat gebunden ist (LR-AK-021, wie in `recoveries`).
+    static func unboundResumeCandidate(
+        eventFileURL: URL,
+        projectPath: String,
+        boundExternalIDs: Set<String>,
+        maxTailBytes: Int = ClaudeExternalIDRecovery.unboundResumeTailBytes,
+        locateTranscript: ((String, String) -> URL?)? = nil
+    ) -> Candidate? {
+        guard let data = tailData(of: eventFileURL, maxBytes: maxTailBytes) else { return nil }
+        guard let candidate = candidate(
+            from: buildIndex(data: data),
+            brokenID: "",
+            locateTranscript: locateTranscript ?? defaultLocator(projectPath: projectPath))
+        else { return nil }
+        guard !boundExternalIDs.contains(candidate.sessionID) else {
+            Logger.claudeBinding.notice("resume_unbound_skipped_bound_elsewhere candidate=\(candidate.sessionID, privacy: .public)")
+            return nil
+        }
+        return candidate
+    }
+
     struct Recovery: Equatable {
         let localID: UUID
         let brokenID: String
@@ -250,17 +287,23 @@ enum ClaudeExternalIDRecovery {
             let alreadyTried = attempted.contains(key)
             attemptedLock.unlock()
             if alreadyTried { continue }
+
+            let fileURL = eventFileURL?(session) ?? hookPaths.eventFileURL(localSessionID: session.id)
+            let signature = RecoveryNegativeCache.signature(of: fileURL)
+            // Negativ-Cache VOR dem Budget: ein Treffer kostet nur ein stat() und
+            // darf die 40 echten Prüfungen pro Aufruf nicht aufzehren (LR-AK-039).
+            if let signature, cache.isKnownNegative(path: fileURL.path, brokenID: broken, signature: signature) {
+                attemptedLock.lock()
+                attempted.insert(key)
+                attemptedLock.unlock()
+                continue
+            }
             if newAttempts >= maxNewAttempts { break }
             newAttempts += 1
             attemptedLock.lock()
             attempted.insert(key)
             attemptedLock.unlock()
 
-            let fileURL = eventFileURL?(session) ?? hookPaths.eventFileURL(localSessionID: session.id)
-            let signature = RecoveryNegativeCache.signature(of: fileURL)
-            if let signature, cache.isKnownNegative(path: fileURL.path, brokenID: broken, signature: signature) {
-                continue
-            }
             let index: EventIndex?
             if let known = indexByFile[fileURL.path] {
                 index = known

@@ -190,10 +190,14 @@ struct AgentCommandBuilder {
     /// fortgesetzt statt still ein neuer, leerer Chat zu starten (LR-AK-021).
     /// Kein Beleg (Chat geöffnet, nie benutzt) → `nil` → Frischstart wie bisher.
     var unboundResumeResolver: (AgentChatSession, AgentProject) -> String? = { session, project in
-        ClaudeExternalIDRecovery.recoverableCandidate(
+        // Läuft auf dem Main-Thread: nur das Dateiende lesen und keine ID nehmen,
+        // die schon ein anderer Chat trägt (Ersatz-Chat).
+        let bound = Set(AgentSessionStore().loadWorkspace().sessions
+            .filter { $0.id != session.id }.compactMap(\.externalSessionID))
+        return ClaudeExternalIDRecovery.unboundResumeCandidate(
             eventFileURL: ClaudeHookPaths().eventFileURL(localSessionID: session.id),
-            brokenID: "",
-            projectPath: project.path
+            projectPath: project.path,
+            boundExternalIDs: bound
         )?.sessionID
     }
 
