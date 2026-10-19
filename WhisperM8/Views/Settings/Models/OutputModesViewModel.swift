@@ -149,24 +149,24 @@ final class OutputModesViewModel {
         if mode.kind == .raw {
             return "No post-processing"
         }
-        let templateName = templates.first { $0.id == mode.templateID }?.name ?? "No template"
+        let templateName = templates.first { $0.id == mode.templateID }?.name ?? String(localized: "No template")
         let modelText: String
         if let override = mode.codexModelRawOverride, !override.isEmpty {
             // Katalog-Displayname; "auto" und Fremd-Slugs ehrlich benennen
             // statt (wie früher via resolve()) still als Default auszugeben.
             if override == CodexModelSelection.autoRawValue {
-                modelText = "Auto model"
+                modelText = String(localized: "Auto model")
             } else {
                 modelText = catalogProvider().modelDisplayName(override)
             }
         } else {
-            modelText = "Default model"
+            modelText = String(localized: "Default model")
         }
         let speedText: String
         if let override = mode.codexServiceTierRawOverride, !override.isEmpty {
-            speedText = CodexServiceTier.resolve(override).displayName
+            speedText = String(localized: String.LocalizationValue(CodexServiceTier.resolve(override).displayName))
         } else {
-            speedText = "Default speed"
+            speedText = String(localized: "Default speed")
         }
         return "\(mode.shortLabel) · \(templateName) · \(modelText) · \(speedText)"
     }
@@ -177,12 +177,14 @@ final class OutputModesViewModel {
 
     func modeToggleHelp(_ mode: OutputMode) -> String {
         if mode.id == OutputMode.rawID {
-            return "Fast stays available as a safe fallback."
+            return String(localized: "Fast stays available as a safe fallback.")
         }
         if mode.id == defaultOutputModeID {
-            return "The default mode stays visible. Pick another default before hiding it."
+            return String(localized: "The default mode stays visible. Pick another default before hiding it.")
         }
-        return mode.isEnabled ? "Hide this mode from recording." : "Show this mode while recording."
+        return mode.isEnabled
+            ? String(localized: "Hide this mode from recording.")
+            : String(localized: "Show this mode while recording.")
     }
 
     func modeVisibilityHelp(_ mode: OutputMode) -> String {

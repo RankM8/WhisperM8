@@ -13,9 +13,9 @@ struct GPTBackendSetupRunner {
 
         var title: String {
             switch self {
-            case .binary: return "Proxy-Binary"
-            case .proxy: return "Proxy & Router starten"
-            case .auth: return "ChatGPT-Konto"
+            case .binary: return String(localized: "Proxy binary")
+            case .proxy: return String(localized: "Start proxy & router")
+            case .auth: return String(localized: "ChatGPT account")
             }
         }
     }
@@ -69,7 +69,7 @@ struct GPTBackendSetupRunner {
                 binaryPath = try await binaryInstaller()
             } catch {
                 onStep(.binary, .failed(
-                    "Automatische Installation fehlgeschlagen: \(error.localizedDescription)"
+                    String(localized: "Automatic installation failed: \(error.localizedDescription)")
                 ))
                 return .failed(.binary)
             }
@@ -81,18 +81,18 @@ struct GPTBackendSetupRunner {
             onStep(.proxy, .failed(error.localizedDescription))
             return .failed(.proxy)
         }
-        onStep(.proxy, .ok("Erreichbar auf Port \(port)"))
+        onStep(.proxy, .ok(String(localized: "Reachable on port \(String(port))")))
 
         onStep(.auth, .running)
         switch authChecker() {
         case .authenticated(let account, let expires):
-            onStep(.auth, .ok("Angemeldet: \(account), Ablauf: \(expires)"))
+            onStep(.auth, .ok(String(localized: "Signed in: \(account), expires: \(expires)")))
             return .ready
         case .notAuthenticated:
-            onStep(.auth, .failed("Nicht angemeldet — Device-Code-Login erforderlich."))
+            onStep(.auth, .failed(String(localized: "Not signed in — device-code login required.")))
             return .needsDeviceLogin
         case .unknown:
-            onStep(.auth, .failed("Auth-Status nicht ermittelbar (`codex auth status` prüfen)."))
+            onStep(.auth, .failed(String(localized: "Could not determine auth status (check `codex auth status`).")))
             return .failed(.auth)
         }
     }

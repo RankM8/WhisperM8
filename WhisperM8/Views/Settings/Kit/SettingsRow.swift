@@ -18,12 +18,12 @@ struct SettingsRow<Trailing: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(settingsLocalized: title)
                     .font(.system(size: 13.5, weight: .regular))
                     .foregroundStyle(AppTheme.textPrimary)
 
                 if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
+                    Text(settingsLocalized: subtitle)
                         .font(.system(size: 11.5))
                         .lineSpacing(2)
                         // Lesbare Erklärung: textSecondary erreicht ≥ 4,5:1,
@@ -53,5 +53,15 @@ extension SettingsRow where Trailing == EmptyView {
         self.title = title
         self.subtitle = subtitle
         self.trailing = EmptyView()
+    }
+}
+
+extension Text {
+    /// Rendert einen zur Laufzeit übergebenen englischen `String` über den
+    /// String-Katalog (Schlüssel = englischer Text), aber ohne Markdown-Auswertung —
+    /// die Kit-Komponenten nehmen `String`, Aufrufer übergeben Literale. Texte mit
+    /// Interpolation vorher mit `String(localized:)` bilden.
+    init(settingsLocalized key: String) {
+        self.init(verbatim: String(localized: String.LocalizationValue(key)))
     }
 }

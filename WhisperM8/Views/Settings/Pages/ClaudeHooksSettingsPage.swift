@@ -13,22 +13,22 @@ struct ClaudeHooksSettingsPage: View {
     var body: some View {
         SettingsPageContainer(
             title: "Hooks",
-            subtitle: "Session hooks for live status. Claude launches with a temporary --settings file; your global ~/.claude/settings.json stays untouched."
+            subtitle: "Session hooks link each chat to its Claude session. Claude launches with a temporary --settings file; your global ~/.claude/settings.json stays untouched."
         ) {
             VStack(alignment: .leading, spacing: 18) {
                 SettingsSection("Claude Code Hooks") {
                     SettingsStatusRow(
                         title: hooksEnabled ? "Session hooks active" : "Session hooks disabled",
                         subtitle: hooksEnabled
-                            ? "Claude chats start with a temporary hook configuration. Status, questions, and turn completion arrive in real time; your global ~/.claude/settings.json stays untouched."
-                            : "Chats start without the hook bridge. Status comes only from the transcript, with coarser detection, no question detection, and no notifications.",
+                            ? "Claude chats start with a temporary hook configuration. It links each chat to its Claude session and blocks prompts that were already delivered from being sent twice. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched."
+                            : "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, the double-send protection is off, and background agents lose their live status.",
                         tone: hooksEnabled ? .ok : .off,
-                        detail: hooksEnabled ? "Live status via session hooks" : "Transcript fallback"
+                        detail: hooksEnabled ? "Session linking and send guard" : "Hooks off"
                     )
 
                     SettingsToggleRow(
                         title: "Use session hooks",
-                        subtitle: "Launches Claude with a temporary --settings file for live status. Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.",
+                        subtitle: "Launches Claude with a temporary --settings file that links the chat to its session. Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.",
                         isOn: $hooksEnabled
                     )
 
@@ -72,7 +72,7 @@ struct ClaudeHooksSettingsPage: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
 
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -84,7 +84,7 @@ struct ClaudeHooksSettingsPage: View {
                 title: "External Claude hooks detected",
                 subtitle: "External hooks can cause duplicate notifications. WhisperM8 never changes ~/.claude/.",
                 tone: .warn,
-                detail: "\(externalHookFindings.count) found"
+                detail: String(localized: "\(externalHookFindings.count) found")
             )
 
             VStack(alignment: .leading, spacing: 8) {
@@ -99,7 +99,7 @@ struct ClaudeHooksSettingsPage: View {
     private func externalHookFindingRow(_ finding: ExternalClaudeHooksInspector.Finding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(finding.eventName)
+                Text(settingsLocalized: finding.eventName)
                     .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -109,12 +109,12 @@ struct ClaudeHooksSettingsPage: View {
 
                 Spacer(minLength: 8)
 
-                Text(finding.source)
+                Text(settingsLocalized: finding.source)
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
-            Text(finding.commandPreview)
+            Text(settingsLocalized: finding.commandPreview)
                 .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)

@@ -9,6 +9,7 @@ struct AgentChatsVoiceAgentTab: View {
     @AppStorage(PreferenceKeys.codexVoiceGateEnabled) private var voiceGateEnabled = false
     @AppStorage(PreferenceKeys.codexVoiceGateDryRun) private var dryRun = true
     @AppStorage(PreferenceKeys.codexVoiceGateSoundEnabled) private var soundEnabled = true
+    @AppStorage(PreferenceKeys.codexVoiceGateSoundName) private var soundName = "Tink"
 
     @AppStorage(PreferenceKeys.codexVoiceGateCarrier) private var carrier = VoiceGateVocabulary.default.carrier
     @AppStorage(PreferenceKeys.codexVoiceGateMuteWord) private var muteWord = VoiceGateVocabulary.default.muteCommand
@@ -17,6 +18,9 @@ struct AgentChatsVoiceAgentTab: View {
     @AppStorage(PreferenceKeys.codexVoiceGateVerboseLogging) private var verboseLogging = false
 
     @State private var gate = VoiceGateCoordinator.shared
+    /// Einmal beim Erscheinen gelesen — der Body rendert bei jedem
+    /// Zustandswechsel des Gates neu, ein Verzeichnis-Scan gehört nicht hinein.
+    @State private var availableSounds: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -29,6 +33,13 @@ struct AgentChatsVoiceAgentTab: View {
                 diagnosticsSection
             }
         }
+        .onAppear { availableSounds = SystemSoundCatalog.availableSoundNames() }
+    }
+
+    /// Wie die Stop-Sound-Zeile: ein gespeicherter Name, der nicht (mehr)
+    /// installiert ist, bleibt wählbar statt den Picker leer zu zeigen.
+    private var soundChoices: [String] {
+        availableSounds.contains(soundName) ? availableSounds : [soundName] + availableSounds
     }
 
     // MARK: - Voraussetzung in Codex
@@ -51,7 +62,7 @@ struct AgentChatsVoiceAgentTab: View {
             )
 
             SettingsRow(title: "Codex", subtitle: "Detected via the running application.") {
-                Text(gate.armState == .codexNotRunning ? "not running" : "running")
+                Text(settingsLocalized: gate.armState == .codexNotRunning ? "not running" : "running")
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -83,6 +94,19 @@ struct AgentChatsVoiceAgentTab: View {
                     subtitle: "Short confirmation tone whenever the code word takes effect.",
                     isOn: $soundEnabled
                 )
+
+                if soundEnabled {
+                    SettingsPickerRow(
+                        title: "Sound",
+                        selection: $soundName,
+                        options: soundChoices
+                    ) { name in
+                        Text(verbatim: name)
+                    }
+                    .onChange(of: soundName) { _, newValue in
+                        SystemSoundCatalog.play(newValue)
+                    }
+                }
             } else {
                 SettingsHelpText(
                     "Off: WhisperM8 does not touch the microphone, and the code words are ignored.",
@@ -177,7 +201,7 @@ struct AgentChatsVoiceAgentTab: View {
 
             if let event = gate.lastEvent {
                 SettingsRow(title: "Last event") {
-                    Text(event)
+                    Text(settingsLocalized: event)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .frame(width: 320, alignment: .trailing)

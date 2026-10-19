@@ -256,7 +256,7 @@ struct CLISkillSettingsCard: View {
                 ? "Claude Code reads from ~/.claude/skills; Save exports the complete skill folder including its supporting files."
                 : "Claude Code reads from ~/.claude/skills; other tools need the file copied manually."
         case .viaPlugin:
-            return "Comes with the plugin as /whisperm8:\(definition.name). Install a loose copy only if you also run Claude outside the app (terminal)."
+            return String(localized: "Comes with the plugin as /whisperm8:\(definition.name). Install a loose copy only if you also run Claude outside the app (terminal).")
         case .duplicate:
             return "Also installed as a loose copy in ~/.claude/skills — sessions started by WhisperM8 load this skill twice (plugin + copy). Keep the copy only for Claude outside the app."
         }
@@ -265,7 +265,7 @@ struct CLISkillSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
+                Text(settingsLocalized: title)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -285,12 +285,14 @@ struct CLISkillSettingsCard: View {
             HStack(spacing: 8) {
                 switch mode {
                 case .legacy:
-                    Button(installButtonTitle) {
+                    Button {
                         if requiresReplaceConfirmation {
                             isReplaceConfirmPresented = true
                         } else {
                             install()
                         }
+                    } label: {
+                        Text(settingsLocalized: installButtonTitle)
                     }
                     .buttonStyle(SettingsButtonStyle.primary)
                     .disabled(installState == .current)
@@ -317,7 +319,7 @@ struct CLISkillSettingsCard: View {
                 }
                 .buttonStyle(SettingsButtonStyle.standard)
                 .disabled(markdown.isEmpty || hasAttachments)
-                .help(hasAttachments ? "Use Save to export the complete skill folder." : "Copy SKILL.md")
+                .help(hasAttachments ? String(localized: "Use Save to export the complete skill folder.") : String(localized: "Copy SKILL.md"))
 
                 Button("View") {
                     isPreviewPresented = true
@@ -326,7 +328,7 @@ struct CLISkillSettingsCard: View {
                 .disabled(markdown.isEmpty)
 
                 if let feedbackMessage, feedback.isActive {
-                    Text(feedbackMessage)
+                    Text(settingsLocalized: feedbackMessage)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusWorking)
                         .transition(.opacity)
@@ -344,8 +346,8 @@ struct CLISkillSettingsCard: View {
         .onAppear(perform: refresh)
         .sheet(isPresented: $isPreviewPresented) {
             CLISkillPreviewSheet(
-                title: "Skill · \(definition.name)",
-                markdown: markdown.isEmpty ? "Skill resource not found." : markdown
+                title: String(localized: "Skill · \(definition.name)"),
+                markdown: markdown.isEmpty ? String(localized: "Skill resource not found.") : markdown
             )
         }
         .confirmationDialog(
@@ -355,7 +357,7 @@ struct CLISkillSettingsCard: View {
             Button("Replace Skill", role: .destructive) { install(force: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(replaceConfirmationMessage)
+            Text(settingsLocalized: replaceConfirmationMessage)
         }
         .confirmationDialog(
             "Install a loose copy for the terminal?",
@@ -372,7 +374,7 @@ struct CLISkillSettingsCard: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(settingsLocalized: errorMessage ?? "")
         }
     }
 
@@ -464,7 +466,7 @@ struct CLISkillSettingsCard: View {
         panel.nameFieldStringValue = "SKILL.md"
         panel.allowedContentTypes = [UTType(filenameExtension: "md") ?? .plainText]
         panel.canCreateDirectories = true
-        panel.title = "Save Skill File"
+        panel.title = String(localized: "Save Skill File")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try markdown.write(to: url, atomically: true, encoding: .utf8)
@@ -480,8 +482,8 @@ struct CLISkillSettingsCard: View {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Export"
-        panel.title = "Choose Parent Folder"
+        panel.prompt = String(localized: "Export")
+        panel.title = String(localized: "Choose Parent Folder")
         guard panel.runModal() == .OK, let parent = panel.url else { return }
 
         do {
@@ -550,7 +552,7 @@ private struct StatuslineSettingsCard: View {
             }
 
             HStack(spacing: 8) {
-                Button(installButtonTitle) {
+                Button {
                     if status == .foreign {
                         isReplaceConfirmPresented = true
                     } else if status == .modifiedLocally || status == .repoSynced {
@@ -560,6 +562,8 @@ private struct StatuslineSettingsCard: View {
                     } else {
                         install()
                     }
+                } label: {
+                    Text(settingsLocalized: installButtonTitle)
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
                 .disabled(status == .current && wiredCount == totalConfigs)
@@ -579,7 +583,7 @@ private struct StatuslineSettingsCard: View {
                 .disabled(script.isEmpty)
 
                 if let feedbackMessage, feedback.isActive {
-                    Text(feedbackMessage)
+                    Text(settingsLocalized: feedbackMessage)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusWorking)
                         .transition(.opacity)
@@ -597,8 +601,8 @@ private struct StatuslineSettingsCard: View {
         .onAppear(perform: refresh)
         .sheet(isPresented: $isPreviewPresented) {
             CLISkillPreviewSheet(
-                title: "Statusline · \(StatuslineInstaller.scriptFileName)",
-                markdown: script.isEmpty ? "Statusline resource not found." : script
+                title: String(localized: "Statusline · \(StatuslineInstaller.scriptFileName)"),
+                markdown: script.isEmpty ? String(localized: "Statusline resource not found.") : script
             )
         }
         .confirmationDialog(
@@ -617,7 +621,7 @@ private struct StatuslineSettingsCard: View {
             Button("Replace Script", role: .destructive) { install() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(managedReplaceConfirmationMessage)
+            Text(settingsLocalized: managedReplaceConfirmationMessage)
         }
         .confirmationDialog(
             "Replace custom status line entries?",
@@ -634,7 +638,7 @@ private struct StatuslineSettingsCard: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(settingsLocalized: errorMessage ?? "")
         }
     }
 
@@ -678,9 +682,9 @@ private struct StatuslineSettingsCard: View {
 
     private var wiringSummary: String {
         guard totalConfigs > 0 else { return "" }
-        var text = "Status line entries active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles; symlinked profiles follow main automatically)."
+        var text = String(localized: "Status line entries active in \(wiredCount) of \(totalConfigs) Claude configs (main + account profiles; symlinked profiles follow main automatically).")
         if foreignSettings > 0 {
-            text += " \(foreignSettings) config(s) use a different status line command."
+            text += " " + String(localized: "\(foreignSettings) config(s) use a different status line command.")
         }
         return text
     }
@@ -723,7 +727,7 @@ private struct CLISkillPreviewSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(title)
+                Text(settingsLocalized: title)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 

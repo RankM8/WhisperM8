@@ -34,7 +34,15 @@ CLI-Befehle (`claude`, `codex`, `whisperm8 chats …`) bleiben unübersetzt.
    Platzhalter müssen übereinstimmen (Guard prüft das).
 4. Ternäre Ausdrücke aus zwei Literalen (`Text(a ? "x" : "y")`) werden zu
    `String` und **nicht** übersetzt — stattdessen `a ? Text("x") : Text("y")`.
-5. Eine vollständig umgestellte Datei in
+5. **Einstellungen:** Die Kit-Komponenten (`SettingsRow`, `SettingsHelpText`,
+   `SettingsSection`, `SettingsToggleRow` …) nehmen weiter `String`-Parameter,
+   rendern sie aber zur Laufzeit über den Katalog (`Text(settingsLocalized:)`,
+   ohne Markdown). Literale dürfen also direkt übergeben werden; Texte mit
+   Interpolation vorher mit `String(localized:)` bilden. `Text(stringVariable)`
+   in Einstellungsdateien immer als `Text(settingsLocalized: …)` (Nutzerdaten:
+   `Text(verbatim:)`). Der Guard prüft dort zusätzlich `title:`/`subtitle:`/
+   `detail:`-Literale und `SettingsSection("…")`/`SettingsHelpText("…")`.
+6. Eine vollständig umgestellte Datei in
    `LocalizationCatalogTests.localizedFiles` eintragen; ab dann fällt jeder
    neue Text ohne Katalogeintrag im Test auf.
 

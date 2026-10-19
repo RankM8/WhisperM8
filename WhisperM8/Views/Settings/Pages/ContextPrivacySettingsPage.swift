@@ -70,7 +70,7 @@ private struct ScreenClipDurationRow: View {
                     .tint(AppTheme.accent)
                     .frame(width: 180)
 
-                Text("\(Int(value)) s")
+                Text(verbatim: "\(Int(value)) s")
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(AppTheme.textSecondary)
                     .frame(width: 34, alignment: .trailing)

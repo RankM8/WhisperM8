@@ -12,7 +12,8 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
-                Text(title.uppercased())
+                Text(settingsLocalized: title)
+                    .textCase(.uppercase)
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                     .tracking(1.45)
                     .foregroundStyle(AppTheme.accent)

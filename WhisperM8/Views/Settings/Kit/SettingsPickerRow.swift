@@ -23,15 +23,17 @@ struct SettingsPickerRow<Option: Hashable, Label: View>: View {
 
     var body: some View {
         SettingsRow(title: title, subtitle: subtitle) {
-            Picker(title, selection: $selection) {
+            Picker(selection: $selection) {
                 ForEach(options, id: \.self) { option in
                     label(option)
                         .tag(option)
                 }
+            } label: {
+                Text(settingsLocalized: title)
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .accessibilityLabel(Text(title))
+            .accessibilityLabel(Text(settingsLocalized: title))
         }
     }
 }

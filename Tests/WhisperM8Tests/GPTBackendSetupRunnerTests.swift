@@ -57,7 +57,7 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         XCTAssertEqual(outcome, .ready)
         XCTAssertEqual(events.map(\.0), [.binary, .binary, .proxy, .proxy, .auth, .auth])
         XCTAssertEqual(events[1].1, .ok("/usr/local/bin/claude-code-proxy"))
-        XCTAssertEqual(events[3].1, .ok("Erreichbar auf Port 18765"))
+        XCTAssertEqual(events[3].1, .ok("Reachable on port 18765"))
         guard case .ok(let authDetail) = events[5].1 else {
             return XCTFail("Auth-Schritt muss ok sein")
         }
@@ -154,7 +154,7 @@ final class GPTBackendSetupRunnerTests: XCTestCase {
         guard case .failed(let message) = events.last?.1 else {
             return XCTFail("Auth-Schritt muss den fehlenden Login melden")
         }
-        XCTAssertTrue(message.contains("Device-Code-Login"))
+        XCTAssertTrue(message.contains("device-code login"))
     }
 
     func testUnknownAuthIsAHardFailure() async {

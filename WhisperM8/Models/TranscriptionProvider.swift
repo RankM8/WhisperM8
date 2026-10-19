@@ -23,6 +23,18 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
         chatGPTAvailable ? displayOrder + [.chatgpt] : displayOrder
     }
 
+    /// Provider-Optionen der Einstellungsseite (LR-ONB-012): „ChatGPT-Abo“ ist ein
+    /// Labs-Anbieter und erscheint nur, wenn der Kill-Switch ihn zulässt UND das
+    /// GPT-Backend eingerichtet ist oder er bereits gewählt wurde — eine bestehende
+    /// Auswahl geht so nie verloren.
+    static func settingsOptions(
+        killSwitchEnabled: Bool,
+        backendEnabled: Bool,
+        stored: TranscriptionProvider
+    ) -> [TranscriptionProvider] {
+        selectableProviders(chatGPTAvailable: killSwitchEnabled && (backendEnabled || stored == .chatgpt))
+    }
+
     /// Empfohlener Default-Provider für neue Nutzer (kostenloser Key, für Personal Use
     /// ausreichend).
     static let recommended: TranscriptionProvider = .groq

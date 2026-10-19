@@ -29,6 +29,9 @@ struct SettingsRouteTarget: Equatable {
             return SettingsRouteTarget(page: .claudeHooks, aiOutputTab: nil, agentChatsTab: nil)
         case "hotkey", "audio":
             return SettingsRouteTarget(page: .recording, aiOutputTab: nil, agentChatsTab: nil)
+        case "voiceAgent":
+            // Der Voice-Gate-Tab von „Agent Chats“ ist seit der Labs-Gruppe eine eigene Seite.
+            return SettingsRouteTarget(page: .voiceGate, aiOutputTab: nil, agentChatsTab: nil)
         case "behavior":
             return SettingsRouteTarget(page: .general, aiOutputTab: nil, agentChatsTab: nil)
         default:

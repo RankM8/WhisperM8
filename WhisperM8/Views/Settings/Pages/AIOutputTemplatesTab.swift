@@ -47,7 +47,7 @@ struct AIOutputTemplatesTab: View {
 
     private func templateGroup(_ title: String, _ templates: [PostProcessingTemplate]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(AppTheme.accent)
                 .padding(.horizontal, 8)
@@ -65,10 +65,10 @@ struct AIOutputTemplatesTab: View {
                     } label: {
                         HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(template.name)
+                                Text(settingsLocalized: template.name)
                                     .font(.system(size: 13, weight: template.id == model.selectedTemplateID ? .semibold : .regular))
                                     .foregroundStyle(template.id == model.selectedTemplateID ? AppTheme.accent : AppTheme.textPrimary)
-                                Text(template.description)
+                                Text(settingsLocalized: template.description)
                                     .font(.system(size: 11))
                                     .foregroundStyle(AppTheme.textTertiary)
                                     .lineLimit(2)
@@ -150,10 +150,10 @@ struct AIOutputTemplatesTab: View {
     private func editorHeader(_ template: PostProcessingTemplate) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(template.name)
+                Text(settingsLocalized: template.name)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
-                Text(template.isBuiltIn ? "Read-only built-in template" : model.isDirty ? "Custom template with unsaved changes" : "Custom template")
+                Text(settingsLocalized: template.isBuiltIn ? "Read-only built-in template" : model.isDirty ? "Custom template with unsaved changes" : "Custom template")
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
             }
