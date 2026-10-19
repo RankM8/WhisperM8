@@ -58,11 +58,18 @@ struct AgentChatsSettingsPage: View {
     }
 }
 
-private struct AgentChatsWorkspaceSettingsTab: View {
+struct AgentChatsWorkspaceSettingsTab: View {
+    /// Startart-Auswahl: „Claude Agents“ (Multi-Session-Ansicht) gehört zu den
+    /// erweiterten Funktionen (LR-AU-031). Eine gespeicherte Auswahl bleibt sichtbar.
+    static func newChatOptions(advanced: Bool, current: String) -> [String] {
+        advanced || current == "claude-agents" ? ["claude", "claude-agents", "codex"] : ["claude", "codex"]
+    }
+
     @AppStorage(PreferenceKeys.defaultAgentProvider) private var defaultAgentProviderRaw = "claude"
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
     @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
     @AppStorage(PreferenceKeys.isTabSwipeEnabled) private var isTabSwipeEnabled = true
+    @AppStorage(PreferenceKeys.agentAdvancedFeaturesEnabled) private var isAdvancedEnabled = false
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
     @State private var folderFeedback: String?
@@ -84,7 +91,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "New chat starts with",
                     subtitle: "Claude Agents opens the multi-session dashboard view instead of a single chat.",
                     selection: $defaultAgentProviderRaw,
-                    options: ["claude", "claude-agents", "codex"]
+                    options: Self.newChatOptions(advanced: isAdvancedEnabled, current: defaultAgentProviderRaw)
                 ) { rawValue in
                     Text(settingsLocalized: providerLabel(for: rawValue))
                 }
@@ -121,6 +128,12 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "Switch tabs with a two-finger swipe",
                     subtitle: "Swiping sideways on the trackpad moves to the next or previous tab. Ignored for a moment after you type, so a resting palm cannot switch chats while you write.",
                     isOn: $isTabSwipeEnabled
+                )
+
+                SettingsToggleRow(
+                    title: "Advanced agent features",
+                    subtitle: "Shows background agents, agent views, plain terminals and the sub-agent library in the new-chat menu. Existing chats of these kinds stay usable either way.",
+                    isOn: $isAdvancedEnabled
                 )
 
                 SettingsToggleRow(

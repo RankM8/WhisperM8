@@ -1021,6 +1021,16 @@
         }
       }
     },
+    "Advanced agent features": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweiterte Agent-Funktionen"
+          }
+        }
+      }
+    },
     "Agent %@.": {
       "localizations": {
         "de": {
@@ -9980,6 +9990,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eingegebenen Key anzeigen"
+          }
+        }
+      }
+    },
+    "Shows background agents, agent views, plain terminals and the sub-agent library in the new-chat menu. Existing chats of these kinds stay usable either way.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt Hintergrund-Agents, Agent-Ansichten, einfache Terminals und die Sub-Agent-Bibliothek im Menü für neue Chats. Bestehende Chats dieser Arten bleiben in jedem Fall bedienbar."
           }
         }
       }

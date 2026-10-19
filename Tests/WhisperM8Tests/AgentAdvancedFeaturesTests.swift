@@ -47,3 +47,14 @@ final class AgentAdvancedFeaturesTests: XCTestCase {
         XCTAssertTrue(AgentAdvancedFeatures.resolveAtLaunch(preferences: prefs, workspaceHasSessions: { false }))
     }
 }
+
+final class AgentAdvancedFeaturesSettingsTests: XCTestCase {
+    func testNewChatOptionsHideAgentViewWhenAdvancedOff() {
+        XCTAssertEqual(AgentChatsWorkspaceSettingsTab.newChatOptions(advanced: false, current: "claude"), ["claude", "codex"])
+        XCTAssertEqual(AgentChatsWorkspaceSettingsTab.newChatOptions(advanced: true, current: "claude"), ["claude", "claude-agents", "codex"])
+    }
+
+    func testStoredAgentViewChoiceStaysVisible() {
+        XCTAssertTrue(AgentChatsWorkspaceSettingsTab.newChatOptions(advanced: false, current: "claude-agents").contains("claude-agents"))
+    }
+}
