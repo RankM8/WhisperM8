@@ -11,16 +11,6 @@
         }
       }
     },
-    " The chat is also removed from the workspace “%@”.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": " Der Chat wird außerdem aus dem Workspace „%@“ entfernt."
-          }
-        }
-      }
-    },
     " · free from %@": {
       "localizations": {
         "de": {
@@ -13824,32 +13814,12 @@
         }
       }
     },
-    "off": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "zu"
-          }
-        }
-      }
-    },
     "offline — showing last known state": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Offline. Letzter bekannter Stand wird angezeigt"
-          }
-        }
-      }
-    },
-    "on": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "auf"
           }
         }
       }
@@ -14030,16 +14000,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "v%@ installiert: %@. Ein laufender Proxy nutzt das Update nach „Proxy stoppen“ + Neustart."
-          }
-        }
-      }
-    },
-    "waiting": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "wartet"
           }
         }
       }
