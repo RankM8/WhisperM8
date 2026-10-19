@@ -42,7 +42,7 @@ A session manager for **Claude Code** and **Codex CLI**:
 
 ## Installation
 
-### Homebrew (recommended)
+### Homebrew
 
 Install:
 
@@ -62,35 +62,15 @@ brew upgrade --cask whisperm8
 > The cask automatically removes the Gatekeeper quarantine attribute on install,
 > so the app launches without a manual override.
 
-### Build from Source
-
-```bash
-git clone https://github.com/RankM8/whisperm8.git
-cd whisperm8
-make install
-```
-
-**Requirements:**
-- macOS 14 (Sonoma) or later
-- Xcode Command Line Tools (`xcode-select --install`)
-
-### Direct DMG download
-
-Grab the latest `.dmg` from [Releases](https://github.com/RankM8/WhisperM8/releases),
-drag WhisperM8 into Applications, then clear the quarantine flag (the Homebrew
-cask does this for you):
-
-```bash
-xattr -dr com.apple.quarantine /Applications/WhisperM8.app
-```
-
 ## Setup
 
-1. **Launch WhisperM8** — The setup wizard will guide you through configuration
-2. **Grant Permissions** — Microphone (for recording) and Accessibility (for auto-paste)
-3. **Set Your Hotkey** — Choose a key combination (e.g., `Control + Shift + Space`)
-4. **Enter API Key** — Get one from [OpenAI](https://platform.openai.com/api-keys) or [Groq](https://console.groq.com/keys) (free tier available)
-5. **Configure Auto-Paste** — Choose whether to auto-paste or just copy to clipboard
+1. **Launch WhisperM8** — the setup wizard walks you through the rest.
+2. **Choose a profile** — *Dictation only*, *Dictation + AI enrichment* or *Full (with Agent Chats)*. You can change it later under Settings → General.
+3. **Grant permissions** — Microphone (recording) and Accessibility (auto-paste).
+4. **Set your hotkey** — e.g. `Control + Shift + Space`.
+5. **Enter an API key** — from [Groq](https://console.groq.com/keys) (free tier) or [OpenAI](https://platform.openai.com/api-keys); stored in the macOS Keychain.
+6. **Connect Claude Code and Codex** (AI enrichment and Agent Chats only) — the wizard detects existing installations. If a CLI is missing, it offers to install it via Homebrew (`brew install --cask claude-code` / `codex`) after you confirm; Codex is connected right in the wizard (*Sign in with ChatGPT*); Claude Code walks you through signing in the first time you start a chat.
+7. **Try it** — the last step records a short test dictation.
 
 ## Usage
 
@@ -100,7 +80,7 @@ xattr -dr com.apple.quarantine /Applications/WhisperM8.app
 4. **Press the hotkey again** to stop and transcribe
 5. Text appears automatically (or is copied to clipboard)
 
-**Cancel Recording:** Click the X button in the overlay or press ESC.
+**Cancel Recording:** Click the X button in the overlay.
 
 ## CLI: `whisperm8`
 
@@ -115,7 +95,7 @@ whisperm8 transcribe workshop.mp4 --dry-run            # duration + cost estimat
 
 Formats: `txt`, `json`, `srt`, `vtt` · providers: Groq (default) and OpenAI · long files are chunked at silence boundaries and stitched back together automatically. Run `whisperm8 --help` for all options.
 
-**Agent skill:** Settings → *CLI & Skill* provides an agent skill (SKILL.md) that teaches Claude Code, Claude.ai, or ChatGPT how to drive the CLI — one click installs it to `~/.claude/skills/`, or copy/save it for other assistants. Source of truth: [WhisperM8/Resources/whisperm8-cli-skill.md](WhisperM8/Resources/whisperm8-cli-skill.md).
+**Agent skill:** Settings → *CLI & Skills* provides an agent skill (SKILL.md) that teaches Claude Code, Claude.ai, or ChatGPT how to drive the CLI — one click installs it to `~/.claude/skills/`, or copy/save it for other assistants. Source of truth: [WhisperM8/Resources/whisperm8-cli-skill.md](WhisperM8/Resources/whisperm8-cli-skill.md).
 
 ## API Providers
 
@@ -130,61 +110,14 @@ For detailed troubleshooting, see [docs/README.md](docs/README.md).
 
 ## Development
 
-```bash
-# Recommended: Clean build, install to /Applications, and launch
-make dev
-
-# Build release only (no install)
-make build
-
-# Quick debug build (for rapid iteration)
-make run
-
-# Install to /Applications
-make install
-```
-
-### Troubleshooting Duplicate Apps in Spotlight
-
-If Spotlight shows multiple WhisperM8 versions:
-
-```bash
-# Remove ALL app bundles from everywhere
-make clean-apps
-
-# Then reinstall fresh
-make dev
-```
-
-### Full Reset
-
-```bash
-# Reset all data (API keys, settings, permissions)
-make clean-install
-```
-
-This removes all app data and reinstalls fresh. You'll need to reconfigure permissions and settings.
-
-### Releasing
-
-Releases are automated via `.github/workflows/release.yml` (triggered on a `v*`
-tag):
-
-1. Bump `CFBundleShortVersionString` / `CFBundleVersion` in `WhisperM8/Info.plist`.
-2. `git tag vX.Y.Z && git push --tags`.
-
-The pipeline builds the ad-hoc DMG, creates a GitHub Release with the asset, and
-updates the Homebrew cask in [`RankM8/homebrew-tap`](https://github.com/RankM8/homebrew-tap)
-(version + sha256). The tag must match the Info.plist version or the build fails.
-
-> One-time setup: the `homebrew-tap` repo must exist (public), and a
-> `TAP_GITHUB_TOKEN` secret (PAT with `Contents: write` on the tap) must be set
-> in this repo's Actions secrets so CI can push the updated cask.
+Building from source, `make` targets, resets and releases are for contributors only — see
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). End users install and update exclusively via Homebrew.
 
 ## Documentation
 
 - [Technical Documentation](docs/README.md) — Architecture, troubleshooting, developer guide
 - [User Guide](docs/USER_GUIDE.md) — Detailed usage instructions
+- [Development](docs/DEVELOPMENT.md) — Build from source, make targets, releasing
 
 ## Contributing
 

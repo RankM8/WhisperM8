@@ -5,7 +5,7 @@ description_long: |
   Einstiegspunkt der WhisperM8-Dokumentation: Kurzbeschreibung der nativen
   macOS-Diktier-App (OpenAI Whisper / Groq), Quick Start, Dokumentationslandkarte
   und Install-/Build-Hinweise. Verweist auf USER_GUIDE.md und die Detail-Docs.
-updated: 2026-07-09
+updated: 2026-10-19
 ---
 
 # WhisperM8
@@ -17,16 +17,12 @@ Native macOS dictation app with OpenAI Whisper / Groq transcription.
 ## Quick Start (TL;DR)
 
 ```bash
-git clone git@github.com:RankM8/whisperm8.git
-cd whisperm8
-make install
-# Launch app → grant permissions → enter API key → done!
+brew install --cask rankm8/tap/whisperm8
+# Launch app → the setup wizard guides you through permissions, hotkey, API key
 ```
 
-**Having issues (crashes, strange behavior)?**
-```bash
-make clean-install
-```
+Updates: `brew upgrade --cask whisperm8`. Problems: see [USER_GUIDE.md](USER_GUIDE.md#troubleshooting).
+Building from source (contributors only): [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
@@ -73,76 +69,13 @@ Der Einstieg in alle Bereiche liegt unter
 
 ## Installation
 
-### Build from source (current supported path)
-
-**Requirements:**
-- macOS 14.0+
-- Vollständiges Xcode unter `/Applications/Xcode.app`; der Makefile-Build setzt
-  `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` für die
-  SwiftUI-Makros. Command Line Tools allein reichen für den regulären Build
-  nicht aus.
-
 ```bash
-git clone git@github.com:RankM8/whisperm8.git
-cd whisperm8
-make install
+brew install --cask rankm8/tap/whisperm8     # install
+brew upgrade --cask whisperm8                # update
 ```
 
-The app will be installed to `/Applications/WhisperM8.app`.
-
----
-
-## Make Commands
-
-| Command | Description |
-|---------|-------------|
-| `make build` | Create release build (app stays in repo) |
-| `make install` | Build + install to `/Applications` |
-| `make run` | Debug build + launch immediately |
-| `make clean-install` | Remove app data, reset Microphone/Accessibility permissions, then reinstall |
-| `make kill` | Stop all running instances |
-| `make clean` | Delete build artifacts |
-
----
-
-## Clean Install (for issues)
-
-If the app crashes, behaves strangely, or won't start after the first time:
-
-```bash
-make clean-install
-```
-
-**What `make clean-install` does:**
-1. Stops all WhisperM8 processes
-2. Removes old app installations (`/Applications`, `~/Applications`, `~/Desktop`, `~/Downloads`)
-3. Resets Accessibility and Microphone permissions for current and legacy bundle IDs; Screen Recording is not reset
-4. Deletes UserDefaults (for all possible bundle IDs)
-5. Deletes Preferences files directly
-6. Deletes Keychain entries (API keys)
-7. Deletes cached data
-8. Deletes Application Support
-9. Deletes saved window state
-10. Deletes Container data (if present)
-11. Deletes temporary files
-12. Runs `make install` after `scripts/clean-install.sh` has completed
-
-**After this you need to:**
-- Grant Microphone permission again and, when using Auto-Paste, Accessibility
-- Re-enter API key
-- Set hotkey
-
-### Cleanup without automatic reinstall
-
-Running the cleanup script directly performs the same destructive cleanup,
-including removal of app bundles, UserDefaults, Keychain entries, caches and
-Application Support. It does **not** reinstall the app:
-
-```bash
-./scripts/clean-install.sh
-# Required afterwards if you want the app installed again:
-make install
-```
+Homebrew is the only supported installation and update channel. Building from source, `make`
+targets and the destructive full reset are contributor topics: [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
@@ -212,14 +145,15 @@ Detailed operation and UI behavior: [USER_GUIDE.md](USER_GUIDE.md) and
 
 ### App crashes after first time / on every start
 
-**Solution:** Clean Install
-```bash
-make clean-install
-```
+1. Update: `brew upgrade --cask whisperm8`.
+2. Quit and relaunch; check whether a second copy (e.g. a self-built one) is running or listed in
+   Spotlight and remove it.
+3. Re-check the permissions under System Settings → Privacy & Security (Microphone, Accessibility).
+4. Collect logs (`log show --last 10m --predicate 'subsystem == "com.whisperm8.app"'`) and the crash
+   report from Console → Crash Reports, and file an issue.
 
-`make clean-install` is an empirical troubleshooting measure. The repository
-contains no diagnostic or frequency data proving that old settings or
-permissions are the usual cause of startup crashes.
+A full data reset deletes your chats, projects and custom modes — it is a last resort, described in
+[DEVELOPMENT.md](DEVELOPMENT.md#full-reset-destructive).
 
 ### Auto-paste not working
 
@@ -238,9 +172,8 @@ permissions are the usual cause of startup crashes.
 
 ### Microphone error / "Microphone usage description" crash
 
-```bash
-make clean-install
-```
+Usually a self-built or damaged copy without its `Info.plist` texts. Reinstall the official build:
+`brew reinstall --cask whisperm8`, then grant the microphone permission again.
 
 ### Bluetooth-Mikrofone (AirPods, etc.)
 
@@ -263,7 +196,7 @@ garantiert.
 
 ### App not appearing in menu bar
 
-- Already an instance running? `make kill`
+- Already an instance running? Check Activity Monitor for a second `WhisperM8` process and quit it
 - Check Console.app → WhisperM8 logs
 
 ### Reset Microphone and Accessibility permissions
