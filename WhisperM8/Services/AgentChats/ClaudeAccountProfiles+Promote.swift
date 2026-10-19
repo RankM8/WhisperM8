@@ -216,10 +216,7 @@ extension ClaudeAccountProfiles {
     }
 
     private func writeMainSecret(_ secret: String, service: String) throws {
-        let (status, _) = securityRunner([
-            "add-generic-password", "-a", NSUserName(), "-s", service,
-            "-l", service, "-w", secret, "-U",
-        ])
+        let status = keychainWriter(service, NSUserName(), secret)
         guard status == 0 else {
             throw PromoteError.keychainWriteFailed("security add-generic-password exit \(status)")
         }

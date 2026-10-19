@@ -23,11 +23,32 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         case inFlight(Date)
         case completed(Date)
     }
+    /// Audit-Ziel (Tests injizieren eine Temp-Datei).
+    var auditLog: ChatsAuditLog = .shared
     private let idempotencyLock = NSLock()
     private var recentRequests: [String: IdempotencyState] = [:]
     private let idempotencyWindow: TimeInterval = 60
 
+    /// Reine Lese-Methoden: brauchen keine verifizierte Identität.
+    static let readOnlyMethods: Set<String> = ["ping", "sessions.live", "window.list", "gridWorkspace.list"]
+
+    /// Behauptet ein mutierender Aufruf eine Session-Identität (`sessionID`),
+    /// beweist aber kein gültiges Token (falsch, nie ausgegeben oder mit dem
+    /// PTY-Ende widerrufen), wird er abgelehnt statt als „unverified"
+    /// ausgeführt (LR-CLI-005). Aufrufe ganz ohne `sessionID` (User im Terminal,
+    /// Skripte) bleiben wie bisher erlaubt und erscheinen als „external".
+    static func rejectsUnverifiedActor(_ request: ChatsControlRequest) -> Bool {
+        guard !readOnlyMethods.contains(request.method),
+              let idString = request.actor.sessionID else { return false }
+        guard let id = UUID(uuidString: idString) else { return true }
+        return !AgentSessionTokenRegistry.shared.verify(sessionID: id, token: request.actor.token)
+    }
+
     func handle(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        if Self.rejectsUnverifiedActor(request) {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "Session-Identität nicht belegt (Token fehlt, falsch oder widerrufen) — Befehl aus der laufenden Chat-Session der App ausführen.")
+        }
         switch request.method {
         case "ping":
             return await pingResponse(request)
@@ -71,6 +92,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await gridWorkspaceOpen(request)
         case "queue.enqueue", "queue.cancel":
             return await queueMutation(request)
+        case "audit.note":
+            return await auditNote(request)
         case "session.moveAccount":
             return await sessionMoveAccount(request)
         case let method where Self.boardMethods.contains(method):
@@ -1709,7 +1732,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             verified = false
             label = "external"
         }
-        ChatsAuditLog.shared.append(ChatsAuditEntry(
+        auditLog.append(ChatsAuditEntry(
             at: Date(), actor: label, verified: verified, method: method, target: target,
             outcome: outcome, promptChars: prompt?.count,
             promptHead: prompt.map(ChatsAuditLog.promptHead)))

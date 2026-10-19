@@ -440,6 +440,50 @@ struct ClaudeAccountProfiles {
         return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
     }
 
+    /// Schreibt ein Keychain-Secret, OHNE es als Prozessargument zu übergeben
+    /// (LR-KO-001): `security add-generic-password -w <secret>` hätte das volle
+    /// OAuth-/Refresh-Token-JSON für die Dauer des Aufrufs in argv offengelegt.
+    /// Stattdessen läuft `security -i` und bekommt den Befehl über stdin; das
+    /// Secret geht als Hex (`-X`), damit kein Quoting nötig ist. Item, ACL und
+    /// Ersteller bleiben dieselben wie beim bisherigen CLI-Aufruf (Claude liest
+    /// den Eintrag weiter per `security find-generic-password`).
+    /// Rückgabe: Exit-Code (0 = geschrieben).
+    var keychainWriter: (_ service: String, _ account: String, _ secret: String) -> Int32 = { service, account, secret in
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["-i"]
+        let input = Pipe()
+        process.standardInput = input
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do {
+            try process.run()
+        } catch {
+            return 1
+        }
+        let line = ClaudeAccountProfiles.keychainWriteCommand(service: service, account: account, secret: secret)
+        // SIGPIPE-Regel: nur das werfende write(contentsOf:).
+        try? input.fileHandleForWriting.write(contentsOf: Data((line + "\n").utf8))
+        try? input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    /// Die `security -i`-Zeile zum Anlegen/Aktualisieren des Items. Service und
+    /// Account sind validierte Namen (ASCII-alnum, `-_ .`), werden aber trotzdem
+    /// in Anführungszeichen mit Escapes gesetzt.
+    static func keychainWriteCommand(service: String, account: String, secret: String) -> String {
+        func quoted(_ value: String) -> String {
+            let escaped = value
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: " ")
+            return "\"\(escaped)\""
+        }
+        let hex = secret.utf8.map { String(format: "%02x", $0) }.joined()
+        return "add-generic-password -a \(quoted(account)) -s \(quoted(service)) -l \(quoted(service)) -X \(hex) -U"
+    }
+
     /// Benennt ein Profil um — inklusive Keychain-Umzug, damit der Login
     /// erhalten bleibt: der Service-Name haengt am Verzeichnis-Pfad
     /// (sha256-Suffix), ein blosser Ordner-Rename wuerde Claude also vom
@@ -469,10 +513,7 @@ struct ClaudeAccountProfiles {
         if readStatus == 0, !trimmedSecret.isEmpty {
             let newService = keychainService(forProfile: newName)
             let account = NSUserName()
-            let (addStatus, _) = securityRunner([
-                "add-generic-password", "-a", account, "-s", newService,
-                "-l", newService, "-w", trimmedSecret, "-U",
-            ])
+            let addStatus = keychainWriter(newService, account, trimmedSecret)
             guard addStatus == 0 else {
                 // Rollback: Ordner zurueck, Login bleibt am alten Namen intakt.
                 try? fileManager.moveItem(at: newDir, to: oldDir)

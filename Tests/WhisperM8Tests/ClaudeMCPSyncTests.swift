@@ -55,6 +55,29 @@ final class ClaudeMCPSyncTests: XCTestCase {
         XCTAssertEqual(plan.excluded, ["secret"])
     }
 
+    func testServersWithSecretsAreNeverPlannedAndNeverReachArgv() async throws {
+        try writeClaudeJSON("main", servers: [
+            "bearer": ["type": "http", "url": "https://b", "headers": ["Authorization": "Bearer SECRET123"]],
+            "envsrv": ["type": "stdio", "command": "x", "env": ["API_KEY": "SECRET456"]],
+            "query": ["type": "http", "url": "https://q?token=SECRET789"],
+            "plain": ["type": "http", "url": "https://p"],
+        ])
+        try writeClaudeJSON("ai2", servers: [:])
+        let runner = RunnerSpy()
+        let sync = ClaudeMCPSync(
+            profiles: ClaudeAccountProfiles(homeDirectory: home),
+            processRunner: runner,
+            commandResolver: { _ in "/fake/claude" })
+
+        let plan = ClaudeMCPSync.plan(sync.snapshot(), excluded: [])
+        XCTAssertEqual(plan.additions.map(\.server), ["plain"])
+        XCTAssertEqual(plan.manual, ["bearer", "envsrv", "query"])
+
+        _ = await sync.apply(plan)
+        let argv = runner.calls.flatMap(\.arguments).joined(separator: " ")
+        XCTAssertFalse(argv.contains("SECRET"))
+    }
+
     func testApplyUsesClaudeCommandWithConfigDirOnlyForProfiles() async throws {
         try writeClaudeJSON("ai2", servers: [:])
         let runner = RunnerSpy()

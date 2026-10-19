@@ -97,19 +97,22 @@ struct ClaudeMCPSyncSection: View {
     private func statusText(missing: [String], server: String, isExcluded: Bool) -> String {
         if isExcluded { return "excluded — stays per account" }
         if snapshot.hasConflict(server) { return "different definitions per account — not copied" }
+        if plan.manual.contains(server) {
+            return "contains secrets — set it up manually in " + missing.joined(separator: ", ") + " (never passed on the command line)"
+        }
         if missing.isEmpty { return "in all accounts" }
         return "missing in " + missing.joined(separator: ", ")
     }
 
     private func statusSymbol(missing: [String], server: String, isExcluded: Bool) -> String {
         if isExcluded { return "minus.circle" }
-        if snapshot.hasConflict(server) { return "exclamationmark.triangle" }
+        if snapshot.hasConflict(server) || plan.manual.contains(server) { return "exclamationmark.triangle" }
         return missing.isEmpty ? "checkmark.circle" : "circle.dashed"
     }
 
     private func statusColor(missing: [String], server: String, isExcluded: Bool) -> Color {
         if isExcluded { return .secondary }
-        if snapshot.hasConflict(server) { return .orange }
+        if snapshot.hasConflict(server) || plan.manual.contains(server) { return .orange }
         return missing.isEmpty ? .green : .secondary
     }
 
