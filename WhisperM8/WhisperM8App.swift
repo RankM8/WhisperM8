@@ -476,7 +476,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             case .cancel:
                 return .terminateCancel
             case .quitAndResume:
-                AgentCrashRecoveryMarker.shared.keepForResume(runningSessionIDs: running)
+                // Während des Dialogs können Chats gestartet oder beendet
+                // worden sein — mit dem Stand nach dem Dialog vormerken.
+                let runningNow = MainActor.assumeIsolated { AgentTerminalRegistry.shared.activeSessionIDs }
+                AgentCrashRecoveryMarker.shared.keepForResume(runningSessionIDs: runningNow)
             case .quit:
                 AgentCrashRecoveryMarker.shared.endRunCleanly()
             }

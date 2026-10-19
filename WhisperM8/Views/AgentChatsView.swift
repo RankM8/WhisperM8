@@ -2585,6 +2585,9 @@ struct AgentChatsView: View {
             }
         }
         .background(AgentTheme.background)
+        // Fehlgeschlagene Workspace-Writes sichtbar machen (LR-AK-005); eigene
+        // kleine View, damit nur sie den Persistenz-Zustand beobachtet.
+        .overlay(alignment: .top) { WorkspacePersistenceBanner() }
     }
 
     /// Ctrl+Tab-Switcher-Overlay über dem Terminal-Content der Einzelansicht:

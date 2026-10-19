@@ -794,22 +794,22 @@
         }
       }
     },
-    "Quit and Continue Later": {
+    "Quit and Reopen Later": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beenden und später fortsetzen"
+            "value": "Beenden und später wieder öffnen"
           }
         }
       }
     },
-    "Quitting stops them mid-task. WhisperM8 can continue them the next time it starts.": {
+    "Quitting stops them mid-task. WhisperM8 can reopen them the next time it starts, so you can pick up where they stopped.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beenden unterbricht sie mitten in der Arbeit. WhisperM8 kann sie beim nächsten Start fortsetzen."
+            "value": "Beenden unterbricht sie mitten in der Arbeit. WhisperM8 kann sie beim nächsten Start wieder öffnen, damit du dort weitermachst."
           }
         }
       }

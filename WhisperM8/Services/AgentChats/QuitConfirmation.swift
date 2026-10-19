@@ -36,8 +36,8 @@ enum QuitConfirmation {
         alert.messageText = busyCount == 1
             ? String(localized: "A chat is still working")
             : String(localized: "\(busyCount) chats are still working")
-        alert.informativeText = String(localized: "Quitting stops them mid-task. WhisperM8 can continue them the next time it starts.")
-        alert.addButton(withTitle: String(localized: "Quit and Continue Later"))
+        alert.informativeText = String(localized: "Quitting stops them mid-task. WhisperM8 can reopen them the next time it starts, so you can pick up where they stopped.")
+        alert.addButton(withTitle: String(localized: "Quit and Reopen Later"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         alert.addButton(withTitle: String(localized: "Quit Anyway"))
         switch alert.runModal() {
