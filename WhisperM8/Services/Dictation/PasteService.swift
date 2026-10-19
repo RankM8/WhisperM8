@@ -26,10 +26,33 @@ struct PasteDeliveryResult: Equatable {
     static let notRequested = PasteDeliveryResult(textPasted: false, pastedAttachments: [], errors: [])
 }
 
+/// Seam für Systemzugriffe des Auto-Paste (Tests ersetzen sie): Rechte,
+/// Vordergrund-App, Aktivierung, Tastendruck und Zwischenablage.
+struct PasteServiceEnvironment {
+    var hasAccessibilityPermission: () -> Bool = { PermissionService.hasAccessibilityPermission }
+    var requestAccessibilityPermission: () -> Void = { PermissionService.requestAccessibilityPermission() }
+    var isFrontmost: (NSRunningApplication) -> Bool = { NSWorkspace.shared.frontmostApplication == $0 }
+    var activate: (NSRunningApplication) -> Void = { $0.activate() }
+    /// Cmd+V mit dem Tastencode des aktiven Layouts (LR-DIK-025).
+    var postPasteKeyEvent: () -> Bool = {
+        KeyCodeResolver.postCommandKey(character: "v", fallback: kVK_ANSI_V)
+    }
+    var pasteboard: NSPasteboard = .general
+    var activationTimeout: TimeInterval = 1.0
+
+    static let live = PasteServiceEnvironment()
+}
+
 @MainActor
 final class PasteService {
+    private let environment: PasteServiceEnvironment
+
+    init(environment: PasteServiceEnvironment = .live) {
+        self.environment = environment
+    }
+
     func copyToClipboard(_ text: String) {
-        let pasteboard = NSPasteboard.general
+        let pasteboard = environment.pasteboard
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
     }
@@ -41,7 +64,7 @@ final class PasteService {
     ) {
         Task {
             _ = await pastePayloadToActiveApp(
-                PastePayload.textOnly(NSPasteboard.general.string(forType: .string) ?? ""),
+                PastePayload.textOnly(environment.pasteboard.string(forType: .string) ?? ""),
                 previousApp: previousApp,
                 onMissingPermission: onMissingPermission,
                 onMissingTarget: onMissingTarget
@@ -55,9 +78,9 @@ final class PasteService {
         onMissingPermission: () -> Void,
         onMissingTarget: () -> Void
     ) async -> PasteDeliveryResult {
-        guard PermissionService.hasAccessibilityPermission else {
+        guard environment.hasAccessibilityPermission() else {
             Logger.permission.error("Accessibility permission missing - cannot auto-paste")
-            PermissionService.requestAccessibilityPermission()
+            environment.requestAccessibilityPermission()
             onMissingPermission()
             return PasteDeliveryResult(
                 textPasted: false,
@@ -80,8 +103,20 @@ final class PasteService {
 
         await sleep(seconds: 0.05)
         Logger.focus.info("Activating target app...")
-        targetApp.activate()
-        await waitForActivation(of: targetApp)
+        environment.activate(targetApp)
+        guard await waitForActivation(of: targetApp) else {
+            // LR-DIK-007: Die Ziel-App ist nicht nach vorn gekommen. Cmd+V
+            // ginge an die zufällige Frontmost-App — also NICHT pasten. Der
+            // Text bleibt in der Zwischenablage, der Aufrufer zeigt den Hinweis.
+            Logger.paste.warning("Target app not active after timeout - skipping paste, text stays on clipboard")
+            copyToClipboard(payload.text)
+            onMissingTarget()
+            return PasteDeliveryResult(
+                textPasted: false,
+                pastedAttachments: [],
+                errors: ["Die Ziel-App ließ sich nicht aktivieren. Der Text liegt in der Zwischenablage – mit Cmd+V selbst einfügen."]
+            )
+        }
         await sleep(seconds: 0.1)
 
         var errors: [String] = []
@@ -123,23 +158,25 @@ final class PasteService {
         )
     }
 
-    private func waitForActivation(of app: NSRunningApplication, timeout: TimeInterval = 1.0) async {
+    /// `true`, sobald die Ziel-App frontmost ist; `false` nach dem Timeout.
+    private func waitForActivation(of app: NSRunningApplication) async -> Bool {
         let start = Date()
 
         while true {
-            if NSWorkspace.shared.frontmostApplication == app {
+            if environment.isFrontmost(app) {
                 Logger.focus.info("Target app is now active")
-                return
+                return true
             }
 
-            if Date().timeIntervalSince(start) >= timeout {
+            if Date().timeIntervalSince(start) >= environment.activationTimeout {
                 break
             }
 
             await sleep(seconds: 0.02)
         }
 
-        Logger.focus.warning("Timeout waiting for app activation, pasting anyway")
+        Logger.focus.warning("Timeout waiting for app activation")
+        return false
     }
 
     private func copyAttachmentToClipboard(_ attachment: PasteAttachment) throws {
@@ -147,7 +184,7 @@ final class PasteService {
             throw PasteServiceError.attachmentMissing(attachment.fileURL.path)
         }
 
-        let pasteboard = NSPasteboard.general
+        let pasteboard = environment.pasteboard
         let item = NSPasteboardItem()
         item.setString(attachment.fileURL.absoluteString, forType: .fileURL)
 
@@ -167,23 +204,13 @@ final class PasteService {
     }
 
     private func postPasteEvent() -> Bool {
-        let source = CGEventSource(stateID: .hidSystemState)
-
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_V), keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_V), keyDown: false) else {
+        let posted = environment.postPasteKeyEvent()
+        if posted {
+            Logger.paste.info("Paste event posted successfully")
+        } else {
             Logger.paste.error("Failed to create CGEvents")
-            return false
         }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-
-        keyDown.post(tap: .cghidEventTap)
-        usleep(20_000)
-        keyUp.post(tap: .cghidEventTap)
-
-        Logger.paste.info("Paste event posted successfully")
-        return true
+        return posted
     }
 
     private func sleep(seconds: TimeInterval) async {

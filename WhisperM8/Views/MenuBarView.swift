@@ -58,6 +58,16 @@ struct MenuBarView: View {
             }
         }
 
+        // Gesicherte Aufnahme (Fehler, ESC-Abbruch, beendete App): später
+        // erneut transkribieren — erscheint nur, wenn eine vorliegt.
+        if appState.hasPreservedRecording {
+            Divider()
+            Button("Letzte Aufnahme erneut transkribieren") {
+                Task { await appState.retryLastPreservedRecording() }
+            }
+            .disabled(appState.isRecording || appState.isTranscribing)
+        }
+
         Divider()
 
         if let shortcut = KeyboardShortcuts.getShortcut(for: .toggleRecording) {

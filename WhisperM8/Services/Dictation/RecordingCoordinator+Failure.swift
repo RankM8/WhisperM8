@@ -76,7 +76,8 @@ extension RecordingCoordinator {
                 audioURL: audioURL,
                 audioDuration: audioDuration,
                 language: AppPreferences.shared.language,
-                errorMessage: errorMessage
+                errorMessage: errorMessage,
+                outputModeID: outputMode.id
             )
             pendingRetry = PendingTranscriptionRetry(
                 recording: recording,
@@ -85,6 +86,7 @@ extension RecordingCoordinator {
                 contextBundle: contextBundle
             )
             Logger.transcription.info("Recording preserved at \(recording.audioURL.path, privacy: .public)")
+            refreshPreservedRecordingFlag()
             return true
         } catch {
             Logger.transcription.error("Failed to preserve recording: \(error.localizedDescription, privacy: .public)")
@@ -108,6 +110,85 @@ extension RecordingCoordinator {
             alert.addButton(withTitle: "OK")
             _ = alert.runModal()
             return false
+        }
+    }
+}
+
+// MARK: - Spätere Wiederholung (Menüleiste) und Quit-Rettung
+
+extension RecordingCoordinator {
+    /// Gibt es eine gesicherte Aufnahme, die sich erneut transkribieren lässt?
+    /// Treibt die Sichtbarkeit des Menüleisten-Eintrags (`AppState`), damit
+    /// der Menü-Body kein Disk-I/O macht.
+    func refreshPreservedRecordingFlag() {
+        appState?.hasPreservedRecording = !failedRecordingsStore.list().isEmpty
+    }
+
+    /// "Letzte Aufnahme erneut transkribieren": nimmt den gemerkten Lauf oder,
+    /// nach App-Neustart, die neueste gesicherte Aufnahme samt Sidecar-Modus.
+    /// Der Kontext ist nach einem Neustart weg (Bundle liegt nur im Speicher);
+    /// Sprache, Modell und Anbieter kommen wie bei jedem Lauf aus den
+    /// aktuellen Einstellungen — so hilft der Retry auch nach einer
+    /// korrigierten API-Key-Eingabe.
+    func retryLastPreservedRecording() async {
+        guard let appState, !appState.isRecording, !appState.isTranscribing else { return }
+
+        if let pending = pendingRetry,
+           FileManager.default.fileExists(atPath: pending.recording.audioURL.path) {
+            await retryPendingTranscription()
+            return
+        }
+
+        guard let latest = failedRecordingsStore.list().first else {
+            pendingRetry = nil
+            refreshPreservedRecordingFlag()
+            return
+        }
+        pendingRetry = PendingTranscriptionRetry(
+            recording: latest,
+            audioDuration: latest.metadata.audioDuration,
+            outputMode: OutputMode.mode(for: latest.metadata.outputModeID),
+            contextBundle: .empty
+        )
+        await retryPendingTranscription()
+    }
+
+    /// Synchrone Quit-Vorbereitung (LR-DIK-001), aus `applicationShouldTerminate`.
+    /// Bewusst ohne `terminateLater`: finalisiert nur lokal eine laufende
+    /// Aufnahme bzw. verschiebt das Audio eines laufenden Uploads in den
+    /// FailedRecordings-Store, wartet nie auf Netzwerk und transkribiert/
+    /// fügt nichts ein. Beim nächsten Start steht die Aufnahme im Menü bereit.
+    func prepareForTermination() {
+        guard let appState else { return }
+        let message = "Die App wurde beendet, bevor das Diktat fertig war."
+
+        if appState.isRecording {
+            recordingTimer.stop()
+            screenClipLimitTask?.cancel()
+            contextCaptureTask?.cancel()
+            let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? appState.recordingDuration
+            if let audioURL = audioStopper.stopRecording() {
+                preserveRecording(
+                    audioURL: audioURL,
+                    audioDuration: duration,
+                    outputMode: appState.selectedOutputMode,
+                    contextBundle: appState.contextBundle,
+                    errorMessage: message
+                )
+            }
+            appState.isRecording = false
+        } else if let flight = inFlightTranscription,
+                  !isDeliveringTranscription,
+                  FileManager.default.fileExists(atPath: flight.audioURL.path) {
+            // Upload läuft: Datei ist fertig geschrieben, liegt aber noch im
+            // tmp-Verzeichnis. Umziehen genügt, der Prozess endet ohnehin.
+            preserveRecording(
+                audioURL: flight.audioURL,
+                audioDuration: flight.audioDuration,
+                outputMode: flight.outputMode,
+                contextBundle: flight.contextBundle,
+                errorMessage: message
+            )
         }
     }
 }
