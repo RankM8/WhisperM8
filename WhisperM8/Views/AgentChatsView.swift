@@ -1944,7 +1944,7 @@ struct AgentChatsView: View {
 
     private var sidebarEmptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Noch keine Projekte")
+            Text("No projects yet")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
             Text("Füge ein Projekt hinzu, um Codex- oder Claude-Chats darin anzulegen.")
@@ -2235,7 +2235,7 @@ struct AgentChatsView: View {
                         .onHover { if $0 { newChatHighlightedProjectID = project.id } }
                     }
                     if projects.isEmpty {
-                        Text(query.isEmpty ? "Noch keine Projekte" : "Kein Projekt gefunden")
+                        (query.isEmpty ? Text("No projects yet") : Text("No project found"))
                             .font(.system(size: 11))
                             .foregroundStyle(AgentTheme.textTertiary)
                             .frame(maxWidth: .infinity)
@@ -2526,7 +2526,7 @@ struct AgentChatsView: View {
                 }
                 .animation(.easeOut(duration: 0.1), value: tabSwitcherRun.isActive)
             } else {
-                ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
+                ContentUnavailableView("No agent chat", systemImage: "terminal")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -3257,7 +3257,7 @@ struct AgentChatsView: View {
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
             } else {
-                Text("Kein Chat ausgewählt")
+                Text("No chat selected")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AgentTheme.textTertiary)
             }
