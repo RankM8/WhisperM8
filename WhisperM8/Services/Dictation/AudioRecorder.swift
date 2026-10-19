@@ -4,8 +4,8 @@ import CoreAudio
 
 @Observable
 class AudioRecorder {
-    private var engine: AVAudioEngine?
-    private var audioFile: AVAudioFile?
+    private var engine: RecorderEngine?
+    private var audioFile: RecordingFileWriter?
     private var recordingURL: URL?
     private var converter: AVAudioConverter?
     private let resourceLock = NSLock()
@@ -27,8 +27,22 @@ class AudioRecorder {
         )!
     }()
 
+    /// Test-Seams: Benachrichtigungszentrale und Wartefunktion (300-ms-
+    /// Stabilisierung, Format-Retries). Defaults = Produktionsverhalten.
+    @ObservationIgnored var notificationCenter: NotificationCenter = .default
+    @ObservationIgnored var sleeper: (UInt64) async -> Void = { nanos in
+        try? await Task.sleep(nanoseconds: nanos)
+    }
+
     var audioLevel: Float = 0
     var isRecording = false
+
+    /// Wird (auf dem Main Thread) gemeldet, wenn die Aufnahme von selbst endet.
+    @ObservationIgnored var onInterruption: ((RecordingInterruption) -> Void)?
+
+    /// Vom Pegel-Timer aufgerufen: Prüft, ob die Engine noch läuft.
+    static let healthCheckTicksBeforeRecovery = 3
+    func checkEngineHealth() {}
 
     func startRecording() async throws {
         Logger.debug("[AudioRecorder] ========== START RECORDING ==========")
@@ -60,7 +74,8 @@ class AudioRecorder {
         }
 
         // Create fresh engine
-        let engine = AVAudioEngine()
+        let avEngine = AVAudioEngine()
+        let engine = AVAudioEngineRecorderEngine(avEngine)
         Logger.debug("[AudioRecorder] Created new AVAudioEngine")
 
         // Check if using System Default or specific device
@@ -74,7 +89,7 @@ class AudioRecorder {
         // Set specific input device if selected (NOT for System Default)
         if let deviceID = deviceID {
             Logger.debug("[AudioRecorder] Setting specific input device: \(deviceID)")
-            let result = setInputDevice(deviceID, for: engine)
+            let result = setInputDevice(deviceID, for: avEngine)
             Logger.debug("[AudioRecorder] setInputDevice result: \(result)")
         } else {
             Logger.debug("[AudioRecorder] Using System Default - not setting specific device")
@@ -85,7 +100,7 @@ class AudioRecorder {
 
         // Access inputNode AFTER setting device (this triggers device binding)
         Logger.debug("[AudioRecorder] Accessing inputNode (this binds the device)...")
-        let inputNode = engine.inputNode
+        let inputNode = avEngine.inputNode
 
         // Get the actual device being used
         if let audioUnit = inputNode.audioUnit {
@@ -105,28 +120,18 @@ class AudioRecorder {
         // Gleiche Schutzlogik wie in handleConfigurationChange().
         var validFormat: AVAudioFormat?
         for attempt in 1...5 {
-            let format = inputNode.inputFormat(forBus: 0)
-            if AudioFormatDecision.isRecordable(format) {
+            let format = engine.currentInputFormat()
+            if let format, AudioFormatDecision.isRecordable(format) {
                 validFormat = format
                 Logger.debug("[AudioRecorder] Input format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount) channels")
                 break
             }
-            Logger.debug("[AudioRecorder] Input format invalid (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount)ch — retrying…")
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            Logger.debug("[AudioRecorder] Input format invalid (attempt \(attempt)): \(format?.sampleRate ?? 0)Hz, \(format?.channelCount ?? 0)ch — retrying…")
+            await sleeper(100_000_000) // 100ms
         }
         guard let inputFormat = validFormat else {
             Logger.debug("[AudioRecorder] ERROR: No recordable input format after retries — aborting start")
             throw RecordingError.invalidFormat
-        }
-
-        // Create converter if needed
-        if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
-            Logger.debug("[AudioRecorder] Creating audio converter (input differs from target)")
-            resourceLock.withLock {
-                converter = AVAudioConverter(from: inputFormat, to: targetFormat)
-            }
-        } else {
-            Logger.debug("[AudioRecorder] No converter needed - formats match")
         }
 
         // Temp file for M4A output
@@ -144,16 +149,39 @@ class AudioRecorder {
         ]
 
         let file = try AVAudioFile(forWriting: url, settings: settings)
+        try beginSession(engine: engine, inputFormat: inputFormat, file: file, url: url)
+
+        Logger.debug("[AudioRecorder] Recording started successfully")
+        Logger.debug("[AudioRecorder] =====================================")
+    }
+
+    /// Gemeinsamer Kern von Erststart und Tests: Converter, Datei, Tap,
+    /// Engine-Start und Beobachter. Fehler räumen selbst auf; `startRecording`
+    /// reicht sie nur durch.
+    func beginSession(
+        engine: RecorderEngine,
+        inputFormat: AVAudioFormat,
+        file: RecordingFileWriter,
+        url: URL
+    ) throws {
+        // Create converter if needed
+        if AudioFormatDecision.needsConversion(from: inputFormat, to: targetFormat) {
+            Logger.debug("[AudioRecorder] Creating audio converter (input differs from target)")
+            let newConverter = AVAudioConverter(from: inputFormat, to: targetFormat)
+            resourceLock.withLock { converter = newConverter }
+        } else {
+            Logger.debug("[AudioRecorder] No converter needed - formats match")
+        }
+
         resourceLock.withLock {
             audioFile = file
         }
         recordingURL = url
 
         // Install tap for recording + level metering
-        // Use larger buffer size (4096) for better Bluetooth compatibility
         Logger.debug("[AudioRecorder] Installing tap on inputNode...")
         do {
-            try installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
+            try installRecordingTap(on: engine, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
         } catch {
             // Statt Prozess-Abort: sauber abbrechen. Der Nutzer bekommt die
             // normale Fehlermeldung und kann es erneut versuchen — beim
@@ -173,7 +201,7 @@ class AudioRecorder {
             Logger.debug("[AudioRecorder] Engine started successfully!")
         } catch {
             Logger.debug("[AudioRecorder] ERROR starting engine: \(error)")
-            inputNode.removeTap(onBus: 0)
+            engine.removeTap()
             resourceLock.withLock {
                 audioFile = nil
                 converter = nil
@@ -187,9 +215,6 @@ class AudioRecorder {
 
         // Setup observer for configuration changes (only for System Default mode)
         setupConfigurationObserver()
-
-        Logger.debug("[AudioRecorder] Recording started successfully")
-        Logger.debug("[AudioRecorder] =====================================")
     }
 
     func stopRecording() -> URL? {
@@ -208,7 +233,7 @@ class AudioRecorder {
         if let engine = engine {
             Logger.debug("[AudioRecorder] Removing tap and stopping engine")
             PerfBudgets.engineStop.withInterval {
-                engine.inputNode.removeTap(onBus: 0)
+                engine.removeTap()
                 engine.stop()
             }
         }
@@ -242,9 +267,9 @@ class AudioRecorder {
 
         Logger.debug("[AudioRecorder] Setting up config observer for System Default mode")
 
-        configurationObserver = NotificationCenter.default.addObserver(
+        configurationObserver = notificationCenter.addObserver(
             forName: .AVAudioEngineConfigurationChange,
-            object: engine,
+            object: engine.notificationSource,
             queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
@@ -260,13 +285,13 @@ class AudioRecorder {
     private func removeConfigurationObserver() {
         if let observer = configurationObserver {
             Logger.debug("[AudioRecorder] Removing configuration observer")
-            NotificationCenter.default.removeObserver(observer)
+            notificationCenter.removeObserver(observer)
             configurationObserver = nil
         }
     }
 
     @MainActor
-    private func handleConfigurationChange() async {
+    func handleConfigurationChange() async {
         Logger.debug("[AudioRecorder] ========== CONFIG CHANGE ==========")
         guard isRecording, !isRestarting, let engine = engine else {
             Logger.debug("[AudioRecorder] Skip: isRecording=\(isRecording), isRestarting=\(isRestarting), engine=\(engine != nil)")
@@ -280,28 +305,26 @@ class AudioRecorder {
 
         // 1. Stop engine and remove old tap (but DON'T destroy engine)
         engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
+        engine.removeTap()
         Logger.debug("[AudioRecorder] Tap removed, engine stopped")
 
         // 2. Wait for Bluetooth HFP profile switch to stabilize (300ms is sufficient)
         Logger.debug("[AudioRecorder] Waiting 300ms for HFP stabilization...")
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        await sleeper(300_000_000)
 
         // 3. Query NEW format with retry logic (format may be temporarily invalid)
-        let inputNode = engine.inputNode
         var newFormat: AVAudioFormat?
         let maxRetries = 5
 
         for attempt in 1...maxRetries {
             // CRITICAL: Use inputFormat(forBus:) NOT outputFormat(forBus:)
-            let format = inputNode.inputFormat(forBus: 0)
-            if AudioFormatDecision.isRecordable(format) {
+            if let format = engine.currentInputFormat(), AudioFormatDecision.isRecordable(format) {
                 newFormat = format
                 Logger.debug("[AudioRecorder] New format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount)ch")
                 break
             }
             Logger.debug("[AudioRecorder] Format invalid (attempt \(attempt)), retrying...")
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            await sleeper(100_000_000) // 100ms
         }
 
         guard let inputFormat = newFormat else {
@@ -310,15 +333,6 @@ class AudioRecorder {
             isRecording = false
             audioLevel = 0
             return
-        }
-
-        // Log what device we're now using
-        if let audioUnit = inputNode.audioUnit {
-            let (currentDeviceID, status) = currentEngineDeviceID(audioUnit)
-            if status == noErr {
-                let deviceName = AudioDeviceManager.shared.availableDevices.first { $0.id == currentDeviceID }?.name ?? "Unknown"
-                Logger.debug("[AudioRecorder] Engine using device: \(currentDeviceID) (\(deviceName))")
-            }
         }
 
         // 4. Create converter for new format if needed
@@ -344,7 +358,7 @@ class AudioRecorder {
         Logger.debug("[AudioRecorder] audioFile is \(hasAudioFile ? "valid" : "NIL")")
 
         do {
-            try installRecordingTap(on: inputNode, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
+            try installRecordingTap(on: engine, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
         } catch {
             // Reconnect nach Gerätewechsel: Schlägt der Tap fehl, ist die
             // Aufnahme verloren — aber die App bleibt am Leben. Ohne Tap
@@ -362,7 +376,7 @@ class AudioRecorder {
             Logger.debug("[AudioRecorder] Engine restarted successfully!")
 
             // Re-setup observer after short delay to avoid immediate re-trigger
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            await sleeper(100_000_000) // 100ms
             setupConfigurationObserver()
             Logger.debug("[AudioRecorder] Config observer re-installed")
         } catch {
@@ -383,7 +397,7 @@ class AudioRecorder {
     /// `logHundredthCallback` bewahrt das bisherige Verhalten: nur der Erststart
     /// loggt zusaetzlich den 100. Callback.
     private func installRecordingTap(
-        on inputNode: AVAudioInputNode,
+        on engine: RecorderEngine,
         inputFormat requestedFormat: AVAudioFormat,
         label: String,
         logHundredthCallback: Bool
@@ -391,7 +405,7 @@ class AudioRecorder {
         // Defensiv: ein evtl. vorhandener Tap würde installTap ebenfalls mit
         // einer unfangbaren NSException quittieren; removeTap ohne Tap ist
         // ein No-op.
-        inputNode.removeTap(onBus: 0)
+        engine.removeTap()
 
         // Das Format DIREKT VOR dem Tap noch einmal lesen. Zwischen der
         // Prüfung in `startRecording()` und diesem Punkt liegen
@@ -399,9 +413,9 @@ class AudioRecorder {
         // waren das 1,6 Sekunden, in denen das Gerät von 48 kHz auf 24 kHz
         // wechselte (Bluetooth-Profilwechsel). `installTap` verlangt exakte
         // Übereinstimmung mit dem AKTUELLEN Hardware-Format und wirft sonst.
-        let liveFormat = inputNode.inputFormat(forBus: 0)
         var inputFormat = requestedFormat
-        if AudioFormatDecision.isRecordable(liveFormat),
+        if let liveFormat = engine.currentInputFormat(),
+           AudioFormatDecision.isRecordable(liveFormat),
            liveFormat.sampleRate != requestedFormat.sampleRate
             || liveFormat.channelCount != requestedFormat.channelCount {
             Logger.info(
@@ -422,29 +436,25 @@ class AudioRecorder {
         var tapCallCount = 0
         let capturedTargetFormat = self.targetFormat
         let capturedFormat = inputFormat
-        // Der einzige vollständige Schutz: Auch nach dem Neulesen bleibt ein
-        // Zeitfenster, in dem das Gerät wechseln kann. Ohne @try/@catch
-        // beendet die NSException aus AVFAudio den Prozess.
-        try ObjCException.catching {
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: capturedFormat) { [weak self] buffer, _ in
-                guard let self else { return }
+        // Installation (inkl. ObjC-Exception-Schutz) liegt im Engine-Adapter.
+        try engine.installTap(format: capturedFormat) { [weak self] buffer in
+            guard let self else { return }
 
-                tapCallCount += 1
-                if tapCallCount == 1 {
-                    Logger.debug("[AudioRecorder] \(label): First callback received! frameLength=\(buffer.frameLength)")
-                } else if tapCallCount == 10 {
-                    Logger.debug("[AudioRecorder] \(label): 10 callbacks received")
-                } else if logHundredthCallback, tapCallCount == 100 {
-                    Logger.debug("[AudioRecorder] \(label): 100 callbacks received")
-                }
-
-                let level = self.calculateLevel(buffer: buffer)
-                Task { @MainActor in
-                    self.audioLevel = level
-                }
-
-                self.writeBuffer(buffer, inputFormat: capturedFormat, targetFormat: capturedTargetFormat)
+            tapCallCount += 1
+            if tapCallCount == 1 {
+                Logger.debug("[AudioRecorder] \(label): First callback received! frameLength=\(buffer.frameLength)")
+            } else if tapCallCount == 10 {
+                Logger.debug("[AudioRecorder] \(label): 10 callbacks received")
+            } else if logHundredthCallback, tapCallCount == 100 {
+                Logger.debug("[AudioRecorder] \(label): 100 callbacks received")
             }
+
+            let level = self.calculateLevel(buffer: buffer)
+            Task { @MainActor in
+                self.audioLevel = level
+            }
+
+            self.writeBuffer(buffer, inputFormat: capturedFormat, targetFormat: capturedTargetFormat)
         }
     }
 
@@ -559,6 +569,13 @@ class AudioRecorder {
         Logger.debug("[AudioRecorder] AudioUnitSetProperty status: \(status)")
         return status
     }
+}
+
+/// Grund, warum eine Aufnahme ohne Nutzer-Stopp endete.
+enum RecordingInterruption: Equatable {
+    case deviceLost
+    case engineFailed(String)
+    case writeFailed(String)
 }
 
 // MARK: - Recording Errors
