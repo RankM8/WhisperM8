@@ -30,6 +30,58 @@ enum AgentStatusPulse {
     static func isContinuous(switchEnabled: Bool) -> Bool { switchEnabled }
 }
 
+/// Bedeutung der Status-Punkte für VoiceOver und für Nutzer ohne Farbwahrnehmung
+/// (LR-AU-009): Label je Status plus eine Form, die ohne Farbe unterscheidbar
+/// ist. Pur und unit-getestet; die Ansicht hängt nur noch dran.
+enum AgentStatusAccessibility {
+    /// Form des Kerns — working = Scheibe, awaiting = Raute, idle = kleine
+    /// graue Scheibe, errored = Ring. Statisch, keine Dauerbewegung.
+    enum Shape: Equatable { case disc, diamond, hollowRing, idleDisc, none }
+
+    static func shape(for status: AgentSessionRuntimeStatus?) -> Shape {
+        switch status {
+        case .working: return .disc
+        case .awaitingInput: return .diamond
+        case .idle: return .idleDisc
+        case .errored: return .hollowRing
+        case .stopped, .none: return .none
+        }
+    }
+
+    /// Kurzes VoiceOver-Label; `nil` = kein Status, nichts vorlesen.
+    static func label(for status: AgentSessionRuntimeStatus?) -> String? {
+        switch status {
+        case .working: return String(localized: "Working")
+        case .awaitingInput: return String(localized: "Waiting for you")
+        case .idle: return String(localized: "Ready")
+        case .errored: return String(localized: "Error")
+        case .stopped, .none: return nil
+        }
+    }
+
+    /// Tooltip (ausführlicher als das Label).
+    static func help(for status: AgentSessionRuntimeStatus?) -> String? {
+        switch status {
+        case .working: return String(localized: "Working …")
+        case .awaitingInput: return String(localized: "May be waiting for your input")
+        case .idle: return String(localized: "Ready — waiting for a prompt")
+        case .errored: return String(localized: "Ended with an error")
+        case .stopped, .none: return nil
+        }
+    }
+}
+
+/// Zusammengefasstes VoiceOver-Element einer Sidebar-Zeile bzw. eines Tabs:
+/// Titel, Status, Projekt (LR-AU-009).
+enum AgentRowAccessibility {
+    static func summary(title: String, status: AgentSessionRuntimeStatus?, project: String?) -> String {
+        var parts = [title]
+        if let label = AgentStatusAccessibility.label(for: status) { parts.append(label) }
+        if let project, !project.isEmpty { parts.append(project) }
+        return parts.joined(separator: ", ")
+    }
+}
+
 struct AgentStatusIndicator: View {
     let status: AgentSessionRuntimeStatus?
     /// Tab-Leiste: dieselben Farben und Bedeutungen, aber 5 pt und ohne Puls —
@@ -39,11 +91,14 @@ struct AgentStatusIndicator: View {
     private var core: CGFloat { compact ? 5 : 7 }
 
     var body: some View {
-        if compact {
-            compactBody
-        } else {
-            fullBody
+        Group {
+            if compact {
+                compactBody
+            } else {
+                fullBody
+            }
         }
+        .modifier(StatusAccessibilityModifier(status: status))
     }
 
     @ViewBuilder
@@ -51,16 +106,12 @@ struct AgentStatusIndicator: View {
         switch status {
         case .working:
             Circle().fill(AgentTheme.statusWorking).frame(width: core, height: core)
-                .help("Arbeitet …")
         case .awaitingInput:
-            Circle().fill(AgentTheme.statusAwaiting).frame(width: core, height: core)
-                .help("Wartet möglicherweise auf User-Input")
+            StatusDiamond(color: AgentTheme.statusAwaiting, size: core)
         case .idle:
             Circle().fill(AgentTheme.textTertiary.opacity(0.55)).frame(width: core, height: core)
-                .help("Bereit — wartet auf einen Prompt")
         case .errored:
             Circle().strokeBorder(AgentTheme.statusError, lineWidth: 1.2).frame(width: core, height: core)
-                .help("Mit Fehler beendet")
         case .stopped, .none:
             Color.clear.frame(width: 1, height: 1)
         }
@@ -72,24 +123,53 @@ struct AgentStatusIndicator: View {
         case .working:
             PulsingDot(color: AgentTheme.statusWorking, maxScale: 2.7, duration: 2.1, filledRing: true,
                        continuous: AgentStatusPulse.isContinuous(switchEnabled: AgentStatusPulse.continuousEnabled))
-                .help("Arbeitet …")
         case .awaitingInput:
             PulsingDot(color: AgentTheme.statusAwaiting, maxScale: 2.2, duration: 1.5, filledRing: false,
+                       diamondCore: true,
                        continuous: AgentStatusPulse.isContinuous(switchEnabled: AgentStatusPulse.continuousEnabled))
-                .help("Wartet möglicherweise auf User-Input")
         case .idle:
             Circle()
                 .fill(AgentTheme.textTertiary.opacity(0.55))
                 .frame(width: core, height: core)
-                .help("Bereit — wartet auf einen Prompt")
         case .errored:
             Circle()
                 .strokeBorder(AgentTheme.statusError, lineWidth: 1.4)
                 .frame(width: core, height: core)
-                .help("Mit Fehler beendet")
         case .stopped, .none:
             Color.clear.frame(width: 1, height: 1)
         }
+    }
+}
+
+/// Tooltip + VoiceOver-Label für den Status-Punkt. Ohne Status bleibt der
+/// Punkt unsichtbar und stumm.
+private struct StatusAccessibilityModifier: ViewModifier {
+    let status: AgentSessionRuntimeStatus?
+
+    func body(content: Content) -> some View {
+        if let label = AgentStatusAccessibility.label(for: status) {
+            content
+                .help(AgentStatusAccessibility.help(for: status) ?? label)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label)
+        } else {
+            content.accessibilityHidden(true)
+        }
+    }
+}
+
+/// Raute als Form-Signal für „wartet auf dich" — statisch, gleiche optische
+/// Größe wie die Scheibe.
+private struct StatusDiamond: View {
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.12)
+            .fill(color)
+            .frame(width: size * 0.8, height: size * 0.8)
+            .rotationEffect(.degrees(45))
+            .frame(width: size, height: size)
     }
 }
 
@@ -101,6 +181,8 @@ private struct PulsingDot: View {
     let maxScale: CGFloat
     let duration: Double
     let filledRing: Bool
+    /// Raute statt Scheibe als Kern (Form-Signal ohne Farbe, LR-AU-009).
+    var diamondCore = false
     var continuous = false
 
     /// Ruhe-Größe/-Deckkraft des Halos im Ruhig-Modus: sichtbar größer als der
@@ -127,9 +209,13 @@ private struct PulsingDot: View {
                     .scaleEffect(ringScale)
                     .opacity(ringOpacity)
             }
-            Circle()
-                .fill(color)
-                .frame(width: core, height: core)
+            if diamondCore {
+                StatusDiamond(color: color, size: core)
+            } else {
+                Circle()
+                    .fill(color)
+                    .frame(width: core, height: core)
+            }
         }
         .frame(width: core, height: core)
         .onAppear {
@@ -162,22 +248,21 @@ private struct PulsingDot: View {
     }
 }
 
-/// Kompakte „vor X"-Formatierung für die Sidebar-Zeilen (zuletzt aktiv).
-/// Bewusst knapp wie im Prototyp: „jetzt", „5m", „3h", „2d", „1w", „3mo".
-/// `now` injizierbar für deterministische Tests.
+/// Kompakte „vor X"-Formatierung für die Sidebar-Zeilen (zuletzt aktiv),
+/// über `RelativeDateTimeFormatter` lokalisiert (de: „vor 5 Min.", en: „5 min. ago").
+/// `now` und `locale` injizierbar für deterministische Tests.
 enum SidebarRelativeTime {
-    static func short(_ date: Date, now: Date = Date()) -> String {
-        let seconds = Int(now.timeIntervalSince(date))
-        if seconds < 60 { return "jetzt" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        if hours < 24 { return "\(hours)h" }
-        let days = hours / 24
-        if days < 7 { return "\(days)d" }
-        let weeks = days / 7
-        if weeks < 5 { return "\(weeks)w" }
-        let months = days / 30
-        return "\(months)mo"
+    static func short(_ date: Date, now: Date = Date(), locale: Locale = .current) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .abbreviated
+        // Unter einer Minute nur „jetzt" (named) — numerisch käme „vor 12 Sek.";
+        // ab einer Minute numerisch, damit „vor 2 Mon." statt „letzter Monat" steht.
+        if now.timeIntervalSince(date) < 60 {
+            formatter.dateTimeStyle = .named
+            return formatter.localizedString(for: now, relativeTo: now)
+        }
+        formatter.dateTimeStyle = .numeric
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 }
