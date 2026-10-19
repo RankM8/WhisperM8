@@ -134,7 +134,7 @@ extension RecordingCoordinator {
             appState.lastError = firstError
         }
 
-        saveRunReport(
+        await saveRunReport(
             status: postProcessingResult.fallbackStatus ?? (postProcessingResult.errorMessage == nil ? .succeeded : .rawFallback),
             errorMessage: postProcessingResult.errorMessage,
             outputMode: outputMode,
@@ -162,6 +162,10 @@ extension RecordingCoordinator {
 
         try? FileManager.default.removeItem(at: audioURL)
         visualContextCaptureService.cleanup(contextBundle)
+        // LR-DIK-019: Löschschalter gilt auch für die Paste-Kopien im Delivery-Verzeichnis.
+        if AppPreferences.shared.deleteContextFilesAfterProcessing {
+            visualAttachmentDeliveryBuilder.removeDeliveryCopiesLater(deliveryAttachments)
+        }
     }
 
     func processTranscriptIfNeeded(
@@ -322,7 +326,7 @@ extension RecordingCoordinator {
         agentProvider: AgentProvider? = nil,
         agentSessionID: String? = nil,
         agentProjectPath: String? = nil
-    ) {
+    ) async {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
             sourceBundleIdentifier: contextSourceApp?.bundleIdentifier,
@@ -351,9 +355,18 @@ extension RecordingCoordinator {
             agentProjectPath: agentProjectPath
         )
 
-        do {
-            appState?.lastTranscriptRunReport = try reportStore.save(draft)
-        } catch {
+        // LR-DIK-017: Attachment-Kopien und Archiv-Cleanup laufen off-main. Der Aufrufer wartet
+        // (await), damit das anschließende `cleanup` die Quelldateien nicht vor dem Kopieren löscht –
+        // der Main Actor bleibt dabei frei.
+        let store = reportStore
+        let storeFiles = !AppPreferences.shared.deleteContextFilesAfterProcessing
+        let result: Result<TranscriptRunReport, Error> = await Task.detached(priority: .utility) {
+            Result { try store.save(draft, storeAttachmentFiles: storeFiles) }
+        }.value
+        switch result {
+        case .success(let report):
+            appState?.lastTranscriptRunReport = report
+        case .failure(let error):
             Logger.debug("Failed to save transcript report: \(error.localizedDescription)")
         }
     }

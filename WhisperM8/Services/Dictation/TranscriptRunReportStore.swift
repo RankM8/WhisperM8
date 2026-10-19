@@ -59,9 +59,24 @@ struct TranscriptRunReportStore {
         var removedBytes: Int64
     }
 
-    private let reportsDirectory: URL
+    /// Prozessweiter Cache der Verzeichnisgrößen (LR-DIK-017): ein Report-Ordner ist nach dem
+    /// Speichern unveränderlich, die rekursive Größenmessung läuft deshalb je Ordner nur einmal
+    /// statt bei jedem Cleanup für das ganze Archiv.
+    private final class DirectorySizeCache: @unchecked Sendable {
+        static let shared = DirectorySizeCache()
+        private let lock = NSLock()
+        private var sizes: [String: Int64] = [:]
+        func size(for path: String) -> Int64? { lock.lock(); defer { lock.unlock() }; return sizes[path] }
+        func store(_ size: Int64, for path: String) { lock.lock(); sizes[path] = size; lock.unlock() }
+        func remove(_ path: String) { lock.lock(); sizes[path] = nil; lock.unlock() }
+    }
 
-    init(reportsDirectory: URL? = nil) {
+    private let reportsDirectory: URL
+    /// Test-Hook (Closure-DI): zählt/ersetzt das Dekodieren einzelner Reports.
+    private let reportLoader: ((URL) throws -> TranscriptRunReport)?
+
+    init(reportsDirectory: URL? = nil, reportLoader: ((URL) throws -> TranscriptRunReport)? = nil) {
+        self.reportLoader = reportLoader
         if let reportsDirectory {
             self.reportsDirectory = reportsDirectory
         } else {
@@ -69,9 +84,13 @@ struct TranscriptRunReportStore {
         }
     }
 
+    /// - Parameter storeAttachmentFiles: `false` = keine Kopien der Bild-/Videodateien im Archiv
+    ///   (LR-DIK-019: der Löschschalter „Delete visual context files after processing" gilt auch
+    ///   für das Archiv); der Report behält Metadaten und Text.
     func save(
         _ draft: TranscriptRunReportDraft,
-        cleanupPolicy: CleanupPolicy? = .productionDefault
+        cleanupPolicy: CleanupPolicy? = .productionDefault,
+        storeAttachmentFiles: Bool = true
     ) throws -> TranscriptRunReport {
         let runDirectory = reportsDirectory
             .appendingPathComponent(draft.id.uuidString, isDirectory: true)
@@ -88,7 +107,8 @@ struct TranscriptRunReportStore {
             try attachmentReport(
                 for: attachment,
                 visualInput: visualInput,
-                attachmentsDirectory: attachmentsDirectory
+                attachmentsDirectory: attachmentsDirectory,
+                storeFiles: storeAttachmentFiles
             )
         }
         let imageInputPaths = attachments
@@ -216,13 +236,20 @@ struct TranscriptRunReportStore {
 
     @discardableResult
     func cleanup(policy: CleanupPolicy, now: Date = Date()) throws -> CleanupResult {
+        // Erstellzeit aus dem Index statt jeden Report zu dekodieren (LR-DIK-017); der Index
+        // wird bei Bedarf einmal neu aufgebaut. Größen kommen aus dem Cache und werden nur
+        // gemessen, wenn das Größenlimit überhaupt gilt.
+        let createdAtByID = Dictionary(
+            loadOrRebuildIndex().map { ($0.id, $0.createdAt) },
+            uniquingKeysWith: { first, _ in first }
+        )
         let directories = reportDirectories()
         var candidates: [(url: URL, createdAt: Date, size: Int64)] = directories.map { directory in
-            let report = try? loadReport(from: directory.appendingPathComponent("report.json"))
+            let id = UUID(uuidString: directory.lastPathComponent)
             return (
                 url: directory,
-                createdAt: report?.createdAt ?? directoryModificationDate(directory),
-                size: directorySize(directory)
+                createdAt: id.flatMap { createdAtByID[$0] } ?? directoryModificationDate(directory),
+                size: policy.maxBytes == nil ? 0 : cachedDirectorySize(directory)
             )
         }
         candidates.sort { $0.createdAt > $1.createdAt }
@@ -256,6 +283,7 @@ struct TranscriptRunReportStore {
         for candidate in candidates where removalPaths.contains(candidate.url) {
             if FileManager.default.fileExists(atPath: candidate.url.path) {
                 try FileManager.default.removeItem(at: candidate.url)
+                DirectorySizeCache.shared.remove(candidate.url.path)
                 removedCount += 1
                 removedBytes += candidate.size
                 if let id = UUID(uuidString: candidate.url.lastPathComponent) {
@@ -371,12 +399,15 @@ struct TranscriptRunReportStore {
     private func attachmentReport(
         for attachment: ContextAttachment,
         visualInput: CodexVisualInputSelection,
-        attachmentsDirectory: URL
+        attachmentsDirectory: URL,
+        storeFiles: Bool = true
     ) throws -> TranscriptRunAttachmentReport {
         let sourceURL = attachment.fileURL
-        let storedURL = try copyAttachment(sourceURL, id: attachment.id, kind: attachment.kind, to: attachmentsDirectory)
+        let storedURL = storeFiles
+            ? try copyAttachment(sourceURL, id: attachment.id, kind: attachment.kind, to: attachmentsDirectory)
+            : nil
         let thumbnailURL: URL?
-        if let sourceThumbnailURL = attachment.thumbnailURL {
+        if storeFiles, let sourceThumbnailURL = attachment.thumbnailURL {
             thumbnailURL = try copyAttachment(
                 sourceThumbnailURL,
                 id: attachment.id,
@@ -437,6 +468,7 @@ struct TranscriptRunReportStore {
     }
 
     private func loadReport(from url: URL) throws -> TranscriptRunReport {
+        if let reportLoader { return try reportLoader(url) }
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -444,7 +476,16 @@ struct TranscriptRunReportStore {
     }
 
     private func upsertIndexEntry(_ summary: TranscriptRunReportSummary) throws {
-        var entries = loadOrRebuildIndex().filter { $0.id != summary.id }
+        // Der neue Report-Ordner existiert schon, der Index kennt ihn noch nicht: ein Aktualitäts-
+        // Check (`loadOrRebuildIndex`) würde hier bei JEDEM Save das ganze Archiv neu dekodieren.
+        // Deshalb den Index roh lesen und nur bei fehlendem/kaputtem Index neu aufbauen.
+        let existing: [TranscriptRunReportSummary]
+        if let index = try? readIndex(), index.version == 1 {
+            existing = index.entries
+        } else {
+            existing = rebuildIndex()
+        }
+        var entries = existing.filter { $0.id != summary.id }
         entries.append(summary)
         try writeIndex(sortedSummaries(entries))
     }
@@ -532,6 +573,13 @@ struct TranscriptRunReportStore {
 
     private func directoryModificationDate(_ directory: URL) -> Date {
         (try? directory.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
+    private func cachedDirectorySize(_ directory: URL) -> Int64 {
+        if let cached = DirectorySizeCache.shared.size(for: directory.path) { return cached }
+        let size = directorySize(directory)
+        DirectorySizeCache.shared.store(size, for: directory.path)
+        return size
     }
 
     private func directorySize(_ directory: URL) -> Int64 {
