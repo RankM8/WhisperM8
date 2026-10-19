@@ -45,7 +45,7 @@ final class ReportArchiveCostTests: XCTestCase {
         let directory = root.appendingPathComponent("Reports", isDirectory: true)
         let real = TranscriptRunReportStore(reportsDirectory: directory)
         for index in 0..<120 {
-            _ = try real.save(draft(createdAt: Date(timeIntervalSinceNow: Double(-index))), cleanupPolicy: nil)
+            _ = try real.save(draft(createdAt: Date(timeIntervalSinceNow: Double(-index - 10))), cleanupPolicy: nil)
         }
         let counting = TranscriptRunReportStore(reportsDirectory: directory, reportLoader: { url in
             counter.increment()
