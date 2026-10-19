@@ -31,8 +31,7 @@ final class ClaudeRegistryStatusSource {
     private(set) var watchedPaths: [String] = []
     private var watchedRoots: [ClaudeSessionRegistry.Root] = [] {
         didSet {
-            let map = Dictionary(watchedRoots.map { ($0.url.path, $0.profileName) },
-                                 uniquingKeysWith: { first, _ in first })
+            let map = Self.directoryProfileMap(for: watchedRoots)
             directoryProfiles.withLock { $0 = map }
         }
     }
@@ -188,6 +187,31 @@ final class ClaudeRegistryStatusSource {
         self.stream = nil
     }
 
+    /// Ordner → Profil. FSEvents liefert KANONISCHE Pfade (Symlinks und
+    /// `/var` → `/private/var` aufgelöst); deshalb steht jeder Ordner unter
+    /// Original- UND realpath-Schlüssel (LR-AK-038).
+    nonisolated static func directoryProfileMap(for roots: [ClaudeSessionRegistry.Root]) -> [String: String] {
+        var map: [String: String] = [:]
+        for root in roots {
+            for key in [root.url.path, canonicalPath(root.url.path)] where map[key] == nil {
+                map[key] = root.profileName
+            }
+        }
+        return map
+    }
+
+    /// `realpath(3)`; bei Fehler (Ordner fehlt) der Eingabepfad.
+    nonisolated static func canonicalPath(_ path: String) -> String {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard realpath(path, &buffer) != nil else { return path }
+        return String(cString: buffer)
+    }
+
+    /// Profil zu einem Event-Ordner: erst exakt, dann kanonisch.
+    nonisolated static func profile(forEventDirectory directory: String, in map: [String: String]) -> String? {
+        map[directory] ?? map[canonicalPath(directory)]
+    }
+
     /// Läuft auf `queue`: geänderte Dateien lesen, dann gebündelt auf den
     /// MainActor. Eine gerade beschriebene, unlesbare Datei ist KEIN Ende —
     /// nur eine fehlende Datei oder ein toter Prozess.
@@ -198,7 +222,7 @@ final class ClaudeRegistryStatusSource {
         for path in paths {
             let url = URL(fileURLWithPath: path)
             guard let pid = ClaudeSessionRegistry.pid(fromFileName: url.lastPathComponent),
-                  let profile = profiles[url.deletingLastPathComponent().path],
+                  let profile = Self.profile(forEventDirectory: url.deletingLastPathComponent().path, in: profiles),
                   seen.insert(pid).inserted else { continue }
             switch Self.readChange(fileURL: url, profileName: profile, isAlive: isAlive) {
             case .record(let record): updates.append((pid, record))

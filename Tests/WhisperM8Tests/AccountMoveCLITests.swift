@@ -227,6 +227,15 @@ final class AccountMoveStopResumePlannerTests: XCTestCase {
 }
 
 final class TerminalComposerDraftTrackerTests: XCTestCase {
+    /// LR-CLI-002 (Review W4b): Ein beginnender Turn hebt die Entwurfs-Schätzung auf.
+    func testTurnStartClearsDraftEstimate() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordKeyDown(keyCode: 0, modifiers: [])
+        XCTAssertTrue(tracker.mayHaveUnsentInput)
+        tracker.recordSubmittedByTurnStart()
+        XCTAssertFalse(tracker.mayHaveUnsentInput)
+    }
+
     func testTypingMarksDraftAndReturnSubmits() {
         var tracker = TerminalComposerDraftTracker()
         XCTAssertFalse(tracker.mayHaveUnsentInput)

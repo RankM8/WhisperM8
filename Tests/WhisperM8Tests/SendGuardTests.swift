@@ -276,4 +276,31 @@ final class SendGuardTests: XCTestCase {
         XCTAssertTrue(command.contains("\\\""), "Quotes im Pfad müssen escaped sein")
         XCTAssertTrue(command.hasSuffix(" chats _prompt-guard"))
     }
+
+    // MARK: LR-AK-026 / LR-AK-027
+
+    func testUnreadableTokenDirectoryIsIOErrorNotDuplicate() throws {
+        store.stage(promptText: "Auftrag A")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+        XCTAssertEqual(store.claim(promptText: "Auftrag A"), .ioError)
+    }
+
+    func testTokenIsNotClaimedTwiceWhenDeletionWouldFail() throws {
+        store.stage(promptText: "Auftrag A")
+        // Verzeichnis nur noch lesbar: Umbenennen scheitert -> kein zweiter Freipass
+        // über ein nicht löschbares Token.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+        XCTAssertNotEqual(store.claim(promptText: "Auftrag A"), .authorized)
+        XCTAssertNotEqual(store.claim(promptText: "Auftrag A"), .authorized)
+    }
+
+    func testFailedStageIsReported() throws {
+        let blocker = directory.deletingLastPathComponent().appendingPathComponent("blocker-\(UUID().uuidString)")
+        try "x".write(to: blocker, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        let broken = SendDeliveryTokenStore(directory: blocker.appendingPathComponent("tokens"))
+        XCTAssertFalse(broken.stage(promptText: "Auftrag A"))
+    }
 }

@@ -146,6 +146,10 @@ final class AgentSessionStatusCoordinator {
     /// meldet Abbruch und Turn-Ende gleich (`idle`) — ein `idle` kurz nach
     /// dem Abbruch ist kein „fertig“ (keine Meldung, keine Queue-Zustellung).
     private var interruptMarks: [UUID: Date] = [:]
+    /// Marken, die ohne Transcript-Prüfung als Abbruch gelten: ein vom
+    /// Send-Guard geblockter Prompt lief nie, im Transcript steht deshalb kein
+    /// Abbruch-Marker (Review W4b zu LR-AK-034).
+    private var confirmedInterruptMarks: Set<UUID> = []
     nonisolated static let interruptWindowSeconds: TimeInterval = 10
     /// Prozessende je Session — späte Registry-Events danach ignorieren.
     private var terminatedAt: [UUID: Date] = [:]
@@ -155,12 +159,25 @@ final class AgentSessionStatusCoordinator {
     private var shadowDiffSince: [UUID: Date] = [:]
     nonisolated static let shadowDiffLogSeconds: TimeInterval = 5
 
+    /// Verzögerung der Rückfrage-Meldung bei Registry-Status: Der Transcript-Tail
+    /// liefert die genaue Warte-Art erst kurz nach dem Registry-Wechsel
+    /// (LR-AK-036). 0 = sofort (Tests).
+    var registryAwaitingNotificationDelay: TimeInterval = 0.3
+
     var isRegistryStatusEnabled: () -> Bool = { AppPreferences.shared.isClaudeRegistryStatusEnabled }
     /// Sessions, deren Launch nur SessionStart/SessionEnd-Hooks bekam (S4).
     private(set) var reducedHookSessions: Set<UUID> = []
 
-    nonisolated static func usesReducedHooks(registryEnabled: Bool, isBackground: Bool) -> Bool {
-        registryEnabled && !isBackground
+    /// Installierte Claude-Version (LR-AK-035) — Test-Injection. Ohne Registry
+    /// in der CLI (zu alt/unbekannt) bekommt der Launch den vollen Hook-Satz.
+    var claudeVersionProvider: () -> ClaudeCLIVersion? = { ClaudeCLIVersionProbe.shared.installedVersion() }
+
+    nonisolated static func usesReducedHooks(
+        registryEnabled: Bool,
+        isBackground: Bool,
+        cliSupportsRegistry: Bool = true
+    ) -> Bool {
+        registryEnabled && !isBackground && cliSupportsRegistry
     }
     /// Läuft der Chat in einem PTY dieser App? Nur dann gilt Claudes
     /// Registry-Eintrag als sein Status — dieselbe Session kann auch in einem
@@ -196,6 +213,7 @@ final class AgentSessionStatusCoordinator {
         self.launchGraceSeconds = launchGraceSeconds
         self.autoNamer = AgentSessionAutoNamer(store: store)
         self.watcher = AgentSessionRuntimeWatcher()
+        ClaudeCLIVersionProbe.shared.prewarm()
 
         self.hookBridge.setDecisionHandler { [weak self] localID, event in
             self?.handleHookEvent(localID: localID, event: event)
@@ -258,9 +276,19 @@ final class AgentSessionStatusCoordinator {
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         // S4: Mit Registry-Status nur noch Binding-/Lebenszyklus-Hooks.
         // Background-Agents behalten den vollen Satz (eigener Status-Pfad).
+        let registryEnabled = isRegistryStatusEnabled()
+        let isBackground = session?.isBackgroundChat ?? false
+        // Version nur abfragen, wenn der reduzierte Satz sonst gewählt würde.
+        let cliSupportsRegistry = (registryEnabled && !isBackground)
+            ? ClaudeCLIVersion.supportsRegistry(claudeVersionProvider())
+            : true
+        if registryEnabled, !isBackground, !cliSupportsRegistry {
+            Logger.claudeBinding.notice("reduced_hooks_skipped reason=claude_version_without_registry")
+        }
         let reducedHooks = Self.usesReducedHooks(
-            registryEnabled: isRegistryStatusEnabled(),
-            isBackground: session?.isBackgroundChat ?? false)
+            registryEnabled: registryEnabled,
+            isBackground: isBackground,
+            cliSupportsRegistry: cliSupportsRegistry)
         if reducedHooks {
             reducedHookSessions.insert(localSessionID)
         } else {
@@ -309,6 +337,9 @@ final class AgentSessionStatusCoordinator {
 
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.
     func externalSessionIDBound(sessionID: UUID) {
+        if let bound = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID {
+            releaseForkMark(localID: sessionID, id: bound)
+        }
         attachWatch(sessionID: sessionID)
         adoptRegistryRecord(sessionID: sessionID)
     }
@@ -389,6 +420,15 @@ final class AgentSessionStatusCoordinator {
         } else {
             resolvePendingBinding(localID: localID, event: event)
         }
+        // Events eines ignorierten bg-Forks (derselbe Event-File wie das
+        // Vordergrundterminal) betreffen den Vordergrundstatus nicht: ein
+        // Fork-Stop meldete sonst einen noch arbeitenden Chat als fertig und
+        // löste eine Queue-Zustellung aus (LR-AK-020). Events mit fremder oder
+        // fehlender ID laufen unverändert weiter.
+        if let eventSessionID = event.sessionID,
+           forkExternalIDs[localID]?.contains(eventSessionID) == true {
+            return
+        }
         if event.hookEventName == .promptGuardBlock {
             handlePromptGuardBlock(localID: localID)
             return
@@ -449,6 +489,7 @@ final class AgentSessionStatusCoordinator {
         // zählt deshalb wie ein beobachteter Abbruch.
         if registryLiveSessions.contains(localID) {
             interruptMarks[localID] = now()
+            confirmedInterruptMarks.insert(localID)
         } else {
             apply(.turnAborted, to: localID)
         }
@@ -653,6 +694,9 @@ final class AgentSessionStatusCoordinator {
         case .question:
             return .question
         case .tool(let name, _):
+            // `input needed` heißt Frage/Elicitation — das letzte Tool im Tail
+            // kann längst abgeschlossen sein (LR-AK-036).
+            if waitingFor == "input needed" { return .question }
             return name == "ExitPlanMode" ? .planApproval : .permission
         case .reply, nil:
             return waitingFor == "input needed" ? .question : .permission
@@ -673,6 +717,7 @@ final class AgentSessionStatusCoordinator {
             if previous?.status != .busy, let mark = interruptMarks[sessionID],
                mark < (record.statusUpdatedAt ?? .distantFuture) {
                 interruptMarks[sessionID] = nil
+                confirmedInterruptMarks.remove(sessionID)
             }
             return .busy
         case .waiting:
@@ -687,8 +732,41 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func consumeInterruptMark(_ sessionID: UUID) -> Bool {
-        guard let mark = interruptMarks.removeValue(forKey: sessionID) else { return false }
-        return now().timeIntervalSince(mark) <= Self.interruptWindowSeconds
+        let preConfirmed = confirmedInterruptMarks.remove(sessionID) != nil
+        guard let mark = interruptMarks.removeValue(forKey: sessionID),
+              now().timeIntervalSince(mark) <= Self.interruptWindowSeconds else { return false }
+        if preConfirmed { return true }
+        // Nur ein bestätigter Abbruch schluckt das „fertig“: Ein ESC kurz vor
+        // dem echten Turn-Ende (oder eines, das nichts abbrach) verschluckte
+        // sonst Meldung und Queue-Zustellung (LR-AK-034). Bestätigung = Claudes
+        // eigener Marker `[Request interrupted by user]` im Transcript-Ende.
+        // Ohne lesbares Transcript bleibt es beim bisherigen Verhalten.
+        return interruptConfirmed(sessionID) ?? true
+    }
+
+    /// Test-Naht für `interruptConfirmed`.
+    var interruptConfirmationOverride: ((UUID) -> Bool?)?
+
+    private func interruptConfirmed(_ sessionID: UUID) -> Bool? {
+        if let interruptConfirmationOverride { return interruptConfirmationOverride(sessionID) }
+        guard let url = watcher.cachedTranscriptURL(sessionID: sessionID) else { return nil }
+        return Self.transcriptTailShowsInterrupt(url: url)
+    }
+
+    /// Steht im letzten Abschnitt des Transcripts (nach der letzten
+    /// Assistenten-Zeile) Claudes Abbruch-Marker?
+    nonisolated static func transcriptTailShowsInterrupt(url: URL, tailBytes: Int = 16_384) -> Bool? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
+        guard let data = try? handle.readToEnd() else { return nil }
+        let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
+        for line in lines.reversed() {
+            if line.contains(AgentTranscriptParser.interruptMarkerPrefix) { return true }
+            if line.contains("\"type\":\"assistant\"") { return false }
+        }
+        return false
     }
 
     /// Transcript-Detail kam nach dem Registry-Wechsel → Warte-Art nachziehen.
@@ -727,6 +805,7 @@ final class AgentSessionStatusCoordinator {
         registryLiveSessions.remove(sessionID)
         registryRecords[sessionID] = nil
         interruptMarks[sessionID] = nil
+        confirmedInterruptMarks.remove(sessionID)
         shadowStates[sessionID] = nil
         shadowDiffSince[sessionID] = nil
         terminatedAt[sessionID] = nil
@@ -867,6 +946,18 @@ final class AgentSessionStatusCoordinator {
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
         }
+        // Ein Turn beginnt: was im Eingabefeld stand, ist abgeschickt. Ohne
+        // das blieb die konservative Entwurfs-Schätzung nach Tasten in Dialogen
+        // (1/2/y ohne Enter) stehen und blockte send/Queue dauerhaft (Review W4b
+        // zu LR-CLI-002).
+        if case .working = transition.state, oldState.runtimeStatus != .working {
+            AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
+        }
+        // Chat ist nach dem Start bereit: ein während `launching`
+        // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).
+        if case .launching = oldState, case .ready = transition.state {
+            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
+        }
     }
 
     /// Kurzname des Signals fürs Journal — stabil und ohne assoziierte Werte,
@@ -908,7 +999,18 @@ final class AgentSessionStatusCoordinator {
             AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
-                postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                if registryLiveSessions.contains(sessionID), registryAwaitingNotificationDelay > 0 {
+                    // Art kann der Tail noch nachziehen: kurz warten, dann die
+                    // aktuelle Art melden — nur wenn der Chat noch wartet.
+                    let delay = registryAwaitingNotificationDelay
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        guard let self, case .awaitingInput(let kind) = self.states[sessionID] else { return }
+                        self.postNotification(kind: .inputRequested(kind), sessionID: sessionID)
+                    }
+                } else {
+                    postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                }
             }
         }
     }
@@ -1015,6 +1117,13 @@ final class AgentSessionStatusCoordinator {
         return .postpone
     }
 
+    /// Nimmt `id` aus der Fork-Merkliste des Chats (LR-AK-020).
+    private func releaseForkMark(localID: UUID, id: String) {
+        guard forkExternalIDs[localID]?.contains(id) == true else { return }
+        forkExternalIDs[localID]?.remove(id)
+        if forkExternalIDs[localID]?.isEmpty == true { forkExternalIDs[localID] = nil }
+    }
+
     private func bindExternalSessionID(localID: UUID, event: ClaudeHookEvent) {
         guard let newID = event.sessionID, !newID.isEmpty else { return }
         let currentID = store.loadWorkspace().sessions
@@ -1090,6 +1199,10 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func setExternalSessionID(localID: UUID, newID: String) {
+        // Eine gebundene ID ist kein Fork mehr (LR-AK-020): bindet der Chat später
+        // genau diese ID (`/resume` auf den Fork, Recovery), würden sonst alle ihre
+        // Hooks verworfen.
+        releaseForkMark(localID: localID, id: newID)
         do {
             var didChange = false
             try store.updateSession(id: localID) { session in

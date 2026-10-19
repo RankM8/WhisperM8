@@ -66,7 +66,14 @@ final class AgentScanCoordinator {
 
     private var lastScanDuration: TimeInterval?
 
+    /// Test-Seam: ersetzt den echten Scan. Der Aufrufer meldet das Ende per
+    /// `markScanCompleted(duration:)`.
+    var scanLauncher: (@MainActor (Reason) -> Void)?
+
     private init() {}
+
+    /// Eigene Instanz für Tests (kein Singleton-Zustand).
+    static func makeForTesting() -> AgentScanCoordinator { AgentScanCoordinator() }
 
     /// Registriert die App-Lifecycle-Hooks. Idempotent — kann mehrmals
     /// aufgerufen werden, installiert aber nur einmal.
@@ -115,6 +122,16 @@ final class AgentScanCoordinator {
         guard suspendCount > 0 else { return }
         suspendCount -= 1
         guard suspendCount == 0, triggerScan else { return }
+        // Läuft noch ein Scan (vor der Pause gestartet, evtl. mit altem
+        // Transcript-Root), darf kein zweiter parallel starten: beide
+        // committeten unabhängig, und der ältere Snapshot könnte den neuen
+        // Account-Stempel zurücksetzen (LR-AK-011). Stattdessen vormerken —
+        // `markScanCompleted` holt den Nachholscan sofort nach.
+        if inFlight {
+            pendingReason = .accountMove
+            Logger.agentPerformance.debug("agent_scan_deferred reason=accountMove cause=in-flight-on-resume")
+            return
+        }
         let reason = pendingReason ?? .accountMove
         pendingReason = nil
         startScan(reason: reason)
@@ -139,7 +156,8 @@ final class AgentScanCoordinator {
             Logger.agentPerformance.debug("agent_scan_deferred reason=\(reason.rawValue, privacy: .public) cause=in-flight")
             return
         }
-        if reason != .manual, let last = lastCompletedAt {
+        // `.accountMove` ist ein echtes, gerade eingetretenes Ereignis wie `.manual`.
+        if reason != .manual, reason != .accountMove, let last = lastCompletedAt {
             let elapsed = Date().timeIntervalSince(last)
             let limit = Self.adaptiveCooldown(
                 base: reason == .fsEvent ? fsEventCooldown : cooldown,
@@ -172,6 +190,11 @@ final class AgentScanCoordinator {
     }
 
     private func startScan(reason: Reason) {
+        if let scanLauncher {
+            inFlight = true
+            scanLauncher(reason)
+            return
+        }
         inFlight = true
         NotificationCenter.default.post(
             name: Self.scanRunningChangedNotification,
@@ -214,7 +237,7 @@ final class AgentScanCoordinator {
         }
     }
 
-    private func markScanCompleted(duration: TimeInterval) {
+    func markScanCompleted(duration: TimeInterval) {
         inFlight = false
         lastScanDuration = duration
         lastCompletedAt = Date()

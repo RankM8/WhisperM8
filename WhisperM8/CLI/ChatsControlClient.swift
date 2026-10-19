@@ -33,6 +33,9 @@ enum ChatsControlClient {
         let request = ChatsControlRequest(actor: actor, method: method, params: .object(params))
         let line = try ChatsControlCodec.encodeLine(request)
         try writeAll(fd, line)
+        // Lang laufende Methoden (Kontowechsel) brauchen eine längere Lese-Frist.
+        var readTimeout = timeval(tv_sec: ChatsControlProtocol.clientReadTimeoutSeconds(for: method), tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &readTimeout, socklen_t(MemoryLayout<timeval>.size))
 
         guard let responseLine = readLine(fd) else {
             throw ClientError.appUnreachable("Keine Antwort von der App (Verbindung abgebrochen).")

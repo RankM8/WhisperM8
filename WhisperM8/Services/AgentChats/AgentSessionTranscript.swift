@@ -114,6 +114,15 @@ enum AgentTranscriptParser {
         let type = obj["type"] as? String
         let subtype = obj["subtype"] as? String
 
+        // Echtes Rollout-Format (codex-cli 0.142, Fixtures in
+        // `CodexRolloutFixtures`): Top-Level `type` ist `session_meta`,
+        // `turn_context`, `event_msg` oder `response_item`; die Semantik steckt
+        // in `payload.type`. Die älteren Formate unten bleiben als
+        // Kompatibilität erhalten.
+        if let realFormat = parseCodexRolloutLine(type: type, payload: obj["payload"] as? [String: Any], timestamp: timestamp) {
+            return realFormat
+        }
+
         switch (type, subtype) {
         case ("event", "turn.completed"),
              ("event", "agent_turn.completed"),
@@ -150,6 +159,61 @@ enum AgentTranscriptParser {
                 return .sessionMeta
             }
             return .other
+        }
+    }
+
+    /// Übersetzt eine Zeile des echten Codex-Rollouts. `nil` = kein Rollout-Typ
+    /// (dann greifen die Alt-Formate).
+    private static func parseCodexRolloutLine(type: String?, payload: [String: Any]?, timestamp: Date?) -> AgentTranscriptEvent? {
+        let payloadType = payload?["type"] as? String
+        switch type {
+        case "session_meta":
+            return .sessionMeta
+        case "turn_context", "compacted", "token_usage_record", "world_state":
+            // Pro Turn geschrieben, ohne Aussage über Arbeit oder Ende. Seit
+            // codex-cli 0.16x kommen `token_usage_record` und `world_state` als
+            // eigene Top-Level-Zeilen dazu (LR-AK-006).
+            return .meta
+        case "event_msg":
+            switch payloadType {
+            case "task_complete":
+                return .assistantMessageStopped(timestamp: timestamp, stopReason: "task_complete")
+            case "turn_aborted":
+                // Abbruch (ESC/interrupt): Chat idlet am Prompt, kein Turn-Ende.
+                return .turnInterrupted(timestamp: timestamp)
+            case "task_started", "user_message":
+                return .userMessage(timestamp: timestamp)
+            case "agent_message", "agent_reasoning", "agent_reasoning_raw_content":
+                return .assistantMessageOngoing(timestamp: timestamp)
+            default:
+                // `token_count`, `item_completed`, `thread_settings_applied`,
+                // `context_compacted`, … und künftige Typen: statusneutral. Ein
+                // unbekannter Typ darf den Rückwärts-Scan nie als „letztes Event"
+                // beenden und so ein laufendes Tool als `.other` erscheinen lassen
+                // (LR-AK-006).
+                return .meta
+            }
+        case "response_item":
+            switch payloadType {
+            case "message":
+                // `role: user/developer` sind Instruktions-Injektionen (AGENTS.md,
+                // Permissions) und kommen VOR dem echten Prompt: statusneutral.
+                if (payload?["role"] as? String) == "assistant" {
+                    return .assistantMessageOngoing(timestamp: timestamp)
+                }
+                return .meta
+            case "reasoning", "function_call", "custom_tool_call", "local_shell_call",
+                 "web_search_call", "tool_search_call":
+                return .assistantMessageOngoing(timestamp: timestamp)
+            case "function_call_output", "custom_tool_call_output", "tool_search_output":
+                return .toolResult(timestamp: timestamp)
+            case "additional_tools":
+                return .meta
+            default:
+                return .other
+            }
+        default:
+            return nil
         }
     }
 

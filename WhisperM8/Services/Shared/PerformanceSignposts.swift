@@ -216,6 +216,8 @@ enum PerfBudgets {
 
     // Sidebar / Status-Pipeline
     static let sidebarWorkspaceLoad = PerformanceBudget(name: "sidebar.workspaceLoad", budget: 0.050, signposter: PerfSignposts.sidebar)
+    /// Selbstheilung toter Session-Zeiger (Event-Files lesen), off-main.
+    static let externalIDRecovery = PerformanceBudget(name: "sidebar.externalIDRecovery", budget: 0.500, signposter: PerfSignposts.sidebar)
     static let sidebarBackgroundIndex = PerformanceBudget(name: "sidebar.backgroundIndex", budget: 2.000, signposter: PerfSignposts.sidebar)
     /// Die tatsächliche Arbeit eines Status-Polls: `stat` und, falls nötig,
     /// das Lesen des Transcript-Endes. Läuft im Hintergrund-Task, misst also
