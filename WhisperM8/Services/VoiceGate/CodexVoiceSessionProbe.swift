@@ -56,15 +56,18 @@ struct CodexVoiceSessionProbe {
     private let logRoot: URL
     private let now: () -> Date
     private let codexRunningProvider: () -> Bool
+    private let logScanner: CodexVoiceLogScanner
 
     init(
         gate: CodexVoiceSessionGate = CodexVoiceSessionGate(),
         logRoot: URL = AppInstance.home
             .appendingPathComponent("Library/Logs/\(CodexVoiceSessionProbe.codexBundleIdentifier)", isDirectory: true),
         now: @escaping () -> Date = Date.init,
-        codexRunningProvider: (() -> Bool)? = nil
+        codexRunningProvider: (() -> Bool)? = nil,
+        logScanner: CodexVoiceLogScanner = CodexVoiceLogScanner()
     ) {
         self.gate = gate
+        self.logScanner = logScanner
         self.logRoot = logRoot
         self.now = now
         self.codexRunningProvider = codexRunningProvider ?? {
@@ -110,8 +113,7 @@ struct CodexVoiceSessionProbe {
 
         var newest: Date?
         for log in logs {
-            guard let tail = Self.readTail(of: log) else { continue }
-            if let candidate = Self.lastSessionStartTimestamp(inLogTail: tail) {
+            if let candidate = logScanner.newestSessionStart(in: log) {
                 if newest == nil || candidate > newest! { newest = candidate }
             }
         }
@@ -141,11 +143,10 @@ struct CodexVoiceSessionProbe {
         try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
-    /// Nur das Ende der Datei lesen. Acht MiB halten den Session-Start auch
-    /// dann im Fenster, wenn waehrend eines langen Voice-Chats viele normale
-    /// App-Logs folgen. Die frueheren 64 KiB verloren den Marker schon nach
-    /// rund 50 Minuten.
-    static func readTail(of url: URL, maxBytes: Int = 8 * 1024 * 1024) -> String? {
+    /// Nur das Ende der Datei lesen (Rückfall ohne Cache, siehe `CodexVoiceLogScanner`).
+    /// Verlustfrei dekodiert: Ein am Schnitt geteiltes Umlaut-Zeichen machte mit
+    /// `String(data:encoding:)` den ganzen Ausschnitt zu `nil` (LR-VG-002).
+    static func readTail(of url: URL, maxBytes: Int = CodexVoiceLogScanner.maxTailBytes) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
 
@@ -153,7 +154,7 @@ struct CodexVoiceSessionProbe {
         let offset = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
         try? handle.seek(toOffset: offset)
         guard let data = try? handle.readToEnd() else { return nil }
-        return String(data: data, encoding: .utf8)
+        return String(decoding: data, as: UTF8.self)
     }
 
     /// Sucht `realtime_session_started` und liest den ISO-Zeitstempel am
@@ -169,9 +170,79 @@ struct CodexVoiceSessionProbe {
         return newest
     }
 
-    private static let isoFormatter: ISO8601DateFormatter = {
+    fileprivate static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+}
+
+/// Inkrementelle Log-Auswertung mit Cache je Datei (LR-VG-002): Die
+/// Scharfschaltung prüft alle 10 s bis zu 12 Logs. Früher las jede Prüfung je
+/// Datei bis zu 8 MiB neu und zerlegte sie in Zeilen. Jetzt gilt:
+/// - unveränderte Datei (Größe und Änderungsdatum gleich): kein Lesezugriff;
+/// - gewachsene Datei: nur der Zuwachs ab der letzten Größe, mit kleiner
+///   Überlappung, damit eine beim letzten Mal halb geschriebene Zeile nicht verloren geht;
+/// - geschrumpft oder neu: das Ende bis 8 MiB.
+/// Gelesen wird als Bytes und verlustfrei dekodiert.
+final class CodexVoiceLogScanner: @unchecked Sendable {
+    /// 8 MiB halten den Session-Start auch dann im Fenster, wenn während eines
+    /// langen Voice-Chats viele normale App-Logs folgen (64 KiB verloren ihn
+    /// nach rund 50 Minuten).
+    static let maxTailBytes = 8 * 1024 * 1024
+    static let overlapBytes: UInt64 = 4 * 1024
+
+    private struct Entry {
+        var size: UInt64
+        var modified: Date?
+        var newest: Date?
+    }
+
+    private let readRange: (URL, UInt64) -> Data?
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    /// `readRange(url, offset)` liefert die Bytes ab `offset` bis zum Ende (Test-Naht).
+    init(readRange: @escaping (URL, UInt64) -> Data? = CodexVoiceLogScanner.readFile) {
+        self.readRange = readRange
+    }
+
+    func newestSessionStart(in url: URL) -> Date? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+              let rawSize = values.fileSize else { return nil }
+        let size = UInt64(rawSize)
+        let modified = values.contentModificationDate
+
+        lock.lock()
+        let cached = entries[url.path]
+        lock.unlock()
+
+        if let cached, cached.size == size, cached.modified == modified {
+            return cached.newest
+        }
+
+        let tailStart = size > UInt64(Self.maxTailBytes) ? size - UInt64(Self.maxTailBytes) : 0
+        var offset = tailStart
+        var previous: Date?
+        if let cached, size > cached.size {
+            offset = max(tailStart, cached.size > Self.overlapBytes ? cached.size - Self.overlapBytes : 0)
+            previous = cached.newest
+        }
+
+        guard let data = readRange(url, offset) else { return cached?.newest }
+        let found = CodexVoiceSessionProbe.lastSessionStartTimestamp(inLogTail: String(decoding: data, as: UTF8.self))
+        let newest = [previous, found].compactMap { $0 }.max()
+
+        lock.lock()
+        entries[url.path] = Entry(size: size, modified: modified, newest: newest)
+        lock.unlock()
+        return newest
+    }
+
+    static func readFile(_ url: URL, _ offset: UInt64) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        try? handle.seek(toOffset: offset)
+        return try? handle.readToEnd()
+    }
 }

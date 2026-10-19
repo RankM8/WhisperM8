@@ -54,6 +54,8 @@ final class VoiceGateCoordinator {
     private let executionProbe = CodexCommandExecutionProbe()
     /// Verhindert, dass eine zweite Erkennung mitten in den Fokus-Roundtrip faellt.
     private var pressInFlight = false
+    /// Laeuft gerade eine Log-Probe im Hintergrund?
+    private var armProbeInFlight = false
     private var stateMachine = VoiceGateStateMachine()
     private var listener: VoiceGateListener?
     private var armTimer: Timer?
@@ -154,9 +156,29 @@ final class VoiceGateCoordinator {
 
         // Waehrend eines eigenen Diktats pausiert der Listener: sonst konkurrieren
         // zwei Engines um dasselbe Geraet und das Codewort landet im Diktat.
-        let dictationActive = AppState.shared.isRecording
-        let state: VoiceGateArmState = dictationActive ? .pausedForDictation : probe.currentArmState()
+        if AppState.shared.isRecording {
+            applyArmState(.pausedForDictation)
+            return
+        }
+        // Die Log-Probe liest Dateien — nie auf dem MainActor (LR-VG-002: bis zu
+        // 12 × 8 MiB pro Takt hielten Hotkey und Overlay auf). Ein Takt, der in
+        // eine laufende Probe faellt, wird ausgelassen.
+        guard !armProbeInFlight else { return }
+        armProbeInFlight = true
+        let probe = self.probe
+        Task.detached(priority: .utility) { [weak self] in
+            let state = probe.currentArmState()
+            await MainActor.run {
+                guard let self else { return }
+                self.armProbeInFlight = false
+                guard self.isEnabled else { return }
+                // Waehrend der Probe kann ein Diktat begonnen haben.
+                self.applyArmState(AppState.shared.isRecording ? .pausedForDictation : state)
+            }
+        }
+    }
 
+    private func applyArmState(_ state: VoiceGateArmState) {
         if state != armState {
             armState = state
             Logger.voiceGate.info("gate.arm_state=\(state.rawValue, privacy: .public)")
@@ -273,7 +295,20 @@ final class VoiceGateCoordinator {
 
     // MARK: - Auswertung
 
+    /// Darf eine Erkennung noch etwas ausloesen? Abschalten und ein eigenes
+    /// Diktat wirken sofort, nicht erst beim naechsten 10-s-Takt (LR-VG-001):
+    /// bereits eingeplante Hypothesen und laufende Tastendruecke pruefen das
+    /// unmittelbar vor der Wirkung erneut.
+    nonisolated static func mayAct(isEnabled: Bool, dictationActive: Bool) -> Bool {
+        isEnabled && !dictationActive
+    }
+
+    private var mayActNow: Bool {
+        Self.mayAct(isEnabled: isEnabled, dictationActive: AppState.shared.isRecording)
+    }
+
     private func handle(_ hypothesis: VoiceGateHypothesis) {
+        guard mayActNow else { return }
         let vocabulary = Self.vocabularyFromPreferences()
         let match = VoiceGateCommandMatcher(vocabulary: vocabulary).match(segments: hypothesis.segments)
         logVerbose(hypothesis, vocabulary: vocabulary, match: match)
@@ -350,6 +385,10 @@ final class VoiceGateCoordinator {
         Task { @MainActor in
             defer { self.pressInFlight = false }
 
+            guard self.mayActNow else {
+                Logger.voiceGate.info("press.skipped — abgeschaltet oder Diktat aktiv")
+                return
+            }
             let snapshot = self.executionProbe.snapshot()
             do {
                 let result = try await self.toggler.toggle()
@@ -402,6 +441,7 @@ final class VoiceGateCoordinator {
     /// eine Schleife waere hier schlimmer als ein offenes Ergebnis.
     private func retryPress(intent: VoiceGateIntent) async -> Bool {
         Logger.voiceGate.info("press.retry intent=\(intent.rawValue, privacy: .public)")
+        guard mayActNow else { return false }
         let snapshot = executionProbe.snapshot()
         do {
             _ = try await toggler.toggle()
