@@ -10,7 +10,7 @@ final class PreferencesTests: XCTestCase {
 
     func testDefaultsUseExpectedValues() {
         withIsolatedPreferences { preferences in
-            XCTAssertEqual(preferences.language, DictationLanguage.defaultCode())
+            XCTAssertEqual(preferences.language, "de", "Systemsprache im Helfer fest auf de-DE")
             XCTAssertTrue(preferences.isAutoPasteEnabled)
             XCTAssertTrue(preferences.isAudioDuckingEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
