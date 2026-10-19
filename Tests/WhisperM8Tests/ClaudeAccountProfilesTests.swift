@@ -352,10 +352,15 @@ extension ClaudeAccountProfilesTests {
         _ = try service.createProfile(named: "alt")
         try service.setActiveProfile("alt")
         var securityCalls: [[String]] = []
+        var writes: [(service: String, account: String, secret: String)] = []
         service.securityRunner = { arguments in
             securityCalls.append(arguments)
             if arguments.first == "find-generic-password" { return (0, "{\"claudeAiOauth\":{}}") }
             return (0, "")
+        }
+        service.keychainWriter = { svc, account, secret in
+            writes.append((svc, account, secret))
+            return 0
         }
 
         try service.renameProfile(from: "alt", to: "neu")
@@ -366,7 +371,9 @@ extension ClaudeAccountProfilesTests {
         let oldService = service.keychainService(forProfile: "alt")
         let newService = service.keychainService(forProfile: "neu")
         XCTAssertTrue(securityCalls.contains { $0.first == "find-generic-password" && $0.contains(oldService) })
-        XCTAssertTrue(securityCalls.contains { $0.first == "add-generic-password" && $0.contains(newService) })
+        XCTAssertTrue(writes.contains { $0.service == newService && $0.secret == "{\"claudeAiOauth\":{}}" })
+        // LR-KO-001: das Secret darf nie als Prozessargument den Weg nehmen.
+        XCTAssertFalse(securityCalls.contains { $0.first == "add-generic-password" || $0.contains("-w") && $0.first != "find-generic-password" })
         XCTAssertTrue(securityCalls.contains { $0.first == "delete-generic-password" && $0.contains(oldService) })
         // .active zieht mit, Marker aktualisiert
         XCTAssertEqual(service.activeProfileName(), "neu")
@@ -381,14 +388,28 @@ extension ClaudeAccountProfilesTests {
         _ = try service.createProfile(named: "alt")
         service.securityRunner = { arguments in
             if arguments.first == "find-generic-password" { return (0, "{\"claudeAiOauth\":{}}") }
-            if arguments.first == "add-generic-password" { return (1, "") }
             return (0, "")
         }
+        service.keychainWriter = { _, _, _ in 1 }
 
         XCTAssertThrowsError(try service.renameProfile(from: "alt", to: "neu"))
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "alt").path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: service.configDir(forProfile: "neu").path))
+    }
+
+    func testKeychainWriteCommandKeepsSecretOutOfPlainTextAndIsQuotedSafely() {
+        let secret = #"{"claudeAiOauth":{"refreshToken":"sk-ant-SECRET"}}"#
+        let line = ClaudeAccountProfiles.keychainWriteCommand(
+            service: "Claude Code-credentials-ab12", account: "gi\"u", secret: secret
+        )
+        // Secret nur als Hex (kein Quoting-Problem mit " und \), Anführungszeichen escaped.
+        XCTAssertFalse(line.contains("SECRET"))
+        XCTAssertFalse(line.contains("-w"))
+        XCTAssertTrue(line.contains(secret.utf8.map { String(format: "%02x", $0) }.joined()))
+        XCTAssertTrue(line.contains(#"-a "gi\"u""#))
+        XCTAssertTrue(line.hasPrefix("add-generic-password "))
+        XCTAssertFalse(line.contains("\n"))
     }
 
     func testRenameProfileWithoutLoginSkipsKeychainOps() throws {
@@ -823,7 +844,7 @@ final class CodexUsageTests: XCTestCase {
 
 extension ClaudeAccountProfilesTests {
     /// Keychain-Attrappe: Service-Name → Secret.
-    private func fakeKeychain(_ items: [String: String], failAdd: Bool = false) -> (box: KeychainBox, runner: ([String]) -> (Int32, String)) {
+    private func fakeKeychain(_ items: [String: String], failAdd: Bool = false) -> (box: KeychainBox, runner: ([String]) -> (Int32, String), writer: (String, String, String) -> Int32) {
         let box = KeychainBox(items: items)
         let runner: ([String]) -> (Int32, String) = { arguments in
             guard let serviceIndex = arguments.firstIndex(of: "-s") else { return (1, "") }
@@ -833,10 +854,9 @@ extension ClaudeAccountProfilesTests {
                 guard let secret = box.items[service] else { return (44, "") }
                 return (0, secret + "\n")
             case "add-generic-password":
-                if failAdd { return (1, "") }
-                let secretIndex = arguments.firstIndex(of: "-w")!
-                box.items[service] = arguments[secretIndex + 1]
-                return (0, "")
+                // LR-KO-001: Schreiben läuft nie über security-argv.
+                box.argvWriteAttempts += 1
+                return (1, "")
             case "delete-generic-password":
                 box.items[service] = nil
                 return (0, "")
@@ -844,10 +864,16 @@ extension ClaudeAccountProfilesTests {
                 return (1, "")
             }
         }
-        return (box, runner)
+        let writer: (String, String, String) -> Int32 = { service, _, secret in
+            if failAdd { return 1 }
+            box.items[service] = secret
+            return 0
+        }
+        return (box, runner, writer)
     }
 
     final class KeychainBox {
+        var argvWriteAttempts = 0
         var items: [String: String]
         init(items: [String: String]) { self.items = items }
     }
@@ -865,6 +891,7 @@ extension ClaudeAccountProfilesTests {
         let profileService = service.keychainService(forProfile: "ai3")
         let keychain = fakeKeychain([mainService: "old-secret", profileService: "ai3-secret"])
         service.securityRunner = keychain.runner
+        service.keychainWriter = keychain.writer
 
         // Gleicher Projekt-Ordner auf beiden Seiten, unterschiedliche Chats;
         // memory/MEMORY.md existiert in beiden → Konflikt, nie ueberschreiben.
@@ -887,6 +914,7 @@ extension ClaudeAccountProfilesTests {
 
         // Login: Secret nach main verschoben, Profil-Item weg
         XCTAssertEqual(keychain.box.items[mainService], "ai3-secret")
+        XCTAssertEqual(keychain.box.argvWriteAttempts, 0)
         XCTAssertNil(keychain.box.items[profileService])
         // oauthAccount ersetzt, Rest von ~/.claude.json unangetastet
         XCTAssertEqual(service.profile(named: "main").emailAddress, "ai3@b.de")
@@ -921,6 +949,7 @@ extension ClaudeAccountProfilesTests {
         try writeClaudeJSON(email: "office@b.de", org: "Y", to: home.appendingPathComponent(".claude.json"))
         let keychain = fakeKeychain([service.keychainService(forProfile: "main"): "old-secret"])
         service.securityRunner = keychain.runner
+        service.keychainWriter = keychain.writer
 
         XCTAssertThrowsError(try service.promoteToMain("halb", trashItem: { _ in XCTFail("nichts loeschen") })) { error in
             XCTAssertEqual(error as? ClaudeAccountProfiles.PromoteError, .notLoggedIn("halb"))
@@ -938,6 +967,7 @@ extension ClaudeAccountProfilesTests {
         let transcript = try makeTranscript(inRoot: profileRoot, cwd: "/x", sessionID: "s1")
         let keychain = fakeKeychain([service.keychainService(forProfile: "ai3"): "ai3-secret"], failAdd: true)
         service.securityRunner = keychain.runner
+        service.keychainWriter = keychain.writer
 
         XCTAssertThrowsError(try service.promoteToMain("ai3", trashItem: { _ in XCTFail("nichts loeschen") }))
 
