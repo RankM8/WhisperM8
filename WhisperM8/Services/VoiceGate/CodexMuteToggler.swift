@@ -45,7 +45,13 @@ struct CodexMuteToggleResult {
 struct CodexMuteToggler {
     /// Tastenkombination, die in Codex auf „Toggle Voice Chat microphone" liegt.
     /// Muss mit der Belegung in Codex' Einstellungen uebereinstimmen.
-    var keyCode: UInt16 = UInt16(kVK_ANSI_U)
+    /// Aus dem aktiven Layout aufgelöst (LR-DIK-025): Codex speichert das
+    /// Kürzel als Zeichen „U"; ein fester US-Code träfe unter Dvorak/Workman eine andere Taste.
+    var keyCode: UInt16 = UInt16(KeyCodeResolver.keyCode(
+        for: "u",
+        fallback: kVK_ANSI_U,
+        translate: KeyCodeResolver.systemTranslator(commandModifier: false)
+    ))
     var modifiers: CGEventFlags = [.maskControl, .maskShift]
 
     /// Wie lange auf den Fokuswechsel gewartet wird.

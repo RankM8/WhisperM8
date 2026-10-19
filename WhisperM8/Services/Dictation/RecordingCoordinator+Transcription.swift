@@ -109,6 +109,12 @@ extension RecordingCoordinator {
                 },
                 onMissingTarget: {
                     overlayController.hide()
+                    // LR-DIK-007: kein Paste in eine fremde App — der Text liegt
+                    // in der Zwischenablage, das sagt der Hinweis.
+                    DictationNotice.post(
+                        title: "Text nicht eingefügt",
+                        body: "Die Ziel-App ließ sich nicht aktivieren. Dein Text liegt in der Zwischenablage – füge ihn mit Cmd+V ein."
+                    )
                 }
             )
         } else {

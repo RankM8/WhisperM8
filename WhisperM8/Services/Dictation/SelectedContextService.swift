@@ -97,19 +97,10 @@ struct SelectedContextService {
     }
 
     private func postCopyEvent() {
-        let source = CGEventSource(stateID: .hidSystemState)
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_C), keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: UInt16(kVK_ANSI_C), keyDown: false) else {
+        // Tastencode aus dem aktiven Layout (LR-DIK-025), nicht fest US-„C".
+        if !KeyCodeResolver.postCommandKey(character: "c", fallback: kVK_ANSI_C) {
             Logger.paste.error("Failed to create selected-context copy events")
-            return
         }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-
-        keyDown.post(tap: .cghidEventTap)
-        usleep(20_000)
-        keyUp.post(tap: .cghidEventTap)
     }
 }
 
