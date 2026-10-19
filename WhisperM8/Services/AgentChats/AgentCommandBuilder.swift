@@ -184,6 +184,19 @@ struct AgentCommandBuilder {
         AgentTranscriptLocator.locate(provider: .claude, externalSessionID: externalSessionID, cwd: cwd)
     }
 
+    /// Bereits gestarteter Chat OHNE gebundene externe ID (Hook-Bindung
+    /// ausgefallen): findet die Session, deren Transcript nachweislich existiert
+    /// (Hook-Event-File des Chats, jüngster Turn mit Datei) — dann wird sie
+    /// fortgesetzt statt still ein neuer, leerer Chat zu starten (LR-AK-021).
+    /// Kein Beleg (Chat geöffnet, nie benutzt) → `nil` → Frischstart wie bisher.
+    var unboundResumeResolver: (AgentChatSession, AgentProject) -> String? = { session, project in
+        ClaudeExternalIDRecovery.recoverableCandidate(
+            eventFileURL: ClaudeHookPaths().eventFileURL(localSessionID: session.id),
+            brokenID: "",
+            projectPath: project.path
+        )?.sessionID
+    }
+
     /// Liefert die Short-ID des Supervisor-Workers, der die Session gerade
     /// als Background-Agent hostet — `nil` wenn keiner laeuft.
     /// (externalSessionID, profileName) → Short-ID. Default liest das
@@ -601,6 +614,12 @@ struct AgentCommandBuilder {
                   !externalSessionID.isEmpty {
             // Resume NUR mit einer real von Claude vergebenen, gebundenen ID.
             resumeSessionID = externalSessionID
+        } else if session.hasLaunchedInitialPrompt,
+                  session.externalSessionID?.isEmpty ?? true,
+                  let recovered = unboundResumeResolver(session, project) {
+            // Gestartet, aber ohne Bindung — Transcript existiert nachweislich.
+            resumeSessionID = recovered
+            Logger.claudeBinding.notice("resume_unbound_recovered localID=\(session.id.uuidString, privacy: .public) id=\(recovered, privacy: .public)")
         }
 
         let resumeTranscriptURL = resumeSessionID.flatMap {
