@@ -125,7 +125,13 @@ struct OutputModeStore {
 
         do {
             let data = try loader(fileURL)
-            let decoded = try JSONDecoder().decode([OutputMode].self, from: data)
+            let (decoded, skipped) = try Self.decodeTolerant(data)
+            if skipped > 0 {
+                // LR-DIK-002: unlesbare Einträge (z. B. Downgrade, unbekannte Enum-Werte)
+                // werden übersprungen; die Originaldatei bleibt als Sicherung erhalten,
+                // bevor der nächste Save sie überschreibt.
+                backUpIncompatibleFile(data: data, skipped: skipped)
+            }
             let modes = Self.deduplicatedByID(decoded)
             if modes.count != decoded.count {
                 backUpFileWithDuplicateIDs(data: data, removed: decoded.count - modes.count)
@@ -134,8 +140,40 @@ struct OutputModeStore {
             return modes
         } catch {
             Logger.debug("Failed to load output modes: \(error.localizedDescription)")
+            // Komplett unlesbare Datei: vor dem Überschreiben durch den nächsten Save sichern.
+            if let raw = try? Data(contentsOf: fileURL), !raw.isEmpty {
+                backUpIncompatibleFile(data: raw, skipped: -1)
+            }
             return []
         }
+    }
+
+    /// Dekodiert Eintrag für Eintrag: ein einzelner defekter Eintrag verwirft nicht den
+    /// ganzen Bestand. Ist die Datei insgesamt kein JSON-Array, wirft die Funktion wie bisher.
+    static func decodeTolerant(_ data: Data) throws -> (modes: [OutputMode], skipped: Int) {
+        guard let objects = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "OutputModes.json ist kein Array"))
+        }
+        let decoder = JSONDecoder()
+        var modes: [OutputMode] = []
+        var skipped = 0
+        for object in objects {
+            if let entryData = try? JSONSerialization.data(withJSONObject: object),
+               let mode = try? decoder.decode(OutputMode.self, from: entryData) {
+                modes.append(mode)
+            } else {
+                skipped += 1
+            }
+        }
+        return (modes, skipped)
+    }
+
+    private func backUpIncompatibleFile(data: Data, skipped: Int) {
+        let backupURL = fileURL.appendingPathExtension("incompatible.bak")
+        if !FileManager.default.fileExists(atPath: backupURL.path) {
+            try? data.write(to: backupURL, options: .atomic)
+        }
+        Logger.info("output_modes_incompatible_entries skipped=\(skipped) backup=\(backupURL.lastPathComponent)")
     }
 
     /// Doppelte IDs deterministisch auflösen: das erste Vorkommen gewinnt, die

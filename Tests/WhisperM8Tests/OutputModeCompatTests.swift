@@ -32,6 +32,36 @@ final class OutputModeCompatTests: XCTestCase {
         }
     }
 
+    /// LR-DIK-002: ein nicht dekodierbarer Eintrag (z. B. unbekannte `kind` nach einem Downgrade)
+    /// darf die gültigen Custom-Modi nicht verwerfen; die Originaldatei wird gesichert.
+    func testIncompatibleEntryKeepsValidCustomModesAndBacksUpFile() throws {
+        try withIsolatedOutputModePreferences { _ in
+            let fileURL = temporaryJSONURL(prefix: "WhisperM8OutputModesCompat")
+            let backupURL = fileURL.appendingPathExtension("incompatible.bak")
+            defer {
+                try? FileManager.default.removeItem(at: fileURL)
+                try? FileManager.default.removeItem(at: backupURL)
+            }
+            let store = OutputModeStore(fileURL: fileURL)
+            var a = store.createCustomMode(); a.name = "Alpha"
+            var b = store.createCustomMode(); b.name = "Beta"
+            let encoder = JSONEncoder()
+            var objects = try [a, b].map { try JSONSerialization.jsonObject(with: encoder.encode($0)) }
+            objects.append(["id": "future", "name": "Zukunft", "kind": "futureKind"])
+            try JSONSerialization.data(withJSONObject: objects).write(to: fileURL)
+
+            let modes = store.modes
+            XCTAssertTrue(modes.contains { $0.id == a.id }, "Alpha muss erhalten bleiben")
+            XCTAssertTrue(modes.contains { $0.id == b.id }, "Beta muss erhalten bleiben")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path), "Original muss gesichert sein")
+
+            try store.saveModes(modes)
+            let reloaded = OutputModeStore(fileURL: fileURL).modes
+            XCTAssertTrue(reloaded.contains { $0.id == a.id })
+            XCTAssertTrue(reloaded.contains { $0.id == b.id })
+        }
+    }
+
     /// LR-DIK-020: doppelte IDs in OutputModes.json trappten in `Dictionary(uniqueKeysWithValues:)`.
     func testDuplicateModeIDsInFileAreDeduplicatedWithoutTrapAndBackedUp() throws {
         try withIsolatedOutputModePreferences { _ in
