@@ -341,6 +341,9 @@ final class RecordingCoordinator {
 
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
+        } else if visualContextCaptureService.hasClipInFlight {
+            // LR-DIK-010: ein noch startender Clip würde sonst nach dem Stop unbeaufsichtigt weiterlaufen.
+            await visualContextCaptureService.cancelActiveClip()
         }
         // VOR dem finalen Clipboard-Sweep auf den Capture-Task warten —
         // sonst importiert der Sweep dessen Cmd+C-/Restore-Pasteboard-Bumps

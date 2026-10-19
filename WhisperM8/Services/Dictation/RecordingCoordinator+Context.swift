@@ -205,6 +205,13 @@ extension RecordingCoordinator {
             removed = attachment
         } else if let attachment = bundle.screenClips.first(where: { $0.id == id }) {
             bundle.screenClips.removeAll { $0.id == id }
+            // LR-DIK-009: aus dem Clip abgeleitete Einzelbilder gehen mit; unabhängige
+            // Screenshots und Frames anderer Clips bleiben.
+            let derivedFrames = bundle.visualFrames.filter { $0.sourceClipID == id }
+            bundle.visualFrames.removeAll { $0.sourceClipID == id }
+            if !derivedFrames.isEmpty {
+                visualContextCaptureService.cleanup(TranscriptContextBundle(visualFrames: derivedFrames))
+            }
             removed = attachment
         } else if let attachment = bundle.visualFrames.first(where: { $0.id == id }) {
             bundle.visualFrames.removeAll { $0.id == id }
