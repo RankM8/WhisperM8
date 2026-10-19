@@ -11,6 +11,7 @@ import ScreenCaptureKit
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
         "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
+        "debug.context",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -22,6 +23,7 @@ extension AgentControlRequestHandler {
             case "debug.snapshot": response = await debugSnapshot(request)
             case "debug.dictate": response = debugDictate(request)
             case "debug.status": response = await debugStatus(request)
+            case "debug.context": response = await debugContext(request)
             default: response = debugJob(request)
             }
         } else {
@@ -56,6 +58,44 @@ extension AgentControlRequestHandler {
             return .failure(requestID: request.requestID, code: .notFound, message: "Kein eindeutiger Chat für \(ref)")
         }
         return .success(requestID: request.requestID, result: .object(["session": matched.uuidString, "status": raw]))
+    }
+
+    // MARK: context
+
+    /// Läuft den Clipboard-Fallback des Diktatstarts so, wie der Hotkey ihn
+    /// startet (Task auf dem MainActor → `captureViaClipboard` → nach dem
+    /// Snapshot-`await` Tastencode für Cmd+C aus dem Layout). Auf einer
+    /// privaten Zwischenablage, ohne Tastendruck und ohne Aktivierung — prüft,
+    /// dass der Pfad in der laufenden App nicht abbricht (HIToolbox abseits
+    /// des Main Threads stürzte die App beim Diktatstart ab).
+    private func debugContext(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let result = await Task { @MainActor () -> [String: Any] in
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name("wm8-debug-context-\(UUID().uuidString)"))
+            defer { pasteboard.releaseGlobally() }
+            pasteboard.clearContents()
+            pasteboard.setString("debug-baseline", forType: .string)
+            var copyKeyCode = -1
+            var copyOnMain = false
+            let service = SelectedContextService(
+                pasteboard: pasteboard,
+                copyPoster: {
+                    copyOnMain = Thread.isMainThread
+                    copyKeyCode = Int(KeyCodeResolver.keyCode(for: "c", fallback: 8))
+                    pasteboard.clearContents()
+                    pasteboard.setString("debug-selection", forType: .string)
+                },
+                activator: { _ in }
+            )
+            let captured = await service.captureViaClipboard(bundleIdentifier: "com.whisperm8.debug-context", activate: {})
+            return [
+                "captured": captured ?? NSNull(),
+                "copyKeyCode": copyKeyCode,
+                "copyOnMainThread": copyOnMain,
+                "pasteKeyCode": Int(KeyCodeResolver.keyCode(for: "v", fallback: 9)),
+                "restoredBaseline": pasteboard.string(forType: .string) == "debug-baseline",
+            ]
+        }.value
+        return .success(requestID: request.requestID, result: .object(result))
     }
 
     // MARK: state

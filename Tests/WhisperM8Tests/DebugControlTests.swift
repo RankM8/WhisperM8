@@ -218,6 +218,8 @@ final class DebugControlTests: XCTestCase {
         let cwd = "/Users/x/proj"
         XCTAssertEqual(try DebugCLIArguments.parse([], cwd: cwd), .help)
         XCTAssertEqual(try DebugCLIArguments.parse(["state"], cwd: cwd), .state)
+        XCTAssertEqual(try DebugCLIArguments.parse(["context"], cwd: cwd), .context)
+        XCTAssertThrowsError(try DebugCLIArguments.parse(["context", "x"], cwd: cwd))
         XCTAssertEqual(try DebugCLIArguments.parse(["open", "settings/transcription"], cwd: cwd),
                        .open(target: "settings/transcription"))
         XCTAssertEqual(try DebugCLIArguments.parse(["snapshot"], cwd: cwd), .snapshot(window: nil, outputDir: nil))
