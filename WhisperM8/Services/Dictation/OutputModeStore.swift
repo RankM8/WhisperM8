@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// In-Memory-Cache der ROHEN Datei-Inhalte von OutputModes.json, gekeyt nach
@@ -86,7 +87,17 @@ struct OutputModeStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let normalizedModes = normalized(modes)
-        let data = try encoder.encode(normalizedModes)
+        var data = try encoder.encode(normalizedModes)
+        // Einträge, die diese Version nicht lesen kann (etwa aus einer neueren
+        // App nach einem Downgrade), unverändert weiterreichen — sonst löschte
+        // der nächste Save sie (Review W2b zu LR-DIK-002).
+        if let existing = try? Data(contentsOf: fileURL),
+           let unreadable = try? Self.decodeTolerant(existing).unreadable,
+           !unreadable.isEmpty,
+           var objects = try JSONSerialization.jsonObject(with: data) as? [Any] {
+            objects.append(contentsOf: unreadable)
+            data = try JSONSerialization.data(withJSONObject: objects, options: [.prettyPrinted, .sortedKeys])
+        }
         try data.write(to: fileURL, options: .atomic)
 
         // Cache direkt aktualisieren (mit dem Stat NACH dem Write) und die
@@ -125,7 +136,8 @@ struct OutputModeStore {
 
         do {
             let data = try loader(fileURL)
-            let (decoded, skipped) = try Self.decodeTolerant(data)
+            let (decoded, unreadable) = try Self.decodeTolerant(data)
+            let skipped = unreadable.count
             if skipped > 0 {
                 // LR-DIK-002: unlesbare Einträge (z. B. Downgrade, unbekannte Enum-Werte)
                 // werden übersprungen; die Originaldatei bleibt als Sicherung erhalten,
@@ -139,7 +151,7 @@ struct OutputModeStore {
             OutputModeDiskCache.shared.store(modes, forPath: fileURL.path, mtime: stat.mtime, size: stat.size)
             return modes
         } catch {
-            Logger.debug("Failed to load output modes: \(error.localizedDescription)")
+            Logger.info("output_modes_unreadable error=\(error.localizedDescription)")
             // Komplett unlesbare Datei: vor dem Überschreiben durch den nächsten Save sichern.
             if let raw = try? Data(contentsOf: fileURL), !raw.isEmpty {
                 backUpIncompatibleFile(data: raw, skipped: -1)
@@ -150,26 +162,29 @@ struct OutputModeStore {
 
     /// Dekodiert Eintrag für Eintrag: ein einzelner defekter Eintrag verwirft nicht den
     /// ganzen Bestand. Ist die Datei insgesamt kein JSON-Array, wirft die Funktion wie bisher.
-    static func decodeTolerant(_ data: Data) throws -> (modes: [OutputMode], skipped: Int) {
+    static func decodeTolerant(_ data: Data) throws -> (modes: [OutputMode], unreadable: [Any]) {
         guard let objects = try JSONSerialization.jsonObject(with: data) as? [Any] else {
             throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "OutputModes.json ist kein Array"))
         }
         let decoder = JSONDecoder()
         var modes: [OutputMode] = []
-        var skipped = 0
+        var unreadable: [Any] = []
         for object in objects {
             if let entryData = try? JSONSerialization.data(withJSONObject: object),
                let mode = try? decoder.decode(OutputMode.self, from: entryData) {
                 modes.append(mode)
             } else {
-                skipped += 1
+                unreadable.append(object)
             }
         }
-        return (modes, skipped)
+        return (modes, unreadable)
     }
 
     private func backUpIncompatibleFile(data: Data, skipped: Int) {
-        let backupURL = fileURL.appendingPathExtension("incompatible.bak")
+        // Je Inhalt eine eigene Sicherung (Kurz-Hash im Namen): ein zweiter
+        // Vorfall überschreibt die erste nicht, derselbe Inhalt entsteht nur einmal.
+        let hash = SHA256.hash(data: data).prefix(4).map { String(format: "%02x", $0) }.joined()
+        let backupURL = fileURL.appendingPathExtension("incompatible-\(hash).bak")
         if !FileManager.default.fileExists(atPath: backupURL.path) {
             try? data.write(to: backupURL, options: .atomic)
         }

@@ -97,7 +97,8 @@ final class CodexProcessRegistry: @unchecked Sendable {
     /// Hartes Zeitlimit: markiert den Lauf als `timedOut` und beendet ihn (TERM, dann KILL).
     func expire(runID: UUID) {
         lock.lock()
-        guard let entry = entries[runID], entry.outcome == .none else {
+        // Kurz nach regulärem Prozessende kein Timeout mehr melden (Review W2b).
+        guard let entry = entries[runID], entry.outcome == .none, entry.process.isRunning else {
             lock.unlock()
             return
         }

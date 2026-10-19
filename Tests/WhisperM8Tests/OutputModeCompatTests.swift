@@ -37,10 +37,15 @@ final class OutputModeCompatTests: XCTestCase {
     func testIncompatibleEntryKeepsValidCustomModesAndBacksUpFile() throws {
         try withIsolatedOutputModePreferences { _ in
             let fileURL = temporaryJSONURL(prefix: "WhisperM8OutputModesCompat")
-            let backupURL = fileURL.appendingPathExtension("incompatible.bak")
+            func backups() -> [String] {
+                (try? FileManager.default.contentsOfDirectory(atPath: fileURL.deletingLastPathComponent().path))?
+                    .filter { $0.hasPrefix(fileURL.lastPathComponent + ".incompatible-") } ?? []
+            }
             defer {
                 try? FileManager.default.removeItem(at: fileURL)
-                try? FileManager.default.removeItem(at: backupURL)
+                for name in backups() {
+                    try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent().appendingPathComponent(name))
+                }
             }
             let store = OutputModeStore(fileURL: fileURL)
             var a = store.createCustomMode(); a.name = "Alpha"
@@ -53,12 +58,15 @@ final class OutputModeCompatTests: XCTestCase {
             let modes = store.modes
             XCTAssertTrue(modes.contains { $0.id == a.id }, "Alpha muss erhalten bleiben")
             XCTAssertTrue(modes.contains { $0.id == b.id }, "Beta muss erhalten bleiben")
-            XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path), "Original muss gesichert sein")
+            XCTAssertEqual(backups().count, 1, "Original muss gesichert sein")
 
             try store.saveModes(modes)
             let reloaded = OutputModeStore(fileURL: fileURL).modes
             XCTAssertTrue(reloaded.contains { $0.id == a.id })
             XCTAssertTrue(reloaded.contains { $0.id == b.id })
+            // Review W2b: der unlesbare Eintrag einer neueren Version überlebt den Save.
+            let raw = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fileURL)) as? [[String: Any]])
+            XCTAssertTrue(raw.contains { $0["id"] as? String == "future" })
         }
     }
 

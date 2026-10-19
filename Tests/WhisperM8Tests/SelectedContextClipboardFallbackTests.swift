@@ -33,22 +33,43 @@ final class SelectedContextClipboardFallbackTests: XCTestCase {
         XCTAssertEqual(service.outcome.resyncChangeCount, pasteboard.changeCount)
     }
 
-    func testForeignCopyDuringCaptureIsNeitherImportedNorOverwritten() async {
-        let pasteboard = makePasteboard("alt")
+    /// Review W2b: Manche Apps erhöhen den Zähler beim Kopieren um mehr als 1
+    /// (clearContents + mehrere Writes). Das ist ihre Kopie — die Nutzerkopie
+    /// im Snapshot kommt zurück, statt verloren zu gehen.
+    func testMultiWriteCopyStillRestoresUserClipboard() async {
+        let pasteboard = makePasteboard("meine Zwischenablage")
         let service = SelectedContextService(
             pasteboard: pasteboard,
             copyPoster: { [self] in
-                write("Ziel-App-Kopie", to: pasteboard)
-                write("echte Nutzerkopie", to: pasteboard)   // fremde Kopie im Fenster
+                write("Zwischenstand", to: pasteboard)
+                write("markierter Text", to: pasteboard)
             },
             activator: { _ in }
         )
 
+        let text = await service.captureViaClipboard(bundleIdentifier: "com.microsoft.Word", activate: {})
+
+        XCTAssertEqual(text, "markierter Text")
+        XCTAssertEqual(pasteboard.string(forType: .string), "meine Zwischenablage")
+    }
+
+    /// Review W2b zu LR-DIK-023: Liegt schon ein Passwort in der Zwischenablage,
+    /// läuft der Fallback gar nicht — sonst wäre es durch die Auswahl ersetzt.
+    func testConfidentialClipboardSkipsFallback() async {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("wm8-fallback-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        let item = NSPasteboardItem()
+        item.setString("geheim", forType: .string)
+        item.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        pasteboard.writeObjects([item])
+        var posted = false
+        let service = SelectedContextService(pasteboard: pasteboard, copyPoster: { posted = true }, activator: { _ in })
+
         let text = await service.captureViaClipboard(bundleIdentifier: "com.apple.Notes", activate: {})
 
-        XCTAssertNil(text, "fremde Kopie darf nicht als markierter Kontext gelten")
-        XCTAssertEqual(pasteboard.string(forType: .string), "echte Nutzerkopie", "kein Restore über die Nutzerkopie")
-        XCTAssertNil(service.outcome.resyncChangeCount, "Monitor darf die Nutzerkopie noch importieren")
+        XCTAssertNil(text)
+        XCTAssertFalse(posted, "kein Cmd+C über einem Passwort")
+        XCTAssertEqual(pasteboard.string(forType: .string), "geheim")
     }
 
     func testCopyLineEditorSkipsFallbackEntirely() async {

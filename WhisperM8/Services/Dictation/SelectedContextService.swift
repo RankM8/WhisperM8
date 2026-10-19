@@ -148,6 +148,14 @@ struct SelectedContextService {
             return nil
         }
 
+        // Liegt schon ein Passwort in der Zwischenablage, ersetzte die Cmd+C-Kopie
+        // es — und zurückgeschrieben wird ein vertraulicher Inhalt bewusst nicht.
+        // Dann lieber ganz ohne Fallback (Review W2b zu LR-DIK-023).
+        if PasteboardPrivacy.isConfidential(pasteboard.types?.map(\.rawValue) ?? []) {
+            Logger.info("clipboard_fallback_skipped reason=confidential")
+            return nil
+        }
+
         let baseline = pasteboard.changeCount
         guard let snapshot = await PasteboardSnapshot.capture(
             from: pasteboard, maxBytes: maxSnapshotBytes, timeout: snapshotTimeout
@@ -165,15 +173,16 @@ struct SelectedContextService {
         copyPoster()
         try? await Task.sleep(nanoseconds: copyDelayNanoseconds)
 
-        // Genau eine Änderung (die Kopie der Ziel-App) ist erwartet. Mehr heißt: der Nutzer hat
-        // in der Zwischenzeit selbst kopiert – seine Kopie bleibt unangetastet und der Monitor
-        // darf sie als regulären Kontext importieren (resyncChangeCount bleibt nil).
+        // Hat sich nichts geändert, gab es keine Auswahl. Manche Apps (Office,
+        // Electron) erhöhen den Zähler beim Kopieren um mehr als 1 — auch das
+        // ist ihre Kopie, die Nutzerkopie im Snapshot muss zurück (Review W2b:
+        // vorher ging sie dabei verloren). Eine eigene Nutzerkopie in den
+        // ~200 ms ist praktisch ausgeschlossen; direkt vor dem Zurückschreiben
+        // wird trotzdem noch einmal geprüft.
         let afterCopy = pasteboard.changeCount
-        guard afterCopy == baseline + 1 else {
-            if afterCopy != baseline {
-                Logger.info("clipboard_fallback_conflict changes=\(afterCopy - baseline)")
-            }
-            return nil
+        guard afterCopy != baseline else { return nil }
+        if afterCopy > baseline + 1 {
+            Logger.info("clipboard_fallback_multi_write changes=\(afterCopy - baseline)")
         }
 
         let selectedText: String?
@@ -185,7 +194,8 @@ struct SelectedContextService {
 
         // Ein Passwort im Snapshot nicht zurückschreiben: der neue changeCount
         // hielte das Auto-Leeren des Passwort-Managers auf (LR-DIK-023).
-        if !snapshot.isConfidential {
+        // Nur zurückschreiben, wenn seit der Kopie niemand mehr kopiert hat.
+        if !snapshot.isConfidential, pasteboard.changeCount == afterCopy {
             await snapshot.restoreOffMain(to: pasteboard)
         }
         outcome.resyncChangeCount = pasteboard.changeCount

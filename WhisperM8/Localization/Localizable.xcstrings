@@ -1181,6 +1181,26 @@
         }
       }
     },
+    "The text clean-up didn't answer within %lld minutes and was stopped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachbearbeitung hat nach %lld Minuten nicht geantwortet und wurde gestoppt."
+          }
+        }
+      }
+    },
+    "The text clean-up was cancelled.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachbearbeitung wurde abgebrochen."
+          }
+        }
+      }
+    },
     "This background session has no short ID, so it can't be attached. Close the tab or start it again.": {
       "localizations": {
         "de": {
