@@ -1297,8 +1297,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     return .failure(.internalError, "Resume-Flag konnte nicht gesetzt werden: \(error.localizedDescription)")
                 }
             }
-            WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-            AppActivation.activate()
+            // Fortsetzen holt die App nicht nach vorn (LR-CLI-004).
+            WindowRequestCenter.shared.requestSessionFocus(
+                sessionID: targetID,
+                activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: false))
             return .success(session)
         }
         switch outcome {
@@ -1498,8 +1500,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                         return .fail(.internalError, "Entarchiviert, aber Resume-Flag fehlgeschlagen: \(error.localizedDescription)")
                     }
                 }
-                WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-                AppActivation.activate()
+                // Fortsetzen holt die App nicht nach vorn (LR-CLI-004).
+                WindowRequestCenter.shared.requestSessionFocus(
+                    sessionID: targetID,
+                    activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: false))
                 resumed = true
             } else if wantsOpen {
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)

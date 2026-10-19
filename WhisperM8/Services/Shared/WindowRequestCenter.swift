@@ -49,6 +49,22 @@ struct AgentSessionFocusRequest: Equatable {
     /// Ziel-Fenster (bereits aufgelöst): Fenster mit offenem Tab, sonst Primär.
     let windowID: UUID
     let isPrimaryWindow: Bool
+    /// App nach vorn holen? Nein bei maschinell ausgelösten Befehlen
+    /// (`chats resume`): sonst landeten die nächsten Tastendrücke des Users
+    /// im Terminal eines Chats, etwa als Freigabe (LR-CLI-004).
+    var activate = true
+}
+
+/// Holen Steuerbefehle die App nach vorn? Nur ein ausdrückliches Öffnen tut
+/// das; Fortsetzen/Starten im Hintergrund nie (LR-CLI-004).
+enum ControlActivationPolicy {
+    static func shouldActivate(method: String, wantsOpen: Bool) -> Bool {
+        switch method {
+        case "session.open", "gridWorkspace.open": return true
+        case "workspace.unarchive": return wantsOpen
+        default: return false
+        }
+    }
 }
 
 /// Reiner FENSTER-Fokus-Wunsch (Single-Owner-Konflikt-Routing: „Workspace
@@ -152,7 +168,7 @@ final class WindowRequestCenter: ObservableObject {
     /// Bringt den Chat `sessionID` in den Vordergrund: Ziel ist das Fenster,
     /// das ihn bereits als Tab zeigt, sonst das Primärfenster (Tab wird dort
     /// geöffnet + selektiert). Einstieg für den Notification-Klick.
-    func requestSessionFocus(sessionID: UUID) {
+    func requestSessionFocus(sessionID: UUID, activate: Bool = true) {
         let windowStore = AgentWindowStore.shared
         // Stale-Guard (Review-Finding): eine veraltete Notification auf eine
         // inzwischen archivierte/gelöschte Session darf den UI-State nicht
@@ -190,7 +206,8 @@ final class WindowRequestCenter: ObservableObject {
             requestID: UUID(),
             sessionID: sessionID,
             windowID: targetWindowID,
-            isPrimaryWindow: isPrimary
+            isPrimaryWindow: isPrimary,
+            activate: activate
         )
     }
 
@@ -249,12 +266,19 @@ struct WindowRequestHandler: View {
             .onReceive(requestCenter.$sessionFocusRequest.compactMap { $0 }.removeDuplicates()) { request in
                 // Notification-Klick: Ziel-Fenster öffnen bzw. fokussieren —
                 // Tab/Selektion stehen bereits im AgentWindowStore.
-                if request.isPrimaryWindow {
-                    openWindow(id: WindowRequest.agentChats.targetWindowID)
-                } else {
-                    openWindow(id: WindowRequest.agentChatWindowGroupID, value: request.windowID)
+                // Ohne Aktivierung nur öffnen, falls das Fenster fehlt — ein
+                // offenes Fenster folgt dem Store von selbst.
+                let windowOpen = NSApp.windows.contains { $0.isVisible && $0.identifier?.rawValue.hasPrefix("agent-chat") == true }
+                if request.activate || !windowOpen {
+                    if request.isPrimaryWindow {
+                        openWindow(id: WindowRequest.agentChats.targetWindowID)
+                    } else {
+                        openWindow(id: WindowRequest.agentChatWindowGroupID, value: request.windowID)
+                    }
                 }
-                WindowActivationService.activateApp()
+                if request.activate {
+                    WindowActivationService.activateApp()
+                }
             }
             .onReceive(requestCenter.$windowFocusRequest.compactMap { $0 }.removeDuplicates()) { request in
                 // Reiner Fenster-Fokus (Single-Owner-Routing): nach vorn,
