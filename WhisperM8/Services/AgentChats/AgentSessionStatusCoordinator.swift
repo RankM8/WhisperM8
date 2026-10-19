@@ -333,6 +333,9 @@ final class AgentSessionStatusCoordinator {
 
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.
     func externalSessionIDBound(sessionID: UUID) {
+        if let bound = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID {
+            releaseForkMark(localID: sessionID, id: bound)
+        }
         attachWatch(sessionID: sessionID)
         adoptRegistryRecord(sessionID: sessionID)
     }
@@ -1098,6 +1101,13 @@ final class AgentSessionStatusCoordinator {
         return .postpone
     }
 
+    /// Nimmt `id` aus der Fork-Merkliste des Chats (LR-AK-020).
+    private func releaseForkMark(localID: UUID, id: String) {
+        guard forkExternalIDs[localID]?.contains(id) == true else { return }
+        forkExternalIDs[localID]?.remove(id)
+        if forkExternalIDs[localID]?.isEmpty == true { forkExternalIDs[localID] = nil }
+    }
+
     private func bindExternalSessionID(localID: UUID, event: ClaudeHookEvent) {
         guard let newID = event.sessionID, !newID.isEmpty else { return }
         let currentID = store.loadWorkspace().sessions
@@ -1173,6 +1183,10 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func setExternalSessionID(localID: UUID, newID: String) {
+        // Eine gebundene ID ist kein Fork mehr (LR-AK-020): bindet der Chat später
+        // genau diese ID (`/resume` auf den Fork, Recovery), würden sonst alle ihre
+        // Hooks verworfen.
+        releaseForkMark(localID: localID, id: newID)
         do {
             var didChange = false
             try store.updateSession(id: localID) { session in

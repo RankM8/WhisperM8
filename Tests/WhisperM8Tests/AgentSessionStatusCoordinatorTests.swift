@@ -187,6 +187,19 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertNotEqual(coordinator.lifecycleState(for: sessionID), .working)
     }
 
+    /// LR-AK-020: Wird ein zuvor ignorierter Fork später ausdrücklich gebunden (`/resume`),
+    /// müssen seine Hooks wieder wirken.
+    func testIgnoredForkIDIsReleasedWhenBoundLater() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "fg" || id == "bgfork" }
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("fg", source: "resume"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bgfork", source: "fork"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bgfork", source: "resume"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "bgfork")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "bgfork"))
+        XCTAssertEqual(coordinator.lifecycleState(for: sessionID), .working, "gebundene ID ist kein Fork mehr")
+    }
+
     /// `/clear`: neue ID ohne Datei wird erst mit dem ersten Prompt gebunden.
     func testPostponedBindingCommitsOnFirstTurnOfNewID() throws {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()
