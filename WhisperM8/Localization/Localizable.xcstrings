@@ -121,6 +121,16 @@
         }
       }
     },
+    "Also removes the paste copies and keeps no image or video copies in the output archive. Text and metadata of a run stay in the archive.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt zusätzlich die Einfüge-Kopien und legt im Ausgabe-Archiv keine Bild- oder Videokopien ab. Text und Metadaten eines Laufs bleiben im Archiv."
+          }
+        }
+      }
+    },
     "App Permissions": {
       "localizations": {
         "de": {
