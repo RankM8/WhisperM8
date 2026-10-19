@@ -28,19 +28,27 @@ extension AgentChatsView {
     func createSession(
         provider: AgentProvider,
         kind: AgentSessionKind? = nil,
-        gptMainModel: Bool = false
+        gptMainModel: Bool = false,
+        skipCLICheck: Bool = false
     ) {
         guard let selectedProject else { return }
         // Fehlt die CLI, entsteht keine Session (sonst sammelten sich Leer-Chats an):
         // stattdessen der geführte Installations-Leerzustand (LR-AU-022).
-        if let missing = AgentChatStartGate.missingCLI(
+        if !skipCLICheck, let missing = AgentChatStartGate.missingCLI(
             provider: provider,
             kind: kind,
             commandResolver: AgentCommandBuilder().commandResolver
         ) {
-            missingCLIPrompt = MissingCLIPrompt(cli: missing) {
-                createSession(provider: provider, kind: kind, gptMainModel: gptMainModel)
-            }
+            missingCLIPrompt = MissingCLIPrompt(
+                cli: missing,
+                retry: {
+                    createSession(provider: provider, kind: kind, gptMainModel: gptMainModel)
+                },
+                // „Trotzdem starten“: nie schlechter als der alte Launch ohne Gate.
+                startAnyway: {
+                    createSession(provider: provider, kind: kind, gptMainModel: gptMainModel, skipCLICheck: true)
+                }
+            )
             return
         }
         do {

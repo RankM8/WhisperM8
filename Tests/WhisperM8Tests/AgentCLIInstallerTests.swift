@@ -116,4 +116,42 @@ final class AgentCLIInstallerTests: XCTestCase {
         XCTAssertEqual(AgentChatStartGate.cli(forCommandName: "Claude"), .claude)
         XCTAssertEqual(AgentChatStartGate.cli(forCommandName: "Codex"), .codex)
     }
+
+    // MARK: LR-AU-022/DIK-015/ONB-003 · Versionsmanager-Orte (D5 „nie doppelt“)
+
+    func testExtraDirectoriesCoverVersionManagersAndNewestNvmFirst() {
+        let home = "/Users/x"
+        let dirs = AgentCLISearchPaths.extraDirectories(home: home, listing: { base in
+            base.hasSuffix(".nvm/versions/node") ? ["v18.19.0", "v20.11.1", "v9.0.0", ".DS_Store"] : []
+        })
+        for expected in ["/Users/x/.volta/bin", "/Users/x/.bun/bin", "/Users/x/.npm-global/bin",
+                         "/Users/x/.local/share/mise/shims", "/Users/x/.asdf/shims"] {
+            XCTAssertTrue(dirs.contains(expected), expected)
+        }
+        let nvm = dirs.filter { $0.contains(".nvm/") }
+        XCTAssertEqual(nvm, ["/Users/x/.nvm/versions/node/v20.11.1/bin",
+                             "/Users/x/.nvm/versions/node/v18.19.0/bin",
+                             "/Users/x/.nvm/versions/node/v9.0.0/bin"], "numerisch sortiert, neueste zuerst")
+    }
+
+    func testFirstExecutableFindsCLIInVoltaDirectory() {
+        let dirs = AgentCLISearchPaths.extraDirectories(home: "/Users/x", listing: { _ in [] })
+        let found = AgentCLISearchPaths.firstExecutable("claude", in: dirs, isExecutable: { $0 == "/Users/x/.volta/bin/claude" })
+        XCTAssertEqual(found, "/Users/x/.volta/bin/claude")
+        XCTAssertNil(AgentCLISearchPaths.firstExecutable("claude", in: dirs, isExecutable: { _ in false }))
+    }
+
+    @MainActor
+    func testCheckAgainInvalidatesLoginShellCacheButInitialCheckDoesNot() async {
+        var invalidations = 0
+        let model = AgentCLIInstallModel(
+            cli: .claude,
+            resolver: AgentCLIResolver(commandResolver: { _ in nil }, brewResolver: { nil }),
+            invalidateEnvironment: { invalidations += 1 }
+        )
+        await model.recheck()
+        XCTAssertEqual(invalidations, 0)
+        await model.recheck(refreshEnvironment: true)
+        XCTAssertEqual(invalidations, 1)
+    }
 }

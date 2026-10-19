@@ -34,6 +34,48 @@ enum AgentCLI: String, CaseIterable, Equatable {
     static let homebrewURL = URL(string: "https://brew.sh")!
 }
 
+/// Zusätzliche Installationsorte von Versionsmanagern (Volta, Bun, npm-global,
+/// mise, asdf, nvm, fnm), die im launchd-PATH der GUI-App fehlen. Ein Ort für
+/// Erkennung UND Chatstart, damit „installiert“ und „startbar“ nie auseinanderlaufen
+/// (LR-AU-022, D5 „nie doppelt“).
+enum AgentCLISearchPaths {
+    static func extraDirectories(
+        home: String = NSHomeDirectory(),
+        listing: (String) -> [String] = { (try? FileManager.default.contentsOfDirectory(atPath: $0)) ?? [] }
+    ) -> [String] {
+        var result = [
+            "\(home)/.volta/bin",
+            "\(home)/.bun/bin",
+            "\(home)/.npm-global/bin",
+            "\(home)/.local/share/mise/shims",
+            "\(home)/.asdf/shims",
+        ]
+        // Glob je Versionsordner, neueste Version zuerst.
+        func newestFirst(_ base: String, suffix: String) -> [String] {
+            listing(base)
+                .filter { !$0.hasPrefix(".") }
+                .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+                .map { "\(base)/\($0)\(suffix)" }
+        }
+        result += newestFirst("\(home)/.nvm/versions/node", suffix: "/bin")
+        result += newestFirst("\(home)/.local/share/fnm/node-versions", suffix: "/installation/bin")
+        result += newestFirst("\(home)/Library/Application Support/fnm/node-versions", suffix: "/installation/bin")
+        return result
+    }
+
+    static func firstExecutable(
+        _ command: String,
+        in directories: [String],
+        isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) -> String? {
+        for directory in directories {
+            let path = "\(directory)/\(command)"
+            if isExecutable(path) { return path }
+        }
+        return nil
+    }
+}
+
 /// Zustand einer CLI auf diesem Mac — rein aus Auflösungs-Closures abgeleitet.
 enum AgentCLIState: Equatable {
     /// Gefunden (egal ob nativer Installer, npm, Homebrew oder App-Bundle).

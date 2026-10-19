@@ -20,13 +20,18 @@ final class AgentCLIInstallModel {
 
     private let resolver: AgentCLIResolver
     private let installer: AgentCLIInstaller
+    /// „Erneut prüfen“ verwirft den Login-Shell-Cache: eine Installation im
+    /// Terminal ändert den PATH, den die App sonst für die Laufzeit behielte.
+    private let invalidateEnvironment: () -> Void
 
     init(
         cli: AgentCLI,
         initialState: AgentCLIState? = nil,
         resolver: AgentCLIResolver = .live,
-        installer: AgentCLIInstaller? = nil
+        installer: AgentCLIInstaller? = nil,
+        invalidateEnvironment: @escaping () -> Void = { LoginShellEnvironment.shared.invalidate() }
     ) {
+        self.invalidateEnvironment = invalidateEnvironment
         self.cli = cli
         self.resolver = resolver
         var inst = installer ?? AgentCLIInstaller()
@@ -37,11 +42,13 @@ final class AgentCLIInstallModel {
     }
 
     /// Auflösung off-main (`which` + Dateiprüfungen sind Subprozess-/I/O-Arbeit).
-    func recheck() async {
+    func recheck(refreshEnvironment: Bool = false) async {
         let resolver = resolver
         let cli = cli
+        let invalidate = invalidateEnvironment
         let newState = await Task.detached(priority: .userInitiated) {
-            resolver.state(of: cli)
+            if refreshEnvironment { invalidate() }
+            return resolver.state(of: cli)
         }.value
         state = newState
         if newState.isInstalled { phase = .idle }
@@ -152,7 +159,7 @@ struct AgentCLIInstallPanel: View {
             if !model.state.isInstalled {
                 Button("Check Again") {
                     Task {
-                        await model.recheck()
+                        await model.recheck(refreshEnvironment: true)
                         if model.state.isInstalled { onInstalled?() }
                     }
                 }
@@ -174,7 +181,7 @@ struct AgentCLIInstallPanel: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("WhisperM8 will run “\(AgentCLIInstaller.displayCommand(for: model.cli))” with Homebrew. Nothing else is changed on your Mac.")
+            Text("WhisperM8 will run “\(AgentCLIInstaller.displayCommand(for: model.cli))” with Homebrew. Nothing else is changed on your Mac.\n\nIf you have already installed \(model.cli.displayName) another way, do not continue here.")
         }
     }
 
@@ -276,6 +283,13 @@ struct AgentCLIMissingSheet: View {
             HStack {
                 Button("Close", action: onClose)
                 Spacer()
+                // Ausweg: das Gate darf nie schlechter sein als der alte Launch
+                // (z. B. CLI an ungewöhnlichem Ort) — Start ohne Prüfung, ein
+                // Fehler erscheint dann wie früher im Terminal.
+                Button("Start Anyway") {
+                    onClose()
+                    prompt.startAnyway()
+                }
                 Button("Start Chat") {
                     onClose()
                     prompt.retry()
@@ -294,4 +308,6 @@ struct MissingCLIPrompt: Identifiable {
     let cli: AgentCLI
     /// Startet den ursprünglich gewünschten Chat erneut (nach Installation).
     let retry: () -> Void
+    /// Startet den Chat ohne CLI-Prüfung („Trotzdem starten“).
+    let startAnyway: () -> Void
 }

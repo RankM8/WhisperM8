@@ -871,6 +871,16 @@
         }
       }
     },
+    "Start Anyway": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trotzdem starten"
+          }
+        }
+      }
+    },
     "Start Chat": {
       "localizations": {
         "de": {
@@ -1181,12 +1191,12 @@
         }
       }
     },
-    "WhisperM8 will run “%@” with Homebrew. Nothing else is changed on your Mac.": {
+    "WhisperM8 will run “%@” with Homebrew. Nothing else is changed on your Mac.\n\nIf you have already installed %@ another way, do not continue here.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "WhisperM8 führt „%@“ mit Homebrew aus. Sonst wird auf deinem Mac nichts verändert."
+            "value": "WhisperM8 führt „%@“ mit Homebrew aus. Sonst wird auf deinem Mac nichts verändert.\n\nFalls du %@ schon anders installiert hast, fahre hier nicht fort."
           }
         }
       }
