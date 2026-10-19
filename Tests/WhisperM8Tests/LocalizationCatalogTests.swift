@@ -99,7 +99,8 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Einfache Literale in typischen UI-Aufrufen. Interpolationen (`\(`)
     /// prüft der Guard nicht — dafür `String(localized:)` mit Platzhalter nutzen.
     static func uiLiterals(in source: String) -> [String] {
-        let calls = #"(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView|String\(localized:|\.help|\.navigationTitle|LocalizedStringKey)\(\s*"((?:[^"\\]|\\.)*)""#
+        // `String(localized: "…")` hat kein zweites `(` — eigene Alternative.
+        let calls = #"(?:(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView|\.help|\.navigationTitle|LocalizedStringKey)\(|String\(localized:)\s*"((?:[^"\\]|\\.)*)""#
         guard let regex = try? NSRegularExpression(pattern: calls) else { return [] }
         let range = NSRange(source.startIndex..., in: source)
         return regex.matches(in: source, range: range).compactMap { match in
