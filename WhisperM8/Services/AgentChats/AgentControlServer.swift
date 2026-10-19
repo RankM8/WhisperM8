@@ -430,7 +430,7 @@ final class AgentControlServer: @unchecked Sendable {
         }
         // Handler-Timeout großzügig (Mutationen sind schnell; nur Schutz gegen
         // Deadlock).
-        let outcome = semaphore.wait(timeout: .now() + 10)
+        let outcome = semaphore.wait(timeout: .now() + .seconds(ChatsControlProtocol.handlerTimeoutSeconds(for: request.method)))
         if outcome == .success, let response = box.get() {
             respond(fd, response)
         } else {

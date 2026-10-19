@@ -46,6 +46,22 @@ enum ChatsControlProtocol {
     static func socketPathFits(_ url: URL) -> Bool {
         url.path.utf8.count < maxSocketPathBytes
     }
+
+    /// Frist, die der Server einem Handler gibt. Mutationen sind schnell; der
+    /// Kontowechsel liest Transcripts, wartet aufs Prozessende und verschiebt
+    /// Dateien — mit 10 s antwortete er „Zustand unklar“, während der Umzug
+    /// weiterlief, und ein Retry plante eine zweite Bewegung (LR-CLI-008).
+    static func handlerTimeoutSeconds(for method: String) -> Int {
+        switch method {
+        case "session.moveAccount", "session.close", "workspace.archive": return 90
+        default: return 10
+        }
+    }
+
+    /// Lese-Frist des Clients: immer etwas länger als die des Servers.
+    static func clientReadTimeoutSeconds(for method: String) -> Int {
+        handlerTimeoutSeconds(for: method) + 2
+    }
 }
 
 // MARK: - Request

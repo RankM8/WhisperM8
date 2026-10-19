@@ -164,5 +164,7 @@ final class AgentPromptQueueStore: @unchecked Sendable {
         // hinterlassen — das wäre exakt der Auftragsverlust, den dieses
         // Feature verhindern soll.
         try? data.write(to: fileURL, options: .atomic)
+        // Volle Prompts nur für den eigenen Benutzer (LR-CLI-012).
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 }
