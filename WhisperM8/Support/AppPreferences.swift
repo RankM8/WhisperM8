@@ -606,6 +606,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.gptAccountProfilesEnabled) }
     }
 
+    /// Kill-Switch fuer das lokale Router-Token (LR-GPT-001). An (Default):
+    /// GPT-Requests an den Router brauchen das beim Chat-Start gesetzte Token.
+    /// `defaults write com.whisperm8.app gptRouterAuthEnabled -bool NO`
+    var isGPTRouterAuthEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.gptRouterAuthEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.gptRouterAuthEnabled) }
+    }
+
     /// Kill-Switch für den Transkriptions-Anbieter „ChatGPT-Abo (GPT-Backend)".
     /// An (Default) heißt nur: der Anbieter ist wählbar und selbst gestartete
     /// GPT-Proxys bekommen `CCP_CODEX_TRANSCRIPTIONS_API=1` — ausgewählt ist er
@@ -902,6 +910,7 @@ enum PreferenceKeys {
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
+    static let gptRouterAuthEnabled = "gptRouterAuthEnabled"
     static let chatGPTTranscriptionEnabled = "chatGPTTranscriptionEnabled"
     static let debugControlEnabled = "debugControlEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"

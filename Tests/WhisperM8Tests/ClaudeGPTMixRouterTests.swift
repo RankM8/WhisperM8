@@ -1315,6 +1315,104 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         XCTAssertNil(mainMock.lastRequest?.header(named: "x-whisperm8-gpt-profile"))
     }
 
+    // MARK: Lokales Router-Token (LR-GPT-001)
+
+    private static let routerToken = String(repeating: "ab12", count: 8)
+
+    private func makeTokenRouter(mock: LocalHTTPMockServer, started: @escaping (String) -> Void = { _ in }) throws -> (ClaudeGPTMixRouter, Int) {
+        let router = ClaudeGPTMixRouter(
+            codexProxyURL: URL(string: "http://127.0.0.1:\(mock.port)")!,
+            anthropicURL: URL(string: "http://127.0.0.1:\(mock.port)")!
+        )
+        router.profilesEnabledResolver = { true }
+        router.codexProxyURLResolver = { _ in nil }
+        router.profileInstanceStarter = started
+        router.authTokenResolver = { Self.routerToken }
+        try router.start(port: 0).get()
+        return (router, try XCTUnwrap(router.listeningPort))
+    }
+
+    func testRouterRejectsGPTRequestWithoutOrWithWrongTokenAndStartsNothing() throws {
+        let mock = try LocalHTTPMockServer(status: 201, responseChunks: [])
+        defer { mock.stop() }
+        var started: [String] = []
+        let (router, port) = try makeTokenRouter(mock: mock) { started.append($0) }
+        defer { router.stop() }
+        let body = Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8)
+
+        for header in [[], ["\(ClaudeGPTRouterToken.headerName): deadbeef"]] {
+            var raw = "POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nX-WhisperM8-GPT-Profile: zweit\r\n"
+            for line in header { raw += line + "\r\n" }
+            raw += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+            var request = Data(raw.utf8)
+            request.append(body)
+            let response = try Self.splitResponse(try Self.exchange(port: port, request: request))
+            XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 401"), response.head)
+        }
+        XCTAssertTrue(started.isEmpty, "ohne Token darf kein Profilstart ausgeloest werden")
+        XCTAssertNil(mock.lastRequest, "ohne Token darf nichts an den Proxy gehen")
+    }
+
+    func testRouterForwardsGPTRequestWithTokenAndStripsIt() throws {
+        let mock = try LocalHTTPMockServer(status: 201, responseChunks: [Data("data: ok\n\n".utf8)])
+        defer { mock.stop() }
+        let (router, port) = try makeTokenRouter(mock: mock)
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: port,
+            body: Data(#"{"model":"gpt-5.6-sol","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["\(ClaudeGPTRouterToken.headerName): \(Self.routerToken)", "X-WhisperM8-GPT-Profile: main"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 201"), response.head)
+        XCTAssertEqual(mock.lastRequest?.jsonModel, "gpt-5.6-sol")
+        XCTAssertNil(mock.lastRequest?.header(named: ClaudeGPTRouterToken.headerName.lowercased()))
+    }
+
+    func testRouterDoesNotGateClaudeModelsButStripsTokenHeader() throws {
+        let mock = try LocalHTTPMockServer(status: 203, responseChunks: [Data("data: c\n\n".utf8)])
+        defer { mock.stop() }
+        let (router, port) = try makeTokenRouter(mock: mock)
+        defer { router.stop() }
+
+        let response = try Self.sendRawRequest(
+            port: port,
+            body: Data(#"{"model":"claude-sonnet-4-5","messages":[]}"#.utf8),
+            authorization: "Bearer x",
+            extraHeaders: ["\(ClaudeGPTRouterToken.headerName): \(Self.routerToken)"]
+        )
+        XCTAssertTrue(response.head.hasPrefix("HTTP/1.1 203"), response.head)
+        XCTAssertNil(mock.lastRequest?.header(named: ClaudeGPTRouterToken.headerName.lowercased()),
+                     "Das Token darf nie zu Anthropic gelangen")
+    }
+
+    func testUpstreamHeadersStripRouterTokenForBothUpstreams() {
+        let headers = [
+            ClaudeGPTMixRouter.HTTPHeader(name: "x-whisperm8-router-token", value: Self.routerToken),
+            ClaudeGPTMixRouter.HTTPHeader(name: "Authorization", value: "Bearer abo"),
+        ]
+        for upstream in [ClaudeGPTMixRouter.Upstream.codexProxy, .anthropic] {
+            let forwarded = ClaudeGPTMixRouter.upstreamHeaders(from: headers, upstream: upstream, host: "h", bodyLength: 0)
+            XCTAssertFalse(forwarded.contains { $0.name.lowercased() == "x-whisperm8-router-token" }, "\(upstream)")
+        }
+    }
+
+    func testRouterTokenComparisonAndFileStore() throws {
+        XCTAssertTrue(ClaudeGPTRouterToken.matches(Self.routerToken, expected: Self.routerToken))
+        XCTAssertFalse(ClaudeGPTRouterToken.matches(nil, expected: Self.routerToken))
+        XCTAssertFalse(ClaudeGPTRouterToken.matches(String(Self.routerToken.dropLast()), expected: Self.routerToken))
+
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("router-token-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("gpt-router-token")
+        let first = try XCTUnwrap(ClaudeGPTRouterToken(fileURL: url).current())
+        XCTAssertTrue(ClaudeGPTRouterToken.isWellFormed(first))
+        XCTAssertEqual(ClaudeGPTRouterToken(fileURL: url).current(), first, "Token ueberlebt einen Neustart")
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+    }
+
     private static func gzipCompress(_ data: Data) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
