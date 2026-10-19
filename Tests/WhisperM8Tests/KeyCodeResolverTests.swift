@@ -24,4 +24,71 @@ final class KeyCodeResolverTests: XCTestCase {
         // Nicht-lateinisches Layout: kein „v" im Block.
         XCTAssertEqual(KeyCodeResolver.keyCode(for: "v", fallback: kVK_ANSI_V, translate: { _ in "ж" }), 9)
     }
+
+    // MARK: - Layout nur auf dem Main Thread lesen (Absturz beim Diktatstart)
+
+    private final class CountingReader: @unchecked Sendable {
+        let lock = NSLock()
+        var calls = 0
+        var offMainCalls = 0
+        func read() -> KeyboardLayoutCache.Snapshot? {
+            lock.withLock {
+                calls += 1
+                if !Thread.isMainThread { offMainCalls += 1 }
+            }
+            return KeyboardLayoutCache.Snapshot(layout: Data([1, 2, 3]), keyboardType: 40)
+        }
+    }
+
+    private func onBackground<T>(_ work: @escaping () -> T) -> T {
+        var result: T?
+        let done = expectation(description: "background")
+        DispatchQueue.global(qos: .userInitiated).async {
+            result = work()
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        return result!
+    }
+
+    func testBackgroundThreadNeverReadsTheSystemLayout() {
+        let reader = CountingReader()
+        let cache = KeyboardLayoutCache(reader: reader.read)
+
+        XCTAssertNil(onBackground { cache.current() }, "ohne Vorlesen kein Layout abseits des Main Threads")
+        cache.refresh()
+        let snapshot = onBackground { cache.current() }
+
+        XCTAssertEqual(snapshot?.keyboardType, 40)
+        XCTAssertEqual(reader.offMainCalls, 0, "TIS darf nie abseits des Main Threads gelesen werden")
+        XCTAssertEqual(reader.calls, 1)
+    }
+
+    func testTranslatorBuiltOffMainUsesCacheAndFallsBack() {
+        let cache = KeyboardLayoutCache(reader: { nil })
+        let code = onBackground {
+            KeyCodeResolver.keyCode(
+                for: "v", fallback: kVK_ANSI_V,
+                translate: KeyCodeResolver.systemTranslator(cache: cache)
+            )
+        }
+        XCTAssertEqual(code, 9)
+    }
+
+    /// Echtes Systemlayout: auf dem Main Thread gelesen, auf einem
+    /// Hintergrund-Thread übersetzt. (Den Abbruch selbst löst HIToolbox nur in
+    /// der laufenden App aus, nicht im Testprozess — den Schutz prüft der
+    /// Zähltest oben.)
+    func testSystemLayoutWorksFromBackgroundAfterMainThreadRead() {
+        let cache = KeyboardLayoutCache()
+        cache.refresh()
+        let code = onBackground {
+            KeyCodeResolver.keyCode(
+                for: "c", fallback: kVK_ANSI_C,
+                translate: KeyCodeResolver.systemTranslator(cache: cache)
+            )
+        }
+        XCTAssertLessThan(code, 51)
+    }
 }
+

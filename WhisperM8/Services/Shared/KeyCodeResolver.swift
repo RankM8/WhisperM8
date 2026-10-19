@@ -36,15 +36,17 @@ enum KeyCodeResolver {
 
     /// Übersetzer über das aktive ASCII-fähige Layout. Mit `commandModifier`
     /// gilt die Cmd-Ebene: Layouts wie „Dvorak – QWERTY ⌘" bilden dort auf
-    /// QWERTY ab, und genau diese Ebene löst Menükürzel aus.
-    static func systemTranslator(commandModifier: Bool = true) -> Translator {
+    /// QWERTY ab, und genau diese Ebene löst Menükürzel aus. Das Layout kommt
+    /// aus `KeyboardLayoutCache` (einmal je Übersetzer, nicht je Tastencode);
+    /// ohne lesbares Layout liefert der Übersetzer `nil` → US-Fallback.
+    static func systemTranslator(
+        commandModifier: Bool = true,
+        cache: KeyboardLayoutCache = .shared
+    ) -> Translator {
+        let snapshot = cache.current()
         return { keyCode in
-            guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
-                  let rawData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
-                return nil
-            }
-            let layoutData = Unmanaged<CFData>.fromOpaque(rawData).takeUnretainedValue() as Data
-            return layoutData.withUnsafeBytes { buffer -> String? in
+            guard let snapshot else { return nil }
+            return snapshot.layout.withUnsafeBytes { buffer -> String? in
                 guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else {
                     return nil
                 }
@@ -57,7 +59,7 @@ enum KeyCodeResolver {
                     keyCode,
                     UInt16(kUCKeyActionDown),
                     modifierState,
-                    UInt32(LMGetKbdType()),
+                    snapshot.keyboardType,
                     OptionBits(kUCKeyTranslateNoDeadKeysBit),
                     &deadKeyState,
                     chars.count,
@@ -85,5 +87,68 @@ enum KeyCodeResolver {
         usleep(20_000)
         keyUp.post(tap: .cghidEventTap)
         return true
+    }
+}
+
+/// Layout-Daten des aktiven Tastaturlayouts. HIToolbox (TIS) verlangt den Main
+/// Thread: unter macOS 26 bricht `TISGetInputSourceProperty` abseits davon per
+/// `dispatch_assert_queue` ab — die App stürzte beim Diktatstart ab, weil der
+/// Kontext-Capture Cmd+C aus einem Task postet. Deshalb liest nur der Main
+/// Thread das Layout (beim Start und bei jedem Layoutwechsel); andere Threads
+/// bekommen den zuletzt gelesenen Stand. `UCKeyTranslate` auf den kopierten
+/// Daten ist threadsicher.
+final class KeyboardLayoutCache: @unchecked Sendable {
+    struct Snapshot: Equatable {
+        let layout: Data
+        let keyboardType: UInt32
+    }
+
+    static let shared = KeyboardLayoutCache()
+
+    private let reader: () -> Snapshot?
+    private let lock = NSLock()
+    private var snapshot: Snapshot?
+    private var observer: NSObjectProtocol?
+
+    init(reader: @escaping () -> Snapshot? = KeyboardLayoutCache.readSystemLayout) {
+        self.reader = reader
+    }
+
+    /// Auf dem Main Thread frisch gelesen (und gemerkt), sonst der gemerkte Stand.
+    func current() -> Snapshot? {
+        guard Thread.isMainThread else { return lock.withLock { snapshot } }
+        return refresh()
+    }
+
+    /// Nur auf dem Main Thread aufrufen.
+    @discardableResult
+    func refresh() -> Snapshot? {
+        precondition(Thread.isMainThread, "TIS nur auf dem Main Thread lesen")
+        let fresh = reader()
+        lock.withLock { snapshot = fresh }
+        return fresh
+    }
+
+    /// Liest das Layout sofort und bei jedem Wechsel der Eingabequelle neu.
+    /// Beim App-Start auf dem Main Thread aufrufen.
+    func startObserving() {
+        refresh()
+        guard observer == nil else { return }
+        observer = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+
+    static func readSystemLayout() -> Snapshot? {
+        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let rawData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let layout = Unmanaged<CFData>.fromOpaque(rawData).takeUnretainedValue() as Data
+        return Snapshot(layout: layout, keyboardType: UInt32(LMGetKbdType()))
     }
 }

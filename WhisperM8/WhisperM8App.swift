@@ -243,6 +243,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             NSApp.terminate(nil)
         }
         sigterm.resume()
+        // Tastaturlayout für synthetische Cmd+C/Cmd+V auf dem Main Thread
+        // vorlesen — der Kontext-Capture fragt es aus einem Task ab.
+        KeyboardLayoutCache.shared.startObserving()
         sigtermSource = sigterm
 
         // Claude-Code-Plugin `whisperm8` ablegen, bevor der erste Chat
