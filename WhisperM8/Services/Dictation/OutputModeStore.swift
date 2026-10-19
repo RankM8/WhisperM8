@@ -170,7 +170,10 @@ struct OutputModeStore {
         var modes: [OutputMode] = []
         var unreadable: [Any] = []
         for object in objects {
-            if let entryData = try? JSONSerialization.data(withJSONObject: object),
+            // Skalare (`[1]`, `["x"]`) sind kein gültiges Top-Level-Objekt:
+            // `data(withJSONObject:)` würfe dann eine NSException, die `try?` nicht fängt.
+            if JSONSerialization.isValidJSONObject(object),
+               let entryData = try? JSONSerialization.data(withJSONObject: object),
                let mode = try? decoder.decode(OutputMode.self, from: entryData) {
                 modes.append(mode)
             } else {

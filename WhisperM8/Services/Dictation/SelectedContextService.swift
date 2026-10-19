@@ -142,6 +142,11 @@ struct SelectedContextService {
     /// - Ändert sich die Zwischenablage zwischen Snapshot und Cmd+C oder öfter als durch die
     ///   Ziel-App erwartet (fremde Nutzerkopie), wird nichts übernommen und nichts zurückgeschrieben.
     /// - Editoren mit „Zeile kopieren ohne Auswahl" sind ausgenommen.
+    /// `@MainActor`: Aktivieren der Ziel-App und das Cmd+C (Tastaturlayout über
+    /// HIToolbox) sind Main-Thread-pflichtig — ohne die Isolation lief der Rest
+    /// nach dem ersten `await` auf dem globalen Executor, und HIToolbox brach die
+    /// App beim Diktatstart ab. Der Snapshot selbst läuft weiter off-main.
+    @MainActor
     func captureViaClipboard(bundleIdentifier: String?, activate: () -> Void) async -> String? {
         guard ClipboardCopyFallbackPolicy.allowsFallback(bundleIdentifier: bundleIdentifier) else {
             Logger.debug("clipboard_fallback_skipped reason=copy_line_editor")

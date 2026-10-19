@@ -320,6 +320,14 @@ final class OutputModeCompatTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "defaultOutputModeID"), OutputMode.retiredChatID)
         XCTAssertEqual(defaults.string(forKey: "lastSelectedOutputModeID"), OutputMode.retiredChatID)
     }
+
+    /// Skalare im Array sind kein gültiges JSON-Top-Level-Objekt; vorher warf
+    /// `data(withJSONObject:)` eine NSException (Absturz bei jedem Start).
+    func testDecodeTolerantCountsScalarEntriesAsUnreadable() throws {
+        let result = try OutputModeStore.decodeTolerant(Data(#"[1, "x", null, {"id": 3}]"#.utf8))
+        XCTAssertTrue(result.modes.isEmpty)
+        XCTAssertEqual(result.unreadable.count, 4)
+    }
 }
 
 private func withIsolatedOutputModePreferences(_ body: (AppPreferences) throws -> Void) rethrows {

@@ -33,6 +33,30 @@ final class SelectedContextClipboardFallbackTests: XCTestCase {
         XCTAssertEqual(service.outcome.resyncChangeCount, pasteboard.changeCount)
     }
 
+    /// Aktivieren und Cmd+C laufen auf dem Main Thread: HIToolbox (Tastaturlayout
+    /// für Cmd+C) bricht die App abseits davon ab — so stürzte jeder Diktatstart ab.
+    func testActivateAndCopyRunOnMainThreadAfterSnapshot() async {
+        let pasteboard = makePasteboard("meine Zwischenablage")
+        var copyOnMain: Bool?
+        var activateOnMain: Bool?
+        let service = SelectedContextService(
+            pasteboard: pasteboard,
+            copyPoster: { [self] in
+                copyOnMain = Thread.isMainThread
+                write("markierter Text", to: pasteboard)
+            },
+            activator: { _ in }
+        )
+
+        _ = await service.captureViaClipboard(
+            bundleIdentifier: "com.apple.Notes",
+            activate: { activateOnMain = Thread.isMainThread }
+        )
+
+        XCTAssertEqual(activateOnMain, true)
+        XCTAssertEqual(copyOnMain, true)
+    }
+
     /// Review W2b: Manche Apps erhöhen den Zähler beim Kopieren um mehr als 1
     /// (clearContents + mehrere Writes). Das ist ihre Kopie — die Nutzerkopie
     /// im Snapshot kommt zurück, statt verloren zu gehen.
