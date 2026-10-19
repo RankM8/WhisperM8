@@ -139,6 +139,11 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
 - Das Plugin wird nie in den laufenden Ordner kopiert, nur per Symlink-Tausch (`rename(2)`) umgestellt — sonst
   laden alle Sessions mitten im Turn neu. In `register.tsx` keine Abschnitte in eigene Dateien auslagern.
 - Board-Felder nur ergänzen, nie umbenennen (`work` und `next` werden gleich geschrieben).
+- Der Terminal-Delegate-Proxy (`AgentTerminalLinkInterceptor`) bleibt: er verweigert `clipboardRead` (OSC 52),
+  sonst bekäme jede TUI den Klartext der Zwischenablage.
+- Kontowechsel: Hat das Zielkonto den Ordner nie freigegeben (Trust), wird ein arbeitender Chat nicht vorgemerkt —
+  der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“.
+- Der GPT-Proxy wird zur Laufzeit nie neu gestartet (laufende GPT-Chats); Waisen ersetzt nur der Start-Guard.
 - Tab-Logik (Auswahl, Reorder, Switcher-Umfang) bleibt pur und getestet; Drag/Drop/Menüs sind manuelle QA.
 - Status-Punkte in Sidebar, Tab und Kopf folgen derselben Logik (`AgentStatusIndicator`); Grün heißt nur „arbeitet“.
 
