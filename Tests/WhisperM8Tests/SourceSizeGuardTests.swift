@@ -7,12 +7,11 @@ import XCTest
 final class SourceSizeGuardTests: XCTestCase {
     static let maxLines = 1_500
 
-    /// Bestand am 19.10.2026 (Launch-Readiness W7). Obergrenze = heutige Länge.
+    /// Endstand nach Launch-Readiness W7 (19.10.2026). Obergrenze = heutige Länge.
     static let exceptions: [String: Int] = [
-        "WhisperM8/Views/AgentChatsView.swift": 3_900,
-        "WhisperM8/Services/AgentChats/AgentControlRequestHandler.swift": 1_800,
-        "WhisperM8/Services/AgentChats/AgentSessionStore.swift": 1_650,
-        "WhisperM8/Services/AgentChats/ClaudeCodeProxyManager.swift": 1_550,
+        "WhisperM8/Views/AgentChatsView.swift": 3_842,
+        "WhisperM8/Services/AgentChats/AgentControlRequestHandler.swift": 1_781,
+        "WhisperM8/Services/AgentChats/AgentSessionStore.swift": 1_634,
     ]
 
     private static var root: URL {
