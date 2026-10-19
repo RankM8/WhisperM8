@@ -687,8 +687,39 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func consumeInterruptMark(_ sessionID: UUID) -> Bool {
-        guard let mark = interruptMarks.removeValue(forKey: sessionID) else { return false }
-        return now().timeIntervalSince(mark) <= Self.interruptWindowSeconds
+        guard let mark = interruptMarks.removeValue(forKey: sessionID),
+              now().timeIntervalSince(mark) <= Self.interruptWindowSeconds else { return false }
+        // Nur ein bestätigter Abbruch schluckt das „fertig“: Ein ESC kurz vor
+        // dem echten Turn-Ende (oder eines, das nichts abbrach) verschluckte
+        // sonst Meldung und Queue-Zustellung (LR-AK-034). Bestätigung = Claudes
+        // eigener Marker `[Request interrupted by user]` im Transcript-Ende.
+        // Ohne lesbares Transcript bleibt es beim bisherigen Verhalten.
+        return interruptConfirmed(sessionID) ?? true
+    }
+
+    /// Test-Naht für `interruptConfirmed`.
+    var interruptConfirmationOverride: ((UUID) -> Bool?)?
+
+    private func interruptConfirmed(_ sessionID: UUID) -> Bool? {
+        if let interruptConfirmationOverride { return interruptConfirmationOverride(sessionID) }
+        guard let url = watcher.cachedTranscriptURL(sessionID: sessionID) else { return nil }
+        return Self.transcriptTailShowsInterrupt(url: url)
+    }
+
+    /// Steht im letzten Abschnitt des Transcripts (nach der letzten
+    /// Assistenten-Zeile) Claudes Abbruch-Marker?
+    nonisolated static func transcriptTailShowsInterrupt(url: URL, tailBytes: Int = 16_384) -> Bool? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return nil }
+        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
+        guard let data = try? handle.readToEnd() else { return nil }
+        let lines = String(decoding: data, as: UTF8.self).split(separator: "\n")
+        for line in lines.reversed() {
+            if line.contains(AgentTranscriptParser.interruptMarkerPrefix) { return true }
+            if line.contains("\"type\":\"assistant\"") { return false }
+        }
+        return false
     }
 
     /// Transcript-Detail kam nach dem Registry-Wechsel → Warte-Art nachziehen.
@@ -866,6 +897,11 @@ final class AgentSessionStatusCoordinator {
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
+        }
+        // Chat ist nach dem Start bereit: ein während `launching`
+        // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).
+        if case .launching = oldState, case .ready = transition.state {
+            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         }
     }
 
