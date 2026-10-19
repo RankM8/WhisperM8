@@ -56,6 +56,11 @@ final class CodexStatusProbeTests: XCTestCase {
     /// Das Default-Environment ist das Login-Shell-Env — es enthält die
     /// Homebrew-/User-Pfade, in denen node & codex liegen.
     func testRunProcessDefaultEnvironmentIsLoginShellEnvironment() {
+        // Auf dem Main Thread liefert `shared` ohne Ergebnis nur den Fallback:
+        // erst off-main aufwärmen, dann vergleichen.
+        let warm = expectation(description: "warm")
+        DispatchQueue.global().async { _ = LoginShellEnvironment.shared.path; warm.fulfill() }
+        wait(for: [warm], timeout: 15)
         let output = CodexStatusProbe.runProcess("/bin/sh", arguments: ["-c", "echo $PATH"])
         let expected = LoginShellEnvironment.shared.processEnvironment()["PATH"] ?? ""
         XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), expected)
