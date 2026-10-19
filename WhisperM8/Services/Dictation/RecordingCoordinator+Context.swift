@@ -176,6 +176,7 @@ extension RecordingCoordinator {
         guard let appState, appState.isRecording else { return }
         guard appState.contextBundle.agentChat != nil else { return }
         appState.contextBundle.agentChat = nil
+        appState.contextBundle.agentChatTail = nil
         overlayController.update(appState: appState)
     }
 

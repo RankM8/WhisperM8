@@ -83,8 +83,15 @@ extension RecordingCoordinator {
         let oldChangeCount = observedPasteboardChangeCount
         observedPasteboardChangeCount = changeCount
 
+        let rawTypes = (pasteboard.types ?? []).map(\.rawValue)
+        // Passwörter aus Passwort-Managern nie in Kontext, Prompt oder Report
+        // übernehmen — nur ihr Vorhandensein loggen (LR-DIK-023).
+        if PasteboardPrivacy.isConfidential(rawTypes) {
+            Logger.transcription.info("clipboard_confidential_skipped newCount=\(changeCount, privacy: .public)")
+            return
+        }
         let pasteboardHasImage = pasteboardContainsImage(pasteboard)
-        let types = (pasteboard.types ?? []).map(\.rawValue).joined(separator: ",")
+        let types = rawTypes.joined(separator: ",")
         Logger.transcription.info(
             "clipboard_change_detected oldCount=\(oldChangeCount, privacy: .public) newCount=\(changeCount, privacy: .public) hasImage=\(pasteboardHasImage, privacy: .public) types=\(types, privacy: .public)"
         )
