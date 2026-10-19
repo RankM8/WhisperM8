@@ -48,11 +48,16 @@ struct ChatGPTTranscriptionDependencies {
                 guard AppPreferences.shared.isGPTAccountProfilesEnabled else { return nil }
                 return GPTAccountProfiles().activeProfileNameOrNil()
             },
-            knownPort: { manager.port(forProfile: $0) },
+            // LR-GPT-002: ein nachweislich fremder Listener auf dem Port wird nie mit Audio bedient.
+            knownPort: { profile in
+                guard let port = manager.port(forProfile: profile),
+                      !ClaudeCodeProxyListenerIdentity.isForeignListener(port: port) else { return nil }
+                return port
+            },
             ensureRunning: { manager.ensureRunning(profile: $0) },
             instanceOrigin: { manager.instanceOrigin(forProfile: $0) },
             binaryVersion: { manager.resolvedBinary()?.version },
-            isReachable: { ClaudeCodeProxyManager.isReachable(port: $0) },
+            isReachable: { ClaudeCodeProxyManager.isTrustedReachable(port: $0) },
             sessionProvider: { MultipartTranscriptionClient.defaultSession(timeout: $0) }
         )
     }

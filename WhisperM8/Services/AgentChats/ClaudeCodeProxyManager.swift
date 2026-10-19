@@ -342,7 +342,7 @@ final class ClaudeCodeProxyManager {
         managedInstaller: @escaping () throws -> String = {
             try ClaudeCodeProxyManager.installKnownGoodBlocking()
         },
-        reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isReachable(port: $0) },
+        reachabilityResolver: @escaping (Int) -> Bool = { ClaudeCodeProxyManager.isTrustedReachable(port: $0) },
         processLauncher: @escaping ProcessLauncher = ClaudeCodeProxyManager.launchProcess,
         commandRunner: @escaping CommandRunner = {
             try ClaudeCodeProxyManager.runCommand(executable: $0, arguments: $1, environment: $2)
@@ -1349,6 +1349,19 @@ final class ClaudeCodeProxyManager {
         }
         session.finishTasksAndInvalidate()
         return result.value
+    }
+
+    /// Health-Probe PLUS Listener-Identitaet (LR-GPT-002): eine nachgeahmte
+    /// Health-Antwort eines fremden Prozesses zaehlt nicht als Proxy — sonst
+    /// ueberspraenge `ensureRunning` den eigenen Start und GPT-Prompts gingen
+    /// an den Fremdlistener.
+    static func isTrustedReachable(port: Int) -> Bool {
+        guard isReachable(port: port) else { return false }
+        guard ClaudeCodeProxyListenerIdentity.isTrustedListener(port: port) else {
+            Logger.agentStore.warning("claude_code_proxy_listener_untrusted port=\(port)")
+            return false
+        }
+        return true
     }
 
     static func isHealthyProbeResponse(
