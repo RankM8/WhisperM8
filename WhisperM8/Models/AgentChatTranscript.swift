@@ -62,8 +62,8 @@ struct TranscriptStableIDGenerator {
             seed += "|"
             switch block {
             case .text(let text): seed += "t:" + text
-            case .toolUse(let name, let input): seed += "u:" + name + ":" + input
-            case .toolResult(let content, let isError): seed += "r:\(isError):" + content
+            case .toolUse(let name, let input, _): seed += "u:" + name + ":" + input
+            case .toolResult(let content, let isError, _): seed += "r:\(isError):" + content
             case .imagePlaceholder(let mediaType, let byteSize): seed += "i:\(mediaType):\(byteSize)"
             case .thinking(let text): seed += "k:" + text
             }
@@ -97,9 +97,12 @@ enum AgentChatBlock: Equatable {
     /// Klartext / Markdown. Wird gerendert als selektierbares Text-Element.
     case text(String)
     /// Tool-Aufruf: Name + Input als JSON-String oder formatiertes Snippet.
-    case toolUse(name: String, input: String)
+    /// `id` = Provider-Aufruf-ID (Claude `tool_use.id`, Codex `call_id`); damit
+    /// werden parallele Ergebnisse dem richtigen Aufruf zugeordnet (LR-AK-013).
+    case toolUse(name: String, input: String, id: String? = nil)
     /// Ergebnis eines Tool-Aufrufs (in User-Messages eingebettet bei Claude).
-    case toolResult(content: String, isError: Bool)
+    /// `toolUseID` = ID des zugehörigen Aufrufs (Claude `tool_use_id`, Codex `call_id`).
+    case toolResult(content: String, isError: Bool, toolUseID: String? = nil)
     /// Eingebettetes Bild — wir speichern hier nur Metadata (Format + Bytes),
     /// nicht die rohen Bytes selbst um Memory zu schonen. Die UI zeigt einen
     /// Platzhalter mit Groessenangabe; tatsaechliches Decoden waere ein

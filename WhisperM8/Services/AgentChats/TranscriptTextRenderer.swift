@@ -115,13 +115,13 @@ enum TranscriptTextRenderer {
             guard !trimmed.isEmpty else { return }
             appendWrapped(trimmed, marker: "✻ ", style: .thinking, to: &lines)
 
-        case .toolUse(let name, let input):
+        case .toolUse(let name, let input, _):
             let classified = ToolCallClassifier.classify(name: name, input: input)
             let subject = singleLine(classified.subject)
             let detail = classified.detail.map { " · " + singleLine($0) } ?? ""
             lines.append(TranscriptTextLine(.tool, "● \(name)(\(subject))\(detail)"))
 
-        case .toolResult(let content, let isError):
+        case .toolResult(let content, let isError, _):
             appendToolOutput(content, isError: isError, to: &lines, limits: limits)
 
         case .imagePlaceholder(let mediaType, let byteSize):

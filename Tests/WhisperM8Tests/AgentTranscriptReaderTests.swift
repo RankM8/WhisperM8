@@ -21,8 +21,8 @@ final class AgentTranscriptReaderTests: XCTestCase {
         let lines = [
             #"{"type":"user","timestamp":"2026-05-11T10:00:00Z","message":{"role":"user","content":"Hello Claude"}}"#,
             #"{"type":"queue-operation","timestamp":"2026-05-11T10:00:01Z","operation":"x","sessionId":"s"}"#,
-            #"{"type":"assistant","timestamp":"2026-05-11T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"},{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}"#,
-            #"{"type":"user","timestamp":"2026-05-11T10:00:03Z","message":{"role":"user","content":[{"type":"tool_result","content":"file.txt","is_error":false}]}}"#
+            #"{"type":"assistant","timestamp":"2026-05-11T10:00:02Z","message":{"role":"assistant","content":[{"type":"text","text":"Hi there!"},{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"ls"}}]}}"#,
+            #"{"type":"user","timestamp":"2026-05-11T10:00:03Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file.txt","is_error":false}]}}"#
         ]
         try lines.joined(separator: "\n").write(to: tempURL, atomically: true, encoding: .utf8)
 
@@ -35,13 +35,15 @@ final class AgentTranscriptReaderTests: XCTestCase {
 
         XCTAssertEqual(transcript.messages[1].role, .assistant)
         XCTAssertEqual(transcript.messages[1].blocks.count, 2)
-        if case .toolUse(let name, let input) = transcript.messages[1].blocks[1] {
+        if case .toolUse(let name, let input, let callID) = transcript.messages[1].blocks[1] {
+            XCTAssertEqual(callID, "toolu_1") // LR-AK-013
             XCTAssertEqual(name, "Bash")
             XCTAssertTrue(input.contains("ls"))
         } else { XCTFail("Expected toolUse block") }
 
         XCTAssertEqual(transcript.messages[2].role, .user)
-        if case .toolResult(let content, let isError) = transcript.messages[2].blocks[0] {
+        if case .toolResult(let content, let isError, let useID) = transcript.messages[2].blocks[0] {
+            XCTAssertEqual(useID, "toolu_1")
             XCTAssertEqual(content, "file.txt")
             XCTAssertFalse(isError)
         } else { XCTFail("Expected toolResult block") }
@@ -145,7 +147,7 @@ final class AgentTranscriptReaderTests: XCTestCase {
                 "message": ["content": [["type": "tool_use", "name": "T", "input": value]]]
             ]
             let message = try XCTUnwrap(ClaudeTranscriptReader.parseEntry(entry))
-            guard case let .toolUse(_, input)? = message.blocks.first else { return XCTFail("kein toolUse") }
+            guard case let .toolUse(_, input, _)? = message.blocks.first else { return XCTFail("kein toolUse") }
             XCTAssertEqual(input, expected)
         }
         let array: [String: Any] = [
@@ -189,7 +191,7 @@ final class AgentTranscriptReaderTests: XCTestCase {
         // function_call als toolUse-Message (Position 1, chronologisch).
         XCTAssertEqual(transcript.messages.count, 3)
         XCTAssertEqual(transcript.messages[0].role, .user)
-        if case .toolUse(let name, let input) = transcript.messages[1].blocks[0] {
+        if case .toolUse(let name, let input, _) = transcript.messages[1].blocks[0] {
             XCTAssertEqual(name, "shell")
             XCTAssertEqual(input, "ls")
         } else { XCTFail("Expected toolUse block") }
@@ -222,11 +224,11 @@ final class AgentTranscriptReaderTests: XCTestCase {
         if case .text(let commentary) = transcript.messages[1].blocks[0] {
             XCTAssertTrue(commentary.hasPrefix("Ich lese gezielt"))
         } else { XCTFail("Commentary-Text erwartet") }
-        if case .toolUse(let name, let input) = transcript.messages[2].blocks[0] {
+        if case .toolUse(let name, let input, _) = transcript.messages[2].blocks[0] {
             XCTAssertEqual(name, "exec_command")
             XCTAssertTrue(input.contains("AgentCLICommand.swift"))
         } else { XCTFail("toolUse erwartet") }
-        if case .toolResult(let content, let isError) = transcript.messages[3].blocks[0] {
+        if case .toolResult(let content, let isError, _) = transcript.messages[3].blocks[0] {
             XCTAssertTrue(content.contains("Process exited with code 0"))
             XCTAssertFalse(isError)
         } else { XCTFail("toolResult erwartet") }
@@ -261,7 +263,7 @@ final class AgentTranscriptReaderTests: XCTestCase {
 
         let transcript = CodexTranscriptReader.read(fileURL: tempURL)
         XCTAssertEqual(transcript.messages.count, 1)
-        if case .toolResult(_, let isError) = transcript.messages[0].blocks[0] {
+        if case .toolResult(_, let isError, _) = transcript.messages[0].blocks[0] {
             XCTAssertTrue(isError)
         } else { XCTFail("toolResult erwartet") }
     }
@@ -275,7 +277,7 @@ final class AgentTranscriptReaderTests: XCTestCase {
 
         let transcript = CodexTranscriptReader.read(fileURL: tempURL)
         XCTAssertEqual(transcript.messages.count, 1)
-        if case .toolUse(let name, let input) = transcript.messages[0].blocks[0] {
+        if case .toolUse(let name, let input, _) = transcript.messages[0].blocks[0] {
             XCTAssertEqual(name, "tool_search")
             XCTAssertTrue(input.contains("computer-use"))
         } else { XCTFail("tool_search als toolUse erwartet") }

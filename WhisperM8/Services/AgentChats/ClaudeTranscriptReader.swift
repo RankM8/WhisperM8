@@ -312,7 +312,7 @@ enum ClaudeTranscriptReader {
                         let isError = chunk["is_error"] as? Bool ?? false
                         let content = extractToolResultText(chunk["content"])
                         if !content.isEmpty {
-                            blocks.append(.toolResult(content: content, isError: isError))
+                            blocks.append(.toolResult(content: content, isError: isError, toolUseID: chunk["tool_use_id"] as? String))
                         }
                     default:
                         break
@@ -349,7 +349,7 @@ enum ClaudeTranscriptReader {
             case "tool_use":
                 let name = chunk["name"] as? String ?? "tool"
                 let input = formatToolInput(chunk["input"])
-                blocks.append(.toolUse(name: name, input: input))
+                blocks.append(.toolUse(name: name, input: input, id: chunk["id"] as? String))
             case "thinking":
                 if let text = chunk["thinking"] as? String, !text.isEmpty {
                     blocks.append(.thinking(text))

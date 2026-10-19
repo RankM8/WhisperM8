@@ -97,6 +97,10 @@ enum TranscriptTimelineBuilder {
         private var provisionalAnswers: [TranscriptAnswer] = []
         /// Indizes der Tool-Steps ohne gepaartes Result (FIFO).
         private var openToolStepIndices: [Int] = []
+        /// Provider-Aufruf-ID → Step-Index. Parallele Aufrufe liefern ihre
+        /// Ergebnisse in beliebiger Reihenfolge; nur die ID ordnet richtig zu
+        /// (LR-AK-013). Ohne ID bleibt der FIFO-Fallback.
+        private var stepIndexByCallID: [String: Int] = [:]
         private var firstTimestamp: Date?
         private var lastTimestamp: Date?
 
@@ -116,7 +120,7 @@ enum TranscriptTimelineBuilder {
                 case .thinking(let text):
                     demoteProvisionalAnswersToNotes()
                     steps.append(TranscriptStep(id: blockID, kind: .thinking(text), timestamp: message.timestamp))
-                case .toolUse(let name, let input):
+                case .toolUse(let name, let input, let callID):
                     demoteProvisionalAnswersToNotes()
                     let derived = ToolCallClassifier.classify(name: name, input: input)
                     steps.append(TranscriptStep(
@@ -133,9 +137,10 @@ enum TranscriptTimelineBuilder {
                         timestamp: message.timestamp
                     ))
                     openToolStepIndices.append(steps.count - 1)
-                case .toolResult(let content, let isError):
+                    if let callID { stepIndexByCallID[callID] = steps.count - 1 }
+                case .toolResult(let content, let isError, let toolUseID):
                     // Unüblich in Assistant-Messages, aber verlustfrei behandeln.
-                    attachToolResult(content: content, isError: isError, blockID: blockID, timestamp: message.timestamp)
+                    attachToolResult(content: content, isError: isError, toolUseID: toolUseID, blockID: blockID, timestamp: message.timestamp)
                 case .imagePlaceholder(let mediaType, let byteSize):
                     steps.append(TranscriptStep(
                         id: blockID,
@@ -153,8 +158,8 @@ enum TranscriptTimelineBuilder {
             for (index, block) in message.blocks.enumerated() {
                 let blockID = "\(message.id.uuidString)-\(index)"
                 switch block {
-                case .toolResult(let content, let isError):
-                    attachToolResult(content: content, isError: isError, blockID: blockID, timestamp: message.timestamp)
+                case .toolResult(let content, let isError, let toolUseID):
+                    attachToolResult(content: content, isError: isError, toolUseID: toolUseID, blockID: blockID, timestamp: message.timestamp)
                 case .imagePlaceholder(let mediaType, let byteSize):
                     steps.append(TranscriptStep(
                         id: blockID,
@@ -170,10 +175,11 @@ enum TranscriptTimelineBuilder {
         /// Nur die Tool-Results einer Prompt-Message (gehören zur Vorrunde).
         mutating func absorb(toolResultsOf message: AgentChatMessage) {
             for (index, block) in message.blocks.enumerated() {
-                if case .toolResult(let content, let isError) = block {
+                if case .toolResult(let content, let isError, let toolUseID) = block {
                     attachToolResult(
                         content: content,
                         isError: isError,
+                        toolUseID: toolUseID,
                         blockID: "\(message.id.uuidString)-\(index)",
                         timestamp: message.timestamp
                     )
@@ -225,11 +231,20 @@ enum TranscriptTimelineBuilder {
 
         // MARK: Intern
 
-        private mutating func attachToolResult(content: String, isError: Bool, blockID: String, timestamp: Date?) {
+        private mutating func attachToolResult(content: String, isError: Bool, toolUseID: String? = nil, blockID: String, timestamp: Date?) {
             register(timestamp: timestamp)
-            if let stepIndex = openToolStepIndices.first,
+            // Mit ID: genau der zugehörige offene Aufruf; eine unbekannte oder
+            // schon beantwortete ID wird nie einem fremden Aufruf zugeschlagen
+            // (eigener Step). Ohne ID (Legacy): FIFO.
+            let target: Int?
+            if let toolUseID {
+                target = stepIndexByCallID[toolUseID].flatMap { openToolStepIndices.contains($0) ? $0 : nil }
+            } else {
+                target = openToolStepIndices.first
+            }
+            if let stepIndex = target,
                case .tool(var tool) = steps[stepIndex].kind {
-                openToolStepIndices.removeFirst()
+                openToolStepIndices.removeAll { $0 == stepIndex }
                 tool.result = content
                 tool.isError = isError
                 steps[stepIndex].kind = .tool(tool)

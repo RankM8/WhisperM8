@@ -52,6 +52,42 @@ final class TranscriptEvidenceExtractorTests: XCTestCase {
     }
 }
 
+extension TranscriptEvidenceExtractorTests {
+    /// LR-AK-014: Ohne Ergebnis kein "bestanden".
+    func testStartedTestWithoutResultIsNotReportedAsPassed() {
+        let evidence = TranscriptEvidenceExtractor.extract(from: timeline2(steps: [
+            bashStep2("swift test", result: nil),
+        ]))
+        XCTAssertTrue(evidence.tests.isEmpty)
+    }
+
+    func testQuotedTestCommandIsNotATestRun() {
+        let evidence = TranscriptEvidenceExtractor.extract(from: timeline2(steps: [
+            bashStep2("echo 'npm test'", result: "npm test"),
+        ]))
+        XCTAssertTrue(evidence.tests.isEmpty)
+    }
+
+    func testChainedAndEnvPrefixedTestCommandsAreRecognized() {
+        let evidence = TranscriptEvidenceExtractor.extract(from: timeline2(steps: [
+            bashStep2("cd app && CI=1 npm test -- --run", result: "ok"),
+        ]))
+        XCTAssertEqual(evidence.tests.count, 1)
+    }
+
+    private func timeline2(steps: [TranscriptStep]) -> TranscriptTimeline {
+        TranscriptTimeline(
+            rounds: [TranscriptRound(id: "r1", prompt: nil, steps: steps, answers: [], stats: .init())],
+            isLiveSourcePossible: false, totalMessageCount: steps.count)
+    }
+
+    private func bashStep2(_ command: String, result: String?) -> TranscriptStep {
+        TranscriptStep(id: UUID().uuidString, kind: .tool(TranscriptToolStep(
+            name: "Bash", op: .bash, subject: command, detail: nil,
+            input: "", result: result, isError: false)), timestamp: nil)
+    }
+}
+
 final class AgentSummaryGeneratorTests: XCTestCase {
 
     func testParsesPlainJSONOutput() {
@@ -88,12 +124,97 @@ final class AgentSummaryGeneratorTests: XCTestCase {
         XCTAssertTrue(excerpt.contains("AGENT: "))
     }
 
+    /// LR-AK-003: Der Prompt (Chat-Inhalt) darf nie in argv stehen — nur in stdin.
+    func testPromptGoesToStdinNotArgv() async throws {
+        for provider in [AgentProvider.claude, .codex] {
+            var capturedArgs: [String] = []
+            var capturedStdin: Data?
+            let generator = AgentSummaryGenerator(
+                executableResolver: { _ in "/usr/bin/true" },
+                runner: { _, args, _, stdin in
+                    capturedArgs = args
+                    capturedStdin = stdin
+                    return #"{"headline":"H","details":"D"}"#
+                }
+            )
+            _ = try await generator.generate(provider: provider, prompt: "AUSZUG sk-SECRET-123 Ende")
+            XCTAssertFalse(capturedArgs.contains { $0.contains("SECRET-123") }, "\(provider): Inhalt in argv")
+            XCTAssertEqual(capturedStdin.flatMap { String(data: $0, encoding: .utf8) }, "AUSZUG sk-SECRET-123 Ende")
+        }
+    }
+
+    /// LR-AK-009: Der Hilfslauf bekommt die Umgebung des Chats (Claude-Profil).
+    func testGenerateMergesLaunchContextEnvironmentAndArguments() async throws {
+        var capturedEnv: [String: String] = [:]
+        var capturedArgs: [String] = []
+        let generator = AgentSummaryGenerator(
+            executableResolver: { _ in "/usr/bin/true" },
+            runner: { _, args, env, _ in
+                capturedArgs = args
+                capturedEnv = env
+                return #"{"headline":"H","details":"D"}"#
+            }
+        )
+        _ = try await generator.generate(
+            provider: .claude,
+            prompt: "p",
+            launch: .init(environment: ["CLAUDE_CONFIG_DIR": "/tmp/ai2"], extraArguments: ["--model", "m"])
+        )
+        XCTAssertEqual(capturedEnv["CLAUDE_CONFIG_DIR"], "/tmp/ai2")
+        XCTAssertEqual(Array(capturedArgs.suffix(2)), ["--model", "m"])
+    }
+
+    func testLaunchContextForProfileSessionCarriesConfigDir() {
+        var builder = AgentCommandBuilder()
+        builder.claudeProfileEnvironmentResolver = { name in
+            name == "ai2" ? ["CLAUDE_CONFIG_DIR": "/profiles/ai2"] : [:]
+        }
+        builder.gptBackendEnabledResolver = { false }
+        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "T")
+        session.claudeProfileName = "ai2"
+        let context = AgentSummaryGenerator.launchContext(for: session, transcriptURL: nil, builder: builder)
+        XCTAssertEqual(context.environment["CLAUDE_CONFIG_DIR"], "/profiles/ai2")
+        XCTAssertTrue(context.extraArguments.isEmpty)
+
+        session.claudeProfileName = nil
+        XCTAssertTrue(AgentSummaryGenerator.launchContext(for: session, transcriptURL: nil, builder: builder).environment.isEmpty)
+    }
+
+    func testLaunchContextForGPTSessionCarriesRouterHeaderAndModel() {
+        var builder = AgentCommandBuilder()
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptProfileHeaderResolver = { _ in "acct2" }
+        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "T")
+        session.claudeBackendModel = "gpt-5.6-terra"
+        session.gptProfileName = "acct2"
+        let context = AgentSummaryGenerator.launchContext(for: session, transcriptURL: nil, builder: builder)
+        XCTAssertNotNil(context.environment["ANTHROPIC_BASE_URL"])
+        XCTAssertEqual(context.environment["ANTHROPIC_CUSTOM_HEADERS"], "\(ClaudeGPTMixRouter.profileHeaderName): acct2")
+        XCTAssertEqual(context.extraArguments.first, "--model")
+    }
+
+    func testLaunchContextForCodexIsEmpty() {
+        let session = AgentChatSession(provider: .codex, projectID: UUID(), title: "T")
+        XCTAssertEqual(AgentSummaryGenerator.launchContext(for: session, transcriptURL: nil), .init())
+    }
+
+    func testHeadlessCLIDeliversStandardInput() async throws {
+        let out = try await AgentHeadlessCLI().run(
+            executable: URL(fileURLWithPath: "/bin/cat"),
+            arguments: [],
+            environment: [:],
+            standardInput: Data("hallo stdin".utf8)
+        )
+        XCTAssertEqual(out, "hallo stdin")
+    }
+
     // P0.4a: Summary-Hilfsläufe erzeugen keine importierbaren Sessions.
     func testSummaryRunsOptOutOfSessionPersistence() async throws {
         var capturedArgs: [[String]] = []
         let generator = AgentSummaryGenerator(
             executableResolver: { _ in "/usr/bin/true" },
-            runner: { _, args, _ in
+            runner: { _, args, _, _ in
                 capturedArgs.append(args)
                 return #"{"headline":"H","details":"D"}"#
             }
