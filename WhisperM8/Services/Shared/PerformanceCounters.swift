@@ -47,6 +47,10 @@ final class PerformanceCounters: Sendable {
         /// Byte-, sondern eine Zeitsumme in Mikrosekunden — Kosten pro
         /// Aufruf = `activity.extracted.us` / `activity.extracted`.
         case activityExtracted
+        /// Eine PTY-Größenänderung wurde angefragt (Layout-Tick, vor der Bündelung).
+        case ptyResizeRequested
+        /// Davon wurde tatsächlich `TIOCSWINSZ` gesendet (nach `PTYResizeCoalescer`).
+        case ptyResizeForwarded
 
         var label: String {
             switch self {
@@ -56,6 +60,8 @@ final class PerformanceCounters: Sendable {
             case .paneDismantled: return "pane.dismantled"
             case .layoutSolved: return "layout.solved"
             case .activityExtracted: return "activity.extracted"
+            case .ptyResizeRequested: return "pty.resize.requested"
+            case .ptyResizeForwarded: return "pty.resize.forwarded"
             }
         }
 

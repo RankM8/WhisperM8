@@ -48,8 +48,19 @@ final class AgentTerminalLinkInterceptor: @preconcurrency TerminalViewDelegate {
     func send(source: TerminalView, data: ArraySlice<UInt8>) {
         base?.send(source: source, data: data)
     }
+    /// PTY-Größe gebündelt (LR-AU-015): Divider-Drag und Fenster-Resize liefen
+    /// sonst mit ~30 Hz je Pane als TIOCSWINSZ/SIGWINCH in die TUI.
+    private lazy var resizeCoalescer = PTYResizeCoalescer(
+        onRequested: { PerformanceCounters.shared.count(.ptyResizeRequested) },
+        onForwarded: { PerformanceCounters.shared.count(.ptyResizeForwarded) },
+        forward: { [weak self] cols, rows in
+            guard let base = self?.base else { return }
+            base.sizeChanged(source: base, newCols: cols, newRows: rows)
+        }
+    )
+
     func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
-        base?.sizeChanged(source: source, newCols: newCols, newRows: newRows)
+        resizeCoalescer.request(cols: newCols, rows: newRows)
     }
     func setTerminalTitle(source: TerminalView, title: String) {
         base?.setTerminalTitle(source: source, title: title)
