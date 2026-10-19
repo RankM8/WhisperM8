@@ -8,9 +8,13 @@ struct AppPreferences {
 
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard) {
+    private let preferredLanguages: [String]
+
+    init(defaults: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.defaults = defaults
+        self.preferredLanguages = preferredLanguages
         migrateScreenshotLimitDefaultIfNeeded()
+        migrateLanguageDefaultIfNeeded()
     }
 
     var selectedProviderRaw: String? {
@@ -34,7 +38,8 @@ struct AppPreferences {
     }
 
     var language: String {
-        get { defaults.string(forKey: Keys.language) ?? "de" }
+        // Ohne gespeicherten Wert folgt die Diktiersprache der Systemsprache (LR-DIK-024).
+        get { defaults.string(forKey: Keys.language) ?? DictationLanguage.defaultCode(preferredLanguages: preferredLanguages) }
         nonmutating set { defaults.set(newValue, forKey: Keys.language) }
     }
 
@@ -842,6 +847,18 @@ struct AppPreferences {
         }
     }
 
+    /// Bestandsnutzer hatten implizit „de" (alter Default) — das bleibt ihr Wert. Erkennbar
+    /// am schon gespeicherten Anbieter; frische Installationen folgen der Systemsprache.
+    /// Einmalig, damit eine spätere Änderung der Systemsprache nichts umschaltet.
+    private func migrateLanguageDefaultIfNeeded() {
+        guard defaults.bool(forKey: Keys.didMigrateLanguageDefault) == false else { return }
+        if defaults.string(forKey: Keys.language) == nil,
+           defaults.string(forKey: Keys.selectedProvider) != nil {
+            defaults.set("de", forKey: Keys.language)
+        }
+        defaults.set(true, forKey: Keys.didMigrateLanguageDefault)
+    }
+
     private func migrateScreenshotLimitDefaultIfNeeded() {
         guard defaults.bool(forKey: Keys.didMigrateMaxScreenshotsPerRecordingTo20) == false else {
             return
@@ -862,6 +879,7 @@ enum PreferenceKeys {
     static let selectedModel = "selectedModel"
     static let usageProfile = "usageProfile"
     static let language = "language"
+    static let didMigrateLanguageDefault = "didMigrateLanguageDefault"
     static let autoPasteEnabled = "autoPasteEnabled"
     static let audioDuckingEnabled = "audioDuckingEnabled"
     static let audioDuckingFactor = "audioDuckingFactor"

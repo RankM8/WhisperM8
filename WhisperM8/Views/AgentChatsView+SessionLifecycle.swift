@@ -31,6 +31,18 @@ extension AgentChatsView {
         gptMainModel: Bool = false
     ) {
         guard let selectedProject else { return }
+        // Fehlt die CLI, entsteht keine Session (sonst sammelten sich Leer-Chats an):
+        // stattdessen der geführte Installations-Leerzustand (LR-AU-022).
+        if let missing = AgentChatStartGate.missingCLI(
+            provider: provider,
+            kind: kind,
+            commandResolver: AgentCommandBuilder().commandResolver
+        ) {
+            missingCLIPrompt = MissingCLIPrompt(cli: missing) {
+                createSession(provider: provider, kind: kind, gptMainModel: gptMainModel)
+            }
+            return
+        }
         do {
             // Agent View hat keine externe Session-ID (es ist ein Dashboard
             // ueber viele Sessions). Auch der Titel ist anders. Terminals

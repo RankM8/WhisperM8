@@ -14,6 +14,11 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Neue oder umgestellte Ansichten hier eintragen.
     static let localizedFiles: [String] = [
         "WhisperM8/Views/Transcript/TranscriptEmptyStateView.swift",
+        "WhisperM8/Views/OnboardingView.swift",
+        "WhisperM8/Views/AgentCLIInstallPanel.swift",
+        "WhisperM8/Models/OnboardingLogic.swift",
+        "WhisperM8/Models/DictationLanguage.swift",
+        "WhisperM8/Services/Shared/AgentCLIInstaller.swift",
     ]
 
     private static var root: URL {

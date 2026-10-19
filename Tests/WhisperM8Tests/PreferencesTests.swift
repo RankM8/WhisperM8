@@ -10,7 +10,7 @@ final class PreferencesTests: XCTestCase {
 
     func testDefaultsUseExpectedValues() {
         withIsolatedPreferences { preferences in
-            XCTAssertEqual(preferences.language, "de")
+            XCTAssertEqual(preferences.language, DictationLanguage.defaultCode())
             XCTAssertTrue(preferences.isAutoPasteEnabled)
             XCTAssertTrue(preferences.isAudioDuckingEnabled)
             XCTAssertEqual(preferences.audioDuckingFactor, 0.2)
@@ -32,6 +32,46 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.codexVisualInputModeRaw, CodexVisualInputMode.defaultMode.rawValue)
             XCTAssertTrue(preferences.isAgentSidebarDragEnabled)
         }
+    }
+
+    // MARK: LR-DIK-024 · Diktiersprache folgt der Systemsprache
+
+    private func isolatedDefaults() -> UserDefaults {
+        let suite = "WhisperM8Tests-lang-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+
+    func testFreshInstallLanguageFollowsSystemLanguage() {
+        XCTAssertEqual(AppPreferences(defaults: isolatedDefaults(), preferredLanguages: ["en-US"]).language, "en")
+        XCTAssertEqual(AppPreferences(defaults: isolatedDefaults(), preferredLanguages: ["fr-FR", "en-US"]).language, "fr")
+        XCTAssertEqual(AppPreferences(defaults: isolatedDefaults(), preferredLanguages: ["de-DE"]).language, "de")
+        XCTAssertEqual(AppPreferences(defaults: isolatedDefaults(), preferredLanguages: ["nb-NO"]).language, "no")
+        XCTAssertEqual(AppPreferences(defaults: isolatedDefaults(), preferredLanguages: ["xx-XX"]).language, "",
+                       "unbekannte Systemsprache fällt auf Auto-Erkennung")
+    }
+
+    func testStoredLanguageIsNeverChanged() {
+        let defaults = isolatedDefaults()
+        defaults.set("de", forKey: PreferenceKeys.language)
+        XCTAssertEqual(AppPreferences(defaults: defaults, preferredLanguages: ["en-US"]).language, "de")
+        defaults.set("", forKey: PreferenceKeys.language)
+        XCTAssertEqual(AppPreferences(defaults: defaults, preferredLanguages: ["en-US"]).language, "")
+    }
+
+    func testExistingUserWithoutStoredLanguageKeepsGerman() {
+        let defaults = isolatedDefaults()
+        defaults.set("groq", forKey: PreferenceKeys.selectedProvider)
+        let preferences = AppPreferences(defaults: defaults, preferredLanguages: ["en-US"])
+        XCTAssertEqual(preferences.language, "de", "Bestandsnutzer hatten implizit de")
+    }
+
+    func testFreshInstallDoesNotGetFrozenToGermanByLaterProviderMigration() {
+        let defaults = isolatedDefaults()
+        _ = AppPreferences(defaults: defaults, preferredLanguages: ["en-US"])
+        defaults.set("groq", forKey: PreferenceKeys.selectedProvider)
+        XCTAssertEqual(AppPreferences(defaults: defaults, preferredLanguages: ["en-US"]).language, "en")
     }
 
     func testAgentSidebarDragEscapeHatchPersists() {

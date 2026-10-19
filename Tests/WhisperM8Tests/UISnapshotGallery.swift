@@ -25,6 +25,12 @@ final class UISnapshotGallery: XCTestCase {
     // MARK: - Galerie
 
     @MainActor
+    private func cliModel(_ cli: AgentCLI, command: String?, brew: String?) -> AgentCLIInstallModel {
+        let resolver = AgentCLIResolver(commandResolver: { _ in command }, brewResolver: { brew })
+        return AgentCLIInstallModel(cli: cli, initialState: resolver.state(of: cli), resolver: resolver)
+    }
+
+    @MainActor
     private var fixtures: [Fixture] {
         let settingsSize = CGSize(width: 700, height: 900)
         let onboardingSize = CGSize(width: 520, height: 560)
@@ -237,6 +243,37 @@ final class UISnapshotGallery: XCTestCase {
             },
             Fixture(name: "onboarding-profil", size: onboardingSize) {
                 AnyView(ProfileStep(selectedProfile: .constant(.full)).padding(24))
+            },
+            Fixture(name: "onboarding-test-fehlgeschlagen", size: onboardingSize) {
+                let gate = OnboardingCompletionGate(
+                    micGranted: true, accessibilityGranted: true, hotkeySet: true,
+                    credentialsSatisfied: true,
+                    testOutcome: .failed("Groq: 401 invalid API key")
+                )
+                return AnyView(TestStep(gate: gate).environment(AppState.shared))
+            },
+            Fixture(name: "onboarding-test-ungetestet", size: onboardingSize) {
+                let gate = OnboardingCompletionGate(
+                    micGranted: true, accessibilityGranted: true, hotkeySet: true,
+                    credentialsSatisfied: true
+                )
+                return AnyView(TestStep(gate: gate).environment(AppState.shared))
+            },
+            Fixture(name: "onboarding-claude-schritt", size: onboardingSize) {
+                AnyView(ClaudeCLIStep())
+            },
+            // CLI-Installation (LR-ONB-003/DIK-015/AU-022): feste Zustände, kein echtes brew.
+            Fixture(name: "cli-claude-fehlt-brew", size: CGSize(width: 480, height: 320)) {
+                AnyView(AgentCLIInstallPanel(model: self.cliModel(.claude, command: nil, brew: "/opt/homebrew/bin/brew")).padding(24))
+            },
+            Fixture(name: "cli-codex-fehlt-ohne-brew", size: CGSize(width: 480, height: 280)) {
+                AnyView(AgentCLIInstallPanel(model: self.cliModel(.codex, command: nil, brew: nil)).padding(24))
+            },
+            Fixture(name: "cli-claude-installiert", size: CGSize(width: 480, height: 220)) {
+                AnyView(AgentCLIInstallPanel(
+                    model: self.cliModel(.claude, command: "/Users/demo/.local/bin/claude", brew: nil),
+                    loginHint: Text("The first time you start a chat, Claude Code opens right inside WhisperM8 and walks you through signing in with your Claude account.")
+                ).padding(24))
             },
         ]
     }

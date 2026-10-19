@@ -4,18 +4,6 @@ import AVFoundation
 import ApplicationServices
 import AppKit
 
-/// Ein logischer Onboarding-Schritt. Die konkrete Reihenfolge ergibt sich profilabhängig
-/// (der Codex-Schritt entfällt für reine Diktat-Profile).
-enum OnboardingStep {
-    case welcome
-    case profile
-    case permissions
-    case hotkey
-    case apiKey
-    case codex
-    case test
-}
-
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dismissWindow) private var dismissWindow
@@ -26,22 +14,14 @@ struct OnboardingView: View {
     @State private var micPermissionGranted = false
     @State private var accessibilityGranted = false
     @State private var hotkeySet = false
-    @State private var apiKey = ""
     @State private var apiKeyAvailable = false
+    @State private var keychainWriteFailed = false
     @State private var selectedProvider = TranscriptionProvider.groq
     @State private var selectedModel = TranscriptionModel.groq_whisper_v3
-    @State private var testResult: String?
-    @State private var isTestingRecording = false
 
-    /// Profilabhängige Schrittfolge. Der Codex-Schritt erscheint nur, wenn das gewählte
-    /// Profil Enrichment nutzt (Dictation+Enrichment / Full).
+    /// Profilabhängige Schrittfolge (pure Ableitung, siehe `OnboardingStepPlanner`).
     private var steps: [OnboardingStep] {
-        var result: [OnboardingStep] = [.welcome, .profile, .permissions, .hotkey, .apiKey]
-        if selectedProfile.wantsCodexEnrichment {
-            result.append(.codex)
-        }
-        result.append(.test)
-        return result
+        OnboardingStepPlanner.steps(for: selectedProfile)
     }
 
     private var currentStep: OnboardingStep {
@@ -115,18 +95,19 @@ struct OnboardingView: View {
             HotkeyStep(hotkeySet: $hotkeySet)
         case .apiKey:
             APIKeyStep(
-                apiKey: $apiKey,
                 apiKeyAvailable: $apiKeyAvailable,
+                keychainWriteFailed: $keychainWriteFailed,
                 selectedProvider: $selectedProvider,
                 selectedModel: $selectedModel
             )
+        case .language:
+            LanguageStep()
+        case .claudeCLI:
+            ClaudeCLIStep()
         case .codex:
             CodexConnectStep()
         case .test:
-            TestStep(
-                testResult: $testResult,
-                isTestingRecording: $isTestingRecording
-            )
+            TestStep(gate: completionGate)
             .environment(appState)
         }
     }
@@ -147,6 +128,29 @@ struct OnboardingView: View {
         dismiss()
     }
 
+    private var credentialsSatisfied: Bool {
+        // Nur ein bestätigt gespeicherter Key zählt — getippte Entwürfe nicht (LR-ONB-006/007).
+        TranscriptionCredentialGate.isSatisfied(
+            provider: selectedProvider,
+            typedKey: "",
+            hasSavedKey: apiKeyAvailable
+        )
+    }
+
+    private var completionGate: OnboardingCompletionGate {
+        OnboardingCompletionGate(
+            micGranted: micPermissionGranted,
+            accessibilityGranted: accessibilityGranted,
+            hotkeySet: hotkeySet,
+            credentialsSatisfied: credentialsSatisfied,
+            keychainWriteFailed: keychainWriteFailed,
+            testOutcome: OnboardingTestOutcome.derive(
+                lastTranscription: appState.lastTranscription,
+                lastError: appState.lastError
+            )
+        )
+    }
+
     private var canProceed: Bool {
         switch currentStep {
         case .permissions:
@@ -154,26 +158,15 @@ struct OnboardingView: View {
         case .hotkey:
             return hotkeySet
         case .apiKey:
-            return TranscriptionCredentialGate.isSatisfied(
-                provider: selectedProvider,
-                typedKey: apiKey,
-                hasSavedKey: apiKeyAvailable
-            )
+            return credentialsSatisfied && !keychainWriteFailed
         default:
-            // Welcome, Profil (Default gewählt), Codex (optional), Test.
+            // Welcome, Profil (Default gewählt), Sprache, Claude/Codex (optional), Test.
             return true
         }
     }
 
     private var canFinish: Bool {
-        return hotkeySet
-            && micPermissionGranted
-            && accessibilityGranted
-            && TranscriptionCredentialGate.isSatisfied(
-                provider: selectedProvider,
-                typedKey: apiKey,
-                hasSavedKey: apiKeyAvailable
-            )
+        completionGate.canFinish
     }
 }
 
@@ -210,7 +203,7 @@ struct WelcomeStep: View {
 
 struct FeatureRow: View {
     let icon: String
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         HStack(spacing: 12) {
@@ -307,6 +300,7 @@ private struct ProfileOptionCard: View {
 /// ohne Codex bleibt der Raw-Fallback.
 struct CodexConnectStep: View {
     @State private var status = CodexConnectionStatus.unknown
+    @State private var installModel = AgentCLIInstallModel(cli: .codex)
 
     var body: some View {
         VStack(spacing: 20) {
@@ -332,14 +326,21 @@ struct CodexConnectStep: View {
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
 
-            HStack {
-                Button(status == .signedIn ? "Reconnect ChatGPT" : "Sign in with ChatGPT") {
-                    CodexStatusProbe().openLoginInTerminal()
-                }
-                .buttonStyle(.borderedProminent)
+            if status == .notInstalled {
+                // Statt „Sign In" ohne CLI: geführte Installation (Homebrew-Cask, nach Rückfrage).
+                AgentCLIInstallPanel(model: installModel, onInstalled: { refreshStatus() })
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+            } else {
+                HStack {
+                    Button(status == .signedIn ? "Reconnect ChatGPT" : "Sign in with ChatGPT") {
+                        CodexStatusProbe().openLoginInTerminal()
+                    }
+                    .buttonStyle(.borderedProminent)
 
-                Button("Check Again") {
-                    refreshStatus()
+                    Button("Check Again") {
+                        refreshStatus()
+                    }
                 }
             }
 
@@ -371,6 +372,7 @@ struct PermissionsStep: View {
     @Binding var accessibilityGranted: Bool
 
     @State private var checkTimer: Timer?
+    @State private var micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
 
     var body: some View {
         VStack(spacing: 24) {
@@ -393,8 +395,18 @@ struct PermissionsStep: View {
                     title: "Microphone",
                     description: "Record your voice for transcription",
                     isGranted: micGranted,
+                    actionTitle: MicrophoneOnboardingAction.buttonTitle(status: micStatus),
                     action: requestMicrophonePermission
                 )
+
+                if let hint = MicrophoneOnboardingAction.hint(status: micStatus), !micGranted {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 // Accessibility Permission
                 PermissionRow(
@@ -435,20 +447,26 @@ struct PermissionsStep: View {
 
     private func checkPermissions() {
         // Check microphone
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized:
-            micGranted = true
-        default:
-            micGranted = false
-        }
+        micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        micGranted = micStatus == .authorized
 
         // Check accessibility
         accessibilityGranted = AXIsProcessTrusted()
     }
 
+    /// Nur bei „noch nicht entschieden" wirkt `requestAccess`; bei Ablehnung führt der
+    /// Button in die Systemeinstellungen (LR-ONB-004). Der 0,5-s-Poll erkennt die Rückkehr.
     private func requestMicrophonePermission() {
-        Task {
-            micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+        switch MicrophoneOnboardingAction.decide(status: micStatus) {
+        case .request:
+            Task {
+                micGranted = await AVCaptureDevice.requestAccess(for: .audio)
+                checkPermissions()
+            }
+        case .openSystemSettings:
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
 
@@ -473,9 +491,10 @@ struct PermissionsStep: View {
 
 struct PermissionRow: View {
     let icon: String
-    let title: String
-    let description: String
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey
     let isGranted: Bool
+    var actionTitle: String = String(localized: "Grant")
     let action: () -> Void
 
     var body: some View {
@@ -500,7 +519,7 @@ struct PermissionRow: View {
                     .font(.system(size: 24))
                     .foregroundStyle(.green)
             } else {
-                Button("Grant") {
+                Button(actionTitle) {
                     action()
                 }
                 .buttonStyle(.borderedProminent)
@@ -590,8 +609,9 @@ struct HotkeyStep: View {
 // MARK: - API Key Step
 
 struct APIKeyStep: View {
-    @Binding var apiKey: String
     @Binding var apiKeyAvailable: Bool
+    /// Der letzte Schreibversuch in den Schlüsselbund ist gescheitert (LR-ONB-007).
+    @Binding var keychainWriteFailed: Bool
     @Binding var selectedProvider: TranscriptionProvider
     @Binding var selectedModel: TranscriptionModel
 
@@ -603,6 +623,8 @@ struct APIKeyStep: View {
     @State private var showsChatGPTOption = false
     /// Aktives GPT-Konto für den Hinweis — Dateizugriff, deshalb im `.task`.
     @State private var chatGPTActiveAccount: String?
+    /// Key-Entwurf des gewählten Anbieters; gespeichert wird nur per „Save".
+    @State private var keyDraft: APIKeyDraftModel?
 
     var body: some View {
         ScrollView {
@@ -626,18 +648,34 @@ struct APIKeyStep: View {
                     options: TranscriptionProvider.selectableProviders(chatGPTAvailable: showsChatGPTOption)
                 )
 
-                if selectedProvider.requiresAPIKey, let keychainKey = selectedProvider.keychainKey {
+                if selectedProvider.requiresAPIKey, let keyDraft {
+                    @Bindable var draft = keyDraft
                     MaskedAPIKeyField(
-                        text: $apiKey,
-                        hasSavedKey: apiKeyAvailable,
-                        providerName: selectedProvider.displayName
+                        text: $draft.draft,
+                        hasSavedKey: keyDraft.hasSavedKey,
+                        providerName: selectedProvider.displayName,
+                        onSubmit: { saveDraft() }
                     )
-                    .onChange(of: apiKey) { _, newValue in
-                        if newValue.isEmpty {
-                            return
+
+                    HStack {
+                        Button("Save Key") { saveDraft() }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(!keyDraft.canCommit)
+                        if keyDraft.canCommit {
+                            Text("Click Save Key to store it in your Keychain.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
-                        KeychainManager.save(key: keychainKey, value: newValue)
-                        apiKeyAvailable = true
+                        Spacer()
+                    }
+
+                    if let error = keyDraft.saveError {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if let apiKeyLink = selectedProvider.apiKeyLink {
@@ -645,10 +683,10 @@ struct APIKeyStep: View {
                             .font(.caption)
                     }
 
-                    if apiKeyAvailable && apiKey.isEmpty {
+                    if keyDraft.hasSavedKey && !keyDraft.canCommit {
                         TranscriptionKeychainStatusLabel()
                     }
-                } else {
+                } else if !selectedProvider.requiresAPIKey {
                     ChatGPTTranscriptionNotice(
                         activeAccount: chatGPTActiveAccount,
                         backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled
@@ -673,29 +711,30 @@ struct APIKeyStep: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 ForEach(selectedProvider.availableModels, id: \.rawValue) { model in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(model.displayName)
-                                .fontWeight(selectedModel == model ? .semibold : .regular)
-                            Text(model.description)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if selectedModel == model {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.blue)
-                        } else {
-                            Image(systemName: "circle")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
+                    // Echte Buttons: per Tastatur fokussierbar, VoiceOver liest „ausgewählt" (LR-ONB-014).
+                    Button {
                         selectedModel = model
                         TranscriptionSettings.saveModel(model)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(model.displayName)
+                                    .fontWeight(selectedModel == model ? .semibold : .regular)
+                                Text(model.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: selectedModel == model ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedModel == model ? Color.blue : Color.secondary)
+                                .accessibilityHidden(true)
+                        }
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(selectedModel == model ? [.isSelected] : [])
                 }
 
                 HStack {
@@ -714,11 +753,15 @@ struct APIKeyStep: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Auto-paste text")
                             .font(.body)
-                        Text(autoPasteEnabled
-                            ? "Text will be automatically pasted"
-                            : "Text will only be copied to clipboard")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if autoPasteEnabled {
+                            Text("Text will be automatically pasted")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Text will only be copied to clipboard")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .toggleStyle(.switch)
@@ -735,13 +778,33 @@ struct APIKeyStep: View {
             selectedModel = TranscriptionSettings.loadModel()
             showsChatGPTOption = AppPreferences.shared.isChatGPTTranscriptionEnabled
                 && (AppPreferences.shared.claudeGPTBackendEnabled || selectedProvider == .chatgpt)
-            apiKey = ""
-            apiKeyAvailable = selectedProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+            rebuildDraft(for: selectedProvider)
+        }
+    }
+
+    private func saveDraft() {
+        guard let keyDraft else { return }
+        let saved = keyDraft.commit()
+        keychainWriteFailed = !saved && keyDraft.saveError != nil
+        apiKeyAvailable = keyDraft.hasSavedKey
+    }
+
+    /// Neuer Entwurf für den Anbieter; ein ungespeicherter Entwurf des alten Anbieters
+    /// wird bewusst verworfen — gespeichert wird nur ausdrücklich per „Save Key".
+    private func rebuildDraft(for provider: TranscriptionProvider) {
+        keychainWriteFailed = false
+        if let keychainKey = provider.keychainKey {
+            let model = APIKeyDraftModel(keychainKey: keychainKey)
+            keyDraft = model
+            apiKeyAvailable = model.hasSavedKey
+        } else {
+            keyDraft = nil
+            apiKeyAvailable = false
         }
     }
 
     /// Brücke für den geteilten Picker; Setter behält die bisherige Side-Effect-Logik
-    /// (Key sichern/leeren, Keychain prüfen, Modell wechseln, Provider persistieren).
+    /// (Keychain prüfen, Modell wechseln, Provider persistieren).
     private var providerBinding: Binding<TranscriptionProvider> {
         Binding(
             get: { selectedProvider },
@@ -750,16 +813,8 @@ struct APIKeyStep: View {
     }
 
     private func handleProviderChange(to newProvider: TranscriptionProvider) {
-        let oldProvider = selectedProvider
-        // Getippten Key sichern, falls Provider gewechselt wird und etwas eingegeben wurde.
-        if !apiKey.isEmpty,
-           let oldKeychainKey = oldProvider.keychainKey,
-           oldKeychainKey != newProvider.keychainKey {
-            KeychainManager.save(key: oldKeychainKey, value: apiKey)
-        }
         selectedProvider = newProvider
-        apiKey = ""
-        apiKeyAvailable = newProvider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+        rebuildDraft(for: newProvider)
         if selectedModel.provider != newProvider {
             selectedModel = newProvider.defaultModel
         }
@@ -767,22 +822,105 @@ struct APIKeyStep: View {
     }
 }
 
+// MARK: - Language Step (LR-DIK-024)
+
+/// Diktiersprache vor dem Testdiktat: Voreinstellung folgt der Systemsprache.
+struct LanguageStep: View {
+    @State private var language = AppPreferences.shared.language
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "globe")
+                .font(.system(size: 48))
+                .foregroundStyle(.blue)
+
+            Text("Which language do you dictate in?")
+                .font(.title)
+                .fontWeight(.bold)
+                .multilineTextAlignment(.center)
+
+            Text("Whisper transcribes best when it knows the language. We preselected the language of your Mac. You can change this later in Settings → Transcription.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Picker("Spoken language", selection: $language) {
+                ForEach(DictationLanguage.pickerCodes, id: \.self) { code in
+                    Text(DictationLanguage.displayName(for: code)).tag(code)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 260)
+            .onChange(of: language) { _, newValue in
+                AppPreferences.shared.language = newValue
+            }
+        }
+        .padding(32)
+        .onAppear {
+            // Auch die unveränderte Voreinstellung festschreiben: eine spätere Änderung
+            // der Systemsprache soll die Diktiersprache nicht stillschweigend umschalten.
+            AppPreferences.shared.language = language
+        }
+    }
+}
+
+// MARK: - Claude CLI Step (LR-ONB-003)
+
+/// Nur im Full-Profil: Claude Code installieren (Homebrew-Cask, nach Rückfrage) und
+/// den Login erklären. Immer überspringbar — Diktat funktioniert ohne.
+struct ClaudeCLIStep: View {
+    @State private var model = AgentCLIInstallModel(cli: .claude)
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 18) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 48))
+                    .foregroundStyle(model.state.isInstalled ? .green : .blue)
+
+                Text("Set up Claude Code")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text("Agent Chats run the Claude Code command line tool. This is optional — you can skip it now and install it later.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                AgentCLIInstallPanel(
+                    model: model,
+                    loginHint: Text("The first time you start a chat, Claude Code opens right inside WhisperM8 and walks you through signing in with your Claude account.")
+                )
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
+            }
+            .padding(32)
+        }
+    }
+}
+
 // MARK: - Test Step
 
 struct TestStep: View {
     @Environment(AppState.self) private var appState
-    @Binding var testResult: String?
-    @Binding var isTestingRecording: Bool
+    let gate: OnboardingCompletionGate
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "checkmark.circle")
+            Image(systemName: gate.showsSuccess ? "checkmark.circle" : "mic.circle")
                 .font(.system(size: 60))
-                .foregroundStyle(.green)
+                .foregroundStyle(gate.showsSuccess ? .green : .blue)
 
-            Text("All set!")
-                .font(.title)
-                .fontWeight(.bold)
+            // „All set!" erst nach bestandenem Testdiktat (LR-ONB-013).
+            if gate.showsSuccess {
+                Text("All set!")
+                    .font(.title)
+                    .fontWeight(.bold)
+            } else {
+                Text("Test your setup")
+                    .font(.title)
+                    .fontWeight(.bold)
+            }
 
             Text("Test your configuration now. Press your hotkey to start, speak, then press again to stop.")
                 .foregroundStyle(.secondary)
@@ -823,10 +961,25 @@ struct TestStep: View {
                 }
             }
 
-            if let error = appState.lastError {
-                Text(error)
+            switch gate.notice {
+            case .none:
+                EmptyView()
+            case .untested:
+                Text("You haven't tested dictation yet. You can finish now, but we recommend a quick test first.")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            case .testFailed(let message):
+                VStack(spacing: 6) {
+                    Text("The test dictation failed. Check your API key and try again.")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.red)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
             }
         }
         .padding(40)

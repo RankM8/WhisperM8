@@ -21,6 +21,46 @@
         }
       }
     },
+    "%@ is installed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ist installiert"
+          }
+        }
+      }
+    },
+    "%@ is not installed yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ist noch nicht installiert"
+          }
+        }
+      }
+    },
+    "AI enrichment modes (Clean, Email, Slack …) use the Codex CLI with your ChatGPT login. This is optional — you can skip it now and connect later in Settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Modi (Bereinigen, E-Mail, Slack …) nutzen die Codex-CLI mit deinem ChatGPT-Login. Das ist optional – du kannst es jetzt überspringen und später in den Einstellungen verbinden."
+          }
+        }
+      }
+    },
+    "Accessibility": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bedienungshilfen"
+          }
+        }
+      }
+    },
     "Add a project folder to start a chat": {
       "localizations": {
         "de": {
@@ -51,6 +91,96 @@
         }
       }
     },
+    "Agent Chats run the Claude Code command line tool. This is optional — you can skip it now and install it later.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent Chats nutzen das Kommandozeilen-Tool Claude Code. Das ist optional – du kannst es jetzt überspringen und später installieren."
+          }
+        }
+      }
+    },
+    "All permissions granted!": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Berechtigungen erteilt!"
+          }
+        }
+      }
+    },
+    "All set!": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alles bereit!"
+          }
+        }
+      }
+    },
+    "App Permissions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App-Berechtigungen"
+          }
+        }
+      }
+    },
+    "Auto-detect": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch erkennen"
+          }
+        }
+      }
+    },
+    "Auto-paste or clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch einfügen oder in die Zwischenablage"
+          }
+        }
+      }
+    },
+    "Auto-paste text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text automatisch einfügen"
+          }
+        }
+      }
+    },
+    "Auto-paste text into other apps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text automatisch in andere Apps einfügen"
+          }
+        }
+      }
+    },
+    "Back": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück"
+          }
+        }
+      }
+    },
     "Background agent was not fully spawned": {
       "localizations": {
         "de": {
@@ -71,12 +201,112 @@
         }
       }
     },
+    "Cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "Chats run the real Claude Code CLI. If you prefer Anthropic's own installer, follow the official instructions and then check again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats nutzen die echte Claude-Code-CLI. Wenn du den Installer von Anthropic bevorzugst, folge der offiziellen Anleitung und prüfe danach erneut."
+          }
+        }
+      }
+    },
+    "Check Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut prüfen"
+          }
+        }
+      }
+    },
     "Click **%@** at the top of the header to start %@ and continue this session.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Klick oben in der Kopfzeile auf **%1$@**, um %2$@ zu starten und mit dieser Session weiterzumachen."
+          }
+        }
+      }
+    },
+    "Click Save Key to store it in your Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klicke auf „Key speichern“, um ihn im Schlüsselbund abzulegen."
+          }
+        }
+      }
+    },
+    "Click each button to grant permission": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klicke jeden Button, um die Berechtigung zu erteilen"
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen"
+          }
+        }
+      }
+    },
+    "Configuration": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konfiguration"
+          }
+        }
+      }
+    },
+    "Configure Hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel festlegen"
+          }
+        }
+      }
+    },
+    "Connect Codex (optional)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex verbinden (optional)"
+          }
+        }
+      }
+    },
+    "Continue Setup…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup fortsetzen …"
           }
         }
       }
@@ -91,12 +321,62 @@
         }
       }
     },
+    "Couldn't save the key to the macOS Keychain. Unlock your Keychain and try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Key konnte nicht im macOS-Schlüsselbund gespeichert werden. Entsperre den Schlüsselbund und versuche es erneut."
+          }
+        }
+      }
+    },
     "Details": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Details"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        }
+      }
+    },
+    "Get %@ API key →": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@-API-Key holen →"
+          }
+        }
+      }
+    },
+    "Get Homebrew": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew holen"
+          }
+        }
+      }
+    },
+    "Grant": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlauben"
           }
         }
       }
@@ -121,12 +401,132 @@
         }
       }
     },
+    "Homebrew is not installed on this Mac. Install Homebrew first, or follow the official instructions for %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Homebrew ist auf diesem Mac nicht installiert. Installiere zuerst Homebrew oder folge der offiziellen Anleitung für %@."
+          }
+        }
+      }
+    },
+    "Hotkey configured!": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel festgelegt!"
+          }
+        }
+      }
+    },
+    "How will you use WhisperM8?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wie möchtest du WhisperM8 nutzen?"
+          }
+        }
+      }
+    },
+    "Install": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installieren"
+          }
+        }
+      }
+    },
+    "Install %@?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ installieren?"
+          }
+        }
+      }
+    },
+    "Install with Homebrew…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Homebrew installieren …"
+          }
+        }
+      }
+    },
+    "Installing %@…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wird installiert …"
+          }
+        }
+      }
+    },
     "Last entry is too large for the preview": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Letzter Eintrag zu groß für die Vorschau"
+          }
+        }
+      }
+    },
+    "Microphone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon"
+          }
+        }
+      }
+    },
+    "Microphone access is restricted on this Mac (for example by a profile or Screen Time). Ask your administrator or change it in System Settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Mikrofonzugriff ist auf diesem Mac eingeschränkt (z. B. durch ein Profil oder Bildschirmzeit). Frage deinen Administrator oder ändere es in den Systemeinstellungen."
+          }
+        }
+      }
+    },
+    "Microphone access was denied. Turn on WhisperM8 under Privacy & Security → Microphone, then come back here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Mikrofonzugriff wurde abgelehnt. Aktiviere WhisperM8 unter Datenschutz & Sicherheit → Mikrofon und komm dann hierher zurück."
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        }
+      }
+    },
+    "Native macOS dictation app with best-in-class transcription.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Native macOS-Diktier-App mit erstklassiger Transkription."
           }
         }
       }
@@ -141,12 +541,42 @@
         }
       }
     },
+    "Next": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weiter"
+          }
+        }
+      }
+    },
+    "Next time you start a chat, Claude Code opens here and walks you through signing in.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim nächsten Chat öffnet sich Claude Code hier und führt dich durch die Anmeldung."
+          }
+        }
+      }
+    },
     "No agent chat": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Kein Agent Chat"
+          }
+        }
+      }
+    },
+    "No audio had been recorded yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wurde noch kein Audio aufgenommen."
           }
         }
       }
@@ -181,12 +611,172 @@
         }
       }
     },
+    "Official instructions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offizielle Anleitung"
+          }
+        }
+      }
+    },
     "Older messages are available": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ältere Nachrichten sind vorhanden"
+          }
+        }
+      }
+    },
+    "Open System Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Systemeinstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Press hotkey to start/stop recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel drücken, um die Aufnahme zu starten oder zu stoppen"
+          }
+        }
+      }
+    },
+    "Press once to start recording, press again to stop and transcribe.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal drücken startet die Aufnahme, nochmal drücken stoppt und transkribiert."
+          }
+        }
+      }
+    },
+    "Price: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preis: %@"
+          }
+        }
+      }
+    },
+    "Provider": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieter"
+          }
+        }
+      }
+    },
+    "Re-transcribe last recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Aufnahme erneut transkribieren"
+          }
+        }
+      }
+    },
+    "Real-time audio feedback": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio-Rückmeldung in Echtzeit"
+          }
+        }
+      }
+    },
+    "Recommended: Control + Shift + Space": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen: Control + Shift + Leertaste"
+          }
+        }
+      }
+    },
+    "Record your voice for transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Stimme für die Transkription aufnehmen"
+          }
+        }
+      }
+    },
+    "Recording interrupted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme unterbrochen"
+          }
+        }
+      }
+    },
+    "Recording...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme läuft …"
+          }
+        }
+      }
+    },
+    "Replace Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key ersetzen"
+          }
+        }
+      }
+    },
+    "Replace Saved Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherten Key ersetzen"
+          }
+        }
+      }
+    },
+    "Result:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnis:"
+          }
+        }
+      }
+    },
+    "Save Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key speichern"
           }
         }
       }
@@ -211,12 +801,82 @@
         }
       }
     },
+    "Set up Claude Code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code einrichten"
+          }
+        }
+      }
+    },
+    "Setup incomplete: no API key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup unvollständig: kein API-Key"
+          }
+        }
+      }
+    },
+    "Setup incomplete: no hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup unvollständig: kein Tastenkürzel"
+          }
+        }
+      }
+    },
+    "Setup incomplete: permissions missing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setup unvollständig: Berechtigungen fehlen"
+          }
+        }
+      }
+    },
+    "Sign in with your ChatGPT account under Settings → AI Output.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Melde dich unter Einstellungen → KI-Ausgabe mit deinem ChatGPT-Konto an."
+          }
+        }
+      }
+    },
     "Spawning this background agent was interrupted, so no short ID was saved. Close the tab from the context menu and start a new background agent if needed.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Der Spawn dieses Hintergrund-Agents wurde unterbrochen, sodass keine Short-ID gespeichert ist. Schließe den Tab über das Kontextmenü und starte bei Bedarf einen neuen Hintergrund-Agent."
+          }
+        }
+      }
+    },
+    "Spoken language": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesprochene Sprache"
+          }
+        }
+      }
+    },
+    "Start Chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat starten"
           }
         }
       }
@@ -241,12 +901,162 @@
         }
       }
     },
+    "Status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        }
+      }
+    },
+    "Test your configuration now. Press your hotkey to start, speak, then press again to stop.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teste jetzt deine Konfiguration. Drücke dein Tastenkürzel zum Starten, sprich und drücke erneut zum Stoppen."
+          }
+        }
+      }
+    },
+    "Test your setup": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teste dein Setup"
+          }
+        }
+      }
+    },
+    "Text not inserted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text nicht eingefügt"
+          }
+        }
+      }
+    },
+    "Text will be automatically pasted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text wird automatisch eingefügt"
+          }
+        }
+      }
+    },
+    "Text will only be copied to clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text wird nur in die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
+    "The first time you start a chat, Claude Code opens right inside WhisperM8 and walks you through signing in with your Claude account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim ersten Chat öffnet sich Claude Code direkt in WhisperM8 und führt dich durch die Anmeldung mit deinem Claude-Konto."
+          }
+        }
+      }
+    },
+    "The installation failed without any output.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Installation ist ohne Ausgabe fehlgeschlagen."
+          }
+        }
+      }
+    },
+    "The installation finished, but the command was not found afterwards. Restart WhisperM8 and check again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Installation ist abgeschlossen, der Befehl wurde danach aber nicht gefunden. Starte WhisperM8 neu und prüfe erneut."
+          }
+        }
+      }
+    },
+    "The installation took too long and was stopped. Try again or use the official instructions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Installation hat zu lange gedauert und wurde gestoppt. Versuche es erneut oder nutze die offizielle Anleitung."
+          }
+        }
+      }
+    },
     "The last entry (for example a large tool result) doesn't fit into the preview. Use **Load earlier history** at the top to see the messages before it.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Der letzte Eintrag (z. B. ein großes Tool-Ergebnis) passt nicht ins Vorschaufenster. Über **Früheren Verlauf laden** oben erscheinen die Nachrichten davor."
+          }
+        }
+      }
+    },
+    "The microphone is no longer available, so the recording was stopped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Mikrofon ist nicht mehr verfügbar, die Aufnahme wurde beendet."
+          }
+        }
+      }
+    },
+    "The recording couldn't be saved any further (is the disk full?).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme konnte nicht weiter gespeichert werden (Speicherplatz voll?)."
+          }
+        }
+      }
+    },
+    "The recording couldn't continue after the audio device changed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme konnte nach einem Gerätewechsel nicht fortgesetzt werden."
+          }
+        }
+      }
+    },
+    "The recording was saved and can be transcribed again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme wurde gesichert und kann erneut transkribiert werden."
+          }
+        }
+      }
+    },
+    "The test dictation failed. Check your API key and try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Testdiktat ist fehlgeschlagen. Prüfe deinen API-Key und versuche es erneut."
           }
         }
       }
@@ -287,6 +1097,136 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diese Session hat noch keine Konversation"
+          }
+        }
+      }
+    },
+    "Transcribing...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribiere …"
+          }
+        }
+      }
+    },
+    "Transcription failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Try again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Welcome to WhisperM8": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Willkommen bei WhisperM8"
+          }
+        }
+      }
+    },
+    "Which language do you dictate in?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In welcher Sprache diktierst du?"
+          }
+        }
+      }
+    },
+    "Whisper transcribes best when it knows the language. We preselected the language of your Mac. You can change this later in Settings → Transcription.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Whisper transkribiert am besten, wenn es die Sprache kennt. Wir haben die Sprache deines Macs vorausgewählt. Du kannst sie später unter Einstellungen → Transkription ändern."
+          }
+        }
+      }
+    },
+    "WhisperM8 couldn't bring the app you dictated into back to the front. Your text is on the clipboard – paste it with Cmd+V.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 konnte die App, in die du diktiert hast, nicht wieder nach vorn holen. Dein Text liegt in der Zwischenablage – füge ihn mit Cmd+V ein."
+          }
+        }
+      }
+    },
+    "WhisperM8 needs two permissions to work properly.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 braucht zwei Berechtigungen, um richtig zu funktionieren."
+          }
+        }
+      }
+    },
+    "WhisperM8 will run “%@” with Homebrew. Nothing else is changed on your Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 führt „%@“ mit Homebrew aus. Sonst wird auf deinem Mac nichts verändert."
+          }
+        }
+      }
+    },
+    "You can change this later in Settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst das später in den Einstellungen ändern."
+          }
+        }
+      }
+    },
+    "You can continue without connecting — without Codex, only Raw dictation runs; enrichment modes fall back to Raw.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst auch ohne Verbindung fortfahren – ohne Codex läuft nur das reine Diktat; KI-Modi fallen auf Raw zurück."
+          }
+        }
+      }
+    },
+    "You haven't tested dictation yet. You can finish now, but we recommend a quick test first.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du hast das Diktat noch nicht getestet. Du kannst jetzt abschließen, wir empfehlen aber vorher einen kurzen Test."
+          }
+        }
+      }
+    },
+    "Your hotkey: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dein Tastenkürzel: %@"
           }
         }
       }
