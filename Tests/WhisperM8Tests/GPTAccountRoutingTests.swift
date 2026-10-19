@@ -191,6 +191,35 @@ final class GPTAccountRoutingTests: XCTestCase {
         XCTAssertEqual(resolverCalls, [nil])
     }
 
+    /// LR-GPT-001: Das Router-Token reist im Env-Header (nie in argv) neben dem Profil.
+    func testRouterTokenTravelsInCustomHeadersNextToProfileAndNeverInArguments() throws {
+        let token = String(repeating: "cd34", count: 8)
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.claudeProfileEnvironmentResolver = { _ in [:] }
+        builder.gptBackendEnabledResolver = { true }
+        builder.gptRouterPortResolver = { 19_002 }
+        builder.gptPickerModelResolver = { "" }
+        builder.gptSubagentModelResolver = { "" }
+        builder.gptDefaultModelResolver = { "" }
+        builder.gptProfileHeaderResolver = { $0 ?? "main" }
+        builder.gptRouterTokenResolver = { token }
+        let session = AgentChatSession(provider: .claude, projectID: project.id, title: "Claude")
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(
+            command.environmentOverrides["ANTHROPIC_CUSTOM_HEADERS"],
+            "X-WhisperM8-GPT-Profile: main\nX-WhisperM8-Router-Token: \(token)"
+        )
+        XCTAssertFalse(command.arguments.contains { $0.contains(token) }, "Token darf nie in argv stehen")
+        // Core-Env (Hintergrund-Agents, Hilfslaeufe): Token auch ohne Profil.
+        XCTAssertEqual(
+            builder.gptRouterCoreEnvironment()?["ANTHROPIC_CUSTOM_HEADERS"],
+            "X-WhisperM8-Router-Token: \(token)"
+        )
+    }
+
     // MARK: - Usage
 
     func testWhamUsageParsesLimitReachedAndAllowed() throws {
