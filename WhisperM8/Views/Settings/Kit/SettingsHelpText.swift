@@ -9,7 +9,8 @@ struct SettingsHelpText: View {
         var color: Color {
             switch self {
             case .secondary:
-                AppTheme.textTertiary
+                // ≥ 4,5:1 auf dem Seitenhintergrund (LR-ONB-016).
+                AppTheme.textSecondary
             case .warning:
                 AppTheme.statusAwaiting
             case .error:
