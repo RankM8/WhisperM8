@@ -1055,7 +1055,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                             message: "Session nicht gefunden oder archiviert")
         }
 
-        let entry = store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel)
+        let enqueuedVerified = actorID.map {
+            AgentSessionTokenRegistry.shared.verify(sessionID: $0, token: request.actor.token)
+        } ?? false
+        let entry = store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel, verified: enqueuedVerified)
         let open = store.openPrompts(for: targetID)
         let position = (open.firstIndex { $0.id == entry.id }).map { $0 + 1 } ?? open.count
 

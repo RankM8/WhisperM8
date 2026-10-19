@@ -46,7 +46,7 @@ final class AgentPromptQueueStore: @unchecked Sendable {
     // MARK: - Mutationen
 
     @discardableResult
-    func enqueue(sessionID: UUID, prompt: String, by actor: String, now: Date = Date()) -> QueuedPrompt {
+    func enqueue(sessionID: UUID, prompt: String, by actor: String, verified: Bool = false, now: Date = Date()) -> QueuedPrompt {
         lock.lock()
         defer { lock.unlock() }
         loadIfNeeded()
@@ -54,7 +54,7 @@ final class AgentPromptQueueStore: @unchecked Sendable {
         // Quelle ist einfacher zu prüfen und über Sessions hinweg vergleichbar.
         let entry = QueuedPrompt(
             sequence: (prompts.map(\.sequence).max() ?? 0) + 1,
-            sessionID: sessionID, prompt: prompt, enqueuedAt: now, enqueuedBy: actor)
+            sessionID: sessionID, prompt: prompt, enqueuedAt: now, enqueuedBy: actor, enqueuedVerified: verified)
         prompts.append(entry)
         persist()
         return entry

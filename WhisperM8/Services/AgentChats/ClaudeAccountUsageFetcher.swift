@@ -251,13 +251,22 @@ struct ClaudeAccountUsageFetcher {
     /// den Alt-Pfad unter literal `/tmp/`, den frühere App-Versionen schrieben.
     private func cachedUsage(forProfile name: String) -> ClaudeAccountUsage? {
         for path in [cachePath(forProfile: name), legacyCachePath(forProfile: name)] {
-            guard let data = FileManager.default.contents(atPath: path) else { continue }
-            let mtime = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date) ?? Date()
+            let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+            // `/tmp` teilen sich alle Benutzer: eine fremde Datei mit passendem
+            // Namen zeigte sonst fremde oder manipulierte Limits (LR-KO-012).
+            guard Self.isOwnedByCurrentUser(attributes),
+                  let data = FileManager.default.contents(atPath: path) else { continue }
+            let mtime = (attributes?[.modificationDate] as? Date) ?? Date()
             if let usage = Self.parseUsage(data, fetchedAt: mtime, isLive: false) {
                 return usage
             }
         }
         return nil
+    }
+
+    static func isOwnedByCurrentUser(_ attributes: [FileAttributeKey: Any]?, uid: uid_t = getuid()) -> Bool {
+        guard let owner = attributes?[.ownerAccountID] as? NSNumber else { return false }
+        return owner.uint32Value == uid
     }
 
     private func cachePath(forProfile name: String) -> String {

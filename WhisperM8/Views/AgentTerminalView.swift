@@ -765,9 +765,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
 
     private func pastePrompt(_ text: String, submit: Bool) {
         guard isRunning else { return }
-        terminal.send(txt: "\u{1B}[200~")
-        terminal.send(txt: text)
-        terminal.send(txt: "\u{1B}[201~")
+        // Bereinigt: ein eingebettetes ESC[201~ beendete sonst den Paste-Block (LR-CLI-001).
+        terminal.send(txt: TerminalPasteSanitizer.bracketedPastePayload(text))
         guard submit else {
             composerDraft.recordTextInserted()
             return

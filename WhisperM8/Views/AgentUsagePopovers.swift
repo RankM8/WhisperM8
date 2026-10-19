@@ -300,6 +300,28 @@ private struct ClaudeUsagePopoverView: View {
 /// `whisperm8 agent`, ChatGPT-App). Die Trennung ist Absicht: am 16.09.2026
 /// zeigte das Popover das frisch umgeloggte CLI-Konto mit freiem Kontingent,
 /// waehrend jede GPT-Session weiter gegen das gesperrte Proxy-Konto lief.
+/// Welche GPT-Backend-Konten das Popover zeigt und live abfragt (pur, testbar).
+/// Ausgeschaltetes Backend = keine Proxy-Konten und keine authentisierten
+/// Abrufe bei chatgpt.com, auch wenn auf Disk noch ein alter Login liegt
+/// (LR-GPT-007). Das Codex-CLI-Konto fragt das Popover unabhängig davon ab.
+enum CodexUsagePopoverTargets {
+    static func displayedProfiles(
+        backendEnabled: Bool,
+        profilesEnabled: Bool,
+        all: () -> [GPTAccountProfile],
+        main: () -> GPTAccountProfile
+    ) -> [GPTAccountProfile] {
+        guard backendEnabled else { return [] }
+        // Kill-Switch aus → nur das Hauptkonto, sonst listete das Popover
+        // Zusatzkonten, die kein Chat nutzen kann.
+        return profilesEnabled ? all() : [main()]
+    }
+
+    static func fetchTargets(_ profiles: [GPTAccountProfile]) -> [GPTAccountProfile] {
+        profiles.filter(\.isLoggedIn)
+    }
+}
+
 private struct CodexUsagePopoverView: View {
     private let profileService = GPTAccountProfiles()
 
@@ -465,16 +487,17 @@ private struct CodexUsagePopoverView: View {
     }
 
     private func load() {
-        // Kill-Switch aus → nur das Hauptkonto, sonst listete das Popover
-        // Zusatzkonten, die kein Chat nutzen kann.
-        profiles = profilesEnabled
-            ? profileService.profiles()
-            : [profileService.profile(named: GPTAccountProfiles.mainProfileName)]
+        profiles = CodexUsagePopoverTargets.displayedProfiles(
+            backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled,
+            profilesEnabled: profilesEnabled,
+            all: { profileService.profiles() },
+            main: { profileService.profile(named: GPTAccountProfiles.mainProfileName) }
+        )
         activeProfileName = profileService.activeProfileName()
         isLoading = true
         failedProfiles = []
         let service = profileService
-        let targets = profiles.filter(\.isLoggedIn)
+        let targets = CodexUsagePopoverTargets.fetchTargets(profiles)
         Task {
             // Parallel: ein Konto im Timeout (6 s) darf die anderen nicht aufhalten.
             let results = await withTaskGroup(of: (String, CodexUsage?).self) { group in
