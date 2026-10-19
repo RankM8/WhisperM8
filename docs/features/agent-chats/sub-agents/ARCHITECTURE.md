@@ -235,3 +235,9 @@ Codex-PTY-Pfad.
 ## Keywords
 
 config.toml, effektives Modell, Default-Effort
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+- **Subagent-Retention** (`SubagentJobRetention.swift`): Die Workspace-Spiegel der CLI-Subagent-Jobs (`whisperm8 agent`) verschwinden 7 Tage nach der letzten Aktivität — vorher wanderte kein einziger je wieder raus (Befund 2026-08-01: 2599 Karteileichen = 83 % der Workspace-Datei). Fällig ist nur, was auf Disk ohnehin weg ist: solange das Job-Verzeichnis lebt, bleibt der Eintrag, sonst legte ihn der nächste Merge sofort neu an. Vor dem Löschen wandert das Rollout-Transcript aus `~/.codex/sessions` nach `agent-jobs-archive/` — der Indexer erkennt Subagent-Threads nur an vorhandenen Job-Sessions, ohne diesen Schritt würde er sie als normale Codex-Chats wieder einsammeln. Job-Verzeichnisse selbst räumt weiterhin nur `agent rm` (git-Worktrees). Der erste Lauf nach dem Update ist eine einmalige, fristlose Altlasten-Bereinigung (`subagentJobRetentionInitialPurgeDone`). Kill-Switch: `defaults write com.whisperm8.app subagentJobRetentionEnabled -bool NO`, Frist: `subagentJobRetentionDays`.

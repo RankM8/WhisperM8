@@ -71,3 +71,10 @@ must match the Info.plist version or the build fails.
 
 > One-time setup: the `homebrew-tap` repo must exist (public), and a `TAP_GITHUB_TOKEN` secret
 > (PAT with `Contents: write` on the tap) must be set in this repo's Actions secrets.
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+**`make dev` baut seit 11.10.2026 Release ohne Whole-Module-Optimierung, mit `-incremental`, in einem eigenen Build-Ordner `.build-dev`**: typische Änderungen ~4–5 s statt ~98 s (WMO übersetzte immer das ganze Modul auf einem Kern); Änderungen an zentralen Modellen kaskadieren weiter (~45–80 s). SwiftPM schaltet `-incremental` im Release nicht selbst ein — ohne das Flag baute auch „ohne WMO" jedes Mal alles. **Kein Debug+O:** Debug definiert `DEBUG` für SwiftTerm, dort brechen vier Setter in `Buffer.swift` bei negativem Cursorwert per `abort()` ab. Ohne WMO fehlen dateiübergreifende Optimierungen — Messläufe gegen die Budgets mit `make dev-release`. Der eigene Ordner verhindert, dass `swift build`/`swift test` anderer Chats den `.build`-Lock halten. Nach dem Accessor-Patch werden die `resource_bundle_accessor.swift` wieder auf 444 gesetzt (sonst baute jeder Lauf doppelt). Aus einem WhisperM8-Chat/-Terminal (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`, `dev-release`, `install`, `run`, `clean-install` ab; `FORCE=1` lässt `dev` nach dem Build abgekoppelt (`nohup`, Log in `$TMPDIR/whisperm8-make-dev.log`) weiterlaufen.
+`make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).

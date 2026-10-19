@@ -144,3 +144,9 @@ Kill-Switch, `instanceOrigin`, Probe-Klassifikator),
 `RecordingCoordinatorTranscriptionTests`, `PreferencesTests`,
 `TranscriptionUtilityTests` (Body ohne `model`), `CLITranscriptionTests`
 (Ablehnung in der CLI).
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+- **ChatGPT-Abo-Transkription** (seit 2026-10-08, opt-in Provider `chatgpt`, Doku `docs/features/dictation/transcription/chatgpt-subscription.md`): `ChatGPTSubscriptionTranscriptionService` schickt das Audio **direkt an den Instanz-Port** des GPT-Proxys (`/v1/audio/transcriptions`, nicht über den Mix-Router, der nach JSON-`model` routet und Multipart an Anthropic schicken würde). Konto = aktives GPT-Profil; ist es nicht angemeldet, gibt es einen Fehler statt eines Rückfalls auf main. Verlangt ein aktives GPT-Backend. Selbst gestartete Proxys bekommen `CCP_CODEX_TRANSCRIPTIONS_API=1`; eine Waise ohne Route ersetzt der Orphan-Guard beim Start, zur Laufzeit wird nie neu gestartet (laufende GPT-Chats). Port bekannt → sofort senden; nur bei „Connection refused" einmal `ensureRunning` + ein Retry; Prewarm beim Aufnahmestart. Inoffizieller Upstream (`chatgpt.com/backend-api/transcribe`), Audio 30 Tage bei ChatGPT gespeichert, kein Prompt/Vokabular, kein Auto-Fallback auf Groq/OpenAI, nur App-Diktat (die CLI lehnt `--provider chatgpt` ab). Kill-Switch: `defaults write com.whisperm8.app chatGPTTranscriptionEnabled -bool NO`.

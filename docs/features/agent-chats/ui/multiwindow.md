@@ -98,3 +98,9 @@ Durch `AgentUIState.normalizedWindows` grundsätzlich erzwungen:
 - **`docs/commit-doc/wip-agent-multiwindow/COMMIT.md`** — Einführungs-Commit.
 - **`../../../CLAUDE.md`** (Repo-Root) → Abschnitt „Agent Chats subsystem" —
   Gesamtkontext des Subsystems.
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+- **Tabs, Multi-Select & Drag** (Chrome-artig): per-Fenster-UI im `AgentWindowStore` (`@Observable`, SSoT) — `openTabIDs`/`selectedSessionID` persistiert in `agent-ui-state.json` (**offene Tabs werden nie gekappt** — bis 05.10.2026 kappte jeder Load still auf 12 und warf bei jedem Neustart die zuletzt geöffneten Tabs weg; `maxOpenTabs` gilt nur noch für die Erst-Migration), dazu eine **ephemere, nicht persistierte** `multiSelection(in:)` pro Fenster (aktiver Tab = Anker; Menge leer = Einzel-Auswahl, sonst ≥2). `AgentChatsView` bridged via computed properties. Die Selektions-/Drag-*Logik* ist pur + unit-getestet: `TabSelectionResolver` (Click/Cmd/Shift + Pin-Normalisierung `shouldUnpinGroup`), `TabReorderGeometry` (Einfügelinie aus gemessenen Tab-Frames), `TabGroupReorder` (Gruppen-Block-Reorder). Reorder = SwiftUI `.draggable` + `TabReorderDropDelegate` (DropProposal `.move`, Einfügelinie, `.leftMouseUp`-Monitor setzt die Linie zurück); **Tear-off** = `.dropDestination` am Content („Loslassen für neues Fenster" → `detachDroppedToNewWindow`); Cross-Window-Drag liest die Quell-Auswahl live aus dem Store. Modifier-Klicks via `NSEvent.modifierFlags`. Bulk-Kontextmenü (Tabs + Sidebar, „N …"-Labels) in `AgentChatsView+BulkActions`. Die Drag/Drop/Menü-*Interaktionen* sind nicht unit-testbar (SwiftUI/NSEvent) → manuelle QA.

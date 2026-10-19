@@ -219,3 +219,9 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `Tests/WhisperM8Tests/ClaudeHookBridgeTests.swift` deckt Settings-Erzeugung, Event-Parsing, Dispatch-Entscheidungen und Statussignale der Hook-Bridge ab.
 - `Tests/WhisperM8Tests/ExternalClaudeHooksInspectorTests.swift` deckt read-only Hook-Settings-Inspektion und Command-Preview ab.
 - `Tests/WhisperM8Tests/ClaudeActiveSessionResolverTests.swift` deckt Rebind-, Unchanged- und Ambiguous-Entscheidungen für externe Claude-Session-IDs ab.
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+- **Background agents**: spawned via `claude --bg` (`BackgroundAgentSpawner`, parses the short ID from stdout), hosted by the Claude supervisor daemon, attached in a PTY via `claude attach <short-id>`. `SupervisorJobReader` reads `~/.claude/jobs/<short-id>/state.json`; `BackgroundAgentLifecycle` wraps logs/stop/respawn/rm. **Resume→Attach-Fallback**: Läuft das Resume-Ziel einer normalen Claude-Session gerade als Background-Agent beim Supervisor (z. B. versehentlich per Left-Arrow/`/background` gebackgroundet), baut der `AgentCommandBuilder` statt `--resume` ein `claude attach <short-id>` — sonst bräche der Launch mit „currently running as a background agent" ab. Quelle ist `<config-dir>/daemon/roster.json` (`SupervisorRosterReader`, profilbewusst, Worker-PID-geprüft) — solche Sessions haben KEIN `jobs/`-Verzeichnis, der `SupervisorJobReader` sieht sie nicht. Forks bleiben Forks (`--resume --fork-session` ist für bg-Sessions erlaubt).

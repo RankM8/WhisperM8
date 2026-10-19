@@ -39,14 +39,16 @@ swift test --filter <TestKlasse>              # gezielt
 
 ## Architektur-Leitplanken (Auswahl)
 
-- `Services/` ist dreigeteilt: `Dictation/`, `AgentChats/`, `Shared/` —
+- `Services/` ist geteilt in `Dictation/`, `AgentChats/`, `Shared/`, `VoiceGate/` —
   neue Dateien in den passenden Ordner (SwiftPM entdeckt rekursiv).
 - Subprozesse NIE mit dem rohen ProcessInfo-Environment spawnen — immer
   `LoginShellEnvironment.shared.processEnvironment()` +
   `AgentCommandBuilder.commandPath(_:)` (GUI-PATH ist minimal).
 - `AgentWorkspaceStore`-Mutation-Closures dürfen keine Subprozesse und kein
   blockierendes I/O ausführen (NSLock-serialisiert) — alles vorberechnen.
-- Alles unter `~/.claude/` und `~/.codex/` ist extern und read-only.
+- Alles unter `~/.claude*` und `~/.codex/` ist extern und wird nur gelesen —
+  bis auf die absichtlichen Integrations-Writes, die CLAUDE.md unter
+  „Invarianten“ abschließend aufzählt.
 - Neue Bundle-Ressourcen brauchen Package.swift UND Makefile (`_bundle`) —
   besser: kleine Ressourcen als Swift-String-Konstanten einbetten.
 - Große Views/Services nicht aufblähen: thematische `extension`-Dateien

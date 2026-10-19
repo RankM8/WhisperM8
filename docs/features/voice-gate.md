@@ -397,3 +397,25 @@ stoppt es nicht. Sofort wirkt allein der Schalter im Einstellungs-Tab
 - `WhisperM8/Views/Settings/Pages/AgentChatsVoiceAgentTab.swift` — Einstellungs-Tab
 - `Tests/WhisperM8Tests/CodexVoiceGateTests.swift` — 50 Tests der reinen Logik
 - `Tests/WhisperM8Tests/VoiceGateDeviceSwitchTests.swift` — 15 Tests zum Gerätewechsel
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+Ein gesprochenes Codewort („Anna Pause" / „Anna weiter", Trägerwort und beide
+Kommandos frei konfigurierbar) schaltet das Mikrofon einer laufenden **Codex-Desktop**-
+Sprachsitzung stumm und wieder frei. WhisperM8 mutet **nicht selbst**: es aktiviert kurz
+Codex und sendet dessen eigenes Kürzel `Ctrl+Shift+U` — das der Nutzer in Codex' Einstellungen
+einmalig auf `realtimeVoice.toggleMicrophoneMute` legen muss, sonst tut das Feature nichts.
+Der Fokus-Roundtrip ist unvermeidbar (`shortcutScope: app`); ein Tastendruck ohne Aktivierung
+bleibt nachweislich wirkungslos.
+
+Erkennung strikt on-device (`SFSpeechRecognizer`, `requiresOnDeviceRecognition`) über einen
+eigenen `AVAudioEngine`-Tap, der explizit ans Gerät gebunden wird — bei Bluetooth bewusst an den System-Standard (siehe oben).
+Fehlt das Sprachmodell, startet die Funktion gar nicht statt still auf Apples Server
+auszuweichen; `VoiceGateLocaleResolver` weicht vorher auf verfügbare Regionalvarianten aus
+(`de_DE` → `de_CH` → `de_AT`). Reine, unit-getestete Logik in `VoiceGateCommandMatcher`
+(Phrasenerkennung inkl. verschmolzener Form „annapause") und `VoiceGateStateMachine`
+(Annahme gegen Codex' blinden Toggle). Opt-in, Default aus, eigener Einstellungs-Tab
+„Codex Voice Agent"; Kill-Switch: `defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO`.
+Details, Messwerte und Fallstricke: `docs/features/voice-gate.md`.

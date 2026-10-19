@@ -113,3 +113,9 @@ Menüleiste.
   App bremst über Entprellung und Höchstlänge.
 - Codex-Chats haben keine Mod: Sie sprechen nur, wenn ihr Prompt oder ein
   Skill sie `whisperm8 speak` aufrufen lässt.
+
+## Betriebswissen aus CLAUDE.md
+
+*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+
+- **Voice-Callouts** (seit 10.10.2026, Doku `docs/features/speech-callouts.md`): Ein Chat lässt am Turn-Ende eine kurze Ansage vorlesen — Jarvis immer, andere nach `/whisperm8:callout`, Codex/Skripte per `whisperm8 speak "<text>"`. Die Mod (Abschnitt in `register.tsx`, **nicht** eigene Datei: die Engine folgt `$`/`on` nie über einen Import und erlaubt nur einen `session.start` ohne Matcher je Plugin) bietet das Tool `mcp__whisperm8__speak` und `/callout an|aus`; die App spricht (`SpeechCalloutCenter`, Socket-Methode `speech.speak`): eine Warteschlange für alle Sessions, nie während einer Diktat-Aufnahme (Aufnahme-Start bricht ab, danach von vorn), 20 s Entprellung je Chat, Stumm-Schalter in der Menüleiste, Name des Chats nur mit gültigem Token vorangestellt, nie Ansagetexte im Log. Stimme: `AVSpeechSynthesizer`, beste installierte deutsche (keine Eloquence-Stimmen). ChatGPT-Abo-Stimme (S8) zurückgestellt. Kill-Switch: `defaults write com.whisperm8.app speechCalloutsEnabled -bool NO`.

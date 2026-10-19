@@ -95,4 +95,24 @@ final class DocsLintTests: XCTestCase {
             }
         }
     }
+
+    /// LR-DOK-008: CLAUDE.md enthält Regeln, kein Vorfall-Logbuch. Jede Session
+    /// lädt die Datei — Länge kostet in jedem Chat Kontext.
+    func testClaudeMdStaysRulesOnly() throws {
+        let rules = try read("CLAUDE.md")
+        XCTAssertLessThanOrEqual(rules.count, 15_000, "CLAUDE.md hat \(rules.count) Zeichen — Mechanik in die Feature-Doku")
+        let datePatterns = [
+            #"Vorfall \d{4}-\d{2}-\d{2}"#, #"\(\d{2}\.\d{2}\.\d{4}\)"#, #"seit \d{2}\.\d{2}\.\d{4}"#,
+        ]
+        for pattern in datePatterns {
+            XCTAssertNil(rules.range(of: pattern, options: .regularExpression),
+                         "CLAUDE.md enthält Vorfall-/Datumsangaben („\(pattern)“) — gehören in die Feature-Doku")
+        }
+        // „read-only“ für ~/.claude/~/.codex nur zusammen mit der Ausnahmeliste.
+        for file in ["CLAUDE.md", "AGENTS.md"] {
+            let text = try read(file)
+            XCTAssertFalse(text.contains("read-only."), "\(file): pauschales „read-only“ ohne Ausnahmeliste")
+        }
+        XCTAssertTrue(rules.contains("Ausnahmen, alle"), "CLAUDE.md: Ausnahmeliste der Integrations-Writes fehlt")
+    }
 }

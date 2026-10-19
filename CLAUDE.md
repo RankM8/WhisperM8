@@ -1,6 +1,8 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Sie enthält nur Arbeitsregeln und Invarianten. Mechanik, Messwerte und Vorgeschichte stehen in der
+Feature-Doku (Verweise unten) — dort nachlesen, bevor ein Subsystem geändert wird.
 
 ## Project Overview
 
@@ -9,193 +11,154 @@ WhisperM8 is a native macOS app (Swift 5.9, SwiftUI, macOS 14+, pure SwiftPM —
 1. **Dictation** — hotkey-driven speech-to-text via OpenAI Whisper or Groq, with optional Codex-CLI post-processing and configurable output modes (rewrite, email, Slack, …).
 2. **Agent Chats** — a session manager for Claude Code and Codex CLI: foreground PTY terminals, background agents (`claude --bg`), project organization, live status tracking, and transcript browsing.
 
+Endnutzer installieren und aktualisieren nur per `brew install --cask rankm8/tap/whisperm8`.
 Code comments are largely written in German — match that style when editing existing files.
 
-## Build Commands
+## Build und Test
 
 ```bash
-make dev          # Recommended: incremental release build (no WMO, ~5 s per typical change) in its own .build-dev, in-place sync to /Applications (preserves TCC permissions), launch
-make dev-release  # Full release build (WMO, ~98 s) in the shared .build — as shipped, for performance measurements
-make run          # Quick debug build, runs from project dir (separate TCC entry)
-make build        # Release build only (creates local .app)
-make clean-install # Full reset (removes all app data + reinstall) — use to test onboarding/migrations
-make kill         # Kill running instances
-make dmg          # Create distributable DMG
-make skills       # Sync agent skills (Resources → Claude-Code-Plugin whisperm8; loose ~/.claude/skills only with plugin off) without build/restart
-
+make dev          # inkrementeller Release-Build (.build-dev), Sync nach /Applications, Start
+make dev-release  # voller Release-Build (WMO) wie ausgeliefert — für Performance-Messungen
+make run          # Debug-Build aus dem Projektordner (eigener TCC-Eintrag)
+make build        # nur Release-Build
+make snapshots [ONLY=<name>]   # UI-Fixtures hell+dunkel als PNG, ohne App-Start
+make skills       # Agent-Skills ins Plugin synchronisieren, ohne Build/Neustart
+make clean-install             # löscht ALLE App-Daten + Neuinstallation (nur Onboarding/Migration testen)
 ```
-
-**`make dev` baut seit 11.10.2026 Release ohne Whole-Module-Optimierung, mit `-incremental`, in einem eigenen Build-Ordner `.build-dev`**: typische Änderungen ~4–5 s statt ~98 s (WMO übersetzte immer das ganze Modul auf einem Kern); Änderungen an zentralen Modellen kaskadieren weiter (~45–80 s). SwiftPM schaltet `-incremental` im Release nicht selbst ein — ohne das Flag baute auch „ohne WMO" jedes Mal alles. **Kein Debug+O:** Debug definiert `DEBUG` für SwiftTerm, dort brechen vier Setter in `Buffer.swift` bei negativem Cursorwert per `abort()` ab. Ohne WMO fehlen dateiübergreifende Optimierungen — Messläufe gegen die Budgets mit `make dev-release`. Der eigene Ordner verhindert, dass `swift build`/`swift test` anderer Chats den `.build`-Lock halten. Nach dem Accessor-Patch werden die `resource_bundle_accessor.swift` wieder auf 444 gesetzt (sonst baute jeder Lauf doppelt). Aus einem WhisperM8-Chat/-Terminal (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`, `dev-release`, `install`, `run`, `clean-install` ab; `FORCE=1` lässt `dev` nach dem Build abgekoppelt (`nohup`, Log in `$TMPDIR/whisperm8-make-dev.log`) weiterlaufen.
-
-`make dev` uses `rsync` into the existing bundle on purpose: deleting and recopying the bundle would make macOS TCC revoke mic/accessibility/screen permissions. Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identity (otherwise ad-hoc signing re-prompts TCC on every rebuild).
-
-**WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall: die Session wurde aus der App heraus gestartet): führe NIEMALS `make dev`, `make kill`, `make run` oder `make clean-install` aus. Diese Targets killen die laufende App — und damit deine eigene Session samt aller anderen offenen Chats des Users. Baue und teste nur mit `swift build` / `swift test`; den Neustart der App (`make dev`) macht der User selbst im Terminal.
-
-### Tests
 
 ```bash
-export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-swift test                                    # full suite
-swift test --filter AgentSessionStoreTests    # one test class
-swift test --filter testLoginShellEnvironment # by test-name substring
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer   # Pflicht für swift build/test (SwiftUI-Makros)
+swift test                                    # volle Suite
+swift test --filter AgentSessionStoreTests    # eine Klasse
 ```
 
-`DEVELOPER_DIR` must point at the Xcode toolchain (SwiftUI macros); the Makefile sets it automatically, plain `swift build`/`swift test` does not.
+Details zu `make dev` (kein WMO, `-incremental`, kein Debug+O wegen SwiftTerm-`abort()`, rsync statt Neukopie
+wegen TCC, Signier-Zertifikat): [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-**UI ansehen ohne App-Start** (Doku `docs/features/ui-testing.md`): `make snapshots [ONLY=<name>]` rendert die Fixtures aus `Tests/WhisperM8Tests/UISnapshotGallery.swift` hell + dunkel als PNG nach `.build/ui-snapshots/<zeit>/` — sicher aus einem Agent-Chat, die PNGs lassen sich direkt lesen. Nach UI-Änderungen an einer Ansicht mit Fixture: rendern und ansehen. Ansichten mit Keychain-/Proxy-/Datei-Zugriffen bekommen für Snapshots eine Abhängigkeits-Struktur mit `.live`-Default (Muster `TranscriptionSettingsDependencies`). **An der laufenden App** (Stufe 2): `whisperm8 debug state|open settings/<seite>|snapshot [--window …]|dictate <audio> [--provider chatgpt]` über den Control-Socket — hinter `defaults write com.whisperm8.app debugControlEnabled -bool YES` (Default aus); `open` holt die App nach vorn, `dictate` fügt nichts ein und lässt die Zwischenablage in Ruhe.
+**WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall): führe NIEMALS `make dev`,
+`make kill`, `make run`, `make install` oder `make clean-install` aus und nie `swift run` ohne Argument. Diese
+Ziele beenden die laufende App — und damit deine eigene Session samt aller anderen Chats. Baue und teste nur mit
+`swift build` / `swift test`; den Neustart macht der User. Aus einem Chat (`WHISPERM8_SESSION_ID` gesetzt)
+brechen `dev`, `dev-release`, `install`, `run` und `clean-install` ab; `FORCE=1` lässt `dev` nach dem Build abgekoppelt weiterlaufen.
 
-Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Agent-Chats coverage is split across thematic files in `Tests/WhisperM8Tests/` (e.g. `AgentSessionStoreTests.swift`, `AgentCommandBuilderTests.swift`); shared helpers live in `AgentTestSupport.swift`.
+- **Tests:** DI über einfache Closures und kleine Protokolle (`commandResolver: { _ in "/path" }`,
+  `ProcessRunner`-Spies) — kein DI-Framework. Gemeinsame Helfer in `AgentTestSupport.swift`.
+- **UI ansehen:** `make snapshots` (sicher aus einem Chat); an der laufenden App `whisperm8 debug …` hinter
+  `debugControlEnabled`; isolierte Test-Instanz `scripts/test-instance.sh`. Ansichten mit Keychain-/Proxy-/
+  Datei-Zugriff bekommen für Snapshots eine Abhängigkeits-Struktur mit `.live`-Default. Nach UI-Änderungen an
+  einer Ansicht mit Fixture: rendern und ansehen. Doku:
+  [docs/features/ui-testing.md](docs/features/ui-testing.md).
+- **Guards, die die Suite erzwingt:** `SourceSizeGuardTests` (max. 1.500 Zeilen je Datei, Ausnahmeliste nur
+  schrumpfend — aufteilen statt Grenze anheben), `LocalizationCatalogTests`, `DocsLintTests`,
+  `InfoPlistContractTests`, `AgentStatusPulseGuardTests`.
 
 ## Lokalisierung (E1)
 
-Englisch ist Basis, Deutsch wird vollständig übersetzt: neue UI-Texte englisch schreiben und mit deutscher Übersetzung in `WhisperM8/Localization/Localizable.xcstrings` eintragen; `String`-Parameter eigener Komponenten (`SettingsRow(title:)`, Alerts, Benachrichtigungen) brauchen `String(localized:)`. Regeln und Guard: `docs/features/lokalisierung.md`, `LocalizationCatalogTests`. Ansehen in beiden Sprachen über die Test-Instanz (`WHISPERM8_TEST_LANG=en|de scripts/test-instance.sh restart`).
+Englisch ist Basis, Deutsch wird vollständig übersetzt: neue UI-Texte englisch schreiben und die deutsche
+Übersetzung in `WhisperM8/Localization/Localizable.xcstrings` eintragen. `Text("…")` mit Literal wird automatisch
+Schlüssel; für String-Parameter (`.help`, NSAlert, Rückgabewerte) `String(localized:)`. Keine Ternär-Literale in
+`Text(cond ? "a" : "b")`. Fachnamen und CLI-Befehle bleiben unübersetzt. Regeln: [docs/features/lokalisierung.md](docs/features/lokalisierung.md).
 
-## Debugging
+## Debugging und Performance
 
 ```bash
 log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 ```
 
-### Performance-Signposts
+- Hot-Paths haben `os_signpost`-Intervalle mit Budgets (`PerfBudgets`); Überschreitungen loggen
+  `perf_budget_exceeded`, ein hängender Main Thread `main_thread_blocked_ongoing`.
+- **Nie pro Byte/Zeichen/Zeile messen** — dort `PerformanceCounters`. Neue Signposts an häufigen Stellen nur
+  in der Stufe `.detail`.
+- Alles, was App oder Build langsam macht, mit Kosten melden. Messläufe gegen Budgets mit `make dev-release`.
+- Doku: [docs/features/performance-messung.md](docs/features/performance-messung.md).
 
-Drei Hot-Paths sind mit `os_signpost`-Intervallen + Budgets instrumentiert
-(`Services/Shared/PerformanceSignposts.swift`): Kategorien `perf.recording`
-(Hotkey→Aufnahme 400 ms, Stop→Transkription 300 ms, Kontext-Teilschritte),
-`perf.store` (Mutation 30 ms, Load 15 ms, Save 20 ms) und `perf.sidebar`
-(Workspace-Load 50 ms, Status-Poll 100 ms, plus `sidebar.statusChanged`-Events
-= Re-Render-Trigger). Budget-Überschreitungen erscheinen als
-`perf_budget_exceeded`-Warnungen im `log stream`-Befehl oben; in Instruments
-über das os_signpost-Template auswertbar. Budgets sind Startwerte — bei
-Anpassungen `PerfBudgets` ändern.
+## Architektur
 
-**Zwei Messstufen** (`PerfTier`, seit 01.08.2026): `.always` läuft immer und
-sitzt nur an seltenen Ereignissen; `.detail` nur bei
-`defaults write com.whisperm8.app agentPerfDetailEnabled -bool YES`. Grund ist
-gemessen: ein os_signpost-Intervall kostet ~686 ns — auch ohne Instruments, denn
-`OSSignposter.isEnabled` ist immer `true`. **Regel: nie pro Byte/Zeichen/Zeile
-messen** — dort gehören Zähler hin (`PerformanceCounters`, ~1 ns, Ausgabe im
-Sekundentakt). `MainThreadStallMonitor` misst zusätzlich, wie lange der Main
-Thread am Stück nicht reagiert hat — unabhängig vom Verursacher, deshalb findet
-er auch uninstrumentierte Stellen. Sein Timer läuft aber SELBST auf dem Main
-Thread und kann eine Blockade darum erst melden, wenn sie vorbei ist; bei einer
-endlosen schwieg er ganz (Vorfall 01.08.2026: App stand, im Log keine Zeile).
-Deshalb stempelt er zusätzlich einen Herzschlag, den `StallWatchdog` auf einer
-eigenen Queue beobachtet — der meldet `main_thread_blocked_ongoing`, WÄHREND
-die App steht, gestaffelt bei Verdopplung der Dauer (1 s, 2 s, 4 s …), damit
-das Log nicht überläuft. Messläufe: `scripts/perf-load.sh` (Last mit
-definierter Rate, im Chat-Terminal starten) und `scripts/perf-report.sh`
-(Log → Tabelle). Befunde: `docs/plans/workspace-performance/`.
+`Services/` ist geteilt in `Dictation/`, `AgentChats/`, `Shared/`, `VoiceGate/` (SwiftPM findet rekursiv).
+Große Views/Services wachsen über thematische `extension`-Dateien (`AgentChatsView+…`,
+`RecordingCoordinator+…`); verschobene Logik ist `internal`. Roadmap: `docs/refactor/REFACTORING-AUDIT.md`.
 
-## Architecture
+**App-Hülle:** Dock-App plus `MenuBarExtra`; Szenen in `WhisperM8App.swift`; das letzte Fenster zu schließen
+beendet die App nicht; `WindowRequestCenter` routet Fenster-Anfragen. Absturzschutz, SIGPIPE, ObjC-Exceptions,
+Cmd+Q-Dialog und Wiederaufnahme nach Absturz: [docs/features/app-shell/ARCHITECTURE.md](docs/features/app-shell/ARCHITECTURE.md).
 
-### Code organization
+**Diktat:** Hotkey → `AppState`/`RecordingCoordinator` → `AudioRecorder` (M4A 16 kHz mono) → Kontext
+(`SelectedContextService`, Screenshots, Chat-Tail) → `TranscriptionService` (OpenAI/Groq/ChatGPT-Abo) →
+optional `PostProcessingService` (Codex mit `OutputMode`) → Zwischenablage/Auto-Paste oder Agent Chat.
+Doku: [docs/features/dictation/](docs/features/dictation/).
 
-`Services/` is split into four subfolders (Phase-1 refactor, 2026-06-27;
-`VoiceGate/` added 2026-07-27):
-`Services/Dictation/` (audio, transcription, post-processing, recording, visual context),
-`Services/AgentChats/` (session store/indexer, runtime watcher, background agents, hooks,
-transcript readers, `AgentProjectPath`), `Services/Shared/` (Logger,
-LoginShellEnvironment, PerformanceSignposts, PermissionService, KeychainManager,
-FileEventSource, WindowRequestCenter, CLISymlinkInstaller), and `Services/VoiceGate/`
-(Codewort-Steuerung der Codex-Sprachsitzung — siehe unten). SwiftPM discovers sources
-recursively, so moving files between these folders is build-neutral. The same pass split
-several god-files into per-type files (SettingsView → `Views/Settings/`, PostProcessingService,
-TranscriptionService, AgentSessionIndexer) and pulled AgentChatsView's NSEvent monitors into
-`Views/AgentChatsView+Shortcuts.swift`. A follow-up pass (Phase 2) decomposed `AgentChatsView`
-further into thematic `extension` files (`+BackgroundAgents`, `+RuntimeServices`,
-`+SessionLifecycle`, `+ProjectManagement`, `+Tabs`, `+DragDrop`), shrinking the main view from
-~3684 to ~2426 LOC. The same `extension`-per-concern technique split `RecordingCoordinator`
-(1385 → 450 LOC) into `+Transcription`/`+Clipboard`/`+Failure`/`+UI`/`+Context`. (Moved logic
-methods/types are `internal` so sibling-file extensions can reach them.) Full roadmap + status:
-`docs/refactor/REFACTORING-AUDIT.md`.
+**Agent Chats:** Discovery (`AgentScanCoordinator` → `AgentSessionIndexer`) → Persistenz
+(`AgentWorkspaceStore` hinter `AgentSessionStore`, UI über `AgentWorkspaceUIModel`) → Laufzeitstatus
+(Claudes Registry, Hook-Bridge, `AgentSessionRuntimeWatcher`) → UI (SwiftTerm-PTYs, Tabs, Grid, Verlauf).
+Doku-Einstieg: [docs/features/agent-chats/](docs/features/agent-chats/README.md); Konten:
+[claude-konten.md](docs/features/agent-chats/claude-konten.md), [gpt-konten.md](docs/features/agent-chats/gpt-konten.md);
+CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board.md](docs/features/jarvis-board.md);
+Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
 
-### App shell
+## Invarianten (nicht brechen)
 
-Regular Dock app (`LSUIElement=false`) plus a `MenuBarExtra` for recording toggle and quick actions. Scenes in `WhisperM8App.swift`: Agent Chats main window, Settings, Onboarding. Closing the last window does not quit (menu bar extra stays alive). `WindowRequestCenter` routes window-open requests between scenes (e.g. menu bar → Agent Chats).
+**Prozesse und Umgebung**
+- GUI-Apps haben einen minimalen `PATH`. Subprozesse nie mit dem rohen `ProcessInfo`-Environment starten,
+  immer `LoginShellEnvironment.shared.processEnvironment()` + `AgentCommandBuilder.commandPath(_:)`.
+- `LoginShellEnvironment` strippt geerbte `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CUSTOM_HEADERS`, `CCP_CONFIG_DIR`.
+- Neue Dateideskriptoren (Locks, Sockets, Watcher) close-on-exec — SwiftTerm `forkpty`+`execve` schließt nichts.
+- An Pipes nur `write(contentsOf:)` (throwing), nie `FileHandle.write(_:)` (NSException bei EPIPE). SIGPIPE
+  wird per leerem `sigaction`-Handler abgefangen, nie per `SIG_IGN` (würde an jede Chat-Shell vererbt).
+- Kein `installTap` ohne `ObjCException.catching`; das Format unmittelbar vor dem Tap neu lesen.
+  Absturzrelevante Ereignisse auf `Logger.info` oder höher (`.info` ist per `OSLogPreferences` persistent).
 
-### Dictation pipeline
+**Workspace und Daten**
+- Mutations-Closures des `AgentWorkspaceStore` laufen unter dem prozessweiten Lock: keine Subprozesse, kein
+  blockierendes I/O (Git-Lookups vorher). UI nie über `loadWorkspace()` „auffrischen“.
+- Die App ist einziger Schreiber von Workspace und Board; die CLI liest von Disk und handelt über den Socket.
+- Fremde Daten unter `~/.claude*` und `~/.codex/` sind extern und werden nur gelesen — **Ausnahmen, alle
+  absichtlich und dokumentiert:** WhisperM8s eigene Hook-Settings-Dateien (`claude-hooks/<id>.json`);
+  `claude mcp add-json` beim MCP-Angleich (schreibt die CLI selbst); „Zum Hauptkonto machen“ (Keychain,
+  `oauthAccount` in `~/.claude.json`, Mischen von `projects/` und `file-history/`); die einmalige
+  Memory-Migration (kopiert nach main, mit Backup); das Wegsichern loser Skill-Kopien nach
+  `~/.claude/skills/.whisperm8-backup/`; Subagent-Retention verschiebt Rollouts aus `~/.codex/sessions` ins Archiv.
+- Logins werden zwischen Konten **verschoben, nie kopiert** (gleiche Refresh-Familie entwertet sich sonst).
+- Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
+  `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, Reports, FailedRecordings).
+- Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.
 
-```
-Hotkey (KeyboardShortcuts) → AppState/RecordingCoordinator → AudioRecorder (AVAudioEngine, M4A 16kHz mono)
-  → context capture (SelectedContextService, screenshots, active agent-chat tail → TranscriptContextBundle)
-  → TranscriptionService (OpenAI/Groq)
-  → optional PostProcessingService (spawns codex CLI with OutputMode + template)
-  → clipboard / auto-paste (PasteService, CGEvent) or routed into an Agent Chat
-```
+**Agent Chats**
+- Status für Claude-Chats kommt aus Claudes Registry (`<config-dir>/sessions/<pid>.json`); Hooks binden nur die
+  Session-ID und tragen den Send-Guard. Ein `SessionStart` übernimmt die externe ID nicht ungeprüft
+  (`externalIDBindingDecision`).
+- WhisperM8 hostet die echte Claude-/Codex-CLI im PTY — keine Eigen-UI oder SDK-Runtime als Ersatz.
+- Welches Modell ein Claude-Chat nutzt, entscheidet Claude Code; `--model` nur beim ausdrücklichen „Neuer GPT-Chat“.
+- GPT-Chats nennen ihr Konto immer per `X-WhisperM8-GPT-Profile`, auch `main`. Angeboten werden nur Modelle,
+  die Codex-Katalog und laufender Proxy beide kennen.
+- Das Plugin wird nie in den laufenden Ordner kopiert, nur per Symlink-Tausch (`rename(2)`) umgestellt — sonst
+  laden alle Sessions mitten im Turn neu. In `register.tsx` keine Abschnitte in eigene Dateien auslagern.
+- Board-Felder nur ergänzen, nie umbenennen (`work` und `next` werden gleich geschrieben).
+- Tab-Logik (Auswahl, Reorder, Switcher-Umfang) bleibt pur und getestet; Drag/Drop/Menüs sind manuelle QA.
+- Status-Punkte in Sidebar, Tab und Kopf folgen derselben Logik (`AgentStatusIndicator`); Grün heißt nur „arbeitet“.
 
-- `Models/AppState.swift` — central `@Observable` state; recording lifecycle, clipboard, active-agent-chat ref
-- `Windows/RecordingPanel.swift` — non-activating NSPanel overlay
-- `Services/Dictation/PromptPackageBuilder.swift` — assembles transcript + context into the final prompt
-- `Models/OutputMode.swift` / `Services/Dictation/OutputModeStore.swift` — user-defined output targets; modes can override Codex model/runtime settings
-- `Services/Shared/KeychainManager.swift` — API keys
-- **ChatGPT-Abo-Transkription** (seit 2026-10-08, opt-in Provider `chatgpt`, Doku `docs/features/dictation/transcription/chatgpt-subscription.md`): `ChatGPTSubscriptionTranscriptionService` schickt das Audio **direkt an den Instanz-Port** des GPT-Proxys (`/v1/audio/transcriptions`, nicht über den Mix-Router, der nach JSON-`model` routet und Multipart an Anthropic schicken würde). Konto = aktives GPT-Profil; ist es nicht angemeldet, gibt es einen Fehler statt eines Rückfalls auf main. Verlangt ein aktives GPT-Backend. Selbst gestartete Proxys bekommen `CCP_CODEX_TRANSCRIPTIONS_API=1`; eine Waise ohne Route ersetzt der Orphan-Guard beim Start, zur Laufzeit wird nie neu gestartet (laufende GPT-Chats). Port bekannt → sofort senden; nur bei „Connection refused" einmal `ensureRunning` + ein Retry; Prewarm beim Aufnahmestart. Inoffizieller Upstream (`chatgpt.com/backend-api/transcribe`), Audio 30 Tage bei ChatGPT gespeichert, kein Prompt/Vokabular, kein Auto-Fallback auf Groq/OpenAI, nur App-Diktat (die CLI lehnt `--provider chatgpt` ab). Kill-Switch: `defaults write com.whisperm8.app chatGPTTranscriptionEnabled -bool NO`.
+**UI-Performance**
+- Kein I/O, kein Session-Scan und kein `.contextMenu` in Bodies, die bei Statusänderungen neu ausgewertet werden;
+  die Sidebar beobachtet den `AgentSessionActivityStore` nie.
+- Keine Dauerbewegung in SwiftUI (`repeatForever`): sie hält die Layout-Schleife des Fensters beschäftigt. Der
+  Status-Puls läuft nur über `SoftPulseRing` (Core Animation, gedrosselt, pausiert bei verdecktem Fenster).
+- Verlauf nur über `TranscriptTextRenderer` + `TranscriptTextView` (ein `NSTextView`), keine SwiftUI-Hierarchie
+  pro Nachricht und kein `.defaultScrollAnchor(.bottom)` über langen Listen.
+- Kein Hover-only-UI: Zustände und Aktionen sind ohne Hover sichtbar und erreichbar.
 
-### Agent Chats subsystem
+## Kill-Switches (`defaults write com.whisperm8.app <Schlüssel> -bool NO`)
 
-The other half of the codebase. Flow: **discovery → persistence → runtime tracking → UI**.
-
-- **Persistence**: in-memory `AgentWorkspaceStore` core (one instance per file URL via `AgentWorkspaceStoreRegistry`; NSLock-serialized mutations, Equatable-diff-gated persistence, debounced 0.5s + atomic for the production URL with willTerminate flush) behind the `AgentSessionStore` facade, backed by `AgentWorkspaceRepository` for disk I/O. Mutation closures must never run subprocesses (they execute under the process-wide store lock — hoist git lookups etc. before the mutate call). SwiftUI observes via the `AgentWorkspaceUIModel` projection; never call `loadWorkspace()` to "refresh" the UI. UI state (open tabs, selection) is a separate sidecar so UI churn never invalidates session data.
-- **Discovery/Indexing**: `AgentScanCoordinator` (singleton, scan on launch/foreground, 30s cooldown) drives `AgentSessionIndexer`, which parses external session JSONL from `~/.claude/projects/<encoded-cwd>/*.jsonl` and `~/.codex/sessions/YYYY/MM/DD/*.jsonl` (mtime+size cache).
-- **Runtime status**: `AgentSessionRuntimeWatcher` is event-driven with a poll fallback — a vnode `FileEventSource` per active transcript file (write → debounced poll; delete/rename → re-arm), plus a 1.5s timer for URL resolution, stat-first time-based escalation (1 stat() syscall instead of a 64KB read), and missed-event fallback. Derives working/awaitingInput/idle into the ephemeral `AgentSessionRuntimeStatusStore` (per-item `statusPublisher(for:)` for the sidebar rows) and triggers auto-naming (`AgentSessionAutoNamer`: seit 23.09.2026 kein Modellaufruf mehr — übernimmt bei jedem Turn-Ende den nativen Titel aus dem Transcript via `NativeSessionTitle`: Claudes `custom-title` (`/rename`) > `ai-title` > erster echter Prompt; Codex: erster Prompt. Ein WhisperM8-Name (`titleIsAutoGenerated == false`) gewinnt, bis er per Kontextmenü „Benennung aufheben" oder `whisperm8 chats rename <ref> --reset` aufgehoben wird). **working-Stau-Heilung** (QA-Befund 2026-08-17): Ein ESC-Interrupt feuert keinen Stop-Hook, und vor dem ersten Output fehlt auch der Transcript-Marker — hook-live-Sessions blieben dann für immer „working". Zwei Stufen im `AgentSessionStatusCoordinator`: (1) Abort-Verdacht bei `chats interrupt` bzw. beobachtetem ESC im Terminal (`observeTerminalInterruptKey`, konsumiert nie) → nach 5 s bestätigt, wenn weder ein Hook-Event kam noch die Transcript-mtime wuchs (Streaming schreibt sekündlich, Tools stempeln Events — ein ESC mit anderer TUI-Bedeutung bleibt folgenlos); (2) stilles Netz: Decider-idle + Zustand working + >180 s ohne Hook-Event → `turnAborted` (`shouldHealSilentHookWorking`; `awaitingInput` bewusst nie — Permission-Dialoge sind legitim still). `AgentDirectoryEventMonitor` (FSEvents on `~/.claude/projects` + `~/.codex/sessions`) triggers scans for externally started sessions. Kill switch: `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`.
-- **Foreground chats**: SwiftTerm `LocalProcessTerminalView` PTYs, managed by `AgentTerminalRegistry` (in `Views/AgentTerminalView.swift`). `AgentCommandBuilder` builds argv (claude/codex, resume vs. new session, keyboard profile per TUI type). **Link-Klicks** (Cmd-Klick; Cmd+Alt = im Finder zeigen): SwiftTerm reicht `requestOpenLink` NICHT an den `processDelegate` weiter, und der Extension-Default (`URL(string:)+NSWorkspace.open`) scheitert bei schemelosen Dateipfaden mit `-50`. Deshalb ersetzt `AgentTerminalLinkInterceptor` den `terminalDelegate` (proxied alle Callbacks 1:1 an die Basis — so bleibt z. B. der Scroll-Lock erhalten — und fängt nur Links ab). **Der Proxy bleibt auch nach SwiftTerm 1.15 nötig**, obwohl PR #599 `requestOpenLink` inzwischen als `open` nachreicht: er verweigert zusätzlich `clipboardRead` (OSC 52), das sonst jeder TUI den Klartext der Zwischenablage gäbe — und das ist `public`, nicht `open`, also per Subclass nicht abschaltbar und routet über den puren, getesteten `TerminalLinkResolver` (Views/): Web→Browser, Code/Markdown→PhpStorm (`PhpStormLauncher`, Services/Shared), sonstige Datei→Standard-App, Ordner→Finder, fehlend→klare `NSAlert`; relative Pfade gegen `command.workingDirectory`, `~` und `path:line`-Suffixe aufgelöst.
-- **Tabs, Multi-Select & Drag** (Chrome-artig): per-Fenster-UI im `AgentWindowStore` (`@Observable`, SSoT) — `openTabIDs`/`selectedSessionID` persistiert in `agent-ui-state.json` (**offene Tabs werden nie gekappt** — bis 05.10.2026 kappte jeder Load still auf 12 und warf bei jedem Neustart die zuletzt geöffneten Tabs weg; `maxOpenTabs` gilt nur noch für die Erst-Migration), dazu eine **ephemere, nicht persistierte** `multiSelection(in:)` pro Fenster (aktiver Tab = Anker; Menge leer = Einzel-Auswahl, sonst ≥2). `AgentChatsView` bridged via computed properties. Die Selektions-/Drag-*Logik* ist pur + unit-getestet: `TabSelectionResolver` (Click/Cmd/Shift + Pin-Normalisierung `shouldUnpinGroup`), `TabReorderGeometry` (Einfügelinie aus gemessenen Tab-Frames), `TabGroupReorder` (Gruppen-Block-Reorder). Reorder = SwiftUI `.draggable` + `TabReorderDropDelegate` (DropProposal `.move`, Einfügelinie, `.leftMouseUp`-Monitor setzt die Linie zurück); **Tear-off** = `.dropDestination` am Content („Loslassen für neues Fenster" → `detachDroppedToNewWindow`); Cross-Window-Drag liest die Quell-Auswahl live aus dem Store. Modifier-Klicks via `NSEvent.modifierFlags`. Bulk-Kontextmenü (Tabs + Sidebar, „N …"-Labels) in `AgentChatsView+BulkActions`. Die Drag/Drop/Menü-*Interaktionen* sind nicht unit-testbar (SwiftUI/NSEvent) → manuelle QA.
-- **Ctrl+Tab-Switcher** (seit 04.10.2026, Doku `docs/features/agent-chats/ui/tab-switcher.md`): kein globaler Modus mehr — der alte Switcher zeigte alle offenen Tabs als Karten-Grid und wurde nicht benutzt (man suchte statt zu wechseln, das räumliche Gedächtnis half nicht). Der pure `TabSwitcherScope` wählt eine von drei Situationen: **A** Grid sichtbar → kein Overlay, die echten Panes werden markiert (`TabSwitcherGridPaneMarking`); **B** maximierter Workspace-Chat → Mini-Map im Grid-Layout (`AgentTabSwitcherMiniMap`, Geometrie aus denselben Bausteinen wie der Grid-Renderer); **C** sonst → Liste der offenen Tabs desselben Projekts (`AgentTabSwitcherOverlay`). Reihenfolge im Workspace = Slot-Index (Leserichtung). Kacheln (`TabSwitcherTile`) zeigen Status, Dauer und eine Stand-Zeile, die der Runtime-Watcher aus dem ohnehin gelesenen Tail zieht (`AgentTranscriptActivityExtractor`, keine zusätzliche I/O). **Performance-Regeln** (aus der Sidebar-Messung 30.09.–01.10.2026: `.contextMenu` wird bei jedem Body-Rebuild mitgebaut, jede Statusänderung zeichnete die Sidebar neu): der `AgentSessionActivityStore` wird nie von der Sidebar beobachtet, nur vom offenen Switcher; kein I/O/Session-Scan und kein `.contextMenu` in Switcher-Bodies (Umfang als Snapshot im Key-Event-Pfad); Dauer tickt nur im offenen Switcher; Extractor-Kosten über `PerformanceCounters`; im Grid lesen die Pane-Overlays nur den kleinen `TabSwitcherGridMarkingState`, damit ein Schritt nicht Grid und Terminals neu auswertet; in Mini-Map/Liste liest der `AgentChatsView`-Body nur `TabSwitcherRunState.isActive`, Highlight und Umfang nur der `TabSwitcherOverlayHost` (sonst wertete jeder Schritt die Sidebar neu aus).
-- **Background agents**: spawned via `claude --bg` (`BackgroundAgentSpawner`, parses the short ID from stdout), hosted by the Claude supervisor daemon, attached in a PTY via `claude attach <short-id>`. `SupervisorJobReader` reads `~/.claude/jobs/<short-id>/state.json`; `BackgroundAgentLifecycle` wraps logs/stop/respawn/rm. **Resume→Attach-Fallback**: Läuft das Resume-Ziel einer normalen Claude-Session gerade als Background-Agent beim Supervisor (z. B. versehentlich per Left-Arrow/`/background` gebackgroundet), baut der `AgentCommandBuilder` statt `--resume` ein `claude attach <short-id>` — sonst bräche der Launch mit „currently running as a background agent" ab. Quelle ist `<config-dir>/daemon/roster.json` (`SupervisorRosterReader`, profilbewusst, Worker-PID-geprüft) — solche Sessions haben KEIN `jobs/`-Verzeichnis, der `SupervisorJobReader` sieht sie nicht. Forks bleiben Forks (`--resume --fork-session` ist für bg-Sessions erlaubt).
-- **Subagent-Retention** (`SubagentJobRetention.swift`): Die Workspace-Spiegel der CLI-Subagent-Jobs (`whisperm8 agent`) verschwinden 7 Tage nach der letzten Aktivität — vorher wanderte kein einziger je wieder raus (Befund 2026-08-01: 2599 Karteileichen = 83 % der Workspace-Datei). Fällig ist nur, was auf Disk ohnehin weg ist: solange das Job-Verzeichnis lebt, bleibt der Eintrag, sonst legte ihn der nächste Merge sofort neu an. Vor dem Löschen wandert das Rollout-Transcript aus `~/.codex/sessions` nach `agent-jobs-archive/` — der Indexer erkennt Subagent-Threads nur an vorhandenen Job-Sessions, ohne diesen Schritt würde er sie als normale Codex-Chats wieder einsammeln. Job-Verzeichnisse selbst räumt weiterhin nur `agent rm` (git-Worktrees). Der erste Lauf nach dem Update ist eine einmalige, fristlose Altlasten-Bereinigung (`subagentJobRetentionInitialPurgeDone`). Kill-Switch: `defaults write com.whisperm8.app subagentJobRetentionEnabled -bool NO`, Frist: `subagentJobRetentionDays`.
-- **GPT-Backend, Proxy und Modellwahl**: Proxy ist Upstream `raine/claude-code-proxy` (Managed Download nach `~/Library/Application Support/WhisperM8/bin/`, known-good gepinnt, beim App-Start automatisch auf das neueste Release gehoben, SHA über das Release-Sidecar; Kill-Switch `defaults write com.whisperm8.app claudeCodeProxyAutoUpdateEnabled -bool NO`). Ein PATH-Binary hat nur ab `ClaudeCodeProxyBinaryInstaller.minimumVersion` Vorrang (Vorfall 2026-09-08: Homebrew 0.1.21 gewann gegen alles). **Waisen-Schutz** (`ClaudeCodeProxyOrphanGuard`): `make kill`/`make dev` beenden die App per SIGTERM ohne `willTerminate`, der selbst gestartete Proxy überlebt als Waise (PPID 1) und wurde von der neuen App weiterbenutzt — Binary-Wechsel und Auto-Update griffen nie. Beim App-Start wird eine Waise namens `claude-code-proxy` mit anderem Binary oder älter als dessen letzte Änderung beendet — mit aktiver ChatGPT-Abo-Transkription auch eine, der die Transkriptions-Route fehlt (`reason=transcription_route_missing`, Probe ohne Upstream-Aufruf: 415 = Route da, 404 = fehlt); ein im Terminal gestarteter Proxy (Elternprozess Shell) bleibt. Jede selbst gestartete Instanz bekommt `CCP_CODEX_TRANSCRIPTIONS_API=1` (Env-Aufbau zentral in `launchEnvironment(forProfile:)`). Angeboten wird nur die Schnittmenge aus Codex-Katalog (`~/.codex/models_cache.json`) und `GET /v1/models` des laufenden Proxys (`ClaudeCodeProxyModelRegistry`) — so bietet nie ein Picker, Stempel oder `gpt.md` ein Modell an, das der Proxy ablehnt. Der WhisperM8-Proxy-Fork (06.–23.09.2026) ist damit abgelöst. **Welches Modell ein neuer Claude-Chat nutzt, entscheidet Claude Code** (`/model` + Enter speichert den Default im Profil); WhisperM8 stempelt `--model` nur beim ausdrücklichen „Neuer GPT-Chat". Das frühere Feld „Standard-Modell für neue Claude-Chats" stempelte jeden Chat und hebelte `/model` aus — entfernt. Kein Haiku-Ersatz und kein Tool-Concurrency-Deckel mehr: Hintergrundaufgaben, Web Search, Fetch und Claudes native Titel laufen über echtes Haiku (der Router reicht `claude-*` an Anthropic durch).
-- **GPT-Konto-Profile** (seit 2026-09-23, `GPTAccountProfiles.swift`, Plan `docs/plans/gpt-account-switcher.md`): Mehrere ChatGPT-Konten im GPT-Backend, Bedienmodell wie „Claude Accounts". **Zwei getrennte Logins auf der Maschine:** Der Proxy hat einen EIGENEN OAuth-Grant (`~/.config/claude-code-proxy/codex/auth.json`), `codex login` (`~/.codex/auth.json`) stellt nur Codex-CLI, Diktat, `whisperm8 agent` und ChatGPT.app um — Vorfall 2026-09-16: Popover zeigte das neue CLI-Konto, GPT-Sessions liefen weiter gegen das gesperrte Proxy-Konto. Zusatzkonten leben je in `~/.gpt-profiles/<name>/` (= `CCP_CONFIG_DIR`), `main` = Default-Store; eingeloggt zählt NUR eine eigene `codex/auth.json` mit `accountId`, weil der Proxy bei fehlender Datei still auf den Default-Store zurückfällt (reproduziert). **Zusatzprofile laufen deshalb mit `HOME` = Profil-Ordner** (seit 08.10.2026): Der Proxy liest als Altlast `$HOME/.config/claude-code-proxy/codex/auth.json` — das ist der main-Store —, und `clear_auth` löscht beide Dateien; ohne eigenes `HOME` meldete „Abmelden" eines Zusatzkontos (oder ein abgelehnter Refresh) main auf Disk mit ab. Der `ClaudeCodeProxyManager` startet je Zusatzprofil eine eigene Instanz (`ensureRunning(profile:)`, Ports ab Backend-Port + 10), Sessions tragen den Stempel `gptProfileName` und nennen ihr Konto per `ANTHROPIC_CUSTOM_HEADERS` (`X-WhisperM8-GPT-Profile`, beim Spawn eingefroren, Subagents erben es) — **immer, auch `main` ausdrücklich** (Review-Blocker 2026-09-23: ohne Header folgte ein main-Chat dem aktiven Profil); der Mix-Router leitet danach an die Instanz, entfernt den Header vor jedem Upstream und antwortet 503 + asynchronem Start (pro Profil einer), wenn die Instanz fehlt. Nur Requests ohne Header (Sessions von vor dem Update) gehen an das aktive Profil. Profilnamen sind ASCII-alnum + `-_`; ein entferntes/abgemeldetes Profil fällt beim Launch auf `main` zurück. `LoginShellEnvironment` strippt `ANTHROPIC_CUSTOM_HEADERS` und `CCP_CONFIG_DIR` aus dem geerbten Env. UI: Sektion „ChatGPT-Konten" auf der GPT-Backend-Seite, Popover-Block je Konto, Kontextmenü „GPT-Konto". Usage pro Konto liest den Datei-Token des Stores — ein 401 heißt meist „Proxy hat im Speicher refresht, Datei veraltet", die Instanz läuft trotzdem. Bei Limit hängt der Proxy ~170 s in Retries, bevor 429 kommt (Slice 5 offen). Kill-Switch: `defaults write com.whisperm8.app gptAccountProfilesEnabled -bool NO`.
-- **Hauptkonto tauschen** (seit 08.10.2026, ⋯-Menü „Make Main Account…" bzw. „Zum Hauptkonto machen…"): `main` ist kein Zeiger, sondern das Default-Verzeichnis (`~/.claude` bzw. Default-Store des Proxys) — dort laufen Terminal-`claude`, `claude --bg` und alle ungestempelten Chats. Ein totes Konto in main ließ sich bisher weder ersetzen noch entfernen. Der Login des Profils wird nach main **verschoben, nie kopiert** (zwei Stores mit derselben Refresh-Familie entwerten sich beim ersten Refresh gegenseitig), der alte main-Login ist danach weg, das Profil verschwindet. Claude (`ClaudeAccountProfiles+Promote`): Keychain-Secret + `oauthAccount` in `~/.claude.json` (Rest der Datei bleibt), `projects/` und `file-history/` werden in main gemischt (gleichnamige Dateien wie `memory/MEMORY.md` nie überschrieben, sie gehen mit dem Profil-Ordner in den Papierkorb), Stempel → `nil`; gesperrt, solange ein Chat des Profils läuft. GPT (`GPTAccountProfiles.promoteToMain` über `ClaudeCodeProxyManager.replaceMainGrant`): Profil-Instanz und main-Proxy werden vor dem Datei-Tausch beendet (sonst schriebe einer seinen alten Grant zurück), main startet danach neu; ein extern gestarteter main-Proxy blockiert. Laufende Chats mit eingefrorenem Profil-Header leitet der Router per In-Memory-Alias (`GPTPromotedProfiles`) an main.
-- **Gemeinsames Claude-Memory** (seit 11.10.2026, Plan `docs/plans/claude-account-switch-ohne-stopp.md`, Slice 1): Claude legt Auto-Memory pro Config-Dir ab — ein Chat unter `ai2` kannte nicht, was einer unter `main` gelernt hatte. Chats von Zusatzprofilen bekommen deshalb in ihrer Session-Settings-Datei (`claude-hooks/<id>.json`, ohnehin per `--settings`) die offizielle Einstellung `autoMemoryDirectory` → `~/.claude/projects/<kodiert>/memory` (`ClaudeSharedMemoryPath`, Fragment über `AgentSessionStatusCoordinator.sharedMemoryFragmentResolver`). **Keine Symlinks, nichts an Claude Code geändert** — Claude liest den Schlüssel aus Flag-Settings ohne Trust-Prüfung und ohne Freigabe-Rückfrage (Prototyp P1). `main` selbst bekommt kein Fragment (dort ist es Claudes Standard; so bleibt main exakt wie vorher, falls die Berechnung je abweicht). Die Pfadregel ist aus Claude Code 2.1.296 nachgebaut: **realpath(3)** des Projektpfads (nicht `resolvingSymlinksInPath`/`standardizingPath` — beide kürzen `/private/…` still), Git-Root, Worktree → Haupt-Repo über `gitdir`/`commondir` (reine Dateizugriffe, kein `git`-Subprozess), Kodierung jede UTF-16-Einheit außer `[A-Za-z0-9]` → `-`, über 200 Zeichen gekürzt plus Java-String-Hash Basis 36. Einmalig beim Start führt `ClaudeMemoryMigration` die Profil-Memorys nach main zusammen: kopieren statt verschieben, Backup nach `Application Support/WhisperM8/memory-migration/<zeit>/`, nie überschreiben (Konflikt → `<name>.<profil>.md`), fehlende `MEMORY.md`-Zeilen anhängen, idempotent (Merker `claudeSharedMemoryMigrationDone`). Kill-Switch: `defaults write com.whisperm8.app claudeSharedMemoryEnabled -bool NO` (wirkt für neu gestartete Chats; jedes Profil nutzt dann wieder sein eigenes, unverändertes Memory).
-- **Kontowechsel ohne Stoppen** (seit 11.10.2026, Plan `docs/plans/claude-account-switch-ohne-stopp.md`, Slice 2): „Zu Account verschieben" überspringt laufende Chats nicht mehr. `AccountSwitchPlanner` (pur) teilt auf: läuft nicht → sofort umziehen; läuft und ruht → anhalten, Prozessende abwarten, umziehen, im Tab fortsetzen (`shouldLaunchOnOpen`); arbeitet / Rückfrage offen / Entwurf im Eingabefeld → **vormerken** und nach dem Turn wechseln (`AccountSwitchCoordinator`, prüft per 2-s-Timer nur solange Vormerkungen bestehen, flüchtig, aufhebbar im Kontextmenü). Unbekannter Status zählt als beschäftigt. Alle sofortigen Bewegungen einer Aktion teilen einen Journal-Batch (ein „Rückgängig"). **Trust ist hart:** Hat das Zielkonto den Ordner nie freigegeben (`projects[<realpath>].hasTrustDialogAccepted` in seiner `.claude.json`, auch geerbt von Elternordnern, nur gelesen — `ClaudeAccountPreflight`), wird ein arbeitender Chat nicht vorgemerkt: der unbeobachtete Neustart landete in Claudes Trust-Dialog mit Vorauswahl „No, exit" (Prototyp P3). Das Sheet nennt außerdem fehlende User-MCP-Server des Ziels und dass Claude den Verlauf im Ziel einmal ohne Cache neu einliest (früheres Thinking bleibt beim alten Konto — Claude zeigt dafür selbst einen Hinweis). Kill-Switch: `defaults write com.whisperm8.app accountSwitchAfterTurnEnabled -bool NO` (laufende Chats werden wieder übersprungen).
-- **MCP-Angleich über Konten** (seit 11.10.2026, `ClaudeMCPSync`, Sektion „MCP Servers" auf der Konten-Seite): Claude speichert User-MCP-Server pro `CLAUDE_CONFIG_DIR` (`mcpServers` in der jeweiligen `.claude.json`) — ein neu eingerichteter Server landet nur im Konto des Chats. Die Sektion zeigt je Server, in welchen Konten er fehlt; „Copy" trägt ihn per **`claude mcp add-json -s user`** nach (Profile mit `CLAUDE_CONFIG_DIR`, main ohne). Nur ergänzen, nie löschen; verschiedene Definitionen unter einem Namen werden nie verteilt (Konflikt); Ausnahmen pro Server (`mcpSyncExcludedServers`); Definitionen (Header-Tokens) nie im Log. Auto-Angleich beim Start: `defaults write com.whisperm8.app mcpAutoSyncEnabled -bool YES` (Default aus). **Bewusst nicht** `managedMcpServers` in `/Library/Application Support/ClaudeCode/managed-settings.json`: maschinenweit, Admin-Rechte, kollidiert mit Firmen-MDM und nur http/https. OAuth-Logins bleiben pro Konto (`/mcp`).
-- **Claude-Status aus Claudes Registry** (seit 17.10.2026, Plan `docs/plans/claude-status-aus-registry.md`): Für Claude-Chats ist Claudes eigener Status die Quelle — jede Session schreibt `<config-dir>/sessions/<pid>.json` (`status` busy/waiting/idle/shell + `waitingFor`, nur bei Änderung). `ClaudeRegistryStatusSource` (FSEvents nur auf die `sessions`-Ordner aller Konten + 10-s-Voll-Scan) → `AgentSessionStatusCoordinator.handleRegistryRecord` → Signal `.registryStatus` im Reducer; für `registryLiveSessions` zählen Hook-Status-Signale und Transcript-Meinungen nicht mehr, die working-Stau-Heilungen sind dort aus. Gemessen 17.10.: 22 Abweichungen ≥ 20 s in 2 h, fast alle „WhisperM8 idle, Claude busy“ (lange Befehle ohne Hook-Event, 180-s-Netz). Registry meldet ESC wie Turn-Ende (`idle`) — ein beobachteter Abbruch (ESC/`chats interrupt`) unterdrückt deshalb 10 s lang „fertig“ + Queue-Zustellung. Warte-Art aus `waitingFor` + Transcript-Detail (`ExitPlanMode` → Plan, offene Frage → question, Tool → Freigabe). Neue Claude-Launches bekommen nur noch `SessionStart`/`SessionEnd` + Send-Guard (`ClaudeHookSettingsBuilder.registryModeEventNames`), Background-Agents den vollen Satz (eigener Status-Pfad, Registry-Einträge ignoriert). Ein Eintrag zählt nur bei lebender PID mit passender Startzeit (`procStart`, von Claude in UTC). Die CLI (`ChatsStatusProbe`) nimmt die Registry vor der Transcript-Schätzung (`source: claudeRegistry`); `whisperm8 chats address <ref>` liefert die `uds:`-Adresse für natives `SendMessage` über alle Konten. Abweichungen zum alten Weg loggt ein Schatten-Reducer (`registry_status_diff`, ≥ 5 s). Kill-Switch: `defaults write com.whisperm8.app claudeRegistryStatusEnabled -bool NO` (Neustart; voller Hook-Satz für neu gestartete Chats).
-- **Hook bridge** (event-driven, no polling): `ClaudeHookSettingsBuilder` writes a settings JSON with SessionStart/SessionEnd/Notification hooks that append to an event file; launched via `claude --settings <path>`. `ClaudeHookBridge` watches that file with `DispatchSourceFileSystemObject` — this is how WhisperM8 binds external session IDs and detects "needs input". **Binding-Regel** (Vorfall 2026-09-30): Nicht jedes `SessionStart` darf die externe ID übernehmen — beim Umwandeln in einen Background-Agent melden der bg-Fork (`source: fork`) und die frische, leere Vordergrund-Session der TUI (schreibt ohne Prompt nie ein Transcript) über dieselbe Settings-Datei. `AgentSessionStatusCoordinator.externalIDBindingDecision` stellt solche IDs zurück und bindet sie erst beim ersten Turn-Event dieser ID. Bereits kaputte Chats heilt `ClaudeExternalIDRecovery` beim Tote-Zeiger-Scan der Sidebar: Rückfall auf die jüngste ID mit Turn im Event-File, deren Transcript existiert — gesucht über alle Profil-Roots, weil ein Kontowechsel die Datei verschiebt; das Profil des Chats zieht dorthin mit, wo die Datei heute liegt (sonst scheitert `--resume`). Ist die ID schon an einen anderen Chat gebunden (Ersatz-Chat), wird nicht geheilt (Log: `binding_recovered` / `binding_recovery_skipped_bound_elsewhere`). Zusätzlich hängt der **Send-Guard** als zweiter `UserPromptSubmit`-Hook drin (`whisperm8 chats _prompt-guard`): Er blockt die Wiedervorlage bereits zugestellter `[via whisperm8 chats]`-Prompts — die Claude-CLI legt sie nach einem ESC-Abbruch selbst in den Composer zurück (Vorfall 2026-08-17). Autorisierung per Zustell-Token (`SendDeliveryTokenStore`, Hash-basiert und Whitespace-tolerant — die TUI formt zurückgelegte Prompts um, von `session.send` + Queue-Zustellung vor dem Paste geschrieben); fail-open bei jedem Fehler, nur Claude-Sessions (Codex hat keine Hooks). Scheiterte die Erstausführung an einem Modell-Fehler („Prompt is too long" — `PromptGuardRetryProbe` liest den Transcript-Tail), ist die Wiedervorlage als Retry erlaubt; bei Block meldet der Guard ein `WhisperM8PromptGuardBlock`-Event über das Event-File zurück und die App nimmt das falsche „working" zurück (`turnAborted`) + leert den Composer (Ctrl+C). Kill-Switch: `defaults write com.whisperm8.app chatsPromptGuardEnabled -bool NO`.
-- **Transcripts**: `ClaudeTranscriptReader` / `CodexTranscriptReader` parse the provider JSONL into the unified `AgentChatTranscript` model (streamed line-by-line; files can be >50 MB).
-- **Verlaufsansicht** (seit 01.08.2026, EINE Ansicht statt Terminal|Chat|Roh): `TranscriptTextRenderer` (Services/AgentChats/) macht aus dem Transcript einen flachen Zeilenstrom im Stil der Claude-Code-CLI (`❯` Prompt, `⏺` Antwort/Tool, `⎿` Ergebnis eingerückt, `✻` Thinking); `TranscriptTextView` (Views/Transcript/) zeigt ihn als **ein** `NSTextView` mit TextKit 2. **Der Grund ist gemessen:** Die alten Ansichten bauten pro Nachricht eine SwiftUI-Hierarchie und hingen alle an `.defaultScrollAnchor(.bottom)`, das SwiftUI zwingt, jede Item-Höhe vorauszuberechnen — mit sechs Grid-Panes fror die App dauerhaft ein (Main Thread endlos in `StackLayout.prioritize`, 100 % CPU, keine Log-Zeile mehr). Jetzt hängen die Layout-Kosten an der sichtbaren Fläche statt an der Länge; Textauswahl über den ganzen Verlauf, ⌘F und Kopieren kommen nativ. Das Attributieren ist der einzige mengenabhängige Schritt und läuft off-main + abbrechbar (10 MB ≈ 0,5 s, Budget in `TranscriptTextRendererTests`). Gekürzt werden nur noch Tool-Ausgaben („+N Zeilen", wie die CLI) — Antworttexte nie. Abgelöst und gelöscht: `AgentTimelineView`, `TimelineRoundView`, `TimelineActivityRow`, `TimelineReportView`, `TerminalSnapshotView`, `AgentChatTranscriptView`, `TranscriptWindow`. Mit dem Terminal-Modus ist auch der **Terminal-Snapshot** ersatzlos entfallen (`TerminalSnapshotStore` gelöscht, kein Buffer-Auslesen mehr beim Sessionende); `LegacyDataCleanup` räumt das Verzeichnis `TerminalSnapshots/` einmalig weg (Flag `terminalSnapshotsPurged`).
-- **ObjC-Exceptions abfangen** (`Sources/ObjCExceptionBridge` + `Services/Shared/ObjCException.swift`): AVFoundation meldet manche Fehler per `NSException` statt `NSError` — Swift kann die nicht fangen, jede beendet den Prozess. `AVAudioNode.installTap` wirft bei Format-Mismatch, und genau so ist die App am 01.08.2026 beim Start einer Transkription abgestürzt (Gerät wechselte während des Starts von 48 kHz auf 24 kHz, Bluetooth-Profilwechsel). Der Recorder liest das Format jetzt **unmittelbar vor** dem Tap erneut und baut den Converter bei Abweichung neu; das verbleibende Zeitfenster fängt der `@try/@catch`-Shim ab. Gleiches Muster in `VoiceGateAudioSource`. **Regel: kein `installTap` ohne `ObjCException.catching`.** Audio-Ereignisse, die einen Absturz erklären können, gehören auf `Logger.info` — `.debug` wird nie persistiert und fehlte deshalb bei der Analyse. **`.info` landet erst durch `OSLogPreferences` in der `Info.plist` (`Persist: Info` für `com.whisperm8.app`, Vertragstest `InfoPlistContractTests`) im persistenten Log-Store:** macOS hält `.info` standardmäßig nur im Speicherpuffer (gemessen 18.10.2026: `log show --info` kennt nur Minuten, `.default`-Meldungen Tage; `man 5 os_log`). Die Einstellung wirkt erst im gebauten Bundle (`make dev` kopiert die `Info.plist`); wer die Regel streicht, muss absturzrelevante Meldungen auf `.notice`/`.error` heben.
-- **SIGPIPE abfangen** (`Services/Shared/SigpipeGuard.swift`, seit 23.09.2026): Die App verschwand samt aller Chats ohne Crashreport; einziger Beleg war runningboardd `termination reported by launchd (2, 13, 13)` = Signal 13 (SIGPIPE) — jeder Write in eine Pipe/einen Socket ohne Leser beendet den Prozess wortlos. Der GUI-Pfad installiert deshalb als Erstes einen leeren `sigaction`-Handler (bewusst **nicht** `SIG_IGN`: das erbt jede Chat-Shell über SwiftTerms `forkpty`+`execve`, ein abgefangenes Signal setzt `execve` zurück) und loggt jede Zustellung als `sigpipe_suppressed`. Writes liefern dann `EPIPE` — **Regel: an Pipes nur `write(contentsOf:)` (throwing), nie das alte `FileHandle.write(_:)`**, das bei EPIPE eine NSException wirft. Stille Abgänge künftig so prüfen: `log show --predicate 'process == "runningboardd" AND eventMessage CONTAINS "termination reported"'` — `(0, 0, 0)` = regulärer Quit, `(2, N, N)` = Signal N.
-- **Wiederaufnahme nach Absturz** (`AgentCrashRecovery.swift`, seit 23.09.2026): Stirbt die App, bekommen alle PTY-Chats SIGHUP und enden. Die App führt deshalb `running-sessions.json` (Application Support) mit den Sessions, deren PTY läuft (gespeist aus `AgentTerminalRegistry.onRunningSetChanged`); `applicationShouldTerminate` entfernt ihn — Cmd+Q, Menü und `make dev`/`make kill` (SIGTERM → `NSApp.terminate`) gelten als sauber. Liegt er beim Start noch da, setzt `AgentCrashRecoveryCoordinator` für die damals laufenden, nicht archivierten Chats `shouldLaunchOnOpen` (wie `chats resume`: Start beim Anzeigen des Tabs) und holt fehlende Tabs ohne Auswahlwechsel zurück. Gestoppte Chats sind nicht im Marker; eine zweite Instanz (lebende Marker-PID) fasst ihn nicht an. Log: `crash_recovery_resumed`. Kill-Switch: `defaults write com.whisperm8.app agentCrashRecoveryEnabled -bool NO`. **Cmd+Q mit Arbeit (D4, seit 19.10.2026, `QuitConfirmation`):** Arbeitet oder wartet ein Chat, fragt Cmd+Q nach („Beenden und später wieder öffnen“ / „Abbrechen“ / „Trotzdem beenden“); die Wiederöffnen-Wahl lässt den Marker mit den laufenden Chats stehen (`keepForResume`). SIGTERM (`make dev`) nie mit Dialog. Abmelden/Neustart/Ausschalten (`kAEQuitReason`) ohne Dialog, merkt aber alle laufenden Chats zum Wiederöffnen vor — wie nach einem Absturz.
-- **Agent-Chats-CLI (`whisperm8 chats`, „Jarvis")**: Jeder Chat kann alle Sessions sehen/verwalten. Lese-Befehle (`list`/`overview`/`show`/`tail`/`wait`/`audit`) laufen app-unabhängig direkt von Disk (`ChatsWorkspaceReader` + `ChatsStatusProbe` mit denselben puren Bausteinen wie der Runtime-Watcher). Handeln-Befehle (`send`/`interrupt`/`open`/`new`/`rename`/`group`/`archive`/`move-account`) gehen über einen BSD-Unix-Domain-Socket (`AgentControlServer`, Start in `applicationDidFinishLaunching`) an die laufende App — Workspace-Single-Writer bleibt die App. Identität via `WHISPERM8_SESSION_ID`+Token (beim PTY-Spawn injiziert). `send` ist TOCTOU-frei (Guards + Bracketed Paste in einem MainActor-Block). Skill `whisperm8-chats` steuert das Verhalten (Send-Gate, Ein-Hop-Regel). `move-account --to <profil>` zieht bestehende Claude-Chats über dieselbe Kette wie das Kontextmenü um (`AccountMoveFacts` → Planer → Service → Journal, also per App rückgängig machbar); `--stop-and-resume` hält laufende Chats an, zieht erst nach nachweislichem Prozessende um und merkt den Neustart vor — working und vermuteter Composer-Entwurf (`TerminalComposerDraftTracker`) werden seit 11.10.2026 nach dem Turn gewechselt (`scheduled`, s. „Kontowechsel ohne Stoppen"), sofort nur mit `--force`, die eigene Session nie. Doku: `docs/features/agent-chats-cli.md`, Plan: `docs/plans/whisperm8-chats-cli/`. Lock, Listen-Socket und angenommene Verbindungen des Servers (ebenso `FileEventSource`, Hook-Bridge, Job-Store-Lock) sind **close-on-exec** — vorher erbte jeder Chat-Prozess (SwiftTerm `forkpty`+`execve` schließt nichts) den Lock und hielt ihn nach einem Neustart bis zu ~19 s, ein langlebiger Prozess aus einer Chat-Shell hätte ihn unbegrenzt gehalten (Analyse 11.10.2026). Kill-Switch: `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
-
-- **Claude-Code-Plugin `whisperm8` + Jarvis-Board** (seit 08.10.2026, Doku `docs/features/jarvis-board.md`, Plan `docs/plans/whisperm8-plugin.md`): Alle Agent-Skills (inkl. `jarvis`, jetzt im Repo als `Resources/whisperm8-jarvis-skill.md`) kommen als Plugin `whisperm8` (`/whisperm8:<skill>`), nicht mehr lose aus `~/.claude/skills`. `WhisperM8ClaudePlugin` setzt es beim App-Start aus `Resources/claude-plugin/` (Manifest, Mod, Typvertrag) plus den Skill-Ressourcen zusammen und legt es unter `Application Support/WhisperM8/claude-plugin/versions/<hash>/whisperm8` ab; der Symlink `claude-plugin/whisperm8` wird per `rename(2)` umgebogen. **Grund (Prototyp gemessen):** Claude Code lädt jede laufende Session neu, sobald sich ihr Plugin-Ordner ändert — Kopieren in den laufenden Ordner würde alle Chats mitten im Turn umladen; ein verlinkter Ordner wird am Ziel überwacht, laufende Sessions behalten ihren Stand. Jeder Claude-Launch bekommt `CLAUDE_CODE_PLUGIN_DIRS` (`AgentCommandBuilder.claudePluginEnvironmentResolver`, ein User-Wert bleibt vorne erhalten). Beim ersten Start wandern die losen Skill-Kopien nach `~/.claude/skills/.whisperm8-backup/<zeit>/` (lokal geänderte und Symlinks bleiben). `make skills` legt im Plugin-Modus denselben Aufbau aus dem Repo ab, `make plugin-test` prüft die Mod (`claude plugin validate` + `test`). Das **Jarvis-Board** (`whisperm8 chats board …`, App einziger Schreiber, `jarvis-board.json`, Ereignisse `kind: "board"` in `since`/`watch`) zeigt die Mod `hooks/register.tsx` als Band über dem Prompt (nur in der Session, deren Board aktiv ist; der Skill `whisperm8:jarvis` schaltet es per `skill.prompt`-Hook ein), weckt Jarvis über `chats watch` (gebündelt, höchstens 1 Prompt/min, einmal je Chat+Zustand) und bietet das Tool `mcp__whisperm8__board`. App-Sessions laufen im Main-Screen (`tui: default`), ein Pane erscheint dort immer inline. Kill-Switches: `defaults write com.whisperm8.app claudePluginEnabled -bool NO` (keine Variable, kein Ablegen), `jarvisBoardEnabled -bool NO` (Board-Befehle).
-- **Jarvis-Randnotizen** (seit 17.10.2026, Doku `docs/features/jarvis-board.md` § Notiz-Karte, Plan `docs/plans/jarvis-randnotizen.md`): Im Grid hängt an jedem Chat auf dem Board einer **laufenden** Jarvis-Session eine Karte am Kachelkopf (umgedrehte `ChromeTabShape`, Overlay über dem Terminal, kein PTY-Resize): Arbeitspaket (`work`), Eingriff (`needs`), Blockade (`blocker`), Ziel (`mission`), drei Meilensteine. Board-Eintrag additiv erweitert: `work` löst `next` ab (**beide werden gleich geschrieben** — Vertrag mit der Mod: Felder nur ergänzen), `milestones` über `whisperm8 chats board milestone`. Jarvis schreibt nur bei echten Änderungen, nie Einzelschritte; Lesehilfe `whisperm8 chats show <ref> --recap` (Claudes eigene `away_summary`-Einträge, Rückwärtssuche nach dem Merkmal — ein festes Tail-Fenster verfehlte sie, gemessen 1,1 MB vor dem Ende einer 172-MB-Datei). Schalter „Notizen auf/zu" in der Workspace-Leiste bzw. ⌥⌘N (Standard App-weit), Pfeil am Kopf klappt einzeln, Fokus klappt die eigene Karte zu, sonst keine Automatik. `JarvisNotesStore` liefert Notizen und Handklicks per Publisher je Session (kein `@Observable` im Grid-Body). Kill-Switch: `defaults write com.whisperm8.app jarvisNotesEnabled -bool NO`.
-- **Status-Punkt oben = Sidebar-Logik** (17.10.2026): `SessionLiveStatusDot` (Chat- und Kachelkopf) und der Punkt am Tab zeigen denselben Laufzeitstatus wie die Sidebar (`AgentStatusIndicator`; am Tab `compact`, ohne Puls). Vorher war der Kopf-Punkt grün, sobald der Prozess lief, und „ruht" am Tab hellgrün — Grün heißt jetzt überall nur „arbeitet". Laufender Prozess ohne bekannten Status = ruht (`SessionHeaderStatus`). **Keine Dauerbewegung** (LR-AU-002, 18.10.2026): Punkte in Sidebar, Kopf und Tab sowie das `SubagentRoad`-Lauflicht sind statisch (working = grüner Kern mit gefülltem Halo, wartet = Amber) — die `repeatForever`-Pulse hielten die Layout-Schleife des ganzen Fensters und den WindowServer dauerhaft beschäftigt. **Sanfter Puls (seit 19.10.2026):** Der Halo der Sidebar-Punkte pulsiert wieder, aber als `CAAnimation` auf eigener Ebene (`SoftPulseRing`): läuft im Render-Server, höchstens 15 fps, pausiert bei verdecktem Fenster und bei „Bewegung reduzieren“ — gemessen App-CPU wie statisch (~0,2 % statt ~12 % mit dem SwiftUI-Puls). Nie wieder `repeatForever` in SwiftUI-Zeilen; Bewegung nur über Core Animation. Kill-Switch `agentStatusSoftPulseEnabled -bool NO`. A/B-Schalter für Messungen: `defaults write com.whisperm8.app agentStatusPulseEnabled -bool YES` (alte Bewegung, Neustart), Guard-Test `AgentStatusPulseGuardTests`.
-- **Voice-Callouts** (seit 10.10.2026, Doku `docs/features/speech-callouts.md`): Ein Chat lässt am Turn-Ende eine kurze Ansage vorlesen — Jarvis immer, andere nach `/whisperm8:callout`, Codex/Skripte per `whisperm8 speak "<text>"`. Die Mod (Abschnitt in `register.tsx`, **nicht** eigene Datei: die Engine folgt `$`/`on` nie über einen Import und erlaubt nur einen `session.start` ohne Matcher je Plugin) bietet das Tool `mcp__whisperm8__speak` und `/callout an|aus`; die App spricht (`SpeechCalloutCenter`, Socket-Methode `speech.speak`): eine Warteschlange für alle Sessions, nie während einer Diktat-Aufnahme (Aufnahme-Start bricht ab, danach von vorn), 20 s Entprellung je Chat, Stumm-Schalter in der Menüleiste, Name des Chats nur mit gültigem Token vorangestellt, nie Ansagetexte im Log. Stimme: `AVSpeechSynthesizer`, beste installierte deutsche (keine Eloquence-Stimmen). ChatGPT-Abo-Stimme (S8) zurückgestellt. Kill-Switch: `defaults write com.whisperm8.app speechCalloutsEnabled -bool NO`.
-
-Key persisted paths: `~/Library/Application Support/WhisperM8/AgentSessions.json` (workspace), `agent-ui-state.json`, `agent-index-cache.json`. Everything under `~/.claude/` and `~/.codex/` is external and read-only (except hook settings files WhisperM8 generates).
-
-### Voice Gate (`Services/VoiceGate/`)
-
-Ein gesprochenes Codewort („Anna Pause" / „Anna weiter", Trägerwort und beide
-Kommandos frei konfigurierbar) schaltet das Mikrofon einer laufenden **Codex-Desktop**-
-Sprachsitzung stumm und wieder frei. WhisperM8 mutet **nicht selbst**: es aktiviert kurz
-Codex und sendet dessen eigenes Kürzel `Ctrl+Shift+U` — das der Nutzer in Codex' Einstellungen
-einmalig auf `realtimeVoice.toggleMicrophoneMute` legen muss, sonst tut das Feature nichts.
-Der Fokus-Roundtrip ist unvermeidbar (`shortcutScope: app`); ein Tastendruck ohne Aktivierung
-bleibt nachweislich wirkungslos.
-
-Erkennung strikt on-device (`SFSpeechRecognizer`, `requiresOnDeviceRecognition`) über einen
-eigenen `AVAudioEngine`-Tap, der **explizit ans Gerät** gebunden wird (nie „System Default").
-Fehlt das Sprachmodell, startet die Funktion gar nicht statt still auf Apples Server
-auszuweichen; `VoiceGateLocaleResolver` weicht vorher auf verfügbare Regionalvarianten aus
-(`de_DE` → `de_CH` → `de_AT`). Reine, unit-getestete Logik in `VoiceGateCommandMatcher`
-(Phrasenerkennung inkl. verschmolzener Form „annapause") und `VoiceGateStateMachine`
-(Annahme gegen Codex' blinden Toggle). Opt-in, Default aus, eigener Einstellungs-Tab
-„Codex Voice Agent"; Kill-Switch: `defaults write com.whisperm8.app codexVoiceGateEnabled -bool NO`.
-Details, Messwerte und Fallstricke: `docs/features/voice-gate.md`.
-
-### Subprocess environment (important gotcha)
-
-GUI apps get a minimal launchd `PATH`. All subprocess spawning must go through:
-
-- `Services/Shared/LoginShellEnvironment.swift` — queries `zsh -l -c 'echo $PATH'` once, merges with a fallback list (includes `~/.local/bin`, where the native Claude Code installer lives), and supplies TERM/COLORTERM so TUIs render in color.
-- `AgentCommandBuilder.commandPath(_:)` — central binary resolution (`which` with corrected env + fallback dirs).
-
-Never spawn `claude`/`codex`/shell tools with the raw `ProcessInfo` environment — they won't find user-installed binaries.
+Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter.
+`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `chatsPromptGuardEnabled`,
+`agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
+`claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
+`claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
+`jarvisNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`.
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
+`mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 
 ## Dependencies (Package.swift)
 
-- **KeyboardShortcuts** (exact 1.16.1) — global hotkeys
-- **Defaults** — type-safe UserDefaults
-- **LaunchAtLogin-Modern** — launch at startup
-- **SwiftTerm** — PTY terminal views for Agent Chats. Eigener Fork, gepinnt auf v1.15.0 + 2 Selection-Patches (Branch `whisperm8-v1.15-patches`); Begründung im Kommentar in `Package.swift`. Der **Metal-GPU-Renderer bleibt Opt-in (Default aus)**: die Absturzgründe sind mit v1.15 weg (#593, #598), aber im Feldtest 01.08.2026 litt das Schriftbild sichtbar („low resolution") — nicht die Auflösung (die stimmt), vermutlich Font-Smoothing auf transparentem Grund plus Pixel-Rundung der Glyph-Positionen. Der Gewinn ist mangels A/B-Messung unbelegt; Rückkehr erst, wenn das Messgerüst (docs/plans/workspace-performance/, Paket A4) einen Gewinn zeigt. Einschalten zum Vergleichen: `defaults write com.whisperm8.app agentTerminalMetalEnabled -bool YES` (wirkt nach App-Neustart). `TerminalMetalWarmup` übersetzt SwiftTerms Shader — die als Quelltext ausgeliefert werden — beim Start im Hintergrund vor, sonst kostet der erste Chat einmalig ~262 ms auf dem Main Thread; es läuft nur bei aktivem Metal.
+- **KeyboardShortcuts** (exact 1.16.1), **Defaults**, **LaunchAtLogin-Modern**
+- **SwiftTerm** — eigener Fork, gepinnt auf v1.15.0 + Selection-Patches (Begründung in `Package.swift`). Der
+  Metal-Renderer bleibt Opt-in, bis eine Messung einen Gewinn zeigt
+  ([terminal.md](docs/features/agent-chats/ui/terminal.md)).
