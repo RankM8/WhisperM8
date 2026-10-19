@@ -20,7 +20,12 @@ import AppKit
 ///   `triggerThreshold` pt akkumuliertem X aus; ihre Momentum-Ausläufer
 ///   werden ebenfalls geschluckt.
 /// - Events ohne Phase (klassische Mausräder) gehen unangetastet durch.
+/// - `typingSuppressed` (Tastenanschlag in den letzten Millisekunden) lässt eine
+///   neue Geste nie horizontal werden.
 struct TabScrollSwipeRecognizer: Equatable {
+    /// So lange nach einem Tastenanschlag beginnt keine Wisch-Geste (Sekunden).
+    static let typingQuietPeriod: TimeInterval = 0.5
+
     enum Verdict: Equatable {
         /// Event unangetastet weiterreichen (vertikal, Maus, fremdes Momentum).
         case passThrough
@@ -49,7 +54,8 @@ struct TabScrollSwipeRecognizer: Equatable {
         phase: NSEvent.Phase,
         momentumPhase: NSEvent.Phase,
         deltaX: CGFloat,
-        deltaY: CGFloat
+        deltaY: CGFloat,
+        typingSuppressed: Bool = false
     ) -> Verdict {
         // Momentum-Ausläufer folgen der Achse der gerade beendeten Geste:
         // horizontale Gesten schlucken auch ihr Momentum (sonst trudeln
@@ -84,6 +90,13 @@ struct TabScrollSwipeRecognizer: Equatable {
 
         accumulatedX += deltaX
         accumulatedY += deltaY
+
+        // Kurz nach einem Tastenanschlag ist ein seitlicher Versatz meist der
+        // Handballen (LR-AU-011): die Geste zählt dann als nicht-horizontal —
+        // nichts wird ausgelöst und nichts konsumiert.
+        if axis == .undecided, typingSuppressed {
+            axis = .vertical
+        }
 
         if axis == .undecided,
            abs(accumulatedX) + abs(accumulatedY) >= Self.axisLockThreshold {

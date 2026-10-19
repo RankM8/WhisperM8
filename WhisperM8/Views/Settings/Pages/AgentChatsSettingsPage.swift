@@ -67,6 +67,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
     @AppStorage(PreferenceKeys.defaultAgentProvider) private var defaultAgentProviderRaw = "claude"
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
     @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
+    @AppStorage(PreferenceKeys.isTabSwipeEnabled) private var isTabSwipeEnabled = true
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
     @State private var folderFeedback: String?
@@ -119,6 +120,12 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "Rename chats automatically",
                     subtitle: "Uses the title the CLI already has — Claude's /rename or generated title, otherwise the first prompt. No extra model call. A name you set in WhisperM8 wins until you reset it.",
                     isOn: $isAutoChatRenameEnabled
+                )
+
+                SettingsToggleRow(
+                    title: "Switch tabs with a two-finger swipe",
+                    subtitle: "Swiping sideways on the trackpad moves to the next or previous tab. Ignored for a moment after you type, so a resting palm cannot switch chats while you write.",
+                    isOn: $isTabSwipeEnabled
                 )
 
                 SettingsToggleRow(

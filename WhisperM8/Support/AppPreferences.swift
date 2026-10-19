@@ -219,6 +219,13 @@ struct AppPreferences {
     /// Aktiviert das automatische Umbenennen von neuen Chats nach dem ersten
     /// Turn-End (via `claude -p`-Subprocess). Default: an. Wenn aus: Title
     /// bleibt "Claude Chat" / "Codex Chat" bis der User selbst umbenennt.
+    /// Zwei-Finger-Wischen wechselt den Tab (LR-AU-011). Default an (Feature-Erhalt),
+    /// in den Agent-Chats-Einstellungen abschaltbar.
+    var isTabSwipeEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.isTabSwipeEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.isTabSwipeEnabled) }
+    }
+
     var isAutoChatRenameEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.isAutoChatRenameEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoChatRenameEnabled) }
@@ -888,6 +895,7 @@ enum PreferenceKeys {
     static let agentDefaultProjectPath = "agentDefaultProjectPath"
     static let defaultAgentProvider = "defaultAgentProvider"
     static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
+    static let isTabSwipeEnabled = "isTabSwipeEnabled"
     static let isAutoSummaryEnabled = "isAutoSummaryEnabled"
     static let summaryStartupReconciliationEnabled = "summaryStartupReconciliationEnabled"
     static let isTerminalBellEnabled = "isTerminalBellEnabled"

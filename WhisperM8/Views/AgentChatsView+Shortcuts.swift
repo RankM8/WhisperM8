@@ -522,14 +522,18 @@ extension AgentChatsView {
         guard let hostWindow, event.window === hostWindow,
               event.hasPreciseScrollingDeltas,
               !isPointerInTabStripBand(event) else { return event }
+        // Abschaltbar (LR-AU-011): aus → Event unangetastet durchreichen.
+        guard AppPreferences.shared.isTabSwipeEnabled else { return event }
 
+        let sinceLastKey = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
         let sign: CGFloat = event.isDirectionInvertedFromDevice ? 1 : -1
         var recognizer = tabScrollSwipeRecognizer
         let verdict = recognizer.handle(
             phase: event.phase,
             momentumPhase: event.momentumPhase,
             deltaX: event.scrollingDeltaX * sign,
-            deltaY: event.scrollingDeltaY * sign
+            deltaY: event.scrollingDeltaY * sign,
+            typingSuppressed: sinceLastKey < TabScrollSwipeRecognizer.typingQuietPeriod
         )
         tabScrollSwipeRecognizer = recognizer
 

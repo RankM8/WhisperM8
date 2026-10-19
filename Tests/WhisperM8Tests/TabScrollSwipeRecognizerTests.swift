@@ -89,4 +89,19 @@ final class TabScrollSwipeRecognizerTests: XCTestCase {
         XCTAssertEqual(recognizer.handle(phase: .began, momentumPhase: [], deltaX: 0, deltaY: 0), .passThrough)
         XCTAssertEqual(changed(0, 50), .passThrough)
     }
+
+    /// LR-AU-011: kurz nach einem Tastenanschlag löst ein seitlicher Versatz
+    /// nichts aus und wird nicht konsumiert.
+    func testGestureDuringTypingNeverTriggersNorConsumes() {
+        XCTAssertEqual(recognizer.handle(phase: .began, momentumPhase: [], deltaX: 0, deltaY: 0,
+                                         typingSuppressed: true), .passThrough)
+        XCTAssertEqual(recognizer.handle(phase: .changed, momentumPhase: [], deltaX: 40, deltaY: 0,
+                                         typingSuppressed: true), .passThrough)
+        XCTAssertEqual(recognizer.handle(phase: .changed, momentumPhase: [], deltaX: 80, deltaY: 0,
+                                         typingSuppressed: false), .passThrough)
+        XCTAssertEqual(recognizer.handle(phase: .ended, momentumPhase: [], deltaX: 0, deltaY: 0), .passThrough)
+        // Nächste, ruhige Geste funktioniert wieder.
+        _ = recognizer.handle(phase: .began, momentumPhase: [], deltaX: 0, deltaY: 0)
+        XCTAssertEqual(changed(80), .trigger(direction: 1))
+    }
 }
