@@ -75,7 +75,11 @@ extension RecordingCoordinator {
         // 500-ms-Monitor sie nicht als User-Kopie importiert. Bekannte
         // Restluecke (existierte auch vorher): eine echte User-Kopie im
         // Capture-Fenster wird mit verschluckt.
-        observedPasteboardChangeCount = NSPasteboard.general.changeCount
+        // LR-DIK-016: nur auf den Stand nach dem eigenen Restore setzen; eine echte
+        // Nutzerkopie während des Captures bleibt für den Monitor sichtbar.
+        if let resync = selectedContextService.outcome.resyncChangeCount {
+            observedPasteboardChangeCount = resync
+        }
         startClipboardScreenshotMonitor()
     }
 
