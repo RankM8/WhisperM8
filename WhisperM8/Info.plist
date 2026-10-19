@@ -4,23 +4,29 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.whisperm8.app</string>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
 		<string>de</string>
 	</array>
-	<key>CFBundleIdentifier</key>
-	<string>com.whisperm8.app</string>
 	<key>CFBundleName</key>
 	<string>WhisperM8</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.21.0</string>
+	<string>2.22.0</string>
 	<key>CFBundleVersion</key>
-	<string>2.21.0</string>
+	<string>2.22.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>WhisperM8 kann Screenshots und kurze Bildschirmaufnahmen als optionalen Kontext für die Nachbearbeitung verwenden.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>WhisperM8 erkennt ein kurzes Codewort lokal auf diesem Mac, um die Codex-Sprachsitzung stummzuschalten. Die Erkennung läuft ausschließlich on-device; es wird kein Audio gespeichert oder gesendet.</string>
 	<key>OSLogPreferences</key>
 	<dict>
 		<key>com.whisperm8.app</key>
@@ -35,12 +41,6 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>WhisperM8 benötigt Mikrofon-Zugriff für die Sprachaufnahme.</string>
-	<key>NSScreenCaptureUsageDescription</key>
-	<string>WhisperM8 kann Screenshots und kurze Bildschirmaufnahmen als optionalen Kontext für die Nachbearbeitung verwenden.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>WhisperM8 erkennt ein kurzes Codewort lokal auf diesem Mac, um die Codex-Sprachsitzung stummzuschalten. Die Erkennung läuft ausschließlich on-device; es wird kein Audio gespeichert oder gesendet.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
