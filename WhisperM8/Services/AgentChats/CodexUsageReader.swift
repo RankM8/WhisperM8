@@ -46,7 +46,7 @@ struct CodexUsage: Equatable {
 }
 
 struct CodexUsageReader {
-    var sessionsRoot: URL = FileManager.default.homeDirectoryForCurrentUser
+    var sessionsRoot: URL = AppInstance.home
         .appendingPathComponent(".codex/sessions", isDirectory: true)
     var fileManager: FileManager = .default
 
@@ -157,7 +157,7 @@ struct CodexUsageFetcher {
         var accountID: String?
     }
 
-    var codexHome: URL = FileManager.default.homeDirectoryForCurrentUser
+    var codexHome: URL = AppInstance.home
         .appendingPathComponent(".codex", isDirectory: true)
     /// Test-Injektion: URL-Request ausfuehren, Antwort-Body liefern.
     var httpBody: (URLRequest) async -> Data? = { request in

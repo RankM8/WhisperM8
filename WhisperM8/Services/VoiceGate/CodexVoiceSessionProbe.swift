@@ -59,7 +59,7 @@ struct CodexVoiceSessionProbe {
 
     init(
         gate: CodexVoiceSessionGate = CodexVoiceSessionGate(),
-        logRoot: URL = FileManager.default.homeDirectoryForCurrentUser
+        logRoot: URL = AppInstance.home
             .appendingPathComponent("Library/Logs/\(CodexVoiceSessionProbe.codexBundleIdentifier)", isDirectory: true),
         now: @escaping () -> Date = Date.init,
         codexRunningProvider: (() -> Bool)? = nil

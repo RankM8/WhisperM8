@@ -26,7 +26,7 @@ final class CodexModelCatalogWatcher {
     private(set) var changeCount = 0
 
     init(
-        url: URL = FileManager.default.homeDirectoryForCurrentUser
+        url: URL = AppInstance.home
             .appendingPathComponent(".codex/models_cache.json"),
         sourceFactory: @escaping @MainActor (URL) -> FileEventSource = { FileEventSource(url: $0) },
         onCatalogChanged: @escaping @MainActor () -> Void = CodexModelCatalogWatcher.syncAgentDefinition,

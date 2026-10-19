@@ -21,7 +21,7 @@ struct CodexCommandExecutionProbe {
     private let now: () -> Date
 
     init(
-        logRoot: URL = FileManager.default.homeDirectoryForCurrentUser
+        logRoot: URL = AppInstance.home
             .appendingPathComponent("Library/Logs/\(CodexVoiceSessionProbe.codexBundleIdentifier)", isDirectory: true),
         now: @escaping () -> Date = Date.init
     ) {

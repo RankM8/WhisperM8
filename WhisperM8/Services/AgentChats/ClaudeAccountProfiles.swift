@@ -41,7 +41,7 @@ enum ClaudeProfileSelection: Equatable {
 struct ClaudeAccountProfiles {
     static let mainProfileName = "main"
 
-    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var homeDirectory: URL = AppInstance.home
     var fileManager: FileManager = .default
 
     var profilesRoot: URL {

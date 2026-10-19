@@ -33,7 +33,7 @@ struct SupervisorJobState: Equatable {
 enum SupervisorJobReader {
     /// Default-Verzeichnis fuer Jobs. Sucht `~/.claude/jobs/`.
     static var defaultJobsDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        AppInstance.home
             .appendingPathComponent(".claude/jobs", isDirectory: true)
     }
 

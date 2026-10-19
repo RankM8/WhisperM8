@@ -316,7 +316,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 return .failure(.notFound, "Session nicht gefunden oder archiviert")
             }
             WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-            NSApp.activate(ignoringOtherApps: true)
+            AppActivation.activate()
             return .success(session)
         }
         switch outcome {
@@ -1164,7 +1164,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             }
 
             WindowRequestCenter.shared.requestWindowFocus(windowID: targetWindowID)
-            NSApp.activate(ignoringOtherApps: true)
+            AppActivation.activate()
 
             return .ok(name: entity.name, workspaceID: entity.id, windowID: targetWindowID,
                        outcome: outcome, focusedSessionID: focused, slotOccupied: slotOccupied)
@@ -1263,7 +1263,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 }
             }
             WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-            NSApp.activate(ignoringOtherApps: true)
+            AppActivation.activate()
             return .success(session)
         }
         switch outcome {
@@ -1464,11 +1464,11 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     }
                 }
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-                NSApp.activate(ignoringOtherApps: true)
+                AppActivation.activate()
                 resumed = true
             } else if wantsOpen {
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
-                NSApp.activate(ignoringOtherApps: true)
+                AppActivation.activate()
                 opened = true
             }
             return .ok(session, outcome: wasArchived ? "unarchived" : "alreadyActive",

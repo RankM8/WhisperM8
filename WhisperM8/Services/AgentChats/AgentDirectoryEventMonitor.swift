@@ -23,7 +23,7 @@ final class AgentDirectoryEventMonitor {
         debounceInterval: TimeInterval = 5.0,
         settleInterval: TimeInterval = 30.0
     ) {
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home = AppInstance.home
         // `.claude-profiles` statt der einzelnen Profil-projects-Dirs: so
         // werden auch NACH App-Start angelegte Account-Profile erfasst.
         // `relevantPaths` filtert Nicht-Transcript-JSONL (history.jsonl etc.).

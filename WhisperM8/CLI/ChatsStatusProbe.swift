@@ -276,7 +276,7 @@ enum ChatsStatusProbe {
 
     /// Codex-Session-ID (36-Zeichen-Suffix des Dateistamms) → JSONL-URL.
     private static let codexTranscriptIndex = ThrottledTranscriptIndex<URL> {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
+        let dir = AppInstance.home
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
         return buildCodexTranscriptIndex(rootPath: dir.path)

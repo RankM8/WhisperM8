@@ -27,7 +27,7 @@ enum CodexTranscriptLocator {
     static var negativeTTL: TimeInterval = 2
 
     static var defaultRoot: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        AppInstance.home
             .appendingPathComponent(".codex", isDirectory: true)
             .appendingPathComponent("sessions", isDirectory: true)
     }

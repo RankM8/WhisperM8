@@ -448,7 +448,7 @@ enum AgentTranscriptLocator {
             codexPathCache.removeObject(forKey: cacheKey)
         }
 
-        let sessionsDir = FileManager.default.homeDirectoryForCurrentUser
+        let sessionsDir = AppInstance.home
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
         guard FileManager.default.fileExists(atPath: sessionsDir.path) else { return nil }
@@ -517,7 +517,7 @@ enum AgentTranscriptPresence {
     /// EIN rekursiver Walk über `~/.codex/sessions`. Codex-Dateien heißen
     /// `rollout-<ts>-<uuid>.jsonl`; die ID sind die letzten 36 Zeichen des Stems.
     private static func presentCodexSessionIDs() -> Set<String> {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
+        let dir = AppInstance.home
             .appendingPathComponent(".codex")
             .appendingPathComponent("sessions")
         guard FileManager.default.fileExists(atPath: dir.path),

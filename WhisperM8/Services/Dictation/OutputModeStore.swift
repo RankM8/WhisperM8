@@ -231,10 +231,7 @@ struct OutputModeStore {
     }
 
     private static func defaultFileURL() -> URL {
-        let supportDirectory = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0]
+        let supportDirectory = AppInstance.applicationSupport
         return supportDirectory
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("OutputModes.json")

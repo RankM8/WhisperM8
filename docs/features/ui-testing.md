@@ -135,3 +135,40 @@ und antwortet sofort, die CLI pollt `debug.job` im Halbsekundentakt. Höchstens
   (dann `method: "cacheDisplay"` — das Bild kann leer sein).
 - Eine App ohne diese Methoden (alter Build) antwortet „Unbekannte Methode";
   die CLI rät dann zu `make dev`.
+
+## Stufe 3: Isolierte Test-Instanz (`scripts/test-instance.sh`)
+
+Seit 19.10.2026. Eine zweite App-Instanz läuft **neben** der Produktiv-App, ohne
+sie oder ihre Daten zu berühren. Damit lassen sich ganze Abläufe (Onboarding,
+Chat-Start, CLI, Snapshots) end-to-end prüfen, ohne `make dev` und ohne die
+laufenden Chats des Nutzers zu stören. Sicher aus einem WhisperM8-Chat.
+
+```bash
+scripts/test-instance.sh build      # inkrementeller Release-Build → .build-test/WhisperM8Test.app
+scripts/test-instance.sh start      # versteckt starten, kein Fokus
+scripts/test-instance.sh cli debug state
+scripts/test-instance.sh cli chats new --project ~/.whisperm8-test-instance/projekt-a
+scripts/test-instance.sh cli debug snapshot --window agent-chats
+scripts/test-instance.sh stop | reset | status | log
+```
+
+**Isolation** (`Services/Shared/AppInstance.swift`, Schalter
+`WHISPERM8_INSTANCE_ROOT`, Standard `~/.whisperm8-test-instance`):
+
+| Bereich | Test-Instanz |
+|---|---|
+| Bundle-ID / Defaults | `com.whisperm8.app.test` (frische Domain, Debug-Kanal an, GPT-Ports 28765/28766) |
+| Home (`~/.claude`, `~/.codex`, Profile, Logs, Application Support) | `<wurzel>/home` — `AppInstance.home`/`.applicationSupport` |
+| Kindprozesse (Chats) | `HOME=<wurzel>/home` → `claude`/`codex` starten wie beim ersten Mal, ohne Login |
+| Control-Socket | unter dem Test-Home, Rückfall `/private/tmp/whisperm8-<uid>-test-<hash>/` |
+| Keychain | Dienst `com.whisperm8.app.test` (kein Zugriffsdialog auf Produktiv-Schlüssel) |
+| Hotkeys, Dock, Fokus | keine globalen Hotkeys, kein Dock-Icon, nie aktiv (`AppActivation`), Fenster hinter dem Schreibtisch (`TestInstanceWindowParking`) |
+| Proxy-Waisensuche, Distributed Notification | aus bzw. mit eigenem Namen |
+
+Binaries (`claude`, `codex`) werden weiter im echten Home gesucht. Das
+Test-Bundle verweigert den Start ohne Wurzel (`GUILaunchGuard`). Fenster
+sichtbar machen: `WHISPERM8_TEST_VISIBLE=1 scripts/test-instance.sh start`.
+
+**Grenzen:** Mikrofon und Bedienungshilfen hat das Test-Bundle nicht (eigener
+TCC-Eintrag) — Diktat nur über `debug dictate <audio>`. Claude im Test-Home ist
+nicht angemeldet; echte Modell-Turns gehen dort nicht.

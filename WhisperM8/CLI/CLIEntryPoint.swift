@@ -47,7 +47,15 @@ enum GUILaunchGuard {
     /// EX_USAGE — falscher Aufruf, kein Absturz.
     static let refusalExitCode: Int32 = 64
 
-    static func refusalMessage(bundleURL: URL, bundleIdentifier: String?) -> String? {
+    static func refusalMessage(
+        bundleURL: URL,
+        bundleIdentifier: String?,
+        isTestInstance: Bool = AppInstance.isTestInstance
+    ) -> String? {
+        // Das Test-Bundle ohne Test-Wurzel liefe auf den echten Daten des Nutzers.
+        if bundleIdentifier == AppInstance.testBundleIdentifier, !isTestInstance {
+            return "WhisperM8 Test: nur über scripts/test-instance.sh starten (setzt \(AppInstance.rootEnvironmentKey))."
+        }
         guard bundleIdentifier == nil || bundleURL.pathExtension != "app" else { return nil }
         return """
         WhisperM8: Die App-Oberfläche startet nur aus dem .app-Bundle \

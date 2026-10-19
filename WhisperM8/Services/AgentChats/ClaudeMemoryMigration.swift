@@ -36,7 +36,7 @@ struct ClaudeMemoryMigration {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8/memory-migration/\(formatter.string(from: now))", isDirectory: true)
     }
 

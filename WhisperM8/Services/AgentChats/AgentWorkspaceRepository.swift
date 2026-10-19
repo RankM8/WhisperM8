@@ -204,7 +204,7 @@ struct AgentWorkspaceRepository {
     /// Produktions-Pfad der Workspace-JSON. Internal, weil die
     /// `AgentWorkspaceStoreRegistry` damit die Default-Instanz auflöst.
     static func defaultFileURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("AgentSessions.json")
     }

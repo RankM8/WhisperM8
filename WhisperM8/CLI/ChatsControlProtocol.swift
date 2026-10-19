@@ -13,7 +13,7 @@ enum ChatsControlProtocol {
     /// Ordner (0700) + Socket (0600) unter Application Support. Der restriktive
     /// Elternordner schließt das bind→chmod-Fenster.
     static func controlDirectory() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("control", isDirectory: true)
     }
@@ -37,7 +37,7 @@ enum ChatsControlProtocol {
     }
 
     static func fallbackSocketURL() -> URL {
-        URL(fileURLWithPath: "/private/tmp/whisperm8-\(getuid())/control.sock")
+        URL(fileURLWithPath: "/private/tmp/whisperm8-\(getuid())\(AppInstance.socketDirectorySuffix)/control.sock")
     }
 
     /// `sun_path`-Limit inkl. abschließendem NUL.

@@ -70,7 +70,7 @@ struct ChatsWorkspaceReader {
     }
 
     static func defaultUIStateFileURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("agent-ui-state.json")
     }

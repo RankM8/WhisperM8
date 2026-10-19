@@ -31,7 +31,7 @@ enum Logger {
 
     /// Rotiert ab 10 MB (eine Vorversion `.1`), schreibt nur per `write(contentsOf:)`.
     private static let fileSink: LoggerFileSink = {
-        let logsDirectory = FileManager.default.homeDirectoryForCurrentUser
+        let logsDirectory = AppInstance.home
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Logs", isDirectory: true)
             .appendingPathComponent("WhisperM8", isDirectory: true)

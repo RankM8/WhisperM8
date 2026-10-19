@@ -30,7 +30,7 @@ enum ClaudeTranscriptReader {
     static func transcriptURL(forCwd cwd: String, sessionID: String) -> URL {
         let canonical = AgentSessionStore.canonicalProjectPath(cwd)
         let encoded = AgentTranscriptLocator.encodeClaudeCwd(canonical)
-        return FileManager.default.homeDirectoryForCurrentUser
+        return AppInstance.home
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("projects", isDirectory: true)
             .appendingPathComponent(encoded, isDirectory: true)

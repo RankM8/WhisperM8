@@ -26,7 +26,7 @@ final class CodexGlobalConfigReader: @unchecked Sendable {
 
     /// DI-Closures für Tests — Konvention wie überall.
     init(
-        fileURL: URL = FileManager.default.homeDirectoryForCurrentUser
+        fileURL: URL = AppInstance.home
             .appendingPathComponent(".codex/config.toml"),
         dataLoader: @escaping (URL) throws -> Data = { try Data(contentsOf: $0) },
         statLoader: @escaping (URL) -> (mtime: Date, size: Int)? = { url in

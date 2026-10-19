@@ -37,7 +37,7 @@ struct AgentJobStore {
     }
 
     static var defaultRootDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8/agent-jobs", isDirectory: true)
     }
 

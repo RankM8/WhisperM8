@@ -33,7 +33,7 @@ final class ChatsAuditLog: @unchecked Sendable {
     }
 
     static func defaultFileURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("chats-audit.jsonl")
     }

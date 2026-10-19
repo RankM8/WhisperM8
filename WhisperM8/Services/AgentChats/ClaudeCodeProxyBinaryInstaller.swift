@@ -108,8 +108,7 @@ struct ClaudeCodeProxyBinaryInstaller {
         downloader: ((URL) async throws -> Data)? = nil,
         extractor: ((URL, URL) throws -> Void)? = nil
     ) {
-        self.directory = directory ?? FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        self.directory = directory ?? AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8/bin", isDirectory: true)
         #if arch(arm64)
         self.architecture = architecture ?? "arm64"

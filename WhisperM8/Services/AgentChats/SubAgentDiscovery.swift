@@ -71,7 +71,7 @@ enum SubAgentDiscovery {
             }
         }
 
-        let userDir = FileManager.default.homeDirectoryForCurrentUser
+        let userDir = AppInstance.home
             .appendingPathComponent(".claude", isDirectory: true)
             .appendingPathComponent("agents", isDirectory: true)
         for agent in scan(directory: userDir, scope: .user) {

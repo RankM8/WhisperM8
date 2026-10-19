@@ -72,7 +72,8 @@ final class WindowRequestCenter: ObservableObject {
     /// wir mittlerweile Agent-Chats. Wir behalten den String, damit ältere
     /// installierte Builds, die noch parallel laufen könnten, kompatibel
     /// bleiben.
-    static let distributedNotificationName = Notification.Name("com.whisperm8.app.openSettings")
+    // Die Test-Instanz hängt ihr Kürzel an, damit sie nie die Produktiv-App weckt.
+    static let distributedNotificationName = Notification.Name("com.whisperm8.app.openSettings" + AppInstance.socketDirectorySuffix)
     static let localNotificationName = Notification.Name("WindowRequestCenter.request")
 
     @Published private(set) var latestRequest: WindowRequest?
@@ -292,7 +293,8 @@ struct AppWindowRequestHost: View {
 }
 
 enum WindowActivationService {
+    @MainActor
     static func activateApp() {
-        NSApp.activate(ignoringOtherApps: true)
+        AppActivation.activate()
     }
 }

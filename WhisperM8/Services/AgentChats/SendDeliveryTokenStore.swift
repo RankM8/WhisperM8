@@ -48,7 +48,7 @@ struct SendDeliveryTokenStore {
 
     /// App und CLI sind dasselbe Binary — beide leiten identisch ab.
     static func defaultDirectory() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("send-tokens", isDirectory: true)
     }

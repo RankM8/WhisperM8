@@ -128,6 +128,12 @@ final class LoginShellEnvironment: @unchecked Sendable {
 
         env["PATH"] = path
 
+        // Test-Instanz: Kindprozesse legen ihre Konfiguration im Test-Home an
+        // (im Normalbetrieb leer, siehe `AppInstance`).
+        for (key, value) in AppInstance.childEnvironmentOverrides {
+            env[key] = value
+        }
+
         if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
             env["TERM"] = "xterm-256color"
         }

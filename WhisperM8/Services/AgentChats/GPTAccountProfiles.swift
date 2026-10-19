@@ -66,7 +66,7 @@ struct GPTAccountProfiles {
     static let homeEnvironmentKey = "HOME"
     static let accountInfoFileName = "whisperm8-account.json"
 
-    var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var homeDirectory: URL = AppInstance.home
     var fileManager: FileManager = .default
     /// Default-Store des Proxys ohne `CCP_CONFIG_DIR`. Der Proxy folgt
     /// `XDG_CONFIG_HOME`, deshalb hier ebenfalls — sonst zeigte „main" auf

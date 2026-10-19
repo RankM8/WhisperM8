@@ -322,7 +322,7 @@ enum JarvisBoardText {
 /// Standard-Domain ist nicht verlässlich die der App.
 enum JarvisBoardSettings {
     static let defaultsKey = PreferenceKeys.jarvisBoardEnabled
-    static let appDomain = "com.whisperm8.app"
+    static var appDomain: String { AppInstance.defaultsDomain }
 
     static func isEnabled(read: (String) -> Any? = Self.readAppPreference) -> Bool {
         (read(defaultsKey) as? Bool) ?? true
@@ -365,7 +365,7 @@ final class JarvisBoardStore: @unchecked Sendable {
 
     /// Hängt an keinem Claude-Profil — überlebt damit einen Kontowechsel.
     static func defaultFileURL() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("jarvis-board.json")
     }

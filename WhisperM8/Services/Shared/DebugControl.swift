@@ -140,7 +140,7 @@ enum DebugControl {
     }
 
     static var defaultSnapshotDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("debug-snapshots", isDirectory: true)
     }

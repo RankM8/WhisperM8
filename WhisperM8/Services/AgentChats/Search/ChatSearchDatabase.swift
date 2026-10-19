@@ -32,7 +32,7 @@ final class ChatSearchDatabase {
     /// Standardort: eigener Ordner neben dem Workspace, damit ein Rebuild
     /// (Ordner löschen) nie versehentlich echte Daten trifft.
     static func defaultFileURL() -> URL {
-        let base = FileManager.default.homeDirectoryForCurrentUser
+        let base = AppInstance.home
             .appendingPathComponent("Library/Application Support/WhisperM8/SearchIndex", isDirectory: true)
         return base.appendingPathComponent("index.sqlite", isDirectory: false)
     }

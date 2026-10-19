@@ -134,7 +134,7 @@ struct CLISkillExporter {
 
     init(
         definition: SkillDefinition = .transcription,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = AppInstance.home,
         bundle: Bundle = .module
     ) {
         self.definition = definition
@@ -517,7 +517,7 @@ struct CLIInstallStatus {
     }
 
     static func current(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = AppInstance.home,
         executableURL: URL? = Bundle.main.executableURL
     ) -> State {
         let linkURL = homeDirectory

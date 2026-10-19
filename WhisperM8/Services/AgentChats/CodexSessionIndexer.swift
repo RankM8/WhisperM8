@@ -1,7 +1,7 @@
 import Foundation
 
 struct CodexSessionIndexer {
-    var sessionsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    var sessionsDirectory: URL = AppInstance.home
         .appendingPathComponent(".codex", isDirectory: true)
         .appendingPathComponent("sessions", isDirectory: true)
 

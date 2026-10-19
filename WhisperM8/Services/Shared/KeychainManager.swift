@@ -3,7 +3,8 @@ import Security
 
 /// Secure storage for API keys using macOS Keychain
 enum KeychainManager {
-    private static let service = "com.whisperm8.app"
+    // Test-Instanz mit eigenem Dienst: kein Zugriffsdialog auf die Produktiv-Schlüssel, nichts überschrieben.
+    private static let service = AppInstance.isTestInstance ? "com.whisperm8.app.test" : "com.whisperm8.app"
     private static var cache: [String: String] = [:]
     private static let cacheLock = NSLock()
 

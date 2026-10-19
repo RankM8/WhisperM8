@@ -25,7 +25,7 @@ enum ExternalClaudeHooksInspector {
     /// Beide User-Settings-Dateien inspizieren (`settings.json` +
     /// `settings.local.json`). Fehlende/inkompatible Dateien → keine Funde.
     static func inspectUserSettings(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        home: URL = AppInstance.home,
         trackedEvents: [String] = ClaudeHookSettingsBuilder.trackedEventNames
     ) -> [Finding] {
         let claudeDir = home.appendingPathComponent(".claude", isDirectory: true)

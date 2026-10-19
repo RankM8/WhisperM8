@@ -39,8 +39,7 @@ final class AgentCrashRecoveryMarker {
     private var isOwner = false
 
     init(
-        fileURL: URL = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        fileURL: URL = AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("running-sessions.json"),
         ownPID: Int32 = getpid(),

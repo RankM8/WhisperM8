@@ -367,7 +367,7 @@ final class CodexModelCatalogStore: @unchecked Sendable {
 
     /// DI-Closures für Tests (Fixture-JSON, Stat-Fakes) — Konvention wie überall.
     init(
-        fileURL: URL = FileManager.default.homeDirectoryForCurrentUser
+        fileURL: URL = AppInstance.home
             .appendingPathComponent(".codex/models_cache.json"),
         dataLoader: @escaping (URL) throws -> Data = { try Data(contentsOf: $0) },
         statLoader: @escaping (URL) -> (mtime: Date, size: Int)? = { url in

@@ -79,8 +79,7 @@ struct ClaudeAccountLimitPinger {
     static let failureCooldown: TimeInterval = 5 * 60
 
     static func defaultWorkDirectory() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
+        let base = AppInstance.applicationSupport
         return base
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent(workDirectoryName, isDirectory: true)

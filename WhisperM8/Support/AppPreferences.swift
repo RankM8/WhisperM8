@@ -184,7 +184,7 @@ struct AppPreferences {
     var agentDefaultProjectPath: String {
         get {
             defaults.string(forKey: Keys.agentDefaultProjectPath)
-                ?? FileManager.default.homeDirectoryForCurrentUser.path
+                ?? AppInstance.home.path
         }
         nonmutating set { defaults.set(newValue, forKey: Keys.agentDefaultProjectPath) }
     }

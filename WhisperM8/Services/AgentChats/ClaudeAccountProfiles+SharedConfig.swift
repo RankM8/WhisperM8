@@ -68,7 +68,7 @@ extension ClaudeAccountProfiles {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let backup = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let backup = AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8/config-migration/shared-items-\(formatter.string(from: Date()))")
         let report = ClaudeAccountProfiles().healSharedItems(backupRoot: backup)
         if report != SharedItemsHealReport() {

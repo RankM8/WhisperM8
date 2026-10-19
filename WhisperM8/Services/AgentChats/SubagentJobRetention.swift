@@ -92,7 +92,7 @@ struct SubagentJobTranscriptArchiver {
     }
 
     static var defaultArchiveRoot: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8/agent-jobs-archive", isDirectory: true)
     }
 

@@ -33,7 +33,7 @@ struct WhisperM8ClaudePlugin {
         rootDirectory: URL = WhisperM8ClaudePlugin.defaultRootDirectory(),
         bundle: Bundle = .module,
         appVersion: String = WhisperM8ClaudePlugin.bundleVersion(),
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = AppInstance.home
     ) {
         self.rootDirectory = rootDirectory
         self.bundle = bundle
@@ -42,7 +42,7 @@ struct WhisperM8ClaudePlugin {
     }
 
     static func defaultRootDirectory() -> URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("claude-plugin", isDirectory: true)
     }
@@ -263,7 +263,7 @@ struct ClaudePluginSkillMigration {
     var homeDirectory: URL
     var bundle: Bundle
 
-    init(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser, bundle: Bundle = .module) {
+    init(homeDirectory: URL = AppInstance.home, bundle: Bundle = .module) {
         self.homeDirectory = homeDirectory
         self.bundle = bundle
     }
@@ -383,7 +383,7 @@ enum ClaudePluginBootstrap {
     /// echten App-Prozess: unter `swift test` läge sonst der Plugin-Ordner des
     /// Entwicklerrechners in jedem Launch-Test.
     static func launchEnvironment(preferences: AppPreferences = .shared) -> [String: String] {
-        guard Bundle.main.bundleIdentifier == "com.whisperm8.app" else { return [:] }
+        guard AppInstance.isAppBundleProcess else { return [:] }
         return WhisperM8ClaudePlugin.launchEnvironment(
             enabled: preferences.isClaudePluginEnabled,
             linkURL: WhisperM8ClaudePlugin.defaultRootDirectory().appendingPathComponent(WhisperM8ClaudePlugin.pluginName),

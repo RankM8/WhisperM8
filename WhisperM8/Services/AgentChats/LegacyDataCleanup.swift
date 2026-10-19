@@ -22,8 +22,7 @@ enum LegacyDataCleanup {
         let flag = "terminalSnapshotsPurged"
         guard !defaults.bool(forKey: flag) else { return }
 
-        let target = directory ?? FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let target = directory ?? AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("TerminalSnapshots", isDirectory: true)
 

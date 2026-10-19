@@ -24,7 +24,11 @@ struct WhisperM8App: App {
             NSApp.terminate(nil)
         }
 
-        setupHotkeys()
+        // Test-Instanz: keine globalen Hotkeys — sie liefe neben der
+        // Produktiv-App und würde deren Diktat-Kürzel doppelt belegen.
+        if !AppInstance.isTestInstance {
+            setupHotkeys()
+        }
     }
 
     var body: some Scene {
@@ -214,7 +218,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Onboarding immer als reguläre App (fokussierbares Setup-Fenster). Sonst richtet
         // sich die Policy nach dem Profil: Voll = Dock-App, sonst reine Menüleisten-App.
         let wantsDock = needsOnboarding || AppPreferences.shared.usageProfile.wantsAgentChats
-        NSApp.setActivationPolicy(wantsDock ? .regular : .accessory)
+        // Test-Instanz ohne Dock-Icon und mit geparkten Fenstern (`AppInstance`).
+        NSApp.setActivationPolicy(wantsDock && !AppInstance.isTestInstance ? .regular : .accessory)
+        TestInstanceWindowParking.installIfNeeded()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -374,11 +380,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 // willTerminate) räumen, bevor ensureRunning ihn weiterbenutzt.
                 // Mit aktiver ChatGPT-Abo-Transkription zusätzlich eine Waise
                 // ohne Transkriptions-Route (vor dem Flag gestartet) ersetzen.
-                ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
-                    port: AppPreferences.shared.claudeGPTBackendPort,
-                    resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath(),
-                    requireTranscriptionRoute: AppPreferences.shared.isChatGPTTranscriptionEnabled
-                )
+                // Nie in der Test-Instanz: deren Waisen-Suche träfe den Proxy der Produktiv-App.
+                if !AppInstance.isTestInstance {
+                    ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
+                        port: AppPreferences.shared.claudeGPTBackendPort,
+                        resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath(),
+                        requireTranscriptionRoute: AppPreferences.shared.isChatGPTTranscriptionEnabled
+                    )
+                }
                 _ = ClaudeCodeProxyManager.shared.ensureRunning(
                     port: AppPreferences.shared.claudeGPTBackendPort
                 )

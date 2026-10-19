@@ -10,7 +10,7 @@ enum CLISymlinkInstaller {
     static func installIfNeeded() {
         guard let target = currentExecutableURL() else { return }
 
-        let binDir = FileManager.default.homeDirectoryForCurrentUser
+        let binDir = AppInstance.home
             .appendingPathComponent(".local/bin", isDirectory: true)
         let linkURL = binDir.appendingPathComponent(linkName)
         let fileManager = FileManager.default
