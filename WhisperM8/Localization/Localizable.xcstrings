@@ -2941,6 +2941,16 @@
         }
       }
     },
+    "Free API key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kostenloser API-Key"
+          }
+        }
+      }
+    },
     "Frontier model for complex coding, research, and real-world work.": {
       "localizations": {
         "de": {
@@ -5600,6 +5610,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Erkennung läuft auf dem Gerät, solange ein Codex-Sprachchat aktiv ist. Es wird kein Audio gespeichert oder gesendet. Beim Ausschalten wird das Mikrofon sofort freigegeben."
+          }
+        }
+      }
+    },
+    "Recommended for personal use. Free key available; low-cost if you exceed free limits.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen für den persönlichen Gebrauch. Ein kostenloser Key ist verfügbar; günstig, falls du die Gratis-Grenzen überschreitest."
           }
         }
       }

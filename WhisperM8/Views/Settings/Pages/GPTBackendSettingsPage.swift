@@ -280,7 +280,7 @@ struct GPTBackendSettingsPage: View {
     private var configurationSection: some View {
         SettingsSection("Configuration") {
             SettingsRow(title: "Port", subtitle: "Local port of the claude-code-proxy (default: 18765, allowed 1024–65535).") {
-                TextField("18765", value: $port, format: .number)
+                TextField("18765", value: $port, format: .number.grouping(.never))
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .multilineTextAlignment(.trailing)
