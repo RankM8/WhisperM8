@@ -105,15 +105,21 @@ private struct LossyArray<Element: Decodable>: Decodable {
     init(from decoder: Decoder) throws {
         var container = try decoder.unkeyedContainer()
         var result: [Element] = []
+        var discarded = 0
         while !container.isAtEnd {
             if let element = try? container.decode(Element.self) {
                 result.append(element)
             } else {
                 // Platz überspringen, sonst bleibt der Cursor stehen.
                 _ = try? container.decode(DiscardedValue.self)
+                discarded += 1
             }
         }
         elements = result
+        if discarded > 0 {
+            // Sonst verschwände ein defekter Eintrag beim nächsten Schreiben spurlos (Review W4a).
+            Logger.agentStore.notice("jarvis_board_entries_discarded count=\(discarded) type=\(String(describing: Element.self), privacy: .public)")
+        }
     }
 
     private struct DiscardedValue: Decodable {}

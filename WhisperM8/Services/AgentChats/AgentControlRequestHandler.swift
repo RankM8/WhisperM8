@@ -1512,7 +1512,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 // Fortsetzen holt die App nicht nach vorn (LR-CLI-004).
                 WindowRequestCenter.shared.requestSessionFocus(
                     sessionID: targetID,
-                    activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: false))
+                    activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: wantsOpen))
                 resumed = true
             } else if wantsOpen {
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)

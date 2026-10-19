@@ -27,6 +27,9 @@ enum TabNavShortcut {
     /// Tab-Kürzel nur, wenn kein Texteditor (Feldeditor eines TextFields,
     /// NSTextView) den Fokus hat.
     static func shouldHandle(firstResponder: NSResponder?) -> Bool {
-        !(firstResponder is NSText)
+        // Nur bearbeitbare Textfelder behalten die Kürzel; die (nicht
+        // editierbare) Verlaufsansicht wechselt weiter die Tabs (Review W4a).
+        guard let text = firstResponder as? NSText else { return true }
+        return !text.isEditable
     }
 }

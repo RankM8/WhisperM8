@@ -140,6 +140,9 @@ struct GridShrinkActionBar: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // Esc bricht ab, statt beim Terminal zu landen und dort ggf. die
+            // laufende Antwort abzubrechen (LR-AU-019).
+            .keyboardShortcut(.cancelAction)
             .help("Kapazität unverändert lassen")
         }
         .padding(.horizontal, 5)

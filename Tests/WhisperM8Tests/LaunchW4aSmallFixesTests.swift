@@ -35,6 +35,9 @@ final class UIStateBackupTests: XCTestCase {
 final class TabNavFirstResponderTests: XCTestCase {
     func testTextEditorsKeepShortcuts() {
         XCTAssertFalse(TabNavShortcut.shouldHandle(firstResponder: NSTextView()))
+        let readOnly = NSTextView()
+        readOnly.isEditable = false
+        XCTAssertTrue(TabNavShortcut.shouldHandle(firstResponder: readOnly), "Verlaufsansicht wechselt weiter Tabs")
         XCTAssertTrue(TabNavShortcut.shouldHandle(firstResponder: NSView()))
         XCTAssertTrue(TabNavShortcut.shouldHandle(firstResponder: nil))
     }
