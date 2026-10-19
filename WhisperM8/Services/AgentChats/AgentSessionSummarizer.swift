@@ -93,8 +93,10 @@ struct AgentSummaryGenerator {
             if let gptProfile = builder.gptProfileHeaderResolver(session.gptProfileName),
                gptProfile == GPTAccountProfiles.mainProfileName
                 || GPTAccountProfiles.isValidProfileName(gptProfile) {
+                // Dieselbe Header-Zeile wie der Chat: Konto UND Router-Token —
+                // ohne Token antwortet der Router 401 (Review W1).
                 context.environment[AgentCommandBuilder.customHeadersEnvironmentKey] =
-                    "\(ClaudeGPTMixRouter.profileHeaderName): \(gptProfile)"
+                    builder.customHeadersValue(profile: gptProfile)
             }
             context.extraArguments = ["--model", model]
         }

@@ -66,7 +66,9 @@ final class AgentPromptQueueDelivery {
             reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)")
         // Zustell-Token VOR dem Paste — gleicher Wiedervorlage-Schutz wie in
         // der Send-Pipeline (UserPromptSubmit-Guard konsumiert es).
-        SendDeliveryTokenStore().stage(promptText: marked)
+        // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
+        // sonst blockte der Guard die eigene Zustellung (Review W1).
+        SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
         controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 

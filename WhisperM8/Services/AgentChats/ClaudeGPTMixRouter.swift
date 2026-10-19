@@ -943,7 +943,7 @@ private extension ClaudeGPTMixRouter {
                     status: 401,
                     reason: "Unauthorized",
                     body: ClaudeGPTMixRouter.anthropicAuthErrorBody(
-                        message: "GPT-Backend: lokales Router-Token fehlt oder ist ungueltig. Chat in WhisperM8 neu starten (aeltere Hintergrund-Agents einmal neu spawnen)."
+                        message: "GPT-Backend: lokales Router-Token fehlt oder ist ungültig. Chat in WhisperM8 neu starten (ältere Hintergrund-Agents einmal neu spawnen)."
                     )
                 )
                 return

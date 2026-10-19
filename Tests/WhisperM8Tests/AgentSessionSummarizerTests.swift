@@ -185,12 +185,16 @@ final class AgentSummaryGeneratorTests: XCTestCase {
         builder.claudeProfileEnvironmentResolver = { _ in [:] }
         builder.gptBackendEnabledResolver = { true }
         builder.gptProfileHeaderResolver = { _ in "acct2" }
+        let token = String(repeating: "a", count: 64)
+        builder.gptRouterTokenResolver = { token }
         var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "T")
         session.claudeBackendModel = "gpt-5.6-terra"
         session.gptProfileName = "acct2"
         let context = AgentSummaryGenerator.launchContext(for: session, transcriptURL: nil, builder: builder)
         XCTAssertNotNil(context.environment["ANTHROPIC_BASE_URL"])
-        XCTAssertEqual(context.environment["ANTHROPIC_CUSTOM_HEADERS"], "\(ClaudeGPTMixRouter.profileHeaderName): acct2")
+        // Konto und Router-Token, sonst 401 am Router (Review W1).
+        XCTAssertEqual(context.environment["ANTHROPIC_CUSTOM_HEADERS"],
+                       "\(ClaudeGPTMixRouter.profileHeaderName): acct2\n\(ClaudeGPTRouterToken.headerName): \(token)")
         XCTAssertEqual(context.extraArguments.first, "--model")
     }
 

@@ -30,8 +30,18 @@ enum ClaudeCodeProxyListenerIdentity {
     }
 
     /// Fuer die Erreichbarkeit: nur ein nachgewiesener Proxy zaehlt.
+    /// Kurz nach dem Start kann der Listener noch nicht einsehbar sein; dann
+    /// abseits des Main Threads zweimal kurz nachfassen, bevor `ensureRunning`
+    /// einen zweiten Proxy auf den belegten Port startet (Review W1).
     static func isTrustedListener(port: Int) -> Bool {
-        verdict(forListenerPath: listenerPath(port: port)) == .trusted
+        var result = verdict(forListenerPath: listenerPath(port: port))
+        if result == .noVisibleListener, !Thread.isMainThread {
+            for _ in 0..<2 where result == .noVisibleListener {
+                Thread.sleep(forTimeInterval: 0.2)
+                result = verdict(forListenerPath: listenerPath(port: port, maxCacheAge: 0))
+            }
+        }
+        return result == .trusted
     }
 
     /// Fuer den Direktweg (Audio an bekannten Port): nur ein nachweislich
@@ -44,14 +54,35 @@ enum ClaudeCodeProxyListenerIdentity {
 
     /// Pfad des Programms, das auf dem TCP-Port lauscht (nur Prozesse der
     /// eigenen UID sind einsehbar). `nil` = keiner gefunden.
-    static func listenerPath(port: Int) -> String? {
+    ///
+    /// Kosten (Review W1): Der Scan läuft im Diktat-Prewarm und bei jedem
+    /// `ensureRunning`. Deshalb nur die Prozesse der eigenen UID
+    /// (`PROC_UID_ONLY`) und ein 5-s-Cache je Port.
+    static func listenerPath(port: Int, maxCacheAge: TimeInterval = 5, now: Date = Date()) -> String? {
         guard (1...65_535).contains(port) else { return nil }
+        cacheLock.lock()
+        if let hit = cache[port], now.timeIntervalSince(hit.at) <= maxCacheAge {
+            cacheLock.unlock()
+            return hit.path
+        }
+        cacheLock.unlock()
+        let path = scanListenerPath(port: port)
+        cacheLock.lock()
+        cache[port] = (now, path)
+        cacheLock.unlock()
+        return path
+    }
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [Int: (at: Date, path: String?)] = [:]
+
+    private static func scanListenerPath(port: Int) -> String? {
         let ownUID = getuid()
 
-        let pidBytes = Int(proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0))
+        let pidBytes = Int(proc_listpids(UInt32(PROC_UID_ONLY), ownUID, nil, 0))
         guard pidBytes > 0 else { return nil }
         var pids = [pid_t](repeating: 0, count: pidBytes / MemoryLayout<pid_t>.size + 16)
-        let bytes = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        let bytes = proc_listpids(UInt32(PROC_UID_ONLY), ownUID, &pids, Int32(pids.count * MemoryLayout<pid_t>.size))
         guard bytes > 0 else { return nil }
         let count = Int(bytes) / MemoryLayout<pid_t>.size
 

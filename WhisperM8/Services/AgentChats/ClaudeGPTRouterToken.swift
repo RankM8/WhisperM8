@@ -52,6 +52,8 @@ final class ClaudeGPTRouterToken {
             let fd = open(fileURL.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
             guard fd >= 0 else { return nil }
             defer { close(fd) }
+            // Auch eine schon vorhandene Datei auf 0600 ziehen (Review W1).
+            fchmod(fd, 0o600)
             let bytes = Array(fresh.utf8)
             guard write(fd, bytes, bytes.count) == bytes.count else { return nil }
         } catch {

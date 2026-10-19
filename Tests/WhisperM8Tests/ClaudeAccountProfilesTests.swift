@@ -383,6 +383,40 @@ extension ClaudeAccountProfilesTests {
         )
     }
 
+    /// Review W1: `security -i` kürzte lange Zeilen still — lange Secrets
+    /// passen nicht in eine interaktive Zeile.
+    func testLongSecretDoesNotFitInteractiveLine() {
+        let short = ClaudeAccountProfiles.keychainWriteCommand(service: "s", account: "a", secret: String(repeating: "x", count: 1000))
+        let long = ClaudeAccountProfiles.keychainWriteCommand(service: "s", account: "a", secret: String(repeating: "x", count: 6000))
+        XCTAssertTrue(ClaudeAccountProfiles.fitsInteractiveLine(short))
+        XCTAssertFalse(ClaudeAccountProfiles.fitsInteractiveLine(long))
+    }
+
+    /// Schreibt der Writer etwas anderes (z. B. gekürzt), bricht das Umbenennen
+    /// ab und rollt zurück, statt den alten Eintrag zu löschen.
+    func testRenameRollsBackWhenKeychainReadBackDiffers() throws {
+        var service = ClaudeAccountProfiles(homeDirectory: home)
+        _ = try service.createProfile(named: "alt")
+        var stored: [String: String] = [service.keychainService(forProfile: "alt"): "{\"claudeAiOauth\":{\"x\":1}}"]
+        var deleted: [String] = []
+        service.securityRunner = { arguments in
+            guard let i = arguments.firstIndex(of: "-s") else { return (1, "") }
+            let svc = arguments[i + 1]
+            switch arguments.first {
+            case "find-generic-password": return stored[svc].map { (0, $0) } ?? (44, "")
+            case "delete-generic-password": deleted.append(svc); stored[svc] = nil; return (0, "")
+            default: return (1, "")
+            }
+        }
+        service.keychainWriter = { svc, _, secret in
+            stored[svc] = String(secret.prefix(5)) // gekürzt geschrieben
+            return 0
+        }
+        XCTAssertThrowsError(try service.renameProfile(from: "alt", to: "neu"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: service.configDir(forProfile: "alt").path))
+        XCTAssertFalse(deleted.contains(service.keychainService(forProfile: "alt")), "alter Login bleibt")
+    }
+
     func testRenameProfileRollsBackWhenKeychainAddFails() throws {
         var service = ClaudeAccountProfiles(homeDirectory: home)
         _ = try service.createProfile(named: "alt")

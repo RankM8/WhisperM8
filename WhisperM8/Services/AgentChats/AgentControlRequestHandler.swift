@@ -221,7 +221,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             // dieses Texts beim UserPromptSubmit-Guard (Wiedervorlage-Schutz,
             // Vorfall 2026-08-17). Auch für --no-submit — der User schickt
             // den gestagten Text später selbst ab.
-            SendDeliveryTokenStore().stage(promptText: marked)
+            // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
+            // sonst blockte der Guard die eigene Zustellung (Review W1).
+            SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
             controller.sendPrompt(marked, submit: submit)
             return .success(session)
         }
