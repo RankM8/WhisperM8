@@ -9,6 +9,23 @@ struct ScreenCaptureTarget {
     let filter: SCContentFilter
 }
 
+/// LR-DIK-028: H.264-Hardware-Encoder verarbeiten nur bis etwa 4096 Pixel Breite —
+/// 5120×1440 (Ultrawide) oder 5K/6K scheiterten. Die Ausgabe wird daher unter
+/// Beibehaltung des Seitenverhältnisses auf 3840×2160 begrenzt (gerade Maße).
+enum ScreenClipOutputSize {
+    static let maxWidth = 3840
+    static let maxHeight = 2160
+
+    static func fitted(width: Int, height: Int) -> (width: Int, height: Int) {
+        let w = max(1, width)
+        let h = max(1, height)
+        let scale = min(1.0, Double(maxWidth) / Double(w), Double(maxHeight) / Double(h))
+        func even(_ value: Double) -> Int { max(2, Int((value / 2).rounded(.down)) * 2) }
+        if scale >= 1.0 { return (even(Double(w)), even(Double(h))) }
+        return (even(Double(w) * scale), even(Double(h) * scale))
+    }
+}
+
 protocol ScreenClipCapturing: AnyObject {
     func stop(startedAt: Date?) async throws -> ContextAttachment
     func cancel() async throws
@@ -48,8 +65,12 @@ final class ManualScreenClipSession: NSObject, SCStreamOutput, SCStreamDelegate,
 
     @MainActor
     static func start(target: ScreenCaptureTarget, outputURL: URL, sourceAppName: String?) async throws -> ManualScreenClipSession {
-        let width = max(1, CGDisplayPixelsWide(target.display.displayID))
-        let height = max(1, CGDisplayPixelsHigh(target.display.displayID))
+        let fitted = ScreenClipOutputSize.fitted(
+            width: CGDisplayPixelsWide(target.display.displayID),
+            height: CGDisplayPixelsHigh(target.display.displayID)
+        )
+        let width = fitted.width
+        let height = fitted.height
 
         let configuration = SCStreamConfiguration()
         configuration.width = width

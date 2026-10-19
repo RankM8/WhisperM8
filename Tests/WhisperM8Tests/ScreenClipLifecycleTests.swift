@@ -78,3 +78,25 @@ final class ScreenClipLifecycleTests: XCTestCase {
         XCTAssertEqual(Set(appState.contextBundle.visualFrames.map(\.id)), [foreign.id, independent.id])
     }
 }
+
+/// LR-DIK-028: Ausgabegröße des Screen-Clips für H.264 begrenzen.
+final class ScreenClipOutputSizeTests: XCTestCase {
+    func testUltrawideIsScaledDownKeepingAspectRatioAndEvenDimensions() {
+        let size = ScreenClipOutputSize.fitted(width: 5120, height: 1440)
+        XCTAssertLessThanOrEqual(size.width, ScreenClipOutputSize.maxWidth)
+        XCTAssertEqual(size.width % 2, 0)
+        XCTAssertEqual(size.height % 2, 0)
+        XCTAssertEqual(Double(size.width) / Double(size.height), 5120.0 / 1440.0, accuracy: 0.02)
+    }
+
+    func testFullHDStaysUnchanged() {
+        let size = ScreenClipOutputSize.fitted(width: 1920, height: 1080)
+        XCTAssertEqual(size.width, 1920)
+        XCTAssertEqual(size.height, 1080)
+    }
+
+    func testTallDisplayIsLimitedInHeightToo() {
+        let size = ScreenClipOutputSize.fitted(width: 2160, height: 7680)
+        XCTAssertLessThanOrEqual(size.height, ScreenClipOutputSize.maxHeight)
+    }
+}
