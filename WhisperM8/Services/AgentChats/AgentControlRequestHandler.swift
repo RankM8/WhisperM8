@@ -215,6 +215,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
                 return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
             }
+            if PromptDeliveryGate.sendBlockedByDraft(
+                mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
+                return .failure(.conflict, PromptDeliveryGate.draftMessage)
+            }
             // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
             let marked = Self.markedPrompt(prompt, actor: markerActor)
             // Zustell-Token VOR dem Paste: autorisiert genau EINE Submission
