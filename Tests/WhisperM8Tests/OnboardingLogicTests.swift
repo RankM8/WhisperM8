@@ -55,6 +55,37 @@ final class OnboardingLogicTests: XCTestCase {
         XCTAssertEqual(OnboardingTestOutcome.derive(lastTranscription: "hi", lastError: "boom"), .failed("boom"))
     }
 
+    func testOutcomeIgnoresResultsFromBeforeTheTestStep() {
+        let baseline = OnboardingTestBaseline(transcriptionRevision: 3, errorRevision: 2)
+        // Altes Diktat und alter Fehler (Zähler unverändert) zählen nicht.
+        XCTAssertEqual(OnboardingTestOutcome.derive(
+            lastTranscription: "alt", lastError: "alt-fehler",
+            baseline: baseline, transcriptionRevision: 3, errorRevision: 2), .notRun)
+        // Neues Diktat nach dem Betreten zählt.
+        XCTAssertEqual(OnboardingTestOutcome.derive(
+            lastTranscription: "neu", lastError: "alt-fehler",
+            baseline: baseline, transcriptionRevision: 4, errorRevision: 2), .succeeded)
+        // Neuer Fehler schlägt das neue Diktat.
+        XCTAssertEqual(OnboardingTestOutcome.derive(
+            lastTranscription: "neu", lastError: "401",
+            baseline: baseline, transcriptionRevision: 4, errorRevision: 3), .failed("401"))
+    }
+
+    @MainActor
+    func testAppStateCountsOnlyAssignedResults() {
+        let state = AppState.shared
+        let (t0, e0) = (state.transcriptionRevision, state.errorRevision)
+        let (oldText, oldError) = (state.lastTranscription, state.lastError)
+        defer { state.lastTranscription = oldText; state.lastError = oldError }
+        state.lastTranscription = "hallo"
+        state.lastTranscription = "hallo"
+        XCTAssertEqual(state.transcriptionRevision, t0 + 2, "auch identischer Text ist ein neues Ergebnis")
+        state.lastError = nil
+        XCTAssertEqual(state.errorRevision, e0)
+        state.lastError = "boom"
+        XCTAssertEqual(state.errorRevision, e0 + 1)
+    }
+
     // MARK: LR-ONB-003
 
     func testFullProfileHasClaudeStepButDictationProfilesDoNot() {

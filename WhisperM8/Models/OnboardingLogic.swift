@@ -10,11 +10,32 @@ enum OnboardingTestOutcome: Equatable {
     case failed(String)
 
     /// Aus dem `AppState` abgeleitet: ein Fehler schlägt ein altes Ergebnis.
-    static func derive(lastTranscription: String?, lastError: String?) -> OnboardingTestOutcome {
-        if let lastError, !lastError.isEmpty { return .failed(lastError) }
-        if let lastTranscription, !lastTranscription.isEmpty { return .succeeded }
+    /// Mit `baseline` zählen nur Ergebnisse, die NACH dem Öffnen des Test-Schritts
+    /// entstanden sind (LR-ONB-013) — ein früheres Diktat oder ein alter Fehler
+    /// ergäbe sonst „All set“ bzw. einen Fehler ohne Test.
+    static func derive(
+        lastTranscription: String?,
+        lastError: String?,
+        baseline: OnboardingTestBaseline? = nil,
+        transcriptionRevision: Int = 0,
+        errorRevision: Int = 0
+    ) -> OnboardingTestOutcome {
+        var transcription = lastTranscription
+        var error = lastError
+        if let baseline {
+            if transcriptionRevision <= baseline.transcriptionRevision { transcription = nil }
+            if errorRevision <= baseline.errorRevision { error = nil }
+        }
+        if let error, !error.isEmpty { return .failed(error) }
+        if let transcription, !transcription.isEmpty { return .succeeded }
         return .notRun
     }
+}
+
+/// Zählerstand beim Öffnen des Test-Schritts.
+struct OnboardingTestBaseline: Equatable {
+    var transcriptionRevision: Int
+    var errorRevision: Int
 }
 
 // MARK: - Keychain-Fehler zurücksetzen (LR-ONB-007)

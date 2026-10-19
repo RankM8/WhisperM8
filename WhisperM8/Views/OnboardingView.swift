@@ -16,6 +16,8 @@ struct OnboardingView: View {
     @State private var hotkeySet = false
     @State private var apiKeyAvailable = false
     @State private var keychainWriteFailed = false
+    /// Zählerstand beim Öffnen des Test-Schritts; davor Entstandenes zählt nicht (LR-ONB-013).
+    @State private var testBaseline: OnboardingTestBaseline?
     @State private var selectedProvider = TranscriptionProvider.groq
     @State private var selectedModel = TranscriptionModel.groq_whisper_v3
 
@@ -77,6 +79,14 @@ struct OnboardingView: View {
             .padding()
         }
         .frame(width: 520, height: 560)
+        .onChange(of: currentStep) { _, newStep in
+            // Beim Betreten des Test-Schritts zählen nur noch neue Ergebnisse (LR-ONB-013).
+            testBaseline = newStep == .test
+                ? OnboardingTestBaseline(
+                    transcriptionRevision: appState.transcriptionRevision,
+                    errorRevision: appState.errorRevision)
+                : nil
+        }
     }
 
     @ViewBuilder
@@ -107,7 +117,7 @@ struct OnboardingView: View {
         case .codex:
             CodexConnectStep()
         case .test:
-            TestStep(gate: completionGate)
+            TestStep(gate: completionGate, baseline: effectiveTestBaseline)
             .environment(appState)
         }
     }
@@ -146,9 +156,20 @@ struct OnboardingView: View {
             keychainWriteFailed: keychainWriteFailed,
             testOutcome: OnboardingTestOutcome.derive(
                 lastTranscription: appState.lastTranscription,
-                lastError: appState.lastError
+                lastError: appState.lastError,
+                baseline: effectiveTestBaseline,
+                transcriptionRevision: appState.transcriptionRevision,
+                errorRevision: appState.errorRevision
             )
         )
+    }
+
+    /// Vor dem Betreten des Test-Schritts gilt der aktuelle Stand als Baseline
+    /// (also noch nichts getestet).
+    private var effectiveTestBaseline: OnboardingTestBaseline {
+        testBaseline ?? OnboardingTestBaseline(
+            transcriptionRevision: appState.transcriptionRevision,
+            errorRevision: appState.errorRevision)
     }
 
     private var canProceed: Bool {
@@ -913,6 +934,7 @@ struct ClaudeCLIStep: View {
 struct TestStep: View {
     @Environment(AppState.self) private var appState
     let gate: OnboardingCompletionGate
+    var baseline = OnboardingTestBaseline(transcriptionRevision: 0, errorRevision: 0)
 
     var body: some View {
         VStack(spacing: 24) {
@@ -959,7 +981,7 @@ struct TestStep: View {
                 .padding()
             }
 
-            if let result = appState.lastTranscription {
+            if appState.transcriptionRevision > baseline.transcriptionRevision, let result = appState.lastTranscription {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Result:")
                         .font(.caption)
