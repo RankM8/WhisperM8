@@ -94,7 +94,7 @@ Settings.
 
 1. Place the cursor in any text field (TextEdit, Slack, browser …).
 2. Press your hotkey to start recording, speak, press it again to stop.
-   With *Hold to talk* you keep the hotkey pressed while speaking instead.
+   Or hold the hotkey while speaking and release it to stop; short taps under 0.3 s are ignored.
 3. The text is pasted into the app that was in front (with auto-paste) and is always also on the
    clipboard.
 
@@ -121,10 +121,10 @@ tools you would run in Terminal, with their own sign-in, models and commands.
 
 ### Projects and chats
 
-- **Add a project:** *Add Project…* in the sidebar and choose a folder. Chats always start in their
+- **Add a project:** *Add project…* in the sidebar and choose a folder. Chats always start in their
   project's folder.
-- **New chat:** the + button next to the tabs or the project's context menu — *New Claude Chat* or
-  *New Codex Chat*. Advanced options (background agents, agent views, sub-agent library) appear once
+- **New chat:** the + button next to the tabs or the project's context menu — *New Claude chat* or
+  *New Codex chat*. Advanced options (background agents, agent views, sub-agent library) appear once
   you turn on *Advanced agent features* in Settings → Agent Chats.
 - **Workspaces:** place several chats of a project side by side in a grid and switch between them with
   `Ctrl+Tab`.
@@ -147,7 +147,7 @@ VoiceOver reads the status out loud. You can get a notification and a sound when
 
 | Action | What happens |
 |---|---|
-| **Close Tab** | Only hides the tab. The chat keeps running and stays in the sidebar. |
+| **Close tab** | Only hides the tab. The chat keeps running and stays in the sidebar. |
 | **Stop** | Ends the chat's process. The conversation is kept and can be resumed later. |
 | **Archive** | Moves a chat out of the sidebar into the archive; *Restore* brings it back. |
 
@@ -173,7 +173,11 @@ be moved to another via its context menu. A chat that is working is moved after 
 
 ## Settings
 
-Open from the menu bar → *Settings…* or with `Cmd + ,`.
+Open from the menu bar → *Open WhisperM8...* or with `Cmd + ,`.
+
+The sidebar groups the pages: **Dictation**, **Agent Chats** and **App** are the everyday settings,
+**Advanced** and **Labs** hold expert and experimental features. With a dictation-only profile the Agent Chats
+pages sit behind *Show Agent Chats settings*.
 
 | Page | What you find there |
 |---|---|
@@ -181,16 +185,19 @@ Open from the menu bar → *Settings…* or with `Cmd + ,`.
 | **Transcription** | Provider (Groq/OpenAI), API key, model and price, spoken language |
 | **AI Output** | ChatGPT connection for Codex, output modes, templates, test lab |
 | **Context & Privacy** | Selected text and visual context (screenshots, screen clips), deleting context files |
-| **Agent Chats** | Default chat type and project folder, automatic titles, tab swipe, summaries, notifications, terminal |
-| **Accounts** | Claude accounts, MCP servers across accounts |
-| **Hooks** | How chats report their state to WhisperM8 (advanced) |
+| **Output** | Your dictation results: the latest run and the full archive of reports |
+| **Agent Chats** | Default chat type and project folder, automatic titles, tab swipe, *Advanced agent features*, summaries, notifications, terminal |
 | **CLI & Skills** | The `whisperm8` command-line tool and agent skills |
 | **General** | Usage profile, start at login, appearance, automatic update check |
 | **Permissions** | Status of microphone, accessibility and screen recording, with links to System Settings |
 | **About** | Version and update |
+| **Accounts** | *Advanced:* several Claude accounts, MCP servers across accounts |
+| **Hooks** | *Advanced:* how chats report their state to WhisperM8 |
+| **GPT-Backend** | *Labs:* GPT models inside Claude Code via a local proxy, ChatGPT accounts |
+| **Codex Voice Agent** | *Labs:* mute and unmute a Codex voice session with a spoken code word |
+| **Jarvis & Callouts** | *Labs:* supervisor board, notes on grid tiles, spoken callouts |
 
-Experimental features (GPT backend, ChatGPT-subscription transcription, Codex Voice Agent, Jarvis board)
-are grouped separately and are off by default.
+Labs features are experimental and off by default.
 
 **Bluetooth microphones (AirPods etc.):** macOS switches the headset to its phone profile while the
 microphone is in use; the sound gets thinner, that is normal. WhisperM8 adapts to the format change.

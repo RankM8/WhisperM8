@@ -50,7 +50,8 @@ brechen `dev`, `dev-release`, `install`, `run` und `clean-install` ab; `FORCE=1`
   [docs/features/ui-testing.md](docs/features/ui-testing.md).
 - **Guards, die die Suite erzwingt:** `SourceSizeGuardTests` (max. 1.500 Zeilen je Datei, Ausnahmeliste nur
   schrumpfend — aufteilen statt Grenze anheben), `LocalizationCatalogTests`, `DocsLintTests`,
-  `InfoPlistContractTests`, `AgentStatusPulseGuardTests`.
+  `InfoPlistContractTests`, `AgentStatusPulseGuardTests`, `PreferenceBedienwegGuardTests`, `ChatsFontSizeGuardTests`
+  (informationstragende Texte ≥ 11 pt).
 
 ## Lokalisierung (E1)
 
@@ -147,7 +148,9 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
 
 ## Kill-Switches (`defaults write com.whisperm8.app <Schlüssel> -bool NO`)
 
-Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter.
+Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
+bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
+Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
 `agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `chatsPromptGuardEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
