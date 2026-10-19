@@ -63,13 +63,26 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// (außerhalb des Locks). Konsument: `AgentWorkspaceUIModel`.
     var onWorkspaceChanged: ((AgentWorkspace) -> Void)?
 
+    /// Meldet den Wechsel des Persistenz-Zustands: `true` = der letzte Write ist
+    /// fehlgeschlagen (Änderungen liegen nur im RAM), `false` = wieder gesichert.
+    /// Wird NUR bei Zustandswechsel gerufen, auf der Flush-Queue.
+    var onPersistenceFailureChanged: ((Bool) -> Void)?
+
+    /// Wartezeiten der automatischen Wiederholungen nach einem fehlgeschlagenen
+    /// Write (LR-AK-005). Begrenzt: danach wartet der Store auf die nächste
+    /// Mutation, einen Fokuswechsel oder `retryPersistNow()` des Users.
+    private let retryBackoff: [TimeInterval]
+    private var consecutiveFailures = 0
+
     init(
         loadInitial: @escaping () -> AgentWorkspace,
         persist: @escaping (AgentWorkspace) throws -> Void,
         normalize: @escaping (AgentWorkspace) -> AgentWorkspace = { $0 },
         policy: PersistencePolicy = .immediate,
+        retryBackoff: [TimeInterval] = [2, 5, 15, 30, 60],
         notificationCenter: NotificationCenter = .default
     ) {
+        self.retryBackoff = retryBackoff
         self.loadInitial = loadInitial
         self.persist = persist
         self.normalize = normalize
@@ -269,6 +282,14 @@ final class AgentWorkspaceStore: @unchecked Sendable {
 
         do {
             try persist(workspace)
+            lock.lock()
+            let recovered = consecutiveFailures > 0
+            consecutiveFailures = 0
+            lock.unlock()
+            if recovered {
+                Logger.agentStore.notice("agent_store_flush_recovered reason=\(reason, privacy: .public)")
+                onPersistenceFailureChanged?(false)
+            }
             // Häufige Debounce-Flushes leise (.info), strukturelle/terminale
             // Flushes sichtbar (.notice) — Letztere sind der Datenverlust-Beweis.
             if reason == "debounce" {
@@ -281,8 +302,34 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             lock.lock()
             dirty = true
             if firstDirtyAt == nil { firstDirtyAt = Date() }
+            consecutiveFailures += 1
+            let failures = consecutiveFailures
             lock.unlock()
+            if failures == 1 { onPersistenceFailureChanged?(true) }
+            // Eigenständiger Retry mit Backoff — sonst bliebe der Stand bis zur
+            // nächsten Mutation nur im RAM, auch wenn die Platte längst wieder
+            // beschreibbar ist.
+            if failures <= retryBackoff.count {
+                let delay = retryBackoff[failures - 1]
+                flushQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.drain(reason: "retry")
+                }
+            }
         }
+    }
+
+    /// Manueller Wiederholversuch („Retry“ im Hinweis). Läuft auf der Flush-Queue.
+    func retryPersistNow() {
+        flushQueue.async { [weak self] in
+            self?.drain(reason: "retry_manual")
+        }
+    }
+
+    /// Letzter Write fehlgeschlagen? (für Tests und den Start-Abgleich)
+    var isPersistenceFailing: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return consecutiveFailures > 0
     }
 
     // MARK: - Intern (nur unter Lock rufen)
@@ -330,9 +377,19 @@ final class AgentWorkspaceUIModel {
     static let shared = AgentWorkspaceUIModel()
 
     private(set) var workspace: AgentWorkspace
+    /// `true`, solange der letzte Workspace-Write fehlgeschlagen ist (LR-AK-005).
+    private(set) var persistenceFailing = false
+    private let store: AgentWorkspaceStore
+
+    /// Stößt einen sofortigen Wiederholversuch an (Hinweis-Button).
+    func retryPersist() { store.retryPersistNow() }
 
     init(store: AgentWorkspaceStore = AgentWorkspaceStoreRegistry.store(for: AgentWorkspaceRepository.defaultFileURL())) {
+        self.store = store
         self.workspace = store.read { $0 }
+        store.onPersistenceFailureChanged = { [weak self] failing in
+            Task { @MainActor [weak self] in self?.persistenceFailing = failing }
+        }
         store.onWorkspaceChanged = { [weak self, weak store] _ in
             guard let store else { return }
             if Thread.isMainThread {

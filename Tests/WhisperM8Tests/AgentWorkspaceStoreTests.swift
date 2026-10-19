@@ -389,6 +389,33 @@ final class AgentWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(spy.saveCount, 1)
     }
 
+    /// LR-AK-005: Nach einem Fehlschlag wiederholt der Store ohne weiteren
+    /// Anstoß selbst und meldet Fehler- und Erholungszustand.
+    func testFailedDebouncedSaveRetriesAutomaticallyAndReportsState() throws {
+        let spy = PersistSpy()
+        let recovered = expectation(description: "Automatischer Retry gelingt")
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) },
+            policy: .debounced(10),
+            retryBackoff: [0.05, 0.05]
+        )
+        var states: [Bool] = []
+        let stateLock = NSLock()
+        store.onPersistenceFailureChanged = { failing in
+            stateLock.lock(); states.append(failing); stateLock.unlock()
+            if !failing { recovered.fulfill() }
+        }
+        try store.mutate { $0.sessions.append(self.makeSession()) }
+        spy.failNext()
+        store.flush()                       // schlägt fehl, KEIN zweiter manueller Aufruf
+        wait(for: [recovered], timeout: 2)
+        XCTAssertEqual(spy.saveCount, 1)
+        stateLock.lock(); defer { stateLock.unlock() }
+        XCTAssertEqual(states, [true, false])
+        XCTAssertFalse(store.isPersistenceFailing)
+    }
+
     func testWillTerminateDrainCompletesBeforeNotificationReturns() throws {
         let spy = PersistSpy()
         let notificationCenter = NotificationCenter()
