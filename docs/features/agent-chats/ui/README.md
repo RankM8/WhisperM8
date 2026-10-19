@@ -177,19 +177,20 @@ kommt aus `ActiveBackgroundSessionTracker`: Der Tracker pollt die
 Claude-Job-State-Dateien nur für selektierte Agent-View-Tabs und wird bei
 Tastendruck im Terminal über `setUserKeystrokeListener` sofort angestoßen.
 
-## Transcript-Timeline
+## Verlaufsansicht
 
-Die rechte Detailfläche zeigt nicht nur das Terminal. Parallel dazu existiert
-die Timeline-Projektion über `Views/Transcript/`: `AgentTranscriptContainerView`
-wandelt geladene Transcripts über `TranscriptTimelineBuilder` in Rounds,
-Prompts, Activity-Zeilen, Reports und Markdown-Blöcke. Sie kann frühere
-History nachladen, abgeschnittene Köpfe markieren und optional eine
-Summary-Card anzeigen.
+Ist kein Live-Terminal offen, zeigt die Detailfläche den Verlauf der Session als
+**eine** Textansicht im Stil der Claude-Code-CLI (`❯` Prompt, `⏺` Antwort/Tool,
+`⎿` Ergebnis, `✻` Thinking). `AgentTranscriptContainerView` (in `Views/Transcript/`)
+trägt Meta-Leiste, optional die Summary-Karte und darunter `TranscriptTextView`, ein
+einzelnes `NSTextView` mit TextKit 2. Den Zeilenstrom baut `TranscriptTextRenderer`
+off-main und abbrechbar. Gelayoutet wird nur der sichtbare Ausschnitt; Textauswahl
+über den ganzen Verlauf, ⌘F und Kopieren kommen nativ. Gekürzt werden nur
+Tool-Ausgaben („+N Zeilen“), Antworttexte nie.
 
-`AgentChatTranscriptView` ist die ältere Chat-Bubble-Darstellung für rohe
-Messages und Spezialzustände wie orphaned Background-Chats. Die Timeline ist
-die kompakte Arbeitsansicht, die Tool-Aktivität, Teammate-Nachrichten,
-Report-Inhalte und Live-Hinweise in chronologischen Runden zusammenfasst.
+Die früheren Timeline- und Bubble-Ansichten sind seit 01.08.2026 entfernt (sie bauten
+pro Nachricht eine SwiftUI-Hierarchie und froren mit mehreren Grid-Panes die App ein).
+`TranscriptTimelineBuilder` lebt nur noch als Datenprojektion für die Summaries.
 
 ## Detail-Views
 
@@ -270,7 +271,7 @@ Transcript, Timeline, Report, Summary, `AgentChatsView`,
 `TabSelectionResolver`, `TabReorderGeometry`, `TabGroupReorder`,
 `TabSwitcherModel`, `AgentTerminalRegistry`, `AgentTerminalController`,
 `AgentTerminalView`, `AgentSessionDetailView`, `SubagentJobDetailView`,
-`AgentTranscriptContainerView`, `AgentTimelineView`, `TranscriptTimelineBuilder`,
+`AgentTranscriptContainerView`, `TranscriptTextView`, `TranscriptTextRenderer`,
 rechter Inspector, Projekt-Inspector, Header-Actions, Plus-Menü,
 Projekt öffnen, Finder öffnen, PhpStorm öffnen, Agent View, Claude Agent View,
 VIEW-Badge, aktive Subsession, `ProjectDetailPanel`,

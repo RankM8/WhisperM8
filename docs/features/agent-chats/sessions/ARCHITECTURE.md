@@ -213,13 +213,14 @@ Pipeline; `.backgroundChat` geht dafür über den Claude-Supervisor-State,
 
 ## Auto-Naming und Summaries
 
-`AgentSessionAutoNamer` reagiert auf ein vom Status-Koordinator bestätigtes
-Turn-Ende. Er respektiert `canAutoRenameTitle`, `lastTurnAt`, das
-`alreadyAttempted`-Set, `inFlight` und die Preferences. Der Transcript-Excerpt
-wird off-main über `AgentTranscriptLocator` und `AgentTranscriptExcerpt`
-gebaut; der CLI-Aufruf läuft über `AgentTitleGenerator` mit
-`LoginShellEnvironment.shared.processEnvironment()` und
-`AgentCommandBuilder.commandPath(_:)`.
+`AgentSessionAutoNamer` reagiert auf jedes vom Status-Koordinator bestätigte
+Turn-Ende und übernimmt den nativen Titel aus dem Transcript über
+`NativeSessionTitle` (Claude: `custom-title` > `ai-title` > erster echter
+Prompt; Codex: erster Prompt). Seit 23.09.2026 gibt es dafür keinen
+Modellaufruf mehr. Er respektiert `canAutoRenameTitle`, `inFlight` und die
+Preferences; ein in WhisperM8 vergebener Name gewinnt. `AgentTitleGenerator`
+enthält nur noch die Headless-Runner-Infrastruktur (Opt-out-Flags, Retry bei
+unbekannter Option), die `AgentSessionSummarizer` nutzt.
 
 ### Kurze Headless-CLI-Aufrufe
 
@@ -348,7 +349,7 @@ Schnittstellen zum Session-Store, Status-Koordinator oder Transcript-System.
 - `WhisperM8/Services/AgentChats/CodexTranscriptReader.swift` streamt Codex-JSONL in das gemeinsame Transcript-Modell.
 - `WhisperM8/Services/AgentChats/BoundedJSONLReader.swift` liefert begrenzte Präfix-Reads für Indexing.
 - `WhisperM8/Services/AgentChats/AgentChatTailExtractor.swift` extrahiert kurze Conversation-Tails für Diktat-Kontext.
-- `WhisperM8/Services/AgentChats/AgentSessionAutoNamer.swift` erzeugt automatische Titel aus begrenzten Transcript-Excerpts.
+- `WhisperM8/Services/AgentChats/AgentSessionAutoNamer.swift` übernimmt native Titel aus dem Transcript (`NativeSessionTitle`), ohne Modellaufruf.
 - `WhisperM8/Services/AgentChats/AgentHeadlessCLI.swift` kapselt Timeout, Exit-Code, stderr und genau-einmalige Completion kurzer CLI-Läufe.
 - `WhisperM8/Services/AgentChats/AgentSessionSummarizer.swift` erzeugt Chat-Summaries, prüft Digest-Staleness und mappt Subagent-Reports.
 - `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift` plant Startup-Summaries nur für frische offene Tabs und schließt Archive, Subagent-Jobs, Agent Views und Background-Chats aus.

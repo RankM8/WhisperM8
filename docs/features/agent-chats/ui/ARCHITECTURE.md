@@ -192,21 +192,20 @@ SwiftUI-Scene asynchron.
 
 ## Transcript-Rendering
 
-`Views/Transcript/` ist die Timeline-Schicht. `AgentTranscriptContainerView`
-entscheidet aus Transcript, Session und Live-Zustand den Darstellungsmodus und
-baut die Timeline asynchron über `TranscriptTimelineBuilder`. Sie rendert
-Header-Strip, Summary-Card, History-Pills, Ladezustände und `AgentTimelineView`.
+`Views/Transcript/` ist die Verlaufsschicht. `AgentTranscriptContainerView`
+zeigt Meta-Leiste, optional `SessionSummaryCard`, Lade- und Nachladezustände
+(`TranscriptHistoryState`) und darunter `TranscriptTextView`. Diese bettet ein
+einzelnes `NSTextView` (TextKit 2) ein; die Layout-Kosten hängen an der
+sichtbaren Fläche, nicht an der Verlaufslänge. Den Inhalt liefert
+`TranscriptTextRenderer` (Services/AgentChats/): ein flacher Zeilenstrom im Stil
+der Claude-Code-CLI, attributiert off-main und abbrechbar (Budget in
+`TranscriptTextRendererTests`). Gekürzt werden nur Tool-Ausgaben.
 
-`AgentTimelineView` begrenzt die sichtbaren Rounds, zeigt frühere History als
-nachladbaren Abschnitt und ergänzt bei laufenden Sessions einen Live-Hinweis.
-`TimelineRoundView` rendert Prompt, Activity, Reports,
-Teammate-Nachrichten und unvollständige Runden. `TimelineActivityRow`,
-`TimelineReportView`, `TranscriptMarkdownView`, `SessionSummaryCard` und
-`TranscriptHistoryState` liefern die spezialisierten Zeilen und Karten.
-
-`AgentChatTranscriptView` bleibt die Message-orientierte Bubble-Ansicht. Sie
-zeigt rohe `AgentChatMessage`-Blöcke, Tool-Use, Tool-Result, Images,
-Thinking-Blöcke und Spezialbanner für orphaned Background-Chats.
+Bis 01.08.2026 gab es drei SwiftUI-Ansichten (Terminal-Snapshot, Chat-Bubbles,
+Timeline-Runden), die alle pro Nachricht eine View-Hierarchie bauten und an
+`.defaultScrollAnchor(.bottom)` hingen; mit sechs Grid-Panes fror das den Main
+Thread dauerhaft ein. Sie sind gelöscht. `TranscriptTimelineBuilder` bleibt nur
+als Projektion für `AgentSessionSummarizer`.
 
 Die Detail-View lädt Transcripts nur, wenn kein Live-Controller läuft, die
 Session keine `.agentView` ist, kein `.backgroundChat` ist und eine
