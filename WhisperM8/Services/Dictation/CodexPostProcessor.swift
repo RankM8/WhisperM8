@@ -6,15 +6,31 @@ struct CodexPostProcessor: PostProcessing {
     /// Hot-Path nutzt den TTL-Cache; die Settings-UI probt weiterhin direkt
     /// (immer frische Anzeige). Closure-DI für Tests.
     private let statusProvider: () -> CodexConnectionStatus
+    /// Auflösung des codex-Binarys (Closure-DI für Tests mit Fake-Skript).
+    private let commandPathResolver: () -> String?
+    private let registry: CodexProcessRegistry
+    /// Hartes Zeitlimit je Lauf (LR-DIK-013). Großzügig, weil der Task-Modus mit
+    /// Projektzugriff legitim lange arbeitet; nur ein Hänger soll hier enden.
+    private let timeoutProvider: (OutputMode) -> TimeInterval
+
+    static func defaultTimeout(for mode: OutputMode) -> TimeInterval {
+        (mode.id == OutputMode.taskID || mode.projectAccess != .off) ? 900 : 300
+    }
 
     init(
         templateStore: PostProcessingTemplateStore = PostProcessingTemplateStore(),
         promptPackageBuilder: PromptPackageBuilder = PromptPackageBuilder(),
-        statusProvider: @escaping () -> CodexConnectionStatus = { CodexStatusCache.shared.status() }
+        statusProvider: @escaping () -> CodexConnectionStatus = { CodexStatusCache.shared.status() },
+        commandPathResolver: @escaping () -> String? = { CodexStatusProbe().commandPath("codex") },
+        registry: CodexProcessRegistry = .shared,
+        timeoutProvider: @escaping (OutputMode) -> TimeInterval = CodexPostProcessor.defaultTimeout(for:)
     ) {
         self.templateStore = templateStore
         self.promptPackageBuilder = promptPackageBuilder
         self.statusProvider = statusProvider
+        self.commandPathResolver = commandPathResolver
+        self.registry = registry
+        self.timeoutProvider = timeoutProvider
     }
 
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
@@ -53,13 +69,29 @@ struct CodexPostProcessor: PostProcessing {
     }
 
     private func runCodex(prompt: String, imageURLs: [URL], mode: OutputMode, projectPath: String?) async throws -> String {
-        try await Task.detached(priority: .userInitiated) {
-            try performCodexRun(prompt: prompt, imageURLs: imageURLs, mode: mode, projectPath: projectPath)
-        }.value
+        // Eigene Run-ID und Besitzer je Lauf: der Overlay-Abbruch trifft nur Diktat-Läufe,
+        // Task-Cancellation nur diesen Lauf (Task-Locals erbt Task.detached nicht → vorher lesen).
+        let runID = UUID()
+        let owner = CodexRunOwner.current
+        let timeout = timeoutProvider(mode)
+        let registry = registry
+        return try await withTaskCancellationHandler {
+            try await Task.detached(priority: .userInitiated) {
+                try performCodexRun(
+                    prompt: prompt, imageURLs: imageURLs, mode: mode, projectPath: projectPath,
+                    runID: runID, owner: owner, timeout: timeout
+                )
+            }.value
+        } onCancel: {
+            registry.cancel(runID: runID)
+        }
     }
 
-    private func performCodexRun(prompt: String, imageURLs: [URL], mode: OutputMode, projectPath: String?) throws -> String {
-        guard let codexPath = CodexStatusProbe().commandPath("codex") else {
+    private func performCodexRun(
+        prompt: String, imageURLs: [URL], mode: OutputMode, projectPath: String?,
+        runID: UUID, owner: CodexRunOwner, timeout: TimeInterval
+    ) throws -> String {
+        guard let codexPath = commandPathResolver() else {
             throw PostProcessingError.codexUnavailable("Codex CLI is not installed.")
         }
 
@@ -99,11 +131,9 @@ struct CodexPostProcessor: PostProcessing {
             activityLock.unlock()
         }
 
-        CodexProcessRegistry.shared.resetCancelFlag()
-
         do {
             try process.run()
-            CodexProcessRegistry.shared.register(process)
+            registry.register(process, runID: runID, owner: owner)
             if let data = prompt.data(using: .utf8) {
                 // Throwing-API: das alte `write(_:)` wirft bei EPIPE (Codex
                 // vor dem Lesen beendet) eine NSException — die beendet die
@@ -116,22 +146,31 @@ struct CodexPostProcessor: PostProcessing {
             throw PostProcessingError.codexUnavailable("Failed to start Codex: \(error.localizedDescription)")
         }
 
-        process.waitUntilExit()
+        // Abschlussgarantie: nach Ablauf des Limits TERM, nach Gnadenfrist KILL.
+        let deadline = DispatchWorkItem { [registry] in registry.expire(runID: runID) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
 
+        process.waitUntilExit()
+        deadline.cancel()
+
+        let outcome = registry.outcome(runID: runID)
         logPipe.fileHandleForReading.readabilityHandler = nil
-        // Restbytes konsumieren, falls Pipe-Buffer noch was hat.
-        let trailing = (try? logPipe.fileHandleForReading.readToEnd()) ?? Data()
+        // Restbytes konsumieren, falls Pipe-Buffer noch was hat. Bei Abbruch/Timeout nicht:
+        // ein verwaistes Kindprozess-Ende könnte das Pipe-Ende offen halten und blockieren.
+        let trailing = outcome == .none ? ((try? logPipe.fileHandleForReading.readToEnd()) ?? Data()) : Data()
         activityLock.lock()
         collectedLog.append(trailing)
         let logData = collectedLog
         activityLock.unlock()
         let logOutput = String(data: logData, encoding: .utf8) ?? ""
 
-        let wasCancelledByUser = CodexProcessRegistry.shared.didCancel
-        CodexProcessRegistry.shared.unregister(process)
+        registry.unregister(runID: runID)
 
-        if wasCancelledByUser {
+        if outcome == .cancelledByUser {
             throw PostProcessingError.userCancelled
+        }
+        if outcome == .timedOut {
+            throw PostProcessingError.timedOut(timeout)
         }
 
         guard process.terminationStatus == 0 else {

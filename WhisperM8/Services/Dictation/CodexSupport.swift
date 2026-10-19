@@ -1,51 +1,124 @@
 import AppKit
 import Foundation
 
-/// Trackt den aktuell laufenden Codex-Subprocess für externes Cancel
-/// (z. B. Cancel-Button im Recording-Overlay).
+/// Wem ein Codex-Lauf gehört: Der Abbruch im Diktat-Overlay trifft nur Diktat-Läufe,
+/// nie eine parallel laufende Test-Lab-Vorschau (LR-DIK-014). Wird als Task-Local
+/// durchgereicht, damit das `PostProcessing`-Protokoll unverändert bleibt.
+enum CodexRunOwner: String, Sendable {
+    case dictation
+    case testLab
+
+    @TaskLocal static var current: CodexRunOwner = .dictation
+}
+
+/// Trackt laufende Codex-Subprozesse je Lauf (Run-ID) für externes Cancel
+/// (Cancel-Button im Recording-Overlay, Task-Cancellation) und das harte
+/// Zeitlimit. Jeder Lauf hat seinen eigenen Slot und sein eigenes Abbruch-Flag.
 final class CodexProcessRegistry: @unchecked Sendable {
     static let shared = CodexProcessRegistry()
 
+    enum Outcome: Equatable {
+        case none
+        case cancelledByUser
+        case timedOut
+    }
+
+    private struct Entry {
+        var process: Process
+        var owner: CodexRunOwner
+        var outcome: Outcome = .none
+    }
+
     private let lock = NSLock()
-    private weak var current: Process?
-    private var cancelledByUser = false
+    private var entries: [UUID: Entry] = [:]
+    /// Abbruch, der vor der Registrierung des Prozesses eintraf (Task-Cancellation
+    /// zwischen Start des Detached-Tasks und `process.run()`).
+    private var precancelled: Set<UUID> = []
+    /// Zeit zwischen SIGTERM und SIGKILL.
+    let killGrace: TimeInterval
 
-    private init() {}
+    init(killGrace: TimeInterval = 3) {
+        self.killGrace = killGrace
+    }
 
-    func register(_ process: Process) {
+    /// Meldet einen gestarteten Prozess unter `runID` an. War der Lauf vorher schon
+    /// abgebrochen, wird er sofort beendet.
+    func register(_ process: Process, runID: UUID = UUID(), owner: CodexRunOwner = .dictation) {
         lock.lock()
-        current = process
-        cancelledByUser = false
+        var entry = Entry(process: process, owner: owner)
+        let wasPrecancelled = precancelled.remove(runID) != nil
+        if wasPrecancelled { entry.outcome = .cancelledByUser }
+        entries[runID] = entry
+        lock.unlock()
+        if wasPrecancelled { terminateWithEscalation(process) }
+    }
+
+    func unregister(runID: UUID) {
+        lock.lock()
+        entries[runID] = nil
+        precancelled.remove(runID)
         lock.unlock()
     }
 
-    func unregister(_ process: Process) {
+    /// Bricht alle laufenden Läufe EINES Besitzers ab (Overlay-Button → `.dictation`).
+    @discardableResult
+    func cancel(owner: CodexRunOwner = .dictation) -> Bool {
         lock.lock()
-        if current === process {
-            current = nil
+        var processes: [Process] = []
+        for (id, entry) in entries where entry.owner == owner {
+            entries[id]?.outcome = .cancelledByUser
+            processes.append(entry.process)
         }
         lock.unlock()
+        var any = false
+        for process in processes where process.isRunning {
+            terminateWithEscalation(process)
+            any = true
+        }
+        return any
     }
 
-    /// Bricht einen laufenden Codex-Subprocess auf Anforderung ab (Cancel-Button).
+    /// Bricht genau einen Lauf ab (Task-Cancellation).
     @discardableResult
-    func cancel() -> Bool {
+    func cancel(runID: UUID) -> Bool {
         lock.lock()
-        let process = current
-        cancelledByUser = true
+        guard let entry = entries[runID] else {
+            precancelled.insert(runID)
+            lock.unlock()
+            return false
+        }
+        entries[runID]?.outcome = .cancelledByUser
         lock.unlock()
-        guard let process, process.isRunning else { return false }
-        process.terminate()
+        guard entry.process.isRunning else { return false }
+        terminateWithEscalation(entry.process)
         return true
     }
 
-    var didCancel: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return cancelledByUser
+    /// Hartes Zeitlimit: markiert den Lauf als `timedOut` und beendet ihn (TERM, dann KILL).
+    func expire(runID: UUID) {
+        lock.lock()
+        guard let entry = entries[runID], entry.outcome == .none else {
+            lock.unlock()
+            return
+        }
+        entries[runID]?.outcome = .timedOut
+        lock.unlock()
+        if entry.process.isRunning { terminateWithEscalation(entry.process) }
     }
 
-    func resetCancelFlag() {
-        lock.lock(); cancelledByUser = false; lock.unlock()
+    func outcome(runID: UUID) -> Outcome {
+        lock.lock(); defer { lock.unlock() }
+        return entries[runID]?.outcome ?? .none
+    }
+
+    /// SIGTERM; ignoriert der Prozess es, folgt nach `killGrace` SIGKILL.
+    private func terminateWithEscalation(_ process: Process) {
+        process.terminate()
+        let pid = process.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + killGrace) { [weak process] in
+            guard let process, process.isRunning, process.processIdentifier == pid else { return }
+            kill(pid, SIGKILL)
+        }
     }
 }
 

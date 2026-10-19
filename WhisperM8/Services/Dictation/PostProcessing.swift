@@ -7,6 +7,7 @@ protocol PostProcessing {
 enum PostProcessingError: LocalizedError, Equatable {
     case missingTemplate
     case userCancelled
+    case timedOut(TimeInterval)
     case codexUnavailable(String)
 
     var errorDescription: String? {
@@ -15,6 +16,8 @@ enum PostProcessingError: LocalizedError, Equatable {
             return "No template is configured for this output mode."
         case .userCancelled:
             return "Codex wurde abgebrochen."
+        case .timedOut(let seconds):
+            return "Codex did not finish within \(Int(seconds)) seconds and was stopped."
         case .codexUnavailable(let message):
             return message
         }
