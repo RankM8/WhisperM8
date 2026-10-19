@@ -41,6 +41,36 @@
         }
       }
     },
+    "%lld chats are still working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats arbeiten noch"
+          }
+        }
+      }
+    },
+    "%lld of them are still running and will be stopped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld davon laufen noch und werden beendet."
+          }
+        }
+      }
+    },
+    "A chat is still working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat arbeitet noch"
+          }
+        }
+      }
+    },
     "AI enrichment modes (Clean, Email, Slack …) use the Codex CLI with your ChatGPT login. This is optional — you can skip it now and connect later in Settings.": {
       "localizations": {
         "de": {
@@ -281,6 +311,26 @@
         }
       }
     },
+    "Close tab — the chat keeps running in the background": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab schließen — der Chat läuft im Hintergrund weiter"
+          }
+        }
+      }
+    },
+    "Closing a tab does not stop the chat. It keeps working in the background. To stop it, use End or Archive in the sidebar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Schließen eines Tabs beendet den Chat nicht. Er arbeitet im Hintergrund weiter. Zum Beenden in der Seitenleiste „Beenden“ oder „Archivieren“ nutzen."
+          }
+        }
+      }
+    },
     "Configuration": {
       "localizations": {
         "de": {
@@ -501,6 +551,16 @@
         }
       }
     },
+    "It is still running. Removing it stops the agent and deletes it from the supervisor.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Er läuft noch. Beim Entfernen wird der Agent gestoppt und vom Supervisor gelöscht."
+          }
+        }
+      }
+    },
     "Last entry is too large for the preview": {
       "localizations": {
         "de": {
@@ -651,6 +711,9 @@
         }
       }
     },
+    "OK": {
+      "shouldTranslate": false
+    },
     "Official instructions": {
       "localizations": {
         "de": {
@@ -717,6 +780,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anbieter"
+          }
+        }
+      }
+    },
+    "Quit Anyway": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trotzdem beenden"
+          }
+        }
+      }
+    },
+    "Quit and Continue Later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden und später fortsetzen"
+          }
+        }
+      }
+    },
+    "Quitting stops them mid-task. WhisperM8 can continue them the next time it starts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden unterbricht sie mitten in der Arbeit. WhisperM8 kann sie beim nächsten Start fortsetzen."
           }
         }
       }
@@ -801,6 +894,26 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove this background agent?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Hintergrund-Agent entfernen?"
+          }
+        }
+      }
+    },
     "Replace Key": {
       "localizations": {
         "de": {
@@ -821,12 +934,42 @@
         }
       }
     },
+    "Restart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu starten"
+          }
+        }
+      }
+    },
+    "Restart this chat?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Chat neu starten?"
+          }
+        }
+      }
+    },
     "Result:": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ergebnis:"
+          }
+        }
+      }
+    },
+    "Retry now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt erneut versuchen"
           }
         }
       }
@@ -897,6 +1040,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Setup unvollständig: Berechtigungen fehlen"
+          }
+        }
+      }
+    },
+    "Shell terminals are closed for good and cannot be restored.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shell-Terminals werden endgültig geschlossen und lassen sich nicht wiederherstellen."
           }
         }
       }
@@ -1021,6 +1174,16 @@
         }
       }
     },
+    "Switch tabs with a two-finger swipe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tabs per Zwei-Finger-Wischen wechseln"
+          }
+        }
+      }
+    },
     "Test your configuration now. Press your hotkey to start, speak, then press again to stop.": {
       "localizations": {
         "de": {
@@ -1067,6 +1230,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text wird nur in die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
+    "The chat is busy or has text you have not sent. Restarting stops the current turn and discards that text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat arbeitet oder hat ungesendeten Text. Beim Neustart wird die laufende Antwort abgebrochen und der Text verworfen."
+          }
+        }
+      }
+    },
+    "The chat is still running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat läuft noch"
           }
         }
       }
@@ -1357,6 +1540,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Du hast das Diktat noch nicht getestet. Du kannst jetzt abschließen, wir empfehlen aber vorher einen kurzen Test."
+          }
+        }
+      }
+    },
+    "Your changes could not be saved yet. Trying again automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Änderungen konnten noch nicht gespeichert werden. Es wird automatisch erneut versucht."
           }
         }
       }
