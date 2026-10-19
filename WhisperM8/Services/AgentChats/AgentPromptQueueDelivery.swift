@@ -68,7 +68,10 @@ final class AgentPromptQueueDelivery {
         // der Send-Pipeline (UserPromptSubmit-Guard konsumiert es).
         // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
         // sonst blockte der Guard die eigene Zustellung (Review W1).
-        SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
+        guard SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked)) else {
+            store.markFailed(id: reserved.id, error: "Zustell-Token ließ sich nicht speichern — erneuter Versuch beim nächsten Turn-Ende", retry: true)
+            return
+        }
         controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 
