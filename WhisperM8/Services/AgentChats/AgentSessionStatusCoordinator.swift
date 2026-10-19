@@ -413,6 +413,15 @@ final class AgentSessionStatusCoordinator {
         } else {
             resolvePendingBinding(localID: localID, event: event)
         }
+        // Events eines ignorierten bg-Forks (derselbe Event-File wie das
+        // Vordergrundterminal) betreffen den Vordergrundstatus nicht: ein
+        // Fork-Stop meldete sonst einen noch arbeitenden Chat als fertig und
+        // löste eine Queue-Zustellung aus (LR-AK-020). Events mit fremder oder
+        // fehlender ID laufen unverändert weiter.
+        if let eventSessionID = event.sessionID,
+           forkExternalIDs[localID]?.contains(eventSessionID) == true {
+            return
+        }
         if event.hookEventName == .promptGuardBlock {
             handlePromptGuardBlock(localID: localID)
             return
