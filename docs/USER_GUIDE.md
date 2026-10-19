@@ -1,10 +1,13 @@
 ---
-description: End-User-Anleitung für WhisperM8 (Installation, Diktat, Agent Chats, Settings)
+description: End-User-Anleitung für WhisperM8 (Installation per Homebrew, Einrichtung, Diktat, Agent Chats, Einstellungen, Fehlerbehebung, Datenschutz)
 description_long: |
-  Ausführlicher Nutzer-Leitfaden: Installation/Permissions, Diktat-Workflow
-  (Hotkey, Output-Modes, Auto-Paste), Agent Chats und Settings. Zielgruppe sind
-  Endnutzer; technische Architektur steht in ARCHITECTURE.md.
-updated: 2026-07-09
+  Ausführlicher Nutzer-Leitfaden: Installation und Updates nur über den Homebrew-Cask,
+  Einrichtungsassistent mit Nutzungsprofilen, Diktat-Workflow (Hotkey, Ausgabemodi,
+  Auto-Paste), Agent Chats (Projekte, Chats, Status, Schließen/Stoppen/Archivieren,
+  Fortsetzen nach Neustart), Einstellungsseiten mit den Namen aus der App,
+  nicht-destruktive Fehlerbehebung und lokale Datenablage. Zielgruppe sind Endnutzer;
+  Entwicklerthemen stehen in DEVELOPMENT.md.
+updated: 2026-10-19
 ---
 
 # WhisperM8 - User Guide
@@ -12,15 +15,11 @@ updated: 2026-07-09
 ## Quick Start
 
 ```bash
-git clone git@github.com:RankM8/whisperm8.git
-cd whisperm8
-make install
+brew install --cask rankm8/tap/whisperm8
 ```
 
-**Having issues (crashes, old installation)?**
-```bash
-make clean-install
-```
+Launch WhisperM8 from Applications — the setup wizard does the rest. Updates:
+`brew upgrade --cask whisperm8`.
 
 ---
 
@@ -28,10 +27,12 @@ make clean-install
 
 1. [Installation](#installation)
 2. [First Steps](#first-steps)
-3. [Usage](#usage)
-4. [Settings](#settings)
-5. [Troubleshooting](#troubleshooting)
-6. [Make Commands](#make-commands)
+3. [Dictation](#dictation)
+4. [Agent Chats](#agent-chats)
+5. [Settings](#settings)
+6. [Troubleshooting](#troubleshooting)
+7. [Privacy and local data](#privacy-and-local-data)
+8. [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ---
 
@@ -40,242 +41,227 @@ make clean-install
 ### Requirements
 
 - macOS 14 (Sonoma) or newer
-- Xcode Command Line Tools: `xcode-select --install`
-- OpenAI API key or Groq API key
+- [Homebrew](https://brew.sh)
+- A Groq or OpenAI API key for transcription
+- Optional: a ChatGPT account (AI enrichment via Codex) and a Claude account (Agent Chats)
 
-### Build from source (current supported path)
-
-```bash
-git clone git@github.com:RankM8/whisperm8.git
-cd whisperm8
-make install
-```
-
-The app will be installed to `/Applications/WhisperM8.app`.
-
-### First install on colleague's Mac / new Mac
-
-**IMPORTANT:** If a different version was installed before:
+### Install and update
 
 ```bash
-make clean-install
+brew install --cask rankm8/tap/whisperm8     # install
+brew upgrade --cask whisperm8                # update
 ```
 
-This removes all old data (permissions, cache, settings) and installs fresh.
+Homebrew is the only supported way to install and update WhisperM8. The app is self-signed; the cask
+removes the Gatekeeper quarantine flag for you, so no manual override is needed. A self-built copy
+from the source code is not updated by Homebrew — remove it before installing the cask.
 
 ---
 
 ## First Steps
 
-### 1. Launch App
+The setup wizard opens on first launch. You can leave it at any step and come back later through
+Settings.
 
-After launch, a **microphone icon** appears in the menu bar (top right).
+1. **Profile** — choose what you want to use. You can switch any time under Settings → General.
 
-### 2. Grant Permissions
+   | Profile | What you get |
+   |---|---|
+   | Dictation only | Menu-bar app, speech to text |
+   | Dictation + AI enrichment | Plus output modes like Clean, Email or Slack (uses Codex) |
+   | Full (with Agent Chats) | Plus the Agent Chats window for Claude Code and Codex (Dock app) |
 
-On first launch, two permissions are required:
-
-#### Microphone
-- Dialog appears automatically on first recording attempt
-- Click "Allow"
-
-#### Accessibility
-- Required by onboarding even when Auto-Paste is disabled; without it, Next and Done remain blocked and onboarding opens again on the next launch
-- Click the permission button to open System Settings
-- Find WhisperM8 in the list and enable
-- **If not in list:** Click "+" → select `/Applications/WhisperM8.app`
-
-### 3. Set up API Key
-
-1. Click microphone icon → "Settings..."
-2. Select "API" tab
-3. Choose provider:
-   - **OpenAI** - Best quality (~$0.006/min)
-   - **Groq** - Free (rate-limited)
-4. Enter API key
-
-**Get API keys:**
-- OpenAI: https://platform.openai.com/api-keys
-- Groq: https://console.groq.com/keys
-
-### 4. Configure Hotkey
-
-1. Select "Hotkey" tab
-2. Click in the recorder field
-3. Press desired key combination
-
-**Recommended:** `Control + Shift + Space`
-
-**Note:** Option-only shortcuts don't work reliably on macOS 15+.
+2. **Permissions** — Microphone (recording) and Accessibility (auto-paste, selected text). The wizard
+   opens the right page in System Settings. If WhisperM8 is missing in the Accessibility list, click
+   "+", press `Cmd+Shift+G`, enter `/Applications/WhisperM8.app` and enable it.
+3. **Hotkey** — click the recorder field and press a key combination, e.g. `Control + Shift + Space`.
+   Avoid shortcuts made only of Option keys.
+4. **API key** — choose Groq (free tier, rate-limited) or OpenAI and paste your key from
+   [console.groq.com/keys](https://console.groq.com/keys) or
+   [platform.openai.com/api-keys](https://platform.openai.com/api-keys). It is stored in the macOS
+   Keychain.
+5. **Language** — the language you usually speak, or auto-detect.
+6. **Claude Code and Codex** (AI enrichment and Agent Chats only) — the wizard detects existing
+   installations (native installer, Homebrew, npm and common version managers). If one is missing,
+   it offers to install it with Homebrew (`brew install --cask claude-code` / `codex`) after you
+   confirm. Codex is connected right in the wizard (*Sign in with ChatGPT*); Claude Code walks you
+   through signing in the first time you start a chat.
+7. **Test** — record a short sentence to check that everything works.
 
 ---
 
-## Usage
+## Dictation
 
-### Dictation (Push-to-Talk)
+1. Place the cursor in any text field (TextEdit, Slack, browser …).
+2. Press your hotkey to start recording, speak, press it again to stop.
+   With *Hold to talk* you keep the hotkey pressed while speaking instead.
+3. The text is pasted into the app that was in front (with auto-paste) and is always also on the
+   clipboard.
 
-1. **Place cursor** in a text field (TextEdit, Slack, browser, etc.)
-2. **Press hotkey** to start recording
-3. **Speak** your text
-4. **Press hotkey again** to stop → transcription starts
-5. **Text appears** automatically in text field (or clipboard)
+**Cancel:** click the X in the overlay. Nothing is transcribed.
 
-### Cancel Recording
+**Overlay:** shows level, timer and buttons at the bottom of the screen. Drag it anywhere; double-click
+resets the position. Full or Mini layout under Settings → Recording.
 
-During recording you can cancel anytime:
-- **X button** in overlay click
+**Output modes:** with AI enrichment you pick a mode (e.g. Clean, Email, Slack) in the overlay or the
+menu bar. The transcript is then rewritten by Codex using your ChatGPT login. Modes, templates and a
+test lab live under Settings → AI Output.
 
-The recording is discarded, nothing is transcribed.
+**Context:** optionally the selected text and screenshots or a short screen clip are passed to the
+mode, so that e.g. *Reply* knows what you are answering (Settings → Context & Privacy).
 
-### Overlay Display
+**Menu bar:** start/stop recording, switch modes, open Agent Chats and Settings.
 
-During recording, appears at bottom of screen:
-- Microphone indicator (responds to voice)
-- Timer (MM:SS)
-- Audio level bars
-- X button to cancel
-- Default position is bottom-center (40pt), but you can drag it freely on-screen
-- Overlay position is saved and restored on the next recording
-- You can switch between `Full` and `Mini` overlay UI in Settings → Behavior
+---
 
-### Menu Bar Status
+## Agent Chats
 
-| Icon | Status |
-|------|--------|
-| 🎤 | Ready |
-| 🎤 (filled) | Recording |
-| ⏳ | Transcribing |
+Agent Chats (profile *Full*) host the real Claude Code and Codex command-line tools in tabs — the same
+tools you would run in Terminal, with their own sign-in, models and commands.
+
+### Projects and chats
+
+- **Add a project:** *Add Project…* in the sidebar and choose a folder. Chats always start in their
+  project's folder.
+- **New chat:** the + button next to the tabs or the project's context menu — *New Claude Chat* or
+  *New Codex Chat*. Advanced options (background agents, agent views, sub-agent library) appear once
+  you turn on *Advanced agent features* in Settings → Agent Chats.
+- **Workspaces:** place several chats of a project side by side in a grid and switch between them with
+  `Ctrl+Tab`.
+
+### Status
+
+The dot in the sidebar, on the tab and in the chat header shows the same status everywhere:
+
+| Status | Meaning |
+|---|---|
+| Green | Working |
+| Amber | Waiting for you — a question, a permission or a plan to approve |
+| Grey | Ready — the turn is finished, waiting for your next prompt |
+| Red ring | Error |
+
+VoiceOver reads the status out loud. You can get a notification and a sound when an agent finishes
+(Settings → Agent Chats → Notifications & Sounds).
+
+### Close, stop, archive
+
+| Action | What happens |
+|---|---|
+| **Close Tab** | Only hides the tab. The chat keeps running and stays in the sidebar. |
+| **Stop** | Ends the chat's process. The conversation is kept and can be resumed later. |
+| **Archive** | Moves a chat out of the sidebar into the archive; *Restore* brings it back. |
+
+WhisperM8 asks before an action interrupts a chat that is still working.
+
+### Quit and resume
+
+- **Cmd+Q** with a chat that is working or waiting asks first: *Quit and Reopen Later* reopens those
+  chats the next time WhisperM8 starts, so you can pick up where they stopped. The running turn itself
+  ends when the app quits.
+- **Log out, restart or shut down** never asks, but marks all running chats to reopen.
+- **After a crash** WhisperM8 reopens the chats that were running.
+
+Resumed chats continue the same conversation (`--resume`); nothing is lost except the turn that was
+in progress.
+
+### Accounts
+
+Several Claude accounts can be set up under Settings → Accounts; each chat runs in one of them and can
+be moved to another via its context menu. A chat that is working is moved after its turn.
 
 ---
 
 ## Settings
 
-Open: Microphone icon → "Settings..." (or `Cmd + ,`)
+Open from the menu bar → *Settings…* or with `Cmd + ,`.
 
-### API Tab
+| Page | What you find there |
+|---|---|
+| **Recording** | Hotkey (hold or toggle), input device, audio ducking, overlay layout and position, auto-paste |
+| **Transcription** | Provider (Groq/OpenAI), API key, model and price, spoken language |
+| **AI Output** | ChatGPT connection for Codex, output modes, templates, test lab |
+| **Context & Privacy** | Selected text and visual context (screenshots, screen clips), deleting context files |
+| **Agent Chats** | Default chat type and project folder, automatic titles, tab swipe, summaries, notifications, terminal |
+| **Accounts** | Claude accounts, MCP servers across accounts |
+| **Hooks** | How chats report their state to WhisperM8 (advanced) |
+| **CLI & Skills** | The `whisperm8` command-line tool and agent skills |
+| **General** | Usage profile, start at login, appearance, automatic update check |
+| **Permissions** | Status of microphone, accessibility and screen recording, with links to System Settings |
+| **About** | Version and update |
 
-| Setting | Description |
-|---------|-------------|
-| Provider | OpenAI or Groq |
-| API Key | Your personal API key (stored securely in Keychain) |
-| Language | German, English, or Auto-detect |
+Experimental features (GPT backend, ChatGPT-subscription transcription, Codex Voice Agent, Jarvis board)
+are grouped separately and are off by default.
 
-### Hotkey Tab
-
-| Setting | Description |
-|---------|-------------|
-| Recording key | Key combination for push-to-talk |
-
-### Behavior Tab
-
-| Setting | Description |
-|---------|-------------|
-| Launch at login | Start app automatically at login |
-| Auto-paste | Paste text automatically (or clipboard only) |
-| Overlay UI | Choose `Full` or `Mini` overlay, and reset saved position |
-
-### Audio Tab
-
-| Setting | Description |
-|---------|-------------|
-| Input Device | Select microphone or audio input device. "System Default" uses whatever macOS has configured as default input. |
-
-**Bluetooth-Mikrofone (AirPods, etc.):** WhisperM8 unterstützt Bluetooth-Mikrofone vollständig. Bei AirPods wechselt macOS automatisch vom Musik-Profil (A2DP) zum Telefon-Profil (HFP) - dies ist normal und wird automatisch gehandhabt. Empfehlung: "System Default" verwenden.
+**Bluetooth microphones (AirPods etc.):** macOS switches the headset to its phone profile while the
+microphone is in use; the sound gets thinner, that is normal. WhisperM8 adapts to the format change.
+If an explicitly chosen Bluetooth device disappears, recording falls back to *System Default*.
 
 ---
 
 ## Troubleshooting
 
-### App crashes / won't start / behaves strangely
+### App crashes, won't start or behaves strangely
 
-**Solution:** Clean Install
-```bash
-make clean-install
-```
+1. Update: `brew upgrade --cask whisperm8`.
+2. Quit WhisperM8 and launch it again. Make sure only one copy exists (Spotlight, Activity Monitor) —
+   remove any self-built copy.
+3. Check the permissions under Settings → Permissions.
+4. Still broken? Reinstall the app without touching your data: `brew reinstall --cask whisperm8`.
+5. Report the problem with the crash report (Console → Crash Reports) and recent logs:
+   `log show --last 10m --predicate 'subsystem == "com.whisperm8.app"'`.
 
-This removes all old data and reinstalls. After that:
-1. Grant Accessibility permission
-2. Re-enter API key
-3. Set hotkey
+A **full reset** deletes your chats, projects, custom modes, reports and API keys. It is a last
+resort for developers and described in [DEVELOPMENT.md](DEVELOPMENT.md#full-reset-destructive) —
+back up `~/Library/Application Support/WhisperM8` before using it.
 
 ### Auto-paste not working
 
-1. **Check Accessibility permission:**
-   - System Settings → Privacy & Security → Accessibility
-   - WhisperM8 must be enabled
-
-2. **Restart app** after permission change
-
-3. **Auto-paste enabled?** → Check Settings → Behavior
+1. Settings → Permissions: Accessibility must be granted. Restart WhisperM8 after changing it.
+2. Settings → Recording → *Auto-paste after transcription* must be on.
+3. The text is always on the clipboard — paste it with `Cmd+V` as a fallback.
 
 ### Microphone permission denied
 
-1. System Settings → Privacy & Security → Microphone
-2. Enable WhisperM8
-3. Restart app
+System Settings → Privacy & Security → Microphone → enable WhisperM8, then restart the app.
 
 ### Hotkey not working
 
-1. Check if another app uses the same hotkey
-2. Try different key combination
-3. Avoid Option-only shortcuts on macOS 15+
+Another app may use the same combination — choose a different one under Settings → Recording.
 
 ### Audio device not appearing
 
-1. Check if device is recognized in System Settings → Sound → Input
-2. Reconnect USB device and wait 2-3 seconds
-3. Restart WhisperM8
-4. For Bluetooth: Ensure device is connected and in input mode
-
-### Bluetooth-Mikrofon (AirPods) produziert keine Aufnahme
-
-**Das Problem ist gelöst in Version 1.1.** Falls du eine ältere Version nutzt:
-
-```bash
-git pull && make install
-```
-
-**Hintergrund:** Bluetooth-Geräte wechseln beim Mikrofonzugriff vom A2DP-Profil (48kHz, Musik) zum HFP-Profil (16kHz, Telefon). WhisperM8 erkennt diesen Wechsel automatisch und passt das Audio-Format an.
+Check System Settings → Sound → Input, reconnect the device, wait a few seconds and pick it again under
+Settings → Recording.
 
 ### API errors
 
-- Key entered correctly? (no spaces at end)
-- Groq rate limit reached? → Wait or switch to OpenAI
-- Check internet connection
+Check the key (no trailing spaces), the Groq rate limit (wait or switch to OpenAI) and the network.
 
-### Debug Logging
+### A chat does not start
 
-```bash
-log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
-```
+If Claude Code or Codex is missing, WhisperM8 shows a sheet with *Check Again* and an install option.
+Sign-in problems are shown inside the chat itself — follow the CLI's instructions there.
 
 ---
 
-## Make Commands
+## Privacy and local data
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Build + install to `/Applications` |
-| `make run` | Debug build + launch immediately |
-| `make build` | Release build (app stays in repo) |
-| `make clean-install` | **Reset everything** + reinstall |
-| `make kill` | Stop running instances |
-| `make clean` | Delete build artifacts |
-
-### When to use which command?
-
-- **Normal updates:** `git pull && make install`
-- **Having issues:** `make clean-install`
-- **For colleagues (current path):** clone repo and run `make install`
-
----
-
-## Privacy
-
-- **API keys** are stored securely in macOS Keychain
-- **Audio** is stored temporarily and deleted after transcription
-- **Settings** are stored in UserDefaults
-- Audio is sent to OpenAI/Groq for transcription
+- **API keys** are stored in the macOS Keychain.
+- **Audio** of a successful dictation is sent to your transcription provider (Groq or OpenAI) and the
+  temporary file is deleted afterwards.
+- **Failed or cancelled transcriptions:** the audio is kept as a rescue copy under
+  `~/Library/Application Support/WhisperM8/FailedRecordings`, so you can transcribe it again. At most
+  10 recordings are kept; older than 7 days are removed the next time a recording is saved there. You
+  can delete the folder's contents at any time.
+- **Reports:** every dictation leaves a local report (transcript, chosen mode, timings and — if enabled
+  — context images) under `~/Library/Application Support/WhisperM8/Reports`. At most 500 reports,
+  180 days and 2 GB are kept; the oldest are removed when a new report is saved. Settings → Context &
+  Privacy can delete visual context files right after processing. You can delete the folder at any time.
+- **Context** (selected text, screenshots, screen clips) is only sent to Codex when an output mode
+  requests it.
+- **Agent Chats** run the Claude Code and Codex tools on your Mac; what they send is governed by those
+  tools and your accounts. Automatic chat summaries are off by default.
+- **Settings** are stored in macOS user defaults (`com.whisperm8.app`).
 
 ---
 
@@ -283,10 +269,10 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd + ,` | Open settings |
-| `Cmd + Q` | Quit app |
-| [Your hotkey] | Toggle recording (start/stop) |
-| X button | Cancel recording |
+| [Your hotkey] | Start/stop recording |
+| `Cmd + ,` | Open Settings |
+| `Ctrl + Tab` | Switch between chats |
+| `Cmd + Q` | Quit (asks first if a chat is working) |
 
 ---
 
