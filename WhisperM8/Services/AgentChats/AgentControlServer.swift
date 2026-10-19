@@ -162,10 +162,15 @@ final class AgentControlServer: @unchecked Sendable {
         var chosen = ChatsControlProtocol.defaultSocketURL()
         if !ChatsControlProtocol.socketPathFits(chosen) {
             let fallbackDir = ChatsControlProtocol.fallbackSocketURL().deletingLastPathComponent()
-            try? FileManager.default.createDirectory(
-                at: fallbackDir, withIntermediateDirectories: true,
-                attributes: [.posixPermissions: 0o700])
-            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fallbackDir.path)
+            // LR-CLI-006: Der Ordner liegt in einem für alle beschreibbaren /tmp.
+            // Existiert er schon, muss er UNS gehören, ein echter Ordner (kein
+            // Symlink) sein und 0700 haben — sonst bindet der Server nicht,
+            // statt Prompts und Token einem fremden Besitzer zu öffnen.
+            guard Self.prepareOwnedDirectory(at: fallbackDir) else {
+                Logger.agentStore.error("control_server_fallback_dir_untrusted")
+                cleanupPartialStart()
+                return
+            }
             chosen = ChatsControlProtocol.fallbackSocketURL()
             guard ChatsControlProtocol.socketPathFits(chosen) else {
                 Logger.agentStore.error("control_server_socket_path_too_long")
@@ -193,6 +198,54 @@ final class AgentControlServer: @unchecked Sendable {
     static func setCloseOnExec(_ fd: Int32) {
         let flags = fcntl(fd, F_GETFD)
         if flags >= 0 { _ = fcntl(fd, F_SETFD, flags | FD_CLOEXEC) }
+    }
+
+    /// Legt `url` mit 0700 an bzw. prüft einen vorhandenen Ordner per `lstat`:
+    /// Verzeichnis (kein Symlink), Eigentümer == `uid`, keine Gruppen-/Welt-Rechte
+    /// (eigene zu weite Rechte werden auf 0700 gezogen). `false` = nicht vertrauen.
+    static func prepareOwnedDirectory(at url: URL, uid: uid_t = getuid()) -> Bool {
+        var st = stat()
+        if lstat(url.path, &st) != 0 {
+            guard errno == ENOENT else { return false }
+            guard mkdir(url.path, 0o700) == 0 || errno == EEXIST else { return false }
+            guard lstat(url.path, &st) == 0 else { return false }
+        }
+        guard (st.st_mode & S_IFMT) == S_IFDIR, st.st_uid == uid else { return false }
+        if (st.st_mode & 0o077) != 0 {
+            guard chmod(url.path, 0o700) == 0 else { return false }
+        }
+        return true
+    }
+
+    /// Obergrenze für das Einlesen einer Request-Zeile ab accept.
+    static let requestReadDeadline: TimeInterval = 5
+
+    /// Liest bis zum Zeilenende mit einer GESAMTfrist (statt `SO_RCVTIMEO` je
+    /// `read`): ein Client, der alle paar Sekunden ein Byte schickt, hielt
+    /// sonst einen der vier Slots bis zu 1 MiB lang (LR-CLI-006). `nil` bei
+    /// Fristablauf oder leerer Verbindung.
+    static func readRequestLine(_ fd: Int32, deadline: TimeInterval = requestReadDeadline) -> Data? {
+        let end = Date().addingTimeInterval(deadline)
+        var buffer = Data()
+        var chunk = [UInt8](repeating: 0, count: 4096)
+        while buffer.count <= ChatsControlCodec.maxLineBytes {
+            let remainingMs = Int32(max(0, end.timeIntervalSinceNow * 1000))
+            if remainingMs == 0 { return nil }
+            var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&descriptor, 1, remainingMs)
+            if ready < 0 { if errno == EINTR { continue }; return nil }
+            if ready == 0 { return nil }
+            let n = chunk.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+            if n < 0 { if errno == EINTR { continue }; return nil }
+            if n == 0 { return buffer.isEmpty ? nil : buffer }
+            let received = chunk[0..<n]
+            if let newline = received.firstIndex(of: 0x0A) {
+                buffer.append(contentsOf: received[..<newline])
+                return buffer
+            }
+            buffer.append(contentsOf: received)
+        }
+        return buffer
     }
 
     private func bindListen(at url: URL) -> Bool {
@@ -334,11 +387,8 @@ final class AgentControlServer: @unchecked Sendable {
         // Server noch antwortet.
         var noSigPipe: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
-        // Read-Timeout gegen hängende Clients.
-        var tv = timeval(tv_sec: 5, tv_usec: 0)
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
-
-        guard let line = readLine(fd) else { return }
+        // Gesamtfrist gegen hängende und tröpfelnde Clients (poll, nicht SO_RCVTIMEO).
+        guard let line = Self.readRequestLine(fd) else { return }
         guard line.count <= ChatsControlCodec.maxLineBytes else {
             respond(fd, .failure(requestID: "", code: .invalid, message: "Request zu groß"))
             return
@@ -404,18 +454,6 @@ final class AgentControlServer: @unchecked Sendable {
             lock.lock(); defer { lock.unlock() }
             return response
         }
-    }
-
-    private func readLine(_ fd: Int32) -> Data? {
-        var buffer = Data()
-        var byte: UInt8 = 0
-        while buffer.count <= ChatsControlCodec.maxLineBytes {
-            let n = read(fd, &byte, 1)
-            if n <= 0 { return buffer.isEmpty ? nil : buffer }
-            if byte == 0x0A { return buffer }
-            buffer.append(byte)
-        }
-        return buffer
     }
 
     private func respond(_ fd: Int32, _ response: ChatsControlResponse) {
