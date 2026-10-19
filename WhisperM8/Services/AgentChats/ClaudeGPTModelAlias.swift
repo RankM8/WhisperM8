@@ -12,9 +12,9 @@ enum ClaudeGPTContextProfile: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .standard:
-            return "Standard — 272k"
+            return String(localized: "Standard — 272k")
         case .extended900K:
-            return "Erweitert — 900k (1M-Backend)"
+            return String(localized: "Extended — 900k (1M backend)")
         }
     }
 

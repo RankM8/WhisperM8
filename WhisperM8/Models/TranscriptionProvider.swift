@@ -31,7 +31,7 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
         switch self {
         case .openai: return "OpenAI"
         case .groq: return "Groq"
-        case .chatgpt: return "ChatGPT-Abo"
+        case .chatgpt: return String(localized: "ChatGPT subscription")
         }
     }
 
@@ -45,13 +45,13 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
 
     /// Kleine, zurückhaltende Badge — nur für den empfohlenen Provider.
     var recommendationBadge: String? {
-        isRecommended ? "Free API key" : nil
+        isRecommended ? String(localized: "Free API key") : nil
     }
 
     /// Kurze, sachliche Empfehlungszeile — nur für den empfohlenen Provider.
     var recommendationHint: String? {
         isRecommended
-            ? "Recommended for personal use. Free key available; low-cost if you exceed free limits."
+            ? String(localized: "Recommended for personal use. Free key available; low-cost if you exceed free limits.")
             : nil
     }
 
@@ -79,7 +79,7 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
         case .groq: return "$0.002/min"
         // Bewusst nicht „kostenlos": unklar, ob die Transkription auf die
         // Nutzungslimits des ChatGPT-Kontos zählt.
-        case .chatgpt: return "im ChatGPT-Abo enthalten"
+        case .chatgpt: return String(localized: "Included in ChatGPT subscription")
         }
     }
 
@@ -149,17 +149,17 @@ enum TranscriptionModel: String, CaseIterable, Codable {
         case .openai_whisper: return "Whisper"
         case .groq_whisper_v3: return "Whisper Large v3"
         case .groq_whisper_v3_turbo: return "Whisper Large v3 Turbo"
-        case .chatgpt_transcribe: return "ChatGPT-Transkription"
+        case .chatgpt_transcribe: return String(localized: "ChatGPT transcription")
         }
     }
 
     var description: String {
         switch self {
-        case .openai_gpt4o: return "Beste Qualität, schnell bei kurzen Audios"
-        case .openai_whisper: return "Bewährt, stabiler bei langen Aufnahmen"
-        case .groq_whisper_v3: return "Beste Qualität bei Groq, 299x Echtzeit"
-        case .groq_whisper_v3_turbo: return "Schneller, 216x Echtzeit"
-        case .chatgpt_transcribe: return "Interne ChatGPT-Transkription über den GPT-Proxy"
+        case .openai_gpt4o: return String(localized: "Best quality, fast for short recordings")
+        case .openai_whisper: return String(localized: "Proven, more stable for long recordings")
+        case .groq_whisper_v3: return String(localized: "Best quality at Groq, 299× real time")
+        case .groq_whisper_v3_turbo: return String(localized: "Faster, 216× real time")
+        case .chatgpt_transcribe: return String(localized: "Internal ChatGPT transcription via the GPT proxy")
         }
     }
 

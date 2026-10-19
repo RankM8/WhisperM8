@@ -241,12 +241,52 @@
         }
       }
     },
+    "Best quality at Groq, 299× real time": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beste Qualität bei Groq, 299-fache Echtzeit"
+          }
+        }
+      }
+    },
+    "Best quality, fast for short recordings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beste Qualität, schnell bei kurzen Aufnahmen"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "ChatGPT subscription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-Abo"
+          }
+        }
+      }
+    },
+    "ChatGPT transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-Transkription"
           }
         }
       }
@@ -401,12 +441,82 @@
         }
       }
     },
+    "Dictation + AI enrichment": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat + KI-Anreicherung"
+          }
+        }
+      }
+    },
+    "Dictation only": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Diktat"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Fertig"
+          }
+        }
+      }
+    },
+    "Everything: dictation, AI enrichment, and the Agent Chats hub for Claude Code / Codex. Runs as a regular Dock app.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alles: Diktat, KI-Anreicherung und die Agent Chats für Claude Code / Codex. Läuft als normale Dock-App."
+          }
+        }
+      }
+    },
+    "Extended — 900k (1M backend)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweitert — 900k (1M-Backend)"
+          }
+        }
+      }
+    },
+    "Faster, 216× real time": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schneller, 216-fache Echtzeit"
+          }
+        }
+      }
+    },
+    "Free API key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kostenloser API-Key"
+          }
+        }
+      }
+    },
+    "Full (with Agent Chats)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voll (mit Agent Chats)"
           }
         }
       }
@@ -511,6 +621,16 @@
         }
       }
     },
+    "Included in ChatGPT subscription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im ChatGPT-Abo enthalten"
+          }
+        }
+      }
+    },
     "Install": {
       "localizations": {
         "de": {
@@ -551,12 +671,32 @@
         }
       }
     },
+    "Internal ChatGPT transcription via the GPT proxy": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interne ChatGPT-Transkription über den GPT-Proxy"
+          }
+        }
+      }
+    },
     "It is still running. Removing it stops the agent and deletes it from the supervisor.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Er läuft noch. Beim Entfernen wird der Agent gestoppt und vom Supervisor gelöscht."
+          }
+        }
+      }
+    },
+    "Just transcription. Lives in the menu bar. No Codex, no Agent Chats — the only setup is a Groq or OpenAI key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Transkription. Lebt in der Menüleiste. Kein Codex, keine Agent Chats — einzurichten ist nur ein Groq- oder OpenAI-Key."
           }
         }
       }
@@ -774,6 +914,16 @@
         }
       }
     },
+    "Proven, more stable for long recordings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewährt, stabiler bei langen Aufnahmen"
+          }
+        }
+      }
+    },
     "Provider": {
       "localizations": {
         "de": {
@@ -830,6 +980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio-Rückmeldung in Echtzeit"
+          }
+        }
+      }
+    },
+    "Recommended for personal use. Free key available; low-cost if you exceed free limits.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen für den persönlichen Gebrauch. Ein kostenloser Key ist verfügbar; günstig, falls du die Gratis-Grenzen überschreitest."
           }
         }
       }
@@ -1120,6 +1280,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gesprochene Sprache"
+          }
+        }
+      }
+    },
+    "Standard — 272k": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard — 272k"
           }
         }
       }
@@ -1440,6 +1610,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkription fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Transcription plus AI rewrite modes (Clean, Email, Slack …) via Codex. Menu-bar app; connect Codex when you want the extra modes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription plus KI-Umformulierung (Clean, E-Mail, Slack …) über Codex. Menüleisten-App; verbinde Codex, wenn du die zusätzlichen Modi möchtest."
           }
         }
       }

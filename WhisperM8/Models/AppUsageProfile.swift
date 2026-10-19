@@ -37,12 +37,12 @@ enum AppUsageProfile: String, CaseIterable, Codable {
         wantsAgentChats ? .regular : .accessory
     }
 
-    /// Kurzer, nutzersichtbarer Titel (englische UI).
+    /// Kurzer, nutzersichtbarer Titel (Englisch Basis, Deutsch im Katalog).
     var displayName: String {
         switch self {
-        case .dictationRaw: return "Dictation only"
-        case .dictationEnrichment: return "Dictation + AI enrichment"
-        case .full: return "Full (with Agent Chats)"
+        case .dictationRaw: return String(localized: "Dictation only")
+        case .dictationEnrichment: return String(localized: "Dictation + AI enrichment")
+        case .full: return String(localized: "Full (with Agent Chats)")
         }
     }
 
@@ -50,11 +50,11 @@ enum AppUsageProfile: String, CaseIterable, Codable {
     var summary: String {
         switch self {
         case .dictationRaw:
-            return "Just transcription. Lives in the menu bar. No Codex, no Agent Chats — the only setup is a Groq or OpenAI key."
+            return String(localized: "Just transcription. Lives in the menu bar. No Codex, no Agent Chats — the only setup is a Groq or OpenAI key.")
         case .dictationEnrichment:
-            return "Transcription plus AI rewrite modes (Clean, Email, Slack …) via Codex. Menu-bar app; connect Codex when you want the extra modes."
+            return String(localized: "Transcription plus AI rewrite modes (Clean, Email, Slack …) via Codex. Menu-bar app; connect Codex when you want the extra modes.")
         case .full:
-            return "Everything: dictation, AI enrichment, and the Agent Chats hub for Claude Code / Codex. Runs as a regular Dock app."
+            return String(localized: "Everything: dictation, AI enrichment, and the Agent Chats hub for Claude Code / Codex. Runs as a regular Dock app.")
         }
     }
 }
