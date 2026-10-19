@@ -22,10 +22,19 @@ struct PendingTranscriptionRetry {
     var contextBundle: TranscriptContextBundle
 }
 
+/// Seam für den Audiostopp (Tests setzen einen Spy ein, ohne AVAudioEngine).
+protocol AudioRecordingStopping: AnyObject {
+    func stopRecording() -> URL?
+}
+
+extension AudioRecorder: AudioRecordingStopping {}
+
 @MainActor
 final class RecordingCoordinator {
     weak var appState: AppState?
     let audioRecorder: AudioRecorder
+    /// Wird für den Stop benutzt; Default = `audioRecorder`.
+    var audioStopper: AudioRecordingStopping
     let overlayController: OverlayController
     let pasteService: PasteService
     let recordingTimer: RecordingTimer
@@ -96,7 +105,9 @@ final class RecordingCoordinator {
         }
     ) {
         self.appState = appState
-        self.audioRecorder = AudioRecorder()
+        let recorder = AudioRecorder()
+        self.audioRecorder = recorder
+        self.audioStopper = recorder
         self.overlayController = OverlayController()
         self.pasteService = PasteService()
         self.recordingTimer = RecordingTimer()
@@ -292,20 +303,40 @@ final class RecordingCoordinator {
         }
 
         isProcessing = true
+        // LR-DIK-018: Audio und Dauer schließen SOFORT beim akzeptierten Stop.
+        // Clip-Finalisierung und Kontext-Capture (bis 1 s) laufen danach —
+        // vorher nahm die Aufnahme während dieser Wartezeit weiter auf und das
+        // 300-ms-Budget bis zum Transkriptionsstart riss.
+        let audioDuration = appState.recordingDuration
+        recordingTimer.stop()
+        // ESC-Monitor bleibt bewusst aktiv: Er bricht jetzt auch die
+        // Transcribing-Phase ab (siehe `setupEscKeyMonitor`). Entfernt wird
+        // er erst, wenn der Transkriptions-Task durch ist.
+        let audioURL = audioStopper.stopRecording()
+        recordingStartTime = nil
+
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
         }
         // VOR dem finalen Clipboard-Sweep auf den Capture-Task warten —
         // sonst importiert der Sweep dessen Cmd+C-/Restore-Pasteboard-Bumps
         // als User-Kontext (und kurze Diktate verloeren ihren Kontext).
+        // `appState.isRecording` bleibt dafür bis hierher true: der Merge
+        // des Captures verlangt es.
         await waitForContextCapture(timeout: 1.0)
+        // Abbruch (Cancel/ESC) in diesem kurzen Fenster: `cancelRecording()`
+        // hat den Rest abgeräumt, die schon gestoppte Datei verwerfen wir hier.
+        guard appState.isRecording else {
+            if let audioURL { try? FileManager.default.removeItem(at: audioURL) }
+            isProcessing = false
+            return
+        }
         observeClipboardChange()
         // Der Monitor läuft bewusst WEITER: was der User während
-        // Transcribing/Improving kopiert, landet noch im Live-Bundle und
-        // fließt ins Post-Processing ein (processTranscriptIfNeeded liest
-        // das Live-Bundle). Gestoppt wird am Ende der Pipeline unten.
+        // Transcribing/Improving kopiert, landet noch im Live-Bundle
+        // (processTranscriptIfNeeded liest das Live-Bundle). Gestoppt wird
+        // am Ende der Pipeline unten.
 
-        let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
@@ -315,15 +346,8 @@ final class RecordingCoordinator {
             "recording_context_committed agentChatPresent=\(frozenContextBundle.agentChat != nil, privacy: .public) provider=\(frozenContextBundle.agentChat?.provider.rawValue ?? "none", privacy: .public) project=\(frozenContextBundle.agentChat?.projectName ?? "none", privacy: .public) hasChatTitle=\(frozenContextBundle.agentChat?.title != nil, privacy: .public) externalID=\(frozenContextBundle.agentChat?.externalSessionID ?? "none", privacy: .public) tailChars=\(frozenContextBundle.agentChatTail?.count ?? 0, privacy: .public) selectedTextChars=\(frozenContextBundle.selectedText.text.count, privacy: .public) attachments=\(frozenContextBundle.attachmentCount, privacy: .public)"
         )
 
-        recordingTimer.stop()
-        // ESC-Monitor bleibt bewusst aktiv: Er bricht jetzt auch die
-        // Transcribing-Phase ab (siehe `setupEscKeyMonitor`). Entfernt wird
-        // er erst, wenn der Transkriptions-Task durch ist.
-
-        let audioURL = audioRecorder.stopRecording()
         appState.isRecording = false
         appState.audioLevel = 0
-        recordingStartTime = nil
 
         Logger.debug("[RecordingCoordinator] Calling AudioDuckingManager.endCapture()")
         AudioDuckingManager.shared.endCapture()
