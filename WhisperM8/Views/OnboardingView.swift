@@ -782,12 +782,19 @@ struct APIKeyStep: View {
                 && (AppPreferences.shared.claudeGPTBackendEnabled || selectedProvider == .chatgpt)
             rebuildDraft(for: selectedProvider)
         }
+        .onChange(of: keyDraft?.draft ?? "") { _, newValue in
+            keychainWriteFailed = OnboardingKeychainFailure.afterDraftEdit(
+                current: keychainWriteFailed,
+                draftIsEmpty: newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                hasSavedKey: keyDraft?.hasSavedKey ?? false)
+        }
     }
 
     private func saveDraft() {
         guard let keyDraft else { return }
         let saved = keyDraft.commit()
-        keychainWriteFailed = !saved && keyDraft.saveError != nil
+        // Ein bereits gespeicherter Key bleibt gültig — dann blockiert der Fehler nicht.
+        keychainWriteFailed = !saved && keyDraft.saveError != nil && !keyDraft.hasSavedKey
         apiKeyAvailable = keyDraft.hasSavedKey
     }
 

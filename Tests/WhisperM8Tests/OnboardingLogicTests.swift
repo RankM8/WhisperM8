@@ -34,6 +34,15 @@ final class OnboardingLogicTests: XCTestCase {
         XCTAssertTrue(gate(outcome: .succeeded).showsSuccess)
     }
 
+    func testKeychainFailureClearsOnEditWhenKeyExistsOrDraftEmptied() {
+        typealias F = OnboardingKeychainFailure
+        XCTAssertFalse(F.afterDraftEdit(current: true, draftIsEmpty: false, hasSavedKey: true))
+        XCTAssertFalse(F.afterDraftEdit(current: true, draftIsEmpty: true, hasSavedKey: false))
+        XCTAssertTrue(F.afterDraftEdit(current: true, draftIsEmpty: false, hasSavedKey: false),
+                      "ohne gespeicherten Key bleibt der Fehler, solange ein Entwurf ansteht")
+        XCTAssertFalse(F.afterDraftEdit(current: false, draftIsEmpty: false, hasSavedKey: false))
+    }
+
     func testKeychainFailureOrMissingCredentialsBlockFinish() {
         XCTAssertFalse(gate(outcome: .succeeded, keychainFailed: true).canFinish)
         XCTAssertFalse(gate(outcome: .notRun, credentials: false).canFinish)

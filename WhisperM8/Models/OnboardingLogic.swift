@@ -17,6 +17,19 @@ enum OnboardingTestOutcome: Equatable {
     }
 }
 
+// MARK: - Keychain-Fehler zurücksetzen (LR-ONB-007)
+
+enum OnboardingKeychainFailure {
+    /// Neuer Wert von `keychainWriteFailed`, nachdem der Entwurf geändert oder
+    /// geleert wurde. Der Fehler gehörte zum letzten Speicherversuch: wer den
+    /// Entwurf leert, oder bereits einen gespeicherten Key hat, darf nicht
+    /// dauerhaft an „Next“ gehindert bleiben.
+    static func afterDraftEdit(current: Bool, draftIsEmpty: Bool, hasSavedKey: Bool) -> Bool {
+        if draftIsEmpty || hasSavedKey { return false }
+        return current
+    }
+}
+
 // MARK: - Abschluss-Gate (LR-ONB-013)
 
 /// Pur: darf der Wizard abgeschlossen werden, und darf er „All set" melden?
