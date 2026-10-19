@@ -179,6 +179,31 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1)
     }
 
+    /// LR-AK-034: ESC kurz vor dem echten Turn-Ende — ohne Abbruch-Marker im
+    /// Transcript ist das „idle“ ein normales Fertig (Meldung, Queue).
+    func testUnconfirmedInterruptMarkDoesNotSwallowTurnEnd() throws {
+        let f = try makeFixture()
+        f.coordinator.interruptConfirmationOverride = { _ in false }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("busy"))
+        f.coordinator.suspectTurnAborted(f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle"))
+        XCTAssertEqual(f.poster.posted.count, 1, "echtes Turn-Ende wird gemeldet")
+    }
+
+    func testTranscriptTailInterruptDetection() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try #"{"type":"assistant","message":{}}"# .appending("\n")
+            .appending(#"{"type":"user","message":{"content":"[Request interrupted by user]"}}"#).appending("\n")
+            .write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentSessionStatusCoordinator.transcriptTailShowsInterrupt(url: url), true)
+        try #"{"type":"user","message":{"content":"[Request interrupted by user]"}}"# .appending("\n")
+            .appending(#"{"type":"assistant","message":{}}"#).appending("\n")
+            .write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentSessionStatusCoordinator.transcriptTailShowsInterrupt(url: url), false)
+    }
+
     func testNewTurnClearsStaleInterruptMark() throws {
         let f = try makeFixture()
         let clock = Date(timeIntervalSince1970: 1_792_000_000)

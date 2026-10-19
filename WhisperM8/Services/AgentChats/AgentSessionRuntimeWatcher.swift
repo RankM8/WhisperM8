@@ -205,6 +205,11 @@ final class AgentSessionRuntimeWatcher {
         watched[sessionID]?.lastStat?.mtime
     }
 
+    /// Aufgelöste Transcript-Datei einer beobachteten Session (kein I/O).
+    func cachedTranscriptURL(sessionID: UUID) -> URL? {
+        watched[sessionID]?.transcriptURL
+    }
+
     /// Beendet das Tracking nach Prozessende. Den finalen Status
     /// (`stopped`/`errored`) setzt der `AgentSessionStatusCoordinator` über
     /// die State-Machine — hier passiert nur noch Ressourcen-Cleanup.

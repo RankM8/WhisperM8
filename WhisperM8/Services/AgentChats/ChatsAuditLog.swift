@@ -56,6 +56,9 @@ final class ChatsAuditLog: @unchecked Sendable {
                 at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? line.write(to: fileURL)
         }
+        // Prompt-Köpfe nur für den eigenen Benutzer, auch für schon
+        // vorhandene Dateien (LR-CLI-012).
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 
     /// Liest die letzten `limit` Einträge (neueste zuletzt), optional gefiltert
