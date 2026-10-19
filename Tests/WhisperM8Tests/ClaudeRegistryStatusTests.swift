@@ -45,7 +45,10 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed", detail: .question("Rot?")), .question)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt",
                                               detail: .tool(name: "ExitPlanMode", argument: nil)), .planApproval)
+        // LR-AK-036: das letzte Tool kann laengst abgeschlossen sein — `input needed` gewinnt.
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed",
+                                              detail: .tool(name: "Bash", argument: "ls")), .question)
+        XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt",
                                               detail: .tool(name: "Bash", argument: "ls")), .permission)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed", detail: nil), .question)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt", detail: .reply("ok")), .permission)
@@ -111,6 +114,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         coordinator.sharedMemoryFragmentResolver = { _, _ in nil }
         coordinator.isRegistryStatusEnabled = { flag.value }
         coordinator.registryRecordLookup = { _ in nil }
+        coordinator.registryAwaitingNotificationDelay = 0
         coordinator.claudeVersionProvider = { ClaudeCLIVersion(components: [2, 1, 303]) }
         coordinator.hasRunningTerminal = { _ in true }
         return Fixture(coordinator: coordinator, store: store, sessionID: session.id,
@@ -221,12 +225,26 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1, "Rückfrage-Meldung nur einmal")
     }
 
+    func testInputRequestedNotificationWaitsForTailAndUsesRefinedKind() async throws {
+        let f = try makeFixture()
+        f.coordinator.registryAwaitingNotificationDelay = 0.05
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("busy"))
+        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "permission prompt"))
+        XCTAssertTrue(f.poster.posted.isEmpty, "Meldung wartet auf den Transcript-Tail")
+        f.coordinator.handleTranscriptActivity(
+            sessionID: f.sessionID, activity: AgentSessionActivity(detail: .tool(name: "ExitPlanMode", argument: nil)))
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(f.poster.posted.count, 1)
+        XCTAssertEqual(f.poster.posted.first?.kind, .inputRequested(.planApproval))
+    }
+
     func testPermissionToolNameComesFromTail() throws {
         let f = try makeFixture()
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
         f.coordinator.handleTranscriptActivity(
             sessionID: f.sessionID, activity: AgentSessionActivity(detail: .tool(name: "Bash", argument: "rm x")))
-        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "input needed"))
+        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "permission prompt"))
         XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .awaitingInput(.permission))
         XCTAssertEqual(f.coordinator.activityStore.activity(for: f.sessionID)?.awaitingToolName, "Bash")
     }

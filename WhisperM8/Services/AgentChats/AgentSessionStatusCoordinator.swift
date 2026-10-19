@@ -155,6 +155,11 @@ final class AgentSessionStatusCoordinator {
     private var shadowDiffSince: [UUID: Date] = [:]
     nonisolated static let shadowDiffLogSeconds: TimeInterval = 5
 
+    /// Verzögerung der Rückfrage-Meldung bei Registry-Status: Der Transcript-Tail
+    /// liefert die genaue Warte-Art erst kurz nach dem Registry-Wechsel
+    /// (LR-AK-036). 0 = sofort (Tests).
+    var registryAwaitingNotificationDelay: TimeInterval = 0.3
+
     var isRegistryStatusEnabled: () -> Bool = { AppPreferences.shared.isClaudeRegistryStatusEnabled }
     /// Sessions, deren Launch nur SessionStart/SessionEnd-Hooks bekam (S4).
     private(set) var reducedHookSessions: Set<UUID> = []
@@ -672,6 +677,9 @@ final class AgentSessionStatusCoordinator {
         case .question:
             return .question
         case .tool(let name, _):
+            // `input needed` heißt Frage/Elicitation — das letzte Tool im Tail
+            // kann längst abgeschlossen sein (LR-AK-036).
+            if waitingFor == "input needed" { return .question }
             return name == "ExitPlanMode" ? .planApproval : .permission
         case .reply, nil:
             return waitingFor == "input needed" ? .question : .permission
@@ -927,7 +935,18 @@ final class AgentSessionStatusCoordinator {
             AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
-                postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                if registryLiveSessions.contains(sessionID), registryAwaitingNotificationDelay > 0 {
+                    // Art kann der Tail noch nachziehen: kurz warten, dann die
+                    // aktuelle Art melden — nur wenn der Chat noch wartet.
+                    let delay = registryAwaitingNotificationDelay
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        guard let self, case .awaitingInput(let kind) = self.states[sessionID] else { return }
+                        self.postNotification(kind: .inputRequested(kind), sessionID: sessionID)
+                    }
+                } else {
+                    postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                }
             }
         }
     }
