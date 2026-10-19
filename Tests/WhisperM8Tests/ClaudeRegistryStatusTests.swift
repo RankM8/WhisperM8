@@ -547,4 +547,19 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         _ = cache.index(now: start.addingTimeInterval(1.5))
         XCTAssertEqual(builds, 2)
     }
+
+    func testEventDirectoryResolvesThroughSymlinkedConfigDir() throws {
+        // LR-AK-038: FSEvents meldet den aufgeloesten Pfad, die Roots tragen den Symlink-Pfad.
+        let real = tempDir.appendingPathComponent("real-sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        let link = tempDir.appendingPathComponent("link-sessions")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let roots = [ClaudeSessionRegistry.Root(profileName: "ai2", url: link)]
+        let map = ClaudeRegistryStatusSource.directoryProfileMap(for: roots)
+        let eventDir = ClaudeRegistryStatusSource.canonicalPath(real.path)
+        XCTAssertNotEqual(eventDir, link.path)
+        XCTAssertEqual(ClaudeRegistryStatusSource.profile(forEventDirectory: eventDir, in: map), "ai2")
+        XCTAssertEqual(ClaudeRegistryStatusSource.profile(forEventDirectory: link.path, in: map), "ai2")
+        XCTAssertNil(ClaudeRegistryStatusSource.profile(forEventDirectory: "/nowhere", in: map))
+    }
 }
