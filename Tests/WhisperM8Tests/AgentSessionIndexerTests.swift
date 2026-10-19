@@ -131,7 +131,7 @@ final class AgentSessionIndexerTests: XCTestCase {
         // Encodierter Name des Ping-Arbeitsordners (ClaudeAccountLimitPinger):
         // die Sessions darin sind Token-Refresh-Artefakte, keine Chats.
         let pingDirectory = root.appendingPathComponent(
-            "-Users-test-Library-Application Support-WhisperM8-whisperm8-limit-ping",
+            ClaudeAccountLimitPinger.defaultPingProjectsDirectoryName,
             isDirectory: true
         )
         defer { try? FileManager.default.removeItem(at: root) }
