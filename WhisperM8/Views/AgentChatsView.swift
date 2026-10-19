@@ -111,6 +111,8 @@ struct AgentChatsView: View {
     @State private var searchText = ""
     @State private var flatVisibleSessionLimit = 50
     @State var errorMessage: String?
+    /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
+    @State var missingCLIPrompt: MissingCLIPrompt?
     @State var isIndexingSessions = false
     @State var sessionActionRequest: AgentSessionActionRequest?
     /// Konto-Umzug (Slice 6): Vorschau/Fortschritt/Ergebnis des Sheets.
@@ -938,6 +940,9 @@ struct AgentChatsView: View {
             Text(sessions.count == 1
                 ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
+        }
+        .sheet(item: $missingCLIPrompt) { prompt in
+            AgentCLIMissingSheet(prompt: prompt, onClose: { missingCLIPrompt = nil })
         }
         .sheet(item: $pendingAccountMove) { pending in
             AgentMoveToAccountSheet(

@@ -1,5 +1,7 @@
 import SwiftUI
 import KeyboardShortcuts
+import AVFoundation
+import ApplicationServices
 
 struct MenuBarView: View {
     @Environment(AppState.self) private var appState
@@ -11,6 +13,13 @@ struct MenuBarView: View {
     /// erscheint nur, wenn das Feature eingeschaltet ist.
     @State private var voiceGate = VoiceGateCoordinator.shared
     @State private var speechCallouts = SpeechCalloutCenter.shared
+
+    /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)
+    private static func hasTranscriptionCredentials() -> Bool {
+        let provider = TranscriptionSettings.loadProvider()
+        guard provider.requiresAPIKey, let keychainKey = provider.keychainKey else { return true }
+        return KeychainManager.exists(key: keychainKey)
+    }
 
     var body: some View {
         Group {
@@ -55,6 +64,23 @@ struct MenuBarView: View {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+
+        // Unvollständiges Setup (Rechte erteilt, aber Hotkey/Key fehlt): Wizard nicht
+        // erzwingen, aber sichtbar fortsetzbar machen (LR-ONB-005).
+        if let reason = SetupIncompleteReason.evaluate(
+            micGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
+            accessibilityGranted: AXIsProcessTrusted(),
+            hotkeySet: KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil,
+            hasCredentials: Self.hasTranscriptionCredentials()
+        ) {
+            Divider()
+            Text(reason.message)
+                .font(.caption)
+                .foregroundStyle(.orange)
+            Button("Continue Setup…") {
+                WindowRequestCenter.shared.request(.onboarding)
             }
         }
 
