@@ -123,7 +123,7 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
             claudeToolResult(),
             claudeText("Der Baum ist sauber. Keine Änderungen offen."),
         ])
-        XCTAssertEqual(activity?.line(for: .working), "› schreibt Antwort")
+        XCTAssertEqual(activity?.line(for: .working), "› writing reply")
     }
 
     func testClaudeFrageAusAskUserQuestion() {
@@ -136,10 +136,10 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
             ]]]),
         ])
         XCTAssertEqual(activity?.detail, .question("Welchen Branch soll ich nehmen?"))
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Frage: Welchen Branch soll ich nehmen?")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Question: Welchen Branch soll ich nehmen?")
         var withHook = activity
         withHook?.awaitingKind = .question
-        XCTAssertEqual(withHook?.line(for: .awaitingInput), "Frage: Welchen Branch soll ich nehmen?")
+        XCTAssertEqual(withHook?.line(for: .awaitingInput), "Question: Welchen Branch soll ich nehmen?")
     }
 
     func testClaudeMehrzeiligeFrageNurErsteZeile() {
@@ -149,7 +149,7 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
                 "header": "Push",
             ]]]),
         ])
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Frage: Soll ich pushen?")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Question: Soll ich pushen?")
     }
 
     func testClaudePlanFreigabeAusHook() {
@@ -158,10 +158,10 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         ])
         XCTAssertEqual(activity?.detail, .tool(name: "ExitPlanMode", argument: nil))
         activity?.awaitingKind = .planApproval
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Plan zur Freigabe")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Plan awaiting approval")
         // Auch ohne Hook-Art kein roher Plan-Text in der Zeile.
         activity?.awaitingKind = nil
-        XCTAssertEqual(activity?.line(for: .working), "Plan zur Freigabe")
+        XCTAssertEqual(activity?.line(for: .working), "Plan awaiting approval")
     }
 
     func testClaudeBerechtigungKombiniertHookUndTail() {
@@ -170,15 +170,15 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         ])
         activity?.awaitingKind = .permission
         activity?.awaitingToolName = "Bash"
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Freigabe: Bash git push origin main")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Approval: Bash git push origin main")
 
         // Hook nennt ein anderes Tool als der Tail → nur der Hook-Name.
         activity?.awaitingToolName = "WebFetch"
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Freigabe: WebFetch")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Approval: WebFetch")
 
         // Hook ohne Tail.
         let hookOnly = AgentSessionActivity(awaitingKind: .permission, awaitingToolName: "Write")
-        XCTAssertEqual(hookOnly.line(for: .awaitingInput), "Freigabe: Write")
+        XCTAssertEqual(hookOnly.line(for: .awaitingInput), "Approval: Write")
     }
 
     func testClaudeIdleZeigtErstenSatzDerLetztenAntwort() {
@@ -199,9 +199,9 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
 
     func testGestopptUndFehlerKommenAusDemStatus() {
         let activity = claude([claudeText("Fertig.")])
-        XCTAssertEqual(activity?.line(for: .stopped), "gestoppt")
-        XCTAssertEqual(activity?.line(for: .errored), "Fehler")
-        XCTAssertEqual(AgentSessionActivity().line(for: .stopped), "gestoppt")
+        XCTAssertEqual(activity?.line(for: .stopped), "stopped")
+        XCTAssertEqual(activity?.line(for: .errored), "error")
+        XCTAssertEqual(AgentSessionActivity().line(for: .stopped), "stopped")
     }
 
     func testMcpToolNameWirdGekuerzt() {
@@ -215,11 +215,11 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
         var activity = claude([claudeTool("mcp__claude-in-chrome__navigate", ["url": "https://example.com/a"])])
         activity?.awaitingKind = .permission
         activity?.awaitingToolName = "mcp__claude-in-chrome__navigate"
-        XCTAssertEqual(activity?.line(for: .awaitingInput), "Freigabe: navigate https://example.com/a")
+        XCTAssertEqual(activity?.line(for: .awaitingInput), "Approval: navigate https://example.com/a")
 
         // Hook ohne Tail: Anzeige ebenfalls gekürzt, nicht roh.
         let hookOnly = AgentSessionActivity(awaitingKind: .permission, awaitingToolName: "mcp__srv__do_thing")
-        XCTAssertEqual(hookOnly.line(for: .awaitingInput), "Freigabe: do_thing")
+        XCTAssertEqual(hookOnly.line(for: .awaitingInput), "Approval: do_thing")
     }
 
     // MARK: - Claude: Randfälle
@@ -392,7 +392,7 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
             codex("event_msg", ["type": "task_complete"]),
         ] + codexNoise())
         XCTAssertEqual(done?.line(for: .idle), "Alles geprüft.")
-        XCTAssertEqual(done?.line(for: .working), "› schreibt Antwort")
+        XCTAssertEqual(done?.line(for: .working), "› writing reply")
 
         let fresh = codex([
             codexAssistant("Alte Antwort."),

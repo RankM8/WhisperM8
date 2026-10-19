@@ -26,7 +26,7 @@ struct SidebarAlertLevelButton: View {
         }
         .buttonStyle(.plain)
         .help(Self.helpText(current: level, next: nextLevel))
-        .accessibilityLabel(Text("Ton und Mitteilungen"))
+        .accessibilityLabel(Text("Sound and notifications"))
         .accessibilityValue(Text(Self.title(for: level)))
     }
 
@@ -44,19 +44,19 @@ struct SidebarAlertLevelButton: View {
 
     static func title(for level: AgentAlertLevel) -> String {
         switch level {
-        case .all: return "Ton und Mitteilungen an"
-        case .soundOff: return "Ton aus, Mitteilungen an"
-        case .off: return "Ton und Mitteilungen aus"
+        case .all: return String(localized: "Sound and notifications on")
+        case .soundOff: return String(localized: "Sound off, notifications on")
+        case .off: return String(localized: "Sound and notifications off")
         }
     }
 
     static func helpText(current: AgentAlertLevel, next: AgentAlertLevel) -> String {
         let action: String
         switch next {
-        case .all: action = "alles wieder an"
-        case .soundOff: action = "Ton aus"
-        case .off: action = "alles aus"
+        case .all: action = String(localized: "everything back on")
+        case .soundOff: action = String(localized: "sound off")
+        case .off: action = String(localized: "everything off")
         }
-        return "\(title(for: current)) — Klick: \(action)"
+        return String(localized: "\(title(for: current)) — click: \(action)")
     }
 }

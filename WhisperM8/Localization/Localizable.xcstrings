@@ -1,6 +1,46 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    " The chat is also removed from the workspace “%@”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " Der Chat wird außerdem aus dem Workspace „%@“ entfernt."
+          }
+        }
+      }
+    },
+    "%@ (active)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (aktiv)"
+          }
+        }
+      }
+    },
+    "%@ (not signed in)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (nicht eingeloggt)"
+          }
+        }
+      }
+    },
+    "%@ ago": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %@"
+          }
+        }
+      }
+    },
     "%@ at the top starts %@ again.": {
       "localizations": {
         "de": {
@@ -17,6 +57,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ hat den gespeicherten Verlauf dieses Chats gelöscht."
+          }
+        }
+      }
+    },
+    "%@ has not approved the folder yet: Claude asks on start — choose “Yes, I trust this folder” there (“No, exit” is preselected). Affects: %@%@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ hat den Ordner noch nicht freigegeben: Claude fragt beim Start nach — dort „Yes, I trust this folder“ wählen (vorausgewählt ist „No, exit“). Betrifft: %2$@%3$@"
           }
         }
       }
@@ -41,12 +91,212 @@
         }
       }
     },
+    "%@ — click: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ — Klick: %2$@"
+          }
+        }
+      }
+    },
+    "%@ — leaves the workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — verlässt den Workspace"
+          }
+        }
+      }
+    },
+    "%@ — stays in the workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — bleibt im Workspace"
+          }
+        }
+      }
+    },
+    "%lld available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld verfügbar"
+          }
+        }
+      }
+    },
+    "%lld chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats"
+          }
+        }
+      }
+    },
+    "%lld chats are running as tabs in another window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats laufen als Tab in einem anderen Fenster"
+          }
+        }
+      }
+    },
     "%lld chats are still working": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld Chats arbeiten noch"
+          }
+        }
+      }
+    },
+    "%lld done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld fertig"
+          }
+        }
+      }
+    },
+    "%lld failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "%lld finished subagents · %lld unread — click to collapse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld fertige Subagents · %2$lld ungelesen — klicken zum Einklappen"
+          }
+        }
+      }
+    },
+    "%lld finished subagents · %lld unread — click to show": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld fertige Subagents · %2$lld ungelesen — klicken zum Anzeigen"
+          }
+        }
+      }
+    },
+    "%lld finished subagents — click to collapse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld fertige Subagents — klicken zum Einklappen"
+          }
+        }
+      }
+    },
+    "%lld finished subagents — click to show": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld fertige Subagents — klicken zum Anzeigen"
+          }
+        }
+      }
+    },
+    "%lld h old": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld h alt"
+          }
+        }
+      }
+    },
+    "%lld left": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld übrig"
+          }
+        }
+      }
+    },
+    "%lld min old": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min alt"
+          }
+        }
+      }
+    },
+    "%lld of %lld chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld von %2$lld Chats"
+          }
+        }
+      }
+    },
+    "%lld of %lld chats are still running — archiving ends the terminals. All chats stay in the archive and can be restored.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld von %2$lld Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen."
+          }
+        }
+      }
+    },
+    "%lld of %lld chats are still running — ending stops the terminals and closes the tabs. Nothing is archived; all chats can be resumed via “Recent”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld von %2$lld Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen."
+          }
+        }
+      }
+    },
+    "%lld of %lld moved": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld von %2$lld verschoben"
+          }
+        }
+      }
+    },
+    "%lld of %lld subagents running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld von %2$lld Subagents laufen"
           }
         }
       }
@@ -61,12 +311,112 @@
         }
       }
     },
+    "%lld subagents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Subagents"
+          }
+        }
+      }
+    },
+    "%lld tabs to new window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tabs in neues Fenster"
+          }
+        }
+      }
+    },
+    "%lld unread": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ungelesen"
+          }
+        }
+      }
+    },
+    "%lld/%lld selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld/%2$lld gewählt"
+          }
+        }
+      }
+    },
+    "%lld/%lld — %lld too many": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld/%2$lld — %3$lld zu viel"
+          }
+        }
+      }
+    },
+    "(no description)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(keine Beschreibung)"
+          }
+        }
+      }
+    },
+    "(no output)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(kein Output)"
+          }
+        }
+      }
+    },
+    "1 chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Chat"
+          }
+        }
+      }
+    },
+    "1 chat is running as a tab in another window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Chat läuft als Tab in einem anderen Fenster"
+          }
+        }
+      }
+    },
     "A chat is still working": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ein Chat arbeitet noch"
+          }
+        }
+      }
+    },
+    "A workspace shows at most 9 chats — the first 9 of the selection were added, %lld were not.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Workspace zeigt höchstens 9 Chats — die ersten 9 der Auswahl wurden aufgenommen, %lld nicht."
           }
         }
       }
@@ -91,6 +441,36 @@
         }
       }
     },
+    "Accounts of the GPT backend (proxy login)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konten des GPT-Backends (Proxy-Login)"
+          }
+        }
+      }
+    },
+    "Active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv"
+          }
+        }
+      }
+    },
+    "Add Project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt hinzufügen"
+          }
+        }
+      }
+    },
     "Add a project folder to start a chat": {
       "localizations": {
         "de": {
@@ -111,6 +491,26 @@
         }
       }
     },
+    "Add a project to create Codex or Claude chats in it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge ein Projekt hinzu, um Codex- oder Claude-Chats darin anzulegen."
+          }
+        }
+      }
+    },
+    "Add project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt hinzufügen"
+          }
+        }
+      }
+    },
     "Add project…": {
       "localizations": {
         "de": {
@@ -121,12 +521,92 @@
         }
       }
     },
+    "Add to workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu Workspace hinzufügen"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweitert"
+          }
+        }
+      }
+    },
+    "Agent %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent %@."
+          }
+        }
+      }
+    },
     "Agent Chats run the Claude Code command line tool. This is optional — you can skip it now and install it later.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Agent Chats nutzen das Kommandozeilen-Tool Claude Code. Das ist optional – du kannst es jetzt überspringen und später installieren."
+          }
+        }
+      }
+    },
+    "Agent is done and waiting for you.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent ist fertig und wartet auf dich."
+          }
+        }
+      }
+    },
+    "Agent overview — Claude’s dashboard of all sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent-Übersicht — Claudes Dashboard aller Sessions"
+          }
+        }
+      }
+    },
+    "Agent overview — Claude’s dashboard of all sessions. WhisperM8 cannot tell which sub-chat is active inside the TUI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent-Übersicht — Claudes Dashboard aller Sessions. Welcher Sub-Chat in der TUI gerade aktiv ist, kann WhisperM8 nicht erkennen."
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        }
+      }
+    },
+    "All connected accounts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle verbundenen Accounts"
           }
         }
       }
@@ -151,6 +631,16 @@
         }
       }
     },
+    "All tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Tabs"
+          }
+        }
+      }
+    },
     "Also removes the paste copies and keeps no image or video copies in the output archive. Text and metadata of a run stay in the archive.": {
       "localizations": {
         "de": {
@@ -167,6 +657,76 @@
           "stringUnit": {
             "state": "translated",
             "value": "App-Berechtigungen"
+          }
+        }
+      }
+    },
+    "Approval": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabe"
+          }
+        }
+      }
+    },
+    "Approval: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabe: %@"
+          }
+        }
+      }
+    },
+    "Archive": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivieren"
+          }
+        }
+      }
+    },
+    "Archive %lld chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats archivieren"
+          }
+        }
+      }
+    },
+    "Archive chat?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat archivieren?"
+          }
+        }
+      }
+    },
+    "Archived chats end up here and can be restored at any time.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivierte Chats landen hier und lassen sich jederzeit wiederherstellen."
+          }
+        }
+      }
+    },
+    "Auto-approves edits and standard filesystem commands.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genehmigt Edits und Standard-Dateisystembefehle automatisch."
           }
         }
       }
@@ -221,6 +781,56 @@
         }
       }
     },
+    "Back to project view “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zur Projekt-Ansicht „%@“"
+          }
+        }
+      }
+    },
+    "Back to workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Workspace „%@“"
+          }
+        }
+      }
+    },
+    "Background agent could not be started: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Agent konnte nicht gestartet werden: %@"
+          }
+        }
+      }
+    },
+    "Background agent could not be started: worker settings with the GPT router environment could not be written.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Agent konnte nicht gestartet werden: Worker-Settings mit GPT-Router-Environment konnten nicht geschrieben werden."
+          }
+        }
+      }
+    },
+    "Background agent short ID": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short-ID des Hintergrund-Agenten"
+          }
+        }
+      }
+    },
     "Background agent was not fully spawned": {
       "localizations": {
         "de": {
@@ -241,12 +851,182 @@
         }
       }
     },
+    "Background agent — runs independently of this window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Agent — läuft unabhängig von diesem Fenster"
+          }
+        }
+      }
+    },
+    "Background tasks still running — switches afterwards": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Tasks laufen noch — wechselt danach"
+          }
+        }
+      }
+    },
+    "Being moved (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird verschoben (%lld)"
+          }
+        }
+      }
+    },
+    "Blocked — quota exhausted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesperrt — Kontingent erschöpft"
+          }
+        }
+      }
+    },
+    "Blue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blau"
+          }
+        }
+      }
+    },
+    "CHATS": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CHATS"
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "Cancel account switch to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontowechsel zu %@ aufheben"
+          }
+        }
+      }
+    },
+    "Cancelled — chats already moved stay in the target account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgebrochen — die bereits verschobenen Chats bleiben im Zielkonto."
+          }
+        }
+      }
+    },
+    "Cancelling takes effect after the current chat — a transcript is never moved halfway.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Abbruch wirkt nach dem aktuellen Chat — ein Transcript wird nie halb verschoben."
+          }
+        }
+      }
+    },
+    "Cannot return to the workspace: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Workspace nicht möglich: %@."
+          }
+        }
+      }
+    },
+    "Capacity %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kapazität %@"
+          }
+        }
+      }
+    },
+    "Chat actions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Aktionen"
+          }
+        }
+      }
+    },
+    "Chat can’t be selected here (e.g. tab in another window)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat ist hier nicht anwählbar (z. B. Tab in einem anderen Fenster)"
+          }
+        }
+      }
+    },
+    "Chat history currently not found: for session %@ there is no transcript file under ~/.claude/projects or in any account profile (~/.claude-profiles/*/projects). If it was deleted, start a new chat for new work — this tab keeps its assignment and resumes automatically as soon as the file reappears.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Verlauf momentan nicht auffindbar: Für Session %@ existiert weder unter ~/.claude/projects noch in einem Account-Profil (~/.claude-profiles/*/projects) eine Transcript-Datei. Falls sie gelöscht wurde, lege für neue Arbeit einen neuen Chat an — dieser Tab behält seine Zuordnung und resumed automatisch wieder, sobald die Datei wieder auftaucht."
+          }
+        }
+      }
+    },
+    "Chat not selectable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat nicht anwählbar"
+          }
+        }
+      }
+    },
+    "ChatGPT · GPT Backend": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT · GPT-Backend"
+          }
+        }
+      }
+    },
+    "ChatGPT/Codex: usage limits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT/Codex: Usage-Limits"
           }
         }
       }
@@ -267,6 +1047,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erneut prüfen"
+          }
+        }
+      }
+    },
+    "Choose icon…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon wählen…"
+          }
+        }
+      }
+    },
+    "Choose or add a project for the new chat (⌘N)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt für neuen Chat wählen oder hinzufügen (⌘N)"
+          }
+        }
+      }
+    },
+    "Choose project icon": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt-Icon wählen"
+          }
+        }
+      }
+    },
+    "Claude account profile of this session": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Account-Profil dieser Session"
+          }
+        }
+      }
+    },
+    "Claude accounts: usage limits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Accounts: Usage-Limits"
+          }
+        }
+      }
+    },
+    "Claude · Usage limits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude · Usage-Limits"
+          }
+        }
+      }
+    },
+    "Clean — no changes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean — keine Änderungen"
+          }
+        }
+      }
+    },
+    "Clear filter — show all chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter aufheben — alle Chats zeigen"
           }
         }
       }
@@ -311,6 +1171,56 @@
         }
       }
     },
+    "Close %d tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Tabs schließen"
+          }
+        }
+      }
+    },
+    "Close %lld terminals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Terminals schließen"
+          }
+        }
+      }
+    },
+    "Close tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab schließen"
+          }
+        }
+      }
+    },
+    "Close tab and end chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab schließen und Chat beenden"
+          }
+        }
+      }
+    },
+    "Close tab of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab von %@ schließen"
+          }
+        }
+      }
+    },
     "Close tab — the chat keeps running in the background": {
       "localizations": {
         "de": {
@@ -321,12 +1231,132 @@
         }
       }
     },
+    "Close tab — the chat leaves the project view (if it is still running, it stays as an active member)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab schließen — der Chat verlässt die Projekt-Ansicht (läuft er noch, bleibt er als aktives Mitglied)"
+          }
+        }
+      }
+    },
+    "Close tab, end chat and remove from workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab schließen, Chat beenden und aus dem Workspace nehmen"
+          }
+        }
+      }
+    },
+    "Close terminal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminal schließen"
+          }
+        }
+      }
+    },
+    "Close/archive %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld schließen/archivieren"
+          }
+        }
+      }
+    },
     "Closing a tab does not stop the chat. It keeps working in the background. To stop it, use End or Archive in the sidebar.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Das Schließen eines Tabs beendet den Chat nicht. Er arbeitet im Hintergrund weiter. Zum Beenden in der Seitenleiste „Beenden“ oder „Archivieren“ nutzen."
+          }
+        }
+      }
+    },
+    "Codex CLI / dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex-CLI / Diktat"
+          }
+        }
+      }
+    },
+    "Collapse Jarvis note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notiz einklappen"
+          }
+        }
+      }
+    },
+    "Collapse Jarvis notes by default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notizen standardmäßig zuklappen"
+          }
+        }
+      }
+    },
+    "Collapse Jarvis notes by default (⌥⌘N)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notizen standardmäßig zuklappen (⌥⌘N)"
+          }
+        }
+      }
+    },
+    "Collapse all": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alles einklappen"
+          }
+        }
+      }
+    },
+    "Collapse tab group · dragging moves the whole group": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-Gruppe einklappen · Ziehen verschiebt die ganze Gruppe"
+          }
+        }
+      }
+    },
+    "Color": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbe"
+          }
+        }
+      }
+    },
+    "Color for %d tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Farbe für %d Tabs"
           }
         }
       }
@@ -361,12 +1391,32 @@
         }
       }
     },
+    "Connected account (proxy login)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbundenes Konto (Proxy-Login)"
+          }
+        }
+      }
+    },
     "Continue Setup…": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Setup fortsetzen …"
+          }
+        }
+      }
+    },
+    "Continue the job permanently as an interactive Codex chat (exclusive — `agent send` is disabled afterwards)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job dauerhaft als interaktiven Codex-Chat fortsetzen (exklusiv — `agent send` ist danach deaktiviert)"
           }
         }
       }
@@ -381,12 +1431,142 @@
         }
       }
     },
+    "Copy path": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pfad kopieren"
+          }
+        }
+      }
+    },
     "Couldn't save the key to the macOS Keychain. Unlock your Keychain and try again.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Der Key konnte nicht im macOS-Schlüsselbund gespeichert werden. Entsperre den Schlüsselbund und versuche es erneut."
+          }
+        }
+      }
+    },
+    "Create Markdown files under ~/.claude/agents/ or in the project under .claude/agents/.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lege Markdown-Files unter ~/.claude/agents/ an oder im Projekt unter .claude/agents/."
+          }
+        }
+      }
+    },
+    "Create new chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen Chat anlegen"
+          }
+        }
+      }
+    },
+    "Create new workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen Workspace anlegen"
+          }
+        }
+      }
+    },
+    "DONE": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FERTIG"
+          }
+        }
+      }
+    },
+    "Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard"
+          }
+        }
+      }
+    },
+    "Default Claude — no specialization.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default Claude — keine Spezialisierung."
+          }
+        }
+      }
+    },
+    "Delete project?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt löschen?"
+          }
+        }
+      }
+    },
+    "Delete project…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt löschen…"
+          }
+        }
+      }
+    },
+    "Delete workspace?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace löschen?"
+          }
+        }
+      }
+    },
+    "Delete: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen: %@"
+          }
+        }
+      }
+    },
+    "Delete…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen…"
+          }
+        }
+      }
+    },
+    "Deselect %lld more chat(s) first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst %lld Chat(s) abwählen"
           }
         }
       }
@@ -401,12 +1581,242 @@
         }
       }
     },
+    "Detect icon automatically": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon automatisch erkennen"
+          }
+        }
+      }
+    },
+    "Discards the old external session ID and starts fresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wirft die alte externe Session-ID weg und beginnt frisch"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Fertig"
+          }
+        }
+      }
+    },
+    "Drop chat here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat hier ablegen"
+          }
+        }
+      }
+    },
+    "ERROR": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FEHLER"
+          }
+        }
+      }
+    },
+    "Empty slot": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerer Slot"
+          }
+        }
+      }
+    },
+    "End": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beenden"
+          }
+        }
+      }
+    },
+    "End %lld chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats beenden"
+          }
+        }
+      }
+    },
+    "End chat?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat beenden?"
+          }
+        }
+      }
+    },
+    "Ended with an error": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Fehler beendet"
+          }
+        }
+      }
+    },
+    "Error": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler"
+          }
+        }
+      }
+    },
+    "Expand Jarvis note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notiz aufklappen"
+          }
+        }
+      }
+    },
+    "Expand Jarvis notes by default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notizen standardmäßig aufklappen"
+          }
+        }
+      }
+    },
+    "Expand Jarvis notes by default (⌥⌘N)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarvis-Notizen standardmäßig aufklappen (⌥⌘N)"
+          }
+        }
+      }
+    },
+    "Expand all": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alles aufklappen"
+          }
+        }
+      }
+    },
+    "Expand tab group · dragging moves the whole group": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-Gruppe aufklappen · Ziehen verschiebt die ganze Gruppe"
+          }
+        }
+      }
+    },
+    "Failed (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlgeschlagen (%lld)"
+          }
+        }
+      }
+    },
+    "Fetch limits again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limits neu abrufen"
+          }
+        }
+      }
+    },
+    "Filter…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter …"
+          }
+        }
+      }
+    },
+    "Follow-up prompt to the subagent …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Folge-Prompt an den Subagent …"
+          }
+        }
+      }
+    },
+    "Fork": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forken"
+          }
+        }
+      }
+    },
+    "From the next start, the quota of %@ is used.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ab dem nächsten Start zahlt das Kontingent von %@."
+          }
+        }
+      }
+    },
+    "GLOBAL": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GLOBAL"
+          }
+        }
+      }
+    },
+    "GPT backend unreachable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-Backend nicht erreichbar"
           }
         }
       }
@@ -441,12 +1851,82 @@
         }
       }
     },
+    "Green": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grün"
+          }
+        }
+      }
+    },
+    "Group by project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach Projekt gruppieren"
+          }
+        }
+      }
+    },
+    "Here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier"
+          }
+        }
+      }
+    },
     "Hide API key": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "API-Key verbergen"
+          }
+        }
+      }
+    },
+    "Hide chat list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Liste ausblenden"
+          }
+        }
+      }
+    },
+    "Hide chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats ausblenden"
+          }
+        }
+      }
+    },
+    "Hide chats of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats von %@ ausblenden"
+          }
+        }
+      }
+    },
+    "Hide project context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt-Kontext ausblenden"
           }
         }
       }
@@ -511,6 +1991,46 @@
         }
       }
     },
+    "In the new account Claude re-reads the history once without cache — for large chats this noticeably costs quota. Earlier thinking stays with the old account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im neuen Konto liest Claude den Verlauf einmal ohne Cache neu ein — bei großen Chats kostet das spürbar Kontingent. Früheres Thinking bleibt beim alten Konto."
+          }
+        }
+      }
+    },
+    "Initial prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Initialer Prompt"
+          }
+        }
+      }
+    },
+    "Insert into slot %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Slot %lld einfügen"
+          }
+        }
+      }
+    },
+    "Insert the report as a prompt snippet into the Claude session that spawned this subagent (without sending automatically)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report als Prompt-Baustein in die Claude-Session einfügen, die diesen Subagent gespawnt hat (ohne automatisches Absenden)"
+          }
+        }
+      }
+    },
     "Install": {
       "localizations": {
         "de": {
@@ -561,12 +2081,212 @@
         }
       }
     },
+    "Job %@ not found.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job %@ nicht gefunden."
+          }
+        }
+      }
+    },
+    "Job directory unknown — takeover not possible.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job-Verzeichnis unbekannt — Übernahme nicht möglich."
+          }
+        }
+      }
+    },
+    "Job was taken over interactively — sending disabled.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job wurde interaktiv übernommen — Senden deaktiviert."
+          }
+        }
+      }
+    },
+    "Just pinged — next attempt from %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerade gepingt — nächster Versuch ab %@ Uhr"
+          }
+        }
+      }
+    },
+    "Keep capacity unchanged": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kapazität unverändert lassen"
+          }
+        }
+      }
+    },
     "Last entry is too large for the preview": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Letzter Eintrag zu groß für die Vorschau"
+          }
+        }
+      }
+    },
+    "Leave archive (Esc)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiv verlassen (Esc)"
+          }
+        }
+      }
+    },
+    "Leaves": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlässt"
+          }
+        }
+      }
+    },
+    "Limits unavailable (token in the file is stale)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limits nicht abrufbar (Token in der Datei veraltet)"
+          }
+        }
+      }
+    },
+    "List capped at %lld entries": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste bei %lld Einträgen gekappt"
+          }
+        }
+      }
+    },
+    "Live fetch failed (HTTP %lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Abruf fehlgeschlagen (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Live refresh — renews expired tokens via Claude CLI ping": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live aktualisieren — erneuert abgelaufene Tokens per Claude-CLI-Ping"
+          }
+        }
+      }
+    },
+    "Loading Git status…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lade Git-Status…"
+          }
+        }
+      }
+    },
+    "Loading conversation…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konversation wird geladen…"
+          }
+        }
+      }
+    },
+    "Loading limits…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lade Limits …"
+          }
+        }
+      }
+    },
+    "Loading logs …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lade Logs …"
+          }
+        }
+      }
+    },
+    "Login expired — sign in again in the account settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login abgelaufen — in den Account-Settings neu einloggen"
+          }
+        }
+      }
+    },
+    "Maximize": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximieren"
+          }
+        }
+      }
+    },
+    "Maximize %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ maximieren"
+          }
+        }
+      }
+    },
+    "Maximize this chat (“Back to workspace” restores the grid)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Chat maximieren („Zurück zum Workspace“ stellt das Grid wieder her)"
+          }
+        }
+      }
+    },
+    "May be waiting for your input": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet möglicherweise auf User-Input"
           }
         }
       }
@@ -611,6 +2331,146 @@
         }
       }
     },
+    "Move": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschieben"
+          }
+        }
+      }
+    },
+    "Move %@ to this window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in dieses Fenster verschieben"
+          }
+        }
+      }
+    },
+    "Move %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld verschieben"
+          }
+        }
+      }
+    },
+    "Move %lld chats to account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats zu Account verschieben"
+          }
+        }
+      }
+    },
+    "Move %lld chats to another account?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Chats in anderes Konto verschieben?"
+          }
+        }
+      }
+    },
+    "Move chat to another account?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat in anderes Konto verschieben?"
+          }
+        }
+      }
+    },
+    "Move finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umzug abgeschlossen"
+          }
+        }
+      }
+    },
+    "Move here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hierher verschieben"
+          }
+        }
+      }
+    },
+    "Move to account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu Account verschieben"
+          }
+        }
+      }
+    },
+    "Move to new window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In neues Fenster verschieben"
+          }
+        }
+      }
+    },
+    "Moved (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschoben (%lld)"
+          }
+        }
+      }
+    },
+    "Moving and resuming …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschiebe und setze fort …"
+          }
+        }
+      }
+    },
+    "Moving …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschiebe …"
+          }
+        }
+      }
+    },
+    "NO JOB STATE": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KEIN JOB-STATE"
+          }
+        }
+      }
+    },
     "Native macOS dictation app with best-in-class transcription.": {
       "localizations": {
         "de": {
@@ -631,12 +2491,132 @@
         }
       }
     },
+    "New Claude agent overview": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Claude-Agent-Übersicht"
+          }
+        }
+      }
+    },
+    "New Claude chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Claude-Chat"
+          }
+        }
+      }
+    },
+    "New Codex chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Codex-Chat"
+          }
+        }
+      }
+    },
+    "New GPT chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer GPT-Chat"
+          }
+        }
+      }
+    },
+    "New background agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Hintergrund-Agent"
+          }
+        }
+      }
+    },
+    "New background agent…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Hintergrund-Agent…"
+          }
+        }
+      }
+    },
     "New chat": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Neuer Chat"
+          }
+        }
+      }
+    },
+    "New chat in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Chat in %@"
+          }
+        }
+      }
+    },
+    "New subagent result — not viewed yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Subagent-Ergebnis — noch nicht angesehen"
+          }
+        }
+      }
+    },
+    "New terminal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Terminal"
+          }
+        }
+      }
+    },
+    "New workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Workspace"
+          }
+        }
+      }
+    },
+    "New workspace from %d chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Workspace aus %d Chats"
+          }
+        }
+      }
+    },
+    "New workspace with this chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Workspace mit diesem Chat"
           }
         }
       }
@@ -661,12 +2641,62 @@
         }
       }
     },
+    "No Codex thread ID — resume impossible.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Codex-Thread-ID — Resume unmöglich."
+          }
+        }
+      }
+    },
+    "No GPT account signed in — Settings → GPT Backend.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein GPT-Konto angemeldet — Einstellungen → GPT-Backend."
+          }
+        }
+      }
+    },
+    "No active chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine aktiven Chats"
+          }
+        }
+      }
+    },
+    "No active chats in this project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine aktiven Chats in diesem Projekt"
+          }
+        }
+      }
+    },
     "No agent chat": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Kein Agent Chat"
+          }
+        }
+      }
+    },
+    "No archived chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine archivierten Chats"
           }
         }
       }
@@ -681,12 +2711,92 @@
         }
       }
     },
+    "No chat in this selection can be moved.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Chat aus dieser Auswahl kann umziehen."
+          }
+        }
+      }
+    },
     "No chat selected": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Kein Chat ausgewählt"
+          }
+        }
+      }
+    },
+    "No chats in this period": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Chats im Zeitraum"
+          }
+        }
+      }
+    },
+    "No data": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Daten"
+          }
+        }
+      }
+    },
+    "No data — Codex is not signed in or no session has run yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Daten — Codex nicht eingeloggt oder noch keine Session gelaufen."
+          }
+        }
+      }
+    },
+    "No job state — sending not possible.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Job-State — Senden nicht möglich."
+          }
+        }
+      }
+    },
+    "No login token — sign in again in the account settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Login-Token — in den Account-Settings neu einloggen"
+          }
+        }
+      }
+    },
+    "No note yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Notiz"
+          }
+        }
+      }
+    },
+    "No project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Projekt"
           }
         }
       }
@@ -711,6 +2821,136 @@
         }
       }
     },
+    "No report yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Report vorhanden."
+          }
+        }
+      }
+    },
+    "No results for “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Treffer für „%@“"
+          }
+        }
+      }
+    },
+    "No running agent sessions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine laufenden Agent-Sessions."
+          }
+        }
+      }
+    },
+    "No sub-agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Sub-Agent"
+          }
+        }
+      }
+    },
+    "No sub-agents found.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Sub-Agents gefunden."
+          }
+        }
+      }
+    },
+    "No supervisor PID — inconsistent state.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Supervisor-PID — Zustand inkonsistent."
+          }
+        }
+      }
+    },
+    "Not a Git repository": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Git-Repository"
+          }
+        }
+      }
+    },
+    "Not reverted because still running: %@ — pause the chat and choose “Undo last account switch” again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht zurückgenommen, weil gerade laufend: %@ — Chat anhalten und „Letzten Kontowechsel rückgängig machen“ erneut wählen."
+          }
+        }
+      }
+    },
+    "Not reverted — running right now (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht zurückgenommen — läuft gerade (%lld)"
+          }
+        }
+      }
+    },
+    "Not started": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gestartet"
+          }
+        }
+      }
+    },
+    "Not switched — %@ (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gewechselt — %1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen"
+          }
+        }
+      }
+    },
+    "Nothing beyond the allow list — good for tightly sandboxed runs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts außerhalb der Allow-Liste — gut für streng abgeschottete Läufe."
+          }
+        }
+      }
+    },
     "OK": {
       "shouldTranslate": false
     },
@@ -720,6 +2960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offizielle Anleitung"
+          }
+        }
+      }
+    },
+    "Offline — last known state": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline — letzter bekannter Stand"
           }
         }
       }
@@ -734,12 +2984,272 @@
         }
       }
     },
+    "Only the marked chats stay in the workspace — tabs and processes keep running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die markierten Chats bleiben im Workspace — Tabs und Prozesse laufen weiter"
+          }
+        }
+      }
+    },
+    "Open %@ in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ in %2$@ öffnen"
+          }
+        }
+      }
+    },
     "Open System Settings": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Systemeinstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Open a new %@ chat in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen %1$@-Chat in %2$@ öffnen"
+          }
+        }
+      }
+    },
+    "Open as grid": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Grid öffnen"
+          }
+        }
+      }
+    },
+    "Open as workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Workspace öffnen"
+          }
+        }
+      }
+    },
+    "Open in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %@ öffnen"
+          }
+        }
+      }
+    },
+    "Open in %@ · arrow to choose": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %@ öffnen · Pfeil für Auswahl"
+          }
+        }
+      }
+    },
+    "Open in PhpStorm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In PhpStorm öffnen"
+          }
+        }
+      }
+    },
+    "Open onboarding / help": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onboarding / Hilfe öffnen"
+          }
+        }
+      }
+    },
+    "Open project as workspace (live grid of the active chats)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt als Workspace öffnen (Live-Grid der aktiven Chats)"
+          }
+        }
+      }
+    },
+    "Open project in PhpStorm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt in PhpStorm öffnen"
+          }
+        }
+      }
+    },
+    "Open settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Open workspace %@ as grid": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace %@ als Grid öffnen"
+          }
+        }
+      }
+    },
+    "Open workspace “%@” as grid": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace „%@“ als Grid öffnen"
+          }
+        }
+      }
+    },
+    "Orange": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        }
+      }
+    },
+    "PINNED": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GEPINNT"
+          }
+        }
+      }
+    },
+    "PROJ": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PROJ"
+          }
+        }
+      }
+    },
+    "PROJECT": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PROJEKT"
+          }
+        }
+      }
+    },
+    "Parent session not found — was it deleted?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parent-Session nicht gefunden — wurde sie gelöscht?"
+          }
+        }
+      }
+    },
+    "Permission mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission Mode"
+          }
+        }
+      }
+    },
+    "PhpStorm could not be opened.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PhpStorm konnte nicht geöffnet werden."
+          }
+        }
+      }
+    },
+    "Pin": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anpinnen"
+          }
+        }
+      }
+    },
+    "Pin %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld anpinnen"
+          }
+        }
+      }
+    },
+    "Place in workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Workspace platzieren"
+          }
+        }
+      }
+    },
+    "Plain terminal — login shell in the project folder, no agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normales Terminal — Login-Shell im Projektverzeichnis, kein Agent"
+          }
+        }
+      }
+    },
+    "Plan awaiting approval": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plan zur Freigabe"
           }
         }
       }
@@ -774,12 +3284,62 @@
         }
       }
     },
+    "Project missing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt fehlt"
+          }
+        }
+      }
+    },
+    "Project name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt-Name"
+          }
+        }
+      }
+    },
     "Provider": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Anbieter"
+          }
+        }
+      }
+    },
+    "Purple": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lila"
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frage"
+          }
+        }
+      }
+    },
+    "Question: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frage: %@"
           }
         }
       }
@@ -814,6 +3374,36 @@
         }
       }
     },
+    "Rate limit from Anthropic — try again shortly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate-Limit von Anthropic — gleich nochmal versuchen"
+          }
+        }
+      }
+    },
+    "Re-read sessions (⌘R)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions neu einlesen (⌘R)"
+          }
+        }
+      }
+    },
+    "Re-read title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titel neu einlesen"
+          }
+        }
+      }
+    },
     "Re-transcribe last recording": {
       "localizations": {
         "de": {
@@ -824,12 +3414,42 @@
         }
       }
     },
+    "Ready": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit"
+          }
+        }
+      }
+    },
+    "Ready — waiting for a prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit — wartet auf einen Prompt"
+          }
+        }
+      }
+    },
     "Real-time audio feedback": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Audio-Rückmeldung in Echtzeit"
+          }
+        }
+      }
+    },
+    "Recent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt"
           }
         }
       }
@@ -894,6 +3514,46 @@
         }
       }
     },
+    "Red": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rot"
+          }
+        }
+      }
+    },
+    "Refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        }
+      }
+    },
+    "Release to open a new window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loslassen für neues Fenster"
+          }
+        }
+      }
+    },
+    "Reload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu laden"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -904,12 +3564,192 @@
         }
       }
     },
+    "Remove %@ from the workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ aus dem Workspace nehmen"
+          }
+        }
+      }
+    },
+    "Remove from supervisor": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vom Supervisor entfernen"
+          }
+        }
+      }
+    },
+    "Remove from workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Workspace entfernen"
+          }
+        }
+      }
+    },
+    "Remove from workspace (slot stays free, tab stays open)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus dem Workspace nehmen (Slot bleibt frei, Tab bleibt offen)"
+          }
+        }
+      }
+    },
+    "Remove from workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Workspace „%@“ entfernen"
+          }
+        }
+      }
+    },
+    "Remove icon": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Icon entfernen"
+          }
+        }
+      }
+    },
     "Remove this background agent?": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Hintergrund-Agent entfernen?"
+          }
+        }
+      }
+    },
+    "Removes only the group “%@” — its %lld chats stay, with their tabs and running processes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt nur die Gruppe „%1$@“ — ihre %2$lld Chats bleiben samt Tabs und laufenden Prozessen erhalten."
+          }
+        }
+      }
+    },
+    "Removes only the group “%@” — its 1 chat stays, with its tabs and running processes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt nur die Gruppe „%@“ — ihr 1 Chat bleibt samt Tabs und laufenden Prozessen erhalten."
+          }
+        }
+      }
+    },
+    "Removes the project and its %lld chats from WhisperM8. The repo on disk and the Claude/Codex transcripts stay untouched.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt das Projekt und seine %lld Chats aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet."
+          }
+        }
+      }
+    },
+    "Removes the project and its 1 chat from WhisperM8. The repo on disk and the Claude/Codex transcripts stay untouched.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt das Projekt und seinen 1 Chat aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet."
+          }
+        }
+      }
+    },
+    "Rename": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umbenennen"
+          }
+        }
+      }
+    },
+    "Rename chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat umbenennen"
+          }
+        }
+      }
+    },
+    "Rename project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt umbenennen"
+          }
+        }
+      }
+    },
+    "Rename workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace umbenennen"
+          }
+        }
+      }
+    },
+    "Rename…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Umbenennen…"
+          }
+        }
+      }
+    },
+    "Reopen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wieder öffnen"
+          }
+        }
+      }
+    },
+    "Reopen tab of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab von %@ wieder öffnen"
+          }
+        }
+      }
+    },
+    "Replace / swap “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ersetzen / tauschen"
           }
         }
       }
@@ -934,12 +3774,72 @@
         }
       }
     },
+    "Report → chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Report → Chat"
+          }
+        }
+      }
+    },
+    "Requires approval before execution.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlangt Freigabe vor der Ausführung."
+          }
+        }
+      }
+    },
+    "Reset name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benennung aufheben"
+          }
+        }
+      }
+    },
+    "Resource usage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ressourcenverbrauch"
+          }
+        }
+      }
+    },
+    "Respawn": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respawn"
+          }
+        }
+      }
+    },
     "Restart": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Neu starten"
+          }
+        }
+      }
+    },
+    "Restart %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ neu starten"
           }
         }
       }
@@ -954,12 +3854,62 @@
         }
       }
     },
+    "Restart — restart the terminal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restart — Terminal neu starten"
+          }
+        }
+      }
+    },
+    "Restore": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederherstellen"
+          }
+        }
+      }
+    },
+    "Result": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnis"
+          }
+        }
+      }
+    },
     "Result:": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ergebnis:"
+          }
+        }
+      }
+    },
+    "Resume": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen"
+          }
+        }
+      }
+    },
+    "Resume %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fortsetzen"
           }
         }
       }
@@ -974,12 +3924,162 @@
         }
       }
     },
+    "Running as a tab in another window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft als Tab in einem anderen Fenster"
+          }
+        }
+      }
+    },
+    "Running chats are paused, moved and resumed in their tab — this takes a few seconds.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Chats werden angehalten, umgezogen und im Tab fortgesetzt — das dauert wenige Sekunden."
+          }
+        }
+      }
+    },
+    "Running — will be paused, moved and resumed in its tab (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft — wird angehalten, verschoben und im Tab fortgesetzt (%lld)"
+          }
+        }
+      }
+    },
+    "Running, open and pinned chats appear here. You will find older ones under “All”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende, offene und gepinnte Chats erscheinen hier. Ältere findest du unter „Alle“."
+          }
+        }
+      }
+    },
+    "SIGTERM to the supervisor — end the turn cleanly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SIGTERM an den Supervisor — Turn sauber abbrechen"
+          }
+        }
+      }
+    },
+    "STARTING": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STARTET"
+          }
+        }
+      }
+    },
+    "STOPPED": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GESTOPPT"
+          }
+        }
+      }
+    },
+    "Sand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sand"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        }
+      }
+    },
     "Save Key": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Key speichern"
+          }
+        }
+      }
+    },
+    "Scanning sessions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sessions werden gescannt"
+          }
+        }
+      }
+    },
+    "Scheduled — switches after the turn (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgemerkt — wechselt nach dem Turn (%lld)"
+          }
+        }
+      }
+    },
+    "Search projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekte suchen"
+          }
+        }
+      }
+    },
+    "Search projects…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekte suchen …"
+          }
+        }
+      }
+    },
+    "Search shows all chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche zeigt alle Chats"
+          }
+        }
+      }
+    },
+    "Select to toggle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen zum Umschalten"
           }
         }
       }
@@ -1004,12 +4104,32 @@
         }
       }
     },
+    "Set capacity to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kapazität auf %@ setzen"
+          }
+        }
+      }
+    },
     "Set up Claude Code": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Claude Code einrichten"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen"
           }
         }
       }
@@ -1044,12 +4164,32 @@
         }
       }
     },
+    "Shell ended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shell beendet"
+          }
+        }
+      }
+    },
     "Shell terminals are closed for good and cannot be restored.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Shell-Terminals werden endgültig geschlossen und lassen sich nicht wiederherstellen."
+          }
+        }
+      }
+    },
+    "Show %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld weitere anzeigen"
           }
         }
       }
@@ -1064,12 +4204,152 @@
         }
       }
     },
+    "Show all": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle zeigen"
+          }
+        }
+      }
+    },
+    "Show all chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Chats zeigen"
+          }
+        }
+      }
+    },
+    "Show chat list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Liste einblenden"
+          }
+        }
+      }
+    },
+    "Show chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats einblenden"
+          }
+        }
+      }
+    },
+    "Show chats of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats von %@ einblenden"
+          }
+        }
+      }
+    },
+    "Show flat (sorted by activity)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flach anzeigen (nach Aktivität sortiert)"
+          }
+        }
+      }
+    },
+    "Show logs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logs anzeigen"
+          }
+        }
+      }
+    },
+    "Show more sessions of this project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Sessions dieses Projekts einblenden"
+          }
+        }
+      }
+    },
+    "Show project context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt-Kontext anzeigen"
+          }
+        }
+      }
+    },
+    "Show project grid again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt-Grid wieder anzeigen"
+          }
+        }
+      }
+    },
+    "Show session resources": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session-Ressourcen anzeigen"
+          }
+        }
+      }
+    },
+    "Show sub-agent library…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sub-Agent-Bibliothek anzeigen…"
+          }
+        }
+      }
+    },
     "Show typed key": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Eingegebenen Key anzeigen"
+          }
+        }
+      }
+    },
+    "Shrink — %lld chats leave": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verkleinern — %lld Chats verlassen"
+          }
+        }
+      }
+    },
+    "Shrink — 1 chat leaves": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verkleinern — 1 Chat verlässt"
           }
         }
       }
@@ -1104,6 +4384,96 @@
         }
       }
     },
+    "Skipped — %@ (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungen — %1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "Skips all permission prompts (activate once interactively first).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überspringt alle Permission-Prompts (vorher einmal interaktiv aktivieren)."
+          }
+        }
+      }
+    },
+    "Slot position in the workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slot-Position im Workspace"
+          }
+        }
+      }
+    },
+    "Snapshot of the last Codex session · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snapshot der letzten Codex-Session · %@"
+          }
+        }
+      }
+    },
+    "Sound and notifications": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton und Mitteilungen"
+          }
+        }
+      }
+    },
+    "Sound and notifications off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton und Mitteilungen aus"
+          }
+        }
+      }
+    },
+    "Sound and notifications on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton und Mitteilungen an"
+          }
+        }
+      }
+    },
+    "Sound off, notifications on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton aus, Mitteilungen an"
+          }
+        }
+      }
+    },
+    "Source: agent report": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle: Agent-Report"
+          }
+        }
+      }
+    },
     "Spawning this background agent was interrupted, so no short ID was saved. Close the tab from the context menu and start a new background agent if needed.": {
       "localizations": {
         "de": {
@@ -1120,6 +4490,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gesprochene Sprache"
+          }
+        }
+      }
+    },
+    "Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starten"
+          }
+        }
+      }
+    },
+    "Start %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ starten"
           }
         }
       }
@@ -1154,12 +4544,62 @@
         }
       }
     },
+    "Start a new Codex chat in the project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuen Codex-Chat im Projekt starten"
+          }
+        }
+      }
+    },
     "Start a new chat or pick one from the sidebar.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Starte einen neuen Chat oder wähle einen in der Seitenleiste."
+          }
+        }
+      }
+    },
+    "Start a new session": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Session starten"
+          }
+        }
+      }
+    },
+    "Start background agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Agent starten"
+          }
+        }
+      }
+    },
+    "Start new shell": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Shell starten"
+          }
+        }
+      }
+    },
+    "Starts a follow-up turn (detached supervisor).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet einen Folge-Turn (detachter Supervisor)."
           }
         }
       }
@@ -1174,12 +4614,222 @@
         }
       }
     },
+    "Stays": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleibt"
+          }
+        }
+      }
+    },
+    "Stays · slot %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bleibt · Slot %lld"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppen"
+          }
+        }
+      }
+    },
+    "Stop job": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job stoppen"
+          }
+        }
+      }
+    },
+    "Sub-agent (optional)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sub-Agent (optional)"
+          }
+        }
+      }
+    },
+    "Sub-agent library": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sub-Agent-Bibliothek"
+          }
+        }
+      }
+    },
+    "Sub-sessions appear here as soon as Claude writes to their JSONL or you press a key in the TUI. Navigating with the arrow keys alone is not enough — WhisperM8 has no direct access to the TUI’s internal focus.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sub-Sessions werden hier sichtbar, sobald Claude in deren JSONL schreibt oder du in der TUI eine Taste drückst. Reines Navigieren mit den Pfeiltasten reicht nicht — WhisperM8 hat keinen Direktzugriff auf den TUI-internen Fokus."
+          }
+        }
+      }
+    },
+    "Subagent failed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subagent ist fehlgeschlagen."
+          }
+        }
+      }
+    },
+    "Subagent is done — report available.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subagent ist fertig — Report liegt vor."
+          }
+        }
+      }
+    },
+    "Subagent — a helper chat started by another chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subagent — ein Hilfs-Chat, den ein anderer Chat gestartet hat"
+          }
+        }
+      }
+    },
     "Switch tabs with a two-finger swipe": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Tabs per Zwei-Finger-Wischen wechseln"
+          }
+        }
+      }
+    },
+    "TAKEN OVER": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ÜBERNOMMEN"
+          }
+        }
+      }
+    },
+    "Tab color": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-Farbe"
+          }
+        }
+      }
+    },
+    "Tab name": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-Name"
+          }
+        }
+      }
+    },
+    "Tab was closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab wurde geschlossen"
+          }
+        }
+      }
+    },
+    "Take over interactively": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interaktiv übernehmen"
+          }
+        }
+      }
+    },
+    "Taken over interactively — this job now continues as a normal Codex chat. Composer and `agent send` are disabled; the history below stays readable.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interaktiv übernommen — dieser Job läuft jetzt als normaler Codex-Chat weiter. Composer und `agent send` sind deaktiviert; der Verlauf unten bleibt lesbar."
+          }
+        }
+      }
+    },
+    "Taken over — continue in the terminal tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übernommen — weiter im Terminal-Tab"
+          }
+        }
+      }
+    },
+    "Takeover failed: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übernahme fehlgeschlagen: %@"
+          }
+        }
+      }
+    },
+    "Takes effect the next time the chat starts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wirkt beim nächsten Start des Chats"
+          }
+        }
+      }
+    },
+    "Target account: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zielkonto: %@"
+          }
+        }
+      }
+    },
+    "Task": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auftrag"
           }
         }
       }
@@ -1200,6 +4850,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Teste dein Setup"
+          }
+        }
+      }
+    },
+    "Text in the input field — switches after sending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text im Eingabefeld — wechselt nach dem Absenden"
           }
         }
       }
@@ -1234,12 +4894,52 @@
         }
       }
     },
+    "The auto-mode classifier decides per tool.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Auto-Mode-Classifier entscheidet pro Tool."
+          }
+        }
+      }
+    },
+    "The chat cannot be added to “%@” (archived or open as a tab in another window).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat kann nicht in „%@“ aufgenommen werden (archiviert oder als Tab in einem anderen Fenster)."
+          }
+        }
+      }
+    },
+    "The chat cannot be added to “%@” (archived or unknown).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat kann nicht in „%@“ aufgenommen werden (archiviert oder unbekannt)."
+          }
+        }
+      }
+    },
     "The chat is busy or has text you have not sent. Restarting stops the current turn and discards that text.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Der Chat arbeitet oder hat ungesendeten Text. Beim Neustart wird die laufende Antwort abgebrochen und der Text verworfen."
+          }
+        }
+      }
+    },
+    "The chat is not archived and can be resumed via “Recent”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
           }
         }
       }
@@ -1254,12 +4954,62 @@
         }
       }
     },
+    "The chat is still running — archiving ends the terminal. The chat stays in the archive and can be restored.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
+          }
+        }
+      }
+    },
+    "The chat is still running — ending stops the terminal and closes the tab.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen."
+          }
+        }
+      }
+    },
+    "The chat starts with the default Claude model. Details in Settings > GPT Backend.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat startet mit dem Claude-Standardmodell. Details in Einstellungen > GPT-Backend."
+          }
+        }
+      }
+    },
+    "The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Gesprächsverlauf zieht vollständig mit. Checkpoints und Datei-Historie (Rewind) bleiben im bisherigen Konto zurück."
+          }
+        }
+      }
+    },
     "The first time you start a chat, Claude Code opens right inside WhisperM8 and walks you through signing in with your Claude account.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Beim ersten Chat öffnet sich Claude Code direkt in WhisperM8 und führt dich durch die Anmeldung mit deinem Claude-Konto."
+          }
+        }
+      }
+    },
+    "The grid shows %@ active chats — final stage 3×3 reached": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Grid zeigt %@ aktive Chats — Endstufe 3×3 erreicht"
           }
         }
       }
@@ -1300,6 +5050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der letzte Eintrag (z. B. ein großes Tool-Ergebnis) passt nicht ins Vorschaufenster. Über **Früheren Verlauf laden** oben erscheinen die Nachrichten davor."
+          }
+        }
+      }
+    },
+    "The last report stays visible in the history below. A follow-up prompt starts a fresh turn.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der letzte Report bleibt unten im Verlauf sichtbar. Ein Folge-Prompt startet einen frischen Turn."
           }
         }
       }
@@ -1354,6 +5114,16 @@
         }
       }
     },
+    "The target account is missing MCP servers: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Zielkonto fehlen MCP-Server: %@."
+          }
+        }
+      }
+    },
     "The test dictation failed. Check your API key and try again.": {
       "localizations": {
         "de": {
@@ -1380,6 +5150,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Nachbearbeitung wurde abgebrochen."
+          }
+        }
+      }
+    },
+    "There is no account switch that could be reverted.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es gibt keinen Kontowechsel, der zurückgenommen werden könnte."
           }
         }
       }
@@ -1424,6 +5204,56 @@
         }
       }
     },
+    "Time of the last write activity in this session’s JSONL. Pure TUI navigation without writing cannot be detected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitpunkt der letzten Schreibaktivität in der JSONL dieser Session. Reine TUI-Navigation ohne Schreiben ist nicht erkennbar."
+          }
+        }
+      }
+    },
+    "Title is being generated automatically …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titel wird automatisch generiert …"
+          }
+        }
+      }
+    },
+    "To cancel: right-click the chat → Move to account → Cancel account switch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufheben: Rechtsklick auf den Chat → Zu Account verschieben → Kontowechsel aufheben."
+          }
+        }
+      }
+    },
+    "Token expired — the running session will renew it shortly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token abgelaufen — die laufende Session erneuert ihn gleich"
+          }
+        }
+      }
+    },
+    "Token expired — ↻ renews it via CLI ping": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token abgelaufen — ↻ erneuert ihn per CLI-Ping"
+          }
+        }
+      }
+    },
     "Transcribing...": {
       "localizations": {
         "de": {
@@ -1454,12 +5284,172 @@
         }
       }
     },
+    "Turn running — report follows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn läuft — Report folgt"
+          }
+        }
+      }
+    },
+    "Turn running — wait for done/failed or stop the job.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn läuft — warte auf done/failed oder stoppe den Job."
+          }
+        }
+      }
+    },
+    "Turn running — wait or stop …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn läuft — warten oder stoppen …"
+          }
+        }
+      }
+    },
+    "Turquoise": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Türkis"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückgängig"
+          }
+        }
+      }
+    },
+    "Undo last account switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzten Kontowechsel rückgängig machen"
+          }
+        }
+      }
+    },
+    "Unpin": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loslösen"
+          }
+        }
+      }
+    },
+    "Unpin %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lösen"
+          }
+        }
+      }
+    },
+    "Use provider color": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider-Farbe verwenden"
+          }
+        }
+      }
+    },
+    "Uses defaultMode from the project settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzt defaultMode aus den Settings des Projekts."
+          }
+        }
+      }
+    },
+    "WORKING": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ARBEITET"
+          }
+        }
+      }
+    },
+    "WORKSPACES": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WORKSPACES"
+          }
+        }
+      }
+    },
+    "Waiting for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf dich"
+          }
+        }
+      }
+    },
+    "Waiting for your answer — switches afterwards": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf deine Antwort — wechselt danach"
+          }
+        }
+      }
+    },
     "Welcome to WhisperM8": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Willkommen bei WhisperM8"
+          }
+        }
+      }
+    },
+    "Which Claude session belongs to this tab?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Claude-Session gehört zu diesem Tab?"
+          }
+        }
+      }
+    },
+    "Which chats the list shows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welche Chats die Liste zeigt"
           }
         }
       }
@@ -1494,6 +5484,16 @@
         }
       }
     },
+    "WhisperM8 found several matching sessions. Please pick the right one or start a new one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 hat mehrere passende Sessions gefunden. Bitte wähle die richtige aus oder starte eine neue."
+          }
+        }
+      }
+    },
     "WhisperM8 needs two permissions to work properly.": {
       "localizations": {
         "de": {
@@ -1510,6 +5510,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperM8 führt „%@“ mit Homebrew aus. Sonst wird auf deinem Mac nichts verändert.\n\nFalls du %@ schon anders installiert hast, fahre hier nicht fort."
+          }
+        }
+      }
+    },
+    "Working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet"
+          }
+        }
+      }
+    },
+    "Working — switches after the turn": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet — wechselt nach dem Turn"
+          }
+        }
+      }
+    },
+    "Working …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet …"
+          }
+        }
+      }
+    },
+    "Workspace “%@” cannot open here: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace „%1$@“ kann hier nicht öffnen: %2$@."
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelb"
           }
         }
       }
@@ -1560,6 +5610,456 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dein Tastenkürzel: %@"
+          }
+        }
+      }
+    },
+    "active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktiv"
+          }
+        }
+      }
+    },
+    "already in this account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "schon in diesem Konto"
+          }
+        }
+      }
+    },
+    "background agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Agent"
+          }
+        }
+      }
+    },
+    "click to collapse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klicken zum Einklappen"
+          }
+        }
+      }
+    },
+    "click to expand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "klicken zum Ausklappen"
+          }
+        }
+      }
+    },
+    "done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fertig"
+          }
+        }
+      }
+    },
+    "e.g. “Find out why the CI test is flaky and open a PR”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "z. B. „Untersuch, warum der CI-Test flaky ist, und öffne einen PR“"
+          }
+        }
+      }
+    },
+    "error": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler"
+          }
+        }
+      }
+    },
+    "everything back on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles wieder an"
+          }
+        }
+      }
+    },
+    "everything off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles aus"
+          }
+        }
+      }
+    },
+    "folder not approved in the target account — switch again after the turn": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner im Zielkonto nicht freigegeben — nach dem Turn erneut wechseln"
+          }
+        }
+      }
+    },
+    "has a question": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hat eine Frage"
+          }
+        }
+      }
+    },
+    "is waiting for permission": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet auf eine Berechtigung"
+          }
+        }
+      }
+    },
+    "is waiting for plan approval": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet auf Plan-Freigabe"
+          }
+        }
+      }
+    },
+    "just now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gerade eben"
+          }
+        }
+      }
+    },
+    "last activity:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "letzte Aktivität:"
+          }
+        }
+      }
+    },
+    "last activity: — no write activity in the JSONL pool": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "letzte Aktivität: — keine Schreibaktivität im JSONL-Pool"
+          }
+        }
+      }
+    },
+    "not a Claude chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kein Claude-Chat"
+          }
+        }
+      }
+    },
+    "not signed in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht angemeldet"
+          }
+        }
+      }
+    },
+    "off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zu"
+          }
+        }
+      }
+    },
+    "on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "auf"
+          }
+        }
+      }
+    },
+    "own session — cannot stop itself": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eigene Session — kann sich nicht selbst anhalten"
+          }
+        }
+      }
+    },
+    "running right now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "läuft gerade"
+          }
+        }
+      }
+    },
+    "runs in its own worktree": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "läuft in eigenem Worktree"
+          }
+        }
+      }
+    },
+    "sound off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ton aus"
+          }
+        }
+      }
+    },
+    "stopped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gestoppt"
+          }
+        }
+      }
+    },
+    "target account is not logged in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zielkonto ist nicht eingeloggt"
+          }
+        }
+      }
+    },
+    "target already has a transcript with this ID": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziel hat bereits ein Transcript mit dieser ID"
+          }
+        }
+      }
+    },
+    "waiting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet"
+          }
+        }
+      }
+    },
+    "working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arbeitet"
+          }
+        }
+      }
+    },
+    "working — %lld tool calls so far": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arbeitet — %lld Tool-Aufrufe bisher"
+          }
+        }
+      }
+    },
+    "working …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "arbeitet …"
+          }
+        }
+      }
+    },
+    "worktree": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Worktree"
+          }
+        }
+      }
+    },
+    "“%@” cannot open as a workspace here: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%1$@“ kann hier nicht als Workspace öffnen: %2$@."
+          }
+        }
+      }
+    },
+    "“%@” is full (3×3) — drop onto a specific pane to replace.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+          }
+        }
+      }
+    },
+    "“%@” is full (3×3) — not all chats of the group fit.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ist voll (3×3) — nicht alle Chats der Gruppe passen hinein."
+          }
+        }
+      }
+    },
+    "“%@” live-shows the active chats of the project — chats from other projects cannot be added here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ zeigt live die aktiven Chats des Projekts — Chats anderer Projekte können hier nicht aufgenommen werden."
+          }
+        }
+      }
+    },
+    "… and %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "… und %lld weitere"
+          }
+        }
+      }
+    },
+    "› writing reply": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "› schreibt Antwort"
+          }
+        }
+      }
+    },
+    "⌃Tab next · ⇧ back · arrows move spatially · Esc": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌃Tab weiter · ⇧ zurück · Pfeile räumlich · Esc"
+          }
+        }
+      }
+    },
+    "⌃Tab next · ⇧ back · ↑↓ select · Esc": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌃Tab weiter · ⇧ zurück · ↑↓ wählen · Esc"
+          }
+        }
+      }
+    },
+    "⌘N": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘N"
+          }
+        }
+      }
+    },
+    "▴ less": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "▴ weniger"
+          }
+        }
+      }
+    },
+    "▸ %lld older": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "▸ %lld ältere"
+          }
+        }
+      }
+    },
+    "＋ Drop here — “%@” grows to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "＋ Hier ablegen — „%1$@“ erweitert auf %2$@"
           }
         }
       }

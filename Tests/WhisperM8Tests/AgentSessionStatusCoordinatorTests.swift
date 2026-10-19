@@ -503,7 +503,7 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
 
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.permissionRequest, tool: "Bash"))
         XCTAssertEqual(store.activity(for: sessionID)?.awaitingKind, .permission)
-        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Freigabe: Bash git push")
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Approval: Bash git push")
 
         // Weiterarbeit räumt die Warte-Art ab, der Tail-Stand bleibt.
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.postToolUse, tool: "Bash"))
@@ -511,14 +511,14 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(store.activity(for: sessionID)?.detail, .tool(name: "Bash", argument: "git push"))
 
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "ExitPlanMode"))
-        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Plan zur Freigabe")
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Plan awaiting approval")
 
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.preToolUse, tool: "AskUserQuestion"))
         XCTAssertEqual(store.activity(for: sessionID)?.awaitingKind, .question)
 
         // Transcript meldet „nichts mehr" → nur die Hook-Art bleibt.
         coordinator.handleTranscriptActivity(sessionID: sessionID, activity: nil)
-        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Frage")
+        XCTAssertEqual(store.activity(for: sessionID)?.line(for: .awaitingInput), "Question")
 
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
         XCTAssertNil(store.activity(for: sessionID), "Leere Activity wird entfernt")

@@ -41,7 +41,7 @@ extension AgentChatsView {
                     }
                 }
                 Divider()
-                Text("Wirkt beim nächsten Start des Chats")
+                Text("Takes effect the next time the chat starts")
             }
         }
     }
@@ -49,7 +49,7 @@ extension AgentChatsView {
     private func gptAccountLabel(_ profile: GPTAccountProfile) -> String {
         var parts = [profile.name]
         if let email = profile.emailAddress { parts.append(email) }
-        if !profile.isLoggedIn { parts.append("nicht angemeldet") }
+        if !profile.isLoggedIn { parts.append(String(localized: "not signed in")) }
         return parts.joined(separator: " · ")
     }
 

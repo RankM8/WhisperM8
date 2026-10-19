@@ -57,9 +57,9 @@ enum AwaitingInputKind: String, Equatable {
 
     var notificationLabel: String {
         switch self {
-        case .permission: return "wartet auf eine Berechtigung"
-        case .question: return "hat eine Frage"
-        case .planApproval: return "wartet auf Plan-Freigabe"
+        case .permission: return String(localized: "is waiting for permission")
+        case .question: return String(localized: "has a question")
+        case .planApproval: return String(localized: "is waiting for plan approval")
         }
     }
 }

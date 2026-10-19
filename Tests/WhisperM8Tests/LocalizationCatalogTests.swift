@@ -109,7 +109,155 @@ final class LocalizationCatalogTests: XCTestCase {
         XCTAssertTrue(Self.ternaryLiteralCalls(in: #"Text("Plain")"#).isEmpty)
     }
 
+    // MARK: - Agent-Chats-UI (W6, LR-ONB-011 / LR-AU-030)
+
+    /// Chat-Oberfläche: keine deutschen Literale im Code (Englisch im Code,
+    /// Deutsch im Katalog). Zusätzlich muss jedes Literal der UI-Aufrufe ein
+    /// Katalogschlüssel sein.
+    static let chatsLocalizedFiles: [String] = [
+        "WhisperM8/Views/AgentChatChromeViews.swift",
+        "WhisperM8/Views/AgentChatsSidebarViews.swift",
+        "WhisperM8/Views/AgentChatsView.swift",
+        "WhisperM8/Views/AgentChatsView+AccountMove.swift",
+        "WhisperM8/Views/AgentChatsView+Archive.swift",
+        "WhisperM8/Views/AgentChatsView+BackgroundAgents.swift",
+        "WhisperM8/Views/AgentChatsView+BulkActions.swift",
+        "WhisperM8/Views/AgentChatsView+DragDrop.swift",
+        "WhisperM8/Views/AgentChatsView+GPTAccount.swift",
+        "WhisperM8/Views/AgentChatsView+Grid.swift",
+        "WhisperM8/Views/AgentChatsView+ProjectManagement.swift",
+        "WhisperM8/Views/AgentChatsView+RuntimeServices.swift",
+        "WhisperM8/Views/AgentChatsView+SessionLifecycle.swift",
+        "WhisperM8/Views/AgentChatsView+SessionMenus.swift",
+        "WhisperM8/Views/AgentChatsView+Shortcuts.swift",
+        "WhisperM8/Views/AgentChatsView+SubagentChildren.swift",
+        "WhisperM8/Views/AgentChatsView+Subagents.swift",
+        "WhisperM8/Views/AgentChatsView+Tabs.swift",
+        "WhisperM8/Views/AgentChatsView+Workspaces.swift",
+        "WhisperM8/Views/AgentChatsViewModel.swift",
+        "WhisperM8/Views/AgentChatsWindowAccessor.swift",
+        "WhisperM8/Views/AgentGridSplitContainer.swift",
+        "WhisperM8/Views/AgentMoveToAccountSheet.swift",
+        "WhisperM8/Views/AgentResourceSummaryButton.swift",
+        "WhisperM8/Views/AgentSessionAmbiguousRebindPicker.swift",
+        "WhisperM8/Views/AgentSessionDetailView.swift",
+        "WhisperM8/Views/AgentStatusIndicator.swift",
+        "WhisperM8/Views/AgentTabSwitcherMiniMap.swift",
+        "WhisperM8/Views/AgentTabSwitcherOverlay.swift",
+        "WhisperM8/Views/AgentUsagePopovers.swift",
+        "WhisperM8/Views/BackgroundDispatchModal.swift",
+        "WhisperM8/Views/GridDropViews.swift",
+        "WhisperM8/Views/GridShrinkSelection.swift",
+        "WhisperM8/Views/GridShrinkSelectionViews.swift",
+        "WhisperM8/Views/JarvisNoteViews.swift",
+        "WhisperM8/Views/ProjectDetailPanel.swift",
+        "WhisperM8/Views/SessionDragPreview.swift",
+        "WhisperM8/Views/SessionMenuPolicy.swift",
+        "WhisperM8/Views/SidebarAlertLevelButton.swift",
+        "WhisperM8/Views/SubagentJobDetailView.swift",
+        "WhisperM8/Views/TabSwitcherGridMarking.swift",
+        "WhisperM8/Views/TabSwitcherGridPaneMarking.swift",
+        "WhisperM8/Views/TabSwitcherMiniMapGeometry.swift",
+        "WhisperM8/Views/TabSwitcherModel.swift",
+        "WhisperM8/Views/TabSwitcherScope.swift",
+        "WhisperM8/Views/TabSwitcherShortcut.swift",
+        "WhisperM8/Views/TabSwitcherTile.swift",
+        "WhisperM8/Views/TabSwitcherTileModel.swift",
+        "WhisperM8/Views/Workspace/WorkspaceLayoutView.swift",
+        "WhisperM8/Views/WorkspacePersistenceBanner.swift",
+        "WhisperM8/Views/AgentChatsView+AdvancedMenu.swift",
+        "WhisperM8/Views/AgentChatsView+Confirmations.swift",
+        "WhisperM8/Services/AgentChats/ChatsUIStrings.swift",
+        "WhisperM8/Services/AgentChats/AccountMovePlanner.swift",
+        "WhisperM8/Services/AgentChats/AccountSwitchPlanner.swift",
+        "WhisperM8/Services/AgentChats/AgentAdvancedFeatures.swift",
+        "WhisperM8/Services/AgentChats/AgentSidebarModelBuilder.swift",
+        "WhisperM8/Services/AgentChats/SidebarCloseAction.swift",
+        "WhisperM8/Services/AgentChats/AgentSessionNotifier.swift",
+        "WhisperM8/Services/AgentChats/AgentSessionStateMachine.swift",
+        "WhisperM8/Services/AgentChats/AgentTranscriptActivityExtractor.swift",
+        "WhisperM8/Views/AgentChatsView+ProjectManagement.swift",
+    ]
+
+    func testChatsFilesContainNoGermanLiterals() throws {
+        for file in Self.chatsLocalizedFiles {
+            let source = try String(contentsOf: Self.root.appendingPathComponent(file), encoding: .utf8)
+            for literal in Self.germanLiterals(in: source) {
+                XCTFail("\(file): deutsches Literal „\(literal)“ — Englisch in den Code, Deutsch in den Katalog")
+            }
+        }
+    }
+
+    func testChatsFilesUseOnlyCatalogKeys() throws {
+        let keys = Set(try strings().keys)
+        for file in Self.chatsLocalizedFiles {
+            let source = try String(contentsOf: Self.root.appendingPathComponent(file), encoding: .utf8)
+            for literal in Self.uiLiterals(in: Self.withoutComments(source))
+            where !keys.contains(literal) && Self.needsCatalogEntry(literal) {
+                XCTFail("\(file): „\(literal)“ fehlt im String-Katalog")
+            }
+            for hit in Self.ternaryLiteralCalls(in: source) {
+                XCTFail("\(file): Ternär-Literal „\(hit)“ in Text/Button")
+            }
+        }
+    }
+
+    func testGermanDetectorFindsKnownPatterns() {
+        XCTAssertEqual(Self.germanLiterals(in: #"Text("Projekt löschen?")"#).count, 1)
+        XCTAssertEqual(Self.germanLiterals(in: #"let a = "Der Chat läuft noch""#).count, 1)
+        XCTAssertEqual(Self.germanLiterals(in: #"Button("Archivieren und beenden") {}"#).count, 1)
+        XCTAssertTrue(Self.germanLiterals(in: #"// Löschen: „Wert“ ist deutsch"#).isEmpty)
+        XCTAssertTrue(Self.germanLiterals(in: #"Text("Delete project?")"#).isEmpty)
+        XCTAssertTrue(Self.germanLiterals(in: #"logger.info("Chat läuft noch")"#).isEmpty)
+    }
+
     // MARK: - Helfer
+
+    /// Reine Symbole/Zeichen (`·`, `⌘N`) und SF-Symbol-Namen brauchen keinen Eintrag.
+    static func needsCatalogEntry(_ literal: String) -> Bool {
+        guard literal.range(of: #"\p{L}"#, options: .regularExpression) != nil else { return false }
+        return literal.range(of: #"^[a-z0-9]+(\.[a-z0-9]+)+$"#, options: .regularExpression) == nil
+    }
+
+    /// Entfernt `//`-Kommentare zeilenweise (außerhalb von Literalen).
+    static func withoutComments(_ source: String) -> String {
+        source.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            var inString = false
+            var previous: Character = " "
+            var result = ""
+            let chars = Array(line)
+            var index = 0
+            while index < chars.count {
+                let ch = chars[index]
+                if ch == "\"" && previous != "\\" { inString.toggle() }
+                if !inString, ch == "/", index + 1 < chars.count, chars[index + 1] == "/" { break }
+                result.append(ch)
+                previous = (previous == "\\" && ch == "\\") ? " " : ch
+                index += 1
+            }
+            return result
+        }.joined(separator: "\n")
+    }
+
+    /// Deutsche Literale außerhalb von Kommentaren und Log-Zeilen: Umlaut/ß
+    /// oder ein typisches deutsches Funktionswort.
+    static func germanLiterals(in source: String) -> [String] {
+        let words = #"\b(der|die|das|den|dem|und|oder|nicht|wird|werden|ein|eine|einen|für|mit|von|zu|zum|zur|im|auf|noch|kein|keine|alle|ohne|nach|bei|über|aus|ist|sind|hier|neuer|neue|neues|sich|wurde|beim|gelöscht|neu|laden|starten|stoppen|beenden|anzeigen|entfernen|archivieren|abbrechen|fertig|speichern|umbenennen|wiederherstellen|einstellungen|hilfe|ablegen|zeigen|projekt|projekte|farbe|fehler|aufklappen|einklappen|zuklappen|weniger|ältere|übrig|arbeitet|bereit|wartet|leer|leerer|keine|kein)\b"#
+        guard let literal = try? NSRegularExpression(pattern: #""((?:[^"\\]|\\.)*)""#),
+              let german = try? NSRegularExpression(pattern: "[äöüÄÖÜß]|" + words, options: [.caseInsensitive]) else { return [] }
+        var hits: [String] = []
+        for line in withoutComments(source).split(separator: "\n") {
+            let text = String(line)
+            if text.contains("ogger.") || text.contains("log.") || text.contains("fatalError(") || text.contains("assert") { continue }
+            let range = NSRange(text.startIndex..., in: text)
+            for match in literal.matches(in: text, range: range) {
+                guard let inner = Range(match.range(at: 1), in: text).map({ String(text[$0]) }) else { continue }
+                let innerRange = NSRange(inner.startIndex..., in: inner)
+                if german.firstMatch(in: inner, range: innerRange) != nil { hits.append(inner) }
+            }
+        }
+        return hits
+    }
 
     static func ternaryLiteralCalls(in source: String) -> [String] {
         let pattern = #"(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView)\(\s*[^"()\n]*\?\s*"(?:[^"\\]|\\.)*"\s*:\s*"(?:[^"\\]|\\.)*""#

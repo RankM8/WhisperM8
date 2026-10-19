@@ -36,10 +36,10 @@ extension AgentChatsView {
     func pinLabel(forID id: UUID) -> String {
         let group = actionGroup(forID: id)
         guard group.count > 1 else {
-            return pinnedSessionIDs.contains(id) ? "Loslösen" : "Anpinnen"
+            return pinnedSessionIDs.contains(id) ? String(localized: "Unpin") : String(localized: "Pin")
         }
         let unpin = TabSelectionResolver.shouldUnpinGroup(group, pinned: Set(pinnedSessionIDs))
-        return unpin ? "\(group.count) lösen" : "\(group.count) anpinnen"
+        return unpin ? String(localized: "Unpin \(group.count)") : String(localized: "Pin \(group.count)")
     }
 
     /// Sessions zu `ids` in deren Reihenfolge — EIN Durchlauf über den
@@ -111,12 +111,12 @@ extension AgentChatsView {
         // Einzelfall ohne Workspace-Lookup — läuft pro Zeile und Render.
         let group = ids.count > 1 ? sessions(in: ids) : []
         guard group.count > 1 else {
-            return session.isTerminal ? "Terminal schließen" : "Archivieren"
+            return session.isTerminal ? String(localized: "Close terminal") : String(localized: "Archive")
         }
         let terminals = group.filter(\.isTerminal).count
-        if terminals == 0 { return "\(group.count) Chats archivieren" }
-        if terminals == group.count { return "\(group.count) Terminals schließen" }
-        return "\(group.count) schließen/archivieren"
+        if terminals == 0 { return String(localized: "Archive \(group.count) chats") }
+        if terminals == group.count { return String(localized: "Close \(group.count) terminals") }
+        return String(localized: "Close/archive \(group.count)")
     }
     /// Icon zum `archiveLabel` (einzelnes Terminal → X statt Archivbox).
     func archiveIcon(for session: AgentChatSession) -> String {

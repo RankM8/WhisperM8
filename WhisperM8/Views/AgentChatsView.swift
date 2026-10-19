@@ -862,41 +862,34 @@ struct AgentChatsView: View {
             Text(errorMessage ?? "")
         }
         .confirmationDialog(
-            "Workspace löschen?",
+            "Delete workspace?",
             isPresented: Binding(
                 get: { workspacePendingDeletion != nil },
                 set: { if !$0 { workspacePendingDeletion = nil } }
             ),
             presenting: workspacePendingDeletion
         ) { entity in
-            Button("Löschen: \(entity.name)", role: .destructive) {
+            Button("Delete: \(entity.name)", role: .destructive) {
                 windowStore.deleteGridWorkspace(entity.id)
             }
-            Button("Abbrechen", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: { entity in
-            let count = entity.occupiedSessionIDs.count
-            Text("Entfernt nur die Gruppe „\(entity.name)“ — ihre \(count) \(count == 1 ? "Chat bleibt" : "Chats bleiben") samt Tabs und laufenden Prozessen erhalten.")
+            Text(verbatim: ChatsUIStrings.workspaceDeleteMessage(name: entity.name, count: entity.occupiedSessionIDs.count))
         }
         .confirmationDialog(
-            "Projekt löschen?",
+            "Delete project?",
             isPresented: Binding(
                 get: { projectPendingDeletion != nil },
                 set: { if !$0 { projectPendingDeletion = nil } }
             ),
             presenting: projectPendingDeletion
         ) { project in
-            Button("Löschen: \(project.name)", role: .destructive) {
+            Button("Delete: \(project.name)", role: .destructive) {
                 deleteProject(project)
             }
-            Button("Abbrechen", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: { project in
-            let projectSessions = workspace.sessions.filter { $0.projectID == project.id }
-            let count = projectSessions.count
-            let runningCount = projectSessions.filter(needsProcessEndConfirmation).count
-            let runningNote = runningCount > 0
-                ? " " + String(localized: "\(runningCount) of them are still running and will be stopped.")
-                : ""
-            Text("Entfernt das Projekt und seine \(count) \(count == 1 ? "Chat" : "Chats") aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet." + runningNote)
+            Text(verbatim: projectDeleteMessage(for: project))
         }
         .confirmationDialog(
             String(localized: "Remove this background agent?"),
@@ -915,60 +908,36 @@ struct AgentChatsView: View {
             Text(String(localized: "It is still running. Removing it stops the agent and deletes it from the supervisor."))
         }
         .confirmationDialog(
-            "Chat archivieren?",
+            "Archive chat?",
             isPresented: Binding(
                 get: { sessionsPendingArchive != nil },
                 set: { if !$0 { sessionsPendingArchive = nil } }
             ),
             presenting: sessionsPendingArchive
         ) { sessions in
-            Button(sessions.count == 1 ? "Archivieren" : "\(sessions.count) Chats archivieren") {
+            Button(ChatsUIStrings.archiveButton(count: sessions.count)) {
                 commitArchive(sessions)
                 sessionsPendingArchive = nil
             }
-            Button("Abbrechen", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: { sessions in
-            let running = sessions.filter {
-                terminalRegistry.controller(for: $0.id)?.isRunning == true
-            }.count
-            let hasShells = sessions.contains(where: \.isTerminal)
-            let shellNote = hasShells
-                ? " " + String(localized: "Shell terminals are closed for good and cannot be restored.")
-                : ""
-            Text((sessions.count == 1
-                ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
-                : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.") + shellNote)
+            Text(verbatim: archiveMessage(for: sessions))
         }
         .confirmationDialog(
-            "Chat beenden?",
+            "End chat?",
             isPresented: Binding(
                 get: { sessionsPendingEnd != nil },
                 set: { if !$0 { sessionsPendingEnd = nil } }
             ),
             presenting: sessionsPendingEnd
         ) { pending in
-            Button(pending.sessions.count == 1 ? "Beenden" : "\(pending.sessions.count) Chats beenden") {
+            Button(ChatsUIStrings.endButton(count: pending.sessions.count)) {
                 commitEndSession(pending.sessions, removingFromWorkspaceID: pending.removeFromWorkspace?.id)
                 sessionsPendingEnd = nil
             }
-            Button("Abbrechen", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: { pending in
-            let sessions = pending.sessions
-            let running = sessions.filter {
-                terminalRegistry.controller(for: $0.id)?.isRunning == true
-            }.count
-            // Minus der Workspace-Sektion: das zusätzliche Entfernen aus dem
-            // Workspace gehört benannt — es ist der Unterschied zum Minus der
-            // Chats-Sektion.
-            let removalSuffix = pending.removeFromWorkspace.map {
-                " Der Chat wird außerdem aus dem Workspace „\($0.name)“ entfernt."
-            } ?? ""
-            let endShellNote = sessions.contains(where: \.isTerminal)
-                ? " " + String(localized: "Shell terminals are closed for good and cannot be restored.")
-                : ""
-            Text((sessions.count == 1
-                ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
-                : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.") + endShellNote)
+            Text(verbatim: endMessage(for: pending))
         }
         .sheet(item: $missingCLIPrompt) { prompt in
             AgentCLIMissingSheet(prompt: prompt, onClose: { missingCLIPrompt = nil })
@@ -1375,11 +1344,11 @@ struct AgentChatsView: View {
             .flatMap { id in workspace.sessions.first(where: { $0.id == id })?.title }
             ?? ""
         return VStack(alignment: .leading, spacing: 14) {
-            Text("Chat umbenennen")
+            Text("Rename chat")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AgentTheme.textPrimary)
 
-            TextField("Tab-Name", text: $renameDraft)
+            TextField("Tab name", text: $renameDraft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .padding(.horizontal, 10)
@@ -1390,9 +1359,9 @@ struct AgentChatsView: View {
 
             HStack {
                 Spacer()
-                Button("Abbrechen") { renameTargetID = nil }
+                Button("Cancel") { renameTargetID = nil }
                     .keyboardShortcut(.cancelAction)
-                Button("Speichern") { commitRename() }
+                Button("Save") { commitRename() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(
                         renameDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1418,11 +1387,11 @@ struct AgentChatsView: View {
             .flatMap { id in workspace.projects.first(where: { $0.id == id })?.name }
             ?? ""
         return VStack(alignment: .leading, spacing: 14) {
-            Text("Projekt umbenennen")
+            Text("Rename project")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AgentTheme.textPrimary)
 
-            TextField("Projekt-Name", text: $renameProjectDraft)
+            TextField("Project name", text: $renameProjectDraft)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .padding(.horizontal, 10)
@@ -1433,9 +1402,9 @@ struct AgentChatsView: View {
 
             HStack {
                 Spacer()
-                Button("Abbrechen") { renameProjectTargetID = nil }
+                Button("Cancel") { renameProjectTargetID = nil }
                     .keyboardShortcut(.cancelAction)
-                Button("Speichern") { commitProjectRename() }
+                Button("Save") { commitProjectRename() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(
                         renameProjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1536,8 +1505,8 @@ struct AgentChatsView: View {
             }
 
             if isIndexingSessions {
-                Label("Sessions werden gescannt", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 10, weight: .medium))
+                Label("Scanning sessions", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .padding(.horizontal, 12)
                     .padding(.bottom, 4)
@@ -1657,11 +1626,11 @@ struct AgentChatsView: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "chevron.down")
                                         .font(.system(size: 9, weight: .semibold))
-                                    Text("Weitere \(nextCount) anzeigen")
+                                    Text("Show \(nextCount) more")
                                         .font(.system(size: 11, weight: .medium))
                                     Spacer(minLength: 0)
-                                    Text("\(snapshot.flatHiddenCount) übrig")
-                                        .font(.system(size: 10).monospacedDigit())
+                                    Text("\(snapshot.flatHiddenCount) left")
+                                        .font(.system(size: 11).monospacedDigit())
                                         .foregroundStyle(AgentTheme.textTertiary)
                                 }
                                 .foregroundStyle(AgentTheme.textSecondary)
@@ -1770,7 +1739,7 @@ struct AgentChatsView: View {
                     .font(.system(size: 8, weight: .bold))
             }
             Text(text.uppercased())
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .tracking(0.6)
             Spacer(minLength: 0)
         }
@@ -1792,11 +1761,11 @@ struct AgentChatsView: View {
                     .font(.system(size: 8, weight: .bold))
                     .rotationEffect(.degrees(chatsSectionCollapsed ? 0 : 90))
                 Text("CHATS")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .tracking(0.6)
                 if chatsSectionCollapsed {
                     Text("\(count)")
-                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        .font(.system(size: 11, weight: .bold).monospacedDigit())
                 }
                 Spacer(minLength: 0)
             }
@@ -1807,8 +1776,8 @@ struct AgentChatsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(chatsSectionCollapsed ? "Chats einblenden" : "Chats ausblenden")
-        .accessibilityLabel(chatsSectionCollapsed ? "Chat-Liste einblenden" : "Chat-Liste ausblenden")
+        .help(chatsSectionCollapsed ? String(localized: "Show chats") : String(localized: "Hide chats"))
+        .accessibilityLabel(chatsSectionCollapsed ? String(localized: "Show chat list") : String(localized: "Hide chat list"))
     }
 
     /// Klappbarer „Gepinnt"-Header (Chevron + Anzahl) — blendet die gepinnten
@@ -1824,12 +1793,12 @@ struct AgentChatsView: View {
                     .rotationEffect(.degrees(pinnedSectionCollapsed ? 0 : 90))
                 Image(systemName: "pin")
                     .font(.system(size: 8, weight: .bold))
-                Text("GEPINNT")
+                Text("PINNED")
                     .font(.system(size: 9, weight: .bold))
                     .tracking(0.6)
                 if pinnedSectionCollapsed {
                     Text("\(count)")
-                        .font(.system(size: 9, weight: .bold).monospacedDigit())
+                        .font(.system(size: 11, weight: .bold).monospacedDigit())
                 }
                 Spacer(minLength: 0)
             }
@@ -1951,17 +1920,17 @@ struct AgentChatsView: View {
     /// zurück auf „Alle".
     private var scopeEmptyHint: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(sidebarScope == .active ? "Keine aktiven Chats" : "Keine Chats im Zeitraum")
+            (sidebarScope == .active ? Text("No active chats") : Text("No chats in this period"))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
-            Text("Laufende, offene und gepinnte Chats erscheinen hier. Ältere findest du unter „Alle“.")
+            Text("Running, open and pinned chats appear here. You will find older ones under “All”.")
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 sidebarScope = .all
             } label: {
-                Text("Alle Chats zeigen")
+                Text("Show all chats")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .padding(.horizontal, 10)
@@ -1981,7 +1950,7 @@ struct AgentChatsView: View {
             Text("No projects yet")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
-            Text("Füge ein Projekt hinzu, um Codex- oder Claude-Chats darin anzulegen.")
+            Text("Add a project to create Codex or Claude chats in it.")
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -1992,7 +1961,7 @@ struct AgentChatsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 11, weight: .medium))
-                    Text("Projekt hinzufügen")
+                    Text("Add project")
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(AgentTheme.textPrimary)
@@ -2036,7 +2005,7 @@ struct AgentChatsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(SidebarRowButtonStyle())
-            .help("Einstellungen öffnen")
+            .help("Open settings")
 
             SidebarUpdateBadge()
 
@@ -2072,7 +2041,7 @@ struct AgentChatsView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Onboarding / Hilfe öffnen")
+            .help("Open onboarding / help")
         }
         .padding(.trailing, 8)
         .padding(.vertical, 7)
@@ -2096,7 +2065,7 @@ struct AgentChatsView: View {
             HStack(spacing: 6) {
                 newChatSplitButton
 
-                sidebarIconButton(icon: "arrow.clockwise", help: "Sessions neu einlesen (⌘R)") {
+                sidebarIconButton(icon: "arrow.clockwise", help: String(localized: "Re-read sessions (⌘R)")) {
                     AgentScanCoordinator.shared.requestScan(reason: .manual)
                 }
                 .keyboardShortcut("r", modifiers: .command)
@@ -2179,7 +2148,7 @@ struct AgentChatsView: View {
                 // Als Trailing-Overlay, damit „Neuer Chat" zentriert bleibt.
                 .overlay(alignment: .trailing) {
                     Text("⌘N")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AgentTheme.textTertiary)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1.5)
@@ -2191,7 +2160,7 @@ struct AgentChatsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? String(localized: "Add a project folder to start a chat"))
+            .help(selectedProject.map { String(localized: "New chat in \($0.name)") } ?? String(localized: "Add a project folder to start a chat"))
 
             Divider().frame(height: 16)
 
@@ -2205,7 +2174,7 @@ struct AgentChatsView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Projekt für neuen Chat wählen oder hinzufügen (⌘N)")
+            .help("Choose or add a project for the new chat (⌘N)")
             .popover(isPresented: $showNewChatProjectPicker, arrowEdge: .bottom) {
                 newChatProjectPicker
             }
@@ -2227,11 +2196,11 @@ struct AgentChatsView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
-                TextField("Projekt suchen…", text: $newChatProjectQuery)
+                TextField("Search projects…", text: $newChatProjectQuery)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .focused($newChatSearchFocused)
-                    .accessibilityLabel("Projekt suchen")
+                    .accessibilityLabel("Search projects")
                     .onSubmit { confirmHighlightedNewChatProject(projects) }
             }
             .padding(.horizontal, 11)
@@ -2253,7 +2222,7 @@ struct AgentChatsView: View {
                                         .foregroundStyle(AgentTheme.textPrimary)
                                         .lineLimit(1)
                                     Text(project.lastBranch ?? project.path)
-                                        .font(.system(size: 9.5))
+                                        .font(.system(size: 11))
                                         .foregroundStyle(AgentTheme.textTertiary)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
@@ -2298,7 +2267,7 @@ struct AgentChatsView: View {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 12))
                         .frame(width: 16)
-                    Text("Projekt hinzufügen…")
+                    Text("Add project…")
                         .font(.system(size: 12, weight: .medium))
                     Spacer(minLength: 0)
                 }
@@ -2471,7 +2440,7 @@ struct AgentChatsView: View {
                 .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
                 .disabled(searching)
                 .opacity(searching ? 0.55 : 1)
-                .help(searching ? "Suche zeigt alle Chats" : "Welche Chats die Liste zeigt")
+                .help(searching ? String(localized: "Search shows all chats") : String(localized: "Which chats the list shows"))
 
                 Button {
                     sidebarLayout = (sidebarLayout == .grouped ? .flat : .grouped)
@@ -2485,17 +2454,17 @@ struct AgentChatsView: View {
                 }
                 .buttonStyle(.plain)
                 .help(sidebarLayout == .grouped
-                    ? "Flach anzeigen (nach Aktivität sortiert)"
-                    : "Nach Projekt gruppieren")
+                    ? String(localized: "Show flat (sorted by activity)")
+                    : String(localized: "Group by project"))
             }
 
             if searching {
-                captionRow(text: "Suche zeigt alle Chats", action: nil, actionLabel: nil)
+                captionRow(text: "Search shows all chats", action: nil, actionLabel: nil)
             } else if sidebarScope != .all {
                 captionRow(
-                    text: "\(visibleCount) von \(counts.all) Chats",
+                    text: "\(visibleCount) of \(counts.all) chats",
                     action: { sidebarScope = .all },
-                    actionLabel: "Alle zeigen"
+                    actionLabel: "Show all"
                 )
             }
         }
@@ -2504,20 +2473,20 @@ struct AgentChatsView: View {
     }
 
     @ViewBuilder
-    private func captionRow(text: String, action: (() -> Void)?, actionLabel: String?) -> some View {
+    private func captionRow(text: LocalizedStringKey, action: (() -> Void)?, actionLabel: LocalizedStringKey?) -> some View {
         HStack(spacing: 4) {
             Text(text)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
             Spacer(minLength: 0)
             if let action, let actionLabel {
                 Button(action: action) {
                     Text(actionLabel)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AgentTheme.textSecondary)
                 }
                 .buttonStyle(.plain)
-                .help("Filter aufheben — alle Chats zeigen")
+                .help("Clear filter — show all chats")
             }
         }
     }
@@ -2618,7 +2587,7 @@ struct AgentChatsView: View {
                 .fill(AgentTheme.accent.opacity(0.12))
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(AgentTheme.accent.opacity(0.7), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-            Label("Loslassen für neues Fenster", systemImage: "macwindow.badge.plus")
+            Label("Release to open a new window", systemImage: "macwindow.badge.plus")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AgentTheme.accent)
                 .padding(.horizontal, 14)
@@ -3030,30 +2999,11 @@ struct AgentChatsView: View {
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
-                    .help("Alle Tabs")
+                    .help("All tabs")
                 }
 
                 Menu {
-                    Button("Neuer Codex Chat") { createSession(provider: .codex) }
-                    Button("Neuer Claude Chat") { createSession(provider: .claude) }
-                    if AppPreferences.shared.claudeGPTBackendEnabled {
-                        // Claude-Code-Chat mit GPT als Hauptmodell, nur für
-                        // diesen Chat — der gespeicherte /model-Default bleibt.
-                        Button("Neuer GPT-Chat") { createSession(provider: .claude, gptMainModel: true) }
-                    }
-                    // Kein Agent: normale Login-Shell im Projektverzeichnis.
-                    // Der Provider ist nur Schema-Platzhalter (siehe
-                    // AgentSessionKind.terminal).
-                    Button("Neues Terminal") { createSession(provider: .claude, kind: .terminal) }
-                    Divider()
-                    Button("Neuer Hintergrund-Agent…") { presentBackgroundDispatchModal() }
-                        .disabled(selectedProject == nil)
-                    Divider()
-                    Button("Neuer Claude Agent View") {
-                        createSession(provider: .claude, kind: .agentView)
-                    }
-                    Divider()
-                    Button("Sub-Agent-Bibliothek anzeigen…") { presentSubAgentLibrary() }
+                    newChatMenuContent
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .bold))
@@ -3065,7 +3015,7 @@ struct AgentChatsView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .disabled(selectedProject == nil)
-                .help("Neuen Chat anlegen")
+                .help("Create new chat")
 
                 Spacer(minLength: 8)
 
@@ -3074,7 +3024,7 @@ struct AgentChatsView: View {
                 // visueller Clutter im Titlebar-Bereich kostet mehr als er
                 // hier liefert.
 
-                TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? "Projekt-Kontext ausblenden" : "Projekt-Kontext anzeigen", isActive: isInspectorVisible) {
+                TitlebarIconButton(systemImage: "sidebar.right", help: isInspectorVisible ? String(localized: "Hide project context") : String(localized: "Show project context"), isActive: isInspectorVisible) {
                     isInspectorVisible.toggle()
                 }
             }
@@ -3149,7 +3099,7 @@ struct AgentChatsView: View {
                                 projectOpenTargetRaw = target.rawValue
                                 openProject(project, in: target)
                             } label: {
-                                Label("In \(target.label) öffnen", systemImage: target.systemImage)
+                                Label("Open in \(target.label)", systemImage: target.systemImage)
                             }
                         }
                     } label: {
@@ -3163,7 +3113,7 @@ struct AgentChatsView: View {
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("In \(projectOpenTarget.label) öffnen · Pfeil für Auswahl")
+                    .help("Open in \(projectOpenTarget.label) · arrow to choose")
                 }
 
                 // Zurück ins Grid: stellt den referenzierten Workspace exakt
@@ -3194,29 +3144,29 @@ struct AgentChatsView: View {
                 .font(.system(size: 9))
                 .foregroundStyle(.orange.opacity(0.8))
             if let active = activeBackgroundTracker.currentSession {
-                Text("letzte Aktivität:")
-                    .font(.system(size: 10, weight: .medium))
+                Text("last activity:")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(active.displayName)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Text("·")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Image(systemName: "folder")
                     .font(.system(size: 9))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(active.projectDisplayName)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
                 Text("·")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(active.shortID)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                 if let stateLabel = active.state, !stateLabel.isEmpty {
                     kindBadge(stateLabel.uppercased(), color: stateColor(for: stateLabel))
@@ -3224,15 +3174,15 @@ struct AgentChatsView: View {
                 // Relative-Zeit-Anzeige fuer "vor wie lange". Bindet auf
                 // `currentTimeForRelativeLabels`, damit der Text sich pro
                 // Sekunde aktualisiert ohne den Tracker neu zu pollen.
-                Text("· vor \(relativeDurationLabel(from: active.lastActivityAt))")
-                    .font(.system(size: 10))
+                Text("· \(relativeDurationLabel(from: active.lastActivityAt))")
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
-                    .help("Zeitpunkt der letzten Schreibaktivität in der JSONL dieser Session. Reine TUI-Navigation ohne Schreiben ist nicht detektierbar.")
+                    .help("Time of the last write activity in this session’s JSONL. Pure TUI navigation without writing cannot be detected.")
             } else {
-                Text("letzte Aktivität: — keine Schreibaktivität im JSONL-Pool")
-                    .font(.system(size: 10))
+                Text("last activity: — no write activity in the JSONL pool")
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
-                    .help("Sub-Sessions werden hier sichtbar, sobald Claude in deren JSONL schreibt oder du in der TUI eine Taste drückst. Reines Mit-den-Pfeiltasten-Navigieren reicht nicht — WhisperM8 hat keinen Direktzugriff auf den TUI-internen Fokus.")
+                    .help("Sub-sessions appear here as soon as Claude writes to their JSONL or you press a key in the TUI. Navigating with the arrow keys alone is not enough — WhisperM8 has no direct access to the TUI’s internal focus.")
             }
         }
     }
@@ -3240,14 +3190,7 @@ struct AgentChatsView: View {
     /// Liefert "12s", "3m", "1h 4m" — kurze Beschriftung der Differenz
     /// zwischen `date` und jetzt. Pure-Funktion fuer einfache Testbarkeit.
     private func relativeDurationLabel(from date: Date) -> String {
-        let seconds = Int(Date().timeIntervalSince(date))
-        if seconds < 1 { return "gerade eben" }
-        if seconds < 60 { return "\(seconds)s" }
-        let minutes = seconds / 60
-        if minutes < 60 { return "\(minutes)m" }
-        let hours = minutes / 60
-        let remainingMinutes = minutes - hours * 60
-        return remainingMinutes == 0 ? "\(hours)h" : "\(hours)h \(remainingMinutes)m"
+        SidebarRelativeTime.short(date)
     }
 
     /// Hex-Farbe fuer den State-Indikator pro TUI-State.
@@ -3294,19 +3237,19 @@ struct AgentChatsView: View {
                     .truncationMode(.tail)
                 if selectedSession.isBackgroundChat {
                     kindBadge("BG", color: .indigo)
-                        .help("Hintergrund-Agent · vom Claude-Supervisor gehostet")
+                        .help("Background agent — runs independently of this window")
                     if let shortID = selectedSession.backgroundShortID, !shortID.isEmpty {
                         Text(shortID)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(AgentTheme.textTertiary)
-                            .help("Background-Agent Short-ID")
+                            .help("Background agent short ID")
                     }
                 } else if selectedSession.isAgentView {
                     kindBadge("VIEW", color: .orange)
-                        .help("Claude Agents View · Multi-Session-Dashboard. Der aktive Sub-Chat innerhalb der TUI ist von WhisperM8 aus nicht erkennbar.")
+                        .help("Agent overview — Claude’s dashboard of all sessions. WhisperM8 cannot tell which sub-chat is active inside the TUI.")
                 } else if selectedSession.isTerminal {
                     kindBadge("TERM", color: .teal)
-                        .help("Normales Terminal · Login-Shell im Projektverzeichnis, kein Agent")
+                        .help("Plain terminal — login shell in the project folder, no agent")
                 }
             } else if let selectedProject {
                 Text(selectedProject.name)
@@ -3329,7 +3272,7 @@ struct AgentChatsView: View {
                     .font(.system(size: 9))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(project.name)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
                 if let branch = project.lastBranch, !branch.isEmpty {
@@ -3337,15 +3280,15 @@ struct AgentChatsView: View {
                         .font(.system(size: 9))
                         .foregroundStyle(AgentTheme.textTertiary)
                     Text(branch)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(AgentTheme.textTertiary)
                         .lineLimit(1)
                 }
                 Text("·")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                 Text(project.path)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -3367,7 +3310,7 @@ struct AgentChatsView: View {
                 ? AgentTheme.textTertiary
                 : AgentTheme.statusAwaiting
             kindBadge(profileName, color: color, maximumTextWidth: 88)
-                .help("Claude-Account-Profil dieser Session")
+                .help("Claude account profile of this session")
         }
     }
 
@@ -3378,7 +3321,7 @@ struct AgentChatsView: View {
         maximumTextWidth: CGFloat? = nil
     ) -> some View {
         Text(text)
-            .font(.system(size: 8, weight: .bold))
+            .font(.system(size: 11, weight: .bold))
             .tracking(0.04)
             .lineLimit(1)
             .truncationMode(.tail)
@@ -3404,7 +3347,7 @@ struct AgentChatsView: View {
                     .font(.system(size: 7, weight: .bold))
                 ProviderIcon(provider: provider, size: 10, tint: AgentTheme.textSecondary)
                 Text(provider.displayName)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(AgentTheme.textSecondary)
             .padding(.horizontal, 7)
@@ -3414,7 +3357,7 @@ struct AgentChatsView: View {
         }
         .buttonStyle(.plain)
         .disabled(selectedProject == nil)
-        .help("Neuen \(provider.displayName) Chat in \(selectedProject?.name ?? "—") öffnen")
+        .help("Open a new \(provider.displayName) chat in \(selectedProject?.name ?? "—")")
     }
 
     private func selectedSessionHeaderControls(_ session: AgentChatSession) -> some View {
@@ -3427,7 +3370,7 @@ struct AgentChatsView: View {
                     .fill(isRunning ? AgentTheme.textSecondary : AgentTheme.textTertiary)
                     .frame(width: 5, height: 5)
                 Text(session.runtimeDisplayText)
-                    .font(.system(size: 9, weight: .regular).monospacedDigit())
+                    .font(.system(size: 11, weight: .regular).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
             }
@@ -3465,7 +3408,7 @@ struct AgentChatsView: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Chat-Aktionen")
+            .help("Chat actions")
         }
     }
 
@@ -3609,7 +3552,7 @@ struct AgentChatsView: View {
         ) { app, error in
             if app == nil || error != nil {
                 DispatchQueue.main.async {
-                    errorMessage = error?.localizedDescription ?? "PhpStorm konnte nicht geöffnet werden."
+                    errorMessage = error?.localizedDescription ?? String(localized: "PhpStorm could not be opened.")
                 }
             }
         }
@@ -3702,7 +3645,7 @@ struct SubAgentLibrarySheet: View {
                 Image(systemName: "books.vertical")
                     .foregroundStyle(AgentTheme.textSecondary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sub-Agent-Bibliothek")
+                    Text("Sub-agent library")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AgentTheme.textPrimary)
                     Text(presentation.projectName.map { "Scope: \($0) + global" } ?? "Scope: global")
@@ -3731,7 +3674,7 @@ struct SubAgentLibrarySheet: View {
 
             HStack {
                 Spacer()
-                Button("Schließen") { onClose() }
+                Button("Close") { onClose() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -3746,10 +3689,10 @@ struct SubAgentLibrarySheet: View {
             Image(systemName: "tray")
                 .font(.system(size: 22))
                 .foregroundStyle(AgentTheme.textTertiary)
-            Text("Keine Sub-Agents gefunden.")
+            Text("No sub-agents found.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AgentTheme.textSecondary)
-            Text("Lege Markdown-Files unter ~/.claude/agents/ an oder im Projekt unter .claude/agents/.")
+            Text("Create Markdown files under ~/.claude/agents/ or in the project under .claude/agents/.")
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .multilineTextAlignment(.center)
@@ -3763,8 +3706,8 @@ struct SubAgentLibrarySheet: View {
     private func sectionView(_ scope: SubAgent.Scope, agents: [SubAgent]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(scope == .project ? "PROJEKT" : "GLOBAL")
-                    .font(.system(size: 9, weight: .bold))
+                (scope == .project ? Text("PROJECT") : Text("GLOBAL"))
+                    .font(.system(size: 11, weight: .bold))
                     .tracking(0.06)
                     .foregroundStyle(scope == .project ? .orange : AgentTheme.textTertiary)
                 Text("· \(agents.count)")
@@ -3786,17 +3729,17 @@ struct SubAgentLibrarySheet: View {
                     .foregroundStyle(AgentTheme.textPrimary)
                 if agent.isolationWorktree {
                     Label("worktree", systemImage: "square.stack.3d.up")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.indigo)
                 }
                 if let mode = agent.permissionMode {
                     Text(mode)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.purple)
                 }
                 if let model = agent.model {
                     Text(model)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AgentTheme.textTertiary)
                 }
                 Spacer()
@@ -3809,12 +3752,12 @@ struct SubAgentLibrarySheet: View {
             }
             if agent.hasToolsRestriction, let tools = agent.toolsRaw {
                 Text("Tools: \(tools)")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(2)
             }
             Text(agent.fileURL.path)
-                .font(.system(size: 9, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -3856,12 +3799,12 @@ struct BackgroundAgentLogsSheet: View {
                 case .loading:
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("Lade Logs …").foregroundStyle(AgentTheme.textSecondary)
+                        Text("Loading logs …").foregroundStyle(AgentTheme.textSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 case .loaded(let output):
                     ScrollView {
-                        Text(output.isEmpty ? "(kein Output)" : output)
+                        (output.isEmpty ? Text("(no output)") : Text(verbatim: output))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(AgentTheme.textPrimary)
                             .textSelection(.enabled)
@@ -3885,7 +3828,7 @@ struct BackgroundAgentLogsSheet: View {
 
             HStack {
                 Spacer()
-                Button("Schließen") { onClose() }
+                Button("Close") { onClose() }
                     .keyboardShortcut(.cancelAction)
             }
         }

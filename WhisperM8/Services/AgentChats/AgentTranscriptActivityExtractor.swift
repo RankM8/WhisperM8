@@ -49,9 +49,9 @@ struct AgentSessionActivity: Equatable, Sendable {
         let raw: String?
         switch status {
         case .stopped:
-            raw = "gestoppt"
+            raw = String(localized: "stopped")
         case .errored:
-            raw = "Fehler"
+            raw = String(localized: "error")
         case .awaitingInput:
             raw = awaitingLine
         case .working:
@@ -59,9 +59,9 @@ struct AgentSessionActivity: Equatable, Sendable {
             case .tool:
                 raw = toolLine
             case .question(let text):
-                raw = "Frage: \(text)"
+                raw = String(localized: "Question: \(text)")
             case .reply:
-                raw = "› schreibt Antwort"
+                raw = String(localized: "› writing reply")
             case nil:
                 raw = nil
             }
@@ -70,7 +70,7 @@ struct AgentSessionActivity: Equatable, Sendable {
             case .reply(let text):
                 raw = text
             case .question(let text):
-                raw = "Frage: \(text)"
+                raw = String(localized: "Question: \(text)")
             case .tool, nil:
                 // Ein Tool ohne Antwort danach im Ruhezustand (Abbruch,
                 // Stau-Heilung) wäre veraltet — lieber nichts.
@@ -83,10 +83,10 @@ struct AgentSessionActivity: Equatable, Sendable {
     private var awaitingLine: String? {
         switch awaitingKind {
         case .planApproval:
-            return "Plan zur Freigabe"
+            return String(localized: "Plan awaiting approval")
         case .question:
-            if case .question(let text) = detail { return "Frage: \(text)" }
-            return "Frage"
+            if case .question(let text) = detail { return String(localized: "Question: \(text)") }
+            return String(localized: "Question")
         case .permission:
             // Der Tail kennt das Argument, der Hook den sicheren Namen. Passen
             // beide zusammen, gewinnt die ausführliche Form. Der Hook liefert
@@ -95,13 +95,13 @@ struct AgentSessionActivity: Equatable, Sendable {
             let hookName = awaitingToolName.map(AgentTranscriptActivityExtractor.displayToolName)
             if case .tool(let name, let argument) = detail,
                hookName == nil || hookName == name {
-                return "Freigabe: " + [name, argument].compactMap { $0 }.joined(separator: " ")
+                return String(localized: "Approval: \([name, argument].compactMap { $0 }.joined(separator: " "))")
             }
-            return hookName.map { "Freigabe: \($0)" } ?? "Freigabe"
+            return hookName.map { String(localized: "Approval: \($0)") } ?? String(localized: "Approval")
         case nil:
             // Codex (keine Hooks): Art unbekannt, nur was der Tail weiß.
             switch detail {
-            case .question(let text): return "Frage: \(text)"
+            case .question(let text): return String(localized: "Question: \(text)")
             case .tool: return toolLine
             case .reply, nil: return nil
             }
@@ -110,7 +110,7 @@ struct AgentSessionActivity: Equatable, Sendable {
 
     private var toolLine: String? {
         guard case .tool(let name, let argument) = detail else { return nil }
-        if name == "ExitPlanMode" { return "Plan zur Freigabe" }
+        if name == "ExitPlanMode" { return String(localized: "Plan awaiting approval") }
         return "› " + [name, argument].compactMap { $0 }.joined(separator: " ")
     }
 }

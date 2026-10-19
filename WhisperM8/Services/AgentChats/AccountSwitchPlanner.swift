@@ -26,10 +26,10 @@ enum AccountSwitchPlanner {
 
         var label: String {
             switch self {
-            case .turnRunning: return "Arbeitet — wechselt nach dem Turn"
-            case .awaitingInput: return "Wartet auf deine Antwort — wechselt danach"
-            case .unsentInput: return "Text im Eingabefeld — wechselt nach dem Absenden"
-            case .backgroundTasks: return "Hintergrund-Tasks laufen noch — wechselt danach"
+            case .turnRunning: return String(localized: "Working — switches after the turn")
+            case .awaitingInput: return String(localized: "Waiting for your answer — switches afterwards")
+            case .unsentInput: return String(localized: "Text in the input field — switches after sending")
+            case .backgroundTasks: return String(localized: "Background tasks still running — switches afterwards")
             }
         }
     }
@@ -45,8 +45,8 @@ enum AccountSwitchPlanner {
 
         var label: String {
             switch self {
-            case .ownSession: return "eigene Session — kann sich nicht selbst anhalten"
-            case .trustMissing: return "Ordner im Zielkonto nicht freigegeben — nach dem Turn erneut wechseln"
+            case .ownSession: return String(localized: "own session — cannot stop itself")
+            case .trustMissing: return String(localized: "folder not approved in the target account — switch again after the turn")
             }
         }
     }

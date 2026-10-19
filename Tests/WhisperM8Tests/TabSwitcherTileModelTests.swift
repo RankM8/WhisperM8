@@ -27,12 +27,12 @@ final class TabSwitcherTileModelTests: XCTestCase {
 
     func testEveryStatusHasWordAndSymbol() {
         let expected: [(AgentSessionRuntimeStatus?, String, String)] = [
-            (.working, "arbeitet", "circle.fill"),
-            (.awaitingInput, "wartet", "circle.lefthalf.filled"),
-            (.idle, "fertig", "circle"),
-            (.stopped, "gestoppt", "stop.circle"),
-            (.errored, "Fehler", "exclamationmark.circle.fill"),
-            (nil, "gestoppt", "stop.circle"),
+            (.working, "working", "circle.fill"),
+            (.awaitingInput, "waiting", "circle.lefthalf.filled"),
+            (.idle, "done", "circle"),
+            (.stopped, "stopped", "stop.circle"),
+            (.errored, "error", "exclamationmark.circle.fill"),
+            (nil, "stopped", "stop.circle"),
         ]
         for (status, word, symbol) in expected {
             let tile = model(status: status)
@@ -48,9 +48,9 @@ final class TabSwitcherTileModelTests: XCTestCase {
     // MARK: - Dauer
 
     func testRunningStatesShowElapsedSinceStatusChange() {
-        XCTAssertEqual(model(status: .working, since: 30).header(detail: .full), "arbeitet · 30 s")
-        XCTAssertEqual(model(status: .working, since: 150).header(detail: .full), "arbeitet · 2 min")
-        XCTAssertEqual(model(status: .awaitingInput, since: 4 * 60 + 59).header(detail: .full), "wartet · 4 min")
+        XCTAssertEqual(model(status: .working, since: 30).header(detail: .full), "working · 30 s")
+        XCTAssertEqual(model(status: .working, since: 150).header(detail: .full), "working · 2 min")
+        XCTAssertEqual(model(status: .awaitingInput, since: 4 * 60 + 59).header(detail: .full), "waiting · 4 min")
         XCTAssertEqual(model(status: .working, since: 3 * 3600 + 10).durationText, "3 h")
         XCTAssertEqual(model(status: .working, since: 2 * 86_400 + 5).durationText, "2 d")
     }
@@ -59,26 +59,26 @@ final class TabSwitcherTileModelTests: XCTestCase {
         // lastActivityAt ist kein Startpunkt des Arbeitens — lieber keine Dauer.
         let tile = model(status: .working, lastActivity: 600)
         XCTAssertNil(tile.durationText)
-        XCTAssertEqual(tile.header(detail: .full), "arbeitet")
+        XCTAssertEqual(tile.header(detail: .full), "working")
     }
 
     func testRestingStatesShowTimeAgo() {
-        XCTAssertEqual(model(status: .idle, since: 12 * 60).header(detail: .full), "fertig · vor 12 min")
-        XCTAssertEqual(model(status: .idle, since: 20).durationText, "gerade eben")
-        XCTAssertEqual(model(status: .errored, since: 2 * 3600).durationText, "vor 2 h")
+        XCTAssertEqual(model(status: .idle, since: 12 * 60).header(detail: .full), "done · 12 min ago")
+        XCTAssertEqual(model(status: .idle, since: 20).durationText, "just now")
+        XCTAssertEqual(model(status: .errored, since: 2 * 3600).durationText, "2 h ago")
     }
 
     func testRestingStatesFallBackToLastActivity() {
-        XCTAssertEqual(model(status: .stopped, lastActivity: 5 * 60).durationText, "vor 5 min")
-        XCTAssertEqual(model(status: nil, lastActivity: 90).durationText, "vor 1 min")
+        XCTAssertEqual(model(status: .stopped, lastActivity: 5 * 60).durationText, "5 min ago")
+        XCTAssertEqual(model(status: nil, lastActivity: 90).durationText, "1 min ago")
         // statusSince gewinnt vor lastActivityAt.
-        XCTAssertEqual(model(status: .idle, since: 60, lastActivity: 3600).durationText, "vor 1 min")
+        XCTAssertEqual(model(status: .idle, since: 60, lastActivity: 3600).durationText, "1 min ago")
         XCTAssertNil(model(status: .idle).durationText)
     }
 
     func testNegativeIntervalsClampToZero() {
         XCTAssertEqual(model(status: .working, since: -30).durationText, "0 s")
-        XCTAssertEqual(model(status: .idle, since: -30).durationText, "gerade eben")
+        XCTAssertEqual(model(status: .idle, since: -30).durationText, "just now")
     }
 
     func testDurationFormattingBoundaries() {
@@ -88,15 +88,15 @@ final class TabSwitcherTileModelTests: XCTestCase {
         XCTAssertEqual(TabSwitcherTileModel.elapsed(3600), "1 h")
         XCTAssertEqual(TabSwitcherTileModel.elapsed(86_399), "23 h")
         XCTAssertEqual(TabSwitcherTileModel.elapsed(86_400), "1 d")
-        XCTAssertEqual(TabSwitcherTileModel.ago(59), "gerade eben")
-        XCTAssertEqual(TabSwitcherTileModel.ago(60), "vor 1 min")
+        XCTAssertEqual(TabSwitcherTileModel.ago(59), "just now")
+        XCTAssertEqual(TabSwitcherTileModel.ago(60), "1 min ago")
     }
 
     func testStatusAndTitleStageDropsDuration() {
         let tile = model(status: .working, since: 150)
-        XCTAssertEqual(tile.header(detail: .full), "arbeitet · 2 min")
-        XCTAssertEqual(tile.header(detail: .withoutActivity), "arbeitet · 2 min")
-        XCTAssertEqual(tile.header(detail: .statusAndTitle), "arbeitet")
+        XCTAssertEqual(tile.header(detail: .full), "working · 2 min")
+        XCTAssertEqual(tile.header(detail: .withoutActivity), "working · 2 min")
+        XCTAssertEqual(tile.header(detail: .statusAndTitle), "working")
     }
 
     // MARK: - Stand-Zeile
@@ -113,7 +113,7 @@ final class TabSwitcherTileModelTests: XCTestCase {
         XCTAssertEqual(idle.activityLine, "Alle Tests grün.")
 
         let plan = model(status: .awaitingInput, activity: AgentSessionActivity(awaitingKind: .planApproval))
-        XCTAssertEqual(plan.activityLine, "Plan zur Freigabe")
+        XCTAssertEqual(plan.activityLine, "Plan awaiting approval")
     }
 
     func testActivityLineRepeatingStatusWordIsDropped() {
