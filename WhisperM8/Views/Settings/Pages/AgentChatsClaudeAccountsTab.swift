@@ -520,13 +520,16 @@ struct AgentChatsClaudeAccountsTab: View {
     /// Session-Stempel im Store nachgezogen. Blockiert, solange irgendeine
     /// Session dieses Profils läuft — deren CLAUDE_CONFIG_DIR zeigt auf den
     /// alten Pfad.
+    private func profileHasRunningSession(_ name: String) -> Bool {
+        ClaudeProfileRunningGuard.hasRunningSession(
+            profile: name,
+            sessions: AgentSessionStore().loadWorkspace().sessions,
+            runningIDs: AgentTerminalRegistry.shared.activeSessionIDs)
+    }
+
     private func renameProfile(_ profile: ClaudeAccountProfile) {
         let store = AgentSessionStore()
-        let runningIDs = AgentTerminalRegistry.shared.activeSessionIDs
-        let hasRunningSession = store.loadWorkspace().sessions.contains {
-            $0.claudeProfileName == profile.name && runningIDs.contains($0.id)
-        }
-        guard !hasRunningSession else {
+        guard !profileHasRunningSession(profile.name) else {
             showFeedback("“\(profile.name)” has running sessions — stop them before renaming.", tone: .warning)
             return
         }
@@ -610,6 +613,10 @@ struct AgentChatsClaudeAccountsTab: View {
     }
 
     private func removeProfile(_ profile: ClaudeAccountProfile) {
+        guard !profileHasRunningSession(profile.name) else {
+            showFeedback("“\(profile.name)” has running sessions — stop them before removing the profile.", tone: .warning)
+            return
+        }
         // Plugins, die über diesen Ordner registriert sind, wären nach dem
         // Entfernen für alle Konten kaputt — vorher abbrechen (Befund 11.10.2026).
         let pluginReferences = ClaudeAccountProfiles().pluginRegistryReferences(toProfile: profile.name)
@@ -626,6 +633,12 @@ struct AgentChatsClaudeAccountsTab: View {
         alert.addButton(withTitle: "Move to Trash")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // Nach der Bestätigung frisch prüfen: der laufende Prozess behielte
+        // sonst einen Config-Root, dessen Verlauf im Papierkorb liegt (LR-KO-005).
+        guard !profileHasRunningSession(profile.name) else {
+            showFeedback("“\(profile.name)” has running sessions — stop them before removing the profile.", tone: .warning)
+            return
+        }
 
         do {
             // Papierkorb statt endgültigem Löschen (Review-Befund 2026-07-13):
@@ -643,5 +656,13 @@ struct AgentChatsClaudeAccountsTab: View {
     private func showFeedback(_ message: String, tone: SettingsHelpText.Tone) {
         feedback = message
         feedbackTone = tone
+    }
+}
+
+/// Läuft gerade ein Chat unter diesem Claude-Profil? Gilt für Umbenennen und
+/// Entfernen gleich (LR-KO-005).
+enum ClaudeProfileRunningGuard {
+    static func hasRunningSession(profile: String, sessions: [AgentChatSession], runningIDs: Set<UUID>) -> Bool {
+        sessions.contains { $0.claudeProfileName == profile && runningIDs.contains($0.id) }
     }
 }

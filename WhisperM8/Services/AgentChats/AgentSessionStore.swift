@@ -74,7 +74,11 @@ struct AgentSessionStore {
                 let data = try Data(contentsOf: uiStateFileURL)
                 state = try JSONDecoder().decode(AgentUIState.self, from: data)
             } catch {
-                Logger.debug("AgentUIState load failed: \(error.localizedDescription) — falling back to first-load migration")
+                // Erst sichern, dann ersetzen: Pins, benannte Grid-Workspaces,
+                // Sekundärfenster und Tab-Reihenfolge wären sonst still weg
+                // (LR-AU-007).
+                backupUIStateFile(reason: "decode-failed")
+                Logger.agentStore.notice("ui_state_decode_failed error=\(error.localizedDescription, privacy: .public) — Backup angelegt, Erst-Migration")
                 state = AgentUIState.initialMigration(from: workspace)
                 needsPersist = true
             }
@@ -89,6 +93,11 @@ struct AgentSessionStore {
         // Migration einmalig festschreiben.
         if state.schemaVersion < AgentUIState.currentSchemaVersion {
             needsPersist = true
+        }
+        // Datei einer neueren App-Version (Downgrade): unbekannte Felder
+        // gingen beim kanonischen Neuschreiben verloren — vorher sichern.
+        if state.schemaVersion > AgentUIState.currentSchemaVersion {
+            backupUIStateFile(reason: "newer-schema-\(state.schemaVersion)")
         }
         // v3→v4 übernimmt die bisherigen globalen @AppStorage-Splits in die
         // migrierten Workspace-Entities (0 = Key existiert nicht → Default).
@@ -128,6 +137,26 @@ struct AgentSessionStore {
             }
         }
         return state
+    }
+
+    /// Kopie der aktuellen UI-State-Datei neben das Original
+    /// (`agent-ui-state.json.<grund>-<zeit>`), bevor sie ersetzt wird.
+    @discardableResult
+    func backupUIStateFile(reason: String, now: Date = Date()) -> URL? {
+        guard FileManager.default.fileExists(atPath: uiStateFileURL.path) else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let backup = uiStateFileURL.deletingLastPathComponent()
+            .appendingPathComponent("\(uiStateFileURL.lastPathComponent).\(reason)-\(formatter.string(from: now))")
+        guard !FileManager.default.fileExists(atPath: backup.path) else { return backup }
+        do {
+            try FileManager.default.copyItem(at: uiStateFileURL, to: backup)
+            return backup
+        } catch {
+            Logger.agentStore.error("ui_state_backup_failed error=\(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// Atomisches Schreiben des UI-States. Wird vom AgentChatsView nach

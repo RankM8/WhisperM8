@@ -157,6 +157,10 @@ extension AgentChatsView {
         guard let direction = TabNavShortcut.direction(keyCode: event.keyCode, modifiers: event.modifierFlags) else {
             return event
         }
+        // In Textfeldern (Sidebar-Filter, Archiv-Suche) markiert ⌘⇧←/→ Text —
+        // dort nicht als Tab-Wechsel schlucken (LR-AU-010). Das Terminal ist
+        // kein NSText und behält die Kürzel.
+        guard TabNavShortcut.shouldHandle(firstResponder: hostWindow.firstResponder) else { return event }
         selectAdjacentTab(direction)
         return nil
     }

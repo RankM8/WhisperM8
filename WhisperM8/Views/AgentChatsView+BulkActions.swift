@@ -12,7 +12,18 @@ extension AgentChatsView {
 
     /// Zielgruppe einer Bulk-Aktion (alle Ausgewählten bzw. nur `id`).
     func actionGroup(forID id: UUID) -> [UUID] {
-        multiSelection.contains(id) && multiSelection.count > 1 ? Array(multiSelection) : [id]
+        guard multiSelection.contains(id), multiSelection.count > 1 else { return [id] }
+        return Self.orderedSelection(multiSelection, visualOrder: visualTabOrderIDs)
+    }
+
+    /// Auswahl in der sichtbaren Tab-Reihenfolge, Ausgewählte ohne Tab dahinter
+    /// (stabil sortiert). Ein Set hat keine Ordnung — Mehrfach-Anpinnen
+    /// vertauschte sonst die Reihenfolge und wechselte sie zwischen Starts
+    /// (LR-AU-012).
+    static func orderedSelection(_ selection: Set<UUID>, visualOrder: [UUID]) -> [UUID] {
+        let inTabs = visualOrder.filter(selection.contains)
+        let rest = selection.subtracting(inTabs).sorted { $0.uuidString < $1.uuidString }
+        return inTabs + rest
     }
 
     /// Count-abhängiges Label (Format mit `%d`).

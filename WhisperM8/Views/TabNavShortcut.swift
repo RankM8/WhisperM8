@@ -23,4 +23,10 @@ enum TabNavShortcut {
         default: return nil
         }
     }
+
+    /// Tab-Kürzel nur, wenn kein Texteditor (Feldeditor eines TextFields,
+    /// NSTextView) den Fokus hat.
+    static func shouldHandle(firstResponder: NSResponder?) -> Bool {
+        !(firstResponder is NSText)
+    }
 }
