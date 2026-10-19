@@ -707,7 +707,9 @@ private func withIsolatedPreferencesAndDefaults(_ body: (AppPreferences, UserDef
     defaults.removePersistentDomain(forName: suiteName)
 
     let original = AppPreferences.shared
-    let preferences = AppPreferences(defaults: defaults)
+    // Systemsprache fest: die Diktiersprache folgt ihr ohne gespeicherten Wert
+    // (LR-DIK-024) — die CI-Maschine läuft auf Englisch.
+    let preferences = AppPreferences(defaults: defaults, preferredLanguages: ["de-DE"])
     AppPreferences.shared = preferences
     defer {
         AppPreferences.shared = original
