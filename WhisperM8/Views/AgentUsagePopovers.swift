@@ -99,10 +99,7 @@ private struct UsageGaugeLine: View {
 
     static func resetText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-        return "→ \(formatter.string(from: resetsAt))"
+        return "→ \(UsageResetDateFormat.short(resetsAt))"
     }
 }
 

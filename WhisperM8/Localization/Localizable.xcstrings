@@ -1421,6 +1421,16 @@
         }
       }
     },
+    "Armed: toggled %lld×, skipped %lld×": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scharf: %1$lld× umgeschaltet, %2$lld× übersprungen"
+          }
+        }
+      }
+    },
     "Assumed microphone state": {
       "localizations": {
         "de": {
@@ -2711,6 +2721,26 @@
         }
       }
     },
+    "Codex microphone is actually …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex-Mikrofon ist tatsächlich …"
+          }
+        }
+      }
+    },
+    "Codex not running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex läuft nicht"
+          }
+        }
+      }
+    },
     "Codex receives extracted frames as images today. Direct video upload is not exposed by codex exec; Video keeps clip paths in the prompt and sends frames as fallback.": {
       "localizations": {
         "de": {
@@ -3747,6 +3777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Probelauf aktiv – Kommandos werden erkannt, Codex wird aber nie umgeschaltet."
+          }
+        }
+      }
+    },
+    "Dry run: would press %lld×, skipped %lld×": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trockenlauf: %1$lld× würde drücken, %2$lld× übersprungen"
           }
         }
       }
@@ -5167,6 +5207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sprache"
+          }
+        }
+      }
+    },
+    "Last at %@: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuletzt %1$@: %2$@"
           }
         }
       }
@@ -9030,6 +9080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Position zurücksetzen"
+          }
+        }
+      }
+    },
+    "Reset counters": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zähler zurücksetzen"
           }
         }
       }
@@ -13034,6 +13094,16 @@
         }
       }
     },
+    "armed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scharf"
+          }
+        }
+      }
+    },
     "awaiting": {
       "localizations": {
         "de": {
@@ -13404,6 +13474,26 @@
         }
       }
     },
+    "mic muted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikro stumm"
+          }
+        }
+      }
+    },
+    "mic open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikro offen"
+          }
+        }
+      }
+    },
     "missing in %@": {
       "localizations": {
         "de": {
@@ -13440,6 +13530,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kein Login-Token im Schlüsselbund. Melde dich erneut an (⋯-Menü)"
+          }
+        }
+      }
+    },
+    "no voice session": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "keine Sprachsitzung"
           }
         }
       }
@@ -13524,6 +13624,16 @@
         }
       }
     },
+    "paused (dictation running)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pausiert (Diktat läuft)"
+          }
+        }
+      }
+    },
     "rate-limited by Anthropic — try again in a few minutes": {
       "localizations": {
         "de": {
@@ -13580,6 +13690,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ton aus"
+          }
+        }
+      }
+    },
+    "state unknown": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zustand unbekannt"
           }
         }
       }
@@ -13960,6 +14080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "▸ %lld ältere"
+          }
+        }
+      }
+    },
+    "⚠️ %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⚠️ %@"
           }
         }
       }

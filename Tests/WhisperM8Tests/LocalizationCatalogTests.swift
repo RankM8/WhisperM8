@@ -226,6 +226,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/TabSwitcherTileModel.swift",
         "WhisperM8/Views/Workspace/WorkspaceLayoutView.swift",
         "WhisperM8/Views/WorkspacePersistenceBanner.swift",
+        "WhisperM8/Views/VoiceGateMenuSection.swift",
         "WhisperM8/Views/AgentChatsView+AdvancedMenu.swift",
         "WhisperM8/Views/AgentChatsView+Confirmations.swift",
         "WhisperM8/Services/AgentChats/ChatsUIStrings.swift",
