@@ -27,7 +27,26 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     private var recentRequests: [String: IdempotencyState] = [:]
     private let idempotencyWindow: TimeInterval = 60
 
+    /// Reine Lese-Methoden: brauchen keine verifizierte Identität.
+    static let readOnlyMethods: Set<String> = ["ping", "sessions.live", "window.list", "gridWorkspace.list"]
+
+    /// Behauptet ein mutierender Aufruf eine Session-Identität (`sessionID`),
+    /// beweist aber kein gültiges Token (falsch, nie ausgegeben oder mit dem
+    /// PTY-Ende widerrufen), wird er abgelehnt statt als „unverified"
+    /// ausgeführt (LR-CLI-005). Aufrufe ganz ohne `sessionID` (User im Terminal,
+    /// Skripte) bleiben wie bisher erlaubt und erscheinen als „external".
+    static func rejectsUnverifiedActor(_ request: ChatsControlRequest) -> Bool {
+        guard !readOnlyMethods.contains(request.method),
+              let idString = request.actor.sessionID else { return false }
+        guard let id = UUID(uuidString: idString) else { return true }
+        return !AgentSessionTokenRegistry.shared.verify(sessionID: id, token: request.actor.token)
+    }
+
     func handle(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        if Self.rejectsUnverifiedActor(request) {
+            return .failure(requestID: request.requestID, code: .invalid,
+                            message: "Session-Identität nicht belegt (Token fehlt, falsch oder widerrufen) — Befehl aus der laufenden Chat-Session der App ausführen.")
+        }
         switch request.method {
         case "ping":
             return await pingResponse(request)

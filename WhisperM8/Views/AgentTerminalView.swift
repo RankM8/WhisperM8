@@ -682,6 +682,8 @@ final class TerminalKeyboardShortcutHandler {
 final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @preconcurrency LocalProcessTerminalViewDelegate {
     let id = UUID()
     let sessionID: UUID
+    /// Control-Token dieses PTY-Laufs (für den Widerruf beim Ende).
+    private var issuedControlToken: String?
     let terminal = QuietableTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
@@ -951,6 +953,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // der Aufruf wirklich aus dieser PTY stammt. Beide gewinnen gegen
         // etwaige gleichnamige Basis-/Override-Einträge (zuletzt gewinnt).
         let token = AgentSessionTokenRegistry.shared.issueToken(for: sessionID)
+        issuedControlToken = token
         environment.removeAll { entry in
             entry.hasPrefix("WHISPERM8_SESSION_ID=") || entry.hasPrefix("WHISPERM8_SESSION_TOKEN=")
         }
@@ -1154,6 +1157,12 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         Task { @MainActor in
             self.exitCode = exitCode
             self.isRunning = false
+            // Token mit der PTY widerrufen (LR-CLI-005): ein Prozess, der den
+            // Lauf überlebt, darf danach nicht mehr als diese Session auftreten.
+            if let token = self.issuedControlToken {
+                AgentSessionTokenRegistry.shared.revoke(sessionID: self.sessionID, ifToken: token)
+                self.issuedControlToken = nil
+            }
             // Selbst-Exit (User tippt Ctrl+C/exit in der TUI): letzte
             // gepufferte Bytes verarbeiten, dann den Terminal-Stand sichern.
             // Nach terminate() ist das ein No-op (didCaptureSnapshot).

@@ -43,6 +43,15 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Widerruft das Token nur, wenn es noch DAS ist, das der endende PTY-Lauf
+    /// bekam — ein schon neu gestarteter Lauf derselben Session (Resume) hat ein
+    /// frisches Token, das ein spätes `processTerminated` nicht treffen darf.
+    func revoke(sessionID: UUID, ifToken token: String) {
+        lock.lock()
+        if tokensBySession[sessionID] == token { tokensBySession.removeValue(forKey: sessionID) }
+        lock.unlock()
+    }
+
     private static func randomToken() -> String {
         var bytes = [UInt8](repeating: 0, count: 24)
         let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
