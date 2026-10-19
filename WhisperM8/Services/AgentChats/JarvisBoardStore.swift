@@ -98,12 +98,53 @@ struct JarvisBoardEntry: Codable, Equatable {
     }
 }
 
+/// Dekodiert ein Array Element für Element und überspringt kaputte.
+private struct LossyArray<Element: Decodable>: Decodable {
+    let elements: [Element]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var result: [Element] = []
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                result.append(element)
+            } else {
+                // Platz überspringen, sonst bleibt der Cursor stehen.
+                _ = try? container.decode(DiscardedValue.self)
+            }
+        }
+        elements = result
+    }
+
+    private struct DiscardedValue: Decodable {}
+}
+
 /// Ein Board je Jarvis-Session (`owner` = deren WhisperM8-Session-ID).
 struct JarvisBoard: Codable, Equatable {
     var owner: UUID
     var isActive: Bool
     var updatedAt: Date
     var entries: [JarvisBoardEntry]
+
+    init(owner: UUID, isActive: Bool, updatedAt: Date, entries: [JarvisBoardEntry]) {
+        self.owner = owner
+        self.isActive = isActive
+        self.updatedAt = updatedAt
+        self.entries = entries
+    }
+
+    private enum CodingKeys: String, CodingKey { case owner, isActive, updatedAt, entries }
+
+    /// Einträge einzeln tolerant: ein Eintrag ohne gültige `sessionID` fällt
+    /// weg, die übrigen bleiben (LR-AU-017) — sonst machte er das ganze Board
+    /// unlesbar und die Quarantäne risse alle Notizen mit.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        owner = try container.decode(UUID.self, forKey: .owner)
+        isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? false
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
+        entries = try container.decodeIfPresent(LossyArray<JarvisBoardEntry>.self, forKey: .entries)?.elements ?? []
+    }
 
     /// Einträge in Anzeige-Reihenfolge: Ampel-Rang, innerhalb ältestes
     /// `updatedAt` zuerst (was am längsten liegt, steht oben).
@@ -118,6 +159,20 @@ struct JarvisBoardFile: Codable, Equatable {
 
     var schema: String = JarvisBoardFile.currentSchema
     var boards: [JarvisBoard] = []
+
+    init(schema: String = JarvisBoardFile.currentSchema, boards: [JarvisBoard] = []) {
+        self.schema = schema
+        self.boards = boards
+    }
+
+    private enum CodingKeys: String, CodingKey { case schema, boards }
+
+    /// Boards einzeln tolerant (siehe `JarvisBoard.init(from:)`).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decodeIfPresent(String.self, forKey: .schema) ?? Self.currentSchema
+        boards = try container.decodeIfPresent(LossyArray<JarvisBoard>.self, forKey: .boards)?.elements ?? []
+    }
 
     func board(owner: UUID) -> JarvisBoard? {
         boards.first { $0.owner == owner }
@@ -350,9 +405,11 @@ final class JarvisBoardStore: @unchecked Sendable {
 
     enum StoreError: LocalizedError {
         case writeFailed(String)
+        case readFailed(String)
 
         var errorDescription: String? {
             switch self {
+            case .readFailed(let message): return "jarvis-board.json nicht lesbar (nichts überschrieben): \(message)"
             case .writeFailed(let message): return "jarvis-board.json nicht schreibbar: \(message)"
             }
         }
@@ -392,7 +449,7 @@ final class JarvisBoardStore: @unchecked Sendable {
                 _ body: (inout JarvisBoardFile, Date) -> JarvisBoardChange) throws -> JarvisBoardChange {
         lock.lock()
         defer { lock.unlock() }
-        var file = loadForWriting()
+        var file = try loadForWriting()
         let change = body(&file, now)
         guard change.changed else { return change }
         try write(file)
@@ -401,13 +458,31 @@ final class JarvisBoardStore: @unchecked Sendable {
         return change
     }
 
-    /// Wie `load`, aber eine unlesbare Datei wird beiseitegelegt statt still
-    /// überschrieben — so bleibt sie für eine Nachanalyse erhalten.
-    private func loadForWriting() -> JarvisBoardFile {
-        guard let data = try? Data(contentsOf: fileURL) else { return JarvisBoardFile() }
+    /// Wie `load`, aber ohne Überschreiben-Risiko: Fehlt die Datei (ENOENT),
+    /// gibt es ein leeres Board; jeder andere Lesefehler wirft, damit ein
+    /// transienter Fehler (EPERM, I/O) das Board nicht durch ein leeres ersetzt.
+    /// Eine lesbare, aber nicht dekodierbare Datei wird mit Zeitstempel im
+    /// Namen beiseitegelegt — frühere Sicherungen bleiben erhalten.
+    private func loadForWriting() throws -> JarvisBoardFile {
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            let ns = error as NSError
+            let missing = (ns.domain == NSCocoaErrorDomain && ns.code == NSFileReadNoSuchFileError)
+                || (ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOENT))
+                || (ns.domain == NSCocoaErrorDomain && ns.code == NSFileNoSuchFileError)
+            if missing { return JarvisBoardFile() }
+            throw StoreError.readFailed(error.localizedDescription)
+        }
         if let file = try? Self.decoder.decode(JarvisBoardFile.self, from: data) { return file }
-        let quarantine = fileURL.appendingPathExtension("corrupt")
-        try? FileManager.default.removeItem(at: quarantine)
+        let stamp = Int(Date().timeIntervalSince1970 * 1000)
+        var quarantine = fileURL.appendingPathExtension("corrupt-\(stamp)")
+        var counter = 1
+        while FileManager.default.fileExists(atPath: quarantine.path) {
+            quarantine = fileURL.appendingPathExtension("corrupt-\(stamp)-\(counter)")
+            counter += 1
+        }
         try? FileManager.default.moveItem(at: fileURL, to: quarantine)
         Logger.info("[JarvisBoard] unlesbare Datei nach \(quarantine.lastPathComponent) verschoben")
         return JarvisBoardFile()

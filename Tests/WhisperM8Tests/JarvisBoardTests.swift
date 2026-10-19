@@ -275,9 +275,54 @@ final class JarvisBoardStoreTests: XCTestCase {
         _ = try makeStore().mutate { file, now in
             JarvisBoardLogic.setActive(&file, owner: owner, active: true, now: now)
         }
-        let quarantine = boardURL.appendingPathExtension("corrupt")
-        XCTAssertEqual(try String(contentsOf: quarantine, encoding: .utf8), "kein json")
+        let quarantined = try quarantineFiles()
+        XCTAssertEqual(quarantined.count, 1)
+        XCTAssertEqual(try String(contentsOf: quarantined[0], encoding: .utf8), "kein json")
         XCTAssertEqual(JarvisBoardStore.load(fileURL: boardURL).board(owner: owner)?.isActive, true)
+    }
+
+    private func quarantineFiles() throws -> [URL] {
+        try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.hasPrefix("jarvis-board.json.corrupt") }
+    }
+
+    /// LR-AU-017: ein zweiter Defekt darf die erste Sicherung nicht löschen.
+    func testSecondCorruptionKeepsFirstQuarantine() throws {
+        for text in ["erster Defekt", "zweiter Defekt"] {
+            try Data(text.utf8).write(to: boardURL)
+            _ = try makeStore().mutate { file, now in
+                JarvisBoardLogic.setActive(&file, owner: owner, active: true, now: now)
+            }
+        }
+        let texts = try quarantineFiles().map { try String(contentsOf: $0, encoding: .utf8) }.sorted()
+        XCTAssertEqual(texts, ["erster Defekt", "zweiter Defekt"])
+    }
+
+    /// LR-AU-017: ein nicht lesbarer (nicht fehlender) File wird nie überschrieben.
+    func testUnreadableFileThrowsAndStaysUntouched() throws {
+        try Data("{\"schema\":\"wm8.board/1\",\"boards\":[]}".utf8).write(to: boardURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: boardURL.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: boardURL.path) }
+        try XCTSkipIf(FileManager.default.isReadableFile(atPath: boardURL.path), "läuft als root")
+        XCTAssertThrowsError(try makeStore().mutate { file, now in
+            JarvisBoardLogic.setActive(&file, owner: owner, active: true, now: now)
+        })
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: boardURL.path)
+        XCTAssertEqual(try String(contentsOf: boardURL, encoding: .utf8), "{\"schema\":\"wm8.board/1\",\"boards\":[]}")
+        XCTAssertTrue(try quarantineFiles().isEmpty)
+    }
+
+    /// LR-AU-017: ein Eintrag ohne gültige sessionID kippt nicht das Board.
+    func testOneBrokenEntryDoesNotDestroyTheBoard() throws {
+        let good = UUID()
+        let json = """
+        {"schema":"wm8.board/1","boards":[{"owner":"\(owner.uuidString)","isActive":true,"updatedAt":"2026-10-01T10:00:00Z",
+        "entries":[{"sessionID":"kein-uuid","light":"running"},{"sessionID":"\(good.uuidString)","light":"needsYou","mission":"M"}]}]}
+        """
+        try Data(json.utf8).write(to: boardURL)
+        let board = JarvisBoardStore.load(fileURL: boardURL).board(owner: owner)
+        XCTAssertEqual(board?.entries.map(\.sessionID), [good])
+        XCTAssertEqual(board?.entries.first?.mission, "M")
     }
 }
 
