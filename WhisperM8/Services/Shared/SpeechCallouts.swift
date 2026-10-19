@@ -1,4 +1,5 @@
 import AVFoundation
+import NaturalLanguage
 import Foundation
 import Observation
 
@@ -109,7 +110,7 @@ final class SystemSpeechCalloutEngine: NSObject, SpeechCalloutEngine, AVSpeechSy
 
     func speak(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = Self.voice(identifier: voiceIdentifier())
+        utterance.voice = Self.voice(identifier: voiceIdentifier(), text: text)
         synthesizer.speak(utterance)
     }
 
@@ -117,15 +118,41 @@ final class SystemSpeechCalloutEngine: NSObject, SpeechCalloutEngine, AVSpeechSy
         synthesizer.stopSpeaking(at: .immediate)
     }
 
-    /// Gewählte Stimme, sonst die beste installierte deutsche.
-    static func voice(identifier: String?) -> AVSpeechSynthesisVoice? {
+    /// Gewählte Stimme, sonst die beste installierte Stimme in der Sprache des
+    /// Ansagetexts (LR-SH-017: eine deutsche Stimme las englische Ansagen
+    /// schwer verständlich vor). Unklare Sprache → Systemsprache, Deutsch als
+    /// letzter Rückfall.
+    static func voice(identifier: String?, text: String = "") -> AVSpeechSynthesisVoice? {
         if let identifier, let voice = AVSpeechSynthesisVoice(identifier: identifier) { return voice }
-        let german = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("de") }
-        let best = german.max { lhs, rhs in
-            precedes(lhs: (lhs.identifier, lhs.language, lhs.quality.rawValue),
-                     rhs: (rhs.identifier, rhs.language, rhs.quality.rawValue))
+        let language = languageCode(for: text)
+        let voices = AVSpeechSynthesisVoice.speechVoices()
+        let candidates = voices.map { ($0.identifier, $0.language, $0.quality.rawValue) }
+        if let chosen = bestVoiceIdentifier(language: language, voices: candidates),
+           let voice = AVSpeechSynthesisVoice(identifier: chosen) {
+            return voice
         }
-        return best ?? AVSpeechSynthesisVoice(language: "de-DE")
+        return AVSpeechSynthesisVoice(language: language == "de" ? "de-DE" : language)
+            ?? AVSpeechSynthesisVoice(language: "de-DE")
+    }
+
+    /// Sprache des Ansagetexts (zweibuchstabig), sonst die Systemsprache.
+    static func languageCode(for text: String, preferred: [String] = Locale.preferredLanguages) -> String {
+        let system = String((preferred.first ?? "de").prefix(2))
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        guard let (language, confidence) = recognizer.languageHypotheses(withMaximum: 1).first,
+              confidence >= 0.6 else { return system }
+        return String(language.rawValue.prefix(2))
+    }
+
+    /// Beste Stimme einer Sprache aus (Kennung, Sprache, Qualität); fällt auf
+    /// Deutsch zurück, wenn für die Sprache keine installiert ist.
+    static func bestVoiceIdentifier(language: String, voices: [(String, String, Int)]) -> String? {
+        for prefix in [language, "de"] {
+            let matching = voices.filter { $0.1.hasPrefix(prefix) }
+            if let best = matching.max(by: { precedes(lhs: $0, rhs: $1) }) { return best.0 }
+        }
+        return nil
     }
 
     /// Premium vor Erweitert vor Standard, keine Eloquence-Stimmen („Grandpa“,
@@ -135,7 +162,7 @@ final class SystemSpeechCalloutEngine: NSObject, SpeechCalloutEngine, AVSpeechSy
         [
             identifier.contains(".eloquence.") ? 0 : 1,
             quality,
-            language == "de-DE" ? 1 : 0,
+            ["de-DE", "en-US"].contains(language) ? 1 : 0,
             identifier.hasSuffix(".Anna") ? 1 : 0,
         ]
     }

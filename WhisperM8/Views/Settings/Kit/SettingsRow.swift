@@ -26,7 +26,9 @@ struct SettingsRow<Trailing: View>: View {
                     Text(subtitle)
                         .font(.system(size: 11.5))
                         .lineSpacing(2)
-                        .foregroundStyle(AppTheme.textTertiary)
+                        // Lesbare Erklärung: textSecondary erreicht ≥ 4,5:1,
+                        // textTertiary nur ~3:1 (LR-ONB-016).
+                        .foregroundStyle(AppTheme.textSecondary)
                         .frame(maxWidth: 460, alignment: .leading)
                 }
             }
