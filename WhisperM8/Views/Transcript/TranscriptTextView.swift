@@ -15,7 +15,12 @@ enum TranscriptTextDocument {
     static let fontSize: CGFloat = 11.5
     static let lineHeight: CGFloat = 16
 
-    nonisolated static func make(lines: [TranscriptTextLine]) -> NSAttributedString {
+    /// `isCancelled` wird alle 256 Zeilen geprüft (LR-AK-015); bei Abbruch
+    /// kommt der bisherige Teil zurück, den der Aufrufer verwirft.
+    nonisolated static func make(
+        lines: [TranscriptTextLine],
+        isCancelled: () -> Bool = { false }
+    ) -> NSAttributedString {
         let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
         let boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
 
@@ -32,7 +37,8 @@ enum TranscriptTextDocument {
         paragraph.headIndent = 14
 
         let result = NSMutableAttributedString()
-        for line in lines {
+        for (index, line) in lines.enumerated() {
+            if index & 0xFF == 0, isCancelled() { return result }
             var attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
                 .foregroundColor: color(for: line.style),

@@ -115,10 +115,19 @@ struct AgentTranscriptContainerView: View {
             lineCount = 0
             return
         }
-        let built = await Task.detached(priority: .userInitiated) { () -> BuiltDocument in
-            let lines = TranscriptTextRenderer.render(transcript)
-            return BuiltDocument(text: TranscriptTextDocument.make(lines: lines), lineCount: lines.count)
-        }.value
+        // Ein `Task.detached` erbt die Abbruch-Kette NICHT: ohne den Handler
+        // rechnete jeder verworfene Aufbau den ganzen Verlauf zu Ende (LR-AK-015).
+        let work = Task.detached(priority: .userInitiated) { () -> BuiltDocument in
+            let cancelled = { Task.isCancelled }
+            let lines = TranscriptTextRenderer.render(transcript, isCancelled: cancelled)
+            return BuiltDocument(text: TranscriptTextDocument.make(lines: lines, isCancelled: cancelled),
+                                 lineCount: lines.count)
+        }
+        let built = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         guard !Task.isCancelled else { return }
         document = built.text
         lineCount = built.lineCount

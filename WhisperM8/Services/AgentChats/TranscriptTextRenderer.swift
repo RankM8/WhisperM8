@@ -64,11 +64,19 @@ enum TranscriptTextRenderer {
         static let `default` = Limits(toolOutputLines: 4, toolOutputChars: 4000)
     }
 
-    static func render(_ transcript: AgentChatTranscript, limits: Limits = .default) -> [TranscriptTextLine] {
+    /// `isCancelled` wird pro Nachricht geprüft (LR-AK-015): ein verworfener
+    /// Aufbau soll nicht den ganzen Verlauf zu Ende rechnen. Bei Abbruch kommt
+    /// das bis dahin Gerenderte zurück — der Aufrufer verwirft es ohnehin.
+    static func render(
+        _ transcript: AgentChatTranscript,
+        limits: Limits = .default,
+        isCancelled: () -> Bool = { false }
+    ) -> [TranscriptTextLine] {
         var lines: [TranscriptTextLine] = []
         lines.reserveCapacity(transcript.messages.count * 6)
 
         for message in transcript.messages {
+            if isCancelled() { return lines }
             let before = lines.count
             for block in message.blocks {
                 append(block: block, role: message.role, to: &lines, limits: limits)

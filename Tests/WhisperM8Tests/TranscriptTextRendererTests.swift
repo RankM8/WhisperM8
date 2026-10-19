@@ -191,4 +191,28 @@ final class TranscriptTextRendererTests: XCTestCase {
         XCTAssertLessThan(renderDauer, 5.0, "Rendern dauerte \(renderDauer)s")
         XCTAssertLessThan(docDauer, 10.0, "Attributieren dauerte \(docDauer)s")
     }
+
+    // MARK: - Abbruch (LR-AK-015)
+
+    func testRenderStopsEarlyWhenCancelled() {
+        let messages = (0..<1000).map { message(.assistant, [.text("Antwort \($0)")]) }
+        var checks = 0
+        let lines = TranscriptTextRenderer.render(transcript(messages), isCancelled: {
+            checks += 1
+            return checks > 10
+        })
+        XCTAssertLessThan(lines.count, 100, "Abbruch nach 10 Nachrichten darf nicht den ganzen Verlauf rendern")
+        XCTAssertLessThanOrEqual(checks, 11)
+    }
+
+    func testDocumentBuildStopsEarlyWhenCancelled() {
+        let lines = (0..<5000).map { TranscriptTextLine(.answer, "Zeile \($0)") }
+        var checks = 0
+        let document = TranscriptTextDocument.make(lines: lines, isCancelled: {
+            checks += 1
+            return checks > 2
+        })
+        XCTAssertLessThan(document.length, 5000 * 8)
+        XCTAssertEqual(checks, 3, "geprüft wird alle 256 Zeilen und bricht bei der dritten Prüfung ab")
+    }
 }
