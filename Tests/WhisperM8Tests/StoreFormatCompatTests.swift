@@ -143,3 +143,22 @@ final class StoreFormatCompatTests: XCTestCase {
 private func privateURL(named label: String, in value: Any) -> URL? {
     Mirror(reflecting: value).children.first { $0.label == label }?.value as? URL
 }
+
+/// Report-Index: Zeitstempel behalten Sekundenbruchteile (sonst sortierten
+/// zwei Reports derselben Sekunde nach dem Einlesen anders und der Index
+/// wurde bei jedem Zugriff neu aufgebaut). Alte Dateien bleiben lesbar.
+final class ReportIndexDateFormatTests: XCTestCase {
+    private struct Box: Codable, Equatable { var date: Date }
+
+    func testIndexDatesKeepFractionalSecondsAndReadLegacy() throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = TranscriptRunReportStore.indexDateEncoding
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = TranscriptRunReportStore.indexDateDecoding
+        let date = Date(timeIntervalSince1970: 1_792_000_000.25)
+        let roundTrip = try decoder.decode(Box.self, from: encoder.encode(Box(date: date)))
+        XCTAssertEqual(roundTrip.date.timeIntervalSince1970, date.timeIntervalSince1970, accuracy: 0.001)
+        let legacy = try decoder.decode(Box.self, from: Data(#"{"date":"2026-10-19T10:00:00Z"}"#.utf8))
+        XCTAssertEqual(legacy.date, ISO8601DateFormatter().date(from: "2026-10-19T10:00:00Z"))
+    }
+}

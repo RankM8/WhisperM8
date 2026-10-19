@@ -499,7 +499,7 @@ struct TranscriptRunReportStore {
     private func readIndex() throws -> ReportSummaryIndex {
         let data = try Data(contentsOf: indexURL())
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = Self.indexDateDecoding
         return try decoder.decode(ReportSummaryIndex.self, from: data)
     }
 
@@ -511,11 +511,37 @@ struct TranscriptRunReportStore {
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = Self.indexDateEncoding
         let index = ReportSummaryIndex(version: 1, entries: sortedSummaries(entries))
         let data = try encoder.encode(index)
         try data.write(to: indexURL(), options: .atomic)
     }
+
+    /// Index-Zeitstempel MIT Sekundenbruchteilen: ohne sie sortierten zwei
+    /// Reports derselben Sekunde nach dem Einlesen anders als beim Schreiben,
+    /// und jeder Zugriff baute den Index komplett neu (Fund aus W2b).
+    /// Alte Indexdateien ohne Bruchteile werden weiter gelesen.
+    static let indexDateEncoding: JSONEncoder.DateEncodingStrategy = .custom { date, encoder in
+        var container = encoder.singleValueContainer()
+        try container.encode(fractionalISOFormatter.string(from: date))
+    }
+
+    static let indexDateDecoding: JSONDecoder.DateDecodingStrategy = .custom { decoder in
+        let container = try decoder.singleValueContainer()
+        let text = try container.decode(String.self)
+        if let date = fractionalISOFormatter.date(from: text) ?? plainISOFormatter.date(from: text) {
+            return date
+        }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Kein ISO-8601-Datum")
+    }
+
+    nonisolated(unsafe) private static let fractionalISOFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    nonisolated(unsafe) private static let plainISOFormatter = ISO8601DateFormatter()
 
     private func isIndexCurrent(_ index: ReportSummaryIndex) -> Bool {
         guard index.version == 1 else { return false }
