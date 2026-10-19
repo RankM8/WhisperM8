@@ -173,6 +173,33 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(externalID(coordinator, sessionID), "8a5a7119")
     }
 
+    /// LR-AK-020: Stop eines ignorierten bg-Forks darf den arbeitenden Vordergrund nicht auf idle setzen.
+    func testIgnoredForkStopDoesNotChangeForegroundStatus() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "fg" || id == "bgfork" }
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("fg", source: "resume"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "fg"))
+        XCTAssertEqual(coordinator.lifecycleState(for: sessionID), .working)
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bgfork", source: "fork"))
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop, sessionID: "bgfork"))
+        XCTAssertEqual(coordinator.lifecycleState(for: sessionID), .working, "Fork-Stop ist nicht der Vordergrund-Stop")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop, sessionID: "fg"))
+        XCTAssertNotEqual(coordinator.lifecycleState(for: sessionID), .working)
+    }
+
+    /// LR-AK-020: Wird ein zuvor ignorierter Fork später ausdrücklich gebunden (`/resume`),
+    /// müssen seine Hooks wieder wirken.
+    func testIgnoredForkIDIsReleasedWhenBoundLater() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "fg" || id == "bgfork" }
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("fg", source: "resume"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bgfork", source: "fork"))
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bgfork", source: "resume"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "bgfork")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit, sessionID: "bgfork"))
+        XCTAssertEqual(coordinator.lifecycleState(for: sessionID), .working, "gebundene ID ist kein Fork mehr")
+    }
+
     /// `/clear`: neue ID ohne Datei wird erst mit dem ersten Prompt gebunden.
     func testPostponedBindingCommitsOnFirstTurnOfNewID() throws {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()

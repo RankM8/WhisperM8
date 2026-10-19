@@ -46,7 +46,8 @@ enum ChatsPromptGuardCommand {
         let store = SendDeliveryTokenStore()
         let verdict = ChatsPromptGuard.decide(
             prompt: prompt,
-            consumeToken: { store.consume(promptText: $0) },
+            // Nicht prüfbar (I/O) zählt wie gefunden: fail-open (LR-AK-026).
+            consumeToken: { store.claim(promptText: $0) != .notFound },
             failedTurnEvidence: { candidate in
                 guard let transcriptPath,
                       let tail = readTail(path: transcriptPath) else { return false }

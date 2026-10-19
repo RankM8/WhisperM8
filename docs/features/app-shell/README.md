@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-19
 ---
 
 # App-Shell
@@ -36,21 +36,40 @@ dasselbe Fensterverhalten unmittelbar.
 
 ## Onboarding-Wizard
 
-Der Wizard berechnet seine Schritte aus dem aktuell gewählten Profil:
+Der Wizard berechnet seine Schritte aus dem aktuell gewählten Profil
+(`OnboardingStepPlanner`, pur):
 
 1. Welcome
 2. Profilwahl
-3. Mikrofon- und Accessibility-Berechtigung
+3. Mikrofon- und Accessibility-Berechtigung (verweigertes Mikrofon → Button „Systemeinstellungen öffnen“ statt wirkungslosem Request, `MicrophoneOnboardingAction`)
 4. Diktat-Hotkey
-5. Groq- oder OpenAI-API-Key
-6. optionaler Codex-Verbindungsschritt für `dictationEnrichment` und `full`
-7. Test und Abschlussrouting über `Done`
+5. Groq- oder OpenAI-API-Key (Entwurf + „Save Key“, siehe unten) und Modellwahl (echte Buttons, per Tastatur bedienbar)
+6. Diktiersprache (Voreinstellung = Systemsprache)
+7. nur `full`: Claude-Code-Schritt (Installation per Homebrew-Cask nach Rückfrage, Login-Hinweis)
+8. optionaler Codex-Verbindungsschritt für `dictationEnrichment` und `full` (fehlt die CLI: Installationsblock statt „Sign In“)
+9. Test und Abschlussrouting über `Done`
+
+CLI-Installation (Beschluss D5/E5): `AgentCLIInstaller` ruft `brew install --cask claude-code`
+bzw. `codex` — nur nach ausdrücklicher Bestätigung im Dialog, nie `curl | bash`, off-main mit
+Timeout und sichtbarer Ausgabe. Vorhandene Installationen (nativer Installer, npm, Homebrew,
+Codex.app) erkennt `AgentCLIResolver` über `AgentCommandBuilder.commandPath` und installiert nie
+doppelt; ohne Homebrew gibt es Hinweis + Links. Derselbe Baustein (`AgentCLIInstallPanel`) steckt in
+Onboarding, Einstellungen → AI Output und im Leerzustand beim Chatstart: fehlt die CLI, legt
+„Neuer Chat“ keine Session an (`AgentChatStartGate`), sondern öffnet ein Sheet mit „Erneut prüfen“.
+
+**API-Key-Regeln:** Ein getippter Key ist nur ein Entwurf (`APIKeyDraftModel`); gespeichert wird
+ausschließlich per „Save Key“/Return, getrimmt, über `KeychainStoring` (liefert `KeychainSaveResult`).
+Tippen oder Leeren berührt einen gespeicherten Key nie; ein gescheiterter Keychain-Write setzt keinen
+Zugang und zeigt einen Fehler. Die Keychain-Migration aus UserDefaults löscht die Altkopie nur nach
+bestätigtem Write.
+
+**Abschluss:** `OnboardingCompletionGate` (pur). „All set!“ erscheint nur nach erfolgreichem Testdiktat;
+ohne Test (Hinweis „ungetestet“) oder nach Fehler (Fehlertext) bleibt Abschließen möglich, damit ein
+Netzfehler den Wizard nicht blockiert. Fehlt nach erteilten Rechten noch Hotkey oder Key, zeigt die
+Menüleiste „Setup fortsetzen…“ (`SetupIncompleteReason`) — der Wizard wird nicht erneut erzwungen.
 
 Der Codex-Schritt ist überspringbar. Fehlt Codex später, bleibt Raw-Diktat als
-Fallback verfügbar. Der API-Key-Schritt akzeptiert einen neu eingegebenen Key
-oder einen bereits im Keychain vorhandenen Key. Der Test selbst ist keine
-Abschlussbedingung; `Done` verlangt aber Hotkey, Mikrofon, Accessibility und
-einen verfügbaren Transkriptions-Key.
+Fallback verfügbar.
 
 ### P1-Invariante: Accessibility erzwingt Onboarding
 

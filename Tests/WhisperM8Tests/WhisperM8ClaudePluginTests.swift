@@ -131,6 +131,22 @@ final class WhisperM8ClaudePluginTests: XCTestCase {
         XCTAssertEqual(env["CLAUDE_CODE_PLUGIN_DIRS"], "/mine/a:/mine/b:/x/claude-plugin/whisperm8")
     }
 
+    /// LR-PJ-002: Der Wert des Users kam aus dem bereinigten Env und war immer
+    /// leer; bei ausgeschaltetem Plugin fiel er ganz weg.
+    func testUserPluginDirsSurviveEnvironmentCleanupAndKillSwitch() {
+        let raw = ["CLAUDE_CODE_PLUGIN_DIRS": "/foo", "CLAUDE_CODE_SESSION_ID": "x", "PATH": "/usr/bin"]
+        XCTAssertNil(LoginShellEnvironment(pathLoader: { "/usr/bin" })
+            .processEnvironment(base: raw)["CLAUDE_CODE_SESSION_ID"], "Bereinigung bleibt")
+        let inherited = ClaudePluginBootstrap.inheritedPluginDirectories(rawEnvironment: raw)
+        let link = URL(fileURLWithPath: "/x/claude-plugin/whisperm8")
+        XCTAssertEqual(WhisperM8ClaudePlugin.launchEnvironment(
+            enabled: true, linkURL: link, inherited: inherited, fileExists: { _ in true })["CLAUDE_CODE_PLUGIN_DIRS"],
+            "/foo:/x/claude-plugin/whisperm8")
+        XCTAssertEqual(WhisperM8ClaudePlugin.launchEnvironment(
+            enabled: false, linkURL: link, inherited: inherited, fileExists: { _ in true }),
+            ["CLAUDE_CODE_PLUGIN_DIRS": "/foo"])
+    }
+
     func testBuilderPassesPluginEnvironmentToClaudeLaunch() throws {
         var builder = AgentCommandBuilder(commandResolver: { "/usr/local/bin/\($0)" })
         builder.gptBackendEnabledResolver = { false }
@@ -182,6 +198,25 @@ final class WhisperM8ClaudePluginTests: XCTestCase {
         XCTAssertTrue(outcome.moved.isEmpty)
         XCTAssertEqual(outcome.kept.count, 2)
         XCTAssertTrue(FileManager.default.fileExists(atPath: edited.claudeCodeSkillURL.path))
+    }
+
+    /// LR-PJ-001: Ein fremder, ungestempelter Skill mit WhisperM8-Namen wurde
+    /// ungefragt in die Sicherung verschoben.
+    func testMigrationKeepsForeignUnstampedSkill() throws {
+        let foreign = home.appendingPathComponent(".claude/skills/codex-subagent", isDirectory: true)
+        try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+        try "---\nname: codex-subagent\n---\nMein eigener Codex-Helfer".write(
+            to: foreign.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let legacy = home.appendingPathComponent(".claude/skills/whisperm8-chats", isDirectory: true)
+        try FileManager.default.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try "---\nname: whisperm8-chats\n---\nalter Stand: whisperm8 chats list".write(
+            to: legacy.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+
+        let outcome = ClaudePluginSkillMigration(homeDirectory: home, bundle: .module).run()
+
+        XCTAssertEqual(outcome.moved, ["whisperm8-chats"], "alter ungestempelter WhisperM8-Skill zieht weiter um")
+        XCTAssertTrue(outcome.kept.contains { $0.hasPrefix("codex-subagent") })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: foreign.appendingPathComponent("SKILL.md").path))
     }
 
     func testMigrationWithoutSkillsDoesNothing() {

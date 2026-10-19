@@ -18,7 +18,8 @@
 # `make kill`, nie ein Prozess außerhalb von $APP.
 #
 # WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster
-# (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests).
+# (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
+# WHISPERM8_TEST_LANG=en|de setzt die Sprache.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -58,6 +59,12 @@ seed_defaults() {
     defaults write "$BUNDLE_ID" debugControlEnabled -bool YES
     defaults read "$BUNDLE_ID" claudeGPTBackendPort >/dev/null 2>&1 || defaults write "$BUNDLE_ID" claudeGPTBackendPort -int 28765
     defaults read "$BUNDLE_ID" claudeGPTRouterPort >/dev/null 2>&1 || defaults write "$BUNDLE_ID" claudeGPTRouterPort -int 28766
+    # Sprache der Test-Instanz (en/de), sonst Systemsprache.
+    if [[ -n "${WHISPERM8_TEST_LANG:-}" ]]; then
+        defaults write "$BUNDLE_ID" AppleLanguages -array "$WHISPERM8_TEST_LANG"
+    else
+        defaults delete "$BUNDLE_ID" AppleLanguages >/dev/null 2>&1 || true
+    fi
 }
 
 cmd_start() {

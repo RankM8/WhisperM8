@@ -57,6 +57,8 @@ struct MaskedAPIKeyField: View {
     var hasSavedKey: Bool
     /// Provider-Name für den Placeholder, wenn noch kein Key gespeichert ist.
     var providerName: String
+    /// Return im Feld speichert (ausdrückliche Aktion, kein Speichern pro Tastendruck).
+    var onSubmit: (() -> Void)?
 
     @State private var isRevealed = false
 
@@ -75,7 +77,8 @@ struct MaskedAPIKeyField: View {
             FocusableTextField(
                 text: $text,
                 placeholder: placeholder,
-                isSecure: !isRevealed
+                isSecure: !isRevealed,
+                onSubmit: onSubmit
             )
             // `isSecure` bestimmt die NSView-Klasse (NSSecureTextField vs. NSTextField)
             // und kann nicht in-place wechseln — die Identität muss sich ändern, damit

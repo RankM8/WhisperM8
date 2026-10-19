@@ -261,6 +261,23 @@ struct CodexStatusProbe {
         return .installed
     }
 
+    /// Single-Quote-Literal für die Shell: `'` wird zu `'\''` (LR-ONB-017).
+    static func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Inhalt des Login-`.command`-Skripts. Der Binary-Pfad wird quotiert: Leerzeichen,
+    /// Apostrophe und Metazeichen im Pfad dürfen den Aufruf nicht zerlegen.
+    static func loginScript(codexPath: String) -> String {
+        """
+        #!/bin/zsh
+        \(shellSingleQuoted(codexPath)) login
+        echo
+        echo "You can close this window after login finishes."
+        read -k 1 "?Press any key to close..."
+        """
+    }
+
     func openLoginInTerminal() {
         guard let codexPath = commandResolver("codex") else {
             NSWorkspace.shared.open(URL(string: "https://help.openai.com/en/articles/11381614-codex-cli-and-sign-in-withgpt")!)
@@ -269,13 +286,7 @@ struct CodexStatusProbe {
 
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("WhisperM8-Codex-Login.command")
-        let script = """
-        #!/bin/zsh
-        \(codexPath) login
-        echo
-        echo "You can close this window after login finishes."
-        read -k 1 "?Press any key to close..."
-        """
+        let script = Self.loginScript(codexPath: codexPath)
 
         do {
             try script.write(to: scriptURL, atomically: true, encoding: .utf8)

@@ -121,7 +121,9 @@ enum TranscriptionProvider: String, CaseIterable, Codable {
 /// Diktat-Pfad, damit beide dieselbe Regel anwenden.
 enum TranscriptionCredentialGate {
     static func isSatisfied(provider: TranscriptionProvider, typedKey: String, hasSavedKey: Bool) -> Bool {
-        !provider.requiresAPIKey || !typedKey.isEmpty || hasSavedKey
+        !provider.requiresAPIKey
+            || !typedKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || hasSavedKey
     }
 }
 

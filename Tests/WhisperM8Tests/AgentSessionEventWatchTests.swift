@@ -105,3 +105,24 @@ final class AgentDirectoryEventFilterTests: XCTestCase {
         )
     }
 }
+
+/// LR-AK-016: Dauernde Events dürfen den Scan nicht endlos verschieben.
+@MainActor
+final class AgentDirectoryEventDebounceTests: XCTestCase {
+    func testContinuousEventsStillTriggerScanViaMaxWait() async throws {
+        var requested = 0
+        let monitor = AgentDirectoryEventMonitor(
+            rootURLs: [],
+            debounceInterval: 0.2,
+            settleInterval: 100,
+            maxWaitInterval: 0.5,
+            requestScan: { _ in requested += 1 }
+        )
+        for _ in 0..<10 {
+            monitor.handleEvents(paths: ["/h/.claude/projects/p/new.jsonl"])
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertGreaterThanOrEqual(requested, 1, "Höchstwartezeit muss greifen")
+        monitor.stop()
+    }
+}

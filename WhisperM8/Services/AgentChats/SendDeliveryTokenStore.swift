@@ -76,10 +76,11 @@ struct SendDeliveryTokenStore {
     }
 
     /// Legt ein Token ab (eine Datei pro Zustellung, UUID-Name) und räumt
-    /// dabei abgelaufene weg. Fehler sind bewusst still: ein fehlendes
-    /// Token darf nie eine Zustellung verhindern — der Guard failt dann
-    /// eben in Richtung Block der SPÄTEREN Wiedervorlage.
-    func stage(promptText: String, now: Date = Date()) {
+    /// dabei abgelaufene weg. `false` = nicht gespeichert: Der Aufrufer
+    /// darf dann NICHT pasten — sonst blockte der Guard genau diese
+    /// Erstzustellung als Duplikat (LR-AK-026).
+    @discardableResult
+    func stage(promptText: String, now: Date = Date()) -> Bool {
         let token = Token(promptHash: Self.promptHash(promptText), createdAt: now)
         do {
             try FileManager.default.createDirectory(
@@ -92,37 +93,78 @@ struct SendDeliveryTokenStore {
             try? FileManager.default.setAttributes(
                 [.posixPermissions: 0o600], ofItemAtPath: url.path
             )
+            return true
         } catch {
             Logger.agentStore.warning(
                 "send_token_stage_failed error=\(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
-    /// Sucht ein frisches Token mit passendem Hash und KONSUMIERT es
-    /// (löscht die Datei). `true` = gefunden → die Submission ist eine
-    /// autorisierte Erst-Zustellung.
-    func consume(promptText: String, now: Date = Date()) -> Bool {
+    enum ClaimResult: Equatable {
+        /// Passendes Token gefunden und exklusiv beansprucht.
+        case authorized
+        /// Sicher kein passendes Token (mehr) vorhanden.
+        case notFound
+        /// Nicht prüfbar (Lese-/Rechtefehler) — der Guard lässt dann durch
+        /// (fail-open, LR-AK-026), statt eine Erstzustellung zu blocken.
+        case ioError
+    }
+
+    /// Sucht ein frisches Token mit passendem Hash und beansprucht es
+    /// atomar per `rename(2)` in einen Claim-Namen — nur EIN Prozess gewinnt;
+    /// früher lasen zwei Hook-Prozesse dasselbe Token und beide durften
+    /// durch, ein gescheitertes Löschen ließ es sogar dauerhaft gelten
+    /// (LR-AK-027).
+    func claim(promptText: String, now: Date = Date()) -> ClaimResult {
         let hash = Self.promptHash(promptText)
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
-        ) else { return false }
+        let files: [URL]
+        do {
+            files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return .notFound
+        } catch {
+            return .ioError
+        }
+        var sawIOError = false
         for url in files where url.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: url),
-                  let token = try? JSONDecoder.tokenDecoder.decode(Token.self, from: data),
+            let data: Data
+            do { data = try Data(contentsOf: url) } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                continue // eben von einem anderen Prozess beansprucht
+            } catch {
+                sawIOError = true
+                continue
+            }
+            guard let token = try? JSONDecoder.tokenDecoder.decode(Token.self, from: data),
                   token.promptHash == hash,
                   now.timeIntervalSince(token.createdAt) <= Self.timeToLive,
                   token.createdAt.timeIntervalSince(now) < 60 // Uhr-Drift-Kappe
             else { continue }
-            try? FileManager.default.removeItem(at: url)
-            return true
+            let claimed = directory.appendingPathComponent(".claimed-\(UUID().uuidString)")
+            if rename(url.path, claimed.path) == 0 {
+                unlink(claimed.path)
+                return .authorized
+            }
+            if errno == ENOENT { continue } // ein anderer Prozess war schneller
+            sawIOError = true
         }
-        return false
+        return sawIOError ? .ioError : .notFound
+    }
+
+    /// Kurzform: `true` nur bei erfolgreichem Claim.
+    func consume(promptText: String, now: Date = Date()) -> Bool {
+        claim(promptText: promptText, now: now) == .authorized
     }
 
     private func purgeExpired(now: Date) {
         guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
         ) else { return }
+        // Liegen gebliebene Claims (Absturz zwischen rename und unlink).
+        for url in files where url.lastPathComponent.hasPrefix(".claimed-") {
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if now.timeIntervalSince(modified) > Self.timeToLive { try? FileManager.default.removeItem(at: url) }
+        }
         for url in files where url.pathExtension == "json" {
             guard let data = try? Data(contentsOf: url),
                   let token = try? JSONDecoder.tokenDecoder.decode(Token.self, from: data) else {

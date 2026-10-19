@@ -88,10 +88,10 @@ extension AgentChatsView {
         }
 
         if selectedProjectID == nil || !workspace.projects.contains(where: { $0.id == selectedProjectID }) {
-            selectedProjectID = workspace.projects.first?.id
+            selectedProjectID = AgentProjectSelectionResolver.fallbackProject(in: workspace.projects)?.id
         }
         if expandedProjectIDs.isEmpty {
-            expandedProjectIDs = Set(workspace.projects.prefix(3).map(\.id))
+            expandedProjectIDs = AgentProjectSelectionResolver.initiallyExpandedIDs(in: workspace.projects)
         }
         if let selectedProjectID {
             expandedProjectIDs.insert(selectedProjectID)

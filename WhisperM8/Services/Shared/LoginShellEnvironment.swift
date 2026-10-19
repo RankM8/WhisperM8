@@ -20,7 +20,7 @@ import Foundation
 /// sowohl Apple Silicon (`/opt/homebrew`) als auch Intel-Macs (`/usr/local`) und
 /// die System-Pfade abdeckt.
 final class LoginShellEnvironment: @unchecked Sendable {
-    static let shared = LoginShellEnvironment()
+    static let shared = LoginShellEnvironment(isMainThread: { Thread.isMainThread })
 
     /// Konservativer Fallback-PATH — Reihenfolge bewusst:
     /// User-lokale Verzeichnisse vor Homebrew vor System-Pfaden, damit
@@ -45,38 +45,140 @@ final class LoginShellEnvironment: @unchecked Sendable {
     ].joined(separator: ":")
 
     private let lock = NSLock()
+    private var cachedSnapshot: LoginShellSnapshot?
     private var cachedPath: String?
+    /// Läuft gerade eine Abfrage? Weitere Aufrufer warten auf genau diese
+    /// statt eine zweite Shell zu starten (LR-SH-007).
+    private var inFlight: DispatchGroup?
+
+    /// Zeitpunkt des letzten FEHLgeschlagenen Versuchs. Ein Fehler (Timeout,
+    /// defekte `.zprofile`) wird nie dauerhaft gecacht: erneuter Versuch
+    /// frühestens nach `retryInterval` oder nach `invalidate()` (LR-SH-007).
+    private var lastFailureAt: Date?
+    /// Läuft die Hintergrund-Abfrage für den Main Thread schon?
+    private var backgroundLoadStarted = false
 
     /// Aufruf-Closure für Tests injizierbar. Default ruft eine echte Login-Shell.
-    let pathLoader: () -> String?
+    let snapshotLoader: () -> LoginShellSnapshot?
+    let retryInterval: TimeInterval
+    private let now: () -> Date
+    /// Auf dem Main Thread nie auf die Abfrage warten (nur `shared` setzt das).
+    private let isMainThread: () -> Bool
 
-    init(pathLoader: @escaping () -> String? = LoginShellEnvironment.queryLoginShellPath) {
-        self.pathLoader = pathLoader
+    init(
+        retryInterval: TimeInterval = 60,
+        now: @escaping () -> Date = Date.init,
+        isMainThread: @escaping () -> Bool = { false },
+        snapshotLoader: @escaping () -> LoginShellSnapshot? = { LoginShellEnvironment.queryLoginShell() }
+    ) {
+        self.retryInterval = retryInterval
+        self.now = now
+        self.isMainThread = isMainThread
+        self.snapshotLoader = snapshotLoader
+    }
+
+    /// Verwirft Ergebnis und Fehlerstand — der nächste Zugriff fragt neu ab
+    /// (z. B. „Erneut prüfen“ nach einer CLI-Installation im Terminal).
+    func invalidate() {
+        lock.lock()
+        cachedSnapshot = nil
+        cachedPath = nil
+        lastFailureAt = nil
+        backgroundLoadStarted = false
+        lock.unlock()
+    }
+
+    /// Kurzform für Tests, die nur den PATH vorgeben.
+    convenience init(pathLoader: @escaping () -> String?) {
+        self.init(retryInterval: 60, snapshotLoader: { pathLoader().map { LoginShellSnapshot(path: $0, variables: [:]) } })
     }
 
     /// Liefert den Login-Shell-PATH (lazy + cached) oder den Hardcoded-Fallback.
-    /// Thread-safe, blockiert kurz beim ersten Call (~50–150 ms für die Shell).
+    /// Thread-safe. Die erste Abfrage dauert typisch 50–150 ms, höchstens die
+    /// Frist von `queryLoginShell` — danach gilt der Fallback.
     var path: String {
+        loadSnapshotIfNeeded()
         lock.lock()
-        if let cached = cachedPath {
+        defer { lock.unlock() }
+        return cachedPath ?? Self.fallbackPath
+    }
+
+    /// Positivliste aus der Login-Shell (Proxy, Zertifikate), siehe `LoginShellSnapshot`.
+    var networkVariables: [String: String] {
+        loadSnapshotIfNeeded()
+        lock.lock()
+        defer { lock.unlock() }
+        return cachedSnapshot?.variables ?? [:]
+    }
+
+    private func loadSnapshotIfNeeded() {
+        lock.lock()
+        if cachedPath != nil {
             lock.unlock()
-            return cached
+            return
+        }
+        // Frischer Fehler: Fallback liefern, nicht erneut 5 s blockieren.
+        if let failed = lastFailureAt, now().timeIntervalSince(failed) < retryInterval {
+            lock.unlock()
+            return
+        }
+        if let running = inFlight {
+            let onMain = isMainThread()
+            lock.unlock()
+            // Main Thread wartet nie; der Aufrufer bekommt den (ungecachten) Fallback.
+            if !onMain { running.wait() }
+            return
+        }
+        if isMainThread() {
+            // Noch kein Ergebnis: Abfrage im Hintergrund anstoßen, Fallback liefern.
+            if !backgroundLoadStarted {
+                backgroundLoadStarted = true
+                lock.unlock()
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    self?.performLoad()
+                }
+            } else {
+                lock.unlock()
+            }
+            return
         }
         lock.unlock()
+        performLoad()
+    }
 
-        let resolved = pathLoader()?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value: String
-        if let resolved, !resolved.isEmpty {
-            value = mergeWithFallback(resolved)
-        } else {
-            Logger.agentPerformance.info("login_shell_path_query_failed using=fallback")
-            value = Self.fallbackPath
+    private func performLoad() {
+        lock.lock()
+        if cachedPath != nil {
+            lock.unlock()
+            return
         }
+        if let running = inFlight {
+            lock.unlock()
+            running.wait()
+            return
+        }
+        let group = DispatchGroup()
+        group.enter()
+        inFlight = group
+        lock.unlock()
+
+        let snapshot = snapshotLoader()
+        let resolved = snapshot?.path?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         lock.lock()
-        cachedPath = value
+        if let resolved, !resolved.isEmpty {
+            cachedSnapshot = snapshot
+            cachedPath = mergeWithFallback(resolved)
+            lastFailureAt = nil
+        } else {
+            // Fehler NICHT dauerhaft cachen (nur Zeitstempel für die Sperrfrist).
+            lastFailureAt = now()
+            Logger.agentPerformance.info("login_shell_path_query_failed using=fallback retry_in=\(Int(self.retryInterval), privacy: .public)s")
+        }
+        backgroundLoadStarted = false
+        inFlight = nil
         lock.unlock()
-        return value
+        group.leave()
     }
 
     /// Liefert das aktuelle Process-ENV erweitert um den korrigierten PATH und
@@ -128,6 +230,18 @@ final class LoginShellEnvironment: @unchecked Sendable {
 
         env["PATH"] = path
 
+        // Proxy und Zertifikate aus der Login-Shell (LR-SH-012): Im Terminal
+        // laufen claude/codex mit den Variablen aus ~/.zprofile, die GUI-App
+        // erbt sie nicht. Ein geerbter Wert gewinnt; Secrets stehen nicht auf
+        // der Positivliste.
+        for (key, value) in networkVariables where env[key] == nil {
+            env[key] = value
+        }
+
+        // Lokale Ziele (GPT-Router auf 127.0.0.1) nie über einen Firmenproxy:
+        // sobald ein Proxy gesetzt ist, `NO_PROXY`/`no_proxy` ERGÄNZEN (LR-SH-012).
+        Self.appendLocalNoProxy(&env)
+
         // Test-Instanz: Kindprozesse legen ihre Konfiguration im Test-Home an
         // (im Normalbetrieb leer, siehe `AppInstance`).
         for (key, value) in AppInstance.childEnvironmentOverrides {
@@ -149,6 +263,22 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env["LANG"] = "en_US.UTF-8"
         }
         return env
+    }
+
+    static let localNoProxyEntries = ["127.0.0.1", "localhost", "::1"]
+
+    /// Ergänzt `NO_PROXY`/`no_proxy` um die lokalen Ziele, falls ein Proxy gesetzt ist.
+    static func appendLocalNoProxy(_ env: inout [String: String]) {
+        let proxyKeys = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]
+        guard proxyKeys.contains(where: { !(env[$0]?.isEmpty ?? true) }) else { return }
+        for key in ["NO_PROXY", "no_proxy"] {
+            var entries = (env[key] ?? "").split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            for local in localNoProxyEntries where !entries.contains(local) {
+                entries.append(local)
+            }
+            env[key] = entries.joined(separator: ",")
+        }
     }
 
     /// Gleiche Daten als `[String]` im `KEY=VALUE`-Format — passt zur SwiftTerm-API
@@ -174,28 +304,111 @@ final class LoginShellEnvironment: @unchecked Sendable {
         return result.joined(separator: ":")
     }
 
-    /// Standard-Implementation: ruft `/bin/zsh -l -c 'echo $PATH'` auf.
-    /// Bewusst zsh, weil das auf macOS 10.15+ die Default-Shell ist und
-    /// `.zprofile` sourcet, das `brew shellenv` enthält.
-    static func queryLoginShellPath() -> String? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", "echo $PATH"]
+    /// Standard-Implementation: `/bin/zsh -l -c 'env -0'` — bewusst zsh (Default
+    /// seit 10.15, sourct `.zprofile` mit `brew shellenv`).
+    ///
+    /// Gehärtet (LR-SH-007): stdin aus `/dev/null`, stderr verworfen, stdout
+    /// parallel gelesen (ein voller Puffer blockiert die Shell nicht), Frist mit
+    /// SIGTERM und danach SIGKILL. Eine hängende `.zprofile` kostet so höchstens
+    /// `deadline`, nie einen dauerhaft blockierten Main Thread.
+    static func queryLoginShell(
+        executable: String = "/bin/zsh",
+        arguments: [String] = ["-l", "-c", "env -0"],
+        fallbackArguments: [String]? = ["-l", "-c", "echo $PATH"],
+        deadline: TimeInterval = 5
+    ) -> LoginShellSnapshot? {
+        switch runShell(executable: executable, arguments: arguments, deadline: deadline) {
+        case .success(let output):
+            return LoginShellSnapshot.parse(envZeroOutput: output)
+        case .failed:
+            // `env -0` nicht verfügbar / Exit ≠ 0: wenigstens den PATH per `echo $PATH`.
+            guard let fallbackArguments else { return nil }
+            guard case .success(let output) = runShell(
+                executable: executable, arguments: fallbackArguments, deadline: deadline) else { return nil }
+            let path = String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return path.isEmpty ? nil : LoginShellSnapshot(path: path, variables: [:])
+        case .timedOut:
+            return nil
+        }
+    }
 
+    private enum ShellRun {
+        case success(Data)
+        case failed      // Start misslungen oder Exit ≠ 0
+        case timedOut
+    }
+
+    private static func runShell(executable: String, arguments: [String], deadline: TimeInterval) -> ShellRun {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+
+        var output = Data()
+        let readDone = DispatchSemaphore(value: 0)
+        let reader = pipe.fileHandleForReading
+        DispatchQueue.global(qos: .userInitiated).async {
+            output = reader.readDataToEndOfFile()
+            readDone.signal()
+        }
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
-            return nil
+            try? pipe.fileHandleForWriting.close()
+            return .failed
         }
+        // Eigene Schreibseite schließen, sonst endet readDataToEndOfFile nie.
+        try? pipe.fileHandleForWriting.close()
 
-        guard process.terminationStatus == 0 else { return nil }
+        if exited.wait(timeout: .now() + deadline) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + 1) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + 1)
+            }
+            Logger.agentPerformance.info("login_shell_query_timeout deadline=\(deadline, privacy: .public)")
+            return .timedOut
+        }
+        // Enkel der Shell könnten stdout offen halten — Lesen ebenfalls befristen.
+        guard readDone.wait(timeout: .now() + 1) == .success else { return .timedOut }
+        guard process.terminationStatus == 0 else { return .failed }
+        return .success(output)
+    }
+}
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)
+/// Ergebnis der Login-Shell-Abfrage: PATH plus eine Positivliste von
+/// Netzwerk-Variablen. Bewusst KEINE Schlüssel/Tokens (API-Keys o. ä.).
+struct LoginShellSnapshot: Equatable {
+    static let allowedVariables: Set<String> = [
+        "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy",
+        "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy",
+        "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+    ]
+
+    var path: String?
+    var variables: [String: String]
+
+    static func parse(envZeroOutput data: Data) -> LoginShellSnapshot {
+        var path: String?
+        var variables: [String: String] = [:]
+        for chunk in data.split(separator: 0) {
+            let entry = String(decoding: chunk, as: UTF8.self)
+            guard let equals = entry.firstIndex(of: "=") else { continue }
+            let key = String(entry[..<equals])
+            let value = String(entry[entry.index(after: equals)...])
+            if key == "PATH" {
+                path = value
+            } else if allowedVariables.contains(key), !value.isEmpty {
+                variables[key] = value
+            }
+        }
+        return LoginShellSnapshot(path: path, variables: variables)
     }
 }

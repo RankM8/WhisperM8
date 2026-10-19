@@ -56,9 +56,22 @@ final class AgentPromptQueueDelivery {
         }
         // Status erneut prüfen: zwischen Turn-Ende und Settle-Delay kann der
         // Chat schon wieder arbeiten (z. B. weil jemand direkt getippt hat).
-        let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
-        if let runtime, runtime != .idle {
-            store.markFailed(id: reserved.id, error: "Ziel ist \(runtime.rawValue) — wartet auf nächstes Turn-Ende", retry: true)
+        let coordinator = AgentSessionStatusCoordinator.shared
+        switch PromptDeliveryGate.forQueue(
+            runtime: coordinator.statusStore.status(for: sessionID),
+            lifecycle: coordinator.lifecycleState(for: sessionID),
+            mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput
+        ) {
+        case .deliver:
+            break
+        case .busy(let runtime):
+            store.markFailed(id: reserved.id, error: "Ziel ist \(runtime) — wartet, bis der Chat fertig ist", retry: true)
+            return
+        case .notReady:
+            store.markFailed(id: reserved.id, error: "Chat startet noch — Zustellung, sobald er bereit ist", retry: true)
+            return
+        case .draftPending:
+            store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist", retry: true)
             return
         }
 
@@ -68,7 +81,10 @@ final class AgentPromptQueueDelivery {
         // der Send-Pipeline (UserPromptSubmit-Guard konsumiert es).
         // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
         // sonst blockte der Guard die eigene Zustellung (Review W1).
-        SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
+        guard SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked)) else {
+            store.markFailed(id: reserved.id, error: "Zustell-Token ließ sich nicht speichern — erneuter Versuch beim nächsten Turn-Ende", retry: true)
+            return
+        }
         controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 

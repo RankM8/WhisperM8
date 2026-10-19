@@ -9,6 +9,7 @@ struct AIOutputAccountTab: View {
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
 
     @State private var connectionModel = CodexConnectionModel()
+    @State private var codexInstallModel = AgentCLIInstallModel(cli: .codex)
     @State private var enabledModes = OutputModeStore().enabledModes
     /// Dynamischer Modellkatalog aus ~/.codex/models_cache.json (Stat-gecacht,
     /// Fallback eingebettet) — Quelle der Model-/Thinking-Picker.
@@ -36,16 +37,30 @@ struct AIOutputAccountTab: View {
                     tone: connectionModel.statusTone,
                     detail: connectionModel.status.displayText
                 ) {
-                    Button(connectionModel.status == .signedIn ? "Reconnect" : "Sign In") {
-                        CodexStatusProbe().openLoginInTerminal()
+                    // Ohne installierte CLI gibt es nichts anzumelden — dann führt der
+                    // Installationsblock darunter (LR-DIK-015).
+                    if connectionModel.status != .notInstalled {
+                        Button {
+                            CodexStatusProbe().openLoginInTerminal()
+                        } label: {
+                            connectionModel.status == .signedIn ? Text("Reconnect") : Text("Sign In")
+                        }
+                        .buttonStyle(SettingsButtonStyle.standard)
                     }
-                    .buttonStyle(SettingsButtonStyle.standard)
 
                     Button("Check Again") {
                         catalog = CodexModelCatalogStore.shared.catalog()
                         Task { await connectionModel.refresh() }
                     }
                     .buttonStyle(SettingsButtonStyle.primary)
+                }
+
+                if connectionModel.status == .notInstalled {
+                    AgentCLIInstallPanel(
+                        model: codexInstallModel,
+                        onInstalled: { Task { await connectionModel.refresh() } }
+                    )
+                    .padding(.vertical, 8)
                 }
 
                 SettingsRow(

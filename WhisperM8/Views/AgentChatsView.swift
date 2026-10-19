@@ -111,6 +111,8 @@ struct AgentChatsView: View {
     @State private var searchText = ""
     @State private var flatVisibleSessionLimit = 50
     @State var errorMessage: String?
+    /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
+    @State var missingCLIPrompt: MissingCLIPrompt?
     @State var isIndexingSessions = false
     @State var sessionActionRequest: AgentSessionActionRequest?
     /// Konto-Umzug (Slice 6): Vorschau/Fortschritt/Ergebnis des Sheets.
@@ -437,7 +439,7 @@ struct AgentChatsView: View {
     @StateObject private var activeBackgroundTracker = ActiveBackgroundSessionTracker()
 
     var selectedProject: AgentProject? {
-        workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
+        AgentProjectSelectionResolver.project(selectedID: selectedProjectID, in: workspace.projects)
     }
 
     /// Sessions des Kontext-Projekts — nur noch Datenquelle für den
@@ -938,6 +940,9 @@ struct AgentChatsView: View {
             Text(sessions.count == 1
                 ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
                 : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
+        }
+        .sheet(item: $missingCLIPrompt) { prompt in
+            AgentCLIMissingSheet(prompt: prompt, onClose: { missingCLIPrompt = nil })
         }
         .sheet(item: $pendingAccountMove) { pending in
             AgentMoveToAccountSheet(
@@ -1944,7 +1949,7 @@ struct AgentChatsView: View {
 
     private var sidebarEmptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Noch keine Projekte")
+            Text("No projects yet")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
             Text("Füge ein Projekt hinzu, um Codex- oder Claude-Chats darin anzulegen.")
@@ -2118,20 +2123,27 @@ struct AgentChatsView: View {
     private var newChatSplitButton: some View {
         HStack(spacing: 0) {
             Button {
-                createDefaultSession()
+                // Ohne sichtbares Projekt führt der Knopf direkt zum Hinzufügen
+                // statt still in einem importierten Ordner zu starten (LR-AU-004).
+                if selectedProject == nil {
+                    _ = addProject()
+                } else {
+                    createDefaultSession()
+                }
             } label: {
                 HStack(spacing: 7) {
                     if let project = selectedProject {
                         ProjectAvatar(project: project, size: 15)
+                        Text("New chat")
+                            .font(.system(size: 12, weight: .semibold))
                     } else {
-                        Image(systemName: "square.stack.3d.up")
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Add project…")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    Text("Neuer Chat")
-                        .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(AgentTheme.textPrimary)
-                .opacity(selectedProject == nil ? 0.5 : 1)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 // Dezenter Keycap-Hinweis: ⌘N öffnet den durchsuchbaren Picker.
@@ -2143,15 +2155,14 @@ struct AgentChatsView: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1.5)
                         .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 4))
-                        .opacity(selectedProject == nil ? 0.5 : 1)
+                        .opacity(selectedProject == nil ? 0 : 1)
                         .padding(.trailing, 8)
                         .allowsHitTesting(false)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(selectedProject == nil)
-            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? "Erst ein Projekt hinzufügen")
+            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? String(localized: "Add a project folder to start a chat"))
 
             Divider().frame(height: 16)
 
@@ -2235,7 +2246,7 @@ struct AgentChatsView: View {
                         .onHover { if $0 { newChatHighlightedProjectID = project.id } }
                     }
                     if projects.isEmpty {
-                        Text(query.isEmpty ? "Noch keine Projekte" : "Kein Projekt gefunden")
+                        (query.isEmpty ? Text("No projects yet") : Text("No project found"))
                             .font(.system(size: 11))
                             .foregroundStyle(AgentTheme.textTertiary)
                             .frame(maxWidth: .infinity)
@@ -2526,8 +2537,22 @@ struct AgentChatsView: View {
                 }
                 .animation(.easeOut(duration: 0.1), value: tabSwitcherRun.isActive)
             } else {
-                ContentUnavailableView("Kein Agent Chat", systemImage: "terminal")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Mit Anleitung und Aktion statt nur Titel (LR-AU-029).
+                ContentUnavailableView {
+                    Label("No agent chat", systemImage: "terminal")
+                } description: {
+                    selectedProject == nil
+                        ? Text("Add a project folder, then start a chat with Claude or Codex there.")
+                        : Text("Start a new chat or pick one from the sidebar.")
+                } actions: {
+                    if selectedProject == nil {
+                        Button("Add project…") { _ = addProject() }
+                    } else {
+                        Button("New chat") { createDefaultSession() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AgentTheme.background)
@@ -3257,7 +3282,7 @@ struct AgentChatsView: View {
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
             } else {
-                Text("Kein Chat ausgewählt")
+                Text("No chat selected")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(AgentTheme.textTertiary)
             }

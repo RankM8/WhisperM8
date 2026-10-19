@@ -17,12 +17,25 @@ final class AgentDirectoryEventMonitor {
     private let debounceInterval: TimeInterval
     private let settleInterval: TimeInterval
     private let rootURLs: [URL]
+    /// Höchstwartezeit des Debounce (LR-AK-016): Reißt der Strom relevanter
+    /// Events nicht ab, wird trotzdem nach dieser Zeit ein Scan angefordert.
+    private let maxWaitInterval: TimeInterval
+    /// Beginn des aktuell laufenden Debounce-Fensters.
+    private var debounceWindowStart: Date?
+    /// Scan-Anforderung (Test-Seam).
+    private let requestScan: @MainActor (AgentScanCoordinator.Reason) -> Void
 
     init(
         rootURLs: [URL]? = nil,
         debounceInterval: TimeInterval = 5.0,
-        settleInterval: TimeInterval = 30.0
+        settleInterval: TimeInterval = 30.0,
+        maxWaitInterval: TimeInterval = 30.0,
+        requestScan: @escaping @MainActor (AgentScanCoordinator.Reason) -> Void = {
+            AgentScanCoordinator.shared.requestScan(reason: $0)
+        }
     ) {
+        self.maxWaitInterval = maxWaitInterval
+        self.requestScan = requestScan
         let home = AppInstance.home
         // `.claude-profiles` statt der einzelnen Profil-projects-Dirs: so
         // werden auch NACH App-Start angelegte Account-Profile erfasst.
@@ -139,7 +152,7 @@ final class AgentDirectoryEventMonitor {
         settleTask = nil
     }
 
-    private func handleEvents(paths: [String]) {
+    func handleEvents(paths: [String]) {
         let relevant = Self.relevantPaths(
             paths,
             watchedTranscriptPaths: AgentSessionRuntimeWatcher.sharedWatchedTranscriptPaths
@@ -149,11 +162,18 @@ final class AgentDirectoryEventMonitor {
         // Debounce: externe Sessions schreiben in Bursts — ein Scan pro
         // Burst reicht. Der .fsEvent-Cooldown im Coordinator (10 s) ist die
         // zweite Bremse.
+        // Trailing-Debounce MIT Höchstwartezeit: dauernde Events dürfen den
+        // Scan nicht endlos verschieben (LR-AK-016).
+        let windowStart = debounceWindowStart ?? Date()
+        debounceWindowStart = windowStart
+        let remainingMax = max(0, maxWaitInterval - Date().timeIntervalSince(windowStart))
+        let wait = min(debounceInterval, remainingMax)
         debounceTask?.cancel()
-        debounceTask = Task { @MainActor [debounceInterval] in
-            try? await Task.sleep(for: .seconds(debounceInterval))
-            guard !Task.isCancelled else { return }
-            AgentScanCoordinator.shared.requestScan(reason: .fsEvent)
+        debounceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(wait))
+            guard !Task.isCancelled, let self else { return }
+            self.debounceWindowStart = nil
+            self.requestScan(.fsEvent)
         }
 
         // Nachzügler-Scan: Eine frisch angelegte Datei kann beim ersten Scan
@@ -163,10 +183,10 @@ final class AgentDirectoryEventMonitor {
         // Foreground-Scan unsichtbar. Ein Folge-Event ersetzt den Task; der
         // Coordinator-Cooldown verschiebt ihn höchstens, er verfällt nicht.
         settleTask?.cancel()
-        settleTask = Task { @MainActor [settleInterval] in
+        settleTask = Task { @MainActor [settleInterval, weak self] in
             try? await Task.sleep(for: .seconds(settleInterval))
-            guard !Task.isCancelled else { return }
-            AgentScanCoordinator.shared.requestScan(reason: .fsEvent)
+            guard !Task.isCancelled, let self else { return }
+            self.requestScan(.fsEvent)
         }
     }
 }

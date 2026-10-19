@@ -173,4 +173,147 @@ final class ClaudeExternalIDRecoveryTests: XCTestCase {
                 eventFileURL: eventFile, brokenID: "leer", projectPath: tempDir.path)?.sessionID,
             "echt")
     }
+
+    // MARK: LR-AK-039 — Kosten der Selbstheilung
+
+    func testByteIndexMatchesLineIndex() {
+        let lines = incidentLines
+        let viaLines = ClaudeExternalIDRecovery.buildIndex(
+            eventLines: lines.joined(separator: "\n").split(separator: "\n"))
+        let viaBytes = ClaudeExternalIDRecovery.buildIndex(data: Data((lines.joined(separator: "\n") + "\n").utf8))
+        XCTAssertEqual(viaLines, viaBytes)
+        XCTAssertEqual(viaBytes.forkIDs, ["08793d2e"])
+        XCTAssertEqual(Set(viaBytes.lastTurnIndex.keys), ["ac020fd4"])
+    }
+
+    func testManyCandidatesShareOneEventFileParsedOnce() throws {
+        ClaudeExternalIDRecovery.resetAttemptedForTesting()
+        let eventFile = tempDir.appendingPathComponent("shared-events.jsonl")
+        try Data((incidentLines + [""]).joined(separator: "\n").utf8).write(to: eventFile)
+        let projectID = UUID()
+        let sessions = (0..<500).map { n in
+            AgentChatSession(provider: .claude, projectID: projectID, externalSessionID: "tot-\(n)", title: "t\(n)")
+        }
+        var parsed = 0
+        let cache = RecoveryNegativeCache(fileURL: nil)
+        let recoveries = ClaudeExternalIDRecovery.recoveries(
+            candidates: sessions,
+            projectPathByID: [projectID: "/p"],
+            boundExternalIDs: [],
+            locateTranscript: { id, _ in id == "ac020fd4" ? URL(fileURLWithPath: "/Users/x/.claude/projects/-p/ac020fd4.jsonl") : nil },
+            eventFileURL: { _ in eventFile },
+            negativeCache: cache,
+            maxNewAttempts: 1000,
+            onIndexBuilt: { _ in parsed += 1 })
+        XCTAssertEqual(parsed, 1, "eine große Event-Datei wird genau einmal zerlegt")
+        XCTAssertEqual(recoveries.count, 500)
+        XCTAssertTrue(recoveries.allSatisfy { $0.recoveredID == "ac020fd4" })
+    }
+
+    func testNewAttemptsPerCallAreCappedAndRestFollowsNextCall() throws {
+        ClaudeExternalIDRecovery.resetAttemptedForTesting()
+        let eventFile = tempDir.appendingPathComponent("cap-events.jsonl")
+        try Data((incidentLines + [""]).joined(separator: "\n").utf8).write(to: eventFile)
+        let projectID = UUID()
+        let sessions = (0..<10).map { n in
+            AgentChatSession(provider: .claude, projectID: projectID, externalSessionID: "tot-\(n)", title: "t\(n)")
+        }
+        func run() -> Int {
+            ClaudeExternalIDRecovery.recoveries(
+                candidates: sessions, projectPathByID: [projectID: "/p"], boundExternalIDs: [],
+                locateTranscript: { id, _ in id == "ac020fd4" ? URL(fileURLWithPath: "/t/ac020fd4.jsonl") : nil },
+                eventFileURL: { _ in eventFile }, negativeCache: RecoveryNegativeCache(fileURL: nil),
+                maxNewAttempts: 4).count
+        }
+        XCTAssertEqual(run(), 4)
+        XCTAssertEqual(run(), 4)
+        XCTAssertEqual(run(), 2)
+        XCTAssertEqual(run(), 0)
+    }
+
+    func testNegativeCacheSkipsUnchangedEventFileAcrossRuns() throws {
+        ClaudeExternalIDRecovery.resetAttemptedForTesting()
+        let eventFile = tempDir.appendingPathComponent("neg-events.jsonl")
+        // Nur die kaputte ID selbst hat Turns → kein Rückfall möglich.
+        try Data((line("UserPromptSubmit", "tot") + "\n").utf8).write(to: eventFile)
+        let projectID = UUID()
+        let session = AgentChatSession(provider: .claude, projectID: projectID, externalSessionID: "tot", title: "t")
+        let cacheURL = tempDir.appendingPathComponent("neg-cache.json")
+        var parsed = 0
+        func run() {
+            ClaudeExternalIDRecovery.resetAttemptedForTesting() // simuliert App-Neustart
+            _ = ClaudeExternalIDRecovery.recoveries(
+                candidates: [session], projectPathByID: [projectID: "/p"], boundExternalIDs: [],
+                eventFileURL: { _ in eventFile }, negativeCache: RecoveryNegativeCache(fileURL: cacheURL),
+                onIndexBuilt: { _ in parsed += 1 })
+        }
+        run(); run()
+        XCTAssertEqual(parsed, 1, "unveränderte Datei wird beim zweiten Start nicht erneut gelesen")
+        // Datei ändert sich → wieder prüfen.
+        try Data((line("UserPromptSubmit", "tot") + "\n" + line("Stop", "tot") + "\n").utf8).write(to: eventFile)
+        run()
+        XCTAssertEqual(parsed, 2)
+    }
+
+    /// LR-AK-039: Negativ-Cache-Treffer verbrauchen das Budget der echten Prüfungen nicht.
+    func testNegativeCacheHitsDoNotConsumeAttemptBudget() throws {
+        ClaudeExternalIDRecovery.resetAttemptedForTesting()
+        let negFile = tempDir.appendingPathComponent("neg-only.jsonl")
+        try Data((line("UserPromptSubmit", "tot") + "\n").utf8).write(to: negFile)
+        let posFile = tempDir.appendingPathComponent("pos.jsonl")
+        try Data((incidentLines + [""]).joined(separator: "\n").utf8).write(to: posFile)
+        let cache = RecoveryNegativeCache(fileURL: nil)
+        cache.recordNegative(path: negFile.path, brokenID: "tot", signature: try XCTUnwrap(RecoveryNegativeCache.signature(of: negFile)))
+        let projectID = UUID()
+        let now = Date()
+        var negatives: [AgentChatSession] = []
+        for n in 0..<6 {
+            var s = AgentChatSession(provider: .claude, projectID: projectID, externalSessionID: "tot", title: "n\(n)")
+            s.lastActivityAt = now.addingTimeInterval(-Double(n))
+            negatives.append(s)
+        }
+        var positives: [AgentChatSession] = []
+        for n in 0..<2 {
+            var s = AgentChatSession(provider: .claude, projectID: projectID, externalSessionID: "kaputt-\(n)", title: "p\(n)")
+            s.lastActivityAt = now.addingTimeInterval(-100 - Double(n))
+            positives.append(s)
+        }
+        let negIDs = Set(negatives.map(\.id))
+        let result = ClaudeExternalIDRecovery.recoveries(
+            candidates: negatives + positives, projectPathByID: [projectID: "/p"], boundExternalIDs: [],
+            locateTranscript: { id, _ in id == "ac020fd4" ? URL(fileURLWithPath: "/t/ac020fd4.jsonl") : nil },
+            eventFileURL: { negIDs.contains($0.id) ? negFile : posFile },
+            negativeCache: cache, maxNewAttempts: 2)
+        XCTAssertEqual(result.count, 2, "Cache-Treffer dürfen die 2 echten Prüfungen nicht aufbrauchen")
+    }
+
+    /// LR-AK-021: Start-Pfad liest nur das Dateiende.
+    func testUnboundResumeCandidateReadsOnlyTail() throws {
+        let file = tempDir.appendingPathComponent("tail-events.jsonl")
+        var text = line("UserPromptSubmit", "alt") + "\n"
+        text += String(repeating: #"{"x":"filler-filler-filler-filler"}"# + "\n", count: 200)
+        text += line("UserPromptSubmit", "neu") + "\n"
+        try Data(text.utf8).write(to: file)
+        let tailOnly = ClaudeExternalIDRecovery.unboundResumeCandidate(
+            eventFileURL: file, projectPath: "/p", boundExternalIDs: [], maxTailBytes: 400,
+            locateTranscript: { id, _ in URL(fileURLWithPath: "/t/\(id).jsonl") })
+        XCTAssertEqual(tailOnly?.sessionID, "neu")
+        // Mit nur "alt" im Fenster wäre "alt" nicht auffindbar → Beleg, dass nicht die ganze Datei gelesen wird.
+        let onlyOldFile = tempDir.appendingPathComponent("old-events.jsonl")
+        try Data((line("UserPromptSubmit", "alt") + "\n" + String(repeating: #"{"x":"filler-filler-filler-filler"}"# + "\n", count: 200)).utf8).write(to: onlyOldFile)
+        XCTAssertNil(ClaudeExternalIDRecovery.unboundResumeCandidate(
+            eventFileURL: onlyOldFile, projectPath: "/p", boundExternalIDs: [], maxTailBytes: 400,
+            locateTranscript: { id, _ in URL(fileURLWithPath: "/t/\(id).jsonl") }))
+    }
+
+    /// LR-AK-021: Eine schon anderswo gebundene ID (Ersatz-Chat) wird nicht übernommen.
+    func testUnboundResumeCandidateSkipsIDBoundElsewhere() throws {
+        let file = tempDir.appendingPathComponent("bound-events.jsonl")
+        try Data((line("UserPromptSubmit", "ac020fd4") + "\n").utf8).write(to: file)
+        let locate: (String, String) -> URL? = { id, _ in URL(fileURLWithPath: "/t/\(id).jsonl") }
+        XCTAssertEqual(ClaudeExternalIDRecovery.unboundResumeCandidate(
+            eventFileURL: file, projectPath: "/p", boundExternalIDs: [], locateTranscript: locate)?.sessionID, "ac020fd4")
+        XCTAssertNil(ClaudeExternalIDRecovery.unboundResumeCandidate(
+            eventFileURL: file, projectPath: "/p", boundExternalIDs: ["ac020fd4"], locateTranscript: locate))
+    }
 }

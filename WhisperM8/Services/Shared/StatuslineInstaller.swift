@@ -23,6 +23,10 @@ struct StatuslineInstaller {
     /// settings.json-Ziele: Main-Config plus alle Account-Profile.
     /// Im Test überschreibbar (Temp-Verzeichnisse).
     var settingsDirectories: () -> [URL]
+    /// Pfad zu `jq` oder nil. Die Skripte brauchen jq, macOS bringt es nicht
+    /// mit — ohne Prüfung meldete die Seite Erfolg und Claude zeigte nur noch
+    /// „jq fehlt“ (LR-SH-016). Im Test überschreibbar.
+    var jqResolver: () -> String? = { StatuslineInstaller.findExecutable("jq") }
 
     init(
         homeDirectory: URL = AppInstance.home,
@@ -50,6 +54,7 @@ struct StatuslineInstaller {
         case resourceMissing
         case foreignScript(path: String)
         case corruptSettings(path: String)
+        case jqMissing
 
         var errorDescription: String? {
             switch self {
@@ -59,6 +64,8 @@ struct StatuslineInstaller {
                 return "Am Zielpfad liegt ein eigenes Statusline-Skript (\(path)). Installation würde es ersetzen."
             case .corruptSettings(let path):
                 return "\(path) ist kein lesbares JSON — Datei bitte prüfen; sie wird nicht überschrieben."
+            case .jqMissing:
+                return String(localized: "The status line needs the program jq, which macOS does not include. Install it in Terminal: brew install jq — then click Install again.")
             }
         }
     }
@@ -144,10 +151,10 @@ struct StatuslineInstaller {
 
     func installedHashes() -> [String: String]? {
         var hashes: [String: String] = [:]
-        if let script = try? String(contentsOf: scriptURL, encoding: .utf8) {
+        if let script = Self.readInstalledScript(scriptURL) {
             hashes[Self.scriptFileName] = Self.sha256(of: script)
         }
-        if let script = try? String(contentsOf: subagentScriptURL, encoding: .utf8) {
+        if let script = Self.readInstalledScript(subagentScriptURL) {
             hashes[Self.subagentScriptFileName] = Self.sha256(of: script)
         }
         return hashes.isEmpty ? nil : hashes
@@ -165,8 +172,8 @@ struct StatuslineInstaller {
     }
 
     func status() -> Status {
-        let mainScript = try? String(contentsOf: scriptURL, encoding: .utf8)
-        let subagentScript = try? String(contentsOf: subagentScriptURL, encoding: .utf8)
+        let mainScript = Self.readInstalledScript(scriptURL)
+        let subagentScript = Self.readInstalledScript(subagentScriptURL)
         guard mainScript != nil || subagentScript != nil else { return .missing }
         if let mainScript, !mainScript.contains(Self.managedMarker) { return .foreign }
         if let subagentScript, !subagentScript.contains(Self.managedMarker) { return .foreign }
@@ -212,9 +219,25 @@ struct StatuslineInstaller {
             .joined()
     }
 
+    /// Ausführbare Datei im Login-Shell-PATH (inklusive Homebrew-Fallback).
+    static func findExecutable(_ name: String, path: String = LoginShellEnvironment.shared.path) -> String? {
+        path.split(separator: ":").lazy
+            .map { URL(fileURLWithPath: String($0)).appendingPathComponent(name).path }
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Inhalt eines vorhandenen Skripts, auch wenn es kein UTF-8 ist (dann
+    /// verlustbehaftet dekodiert). Früher galt ein Latin-1-Skript als „fehlt“
+    /// und wurde ohne Fremddatei-Rückfrage überschrieben (LR-SH-004); ohne
+    /// unseren Marker zählt es jetzt als fremd.
+    static func readInstalledScript(_ url: URL) -> String? {
+        guard let data = FileManager.default.contents(atPath: url.path) else { return nil }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private func foreignScriptURL() -> URL? {
         for url in [scriptURL, subagentScriptURL] {
-            if let content = try? String(contentsOf: url, encoding: .utf8),
+            if let content = Self.readInstalledScript(url),
                !content.contains(Self.managedMarker) {
                 return url
             }
@@ -262,6 +285,7 @@ struct StatuslineInstaller {
     ) throws -> URL {
         let content = try bundledScript()
         let subagentContent = try bundledSubagentScript()
+        guard jqResolver() != nil else { throw InstallError.jqMissing }
 
         if !replaceForeignScript, let foreignURL = foreignScriptURL() {
             throw InstallError.foreignScript(path: foreignURL.path)

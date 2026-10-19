@@ -215,6 +215,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
                 return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
             }
+            if PromptDeliveryGate.sendBlockedByDraft(
+                mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
+                return .failure(.conflict, PromptDeliveryGate.draftMessage)
+            }
             // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
             let marked = Self.markedPrompt(prompt, actor: markerActor)
             // Zustell-Token VOR dem Paste: autorisiert genau EINE Submission
@@ -223,7 +227,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             // den gestagten Text später selbst ab.
             // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
             // sonst blockte der Guard die eigene Zustellung (Review W1).
-            SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
+            guard SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked)) else {
+                return .failure(.internalError,
+                                "Zustell-Token ließ sich nicht speichern (Datenträger voll oder Rechte?) — nichts gesendet.")
+            }
             controller.sendPrompt(marked, submit: submit)
             return .success(session)
         }

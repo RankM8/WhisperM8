@@ -80,7 +80,24 @@ final class ClaudeThemeWriter {
 
     // MARK: - Atomic merge
 
-    private func performWrite(target: String) {
+    /// Test-Naht: läuft direkt vor dem Ersetzen der Datei.
+    var beforeReplace: (() -> Void)?
+
+    /// Liest, ergänzt `theme` und ersetzt atomar. Hat jemand die Datei
+    /// zwischen Lesen und Ersetzen geändert (die CLI speichert z. B. eine
+    /// Freigabe-Regel), wird von vorn gelesen statt den älteren Stand
+    /// zurückzuschreiben — der atomare Ersatz allein verhinderte diesen
+    /// Lost Update nicht (LR-AK-017). Höchstens drei Versuche.
+    func performWrite(target: String) {
+        for _ in 0..<3 {
+            if writeOnce(target: target) { return }
+            Logger.agentPerformance.info("claude_theme_write_retry reason=changed_concurrently")
+        }
+        Logger.agentPerformance.warning("claude_theme_write_skipped reason=changed_concurrently")
+    }
+
+    /// `false` = Datei hat sich während des Schreibens geändert, nichts ersetzt.
+    private func writeOnce(target: String) -> Bool {
         let fm = FileManager.default
 
         // settings.json existiert noch nicht: frischer User. Wir legen sie
@@ -102,12 +119,12 @@ final class ClaudeThemeWriter {
             } catch {
                 Logger.agentPerformance.warning("claude_theme_seed_failed error=\(error.localizedDescription, privacy: .public)")
             }
-            return
+            return true
         }
 
         guard let data = try? Data(contentsOf: claudeStateURL) else {
             Logger.agentPerformance.warning("claude_theme_write_skipped reason=read_failed")
-            return
+            return true
         }
 
         // Strict JSON. Bei Parse-Fehler: Datei ist gerade mid-write von
@@ -115,12 +132,12 @@ final class ClaudeThemeWriter {
         guard let obj = try? JSONSerialization.jsonObject(with: data),
               var json = obj as? [String: Any] else {
             Logger.agentPerformance.warning("claude_theme_write_skipped reason=parse_failed bytes=\(data.count)")
-            return
+            return true
         }
 
         if let current = json["theme"] as? String, current == target {
             // Schon korrekt — kein churn-Write.
-            return
+            return true
         }
 
         // Einmaliges Backup, bevor wir das erste Mal mutieren.
@@ -136,7 +153,7 @@ final class ClaudeThemeWriter {
             options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         ) else {
             Logger.agentPerformance.warning("claude_theme_write_skipped reason=serialize_failed")
-            return
+            return true
         }
 
         // Original-POSIX-Permissions ermitteln.
@@ -150,12 +167,18 @@ final class ClaudeThemeWriter {
             if let perms = originalPermissions {
                 try? fm.setAttributes([.posixPermissions: perms], ofItemAtPath: tmpURL.path)
             }
+            beforeReplace?()
+            guard (try? Data(contentsOf: claudeStateURL)) == data else {
+                try? fm.removeItem(at: tmpURL)
+                return false
+            }
             _ = try fm.replaceItemAt(claudeStateURL, withItemAt: tmpURL)
             Logger.agentPerformance.info("claude_theme_written target=\(target, privacy: .public)")
         } catch {
             try? fm.removeItem(at: tmpURL)
             Logger.agentPerformance.warning("claude_theme_write_failed error=\(error.localizedDescription, privacy: .public)")
         }
+        return true
     }
 
     private func createInitialBackupIfNeeded(originalData: Data) {
