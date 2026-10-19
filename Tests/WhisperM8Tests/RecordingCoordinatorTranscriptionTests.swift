@@ -144,3 +144,36 @@ final class RecordingCoordinatorTranscriptionTests: XCTestCase {
         XCTAssertFalse(factoryCalled)
     }
 }
+
+private struct EchoPostProcessor: PostProcessing {
+    func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String { rawText }
+}
+
+/// LR-DIK-011: ein während der Transkription nachgereichter Screenshot muss im
+/// effektiven Snapshot stehen, den Zustellung, Report und Cleanup verwenden.
+@MainActor
+final class RecordingCoordinatorLateContextTests: XCTestCase {
+    func testLateScreenshotIsPartOfEffectiveContextBundle() async throws {
+        let appState = AppState.shared
+        let originalBundle = appState.contextBundle
+        defer { appState.contextBundle = originalBundle }
+
+        let late = ContextAttachment(kind: .screenshot, fileURL: URL(fileURLWithPath: "/tmp/late.png"))
+        appState.contextBundle = TranscriptContextBundle(screenshots: [late])
+
+        let coordinator = RecordingCoordinator(
+            appState: appState,
+            postProcessingService: PostProcessingService(processor: EchoPostProcessor()),
+            providerResolver: { .groq },
+            modelResolver: { .groq_whisper_v3 },
+            apiKeyResolver: { _ in "k" }
+        )
+        let mode = try XCTUnwrap(OutputMode.builtInModes.first { $0.id == OutputMode.promptID })
+
+        // Das beim Stop eingefrorene Bundle enthält den späten Screenshot noch nicht.
+        let frozen = TranscriptContextBundle(selectedText: SelectedContext(text: "x", sourceAppName: nil, sourceBundleIdentifier: nil))
+        let result = try await coordinator.processTranscriptIfNeeded("hallo", mode: mode, language: "de", contextBundle: frozen)
+
+        XCTAssertEqual(result.effectiveContextBundle?.screenshots.map(\.id), [late.id])
+    }
+}

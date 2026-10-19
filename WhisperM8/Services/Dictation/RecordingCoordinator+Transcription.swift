@@ -68,6 +68,9 @@ extension RecordingCoordinator {
             language: language,
             contextBundle: contextBundle
         )
+        // LR-DIK-011: ab hier gilt EIN effektiver Kontext-Snapshot (der, den der Prompt
+        // gesehen hat) für Bild-Zustellung, Report und Cleanup.
+        let contextBundle = postProcessingResult.effectiveContextBundle ?? contextBundle
         let finalText = postProcessingResult.finalText
         let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
         var deliveryAttachments: [PasteAttachment] = []
@@ -216,7 +219,8 @@ extension RecordingCoordinator {
                 visualManifest: promptPackage?.visualManifest,
                 agentProvider: agentSession?.provider,
                 agentSessionID: agentSession?.externalSessionID,
-                agentProjectPath: agentSession?.projectPath
+                agentProjectPath: agentSession?.projectPath,
+                effectiveContextBundle: contextBundle
             )
         } catch {
             appState.isPostProcessing = false
@@ -230,7 +234,8 @@ extension RecordingCoordinator {
                     renderedPrompt: renderedPrompt,
                     replyIntent: promptPackage?.intent,
                     visualManifest: promptPackage?.visualManifest,
-                    fallbackStatus: .rawFallback
+                    fallbackStatus: .rawFallback,
+                    effectiveContextBundle: contextBundle
                 )
             }
 
@@ -249,7 +254,8 @@ extension RecordingCoordinator {
                     replyIntent: promptPackage?.intent,
                     visualManifest: promptPackage?.visualManifest,
                     fallbackStatus: fallback.status,
-                    errorMessage: message
+                    errorMessage: message,
+                    effectiveContextBundle: contextBundle
                 )
             }
 

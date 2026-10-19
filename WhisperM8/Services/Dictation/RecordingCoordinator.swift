@@ -10,6 +10,10 @@ struct PostProcessingRunResult {
     var agentProvider: AgentProvider?
     var agentSessionID: String?
     var agentProjectPath: String?
+    /// LR-DIK-011: der Kontext, auf dessen Grundlage der Prompt gebaut wurde (Live-Bundle,
+    /// inkl. während der Transkription nachgereichter Kopien). Zustellung, Report und
+    /// Cleanup müssen dasselbe Bundle verwenden wie der Prompt; `nil` = kein Post-Processing.
+    var effectiveContextBundle: TranscriptContextBundle?
 }
 
 /// Eingefrorener Zustand eines fehlgeschlagenen Transkriptions-Laufs.
