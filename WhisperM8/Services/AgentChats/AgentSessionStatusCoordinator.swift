@@ -159,8 +159,16 @@ final class AgentSessionStatusCoordinator {
     /// Sessions, deren Launch nur SessionStart/SessionEnd-Hooks bekam (S4).
     private(set) var reducedHookSessions: Set<UUID> = []
 
-    nonisolated static func usesReducedHooks(registryEnabled: Bool, isBackground: Bool) -> Bool {
-        registryEnabled && !isBackground
+    /// Installierte Claude-Version (LR-AK-035) — Test-Injection. Ohne Registry
+    /// in der CLI (zu alt/unbekannt) bekommt der Launch den vollen Hook-Satz.
+    var claudeVersionProvider: () -> ClaudeCLIVersion? = { ClaudeCLIVersionProbe.shared.installedVersion() }
+
+    nonisolated static func usesReducedHooks(
+        registryEnabled: Bool,
+        isBackground: Bool,
+        cliSupportsRegistry: Bool = true
+    ) -> Bool {
+        registryEnabled && !isBackground && cliSupportsRegistry
     }
     /// Läuft der Chat in einem PTY dieser App? Nur dann gilt Claudes
     /// Registry-Eintrag als sein Status — dieselbe Session kann auch in einem
@@ -196,6 +204,7 @@ final class AgentSessionStatusCoordinator {
         self.launchGraceSeconds = launchGraceSeconds
         self.autoNamer = AgentSessionAutoNamer(store: store)
         self.watcher = AgentSessionRuntimeWatcher()
+        ClaudeCLIVersionProbe.shared.prewarm()
 
         self.hookBridge.setDecisionHandler { [weak self] localID, event in
             self?.handleHookEvent(localID: localID, event: event)
@@ -258,9 +267,19 @@ final class AgentSessionStatusCoordinator {
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         // S4: Mit Registry-Status nur noch Binding-/Lebenszyklus-Hooks.
         // Background-Agents behalten den vollen Satz (eigener Status-Pfad).
+        let registryEnabled = isRegistryStatusEnabled()
+        let isBackground = session?.isBackgroundChat ?? false
+        // Version nur abfragen, wenn der reduzierte Satz sonst gewählt würde.
+        let cliSupportsRegistry = (registryEnabled && !isBackground)
+            ? ClaudeCLIVersion.supportsRegistry(claudeVersionProvider())
+            : true
+        if registryEnabled, !isBackground, !cliSupportsRegistry {
+            Logger.claudeBinding.notice("reduced_hooks_skipped reason=claude_version_without_registry")
+        }
         let reducedHooks = Self.usesReducedHooks(
-            registryEnabled: isRegistryStatusEnabled(),
-            isBackground: session?.isBackgroundChat ?? false)
+            registryEnabled: registryEnabled,
+            isBackground: isBackground,
+            cliSupportsRegistry: cliSupportsRegistry)
         if reducedHooks {
             reducedHookSessions.insert(localSessionID)
         } else {

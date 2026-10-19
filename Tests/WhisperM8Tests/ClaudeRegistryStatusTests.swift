@@ -111,6 +111,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         coordinator.sharedMemoryFragmentResolver = { _, _ in nil }
         coordinator.isRegistryStatusEnabled = { flag.value }
         coordinator.registryRecordLookup = { _ in nil }
+        coordinator.claudeVersionProvider = { ClaudeCLIVersion(components: [2, 1, 303]) }
         coordinator.hasRunningTerminal = { _ in true }
         return Fixture(coordinator: coordinator, store: store, sessionID: session.id,
                        poster: poster, soundBox: sounds, registryEnabled: flag)
@@ -369,6 +370,30 @@ final class ClaudeRegistryStatusTests: XCTestCase {
             with: Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(full.settingsFilePath)))) as? [String: Any])
         XCTAssertNotNil((fullJSON["hooks"] as? [String: Any])?["PreToolUse"])
         XCTAssertFalse(f.coordinator.reducedHookSessions.contains(f.sessionID))
+    }
+
+    func testOldOrUnknownClaudeVersionGetsFullHookSet() throws {
+        for version in [ClaudeCLIVersion(components: [2, 1, 250]), nil] {
+            let f = try makeFixture()
+            f.coordinator.claudeVersionProvider = { version }
+            let prep = f.coordinator.prepareLaunchSettings(localSessionID: f.sessionID)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(prep.settingsFilePath)))) as? [String: Any])
+            let hooks = try XCTUnwrap(json["hooks"] as? [String: Any])
+            XCTAssertNotNil(hooks["PreToolUse"], "ohne Registry-Version voller Satz")
+            XCTAssertNotNil(hooks["PermissionRequest"])
+            XCTAssertFalse(f.coordinator.reducedHookSessions.contains(f.sessionID))
+        }
+    }
+
+    func testClaudeVersionParsingAndGate() {
+        XCTAssertEqual(ClaudeCLIVersion(parsing: "2.1.303 (Claude Code)")?.components, [2, 1, 303])
+        XCTAssertNil(ClaudeCLIVersion(parsing: "kaputt"))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.1.302")))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.2.0")))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "3.0")))
+        XCTAssertFalse(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.1.301")))
+        XCTAssertFalse(ClaudeCLIVersion.supportsRegistry(nil))
     }
 
     // MARK: Quelle
