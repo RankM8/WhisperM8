@@ -23,6 +23,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         case inFlight(Date)
         case completed(Date)
     }
+    /// Audit-Ziel (Tests injizieren eine Temp-Datei).
+    var auditLog: ChatsAuditLog = .shared
     private let idempotencyLock = NSLock()
     private var recentRequests: [String: IdempotencyState] = [:]
     private let idempotencyWindow: TimeInterval = 60
@@ -90,6 +92,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await gridWorkspaceOpen(request)
         case "queue.enqueue", "queue.cancel":
             return await queueMutation(request)
+        case "audit.note":
+            return await auditNote(request)
         case "session.moveAccount":
             return await sessionMoveAccount(request)
         case let method where Self.boardMethods.contains(method):
@@ -1725,7 +1729,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             verified = false
             label = "external"
         }
-        ChatsAuditLog.shared.append(ChatsAuditEntry(
+        auditLog.append(ChatsAuditEntry(
             at: Date(), actor: label, verified: verified, method: method, target: target,
             outcome: outcome, promptChars: prompt?.count,
             promptHead: prompt.map(ChatsAuditLog.promptHead)))
