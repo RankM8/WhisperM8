@@ -19,6 +19,65 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Models/OnboardingLogic.swift",
         "WhisperM8/Models/DictationLanguage.swift",
         "WhisperM8/Services/Shared/AgentCLIInstaller.swift",
+    ] + settingsFiles
+
+    /// Alle Einstellungsdateien (W6 · LR-ONB-011/LR-AU-030) außer der Entwickler-Vorschau
+    /// `SettingsKitPreview` (nur Platzhalter-Text für die Kit-Galerie).
+    static let settingsFiles: [String] = [
+        "WhisperM8/Views/Settings/Kit/ClipboardClient.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsButtonRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsCodeBlock.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsCopyCommandRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsFeedbackState.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsHelpText.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsKeyRecorderRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsLabsNotice.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsListPanel.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsPageContainer.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsPickerRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsSection.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsSliderRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsStatusRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsStatusTone.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsStepperRow.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsTabs.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsTextArea.swift",
+        "WhisperM8/Views/Settings/Kit/SettingsToggleRow.swift",
+        "WhisperM8/Views/Settings/Models/AgentCLIArgumentsPreview.swift",
+        "WhisperM8/Views/Settings/Models/CodexConnectionModel.swift",
+        "WhisperM8/Views/Settings/Models/OutputArchiveViewModel.swift",
+        "WhisperM8/Views/Settings/Models/OutputModesViewModel.swift",
+        "WhisperM8/Views/Settings/Models/PermissionSettingsModel.swift",
+        "WhisperM8/Views/Settings/Models/PreferenceBedienweg.swift",
+        "WhisperM8/Views/Settings/Models/SettingsNavigation.swift",
+        "WhisperM8/Views/Settings/Models/SettingsRouteTarget.swift",
+        "WhisperM8/Views/Settings/Models/TemplateEditorModel.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputAccountTab.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputModesTab.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputTemplatesTab.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputTestLabTab.swift",
+        "WhisperM8/Views/Settings/Pages/AboutSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/AgentChatsClaudeAccountsTab.swift",
+        "WhisperM8/Views/Settings/Pages/AgentChatsSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/AgentChatsVoiceAgentTab.swift",
+        "WhisperM8/Views/Settings/Pages/CLISkillsSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/ClaudeAccountsSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/ClaudeHooksSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/ClaudeMCPSyncSection.swift",
+        "WhisperM8/Views/Settings/Pages/ContextPrivacySettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/GPTAccountsSection.swift",
+        "WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/GPTBackendSetupRunner.swift",
+        "WhisperM8/Views/Settings/Pages/GeneralSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/JarvisCalloutsSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/OutputWorkspacePage.swift",
+        "WhisperM8/Views/Settings/Pages/PermissionsSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/RecordingSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/TranscriptionSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/VoiceGateSettingsPage.swift",
+        "WhisperM8/Views/SettingsView.swift",
     ]
 
     private static var root: URL {
@@ -59,7 +118,9 @@ final class LocalizationCatalogTests: XCTestCase {
         let keys = Set(try strings().keys)
         for file in Self.localizedFiles {
             let source = try String(contentsOf: Self.root.appendingPathComponent(file), encoding: .utf8)
-            for literal in Self.uiLiterals(in: source) where !keys.contains(literal) {
+            let isSettings = file.hasPrefix("WhisperM8/Views/Settings/") || file == "WhisperM8/Views/SettingsView.swift"
+            let literals = Self.uiLiterals(in: source) + (isSettings ? Self.settingsKitLiterals(in: source) : [])
+            for literal in literals where !keys.contains(literal) {
                 XCTFail("\(file): „\(literal)“ fehlt im String-Katalog")
             }
         }
@@ -112,20 +173,39 @@ final class LocalizationCatalogTests: XCTestCase {
     // MARK: - Helfer
 
     static func ternaryLiteralCalls(in source: String) -> [String] {
-        let pattern = #"(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView)\(\s*[^"()\n]*\?\s*"(?:[^"\\]|\\.)*"\s*:\s*"(?:[^"\\]|\\.)*""#
+        let pattern = #"(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView)\(\s*(?!settingsLocalized:)[^"()\n]*\?\s*"(?:[^"\\]|\\.)*"\s*:\s*"(?:[^"\\]|\\.)*""#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(source.startIndex..., in: source)
         return regex.matches(in: source, range: range).compactMap { Range($0.range, in: source).map { String(source[$0]) } }
+    }
+
+    /// Swift-Literal → eigentlicher Schlüssel (`\"` und `\\` aufgelöst).
+    static func unescape(_ literal: String) -> String {
+        literal.replacingOccurrences(of: "\\\"", with: "\"").replacingOccurrences(of: "\\\\", with: "\\")
     }
 
     /// `%@`, `%lld`, `%1$@` … in Reihenfolge, Positionsangaben ignoriert.
     static func placeholders(in text: String) -> [String] {
         let pattern = #"%(?:\d+\$)?[-+ #0]*\d*(?:\.\d+)?(?:hh|h|ll|l|q|z|t|j)?[@dDuUxXoOfeEgGcCsSpaA]"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        // `%%` ist ein wörtliches Prozentzeichen, kein Platzhalter.
+        let text = text.replacingOccurrences(of: "%%", with: "")
         let range = NSRange(text.startIndex..., in: text)
         return regex.matches(in: text, range: range).compactMap { match in
             Range(match.range, in: text).map { String(text[$0]).replacingOccurrences(of: #"\d+\$"#, with: "", options: .regularExpression) }
         }.sorted()
+    }
+
+    /// Literale, die an die Kit-Komponenten der Einstellungen gehen
+    /// (`SettingsRow(title:subtitle:)`, `SettingsHelpText("…")`, `SettingsSection("…")` …).
+    /// Sie rendern ihre `String`-Parameter zur Laufzeit über den Katalog.
+    static func settingsKitLiterals(in source: String) -> [String] {
+        let pattern = #"(?:\b(?:title|subtitle|detail|caption|placeholder|message|label|prompt|hint):|Settings(?:Section|HelpText|LabsNotice)\()\s*"((?:[^"\\]|\\.)*)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(source.startIndex..., in: source)
+        return regex.matches(in: source, range: range).compactMap { match in
+            Range(match.range(at: 1), in: source).map { Self.unescape(String(source[$0])) }
+        }.filter { !$0.contains("\\(") && !$0.isEmpty }
     }
 
     /// Einfache Literale in typischen UI-Aufrufen. Interpolationen (`\(`)
@@ -136,7 +216,7 @@ final class LocalizationCatalogTests: XCTestCase {
         guard let regex = try? NSRegularExpression(pattern: calls) else { return [] }
         let range = NSRange(source.startIndex..., in: source)
         return regex.matches(in: source, range: range).compactMap { match in
-            Range(match.range(at: 1), in: source).map { String(source[$0]) }
+            Range(match.range(at: 1), in: source).map { Self.unescape(String(source[$0])) }
         }.filter { !$0.contains("\\(") && !$0.isEmpty }
     }
 }

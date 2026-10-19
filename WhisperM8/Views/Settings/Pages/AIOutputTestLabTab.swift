@@ -127,7 +127,7 @@ struct AIOutputTestLabTab: View {
             guard generation == previewGeneration, !Task.isCancelled else { return }
             if shouldFallbackToRaw {
                 previewText = normalizedText
-                errorMessage = "\(error.localizedDescription) Showing Raw fallback."
+                errorMessage = String(localized: "\(error.localizedDescription) Showing Raw fallback.")
             } else {
                 previewText = ""
                 errorMessage = error.localizedDescription

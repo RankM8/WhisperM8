@@ -11,13 +11,13 @@ struct AboutSettingsPage: View {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         switch (version?.isEmpty == false ? version : nil, build?.isEmpty == false ? build : nil) {
         case let (version?, build?) where version != build:
-            return "Version \(version) (\(build))"
+            return String(localized: "Version \(version) (\(build))")
         case let (version?, _):
-            return "Version \(version)"
+            return String(localized: "Version \(version)")
         case (_, let build?):
-            return "Build \(build)"
+            return String(localized: "Build \(build)")
         default:
-            return "Version unknown"
+            return String(localized: "Version unknown")
         }
     }
 
@@ -26,9 +26,9 @@ struct AboutSettingsPage: View {
             return nil
         }
         let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "en_US")
+        formatter.locale = Locale.current
         formatter.unitsStyle = .full
-        return "Last checked \(formatter.localizedString(for: lastCheckedAt, relativeTo: Date()))"
+        return String(localized: "Last checked \(formatter.localizedString(for: lastCheckedAt, relativeTo: Date()))")
     }
 
     var body: some View {

@@ -10,7 +10,7 @@ enum AgentCLIArgumentsPreview {
     /// Beispiel im Eingabefeld — bewusst harmlos. Früher stand hier
     /// `--dangerously-skip-permissions`; Laien übernehmen Beispiele (LR-AU-032).
     static func placeholder(binary: String) -> String {
-        binary == "codex" ? "e.g. --search" : "e.g. --verbose"
+        binary == "codex" ? String(localized: "e.g. --search") : String(localized: "e.g. --verbose")
     }
 
     /// Argumente, die Rückfragen bzw. die Sandbox des Agenten für JEDEN Chat

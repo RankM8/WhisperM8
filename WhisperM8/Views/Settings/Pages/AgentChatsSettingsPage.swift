@@ -93,7 +93,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "Default project folder",
                     subtitle: "New chats start from this folder. Project actions still update this path when you open or select a project."
                 ) {
-                    Text(settingsLocalized: defaultProjectPath)
+                    Text(verbatim: defaultProjectPath)
                         .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(AppTheme.textSecondary)
                         .lineLimit(1)
@@ -154,7 +154,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Choose"
+        panel.prompt = String(localized: "Choose")
 
         if isExistingDirectory(defaultProjectPath) {
             panel.directoryURL = URL(fileURLWithPath: defaultProjectPath, isDirectory: true)
@@ -375,16 +375,16 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
     private func sendTestNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "Statusmaschine-Chat"
+        content.title = String(localized: "Example chat")
         content.subtitle = "WhisperM8 Test"
-        content.body = "Agent ist fertig und wartet auf dich."
+        content.body = String(localized: "Agent is finished and waiting for you.")
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             Task { @MainActor in
                 if let error {
                     showNotificationFeedback(NotificationFeedback(
-                        message: "Notification failed: \(error.localizedDescription)",
+                        message: String(localized: "Notification failed: \(error.localizedDescription)"),
                         tone: .error
                     ))
                 } else {
@@ -473,7 +473,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
                 let dangerous = AgentCLIArgumentsPreview.dangerousArguments(in: text.wrappedValue)
                 if !dangerous.isEmpty {
                     SettingsHelpText(
-                        "\(dangerous.joined(separator: " ")) turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it.",
+                        String(localized: "\(dangerous.joined(separator: " ")) turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it."),
                         tone: .warning
                     )
                     .frame(width: 420, alignment: .trailing)
@@ -484,7 +484,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
 
     private func commandPreviewRow(binary: String, extraArguments: String) -> some View {
         SettingsRow(title: "Command preview") {
-            Text(settingsLocalized: AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
+            Text(verbatim: AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
                 .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)

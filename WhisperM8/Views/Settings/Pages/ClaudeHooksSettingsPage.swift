@@ -84,7 +84,7 @@ struct ClaudeHooksSettingsPage: View {
                 title: "External Claude hooks detected",
                 subtitle: "External hooks can cause duplicate notifications. WhisperM8 never changes ~/.claude/.",
                 tone: .warn,
-                detail: "\(externalHookFindings.count) found"
+                detail: String(localized: "\(externalHookFindings.count) found")
             )
 
             VStack(alignment: .leading, spacing: 8) {

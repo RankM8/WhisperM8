@@ -45,12 +45,14 @@ struct SettingsCopyCommandRow: View {
 
             Spacer(minLength: 12)
 
-            Button(feedback.isActive ? "Copied" : "Copy") {
+            Button {
                 SettingsCopyCommandAction.copy(
                     command: command,
                     clipboard: clipboard,
                     feedback: feedback
                 )
+            } label: {
+                feedback.isActive ? Text("Copied") : Text("Copy")
             }
             .buttonStyle(SettingsButtonStyle.standard)
         }

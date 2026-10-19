@@ -45,10 +45,14 @@ struct ClaudeMCPSyncSection: View {
                 title: plan.additions.isEmpty ? "All accounts have the same servers" : "Copy missing servers to all accounts",
                 subtitle: plan.additions.isEmpty
                     ? "Nothing to do. Servers with different definitions per account are never copied."
-                    : "\(plan.additions.count) missing entr\(plan.additions.count == 1 ? "y" : "ies") — added with Claude's own “claude mcp add-json -s user”. Never removes anything; servers that sign in with OAuth need a one-time /mcp login per account."
+                    : (plan.additions.count == 1
+                        ? String(localized: "1 missing entry — added with Claude's own “claude mcp add-json -s user”. Never removes anything; servers that sign in with OAuth need a one-time /mcp login per account.")
+                        : String(localized: "\(plan.additions.count) missing entries — added with Claude's own “claude mcp add-json -s user”. Never removes anything; servers that sign in with OAuth need a one-time /mcp login per account."))
             ) {
-                Button(isSyncing ? "Copying…" : "Copy") {
+                Button {
                     syncNow()
+                } label: {
+                    isSyncing ? Text("Copying…") : Text("Copy")
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
                 .disabled(plan.additions.isEmpty || isSyncing)
@@ -85,8 +89,10 @@ struct ClaudeMCPSyncSection: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
             Spacer(minLength: 8)
-            Button(isExcluded ? "Include" : "Exclude") {
+            Button {
                 toggleExclusion(server)
+            } label: {
+                isExcluded ? Text("Include") : Text("Exclude")
             }
             .buttonStyle(.plain)
             .font(.system(size: 11))
@@ -98,10 +104,10 @@ struct ClaudeMCPSyncSection: View {
         if isExcluded { return "excluded — stays per account" }
         if snapshot.hasConflict(server) { return "different definitions per account — not copied" }
         if plan.manual.contains(server) {
-            return "contains secrets — set it up manually in " + missing.joined(separator: ", ") + " (never passed on the command line)"
+            return String(localized: "contains secrets — set it up manually in \(missing.joined(separator: ", ")) (never passed on the command line)")
         }
         if missing.isEmpty { return "in all accounts" }
-        return "missing in " + missing.joined(separator: ", ")
+        return String(localized: "missing in \(missing.joined(separator: ", "))")
     }
 
     private func statusSymbol(missing: [String], server: String, isExcluded: Bool) -> String {
@@ -136,10 +142,12 @@ struct ClaudeMCPSyncSection: View {
             isSyncing = false
             snapshot = dependencies.snapshot()
             if outcome.failed.isEmpty {
-                feedback = "Added \(outcome.added.count) server entr\(outcome.added.count == 1 ? "y" : "ies")."
+                feedback = outcome.added.count == 1
+                    ? String(localized: "Added 1 server entry.")
+                    : String(localized: "Added \(outcome.added.count) server entries.")
             } else {
                 let sample = outcome.failed.prefix(3).map { "\($0.addition.server) → \($0.addition.profile): \($0.message)" }
-                feedback = "Added \(outcome.added.count), failed \(outcome.failed.count): " + sample.joined(separator: "; ")
+                feedback = String(localized: "Added \(outcome.added.count), failed \(outcome.failed.count): \(sample.joined(separator: "; "))")
             }
         }
     }

@@ -144,12 +144,12 @@ struct TranscriptionSettingsPage: View {
                     SettingsStatusRow(
                         title: "GPT-Backend",
                         tone: gptBackendEnabled ? .ok : .warn,
-                        detail: gptBackendEnabled ? "Aktiv" : "Aus – unter GPT-Backend aktivieren"
+                        detail: gptBackendEnabled ? "Active" : "Off – enable it under GPT-Backend"
                     )
                     if gptBackendEnabled {
                         SettingsStatusRow(
-                            title: "ChatGPT-Konto",
-                            subtitle: "Aktives Konto des GPT-Backends",
+                            title: "ChatGPT account",
+                            subtitle: "Active account of the GPT-Backend",
                             tone: chatGPTAuthTone,
                             detail: chatGPTAuthText
                         )
@@ -183,7 +183,7 @@ struct TranscriptionSettingsPage: View {
                     title: "Price",
                     subtitle: provider.requiresAPIKey
                         ? "Static list price, as of 2026-07."
-                        : "Unklar, ob es auf die Nutzungslimits des ChatGPT-Kontos zählt."
+                        : "Unclear whether it counts toward the ChatGPT account's usage limits."
                 ) {
                     Text(settingsLocalized: provider.priceInfo)
                         .font(.system(size: 12, design: .monospaced))
@@ -284,13 +284,13 @@ struct TranscriptionSettingsPage: View {
         let account = chatGPTActiveAccount ?? "…"
         switch chatGPTAuthStatus {
         case .authenticated?:
-            return "\(account): angemeldet"
+            return String(localized: "\(account): signed in")
         case .notAuthenticated?:
-            return "\(account): nicht angemeldet"
+            return String(localized: "\(account): not signed in")
         case .unknown?:
-            return "\(account): Status unbekannt"
+            return String(localized: "\(account): status unknown")
         case nil:
-            return "Wird geprüft…"
+            return String(localized: "Checking…")
         }
     }
 
@@ -313,7 +313,7 @@ struct TranscriptionSettingsPage: View {
         case .groq_whisper_v3_turbo:
             return "Faster, 216x real-time."
         case .chatgpt_transcribe:
-            return "Interne ChatGPT-Transkription über den GPT-Proxy – ein Modell, keine Auswahl."
+            return "Internal ChatGPT transcription through the GPT proxy – one model, no choice."
         }
     }
 
@@ -386,7 +386,7 @@ private struct TranscriptionAPIKeyInputRow: View {
     private static let maskedPlaceholder = String(repeating: "•", count: 16)
 
     private var placeholder: String {
-        hasSavedKey ? Self.maskedPlaceholder : "\(providerName) API key..."
+        hasSavedKey ? Self.maskedPlaceholder : String(localized: "\(providerName) API key...")
     }
 
     var body: some View {

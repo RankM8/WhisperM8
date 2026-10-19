@@ -52,14 +52,14 @@ struct GPTBackendSettingsPage: View {
     var body: some View {
         SettingsPageContainer(
             title: "GPT-Backend",
-            subtitle: "Claude Code mit GPT-Modellen über den lokalen claude-code-proxy verwenden."
+            subtitle: "Use Claude Code with GPT models through the local claude-code-proxy."
         ) {
             SettingsLabsNotice("Unofficial upstream: Claude Code talks to GPT models through a local proxy. It can break whenever the upstream changes. Off by default.")
 
-            SettingsSection("Aktivierung") {
+            SettingsSection("Activation") {
                 SettingsToggleRow(
-                    title: "GPT-Backend aktivieren",
-                    subtitle: "Aus: Alle Claude-Chats verhalten sich wie bisher und verbinden sich direkt mit Anthropic. GPT-Stempel vorhandener Sessions werden ignoriert.",
+                    title: "Enable GPT-Backend",
+                    subtitle: "Off: all Claude chats behave as before and connect directly to Anthropic. GPT stamps on existing sessions are ignored.",
                     isOn: $backendEnabled
                 )
             }
@@ -89,38 +89,44 @@ struct GPTBackendSettingsPage: View {
                 .disabled(!backendEnabled)
                 .opacity(backendEnabled ? 1 : 0.55)
 
-            SettingsSection("Aktionen") {
+            SettingsSection("Actions") {
                 SettingsButtonRow(
-                    title: "Proxy verwalten",
-                    subtitle: "Stoppen beendet nur von WhisperM8 selbst gestartete Proxy-Prozesse — den Hauptproxy und die Instanzen der Zusatzkonten."
+                    title: "Manage proxy",
+                    subtitle: "Stopping only ends proxy processes started by WhisperM8 itself — the main proxy and the instances of the additional accounts."
                 ) {
-                    Button("Proxy stoppen") {
+                    Button("Stop proxy") {
                         proxyManager.stopIfSelfStarted()
                         refreshStatus()
                     }
                     .buttonStyle(SettingsButtonStyle.destructive)
 
-                    Button(isRefreshing ? "Prüfe…" : "Neu prüfen") {
+                    Button {
                         refreshStatus()
+                    } label: {
+                        isRefreshing ? Text("Checking…") : Text("Check again")
                     }
                     .buttonStyle(SettingsButtonStyle.standard)
                     .disabled(!backendEnabled || isRefreshing)
                 }
 
                 SettingsButtonRow(
-                    title: "Proxy-Binary",
+                    title: "Proxy binary",
                     subtitle: binaryManagementSubtitle
                 ) {
                     if let availableUpdate {
-                        Button(isUpdateWorking ? "Installiere…" : "Update auf v\(availableUpdate)") {
+                        Button {
                             installBinaryUpdate(availableUpdate)
+                        } label: {
+                            isUpdateWorking ? Text("Installing…") : Text("Update to v\(availableUpdate)")
                         }
                         .buttonStyle(SettingsButtonStyle.primary)
                         .disabled(isUpdateWorking)
                     }
 
-                    Button(isUpdateWorking && availableUpdate == nil ? "Prüfe…" : "Nach Update suchen") {
+                    Button {
                         checkForBinaryUpdate()
+                    } label: {
+                        isUpdateWorking && availableUpdate == nil ? Text("Checking…") : Text("Check for update")
                     }
                     .buttonStyle(SettingsButtonStyle.standard)
                     .disabled(!backendEnabled || isUpdateWorking)
@@ -167,13 +173,15 @@ struct GPTBackendSettingsPage: View {
     }
 
     private var setupSection: some View {
-        SettingsSection("Einrichtung") {
+        SettingsSection("Setup") {
             SettingsButtonRow(
-                title: "Geführte Einrichtung",
-                subtitle: "Führt alle Schritte nacheinander aus: Binary prüfen (fehlt es, lädt WhisperM8 v\(ClaudeCodeProxyBinaryInstaller.knownGoodVersion) checksummen-verifiziert aus dem GitHub-Release) → Proxy & Router starten → ChatGPT-Login (Device-Code, öffnet die Code-Anzeige unten)."
+                title: "Guided setup",
+                subtitle: String(localized: "Runs all steps in order: check the binary (if it is missing, WhisperM8 downloads v\(ClaudeCodeProxyBinaryInstaller.knownGoodVersion) from the GitHub release, checksum-verified) → start proxy & router → ChatGPT login (device code, opens the code display below).")
             ) {
-                Button(isSetupRunning ? "Läuft…" : "Jetzt komplett einrichten") {
+                Button {
                     runFullSetup(startLoginIfNeeded: true)
+                } label: {
+                    isSetupRunning ? Text("Running…") : Text("Set up everything now")
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
                 // Auch ein Login aus der Kontoliste sperrt: der Manager erlaubt
@@ -197,12 +205,12 @@ struct GPTBackendSettingsPage: View {
             )
 
             SettingsStatusRow(
-                title: "Prozess",
+                title: "Process",
                 tone: proxyReachable.map { $0 ? .ok : .warn } ?? .off,
                 detail: processStatusText
             ) {
                 if proxyReachable != true {
-                    Button("Proxy starten") {
+                    Button("Start proxy") {
                         startProxy()
                     }
                     .buttonStyle(SettingsButtonStyle.primary)
@@ -211,7 +219,7 @@ struct GPTBackendSettingsPage: View {
             }
 
             SettingsStatusRow(
-                title: "Authentifizierung",
+                title: "Authentication",
                 tone: authStatusTone,
                 detail: authStatusText
             )
@@ -223,13 +231,15 @@ struct GPTBackendSettingsPage: View {
     }
 
     private var deviceLoginSection: some View {
-        SettingsSection("ChatGPT-Konto") {
+        SettingsSection("ChatGPT account") {
             SettingsButtonRow(
-                title: "Device-Code-Login",
-                subtitle: "In den ChatGPT-Sicherheitseinstellungen muss „Autorisierung per Gerätecode“ aktiviert sein."
+                title: "Device-code login",
+                subtitle: "“Device code authorization” must be enabled in the ChatGPT security settings."
             ) {
-                Button(isDeviceLoginRunning ? "Login läuft…" : "Mit ChatGPT-Konto verbinden") {
+                Button {
                     startDeviceLogin()
+                } label: {
+                    isDeviceLoginRunning ? Text("Login running…") : Text("Connect ChatGPT account")
                 }
                 .buttonStyle(SettingsButtonStyle.primary)
                 // Auch während des geführten Setups gesperrt: dessen
@@ -239,7 +249,7 @@ struct GPTBackendSettingsPage: View {
             }
 
             if let deviceCodeInfo {
-                SettingsRow(title: "URL", subtitle: "Im Browser öffnen und dort den angezeigten Code eingeben.") {
+                SettingsRow(title: "URL", subtitle: "Open it in the browser and enter the displayed code there.") {
                     if let url = URL(string: deviceCodeInfo.visitURL) {
                         Link(deviceCodeInfo.visitURL, destination: url)
                             .font(.system(size: 13, weight: .medium))
@@ -249,14 +259,14 @@ struct GPTBackendSettingsPage: View {
                     }
                 }
 
-                SettingsRow(title: "Gerätecode") {
+                SettingsRow(title: "Device code") {
                     HStack(spacing: 10) {
                         Text(settingsLocalized: deviceCodeInfo.code)
                             .font(.system(size: 22, weight: .bold, design: .monospaced))
                             .foregroundStyle(AppTheme.textPrimary)
                             .textSelection(.enabled)
 
-                        Button("Code kopieren") {
+                        Button("Copy code") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(deviceCodeInfo.code, forType: .string)
                         }
@@ -268,8 +278,8 @@ struct GPTBackendSettingsPage: View {
     }
 
     private var configurationSection: some View {
-        SettingsSection("Konfiguration") {
-            SettingsRow(title: "Port", subtitle: "Lokaler Port des claude-code-proxy (Standard: 18765, zulässig 1024–65535).") {
+        SettingsSection("Configuration") {
+            SettingsRow(title: "Port", subtitle: "Local port of the claude-code-proxy (default: 18765, allowed 1024–65535).") {
                 TextField("18765", value: $port, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
@@ -283,37 +293,37 @@ struct GPTBackendSettingsPage: View {
             }
 
             SettingsToggleRow(
-                title: "Fast-Modus (Priority-Tier)",
-                subtitle: "Priority-Tier des Codex-Backends: deutlich schneller (laut Katalog 1,5× bis 2×), verbraucht aber erheblich mehr ChatGPT-Credits. Gilt für neu gestartete Chats samt Subagents — nicht für Background-Agents (claude --bg). Vorrang behalten: ein eigenes --model in den Claude-Extra-Argumenten, ein explizites ›-fast‹ im Modellnamen sowie eine globale Proxy-Konfiguration.",
+                title: "Fast mode (priority tier)",
+                subtitle: "Priority tier of the Codex backend: much faster (1.5× to 2× according to the catalog), but uses considerably more ChatGPT credits. Applies to newly started chats including subagents — not to background agents (claude --bg). These take precedence: your own --model in the Claude extra arguments, an explicit ‘-fast’ in the model name, and a global proxy configuration.",
                 isOn: $fastModeEnabled
             )
 
             editableModelRow(
-                title: "GPT-Modell",
-                subtitle: "Das GPT-Modell für den /model-Picker, für „Neuer GPT-Chat“ und für GPT-Subagents (Agent-Typ »gpt«). Welches Modell ein neuer Chat nutzt, entscheidet Claude Code selbst: in einem Chat /model wählen und mit Enter als Standard speichern — GPT oder Claude. Leer, ›auto‹ oder unbekannt = neuestes Modell (derzeit \(frontierModelName)). Zulässig ist jedes Backend-Modell des Codex-Katalogs (derzeit: \(catalogModelSummary)); Modelle mit Priority-Tier optional mit ›-fast‹. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. Neue Modelle brauchen zusätzlich einen claude-code-proxy, der sie kennt.",
-                placeholder: "Leer = automatisch",
+                title: "GPT model",
+                subtitle: String(localized: "The GPT model for the /model picker, for “New GPT chat” and for GPT subagents (agent type “gpt”). Which model a new chat uses is decided by Claude Code itself: choose /model in a chat and save it as the default with Enter — GPT or Claude. Empty, ‘auto’ or unknown = latest model (currently \(frontierModelName)). Any backend model of the Codex catalog is allowed (currently: \(catalogModelSummary)); models with a priority tier optionally with ‘-fast’. Older and unknown GPT IDs are clearly rejected by the router. New models also need a claude-code-proxy that knows them."),
+                placeholder: String(localized: "Empty = automatic"),
                 text: $pickerModel,
                 suggestions: pickerModelSuggestions
             )
 
             editableModelRow(
-                title: "Subagent-Modell (CLAUDE_CODE_SUBAGENT_MODEL)",
-                subtitle: "Zwangs-Override für ALLE nativen Subagents. Zulässig ist jedes Backend-Modell des Codex-Katalogs, optional mit ›-fast‹; ›auto‹ = neuestes Modell (derzeit \(frontierModelName)); Unbekanntes fällt sicher auf das neueste Modell zurück. Empfehlung: leer lassen und GPT-Subagents über den Agent-Typ »gpt« wählen lassen.",
-                placeholder: "Leer = aus (empfohlen)",
+                title: "Subagent model (CLAUDE_CODE_SUBAGENT_MODEL)",
+                subtitle: String(localized: "Forced override for ALL native subagents. Any backend model of the Codex catalog is allowed, optionally with ‘-fast’; ‘auto’ = latest model (currently \(frontierModelName)); unknown values safely fall back to the latest model. Recommendation: leave empty and let GPT subagents be chosen via the agent type “gpt”."),
+                placeholder: String(localized: "Empty = off (recommended)"),
                 text: $subagentModel,
                 suggestions: subagentModelSuggestions
             )
 
             SettingsRow(
-                title: "GPT-Kontextprofil",
+                title: "GPT context profile",
                 subtitle: gptContextProfileSubtitle
             ) {
-                Picker("GPT-Kontextprofil", selection: gptContextWindowSelection) {
+                Picker("GPT context profile", selection: gptContextWindowSelection) {
                     ForEach(ClaudeGPTContextProfile.allCases) { profile in
                         Text(settingsLocalized: profile.title).tag(profile.rawValue)
                     }
                     if ClaudeGPTContextProfile.matching(contextWindow: effectiveGPTContextWindow) == nil {
-                        Text("Benutzerdefiniert — \(effectiveGPTContextWindow)")
+                        Text("Custom — \(effectiveGPTContextWindow)")
                             .tag(effectiveGPTContextWindow)
                     }
                 }
@@ -366,7 +376,7 @@ struct GPTBackendSettingsPage: View {
                         Image(systemName: "chevron.down")
                     }
                     .menuStyle(.borderlessButton)
-                    .help("Modellvorschläge")
+                    .help("Model suggestions")
                 }
             }
         }
@@ -375,33 +385,33 @@ struct GPTBackendSettingsPage: View {
     private var gptContextProfileSubtitle: String {
         switch ClaudeGPTContextProfile.matching(contextWindow: effectiveGPTContextWindow) {
         case .some(.standard):
-            return "Sicherer Default für alle freigegebenen GPT-Modelle. Claude Code kompaktifiziert erfahrungsgemäß bei ungefähr \(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens / 1_000)k; native 1M-Modelle bleiben unberührt."
+            return String(localized: "Safe default for all approved GPT models. In our experience Claude Code compacts at roughly \(ClaudeGPTContextProfile.standard.expectedAutoCompactTokens / 1_000)k; native 1M models are left untouched.")
         case .some(.extended900K):
-            return "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Gilt für die 1M-Klasse laut Codex-Katalog (derzeit: \(extendedProfileModelSummary)); Direktmessungen 2026-08-18 und 2026-09-06: 903k–913k angenommen, ~924k abgewiesen. Andere Modelle fallen in diesem Profil aus dem Picker, frische Starts damit auf das neueste Modell zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
+            return String(localized: "Opt-in via Codex subscription/OAuth (1M rollout of the Codex backend): 900k raw profile, auto-compact expected around \(ClaudeGPTContextProfile.extended900K.expectedAutoCompactTokens / 1_000)k. Applies to the 1M class according to the Codex catalog (currently: \(extendedProfileModelSummary)); direct measurements 2026-08-18 and 2026-09-06: 903k–913k accepted, ~924k rejected. In this profile other models drop out of the picker, so fresh starts fall back to the latest model. May use up ChatGPT credits faster — switch back to Standard on upstream overflow.")
         case .none:
-            return "Bestehender benutzerdefinierter Wert. Für eine klar getestete Konfiguration Standard 272k oder das erweiterte 900k-Profil wählen."
+            return "Existing custom value. For a clearly tested configuration choose Standard 272k or the extended 900k profile."
         }
     }
 
     private var processStatusText: String {
         switch proxyReachable {
         case true:
-            return "Erreichbar auf Port \(port)"
+            return String(localized: "Reachable on port \(String(port))")
         case false:
-            return "Nicht erreichbar auf Port \(port)"
+            return String(localized: "Not reachable on port \(String(port))")
         case nil:
-            return "Wird geprüft…"
+            return "Checking…"
         }
     }
 
     private var authStatusText: String {
         switch authStatus {
         case .authenticated(let account, let expires):
-            return "Angemeldet: \(account), Ablauf: \(expires)"
+            return String(localized: "Signed in: \(account), expires: \(expires)")
         case .notAuthenticated:
-            return "Nicht angemeldet"
+            return "Not signed in"
         case .unknown:
-            return didRefresh ? "Unbekannt" : "Wird geprüft…"
+            return didRefresh ? "Unknown" : "Checking…"
         }
     }
 
@@ -419,14 +429,14 @@ struct GPTBackendSettingsPage: View {
     private var binaryManagementSubtitle: String {
         let installer = ClaudeCodeProxyBinaryInstaller()
         if let managed = installer.installedManagedVersion() {
-            return "Verwaltet von WhisperM8: v\(managed) (\(installer.binaryURL.path)), wird beim App-Start automatisch auf das neueste Upstream-Release gehoben. Ein PATH-Binary hätte Vorrang, sofern es mindestens v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) ist."
+            return String(localized: "Managed by WhisperM8: v\(managed) (\(installer.binaryURL.path)), automatically raised to the latest upstream release on app start. A PATH binary would take precedence if it is at least v\(ClaudeCodeProxyBinaryInstaller.minimumVersion).")
         }
-        return "Kein verwaltetes Binary — es zählt die PATH-Installation, solange sie mindestens v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) ist. „Nach Update suchen“ vergleicht mit dem neuesten GitHub-Release."
+        return String(localized: "No managed binary — the PATH installation counts as long as it is at least v\(ClaudeCodeProxyBinaryInstaller.minimumVersion). “Check for update” compares against the latest GitHub release.")
     }
 
     private var binaryStatusDetail: String {
-        guard let binary else { return didRefresh ? "Fehlt" : "Wird geprüft…" }
-        return "Gefunden: \(binary.path) (v\(binary.version ?? "unbekannt"), \(binary.sourceLabel))"
+        guard let binary else { return didRefresh ? "Missing" : "Checking…" }
+        return String(localized: "Found: \(binary.path) (v\(binary.version ?? String(localized: "unknown")), \(binary.sourceLabel))")
     }
 
     private var binaryStatusTone: SettingsStatusTone {
@@ -440,12 +450,12 @@ struct GPTBackendSettingsPage: View {
     private var binaryStatusSubtitle: String? {
         guard didRefresh else { return nil }
         guard let binary else {
-            return "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release \(ClaudeCodeProxyBinaryInstaller.repository) in den PATH."
+            return String(localized: "“Set up everything now” downloads it automatically; alternatively, put it into the PATH manually from the GitHub release \(ClaudeCodeProxyBinaryInstaller.repository).")
         }
         guard !binary.meetsMinimumVersion else { return nil }
-        var text = "Diese Version ist älter als v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) und kennt neuere Codex-Modelle nicht. „Jetzt komplett einrichten“ installiert das verwaltete Binary, das dann Vorrang hat."
+        var text = String(localized: "This version is older than v\(ClaudeCodeProxyBinaryInstaller.minimumVersion) and does not know newer Codex models. “Set up everything now” installs the managed binary, which then takes precedence.")
         if let installError = proxyManager.lastManagedInstallError {
-            text += " Letzter automatischer Versuch: \(installError)"
+            text += String(localized: " Last automatic attempt: \(installError)")
         }
         return text
     }
@@ -467,9 +477,9 @@ struct GPTBackendSettingsPage: View {
                 // (latest < baseline) darf keinen Downgrade auslösen.
                 if ClaudeCodeProxyBinaryInstaller.isVersion(latest, newerThan: baseline) {
                     availableUpdate = latest
-                    updateStatusText = "Neuere Version verfügbar (installiert/getestet: v\(baseline)). Update wird gegen die Release-Checksumme verifiziert."
+                    updateStatusText = String(localized: "Newer version available (installed/tested: v\(baseline)). The update is verified against the release checksum.")
                 } else {
-                    updateStatusText = "Aktuell: v\(baseline) (neuestes Release: v\(latest))."
+                    updateStatusText = String(localized: "Up to date: v\(baseline) (latest release: v\(latest)).")
                 }
             } catch {
                 updateStatusText = error.localizedDescription
@@ -489,7 +499,7 @@ struct GPTBackendSettingsPage: View {
             do {
                 let url = try await ClaudeCodeProxyBinaryInstaller().install(version: version)
                 availableUpdate = nil
-                updateStatusText = "v\(version) installiert: \(url.path). Ein laufender Proxy nutzt das Update nach „Proxy stoppen“ + Neustart."
+                updateStatusText = String(localized: "v\(version) installed: \(url.path). A running proxy uses the update after “Stop proxy” + restart.")
                 refreshStatus()
             } catch {
                 updateStatusText = error.localizedDescription
@@ -632,7 +642,7 @@ struct GPTBackendSettingsPage: View {
                 Task { @MainActor in
                     isDeviceLoginRunning = false
                     if exitCode != 0 {
-                        operationError = "Device-Code-Login wurde mit Status \(exitCode) beendet."
+                        operationError = String(localized: "Device-code login ended with status \(exitCode).")
                     }
                     refreshStatus()
                 }

@@ -8,7 +8,7 @@ struct OutputArchiveFallback: Equatable {
     var createdAt: Date?
 
     var title: String {
-        let modeName = mode?.name ?? "Latest Output"
+        let modeName = mode?.name ?? String(localized: "Latest Output")
         return "\(modeName) · AppState"
     }
 
