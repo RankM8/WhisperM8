@@ -32,8 +32,10 @@ BUNDLE_ID="com.whisperm8.app.test"
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 
 pids() {
-    # Nur Prozesse, deren Executable exakt das Test-Binary ist.
-    ps -axo pid=,comm= | awk -v bin="$BIN" '$2==bin {print $1}'
+    # Jede laufende Test-Instanz, auch aus einem anderen Worktree — es gibt nur
+    # eine Wurzel, zwei Instanzen würden sich die Daten teilen. Nie die
+    # Produktiv-App (anderer Bundle-Name).
+    ps -axo pid=,comm= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ {print $1}'
 }
 
 cmd_build() {
@@ -69,7 +71,10 @@ seed_defaults() {
 
 cmd_start() {
     [[ -x "$BIN" ]] || { echo "Kein Test-Bundle — erst: $0 build" >&2; exit 1; }
-    if [[ -n "$(pids)" ]]; then echo "läuft bereits (PID $(pids | tr '\n' ' '))"; return 0; fi
+    if [[ -n "$(pids)" ]]; then
+        echo "läuft bereits (PID $(pids | tr '\n' ' ')) — ggf. aus einem anderen Worktree; erst stoppen" >&2
+        return 1
+    fi
     mkdir -p "$ROOT/home"
     seed_defaults
     local env_args=(--env "WHISPERM8_INSTANCE_ROOT=$ROOT")
