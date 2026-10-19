@@ -386,6 +386,8 @@ struct AgentChatsView: View {
     /// Sessions, für die gerade der Archivieren-Bestätigungsdialog offen ist
     /// (nur gesetzt, wenn mindestens ein Terminal der Gruppe läuft).
     @State var sessionsPendingArchive: [AgentChatSession]?
+    /// Hintergrund-Agent, dessen Entfernen vom Supervisor noch bestätigt wird (LR-AU-005).
+    @State var backgroundSessionPendingRemoval: AgentChatSession?
     /// Sessions, für die gerade der Beenden-Bestätigungsdialog offen ist
     /// (Hover-Aktion im Scope „Aktiv" bzw. der Workspace-Sektion; nur
     /// gesetzt, wenn mindestens ein Terminal der Gruppe läuft — nichts
@@ -886,8 +888,29 @@ struct AgentChatsView: View {
             }
             Button("Abbrechen", role: .cancel) {}
         } message: { project in
-            let count = workspace.sessions.filter { $0.projectID == project.id }.count
-            Text("Entfernt das Projekt und seine \(count) \(count == 1 ? "Chat" : "Chats") aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet.")
+            let projectSessions = workspace.sessions.filter { $0.projectID == project.id }
+            let count = projectSessions.count
+            let runningCount = projectSessions.filter(needsProcessEndConfirmation).count
+            let runningNote = runningCount > 0
+                ? " " + String(localized: "\(runningCount) of them are still running and will be stopped.")
+                : ""
+            Text("Entfernt das Projekt und seine \(count) \(count == 1 ? "Chat" : "Chats") aus WhisperM8. Das Repo auf der Festplatte und die Claude/Codex-Transcripts bleiben unangetastet." + runningNote)
+        }
+        .confirmationDialog(
+            String(localized: "Remove this background agent?"),
+            isPresented: Binding(
+                get: { backgroundSessionPendingRemoval != nil },
+                set: { if !$0 { backgroundSessionPendingRemoval = nil } }
+            ),
+            presenting: backgroundSessionPendingRemoval
+        ) { session in
+            Button(String(localized: "Remove"), role: .destructive) {
+                performBackgroundLifecycle(.rm, on: session)
+                backgroundSessionPendingRemoval = nil
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(String(localized: "It is still running. Removing it stops the agent and deletes it from the supervisor."))
         }
         .confirmationDialog(
             "Chat archivieren?",
@@ -906,9 +929,13 @@ struct AgentChatsView: View {
             let running = sessions.filter {
                 terminalRegistry.controller(for: $0.id)?.isRunning == true
             }.count
-            Text(sessions.count == 1
+            let hasShells = sessions.contains(where: \.isTerminal)
+            let shellNote = hasShells
+                ? " " + String(localized: "Shell terminals are closed for good and cannot be restored.")
+                : ""
+            Text((sessions.count == 1
                 ? "Der Chat läuft noch — beim Archivieren wird das Terminal beendet. Der Chat bleibt im Archiv erhalten und lässt sich wiederherstellen."
-                : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.")
+                : "\(running) von \(sessions.count) Chats laufen noch — beim Archivieren werden die Terminals beendet. Alle Chats bleiben im Archiv erhalten und lassen sich wiederherstellen.") + shellNote)
         }
         .confirmationDialog(
             "Chat beenden?",
@@ -934,9 +961,12 @@ struct AgentChatsView: View {
             let removalSuffix = pending.removeFromWorkspace.map {
                 " Der Chat wird außerdem aus dem Workspace „\($0.name)“ entfernt."
             } ?? ""
-            Text(sessions.count == 1
+            let endShellNote = sessions.contains(where: \.isTerminal)
+                ? " " + String(localized: "Shell terminals are closed for good and cannot be restored.")
+                : ""
+            Text((sessions.count == 1
                 ? "Der Chat läuft noch — beim Beenden wird das Terminal gestoppt und der Tab geschlossen.\(removalSuffix) Der Chat wird nicht archiviert und lässt sich über „Zuletzt“ fortsetzen."
-                : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.")
+                : "\(running) von \(sessions.count) Chats laufen noch — beim Beenden werden die Terminals gestoppt und die Tabs geschlossen. Nichts wird archiviert; alle Chats lassen sich über „Zuletzt“ fortsetzen.") + endShellNote)
         }
         .sheet(item: $pendingAccountMove) { pending in
             AgentMoveToAccountSheet(

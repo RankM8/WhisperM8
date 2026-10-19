@@ -39,6 +39,7 @@ struct AgentSessionDetailView: View {
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
+    @State private var showRestartConfirmation = false
     /// Lokal gecachtes Transcript fuer die Offline-Ansicht. Wird beim Mount
     /// / Session-Wechsel asynchron via TranscriptReader von der JSONL der
     /// jeweiligen CLI geladen — verhindert dass jedes Re-Render erneut
@@ -155,6 +156,15 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
+        }
+        .confirmationDialog(
+            String(localized: "Restart this chat?"),
+            isPresented: $showRestartConfirmation
+        ) {
+            Button(String(localized: "Restart"), role: .destructive) { restartTerminal() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "The chat is busy or has text you have not sent. Restarting stops the current turn and discards that text."))
         }
         // `whisperm8 chats resume`: Der Control-Handler setzt
         // `shouldLaunchOnOpen = true` — ist der Tab aber BEREITS offen und
@@ -344,7 +354,18 @@ struct AgentSessionDetailView: View {
         case .start:
             launchAfterCacheWarmup()
         case .restart:
-            restartTerminal()
+            // Restart bricht einen laufenden Turn ab und verwirft einen Entwurf
+            // im Composer — nur dann nachfragen (LR-AU-005).
+            let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id)
+            if ProcessEndConfirmation.restartNeedsConfirmation(
+                isRunning: controller?.isRunning == true,
+                runtime: runtime,
+                mayHaveUnsentInput: controller?.composerDraft.mayHaveUnsentInput == true
+            ) {
+                showRestartConfirmation = true
+            } else {
+                restartTerminal()
+            }
         }
     }
 

@@ -126,18 +126,27 @@ extension AgentChatsView {
     /// confirmationDialog nach (Terminieren ist die einzige irreversible
     /// Nebenwirkung) — sonst wird direkt archiviert.
     func requestArchive(_ sessions: [AgentChatSession]) {
-        sessions.filter(\.isTerminal).forEach { closeTerminalSession($0) }
-
-        let archivable = sessions.filter { !$0.isTerminal }
-        guard !archivable.isEmpty else { return }
-        let hasRunning = archivable.contains {
-            terminalRegistry.controller(for: $0.id)?.isRunning == true
-        }
-        if hasRunning {
-            sessionsPendingArchive = archivable
+        guard !sessions.isEmpty else { return }
+        // Terminals werden NICHT mehr vorab geschlossen (LR-AU-005): sie laufen
+        // im selben Commit-Pfad wie die Chats, damit „Abbrechen" im Dialog
+        // wirklich alles unangetastet lässt.
+        if sessions.contains(where: needsProcessEndConfirmation) {
+            sessionsPendingArchive = sessions
         } else {
-            commitArchive(archivable)
+            commitArchive(sessions)
         }
+    }
+
+    /// Fragt das Beenden dieser Session nach? Chats: sobald ihr PTY läuft;
+    /// Terminals: nur mit laufendem Kindprozess (`ProcessEndConfirmation`).
+    func needsProcessEndConfirmation(_ session: AgentChatSession) -> Bool {
+        let controller = terminalRegistry.controller(for: session.id)
+        let isRunning = controller?.isRunning == true
+        guard session.isTerminal else { return isRunning }
+        return ProcessEndConfirmation.terminalNeedsConfirmation(
+            isRunning: isRunning,
+            shellHasChildProcess: controller?.processID.map(ProcessChildren.hasChildProcess(of:)) ?? false
+        )
     }
 
     /// Einstiegspunkt der Sidebar-Hover-Aktion: welche Semantik gilt, sagt
@@ -165,25 +174,12 @@ extension AgentChatsView {
         _ sessions: [AgentChatSession],
         removingFrom workspaceEntity: AgentGridWorkspace? = nil
     ) {
-        // Terminals: Session wird komplett gelöscht — den Slot trotzdem
-        // explizit leeren, damit er sofort frei ist statt erst bei der
-        // nächsten Store-Normalisierung.
-        sessions.filter(\.isTerminal).forEach { terminal in
-            if let workspaceEntity {
-                removeSessionFromWorkspace(terminal.id, workspaceID: workspaceEntity.id)
-            }
-            closeTerminalSession(terminal)
-        }
-
-        let endable = sessions.filter { !$0.isTerminal }
-        guard !endable.isEmpty else { return }
-        let hasRunning = endable.contains {
-            terminalRegistry.controller(for: $0.id)?.isRunning == true
-        }
-        if hasRunning {
-            sessionsPendingEnd = SessionEndRequest(sessions: endable, removeFromWorkspace: workspaceEntity)
+        guard !sessions.isEmpty else { return }
+        // Terminals erst im Commit-Pfad schließen (LR-AU-005).
+        if sessions.contains(where: needsProcessEndConfirmation) {
+            sessionsPendingEnd = SessionEndRequest(sessions: sessions, removeFromWorkspace: workspaceEntity)
         } else {
-            commitEndSession(endable, removingFromWorkspaceID: workspaceEntity?.id)
+            commitEndSession(sessions, removingFromWorkspaceID: workspaceEntity?.id)
         }
     }
 
@@ -194,9 +190,17 @@ extension AgentChatsView {
         _ sessions: [AgentChatSession],
         removingFromWorkspaceID workspaceID: UUID? = nil
     ) {
-        sessions.forEach { endSession($0) }
-        if let workspaceID {
-            sessions.forEach { removeSessionFromWorkspace($0.id, workspaceID: workspaceID) }
+        for session in sessions {
+            if session.isTerminal {
+                // Terminal: Session wird komplett gelöscht — den Slot trotzdem
+                // explizit leeren, damit er sofort frei ist statt erst bei der
+                // nächsten Store-Normalisierung.
+                if let workspaceID { removeSessionFromWorkspace(session.id, workspaceID: workspaceID) }
+                closeTerminalSession(session)
+            } else {
+                endSession(session)
+                if let workspaceID { removeSessionFromWorkspace(session.id, workspaceID: workspaceID) }
+            }
         }
         multiSelection = []
     }
@@ -232,7 +236,9 @@ extension AgentChatsView {
     /// Der Auswahl-Reset lebt bewusst HIER und nicht in `archiveSelection` —
     /// bei „Abbrechen" im Dialog bleibt die Mehrfach-Auswahl erhalten.
     func commitArchive(_ sessions: [AgentChatSession]) {
-        sessions.forEach { archiveSession($0) }
+        // `.terminal`-Sessions werden nicht archiviert (kein Transcript, kein
+        // Resume — ein Archiv-Eintrag wäre ein toter Geist), sondern gelöscht.
+        sessions.forEach { $0.isTerminal ? closeTerminalSession($0) : archiveSession($0) }
         multiSelection = []
     }
 

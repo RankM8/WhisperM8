@@ -236,7 +236,13 @@ extension AgentChatsView {
         }
         .disabled(!hasID || busy)
         Button("Vom Supervisor entfernen", systemImage: "trash", role: .destructive) {
-            performBackgroundLifecycle(.rm, on: session)
+            let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id)
+            let isRunning = terminalRegistry.controller(for: session.id)?.isRunning == true
+            if ProcessEndConfirmation.backgroundRemoveNeedsConfirmation(isRunning: isRunning, runtime: runtime) {
+                backgroundSessionPendingRemoval = session
+            } else {
+                performBackgroundLifecycle(.rm, on: session)
+            }
         }
         .disabled(!hasID || busy)
     }
