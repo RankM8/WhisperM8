@@ -48,4 +48,18 @@ struct VisualAttachmentDeliveryBuilder {
             )
         }
     }
+
+    /// Entfernt die Paste-Kopien (Run-Verzeichnis) nach einer Gnadenfrist: Ziel-Apps lesen
+    /// eingefügte Dateien teils asynchron noch nach dem Cmd+V (LR-DIK-019).
+    func removeDeliveryCopiesLater(_ attachments: [PasteAttachment], after delay: TimeInterval = 120) {
+        let directories = Set(attachments.map { $0.fileURL.deletingLastPathComponent() })
+        guard !directories.isEmpty else { return }
+        let root = rootDirectory.standardizedFileURL.path
+        let fileManager = fileManager
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
+            for directory in directories where directory.standardizedFileURL.path.hasPrefix(root + "/") {
+                try? fileManager.removeItem(at: directory)
+            }
+        }
+    }
 }

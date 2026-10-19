@@ -10,6 +10,10 @@ struct PostProcessingRunResult {
     var agentProvider: AgentProvider?
     var agentSessionID: String?
     var agentProjectPath: String?
+    /// LR-DIK-011: der Kontext, auf dessen Grundlage der Prompt gebaut wurde (Live-Bundle,
+    /// inkl. während der Transkription nachgereichter Kopien). Zustellung, Report und
+    /// Cleanup müssen dasselbe Bundle verwenden wie der Prompt; `nil` = kein Post-Processing.
+    var effectiveContextBundle: TranscriptContextBundle?
 }
 
 /// Eingefrorener Zustand eines fehlgeschlagenen Transkriptions-Laufs.
@@ -341,6 +345,9 @@ final class RecordingCoordinator {
 
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
+        } else if visualContextCaptureService.hasClipInFlight {
+            // LR-DIK-010: ein noch startender Clip würde sonst nach dem Stop unbeaufsichtigt weiterlaufen.
+            await visualContextCaptureService.cancelActiveClip()
         }
         // VOR dem finalen Clipboard-Sweep auf den Capture-Task warten —
         // sonst importiert der Sweep dessen Cmd+C-/Restore-Pasteboard-Bumps

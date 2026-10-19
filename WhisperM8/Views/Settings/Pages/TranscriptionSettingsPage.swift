@@ -36,13 +36,14 @@ struct TranscriptionSettingsPage: View {
 
     @AppStorage("selectedProvider") private var selectedProviderRaw = TranscriptionProvider.groq.rawValue
     @AppStorage("selectedModel") private var selectedModelRaw = TranscriptionModel.groq_whisper_v3.rawValue
-    @AppStorage("language") private var language = "de"
+    @AppStorage("language") private var language = DictationLanguage.defaultCode()
 
     @AppStorage(PreferenceKeys.claudeGPTBackendEnabled) private var gptBackendEnabled = false
     @AppStorage(PreferenceKeys.chatGPTTranscriptionEnabled) private var chatGPTTranscriptionEnabled = true
 
     @State private var apiKey = ""
     @State private var apiKeyAvailable = false
+    @State private var keySaveError: String?
     @State private var isConfirmingKeyRemoval = false
     /// ChatGPT-Abo: aktives GPT-Konto und dessen Login — beides Datei-/
     /// Subprozess-Zugriffe, deshalb nur aus dem `.task` befüllt.
@@ -102,14 +103,25 @@ struct TranscriptionSettingsPage: View {
                     TranscriptionAPIKeyInputRow(
                         text: $apiKey,
                         hasSavedKey: apiKeyAvailable,
-                        providerName: provider.displayName
+                        providerName: provider.displayName,
+                        onSubmit: { saveTypedKey(keychainKey: keychainKey) }
                     )
-                    .onChange(of: apiKey) { _, newValue in
-                        guard !newValue.isEmpty else {
-                            return
+
+                    // Gespeichert wird nur ausdrücklich: ein getipptes Zeichen darf einen
+                    // funktionierenden Key nie ersetzen (LR-ONB-006), und ein gescheiterter
+                    // Keychain-Write darf nicht wie ein vorhandener Zugang aussehen (LR-ONB-007).
+                    if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        SettingsRow(title: "Replace Key") {
+                            Button {
+                                saveTypedKey(keychainKey: keychainKey)
+                            } label: {
+                                apiKeyAvailable ? Text("Replace Saved Key") : Text("Save Key")
+                            }
+                            .buttonStyle(SettingsButtonStyle.primary)
                         }
-                        KeychainManager.save(key: keychainKey, value: newValue)
-                        apiKeyAvailable = true
+                    }
+                    if let keySaveError {
+                        SettingsHelpText(keySaveError)
                     }
 
                     if apiKeyAvailable && apiKey.isEmpty {
@@ -181,9 +193,9 @@ struct TranscriptionSettingsPage: View {
                 SettingsPickerRow(
                     title: "Spoken language",
                     selection: $language,
-                    options: ["de", "en", ""]
+                    options: DictationLanguage.pickerCodes
                 ) { code in
-                    Text(languageDisplayName(for: code))
+                    Text(DictationLanguage.displayName(for: code))
                 }
 
                 SettingsHelpText("Also used for AI Output post-processing and the Test Lab. Auto-detect omits the language field.")
@@ -224,6 +236,18 @@ struct TranscriptionSettingsPage: View {
             selectedModelRaw = newProvider.defaultModel.rawValue
         }
         selectedProviderRaw = newProvider.rawValue
+    }
+
+    private func saveTypedKey(keychainKey: String) {
+        let value = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        if KeychainManager.save(key: keychainKey, value: value).succeeded {
+            apiKeyAvailable = true
+            keySaveError = nil
+            apiKey = ""
+        } else {
+            keySaveError = String(localized: "Couldn't save the key to the macOS Keychain. Unlock your Keychain and try again.")
+        }
     }
 
     private func removeProviderKey() {
@@ -291,16 +315,6 @@ struct TranscriptionSettingsPage: View {
         }
     }
 
-    private func languageDisplayName(for code: String) -> String {
-        switch code {
-        case "de":
-            return "German"
-        case "en":
-            return "English"
-        default:
-            return "Auto-detect"
-        }
-    }
 }
 
 private struct TranscriptionProviderSegmentedRow: View {
@@ -363,6 +377,7 @@ private struct TranscriptionAPIKeyInputRow: View {
     @Binding var text: String
     var hasSavedKey: Bool
     var providerName: String
+    var onSubmit: (() -> Void)?
 
     @State private var isRevealed = false
 
@@ -378,7 +393,8 @@ private struct TranscriptionAPIKeyInputRow: View {
                 FocusableTextField(
                     text: $text,
                     placeholder: placeholder,
-                    isSecure: !isRevealed
+                    isSecure: !isRevealed,
+                    onSubmit: onSubmit
                 )
                 // `isSecure` tauscht die AppKit-View-Klasse; die Identitaet muss
                 // wechseln, damit der Eye-Toggle nicht nur den State aendert.
@@ -400,8 +416,8 @@ private struct TranscriptionAPIKeyInputRow: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(AppTheme.border, lineWidth: 1)
                 }
-                .help(isRevealed ? "Hide typed key" : "Show typed key")
-                .accessibilityLabel(Text(isRevealed ? "Hide API key" : "Show API key"))
+                .help(isRevealed ? Text("Hide typed key") : Text("Show typed key"))
+                .accessibilityLabel(isRevealed ? Text("Hide API key") : Text("Show API key"))
             }
         }
     }

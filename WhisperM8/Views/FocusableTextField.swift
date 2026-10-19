@@ -6,6 +6,8 @@ struct FocusableTextField: NSViewRepresentable {
     @Binding var text: String
     var placeholder: String
     var isSecure: Bool = false
+    /// Return im Feld (optional).
+    var onSubmit: (() -> Void)?
 
     func makeNSView(context: Context) -> NSTextField {
         let textField: NSTextField
@@ -23,6 +25,7 @@ struct FocusableTextField: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSTextField, context: Context) {
+        context.coordinator.parent = self
         if nsView.stringValue != text {
             nsView.stringValue = text
         }
@@ -46,6 +49,13 @@ struct FocusableTextField: NSViewRepresentable {
 
         init(_ parent: FocusableTextField) {
             self.parent = parent
+        }
+
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard commandSelector == #selector(NSResponder.insertNewline(_:)),
+                  let onSubmit = parent.onSubmit else { return false }
+            onSubmit()
+            return true
         }
 
         func controlTextDidChange(_ obj: Notification) {

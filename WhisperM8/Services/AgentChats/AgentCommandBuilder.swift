@@ -863,7 +863,9 @@ struct AgentCommandBuilder {
             "/usr/bin",
             "/bin"
         ]
-        for directory in fallbackDirectories {
+        // Versionsmanager (Volta, Bun, npm-global, mise, asdf, nvm, fnm) zuletzt:
+        // dieselbe Liste nutzt die CLI-Erkennung, damit „installiert“ = „startbar“.
+        for directory in fallbackDirectories + AgentCLISearchPaths.extraDirectories() {
             let path = "\(directory)/\(command)"
             if FileManager.default.isExecutableFile(atPath: path) {
                 AgentCommandPathCache.shared.store(path, for: command)

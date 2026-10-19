@@ -53,7 +53,9 @@ let package = Package(
                 "ObjCExceptionBridge",
             ],
             path: "WhisperM8",
-            exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns"],
+            // Der String-Katalog wird vom Makefile in das App-Bundle kompiliert
+            // (Bundle.main, dort sucht SwiftUI `Text("…")`), nicht als SwiftPM-Ressource.
+            exclude: ["Info.plist", "WhisperM8.entitlements", "Resources/AppIcon.icns", "Localization"],
             resources: [
                 .copy("Resources/whisperm8-cli-skill.md"),
                 .copy("Resources/whisperm8-agent-skill.md"),

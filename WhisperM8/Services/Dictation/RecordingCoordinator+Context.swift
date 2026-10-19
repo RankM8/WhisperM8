@@ -75,7 +75,11 @@ extension RecordingCoordinator {
         // 500-ms-Monitor sie nicht als User-Kopie importiert. Bekannte
         // Restluecke (existierte auch vorher): eine echte User-Kopie im
         // Capture-Fenster wird mit verschluckt.
-        observedPasteboardChangeCount = NSPasteboard.general.changeCount
+        // LR-DIK-016: nur auf den Stand nach dem eigenen Restore setzen; eine echte
+        // Nutzerkopie während des Captures bleibt für den Monitor sichtbar.
+        if let resync = selectedContextService.outcome.resyncChangeCount {
+            observedPasteboardChangeCount = resync
+        }
         startClipboardScreenshotMonitor()
     }
 
@@ -176,6 +180,7 @@ extension RecordingCoordinator {
         guard let appState, appState.isRecording else { return }
         guard appState.contextBundle.agentChat != nil else { return }
         appState.contextBundle.agentChat = nil
+        appState.contextBundle.agentChatTail = nil
         overlayController.update(appState: appState)
     }
 
@@ -204,6 +209,13 @@ extension RecordingCoordinator {
             removed = attachment
         } else if let attachment = bundle.screenClips.first(where: { $0.id == id }) {
             bundle.screenClips.removeAll { $0.id == id }
+            // LR-DIK-009: aus dem Clip abgeleitete Einzelbilder gehen mit; unabhängige
+            // Screenshots und Frames anderer Clips bleiben.
+            let derivedFrames = bundle.visualFrames.filter { $0.sourceClipID == id }
+            bundle.visualFrames.removeAll { $0.sourceClipID == id }
+            if !derivedFrames.isEmpty {
+                visualContextCaptureService.cleanup(TranscriptContextBundle(visualFrames: derivedFrames))
+            }
             removed = attachment
         } else if let attachment = bundle.visualFrames.first(where: { $0.id == id }) {
             bundle.visualFrames.removeAll { $0.id == id }

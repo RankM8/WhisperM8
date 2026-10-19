@@ -26,11 +26,37 @@ final class StatuslineInstallerTests: XCTestCase {
 
     private func makeInstaller() -> StatuslineInstaller {
         let directories = [mainConfigDir!, profileDir!]
-        return StatuslineInstaller(
+        var installer = StatuslineInstaller(
             homeDirectory: tempHome,
             bundle: .module,
             settingsDirectories: { directories }
         )
+        installer.jqResolver = { "/usr/bin/jq" }
+        return installer
+    }
+
+    /// LR-SH-004: Ein eigenes Skript in Latin-1 galt als „fehlt“ und wurde
+    /// ohne Fremddatei-Rückfrage überschrieben.
+    func testNonUTF8ForeignScriptIsProtected() throws {
+        let installer = makeInstaller()
+        let original = Data([0x23, 0x21, 0x2F, 0x62, 0x69, 0x6E, 0x2F, 0x73, 0x68, 0x0A, 0x23, 0x20, 0xE4, 0x0A])
+        try original.write(to: installer.scriptURL)
+        XCTAssertEqual(installer.status(), .foreign)
+        XCTAssertThrowsError(try installer.install()) { error in
+            XCTAssertEqual(error as? StatuslineInstaller.InstallError, .foreignScript(path: installer.scriptURL.path))
+        }
+        XCTAssertEqual(try Data(contentsOf: installer.scriptURL), original, "bytegleich erhalten")
+    }
+
+    /// LR-SH-016: Ohne jq meldet die Installation einen geführten Fehler statt Erfolg.
+    func testInstallWithoutJqFailsWithGuidance() {
+        var installer = makeInstaller()
+        installer.jqResolver = { nil }
+        XCTAssertThrowsError(try installer.install()) { error in
+            XCTAssertEqual(error as? StatuslineInstaller.InstallError, .jqMissing)
+            XCTAssertTrue(error.localizedDescription.contains("brew install jq"))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: installer.scriptURL.path))
     }
 
     private func settingsJSON(in directory: URL) throws -> [String: Any] {

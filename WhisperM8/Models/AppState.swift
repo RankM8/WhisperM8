@@ -27,11 +27,19 @@ final class AppState {
     var isTranscribing = false
     var audioLevel: Float = 0
     var recordingDuration: TimeInterval = 0
-    var lastError: String?
+    var lastError: String? {
+        didSet { if lastError != nil { errorRevision &+= 1 } }
+    }
+    /// Zähler für „neu entstandene“ Ergebnisse (Onboarding-Test, LR-ONB-013):
+    /// steigen bei jedem gesetzten Fehler bzw. Diktatergebnis.
+    private(set) var errorRevision = 0
+    private(set) var transcriptionRevision = 0
     /// `true`, wenn eine gesicherte Aufnahme zum erneuten Transkribieren bereitliegt
     /// (Menüleisten-Eintrag). Gepflegt vom RecordingCoordinator.
     var hasPreservedRecording = false
-    var lastTranscription: String?
+    var lastTranscription: String? {
+        didSet { if lastTranscription != nil { transcriptionRevision &+= 1 } }
+    }
     var selectedOutputMode = OutputMode.defaultMode()
     var isPostProcessing = false
     var lastRawTranscription: String?

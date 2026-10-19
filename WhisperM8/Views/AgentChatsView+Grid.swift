@@ -1183,7 +1183,8 @@ extension AgentChatsView {
                 },
                 onClaudeHookLaunched: { sessionID in
                     AgentSessionStatusCoordinator.shared.hookLaunchDidStart(sessionID: sessionID)
-                }
+                },
+                onNewChatInProject: { startNewChat(in: project) }
             )
         }
     }

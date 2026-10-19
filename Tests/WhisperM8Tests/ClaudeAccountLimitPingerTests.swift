@@ -72,10 +72,12 @@ final class ClaudeAccountLimitPingerTests: XCTestCase {
     /// Ping-Artefakte ins Profil legen (encodiertes projects/-Verzeichnis mit
     /// Session-JSONL + memory/ — exakt was die CLI beim Test-Ping anlegte).
     private func seedPingArtifacts(configDir: URL) throws -> URL {
+        let work = tempRoot.appendingPathComponent(ClaudeAccountLimitPinger.workDirectoryName, isDirectory: true)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         let encoded = configDir
             .appendingPathComponent("projects", isDirectory: true)
             .appendingPathComponent(
-                "-tmp-fake-\(ClaudeAccountLimitPinger.workDirectoryName)", isDirectory: true
+                ClaudeAccountLimitPinger.pingProjectsDirectoryName(workDirectory: work), isDirectory: true
             )
         try FileManager.default.createDirectory(
             at: encoded.appendingPathComponent("memory", isDirectory: true),
@@ -192,12 +194,33 @@ final class ClaudeAccountLimitPingerTests: XCTestCase {
     }
 
     func testPingProjectsDirectoryDetection() {
-        XCTAssertTrue(ClaudeAccountLimitPinger.isPingProjectsDirectory(
-            "-Users-x-Library-Application Support-WhisperM8-whisperm8-limit-ping"
-        ))
-        XCTAssertTrue(ClaudeAccountLimitPinger.isPingProjectsDirectory("-tmp-whisperm8-limit-ping"))
-        XCTAssertFalse(ClaudeAccountLimitPinger.isPingProjectsDirectory("-Users-x-repos-whisperm8"))
-        XCTAssertFalse(ClaudeAccountLimitPinger.isPingProjectsDirectory("-Users-x-limit-ping-notes"))
+        let work = URL(fileURLWithPath: "/tmp/wm8-ping-test/whisperm8-limit-ping")
+        let exact = ClaudeAccountLimitPinger.pingProjectsDirectoryName(workDirectory: work)
+        XCTAssertTrue(ClaudeAccountLimitPinger.isPingProjectsDirectory(exact, workDirectory: work))
+        XCTAssertFalse(ClaudeAccountLimitPinger.isPingProjectsDirectory("-Users-x-repos-whisperm8", workDirectory: work))
+        XCTAssertFalse(ClaudeAccountLimitPinger.isPingProjectsDirectory("-Users-x-limit-ping-notes", workDirectory: work))
+    }
+
+    /// LR-KO-003: Ein echtes Projekt mit demselben Namensende wurde samt
+    /// Transcripts gelöscht.
+    func testCleanupDeletesOnlyTheExactPingDirectory() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("ping-clean-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let work = tmp.appendingPathComponent("support/whisperm8-limit-ping")
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        let configDir = tmp.appendingPathComponent("config")
+        let projects = configDir.appendingPathComponent("projects")
+        let pingDir = projects.appendingPathComponent(ClaudeAccountLimitPinger.pingProjectsDirectoryName(workDirectory: work))
+        let userDir = projects.appendingPathComponent("-Users-x-repos-whisperm8-limit-ping")
+        for dir in [pingDir, userDir] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try "{}".write(to: dir.appendingPathComponent("s.jsonl"), atomically: true, encoding: .utf8)
+        }
+        var pinger = ClaudeAccountLimitPinger()
+        pinger.workDirectory = work
+        pinger.cleanupPingArtifacts(configDir: configDir)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pingDir.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: userDir.appendingPathComponent("s.jsonl").path))
     }
 }
 

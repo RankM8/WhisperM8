@@ -9,6 +9,7 @@ xcuserdata/
 # Swift Package Manager
 .build/
 .build-dev/
+.build-*/
 .build-test/
 .build-li/
 .swiftpm/

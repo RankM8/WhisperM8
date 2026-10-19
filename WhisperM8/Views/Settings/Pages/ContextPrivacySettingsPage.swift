@@ -45,6 +45,7 @@ struct ContextPrivacySettingsPage: View {
                         title: "Delete visual context files after processing",
                         isOn: $deleteContextFilesAfterProcessing
                     )
+                    SettingsHelpText(String(localized: "Also removes the paste copies and keeps no image or video copies in the output archive. Text and metadata of a run stay in the archive."))
                 }
             }
 

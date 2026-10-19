@@ -36,10 +36,14 @@ struct AgentSessionDetailView: View {
     var onPrepareLaunchSettings: (UUID) -> AgentSessionStatusCoordinator.LaunchSettingsPreparation = { _ in .none }
     /// Wird gerufen direkt NACH dem Launch um Hook-Tail-Polling zu starten.
     var onClaudeHookLaunched: (UUID) -> Void = { _ in }
+    /// Neuer Chat im Projekt dieser Session (Leerzustand bei gelöschtem Verlauf).
+    var onNewChatInProject: (() -> Void)?
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
     @State private var showRestartConfirmation = false
+    /// Launch scheiterte an fehlender CLI: geführter Leerzustand statt Balken (LR-AU-022).
+    @State private var missingCLI: AgentCLI?
     /// Lokal gecachtes Transcript fuer die Offline-Ansicht. Wird beim Mount
     /// / Session-Wechsel asynchron via TranscriptReader von der JSONL der
     /// jeweiligen CLI geladen — verhindert dass jedes Re-Render erneut
@@ -99,7 +103,9 @@ struct AgentSessionDetailView: View {
                 .padding(10)
                 .background(Color.yellow.opacity(0.12))
             }
-            if let controller {
+            if let missingCLI, controller == nil {
+                AgentCLIMissingView(cli: missingCLI, onInstalled: { self.missingCLI = nil })
+            } else if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
             } else if session.isTerminal {
@@ -121,7 +127,8 @@ struct AgentSessionDetailView: View {
                         ? { loadEarlierHistory() } : nil,
                     history: historyState,
                     loadHint: tailWindowHint,
-                    showsSummaryCard: !session.isSubagentJob
+                    showsSummaryCard: !session.isSubagentJob,
+                    onNewChatInProject: onNewChatInProject
                 )
             }
         }
@@ -532,7 +539,12 @@ struct AgentSessionDetailView: View {
             }
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            if case AgentCommandError.commandNotFound(let name) = error {
+                missingCLI = AgentChatStartGate.cli(forCommandName: name)
+                errorMessage = nil
+            } else {
+                errorMessage = error.localizedDescription
+            }
             // R4-RESUME-01: Fehlerpfad (z. B. fehlendes Resume-Transcript,
             // Builder-Fehler) gibt den Launch-Trigger wieder frei — sonst
             // blockiert `focusLaunchInFlight` jeden weiteren Versuch, bis
