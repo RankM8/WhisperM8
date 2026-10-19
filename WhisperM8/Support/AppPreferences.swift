@@ -236,8 +236,12 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.summaryStartupReconciliationEnabled) }
     }
 
+    /// Default AUS (LR-AK-010, Beschluss D1): Jede Zusammenfassung ist ein
+    /// zusätzlicher Modellaufruf, der Gesprächsausschnitte an das Modell des
+    /// Chats schickt und auf dessen Konto zählt. Ein einmal gespeicherter Wert
+    /// (auch `true`) bleibt erhalten — nur der Default für nie gesetzte Werte ist aus.
     var isAutoSummaryEnabled: Bool {
-        get { boolWithDefault(true, forKey: Keys.isAutoSummaryEnabled) }
+        get { boolWithDefault(false, forKey: Keys.isAutoSummaryEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoSummaryEnabled) }
     }
 
