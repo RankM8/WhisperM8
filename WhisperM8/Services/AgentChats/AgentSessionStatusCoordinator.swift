@@ -155,12 +155,25 @@ final class AgentSessionStatusCoordinator {
     private var shadowDiffSince: [UUID: Date] = [:]
     nonisolated static let shadowDiffLogSeconds: TimeInterval = 5
 
+    /// Verzögerung der Rückfrage-Meldung bei Registry-Status: Der Transcript-Tail
+    /// liefert die genaue Warte-Art erst kurz nach dem Registry-Wechsel
+    /// (LR-AK-036). 0 = sofort (Tests).
+    var registryAwaitingNotificationDelay: TimeInterval = 0.3
+
     var isRegistryStatusEnabled: () -> Bool = { AppPreferences.shared.isClaudeRegistryStatusEnabled }
     /// Sessions, deren Launch nur SessionStart/SessionEnd-Hooks bekam (S4).
     private(set) var reducedHookSessions: Set<UUID> = []
 
-    nonisolated static func usesReducedHooks(registryEnabled: Bool, isBackground: Bool) -> Bool {
-        registryEnabled && !isBackground
+    /// Installierte Claude-Version (LR-AK-035) — Test-Injection. Ohne Registry
+    /// in der CLI (zu alt/unbekannt) bekommt der Launch den vollen Hook-Satz.
+    var claudeVersionProvider: () -> ClaudeCLIVersion? = { ClaudeCLIVersionProbe.shared.installedVersion() }
+
+    nonisolated static func usesReducedHooks(
+        registryEnabled: Bool,
+        isBackground: Bool,
+        cliSupportsRegistry: Bool = true
+    ) -> Bool {
+        registryEnabled && !isBackground && cliSupportsRegistry
     }
     /// Läuft der Chat in einem PTY dieser App? Nur dann gilt Claudes
     /// Registry-Eintrag als sein Status — dieselbe Session kann auch in einem
@@ -196,6 +209,7 @@ final class AgentSessionStatusCoordinator {
         self.launchGraceSeconds = launchGraceSeconds
         self.autoNamer = AgentSessionAutoNamer(store: store)
         self.watcher = AgentSessionRuntimeWatcher()
+        ClaudeCLIVersionProbe.shared.prewarm()
 
         self.hookBridge.setDecisionHandler { [weak self] localID, event in
             self?.handleHookEvent(localID: localID, event: event)
@@ -258,9 +272,19 @@ final class AgentSessionStatusCoordinator {
         guard hooksEnabled || !fragment.isEmpty else { return .none }
         // S4: Mit Registry-Status nur noch Binding-/Lebenszyklus-Hooks.
         // Background-Agents behalten den vollen Satz (eigener Status-Pfad).
+        let registryEnabled = isRegistryStatusEnabled()
+        let isBackground = session?.isBackgroundChat ?? false
+        // Version nur abfragen, wenn der reduzierte Satz sonst gewählt würde.
+        let cliSupportsRegistry = (registryEnabled && !isBackground)
+            ? ClaudeCLIVersion.supportsRegistry(claudeVersionProvider())
+            : true
+        if registryEnabled, !isBackground, !cliSupportsRegistry {
+            Logger.claudeBinding.notice("reduced_hooks_skipped reason=claude_version_without_registry")
+        }
         let reducedHooks = Self.usesReducedHooks(
-            registryEnabled: isRegistryStatusEnabled(),
-            isBackground: session?.isBackgroundChat ?? false)
+            registryEnabled: registryEnabled,
+            isBackground: isBackground,
+            cliSupportsRegistry: cliSupportsRegistry)
         if reducedHooks {
             reducedHookSessions.insert(localSessionID)
         } else {
@@ -388,6 +412,15 @@ final class AgentSessionStatusCoordinator {
             bindExternalSessionID(localID: localID, event: event)
         } else {
             resolvePendingBinding(localID: localID, event: event)
+        }
+        // Events eines ignorierten bg-Forks (derselbe Event-File wie das
+        // Vordergrundterminal) betreffen den Vordergrundstatus nicht: ein
+        // Fork-Stop meldete sonst einen noch arbeitenden Chat als fertig und
+        // löste eine Queue-Zustellung aus (LR-AK-020). Events mit fremder oder
+        // fehlender ID laufen unverändert weiter.
+        if let eventSessionID = event.sessionID,
+           forkExternalIDs[localID]?.contains(eventSessionID) == true {
+            return
         }
         if event.hookEventName == .promptGuardBlock {
             handlePromptGuardBlock(localID: localID)
@@ -653,6 +686,9 @@ final class AgentSessionStatusCoordinator {
         case .question:
             return .question
         case .tool(let name, _):
+            // `input needed` heißt Frage/Elicitation — das letzte Tool im Tail
+            // kann längst abgeschlossen sein (LR-AK-036).
+            if waitingFor == "input needed" { return .question }
             return name == "ExitPlanMode" ? .planApproval : .permission
         case .reply, nil:
             return waitingFor == "input needed" ? .question : .permission
@@ -944,7 +980,18 @@ final class AgentSessionStatusCoordinator {
             AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
-                postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                if registryLiveSessions.contains(sessionID), registryAwaitingNotificationDelay > 0 {
+                    // Art kann der Tail noch nachziehen: kurz warten, dann die
+                    // aktuelle Art melden — nur wenn der Chat noch wartet.
+                    let delay = registryAwaitingNotificationDelay
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        guard let self, case .awaitingInput(let kind) = self.states[sessionID] else { return }
+                        self.postNotification(kind: .inputRequested(kind), sessionID: sessionID)
+                    }
+                } else {
+                    postNotification(kind: .inputRequested(reason), sessionID: sessionID)
+                }
             }
         }
     }

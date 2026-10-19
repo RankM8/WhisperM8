@@ -159,8 +159,22 @@ final class AgentSessionRuntimeWatcher {
         )
         entry.provider = provider
         entry.cwd = cwd
+        // Umbindung (/clear, /resume): neue ID → altes Transcript samt Caches
+        // und Event-Source verwerfen, sonst liest der Watcher weiter die alte
+        // Datei (LR-AK-019).
+        let rebound = watched[sessionID] != nil
+            && externalSessionID != nil
+            && externalSessionID != entry.externalSessionID
         if let externalSessionID {
             entry.externalSessionID = externalSessionID
+        }
+        if rebound {
+            entry.transcriptURL = nil
+            entry.lastStat = nil
+            entry.cachedLastEvent = nil
+            entry.cachedActivity = nil
+            watched[sessionID] = entry
+            detachEventSource(sessionID: sessionID)
         }
         if entry.transcriptURL == nil {
             entry.transcriptURL = resolveTranscriptURL(for: entry)
@@ -173,6 +187,11 @@ final class AgentSessionRuntimeWatcher {
         // Sofortiger Tick, damit der Status nicht erst nach `pollInterval`
         // aufschlägt — wichtig fürs Erlebnis beim Wechseln zwischen Sessions.
         pollOne(sessionID: sessionID)
+    }
+
+    /// Aktuell beobachtete Transcript-URL (Tests, Diagnose).
+    func transcriptURL(for sessionID: UUID) -> URL? {
+        watched[sessionID]?.transcriptURL
     }
 
     func unwatch(sessionID: UUID) {
@@ -405,7 +424,7 @@ final class AgentSessionRuntimeWatcher {
     }
 
     private func resolveTranscriptURL(for entry: WatchedSession) -> URL? {
-        Self.resolveTranscriptURL(for: entry)
+        urlResolver(entry)
     }
 
     nonisolated private static func resolveTranscriptURL(for entry: WatchedSession) -> URL? {

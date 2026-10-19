@@ -56,6 +56,73 @@ final class AgentTranscriptStatusTests: XCTestCase {
         }
     }
 
+    // MARK: - Echtes Codex-Rollout-Format (LR-AK-006)
+
+    func testCodexRealRolloutTaskCompleteIsTurnEnd() {
+        let event = AgentTranscriptParser.parseLine(CodexRolloutFixtures.taskComplete, provider: .codex)
+        guard case .assistantMessageStopped = event else {
+            return XCTFail("task_complete muss Turn-Ende sein, bekam \(String(describing: event))")
+        }
+    }
+
+    func testCodexRealRolloutTurnStartAndPromptAreWorking() {
+        for line in [CodexRolloutFixtures.taskStarted, CodexRolloutFixtures.userMessage] {
+            guard case .userMessage = AgentTranscriptParser.parseLine(line, provider: .codex) else {
+                return XCTFail("Turn-Start/Prompt muss .userMessage sein: \(line.prefix(80))")
+            }
+        }
+    }
+
+    func testCodexRealRolloutActivityLines() {
+        for line in [CodexRolloutFixtures.agentMessageCommentary, CodexRolloutFixtures.reasoningEncrypted,
+                     CodexRolloutFixtures.functionCall, CodexRolloutFixtures.responseItemAssistantCommentary] {
+            guard case .assistantMessageOngoing = AgentTranscriptParser.parseLine(line, provider: .codex) else {
+                return XCTFail("Aktivitaet erwartet: \(line.prefix(80))")
+            }
+        }
+        guard case .toolResult = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCallOutput, provider: .codex) else {
+            return XCTFail("function_call_output muss .toolResult sein")
+        }
+    }
+
+    func testCodexRealRolloutTokenCountAndTurnContextAreMeta() {
+        for line in [CodexRolloutFixtures.tokenCount, CodexRolloutFixtures.turnContext,
+                     CodexRolloutFixtures.responseItemUserMessage, CodexRolloutFixtures.responseItemDeveloperMessage] {
+            guard case .meta = AgentTranscriptParser.parseLine(line, provider: .codex) else {
+                return XCTFail("statusneutral erwartet: \(line.prefix(80))")
+            }
+        }
+        guard case .sessionMeta = AgentTranscriptParser.parseLine(CodexRolloutFixtures.sessionMeta, provider: .codex) else {
+            return XCTFail("session_meta muss .sessionMeta sein")
+        }
+    }
+
+    func testCodexRealRolloutTurnAbortedIsInterrupt() {
+        let line = #"{"timestamp":"2026-07-04T22:20:38.665Z","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"x","reason":"interrupted"}}"#
+        guard case .turnInterrupted = AgentTranscriptParser.parseLine(line, provider: .codex) else {
+            return XCTFail("turn_aborted muss .turnInterrupted sein")
+        }
+    }
+
+    func testCodexRealRolloutTailAfterTaskCompleteDecidesIdleAndFinished() {
+        // token_count folgt in echten Rollouts NACH task_complete — darf das Turn-Ende nicht verdecken.
+        let tail = [CodexRolloutFixtures.functionCallOutput, CodexRolloutFixtures.agentMessageFinal,
+                    CodexRolloutFixtures.taskComplete, CodexRolloutFixtures.tokenCount].joined(separator: "\n")
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        let now = Date()
+        let decision = AgentTranscriptStatusDecider.decide(lastEvent: event, fileMTime: now, now: now, priorTurnFinishedAt: nil)
+        XCTAssertEqual(decision?.status, .idle)
+        XCTAssertEqual(decision?.turnFinished, true)
+    }
+
+    func testCodexRealRolloutLongSilentToolRunStaysWorking() {
+        let tail = [CodexRolloutFixtures.taskStarted, CodexRolloutFixtures.functionCall].joined(separator: "\n")
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        let now = Date()
+        let decision = AgentTranscriptStatusDecider.decide(lastEvent: event, fileMTime: now.addingTimeInterval(-60), now: now, priorTurnFinishedAt: nil)
+        XCTAssertEqual(decision?.status, .working, "60 s stiller Tool-Lauf darf nicht idle werden")
+    }
+
     func testTranscriptParserReturnsNilForGarbageLine() {
         XCTAssertNil(AgentTranscriptParser.parseLine("not json", provider: .claude))
         XCTAssertNil(AgentTranscriptParser.parseLine("", provider: .codex))

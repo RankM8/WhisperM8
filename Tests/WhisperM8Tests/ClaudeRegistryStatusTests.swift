@@ -45,7 +45,10 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed", detail: .question("Rot?")), .question)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt",
                                               detail: .tool(name: "ExitPlanMode", argument: nil)), .planApproval)
+        // LR-AK-036: das letzte Tool kann laengst abgeschlossen sein — `input needed` gewinnt.
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed",
+                                              detail: .tool(name: "Bash", argument: "ls")), .question)
+        XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt",
                                               detail: .tool(name: "Bash", argument: "ls")), .permission)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed", detail: nil), .question)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt", detail: .reply("ok")), .permission)
@@ -111,6 +114,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         coordinator.sharedMemoryFragmentResolver = { _, _ in nil }
         coordinator.isRegistryStatusEnabled = { flag.value }
         coordinator.registryRecordLookup = { _ in nil }
+        coordinator.registryAwaitingNotificationDelay = 0
+        coordinator.claudeVersionProvider = { ClaudeCLIVersion(components: [2, 1, 303]) }
         coordinator.hasRunningTerminal = { _ in true }
         return Fixture(coordinator: coordinator, store: store, sessionID: session.id,
                        poster: poster, soundBox: sounds, registryEnabled: flag)
@@ -245,12 +250,26 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1, "Rückfrage-Meldung nur einmal")
     }
 
+    func testInputRequestedNotificationWaitsForTailAndUsesRefinedKind() async throws {
+        let f = try makeFixture()
+        f.coordinator.registryAwaitingNotificationDelay = 0.05
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("busy"))
+        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "permission prompt"))
+        XCTAssertTrue(f.poster.posted.isEmpty, "Meldung wartet auf den Transcript-Tail")
+        f.coordinator.handleTranscriptActivity(
+            sessionID: f.sessionID, activity: AgentSessionActivity(detail: .tool(name: "ExitPlanMode", argument: nil)))
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(f.poster.posted.count, 1)
+        XCTAssertEqual(f.poster.posted.first?.kind, .inputRequested(.planApproval))
+    }
+
     func testPermissionToolNameComesFromTail() throws {
         let f = try makeFixture()
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
         f.coordinator.handleTranscriptActivity(
             sessionID: f.sessionID, activity: AgentSessionActivity(detail: .tool(name: "Bash", argument: "rm x")))
-        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "input needed"))
+        f.coordinator.handleRegistryRecord(record("waiting", waitingFor: "permission prompt"))
         XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .awaitingInput(.permission))
         XCTAssertEqual(f.coordinator.activityStore.activity(for: f.sessionID)?.awaitingToolName, "Bash")
     }
@@ -396,6 +415,30 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertFalse(f.coordinator.reducedHookSessions.contains(f.sessionID))
     }
 
+    func testOldOrUnknownClaudeVersionGetsFullHookSet() throws {
+        for version in [ClaudeCLIVersion(components: [2, 1, 250]), nil] {
+            let f = try makeFixture()
+            f.coordinator.claudeVersionProvider = { version }
+            let prep = f.coordinator.prepareLaunchSettings(localSessionID: f.sessionID)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(
+                with: Data(contentsOf: URL(fileURLWithPath: try XCTUnwrap(prep.settingsFilePath)))) as? [String: Any])
+            let hooks = try XCTUnwrap(json["hooks"] as? [String: Any])
+            XCTAssertNotNil(hooks["PreToolUse"], "ohne Registry-Version voller Satz")
+            XCTAssertNotNil(hooks["PermissionRequest"])
+            XCTAssertFalse(f.coordinator.reducedHookSessions.contains(f.sessionID))
+        }
+    }
+
+    func testClaudeVersionParsingAndGate() {
+        XCTAssertEqual(ClaudeCLIVersion(parsing: "2.1.303 (Claude Code)")?.components, [2, 1, 303])
+        XCTAssertNil(ClaudeCLIVersion(parsing: "kaputt"))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.1.302")))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.2.0")))
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "3.0")))
+        XCTAssertFalse(ClaudeCLIVersion.supportsRegistry(ClaudeCLIVersion(parsing: "2.1.301")))
+        XCTAssertFalse(ClaudeCLIVersion.supportsRegistry(nil))
+    }
+
     // MARK: Quelle
 
     func testSourceDiffsScansAndReportsRemovals() {
@@ -528,5 +571,20 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(builds, 1)
         _ = cache.index(now: start.addingTimeInterval(1.5))
         XCTAssertEqual(builds, 2)
+    }
+
+    func testEventDirectoryResolvesThroughSymlinkedConfigDir() throws {
+        // LR-AK-038: FSEvents meldet den aufgeloesten Pfad, die Roots tragen den Symlink-Pfad.
+        let real = tempDir.appendingPathComponent("real-sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        let link = tempDir.appendingPathComponent("link-sessions")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let roots = [ClaudeSessionRegistry.Root(profileName: "ai2", url: link)]
+        let map = ClaudeRegistryStatusSource.directoryProfileMap(for: roots)
+        let eventDir = ClaudeRegistryStatusSource.canonicalPath(real.path)
+        XCTAssertNotEqual(eventDir, link.path)
+        XCTAssertEqual(ClaudeRegistryStatusSource.profile(forEventDirectory: eventDir, in: map), "ai2")
+        XCTAssertEqual(ClaudeRegistryStatusSource.profile(forEventDirectory: link.path, in: map), "ai2")
+        XCTAssertNil(ClaudeRegistryStatusSource.profile(forEventDirectory: "/nowhere", in: map))
     }
 }

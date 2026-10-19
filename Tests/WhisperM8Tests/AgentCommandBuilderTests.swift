@@ -211,6 +211,26 @@ final class AgentCommandBuilderTests: XCTestCase {
         }
     }
 
+    // MARK: - Gestartet ohne Bindung (LR-AK-021)
+
+    func testStartedClaudeChatWithoutBindingResumesProvableTranscript() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        let session = AgentChatSession(
+            provider: .claude, projectID: project.id, externalSessionID: nil,
+            title: "Ohne Bindung", hasLaunchedInitialPrompt: true)
+
+        builder.unboundResumeResolver = { _, _ in "belegte-id" }
+        XCTAssertEqual(try builder.command(for: session, project: project).arguments.prefix(2), ["--resume", "belegte-id"])
+
+        // Ohne Beleg (nie benutzt): unverändert Frischstart, kein --resume.
+        builder.unboundResumeResolver = { _, _ in nil }
+        XCTAssertFalse(try builder.command(for: session, project: project).arguments.contains("--resume"))
+    }
+
     // MARK: - Resume→Attach-Fallback (Resume-Ziel laeuft als Background-Agent)
 
     func testAgentCommandBuilderFallsBackToAttachWhenResumeTargetRunsAsBackgroundAgent() throws {

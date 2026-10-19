@@ -32,6 +32,22 @@ final class AgentSessionRuntimeWatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testWatchRebindsTranscriptWhenExternalIDChanges() {
+        // LR-AK-019: /clear bindet eine neue ID — der Watcher muss das neue Transcript beobachten.
+        let watcher = AgentSessionRuntimeWatcher(
+            statProvider: { _ in nil },
+            tailProvider: { _, _ in nil },
+            urlResolver: { URL(fileURLWithPath: "/tmp/wm8-\($0.externalSessionID ?? "none").jsonl") }
+        )
+        let id = UUID()
+        watcher.watch(sessionID: id, provider: .claude, externalSessionID: "A", cwd: "/tmp", priorTurnFinishedAt: nil)
+        XCTAssertEqual(watcher.transcriptURL(for: id)?.lastPathComponent, "wm8-A.jsonl")
+        watcher.watch(sessionID: id, provider: .claude, externalSessionID: "B", cwd: "/tmp", priorTurnFinishedAt: nil)
+        XCTAssertEqual(watcher.transcriptURL(for: id)?.lastPathComponent, "wm8-B.jsonl")
+        watcher.unwatch(sessionID: id)
+    }
+
     func testNoURLYieldsNilDecisionAndSkipsStat() {
         let statFlag = Flag()
         let snapshot = AgentSessionRuntimeWatcher.pollSnapshot(
