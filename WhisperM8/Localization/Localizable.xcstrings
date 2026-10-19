@@ -1151,6 +1151,16 @@
         }
       }
     },
+    "The status line needs the program jq, which macOS does not include. Install it in Terminal: brew install jq — then click Install again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Statusline braucht das Programm jq, das macOS nicht mitbringt. Im Terminal installieren: brew install jq — danach erneut auf Installieren klicken."
+          }
+        }
+      }
+    },
     "The test dictation failed. Check your API key and try again.": {
       "localizations": {
         "de": {

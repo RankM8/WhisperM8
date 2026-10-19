@@ -21,6 +21,9 @@ struct MenuBarView: View {
         return KeychainManager.exists(key: keychainKey)
     }
 
+    /// Setup-Prüfung höchstens alle paar Sekunden statt bei jedem Body-Rebuild.
+    private static let setupProbe = SetupIncompleteProbeCache()
+
     var body: some View {
         Group {
             if appState.isRecording {
@@ -79,12 +82,16 @@ struct MenuBarView: View {
 
         // Unvollständiges Setup (Rechte erteilt, aber Hotkey/Key fehlt): Wizard nicht
         // erzwingen, aber sichtbar fortsetzbar machen (LR-ONB-005).
-        if let reason = SetupIncompleteReason.evaluate(
-            micGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-            accessibilityGranted: AXIsProcessTrusted(),
-            hotkeySet: KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil,
-            hasCredentials: Self.hasTranscriptionCredentials()
-        ) {
+        if let reason = Self.setupProbe.reason(compute: {
+            let autoPaste = AppPreferences.shared.isAutoPasteEnabled
+            return SetupIncompleteReason.evaluate(
+                micGranted: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
+                accessibilityGranted: !autoPaste || AXIsProcessTrusted(),
+                hotkeySet: KeyboardShortcuts.getShortcut(for: .toggleRecording) != nil,
+                hasCredentials: Self.hasTranscriptionCredentials(),
+                requiresAccessibility: autoPaste
+            )
+        }) {
             Divider()
             Text(reason.message)
                 .font(.caption)

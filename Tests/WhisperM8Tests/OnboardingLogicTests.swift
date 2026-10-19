@@ -114,6 +114,28 @@ final class OnboardingLogicTests: XCTestCase {
         XCTAssertNil(SetupIncompleteReason.evaluate(micGranted: true, accessibilityGranted: true, hotkeySet: true, hasCredentials: true))
     }
 
+    func testSetupReasonIgnoresAccessibilityWithoutAutoPaste() {
+        XCTAssertNil(SetupIncompleteReason.evaluate(
+            micGranted: true, accessibilityGranted: false, hotkeySet: true, hasCredentials: true,
+            requiresAccessibility: false))
+        XCTAssertEqual(SetupIncompleteReason.evaluate(
+            micGranted: true, accessibilityGranted: false, hotkeySet: true, hasCredentials: true,
+            requiresAccessibility: true), .permissionsMissing)
+    }
+
+    func testSetupProbeCacheEvaluatesOncePerTTL() {
+        var clock = Date(timeIntervalSince1970: 5_000)
+        var calls = 0
+        let cache = SetupIncompleteProbeCache(ttl: 5, now: { clock })
+        let compute: () -> SetupIncompleteReason? = { calls += 1; return .hotkeyMissing }
+        XCTAssertEqual(cache.reason(compute: compute), .hotkeyMissing)
+        XCTAssertEqual(cache.reason(compute: compute), .hotkeyMissing)
+        XCTAssertEqual(calls, 1, "Body-Rebuilds innerhalb der Frist fragen nicht erneut ab")
+        clock += 6
+        _ = cache.reason(compute: compute)
+        XCTAssertEqual(calls, 2)
+    }
+
     // MARK: LR-ONB-006 / LR-ONB-007
 
     final class SpyStore: KeychainStoring {

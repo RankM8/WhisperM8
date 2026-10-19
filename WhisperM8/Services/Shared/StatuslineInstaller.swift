@@ -65,7 +65,7 @@ struct StatuslineInstaller {
             case .corruptSettings(let path):
                 return "\(path) ist kein lesbares JSON — Datei bitte prüfen; sie wird nicht überschrieben."
             case .jqMissing:
-                return "Die Statusline braucht das Programm jq, das macOS nicht mitbringt. Im Terminal installieren: brew install jq — danach erneut auf Installieren klicken."
+                return String(localized: "The status line needs the program jq, which macOS does not include. Install it in Terminal: brew install jq — then click Install again.")
             }
         }
     }

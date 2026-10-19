@@ -175,9 +175,12 @@ enum SetupIncompleteReason: Equatable {
         micGranted: Bool,
         accessibilityGranted: Bool,
         hotkeySet: Bool,
-        hasCredentials: Bool
+        hasCredentials: Bool,
+        requiresAccessibility: Bool = true
     ) -> SetupIncompleteReason? {
-        if !micGranted || !accessibilityGranted { return .permissionsMissing }
+        // Bedienungshilfen braucht nur das automatische Einfügen; ohne Auto-Paste
+        // landet der Text in der Zwischenablage und nichts fehlt.
+        if !micGranted || (requiresAccessibility && !accessibilityGranted) { return .permissionsMissing }
         if !hotkeySet { return .hotkeyMissing }
         if !hasCredentials { return .credentialsMissing }
         return nil
@@ -192,6 +195,42 @@ enum SetupIncompleteReason: Equatable {
         case .credentialsMissing:
             return String(localized: "Setup incomplete: no API key")
         }
+    }
+}
+
+/// Kurzer Zwischenspeicher für die Setup-Prüfung der Menüleiste: Der Body wird
+/// bei jeder Zustandsänderung neu gebaut, die Prüfung selbst fragt aber
+/// Mikrofon, Bedienungshilfen und Schlüsselbund ab. Gültigkeit in Sekunden.
+final class SetupIncompleteProbeCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (at: Date, reason: SetupIncompleteReason?)?
+    private let ttl: TimeInterval
+    private let now: () -> Date
+
+    init(ttl: TimeInterval = 5, now: @escaping () -> Date = Date.init) {
+        self.ttl = ttl
+        self.now = now
+    }
+
+    func reason(compute: () -> SetupIncompleteReason?) -> SetupIncompleteReason? {
+        lock.lock()
+        if let stored, now().timeIntervalSince(stored.at) < ttl {
+            let value = stored.reason
+            lock.unlock()
+            return value
+        }
+        lock.unlock()
+        let value = compute()
+        lock.lock()
+        stored = (now(), value)
+        lock.unlock()
+        return value
+    }
+
+    func invalidate() {
+        lock.lock()
+        stored = nil
+        lock.unlock()
     }
 }
 
