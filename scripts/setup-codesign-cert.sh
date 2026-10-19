@@ -39,10 +39,15 @@ openssl req -newkey rsa:2048 -nodes \
     -addext "keyUsage=critical,digitalSignature" \
     -out "$TMPDIR/codesign.crt" 2> /dev/null
 
-# Bundle key+cert into PKCS12 with a fixed transient password.
-# macOS rejects empty-password p12s on import; the password is only
-# used to bundle the key, it is not stored anywhere afterward.
-P12_PASS="whisperm8-local-dev"
+# Bundle key+cert into PKCS12 with a random per-run password.
+# macOS rejects empty-password p12s on import; the password only protects
+# the temporary p12 (deleted on exit) and is not stored anywhere.
+# openssl reads it from the environment instead of argv (LR-BR-011).
+# `security import` has no stdin/env option for the passphrase, so it
+# still sees it in argv for the moment of the import — harmless, because
+# it is random and the file it unlocks is gone right after.
+P12_PASS=$(openssl rand -hex 16)
+export P12_PASS
 # Use legacy PBE so macOS Security framework can decode the file.
 # OpenSSL 3 defaults to AES-256-CBC + PBKDF2 which the macOS importer
 # can't verify. -legacy + explicit SHA1-3DES gives us the old format
@@ -55,7 +60,7 @@ openssl pkcs12 -export \
     -inkey "$TMPDIR/codesign.key" \
     -in "$TMPDIR/codesign.crt" \
     -name "$CERT_NAME" \
-    -password "pass:$P12_PASS" \
+    -password env:P12_PASS \
     -out "$TMPDIR/codesign.p12"
 
 echo "→ Importing into login keychain..."
