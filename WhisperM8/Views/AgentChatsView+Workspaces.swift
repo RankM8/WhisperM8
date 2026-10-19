@@ -35,9 +35,13 @@ extension AgentChatsView {
         if !workspaces.isEmpty {
             workspacesSectionHeader(count: workspaces.count)
             if !workspacesSectionCollapsed {
+                // ID→Session EINMAL für alle Workspaces der Sektion (LR-AU-018).
+                let sessionsByID = Dictionary(
+                    workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
                 ForEach(workspaces) { entity in
                     workspaceGroup(
                         entity,
+                        sessionsByID: sessionsByID,
                         subagentChildrenByParent: subagentChildrenByParent,
                         workingSubagentIDs: workingSubagentIDs,
                         erroredSubagentIDs: erroredSubagentIDs
@@ -95,6 +99,7 @@ extension AgentChatsView {
     @ViewBuilder
     private func workspaceGroup(
         _ entity: AgentGridWorkspace,
+        sessionsByID: [UUID: AgentChatSession],
         subagentChildrenByParent: [UUID: [AgentChatSession]],
         workingSubagentIDs: Set<UUID>,
         erroredSubagentIDs: Set<UUID>
@@ -106,7 +111,7 @@ extension AgentChatsView {
             if !isCollapsed {
                 ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
                     if let sessionID = slot,
-                       let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+                       let session = sessionsByID[sessionID] {
                         // Split EINMAL pro Parent (Muster ProjectChatGroup) —
                         // speist Chip UND Kinder-Aufteilung.
                         let children = subagentChildrenByParent[session.id] ?? []

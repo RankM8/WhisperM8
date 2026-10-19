@@ -229,6 +229,13 @@ extension AgentChatsView {
             workspace.sessions.map { ($0.id, $0) },
             uniquingKeysWith: { a, _ in a }
         )
+        // Ebenfalls EINMAL je Body-Eval (LR-AU-018): Fokus-ID und Projekt-Map,
+        // statt je Pane `selectedSession` und `projects.first` zu suchen.
+        let focusedID = selectedSession?.id
+        let projectsByID = Dictionary(
+            workspace.projects.map { ($0.id, $0) },
+            uniquingKeysWith: { a, _ in a }
+        )
         return AgentGridSplitContainer(
             layout: AgentGridAutoLayout.forCapacity(entity.capacity),
             persistedColumnFractions: entity.columnFractions,
@@ -244,7 +251,10 @@ extension AgentChatsView {
                 // Drag-Start soll nicht nebenbei die Selektion verschieben.
                 if hovering { hoveredGridPaneID = nil }
             },
-            pane: { index in gridSlot(index, entity: entity, sessionsByID: sessionsByID) }
+            pane: { index in
+                gridSlot(index, entity: entity, sessionsByID: sessionsByID,
+                         focusedID: focusedID, projectsByID: projectsByID)
+            }
         )
         // Der 1-px-„Gap" zwischen den Panes IST die Trennlinie — gleiche
         // Farbe wie die übrigen Chrome-Divider. Kein Außen-Padding, keine
@@ -686,7 +696,9 @@ extension AgentChatsView {
     private func gridSlot(
         _ index: Int,
         entity: AgentGridWorkspace,
-        sessionsByID: [UUID: AgentChatSession]
+        sessionsByID: [UUID: AgentChatSession],
+        focusedID: UUID?,
+        projectsByID: [UUID: AgentProject]
     ) -> some View {
         let occupied = entity.slots.indices.contains(index) ? entity.slots[index] : nil
         GridSlotDropArea(
@@ -706,7 +718,8 @@ extension AgentChatsView {
                 // geschlossen/abgewandert, egal über welchen Mutationspfad)
                 // ein Platzhalter mit explizitem Übernahme-Angebot.
                 if windowStore.windowID(containingTab: sessionID) == windowID {
-                    gridPane(for: session, workspaceID: entity.id, slotIndex: index)
+                    gridPane(for: session, workspaceID: entity.id, slotIndex: index,
+                             focusedID: focusedID, projectsByID: projectsByID)
                 } else {
                     gridOrphanSlot(session, entity: entity, slotIndex: index)
                 }
@@ -810,9 +823,12 @@ extension AgentChatsView {
         .background(AgentTheme.background)
     }
 
-    private func gridPane(for session: AgentChatSession, workspaceID: UUID, slotIndex: Int) -> some View {
-        let isFocused = session.id == selectedSession?.id
-        let project = workspace.projects.first { $0.id == session.projectID }
+    private func gridPane(
+        for session: AgentChatSession, workspaceID: UUID, slotIndex: Int,
+        focusedID: UUID?, projectsByID: [UUID: AgentProject]
+    ) -> some View {
+        let isFocused = session.id == focusedID
+        let project = projectsByID[session.projectID]
         return VStack(spacing: 0) {
             gridPaneHeader(
                 session, project: project, isFocused: isFocused,

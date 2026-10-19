@@ -682,9 +682,8 @@ struct AgentChatsView: View {
     }
 
     var selectedSession: AgentChatSession? {
-        guard let selectedSessionID else { return headerTabs.first }
-        return workspace.sessions.first { $0.id == selectedSessionID && $0.status != .archived }
-            ?? headerTabs.first
+        AgentSelectionResolver.selected(
+            sessions: workspace.sessions, selectedID: selectedSessionID, openTabIDs: openTabIDs)
     }
 
     /// `true`, wenn der Tab-Strip-Inhalt breiter ist als sein sichtbarer
