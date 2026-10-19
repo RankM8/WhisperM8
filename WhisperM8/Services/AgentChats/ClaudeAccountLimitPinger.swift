@@ -35,12 +35,24 @@ struct ClaudeAccountLimitPinger {
     /// Fester Name des Ping-Arbeitsordners (cwd aller Pings).
     static let workDirectoryName = "whisperm8-limit-ping"
 
-    /// Erkennt das encodierte `projects/`-Verzeichnis des Ping-Ordners: die
-    /// CLI ersetzt Pfad-Trennzeichen durch `-`, die letzte Pfad-Komponente
-    /// bleibt dabei als Suffix erhalten — unabhängig davon, wo der Ordner
-    /// liegt und wie Sonderzeichen davor encodiert werden.
+    /// Erkennt das encodierte `projects/`-Verzeichnis des Ping-Ordners — exakt
+    /// über Claudes eigene Kodierung des Arbeitsordners (`encodeClaudeCwd`),
+    /// nicht mehr über das Namenssuffix: ein echtes Projekt
+    /// `…/whisperm8-limit-ping` wurde sonst samt Transcripts und Memory
+    /// gelöscht (LR-KO-003).
     static func isPingProjectsDirectory(_ name: String) -> Bool {
-        name.hasSuffix("-" + workDirectoryName)
+        name == defaultPingProjectsDirectoryName
+    }
+
+    static func isPingProjectsDirectory(_ name: String, workDirectory: URL) -> Bool {
+        name == pingProjectsDirectoryName(workDirectory: workDirectory)
+    }
+
+    /// Einmal berechnet — der Indexer fragt pro Ordner und Datei.
+    static let defaultPingProjectsDirectoryName = pingProjectsDirectoryName(workDirectory: defaultWorkDirectory())
+
+    static func pingProjectsDirectoryName(workDirectory: URL) -> String {
+        AgentTranscriptLocator.encodeClaudeCwd(workDirectory.path)
     }
 
     enum Outcome: Equatable {
@@ -167,7 +179,7 @@ struct ClaudeAccountLimitPinger {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: projects, includingPropertiesForKeys: nil
         ) else { return }
-        for entry in entries where Self.isPingProjectsDirectory(entry.lastPathComponent) {
+        for entry in entries where Self.isPingProjectsDirectory(entry.lastPathComponent, workDirectory: workDirectory) {
             try? FileManager.default.removeItem(at: entry)
         }
     }

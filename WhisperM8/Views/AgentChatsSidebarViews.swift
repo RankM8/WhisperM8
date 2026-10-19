@@ -910,6 +910,7 @@ struct SessionListButton: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .help("Transkript von Claude gelöscht – nicht mehr resumebar")
+                .accessibilityLabel(Text("History deleted, can't be continued"))
         } else {
             statusIndicator
         }
@@ -1127,6 +1128,7 @@ struct PinnedSessionRow: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .help("Transkript von Claude gelöscht – nicht mehr resumebar")
+                .accessibilityLabel(Text("History deleted, can't be continued"))
         } else {
             switch resolvedStatus {
             case .working, .awaitingInput, .idle, .errored:

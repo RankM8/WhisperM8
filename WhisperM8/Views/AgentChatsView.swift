@@ -437,7 +437,7 @@ struct AgentChatsView: View {
     @StateObject private var activeBackgroundTracker = ActiveBackgroundSessionTracker()
 
     var selectedProject: AgentProject? {
-        workspace.projects.first { $0.id == selectedProjectID } ?? workspace.projects.first
+        AgentProjectSelectionResolver.project(selectedID: selectedProjectID, in: workspace.projects)
     }
 
     /// Sessions des Kontext-Projekts — nur noch Datenquelle für den
@@ -2118,20 +2118,27 @@ struct AgentChatsView: View {
     private var newChatSplitButton: some View {
         HStack(spacing: 0) {
             Button {
-                createDefaultSession()
+                // Ohne sichtbares Projekt führt der Knopf direkt zum Hinzufügen
+                // statt still in einem importierten Ordner zu starten (LR-AU-004).
+                if selectedProject == nil {
+                    _ = addProject()
+                } else {
+                    createDefaultSession()
+                }
             } label: {
                 HStack(spacing: 7) {
                     if let project = selectedProject {
                         ProjectAvatar(project: project, size: 15)
+                        Text("Neuer Chat")
+                            .font(.system(size: 12, weight: .semibold))
                     } else {
-                        Image(systemName: "square.stack.3d.up")
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Add project…")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    Text("Neuer Chat")
-                        .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(AgentTheme.textPrimary)
-                .opacity(selectedProject == nil ? 0.5 : 1)
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
                 // Dezenter Keycap-Hinweis: ⌘N öffnet den durchsuchbaren Picker.
@@ -2143,15 +2150,14 @@ struct AgentChatsView: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1.5)
                         .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 4))
-                        .opacity(selectedProject == nil ? 0.5 : 1)
+                        .opacity(selectedProject == nil ? 0 : 1)
                         .padding(.trailing, 8)
                         .allowsHitTesting(false)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(selectedProject == nil)
-            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? "Erst ein Projekt hinzufügen")
+            .help(selectedProject.map { "Neuer Chat in \($0.name)" } ?? String(localized: "Add a project folder to start a chat"))
 
             Divider().frame(height: 16)
 
@@ -2526,8 +2532,22 @@ struct AgentChatsView: View {
                 }
                 .animation(.easeOut(duration: 0.1), value: tabSwitcherRun.isActive)
             } else {
-                ContentUnavailableView("No agent chat", systemImage: "terminal")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Mit Anleitung und Aktion statt nur Titel (LR-AU-029).
+                ContentUnavailableView {
+                    Label("No agent chat", systemImage: "terminal")
+                } description: {
+                    selectedProject == nil
+                        ? Text("Add a project folder, then start a chat with Claude or Codex there.")
+                        : Text("Start a new chat or pick one from the sidebar.")
+                } actions: {
+                    if selectedProject == nil {
+                        Button("Add project…") { _ = addProject() }
+                    } else {
+                        Button("New chat") { createDefaultSession() }
+                            .keyboardShortcut(.defaultAction)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(AgentTheme.background)

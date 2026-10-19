@@ -60,23 +60,49 @@ struct TranscriptEmptyStateView: View {
         transcript?.hasTruncatedHead == true
     }
 
+    /// Die Session hatte schon einen Verlauf (externe ID gebunden — das
+    /// passiert erst beim ersten Turn), die Datei ist aber weg: Claude räumt
+    /// alte Transcripts selbst ab. Fortsetzen geht dann nicht mehr; früher
+    /// stand hier trotzdem „Klick Resume“ (LR-AU-034).
+    static func isTranscriptDeleted(transcript: AgentChatTranscript?, session: AgentChatSession) -> Bool {
+        transcript == nil && !(session.externalSessionID ?? "").isEmpty && !session.isBackgroundChat
+    }
+
+    private var isTranscriptDeleted: Bool {
+        Self.isTranscriptDeleted(transcript: transcript, session: session)
+    }
+
     private var bannerTitle: String {
         if isOrphanedBackgroundChat {
-            return "Hintergrund-Agent unvollständig gespawnt"
+            return String(localized: "Background agent was not fully spawned")
         }
         if isTruncatedOnly {
-            return "Letzter Eintrag zu groß für die Vorschau"
+            return String(localized: "Last entry is too large for the preview")
+        }
+        if isTranscriptDeleted {
+            return String(localized: "History no longer available")
         }
         return transcript == nil
-            ? "Session noch nicht gestartet"
-            : "Konversation ist leer"
+            ? String(localized: "Session not started yet")
+            : String(localized: "Conversation is empty")
+    }
+
+    /// Beschriftung des Knopfs oben in der Kopfzeile — dieselbe Regel wie dort.
+    /// Der Text verwies früher immer auf „Resume“, auch wenn der Knopf „Start“
+    /// hieß (LR-AU-029).
+    static func launchButtonLabel(for session: AgentChatSession) -> String {
+        session.externalSessionID == nil ? "Start" : "Resume"
     }
 
     private var bannerSubtitle: String {
         if isOrphanedBackgroundChat {
-            return "Diese Hintergrund-Session hat keine Short-ID — Attach ist nicht möglich. Tab schließen oder neu starten."
+            return String(localized: "This background session has no short ID, so it can't be attached. Close the tab or start it again.")
         }
-        return "Resume oben startet \(session.provider.displayName) erneut."
+        if isTranscriptDeleted {
+            return String(localized: "\(session.provider.displayName) deleted the saved history of this chat.")
+        }
+        let label = Self.launchButtonLabel(for: session)
+        return String(localized: "\(label) at the top starts \(session.provider.displayName) again.")
     }
 
     @ViewBuilder
@@ -86,20 +112,28 @@ struct TranscriptEmptyStateView: View {
             Image(systemName: emptyStateIcon)
                 .font(.system(size: 32))
                 .foregroundStyle(AgentTheme.textTertiary)
+                .accessibilityHidden(true)
             Text(emptyStateTitle)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(AgentTheme.textPrimary)
-            Text(emptyStateDetail)
+            // Markdown ausdrücklich parsen: `Text(String)` zeigte `**` wörtlich.
+            Text(Self.renderMarkdown(emptyStateDetail))
                 .font(.system(size: 12))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
             if let id = session.externalSessionID, !id.isEmpty {
-                Text("Session-ID: \(id)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .textSelection(.enabled)
-                    .padding(.top, 4)
+                // Rohe Session-ID nur auf Nachfrage — für Laien ohne Nutzen.
+                DisclosureGroup("Details") {
+                    Text("Session ID: \(id)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AgentTheme.textTertiary)
+                        .textSelection(.enabled)
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(AgentTheme.textTertiary)
+                .frame(maxWidth: 360)
+                .padding(.top, 4)
             }
             Spacer()
         }
@@ -107,30 +141,50 @@ struct TranscriptEmptyStateView: View {
         .padding(.horizontal, 32)
     }
 
+    static func renderMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
     private var emptyStateIcon: String {
         if isOrphanedBackgroundChat { return "exclamationmark.triangle" }
+        if isTranscriptDeleted { return "questionmark.circle" }
         return transcript == nil ? "play.rectangle" : "ellipsis.bubble"
     }
 
     private var emptyStateTitle: String {
         if isOrphanedBackgroundChat {
-            return "Hintergrund-Agent wurde nicht vollständig gestartet"
+            return String(localized: "Background agent was not fully started")
         }
         if isTruncatedOnly {
-            return "Ältere Nachrichten sind vorhanden"
+            return String(localized: "Older messages are available")
+        }
+        if isTranscriptDeleted {
+            return String(localized: "This chat can't be continued")
         }
         return transcript == nil
-            ? "Diese Session hat noch keine Konversation"
-            : "Diese Konversation enthaelt noch keine Nachrichten"
+            ? String(localized: "This session has no conversation yet")
+            : String(localized: "This conversation has no messages yet")
     }
 
     private var emptyStateDetail: String {
+        if isTranscriptDeleted {
+            return String(localized: "Start a **New chat** in the same project to keep working there. You can archive this chat from its context menu in the sidebar.")
+        }
+        return Self.detailText(
+            isOrphanedBackgroundChat: isOrphanedBackgroundChat,
+            isTruncatedOnly: isTruncatedOnly,
+            launchLabel: Self.launchButtonLabel(for: session),
+            providerName: session.provider.displayName
+        )
+    }
+
+    static func detailText(isOrphanedBackgroundChat: Bool, isTruncatedOnly: Bool, launchLabel: String, providerName: String) -> String {
         if isOrphanedBackgroundChat {
-            return "Der Spawn dieses Hintergrund-Agents wurde unterbrochen, sodass keine Short-ID gespeichert ist. Schließe den Tab über das Kontextmenü und starte bei Bedarf einen neuen Hintergrund-Agent."
+            return String(localized: "Spawning this background agent was interrupted, so no short ID was saved. Close the tab from the context menu and start a new background agent if needed.")
         }
         if isTruncatedOnly {
-            return "Der letzte Eintrag (z. B. ein großes Tool-Ergebnis) passt nicht ins Vorschaufenster. Über **Früheren Verlauf laden** oben erscheinen die Nachrichten davor."
+            return String(localized: "The last entry (for example a large tool result) doesn't fit into the preview. Use **Load earlier history** at the top to see the messages before it.")
         }
-        return "Klick **Resume** oben in der Header-Leiste, um \(session.provider.displayName) zu starten und mit dieser Session weiterzumachen."
+        return String(localized: "Click **\(launchLabel)** at the top of the header to start \(providerName) and continue this session.")
     }
 }

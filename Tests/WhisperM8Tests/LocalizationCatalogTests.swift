@@ -12,7 +12,9 @@ import XCTest
 final class LocalizationCatalogTests: XCTestCase {
     /// Dateien, deren sichtbare Texte vollständig über den Katalog laufen.
     /// Neue oder umgestellte Ansichten hier eintragen.
-    static let localizedFiles: [String] = []
+    static let localizedFiles: [String] = [
+        "WhisperM8/Views/Transcript/TranscriptEmptyStateView.swift",
+    ]
 
     private static var root: URL {
         URL(fileURLWithPath: #filePath)

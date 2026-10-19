@@ -239,14 +239,17 @@ struct WhisperM8ClaudePlugin {
         inherited: String?,
         fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> [String: String] {
-        guard enabled, fileExists(linkURL.appendingPathComponent(".claude-plugin/plugin.json").path) else {
-            return [:]
-        }
         let ours = linkURL.path
         let existing = (inherited ?? "")
             .split(separator: ":", omittingEmptySubsequences: true)
             .map(String.init)
             .filter { $0 != ours }
+        guard enabled, fileExists(linkURL.appendingPathComponent(".claude-plugin/plugin.json").path) else {
+            // Plugin aus: nur den eigenen Ordner weglassen, fremde Pfade bleiben.
+            // `processEnvironment()` entfernt alle CLAUDE_CODE_*-Variablen, ohne
+            // diese Zeile ginge der Wert des Users verloren (LR-PJ-002).
+            return existing.isEmpty ? [:] : [environmentKey: existing.joined(separator: ":")]
+        }
         return [environmentKey: (existing + [ours]).joined(separator: ":")]
     }
 }
@@ -301,6 +304,11 @@ struct ClaudePluginSkillMigration {
         return target
     }
 
+    static func looksLikeWhisperM8Skill(at skillFile: URL) -> Bool {
+        guard let data = try? Data(contentsOf: skillFile) else { return false }
+        return String(decoding: data, as: UTF8.self).range(of: "whisperm8", options: .caseInsensitive) != nil
+    }
+
     func run(now: Date = Date()) -> Outcome {
         let fm = FileManager.default
         var outcome = Outcome()
@@ -316,8 +324,18 @@ struct ClaudePluginSkillMigration {
             }
             // `jarvis` hatte nie einen Stempel und kam nie aus der App: immer
             // sichern. Für die übrigen belegt der Stempel eine lokale Änderung.
-            if definition != .jarvis, exporter.installState() == .modifiedLocally {
+            let state = exporter.installState()
+            if definition != .jarvis, state == .modifiedLocally {
                 outcome.kept.append("\(definition.name) (lokal geändert)")
+                continue
+            }
+            // Ungestempelt und anders als gebündelt: nur verschieben, wenn der
+            // Inhalt nach WhisperM8 aussieht (alte Installs ohne Stempel). Ein
+            // gleichnamiger fremder Skill bleibt (LR-PJ-001). `jarvis` gab es
+            // nur als eigene Kopie des Users — die zieht weiter immer um.
+            if definition != .jarvis, state == .unknownDrift,
+               !Self.looksLikeWhisperM8Skill(at: exporter.claudeCodeSkillURL) {
+                outcome.kept.append("\(definition.name) (fremder Skill)")
                 continue
             }
             do {
@@ -387,7 +405,17 @@ enum ClaudePluginBootstrap {
         return WhisperM8ClaudePlugin.launchEnvironment(
             enabled: preferences.isClaudePluginEnabled,
             linkURL: WhisperM8ClaudePlugin.defaultRootDirectory().appendingPathComponent(WhisperM8ClaudePlugin.pluginName),
-            inherited: LoginShellEnvironment.shared.processEnvironment()[WhisperM8ClaudePlugin.environmentKey]
+            inherited: inheritedPluginDirectories()
         )
+    }
+
+    /// Ein vom User gesetztes `CLAUDE_CODE_PLUGIN_DIRS` — aus der ROHEN
+    /// Umgebung der App: `LoginShellEnvironment.processEnvironment()` entfernt
+    /// bewusst alle `CLAUDE_CODE_*`-Variablen (verschachtelte Child-Session),
+    /// darunter auch diese (LR-PJ-002).
+    static func inheritedPluginDirectories(
+        rawEnvironment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        rawEnvironment[WhisperM8ClaudePlugin.environmentKey]
     }
 }
