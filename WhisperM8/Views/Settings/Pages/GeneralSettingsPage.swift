@@ -20,7 +20,7 @@ struct GeneralSettingsPage: View {
                     selection: $usageProfile,
                     options: AppUsageProfile.allCases
                 ) { profile in
-                    Text(profile.displayName)
+                    Text(settingsLocalized: profile.displayName)
                 }
                 .onChange(of: usageProfile) { _, newValue in
                     applyProfileChange(newValue)
@@ -48,7 +48,7 @@ struct GeneralSettingsPage: View {
                     ),
                     options: AppearanceOverride.allCases
                 ) { option in
-                    Text(themeName(for: option))
+                    Text(settingsLocalized: themeName(for: option))
                 }
             }
 

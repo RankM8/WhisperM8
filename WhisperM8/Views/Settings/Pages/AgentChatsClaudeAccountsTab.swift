@@ -140,12 +140,12 @@ struct AgentChatsClaudeAccountsTab: View {
     private func identityColumn(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                Text(profile.name)
+                Text(settingsLocalized: profile.name)
                     .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
 
                 if let plan = profile.planDisplayName {
-                    Text(plan)
+                    Text(settingsLocalized: plan)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 6)
@@ -164,7 +164,7 @@ struct AgentChatsClaudeAccountsTab: View {
             }
 
             if let email = profile.emailAddress {
-                Text(email)
+                Text(settingsLocalized: email)
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
                     .lineLimit(1)
@@ -173,7 +173,7 @@ struct AgentChatsClaudeAccountsTab: View {
                 // Org nur wenn sie mehr sagt als „<email>'s Organization"
                 if let org = profile.organizationName, !org.isEmpty,
                    !org.hasSuffix("'s Organization"), !org.hasSuffix("’s Organization") {
-                    Text(org)
+                    Text(settingsLocalized: org)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
@@ -267,12 +267,12 @@ struct AgentChatsClaudeAccountsTab: View {
                     }
                 }
                 if !usage.isLive, usage.hasLimitData {
-                    Text(cacheAgeText(usage.fetchedAt))
+                    Text(settingsLocalized: cacheAgeText(usage.fetchedAt))
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
                 if let problem = usage.liveFetchProblem {
-                    Text(Self.problemText(problem))
+                    Text(settingsLocalized: Self.problemText(problem))
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusAwaiting)
                 }
@@ -293,7 +293,7 @@ struct AgentChatsClaudeAccountsTab: View {
         }()
 
         return HStack(spacing: 7) {
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)
@@ -310,12 +310,12 @@ struct AgentChatsClaudeAccountsTab: View {
                 }
             }
 
-            Text(percent.map { "\(Int($0.rounded())) %" } ?? "—")
+            Text(settingsLocalized: percent.map { "\(Int($0.rounded())) %" } ?? "—")
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(percent != nil ? color : AppTheme.textTertiary)
                 .frame(width: 38, alignment: .trailing)
 
-            Text(resetText(resetsAt))
+            Text(settingsLocalized: resetText(resetsAt))
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 66, alignment: .leading)

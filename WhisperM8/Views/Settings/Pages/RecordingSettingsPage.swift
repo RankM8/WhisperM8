@@ -42,7 +42,7 @@ struct RecordingSettingsPage: View {
                     selection: $selectedDeviceUID,
                     options: inputDeviceOptions.map(\.uid)
                 ) { uid in
-                    Text(inputDeviceName(for: uid))
+                    Text(settingsLocalized: inputDeviceName(for: uid))
                 }
                 .onChange(of: selectedDeviceUID) { _, newValue in
                     deviceManager.selectedDeviceUID = newValue.isEmpty ? nil : newValue
@@ -72,7 +72,7 @@ struct RecordingSettingsPage: View {
                     selection: $overlayStyleRaw,
                     options: OverlayStyle.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
+                    Text(settingsLocalized: OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
                 }
 
                 SettingsToggleRow(

@@ -45,7 +45,7 @@ struct AboutSettingsPage: View {
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(AppTheme.textPrimary)
 
-                        Text(versionText)
+                        Text(settingsLocalized: versionText)
                             .font(.system(size: 12))
                             .foregroundStyle(AppTheme.textSecondary)
 

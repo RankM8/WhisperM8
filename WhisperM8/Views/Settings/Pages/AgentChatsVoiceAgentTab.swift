@@ -52,7 +52,7 @@ struct AgentChatsVoiceAgentTab: View {
             )
 
             SettingsRow(title: "Codex", subtitle: "Detected via the running application.") {
-                Text(gate.armState == .codexNotRunning ? "not running" : "running")
+                Text(settingsLocalized: gate.armState == .codexNotRunning ? "not running" : "running")
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -191,7 +191,7 @@ struct AgentChatsVoiceAgentTab: View {
 
             if let event = gate.lastEvent {
                 SettingsRow(title: "Last event") {
-                    Text(event)
+                    Text(settingsLocalized: event)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .frame(width: 320, alignment: .trailing)

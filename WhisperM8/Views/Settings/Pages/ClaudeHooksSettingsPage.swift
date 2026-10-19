@@ -72,7 +72,7 @@ struct ClaudeHooksSettingsPage: View {
                 .fill(color)
                 .frame(width: 8, height: 8)
 
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(AppTheme.textSecondary)
         }
@@ -99,7 +99,7 @@ struct ClaudeHooksSettingsPage: View {
     private func externalHookFindingRow(_ finding: ExternalClaudeHooksInspector.Finding) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(finding.eventName)
+                Text(settingsLocalized: finding.eventName)
                     .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -109,12 +109,12 @@ struct ClaudeHooksSettingsPage: View {
 
                 Spacer(minLength: 8)
 
-                Text(finding.source)
+                Text(settingsLocalized: finding.source)
                     .font(.system(size: 11.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
-            Text(finding.commandPreview)
+            Text(settingsLocalized: finding.commandPreview)
                 .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)

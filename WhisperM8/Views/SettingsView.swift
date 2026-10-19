@@ -226,7 +226,7 @@ struct SettingsView: View {
                 Image(systemName: revealAgentPages ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
                     .frame(width: 18)
-                Text(revealAgentPages ? "Hide Agent Chats settings" : "Show Agent Chats settings")
+                Text(settingsLocalized: revealAgentPages ? "Hide Agent Chats settings" : "Show Agent Chats settings")
                     .font(.system(size: 12))
                 Spacer(minLength: 0)
             }
@@ -265,7 +265,7 @@ struct SettingsView: View {
                     .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textSecondary)
                     .frame(width: 18)
 
-                Text(page.title)
+                Text(settingsLocalized: page.title)
                     .font(.system(size: 13))
                     .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textPrimary)
                     .lineLimit(1)

@@ -155,13 +155,13 @@ struct GPTAccountsSection: View {
     private func identityColumn(for profile: GPTAccountProfile, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                Text(profile.name)
+                Text(settingsLocalized: profile.name)
                     .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
 
                 if let plan = profile.planDisplayName ?? usageByProfile[profile.name]?.planType
                     .flatMap(GPTAccountProfiles.planDisplayName) {
-                    Text(plan)
+                    Text(settingsLocalized: plan)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 6)
@@ -181,7 +181,7 @@ struct GPTAccountsSection: View {
 
             if profile.isLoggedIn {
                 if let email = profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress {
-                    Text(email)
+                    Text(settingsLocalized: email)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
@@ -249,7 +249,7 @@ struct GPTAccountsSection: View {
                 }
             }
         } else if let problem = usageProblemByProfile[profile.name] {
-            Text(problem)
+            Text(settingsLocalized: problem)
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(AppTheme.statusAwaiting)
                 .frame(maxWidth: 260, alignment: .leading)
@@ -279,7 +279,7 @@ struct GPTAccountsSection: View {
         }()
 
         return HStack(spacing: 7) {
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)
@@ -296,12 +296,12 @@ struct GPTAccountsSection: View {
                 }
             }
 
-            Text(percent.map { "\(Int($0.rounded())) %" } ?? "—")
+            Text(settingsLocalized: percent.map { "\(Int($0.rounded())) %" } ?? "—")
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(percent != nil ? color : AppTheme.textTertiary)
                 .frame(width: 38, alignment: .trailing)
 
-            Text(Self.resetText(resetsAt))
+            Text(settingsLocalized: Self.resetText(resetsAt))
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 66, alignment: .leading)
@@ -349,13 +349,13 @@ struct GPTAccountsSection: View {
                 Link(info.visitURL, destination: url)
                     .font(.system(size: 13, weight: .medium))
             } else {
-                Text(info.visitURL).textSelection(.enabled)
+                Text(settingsLocalized: info.visitURL).textSelection(.enabled)
             }
         }
 
         SettingsRow(title: "Gerätecode") {
             HStack(spacing: 10) {
-                Text(info.code)
+                Text(settingsLocalized: info.code)
                     .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.textPrimary)
                     .textSelection(.enabled)

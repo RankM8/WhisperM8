@@ -265,7 +265,7 @@ struct CLISkillSettingsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
+                Text(settingsLocalized: title)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -326,7 +326,7 @@ struct CLISkillSettingsCard: View {
                 .disabled(markdown.isEmpty)
 
                 if let feedbackMessage, feedback.isActive {
-                    Text(feedbackMessage)
+                    Text(settingsLocalized: feedbackMessage)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusWorking)
                         .transition(.opacity)
@@ -355,7 +355,7 @@ struct CLISkillSettingsCard: View {
             Button("Replace Skill", role: .destructive) { install(force: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(replaceConfirmationMessage)
+            Text(settingsLocalized: replaceConfirmationMessage)
         }
         .confirmationDialog(
             "Install a loose copy for the terminal?",
@@ -372,7 +372,7 @@ struct CLISkillSettingsCard: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(settingsLocalized: errorMessage ?? "")
         }
     }
 
@@ -579,7 +579,7 @@ private struct StatuslineSettingsCard: View {
                 .disabled(script.isEmpty)
 
                 if let feedbackMessage, feedback.isActive {
-                    Text(feedbackMessage)
+                    Text(settingsLocalized: feedbackMessage)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusWorking)
                         .transition(.opacity)
@@ -617,7 +617,7 @@ private struct StatuslineSettingsCard: View {
             Button("Replace Script", role: .destructive) { install() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(managedReplaceConfirmationMessage)
+            Text(settingsLocalized: managedReplaceConfirmationMessage)
         }
         .confirmationDialog(
             "Replace custom status line entries?",
@@ -634,7 +634,7 @@ private struct StatuslineSettingsCard: View {
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "")
+            Text(settingsLocalized: errorMessage ?? "")
         }
     }
 
@@ -723,7 +723,7 @@ private struct CLISkillPreviewSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(title)
+                Text(settingsLocalized: title)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 

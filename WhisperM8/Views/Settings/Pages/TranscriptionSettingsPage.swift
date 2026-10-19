@@ -171,7 +171,7 @@ struct TranscriptionSettingsPage: View {
                         selection: modelSelection,
                         options: provider.availableModels.map(\.rawValue)
                     ) { rawValue in
-                        Text(TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
+                        Text(settingsLocalized: TranscriptionModel(rawValue: rawValue)?.displayName ?? rawValue)
                     }
                 }
 
@@ -185,7 +185,7 @@ struct TranscriptionSettingsPage: View {
                         ? "Static list price, as of 2026-07."
                         : "Unklar, ob es auf die Nutzungslimits des ChatGPT-Kontos zählt."
                 ) {
-                    Text(provider.priceInfo)
+                    Text(settingsLocalized: provider.priceInfo)
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -197,7 +197,7 @@ struct TranscriptionSettingsPage: View {
                     selection: $language,
                     options: DictationLanguage.pickerCodes
                 ) { code in
-                    Text(DictationLanguage.displayName(for: code))
+                    Text(settingsLocalized: DictationLanguage.displayName(for: code))
                 }
 
                 SettingsHelpText("Also used for AI Output post-processing and the Test Lab. Auto-detect omits the language field.")
@@ -333,7 +333,7 @@ private struct TranscriptionProviderSegmentedRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let badge = provider.recommendationBadge {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(badge)
+                        Text(settingsLocalized: badge)
                             .font(.system(size: 10.5, weight: .semibold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
@@ -341,7 +341,7 @@ private struct TranscriptionProviderSegmentedRow: View {
                             .foregroundStyle(AppTheme.statusWorking)
 
                         if let hint = provider.recommendationHint {
-                            Text(hint)
+                            Text(settingsLocalized: hint)
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(AppTheme.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -357,7 +357,7 @@ private struct TranscriptionProviderSegmentedRow: View {
 
             Picker("Provider", selection: $provider) {
                 ForEach(options, id: \.self) { option in
-                    Text(option.displayName).tag(option)
+                    Text(settingsLocalized: option.displayName).tag(option)
                 }
             }
             .labelsHidden()

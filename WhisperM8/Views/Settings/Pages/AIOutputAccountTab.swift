@@ -67,7 +67,7 @@ struct AIOutputAccountTab: View {
                     title: "Codex CLI",
                     subtitle: "Version used for non-interactive post-processing."
                 ) {
-                    Text(connectionModel.codexVersion)
+                    Text(settingsLocalized: connectionModel.codexVersion)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -80,7 +80,7 @@ struct AIOutputAccountTab: View {
                     selection: $selectedModelRaw,
                     options: modelPickerOptions
                 ) { rawValue in
-                    Text(modelLabel(for: rawValue))
+                    Text(settingsLocalized: modelLabel(for: rawValue))
                 }
 
                 SettingsPickerRow(
@@ -92,7 +92,7 @@ struct AIOutputAccountTab: View {
                         including: reasoningEffortRaw
                     )
                 ) { rawValue in
-                    Text(CodexModelCatalog.effortDisplayName(rawValue))
+                    Text(settingsLocalized: CodexModelCatalog.effortDisplayName(rawValue))
                 }
 
                 if let warning = catalogWarning {
@@ -105,7 +105,7 @@ struct AIOutputAccountTab: View {
                     selection: $serviceTierRaw,
                     options: CodexServiceTier.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(CodexServiceTier.resolve(rawValue).displayName)
+                    Text(settingsLocalized: CodexServiceTier.resolve(rawValue).displayName)
                 }
             }
 
@@ -116,7 +116,7 @@ struct AIOutputAccountTab: View {
                     selection: $visualInputModeRaw,
                     options: CodexVisualInputMode.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(visualInputLabel(for: rawValue))
+                    Text(settingsLocalized: visualInputLabel(for: rawValue))
                 }
 
                 SettingsHelpText(
@@ -132,7 +132,7 @@ struct AIOutputAccountTab: View {
                     selection: $defaultOutputModeID,
                     options: enabledModes.map(\.id)
                 ) { modeID in
-                    Text(modeName(for: modeID))
+                    Text(settingsLocalized: modeName(for: modeID))
                 }
 
                 SettingsToggleRow(

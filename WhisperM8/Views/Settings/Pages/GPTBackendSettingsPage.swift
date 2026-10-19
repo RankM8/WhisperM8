@@ -244,14 +244,14 @@ struct GPTBackendSettingsPage: View {
                         Link(deviceCodeInfo.visitURL, destination: url)
                             .font(.system(size: 13, weight: .medium))
                     } else {
-                        Text(deviceCodeInfo.visitURL)
+                        Text(settingsLocalized: deviceCodeInfo.visitURL)
                             .textSelection(.enabled)
                     }
                 }
 
                 SettingsRow(title: "Gerätecode") {
                     HStack(spacing: 10) {
-                        Text(deviceCodeInfo.code)
+                        Text(settingsLocalized: deviceCodeInfo.code)
                             .font(.system(size: 22, weight: .bold, design: .monospaced))
                             .foregroundStyle(AppTheme.textPrimary)
                             .textSelection(.enabled)
@@ -310,7 +310,7 @@ struct GPTBackendSettingsPage: View {
             ) {
                 Picker("GPT-Kontextprofil", selection: gptContextWindowSelection) {
                     ForEach(ClaudeGPTContextProfile.allCases) { profile in
-                        Text(profile.title).tag(profile.rawValue)
+                        Text(settingsLocalized: profile.title).tag(profile.rawValue)
                     }
                     if ClaudeGPTContextProfile.matching(contextWindow: effectiveGPTContextWindow) == nil {
                         Text("Benutzerdefiniert — \(effectiveGPTContextWindow)")

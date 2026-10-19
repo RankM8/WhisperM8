@@ -86,14 +86,14 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     selection: $defaultAgentProviderRaw,
                     options: ["claude", "claude-agents", "codex"]
                 ) { rawValue in
-                    Text(providerLabel(for: rawValue))
+                    Text(settingsLocalized: providerLabel(for: rawValue))
                 }
 
                 SettingsButtonRow(
                     title: "Default project folder",
                     subtitle: "New chats start from this folder. Project actions still update this path when you open or select a project."
                 ) {
-                    Text(defaultProjectPath)
+                    Text(settingsLocalized: defaultProjectPath)
                         .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(AppTheme.textSecondary)
                         .lineLimit(1)
@@ -272,7 +272,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
                 Picker("", selection: $stopSoundName) {
                     ForEach(soundChoices, id: \.self) { name in
-                        Text(name).tag(name)
+                        Text(settingsLocalized: name).tag(name)
                     }
                 }
                 .labelsHidden()
@@ -484,7 +484,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
 
     private func commandPreviewRow(binary: String, extraArguments: String) -> some View {
         SettingsRow(title: "Command preview") {
-            Text(AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
+            Text(settingsLocalized: AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
                 .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)

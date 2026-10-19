@@ -22,7 +22,7 @@ struct AIOutputTestLabTab: View {
                     selection: $selectedModeID,
                     options: modes.map(\.id)
                 ) { modeID in
-                    Text(modes.first { $0.id == modeID }?.name ?? modeID)
+                    Text(settingsLocalized: modes.first { $0.id == modeID }?.name ?? modeID)
                 }
 
                 SettingsRow(title: "Input — raw transcript")
