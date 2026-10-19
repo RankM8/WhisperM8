@@ -94,7 +94,7 @@ Settings.
 
 1. Place the cursor in any text field (TextEdit, Slack, browser …).
 2. Press your hotkey to start recording, speak, press it again to stop.
-   Or hold the hotkey while speaking and release it to stop; short taps under 0.3 s are ignored.
+   Or hold the hotkey while speaking and release it to stop.
 3. The text is pasted into the app that was in front (with auto-paste) and is always also on the
    clipboard.
 
@@ -155,9 +155,10 @@ WhisperM8 asks before an action interrupts a chat that is still working.
 
 ### Quit and resume
 
-- **Cmd+Q** with a chat that is working or waiting asks first: *Quit and Reopen Later* reopens those
-  chats the next time WhisperM8 starts, so you can pick up where they stopped. The running turn itself
-  ends when the app quits.
+- **Cmd+Q** with a chat that is working or waiting asks first. *Quit and Reopen Later* reopens all chats
+  that are still running the next time WhisperM8 starts, so you can pick up where they stopped; the turn in
+  progress ends when the app quits. *Quit Anyway* quits without reopening anything; *Cancel* keeps the app
+  open. Without working or waiting chats Cmd+Q quits right away and reopens nothing.
 - **Log out, restart or shut down** never asks, but marks all running chats to reopen.
 - **After a crash** WhisperM8 reopens the chats that were running.
 
@@ -176,7 +177,7 @@ be moved to another via its context menu. A chat that is working is moved after 
 Open from the menu bar → *Open WhisperM8...* or with `Cmd + ,`.
 
 The sidebar groups the pages: **Dictation**, **Agent Chats** and **App** are the everyday settings,
-**Advanced** and **Labs** hold expert and experimental features. With a dictation-only profile the Agent Chats
+**Advanced** and **Labs** hold expert and experimental features. With the two dictation profiles the Agent Chats
 pages sit behind *Show Agent Chats settings*.
 
 | Page | What you find there |

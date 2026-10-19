@@ -400,7 +400,7 @@ stoppt es nicht. Sofort wirkt allein der Schalter im Einstellungs-Tab
 
 ## Betriebswissen aus CLAUDE.md
 
-*Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
+*Am 19.10.2026 aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Einzige Änderung: die frühere Aussage „nie System Default“ ist an die Bluetooth-Ausnahme oben angeglichen. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
 
 Ein gesprochenes Codewort („Anna Pause" / „Anna weiter", Trägerwort und beide
 Kommandos frei konfigurierbar) schaltet das Mikrofon einer laufenden **Codex-Desktop**-

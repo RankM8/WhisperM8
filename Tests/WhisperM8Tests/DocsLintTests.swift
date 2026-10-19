@@ -114,5 +114,11 @@ final class DocsLintTests: XCTestCase {
             XCTAssertFalse(text.contains("read-only."), "\(file): pauschales „read-only“ ohne Ausnahmeliste")
         }
         XCTAssertTrue(rules.contains("Ausnahmen, alle"), "CLAUDE.md: Ausnahmeliste der Integrations-Writes fehlt")
+        // Bekannte Schreiber unter ~/.claude* — ein neuer gehört hier und in die Liste.
+        for writer in ["ClaudeThemeWriter", "ClaudeGPTAgentDefinition", "StatuslineInstaller",
+                       "ClaudeAccountProfiles+SharedConfig", "claude mcp add-json", "Zum Hauptkonto machen",
+                       "Memory-Migration", ".whisperm8-backup", "Subagent-Retention"] {
+            XCTAssertTrue(rules.contains(writer), "CLAUDE.md: Ausnahmeliste nennt „\(writer)“ nicht")
+        }
     }
 }

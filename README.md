@@ -95,7 +95,7 @@ whisperm8 transcribe workshop.mp4 --dry-run            # duration + cost estimat
 
 Formats: `txt`, `json`, `srt`, `vtt` · providers: Groq (default) and OpenAI · long files are chunked at silence boundaries and stitched back together automatically. Run `whisperm8 --help` for all options.
 
-**Agent skill:** Settings → *CLI & Skills* provides an agent skill (SKILL.md) that teaches Claude Code, Claude.ai, or ChatGPT how to drive the CLI — one click installs it to `~/.claude/skills/`, or copy/save it for other assistants. Source of truth: [WhisperM8/Resources/whisperm8-cli-skill.md](WhisperM8/Resources/whisperm8-cli-skill.md).
+**Agent skill:** Settings → *CLI & Skills* provides an agent skill (SKILL.md) that teaches Claude Code, Claude.ai, or ChatGPT how to drive the CLI. Claude sessions started in WhisperM8 get it automatically (as part of the WhisperM8 plugin); for Claude Code in Terminal use *Install for Terminal…*, for other assistants copy or save it. Source of truth: [WhisperM8/Resources/whisperm8-cli-skill.md](WhisperM8/Resources/whisperm8-cli-skill.md).
 
 ## API Providers
 

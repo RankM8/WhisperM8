@@ -48,7 +48,7 @@ swift test --filter <TestKlasse>              # gezielt
   blockierendes I/O ausführen (NSLock-serialisiert) — alles vorberechnen.
 - Alles unter `~/.claude*` und `~/.codex/` ist extern und wird nur gelesen —
   bis auf die absichtlichen Integrations-Writes, die CLAUDE.md unter
-  „Invarianten“ abschließend aufzählt.
+  „Invarianten“ aufzählt (neue Writes dort ergänzen).
 - Neue Bundle-Ressourcen brauchen Package.swift UND Makefile (`_bundle`) —
   besser: kleine Ressourcen als Swift-String-Konstanten einbetten.
 - Große Views/Services nicht aufblähen: thematische `extension`-Dateien

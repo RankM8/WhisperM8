@@ -113,11 +113,16 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
   blockierendes I/O (Git-Lookups vorher). UI nie über `loadWorkspace()` „auffrischen“.
 - Die App ist einziger Schreiber von Workspace und Board; die CLI liest von Disk und handelt über den Socket.
 - Fremde Daten unter `~/.claude*` und `~/.codex/` sind extern und werden nur gelesen — **Ausnahmen, alle
-  absichtlich und dokumentiert:** WhisperM8s eigene Hook-Settings-Dateien (`claude-hooks/<id>.json`);
+  absichtlich:** Theme-Schlüssel in `settings.json` (`ClaudeThemeWriter`, bei Theme-Wechsel);
+  `agents/gpt.md` je Konto bei aktivem GPT-Backend (`ClaudeGPTAgentDefinition`); Statuszeile
+  (`StatuslineInstaller`: Skripte + `statusLine` in `settings.json`, nutzerausgelöst); geteilte Einträge der
+  Profil-Ordner (`ClaudeAccountProfiles+SharedConfig`, Symlinks); lose Skills nach `~/.claude/skills`
+  („Install for Terminal…“, nutzerausgelöst) und das Wegsichern alter Kopien nach `skills/.whisperm8-backup/`;
   `claude mcp add-json` beim MCP-Angleich (schreibt die CLI selbst); „Zum Hauptkonto machen“ (Keychain,
   `oauthAccount` in `~/.claude.json`, Mischen von `projects/` und `file-history/`); die einmalige
-  Memory-Migration (kopiert nach main, mit Backup); das Wegsichern loser Skill-Kopien nach
-  `~/.claude/skills/.whisperm8-backup/`; Subagent-Retention verschiebt Rollouts aus `~/.codex/sessions` ins Archiv.
+  Memory-Migration (kopiert nach main, mit Backup); Subagent-Retention verschiebt Rollouts aus
+  `~/.codex/sessions` ins Archiv. Ein neuer Write kommt in diese Liste. Hook-Settings (`claude-hooks/<id>.json`)
+  liegen in Application Support, nicht unter `~/.claude`.
 - Logins werden zwischen Konten **verschoben, nie kopiert** (gleiche Refresh-Familie entwertet sich sonst).
 - Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
   `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, Reports, FailedRecordings).
