@@ -11,6 +11,17 @@ enum ChatsUIStrings {
             : String(localized: "\(count) chats are running as tabs in another window")
     }
 
+    /// Beschriftung der Start-Aktion: Restart (läuft), Start (neu) oder Resume.
+    static func startActionTitle(isRunning: Bool, hasExternalSession: Bool) -> String {
+        if isRunning { return String(localized: "Restart") }
+        return hasExternalSession ? String(localized: "Resume") : String(localized: "Start")
+    }
+
+    /// „N Dateien" im Git-Panel.
+    static func fileCount(_ count: Int) -> String {
+        count == 1 ? String(localized: "1 file") : String(localized: "\(count) files")
+    }
+
     /// „N Chat(s) bleiben" im Löschdialog eines Workspaces/Projekts.
     static func chatCount(_ count: Int) -> String {
         count == 1 ? String(localized: "1 chat") : String(localized: "\(count) chats")
@@ -50,13 +61,17 @@ enum ChatsUIStrings {
     }
 
     /// Text unter „Chat beenden?"; `workspaceName` = zusätzliches Entfernen aus dem Workspace.
+    /// Jeder Satz ist ein vollständiger Katalogschlüssel (kein Zusammensetzen aus Fragmenten).
     static func endMessage(running: Int, total: Int, workspaceName: String?) -> String {
         guard total == 1 else {
             return String(localized: "\(running) of \(total) chats are still running — ending stops the terminals and closes the tabs. Nothing is archived; all chats can be resumed via “Recent”.")
         }
-        let removal = workspaceName.map { String(localized: " The chat is also removed from the workspace “\($0)”.") } ?? ""
-        return String(localized: "The chat is still running — ending stops the terminal and closes the tab.") + removal
-            + " " + String(localized: "The chat is not archived and can be resumed via “Recent”.")
+        var sentences = [String(localized: "The chat is still running — ending stops the terminal and closes the tab.")]
+        if let workspaceName {
+            sentences.append(String(localized: "The chat is also removed from the workspace “\(workspaceName)”."))
+        }
+        sentences.append(String(localized: "The chat is not archived and can be resumed via “Recent”."))
+        return sentences.joined(separator: " ")
     }
 }
 

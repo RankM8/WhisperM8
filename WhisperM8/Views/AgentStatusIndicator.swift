@@ -252,17 +252,36 @@ private struct PulsingDot: View {
 /// über `RelativeDateTimeFormatter` lokalisiert (de: „vor 5 Min.", en: „5 min. ago").
 /// `now` und `locale` injizierbar für deterministische Tests.
 enum SidebarRelativeTime {
+    /// Zwei Formatter je Locale (benannt für „jetzt", numerisch ab einer Minute) —
+    /// die Zeile wird je Sidebar-Body ausgewertet, ein Formatter pro Aufruf
+    /// wäre ein heißer Pfad. Ein Locale-Wechsel ist selten und legt einen
+    /// neuen Eintrag an.
+    private static let lock = NSLock()
+    private static var cache: [String: (named: RelativeDateTimeFormatter, numeric: RelativeDateTimeFormatter)] = [:]
+
+    private static func formatters(for locale: Locale) -> (named: RelativeDateTimeFormatter, numeric: RelativeDateTimeFormatter) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cache[locale.identifier] { return cached }
+        func make(_ style: RelativeDateTimeFormatter.DateTimeStyle) -> RelativeDateTimeFormatter {
+            let formatter = RelativeDateTimeFormatter()
+            formatter.locale = locale
+            formatter.unitsStyle = .abbreviated
+            formatter.dateTimeStyle = style
+            return formatter
+        }
+        let pair = (named: make(.named), numeric: make(.numeric))
+        cache[locale.identifier] = pair
+        return pair
+    }
+
     static func short(_ date: Date, now: Date = Date(), locale: Locale = .current) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = locale
-        formatter.unitsStyle = .abbreviated
+        let pair = formatters(for: locale)
         // Unter einer Minute nur „jetzt" (named) — numerisch käme „vor 12 Sek.";
         // ab einer Minute numerisch, damit „vor 2 Mon." statt „letzter Monat" steht.
         if now.timeIntervalSince(date) < 60 {
-            formatter.dateTimeStyle = .named
-            return formatter.localizedString(for: now, relativeTo: now)
+            return pair.named.localizedString(for: now, relativeTo: now)
         }
-        formatter.dateTimeStyle = .numeric
-        return formatter.localizedString(for: date, relativeTo: now)
+        return pair.numeric.localizedString(for: date, relativeTo: now)
     }
 }

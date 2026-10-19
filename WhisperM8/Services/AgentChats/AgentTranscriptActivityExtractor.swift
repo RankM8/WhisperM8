@@ -49,9 +49,9 @@ struct AgentSessionActivity: Equatable, Sendable {
         let raw: String?
         switch status {
         case .stopped:
-            raw = String(localized: "stopped")
+            raw = String(localized: "Stopped")
         case .errored:
-            raw = String(localized: "error")
+            raw = String(localized: "Error")
         case .awaitingInput:
             raw = awaitingLine
         case .working:

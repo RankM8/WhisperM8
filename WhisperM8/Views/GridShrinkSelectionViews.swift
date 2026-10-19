@@ -237,7 +237,7 @@ struct GridSlotSelectionOverlay: View {
             Image(systemName: retained ? "checkmark.circle.fill" : "minus.circle.fill")
                 .font(.system(size: 10, weight: .bold))
             (retained ? (slotNumber.map { Text("Stays · slot \($0)") } ?? Text("Stays")) : Text("Leaves"))
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 7)

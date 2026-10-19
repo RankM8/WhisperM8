@@ -171,6 +171,8 @@ struct AgentChatsView: View {
     /// Workspaces-Sektion ein-/ausgeklappt (persistiert, Muster GEPINNT).
     /// internal, da die Sektion in +Workspaces lebt.
     @AppStorage("agentWorkspacesSectionCollapsed") var workspacesSectionCollapsed = false
+    /// „Advanced agent features" — als @AppStorage, damit das „+"-Menü nach dem Umschalten stimmt.
+    @AppStorage(PreferenceKeys.agentAdvancedFeaturesEnabled) var advancedFeaturesEnabled = false
     /// Umbenennen-Sheet für Workspace-Gruppen (analog renameTargetID).
     @State var renameWorkspaceTargetID: UUID?
     @State var renameWorkspaceDraft = ""
@@ -1794,7 +1796,7 @@ struct AgentChatsView: View {
                 Image(systemName: "pin")
                     .font(.system(size: 8, weight: .bold))
                 Text("PINNED")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .tracking(0.6)
                 if pinnedSectionCollapsed {
                     Text("\(count)")
@@ -1809,7 +1811,7 @@ struct AgentChatsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(pinnedSectionCollapsed ? "Gepinnte einblenden" : "Gepinnte ausblenden")
+        .help(pinnedSectionCollapsed ? String(localized: "Show pinned chats") : String(localized: "Hide pinned chats"))
     }
 
     /// Zeile der Gepinnt-Sektion inkl. Kontextmenü (Loslösen, Umbenennen,
@@ -2023,7 +2025,7 @@ struct AgentChatsView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(archiveModeActive ? "Archiv verlassen" : "Archiv (\(archivedSidebarSessions.count))")
+            .help(archiveModeActive ? String(localized: "Leave archive") : String(localized: "Archive (\(archivedSidebarSessions.count))"))
 
             // Ruhe-Stufe: Fertig-Ton / Mitteilungen per Klick dämpfen
             SidebarAlertLevelButton()
@@ -2788,7 +2790,7 @@ struct AgentChatsView: View {
                     Spacer().frame(width: 70)
                 }
 
-                TitlebarIconButton(systemImage: "sidebar.left", help: isSidebarVisible ? "Sidebar ausblenden" : "Sidebar einblenden", isActive: isSidebarVisible) {
+                TitlebarIconButton(systemImage: "sidebar.left", help: isSidebarVisible ? String(localized: "Hide sidebar") : String(localized: "Show sidebar"), isActive: isSidebarVisible) {
                     isSidebarVisible.toggle()
                 }
 
@@ -2967,7 +2969,7 @@ struct AgentChatsView: View {
 
                 TitlebarIconButton(
                     systemImage: "rectangle.stack",
-                    help: tabGroupingEnabled ? "Tab-Gruppen ausschalten" : "Tab-Gruppen einschalten",
+                    help: tabGroupingEnabled ? String(localized: "Turn tab groups off") : String(localized: "Turn tab groups on"),
                     isActive: tabGroupingEnabled
                 ) {
                     tabGroupingEnabled.toggle()
@@ -3386,8 +3388,8 @@ struct AgentChatsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: isRunning ? "arrow.clockwise" : "play.fill")
                         .font(.system(size: 8, weight: .medium))
-                    Text(isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"))
-                        .font(.system(size: 10, weight: .medium))
+                    Text(verbatim: ChatsUIStrings.startActionTitle(isRunning: isRunning, hasExternalSession: session.externalSessionID != nil))
+                        .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundStyle(AgentTheme.textPrimary)
                 .padding(.horizontal, 7)

@@ -131,7 +131,7 @@ extension AgentChatsView {
             HStack(spacing: 5) {
                 Image(systemName: "archivebox")
                     .font(.system(size: 10, weight: .semibold))
-                Text("Archiv · \(archivedSidebarSessions.count)")
+                Text("Archive · \(archivedSidebarSessions.count)")
                     .font(.system(size: 11.5, weight: .semibold))
             }
             .foregroundStyle(AgentTheme.textPrimary)
@@ -149,7 +149,7 @@ extension AgentChatsView {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AgentTheme.textTertiary)
-            TextField("Archiv durchsuchen…", text: $archiveSearchText)
+            TextField("Search archive…", text: $archiveSearchText)
                 .textFieldStyle(.plain)
                 .font(.system(size: 11.5))
             if !archiveSearchText.isEmpty {

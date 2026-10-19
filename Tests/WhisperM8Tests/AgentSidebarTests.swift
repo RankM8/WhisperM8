@@ -913,9 +913,13 @@ final class SidebarRelativeTimeTests: XCTestCase {
         XCTAssertEqual(label(secondsAgo: 59), "now")
         XCTAssertEqual(label(secondsAgo: 60), "1m ago")
         XCTAssertEqual(label(secondsAgo: 45 * 60), "45m ago")
+        XCTAssertEqual(label(secondsAgo: 60 * 60), "1h ago")
         XCTAssertEqual(label(secondsAgo: 5 * 3600), "5h ago")
+        XCTAssertEqual(label(secondsAgo: 24 * 3600), "1d ago")
         XCTAssertEqual(label(secondsAgo: 3 * 24 * 3600), "3d ago")
+        XCTAssertEqual(label(secondsAgo: 7 * 24 * 3600), "1w ago")
         XCTAssertEqual(label(secondsAgo: 21 * 24 * 3600), "3w ago")
+        XCTAssertEqual(label(secondsAgo: 60 * 24 * 3600), "1mo ago")
         XCTAssertEqual(label(secondsAgo: 95 * 24 * 3600), "3mo ago")
     }
 }

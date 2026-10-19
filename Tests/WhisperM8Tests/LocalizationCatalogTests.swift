@@ -228,6 +228,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/WorkspacePersistenceBanner.swift",
         "WhisperM8/Views/VoiceGateMenuSection.swift",
         "WhisperM8/Views/AgentChatsView+AdvancedMenu.swift",
+        "WhisperM8/Views/AgentTerminalView.swift",
         "WhisperM8/Views/AgentChatsView+Confirmations.swift",
         "WhisperM8/Services/AgentChats/ChatsUIStrings.swift",
         "WhisperM8/Services/AgentChats/AccountMovePlanner.swift",
@@ -264,6 +265,27 @@ final class LocalizationCatalogTests: XCTestCase {
         }
     }
 
+    /// Ternäre mit nackten String-Literalen (auch verschachtelt, auch in
+    /// `.help(`/`help:`/`title:`) werden nie lokalisiert — jeder Zweig braucht
+    /// `Text("…")` bzw. `String(localized:)`.
+    func testChatsFilesHaveNoBareStringTernaries() throws {
+        for file in Self.chatsLocalizedFiles {
+            let source = try String(contentsOf: Self.root.appendingPathComponent(file), encoding: .utf8)
+            for hit in Self.bareStringTernaries(in: Self.withoutComments(source)) {
+                XCTFail("\(file): Ternär mit nacktem Literal „\(hit)“ — Zweige als Text(\"…\") oder String(localized:)")
+            }
+        }
+    }
+
+    func testBareTernaryDetectorFindsKnownPatterns() {
+        XCTAssertEqual(Self.bareStringTernaries(in: #".help(a ? "Einblenden" : "Ausblenden")"#).count, 2)
+        XCTAssertEqual(Self.bareStringTernaries(in: #"Text(r ? "Restart" : (x == nil ? "Start" : "Resume"))"#).count, 3)
+        XCTAssertEqual(Self.bareStringTernaries(in: #"help: s ? "Hide sidebar" : "Show sidebar""#).count, 2)
+        XCTAssertTrue(Self.bareStringTernaries(in: #"x ? Text("A") : Text("B")"#).isEmpty)
+        XCTAssertTrue(Self.bareStringTernaries(in: #"x ? String(localized: "A") : String(localized: "B")"#).isEmpty)
+        XCTAssertTrue(Self.bareStringTernaries(in: #"icon: a ? "archivebox.fill" : "archivebox""#).isEmpty)
+    }
+
     func testGermanDetectorFindsKnownPatterns() {
         XCTAssertEqual(Self.germanLiterals(in: #"Text("Projekt löschen?")"#).count, 1)
         XCTAssertEqual(Self.germanLiterals(in: #"let a = "Der Chat läuft noch""#).count, 1)
@@ -279,6 +301,32 @@ final class LocalizationCatalogTests: XCTestCase {
     static func needsCatalogEntry(_ literal: String) -> Bool {
         guard literal.range(of: #"\p{L}"#, options: .regularExpression) != nil else { return false }
         return literal.range(of: #"^[a-z0-9]+(\.[a-z0-9]+)+$"#, options: .regularExpression) == nil
+    }
+
+    /// Bezeichner statt Text: Farb-Hex, Kleinbuchstaben-Token (`claude`, `pin`, `s`), Werkzeugnamen.
+    static func isIdentifierLike(_ literal: String) -> Bool {
+        literal.hasPrefix("#") || literal.hasPrefix("/") || literal == "Bash"
+            || literal.range(of: #"^[a-z0-9_]+$"#, options: .regularExpression) != nil
+    }
+
+    /// Literale direkt hinter `?` oder `:` eines Ternärs, die Text enthalten
+    /// (SF-Symbol-Namen und reine Zeichen zählen nicht).
+    static func bareStringTernaries(in source: String) -> [String] {
+        guard let regex = try? NSRegularExpression(pattern: #"(?: \? | : )\(?"((?:[^"\\]|\\.)*)"(?=\s*:\s|\s*[)\n,]|\s*$)"#) else { return [] }
+        var hits: [String] = []
+        for line in source.split(separator: "\n") {
+            let text = String(line)
+            guard text.contains(" ? ") else { continue }
+            let range = NSRange(text.startIndex..., in: text)
+            for match in regex.matches(in: text, range: range) {
+                guard let r = Range(match.range(at: 1), in: text) else { continue }
+                let literal = String(text[r])
+                // Nur Zweige eines `? … :`-Ternärs: der Text davor enthält ein ` ? `.
+                let before = String(text[..<r.lowerBound])
+                if before.contains(" ? "), needsCatalogEntry(literal), !isIdentifierLike(literal) { hits.append(literal) }
+            }
+        }
+        return hits
     }
 
     /// Entfernt `//`-Kommentare zeilenweise (außerhalb von Literalen).
@@ -304,7 +352,7 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Deutsche Literale außerhalb von Kommentaren und Log-Zeilen: Umlaut/ß
     /// oder ein typisches deutsches Funktionswort.
     static func germanLiterals(in source: String) -> [String] {
-        let words = #"\b(der|die|das|den|dem|und|oder|nicht|wird|werden|ein|eine|einen|für|mit|von|zu|zum|zur|im|auf|noch|kein|keine|alle|ohne|nach|bei|über|aus|ist|sind|hier|neuer|neue|neues|sich|wurde|beim|gelöscht|neu|laden|starten|stoppen|beenden|anzeigen|entfernen|archivieren|abbrechen|fertig|speichern|umbenennen|wiederherstellen|einstellungen|hilfe|ablegen|zeigen|projekt|projekte|farbe|fehler|aufklappen|einklappen|zuklappen|weniger|ältere|übrig|arbeitet|bereit|wartet|leer|leerer|keine|kein)\b"#
+        let words = #"\b(der|die|das|den|dem|und|oder|nicht|wird|werden|ein|eine|einen|für|mit|von|zu|zum|zur|im|auf|noch|kein|keine|alle|ohne|nach|bei|über|aus|ist|sind|hier|neuer|neue|neues|sich|wurde|beim|gelöscht|neu|laden|starten|stoppen|beenden|anzeigen|entfernen|archivieren|abbrechen|fertig|speichern|umbenennen|wiederherstellen|einstellungen|hilfe|ablegen|zeigen|projekt|projekte|farbe|fehler|aufklappen|einklappen|zuklappen|weniger|ältere|übrig|arbeitet|bereit|wartet|leer|leerer|keine|kein|archiv|einblenden|ausblenden|verlassen|durchsuchen|gepinnte|gepinnt|schließen|lösen|anpinnen|lade|kopieren|wählen|hinzufügen|entfernen|zurück|weiter|gerade|noch|alle|zeigen|anzeigen|öffnen)\b"#
         guard let literal = try? NSRegularExpression(pattern: #""((?:[^"\\]|\\.)*)""#),
               let german = try? NSRegularExpression(pattern: "[äöüÄÖÜß]|" + words, options: [.caseInsensitive]) else { return [] }
         var hits: [String] = []

@@ -105,7 +105,7 @@ private struct UsageGaugeLine: View {
 
 private struct PopoverHeader: View {
     var title: LocalizedStringKey
-    var subtitle: LocalizedStringKey?
+    var subtitle: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -113,7 +113,7 @@ private struct PopoverHeader: View {
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
             if let subtitle {
-                Text(subtitle)
+                Text(verbatim: subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -135,7 +135,7 @@ private struct ClaudeUsagePopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 8) {
-                PopoverHeader(title: "Claude · Usage limits", subtitle: "All connected accounts")
+                PopoverHeader(title: "Claude · Usage limits", subtitle: String(localized: "All connected accounts"))
                 Spacer(minLength: 0)
                 // Manuelles Update: einziger Weg, abgelaufene Tokens zu
                 // erneuern (CLI-Ping) — onAppear bleibt passiv.
@@ -336,7 +336,7 @@ private struct CodexUsagePopoverView: View {
             HStack(alignment: .top) {
                 PopoverHeader(
                     title: "ChatGPT · GPT Backend",
-                    subtitle: profilesEnabled ? "Accounts of the GPT backend (proxy login)" : "Connected account (proxy login)"
+                    subtitle: profilesEnabled ? String(localized: "Accounts of the GPT backend (proxy login)") : String(localized: "Connected account (proxy login)")
                 )
                 Spacer(minLength: 0)
                 Button {
@@ -406,7 +406,7 @@ private struct CodexUsagePopoverView: View {
                         .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
                 }
                 if isActive, profilesEnabled {
-                    Text("active")
+                    Text("Active")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.statusWorking)
                 }

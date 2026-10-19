@@ -129,7 +129,7 @@ struct ProjectDetailPanel: View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.callout.weight(.semibold))
-            Text("\(count) file\(count == 1 ? "" : "s")")
+            Text(verbatim: ChatsUIStrings.fileCount(count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -242,7 +242,7 @@ private struct GitChangesRowView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
-                Text("\(row.fileCount) file\(row.fileCount == 1 ? "" : "s")")
+                Text(verbatim: ChatsUIStrings.fileCount(row.fileCount))
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             } else {

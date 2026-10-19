@@ -277,7 +277,7 @@ struct ProjectChatGroup: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 6.5, weight: .semibold))
                 Text("\(split.hidden.count) done")
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 11))
                     .monospacedDigit()
                 if split.hiddenUnreadCount > 0 {
                     Circle()
@@ -418,7 +418,7 @@ struct ProjectChatGroup: View {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 8))
                     Text(project.lastBranch ?? "local")
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 11))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -947,6 +947,8 @@ struct SessionListButton: View {
             case .stopped, .none:
                 // Kein Live-Status → „zuletzt aktiv" statt Indikator.
                 Text(SidebarRelativeTime.short(session.lastActivityAt))
+                    .lineLimit(1)
+                    .fixedSize()
                     .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(AgentTheme.textTertiary)
@@ -1127,7 +1129,7 @@ struct PinnedSessionRow: View {
 
     @ViewBuilder
     private var trailingIndicator: some View {
-        if isHovered {
+        if isHovered || isSelected {
             // Echter Button statt Image + onTapGesture (LR-AU-009); dieselbe
             // Aktion hängt zusätzlich als accessibilityAction an der Zeile.
             Button(action: onClose) {
@@ -1154,6 +1156,8 @@ struct PinnedSessionRow: View {
             case .stopped, .none:
                 // Kein Live-Status → „zuletzt aktiv" statt Indikator.
                 Text(SidebarRelativeTime.short(session.lastActivityAt))
+                    .lineLimit(1)
+                    .fixedSize()
                     .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(AgentTheme.textTertiary)

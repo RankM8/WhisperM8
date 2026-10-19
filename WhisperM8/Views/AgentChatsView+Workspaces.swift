@@ -63,7 +63,7 @@ extension AgentChatsView {
                     Image(systemName: "square.grid.2x2")
                         .font(.system(size: 8, weight: .bold))
                     Text("WORKSPACES")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .tracking(0.6)
                     if workspacesSectionCollapsed {
                         Text("\(count)")
@@ -74,7 +74,7 @@ extension AgentChatsView {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(workspacesSectionCollapsed ? "Workspaces einblenden" : "Workspaces ausblenden")
+            .help(workspacesSectionCollapsed ? String(localized: "Show workspaces") : String(localized: "Hide workspaces"))
 
             Button {
                 createWorkspaceFromSidebar()

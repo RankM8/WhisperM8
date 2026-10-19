@@ -27,12 +27,12 @@ final class TabSwitcherTileModelTests: XCTestCase {
 
     func testEveryStatusHasWordAndSymbol() {
         let expected: [(AgentSessionRuntimeStatus?, String, String)] = [
-            (.working, "working", "circle.fill"),
-            (.awaitingInput, "waiting", "circle.lefthalf.filled"),
-            (.idle, "done", "circle"),
-            (.stopped, "stopped", "stop.circle"),
-            (.errored, "error", "exclamationmark.circle.fill"),
-            (nil, "stopped", "stop.circle"),
+            (.working, "Working", "circle.fill"),
+            (.awaitingInput, "Waiting for you", "circle.lefthalf.filled"),
+            (.idle, "Ready", "circle"),
+            (.stopped, "Stopped", "stop.circle"),
+            (.errored, "Error", "exclamationmark.circle.fill"),
+            (nil, "Stopped", "stop.circle"),
         ]
         for (status, word, symbol) in expected {
             let tile = model(status: status)
@@ -48,9 +48,9 @@ final class TabSwitcherTileModelTests: XCTestCase {
     // MARK: - Dauer
 
     func testRunningStatesShowElapsedSinceStatusChange() {
-        XCTAssertEqual(model(status: .working, since: 30).header(detail: .full), "working · 30 s")
-        XCTAssertEqual(model(status: .working, since: 150).header(detail: .full), "working · 2 min")
-        XCTAssertEqual(model(status: .awaitingInput, since: 4 * 60 + 59).header(detail: .full), "waiting · 4 min")
+        XCTAssertEqual(model(status: .working, since: 30).header(detail: .full), "Working · 30 s")
+        XCTAssertEqual(model(status: .working, since: 150).header(detail: .full), "Working · 2 min")
+        XCTAssertEqual(model(status: .awaitingInput, since: 4 * 60 + 59).header(detail: .full), "Waiting for you · 4 min")
         XCTAssertEqual(model(status: .working, since: 3 * 3600 + 10).durationText, "3 h")
         XCTAssertEqual(model(status: .working, since: 2 * 86_400 + 5).durationText, "2 d")
     }
@@ -59,11 +59,11 @@ final class TabSwitcherTileModelTests: XCTestCase {
         // lastActivityAt ist kein Startpunkt des Arbeitens — lieber keine Dauer.
         let tile = model(status: .working, lastActivity: 600)
         XCTAssertNil(tile.durationText)
-        XCTAssertEqual(tile.header(detail: .full), "working")
+        XCTAssertEqual(tile.header(detail: .full), "Working")
     }
 
     func testRestingStatesShowTimeAgo() {
-        XCTAssertEqual(model(status: .idle, since: 12 * 60).header(detail: .full), "done · 12 min ago")
+        XCTAssertEqual(model(status: .idle, since: 12 * 60).header(detail: .full), "Ready · 12 min ago")
         XCTAssertEqual(model(status: .idle, since: 20).durationText, "just now")
         XCTAssertEqual(model(status: .errored, since: 2 * 3600).durationText, "2 h ago")
     }
@@ -94,9 +94,9 @@ final class TabSwitcherTileModelTests: XCTestCase {
 
     func testStatusAndTitleStageDropsDuration() {
         let tile = model(status: .working, since: 150)
-        XCTAssertEqual(tile.header(detail: .full), "working · 2 min")
-        XCTAssertEqual(tile.header(detail: .withoutActivity), "working · 2 min")
-        XCTAssertEqual(tile.header(detail: .statusAndTitle), "working")
+        XCTAssertEqual(tile.header(detail: .full), "Working · 2 min")
+        XCTAssertEqual(tile.header(detail: .withoutActivity), "Working · 2 min")
+        XCTAssertEqual(tile.header(detail: .statusAndTitle), "Working")
     }
 
     // MARK: - Stand-Zeile

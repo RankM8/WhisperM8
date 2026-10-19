@@ -98,7 +98,7 @@ extension AgentChatsView {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 6.5, weight: .semibold))
                 Text("\(split.hidden.count) done")
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 11))
                     .monospacedDigit()
                 if split.hiddenUnreadCount > 0 {
                     Circle()

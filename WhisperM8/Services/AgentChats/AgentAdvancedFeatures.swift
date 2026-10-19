@@ -28,9 +28,33 @@ enum AgentAdvancedFeatures {
         return value
     }
 
-    /// Produktiver Aufruf: schaut in die Workspace-Datei.
+    /// Produktiver Aufruf: schaut in die Workspace-Datei — ohne sie zu dekodieren
+    /// (sie kann mehrere MB groß sein, der Aufruf läuft im Start auf dem Main Thread).
     static func resolveAtLaunch() {
-        resolveAtLaunch { !AgentWorkspaceRepository(fileURL: nil).loadReadOnly().sessions.isEmpty }
+        resolveAtLaunch {
+            let url = AgentWorkspaceRepository.defaultFileURL()
+            guard let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return false }
+            return workspaceHasSessions(in: data)
+        }
+    }
+
+    /// Pur: enthält das JSON ein nicht-leeres `"sessions"`-Array? Sucht den Schlüssel
+    /// in den Bytes und schaut nur auf das erste Zeichen nach `[` — kein Parsen.
+    static func workspaceHasSessions(in data: Data) -> Bool {
+        let key = Data("\"sessions\"".utf8)
+        guard let range = data.range(of: key) else { return false }
+        var index = range.upperBound
+        func next() -> UInt8? {
+            while index < data.endIndex {
+                defer { index = data.index(after: index) }
+                let byte = data[index]
+                if byte != 0x20, byte != 0x0A, byte != 0x0D, byte != 0x09 { return byte }
+            }
+            return nil
+        }
+        guard next() == UInt8(ascii: ":"), next() == UInt8(ascii: "[") else { return false }
+        guard let first = next() else { return false }
+        return first != UInt8(ascii: "]")
     }
 }
 
@@ -39,12 +63,13 @@ enum NewChatMenuItem: Equatable {
     case claudeChat
     case codexChat
     case gptChat
+    /// Normale Login-Shell — wie bisher auf oberster Ebene, aber nur mit dem Schalter.
+    case terminal
     /// Untermenü „Advanced" mit den erweiterten Einträgen.
     case advanced([NewChatMenuAdvancedItem])
 }
 
 enum NewChatMenuAdvancedItem: Equatable {
-    case terminal
     case backgroundAgent
     case agentView
     case subAgentLibrary
@@ -52,12 +77,13 @@ enum NewChatMenuAdvancedItem: Equatable {
 
 enum NewChatMenuPlan {
     /// Claude vor Codex; GPT-Chat nur mit aktivem GPT-Backend (eigener Opt-in);
-    /// die erweiterten Einträge nur bei eingeschaltetem Schalter.
+    /// Terminal und das Untermenü „Advanced" nur bei eingeschaltetem Schalter.
     static func items(advancedEnabled: Bool, gptBackendEnabled: Bool) -> [NewChatMenuItem] {
         var items: [NewChatMenuItem] = [.claudeChat, .codexChat]
         if gptBackendEnabled { items.append(.gptChat) }
         if advancedEnabled {
-            items.append(.advanced([.terminal, .backgroundAgent, .agentView, .subAgentLibrary]))
+            items.append(.terminal)
+            items.append(.advanced([.backgroundAgent, .agentView, .subAgentLibrary]))
         }
         return items
     }

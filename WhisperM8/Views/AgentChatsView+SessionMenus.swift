@@ -127,7 +127,7 @@ extension AgentChatsView {
     private func runtimeMenuItem(_ session: AgentChatSession) -> some View {
         let isRunning = terminalRegistry.controller(for: session.id)?.isRunning == true
         Button(
-            isRunning ? "Restart" : (session.externalSessionID == nil ? "Start" : "Resume"),
+            ChatsUIStrings.startActionTitle(isRunning: isRunning, hasExternalSession: session.externalSessionID != nil),
             systemImage: isRunning ? "arrow.clockwise" : "play.fill"
         ) {
             sessionActionRequest = AgentSessionActionRequest(

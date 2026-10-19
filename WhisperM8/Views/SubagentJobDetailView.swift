@@ -344,7 +344,7 @@ struct SubagentJobDetailView: View {
             Circle().fill(Color.teal).frame(width: 5, height: 5)
             Text("Source: agent report")
         }
-        .font(.system(size: 9.5, weight: .semibold))
+        .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(Color.teal)
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -483,7 +483,7 @@ struct SubagentJobDetailView: View {
                         AgentSendCLI.claim(store: store, options: options)
                     }
                 } catch {
-                    return "Job-Lock fehlgeschlagen: \(error.localizedDescription)"
+                    return String(localized: "Job lock failed: \(error.localizedDescription)")
                 }
                 if case .failure(let claimError) = claim {
                     return claimError.message
@@ -500,7 +500,7 @@ struct SubagentJobDetailView: View {
                     // wäre der Job sonst für 30s "aktiv" gesperrt.
                     _ = try? store.mutateState(shortId: shortId) { job in
                         if job.canTransition(to: .failed) { job.state = .failed }
-                        job.failureReason = "Supervisor-Launch fehlgeschlagen: \(error.localizedDescription)"
+                        job.failureReason = String(localized: "Supervisor launch failed: \(error.localizedDescription)")
                     }
                     return error.localizedDescription
                 }

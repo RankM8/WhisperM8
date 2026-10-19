@@ -509,7 +509,7 @@ struct BranchTag: View {
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: 9, weight: .bold))
             Text(formattedBranch)
-                .font(.system(size: 10, weight: .semibold).monospaced())
+                .font(.system(size: 11, weight: .semibold).monospaced())
                 .lineLimit(1)
                 .truncationMode(.middle)
         }

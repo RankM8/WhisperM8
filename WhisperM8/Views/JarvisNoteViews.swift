@@ -399,9 +399,7 @@ struct JarvisNotesToggleButton: View {
                     HStack(spacing: 5) {
                         Image(systemName: "note.text")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("Notes")
-                        (defaultOpen ? Text("on") : Text("off"))
-                            .foregroundStyle(defaultOpen ? AgentTheme.accent : AgentTheme.textTertiary)
+                        (defaultOpen ? Text("Notes on") : Text("Notes off"))
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(defaultOpen ? AgentTheme.accent : AgentTheme.textSecondary)

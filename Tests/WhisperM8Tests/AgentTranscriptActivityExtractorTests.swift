@@ -199,9 +199,9 @@ final class AgentTranscriptActivityExtractorTests: XCTestCase {
 
     func testGestopptUndFehlerKommenAusDemStatus() {
         let activity = claude([claudeText("Fertig.")])
-        XCTAssertEqual(activity?.line(for: .stopped), "stopped")
-        XCTAssertEqual(activity?.line(for: .errored), "error")
-        XCTAssertEqual(AgentSessionActivity().line(for: .stopped), "stopped")
+        XCTAssertEqual(activity?.line(for: .stopped), "Stopped")
+        XCTAssertEqual(activity?.line(for: .errored), "Error")
+        XCTAssertEqual(AgentSessionActivity().line(for: .stopped), "Stopped")
     }
 
     func testMcpToolNameWirdGekuerzt() {

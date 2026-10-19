@@ -75,11 +75,10 @@ struct TabSwitcherTileModel: Equatable {
     /// wie `AgentStatusIndicator`.
     static func statusWord(for status: AgentSessionRuntimeStatus?) -> String {
         switch status {
-        case .working: return String(localized: "working")
-        case .awaitingInput: return String(localized: "waiting")
-        case .idle: return String(localized: "done")
-        case .errored: return String(localized: "error")
-        case .stopped, nil: return String(localized: "stopped")
+        case .working, .awaitingInput, .idle, .errored:
+            // Dieselben Wörter wie VoiceOver und Tooltip des Status-Punkts.
+            return AgentStatusAccessibility.label(for: status) ?? ""
+        case .stopped, nil: return String(localized: "Stopped")
         }
     }
 

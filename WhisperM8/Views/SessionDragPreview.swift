@@ -17,7 +17,7 @@ struct SessionDragPreview: View {
         HStack(spacing: 6) {
             Image(systemName: count > 1 ? "square.stack.3d.up.fill" : "bubble.left.and.text.bubble.right")
                 .font(.system(size: 11, weight: .semibold))
-            Text(count > 1 ? "\(count) Chats" : title)
+            Text(verbatim: count > 1 ? String(localized: "\(count) chats") : title)
                 .font(.system(size: 12, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)

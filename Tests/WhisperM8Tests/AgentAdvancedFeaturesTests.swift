@@ -21,7 +21,7 @@ final class AgentAdvancedFeaturesTests: XCTestCase {
     func testMenuOnKeepsEveryFeatureUnderAdvanced() {
         XCTAssertEqual(
             NewChatMenuPlan.items(advancedEnabled: true, gptBackendEnabled: true),
-            [.claudeChat, .codexChat, .gptChat, .advanced([.terminal, .backgroundAgent, .agentView, .subAgentLibrary])])
+            [.claudeChat, .codexChat, .gptChat, .terminal, .advanced([.backgroundAgent, .agentView, .subAgentLibrary])])
     }
 
     func testInitialValueFollowsExistingSessions() {
@@ -56,5 +56,15 @@ final class AgentAdvancedFeaturesSettingsTests: XCTestCase {
 
     func testStoredAgentViewChoiceStaysVisible() {
         XCTAssertTrue(AgentChatsWorkspaceSettingsTab.newChatOptions(advanced: false, current: "claude-agents").contains("claude-agents"))
+    }
+
+    func testWorkspaceHasSessionsWithoutDecoding() {
+        func has(_ json: String) -> Bool { AgentAdvancedFeatures.workspaceHasSessions(in: Data(json.utf8)) }
+        XCTAssertTrue(has(#"{"projects":[],"sessions":[{"id":"x"}]}"#))
+        XCTAssertTrue(has("{\n  \"sessions\" : [\n    {\"id\": 1}\n  ]\n}"))
+        XCTAssertFalse(has(#"{"projects":[],"sessions":[]}"#))
+        XCTAssertFalse(has("{\n  \"sessions\" : [\n  ]\n}"))
+        XCTAssertFalse(has(#"{"projects":[]}"#))
+        XCTAssertFalse(has(""))
     }
 }

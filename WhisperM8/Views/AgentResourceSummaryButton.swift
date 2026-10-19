@@ -31,7 +31,7 @@ struct AgentResourceSummaryButton: View {
                 Image(systemName: "memorychip")
                     .font(.system(size: 9, weight: .medium))
                 Text(summaryText)
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .lineLimit(1)
             }
             .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textTertiary)

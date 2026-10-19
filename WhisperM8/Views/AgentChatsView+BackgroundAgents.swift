@@ -321,6 +321,6 @@ extension AgentChatsView {
         let firstLine = trimmed.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? trimmed
         let cap = 60
         let snippet = firstLine.count > cap ? String(firstLine.prefix(cap - 1)) + "…" : firstLine
-        return snippet.isEmpty ? "Hintergrund-Agent" : snippet
+        return snippet.isEmpty ? String(localized: "Background agent") : snippet
     }
 }
