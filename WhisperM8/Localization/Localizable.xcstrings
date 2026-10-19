@@ -381,6 +381,26 @@
         }
       }
     },
+    "Hide API key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Key verbergen"
+          }
+        }
+      }
+    },
+    "Hide typed key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingegebenen Key verbergen"
+          }
+        }
+      }
+    },
     "History deleted, can't be continued": {
       "localizations": {
         "de": {
@@ -711,6 +731,26 @@
         }
       }
     },
+    "Reconnect": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu verbinden"
+          }
+        }
+      }
+    },
+    "Reconnect ChatGPT": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT neu verbinden"
+          }
+        }
+      }
+    },
     "Record your voice for transcription": {
       "localizations": {
         "de": {
@@ -837,6 +877,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Setup unvollständig: Berechtigungen fehlen"
+          }
+        }
+      }
+    },
+    "Show API key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Key anzeigen"
+          }
+        }
+      }
+    },
+    "Show typed key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingegebenen Key anzeigen"
+          }
+        }
+      }
+    },
+    "Sign In": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmelden"
+          }
+        }
+      }
+    },
+    "Sign in with ChatGPT": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit ChatGPT anmelden"
           }
         }
       }

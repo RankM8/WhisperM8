@@ -40,8 +40,10 @@ struct AIOutputAccountTab: View {
                     // Ohne installierte CLI gibt es nichts anzumelden — dann führt der
                     // Installationsblock darunter (LR-DIK-015).
                     if connectionModel.status != .notInstalled {
-                        Button(connectionModel.status == .signedIn ? "Reconnect" : "Sign In") {
+                        Button {
                             CodexStatusProbe().openLoginInTerminal()
+                        } label: {
+                            connectionModel.status == .signedIn ? Text("Reconnect") : Text("Sign In")
                         }
                         .buttonStyle(SettingsButtonStyle.standard)
                     }

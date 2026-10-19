@@ -112,8 +112,10 @@ struct TranscriptionSettingsPage: View {
                     // Keychain-Write darf nicht wie ein vorhandener Zugang aussehen (LR-ONB-007).
                     if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         SettingsRow(title: "Replace Key") {
-                            Button(apiKeyAvailable ? "Replace Saved Key" : "Save Key") {
+                            Button {
                                 saveTypedKey(keychainKey: keychainKey)
+                            } label: {
+                                apiKeyAvailable ? Text("Replace Saved Key") : Text("Save Key")
                             }
                             .buttonStyle(SettingsButtonStyle.primary)
                         }
@@ -414,8 +416,8 @@ private struct TranscriptionAPIKeyInputRow: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .stroke(AppTheme.border, lineWidth: 1)
                 }
-                .help(isRevealed ? "Hide typed key" : "Show typed key")
-                .accessibilityLabel(Text(isRevealed ? "Hide API key" : "Show API key"))
+                .help(isRevealed ? Text("Hide typed key") : Text("Show typed key"))
+                .accessibilityLabel(isRevealed ? Text("Hide API key") : Text("Show API key"))
             }
         }
     }

@@ -84,7 +84,39 @@ final class LocalizationCatalogTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: out.appendingPathComponent("de.lproj/Localizable.strings").path))
     }
 
+    /// Dateien, in denen Ternär-Literale direkt in Text/Button verboten sind
+    /// (LR-ONB/Lokalisierung): `Text(a ? "x" : "y")` wird zu `String` und bleibt
+    /// unübersetzt. Neben den vollständig lokalisierten Dateien die Stellen,
+    /// an denen es schon einmal auftrat.
+    static let ternaryGuardedFiles: [String] = localizedFiles + [
+        "WhisperM8/Views/Settings/Pages/AIOutputAccountTab.swift",
+        "WhisperM8/Views/Settings/Pages/TranscriptionSettingsPage.swift",
+    ]
+
+    func testNoTernaryLiteralsInTextAndButtons() throws {
+        for file in Self.ternaryGuardedFiles {
+            let source = try String(contentsOf: Self.root.appendingPathComponent(file), encoding: .utf8)
+            for hit in Self.ternaryLiteralCalls(in: source) {
+                XCTFail("\(file): Ternär-Literal „\(hit)“ in Text/Button — `cond ? Text(\"A\") : Text(\"B\")` verwenden")
+            }
+        }
+    }
+
+    func testTernaryDetectorFindsTheKnownPatterns() {
+        XCTAssertEqual(Self.ternaryLiteralCalls(in: #"Button(status == .signedIn ? "Reconnect" : "Sign In") {"#).count, 1)
+        XCTAssertEqual(Self.ternaryLiteralCalls(in: #"Text(isOn ? "A" : "B")"#).count, 1)
+        XCTAssertTrue(Self.ternaryLiteralCalls(in: #"x ? Text("A") : Text("B")"#).isEmpty)
+        XCTAssertTrue(Self.ternaryLiteralCalls(in: #"Text("Plain")"#).isEmpty)
+    }
+
     // MARK: - Helfer
+
+    static func ternaryLiteralCalls(in source: String) -> [String] {
+        let pattern = #"(?:Text|Button|Label|Toggle|Section|Picker|Menu|ContentUnavailableView)\(\s*[^"()\n]*\?\s*"(?:[^"\\]|\\.)*"\s*:\s*"(?:[^"\\]|\\.)*""#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(source.startIndex..., in: source)
+        return regex.matches(in: source, range: range).compactMap { Range($0.range, in: source).map { String(source[$0]) } }
+    }
 
     /// `%@`, `%lld`, `%1$@` … in Reihenfolge, Positionsangaben ignoriert.
     static func placeholders(in text: String) -> [String] {

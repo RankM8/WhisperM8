@@ -333,8 +333,10 @@ struct CodexConnectStep: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.1)))
             } else {
                 HStack {
-                    Button(status == .signedIn ? "Reconnect ChatGPT" : "Sign in with ChatGPT") {
+                    Button {
                         CodexStatusProbe().openLoginInTerminal()
+                    } label: {
+                        status == .signedIn ? Text("Reconnect ChatGPT") : Text("Sign in with ChatGPT")
                     }
                     .buttonStyle(.borderedProminent)
 

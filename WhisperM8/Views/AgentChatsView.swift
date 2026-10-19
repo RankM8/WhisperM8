@@ -2134,7 +2134,7 @@ struct AgentChatsView: View {
                 HStack(spacing: 7) {
                     if let project = selectedProject {
                         ProjectAvatar(project: project, size: 15)
-                        Text("Neuer Chat")
+                        Text("New chat")
                             .font(.system(size: 12, weight: .semibold))
                     } else {
                         Image(systemName: "folder.badge.plus")
