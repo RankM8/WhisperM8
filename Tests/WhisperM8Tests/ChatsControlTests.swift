@@ -88,6 +88,40 @@ final class AgentSessionTokenRegistryTests: XCTestCase {
         XCTAssertFalse(registry.verify(sessionID: id, token: token))
     }
 
+    func testRevokeIfTokenOnlyHitsTheEndingRun() {
+        let registry = AgentSessionTokenRegistry.shared
+        let id = UUID()
+        let first = registry.issueToken(for: id)
+        let second = registry.issueToken(for: id)   // Resume: neuer Lauf
+        registry.revoke(sessionID: id, ifToken: first)   // spätes Ende des alten Laufs
+        XCTAssertTrue(registry.verify(sessionID: id, token: second))
+        registry.revoke(sessionID: id, ifToken: second)
+        XCTAssertFalse(registry.verify(sessionID: id, token: second))
+    }
+
+    func testMutatingRequestWithSessionIDButBadTokenIsRejected() async {
+        let id = UUID()
+        let token = AgentSessionTokenRegistry.shared.issueToken(for: id)
+        defer { AgentSessionTokenRegistry.shared.revoke(sessionID: id) }
+        let handler = AgentControlRequestHandler()
+
+        let bad = ChatsControlRequest(
+            actor: ChatsControlActor(sessionID: id.uuidString, token: "falsch"), method: "session.close")
+        let response = await handler.handle(bad)
+        XCTAssertFalse(response.ok)
+        XCTAssertEqual(response.error?.code, ChatsControlErrorCode.invalid.rawValue)
+
+        // Kein Token / Lese-Methode / ohne sessionID / gültiges Token: nicht abgelehnt.
+        XCTAssertFalse(AgentControlRequestHandler.rejectsUnverifiedActor(
+            ChatsControlRequest(actor: ChatsControlActor(sessionID: id.uuidString, token: token), method: "session.close")))
+        XCTAssertFalse(AgentControlRequestHandler.rejectsUnverifiedActor(
+            ChatsControlRequest(actor: ChatsControlActor(sessionID: id.uuidString, token: "falsch"), method: "sessions.live")))
+        XCTAssertFalse(AgentControlRequestHandler.rejectsUnverifiedActor(
+            ChatsControlRequest(actor: ChatsControlActor(), method: "session.close")))
+        XCTAssertTrue(AgentControlRequestHandler.rejectsUnverifiedActor(
+            ChatsControlRequest(actor: ChatsControlActor(sessionID: id.uuidString, token: nil), method: "session.send")))
+    }
+
     func testReissueReplacesToken() {
         let registry = AgentSessionTokenRegistry.shared
         let id = UUID()

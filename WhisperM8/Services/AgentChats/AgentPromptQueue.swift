@@ -41,6 +41,11 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
     var enqueuedAt: Date
     /// Wer den Auftrag eingestellt hat (`projekt/titel` oder `external`).
     var enqueuedBy: String
+    /// War der Einsteller per Session-Token verifiziert? Die Zustellung geht
+    /// mit genau diesem Wert ins Audit-Log — vorher stand dort immer `true`,
+    /// auch für externe oder unverifizierte Aufrufer (LR-CLI-011). Alte
+    /// Einträge ohne Feld gelten als nicht verifiziert.
+    var enqueuedVerified: Bool = false
     var state: State = .pending
     var deliveredAt: Date?
     var lastError: String?
@@ -66,13 +71,14 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         prompt = try container.decode(String.self, forKey: .prompt)
         enqueuedAt = try container.decode(Date.self, forKey: .enqueuedAt)
         enqueuedBy = try container.decodeIfPresent(String.self, forKey: .enqueuedBy) ?? "unbekannt"
+        enqueuedVerified = try container.decodeIfPresent(Bool.self, forKey: .enqueuedVerified) ?? false
         state = try container.decodeIfPresent(State.self, forKey: .state) ?? .pending
         deliveredAt = try container.decodeIfPresent(Date.self, forKey: .deliveredAt)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
     }
 
     init(id: UUID = UUID(), sequence: Int = 0, sessionID: UUID, prompt: String,
-         enqueuedAt: Date, enqueuedBy: String, state: State = .pending,
+         enqueuedAt: Date, enqueuedBy: String, enqueuedVerified: Bool = false, state: State = .pending,
          deliveredAt: Date? = nil, lastError: String? = nil) {
         self.id = id
         self.sequence = sequence
@@ -80,6 +86,7 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         self.prompt = prompt
         self.enqueuedAt = enqueuedAt
         self.enqueuedBy = enqueuedBy
+        self.enqueuedVerified = enqueuedVerified
         self.state = state
         self.deliveredAt = deliveredAt
         self.lastError = lastError

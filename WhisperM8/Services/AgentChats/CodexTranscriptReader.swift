@@ -141,7 +141,7 @@ enum CodexTranscriptReader {
                 id: UUID(),
                 role: .assistant,
                 timestamp: timestamp,
-                blocks: [.toolUse(name: name, input: input)]
+                blocks: [.toolUse(name: name, input: input, id: payload["call_id"] as? String)]
             )
         case "function_call_output":
             let output = extractFunctionOutput(payload["output"])
@@ -150,7 +150,7 @@ enum CodexTranscriptReader {
                 id: UUID(),
                 role: .user, // Claude-Konvention: Results kommen als User-Message zurueck
                 timestamp: timestamp,
-                blocks: [.toolResult(content: output, isError: outputIndicatesFailure(output))]
+                blocks: [.toolResult(content: output, isError: outputIndicatesFailure(output), toolUseID: payload["call_id"] as? String)]
             )
         case "tool_search_call":
             let input: String

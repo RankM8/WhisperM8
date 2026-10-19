@@ -28,7 +28,7 @@ enum TranscriptEvidenceExtractor {
                             evidence.commits.append(commit)
                         }
                     }
-                    if let test = parseTestRun(command: tool.subject, isError: tool.isError) {
+                    if let test = parseTestRun(command: tool.subject, result: tool.result, isError: tool.isError) {
                         evidence.tests.append(test)
                     }
                 case .read, .search, .web, .task, .mcp, .other:
@@ -65,13 +65,31 @@ enum TranscriptEvidenceExtractor {
         return .init(sha: sha, message: message)
     }
 
-    /// Erkennt Test-Kommandos konservativ am Anfang des Kommandos (nach
-    /// optionalem `cd …&&`/Env-Präfix wäre zu viel Raterei — bewusst simpel).
-    static func parseTestRun(command: String, isError: Bool) -> AgentSessionSummary.Evidence.TestRun? {
-        let lowered = command.lowercased()
+    /// Erkennt Test-Kommandos am Anfang eines Kommando-Segments (nach `&&`, `;`,
+    /// `||`, Zeilenumbruch, optionalem Env-Präfix) — ein bloß zitierter Befehl
+    /// (`echo 'npm test'`) zählt nicht. Ohne zugeordnetes Ergebnis (`result == nil`:
+    /// Chat vor dem Ende beendet, Befehl läuft noch) gibt es keinen Beleg —
+    /// weder „bestanden" noch „fehlgeschlagen" (LR-AK-014).
+    static func parseTestRun(command: String, result: String?, isError: Bool) -> AgentSessionSummary.Evidence.TestRun? {
+        guard result != nil else { return nil }
         let markers = ["swift test", "npm test", "npm run test", "pnpm test", "yarn test",
                        "pytest", "go test", "cargo test", "php artisan test", "phpunit", "vitest", "jest"]
-        guard markers.contains(where: { lowered.contains($0) }) else { return nil }
+        let segments = command
+            .replacingOccurrences(of: "&&", with: "\n")
+            .replacingOccurrences(of: "||", with: "\n")
+            .replacingOccurrences(of: ";", with: "\n")
+            .split(separator: "\n")
+        let isTestCommand = segments.contains { segment in
+            var words = segment.trimmingCharacters(in: .whitespaces).lowercased()
+                .split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            // Env-Präfix (`CI=1 npm test`) und `time` überspringen.
+            while let first = words.first, first == "time" || (first.contains("=") && !first.hasPrefix("-")) {
+                words.removeFirst()
+            }
+            let head = words.joined(separator: " ")
+            return markers.contains { head == $0 || head.hasPrefix($0 + " ") }
+        }
+        guard isTestCommand else { return nil }
         return .init(command: String(command.prefix(90)), passed: !isError)
     }
 }

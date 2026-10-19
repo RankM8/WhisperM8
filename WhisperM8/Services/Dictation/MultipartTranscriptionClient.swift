@@ -69,18 +69,38 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
             audioDuration: audioDuration
         )
 
-        let result: TranscriptionResponse
-        do {
-            result = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
-        } catch {
-            let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
-            Logger.debug("ERROR decoding response: \(error)")
-            Logger.debug("Raw response: \(responseText.prefix(500))")
-            throw error
-        }
+        let result = try Self.decodeLogged(TranscriptionResponse.self, from: data)
 
         Logger.debug("SUCCESS! Text length: \(result.text.count) characters")
         return result.text
+    }
+
+    /// Dekodiert die Antwort; im Fehlerfall wird nur Typ, Länge und Ort des
+    /// Fehlers protokolliert, nie der Antworttext. Eine abgeschnittene Antwort
+    /// beginnt oft schon mit dem diktierten Inhalt, und `Logger.debug` ist
+    /// öffentlich bzw. landet im Datei-Log (LR-SH-008).
+    static func decodeLogged<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            Logger.debug("ERROR decoding \(type): \(contentFreeDescription(of: error)), \(data.count) bytes (Inhalt nicht protokolliert)")
+            throw error
+        }
+    }
+
+    /// Fehlerart und Pfad, ohne Werte aus der Antwort.
+    static func contentFreeDescription(of error: Error) -> String {
+        guard let decodingError = error as? DecodingError else { return String(describing: Swift.type(of: error)) }
+        func path(_ context: DecodingError.Context) -> String {
+            context.codingPath.map(\.stringValue).joined(separator: ".")
+        }
+        switch decodingError {
+        case .dataCorrupted(let context): return "dataCorrupted at '\(path(context))'"
+        case .keyNotFound(let key, let context): return "keyNotFound '\(key.stringValue)' at '\(path(context))'"
+        case .typeMismatch(_, let context): return "typeMismatch at '\(path(context))'"
+        case .valueNotFound(_, let context): return "valueNotFound at '\(path(context))'"
+        @unknown default: return "DecodingError"
+        }
     }
 
     /// CLI-Pfad: fordert je nach gewünschtem Ausgabeformat Segmente an
@@ -101,15 +121,7 @@ final class MultipartTranscriptionClient: TranscriptionServiceProtocol {
 
         switch responseFormat {
         case .verboseJSON:
-            let verbose: VerboseTranscriptionResponse
-            do {
-                verbose = try JSONDecoder().decode(VerboseTranscriptionResponse.self, from: data)
-            } catch {
-                let responseText = String(data: data, encoding: .utf8) ?? "Unable to decode"
-                Logger.debug("ERROR decoding verbose response: \(error)")
-                Logger.debug("Raw response: \(responseText.prefix(500))")
-                throw error
-            }
+            let verbose = try Self.decodeLogged(VerboseTranscriptionResponse.self, from: data)
             return DetailedTranscription(
                 text: verbose.text,
                 segments: (verbose.segments ?? []).map {

@@ -303,9 +303,13 @@ enum JarvisBoardLogic {
 enum JarvisBoardText {
     static let maxLength = 160
 
+    /// Eine Zeile ohne Steuerzeichen: Board-Texte landen in der Mod-Anzeige und
+    /// in Jarvis' Weck-Prompt — ESC-Sequenzen und C1-Zeichen (`0x9B`) dort
+    /// wären Terminal-Steuerung bzw. getarnte Anweisungen (LR-PJ-004).
     static func sanitize(_ raw: String) -> String {
         let oneLine = raw.replacingOccurrences(
-            of: "[\\r\\n\\x{2028}\\x{2029}]+", with: " ", options: .regularExpression)
+            of: "\\x{1B}\\[[0-?]*[ -/]*[@-~]|[\\x{00}-\\x{1F}\\x{7F}-\\x{9F}\\x{2028}\\x{2029}]+",
+            with: " ", options: .regularExpression)
         let trimmed = oneLine.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > maxLength else { return trimmed }
         return String(trimmed.prefix(maxLength - 1)).trimmingCharacters(in: .whitespaces) + "…"

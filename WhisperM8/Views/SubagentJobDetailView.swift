@@ -329,7 +329,7 @@ struct SubagentJobDetailView: View {
         var last: String?
         for message in messages {
             for block in message.blocks {
-                if case .toolUse(let name, let input) = block {
+                if case .toolUse(let name, let input, _) = block {
                     count += 1
                     last = ToolCallClassifier.classify(name: name, input: input).subject
                 }

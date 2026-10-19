@@ -66,18 +66,26 @@ final class AgentPromptQueueDelivery {
             reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)")
         // Zustell-Token VOR dem Paste — gleicher Wiedervorlage-Schutz wie in
         // der Send-Pipeline (UserPromptSubmit-Guard konsumiert es).
-        SendDeliveryTokenStore().stage(promptText: marked)
+        // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
+        // sonst blockte der Guard die eigene Zustellung (Review W1).
+        SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked))
         controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 
-        ChatsAuditLog.shared.append(ChatsAuditEntry(
-            at: Date(), actor: reserved.enqueuedBy, verified: true,
-            method: "queue-deliver",
-            target: "\(session.title)", outcome: "ok",
-            promptChars: reserved.prompt.count,
-            promptHead: String(reserved.prompt.prefix(80))))
+        ChatsAuditLog.shared.append(Self.deliveryAuditEntry(for: reserved, target: session.title, at: Date()))
 
         Logger.agentStore.notice(
             "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
+    }
+
+    /// Audit-Eintrag der Zustellung: Absender und Verifikation stammen aus dem
+    /// Moment des Einstellens (LR-CLI-011), der Kopf ist einzeilig wie bei `send`.
+    nonisolated static func deliveryAuditEntry(for prompt: QueuedPrompt, target: String, at date: Date) -> ChatsAuditEntry {
+        ChatsAuditEntry(
+            at: date, actor: prompt.enqueuedBy, verified: prompt.enqueuedVerified,
+            method: "queue-deliver",
+            target: target, outcome: "ok",
+            promptChars: prompt.prompt.count,
+            promptHead: ChatsAuditLog.promptHead(prompt.prompt))
     }
 }

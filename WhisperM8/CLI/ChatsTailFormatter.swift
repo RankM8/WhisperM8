@@ -123,9 +123,9 @@ enum ChatsTailFormatter {
             case .text(let text):
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { body.append(trimmed) }
-            case .toolUse(let name, let input):
+            case .toolUse(let name, let input, _):
                 body.append("⏺ \(name): \(oneLine(input, maxChars: toolLineMaxChars))")
-            case .toolResult(let content, let isError):
+            case .toolResult(let content, let isError, _):
                 if isError {
                     body.append("⚠︎ tool error: \(oneLine(content, maxChars: toolLineMaxChars))")
                 }

@@ -66,7 +66,7 @@ struct AgentChatsSettingsPage: View {
 private struct AgentChatsWorkspaceSettingsTab: View {
     @AppStorage(PreferenceKeys.defaultAgentProvider) private var defaultAgentProviderRaw = "claude"
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
-    @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = true
+    @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
     @State private var folderFeedback: String?
@@ -123,7 +123,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
 
                 SettingsToggleRow(
                     title: "Summarize chats automatically",
-                    subtitle: "Creates timeline summaries per session after chat activity completes.",
+                    subtitle: "Off by default. When on, WhisperM8 makes one extra model call per finished chat and sends excerpts of that conversation (recent messages, commits, test results) to the same model provider and account the chat uses — it counts toward that account's usage. Chat titles are separate and never use a model call.",
                     isOn: $isAutoSummaryEnabled
                 )
             }
@@ -420,7 +420,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
                 cliArgumentsField(
                     title: "Claude CLI · extra arguments",
                     subtitle: "Prepended to each `claude` launch, including resumed sessions. Whitespace-separated; quotes are supported for arguments with spaces.",
-                    placeholder: "e.g. --dangerously-skip-permissions",
+                    placeholder: AgentCLIArgumentsPreview.placeholder(binary: "claude"),
                     binary: "claude",
                     text: $claudeExtraArguments
                 )
@@ -430,7 +430,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
                 cliArgumentsField(
                     title: "Codex CLI · extra arguments",
                     subtitle: "Prepended to each `codex` launch before `-C`, `-m`, and resume arguments. Whitespace-separated; quotes are supported.",
-                    placeholder: "e.g. --ask-for-approval untrusted",
+                    placeholder: AgentCLIArgumentsPreview.placeholder(binary: "codex"),
                     binary: "codex",
                     text: $codexExtraArguments
                 )
@@ -448,11 +448,26 @@ private struct AgentChatsAdvancedSettingsTab: View {
         text: Binding<String>
     ) -> some View {
         SettingsRow(title: title, subtitle: subtitle) {
-            TextField(placeholder, text: text)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
-                .frame(width: 360)
-                .help("\(binary) extra arguments")
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: 6) {
+                    TextField(placeholder, text: text)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .frame(width: 360)
+                        .help("\(binary) extra arguments")
+                    Button("Reset") { text.wrappedValue = "" }
+                        .disabled(text.wrappedValue.isEmpty)
+                        .help("Remove all extra arguments")
+                }
+                let dangerous = AgentCLIArgumentsPreview.dangerousArguments(in: text.wrappedValue)
+                if !dangerous.isEmpty {
+                    SettingsHelpText(
+                        "\(dangerous.joined(separator: " ")) turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it.",
+                        tone: .warning
+                    )
+                    .frame(width: 420, alignment: .trailing)
+                }
+            }
         }
     }
 

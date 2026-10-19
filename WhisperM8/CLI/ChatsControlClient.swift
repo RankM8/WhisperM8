@@ -24,6 +24,10 @@ enum ChatsControlClient {
         let socketPath = try resolveSocketPath()
         let fd = try connect(to: socketPath)
         defer { close(fd) }
+        // Vor dem Senden (Prompts, Token): Gegenstelle muss derselbe Benutzer sein.
+        guard isPeerCurrentUser(fd) else {
+            throw ClientError.appUnreachable("Gegenstelle des Control-Sockets gehört einem anderen Benutzer — nichts gesendet.")
+        }
 
         let actor = ChatsControlActor(identity: .fromEnvironment())
         let request = ChatsControlRequest(actor: actor, method: method, params: .object(params))
@@ -46,6 +50,14 @@ enum ChatsControlClient {
     }
 
     // MARK: - Socket-Mechanik
+
+    /// `getpeereid`: der Prozess am anderen Ende läuft unter unserer UID (LR-CLI-006).
+    /// Schützt den /tmp-Fallback, in dem ein Fremder einen Socket hinlegen könnte.
+    static func isPeerCurrentUser(_ fd: Int32) -> Bool {
+        var euid: uid_t = 0
+        var egid: gid_t = 0
+        return getpeereid(fd, &euid, &egid) == 0 && euid == getuid()
+    }
 
     private static func resolveSocketPath() throws -> String {
         let discovery = ChatsControlProtocol.discoveryFileURL()

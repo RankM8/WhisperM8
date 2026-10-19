@@ -48,6 +48,11 @@ struct SessionSummaryCard: View {
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(AgentTheme.accentTint, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                // Derselbe Hinweis wie am Schalter in den Einstellungen (LR-AK-010).
+                Text("Schickt den Chatverlauf zusätzlich an das Modell und Konto dieses Chats; zählt zur Nutzung.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, 14)

@@ -26,7 +26,17 @@ enum ClaudeGPTMixRouterError: LocalizedError, Equatable {
 /// mit `Connection: close`; Upstream-Antworten werden trotzdem sofort als
 /// HTTP-Chunks gestreamt, damit SSE nicht bis zum Response-Ende puffert.
 final class ClaudeGPTMixRouter {
-    static let shared = ClaudeGPTMixRouter()
+    static let shared: ClaudeGPTMixRouter = {
+        let router = ClaudeGPTMixRouter()
+        // LR-GPT-001: Das produktive Router-Objekt verlangt fuer GPT-Modelle das
+        // lokale Token (Kill-Switch `gptRouterAuthEnabled`). Frisch erzeugte
+        // Router (Tests) erzwingen nichts.
+        router.authTokenResolver = {
+            guard AppPreferences.shared.isGPTRouterAuthEnabled else { return nil }
+            return ClaudeGPTRouterToken.shared.current()
+        }
+        return router
+    }()
 
     enum Upstream: String, Equatable {
         case codexProxy = "codex-proxy"
@@ -91,6 +101,17 @@ final class ClaudeGPTMixRouter {
     /// `AgentCommandBuilder` ueber `ANTHROPIC_CUSTOM_HEADERS`; wird vor JEDEM
     /// Upstream entfernt (Anthropic soll ihn nie sehen).
     static let profileHeaderName = "X-WhisperM8-GPT-Profile"
+
+    /// Erwartetes lokales Token fuer Requests an das GPT-Backend (LR-GPT-001);
+    /// `nil` = nicht erzwingen. Nur der Codex-Upstream ist geschuetzt — `claude-*`
+    /// geht mit dem eigenen Anthropic-Login des Aufrufers durch und verbraucht
+    /// kein GPT-Konto. Der Token-Header wird vor JEDEM Upstream entfernt.
+    ///
+    /// Abwaegung Altbestand: Prozesse, die vor dem Update mit Router-URL, aber
+    /// ohne Token gestartet wurden (Hintergrund-Agents des Supervisors), bekommen
+    /// fuer GPT-Modelle eine erklaerende 401 bis zum Neustart. PTY-Chats sind
+    /// Kinder der App und starten nach jedem App-Neustart ohnehin neu (mit Token).
+    var authTokenResolver: () -> String? = { nil }
 
     /// Kill-Switch: aus → Header ignorieren, alles laeuft ueber main.
     var profilesEnabledResolver: () -> Bool = { AppPreferences.shared.isGPTAccountProfilesEnabled }
@@ -160,6 +181,15 @@ final class ClaudeGPTMixRouter {
             isLoggedIn: profileLoggedInResolver,
             wasPromotedToMain: promotedProfileResolver
         )
+    }
+
+    static func anthropicAuthErrorBody(message: String) -> Data {
+        let payload: [String: Any] = [
+            "type": "error",
+            "error": ["type": "authentication_error", "message": message],
+        ]
+        return (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]))
+            ?? Data(#"{"type":"error","error":{"type":"authentication_error","message":"Unauthorized."}}"#.utf8)
     }
 
     /// Anthropic-foermiger `api_error` — fuer Zustaende, die kein Fehler des
@@ -635,6 +665,9 @@ final class ClaudeGPTMixRouter {
         result.removeAll {
             $0.name.caseInsensitiveCompare(profileHeaderName) == .orderedSame
         }
+        result.removeAll {
+            $0.name.caseInsensitiveCompare(ClaudeGPTRouterToken.headerName) == .orderedSame
+        }
         if upstream == .codexProxy {
             result.removeAll { header in
                 let name = header.name.lowercased()
@@ -736,6 +769,7 @@ final class ClaudeGPTMixRouter {
                 upstreamURLResolver: upstreamURLResolver,
                 gptContextWindowResolver: gptContextWindowResolver,
                 profileRouting: makeProfileRouting(),
+                authTokenResolver: authTokenResolver,
                 onFinish: { [weak self] in self?.removeConnection(id: id) }
             )
             connections[id] = client
@@ -759,6 +793,7 @@ private extension ClaudeGPTMixRouter {
         private let upstreamURLResolver: UpstreamURLResolver
         private let gptContextWindowResolver: GPTContextWindowResolver
         private let profileRouting: ProfileRouting
+        private let authTokenResolver: () -> String?
         private let onFinish: () -> Void
         private let queue = DispatchQueue(label: "com.whisperm8.claude-gpt-router.client")
         private var buffer = Data()
@@ -787,12 +822,14 @@ private extension ClaudeGPTMixRouter {
             upstreamURLResolver: @escaping UpstreamURLResolver,
             gptContextWindowResolver: @escaping GPTContextWindowResolver,
             profileRouting: ProfileRouting,
+            authTokenResolver: @escaping () -> String?,
             onFinish: @escaping () -> Void
         ) {
             self.connection = connection
             self.upstreamURLResolver = upstreamURLResolver
             self.gptContextWindowResolver = gptContextWindowResolver
             self.profileRouting = profileRouting
+            self.authTokenResolver = authTokenResolver
             self.onFinish = onFinish
         }
 
@@ -891,6 +928,26 @@ private extension ClaudeGPTMixRouter {
             let body = prepared.body
             let model = prepared.model
             let upstream = prepared.upstream
+            if upstream == .codexProxy, let expected = authTokenResolver(),
+               !ClaudeGPTRouterToken.matches(
+                   requestHead.headers.first {
+                       $0.name.caseInsensitiveCompare(ClaudeGPTRouterToken.headerName) == .orderedSame
+                   }?.value,
+                   expected: expected
+               ) {
+                // Weder Profilstart noch Upstream-Zugriff ohne Token (LR-GPT-001).
+                requestModel = model
+                requestUpstream = upstream
+                Logger.claudeGPTRouter.warning("gpt_router_token_rejected status=401")
+                sendJSONResponse(
+                    status: 401,
+                    reason: "Unauthorized",
+                    body: ClaudeGPTMixRouter.anthropicAuthErrorBody(
+                        message: "GPT-Backend: lokales Router-Token fehlt oder ist ungültig. Chat in WhisperM8 neu starten (ältere Hintergrund-Agents einmal neu spawnen)."
+                    )
+                )
+                return
+            }
             if let sanitized = prepared.sanitization {
                 // Das OpenAI-Backend validiert Tool-Schemas mit einer Regex-
                 // Engine ohne Unicode-Klassen; Claude Codes Artifact-Tool

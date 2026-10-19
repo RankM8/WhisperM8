@@ -108,8 +108,15 @@ extension ClaudeAccountProfiles {
             ? oldMainRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
 
-        // (1) Login nach main
-        try writeMainSecret(secret, service: mainService)
+        // (1) Login nach main — scheitert das Schreiben oder Rücklesen, den
+        // alten main-Login sofort zurückschreiben (ein halb geschriebenes Item
+        // wäre sonst der neue Stand).
+        do {
+            try writeMainSecret(secret, service: mainService)
+        } catch {
+            restoreMainSecret(previousMainSecret, service: mainService)
+            throw error
+        }
         mainJSON["oauthAccount"] = profileAccount
         do {
             let data = try JSONSerialization.data(withJSONObject: mainJSON, options: [.prettyPrinted, .withoutEscapingSlashes])
@@ -216,10 +223,7 @@ extension ClaudeAccountProfiles {
     }
 
     private func writeMainSecret(_ secret: String, service: String) throws {
-        let (status, _) = securityRunner([
-            "add-generic-password", "-a", NSUserName(), "-s", service,
-            "-l", service, "-w", secret, "-U",
-        ])
+        let status = writeKeychainSecretVerified(service: service, account: NSUserName(), secret: secret)
         guard status == 0 else {
             throw PromoteError.keychainWriteFailed("security add-generic-password exit \(status)")
         }

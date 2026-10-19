@@ -22,6 +22,51 @@ final class TranscriptTimelineBuilderTests: XCTestCase {
         TranscriptTimelineBuilder.build(from: AgentChatTranscript(messages: messages, isLiveSourcePossible: live))
     }
 
+    // MARK: - Parallele Tool-Ergebnisse (LR-AK-013)
+
+    /// Ergebnisse in umgekehrter Reihenfolge: nur die ID ordnet richtig zu.
+    func testParallelToolResultsAreMatchedByToolUseID() {
+        let timeline = build([
+            message(.user, blocks: [.text("los")]),
+            message(.assistant, blocks: [
+                .toolUse(name: "Bash", input: "{\"command\":\"swift test\"}", id: "A"),
+                .toolUse(name: "Bash", input: "{\"command\":\"git commit -m x\"}", id: "B"),
+            ]),
+            message(.user, blocks: [.toolResult(content: "[main abc1234] x", isError: false, toolUseID: "B")]),
+            message(.user, blocks: [.toolResult(content: "error: boom", isError: true, toolUseID: "A")]),
+        ])
+        let tools = timeline.rounds[0].steps.compactMap { step -> TranscriptToolStep? in
+            if case .tool(let tool) = step.kind { return tool }
+            return nil
+        }
+        XCTAssertEqual(tools.count, 2)
+        XCTAssertEqual(tools[0].result, "error: boom")
+        XCTAssertTrue(tools[0].isError)
+        XCTAssertEqual(tools[1].result, "[main abc1234] x")
+        XCTAssertFalse(tools[1].isError)
+
+        let evidence = TranscriptEvidenceExtractor.extract(from: timeline)
+        XCTAssertEqual(evidence.commits.map(\.sha), ["abc1234"])
+        XCTAssertEqual(evidence.tests.map(\.passed), [false])
+    }
+
+    func testToolResultsWithoutIDsKeepFIFOOrder() {
+        let timeline = build([
+            message(.user, blocks: [.text("los")]),
+            message(.assistant, blocks: [
+                .toolUse(name: "Bash", input: "{\"command\":\"a\"}"),
+                .toolUse(name: "Bash", input: "{\"command\":\"b\"}"),
+            ]),
+            message(.user, blocks: [.toolResult(content: "1", isError: false)]),
+            message(.user, blocks: [.toolResult(content: "2", isError: false)]),
+        ])
+        let results = timeline.rounds[0].steps.compactMap { step -> String? in
+            if case .tool(let tool) = step.kind { return tool.result }
+            return nil
+        }
+        XCTAssertEqual(results, ["1", "2"])
+    }
+
     // MARK: - Rundensegmentierung
 
     func testSplitsIntoRoundsAtUserTextMessages() {

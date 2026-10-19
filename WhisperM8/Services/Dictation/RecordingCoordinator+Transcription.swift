@@ -59,7 +59,6 @@ extension RecordingCoordinator {
         let normalizedRawText = TextNormalizer.normalizeTranscriptionText(rawText)
 
         Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(normalizedRawText.count)")
-        Logger.debug(" Text preview: \(String(normalizedRawText.prefix(100)))...")
 
         appState.lastRawTranscription = normalizedRawText
 

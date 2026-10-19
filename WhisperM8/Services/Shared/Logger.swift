@@ -51,7 +51,12 @@ enum Logger {
     /// gesamte Spur lag auf `.debug` und war nach dem Absturz nicht mehr
     /// abrufbar. Fuer die wenigen Ereignisse, die einen Absturz erklaeren
     /// koennen, gehoert deshalb `info` genommen.
+    /// Test-Naht: sammelt jede Meldung von `info`/`debug` (Guard-Tests „keine
+    /// Inhalte im Log“). Nur in Tests gesetzt.
+    nonisolated(unsafe) static var testSink: ((String) -> Void)?
+
     static func info(_ message: String) {
+        testSink?(message)
         debugLog.info("\(message, privacy: .public)")
 
         #if DEBUG
@@ -60,6 +65,7 @@ enum Logger {
     }
 
     static func debug(_ message: String) {
+        testSink?(message)
         debugLog.debug("\(message, privacy: .public)")
 
         #if DEBUG

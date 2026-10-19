@@ -116,6 +116,27 @@ struct AgentCommandBuilder {
     /// lokalen Dummy-Endpoint: kommt bei jedem Request inkl. Retries an).
     static let customHeadersEnvironmentKey = "ANTHROPIC_CUSTOM_HEADERS"
 
+    /// Lokales Router-Token (LR-GPT-001), das jeder Router-Request als Header
+    /// mitbringt. Nur in der echten App; unter `swift test` bleibt der Wert
+    /// `nil`, damit keine Token-Datei entsteht. Wert nie loggen, nie in argv.
+    var gptRouterTokenResolver: () -> String? = {
+        guard AppInstance.isAppBundleProcess,
+              AppPreferences.shared.isGPTRouterAuthEnabled else { return nil }
+        return ClaudeGPTRouterToken.shared.current()
+    }
+
+    /// Wert fuer `ANTHROPIC_CUSTOM_HEADERS` (eine Zeile `Name: Wert` je Header).
+    func customHeadersValue(profile: String?) -> String? {
+        var lines: [String] = []
+        if let profile {
+            lines.append("\(ClaudeGPTMixRouter.profileHeaderName): \(profile)")
+        }
+        if let token = gptRouterTokenResolver(), ClaudeGPTRouterToken.isWellFormed(token) {
+            lines.append("\(ClaudeGPTRouterToken.headerName): \(token)")
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
     var gptFastModeEnabledResolver: () -> Bool = {
         AppPreferences.shared.claudeGPTFastModeEnabled
     }
@@ -317,6 +338,11 @@ struct AgentCommandBuilder {
             )
             environment["CLAUDE_CODE_SUBAGENT_MODEL"] = effectiveSubagentModel
         }
+        // Auch Hintergrund-Agents und Hilfslaeufe (Core-Env) tragen das
+        // Router-Token; die Session-Variante ergaenzt unten das Profil.
+        if let headers = customHeadersValue(profile: nil) {
+            environment[Self.customHeadersEnvironmentKey] = headers
+        }
         return environment
     }
 
@@ -498,7 +524,7 @@ struct AgentCommandBuilder {
                gptProfile == GPTAccountProfiles.mainProfileName
                 || GPTAccountProfiles.isValidProfileName(gptProfile) {
                 environment[Self.customHeadersEnvironmentKey] =
-                    "\(ClaudeGPTMixRouter.profileHeaderName): \(gptProfile)"
+                    customHeadersValue(profile: gptProfile)
             }
             // Bewusst KEIN Haiku-Ersatz und kein Concurrency-Deckel mehr
             // (2026-09-23): Hintergrundaufgaben, Web Search, Fetch und Claudes

@@ -236,8 +236,12 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.summaryStartupReconciliationEnabled) }
     }
 
+    /// Default AUS (LR-AK-010, Beschluss D1): Jede Zusammenfassung ist ein
+    /// zusätzlicher Modellaufruf, der Gesprächsausschnitte an das Modell des
+    /// Chats schickt und auf dessen Konto zählt. Ein einmal gespeicherter Wert
+    /// (auch `true`) bleibt erhalten — nur der Default für nie gesetzte Werte ist aus.
     var isAutoSummaryEnabled: Bool {
-        get { boolWithDefault(true, forKey: Keys.isAutoSummaryEnabled) }
+        get { boolWithDefault(false, forKey: Keys.isAutoSummaryEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoSummaryEnabled) }
     }
 
@@ -606,6 +610,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.gptAccountProfilesEnabled) }
     }
 
+    /// Kill-Switch fuer das lokale Router-Token (LR-GPT-001). An (Default):
+    /// GPT-Requests an den Router brauchen das beim Chat-Start gesetzte Token.
+    /// `defaults write com.whisperm8.app gptRouterAuthEnabled -bool NO`
+    var isGPTRouterAuthEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.gptRouterAuthEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.gptRouterAuthEnabled) }
+    }
+
     /// Kill-Switch für den Transkriptions-Anbieter „ChatGPT-Abo (GPT-Backend)".
     /// An (Default) heißt nur: der Anbieter ist wählbar und selbst gestartete
     /// GPT-Proxys bekommen `CCP_CODEX_TRANSCRIPTIONS_API=1` — ausgewählt ist er
@@ -902,6 +914,7 @@ enum PreferenceKeys {
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
     static let accountBulkMoveEnabled = "accountBulkMoveEnabled"
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
+    static let gptRouterAuthEnabled = "gptRouterAuthEnabled"
     static let chatGPTTranscriptionEnabled = "chatGPTTranscriptionEnabled"
     static let debugControlEnabled = "debugControlEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"

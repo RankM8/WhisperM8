@@ -7,6 +7,29 @@ enum AgentCLIArgumentsPreview {
             .joined(separator: " ")
     }
 
+    /// Beispiel im Eingabefeld — bewusst harmlos. Früher stand hier
+    /// `--dangerously-skip-permissions`; Laien übernehmen Beispiele (LR-AU-032).
+    static func placeholder(binary: String) -> String {
+        binary == "codex" ? "e.g. --search" : "e.g. --verbose"
+    }
+
+    /// Argumente, die Rückfragen bzw. die Sandbox des Agenten für JEDEN Chat
+    /// abschalten — die Seite zeigt dazu eine Warnung.
+    static func dangerousArguments(in raw: String) -> [String] {
+        let arguments = parseArguments(raw)
+        var found: [String] = []
+        for (index, argument) in arguments.enumerated() {
+            let lowered = argument.lowercased()
+            let next = index + 1 < arguments.count ? arguments[index + 1].lowercased() : ""
+            if lowered.contains("dangerously") || lowered == "--yolo"
+                || lowered.contains("bypasspermissions") || lowered.contains("bypass-approvals")
+                || (lowered == "--permission-mode" && next == "bypasspermissions") {
+                found.append(argument)
+            }
+        }
+        return found
+    }
+
     /// Gleiche kleine Parser-Semantik wie `AgentCommandBuilder.parseArguments`.
     /// Die Funktion ist hier nachgebaut, weil das Settings-Modell rein und
     /// separat testbar bleiben soll.

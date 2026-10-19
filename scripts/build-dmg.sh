@@ -107,11 +107,11 @@ if [[ -n "${DEVELOPER_ID_APPLICATION}" ]]; then
             --wait
         xcrun stapler staple "${DMG_VERSIONED_PATH}"
     elif [[ -n "${APPLE_ID}" && -n "${APPLE_TEAM_ID}" && -n "${APPLE_APP_SPECIFIC_PASSWORD}" ]]; then
-        echo "7. Notarizing DMG with Apple ID credentials..."
+        echo "7. Notarizing DMG with Apple ID credentials (Passwort über @env, nicht in argv)..."
         xcrun notarytool submit "${DMG_VERSIONED_PATH}" \
             --apple-id "${APPLE_ID}" \
             --team-id "${APPLE_TEAM_ID}" \
-            --password "${APPLE_APP_SPECIFIC_PASSWORD}" \
+            --password "@env:APPLE_APP_SPECIFIC_PASSWORD" \
             --wait
         xcrun stapler staple "${DMG_VERSIONED_PATH}"
     else

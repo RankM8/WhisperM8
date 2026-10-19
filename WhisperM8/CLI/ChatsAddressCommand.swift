@@ -98,6 +98,17 @@ enum ChatsAddressCommand {
             externalSessionID: entry.session.externalSessionID,
             registry: registry)
 
+        if case .address = outcome {
+            // Audit-Spur + Selbstschutz, bevor die Adresse ausgegeben wird
+            // (LR-CLI-007). Ist die App nicht erreichbar, bleibt der reine
+            // Registry-Lesebefehl wie bisher nutzbar (fail-open, keine Spur).
+            if let response = try? ChatsControlClient.send(
+                method: "audit.note", params: ["targetSessionID": entry.session.id.uuidString]),
+               !response.ok {
+                CLIIO.err("\(entry.session.title): \(response.error?.message ?? "abgelehnt")")
+                return ChatsCLIExit.conflict
+            }
+        }
         if options.json {
             CLIIO.out(ChatsOutput.encodeJSON(ChatsAddressLogic.json(entry: entry, outcome: outcome)))
         }
