@@ -106,7 +106,7 @@ struct AgentTabSwitcherMiniMap: View {
 
     private var footer: some View {
         Text(TabSwitcherHint.miniMap)
-            .font(.system(size: 10))
+            .font(.system(size: 11))
             .foregroundStyle(AgentTheme.textTertiary)
             .lineLimit(1)
             .truncationMode(.head)
@@ -164,12 +164,12 @@ struct AgentTabSwitcherMiniMap: View {
                     Image(systemName: "macwindow")
                         .font(.system(size: 11))
                         .foregroundStyle(AgentTheme.textTertiary.opacity(0.6))
-                        .help("Chat ist hier nicht anwählbar (z. B. Tab in einem anderen Fenster)")
+                        .help("Chat can’t be selected here (e.g. tab in another window)")
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 10))
             .onTapGesture { onCancel() }
-            .accessibilityLabel(isEmptySlot ? "Leerer Slot" : "Chat nicht anwählbar")
+            .accessibilityLabel(isEmptySlot ? String(localized: "Empty slot") : String(localized: "Chat not selectable"))
     }
 
     /// Baut das Kachel-Modell aus O(1)-Lookups je Session (kein Scan).

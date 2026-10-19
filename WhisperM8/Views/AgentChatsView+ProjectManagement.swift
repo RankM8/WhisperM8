@@ -32,7 +32,7 @@ extension AgentChatsView {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = "Add Project"
+        panel.prompt = String(localized: "Add Project")
 
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
@@ -97,7 +97,7 @@ extension AgentChatsView {
     /// üblichen Bildformate, die NSImage zuverlässig darstellt.
     func chooseProjectIcon(_ project: AgentProject) {
         let panel = NSOpenPanel()
-        panel.title = "Projekt-Icon wählen"
+        panel.title = String(localized: "Choose project icon")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true

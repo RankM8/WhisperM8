@@ -41,12 +41,12 @@ enum AccountMovePlanner {
 
         var label: String {
             switch self {
-            case .running: return "läuft gerade"
-            case .backgroundAgent: return "Hintergrund-Agent"
-            case .notAChat: return "kein Claude-Chat"
-            case .alreadyInTarget: return "schon in diesem Konto"
-            case .targetConflict: return "Ziel hat bereits ein Transcript mit dieser ID"
-            case .targetNotLoggedIn: return "Zielkonto ist nicht eingeloggt"
+            case .running: return String(localized: "running right now")
+            case .backgroundAgent: return String(localized: "background agent")
+            case .notAChat: return String(localized: "not a Claude chat")
+            case .alreadyInTarget: return String(localized: "already in this account")
+            case .targetConflict: return String(localized: "target already has a transcript with this ID")
+            case .targetNotLoggedIn: return String(localized: "target account is not logged in")
             }
         }
     }

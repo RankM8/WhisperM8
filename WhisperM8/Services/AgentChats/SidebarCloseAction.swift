@@ -35,10 +35,10 @@ enum SidebarCloseAction: Equatable {
 
     var help: String {
         switch self {
-        case .closeTerminal: return "Terminal schließen"
-        case .endSession: return "Tab schließen und Chat beenden"
-        case .archive: return "Archivieren"
-        case .endAndRemoveFromWorkspace: return "Tab schließen, Chat beenden und aus dem Workspace nehmen"
+        case .closeTerminal: return String(localized: "Close terminal")
+        case .endSession: return String(localized: "Close tab and end chat")
+        case .archive: return String(localized: "Archive")
+        case .endAndRemoveFromWorkspace: return String(localized: "Close tab, end chat and remove from workspace")
         }
     }
 

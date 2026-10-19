@@ -75,11 +75,11 @@ extension AgentChatsView {
         .equatable()
         .padding(.leading, extraLeadingInset)
         .contextMenu {
-            Button("Umbenennen…", systemImage: "pencil") {
+            Button("Rename…", systemImage: "pencil") {
                 beginRename(child)
             }
             Divider()
-            Button("Archivieren", systemImage: "archivebox") {
+            Button("Archive", systemImage: "archivebox") {
                 requestArchive([child])
             }
         }
@@ -97,7 +97,7 @@ extension AgentChatsView {
             HStack(spacing: 7) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 6.5, weight: .semibold))
-                Text("\(split.hidden.count) fertig")
+                Text("\(split.hidden.count) done")
                     .font(.system(size: 9.5))
                     .monospacedDigit()
                 if split.hiddenUnreadCount > 0 {
@@ -114,8 +114,6 @@ extension AgentChatsView {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(split.hidden.count) fertige Subagents"
-            + (split.hiddenUnreadCount > 0 ? " · \(split.hiddenUnreadCount) ungelesen" : "")
-            + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
+        .help(SubagentFooterHelp.text(done: split.hidden.count, unread: split.hiddenUnreadCount, isExpanded: isExpanded))
     }
 }

@@ -16,9 +16,9 @@ enum SidebarScope: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .active: return "Aktiv"
-        case .recent: return "Zuletzt"
-        case .all: return "Alle"
+        case .active: return String(localized: "Active")
+        case .recent: return String(localized: "Recent")
+        case .all: return String(localized: "All")
         }
     }
 }

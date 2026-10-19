@@ -37,9 +37,9 @@ extension AgentChatsView {
         let name = windowStore.gridWorkspace(id: workspaceID)?.name ?? "Workspace"
         switch result {
         case .full:
-            errorMessage = "„\(name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+            errorMessage = String(localized: "“\(name)” is full (3×3) — drop onto a specific pane to replace.")
         case .rejected:
-            errorMessage = "Der Chat kann nicht in „\(name)“ aufgenommen werden (archiviert oder als Tab in einem anderen Fenster)."
+            errorMessage = String(localized: "The chat cannot be added to “\(name)” (archived or open as a tab in another window).")
         default:
             break
         }
@@ -81,7 +81,7 @@ extension AgentChatsView {
                     .disabled(entity.slotIndex(of: session.id) != nil)
                 }
             } label: {
-                Label("Zu Workspace hinzufügen", systemImage: "square.grid.2x2")
+                Label("Add to workspace", systemImage: "square.grid.2x2")
             }
 
             // Präziser Weg ohne Drag: gezielt in einen Slot des SICHTBAREN
@@ -108,7 +108,7 @@ extension AgentChatsView {
                                 && entity.slotIndex(of: session.id) == nil))
                     }
                 } label: {
-                    Label("Im Workspace platzieren", systemImage: "square.grid.3x3.topleft.filled")
+                    Label("Place in workspace", systemImage: "square.grid.3x3.topleft.filled")
                 }
             }
 
@@ -116,7 +116,7 @@ extension AgentChatsView {
             if includeRemoval {
                 let containing = workspaces.filter { $0.slotIndex(of: session.id) != nil }
                 if containing.count == 1, let only = containing.first {
-                    Button("Aus Workspace „\(only.name)“ entfernen", systemImage: "minus.circle") {
+                    Button("Remove from workspace “\(only.name)”", systemImage: "minus.circle") {
                         removeSessionFromWorkspace(session.id, workspaceID: only.id)
                     }
                 } else if containing.count > 1 {
@@ -127,7 +127,7 @@ extension AgentChatsView {
                             }
                         }
                     } label: {
-                        Label("Aus Workspace entfernen", systemImage: "minus.circle")
+                        Label("Remove from workspace", systemImage: "minus.circle")
                     }
                 }
             }
@@ -166,7 +166,7 @@ extension AgentChatsView {
             // Besitzerfenster nach vorn.
             focusWindow(owner)
         case .blockedByWindowOwnership(let conflicts):
-            errorMessage = "Zurück zum Workspace nicht möglich: \(conflicts.count) \(conflicts.count == 1 ? "Chat läuft" : "Chats laufen") als Tab in einem anderen Fenster."
+            errorMessage = String(localized: "Cannot return to the workspace: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
         default:
             break
         }
@@ -180,8 +180,8 @@ extension AgentChatsView {
             HeaderIconButton(
                 systemImage: "square.grid.2x2",
                 help: entity.sourceProjectID == nil
-                    ? "Zurück zum Workspace „\(entity.name)“"
-                    : "Zurück zur Projekt-Ansicht „\(entity.name)“"
+                    ? String(localized: "Back to workspace “\(entity.name)”")
+                    : String(localized: "Back to project view “\(entity.name)”")
             ) {
                 returnToWorkspace()
             }
@@ -420,7 +420,7 @@ extension AgentChatsView {
                         requestCapacityChange(entity: entity, to: stage)
                     } label: {
                         Text(Self.capacityLabel(stage))
-                            .font(.system(size: 10, weight: stage == entity.capacity ? .bold : .medium).monospacedDigit())
+                            .font(.system(size: 11, weight: stage == entity.capacity ? .bold : .medium).monospacedDigit())
                             .foregroundStyle(stage == entity.capacity ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -431,8 +431,8 @@ extension AgentChatsView {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Kapazität \(Self.capacityLabel(stage))")
-                    .accessibilityLabel("Kapazität auf \(Self.capacityLabel(stage)) setzen")
+                    .help("Capacity \(Self.capacityLabel(stage))")
+                    .accessibilityLabel("Set capacity to \(Self.capacityLabel(stage))")
                 }
             }
         }
@@ -528,7 +528,7 @@ extension AgentChatsView {
     /// platziert in den ersten NEUEN Slot).
     private func gridGrowZone(entity: AgentGridWorkspace, nextCapacity: Int) -> some View {
         GridGrowDropZone(
-            label: "＋ Hier ablegen — „\(entity.name)“ erweitert auf \(Self.capacityLabel(nextCapacity))",
+            label: String(localized: "＋ Drop here — “\(entity.name)” grows to \(Self.capacityLabel(nextCapacity))"),
             onDrop: { dropped in handleGridGroupDrop(dropped, workspaceID: entity.id) }
         )
         .padding(.horizontal, 12)
@@ -583,11 +583,11 @@ extension AgentChatsView {
                 accepted = true
             case .full:
                 errorMessage = accepted
-                    ? "„\(entity.name)“ ist voll (3×3) — nicht alle Chats der Gruppe passen hinein."
-                    : "„\(entity.name)“ ist voll (3×3) — gezielt auf eine Pane ablegen, um zu ersetzen."
+                    ? String(localized: "“\(entity.name)” is full (3×3) — not all chats of the group fit.")
+                    : String(localized: "“\(entity.name)” is full (3×3) — drop onto a specific pane to replace.")
                 return accepted
             case .rejected:
-                errorMessage = "Der Chat kann nicht in „\(entity.name)“ aufgenommen werden (archiviert oder unbekannt)."
+                errorMessage = String(localized: "The chat cannot be added to “\(entity.name)” (archived or unknown).")
                 return accepted
             }
         }
@@ -643,7 +643,7 @@ extension AgentChatsView {
         )
         let hasForeign = members.contains { sessionsByID[$0]?.projectID != sourceProjectID }
         guard hasForeign else { return true }
-        errorMessage = "„\(entity.name)“ zeigt live die aktiven Chats des Projekts — Chats anderer Projekte können hier nicht aufgenommen werden."
+        errorMessage = String(localized: "“\(entity.name)” live-shows the active chats of the project — chats from other projects cannot be added here.")
         return false
     }
 
@@ -776,12 +776,12 @@ extension AgentChatsView {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .lineLimit(1)
-            Text(hostWindowID == nil
-                ? "Tab wurde geschlossen"
-                : "Läuft als Tab in einem anderen Fenster")
+            (hostWindowID == nil
+                ? Text("Tab was closed")
+                : Text("Running as a tab in another window"))
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
-            Button(hostWindowID == nil ? "Wieder öffnen" : "Hierher verschieben") {
+            Button(hostWindowID == nil ? String(localized: "Reopen") : String(localized: "Move here")) {
                 if let hostWindowID {
                     windowStore.moveTab(session.id, from: hostWindowID, to: windowID, before: nil)
                 } else {
@@ -791,8 +791,8 @@ extension AgentChatsView {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityLabel(hostWindowID == nil
-                ? "Tab von \(session.title) wieder öffnen"
-                : "\(session.title) in dieses Fenster verschieben")
+                ? String(localized: "Reopen tab of \(session.title)")
+                : String(localized: "Move \(session.title) to this window"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
@@ -806,7 +806,7 @@ extension AgentChatsView {
             Text("Slot \(index + 1)")
                 .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
-            Text("Chat hier ablegen")
+            Text("Drop chat here")
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
         }
@@ -851,7 +851,7 @@ extension AgentChatsView {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
             } else {
-                ContentUnavailableView("Projekt fehlt", systemImage: "questionmark.folder")
+                ContentUnavailableView("Project missing", systemImage: "questionmark.folder")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -965,8 +965,8 @@ extension AgentChatsView {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("\(project.name) in \(projectOpenTarget.label) öffnen")
-                .accessibilityLabel("\(project.name) in \(projectOpenTarget.label) öffnen")
+                .help("Open \(project.name) in \(projectOpenTarget.label)")
+                .accessibilityLabel("Open \(project.name) in \(projectOpenTarget.label)")
             }
             // Start/Resume/Restart direkt an der Pane — der Chat-Header (wo
             // die Aktion sonst sitzt) ist im Grid ausgeblendet. Gleicher
@@ -988,13 +988,13 @@ extension AgentChatsView {
                 }
                 .buttonStyle(.plain)
                 .help(isProcessRunning
-                    ? "Restart — Terminal neu starten"
-                    : (session.externalSessionID == nil ? "Start" : "Resume"))
+                    ? String(localized: "Restart — restart the terminal")
+                    : (session.externalSessionID == nil ? String(localized: "Start") : String(localized: "Resume")))
                 .accessibilityLabel(isProcessRunning
-                    ? "\(session.title) neu starten"
+                    ? String(localized: "Restart \(session.title)")
                     : (session.externalSessionID == nil
-                        ? "\(session.title) starten"
-                        : "\(session.title) fortsetzen"))
+                        ? String(localized: "Start \(session.title)")
+                        : String(localized: "Resume \(session.title)")))
             }
             Button {
                 maximizePane(session.id)
@@ -1007,8 +1007,8 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Diesen Chat maximieren („Zurück zum Workspace“ stellt das Grid wieder her)")
-            .accessibilityLabel("\(session.title) maximieren")
+            .help("Maximize this chat (“Back to workspace” restores the grid)")
+            .accessibilityLabel("Maximize \(session.title)")
             // Projekt-View: „aus dem Workspace nehmen" gibt es nicht (der
             // Live-Sync brächte den aktiven Chat sofort zurück) — ⊖ schließt
             // hier den TAB. Nicht mehr aktiv = raus aus der Ansicht; läuft
@@ -1032,11 +1032,11 @@ extension AgentChatsView {
             }
             .buttonStyle(.plain)
             .help(isProjectView
-                ? "Tab schließen — der Chat verlässt die Projekt-Ansicht (läuft er noch, bleibt er als aktives Mitglied)"
-                : "Aus dem Workspace nehmen (Slot bleibt frei, Tab bleibt offen)")
+                ? String(localized: "Close tab — the chat leaves the project view (if it is still running, it stays as an active member)")
+                : String(localized: "Remove from workspace (slot stays free, tab stays open)"))
             .accessibilityLabel(isProjectView
-                ? "Tab von \(session.title) schließen"
-                : "\(session.title) aus dem Workspace nehmen")
+                ? String(localized: "Close tab of \(session.title)")
+                : String(localized: "Remove \(session.title) from the workspace"))
         }
         .padding(.horizontal, 10)
         .frame(height: Self.gridPaneHeaderHeight)

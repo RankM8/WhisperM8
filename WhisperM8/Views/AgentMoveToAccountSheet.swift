@@ -43,7 +43,7 @@ struct AgentMoveToAccountSheet: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.headline)
-            Text("Zielkonto: \(targetDisplayName)")
+            Text("Target account: \(targetDisplayName)")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -53,12 +53,12 @@ struct AgentMoveToAccountSheet: View {
         switch phase {
         case .preview:
             return decision.actionableCount == 1
-                ? "Chat in anderes Konto verschieben?"
-                : "\(decision.actionableCount) Chats in anderes Konto verschieben?"
+                ? String(localized: "Move chat to another account?")
+                : String(localized: "Move \(decision.actionableCount) chats to another account?")
         case .running:
-            return decision.switchNow.isEmpty ? "Verschiebe …" : "Verschiebe und setze fort …"
+            return decision.switchNow.isEmpty ? String(localized: "Moving …") : String(localized: "Moving and resuming …")
         case .finished:
-            return "Umzug abgeschlossen"
+            return String(localized: "Move finished")
         }
     }
 
@@ -72,15 +72,15 @@ struct AgentMoveToAccountSheet: View {
         case .running(let done, let total):
             VStack(alignment: .leading, spacing: 10) {
                 ProgressView(value: Double(done), total: Double(max(total, 1)))
-                Text("\(done) von \(total) verschoben")
+                Text("\(done) of \(total) moved")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if !decision.switchNow.isEmpty {
-                    Text("Laufende Chats werden angehalten, umgezogen und im Tab fortgesetzt — das dauert wenige Sekunden.")
+                    Text("Running chats are paused, moved and resumed in their tab — this takes a few seconds.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("Der Abbruch wirkt nach dem aktuellen Chat — ein Transcript wird nie halb verschoben.")
+                Text("Cancelling takes effect after the current chat — a transcript is never moved halfway.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -93,18 +93,18 @@ struct AgentMoveToAccountSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if decision.actionableCount == 0 {
-                    Label("Kein Chat aus dieser Auswahl kann umziehen.", systemImage: "exclamationmark.triangle")
+                    Label("No chat in this selection can be moved.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
                 if decision.actionableCount > 0,
                    !pending.missingMCPServers.isEmpty || !pending.untrustedTitles.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         if !pending.missingMCPServers.isEmpty {
-                            Label("Im Zielkonto fehlen MCP-Server: \(pending.missingMCPServers.joined(separator: ", ")).",
+                            Label("The target account is missing MCP servers: \(pending.missingMCPServers.joined(separator: ", ")).",
                                   systemImage: "puzzlepiece.extension")
                         }
                         if !pending.untrustedTitles.isEmpty {
-                            Label("\(targetDisplayName) hat den Ordner noch nicht freigegeben: Claude fragt beim Start nach — dort „Yes, I trust this folder“ wählen (vorausgewählt ist „No, exit“). Betrifft: \(pending.untrustedTitles.prefix(3).joined(separator: ", "))\(pending.untrustedTitles.count > 3 ? " …" : "")",
+                            Label("\(targetDisplayName) has not approved the folder yet: Claude asks on start — choose “Yes, I trust this folder” there (“No, exit” is preselected). Affects: \(pending.untrustedTitles.prefix(3).joined(separator: ", "))\(pending.untrustedTitles.count > 3 ? " …" : "")",
                                   systemImage: "lock.shield")
                         }
                     }
@@ -114,14 +114,14 @@ struct AgentMoveToAccountSheet: View {
                 }
                 if !decision.moveNow.isEmpty {
                     section(
-                        title: "Wird verschoben (\(decision.moveNow.count))",
+                        title: String(localized: "Being moved (\(decision.moveNow.count))"),
                         systemImage: "arrow.right.circle",
                         titles: decision.moveNow.map(\.title)
                     )
                 }
                 if !decision.switchNow.isEmpty {
                     section(
-                        title: "Läuft — wird angehalten, verschoben und im Tab fortgesetzt (\(decision.switchNow.count))",
+                        title: String(localized: "Running — will be paused, moved and resumed in its tab (\(decision.switchNow.count))"),
                         systemImage: "arrow.triangle.2.circlepath",
                         titles: decision.switchNow.map(\.title)
                     )
@@ -135,7 +135,7 @@ struct AgentMoveToAccountSheet: View {
                 }
                 ForEach(blockedGroups, id: \.reason) { group in
                     section(
-                        title: "Nicht gewechselt — \(group.reason.label) (\(group.titles.count))",
+                        title: String(localized: "Not switched — \(group.reason.label) (\(group.titles.count))"),
                         systemImage: "hand.raised",
                         titles: group.titles,
                         muted: true
@@ -143,7 +143,7 @@ struct AgentMoveToAccountSheet: View {
                 }
                 ForEach(skippedGroups, id: \.reason) { group in
                     section(
-                        title: "Übersprungen — \(group.reason.label) (\(group.candidates.count))",
+                        title: String(localized: "Skipped — \(group.reason.label) (\(group.candidates.count))"),
                         systemImage: "minus.circle",
                         titles: group.candidates.map(\.title),
                         muted: true
@@ -152,12 +152,12 @@ struct AgentMoveToAccountSheet: View {
 
                 if decision.actionableCount > 0 {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Ab dem nächsten Start zahlt das Kontingent von \(targetDisplayName).",
+                        Label("From the next start, the quota of \(targetDisplayName) is used.",
                               systemImage: "gauge.with.needle")
-                        Label("Der Gesprächsverlauf zieht vollständig mit. Checkpoints und Datei-Historie (Rewind) bleiben im bisherigen Konto zurück.",
+                        Label("The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.",
                               systemImage: "clock.arrow.circlepath")
                         if !decision.switchNow.isEmpty || !decision.waitForTurn.isEmpty {
-                            Label("Im neuen Konto liest Claude den Verlauf einmal ohne Cache neu ein — bei großen Chats kostet das spürbar Kontingent. Früheres Thinking bleibt beim alten Konto.",
+                            Label("In the new account Claude re-reads the history once without cache — for large chats this noticeably costs quota. Earlier thinking stays with the old account.",
                                   systemImage: "arrow.clockwise")
                         }
                     }
@@ -198,38 +198,38 @@ struct AgentMoveToAccountSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 if !outcome.moved.isEmpty {
                     section(
-                        title: "Verschoben (\(outcome.moved.count))",
+                        title: String(localized: "Moved (\(outcome.moved.count))"),
                         systemImage: "checkmark.circle",
                         titles: outcome.moved.map(\.sessionTitle)
                     )
                 }
                 if !decision.waitForTurn.isEmpty {
                     section(
-                        title: "Vorgemerkt — wechselt nach dem Turn (\(decision.waitForTurn.count))",
+                        title: String(localized: "Scheduled — switches after the turn (\(decision.waitForTurn.count))"),
                         systemImage: "clock",
                         titles: decision.waitForTurn.map(\.candidate.title)
                     )
-                    Text("Aufheben: Rechtsklick auf den Chat → Zu Account verschieben → Kontowechsel aufheben.")
+                    Text("To cancel: right-click the chat → Move to account → Cancel account switch.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 if !outcome.skippedRunning.isEmpty {
                     section(
-                        title: "Nicht zurückgenommen — läuft gerade (\(outcome.skippedRunning.count))",
+                        title: String(localized: "Not reverted — running right now (\(outcome.skippedRunning.count))"),
                         systemImage: "play.circle",
                         titles: outcome.skippedRunning,
                         muted: true
                     )
                 }
                 if outcome.wasCancelled {
-                    Label("Abgebrochen — die bereits verschobenen Chats bleiben im Zielkonto.",
+                    Label("Cancelled — chats already moved stay in the target account.",
                           systemImage: "stop.circle")
                         .font(.callout)
                         .foregroundStyle(.orange)
                 }
                 if !outcome.failed.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Label("Fehlgeschlagen (\(outcome.failed.count))", systemImage: "xmark.circle")
+                        Label("Failed (\(outcome.failed.count))", systemImage: "xmark.circle")
                             .foregroundStyle(.red)
                         ForEach(Array(outcome.failed.enumerated()), id: \.offset) { _, failure in
                             Text("• \(failure.title): \(failure.message)")
@@ -261,7 +261,7 @@ struct AgentMoveToAccountSheet: View {
                     .lineLimit(1)
             }
             if titles.count > 12 {
-                Text("… und \(titles.count - 12) weitere")
+                Text("… and \(titles.count - 12) more")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -275,10 +275,10 @@ struct AgentMoveToAccountSheet: View {
         switch phase {
         case .preview:
             HStack {
-                Button("Abbrechen", role: .cancel, action: onClose)
+                Button("Cancel", role: .cancel, action: onClose)
                     .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(decision.actionableCount == 1 ? "Verschieben" : "\(decision.actionableCount) verschieben") {
+                Button(decision.actionableCount == 1 ? String(localized: "Move") : String(localized: "Move \(decision.actionableCount)")) {
                     onConfirm()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -286,17 +286,17 @@ struct AgentMoveToAccountSheet: View {
             }
         case .running:
             HStack {
-                Button("Abbrechen", role: .cancel, action: onCancelRun)
+                Button("Cancel", role: .cancel, action: onCancelRun)
                 Spacer()
             }
         case .finished(let outcome):
             HStack {
                 // Rueckgaengig macht den Batch ueber das Journal rueckgaengig —
                 // dieselbe Bewegung mit vertauschten Argumenten.
-                Button("Rückgängig", action: onUndo)
+                Button("Undo", action: onUndo)
                     .disabled(outcome.moved.isEmpty)
                 Spacer()
-                Button("Fertig", action: onClose)
+                Button("Done", action: onClose)
                     .keyboardShortcut(.defaultAction)
             }
         }

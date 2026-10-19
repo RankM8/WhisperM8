@@ -2,14 +2,14 @@ import SwiftUI
 
 /// Liste der Permission-Modes, die wir im Modal anbieten. Reihenfolge ist
 /// "least surprising first" — Default = vom cwd geerbter Mode.
-private let backgroundPermissionModes: [(value: String?, label: String, hint: String)] = [
-    (nil, "Default", "Nutzt defaultMode aus den Settings des Projekts."),
-    ("acceptEdits", "acceptEdits", "Auto-Approve fuer Edits + Standard-FS-Commands."),
-    ("plan", "plan", "Verlangt Approval vor Execution."),
-    ("auto", "auto", "Auto-Mode-Classifier entscheidet pro Tool."),
-    ("dontAsk", "dontAsk", "Nichts ueberhalb der Allow-Liste — gut fuer streng abgeschottete Runs."),
-    ("bypassPermissions", "bypassPermissions", "Skipped alle Permission-Prompts (vorher 1x interaktiv aktivieren).")
-]
+private var backgroundPermissionModes: [(value: String?, label: String, hint: String)] { [
+    (nil, String(localized: "Default"), String(localized: "Uses defaultMode from the project settings.")),
+    ("acceptEdits", "acceptEdits", String(localized: "Auto-approves edits and standard filesystem commands.")),
+    ("plan", "plan", String(localized: "Requires approval before execution.")),
+    ("auto", "auto", String(localized: "The auto-mode classifier decides per tool.")),
+    ("dontAsk", "dontAsk", String(localized: "Nothing beyond the allow list — good for tightly sandboxed runs.")),
+    ("bypassPermissions", "bypassPermissions", String(localized: "Skips all permission prompts (activate once interactively first)."))
+] }
 
 /// Wird vom Caller zurueckgegeben, wenn der User auf "Starten" klickt.
 struct BackgroundDispatchRequest: Equatable {
@@ -73,7 +73,7 @@ struct BackgroundDispatchModal: View {
                 Image(systemName: "bolt.horizontal.circle")
                     .foregroundStyle(.orange)
                     .font(.system(size: 16, weight: .semibold))
-                Text("Neuer Hintergrund-Agent")
+                Text("New background agent")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
             }
@@ -89,7 +89,7 @@ struct BackgroundDispatchModal: View {
 
     private var promptField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            fieldLabel("Initialer Prompt")
+            fieldLabel(String(localized: "Initial prompt"))
             TextEditor(text: $prompt)
                 .focused($promptFocused)
                 .font(.system(size: 13))
@@ -103,7 +103,7 @@ struct BackgroundDispatchModal: View {
                 .cornerRadius(6)
                 .overlay(alignment: .topLeading) {
                     if prompt.isEmpty {
-                        Text("z. B. „Untersuch warum der CI-Test flaky ist und öffne einen PR\"")
+                        Text("e.g. “Find out why the CI test is flaky and open a PR”")
                             .font(.system(size: 13))
                             .foregroundStyle(AgentTheme.textTertiary)
                             .padding(.horizontal, 12)
@@ -118,7 +118,7 @@ struct BackgroundDispatchModal: View {
 
     private var permissionModeField: some View {
         VStack(alignment: .leading, spacing: 6) {
-            fieldLabel("Permission Mode")
+            fieldLabel(String(localized: "Permission mode"))
             Picker("", selection: permissionModeBinding) {
                 ForEach(backgroundPermissionModes, id: \.label) { mode in
                     Text(mode.label).tag(mode.value)
@@ -150,9 +150,9 @@ struct BackgroundDispatchModal: View {
     private var subAgentGrid: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                fieldLabel("Sub-Agent (optional)")
+                fieldLabel(String(localized: "Sub-agent (optional)"))
                 Spacer()
-                Text("\(availableSubAgents.count) verfügbar")
+                Text("\(availableSubAgents.count) available")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
             }
@@ -173,12 +173,12 @@ struct BackgroundDispatchModal: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Circle().fill(AgentTheme.textTertiary).frame(width: 7, height: 7)
-                    Text("Kein Sub-Agent")
+                    Text("No sub-agent")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(AgentTheme.textPrimary)
                 }
-                Text("Default Claude — keine Spezialisierung.")
-                    .font(.system(size: 10))
+                Text("Default Claude — no specialization.")
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -210,12 +210,12 @@ struct BackgroundDispatchModal: View {
                         .lineLimit(1)
                     if agent.scope == .project {
                         Text("PROJ")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.orange)
                     }
                 }
-                Text(agent.description ?? "(keine Beschreibung)")
-                    .font(.system(size: 10))
+                (agent.description.map { Text(verbatim: $0) } ?? Text("(no description)"))
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -256,19 +256,19 @@ struct BackgroundDispatchModal: View {
     private var footer: some View {
         HStack {
             if let agent = selectedSubAgent, agent.isolationWorktree {
-                Label("läuft in eigenem Worktree", systemImage: "square.stack.3d.up")
+                Label("runs in its own worktree", systemImage: "square.stack.3d.up")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
             }
             Spacer()
-            Button("Abbrechen", role: .cancel) { onCancel() }
+            Button("Cancel", role: .cancel) { onCancel() }
                 .keyboardShortcut(.cancelAction)
             Button {
                 submit()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "play.fill")
-                    Text("Hintergrund-Agent starten")
+                    Text("Start background agent")
                 }
             }
             .keyboardShortcut(.defaultAction)
@@ -291,7 +291,7 @@ struct BackgroundDispatchModal: View {
 
     private func fieldLabel(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .tracking(0.04)
             .foregroundStyle(AgentTheme.textTertiary)
     }

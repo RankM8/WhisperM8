@@ -18,7 +18,7 @@ extension AgentChatsView {
     @MainActor
     func takeOverSubagentJob(_ session: AgentChatSession) {
         guard let shortId = session.subagentJobShortID else {
-            errorMessage = "Job-Verzeichnis unbekannt — Übernahme nicht möglich."
+            errorMessage = String(localized: "Job directory unknown — takeover not possible.")
             return
         }
         Task { @MainActor in
@@ -39,7 +39,7 @@ extension AgentChatsView {
 
             switch outcome {
             case .failure(let error):
-                errorMessage = "Übernahme fehlgeschlagen: \(error.localizedDescription)"
+                errorMessage = String(localized: "Takeover failed: \(error.localizedDescription)")
             case .success(let jobState):
                 // Session-Felder defensiv prüfen — der Resume-Branch von
                 // `codexCommand()` braucht externalSessionID + subagentCwd.

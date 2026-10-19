@@ -251,6 +251,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Dateien, nur bei neuem Stand geschrieben).
         ClaudePluginBootstrap.run()
 
+        // „Advanced agent features" (LR-AU-031): beim ersten Start mit diesem
+        // Stand für Bestandsnutzer an, für Neuinstallationen aus.
+        AgentAdvancedFeatures.resolveAtLaunch()
+
         // Agent-Notifications: Delegate VOR der Permission-Anfrage setzen,
         // damit Banner auch im Vordergrund erscheinen und Klicks zum
         // richtigen Chat routen (siehe UNUserNotificationCenterDelegate unten).

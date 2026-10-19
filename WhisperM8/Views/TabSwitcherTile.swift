@@ -76,7 +76,7 @@ struct TabSwitcherTile: View {
             if isCurrent { hereBadge }
             if detail.showsDuration, let duration = model.durationText {
                 Text(duration)
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .fixedSize()
@@ -112,7 +112,7 @@ struct TabSwitcherTile: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(symbolTint)
             Text(text)
-                .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(wordTint)
                 .lineLimit(1)
         }
@@ -129,7 +129,7 @@ struct TabSwitcherTile: View {
 
     private func activityText(_ line: String, lineLimit: Int) -> some View {
         Text(line)
-            .font(.system(size: 10.5))
+            .font(.system(size: 11))
             .foregroundStyle(AgentTheme.textTertiary)
             .lineLimit(lineLimit)
             .truncationMode(.tail)
@@ -137,8 +137,8 @@ struct TabSwitcherTile: View {
     }
 
     private var hereBadge: some View {
-        Text("Hier")
-            .font(.system(size: 8.5, weight: .bold))
+        Text("Here")
+            .font(.system(size: 11, weight: .bold))
             .foregroundStyle(AgentTheme.accent)
             .padding(.horizontal, 4)
             .padding(.vertical, 1)

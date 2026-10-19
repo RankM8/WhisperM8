@@ -85,11 +85,11 @@ extension AgentChatsView {
             VStack(alignment: .leading, spacing: 2) {
                 if archivedSidebarSessions.isEmpty {
                     archiveEmptyState(
-                        title: "Keine archivierten Chats",
-                        detail: "Archivierte Chats landen hier und lassen sich jederzeit wiederherstellen."
+                        title: "No archived chats",
+                        detail: "Archived chats end up here and can be restored at any time."
                     )
                 } else if groups.isEmpty {
-                    archiveEmptyState(title: "Keine Treffer für „\(archiveSearchText)“", detail: nil)
+                    archiveEmptyState(title: "No results for “\(archiveSearchText)”", detail: nil)
                 } else {
                     ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                         ArchiveProjectGroup(
@@ -114,7 +114,7 @@ extension AgentChatsView {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 10, weight: .bold))
-                    Text("Zurück")
+                    Text("Back")
                         .font(.system(size: 11.5, weight: .medium))
                 }
                 .foregroundStyle(AgentTheme.textSecondary)
@@ -124,7 +124,7 @@ extension AgentChatsView {
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
-            .help("Archiv verlassen (Esc)")
+            .help("Leave archive (Esc)")
 
             Spacer(minLength: 0)
 
@@ -175,7 +175,7 @@ extension AgentChatsView {
         archiveSearchText = ""
     }
 
-    private func archiveEmptyState(title: String, detail: String?) -> some View {
+    private func archiveEmptyState(title: LocalizedStringKey, detail: LocalizedStringKey?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 12, weight: .semibold))
@@ -218,12 +218,12 @@ struct ArchiveProjectGroup: View {
                         statusStore: statusStore,
                         isAutoRenaming: false,
                         closeIcon: "arrow.uturn.backward",
-                        closeHelp: "Wiederherstellen",
+                        closeHelp: String(localized: "Restore"),
                         onSelect: { onRestore(session) },
                         onClose: { onRestore(session) }
                     )
                     .contextMenu {
-                        Button("Wiederherstellen", systemImage: "arrow.uturn.backward") {
+                        Button("Restore", systemImage: "arrow.uturn.backward") {
                             onRestore(session)
                         }
                     }
@@ -253,7 +253,7 @@ struct ArchiveProjectGroup: View {
                         .frame(width: 18, height: 18)
                 }
 
-                Text(project?.name ?? "Ohne Projekt")
+                (project.map { Text(verbatim: $0.name) } ?? Text("No project"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
@@ -263,7 +263,7 @@ struct ArchiveProjectGroup: View {
                 Spacer(minLength: 6)
 
                 Text("\(sessions.count)")
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
             }
             .padding(.leading, 8)

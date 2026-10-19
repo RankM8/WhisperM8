@@ -199,13 +199,13 @@ struct ChatTabGroupLabel: View {
                     .font(.system(size: 7, weight: .bold))
                     .rotationEffect(.degrees(isCollapsed ? -90 : 0))
                 Text(title)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .frame(maxWidth: 110)
                     .fixedSize(horizontal: true, vertical: false)
                 Text("\(count)")
-                    .font(.system(size: 9, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .opacity(0.75)
                     .fixedSize()
             }
@@ -238,8 +238,8 @@ struct ChatTabGroupLabel: View {
         .animation(.easeOut(duration: 0.12), value: isCollapsed)
         .help(
             isCollapsed
-                ? "Tab-Gruppe aufklappen · Ziehen verschiebt die ganze Gruppe"
-                : "Tab-Gruppe einklappen · Ziehen verschiebt die ganze Gruppe"
+                ? String(localized: "Expand tab group · dragging moves the whole group")
+                : String(localized: "Collapse tab group · dragging moves the whole group")
         )
     }
 }
@@ -363,21 +363,30 @@ struct ChatTabButton: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
+        .accessibilityLabel(AgentRowAccessibility.summary(
+            title: session.title, status: resolvedStatus, project: project?.name))
+        .accessibilityAction(named: Text("Close tab")) { onClose() }
     }
 
     @ViewBuilder
     private var trailingIndicator: some View {
         if isHovered || isSelected {
-            Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .frame(width: 16, height: 16)
-                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
-                .contentShape(Rectangle())
-                .onTapGesture { onClose() }
-                .help(resolvedStatus?.isLive == true
-                      ? String(localized: "Close tab — the chat keeps running in the background")
-                      : "Tab schließen")
+            // Echter Button statt Image + onTapGesture (LR-AU-009): VoiceOver
+            // findet ihn, die Aktion hängt zusätzlich als accessibilityAction
+            // am Tab (siehe `body`) und ist damit nicht nur per Hover erreichbar.
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 16, height: 16)
+                    .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Close tab"))
+            .help(resolvedStatus?.isLive == true
+                  ? String(localized: "Close tab — the chat keeps running in the background")
+                  : String(localized: "Close tab"))
         } else {
             // Dieselbe Status-Sprache wie die Sidebar (grün nur bei „arbeitet").
             AgentStatusIndicator(status: resolvedStatus, compact: true)
@@ -391,18 +400,20 @@ struct ChatTabButton: View {
 
 enum AgentChatColorName {
     static let map: [String: String] = [
-        "#32D74B": "Grün",
+        "#32D74B": "Green",
         "#FF9F0A": "Orange",
-        "#0A84FF": "Blau",
-        "#BF5AF2": "Lila",
-        "#FF453A": "Rot",
-        "#64D2FF": "Türkis",
-        "#FFD60A": "Gelb",
+        "#0A84FF": "Blue",
+        "#BF5AF2": "Purple",
+        "#FF453A": "Red",
+        "#64D2FF": "Turquoise",
+        "#FFD60A": "Yellow",
         "#AC8E68": "Sand"
     ]
 
     static func label(for hex: String) -> String {
-        map[hex] ?? hex
+        // Die Namen sind Katalogschlüssel (Englisch im Code, Deutsch im Katalog).
+        guard let name = map[hex] else { return hex }
+        return String(localized: String.LocalizationValue(name))
     }
 }
 
@@ -570,7 +581,7 @@ struct SessionLiveStatusDot: View {
                 Circle()
                     .fill(AgentTheme.textTertiary.opacity(0.4))
                     .frame(width: 7, height: 7)
-                    .help("Nicht gestartet")
+                    .help("Not started")
             }
         }
         .frame(width: 7, height: 7)

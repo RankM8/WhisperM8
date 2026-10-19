@@ -49,9 +49,9 @@ struct GridSlotDropArea<Content: View>: View {
 
     private var dropLabel: String {
         if let occupiedTitle {
-            return "„\(occupiedTitle)“ ersetzen / tauschen"
+            return String(localized: "Replace / swap “\(occupiedTitle)”")
         }
-        return "In Slot \(slotIndex + 1) einfügen"
+        return String(localized: "Insert into slot \(slotIndex + 1)")
     }
 }
 

@@ -111,9 +111,9 @@ struct GridShrinkActionBar: View {
                 )
 
             Button(action: onCommit) {
-                Text(leaving == 1
-                    ? "Verkleinern — 1 Chat verlässt"
-                    : "Verkleinern — \(leaving) Chats verlassen")
+                (leaving == 1
+                    ? Text("Shrink — 1 chat leaves")
+                    : Text("Shrink — \(leaving) chats leave"))
                     .font(.system(size: 11, weight: .semibold))
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
@@ -127,11 +127,11 @@ struct GridShrinkActionBar: View {
             .buttonStyle(.plain)
             .disabled(!selection.isCommitEnabled)
             .help(selection.isCommitEnabled
-                ? "Nur die markierten Chats bleiben im Workspace — Tabs und Prozesse laufen weiter"
-                : "Erst \(selection.overflowCount) Chat(s) abwählen")
+                ? String(localized: "Only the marked chats stay in the workspace — tabs and processes keep running")
+                : String(localized: "Deselect \(selection.overflowCount) more chat(s) first"))
 
             Button(action: onCancel) {
-                Text("Abbrechen")
+                Text("Cancel")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .padding(.horizontal, 8)
@@ -143,7 +143,7 @@ struct GridShrinkActionBar: View {
             // Esc bricht ab, statt beim Terminal zu landen und dort ggf. die
             // laufende Antwort abzubrechen (LR-AU-019).
             .keyboardShortcut(.cancelAction)
-            .help("Kapazität unverändert lassen")
+            .help("Keep capacity unchanged")
         }
         .padding(.horizontal, 5)
         .padding(.vertical, 3)
@@ -156,9 +156,9 @@ struct GridShrinkActionBar: View {
 
     private func counterLabel(retained: Int, leaving: Int) -> String {
         guard selection.isCommitEnabled else {
-            return "\(retained)/\(selection.targetCapacity) — \(selection.overflowCount) zu viel"
+            return String(localized: "\(retained)/\(selection.targetCapacity) — \(selection.overflowCount) too many")
         }
-        return "\(retained)/\(selection.targetCapacity) gewählt"
+        return String(localized: "\(retained)/\(selection.targetCapacity) selected")
     }
 }
 
@@ -217,9 +217,11 @@ struct GridSlotSelectionOverlay: View {
             .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isButton)
             .accessibilityLabel(
-                "\(sessionTitle ?? "Chat") — \(retained ? "bleibt im Workspace" : "verlässt den Workspace")"
+                retained
+                    ? String(localized: "\(sessionTitle ?? "Chat") — stays in the workspace")
+                    : String(localized: "\(sessionTitle ?? "Chat") — leaves the workspace")
             )
-            .accessibilityHint("Auswählen zum Umschalten")
+            .accessibilityHint("Select to toggle")
             .accessibilityAction(.default, onToggle)
         } else {
             // Leerer Slot: zurücknehmen, aber kein Catcher — hier gibt es
@@ -234,7 +236,7 @@ struct GridSlotSelectionOverlay: View {
         HStack(spacing: 4) {
             Image(systemName: retained ? "checkmark.circle.fill" : "minus.circle.fill")
                 .font(.system(size: 10, weight: .bold))
-            Text(retained ? "Bleibt\(slotNumber.map { " · Slot \($0)" } ?? "")" : "Verlässt")
+            (retained ? (slotNumber.map { Text("Stays · slot \($0)") } ?? Text("Stays")) : Text("Leaves"))
                 .font(.system(size: 10.5, weight: .semibold))
         }
         .foregroundStyle(.white)
