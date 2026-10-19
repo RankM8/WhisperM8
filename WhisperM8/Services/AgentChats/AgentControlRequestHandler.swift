@@ -1090,7 +1090,16 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let enqueuedVerified = actorID.map {
             AgentSessionTokenRegistry.shared.verify(sessionID: $0, token: request.actor.token)
         } ?? false
-        let entry = store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel, verified: enqueuedVerified)
+        let entry: QueuedPrompt
+        do {
+            entry = try store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel, verified: enqueuedVerified)
+        } catch {
+            // Nicht gesichert → kein Erfolg melden (LR-AK-018).
+            await audit(request.actor, method: "queue-enqueue", target: await sessionLabel(targetID),
+                        outcome: "failed", prompt: prompt)
+            return .failure(requestID: request.requestID, code: .internalError,
+                            message: "Folgeauftrag konnte nicht gespeichert werden: \(error.localizedDescription)")
+        }
         let open = store.openPrompts(for: targetID)
         let position = (open.firstIndex { $0.id == entry.id }).map { $0 + 1 } ?? open.count
 

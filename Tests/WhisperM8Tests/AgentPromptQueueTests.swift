@@ -135,8 +135,8 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testEnqueuePersistsAndSurvivesReload() throws {
-        store.enqueue(sessionID: session, prompt: "erster Auftrag", by: "jarvis")
-        store.enqueue(sessionID: session, prompt: "zweiter Auftrag", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "erster Auftrag", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "zweiter Auftrag", by: "jarvis")
 
         let reloaded = AgentPromptQueueStore(fileURL: directory.appendingPathComponent("queue.json"))
         let open = reloaded.openPrompts(for: session)
@@ -149,7 +149,7 @@ final class AgentPromptQueueStoreTests: XCTestCase {
         // auf eine zufällige UUID-Sortierung zurück.
         let texts = (1...12).map { "Auftrag \($0)" }
         for text in texts {
-            store.enqueue(sessionID: session, prompt: text, by: "jarvis")
+            try! store.enqueue(sessionID: session, prompt: text, by: "jarvis")
         }
         XCTAssertEqual(store.openPrompts(for: session).map(\.prompt), texts)
 
@@ -159,15 +159,15 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testSequenceKeepsGrowingAcrossReloads() {
-        store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
         let reloaded = AgentPromptQueueStore(fileURL: directory.appendingPathComponent("queue.json"))
-        let second = reloaded.enqueue(sessionID: session, prompt: "B", by: "jarvis")
+        let second = try! reloaded.enqueue(sessionID: session, prompt: "B", by: "jarvis")
         XCTAssertEqual(second.sequence, 2, "die Nummer setzt nach einem Neustart fort, statt neu zu zählen")
     }
 
     func testReserveNextIsExclusiveUntilResolved() {
-        store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
-        store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
 
         let first = store.reserveNext(for: session)
         XCTAssertEqual(first?.prompt, "A")
@@ -178,7 +178,7 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testDeliveringStateIsPersistedBeforeDelivery() throws {
-        store.enqueue(sessionID: session, prompt: "unterwegs", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "unterwegs", by: "jarvis")
         _ = store.reserveNext(for: session)
 
         // Genau darauf beruht die Höchstens-einmal-Garantie: der Zustand muss
@@ -188,7 +188,7 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testFailedWithRetryGoesBackToPending() {
-        store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
         let reserved = store.reserveNext(for: session)!
 
         store.markFailed(id: reserved.id, error: "keine PTY", retry: true)
@@ -198,7 +198,7 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testFailedWithoutRetryClosesTheEntry() {
-        store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
         let reserved = store.reserveNext(for: session)!
         store.markFailed(id: reserved.id, error: "archiviert", retry: false)
         XCTAssertTrue(store.openPrompts(for: session).isEmpty)
@@ -206,8 +206,8 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testCancelAllRemovesOnlyPendingOnes() {
-        store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
-        store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
         let inFlight = store.reserveNext(for: session)!
 
         let cancelled = store.cancel(sessionID: session)
@@ -217,8 +217,8 @@ final class AgentPromptQueueStoreTests: XCTestCase {
     }
 
     func testCancelSpecificIDLeavesOthersAlone() {
-        let a = store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
-        store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
+        let a = try! store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "B", by: "jarvis")
 
         let cancelled = store.cancel(sessionID: session, ids: [a.id])
         XCTAssertEqual(cancelled.count, 1)
@@ -227,20 +227,53 @@ final class AgentPromptQueueStoreTests: XCTestCase {
 
     func testCancelDoesNotTouchOtherSessions() {
         let foreign = UUID()
-        store.enqueue(sessionID: session, prompt: "meiner", by: "jarvis")
-        store.enqueue(sessionID: foreign, prompt: "fremder", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "meiner", by: "jarvis")
+        try! store.enqueue(sessionID: foreign, prompt: "fremder", by: "jarvis")
         store.cancel(sessionID: session)
         XCTAssertEqual(store.openPrompts(for: foreign).map(\.prompt), ["fremder"])
     }
 
     func testReconcileOnLaunchMarksInterruptedDelivery() {
-        store.enqueue(sessionID: session, prompt: "unterwegs", by: "jarvis")
+        try! store.enqueue(sessionID: session, prompt: "unterwegs", by: "jarvis")
         _ = store.reserveNext(for: session)
 
         let restarted = AgentPromptQueueStore(fileURL: directory.appendingPathComponent("queue.json"))
         restarted.reconcileOnLaunch()
         XCTAssertEqual(restarted.all().first?.state, .unknown)
         XCTAssertNil(restarted.reserveNext(for: session), "kein stiller Zweitversuch nach Absturz")
+    }
+
+    /// LR-AK-018: enqueue meldet keinen Erfolg, wenn nicht gesichert werden kann.
+    func testEnqueueThrowsWhenPersistenceFails() throws {
+        // Elternpfad ist eine Datei → createDirectory/write scheitern.
+        let blocker = directory.appendingPathComponent("blocker")
+        try Data("x".utf8).write(to: blocker)
+        let broken = AgentPromptQueueStore(fileURL: blocker.appendingPathComponent("queue.json"))
+        XCTAssertThrowsError(try broken.enqueue(sessionID: session, prompt: "A", by: "jarvis"))
+        XCTAssertTrue(broken.all().isEmpty, "nicht gesicherter Auftrag darf nicht im Speicher stehen bleiben")
+    }
+
+    /// LR-AK-018: ohne durables `delivering` keine Reservierung (sonst Doppelzustellung nach Absturz).
+    func testReserveNextReturnsNilWhenDeliveringCannotBePersisted() throws {
+        _ = try store.enqueue(sessionID: session, prompt: "A", by: "jarvis")
+        // Pfad nach dem Einstellen blockieren: Verzeichnis ersetzt die Datei.
+        let file = directory.appendingPathComponent("queue.json")
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        XCTAssertNil(store.reserveNext(for: session))
+        XCTAssertEqual(store.all().first?.state, .pending, "Zustand wird zurückgenommen")
+    }
+
+    /// LR-AK-018: Decode-Fehler → Original gesichert, reconcileOnLaunch schreibt nicht [].
+    func testUndecodableFileIsBackedUpAndNotOverwrittenByReconcile() throws {
+        let file = directory.appendingPathComponent("queue.json")
+        try Data("{kaputt".utf8).write(to: file)
+        let fresh = AgentPromptQueueStore(fileURL: file)
+        fresh.reconcileOnLaunch()
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "{kaputt")
+        let backups = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasPrefix("queue.json.corrupt-") }
+        XCTAssertEqual(backups.count, 1)
     }
 
     func testMissingFileYieldsEmptyQueueNotACrash() {

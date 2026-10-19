@@ -43,7 +43,7 @@ final class PrivateFilePermissionTests: XCTestCase {
             at: Date(), actor: "x", verified: false, method: "send", target: nil, outcome: "ok",
             promptChars: 3, promptHead: "abc"))
         let queue = dir.appendingPathComponent("queue.json")
-        AgentPromptQueueStore(fileURL: queue).enqueue(sessionID: UUID(), prompt: "geheim", by: "x")
+        try AgentPromptQueueStore(fileURL: queue).enqueue(sessionID: UUID(), prompt: "geheim", by: "x")
         for url in [audit, queue] {
             let perms = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
             XCTAssertEqual(perms?.intValue, 0o600, url.lastPathComponent)

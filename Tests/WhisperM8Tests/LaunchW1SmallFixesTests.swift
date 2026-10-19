@@ -33,7 +33,7 @@ final class LaunchW1SmallFixesTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         let store = AgentPromptQueueStore(fileURL: url)
         let target = UUID()
-        store.enqueue(sessionID: target, prompt: "a", by: "p/chat", verified: true)
+        try! store.enqueue(sessionID: target, prompt: "a", by: "p/chat", verified: true)
         XCTAssertEqual(AgentPromptQueueStore(fileURL: url).all().first?.enqueuedVerified, true)
 
         let legacy = #"{"sessionID":"\#(target.uuidString)","prompt":"b","enqueuedAt":0,"enqueuedBy":"extern"}"#
