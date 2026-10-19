@@ -790,6 +790,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         terminal.send([0x1B])
     }
 
+    /// Ein Turn hat begonnen: der Composer ist abgeschickt (LR-CLI-002).
+    func noteTurnStarted() {
+        composerDraft.recordSubmittedByTurnStart()
+    }
+
     /// Ein laufender Turn wurde abgebrochen — die CLI legt seinen Prompt in
     /// den Composer zurück (siehe `sendPrompt`).
     func noteTurnInterrupted() {
@@ -873,7 +878,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         )
         keyboardShortcutHandler?.onTerminalKeyDownEvent = { [weak self] event in
             guard let self else { return }
-            self.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            // In Dialogen (Freigabe, Frage, Plan) antworten 1/2/y ohne Enter —
+            // das ist kein Entwurf im Eingabefeld (LR-CLI-002).
+            if AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID) != .awaitingInput {
+                self.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
+            }
             // ESC mitten im Turn bricht ab — die CLI legt den Prompt zurück.
             if event.keyCode == 53,
                event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,

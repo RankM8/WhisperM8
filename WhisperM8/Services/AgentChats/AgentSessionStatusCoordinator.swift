@@ -146,6 +146,10 @@ final class AgentSessionStatusCoordinator {
     /// meldet Abbruch und Turn-Ende gleich (`idle`) — ein `idle` kurz nach
     /// dem Abbruch ist kein „fertig“ (keine Meldung, keine Queue-Zustellung).
     private var interruptMarks: [UUID: Date] = [:]
+    /// Marken, die ohne Transcript-Prüfung als Abbruch gelten: ein vom
+    /// Send-Guard geblockter Prompt lief nie, im Transcript steht deshalb kein
+    /// Abbruch-Marker (Review W4b zu LR-AK-034).
+    private var confirmedInterruptMarks: Set<UUID> = []
     nonisolated static let interruptWindowSeconds: TimeInterval = 10
     /// Prozessende je Session — späte Registry-Events danach ignorieren.
     private var terminatedAt: [UUID: Date] = [:]
@@ -482,6 +486,7 @@ final class AgentSessionStatusCoordinator {
         // zählt deshalb wie ein beobachteter Abbruch.
         if registryLiveSessions.contains(localID) {
             interruptMarks[localID] = now()
+            confirmedInterruptMarks.insert(localID)
         } else {
             apply(.turnAborted, to: localID)
         }
@@ -709,6 +714,7 @@ final class AgentSessionStatusCoordinator {
             if previous?.status != .busy, let mark = interruptMarks[sessionID],
                mark < (record.statusUpdatedAt ?? .distantFuture) {
                 interruptMarks[sessionID] = nil
+                confirmedInterruptMarks.remove(sessionID)
             }
             return .busy
         case .waiting:
@@ -723,8 +729,10 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func consumeInterruptMark(_ sessionID: UUID) -> Bool {
+        let preConfirmed = confirmedInterruptMarks.remove(sessionID) != nil
         guard let mark = interruptMarks.removeValue(forKey: sessionID),
               now().timeIntervalSince(mark) <= Self.interruptWindowSeconds else { return false }
+        if preConfirmed { return true }
         // Nur ein bestätigter Abbruch schluckt das „fertig“: Ein ESC kurz vor
         // dem echten Turn-Ende (oder eines, das nichts abbrach) verschluckte
         // sonst Meldung und Queue-Zustellung (LR-AK-034). Bestätigung = Claudes
@@ -794,6 +802,7 @@ final class AgentSessionStatusCoordinator {
         registryLiveSessions.remove(sessionID)
         registryRecords[sessionID] = nil
         interruptMarks[sessionID] = nil
+        confirmedInterruptMarks.remove(sessionID)
         shadowStates[sessionID] = nil
         shadowDiffSince[sessionID] = nil
         terminatedAt[sessionID] = nil
@@ -933,6 +942,13 @@ final class AgentSessionStatusCoordinator {
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
+        }
+        // Ein Turn beginnt: was im Eingabefeld stand, ist abgeschickt. Ohne
+        // das blieb die konservative Entwurfs-Schätzung nach Tasten in Dialogen
+        // (1/2/y ohne Enter) stehen und blockte send/Queue dauerhaft (Review W4b
+        // zu LR-CLI-002).
+        if case .working = transition.state, oldState.runtimeStatus != .working {
+            AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
         }
         // Chat ist nach dem Start bereit: ein während `launching`
         // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).

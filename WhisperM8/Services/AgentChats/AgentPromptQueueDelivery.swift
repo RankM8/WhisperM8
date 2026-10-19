@@ -65,13 +65,13 @@ final class AgentPromptQueueDelivery {
         case .deliver:
             break
         case .busy(let runtime):
-            store.markFailed(id: reserved.id, error: "Ziel ist \(runtime) — wartet auf nächstes Turn-Ende", retry: true)
+            store.markFailed(id: reserved.id, error: "Ziel ist \(runtime) — wartet, bis der Chat fertig ist", retry: true)
             return
         case .notReady:
             store.markFailed(id: reserved.id, error: "Chat startet noch — Zustellung, sobald er bereit ist", retry: true)
             return
         case .draftPending:
-            store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet auf nächstes Turn-Ende", retry: true)
+            store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist", retry: true)
             return
         }
 

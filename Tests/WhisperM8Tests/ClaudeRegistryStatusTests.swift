@@ -342,6 +342,9 @@ final class ClaudeRegistryStatusTests: XCTestCase {
 
     func testPromptGuardBlockIsNoTurnEnd() throws {
         let f = try makeFixture()
+        // Wie in Produktion: das Transcript zeigt keinen Abbruch-Marker (der
+        // geblockte Prompt lief nie) — der Block gilt trotzdem (Review W4b).
+        f.coordinator.interruptConfirmationOverride = { _ in false }
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
         f.coordinator.handleRegistryRecord(record("idle", updatedAt: Date().addingTimeInterval(-10)))
         f.coordinator.handleRegistryRecord(record("busy", updatedAt: Date().addingTimeInterval(-1)))

@@ -158,8 +158,13 @@ struct SendDeliveryTokenStore {
 
     private func purgeExpired(now: Date) {
         guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directory, includingPropertiesForKeys: nil
+            at: directory, includingPropertiesForKeys: [.contentModificationDateKey]
         ) else { return }
+        // Liegen gebliebene Claims (Absturz zwischen rename und unlink).
+        for url in files where url.lastPathComponent.hasPrefix(".claimed-") {
+            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if now.timeIntervalSince(modified) > Self.timeToLive { try? FileManager.default.removeItem(at: url) }
+        }
         for url in files where url.pathExtension == "json" {
             guard let data = try? Data(contentsOf: url),
                   let token = try? JSONDecoder.tokenDecoder.decode(Token.self, from: data) else {
