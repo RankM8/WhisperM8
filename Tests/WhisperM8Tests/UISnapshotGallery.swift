@@ -244,6 +244,24 @@ final class UISnapshotGallery: XCTestCase {
             Fixture(name: "onboarding-profil", size: onboardingSize) {
                 AnyView(ProfileStep(selectedProfile: .constant(.full)).padding(24))
             },
+            Fixture(name: "onboarding-test-fehlgeschlagen", size: onboardingSize) {
+                let gate = OnboardingCompletionGate(
+                    micGranted: true, accessibilityGranted: true, hotkeySet: true,
+                    credentialsSatisfied: true,
+                    testOutcome: .failed("Groq: 401 invalid API key")
+                )
+                return AnyView(TestStep(gate: gate).environment(AppState.shared))
+            },
+            Fixture(name: "onboarding-test-ungetestet", size: onboardingSize) {
+                let gate = OnboardingCompletionGate(
+                    micGranted: true, accessibilityGranted: true, hotkeySet: true,
+                    credentialsSatisfied: true
+                )
+                return AnyView(TestStep(gate: gate).environment(AppState.shared))
+            },
+            Fixture(name: "onboarding-claude-schritt", size: onboardingSize) {
+                AnyView(ClaudeCLIStep())
+            },
             // CLI-Installation (LR-ONB-003/DIK-015/AU-022): feste Zustände, kein echtes brew.
             Fixture(name: "cli-claude-fehlt-brew", size: CGSize(width: 480, height: 320)) {
                 AnyView(AgentCLIInstallPanel(model: self.cliModel(.claude, command: nil, brew: "/opt/homebrew/bin/brew")).padding(24))
