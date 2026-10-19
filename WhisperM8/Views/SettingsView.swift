@@ -110,7 +110,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .claudeAccounts:
             return String(localized: "Claude accounts and profiles (CLAUDE_CONFIG_DIR) for multi-account sessions.")
         case .claudeHooks:
-            return String(localized: "Session hooks for live status — temporary --settings, your global config stays untouched.")
+            return String(localized: "Session hooks that link chats to Claude sessions — temporary --settings, your global config stays untouched.")
         case .cli:
             return String(localized: "Command line access and installable agent skills.")
         case .general:

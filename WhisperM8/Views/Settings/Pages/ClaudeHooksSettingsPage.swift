@@ -13,22 +13,22 @@ struct ClaudeHooksSettingsPage: View {
     var body: some View {
         SettingsPageContainer(
             title: "Hooks",
-            subtitle: "Session hooks for live status. Claude launches with a temporary --settings file; your global ~/.claude/settings.json stays untouched."
+            subtitle: "Session hooks link each chat to its Claude session. Claude launches with a temporary --settings file; your global ~/.claude/settings.json stays untouched."
         ) {
             VStack(alignment: .leading, spacing: 18) {
                 SettingsSection("Claude Code Hooks") {
                     SettingsStatusRow(
                         title: hooksEnabled ? "Session hooks active" : "Session hooks disabled",
                         subtitle: hooksEnabled
-                            ? "Claude chats start with a temporary hook configuration. Status, questions, and turn completion arrive in real time; your global ~/.claude/settings.json stays untouched."
-                            : "Chats start without the hook bridge. Status comes only from the transcript, with coarser detection, no question detection, and no notifications.",
+                            ? "Claude chats start with a temporary hook configuration. It links each chat to its Claude session and blocks prompts that were already delivered from being sent twice. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched."
+                            : "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, the double-send protection is off, and background agents lose their live status.",
                         tone: hooksEnabled ? .ok : .off,
-                        detail: hooksEnabled ? "Live status via session hooks" : "Transcript fallback"
+                        detail: hooksEnabled ? "Session linking and send guard" : "Hooks off"
                     )
 
                     SettingsToggleRow(
                         title: "Use session hooks",
-                        subtitle: "Launches Claude with a temporary --settings file for live status. Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.",
+                        subtitle: "Launches Claude with a temporary --settings file that links the chat to its session. Your global ~/.claude/settings.json is never touched. Running sessions need a restart to pick up changes.",
                         isOn: $hooksEnabled
                     )
 
