@@ -310,7 +310,9 @@ const considerWake = async ($: EngineInterface, entry: BoardEntry, ev: WatchEven
   const key = `${id}:${ev.to}`
   if ((await read($, woken)).includes(key)) return
   await update($, woken, list => [...(list ?? []), key].slice(-200))
-  wakeQueue.push(`[Board] ${entry.title} (${entry.ref}): ${reason}`)
+  // Der Titel stammt aus einem fremden Chat (ai-title, erster Prompt) — als Daten
+  // gekennzeichnet und ohne Steuerzeichen, nie als Anweisung lesbar (LR-PJ-004).
+  wakeQueue.push(`[Board] „${asData(entry.title)}“ (${asData(entry.ref)}): ${reason}`)
   armWake($)
 }
 
@@ -358,6 +360,9 @@ const say = (e: BoardEntry) => {
 
 const sorted = (entries: readonly BoardEntry[]) =>
   [...entries].sort((a, b) => ORDER[a.light] - ORDER[b.light] || Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+
+// Steuerzeichen (C0, DEL, C1) und Anführungszeichen raus, auf eine Zeile, gekürzt.
+const asData = (text: string) => clip(String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/[„“"]/g, "'").trim(), 120)
 
 const clip = (text: string, width: number) => (text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text)
 
