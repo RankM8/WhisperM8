@@ -302,3 +302,33 @@ final class AgentScanCoordinatorSuspendTests: XCTestCase {
         XCTAssertFalse(coordinator.isSuspended)
     }
 }
+
+/// LR-AK-011: Resume während eines laufenden Scans darf keinen zweiten
+/// parallel starten, sondern holt einen Nachholscan nach (ohne Cooldown).
+@MainActor
+final class AgentScanCoordinatorResumeSingleFlightTests: XCTestCase {
+    func testResumeWhileScanInFlightDefersToFollowUpScan() {
+        let coordinator = AgentScanCoordinator.makeForTesting()
+        var started: [AgentScanCoordinator.Reason] = []
+        coordinator.scanLauncher = { started.append($0) }
+
+        coordinator.requestScan(reason: .launch)          // Scan A läuft
+        coordinator.suspendScans()
+        coordinator.resumeScans()                          // Umzug fertig, A noch in flight
+        XCTAssertEqual(started, [.launch], "kein zweiter paralleler Scan")
+
+        coordinator.markScanCompleted(duration: 5)         // A endet → Nachholscan
+        XCTAssertEqual(started, [.launch, .accountMove], "Nachholscan trotz Cooldown")
+        coordinator.markScanCompleted(duration: 1)
+        XCTAssertFalse(coordinator.isRunning)
+    }
+
+    func testResumeWithoutRunningScanStartsImmediately() {
+        let coordinator = AgentScanCoordinator.makeForTesting()
+        var started: [AgentScanCoordinator.Reason] = []
+        coordinator.scanLauncher = { started.append($0) }
+        coordinator.suspendScans()
+        coordinator.resumeScans()
+        XCTAssertEqual(started, [.accountMove])
+    }
+}
