@@ -551,6 +551,16 @@
         }
       }
     },
+    "New Chat in Same Project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Chat im selben Projekt"
+          }
+        }
+      }
+    },
     "New chat": {
       "localizations": {
         "de": {

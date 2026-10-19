@@ -36,6 +36,8 @@ struct AgentSessionDetailView: View {
     var onPrepareLaunchSettings: (UUID) -> AgentSessionStatusCoordinator.LaunchSettingsPreparation = { _ in .none }
     /// Wird gerufen direkt NACH dem Launch um Hook-Tail-Polling zu starten.
     var onClaudeHookLaunched: (UUID) -> Void = { _ in }
+    /// Neuer Chat im Projekt dieser Session (Leerzustand bei gelöschtem Verlauf).
+    var onNewChatInProject: (() -> Void)?
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
@@ -124,7 +126,8 @@ struct AgentSessionDetailView: View {
                         ? { loadEarlierHistory() } : nil,
                     history: historyState,
                     loadHint: tailWindowHint,
-                    showsSummaryCard: !session.isSubagentJob
+                    showsSummaryCard: !session.isSubagentJob,
+                    onNewChatInProject: onNewChatInProject
                 )
             }
         }

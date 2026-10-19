@@ -46,6 +46,17 @@ final class TranscriptDeletedStateTests: XCTestCase {
         var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "Alt")
         XCTAssertFalse(TranscriptEmptyStateView.isTranscriptDeleted(transcript: nil, session: session), "nie gestartet")
         session.externalSessionID = "abc"
+        session.createdManually = true
+        XCTAssertFalse(TranscriptEmptyStateView.isTranscriptDeleted(transcript: nil, session: session),
+                       "ID gebunden (SessionStart), aber noch kein Turn: Transcript entsteht erst mit dem ersten Prompt")
+        session.lastTurnAt = Date()
+        XCTAssertTrue(TranscriptEmptyStateView.isTranscriptDeleted(transcript: nil, session: session))
+    }
+
+    func testAdoptedSessionWithoutTranscriptCountsAsDeleted() {
+        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "Importiert")
+        session.externalSessionID = "abc"
+        session.createdManually = nil
         XCTAssertTrue(TranscriptEmptyStateView.isTranscriptDeleted(transcript: nil, session: session))
     }
 }

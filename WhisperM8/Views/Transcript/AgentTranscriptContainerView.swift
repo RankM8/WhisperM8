@@ -32,6 +32,8 @@ struct AgentTranscriptContainerView: View {
     /// Summary-Karte über dem Verlauf (Chat-Sessions; Subagents haben die
     /// Ergebnis-Karte in ihrer eigenen Detail-View).
     var showsSummaryCard: Bool = false
+    /// Neuer Chat im selben Projekt (Aktion im Leerzustand „Verlauf gelöscht“).
+    var onNewChatInProject: (() -> Void)?
 
     /// Fertig gebauter Verlaufstext. Wird off-main erzeugt (siehe `rebuild`)
     /// und hier nur gehalten — das Setzen im NSTextView ist billig.
@@ -60,7 +62,7 @@ struct AgentTranscriptContainerView: View {
                     if Self.offersEarlierHistoryWhenEmpty(transcript: transcript, canLoad: onLoadEarlierHistory != nil) {
                         historyStrip
                     }
-                    TranscriptEmptyStateView(transcript: transcript, session: session)
+                    TranscriptEmptyStateView(transcript: transcript, session: session, onNewChatInProject: onNewChatInProject)
                 }
             } else {
                 VStack(spacing: 0) {

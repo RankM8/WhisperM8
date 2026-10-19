@@ -11,6 +11,9 @@ struct TranscriptEmptyStateView: View {
     /// `nil` heißt: kein Transcript verfügbar (JSONL existiert nicht).
     let transcript: AgentChatTranscript?
     let session: AgentChatSession
+    /// Legt einen neuen Chat im selben Projekt an (Container reicht den
+    /// Mechanismus der Chat-Ansicht durch). `nil` = Knopf entfällt.
+    var onNewChatInProject: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,12 +63,17 @@ struct TranscriptEmptyStateView: View {
         transcript?.hasTruncatedHead == true
     }
 
-    /// Die Session hatte schon einen Verlauf (externe ID gebunden — das
-    /// passiert erst beim ersten Turn), die Datei ist aber weg: Claude räumt
-    /// alte Transcripts selbst ab. Fortsetzen geht dann nicht mehr; früher
+    /// Die Session hatte schon einen Verlauf, die Datei ist aber weg: Claude
+    /// räumt alte Transcripts selbst ab. Fortsetzen geht dann nicht mehr; früher
     /// stand hier trotzdem „Klick Resume“ (LR-AU-034).
+    ///
+    /// Die externe ID allein beweist das nicht: Sie wird schon bei `SessionStart`
+    /// gebunden, das Transcript entsteht erst mit dem ersten Prompt. Darum zusätzlich
+    /// ein nachweisbarer Turn (`lastTurnAt`) bzw. eine übernommene (nicht manuell
+    /// angelegte) Session, deren Verlauf von außen kam.
     static func isTranscriptDeleted(transcript: AgentChatTranscript?, session: AgentChatSession) -> Bool {
-        transcript == nil && !(session.externalSessionID ?? "").isEmpty && !session.isBackgroundChat
+        guard transcript == nil, !(session.externalSessionID ?? "").isEmpty, !session.isBackgroundChat else { return false }
+        return session.lastTurnAt != nil || session.createdManually != true
     }
 
     private var isTranscriptDeleted: Bool {
@@ -122,6 +130,12 @@ struct TranscriptEmptyStateView: View {
                 .foregroundStyle(AgentTheme.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
+            if isTranscriptDeleted, let onNewChatInProject {
+                Button("New Chat in Same Project", action: onNewChatInProject)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .padding(.top, 4)
+            }
             if let id = session.externalSessionID, !id.isEmpty {
                 // Rohe Session-ID nur auf Nachfrage — für Laien ohne Nutzen.
                 DisclosureGroup("Details") {
