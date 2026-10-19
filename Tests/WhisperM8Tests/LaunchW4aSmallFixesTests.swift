@@ -63,3 +63,33 @@ final class ClaudeProfileRunningGuardTests: XCTestCase {
         XCTAssertFalse(ClaudeProfileRunningGuard.hasRunningSession(profile: "b", sessions: [session], runningIDs: [session.id]))
     }
 }
+
+/// LR-AU-006 (D4): Cmd+Q fragt nur bei arbeitenden oder wartenden Chats.
+final class QuitConfirmationTests: XCTestCase {
+    func testOnlyWorkingOrWaitingChatsNeedConfirmation() {
+        let working = UUID(), waiting = UUID(), idle = UUID()
+        let statuses: [UUID: AgentSessionRuntimeStatus] = [working: .working, waiting: .awaitingInput, idle: .idle]
+        let busy = QuitConfirmation.busySessionIDs(running: [working, waiting, idle], status: { statuses[$0] })
+        XCTAssertEqual(busy, [working, waiting])
+        XCTAssertTrue(QuitConfirmation.busySessionIDs(running: [idle], status: { statuses[$0] }).isEmpty)
+    }
+
+    func testSystemQuitSkipsDialog() {
+        XCTAssertTrue(QuitConfirmation.isSystemQuit(kAEShutDown))
+        XCTAssertTrue(QuitConfirmation.isSystemQuit(kAEReallyLogOut))
+        XCTAssertFalse(QuitConfirmation.isSystemQuit(nil))
+    }
+
+    func testKeepForResumeLeavesMarkerWithRunningChats() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("marker-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let marker = AgentCrashRecoveryMarker(fileURL: url, ownPID: 4242, isProcessAlive: { _ in false })
+        _ = marker.beginRun()
+        let ids: Set<UUID> = [UUID(), UUID()]
+        marker.record(runningSessionIDs: ids)
+        marker.keepForResume(runningSessionIDs: ids)
+        marker.record(runningSessionIDs: [])   // PTYs sterben beim Quit
+        let next = AgentCrashRecoveryMarker(fileURL: url, ownPID: 4343, isProcessAlive: { _ in false })
+        XCTAssertEqual(Set(next.beginRun()), ids)
+    }
+}

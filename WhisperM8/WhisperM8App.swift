@@ -201,6 +201,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Hält die SIGTERM-DispatchSource am Leben (Installation in
     /// `applicationDidFinishLaunching`, Begründung dort).
     private var sigtermSource: DispatchSourceSignal?
+    /// Beenden per SIGTERM (`make dev`): ohne Cmd+Q-Dialog.
+    private var terminatingViaSignal = false
 
     /// Onboarding nötig, wenn eine der zwei essenziellen System-Permissions
     /// (Mikrofon + Accessibility) fehlt. Bewusst permission-basiert statt Flag —
@@ -235,7 +237,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // ein abgefangenes setzt execve auf Default zurück (SigpipeGuard).
         SigpipeGuard.installNoOpHandler(for: SIGTERM)
         let sigterm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        sigterm.setEventHandler {
+        sigterm.setEventHandler { [weak self] in
+            // `make dev`/`make kill`: nie der Cmd+Q-Dialog (D4).
+            self?.terminatingViaSignal = true
             NSApp.terminate(nil)
         }
         sigterm.resume()
@@ -435,6 +439,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Halten der App am Leben, wenn der User das letzte Window schließt —
     /// die Menubar-Funktionen (Hotkey-Recording, Output-Modes) sollen weiter
     /// funktionieren, auch ohne offenes Hauptfenster.
+    /// `kAEQuitReason` des Quit-Events (Abmelden, Neustart, Ausschalten).
+    static func currentQuitReason() -> OSType? {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventID == kAEQuitApplication,
+              let reason = event.attributeDescriptor(forKeyword: kAEQuitReason) else { return nil }
+        return reason.typeCodeValue
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
@@ -447,10 +459,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// nicht aus dem Store werfen, sonst waere der Launch-Restore nach jedem
     /// Neustart leer. Nie zurueckgenommen — der Prozess endet.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Sauberes Ende (Cmd+Q, Menü, SIGTERM von `make dev`): Absturz-Marker
-        // weg, BEVOR die PTYs beim Quit sterben — der nächste Start fährt dann
-        // nichts automatisch hoch.
-        AgentCrashRecoveryMarker.shared.endRunCleanly()
+        // Cmd+Q/Menü bei arbeitenden oder wartenden Chats: nachfragen (D4,
+        // LR-AU-006). Nie bei SIGTERM (`make dev`) und nie beim Abmelden/
+        // Ausschalten — dort werden die laufenden Chats still zum Fortsetzen
+        // vorgemerkt.
+        let running = MainActor.assumeIsolated { AgentTerminalRegistry.shared.activeSessionIDs }
+        let busy = MainActor.assumeIsolated {
+            QuitConfirmation.busySessionIDs(
+                running: running,
+                status: { AgentSessionStatusCoordinator.shared.statusStore.status(for: $0) })
+        }
+        if QuitConfirmation.isSystemQuit(Self.currentQuitReason()) {
+            AgentCrashRecoveryMarker.shared.keepForResume(runningSessionIDs: running)
+        } else if !terminatingViaSignal, !busy.isEmpty {
+            switch MainActor.assumeIsolated({ QuitConfirmation.ask(busyCount: busy.count) }) {
+            case .cancel:
+                return .terminateCancel
+            case .quitAndResume:
+                AgentCrashRecoveryMarker.shared.keepForResume(runningSessionIDs: running)
+            case .quit:
+                AgentCrashRecoveryMarker.shared.endRunCleanly()
+            }
+        } else {
+            // Sauberes Ende (Cmd+Q ohne Arbeit, SIGTERM von `make dev`):
+            // Absturz-Marker weg, BEVOR die PTYs beim Quit sterben — der
+            // nächste Start fährt dann nichts automatisch hoch.
+            AgentCrashRecoveryMarker.shared.endRunCleanly()
+        }
         MainActor.assumeIsolated {
             AgentWindowStore.shared.suspendCloseTracking()
             // Terminal-Staende der noch laufenden Chats einfrieren, solange

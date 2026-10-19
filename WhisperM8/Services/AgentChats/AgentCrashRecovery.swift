@@ -76,6 +76,18 @@ final class AgentCrashRecoveryMarker {
         write(Contents(pid: ownPID, runningSessionIDs: sorted, updatedAt: Date()))
     }
 
+    /// Beenden mit „beim nächsten Start fortsetzen“ (Cmd+Q-Dialog, D4): der
+    /// Marker bleibt mit den gerade laufenden Chats stehen und wird nicht mehr
+    /// fortgeschrieben — sonst leerte ihn das Sterben der PTYs beim Quit.
+    /// Der nächste Start nimmt sie über den Wiederaufnahme-Weg wieder auf.
+    func keepForResume(runningSessionIDs: Set<UUID>) {
+        lock.lock(); defer { lock.unlock() }
+        guard isOwner, !isFinished else { return }
+        write(Contents(pid: ownPID, runningSessionIDs: runningSessionIDs.sorted { $0.uuidString < $1.uuidString },
+                       updatedAt: Date()))
+        isFinished = true
+    }
+
     /// Sauberes Ende: Marker entfernen. Nur der eigene — eine zweite Instanz,
     /// die sich im Single-Instance-Check beendet, darf den Marker der
     /// laufenden App nicht löschen.
