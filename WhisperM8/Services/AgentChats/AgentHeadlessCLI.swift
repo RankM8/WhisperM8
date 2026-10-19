@@ -30,7 +30,8 @@ struct AgentHeadlessCLI {
         executable: URL,
         arguments: [String],
         environment: [String: String],
-        workingDirectory: URL? = nil
+        workingDirectory: URL? = nil,
+        standardInput: Data? = nil
     ) async throws -> String {
         let timeout = self.timeout
         return try await withCheckedThrowingContinuation { continuation in
@@ -43,9 +44,20 @@ struct AgentHeadlessCLI {
             if let workingDirectory {
                 process.currentDirectoryURL = workingDirectory
             }
-            // Kein stdin: headless Subcommands duerfen nie auf interaktive
-            // Eingaben warten (z. B. Bestaetigungs-Prompts) — EOF sofort.
-            process.standardInput = FileHandle.nullDevice
+            // Ohne Payload kein stdin: headless Subcommands duerfen nie auf
+            // interaktive Eingaben warten (z. B. Bestaetigungs-Prompts) — EOF
+            // sofort. Mit Payload (LR-AK-003) kommt vertraulicher Inhalt wie
+            // ein Zusammenfassungs-Prompt ueber stdin statt ueber argv (argv
+            // ist per Prozessliste sichtbar); danach sofort EOF.
+            let stdinPipe: Pipe?
+            if standardInput != nil {
+                let pipe = Pipe()
+                process.standardInput = pipe
+                stdinPipe = pipe
+            } else {
+                process.standardInput = FileHandle.nullDevice
+                stdinPipe = nil
+            }
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
@@ -63,6 +75,17 @@ struct AgentHeadlessCLI {
             } catch {
                 state.forceFinish(.failure(error))
                 return
+            }
+
+            if let stdinPipe, let payload = standardInput {
+                // Eigene Queue: ein grosser Payload darf den Aufrufer nicht
+                // blockieren, wenn das CLI erst spaet liest. Nur das
+                // werfende `write(contentsOf:)` (EPIPE → Fehler statt Absturz).
+                DispatchQueue.global(qos: .utility).async {
+                    let handle = stdinPipe.fileHandleForWriting
+                    try? handle.write(contentsOf: payload)
+                    try? handle.close()
+                }
             }
 
             // Blockierende Reader auf eigenen Queues statt Lesen im

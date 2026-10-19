@@ -447,7 +447,7 @@ final class PreferencesTests: XCTestCase {
             XCTAssertEqual(preferences.defaultAgentLaunchTarget.provider, .claude)
             XCTAssertNil(preferences.defaultAgentLaunchTarget.kind)
             XCTAssertTrue(preferences.isAutoChatRenameEnabled)
-            XCTAssertTrue(preferences.isAutoSummaryEnabled)
+            XCTAssertFalse(preferences.isAutoSummaryEnabled)
             XCTAssertTrue(preferences.isTerminalBellEnabled)
             XCTAssertEqual(preferences.codexExtraArguments, "")
             XCTAssertEqual(preferences.claudeExtraArguments, "")
@@ -629,12 +629,17 @@ final class PreferencesTests: XCTestCase {
         }
     }
 
-    func testAutoSummaryEnabledDefaultTrueAndFalsePersists() {
+    /// LR-AK-010 (Beschluss D1): Zusammenfassungen sind ein zusätzlicher
+    /// Modellaufruf mit Gesprächsausschnitten — Default aus; ein einmal
+    /// gespeicherter Wert (auch true) bleibt bestehen.
+    func testAutoSummaryEnabledDefaultsFalseAndStoredValuesPersist() {
         withIsolatedPreferencesAndDefaults { preferences, defaults in
-            XCTAssertTrue(preferences.isAutoSummaryEnabled)
+            XCTAssertFalse(preferences.isAutoSummaryEnabled)
+
+            preferences.isAutoSummaryEnabled = true
+            XCTAssertTrue(AppPreferences(defaults: defaults).isAutoSummaryEnabled)
 
             preferences.isAutoSummaryEnabled = false
-
             XCTAssertFalse(AppPreferences(defaults: defaults).isAutoSummaryEnabled)
         }
     }

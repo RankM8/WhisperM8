@@ -5,7 +5,9 @@ import Foundation
 /// Closures, striktes JSON-Ausgabeformat mit tolerantem Parser.
 struct AgentSummaryGenerator {
     var executableResolver: (AgentProvider) -> String?
-    var runner: (URL, [String], [String: String]) async throws -> String
+    /// (Binary, argv, Environment, stdin-Payload). Der Prompt geht NIE in argv
+    /// (LR-AK-003) — sondern als stdin-Payload.
+    var runner: (URL, [String], [String: String], Data?) async throws -> String
 
     static let live = AgentSummaryGenerator(
         executableResolver: { provider in
@@ -14,7 +16,14 @@ struct AgentSummaryGenerator {
             case .codex: return AgentCommandBuilder.commandPath("codex")
             }
         },
-        runner: AgentTitleGenerator.defaultRunner
+        runner: { executable, arguments, environment, standardInput in
+            try await AgentTitleGenerator.defaultRunner(
+                executable: executable,
+                arguments: arguments,
+                environment: environment,
+                standardInput: standardInput
+            )
+        }
     )
 
     /// Erwartetes JSON des Modells.
@@ -24,7 +33,19 @@ struct AgentSummaryGenerator {
         var status: String?
     }
 
-    func generate(provider: AgentProvider, prompt: String) async throws -> Output {
+    /// Konto/Backend des Chats für den Hilfslauf (LR-AK-009): Env-Overrides
+    /// (`CLAUDE_CONFIG_DIR`, GPT-Router + Konto-Header) und Zusatz-Argumente
+    /// (`--model` bei GPT-Chats). Leer = Hauptkonto wie bisher.
+    struct LaunchContext: Equatable {
+        var environment: [String: String] = [:]
+        var extraArguments: [String] = []
+    }
+
+    func generate(
+        provider: AgentProvider,
+        prompt: String,
+        launch: LaunchContext = LaunchContext()
+    ) async throws -> Output {
         guard let path = executableResolver(provider) else {
             throw AgentTitleGeneratorError.executableNotFound(provider)
         }
@@ -32,15 +53,52 @@ struct AgentSummaryGenerator {
         let args: [String]
         switch provider {
         case .claude:
-            args = ["-p", prompt, "--output-format", "text", "--no-session-persistence"]
+            // Ohne Prompt-Argument liest `claude -p` den Prompt von stdin.
+            args = ["-p", "--output-format", "text", "--no-session-persistence"] + launch.extraArguments
         case .codex:
-            args = ["exec", "--skip-git-repo-check", "--ephemeral", prompt]
+            // `-` erzwingt: Instruktionen kommen von stdin.
+            args = ["exec", "--skip-git-repo-check", "--ephemeral"] + launch.extraArguments + ["-"]
         }
-        let stdout = try await runner(executable, args, LoginShellEnvironment.shared.processEnvironment())
+        let environment = LoginShellEnvironment.shared.processEnvironment()
+            .merging(launch.environment) { _, override in override }
+        let stdout = try await runner(executable, args, environment, Data(prompt.utf8))
         guard let output = Self.parseOutput(stdout) else {
             throw AgentTitleGeneratorError.emptyOutput
         }
         return output
+    }
+
+    /// Baut Konto/Backend des Hilfslaufs aus denselben Bausteinen wie der Start
+    /// des Chats (`AgentCommandBuilder`): Claude-Profil → `CLAUDE_CONFIG_DIR`
+    /// (der reale Transcript-Root schlägt den Stempel, wie beim Resume);
+    /// GPT-gestempelter Chat → Router-Env + Konto-Header + dasselbe Modell, damit
+    /// der Lauf auf dem Konto/Backend des Chats zählt statt still auf main.
+    /// Codex kennt nur das eine globale Konto → leer.
+    static func launchContext(
+        for session: AgentChatSession,
+        transcriptURL: URL?,
+        builder: AgentCommandBuilder = AgentCommandBuilder()
+    ) -> LaunchContext {
+        guard session.provider == .claude else { return LaunchContext() }
+
+        var profileName = session.claudeProfileName
+        if let transcriptURL {
+            profileName = ClaudeAccountProfiles.profileName(forTranscriptPath: transcriptURL.path)
+        }
+        var context = LaunchContext(environment: builder.claudeProfileEnvironmentResolver(profileName))
+
+        if let model = builder.effectiveClaudeBackendModel(session.claudeBackendModel),
+           let router = builder.gptRouterCoreEnvironment() {
+            context.environment.merge(router) { _, router in router }
+            if let gptProfile = builder.gptProfileHeaderResolver(session.gptProfileName),
+               gptProfile == GPTAccountProfiles.mainProfileName
+                || GPTAccountProfiles.isValidProfileName(gptProfile) {
+                context.environment[AgentCommandBuilder.customHeadersEnvironmentKey] =
+                    "\(ClaudeGPTMixRouter.profileHeaderName): \(gptProfile)"
+            }
+            context.extraArguments = ["--model", model]
+        }
+        return context
     }
 
     /// Tolerant: Code-Fences strippen, erstes `{…}`-Objekt dekodieren.
@@ -126,6 +184,8 @@ final class AgentSessionSummarizer {
 
     private let store: AgentSessionStore
     private let generator: AgentSummaryGenerator
+    /// Konto/Backend des Chats für den Hilfslauf; im Test überschreibbar.
+    private let launchContextResolver: (AgentChatSession, URL) -> AgentSummaryGenerator.LaunchContext
     /// Mindest-Nachrichtenzahl für automatische Läufe (manuell: 1).
     private let minimumMessages = 4
 
@@ -148,9 +208,16 @@ final class AgentSessionSummarizer {
     private var sessionFailures: [UUID: Date] = [:]
     var now: () -> Date = Date.init
 
-    init(store: AgentSessionStore = AgentSessionStore(), generator: AgentSummaryGenerator = .live) {
+    init(
+        store: AgentSessionStore = AgentSessionStore(),
+        generator: AgentSummaryGenerator = .live,
+        launchContextResolver: @escaping (AgentChatSession, URL) -> AgentSummaryGenerator.LaunchContext = {
+            AgentSummaryGenerator.launchContext(for: $0, transcriptURL: $1)
+        }
+    ) {
         self.store = store
         self.generator = generator
+        self.launchContextResolver = launchContextResolver
     }
 
     // MARK: - Digest
@@ -338,7 +405,11 @@ final class AgentSessionSummarizer {
             evidenceLines: AgentSummaryGenerator.evidenceLines(evidence)
         )
         do {
-            let output = try await generator.generate(provider: provider, prompt: prompt)
+            let output = try await generator.generate(
+                provider: provider,
+                prompt: prompt,
+                launch: launchContextResolver(session, url)
+            )
             let summary = AgentSessionSummary(
                 headline: output.headline,
                 details: output.details,

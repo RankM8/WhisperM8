@@ -66,7 +66,7 @@ struct AgentChatsSettingsPage: View {
 private struct AgentChatsWorkspaceSettingsTab: View {
     @AppStorage(PreferenceKeys.defaultAgentProvider) private var defaultAgentProviderRaw = "claude"
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
-    @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = true
+    @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
     @State private var folderFeedback: String?
@@ -123,7 +123,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
 
                 SettingsToggleRow(
                     title: "Summarize chats automatically",
-                    subtitle: "Creates timeline summaries per session after chat activity completes.",
+                    subtitle: "Off by default. When on, WhisperM8 makes one extra model call per finished chat and sends excerpts of that conversation (recent messages, commits, test results) to the same model provider and account the chat uses — it counts toward that account's usage. Chat titles are separate and never use a model call.",
                     isOn: $isAutoSummaryEnabled
                 )
             }

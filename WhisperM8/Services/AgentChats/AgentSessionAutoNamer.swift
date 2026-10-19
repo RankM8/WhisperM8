@@ -151,7 +151,8 @@ enum AgentTitleGenerator {
     static func defaultRunner(
         executable: URL,
         arguments: [String],
-        environment: [String: String]
+        environment: [String: String],
+        standardInput: Data? = nil
     ) async throws -> String {
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("whisperm8-headless-scratch", isDirectory: true)
@@ -161,7 +162,8 @@ enum AgentTitleGenerator {
                 executable: executable,
                 arguments: arguments,
                 environment: environment,
-                workingDirectory: scratch
+                workingDirectory: scratch,
+                standardInput: standardInput
             )
         } catch AgentHeadlessCLIError.nonZeroExit(let code, let stderr, let stdout) {
             if let retryArgs = retryArgumentsAfterUnknownOption(arguments: arguments, stderr: stderr + "\n" + stdout) {
@@ -169,7 +171,8 @@ enum AgentTitleGenerator {
                     "headless_persistence_flag_unsupported — retry ohne Opt-out-Flag (ältere CLI)"
                 )
                 return try await defaultRunner(
-                    executable: executable, arguments: retryArgs, environment: environment
+                    executable: executable, arguments: retryArgs, environment: environment,
+                    standardInput: standardInput
                 )
             }
             Logger.agentPerformance.warning(
