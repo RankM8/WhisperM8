@@ -114,13 +114,18 @@ final class TemplateEditorModel {
             return
         }
 
-        templates[index].name = editableName
-        templates[index].description = editableDescription
-        templates[index].instruction = editableInstruction
-        templates[index].updatedAt = Date()
+        // Kandidat schreiben, den bestätigten Stand (`templates`) erst nach erfolgreichem
+        // Speichern ersetzen: bei einem Schreibfehler bleibt der Entwurf dirty und Save
+        // aktiv, damit derselbe Entwurf nach Behebung des Problems erneut gespeichert
+        // werden kann (LR-ONB-015).
+        var candidates = templates
+        candidates[index].name = editableName
+        candidates[index].description = editableDescription
+        candidates[index].instruction = editableInstruction
+        candidates[index].updatedAt = Date()
 
         do {
-            try store.saveCustomTemplates(templates)
+            try store.saveCustomTemplates(candidates)
             reload()
         } catch {
             errorMessage = error.localizedDescription

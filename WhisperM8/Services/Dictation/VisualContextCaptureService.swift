@@ -35,6 +35,18 @@ final class VisualContextCaptureService {
     private let maxVisualFrames = 5
     private var activeClipSession: ScreenClipCapturing?
     private var activeClipStartDate: Date?
+    /// LR-DIK-010: Generation des Clip-Lebenszyklus. `cancelActiveClip` erhöht sie;
+    /// ein noch startender Clip (Awaits in `startScreenClip`) erkennt daran nach dem
+    /// Start, dass der Diktatabbruch dazwischen lag, und stoppt sich selbst.
+    private var clipGeneration = 0
+    private var isStartingClip = false
+
+    /// Test-Seams (Closure-DI): Screen-Recording-Recht und der eigentliche Clip-Start.
+    var screenRecordingPermissionCheck: () -> Bool = { PermissionService.hasScreenRecordingPermission }
+    var clipStarter: (_ sourceAppName: String?, _ outputURL: URL) async throws -> ScreenClipCapturing = { sourceAppName, outputURL in
+        let target = try await VisualContextCaptureService.makeCaptureTarget()
+        return try await ManualScreenClipSession.start(target: target, outputURL: outputURL, sourceAppName: sourceAppName)
+    }
 
     /// Injizierbarer Runner fuer die native Bereichsauswahl. Default ruft das
     /// System-Binary `/usr/sbin/screencapture -i` auf. Tests ersetzen den Runner,
@@ -45,6 +57,11 @@ final class VisualContextCaptureService {
 
     var isRecordingClip: Bool {
         activeClipSession != nil
+    }
+
+    /// Hat ein Clip-Lauf Ressourcen (läuft oder startet gerade)?
+    var hasClipInFlight: Bool {
+        activeClipSession != nil || isStartingClip
     }
 
     /// Startet die native macOS-Bereichsauswahl (Fadenkreuz) und liefert ein
@@ -131,23 +148,28 @@ final class VisualContextCaptureService {
         guard AppPreferences.shared.isVisualContextCaptureEnabled else {
             throw VisualContextCaptureError.disabled
         }
-        guard PermissionService.hasScreenRecordingPermission else {
+        guard screenRecordingPermissionCheck() else {
             throw VisualContextCaptureError.missingPermission
         }
-        guard activeClipSession == nil else {
+        guard activeClipSession == nil, !isStartingClip else {
             throw VisualContextCaptureError.alreadyRecording
         }
 
-        let target = try await makeCaptureTarget()
+        let generation = clipGeneration
+        isStartingClip = true
+        defer { isStartingClip = false }
+
         let fileURL = try contextDirectory()
             .appendingPathComponent("ScreenClip-\(UUID().uuidString)")
             .appendingPathExtension("mp4")
 
-        let session = try await ManualScreenClipSession.start(
-            target: target,
-            outputURL: fileURL,
-            sourceAppName: sourceApp?.localizedName
-        )
+        let session = try await clipStarter(sourceApp?.localizedName, fileURL)
+        guard generation == clipGeneration else {
+            // Diktat wurde während des Starts abgebrochen: die frisch gestartete
+            // Bildschirmaufnahme sofort wieder beenden, nie als aktive Session merken.
+            try? await session.cancel()
+            throw CancellationError()
+        }
         activeClipSession = session
         activeClipStartDate = Date()
     }
@@ -167,6 +189,7 @@ final class VisualContextCaptureService {
     }
 
     func cancelActiveClip() async {
+        clipGeneration += 1
         guard let session = activeClipSession else {
             activeClipSession = nil
             activeClipStartDate = nil
@@ -216,7 +239,8 @@ final class VisualContextCaptureService {
                         fileURL: fileURL,
                         thumbnailURL: fileURL,
                         sourceDisplayID: clip.sourceDisplayID,
-                        sourceAppName: clip.sourceAppName
+                        sourceAppName: clip.sourceAppName,
+                        sourceClipID: clip.id
                     )
                 )
             } catch {
@@ -227,9 +251,9 @@ final class VisualContextCaptureService {
         return frames
     }
 
-    private func makeCaptureTarget() async throws -> ScreenCaptureTarget {
+    private static func makeCaptureTarget() async throws -> ScreenCaptureTarget {
         let content = try await SCShareableContent.current
-        guard let display = activeDisplay(from: content) ?? content.displays.first else {
+        guard let display = Self.activeDisplay(from: content) ?? content.displays.first else {
             throw VisualContextCaptureError.noDisplay
         }
 
@@ -245,7 +269,7 @@ final class VisualContextCaptureService {
         return ScreenCaptureTarget(display: display, filter: filter)
     }
 
-    private func activeDisplay(from content: SCShareableContent) -> SCDisplay? {
+    private static func activeDisplay(from content: SCShareableContent) -> SCDisplay? {
         guard let screen = OverlayPositionStore.activeScreen,
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
             return nil

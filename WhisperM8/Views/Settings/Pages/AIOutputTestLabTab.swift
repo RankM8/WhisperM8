@@ -111,11 +111,14 @@ struct AIOutputTestLabTab: View {
         let mode = OutputMode.mode(for: modeID)
         let normalizedText = TextNormalizer.normalizeTranscriptionText(inputText)
         do {
-            let output = try await PostProcessingService().process(
-                rawText: normalizedText,
-                mode: mode,
-                language: AppPreferences.shared.language
-            )
+            // Eigener Besitzer: der Abbruch im Diktat-Overlay darf diese Vorschau nicht treffen.
+            let output = try await CodexRunOwner.$current.withValue(.testLab) {
+                try await PostProcessingService().process(
+                    rawText: normalizedText,
+                    mode: mode,
+                    language: AppPreferences.shared.language
+                )
+            }
             guard generation == previewGeneration, !Task.isCancelled else { return }
             previewText = output
         } catch is CancellationError {

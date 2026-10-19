@@ -32,7 +32,10 @@ struct PostProcessingTemplate: Identifiable, Codable, Equatable, Hashable {
             .replacingOccurrences(of: "{agentChatPath}", with: agentChat?.projectPath ?? "")
             .replacingOccurrences(of: "{agentChatProvider}", with: agentChat?.provider.displayName ?? "")
             .replacingOccurrences(of: "{agentChatExternalID}", with: agentChat?.externalSessionID ?? "")
-            .replacingOccurrences(of: "{agentChatTail}", with: contextBundle.agentChatTail ?? "")
+            // Verlauf nur zusammen mit der freigegebenen Chat-Referenz: Hat der
+            // User den Chat-Kontext entfernt, darf der schon geladene Tail
+            // nicht trotzdem an Codex gehen (LR-DIK-008).
+            .replacingOccurrences(of: "{agentChatTail}", with: agentChat == nil ? "" : (contextBundle.agentChatTail ?? ""))
             .replacingOccurrences(of: "{language}", with: language.isEmpty ? "auto" : language)
             .replacingOccurrences(of: "{date}", with: renderedDate)
     }

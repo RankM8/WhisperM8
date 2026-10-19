@@ -11,9 +11,17 @@ extension RecordingCoordinator {
 
         do {
             try await visualContextCaptureService.startScreenClip(sourceApp: contextSourceApp)
+            // Diktat wurde während des Starts beendet/abgebrochen: der Clip ist schon
+            // gestoppt (Generation), nichts mehr anzeigen oder planen.
+            guard appState.isRecording else {
+                await visualContextCaptureService.cancelActiveClip()
+                return
+            }
             appState.isScreenClipRecording = true
             overlayController.update(appState: appState)
             scheduleScreenClipLimit()
+        } catch is CancellationError {
+            Logger.debug("Screen clip start cancelled")
         } catch {
             appState.lastError = error.localizedDescription
             Logger.permission.warning("Screen clip context failed: \(error.localizedDescription, privacy: .public)")
@@ -49,7 +57,14 @@ extension RecordingCoordinator {
         let maxDuration = AppPreferences.shared.maxScreenRecordingDuration
         screenClipLimitTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(maxDuration))
-            guard !Task.isCancelled, appState?.isRecording == true, appState?.isScreenClipRecording == true else { return }
+            guard !Task.isCancelled, appState?.isScreenClipRecording == true else { return }
+            // Hartes Limit unabhängig vom Diktat-Flag: läuft der Clip nach einem
+            // Abbruch weiter, wird er verworfen statt unsichtbar weiterzuspielen.
+            guard appState?.isRecording == true else {
+                await visualContextCaptureService.cancelActiveClip()
+                appState?.isScreenClipRecording = false
+                return
+            }
             await stopScreenClipAndAttach()
         }
     }
@@ -83,8 +98,15 @@ extension RecordingCoordinator {
         let oldChangeCount = observedPasteboardChangeCount
         observedPasteboardChangeCount = changeCount
 
+        let rawTypes = (pasteboard.types ?? []).map(\.rawValue)
+        // Passwörter aus Passwort-Managern nie in Kontext, Prompt oder Report
+        // übernehmen — nur ihr Vorhandensein loggen (LR-DIK-023).
+        if PasteboardPrivacy.isConfidential(rawTypes) {
+            Logger.transcription.info("clipboard_confidential_skipped newCount=\(changeCount, privacy: .public)")
+            return
+        }
         let pasteboardHasImage = pasteboardContainsImage(pasteboard)
-        let types = (pasteboard.types ?? []).map(\.rawValue).joined(separator: ",")
+        let types = rawTypes.joined(separator: ",")
         Logger.transcription.info(
             "clipboard_change_detected oldCount=\(oldChangeCount, privacy: .public) newCount=\(changeCount, privacy: .public) hasImage=\(pasteboardHasImage, privacy: .public) types=\(types, privacy: .public)"
         )

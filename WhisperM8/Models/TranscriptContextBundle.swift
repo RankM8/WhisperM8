@@ -20,6 +20,9 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
     var annotationComment: String?
     var annotationRect: CGRect?
     var createdAt: Date
+    /// Bei `.visualFrame`: ID des Screen-Clips, aus dem das Einzelbild stammt
+    /// (LR-DIK-009). Entfernt der Nutzer den Clip, gehen diese Bilder mit.
+    var sourceClipID: UUID?
 
     init(
         id: UUID = UUID(),
@@ -32,7 +35,8 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
         annotationNumber: Int? = nil,
         annotationComment: String? = nil,
         annotationRect: CGRect? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        sourceClipID: UUID? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -45,6 +49,7 @@ struct ContextAttachment: Identifiable, Codable, Equatable {
         self.annotationComment = annotationComment
         self.annotationRect = annotationRect
         self.createdAt = createdAt
+        self.sourceClipID = sourceClipID
     }
 }
 
