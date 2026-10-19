@@ -46,6 +46,10 @@ swift test --filter testLoginShellEnvironment # by test-name substring
 
 Test convention: dependency injection via plain closures and small protocols (e.g. `commandResolver: { _ in "/path" }`, `ProcessRunner` spies) — no DI framework. Agent-Chats coverage is split across thematic files in `Tests/WhisperM8Tests/` (e.g. `AgentSessionStoreTests.swift`, `AgentCommandBuilderTests.swift`); shared helpers live in `AgentTestSupport.swift`.
 
+## Lokalisierung (E1)
+
+Englisch ist Basis, Deutsch wird vollständig übersetzt: neue UI-Texte englisch schreiben und mit deutscher Übersetzung in `WhisperM8/Localization/Localizable.xcstrings` eintragen; `String`-Parameter eigener Komponenten (`SettingsRow(title:)`, Alerts, Benachrichtigungen) brauchen `String(localized:)`. Regeln und Guard: `docs/features/lokalisierung.md`, `LocalizationCatalogTests`. Ansehen in beiden Sprachen über die Test-Instanz (`WHISPERM8_TEST_LANG=en|de scripts/test-instance.sh restart`).
+
 ## Debugging
 
 ```bash

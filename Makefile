@@ -339,6 +339,9 @@ _bundle:
 	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-claude-workflows.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-chats-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-gpt-coworker-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
+	@# String-Katalog (E1: Englisch Basis, Deutsch) → <sprache>.lproj/Localizable.strings
+	@# direkt in Contents/Resources, wo SwiftUI `Text("…")` und `String(localized:)` suchen.
+	@xcrun xcstringstool compile "WhisperM8/Localization/Localizable.xcstrings" --output-directory "$(APP_BUNDLE)/Contents/Resources" >/dev/null
 	@# SwiftPM-generierte Resource-Bundles (z. B. KeyboardShortcuts_KeyboardShortcuts.bundle)
 	@# in Contents/Resources/ kopieren - wo macOS-Apps Ressourcen erwarten und
 	@# codesign sie als gesealte Inhalte akzeptiert. Damit `Bundle.module` sie hier
