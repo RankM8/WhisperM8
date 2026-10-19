@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GeneralSettingsPage: View {
     @AppStorage("updateCheckEnabled") private var updateCheckEnabled = true
+    @AppStorage(PreferenceKeys.debugFileLoggingEnabled) private var debugFileLogging = false
     @ObservedObject private var themeManager = ThemeManager.shared
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var usageProfile: AppUsageProfile = AppPreferences.shared.usageProfile
@@ -56,6 +57,14 @@ struct GeneralSettingsPage: View {
                     title: "Check for updates automatically",
                     subtitle: "Daily check on launch.",
                     isOn: $updateCheckEnabled
+                )
+            }
+
+            SettingsSection("Troubleshooting") {
+                SettingsToggleRow(
+                    title: "Write a debug log file",
+                    subtitle: "Writes detailed events to ~/Library/Logs/WhisperM8/WhisperM8-debug.log (rotates at 10 MB). Turn it on when you report a problem, off afterwards.",
+                    isOn: $debugFileLogging
                 )
             }
         }

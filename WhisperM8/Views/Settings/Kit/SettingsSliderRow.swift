@@ -26,7 +26,7 @@ struct SettingsSliderRow: View {
             slider
                 .tint(AppTheme.accent)
                 .frame(width: 180)
-                .accessibilityLabel(Text(title))
+                .accessibilityLabel(Text(settingsLocalized: title))
         }
     }
 

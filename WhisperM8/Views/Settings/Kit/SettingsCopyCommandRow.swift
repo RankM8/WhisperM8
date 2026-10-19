@@ -38,7 +38,7 @@ struct SettingsCopyCommandRow: View {
                     .foregroundStyle(AppTheme.textPrimary)
                     .textSelection(.enabled)
 
-                Text(caption)
+                Text(settingsLocalized: caption)
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }

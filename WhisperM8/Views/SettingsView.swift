@@ -14,6 +14,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case permissions
     case about
     case output
+    case voiceGate = "voice-gate"
+    case jarvis
 
     var id: String { rawValue }
 
@@ -24,31 +26,35 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .recording:
-            return "Recording"
+            return String(localized: "Recording")
         case .transcription:
-            return "Transcription"
+            return String(localized: "Transcription")
         case .aiOutput:
-            return "AI Output"
+            return String(localized: "AI Output")
         case .context:
-            return "Context & Privacy"
+            return String(localized: "Context & Privacy")
         case .agentChats:
-            return "Agent Chats"
+            return String(localized: "Agent Chats")
         case .gptBackend:
-            return "GPT-Backend"
+            return String(localized: "GPT-Backend")
         case .claudeAccounts:
-            return "Accounts"
+            return String(localized: "Accounts")
         case .claudeHooks:
-            return "Hooks"
+            return String(localized: "Hooks")
         case .cli:
-            return "CLI & Skills"
+            return String(localized: "CLI & Skills")
         case .general:
-            return "General"
+            return String(localized: "General")
         case .permissions:
-            return "Permissions"
+            return String(localized: "Permissions")
         case .about:
-            return "About"
+            return String(localized: "About")
         case .output:
-            return "Output"
+            return String(localized: "Output")
+        case .voiceGate:
+            return String(localized: "Codex Voice Agent")
+        case .jarvis:
+            return String(localized: "Jarvis & Callouts")
         }
     }
 
@@ -80,46 +86,47 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "info.circle"
         case .output:
             return "doc.text"
+        case .voiceGate:
+            return "mic.slash"
+        case .jarvis:
+            return "text.bubble"
         }
     }
 
     var subtitle: String {
         switch self {
         case .recording:
-            return "Configure capture, input audio, and the dictation hotkey."
+            return String(localized: "Configure capture, input audio, and the dictation hotkey.")
         case .transcription:
-            return "Choose the speech-to-text provider, model, and language behavior."
+            return String(localized: "Choose the speech-to-text provider, model, and language behavior.")
         case .aiOutput:
-            return "Connect Codex and manage post-processing modes, templates, and test runs."
+            return String(localized: "Connect Codex and manage post-processing modes, templates, and test runs.")
         case .context:
-            return "What WhisperM8 may capture alongside your voice — and what happens to it."
+            return String(localized: "What WhisperM8 may capture alongside your voice — and what happens to it.")
         case .agentChats:
-            return "Configure the agent workspace and Claude Code hooks."
+            return String(localized: "Configure the agent workspace and Claude Code hooks.")
         case .gptBackend:
-            return "Connect Claude Code sessions to GPT models through the local proxy."
+            return String(localized: "Connect Claude Code sessions to GPT models through the local proxy.")
         case .claudeAccounts:
-            return "Claude accounts and profiles (CLAUDE_CONFIG_DIR) for multi-account sessions."
+            return String(localized: "Claude accounts and profiles (CLAUDE_CONFIG_DIR) for multi-account sessions.")
         case .claudeHooks:
-            return "Session hooks for live status — temporary --settings, your global config stays untouched."
+            return String(localized: "Session hooks for live status — temporary --settings, your global config stays untouched.")
         case .cli:
-            return "Command line access and installable agent skills."
+            return String(localized: "Command line access and installable agent skills.")
         case .general:
-            return "Profile, appearance, startup, and updates."
+            return String(localized: "Profile, appearance, startup, and updates.")
         case .permissions:
-            return "System permissions required for recording and automation."
+            return String(localized: "System permissions required for recording and automation.")
         case .about:
-            return "Version, update, and project information."
+            return String(localized: "Version, update, and project information.")
         case .output:
-            return "Review the latest run and archived output reports."
+            return String(localized: "Review the latest run and archived output reports.")
+        case .voiceGate:
+            return String(localized: "Mute and unmute a Codex Desktop voice session with a spoken code word.")
+        case .jarvis:
+            return String(localized: "Experimental: Jarvis board, per-chat notes and spoken callouts.")
         }
     }
-}
-
-private struct SettingsPageGroup: Identifiable {
-    let title: String
-    let pages: [SettingsPage]
-
-    var id: String { title }
 }
 
 struct SettingsView: View {
@@ -129,13 +136,22 @@ struct SettingsView: View {
     @State private var aiOutputTab: AIOutputPageTab = .account
     @State private var agentChatsTab: AgentChatsSettingsPageTab = .workspace
 
-    private let pageGroups: [SettingsPageGroup] = [
-        SettingsPageGroup(title: "Dictation", pages: [.recording, .transcription, .aiOutput, .context]),
-        SettingsPageGroup(title: "Agents", pages: [.agentChats, .cli]),
-        SettingsPageGroup(title: "Claude Code", pages: [.claudeAccounts, .claudeHooks, .gptBackend]),
-        SettingsPageGroup(title: "App", pages: [.general, .permissions, .about]),
-        SettingsPageGroup(title: "Workspace", pages: [.output])
-    ]
+    @AppStorage(PreferenceKeys.usageProfile) private var usageProfileRaw = AppUsageProfile.defaultProfile.rawValue
+    /// Im Diktat-Profil blenden wir Agent-Chats-Seiten aus; dieser Schalter holt sie zurück.
+    @State private var revealAgentPages = false
+
+    private var usageProfile: AppUsageProfile {
+        AppUsageProfile(rawValue: usageProfileRaw) ?? .defaultProfile
+    }
+
+    /// Öffnet eine Route eine ausgeblendete Seite, bleibt sie sichtbar (sonst gäbe es keine markierte Zeile).
+    private var pageGroups: [SettingsPageGroup] {
+        SettingsNavigation.pageGroups(for: usageProfile, revealAgentPages: revealAgentPages)
+    }
+
+    static func pageGroups(for profile: AppUsageProfile, revealAgentPages: Bool = false) -> [SettingsPageGroup] {
+        SettingsNavigation.pageGroups(for: profile, revealAgentPages: revealAgentPages)
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -146,6 +162,9 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(pageGroups) { group in
                         sidebarSection(group)
+                    }
+                    if !usageProfile.wantsAgentChats {
+                        revealAgentPagesButton
                     }
                 }
                 .padding(.horizontal, 10)
@@ -193,12 +212,36 @@ struct SettingsView: View {
             self.agentChatsTab = agentChatsTab
         }
         selection = target.page
+        if SettingsNavigation.requiresReveal(target.page, profile: usageProfile) {
+            revealAgentPages = true
+        }
+    }
+
+    /// Diktat-Profile sehen die Agent-Chats-Seiten nicht in der Hauptliste — hier kommen sie zurück.
+    private var revealAgentPagesButton: some View {
+        Button {
+            revealAgentPages.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: revealAgentPages ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 18)
+                Text(revealAgentPages ? "Hide Agent Chats settings" : "Show Agent Chats settings")
+                    .font(.system(size: 12))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(AppTheme.textSecondary)
+            .padding(.horizontal, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func sidebarSection(_ group: SettingsPageGroup) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(group.title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+            Text(LocalizedStringKey(group.title))
+                .textCase(.uppercase)
+                .font(.system(size: 11, weight: .semibold))
                 .tracking(0.7)
                 .foregroundStyle(AppTheme.textTertiary)
                 .padding(.horizontal, 8)
@@ -277,6 +320,10 @@ struct SettingsView: View {
             AboutSettingsPage()
         case .output:
             outputPage(page)
+        case .voiceGate:
+            VoiceGateSettingsPage()
+        case .jarvis:
+            JarvisCalloutsSettingsPage()
         }
     }
 

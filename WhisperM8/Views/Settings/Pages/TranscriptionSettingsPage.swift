@@ -94,8 +94,10 @@ struct TranscriptionSettingsPage: View {
             SettingsSection("Provider") {
                 TranscriptionProviderSegmentedRow(
                     provider: providerBinding,
-                    options: TranscriptionProvider.selectableProviders(
-                        chatGPTAvailable: chatGPTTranscriptionEnabled
+                    options: TranscriptionProvider.settingsOptions(
+                        killSwitchEnabled: chatGPTTranscriptionEnabled,
+                        backendEnabled: gptBackendEnabled,
+                        stored: TranscriptionProvider(rawValue: selectedProviderRaw) ?? .groq
                     )
                 )
 

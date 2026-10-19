@@ -28,7 +28,7 @@ struct SettingsHelpText: View {
     }
 
     var body: some View {
-        Text(text)
+        Text(settingsLocalized: text)
             .font(.system(size: 11.5))
             .lineSpacing(2)
             .foregroundStyle(tone.color)

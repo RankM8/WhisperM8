@@ -24,6 +24,6 @@ struct SettingsTextArea: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .stroke(AppTheme.border, lineWidth: 1)
             }
-            .accessibilityLabel(Text(title ?? "Text area"))
+            .accessibilityLabel(Text(settingsLocalized: title ?? "Text area"))
     }
 }

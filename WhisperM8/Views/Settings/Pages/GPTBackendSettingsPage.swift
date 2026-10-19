@@ -54,6 +54,8 @@ struct GPTBackendSettingsPage: View {
             title: "GPT-Backend",
             subtitle: "Claude Code mit GPT-Modellen über den lokalen claude-code-proxy verwenden."
         ) {
+            SettingsLabsNotice("Unofficial upstream: Claude Code talks to GPT models through a local proxy. It can break whenever the upstream changes. Off by default.")
+
             SettingsSection("Aktivierung") {
                 SettingsToggleRow(
                     title: "GPT-Backend aktivieren",

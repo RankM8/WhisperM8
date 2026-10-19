@@ -49,11 +49,11 @@ struct SettingsPageContainer<Content: View>: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(AppTheme.textPrimary)
 
-            Text(subtitle)
+            Text(settingsLocalized: subtitle)
                 .font(.system(size: 13))
                 .foregroundStyle(AppTheme.textSecondary)
         }

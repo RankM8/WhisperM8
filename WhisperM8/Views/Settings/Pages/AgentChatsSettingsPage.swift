@@ -8,7 +8,6 @@ import UserNotifications
 enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
     case workspace
     case notifications
-    case voiceAgent
     case advanced
 
     var title: String {
@@ -17,8 +16,6 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
             return "Workspace"
         case .notifications:
             return "Notifications"
-        case .voiceAgent:
-            return "Codex Voice Agent"
         case .advanced:
             return "Advanced"
         }
@@ -55,8 +52,6 @@ struct AgentChatsSettingsPage: View {
             AgentChatsWorkspaceSettingsTab()
         case .notifications:
             AgentChatsNotificationsSettingsTab()
-        case .voiceAgent:
-            AgentChatsVoiceAgentTab()
         case .advanced:
             AgentChatsAdvancedSettingsTab()
         }
@@ -420,9 +415,18 @@ private struct NotificationFeedback {
 private struct AgentChatsAdvancedSettingsTab: View {
     @AppStorage(PreferenceKeys.claudeExtraArguments) private var claudeExtraArguments = ""
     @AppStorage(PreferenceKeys.codexExtraArguments) private var codexExtraArguments = ""
+    @AppStorage(PreferenceKeys.gridAutoCompactEnabled) private var gridAutoCompact = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            SettingsSection("Grid") {
+                SettingsToggleRow(
+                    title: "Close gaps when a chat leaves the grid",
+                    subtitle: "The remaining chats move up and the grid shrinks to the smallest layout that fits. Off: the empty slot and the layout stay, so every chat keeps its position.",
+                    isOn: $gridAutoCompact
+                )
+            }
+
             SettingsSection("Advanced") {
                 cliArgumentsField(
                     title: "Claude CLI · extra arguments",

@@ -9,6 +9,7 @@ struct AgentChatsVoiceAgentTab: View {
     @AppStorage(PreferenceKeys.codexVoiceGateEnabled) private var voiceGateEnabled = false
     @AppStorage(PreferenceKeys.codexVoiceGateDryRun) private var dryRun = true
     @AppStorage(PreferenceKeys.codexVoiceGateSoundEnabled) private var soundEnabled = true
+    @AppStorage(PreferenceKeys.codexVoiceGateSoundName) private var soundName = "Tink"
 
     @AppStorage(PreferenceKeys.codexVoiceGateCarrier) private var carrier = VoiceGateVocabulary.default.carrier
     @AppStorage(PreferenceKeys.codexVoiceGateMuteWord) private var muteWord = VoiceGateVocabulary.default.muteCommand
@@ -83,6 +84,19 @@ struct AgentChatsVoiceAgentTab: View {
                     subtitle: "Short confirmation tone whenever the code word takes effect.",
                     isOn: $soundEnabled
                 )
+
+                if soundEnabled {
+                    SettingsPickerRow(
+                        title: "Sound",
+                        selection: $soundName,
+                        options: SystemSoundCatalog.availableSoundNames()
+                    ) { name in
+                        Text(verbatim: name)
+                    }
+                    .onChange(of: soundName) { _, newValue in
+                        SystemSoundCatalog.play(newValue)
+                    }
+                }
             } else {
                 SettingsHelpText(
                     "Off: WhisperM8 does not touch the microphone, and the code words are ignored.",
