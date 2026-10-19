@@ -17,7 +17,8 @@
 # Hotkeys, kein Dock-Icon, nie Fokus. Sicher aus einem WhisperM8-Chat: kein
 # `make kill`, nie ein Prozess außerhalb von $APP.
 #
-# WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster.
+# WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster
+# (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -65,8 +66,11 @@ cmd_start() {
     mkdir -p "$ROOT/home"
     seed_defaults
     local env_args=(--env "WHISPERM8_INSTANCE_ROOT=$ROOT")
-    [[ "${WHISPERM8_TEST_VISIBLE:-}" == "1" ]] && env_args+=(--env "WHISPERM8_TEST_VISIBLE=1")
-    open -n -g -j "${env_args[@]}" --stdout "$LOG" --stderr "$LOG" "$APP"
+    [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && env_args+=(--env "WHISPERM8_TEST_VISIBLE=$WHISPERM8_TEST_VISIBLE")
+    # Versteckt starten (-j), außer die Fenster sollen sichtbar sein.
+    local hide=(-j)
+    [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && hide=()
+    open -n -g ${hide[@]+"${hide[@]}"} "${env_args[@]}" --stdout "$LOG" --stderr "$LOG" "$APP"
     for _ in $(seq 1 50); do
         if cmd_cli debug state >/dev/null 2>&1; then echo "✅ Test-Instanz läuft (PID $(pids | tr '\n' ' '))"; return 0; fi
         sleep 0.2
@@ -84,7 +88,9 @@ cmd_stop() {
 }
 
 cmd_cli() {
-    WHISPERM8_INSTANCE_ROOT="$ROOT" "$BIN" "$@"
+    # Ohne die Session-Identität des aufrufenden Produktiv-Chats: die
+    # Test-Instanz kennt dessen Token nicht und lehnt mutierende Befehle sonst ab.
+    env -u WHISPERM8_SESSION_ID -u WHISPERM8_SESSION_TOKEN WHISPERM8_INSTANCE_ROOT="$ROOT" "$BIN" "$@"
 }
 
 cmd_status() {

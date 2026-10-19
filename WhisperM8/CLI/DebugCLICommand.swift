@@ -10,6 +10,7 @@ enum DebugCLIArguments: Equatable {
     case snapshot(window: String?, outputDir: String?)
     case dictate(audioPath: String, provider: String?, language: String?, timeoutSeconds: Int)
     case job(id: String)
+    case status(ref: String, status: String)
 
     static let defaultDictateTimeout = 300
 
@@ -69,6 +70,11 @@ enum DebugCLIArguments: Equatable {
         case "job":
             guard rest.count == 1 else { throw ParseError.usage("job braucht eine Auftrags-ID") }
             return .job(id: rest[0])
+        case "status":
+            guard rest.count == 2, AgentSessionRuntimeStatus(rawValue: rest[1]) != nil else {
+                throw ParseError.usage("status braucht <ref> <working|awaitingInput|idle|errored|stopped>")
+            }
+            return .status(ref: rest[0], status: rest[1])
         default:
             throw ParseError.usage("Unbekannter debug-Befehl: \(command)")
         }
@@ -93,6 +99,9 @@ enum DebugCLICommand {
               [--provider groq|openai|chatgpt] [--language de|en|auto] [--timeout <s>]
                                     ohne Einfügen, ohne Zwischenablage, ohne Nachbearbeitung
       job <id>                      Stand eines Diktat-Auftrags
+      status <ref> <status>         Laufzeitstatus eines Chats nur für die Anzeige setzen
+                                    (working|awaitingInput|idle|errored|stopped) — UI-Tests
+                                    von Status-Punkten; der nächste echte Wechsel überschreibt ihn
 
     Ausgabe: JSON auf stdout. Exit: 0 ok, 1 Aufruf/Parameter, 3 nicht gefunden,
     4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.
@@ -125,6 +134,8 @@ enum DebugCLICommand {
             return call("debug.snapshot", params)
         case .job(let id):
             return call("debug.job", ["jobID": id])
+        case .status(let ref, let status):
+            return call("debug.status", ["ref": ref, "status": status])
         case .dictate(let audioPath, let provider, let language, let timeout):
             var params: [String: Any] = ["audioPath": audioPath]
             if let provider { params["provider"] = provider }

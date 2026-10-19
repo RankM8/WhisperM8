@@ -26,7 +26,22 @@ enum TestInstanceWindowParking {
     private static var lastForeignFrontmost: NSRunningApplication?
 
     static func installIfNeeded(environment: [String: String] = ProcessInfo.processInfo.environment) {
-        guard AppInstance.isTestInstance, environment["WHISPERM8_TEST_VISIBLE"] != "1", observers.isEmpty else { return }
+        guard AppInstance.isTestInstance, observers.isEmpty else { return }
+        // `front`: Fenster schwebend vor allen anderen (kurze Sichttests, etwa
+        // ob eine Animation läuft — verdeckte Fenster pausieren sie), weiter ohne Fokus.
+        if environment["WHISPERM8_TEST_VISIBLE"] == "front" {
+            observers.append(NotificationCenter.default.addObserver(
+                forName: NSApplication.didUpdateNotification, object: nil, queue: .main
+            ) { _ in
+                MainActor.assumeIsolated {
+                    for window in NSApp.windows where window.level == .normal && window.isVisible {
+                        window.level = .floating
+                    }
+                }
+            })
+            return
+        }
+        guard environment["WHISPERM8_TEST_VISIBLE"] != "1" else { return }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ownPID {
             lastForeignFrontmost = front

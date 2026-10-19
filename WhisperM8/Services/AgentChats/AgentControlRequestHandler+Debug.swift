@@ -10,7 +10,7 @@ import ScreenCaptureKit
 /// als Auftrag im Hintergrund (10-s-Fenster des Sockets).
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
-        "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job",
+        "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -21,6 +21,7 @@ extension AgentControlRequestHandler {
             case "debug.open": response = await debugOpen(request)
             case "debug.snapshot": response = await debugSnapshot(request)
             case "debug.dictate": response = debugDictate(request)
+            case "debug.status": response = await debugStatus(request)
             default: response = debugJob(request)
             }
         } else {
@@ -32,6 +33,29 @@ extension AgentControlRequestHandler {
                         target: nil, outcome: response.ok ? "ok" : (response.error?.code ?? "error"), prompt: nil)
         }
         return response
+    }
+
+    // MARK: status
+
+    /// Setzt nur den angezeigten Laufzeitstatus (Status-Punkte prüfen, ohne
+    /// einen echten arbeitenden Chat). Der nächste echte Wechsel überschreibt ihn.
+    private func debugStatus(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        guard let ref = request.params["ref"]?.stringValue?.lowercased(), !ref.isEmpty,
+              let raw = request.params["status"]?.stringValue,
+              let status = AgentSessionRuntimeStatus(rawValue: raw) else {
+            return .failure(requestID: request.requestID, code: .invalid, message: "ref und status nötig")
+        }
+        let matched: UUID? = await MainActor.run {
+            let ids = AgentWorkspaceUIModel.shared.workspace.sessions.map(\.id)
+                .filter { $0.uuidString.lowercased().hasPrefix(ref) }
+            guard ids.count == 1, let id = ids.first else { return nil }
+            AgentSessionStatusCoordinator.shared.statusStore.setStatus(status, for: id)
+            return id
+        }
+        guard let matched else {
+            return .failure(requestID: request.requestID, code: .notFound, message: "Kein eindeutiger Chat für \(ref)")
+        }
+        return .success(requestID: request.requestID, result: .object(["session": matched.uuidString, "status": raw]))
     }
 
     // MARK: state

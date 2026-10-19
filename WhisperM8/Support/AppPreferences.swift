@@ -431,6 +431,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentStatusPulseEnabled) }
     }
 
+    /// Sanfter Status-Puls über Core Animation (seit 19.10.2026, Default an):
+    /// läuft im Render-Server mit gedrosselter Bildrate, ohne SwiftUI-Layout
+    /// pro Frame. Kill-Switch:
+    /// `defaults write com.whisperm8.app agentStatusSoftPulseEnabled -bool NO`
+    /// (wirkt nach Neustart).
+    var isAgentStatusSoftPulseEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentStatusSoftPulseEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentStatusSoftPulseEnabled) }
+    }
+
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
     /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
     /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
@@ -924,6 +934,7 @@ enum PreferenceKeys {
     static let agentTerminalMetalEnabled = "agentTerminalMetalEnabled"
     static let agentPerfDetailEnabled = "agentPerfDetailEnabled"
     static let agentStatusPulseEnabled = "agentStatusPulseEnabled"
+    static let agentStatusSoftPulseEnabled = "agentStatusSoftPulseEnabled"
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"
     static let claudeHooksEnabled = "claudeHooksEnabled"

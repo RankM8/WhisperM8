@@ -23,6 +23,8 @@ import SwiftUI
 enum AgentStatusPulse {
     /// Einmal pro Prozess gelesen (Schalter wirkt nach Neustart).
     static let continuousEnabled: Bool = AppPreferences().isAgentStatusPulseEnabled
+    /// Sanfter Puls über Core Animation (`SoftPulseRing`), Default an.
+    static let softEnabled: Bool = AppPreferences().isAgentStatusSoftPulseEnabled
 
     /// Pur: bewegt sich der Halo dauerhaft?
     static func isContinuous(switchEnabled: Bool) -> Bool { switchEnabled }
@@ -111,10 +113,20 @@ private struct PulsingDot: View {
 
     var body: some View {
         ZStack {
-            ring
-                .frame(width: core, height: core)
-                .scaleEffect(ringScale)
-                .opacity(ringOpacity)
+            if !continuous, AgentStatusPulse.softEnabled {
+                // Sanfter Puls im Render-Server statt SwiftUI-Animation
+                // (siehe `SoftPulseRing`) — gleiche Form wie der alte Puls.
+                SoftPulseRing(
+                    color: NSColor(color), maxScale: maxScale, duration: duration * 1.3,
+                    filled: filledRing, startOpacity: filledRing ? 0.45 : 0.65)
+                    .frame(width: core, height: core)
+                    .allowsHitTesting(false)
+            } else {
+                ring
+                    .frame(width: core, height: core)
+                    .scaleEffect(ringScale)
+                    .opacity(ringOpacity)
+            }
             Circle()
                 .fill(color)
                 .frame(width: core, height: core)

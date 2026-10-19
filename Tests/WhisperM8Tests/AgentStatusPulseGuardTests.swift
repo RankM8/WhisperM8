@@ -52,3 +52,33 @@ final class AgentStatusPulseGuardTests: XCTestCase {
         XCTAssertTrue(context.contains("AgentStatusPulse.continuousEnabled"))
     }
 }
+
+/// Sanfter Puls über Core Animation (19.10.2026): bewegt sich, ohne SwiftUI pro
+/// Frame neu auszuwerten — gedrosselt, pausiert verdeckt, respektiert
+/// „Bewegung reduzieren“.
+@MainActor
+final class SoftPulseRingTests: XCTestCase {
+    func testSoftPulseIsDefaultOnWithKillSwitch() throws {
+        let suite = "whisperm8-softpulse-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = AppPreferences(defaults: defaults)
+        XCTAssertTrue(prefs.isAgentStatusSoftPulseEnabled)
+        defaults.set(false, forKey: "agentStatusSoftPulseEnabled")
+        XCTAssertFalse(prefs.isAgentStatusSoftPulseEnabled)
+    }
+
+    func testAnimationIsThrottledAndRepeatsInRenderServer() {
+        let style = SoftPulseRingView.Style(color: .systemGreen, maxScale: 2.7, duration: 2.7, filled: true, startOpacity: 0.45)
+        let animation = SoftPulseRingView.makeAnimation(style)
+        XCTAssertEqual(animation.repeatCount, .infinity)
+        XCTAssertLessThanOrEqual(animation.preferredFrameRateRange.maximum, 15)
+        XCTAssertEqual(animation.duration, 2.7)
+    }
+
+    func testPausesWhenHiddenOrReduceMotion() {
+        XCTAssertTrue(SoftPulseRingView.shouldAnimate(windowVisible: true, reduceMotion: false))
+        XCTAssertFalse(SoftPulseRingView.shouldAnimate(windowVisible: false, reduceMotion: false))
+        XCTAssertFalse(SoftPulseRingView.shouldAnimate(windowVisible: true, reduceMotion: true))
+    }
+}
