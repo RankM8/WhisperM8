@@ -30,7 +30,8 @@ enum AccountMoveFacts {
                 guard let externalID = session.externalSessionID, !externalID.isEmpty,
                       let cwd = cwd(for: session, projects: projects) else { return false }
                 return profiles.transcriptConflictExists(
-                    externalSessionID: externalID, cwd: cwd, toProfile: target
+                    externalSessionID: externalID, cwd: cwd, toProfile: target,
+                    origin: .profile(session.claudeProfileName)
                 )
             }()
             return AccountMovePlanner.Candidate(

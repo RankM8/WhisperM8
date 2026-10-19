@@ -602,6 +602,29 @@ struct ClaudeAccountProfiles {
         )
     }
 
+    /// Woher der Chat kommt. `.profile(nil)` = main. Mit bekanntem Herkunftskonto
+    /// ist DESSEN Root die Quelle — die globale Suche (main zuerst) hielte sonst
+    /// eine ältere Kopie im Ziel für die Quelle und verschleierte den Konflikt
+    /// als No-op (LR-KO-008).
+    enum TranscriptOrigin: Equatable {
+        case unknown
+        case profile(String?)
+    }
+
+    /// Quelle des Transcripts: zuerst im Herkunftskonto (falls bekannt), sonst
+    /// über alle Roots wie `locateTranscript`.
+    private func resolveSource(externalSessionID: String, cwd: String, origin: TranscriptOrigin) -> URL? {
+        if case .profile(let name) = origin {
+            let root = configDir(forProfile: name ?? Self.mainProfileName)
+                .appendingPathComponent("projects", isDirectory: true)
+            if let found = AgentTranscriptLocator.locateClaude(
+                externalSessionID: externalSessionID, cwd: cwd, roots: [root], fileManager: fileManager) {
+                return found
+            }
+        }
+        return locateTranscript(externalSessionID: externalSessionID, cwd: cwd)
+    }
+
     /// Liegt im Ziel-Root schon eine Datei (oder ein Subagent-Ordner) mit
     /// dieser Session-ID? Reine Vorschau-Pruefung fuer den Umzugs-Planer —
     /// `moveTranscript` prueft vor der Bewegung erneut, weil zwischen Vorschau
@@ -609,10 +632,11 @@ struct ClaudeAccountProfiles {
     func transcriptConflictExists(
         externalSessionID: String,
         cwd: String,
-        toProfile targetName: String?
+        toProfile targetName: String?,
+        origin: TranscriptOrigin = .unknown
     ) -> Bool {
         let target = targetName ?? Self.mainProfileName
-        let source = locateTranscript(externalSessionID: externalSessionID, cwd: cwd)
+        let source = resolveSource(externalSessionID: externalSessionID, cwd: cwd, origin: origin)
         let targetDir = configDir(forProfile: target)
             .appendingPathComponent("projects", isDirectory: true)
             .appendingPathComponent(
@@ -641,7 +665,8 @@ struct ClaudeAccountProfiles {
     func moveTranscript(
         externalSessionID: String,
         cwd: String,
-        toProfile targetName: String?
+        toProfile targetName: String?,
+        origin: TranscriptOrigin = .unknown
     ) throws -> Bool {
         let target = targetName ?? Self.mainProfileName
         guard target == Self.mainProfileName
@@ -655,7 +680,7 @@ struct ClaudeAccountProfiles {
         // stimmt auch dann, wenn unsere Kodierung einmal abweicht (vorher
         // meldete der Umzug dann „kein Transcript", die Session wurde trotzdem
         // umgestempelt, und das Fortsetzen scheiterte).
-        guard let sourceFile = locateTranscript(externalSessionID: externalSessionID, cwd: cwd) else {
+        guard let sourceFile = resolveSource(externalSessionID: externalSessionID, cwd: cwd, origin: origin) else {
             return false
         }
         let targetDir = configDir(forProfile: target)

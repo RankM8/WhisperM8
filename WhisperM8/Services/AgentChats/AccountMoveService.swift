@@ -82,7 +82,8 @@ struct AccountMoveService {
                     movedTranscript = try profiles.moveTranscript(
                         externalSessionID: externalID,
                         cwd: move.cwd,
-                        toProfile: move.toProfile
+                        toProfile: move.toProfile,
+                        origin: .profile(move.fromProfile)
                     )
                 }
                 try store.setClaudeSessionProfile(id: move.sessionID, profileName: move.toProfile)

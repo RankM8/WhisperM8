@@ -363,4 +363,25 @@ final class ClaudeTranscriptMoveTests: XCTestCase {
             externalSessionID: "sess-7", cwd: cwd, toProfile: "ai3"
         ))
     }
+
+    /// LR-KO-008: Alte Kopie in main, aktuelle im Herkunftskonto — der Umzug nach
+    /// main darf nicht als No-op durchgehen und danach umstempeln.
+    func testStaleCopyInTargetIsReportedAsConflictWhenOriginKnown() throws {
+        try writeTranscript("sess-8", in: "main", contents: "alt")
+        let current = try writeTranscript("sess-8", in: "ai3", contents: "aktuell")
+
+        XCTAssertTrue(profiles.transcriptConflictExists(
+            externalSessionID: "sess-8", cwd: cwd, toProfile: nil, origin: .profile("ai3")))
+        XCTAssertThrowsError(try profiles.moveTranscript(
+            externalSessionID: "sess-8", cwd: cwd, toProfile: nil, origin: .profile("ai3")))
+        XCTAssertEqual(try String(contentsOf: current, encoding: .utf8), "aktuell", "Quelle bleibt unberührt")
+    }
+
+    func testMoveToMainFromProfileWithOriginMovesTheCurrentFile() throws {
+        try writeTranscript("sess-9", in: "ai3", contents: "aktuell")
+        XCTAssertTrue(try profiles.moveTranscript(
+            externalSessionID: "sess-9", cwd: cwd, toProfile: nil, origin: .profile("ai3")))
+        let target = projectsDir("main").appendingPathComponent("sess-9.jsonl")
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "aktuell")
+    }
 }
