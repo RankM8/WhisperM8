@@ -55,6 +55,10 @@ final class RecordingCoordinator {
 
     var recordingStartTime: Date?
     private(set) var isProcessing = false
+    /// Schon gestoppte Datei, solange der Stop noch auf den Kontext-Capture
+    /// wartet (bis 1 s). Ein Cmd+Q in diesem Fenster rettet sie darüber —
+    /// der Recorder liefert dann keine URL mehr (Review W2a zu LR-DIK-001/018).
+    var stoppedAudioAwaitingContext: (url: URL, duration: TimeInterval)?
     var escKeyMonitor: Any?
     var contextSourceApp: NSRunningApplication?
     var screenClipLimitTask: Task<Void, Never>?
@@ -333,6 +337,7 @@ final class RecordingCoordinator {
         // er erst, wenn der Transkriptions-Task durch ist.
         let audioURL = audioStopper.stopRecording()
         recordingStartTime = nil
+        stoppedAudioAwaitingContext = audioURL.map { ($0, audioDuration) }
 
         if appState.isScreenClipRecording {
             await stopScreenClipAndAttach()
@@ -343,6 +348,7 @@ final class RecordingCoordinator {
         // `appState.isRecording` bleibt dafür bis hierher true: der Merge
         // des Captures verlangt es.
         await waitForContextCapture(timeout: 1.0)
+        stoppedAudioAwaitingContext = nil
         // Abbruch (Cancel/ESC) in diesem kurzen Fenster: `cancelRecording()`
         // hat den Rest abgeräumt, die schon gestoppte Datei verwerfen wir hier.
         guard appState.isRecording else {

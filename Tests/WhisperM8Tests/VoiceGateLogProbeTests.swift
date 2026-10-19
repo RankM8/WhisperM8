@@ -79,6 +79,20 @@ final class VoiceGateLogProbeTests: XCTestCase {
         XCTAssertGreaterThan(reads.lastOffset, 0, "zweiter Lauf liest nur den Zuwachs")
     }
 
+    func testRotatedLargerFileIsReadFromScratch() throws {
+        let log = dayDirectory().appendingPathComponent("codex.log")
+        try String(repeating: "2026-10-19T09:00:00.000Z info nichts\n", count: 100).write(to: log, atomically: true, encoding: .utf8)
+        let probe = probe(reads: CountingReader())
+        XCTAssertNil(probe.lastRealtimeSessionStart())
+        // Neue Datei (anderer Inode), größer, Marker am Anfang.
+        let rotated = dayDirectory().appendingPathComponent("codex.tmp")
+        try ("2026-10-19T09:50:00.000Z info realtime_session_started\n"
+             + String(repeating: "2026-10-19T09:51:00.000Z info nichts\n", count: 300))
+            .write(to: rotated, atomically: true, encoding: .utf8)
+        _ = try FileManager.default.replaceItemAt(log, withItemAt: rotated)
+        XCTAssertEqual(probe.lastRealtimeSessionStart(), ISO8601DateFormatter().date(from: "2026-10-19T09:50:00Z"))
+    }
+
     func testNoActionWhenDisabledOrDictating() {
         XCTAssertTrue(VoiceGateCoordinator.mayAct(isEnabled: true, dictationActive: false))
         XCTAssertFalse(VoiceGateCoordinator.mayAct(isEnabled: false, dictationActive: false))

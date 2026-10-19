@@ -195,6 +195,7 @@ final class CodexVoiceLogScanner: @unchecked Sendable {
     private struct Entry {
         var size: UInt64
         var modified: Date?
+        var inode: UInt64?
         var newest: Date?
     }
 
@@ -212,19 +213,22 @@ final class CodexVoiceLogScanner: @unchecked Sendable {
               let rawSize = values.fileSize else { return nil }
         let size = UInt64(rawSize)
         let modified = values.contentModificationDate
+        // Eine rotierte, größere Datei ist kein Zuwachs der alten (Review W2a).
+        let inode = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.systemFileNumber] as? UInt64
 
         lock.lock()
         let cached = entries[url.path]
         lock.unlock()
 
-        if let cached, cached.size == size, cached.modified == modified {
+        let sameFile = cached?.inode == inode
+        if let cached, sameFile, cached.size == size, cached.modified == modified {
             return cached.newest
         }
 
         let tailStart = size > UInt64(Self.maxTailBytes) ? size - UInt64(Self.maxTailBytes) : 0
         var offset = tailStart
         var previous: Date?
-        if let cached, size > cached.size {
+        if let cached, sameFile, size > cached.size {
             offset = max(tailStart, cached.size > Self.overlapBytes ? cached.size - Self.overlapBytes : 0)
             previous = cached.newest
         }
@@ -234,7 +238,7 @@ final class CodexVoiceLogScanner: @unchecked Sendable {
         let newest = [previous, found].compactMap { $0 }.max()
 
         lock.lock()
-        entries[url.path] = Entry(size: size, modified: modified, newest: newest)
+        entries[url.path] = Entry(size: size, modified: modified, inode: inode, newest: newest)
         lock.unlock()
         return newest
     }

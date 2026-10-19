@@ -14,7 +14,8 @@ extension RecordingCoordinator {
         outputMode: OutputMode,
         contextBundle: TranscriptContextBundle,
         message: String,
-        logPrefix: String
+        logPrefix: String,
+        alertTitle: String = String(localized: "Transcription failed")
     ) {
         appState?.lastError = message
         Logger.debug(" \(logPrefix): \(message)")
@@ -28,7 +29,7 @@ extension RecordingCoordinator {
             errorMessage: message
         )
 
-        let wantsRetry = showTranscriptionFailureAlert(message: message, canRetry: preserved)
+        let wantsRetry = showTranscriptionFailureAlert(title: alertTitle, message: message, canRetry: preserved)
         if wantsRetry {
             // Eigener Task statt direktem Call: Der Aufrufer (stopRecording/
             // retryPendingTranscription) muss erst seinen State-Cleanup
@@ -96,14 +97,14 @@ extension RecordingCoordinator {
 
     /// Fehler-Alert mit Retry-Option. Gibt `true` zurück, wenn der User
     /// "Erneut versuchen" gewählt hat.
-    func showTranscriptionFailureAlert(message: String, canRetry: Bool) -> Bool {
+    func showTranscriptionFailureAlert(title: String, message: String, canRetry: Bool) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Transcription Failed"
+        alert.messageText = title
         alert.alertStyle = .warning
         if canRetry {
-            alert.informativeText = message + "\n\nDie Aufnahme wurde gesichert und kann erneut transkribiert werden."
-            alert.addButton(withTitle: "Erneut versuchen")
-            alert.addButton(withTitle: "Schließen")
+            alert.informativeText = message + "\n\n" + String(localized: "The recording was saved and can be transcribed again.")
+            alert.addButton(withTitle: String(localized: "Try again"))
+            alert.addButton(withTitle: String(localized: "Close"))
             return alert.runModal() == .alertFirstButtonReturn
         } else {
             alert.informativeText = message
@@ -167,10 +168,14 @@ extension RecordingCoordinator {
             screenClipLimitTask?.cancel()
             contextCaptureTask?.cancel()
             let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? appState.recordingDuration
-            if let audioURL = audioStopper.stopRecording() {
+            // Im Stop-Fenster ist der Recorder schon gestoppt und liefert nil;
+            // dann die dort gemerkte Datei retten.
+            let pending = stoppedAudioAwaitingContext
+            stoppedAudioAwaitingContext = nil
+            if let audioURL = audioStopper.stopRecording() ?? pending?.url {
                 preserveRecording(
                     audioURL: audioURL,
-                    audioDuration: duration,
+                    audioDuration: pending?.duration ?? duration,
                     outputMode: appState.selectedOutputMode,
                     contextBundle: appState.contextBundle,
                     errorMessage: message

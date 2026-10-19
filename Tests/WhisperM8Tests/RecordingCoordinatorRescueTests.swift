@@ -11,9 +11,9 @@ private final class RecordingTranscriptionService: TranscriptionServiceProtocol 
 }
 
 private final class RescueAudioStopSpy: AudioRecordingStopping {
-    let url: URL
+    let url: URL?
     var stopCount = 0
-    init(url: URL) { self.url = url }
+    init(url: URL?) { self.url = url }
     func stopRecording() -> URL? {
         stopCount += 1
         return url
@@ -156,6 +156,23 @@ final class RecordingCoordinatorRescueTests: XCTestCase {
         coordinator.prepareForTermination()
 
         XCTAssertEqual(store.list().count, 1)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audio.path))
+    }
+
+    /// Review W2a: Cmd+Q, während der Stop schon gestoppt hat und auf den
+    /// Kontext wartet — der Recorder liefert keine URL mehr.
+    func testPrepareForTerminationDuringStopWindowPreservesStoppedAudio() throws {
+        let audio = try makeAudio()
+        let store = FailedRecordingsStore(directoryURL: storeDir)
+        let coordinator = makeCoordinator(store: store)
+        coordinator.audioStopper = RescueAudioStopSpy(url: nil)
+        AppState.shared.isRecording = true
+        coordinator.stoppedAudioAwaitingContext = (audio, 12)
+
+        coordinator.prepareForTermination()
+
+        XCTAssertEqual(store.list().count, 1)
+        XCTAssertEqual(store.list().first?.metadata.audioDuration, 12)
         XCTAssertFalse(FileManager.default.fileExists(atPath: audio.path))
     }
 

@@ -111,9 +111,14 @@ extension RecordingCoordinator {
                     overlayController.hide()
                     // LR-DIK-007: kein Paste in eine fremde App — der Text liegt
                     // in der Zwischenablage, das sagt der Hinweis.
+                    // Ein Text für beide Fälle (keine Ziel-App gemerkt bzw.
+                    // Aktivierung gescheitert); `lastError` bleibt im Menü
+                    // sichtbar, falls Mitteilungen nicht erlaubt sind.
+                    let body = String(localized: "WhisperM8 couldn't bring the app you dictated into back to the front. Your text is on the clipboard – paste it with Cmd+V.")
+                    appState.lastError = body
                     DictationNotice.post(
-                        title: "Text nicht eingefügt",
-                        body: "Die Ziel-App ließ sich nicht aktivieren. Dein Text liegt in der Zwischenablage – füge ihn mit Cmd+V ein."
+                        title: String(localized: "Text not inserted"),
+                        body: body
                     )
                 }
             )

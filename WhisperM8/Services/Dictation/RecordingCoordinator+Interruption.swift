@@ -41,7 +41,8 @@ extension RecordingCoordinator {
         let reason = Self.userMessage(for: interruption)
         guard let audioURL else {
             overlayController.hide()
-            showErrorAlert(title: "Recording Interrupted", message: reason + " Es wurde noch kein Audio aufgenommen.")
+            showErrorAlert(title: String(localized: "Recording interrupted"),
+                           message: reason + " " + String(localized: "No audio had been recorded yet."))
             return
         }
 
@@ -50,19 +51,20 @@ extension RecordingCoordinator {
             audioDuration: audioDuration,
             outputMode: frozenOutputMode,
             contextBundle: frozenContextBundle,
-            message: reason + " Die bisherige Aufnahme wurde gesichert.",
-            logPrefix: "Recording interrupted"
+            message: reason,
+            logPrefix: "Recording interrupted",
+            alertTitle: String(localized: "Recording interrupted")
         )
     }
 
     private static func userMessage(for interruption: RecordingInterruption) -> String {
         switch interruption {
         case .deviceLost:
-            return "Das Mikrofon ist nicht mehr verfügbar, die Aufnahme wurde beendet."
+            return String(localized: "The microphone is no longer available, so the recording was stopped.")
         case .engineFailed:
-            return "Die Aufnahme konnte nach einem Gerätewechsel nicht fortgesetzt werden."
+            return String(localized: "The recording couldn't continue after the audio device changed.")
         case .writeFailed:
-            return "Die Aufnahme konnte nicht weiter gespeichert werden (Speicherplatz?)."
+            return String(localized: "The recording couldn't be saved any further (is the disk full?).")
         }
     }
 }
