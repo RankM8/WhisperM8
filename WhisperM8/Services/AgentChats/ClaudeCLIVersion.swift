@@ -45,35 +45,96 @@ struct ClaudeCLIVersion: Comparable, Equatable {
     }
 }
 
-/// Fragt `claude --version` ab und cached das Ergebnis (pfadbezogen, 10 min —
-/// Claude aktualisiert sich selbst).
+/// Fragt `claude --version` ab und cached das Ergebnis (10 min — Claude
+/// aktualisiert sich selbst).
+///
+/// Blockiert NIE: `installedVersion()` läuft im Launch-Pfad auf dem Main Thread
+/// (`prepareLaunchSettings`). Stale-while-revalidate: ein abgelaufener Wert wird
+/// sofort geliefert und im Hintergrund erneuert; ohne jeden Wert kommt `nil`
+/// (→ voller Hook-Satz, der sichere Weg) und der erste Abruf läuft im
+/// Hintergrund. Ein Fehlschlag (`nil`) wird nur kurz gecacht (LR-AK-035).
 final class ClaudeCLIVersionProbe: @unchecked Sendable {
-    static let shared = ClaudeCLIVersionProbe()
+    static let shared = ClaudeCLIVersionProbe(spawnEnabled: AppInstance.isAppBundleProcess)
 
     private let lock = NSLock()
-    private var cached: (path: String, version: ClaudeCLIVersion?, at: Date)?
-    private let ttl: TimeInterval = 600
+    private var cached: (version: ClaudeCLIVersion?, at: Date)?
+    private var refreshInFlight = false
+    private var loggedUnknown = false
+    private let ttl: TimeInterval
+    private let failureTTL: TimeInterval
+    private let spawnEnabled: Bool
+    private let versionRunner: () -> ClaudeCLIVersion?
+    private let dispatch: (@escaping @Sendable () -> Void) -> Void
+    private let now: () -> Date
 
-    /// Im Hintergrund vorwärmen, damit der erste Launch nicht auf den
-    /// Subprozess wartet.
-    func prewarm() {
-        DispatchQueue.global(qos: .utility).async { [self] in _ = installedVersion() }
+    /// - Parameter spawnEnabled: `false` in Tests und CLI-Prozessen — dort wird
+    ///   nie `claude --version` gestartet.
+    init(
+        spawnEnabled: Bool,
+        ttl: TimeInterval = 600,
+        failureTTL: TimeInterval = 30,
+        versionRunner: (() -> ClaudeCLIVersion?)? = nil,
+        dispatch: ((@escaping @Sendable () -> Void) -> Void)? = nil,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.spawnEnabled = spawnEnabled
+        self.ttl = ttl
+        self.failureTTL = failureTTL
+        self.versionRunner = versionRunner ?? {
+            guard let path = AgentCommandBuilder.commandPath("claude") else { return nil }
+            return Self.run(path)
+        }
+        self.dispatch = dispatch ?? { work in DispatchQueue.global(qos: .utility).async(execute: work) }
+        self.now = now
     }
 
-    func installedVersion() -> ClaudeCLIVersion? {
-        guard let path = AgentCommandBuilder.commandPath("claude") else { return nil }
-        lock.lock()
-        if let cached, cached.path == path, Date().timeIntervalSince(cached.at) < ttl {
-            lock.unlock()
-            return cached.version
-        }
-        lock.unlock()
+    /// Im Hintergrund vorwärmen, damit der erste Launch den Wert schon hat.
+    func prewarm() {
+        guard spawnEnabled else { return }
+        startRefreshIfNeeded()
+    }
 
-        let version = Self.run(path)
+    /// Nie blockierend. `nil` = (noch) unbekannt.
+    func installedVersion() -> ClaudeCLIVersion? {
+        guard spawnEnabled else { return nil }
         lock.lock()
-        cached = (path, version, Date())
+        let snapshot = cached
         lock.unlock()
-        return version
+        guard let snapshot else {
+            startRefreshIfNeeded()
+            logUnknownOnce()
+            return nil
+        }
+        let limit = snapshot.version == nil ? failureTTL : ttl
+        if now().timeIntervalSince(snapshot.at) >= limit {
+            startRefreshIfNeeded()
+        }
+        if snapshot.version == nil { logUnknownOnce() }
+        return snapshot.version
+    }
+
+    private func logUnknownOnce() {
+        lock.lock()
+        let first = !loggedUnknown
+        loggedUnknown = true
+        lock.unlock()
+        if first {
+            Logger.claudeBinding.notice("claude_version_unknown reason=not_yet_probed_using_full_hooks")
+        }
+    }
+
+    private func startRefreshIfNeeded() {
+        lock.lock()
+        if refreshInFlight { lock.unlock(); return }
+        refreshInFlight = true
+        lock.unlock()
+        dispatch { [self] in
+            let version = versionRunner()
+            lock.lock()
+            cached = (version, now())
+            refreshInFlight = false
+            lock.unlock()
+        }
     }
 
     private static func run(_ path: String) -> ClaudeCLIVersion? {

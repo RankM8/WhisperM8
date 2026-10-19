@@ -587,4 +587,52 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(ClaudeRegistryStatusSource.profile(forEventDirectory: link.path, in: map), "ai2")
         XCTAssertNil(ClaudeRegistryStatusSource.profile(forEventDirectory: "/nowhere", in: map))
     }
+
+    // MARK: - ClaudeCLIVersionProbe (LR-AK-035)
+
+    func testVersionProbeNeverBlocksAndRefreshesInBackground() {
+        var pending: [@Sendable () -> Void] = []
+        var runs = 0
+        var clock = Date()
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, ttl: 600, failureTTL: 30,
+            versionRunner: { runs += 1; return ClaudeCLIVersion(components: [2, 1, 310]) },
+            dispatch: { pending.append($0) },
+            now: { clock })
+        // Cache-Miss: sofort nil, Messung nur eingereiht (nicht synchron gelaufen).
+        XCTAssertNil(probe.installedVersion())
+        XCTAssertEqual(runs, 0)
+        XCTAssertNil(probe.installedVersion(), "zweiter Abruf startet keine zweite Messung")
+        pending.removeFirst()()
+        XCTAssertEqual(runs, 1)
+        XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 310])
+        // Abgelaufen: alter Wert sofort, Erneuerung im Hintergrund.
+        clock = clock.addingTimeInterval(601)
+        XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 310])
+        XCTAssertEqual(pending.count, 1)
+    }
+
+    func testVersionProbeCachesFailureOnlyBriefly() {
+        var pending: [@Sendable () -> Void] = []
+        var clock = Date()
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, ttl: 600, failureTTL: 30,
+            versionRunner: { nil }, dispatch: { pending.append($0) }, now: { clock })
+        _ = probe.installedVersion()
+        pending.removeFirst()()
+        XCTAssertNil(probe.installedVersion())
+        XCTAssertTrue(pending.isEmpty, "nil innerhalb von 30 s wird nicht neu gemessen")
+        clock = clock.addingTimeInterval(31)
+        _ = probe.installedVersion()
+        XCTAssertEqual(pending.count, 1, "nach 30 s wird das nil-Ergebnis erneuert")
+    }
+
+    func testDisabledVersionProbeNeverSpawns() {
+        var runs = 0
+        let probe = ClaudeCLIVersionProbe(spawnEnabled: false, versionRunner: { runs += 1; return nil },
+                                          dispatch: { $0() })
+        XCTAssertNil(probe.installedVersion())
+        probe.prewarm()
+        XCTAssertEqual(runs, 0)
+    }
 }
