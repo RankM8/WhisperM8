@@ -37,7 +37,7 @@ extension AgentChatsView {
                 plan.allowsBulk ? bulkLabel("Tab schließen", "%d Tabs schließen", for: session) : "Tab schließen",
                 systemImage: "xmark.square"
             ) {
-                if plan.allowsBulk { closeTabsInSelection(session) } else { closeTab(session) }
+                if plan.allowsBulk { closeTabsInSelection(session) } else { closeTabByUser(session) }
             }
         }
         if plan.showsWorkspaceRemovalHead, let removalWorkspace {

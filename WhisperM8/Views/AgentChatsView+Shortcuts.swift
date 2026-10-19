@@ -112,7 +112,7 @@ extension AgentChatsView {
         guard modifiers == .command,
               event.charactersIgnoringModifiers == "w" else { return event }
         guard let session = selectedSession else { return event }
-        closeTab(session)
+        closeTabByUser(session)
         return nil
     }
 

@@ -226,6 +226,12 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.isTabSwipeEnabled) }
     }
 
+    /// Der einmalige Hinweis „Chat läuft nach Tab-Schließen weiter" wurde gezeigt (LR-AU-024).
+    var tabCloseRunningNoticeShown: Bool {
+        get { boolWithDefault(false, forKey: Keys.tabCloseRunningNoticeShown) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.tabCloseRunningNoticeShown) }
+    }
+
     var isAutoChatRenameEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.isAutoChatRenameEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.isAutoChatRenameEnabled) }
@@ -896,6 +902,7 @@ enum PreferenceKeys {
     static let defaultAgentProvider = "defaultAgentProvider"
     static let isAutoChatRenameEnabled = "isAutoChatRenameEnabled"
     static let isTabSwipeEnabled = "isTabSwipeEnabled"
+    static let tabCloseRunningNoticeShown = "tabCloseRunningNoticeShown"
     static let isAutoSummaryEnabled = "isAutoSummaryEnabled"
     static let summaryStartupReconciliationEnabled = "summaryStartupReconciliationEnabled"
     static let isTerminalBellEnabled = "isTerminalBellEnabled"

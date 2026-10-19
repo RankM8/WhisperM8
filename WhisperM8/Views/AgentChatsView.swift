@@ -2747,11 +2747,11 @@ struct AgentChatsView: View {
                 handleTabClick(session.id)
             },
             onClose: {
-                closeTab(session)
+                closeTabByUser(session)
             }
         )
         // Mittelklick (Mausrad) schließt den Tab — wie im Browser.
-        .onMiddleClick { closeTab(session) }
+        .onMiddleClick { closeTabByUser(session) }
         .draggable(DraggableSession(
             sessionID: session.id,
             sourceProjectID: session.projectID,

@@ -375,7 +375,9 @@ struct ChatTabButton: View {
                 .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
                 .contentShape(Rectangle())
                 .onTapGesture { onClose() }
-                .help("Tab schließen")
+                .help(resolvedStatus?.isLive == true
+                      ? String(localized: "Close tab — the chat keeps running in the background")
+                      : "Tab schließen")
         } else {
             // Dieselbe Status-Sprache wie die Sidebar (grün nur bei „arbeitet").
             AgentStatusIndicator(status: resolvedStatus, compact: true)

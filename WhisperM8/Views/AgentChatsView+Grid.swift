@@ -1018,7 +1018,7 @@ extension AgentChatsView {
             let isProjectView = windowStore.gridWorkspace(id: workspaceID)?.sourceProjectID != nil
             Button {
                 if isProjectView {
-                    closeTab(session)
+                    closeTabByUser(session)
                 } else {
                     removeSessionFromWorkspace(session.id, workspaceID: workspaceID)
                 }

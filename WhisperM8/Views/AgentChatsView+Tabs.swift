@@ -95,6 +95,16 @@ extension AgentChatsView {
     /// und ein laufendes PTY läuft weiter (Status bleibt über den
     /// Sidebar-Dot sichtbar; erneutes Öffnen attached an denselben
     /// Terminal-Controller inkl. Scrollback).
+    /// Nutzer-Aktion „Tab schließen" (X, Mittelklick, ⌘W, Menü): schließt den Tab
+    /// und weist beim ersten Mal darauf hin, dass ein laufender Chat im
+    /// Hintergrund weiterläuft (LR-AU-024).
+    func closeTabByUser(_ session: AgentChatSession) {
+        let isRunning = terminalRegistry.controller(for: session.id)?.isRunning == true
+        let showNotice = TabCloseNotice.standard.consume(processRunning: isRunning)
+        closeTab(session)
+        if showNotice { TabCloseNotice.present() }
+    }
+
     func closeTab(_ session: AgentChatSession) {
         // Geschlossener Tab darf nicht in der Mehrfach-Auswahl zurückbleiben.
         multiSelection.remove(session.id)
