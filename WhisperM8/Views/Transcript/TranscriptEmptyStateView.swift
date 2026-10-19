@@ -99,7 +99,9 @@ struct TranscriptEmptyStateView: View {
     /// Der Text verwies früher immer auf „Resume“, auch wenn der Knopf „Start“
     /// hieß (LR-AU-029).
     static func launchButtonLabel(for session: AgentChatSession) -> String {
-        session.externalSessionID == nil ? "Start" : "Resume"
+        // Lokalisiert wie der Kopfzeilen-Button, sonst nennt der Text auf Deutsch
+        // „Start“, während der Button „Starten“ heißt.
+        ChatsUIStrings.startActionTitle(isRunning: false, hasExternalSession: session.externalSessionID != nil)
     }
 
     private var bannerSubtitle: String {

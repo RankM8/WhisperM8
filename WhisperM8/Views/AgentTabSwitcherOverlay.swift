@@ -118,11 +118,11 @@ struct AgentTabSwitcherOverlay: View {
     private var footer: some View {
         HStack(spacing: 8) {
             Text("\(sessions.count) Tabs")
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(AgentTheme.textSecondary)
             Spacer(minLength: 12)
             Text(TabSwitcherHint.list)
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.head)

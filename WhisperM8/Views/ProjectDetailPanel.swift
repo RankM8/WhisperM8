@@ -59,21 +59,21 @@ struct ProjectDetailPanel: View {
                 }
             }
             Spacer()
-            headerButton("arrow.clockwise", help: "Neu laden") { refreshToken += 1 }
-            headerButton("arrow.up.left.and.arrow.down.right", help: "Alles aufklappen") {
+            headerButton("arrow.clockwise", help: "Reload") { refreshToken += 1 }
+            headerButton("arrow.up.left.and.arrow.down.right", help: "Expand all") {
                 collapsedIDs = []
             }
-            headerButton("arrow.down.right.and.arrow.up.left", help: "Alles einklappen") {
+            headerButton("arrow.down.right.and.arrow.up.left", help: "Collapse all") {
                 collapsedIDs = GitChangesTreeBuilder.directoryIDs(in: stagedTree)
                     .union(GitChangesTreeBuilder.directoryIDs(in: unstagedTree))
             }
-            headerButton("chevron.left.forwardslash.chevron.right", help: "Projekt in PhpStorm öffnen", action: onOpenPHPStorm)
+            headerButton("chevron.left.forwardslash.chevron.right", help: "Open project in PhpStorm", action: onOpenPHPStorm)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
     }
 
-    private func headerButton(_ systemName: String, help: String, action: @escaping () -> Void) -> some View {
+    private func headerButton(_ systemName: String, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 11, weight: .medium))
@@ -91,14 +91,14 @@ struct ProjectDetailPanel: View {
     private var content: some View {
         if let snapshot {
             if !snapshot.isGitRepository {
-                emptyState(icon: "shippingbox", text: "Kein Git-Repository")
+                emptyState(icon: "shippingbox", text: "Not a Git repository")
             } else if snapshot.entries.isEmpty {
-                emptyState(icon: "checkmark.circle", text: "Clean — keine Änderungen")
+                emptyState(icon: "checkmark.circle", text: "Clean — no changes")
             } else {
                 changesTree(snapshot)
             }
         } else {
-            emptyState(icon: "hourglass", text: "Lade Git-Status…")
+            emptyState(icon: "hourglass", text: "Loading Git status…")
         }
     }
 
@@ -114,7 +114,7 @@ struct ProjectDetailPanel: View {
                     rows(for: unstagedTree)
                 }
                 if snapshot.truncated {
-                    Text("Liste bei \(GitChangesSnapshot.entryCap) Einträgen gekappt")
+                    Text("List capped at \(GitChangesSnapshot.entryCap) entries")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
@@ -129,7 +129,7 @@ struct ProjectDetailPanel: View {
         HStack(spacing: 6) {
             Text(title)
                 .font(.callout.weight(.semibold))
-            Text("\(count) file\(count == 1 ? "" : "s")")
+            Text(verbatim: ChatsUIStrings.fileCount(count))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -149,7 +149,7 @@ struct ProjectDetailPanel: View {
         }
     }
 
-    private func emptyState(icon: String, text: String) -> some View {
+    private func emptyState(icon: String, text: LocalizedStringKey) -> some View {
         VStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 22))
@@ -242,7 +242,7 @@ private struct GitChangesRowView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
-                Text("\(row.fileCount) file\(row.fileCount == 1 ? "" : "s")")
+                Text(verbatim: ChatsUIStrings.fileCount(row.fileCount))
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             } else {
@@ -272,9 +272,9 @@ private struct GitChangesRowView: View {
         }
         .contextMenu {
             if !row.isDirectory {
-                Button("In PhpStorm öffnen", action: onOpenFile)
+                Button("Open in PhpStorm", action: onOpenFile)
             }
-            Button("Pfad kopieren") {
+            Button("Copy path") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(row.relativePath, forType: .string)
             }

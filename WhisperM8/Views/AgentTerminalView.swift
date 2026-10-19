@@ -1141,8 +1141,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         case .notFound(let path):
             Logger.terminalSnapshot.debug("terminal_link_not_found path=\(path, privacy: .public)")
             Self.presentLinkAlert(
-                title: "Datei nicht gefunden",
-                message: "Das verlinkte Ziel existiert nicht (mehr):\n\(path)"
+                title: String(localized: "File not found"),
+                message: String(localized: "The linked target no longer exists:\n\(path)")
             )
         case .reject(let reason):
             // Bewusste Ablehnung (leerer/relativer-ohne-Basis/kaputter Link) —

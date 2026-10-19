@@ -28,12 +28,12 @@ struct SettingsListPanel<ID: Hashable>: View {
                     selection = item.id
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(item.title)
+                        Text(settingsLocalized: item.title)
                             .font(.system(size: 13, weight: item.id == selection ? .semibold : .regular))
                             .foregroundStyle(item.id == selection ? AppTheme.accent : AppTheme.textPrimary)
 
                         if let subtitle = item.subtitle {
-                            Text(subtitle)
+                            Text(settingsLocalized: subtitle)
                                 .font(.system(size: 11))
                                 .foregroundStyle(AppTheme.textTertiary)
                         }

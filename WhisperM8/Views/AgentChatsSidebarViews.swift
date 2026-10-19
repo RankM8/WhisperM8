@@ -240,7 +240,7 @@ struct ProjectChatGroup: View {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.down.circle")
                     .font(.system(size: 10, weight: .semibold))
-                Text("\(hiddenCount) weitere anzeigen")
+                Text("Show \(hiddenCount) more")
                     .font(.system(size: 11, weight: .medium))
                 Spacer(minLength: 0)
             }
@@ -251,7 +251,7 @@ struct ProjectChatGroup: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Weitere Sessions dieses Projekts einblenden")
+        .help("Show more sessions of this project")
     }
 
     /// Fuß-Zeile unter den aktiven Subagent-Kindern: zählt die verborgenen
@@ -276,8 +276,8 @@ struct ProjectChatGroup: View {
             HStack(spacing: 7) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 6.5, weight: .semibold))
-                Text("\(split.hidden.count) fertig")
-                    .font(.system(size: 9.5))
+                Text("\(split.hidden.count) done")
+                    .font(.system(size: 11))
                     .monospacedDigit()
                 if split.hiddenUnreadCount > 0 {
                     Circle()
@@ -296,9 +296,7 @@ struct ProjectChatGroup: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(split.hidden.count) fertige Subagents"
-            + (split.hiddenUnreadCount > 0 ? " · \(split.hiddenUnreadCount) ungelesen" : "")
-            + " — klicken zum \(isExpanded ? "Einklappen" : "Anzeigen")")
+        .help(SubagentFooterHelp.text(done: split.hidden.count, unread: split.hiddenUnreadCount, isExpanded: isExpanded))
     }
 
     /// Eingerückte Kind-Zeile eines Subagent-Jobs. Bewusst OHNE Drag&Drop
@@ -420,7 +418,7 @@ struct ProjectChatGroup: View {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 8))
                     Text(project.lastBranch ?? "local")
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 11))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -443,10 +441,10 @@ struct ProjectChatGroup: View {
                     .buttonStyle(.plain)
                     .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
                     .help(isWorkspaceOpen
-                        ? "Projekt-Grid wieder anzeigen"
+                        ? String(localized: "Show project grid again")
                         : canOpenAsWorkspace
-                            ? "Projekt als Workspace öffnen (Live-Grid der aktiven Chats)"
-                            : "Keine aktiven Chats in diesem Projekt")
+                            ? String(localized: "Open project as workspace (live grid of the active chats)")
+                            : String(localized: "No active chats in this project"))
                     if isHeaderHovered {
                         Button(action: onNewChat) {
                             Image(systemName: "plus")
@@ -456,20 +454,20 @@ struct ProjectChatGroup: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help("Neuen Codex Chat im Projekt starten")
+                        .help("Start a new Codex chat in the project")
                     } else if let workspaceOccupancyLabel {
                         Text(workspaceOccupancyLabel)
-                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
                             .foregroundStyle(AgentTheme.accent)
-                            .help("Das Grid zeigt \(workspaceOccupancyLabel) aktive Chats — Endstufe 3×3 erreicht")
+                            .help("The grid shows \(workspaceOccupancyLabel) active chats — final stage 3×3 reached")
                     }
                 } else if let workspaceOccupancyLabel {
                     Text(workspaceOccupancyLabel)
-                        .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(AgentTheme.accent)
                 } else if !sessions.isEmpty {
                     Text("\(sessions.count)")
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(AgentTheme.textTertiary)
                 }
             }
@@ -501,15 +499,15 @@ struct ProjectChatGroup: View {
             return true
         } isTargeted: { isSessionDragOver = $0 }
         .contextMenu {
-            Button("Als Workspace öffnen", systemImage: "square.grid.2x2") {
+            Button("Open as workspace", systemImage: "square.grid.2x2") {
                 onOpenAsWorkspace()
             }
             .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
             Divider()
-            Button("Umbenennen…", systemImage: "pencil") {
+            Button("Rename…", systemImage: "pencil") {
                 onRenameProjectRequest(project)
             }
-            Menu("Farbe") {
+            Menu("Color") {
                 ForEach(AgentProjectColor.palette, id: \.self) { color in
                     Button {
                         onSetProjectColor(project.id, color)
@@ -523,21 +521,21 @@ struct ProjectChatGroup: View {
                 }
             }
             Divider()
-            Button("Icon wählen…", systemImage: "photo") {
+            Button("Choose icon…", systemImage: "photo") {
                 onChooseProjectIcon(project)
             }
-            Button("Auto-Icon erkennen", systemImage: "sparkles.rectangle.stack") {
+            Button("Detect icon automatically", systemImage: "sparkles.rectangle.stack") {
                 onAutoDetectProjectIcon(project)
             }
             if project.resolvedIconURL != nil
                 || project.iconRelativePath != nil
                 || project.customIconAbsolutePath != nil {
-                Button("Icon entfernen", systemImage: "xmark.circle", role: .destructive) {
+                Button("Remove icon", systemImage: "xmark.circle", role: .destructive) {
                     onClearProjectIcon(project.id)
                 }
             }
             Divider()
-            Button("Projekt löschen…", systemImage: "trash", role: .destructive) {
+            Button("Delete project…", systemImage: "trash", role: .destructive) {
                 onDeleteProject(project)
             }
         }
@@ -697,11 +695,11 @@ struct SubagentChildrenChip: View {
             if runningChildCount > 0 {
                 SubagentRoad(barCount: min(runningChildCount, 6))
                 Text("\(runningChildCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
                     .foregroundStyle(AgentTheme.statusWorking)
             } else {
                 Text("\(childCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
             }
             if erroredChildCount > 0 {
@@ -709,7 +707,7 @@ struct SubagentChildrenChip: View {
                     .fill(AgentTheme.statusError)
                     .frame(width: 2, height: 7)
                 Text("\(erroredChildCount)")
-                    .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                    .font(.system(size: 11, weight: .bold).monospacedDigit())
                     .foregroundStyle(AgentTheme.statusError)
             }
             if unreadChildCount > 0 {
@@ -732,14 +730,14 @@ struct SubagentChildrenChip: View {
     private var helpText: String {
         var parts: [String] = []
         if runningChildCount > 0 {
-            parts.append("\(runningChildCount) von \(childCount) Subagents laufen")
+            parts.append(String(localized: "\(runningChildCount) of \(childCount) subagents running"))
         } else {
-            parts.append("\(childCount) Subagents")
+            parts.append(String(localized: "\(childCount) subagents"))
         }
-        if erroredChildCount > 0 { parts.append("\(erroredChildCount) fehlgeschlagen") }
-        if unreadChildCount > 0 { parts.append("\(unreadChildCount) ungelesen") }
-        return parts.joined(separator: " · ")
-            + " — klicken zum \(isChildrenExpanded ? "Einklappen" : "Ausklappen")"
+        if erroredChildCount > 0 { parts.append(String(localized: "\(erroredChildCount) failed")) }
+        if unreadChildCount > 0 { parts.append(String(localized: "\(unreadChildCount) unread")) }
+        let action = isChildrenExpanded ? String(localized: "click to collapse") : String(localized: "click to expand")
+        return parts.joined(separator: " · ") + " — " + action
     }
 }
 
@@ -774,7 +772,7 @@ struct SessionListButton: View {
     /// Icon + Tooltip der Hover-Aktion rechts. Default = Archivieren; der
     /// Archiv-Modus der Sidebar nutzt dieselbe Row mit „Wiederherstellen".
     var closeIcon: String = "xmark"
-    var closeHelp: String = "Archivieren"
+    var closeHelp: String = String(localized: "Archive")
     /// Subagent-Kind unter seiner Parent-Row: stärkerer Einzug (44 statt 28)
     /// + SUB-Pill. Kinder haben kein Drag&Drop (macht der Aufrufer).
     var indentAsSubagent: Bool = false
@@ -851,13 +849,13 @@ struct SessionListButton: View {
 
                     if session.isBackgroundChat {
                         kindPill("BG", color: .indigo)
-                            .help("Hintergrund-Agent · vom Claude-Supervisor gehostet")
+                            .help("Background agent — runs independently of this window")
                     } else if session.isAgentView {
                         kindPill("VIEW", color: .orange)
-                            .help("Claude Agents View · Multi-Session-TUI")
+                            .help("Agent overview — Claude’s dashboard of all sessions")
                     } else if session.isSubagentJob {
                         kindPill("SUB", color: .teal)
-                            .help("Codex-Subagent · superviselt vom whisperm8-CLI")
+                            .help("Subagent — a helper chat started by another chat")
                     }
 
                     if childCount > 0 {
@@ -887,6 +885,10 @@ struct SessionListButton: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
+        // Zusammengefasstes VoiceOver-Element (Titel, Status) + Schließen-Aktion
+        // ohne Hover erreichbar (LR-AU-009).
+        .accessibilityLabel(AgentRowAccessibility.summary(title: session.title, status: resolvedStatus, project: nil))
+        .accessibilityAction(named: Text(verbatim: closeHelp)) { onClose() }
     }
 
     private var titleColor: Color {
@@ -897,19 +899,24 @@ struct SessionListButton: View {
     @ViewBuilder
     private var trailingIndicator: some View {
         if isHovered || isSelected {
-            Image(systemName: closeIcon)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .frame(width: 16, height: 16)
-                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
-                .contentShape(Rectangle())
-                .onTapGesture { onClose() }
-                .help(closeHelp)
+            // Echter Button statt Image + onTapGesture (LR-AU-009); dieselbe
+            // Aktion hängt zusätzlich als accessibilityAction an der Zeile.
+            Button(action: onClose) {
+                Image(systemName: closeIcon)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 16, height: 16)
+                    .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(closeHelp)
+            .help(closeHelp)
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(AgentTheme.textTertiary)
-                .help("Transkript von Claude gelöscht – nicht mehr resumebar")
+                .help("History deleted, can't be continued")
                 .accessibilityLabel(Text("History deleted, can't be continued"))
         } else {
             statusIndicator
@@ -924,7 +931,7 @@ struct SessionListButton: View {
             Image(systemName: "sparkles")
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(AgentTheme.accent)
-                .help("Titel wird automatisch generiert …")
+                .help("Title is being generated automatically …")
         } else if isUnreadSubagentResult, resolvedStatus == .idle || resolvedStatus == nil {
             // Fertiger Subagent-Job mit ungelesenem Ergebnis: blauer Dot
             // statt des grauen Idle-Punkts (View-Wissen — kein eigener
@@ -932,7 +939,7 @@ struct SessionListButton: View {
             Circle()
                 .fill(Color.blue)
                 .frame(width: 7, height: 7)
-                .help("Neues Subagent-Ergebnis — noch nicht angesehen")
+                .help("New subagent result — not viewed yet")
         } else {
             switch resolvedStatus {
             case .working, .awaitingInput, .idle, .errored:
@@ -940,7 +947,9 @@ struct SessionListButton: View {
             case .stopped, .none:
                 // Kein Live-Status → „zuletzt aktiv" statt Indikator.
                 Text(SidebarRelativeTime.short(session.lastActivityAt))
-                    .font(.system(size: 9.5))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(AgentTheme.textTertiary)
             }
@@ -978,7 +987,7 @@ struct SessionListButton: View {
     @ViewBuilder
     private func kindPill(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 8, weight: .bold))
+            .font(.system(size: 11, weight: .bold))
             .tracking(0.04)
             .foregroundStyle(color)
             .padding(.horizontal, 4)
@@ -1069,7 +1078,7 @@ struct PinnedSessionRow: View {
                     .foregroundStyle(isMissingTranscript ? AgentTheme.textTertiary : AgentTheme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .help(isMissingTranscript ? "Transkript von Claude gelöscht – nicht mehr resumebar" : session.title)
+                    .help(isMissingTranscript ? String(localized: "History deleted, can't be continued") : session.title)
 
                 if childCount > 0 {
                     SubagentChildrenChip(
@@ -1086,9 +1095,9 @@ struct PinnedSessionRow: View {
 
                 if let slotBadge {
                     Text(slotBadge)
-                        .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                        .font(.system(size: 11, weight: .bold).monospacedDigit())
                         .foregroundStyle(AgentTheme.accent)
-                        .help("Slot-Position im Workspace")
+                        .help("Slot position in the workspace")
                 }
 
                 trailingIndicator
@@ -1110,24 +1119,35 @@ struct PinnedSessionRow: View {
         .onHover { isHovered = $0 }
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .onReceive(statusStore.statusPublisher(for: session.id)) { liveStatus = $0 }
+        .accessibilityLabel(AgentRowAccessibility.summary(title: session.title, status: resolvedStatus, project: project?.name))
+        .accessibilityAction(named: Text(verbatim: resolvedCloseHelp)) { onClose() }
+    }
+
+    private var resolvedCloseHelp: String {
+        closeHelp ?? (session.isTerminal ? String(localized: "Close terminal") : String(localized: "Archive"))
     }
 
     @ViewBuilder
     private var trailingIndicator: some View {
-        if isHovered {
-            Image(systemName: closeIcon)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .frame(width: 16, height: 16)
-                .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
-                .contentShape(Rectangle())
-                .onTapGesture { onClose() }
-                .help(closeHelp ?? (session.isTerminal ? "Terminal schließen" : "Archivieren"))
+        if isHovered || isSelected {
+            // Echter Button statt Image + onTapGesture (LR-AU-009); dieselbe
+            // Aktion hängt zusätzlich als accessibilityAction an der Zeile.
+            Button(action: onClose) {
+                Image(systemName: closeIcon)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .frame(width: 16, height: 16)
+                    .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 3))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(resolvedCloseHelp)
+            .help(resolvedCloseHelp)
         } else if isMissingTranscript {
             Image(systemName: "questionmark.circle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(AgentTheme.textTertiary)
-                .help("Transkript von Claude gelöscht – nicht mehr resumebar")
+                .help("History deleted, can't be continued")
                 .accessibilityLabel(Text("History deleted, can't be continued"))
         } else {
             switch resolvedStatus {
@@ -1136,7 +1156,9 @@ struct PinnedSessionRow: View {
             case .stopped, .none:
                 // Kein Live-Status → „zuletzt aktiv" statt Indikator.
                 Text(SidebarRelativeTime.short(session.lastActivityAt))
-                    .font(.system(size: 9.5))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .font(.system(size: 11))
                     .monospacedDigit()
                     .foregroundStyle(AgentTheme.textTertiary)
             }

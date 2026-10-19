@@ -114,7 +114,7 @@ struct SubagentJobDetailView: View {
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
                 Text(headerSubtitle)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -126,31 +126,31 @@ struct SubagentJobDetailView: View {
                 Button {
                     stopJob()
                 } label: {
-                    Label("Stoppen", systemImage: "stop.circle")
+                    Label("Stop", systemImage: "stop.circle")
                         .font(.system(size: 11, weight: .medium))
                 }
-                .help("SIGTERM an den Supervisor — Turn sauber abbrechen")
+                .help("SIGTERM to the supervisor — end the turn cleanly")
             }
 
             if session.subagentParentSessionID != nil {
                 Button {
                     sendReportToParentChat()
                 } label: {
-                    Label("Report → Chat", systemImage: "arrowshape.turn.up.left")
+                    Label("Report → chat", systemImage: "arrowshape.turn.up.left")
                         .font(.system(size: 11, weight: .medium))
                 }
                 .disabled(report == nil && rawLastMessage == nil)
-                .help("Report als Prompt-Baustein in die Claude-Session einfügen, die diesen Subagent gespawnt hat (ohne automatisches Absenden)")
+                .help("Insert the report as a prompt snippet into the Claude session that spawned this subagent (without sending automatically)")
             }
 
             Button {
                 onTakeOver()
             } label: {
-                Label("Interaktiv übernehmen", systemImage: "terminal")
+                Label("Take over interactively", systemImage: "terminal")
                     .font(.system(size: 11, weight: .medium))
             }
             .disabled(snapshot == nil || snapshot?.isActive == true || snapshot?.state == .takenOver)
-            .help("Job dauerhaft als interaktiven Codex-Chat fortsetzen (exklusiv — `agent send` ist danach deaktiviert)")
+            .help("Continue the job permanently as an interactive Codex chat (exclusive — `agent send` is disabled afterwards)")
         }
     }
 
@@ -170,7 +170,7 @@ struct SubagentJobDetailView: View {
     private var statusPill: some View {
         let (label, color) = statusPillContent
         Text(label)
-            .font(.system(size: 9, weight: .bold))
+            .font(.system(size: 11, weight: .bold))
             .tracking(0.04)
             .foregroundStyle(color)
             .padding(.horizontal, 6)
@@ -182,13 +182,13 @@ struct SubagentJobDetailView: View {
 
     private var statusPillContent: (String, Color) {
         switch snapshot?.state {
-        case .spawning: return ("STARTET", .teal)
-        case .running: return ("ARBEITET", .teal)
-        case .done: return ("FERTIG", .green)
-        case .failed: return ("FEHLER", .red)
-        case .stopped: return ("GESTOPPT", .orange)
-        case .takenOver: return ("ÜBERNOMMEN", .indigo)
-        case nil: return ("KEIN JOB-STATE", .gray)
+        case .spawning: return (String(localized: "STARTING"), .teal)
+        case .running: return (String(localized: "WORKING"), .teal)
+        case .done: return (String(localized: "DONE"), .green)
+        case .failed: return (String(localized: "ERROR"), .red)
+        case .stopped: return (String(localized: "STOPPED"), .orange)
+        case .takenOver: return (String(localized: "TAKEN OVER"), .indigo)
+        case nil: return (String(localized: "NO JOB STATE"), .gray)
         }
     }
 
@@ -198,8 +198,8 @@ struct SubagentJobDetailView: View {
     @ViewBuilder
     private func mandateBlock(_ intent: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Text("Auftrag")
-                .font(.system(size: 9, weight: .bold))
+            Text("Task")
+                .font(.system(size: 11, weight: .bold))
                 .tracking(0.6)
                 .textCase(.uppercase)
                 .foregroundStyle(AgentTheme.textTertiary)
@@ -228,13 +228,13 @@ struct SubagentJobDetailView: View {
     private var resultCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Ergebnis")
-                    .font(.system(size: 10, weight: .bold))
+                Text("Result")
+                    .font(.system(size: 11, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(AgentTheme.textTertiary)
                 if let reportStatus = report?.status, snapshot?.isActive != true {
                     Text(reportStatus.rawValue.uppercased())
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(reportStatusColor(reportStatus))
                     reportSourceChip
                 }
@@ -244,7 +244,7 @@ struct SubagentJobDetailView: View {
                 Spacer(minLength: 0)
                 if let metrics = metricsLine {
                     Text(metrics)
-                        .font(.system(size: 9.5).monospacedDigit())
+                        .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(AgentTheme.textTertiary)
                 }
             }
@@ -257,7 +257,7 @@ struct SubagentJobDetailView: View {
                     Image(systemName: "keyboard")
                         .font(.system(size: 11))
                         .foregroundStyle(AgentTheme.textTertiary)
-                    Text("Interaktiv übernommen — dieser Job läuft jetzt als normaler Codex-Chat weiter. Composer und `agent send` sind deaktiviert; der Verlauf unten bleibt lesbar.")
+                    Text("Taken over interactively — this job now continues as a normal Codex chat. Composer and `agent send` are disabled; the history below stays readable.")
                         .font(.system(size: 11.5))
                         .foregroundStyle(AgentTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -270,8 +270,8 @@ struct SubagentJobDetailView: View {
                     .foregroundStyle(AgentTheme.statusError)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Der letzte Report bleibt unten im Verlauf sichtbar. Ein Folge-Prompt startet einen frischen Turn.")
-                    .font(.system(size: 10.5))
+                Text("The last report stays visible in the history below. A follow-up prompt starts a fresh turn.")
+                    .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
             } else if let report {
                 TranscriptMarkdownView(text: report.summary)
@@ -291,7 +291,7 @@ struct SubagentJobDetailView: View {
                 }
                 .frame(maxHeight: 120)
             } else {
-                Text("Noch kein Report vorhanden.")
+                Text("No report yet.")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
             }
@@ -309,12 +309,12 @@ struct SubagentJobDetailView: View {
         let stats = liveToolStats
         HStack(spacing: 8) {
             TimelinePulsingDot(color: AgentTheme.statusWorking)
-            Text(stats.count > 0 ? "arbeitet — \(stats.count) Tool-Aufrufe bisher" : "arbeitet …")
+            (stats.count > 0 ? Text("working — \(stats.count) tool calls so far") : Text("working …"))
                 .font(.system(size: 11.5))
                 .foregroundStyle(AgentTheme.textSecondary)
             if let last = stats.lastSubject {
                 Text("zuletzt: \(last)")
-                    .font(.system(size: 10.5, design: .monospaced))
+                    .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -342,9 +342,9 @@ struct SubagentJobDetailView: View {
     private var reportSourceChip: some View {
         HStack(spacing: 5) {
             Circle().fill(Color.teal).frame(width: 5, height: 5)
-            Text("Quelle: Agent-Report")
+            Text("Source: agent report")
         }
-        .font(.system(size: 9.5, weight: .semibold))
+        .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(Color.teal)
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -355,10 +355,10 @@ struct SubagentJobDetailView: View {
     private var generatingChip: some View {
         HStack(spacing: 5) {
             Text("✦")
-                .font(.system(size: 10))
-            Text("Turn läuft — Report folgt")
+                .font(.system(size: 11))
+            Text("Turn running — report follows")
         }
-        .font(.system(size: 9.5, weight: .semibold))
+        .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(AgentTheme.accent)
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
@@ -374,7 +374,7 @@ struct SubagentJobDetailView: View {
                 ForEach(Array(report.openQuestions.enumerated()), id: \.offset) { _, question in
                     HStack(alignment: .firstTextBaseline, spacing: 7) {
                         Text("?")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
                             .foregroundStyle(AgentTheme.statusAwaiting)
                         Text(question)
                             .font(.system(size: 11))
@@ -417,9 +417,9 @@ struct SubagentJobDetailView: View {
 
     /// Placeholder erklärt den Zustand (Prototyp) — nicht nur disabled.
     private var composerPlaceholder: String {
-        if snapshot?.state == .takenOver { return "Übernommen — weiter im Terminal-Tab" }
-        if snapshot?.isActive == true { return "Turn läuft — warten oder stoppen …" }
-        return "Folge-Prompt an den Subagent …"
+        if snapshot?.state == .takenOver { return String(localized: "Taken over — continue in the terminal tab") }
+        if snapshot?.isActive == true { return String(localized: "Turn running — wait or stop …") }
+        return String(localized: "Follow-up prompt to the subagent …")
     }
 
     private var composer: some View {
@@ -449,11 +449,11 @@ struct SubagentJobDetailView: View {
     }
 
     private var composerHelp: String {
-        guard let snapshot else { return "Kein Job-State — Senden nicht möglich." }
-        if snapshot.state == .takenOver { return "Job wurde interaktiv übernommen — Senden deaktiviert." }
-        if snapshot.isActive { return "Turn läuft — warte auf done/failed oder stoppe den Job." }
-        if snapshot.codexThreadID == nil { return "Keine Codex-Thread-ID — Resume unmöglich." }
-        return "Startet einen Folge-Turn (detachter Supervisor)."
+        guard let snapshot else { return String(localized: "No job state — sending not possible.") }
+        if snapshot.state == .takenOver { return String(localized: "Job was taken over interactively — sending disabled.") }
+        if snapshot.isActive { return String(localized: "Turn running — wait for done/failed or stop the job.") }
+        if snapshot.codexThreadID == nil { return String(localized: "No Codex thread ID — resume impossible.") }
+        return String(localized: "Starts a follow-up turn (detached supervisor).")
     }
 
     // MARK: - Aktionen
@@ -472,7 +472,7 @@ struct SubagentJobDetailView: View {
             let failure: String? = await Task.detached(priority: .userInitiated) {
                 let store = AgentJobStore()
                 guard store.readCorrected(shortId: shortId) != nil else {
-                    return "Job \(shortId) nicht gefunden."
+                    return String(localized: "Job \(shortId) not found.")
                 }
                 var options = AgentSendOptions()
                 options.shortId = shortId
@@ -483,7 +483,7 @@ struct SubagentJobDetailView: View {
                         AgentSendCLI.claim(store: store, options: options)
                     }
                 } catch {
-                    return "Job-Lock fehlgeschlagen: \(error.localizedDescription)"
+                    return String(localized: "Job lock failed: \(error.localizedDescription)")
                 }
                 if case .failure(let claimError) = claim {
                     return claimError.message
@@ -500,7 +500,7 @@ struct SubagentJobDetailView: View {
                     // wäre der Job sonst für 30s "aktiv" gesperrt.
                     _ = try? store.mutateState(shortId: shortId) { job in
                         if job.canTransition(to: .failed) { job.state = .failed }
-                        job.failureReason = "Supervisor-Launch fehlgeschlagen: \(error.localizedDescription)"
+                        job.failureReason = String(localized: "Supervisor launch failed: \(error.localizedDescription)")
                     }
                     return error.localizedDescription
                 }
@@ -524,7 +524,7 @@ struct SubagentJobDetailView: View {
         guard let parentExtID = session.subagentParentSessionID, !parentExtID.isEmpty else { return }
         guard let parent = AgentSessionStore().loadWorkspace().sessions
             .first(where: { !$0.isSubagentJob && $0.externalSessionID == parentExtID }) else {
-            errorMessage = "Parent-Session nicht gefunden — wurde sie gelöscht?"
+            errorMessage = String(localized: "Parent session not found — was it deleted?")
             return
         }
         let text: String
@@ -541,7 +541,7 @@ struct SubagentJobDetailView: View {
     /// SIGTERM an den Supervisor — derselbe Weg wie `agent stop`.
     private func stopJob() {
         guard let pid = snapshot?.supervisorPid else {
-            errorMessage = "Keine Supervisor-PID — Zustand inkonsistent."
+            errorMessage = String(localized: "No supervisor PID — inconsistent state.")
             return
         }
         _ = kill(pid, SIGTERM)

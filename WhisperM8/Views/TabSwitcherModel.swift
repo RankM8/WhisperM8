@@ -153,7 +153,7 @@ enum TabSwitcherListLayout {
 /// Overlay und damit keine Fußzeile.
 enum TabSwitcherHint {
     /// Situation C: ↑/↓ (und ←/→) = ein Schritt in der Liste.
-    static let list = "⌃Tab weiter · ⇧ zurück · ↑↓ wählen · Esc"
+    static var list: String { String(localized: "⌃Tab next · ⇧ back · ↑↓ select · Esc") }
     /// Situation B: Pfeile springen räumlich wie ⌃⌘-Pfeile im Grid.
-    static let miniMap = "⌃Tab weiter · ⇧ zurück · Pfeile räumlich · Esc"
+    static var miniMap: String { String(localized: "⌃Tab next · ⇧ back · arrows move spatially · Esc") }
 }

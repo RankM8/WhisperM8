@@ -31,7 +31,7 @@ struct AgentResourceSummaryButton: View {
                 Image(systemName: "memorychip")
                     .font(.system(size: 9, weight: .medium))
                 Text(summaryText)
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .lineLimit(1)
             }
             .foregroundStyle(isActive ? AgentTheme.textPrimary : AgentTheme.textTertiary)
@@ -45,7 +45,7 @@ struct AgentResourceSummaryButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Session-Ressourcen anzeigen")
+        .help("Show session resources")
         .onHover { isHovered = $0 }
         .popover(isPresented: $isPopoverPresented, arrowEdge: .trailing) {
             AgentResourcePopover(snapshot: snapshot, onRefresh: refresh)
@@ -121,14 +121,14 @@ private struct AgentResourcePopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Resource Usage")
+                Text("Resource usage")
                     .font(.headline.weight(.semibold))
                 Spacer()
                 Button(action: onRefresh) {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.plain)
-                .help("Aktualisieren")
+                .help("Refresh")
             }
             .padding(14)
 
@@ -145,7 +145,7 @@ private struct AgentResourcePopover: View {
             Divider()
 
             if snapshot.projects.isEmpty {
-                Text("Keine laufenden Agent-Sessions.")
+                Text("No running agent sessions.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(14)

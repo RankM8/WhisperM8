@@ -168,7 +168,7 @@ extension AgentChatsView {
     @ViewBuilder
     func forkMenuItem(_ session: AgentChatSession) -> some View {
         if session.isForkable {
-            Button("Forken", systemImage: "arrow.triangle.branch") {
+            Button("Fork", systemImage: "arrow.triangle.branch") {
                 forkSession(session)
             }
         }
@@ -188,7 +188,7 @@ extension AgentChatsView {
         if let email = profile.emailAddress {
             return "\(profile.name) (\(email))"
         }
-        return "\(profile.name) (nicht eingeloggt)"
+        return String(localized: "\(profile.name) (not signed in)")
     }
 
     func markSession(_ id: UUID, status: AgentChatStatus) {
@@ -226,7 +226,7 @@ extension AgentChatsView {
     /// färbt nur DIESE Session — ohne „Farbe für N Tabs"-Überraschung.
     @ViewBuilder
     func tabColorMenu(for session: AgentChatSession, allowsBulk: Bool = true) -> some View {
-        Menu(allowsBulk ? bulkLabel("Tab-Farbe", "Farbe für %d Tabs", for: session) : "Tab-Farbe") {
+        Menu(allowsBulk ? bulkLabel(String(localized: "Tab color"), String(localized: "Color for %d tabs"), for: session) : String(localized: "Tab color")) {
             ForEach(AgentChatColor.palette, id: \.self) { color in
                 Button {
                     if allowsBulk {
@@ -243,7 +243,7 @@ extension AgentChatsView {
                 }
             }
             Divider()
-            Button("Provider-Farbe verwenden", systemImage: "arrow.uturn.backward") {
+            Button("Use provider color", systemImage: "arrow.uturn.backward") {
                 if allowsBulk {
                     setColorForSelection(session, color: nil)
                 } else {

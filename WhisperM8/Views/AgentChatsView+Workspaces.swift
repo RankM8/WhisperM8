@@ -63,18 +63,18 @@ extension AgentChatsView {
                     Image(systemName: "square.grid.2x2")
                         .font(.system(size: 8, weight: .bold))
                     Text("WORKSPACES")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .tracking(0.6)
                     if workspacesSectionCollapsed {
                         Text("\(count)")
-                            .font(.system(size: 9, weight: .bold).monospacedDigit())
+                            .font(.system(size: 11, weight: .bold).monospacedDigit())
                     }
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(workspacesSectionCollapsed ? "Workspaces einblenden" : "Workspaces ausblenden")
+            .help(workspacesSectionCollapsed ? String(localized: "Show workspaces") : String(localized: "Hide workspaces"))
 
             Button {
                 createWorkspaceFromSidebar()
@@ -85,8 +85,8 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Neuer Workspace")
-            .accessibilityLabel("Neuen Workspace anlegen")
+            .help("New workspace")
+            .accessibilityLabel("Create new workspace")
         }
         .foregroundStyle(AgentTheme.textTertiary)
         .padding(.horizontal, 14)
@@ -168,10 +168,10 @@ extension AgentChatsView {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isCollapsed ? "Chats einblenden" : "Chats ausblenden")
+            .help(isCollapsed ? String(localized: "Show chats") : String(localized: "Hide chats"))
             .accessibilityLabel(isCollapsed
-                ? "Chats von \(entity.name) einblenden"
-                : "Chats von \(entity.name) ausblenden")
+                ? String(localized: "Show chats of \(entity.name)")
+                : String(localized: "Hide chats of \(entity.name)"))
 
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 4)
@@ -179,7 +179,7 @@ extension AgentChatsView {
                     .frame(width: 15, height: 15)
                     .overlay {
                         Text(String(entity.name.prefix(1)).uppercased())
-                            .font(.system(size: 8.5, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                     }
                 Text(entity.name)
@@ -189,17 +189,17 @@ extension AgentChatsView {
                     .truncationMode(.tail)
                 Spacer(minLength: 0)
                 Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity)")
-                    .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
                 Image(systemName: "square.grid.2x2")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(isActiveHere ? AgentTheme.accent : AgentTheme.textTertiary)
-                    .help("Als Grid öffnen")
+                    .help("Open as grid")
             }
             .contentShape(Rectangle())
             .onTapGesture { activateWorkspaceFromSidebar(entity) }
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel("Workspace \(entity.name) als Grid öffnen")
+            .accessibilityLabel("Open workspace \(entity.name) as grid")
         }
         .padding(.leading, 6)
         .padding(.trailing, 10)
@@ -209,7 +209,7 @@ extension AgentChatsView {
             in: RoundedRectangle(cornerRadius: 6)
         )
         .padding(.horizontal, 8)
-        .help("Workspace „\(entity.name)“ als Grid öffnen")
+        .help("Open workspace “\(entity.name)” as grid")
         .contextMenu { workspaceContextMenu(entity) }
         // Sidebar-Reorder: Gruppen-Header ziehen, auf einen anderen Header
         // fallen lassen = davor einsortieren (reorderGridWorkspaces kann
@@ -300,11 +300,11 @@ extension AgentChatsView {
 
     @ViewBuilder
     private func workspaceContextMenu(_ entity: AgentGridWorkspace) -> some View {
-        Button("Als Grid öffnen", systemImage: "square.grid.2x2") {
+        Button("Open as grid", systemImage: "square.grid.2x2") {
             activateWorkspaceFromSidebar(entity)
         }
         Divider()
-        Button("Umbenennen…", systemImage: "pencil") {
+        Button("Rename…", systemImage: "pencil") {
             renameWorkspaceDraft = entity.name
             renameWorkspaceTargetID = entity.id
         }
@@ -317,7 +317,7 @@ extension AgentChatsView {
                 } label: {
                     Label {
                         Text(hex == entity.colorHex
-                            ? "\(AgentChatColorName.label(for: hex)) (aktiv)"
+                            ? String(localized: "\(AgentChatColorName.label(for: hex)) (active)")
                             : AgentChatColorName.label(for: hex))
                     } icon: {
                         Image(nsImage: colorSwatchImage(hex: hex))
@@ -325,10 +325,10 @@ extension AgentChatsView {
                 }
             }
         } label: {
-            Label("Farbe", systemImage: "paintpalette")
+            Label("Color", systemImage: "paintpalette")
         }
         Divider()
-        Button("Löschen…", systemImage: "trash", role: .destructive) {
+        Button("Delete…", systemImage: "trash", role: .destructive) {
             workspacePendingDeletion = entity
         }
     }
@@ -355,7 +355,7 @@ extension AgentChatsView {
             // Fenster nach vorn holen statt Terminals zu stehlen.
             focusWindow(owner)
         case .blockedByWindowOwnership(let conflicts):
-            errorMessage = "Workspace „\(entity.name)“ kann hier nicht öffnen: \(conflicts.count) \(conflicts.count == 1 ? "Chat läuft" : "Chats laufen") als Tab in einem anderen Fenster."
+            errorMessage = String(localized: "Workspace “\(entity.name)” cannot open here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
         case .rejected:
             break
         }
@@ -382,7 +382,7 @@ extension AgentChatsView {
         }
         let accepted = Array(ordered.prefix(9))
         if sessionIDs.count > 9 {
-            errorMessage = "Ein Workspace zeigt höchstens 9 Chats — die ersten 9 der Auswahl wurden aufgenommen, \(sessionIDs.count - 9) nicht."
+            errorMessage = String(localized: "A workspace shows at most 9 chats — the first 9 of the selection were added, \(sessionIDs.count - 9) were not.")
         }
         let id = windowStore.createGridWorkspace(
             name: nextFreeWorkspaceName(),
@@ -429,7 +429,7 @@ extension AgentChatsView {
         case .alreadyActive(let owner):
             focusWindow(owner)
         case .blockedByWindowOwnership(let conflicts):
-            errorMessage = "„\(project.name)“ kann hier nicht als Workspace öffnen: \(conflicts.count) \(conflicts.count == 1 ? "Chat läuft" : "Chats laufen") als Tab in einem anderen Fenster."
+            errorMessage = String(localized: "“\(project.name)” cannot open as a workspace here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
         case .rejected:
             break
         }
@@ -451,7 +451,7 @@ extension AgentChatsView {
     @ViewBuilder
     func newWorkspaceFromSelectionButton(for session: AgentChatSession) -> some View {
         Button(
-            bulkLabel("Neuer Workspace mit diesem Chat", "Neuer Workspace aus %d Chats", for: session),
+            bulkLabel(String(localized: "New workspace with this chat"), String(localized: "New workspace from %d chats"), for: session),
             systemImage: "plus.square.on.square"
         ) {
             createWorkspaceFromSelection(actionGroup(for: session))
@@ -491,7 +491,7 @@ extension AgentChatsView {
 
     var renameWorkspaceSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Workspace umbenennen")
+            Text("Rename workspace")
                 .font(.system(size: 13, weight: .semibold))
             TextField("Name", text: $renameWorkspaceDraft)
                 .textFieldStyle(.roundedBorder)
@@ -499,9 +499,9 @@ extension AgentChatsView {
                 .onSubmit { commitWorkspaceRename() }
             HStack {
                 Spacer()
-                Button("Abbrechen") { renameWorkspaceTargetID = nil }
+                Button("Cancel") { renameWorkspaceTargetID = nil }
                     .keyboardShortcut(.cancelAction)
-                Button("Umbenennen") { commitWorkspaceRename() }
+                Button("Rename") { commitWorkspaceRename() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(renameWorkspaceDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

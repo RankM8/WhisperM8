@@ -93,8 +93,10 @@ struct PermissionsSettingsPage: View {
             tone: isGranted ? .ok : .warn,
             detail: statusText
         ) {
-            Button(primaryTitle) {
+            Button {
                 primaryAction()
+            } label: {
+                Text(settingsLocalized: primaryTitle)
             }
             .buttonStyle(isGranted ? SettingsButtonStyle.standard : SettingsButtonStyle.primary)
 

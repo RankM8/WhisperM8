@@ -75,11 +75,10 @@ struct TabSwitcherTileModel: Equatable {
     /// wie `AgentStatusIndicator`.
     static func statusWord(for status: AgentSessionRuntimeStatus?) -> String {
         switch status {
-        case .working: return "arbeitet"
-        case .awaitingInput: return "wartet"
-        case .idle: return "fertig"
-        case .errored: return "Fehler"
-        case .stopped, nil: return "gestoppt"
+        case .working, .awaitingInput, .idle, .errored:
+            // Dieselben Wörter wie VoiceOver und Tooltip des Status-Punkts.
+            return AgentStatusAccessibility.label(for: status) ?? ""
+        case .stopped, nil: return String(localized: "Stopped")
         }
     }
 
@@ -131,7 +130,7 @@ struct TabSwitcherTileModel: Equatable {
 
     /// „gerade eben" unter einer Minute, sonst „vor 12 min" / „vor 3 h".
     static func ago(_ interval: TimeInterval) -> String {
-        guard interval >= 60 else { return "gerade eben" }
-        return "vor \(elapsed(interval))"
+        guard interval >= 60 else { return String(localized: "just now") }
+        return String(localized: "\(elapsed(interval)) ago")
     }
 }

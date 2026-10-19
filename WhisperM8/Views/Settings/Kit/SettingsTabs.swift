@@ -51,7 +51,7 @@ struct SettingsTabs<ID: Hashable>: View {
                 Button {
                     selection = tab.id
                 } label: {
-                    Text(tab.title)
+                    Text(settingsLocalized: tab.title)
                         .font(.system(size: 12, weight: isSelected(tab) ? .semibold : .medium))
                         .foregroundStyle(isSelected(tab) ? Color.white : AppTheme.textSecondary)
                         .frame(minWidth: 86)

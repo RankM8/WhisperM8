@@ -115,7 +115,7 @@ struct OutputWorkspacePage: View {
             Picker("Status", selection: $model.status) {
                 Text("Any status").tag(Optional<TranscriptRunStatus>.none)
                 ForEach(statusOptions, id: \.self) { status in
-                    Text(status.displayText).tag(Optional(status))
+                    Text(settingsLocalized: status.displayText).tag(Optional(status))
                 }
             }
             .labelsHidden()
@@ -234,7 +234,7 @@ struct OutputWorkspacePage: View {
             }
 
             if let errorMessage = model.errorMessage {
-                Text(errorMessage)
+                Text(settingsLocalized: errorMessage)
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.statusError)
             }
@@ -274,7 +274,7 @@ private struct LatestReportRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 5) {
-                Text(report.title)
+                Text(settingsLocalized: report.title)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
 
@@ -305,7 +305,7 @@ private struct LatestFallbackRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(fallback.title)
+                Text(settingsLocalized: fallback.title)
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
                 Spacer()
@@ -367,7 +367,7 @@ private struct LatestTranscriptPreviews: View {
             }
 
             if rawPreview == nil && finalPreview == nil {
-                Text(emptyText)
+                Text(settingsLocalized: emptyText)
                     .font(.system(size: 12.5))
                     .foregroundStyle(AppTheme.textSecondary)
                     .lineLimit(3)
@@ -391,11 +391,11 @@ private struct LatestTranscriptPreviewBlock: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
 
-            Text(text)
+            Text(settingsLocalized: text)
                 .font(.system(size: 12.5))
                 .foregroundStyle(AppTheme.textSecondary)
                 .lineLimit(2)
@@ -411,12 +411,12 @@ private struct OutputArchiveReportRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(report.title)
+                Text(settingsLocalized: report.title)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textPrimary)
                     .lineLimit(1)
 
-                Text(report.preview.isEmpty ? "No transcript" : report.preview)
+                Text(settingsLocalized: report.preview.isEmpty ? "No transcript" : report.preview)
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
                     .lineLimit(2)
@@ -426,7 +426,7 @@ private struct OutputArchiveReportRow: View {
 
             VStack(alignment: .trailing, spacing: 6) {
                 OutputStatusChip(status: report.status)
-                Text(relativeDate(report.createdAt))
+                Text(settingsLocalized: relativeDate(report.createdAt))
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -449,7 +449,7 @@ private struct OutputStatusChip: View {
     let status: TranscriptRunStatus
 
     var body: some View {
-        Text(status.displayText)
+        Text(settingsLocalized: status.displayText)
             .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
             .foregroundStyle(tone.color)
             .padding(.horizontal, 7)
@@ -478,7 +478,7 @@ private struct LoadingOutputPanel: View {
             ProgressView()
                 .controlSize(.small)
 
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
         }
@@ -504,7 +504,7 @@ private struct LoadingFooterText: View {
         HStack(spacing: 6) {
             ProgressView()
                 .controlSize(.small)
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 11.5))
                 .foregroundStyle(AppTheme.textTertiary)
         }
@@ -524,11 +524,11 @@ private struct EmptyOutputPanel: View {
                 .font(.system(size: 24))
                 .foregroundStyle(AppTheme.textTertiary)
 
-            Text(title)
+            Text(settingsLocalized: title)
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
 
-            Text(description)
+            Text(settingsLocalized: description)
                 .font(.system(size: 12))
                 .foregroundStyle(AppTheme.textTertiary)
                 .multilineTextAlignment(.center)

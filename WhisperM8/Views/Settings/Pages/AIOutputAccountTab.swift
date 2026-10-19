@@ -67,7 +67,7 @@ struct AIOutputAccountTab: View {
                     title: "Codex CLI",
                     subtitle: "Version used for non-interactive post-processing."
                 ) {
-                    Text(connectionModel.codexVersion)
+                    Text(settingsLocalized: connectionModel.codexVersion)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
@@ -80,7 +80,7 @@ struct AIOutputAccountTab: View {
                     selection: $selectedModelRaw,
                     options: modelPickerOptions
                 ) { rawValue in
-                    Text(modelLabel(for: rawValue))
+                    Text(settingsLocalized: modelLabel(for: rawValue))
                 }
 
                 SettingsPickerRow(
@@ -92,7 +92,7 @@ struct AIOutputAccountTab: View {
                         including: reasoningEffortRaw
                     )
                 ) { rawValue in
-                    Text(CodexModelCatalog.effortDisplayName(rawValue))
+                    Text(settingsLocalized: CodexModelCatalog.effortDisplayName(rawValue))
                 }
 
                 if let warning = catalogWarning {
@@ -101,11 +101,14 @@ struct AIOutputAccountTab: View {
 
                 SettingsPickerRow(
                     title: "Speed",
-                    subtitle: "\(selectedServiceTier.detail) Modes can override speed separately when they need different routing.",
+                    subtitle: [
+                        runtimeLocalized(selectedServiceTier.detail),
+                        String(localized: "Modes can override speed separately when they need different routing.")
+                    ].joined(separator: " "),
                     selection: $serviceTierRaw,
                     options: CodexServiceTier.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(CodexServiceTier.resolve(rawValue).displayName)
+                    Text(settingsLocalized: CodexServiceTier.resolve(rawValue).displayName)
                 }
             }
 
@@ -116,7 +119,7 @@ struct AIOutputAccountTab: View {
                     selection: $visualInputModeRaw,
                     options: CodexVisualInputMode.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(visualInputLabel(for: rawValue))
+                    Text(settingsLocalized: visualInputLabel(for: rawValue))
                 }
 
                 SettingsHelpText(
@@ -132,7 +135,7 @@ struct AIOutputAccountTab: View {
                     selection: $defaultOutputModeID,
                     options: enabledModes.map(\.id)
                 ) { modeID in
-                    Text(modeName(for: modeID))
+                    Text(settingsLocalized: modeName(for: modeID))
                 }
 
                 SettingsToggleRow(
@@ -169,11 +172,11 @@ struct AIOutputAccountTab: View {
 
     private func modelLabel(for rawValue: String) -> String {
         if rawValue == CodexModelSelection.autoRawValue {
-            let frontier = catalog.frontierModel?.displayName ?? "latest"
-            return "Auto — latest (\(frontier))"
+            let frontier = catalog.frontierModel?.displayName ?? String(localized: "latest")
+            return String(localized: "Auto — latest (\(frontier))")
         }
         guard catalog.model(slug: rawValue) != nil else {
-            return "\(rawValue) (not in catalog)"
+            return String(localized: "\(rawValue) (not in catalog)")
         }
         return catalog.modelDisplayName(rawValue)
     }
@@ -181,37 +184,39 @@ struct AIOutputAccountTab: View {
     private var modelSubtitle: String {
         let base: String
         if selectedModelRaw == CodexModelSelection.autoRawValue {
-            let frontier = catalog.frontierModel?.displayName ?? "the newest listed model"
-            base = "Always uses the newest frontier model from your Codex CLI — currently \(frontier)."
+            let frontier = catalog.frontierModel?.displayName ?? String(localized: "the newest listed model")
+            base = String(localized: "Always uses the newest frontier model from your Codex CLI — currently \(frontier).")
         } else {
-            base = catalog.model(slug: selectedModelRaw)?.detail
-                ?? "Not listed in your Codex CLI's model catalog."
+            base = catalog.model(slug: selectedModelRaw)?.detail.map(runtimeLocalized)
+                ?? String(localized: "Not listed in your Codex CLI's model catalog.")
         }
-        return "\(base) Modes can override this value in the Modes tab. New Codex agent chats also start from this default."
+        return base + " " + String(localized: "Modes can override this value in the Modes tab. New Codex agent chats also start from this default.")
     }
 
     private var thinkingSubtitle: String {
         let detail = catalog.efforts(forModelSlug: effectiveModelSlug)
             .first { $0.effort == reasoningEffortRaw }?.detail
-        let base = detail ?? "Reasoning depth for post-processing."
-        return "\(base) Modes can override this value; new Codex agent chats also use it when created."
+        let base = detail.map(runtimeLocalized) ?? String(localized: "Reasoning depth for post-processing.")
+        return base + " " + String(localized: "Modes can override this value; new Codex agent chats also use it when created.")
     }
 
     /// Katalog-basierte Warnungen — ersetzt die alte GPT-5.5/"0.120."-Heuristik.
     private var catalogWarning: String? {
         let stand: String
         if let fetchedAt = catalog.fetchedAt {
-            stand = "catalog as of \(fetchedAt.formatted(date: .abbreviated, time: .shortened))"
+            let fetchedText = fetchedAt.formatted(date: .abbreviated, time: .shortened)
+            stand = String(localized: "catalog as of \(fetchedText)")
         } else {
-            stand = "embedded fallback catalog"
+            stand = String(localized: "embedded fallback catalog")
         }
         if selectedModelRaw != CodexModelSelection.autoRawValue,
            catalog.model(slug: selectedModelRaw) == nil {
-            return "\(selectedModelRaw) is not in your Codex CLI's model list (\(stand)). If runs fail, pick a listed model or update the Codex CLI."
+            return String(localized: "\(selectedModelRaw) is not in your Codex CLI's model list (\(stand)). If runs fail, pick a listed model or update the Codex CLI.")
         }
         if let model = catalog.model(slug: effectiveModelSlug),
            !model.supportsEffort(reasoningEffortRaw) {
-            return "\(CodexModelCatalog.effortDisplayName(reasoningEffortRaw)) is not listed for \(model.displayName) (\(stand)) — Codex may reject or downgrade it."
+            let effortName = runtimeLocalized(CodexModelCatalog.effortDisplayName(reasoningEffortRaw))
+            return String(localized: "\(effortName) is not listed for \(model.displayName) (\(stand)) — Codex may reject or downgrade it.")
         }
         return nil
     }
@@ -230,5 +235,10 @@ struct AIOutputAccountTab: View {
 
     private func modeName(for id: String) -> String {
         enabledModes.first { $0.id == id }?.name ?? id
+    }
+
+    /// Übersetzt einen zur Laufzeit gelieferten englischen Text (Katalog-Schlüssel).
+    private func runtimeLocalized(_ key: String) -> String {
+        String(localized: String.LocalizationValue(key))
     }
 }

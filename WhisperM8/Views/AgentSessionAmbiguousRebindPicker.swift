@@ -28,9 +28,9 @@ struct AgentSessionAmbiguousRebindPicker: View {
                         HStack {
                             Image(systemName: "plus.circle")
                             VStack(alignment: .leading) {
-                                Text("Neue Session starten")
+                                Text("Start a new session")
                                     .font(.system(size: 13, weight: .medium))
-                                Text("Wirft die alte externe Session-ID weg und beginnt frisch")
+                                Text("Discards the old external session ID and starts fresh")
                                     .font(.system(size: 11))
                                     .foregroundStyle(AgentTheme.textSecondary)
                             }
@@ -51,7 +51,7 @@ struct AgentSessionAmbiguousRebindPicker: View {
 
             HStack {
                 Spacer()
-                Button("Abbrechen", action: onCancel)
+                Button("Cancel", action: onCancel)
                     .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 16)
@@ -64,10 +64,10 @@ struct AgentSessionAmbiguousRebindPicker: View {
     @ViewBuilder
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Welche Claude-Session gehoert zu diesem Tab?")
+            Text("Which Claude session belongs to this tab?")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(AgentTheme.textPrimary)
-            Text("WhisperM8 hat mehrere passende Sessions gefunden. Bitte waehle die richtige aus oder starte eine neue.")
+            Text("WhisperM8 found several matching sessions. Please pick the right one or start a new one.")
                 .font(.system(size: 12))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

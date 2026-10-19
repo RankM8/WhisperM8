@@ -23,13 +23,13 @@ struct AgentSessionUserNotification: Equatable {
     var body: String {
         switch kind {
         case .turnCompleted:
-            return "Agent ist fertig und wartet auf dich."
+            return String(localized: "Agent is done and waiting for you.")
         case .inputRequested(let reason):
-            return "Agent \(reason.notificationLabel)."
+            return String(localized: "Agent \(reason.notificationLabel).")
         case .subagentCompleted:
-            return "Subagent ist fertig — Report liegt vor."
+            return String(localized: "Subagent is done — report available.")
         case .subagentFailed:
-            return "Subagent ist fehlgeschlagen."
+            return String(localized: "Subagent failed.")
         }
     }
 }

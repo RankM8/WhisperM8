@@ -27,8 +27,8 @@ extension AgentChatsView {
                 : self.sessions(in: group).filter { canSwitchGPTAccount($0) }
             let currentProfiles = Set(sessions.map { $0.gptProfileName ?? GPTAccountProfiles.mainProfileName })
             let label = sessions.count == 1
-                ? "GPT-Konto"
-                : "\(sessions.count) Chats: GPT-Konto"
+                ? String(localized: "GPT account")
+                : String(localized: "\(sessions.count) chats: GPT account")
             Menu(label, systemImage: "person.crop.circle") {
                 ForEach(AccountMenuData.gptProfiles.value) { profile in
                     // Aktuelles Konto ausblenden (wie beim Claude-Menue) — bei
@@ -41,7 +41,7 @@ extension AgentChatsView {
                     }
                 }
                 Divider()
-                Text("Wirkt beim nächsten Start des Chats")
+                Text("Takes effect the next time the chat starts")
             }
         }
     }
@@ -49,7 +49,7 @@ extension AgentChatsView {
     private func gptAccountLabel(_ profile: GPTAccountProfile) -> String {
         var parts = [profile.name]
         if let email = profile.emailAddress { parts.append(email) }
-        if !profile.isLoggedIn { parts.append("nicht angemeldet") }
+        if !profile.isLoggedIn { parts.append(String(localized: "not signed in")) }
         return parts.joined(separator: " · ")
     }
 

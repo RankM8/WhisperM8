@@ -109,8 +109,8 @@ struct JarvisNoteChevron: View {
                 .onHover(perform: onHoverChanged)
                 .onDisappear { onHoverChanged(false) }
                 .animation(.easeOut(duration: 0.2), value: open)
-                .help(open ? "Jarvis-Notiz einklappen" : "Jarvis-Notiz aufklappen")
-                .accessibilityLabel(open ? "Jarvis-Notiz einklappen" : "Jarvis-Notiz aufklappen")
+                .help(open ? String(localized: "Collapse Jarvis note") : String(localized: "Expand Jarvis note"))
+                .accessibilityLabel(open ? String(localized: "Collapse Jarvis note") : String(localized: "Expand Jarvis note"))
             }
         }
         .modifier(JarvisNoteSubscription(sessionID: sessionID, windowID: windowID, note: $note, override: $override))
@@ -291,7 +291,7 @@ struct JarvisNoteCardContent: View {
                 section("Meilensteine") { milestones }
             }
             Text("Aktualisiert \(entry.updatedAt.formatted(date: .omitted, time: .shortened)) · Jarvis")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
         }
         .padding(.horizontal, 13)
@@ -303,7 +303,7 @@ struct JarvisNoteCardContent: View {
     /// Arbeitspaket fett; fehlt es, steht das Ziel an seiner Stelle.
     private var lead: some View {
         let text = entry.work.isEmpty ? entry.mission : entry.work
-        return (Text(text.isEmpty ? "Noch keine Notiz" : text)
+        return ((text.isEmpty ? Text("No note yet") : Text(verbatim: text))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(AgentTheme.textPrimary)
                 + Text("  · \(SidebarRelativeTime.short(entry.updatedAt, now: now))")
@@ -326,7 +326,7 @@ struct JarvisNoteCardContent: View {
     private func section<Body: View>(_ title: String, @ViewBuilder body: () -> Body) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title.uppercased())
-                .font(.system(size: 9.5, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(AgentTheme.textTertiary)
             body()
@@ -340,7 +340,7 @@ struct JarvisNoteCardContent: View {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, milestone in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(milestone.at.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 10.5).monospacedDigit())
+                        .font(.system(size: 11).monospacedDigit())
                         .foregroundStyle(AgentTheme.textTertiary)
                         .frame(minWidth: 34, alignment: .leading)
                     Text(milestone.text)
@@ -353,7 +353,7 @@ struct JarvisNoteCardContent: View {
                 Button {
                     showsAllMilestones.toggle()
                 } label: {
-                    Text(showsAllMilestones ? "▴ weniger" : "▸ \(hidden) ältere")
+                    (showsAllMilestones ? Text("▴ less") : Text("▸ \(hidden) older"))
                         .font(.system(size: 11))
                         .foregroundStyle(AgentTheme.textTertiary)
                 }
@@ -399,9 +399,7 @@ struct JarvisNotesToggleButton: View {
                     HStack(spacing: 5) {
                         Image(systemName: "note.text")
                             .font(.system(size: 10, weight: .semibold))
-                        Text("Notizen")
-                        Text(defaultOpen ? "auf" : "zu")
-                            .foregroundStyle(defaultOpen ? AgentTheme.accent : AgentTheme.textTertiary)
+                        (defaultOpen ? Text("Notes on") : Text("Notes off"))
                     }
                     .font(.system(size: 11))
                     .foregroundStyle(defaultOpen ? AgentTheme.accent : AgentTheme.textSecondary)
@@ -414,8 +412,8 @@ struct JarvisNotesToggleButton: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Jarvis-Notizen standardmäßig \(defaultOpen ? "zuklappen" : "aufklappen") (⌥⌘N)")
-                .accessibilityLabel("Jarvis-Notizen \(defaultOpen ? "zuklappen" : "aufklappen")")
+                .help(defaultOpen ? String(localized: "Collapse Jarvis notes by default (⌥⌘N)") : String(localized: "Expand Jarvis notes by default (⌥⌘N)"))
+                .accessibilityLabel(defaultOpen ? String(localized: "Collapse Jarvis notes by default") : String(localized: "Expand Jarvis notes by default"))
             }
         }
         .onReceive(JarvisNotesStore.shared.notedSessionsPublisher) { notedSessions = $0 }

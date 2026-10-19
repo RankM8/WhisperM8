@@ -459,6 +459,22 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentStatusSoftPulseEnabled) }
     }
 
+    /// „Advanced agent features" (LR-AU-031): Hintergrund-Agent, Claude Agent
+    /// View, Sub-Agent-Bibliothek und Terminal im „+"-Menü. Default AUS für
+    /// Neuinstallationen; für Bestandsnutzer setzt `AgentAdvancedFeatures
+    /// .resolveAtLaunch` beim ersten Start mit diesem Stand einmalig AN. UI:
+    /// Schalter in den Agent-Chats-Einstellungen (Schlüssel
+    /// `agentAdvancedFeaturesEnabled`).
+    var agentAdvancedFeaturesEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.agentAdvancedFeaturesEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentAdvancedFeaturesEnabled) }
+    }
+
+    /// `true`, sobald der Schalter einmal bestimmt oder vom Nutzer gesetzt wurde.
+    var hasAgentAdvancedFeaturesDecision: Bool {
+        defaults.object(forKey: Keys.agentAdvancedFeaturesEnabled) != nil
+    }
+
     /// Kill-Switch für das event-getriebene Transcript-Watching (P2). Bei
     /// Problemen ohne Rebuild zurück zum reinen 1,5-s-Polling:
     /// `defaults write com.whisperm8.app agentEventDrivenWatchEnabled -bool NO`
@@ -927,6 +943,7 @@ enum PreferenceKeys {
     static let codexExtraArguments = "codexExtraArguments"
     static let claudeExtraArguments = "claudeExtraArguments"
     static let claudeGPTBackendEnabled = "claudeGPTBackendEnabled"
+    static let agentAdvancedFeaturesEnabled = "agentAdvancedFeaturesEnabled"
     static let claudeGPTBackendPort = "claudeGPTBackendPort"
     static let claudeGPTRouterPort = "claudeGPTRouterPort"
     static let claudeGPTBackendDefaultModel = "claudeGPTBackendDefaultModel"

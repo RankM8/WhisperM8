@@ -24,7 +24,7 @@ struct SidebarUsageButtons: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Claude-Accounts: Usage-Limits")
+            .help("Claude accounts: usage limits")
             .popover(isPresented: $showClaudePopover, arrowEdge: .bottom) {
                 ClaudeUsagePopoverView()
             }
@@ -41,7 +41,7 @@ struct SidebarUsageButtons: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("ChatGPT/Codex: Usage-Limits")
+            .help("ChatGPT/Codex: usage limits")
             .popover(isPresented: $showCodexPopover, arrowEdge: .bottom) {
                 CodexUsagePopoverView()
             }
@@ -69,7 +69,7 @@ private struct UsageGaugeLine: View {
     var body: some View {
         HStack(spacing: 7) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)
                 .frame(width: labelWidth, alignment: .leading)
@@ -91,7 +91,7 @@ private struct UsageGaugeLine: View {
                 .frame(width: 38, alignment: .trailing)
 
             Text(Self.resetText(resetsAt))
-                .font(.system(size: 10, weight: .regular).monospacedDigit())
+                .font(.system(size: 11, weight: .regular).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 66, alignment: .leading)
         }
@@ -99,15 +99,12 @@ private struct UsageGaugeLine: View {
 
     static func resetText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-        return "→ \(formatter.string(from: resetsAt))"
+        return "→ \(UsageResetDateFormat.short(resetsAt))"
     }
 }
 
 private struct PopoverHeader: View {
-    var title: String
+    var title: LocalizedStringKey
     var subtitle: String?
 
     var body: some View {
@@ -116,8 +113,8 @@ private struct PopoverHeader: View {
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(AppTheme.textPrimary)
             if let subtitle {
-                Text(subtitle)
-                    .font(.system(size: 10.5))
+                Text(verbatim: subtitle)
+                    .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
         }
@@ -138,7 +135,7 @@ private struct ClaudeUsagePopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 8) {
-                PopoverHeader(title: "Claude · Usage-Limits", subtitle: "Alle verbundenen Accounts")
+                PopoverHeader(title: "Claude · Usage limits", subtitle: String(localized: "All connected accounts"))
                 Spacer(minLength: 0)
                 // Manuelles Update: einziger Weg, abgelaufene Tokens zu
                 // erneuern (CLI-Ping) — onAppear bleibt passiv.
@@ -153,11 +150,11 @@ private struct ClaudeUsagePopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
-                .help("Live aktualisieren — erneuert abgelaufene Tokens per Claude-CLI-Ping")
+                .help("Live refresh — renews expired tokens via Claude CLI ping")
             }
 
             if isLoading, usageByProfile.isEmpty {
-                Text("lade Limits…")
+                Text("Loading limits…")
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -170,7 +167,7 @@ private struct ClaudeUsagePopoverView: View {
                             .foregroundStyle(profile.name == activeProfileName ? AppTheme.statusWorking : AppTheme.textPrimary)
                         if let plan = profile.planDisplayName {
                             Text(plan)
-                                .font(.system(size: 8.5, weight: .semibold))
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(AppTheme.textSecondary)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -179,7 +176,7 @@ private struct ClaudeUsagePopoverView: View {
                         Spacer(minLength: 0)
                         if let email = profile.emailAddress {
                             Text(email)
-                                .font(.system(size: 9.5))
+                                .font(.system(size: 11))
                                 .foregroundStyle(AppTheme.textTertiary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -200,17 +197,17 @@ private struct ClaudeUsagePopoverView: View {
                         }
                         if !usage.isLive, usage.hasLimitData {
                             Text("Cache · \(Self.age(usage.fetchedAt))")
-                                .font(.system(size: 9.5))
+                                .font(.system(size: 11))
                                 .foregroundStyle(AppTheme.textTertiary)
                         }
                         if let problem = usage.liveFetchProblem {
                             Text(Self.problemText(problem))
-                                .font(.system(size: 9.5, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(AppTheme.statusAwaiting)
                         }
                     } else if !isLoading {
-                        Text("keine Daten")
-                            .font(.system(size: 10.5))
+                        Text("No data")
+                            .font(.system(size: 11))
                             .foregroundStyle(AppTheme.textTertiary)
                     }
                 }
@@ -223,28 +220,28 @@ private struct ClaudeUsagePopoverView: View {
 
     private static func age(_ date: Date) -> String {
         let minutes = Int(Date().timeIntervalSince(date) / 60)
-        if minutes < 60 { return "\(minutes) min alt" }
-        return "\(minutes / 60) h alt"
+        if minutes < 60 { return String(localized: "\(minutes) min old") }
+        return String(localized: "\(minutes / 60) h old")
     }
 
     private static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
         switch problem {
         case .noCredentials:
-            return "Kein Login-Token — in den Account-Settings neu einloggen"
+            return String(localized: "No login token — sign in again in the account settings")
         case .loginExpired:
-            return "Login abgelaufen — in den Account-Settings neu einloggen"
+            return String(localized: "Login expired — sign in again in the account settings")
         case .refreshBlockedBySession:
-            return "Token abgelaufen — die laufende Session erneuert ihn gleich"
+            return String(localized: "Token expired — the running session will renew it shortly")
         case .tokenExpired:
-            return "Token abgelaufen — ↻ erneuert ihn per CLI-Ping"
+            return String(localized: "Token expired — ↻ renews it via CLI ping")
         case .refreshCoolingDown(let until):
-            return "Gerade gepingt — nächster Versuch ab \(AgentChatsClaudeAccountsTab.timeText(until)) Uhr"
+            return String(localized: "Just pinged — next attempt from \(AgentChatsClaudeAccountsTab.timeText(until))")
         case .httpStatus(429):
-            return "Rate-Limit von Anthropic — gleich nochmal versuchen"
+            return String(localized: "Rate limit from Anthropic — try again shortly")
         case .httpStatus(let status):
-            return "Live-Abruf fehlgeschlagen (HTTP \(status))"
+            return String(localized: "Live fetch failed (HTTP \(status))")
         case .network:
-            return "Offline — letzter bekannter Stand"
+            return String(localized: "Offline — last known state")
         }
     }
 
@@ -338,8 +335,8 @@ private struct CodexUsagePopoverView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 PopoverHeader(
-                    title: "ChatGPT · GPT-Backend",
-                    subtitle: profilesEnabled ? "Konten des GPT-Backends (Proxy-Login)" : "Verbundenes Konto (Proxy-Login)"
+                    title: "ChatGPT · GPT Backend",
+                    subtitle: profilesEnabled ? String(localized: "Accounts of the GPT backend (proxy login)") : String(localized: "Connected account (proxy login)")
                 )
                 Spacer(minLength: 0)
                 Button {
@@ -351,19 +348,19 @@ private struct CodexUsagePopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLoading)
-                .help("Limits neu abrufen")
+                .help("Fetch limits again")
             }
 
             if isLoading, usageByProfile.isEmpty {
-                Text("lade Limits…")
+                Text("Loading limits…")
                     .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
             let loggedIn = profiles.filter(\.isLoggedIn)
             if loggedIn.isEmpty, !isLoading {
-                Text("Kein GPT-Konto angemeldet — Einstellungen → GPT-Backend.")
-                    .font(.system(size: 10.5))
+                Text("No GPT account signed in — Settings → GPT Backend.")
+                    .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
@@ -374,14 +371,14 @@ private struct CodexUsagePopoverView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 5) {
-                Text("Codex-CLI / Diktat")
+                Text("Codex CLI / dictation")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppTheme.textPrimary)
                 if let usage = cliUsage {
                     usageRows(usage, showEmail: true)
                 } else if !isLoading {
-                    Text("Keine Daten — Codex nicht eingeloggt oder noch keine Session gelaufen.")
-                        .font(.system(size: 10.5))
+                    Text("No data — Codex is not signed in or no session has run yet.")
+                        .font(.system(size: 11))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
             }
@@ -402,21 +399,21 @@ private struct CodexUsagePopoverView: View {
                 if let plan = profile.planDisplayName
                     ?? usageByProfile[profile.name]?.planType.flatMap(GPTAccountProfiles.planDisplayName) {
                     Text(plan)
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(AppTheme.textTertiary.opacity(0.12), in: Capsule())
                 }
                 if isActive, profilesEnabled {
-                    Text("aktiv")
-                        .font(.system(size: 8.5, weight: .semibold))
+                    Text("Active")
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.statusWorking)
                 }
                 Spacer(minLength: 0)
                 if let email = profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress {
                     Text(email)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -426,12 +423,12 @@ private struct CodexUsagePopoverView: View {
             if let usage = usageByProfile[profile.name] {
                 usageRows(usage, showEmail: false)
             } else if failedProfiles.contains(profile.name) {
-                Text("Limits nicht abrufbar (Token in der Datei veraltet)")
-                    .font(.system(size: 9.5, weight: .medium))
+                Text("Limits unavailable (token in the file is stale)")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             } else if !isLoading {
-                Text("keine Daten")
-                    .font(.system(size: 10.5))
+                Text("No data")
+                    .font(.system(size: 11))
                     .foregroundStyle(AppTheme.textTertiary)
             }
         }
@@ -443,7 +440,7 @@ private struct CodexUsagePopoverView: View {
             HStack(spacing: 6) {
                 if let plan = GPTAccountProfiles.planDisplayName(usage.planType) {
                     Text(plan)
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -452,7 +449,7 @@ private struct CodexUsagePopoverView: View {
                 Spacer(minLength: 0)
                 if let email = usage.emailAddress {
                     Text(email)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -469,21 +466,21 @@ private struct CodexUsagePopoverView: View {
             UsageGaugeLine(label: scoped.name, percent: scoped.window.usedPercent, resetsAt: scoped.window.resetsAt, labelWidth: 88)
         }
         if usage.isLimitReached {
-            Text("Gesperrt — Kontingent erschöpft")
-                .font(.system(size: 9.5, weight: .medium))
+            Text("Blocked — quota exhausted")
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(AppTheme.statusError)
         }
         if !usage.isLive, let capturedAt = usage.capturedAt {
-            Text("Snapshot der letzten Codex-Session · \(Self.age(capturedAt))")
-                .font(.system(size: 9.5))
+            Text("Snapshot of the last Codex session · \(Self.age(capturedAt))")
+                .font(.system(size: 11))
                 .foregroundStyle(AppTheme.textTertiary)
         }
     }
 
     private static func age(_ date: Date) -> String {
         let minutes = Int(Date().timeIntervalSince(date) / 60)
-        if minutes < 60 { return "\(minutes) min alt" }
-        return "\(minutes / 60) h alt"
+        if minutes < 60 { return String(localized: "\(minutes) min old") }
+        return String(localized: "\(minutes / 60) h old")
     }
 
     private func load() {

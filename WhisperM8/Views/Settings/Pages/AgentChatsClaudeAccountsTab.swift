@@ -131,21 +131,21 @@ struct AgentChatsClaudeAccountsTab: View {
         .buttonStyle(.plain)
         .disabled(!profile.isLoggedIn)
         .help(isActive
-            ? "Active account for new Claude chats"
+            ? String(localized: "Active account for new Claude chats")
             : profile.isLoggedIn
-                ? "Use this account for new Claude chats"
-                : "Log in first (⋯ menu)")
+                ? String(localized: "Use this account for new Claude chats")
+                : String(localized: "Log in first (⋯ menu)"))
     }
 
     private func identityColumn(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                Text(profile.name)
+                Text(settingsLocalized: profile.name)
                     .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
 
                 if let plan = profile.planDisplayName {
-                    Text(plan)
+                    Text(settingsLocalized: plan)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 6)
@@ -164,7 +164,7 @@ struct AgentChatsClaudeAccountsTab: View {
             }
 
             if let email = profile.emailAddress {
-                Text(email)
+                Text(settingsLocalized: email)
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
                     .lineLimit(1)
@@ -173,7 +173,7 @@ struct AgentChatsClaudeAccountsTab: View {
                 // Org nur wenn sie mehr sagt als „<email>'s Organization"
                 if let org = profile.organizationName, !org.isEmpty,
                    !org.hasSuffix("'s Organization"), !org.hasSuffix("’s Organization") {
-                    Text(org)
+                    Text(settingsLocalized: org)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
@@ -218,8 +218,10 @@ struct AgentChatsClaudeAccountsTab: View {
     private func manageMenu(for profile: ClaudeAccountProfile, isActive: Bool) -> some View {
         Menu {
             if profile.isMain {
-                Button(profile.isLoggedIn ? "Log in with another account…" : "Log in…") {
+                Button {
                     openLoginTerminal(for: profile)
+                } label: {
+                    profile.isLoggedIn ? Text("Log in with another account…") : Text("Log in…")
                 }
             } else {
                 if !profile.isLoggedIn || needsRelogin(profile) {
@@ -243,7 +245,7 @@ struct AgentChatsClaudeAccountsTab: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(profile.isMain ? "Log in with another account" : "Make main, rename, log in, remove")
+        .help(profile.isMain ? String(localized: "Log in with another account") : String(localized: "Make main, rename, log in, remove"))
     }
 
     /// Limit-Anzeige pro Account: zwei ausgerichtete Gauge-Zeilen (5h-Fenster
@@ -267,12 +269,12 @@ struct AgentChatsClaudeAccountsTab: View {
                     }
                 }
                 if !usage.isLive, usage.hasLimitData {
-                    Text(cacheAgeText(usage.fetchedAt))
+                    Text(settingsLocalized: cacheAgeText(usage.fetchedAt))
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
                 if let problem = usage.liveFetchProblem {
-                    Text(Self.problemText(problem))
+                    Text(settingsLocalized: Self.problemText(problem))
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusAwaiting)
                 }
@@ -293,7 +295,7 @@ struct AgentChatsClaudeAccountsTab: View {
         }()
 
         return HStack(spacing: 7) {
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)
@@ -310,12 +312,12 @@ struct AgentChatsClaudeAccountsTab: View {
                 }
             }
 
-            Text(percent.map { "\(Int($0.rounded())) %" } ?? "—")
+            Text(settingsLocalized: percent.map { "\(Int($0.rounded())) %" } ?? "—")
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(percent != nil ? color : AppTheme.textTertiary)
                 .frame(width: 38, alignment: .trailing)
 
-            Text(resetText(resetsAt))
+            Text(settingsLocalized: resetText(resetsAt))
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 66, alignment: .leading)
@@ -327,15 +329,12 @@ struct AgentChatsClaudeAccountsTab: View {
     /// „→ 23:09" (5h-Fenster) bzw. „→ Sa 19:00" (Reset liegt > 24 h voraus).
     private func resetText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-        return "→ \(formatter.string(from: resetsAt))"
+        return "→ \(UsageResetDateFormat.short(resetsAt))"
     }
 
     private func cacheAgeText(_ fetchedAt: Date) -> String {
         let minutes = Int(Date().timeIntervalSince(fetchedAt) / 60)
-        return minutes < 1 ? "cache" : "cache · \(minutes) min alt"
+        return minutes < 1 ? String(localized: "cache") : String(localized: "cache · \(minutes) min old")
     }
 
     /// Warum kein Live-Stand geholt werden konnte — sichtbar statt still auf
@@ -352,11 +351,11 @@ struct AgentChatsClaudeAccountsTab: View {
         case .tokenExpired:
             return "token expired — press “Update” below (renews via a short Claude-CLI ping)"
         case .refreshCoolingDown(let until):
-            return "recently pinged — next attempt possible at \(timeText(until))"
+            return String(localized: "recently pinged — next attempt possible at \(timeText(until))")
         case .httpStatus(429):
             return "rate-limited by Anthropic — try again in a few minutes"
         case .httpStatus(let status):
-            return "live fetch failed (HTTP \(status))"
+            return String(localized: "live fetch failed (HTTP \(status))")
         case .network:
             return "offline — showing last known state"
         }
@@ -433,13 +432,13 @@ struct AgentChatsClaudeAccountsTab: View {
         }
         var parts: [String] = []
         if !summary.renewed.isEmpty {
-            parts.append("Renewed via CLI ping: \(summary.renewed.joined(separator: ", ")).")
+            parts.append(String(localized: "Renewed via CLI ping: \(summary.renewed.joined(separator: ", "))."))
         }
         if !summary.loginRequired.isEmpty {
-            parts.append("Login expired (re-login via ⋯ menu): \(summary.loginRequired.joined(separator: ", ")).")
+            parts.append(String(localized: "Login expired (re-login via ⋯ menu): \(summary.loginRequired.joined(separator: ", "))."))
         }
         if !summary.failed.isEmpty {
-            parts.append("Ping failed: \(summary.failed.joined(separator: ", ")).")
+            parts.append(String(localized: "Ping failed: \(summary.failed.joined(separator: ", "))."))
         }
         guard !parts.isEmpty else {
             showFeedback("Limits updated.", tone: .secondary)
@@ -455,9 +454,9 @@ struct AgentChatsClaudeAccountsTab: View {
         do {
             try profileService.setActiveProfile(profile.name)
             activeProfileName = profile.name
-            showFeedback("New Claude chats now start as “\(profile.name)”. Running sessions are not affected.", tone: .secondary)
+            showFeedback(String(localized: "New Claude chats now start as “\(profile.name)”. Running sessions are not affected."), tone: .secondary)
         } catch {
-            showFeedback("Could not switch account: \(error.localizedDescription)", tone: .error)
+            showFeedback(String(localized: "Could not switch account: \(error.localizedDescription)"), tone: .error)
         }
     }
 
@@ -468,7 +467,7 @@ struct AgentChatsClaudeAccountsTab: View {
             newProfileName = ""
             reload()
             openLoginTerminal(for: profile)
-            showFeedback("Profile “\(name)” created. Complete the login in the Terminal window, then hit Refresh.", tone: .secondary)
+            showFeedback(String(localized: "Profile “\(name)” created. Complete the login in the Terminal window, then hit Refresh."), tone: .secondary)
         } catch {
             showFeedback(error.localizedDescription, tone: .error)
         }
@@ -490,12 +489,13 @@ struct AgentChatsClaudeAccountsTab: View {
             ? "unset CLAUDE_CONFIG_DIR"
             : "export CLAUDE_CONFIG_DIR=\"\(profile.configDir.path)\""
         let hint = profile.isMain && profile.isLoggedIn
-            ? "Type /login and sign in with the account that should become main — it replaces the current main login."
-            : "Log in once (/login) — afterwards this profile stays signed in permanently."
+            ? String(localized: "Type /login and sign in with the account that should become main — it replaces the current main login.")
+            : String(localized: "Log in once (/login) — afterwards this profile stays signed in permanently.")
+        let banner = String(localized: "WhisperM8 · Claude account profile “\(profile.name)”")
         let script = """
         #!/bin/zsh
         \(configLine)
-        echo "WhisperM8 · Claude account profile “\(profile.name)”"
+        echo "\(banner)"
         echo "\(hint)"
         exec "\(claudePath)"
         """
@@ -511,7 +511,7 @@ struct AgentChatsClaudeAccountsTab: View {
             )
             NSWorkspace.shared.open(commandURL)
         } catch {
-            showFeedback("Could not open the login Terminal: \(error.localizedDescription)", tone: .error)
+            showFeedback(String(localized: "Could not open the login Terminal: \(error.localizedDescription)"), tone: .error)
         }
     }
 
@@ -530,18 +530,18 @@ struct AgentChatsClaudeAccountsTab: View {
     private func renameProfile(_ profile: ClaudeAccountProfile) {
         let store = AgentSessionStore()
         guard !profileHasRunningSession(profile.name) else {
-            showFeedback("“\(profile.name)” has running sessions — stop them before renaming.", tone: .warning)
+            showFeedback(String(localized: "“\(profile.name)” has running sessions — stop them before renaming."), tone: .warning)
             return
         }
 
         let alert = NSAlert()
-        alert.messageText = "Rename account profile “\(profile.name)”"
-        alert.informativeText = "The login is kept — the Keychain entry moves to the new name automatically. All chats of this profile keep working."
+        alert.messageText = String(localized: "Rename account profile “\(profile.name)”")
+        alert.informativeText = String(localized: "The login is kept — the Keychain entry moves to the new name automatically. All chats of this profile keep working.")
         let field = NSTextField(string: profile.name)
         field.frame = NSRect(x: 0, y: 0, width: 240, height: 24)
         alert.accessoryView = field
-        alert.addButton(withTitle: "Rename")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Rename"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         let newName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -551,7 +551,7 @@ struct AgentChatsClaudeAccountsTab: View {
             try store.renameClaudeSessionProfiles(from: profile.name, to: newName)
             usageByProfile[newName] = usageByProfile.removeValue(forKey: profile.name)
             reload()
-            showFeedback("Profile renamed to “\(newName)”. Login and chats moved along.", tone: .secondary)
+            showFeedback(String(localized: "Profile renamed to “\(newName)”. Login and chats moved along."), tone: .secondary)
         } catch {
             showFeedback(error.localizedDescription, tone: .error)
         }
@@ -568,7 +568,11 @@ struct AgentChatsClaudeAccountsTab: View {
             $0.claudeProfileName == profile.name && runningIDs.contains($0.id)
         }.count
         guard runningCount == 0 else {
-            showFeedback("“\(profile.name)” has \(runningCount) running chat\(runningCount == 1 ? "" : "s") — stop \(runningCount == 1 ? "it" : "them") before making it the main account.", tone: .warning)
+            showFeedback(
+                runningCount == 1
+                    ? String(localized: "“\(profile.name)” has 1 running chat — stop it before making it the main account.")
+                    : String(localized: "“\(profile.name)” has \(runningCount) running chats — stop them before making it the main account."),
+                tone: .warning)
             return
         }
 
@@ -576,17 +580,17 @@ struct AgentChatsClaudeAccountsTab: View {
         let oldMain = main?.emailAddress.map { " (\($0))" } ?? ""
         let newAccount = profile.emailAddress.map { " (\($0))" } ?? ""
         let alert = NSAlert()
-        alert.messageText = "Make “\(profile.name)” the main account?"
-        alert.informativeText = """
+        alert.messageText = String(localized: "Make “\(profile.name)” the main account?")
+        alert.informativeText = String(localized: """
         The login of “\(profile.name)”\(newAccount) replaces the current main login\(oldMain), which is signed out for good — add it again as a new profile if you still need it.
 
         All chats of “\(profile.name)” move to main and keep working; the profile folder goes to the Trash. Afterwards claude in the Terminal, background agents and every main chat use this account. Running main chats pick it up after a restart.
 
         Close Terminal sessions started with this profile (ccs) first.
-        """
+        """)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Make Main Account")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Make Main Account"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         // Kein Scan waehrend des Umzugs: der Indexer saehe Transcripts
@@ -600,21 +604,21 @@ struct AgentChatsClaudeAccountsTab: View {
             usageFetcher.discardCache(forProfile: profile.name)
             usageByProfile = [:]
             reload()
-            var message = "“\(profile.name)” is now the main account. Its chats moved to main."
+            var message = String(localized: "“\(profile.name)” is now the main account. Its chats moved to main.")
             if !result.conflicts.isEmpty {
                 let sample = result.conflicts.prefix(3).joined(separator: ", ")
-                message += " \(result.conflicts.count) file(s) already existed in main and stayed in the profile folder (now in the Trash): \(sample)\(result.conflicts.count > 3 ? ", …" : "")."
+                message += " " + String(localized: "\(result.conflicts.count) file(s) already existed in main and stayed in the profile folder (now in the Trash): \(sample)\(result.conflicts.count > 3 ? ", …" : "").")
             }
             showFeedback(message, tone: result.conflicts.isEmpty ? .secondary : .warning)
         } catch {
             reload()
-            showFeedback("Could not make “\(profile.name)” the main account: \(error.localizedDescription)", tone: .error)
+            showFeedback(String(localized: "Could not make “\(profile.name)” the main account: \(error.localizedDescription)"), tone: .error)
         }
     }
 
     private func removeProfile(_ profile: ClaudeAccountProfile) {
         guard !profileHasRunningSession(profile.name) else {
-            showFeedback("“\(profile.name)” has running sessions — stop them before removing the profile.", tone: .warning)
+            showFeedback(String(localized: "“\(profile.name)” has running sessions — stop them before removing the profile."), tone: .warning)
             return
         }
         // Plugins, die über diesen Ordner registriert sind, wären nach dem
@@ -627,16 +631,16 @@ struct AgentChatsClaudeAccountsTab: View {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "Remove account profile “\(profile.name)”?"
-        alert.informativeText = "Moves \(profile.configDir.path) — including its chat history — to the Trash, so you can restore it if needed. The Keychain login entry is kept — remove it via Keychain Access if you want it gone. Sessions that ran under this profile can no longer be resumed while the folder is in the Trash."
+        alert.messageText = String(localized: "Remove account profile “\(profile.name)”?")
+        alert.informativeText = String(localized: "Moves \(profile.configDir.path) — including its chat history — to the Trash, so you can restore it if needed. The Keychain login entry is kept — remove it via Keychain Access if you want it gone. Sessions that ran under this profile can no longer be resumed while the folder is in the Trash.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Move to Trash")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Move to Trash"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         // Nach der Bestätigung frisch prüfen: der laufende Prozess behielte
         // sonst einen Config-Root, dessen Verlauf im Papierkorb liegt (LR-KO-005).
         guard !profileHasRunningSession(profile.name) else {
-            showFeedback("“\(profile.name)” has running sessions — stop them before removing the profile.", tone: .warning)
+            showFeedback(String(localized: "“\(profile.name)” has running sessions — stop them before removing the profile."), tone: .warning)
             return
         }
 
@@ -647,9 +651,9 @@ struct AgentChatsClaudeAccountsTab: View {
             // vernichten.
             try FileManager.default.trashItem(at: profile.configDir, resultingItemURL: nil)
             reload()
-            showFeedback("Profile “\(profile.name)” moved to Trash.", tone: .secondary)
+            showFeedback(String(localized: "Profile “\(profile.name)” moved to Trash."), tone: .secondary)
         } catch {
-            showFeedback("Could not remove profile: \(error.localizedDescription)", tone: .error)
+            showFeedback(String(localized: "Could not remove profile: \(error.localizedDescription)"), tone: .error)
         }
     }
 

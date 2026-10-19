@@ -42,7 +42,7 @@ struct RecordingSettingsPage: View {
                     selection: $selectedDeviceUID,
                     options: inputDeviceOptions.map(\.uid)
                 ) { uid in
-                    Text(inputDeviceName(for: uid))
+                    Text(settingsLocalized: inputDeviceName(for: uid))
                 }
                 .onChange(of: selectedDeviceUID) { _, newValue in
                     deviceManager.selectedDeviceUID = newValue.isEmpty ? nil : newValue
@@ -58,7 +58,7 @@ struct RecordingSettingsPage: View {
                 if audioDuckingEnabled {
                     SettingsSliderRow(
                         title: "Target volume",
-                        subtitle: "System volume will be set to \(Int(audioDuckingFactor * 100))% during recording.",
+                        subtitle: String(localized: "System volume will be set to \(Int(audioDuckingFactor * 100))% during recording."),
                         value: $audioDuckingFactor,
                         in: 0.05...0.3,
                         step: 0.05
@@ -72,7 +72,7 @@ struct RecordingSettingsPage: View {
                     selection: $overlayStyleRaw,
                     options: OverlayStyle.allCases.map(\.rawValue)
                 ) { rawValue in
-                    Text(OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
+                    Text(settingsLocalized: OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
                 }
 
                 SettingsToggleRow(
@@ -111,6 +111,6 @@ struct RecordingSettingsPage: View {
             return AudioDevice.systemDefault.name
         }
 
-        return deviceManager.availableDevices.first { $0.uid == uid }?.name ?? "Missing device"
+        return deviceManager.availableDevices.first { $0.uid == uid }?.name ?? String(localized: "Missing device")
     }
 }

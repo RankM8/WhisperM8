@@ -8,7 +8,6 @@ import UserNotifications
 enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
     case workspace
     case notifications
-    case voiceAgent
     case advanced
 
     var title: String {
@@ -17,8 +16,6 @@ enum AgentChatsSettingsPageTab: String, CaseIterable, Hashable {
             return "Workspace"
         case .notifications:
             return "Notifications"
-        case .voiceAgent:
-            return "Codex Voice Agent"
         case .advanced:
             return "Advanced"
         }
@@ -55,19 +52,24 @@ struct AgentChatsSettingsPage: View {
             AgentChatsWorkspaceSettingsTab()
         case .notifications:
             AgentChatsNotificationsSettingsTab()
-        case .voiceAgent:
-            AgentChatsVoiceAgentTab()
         case .advanced:
             AgentChatsAdvancedSettingsTab()
         }
     }
 }
 
-private struct AgentChatsWorkspaceSettingsTab: View {
+struct AgentChatsWorkspaceSettingsTab: View {
+    /// Startart-Auswahl: „Claude Agents“ (Multi-Session-Ansicht) gehört zu den
+    /// erweiterten Funktionen (LR-AU-031). Eine gespeicherte Auswahl bleibt sichtbar.
+    static func newChatOptions(advanced: Bool, current: String) -> [String] {
+        advanced || current == "claude-agents" ? ["claude", "claude-agents", "codex"] : ["claude", "codex"]
+    }
+
     @AppStorage(PreferenceKeys.defaultAgentProvider) private var defaultAgentProviderRaw = "claude"
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
     @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
     @AppStorage(PreferenceKeys.isTabSwipeEnabled) private var isTabSwipeEnabled = true
+    @AppStorage(PreferenceKeys.agentAdvancedFeaturesEnabled) private var isAdvancedEnabled = false
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
     @State private var folderFeedback: String?
@@ -89,16 +91,16 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "New chat starts with",
                     subtitle: "Claude Agents opens the multi-session dashboard view instead of a single chat.",
                     selection: $defaultAgentProviderRaw,
-                    options: ["claude", "claude-agents", "codex"]
+                    options: Self.newChatOptions(advanced: isAdvancedEnabled, current: defaultAgentProviderRaw)
                 ) { rawValue in
-                    Text(providerLabel(for: rawValue))
+                    Text(settingsLocalized: providerLabel(for: rawValue))
                 }
 
                 SettingsButtonRow(
                     title: "Default project folder",
                     subtitle: "New chats start from this folder. Project actions still update this path when you open or select a project."
                 ) {
-                    Text(defaultProjectPath)
+                    Text(verbatim: defaultProjectPath)
                         .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                         .foregroundStyle(AppTheme.textSecondary)
                         .lineLimit(1)
@@ -126,6 +128,12 @@ private struct AgentChatsWorkspaceSettingsTab: View {
                     title: "Switch tabs with a two-finger swipe",
                     subtitle: "Swiping sideways on the trackpad moves to the next or previous tab. Ignored for a moment after you type, so a resting palm cannot switch chats while you write.",
                     isOn: $isTabSwipeEnabled
+                )
+
+                SettingsToggleRow(
+                    title: "Advanced agent features",
+                    subtitle: "Shows background agents, agent views, plain terminals and the sub-agent library in the new-chat menu. Existing chats of these kinds stay usable either way.",
+                    isOn: $isAdvancedEnabled
                 )
 
                 SettingsToggleRow(
@@ -159,7 +167,7 @@ private struct AgentChatsWorkspaceSettingsTab: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Choose"
+        panel.prompt = String(localized: "Choose")
 
         if isExistingDirectory(defaultProjectPath) {
             panel.directoryURL = URL(fileURLWithPath: defaultProjectPath, isDirectory: true)
@@ -277,7 +285,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
                 Picker("", selection: $stopSoundName) {
                     ForEach(soundChoices, id: \.self) { name in
-                        Text(name).tag(name)
+                        Text(settingsLocalized: name).tag(name)
                     }
                 }
                 .labelsHidden()
@@ -380,16 +388,16 @@ private struct AgentChatsNotificationsSettingsTab: View {
 
     private func sendTestNotification() {
         let content = UNMutableNotificationContent()
-        content.title = "Statusmaschine-Chat"
+        content.title = String(localized: "Example chat")
         content.subtitle = "WhisperM8 Test"
-        content.body = "Agent ist fertig und wartet auf dich."
+        content.body = String(localized: "Agent is finished and waiting for you.")
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             Task { @MainActor in
                 if let error {
                     showNotificationFeedback(NotificationFeedback(
-                        message: "Notification failed: \(error.localizedDescription)",
+                        message: String(localized: "Notification failed: \(error.localizedDescription)"),
                         tone: .error
                     ))
                 } else {
@@ -420,9 +428,18 @@ private struct NotificationFeedback {
 private struct AgentChatsAdvancedSettingsTab: View {
     @AppStorage(PreferenceKeys.claudeExtraArguments) private var claudeExtraArguments = ""
     @AppStorage(PreferenceKeys.codexExtraArguments) private var codexExtraArguments = ""
+    @AppStorage(PreferenceKeys.gridAutoCompactEnabled) private var gridAutoCompact = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            SettingsSection("Grid") {
+                SettingsToggleRow(
+                    title: "Close gaps when a chat leaves the grid",
+                    subtitle: "The remaining chats move up and the grid shrinks to the smallest layout that fits. Off: the empty slot and the layout stay, so every chat keeps its position.",
+                    isOn: $gridAutoCompact
+                )
+            }
+
             SettingsSection("Advanced") {
                 cliArgumentsField(
                     title: "Claude CLI · extra arguments",
@@ -469,7 +486,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
                 let dangerous = AgentCLIArgumentsPreview.dangerousArguments(in: text.wrappedValue)
                 if !dangerous.isEmpty {
                     SettingsHelpText(
-                        "\(dangerous.joined(separator: " ")) turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it.",
+                        String(localized: "\(dangerous.joined(separator: " ")) turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it."),
                         tone: .warning
                     )
                     .frame(width: 420, alignment: .trailing)
@@ -480,7 +497,7 @@ private struct AgentChatsAdvancedSettingsTab: View {
 
     private func commandPreviewRow(binary: String, extraArguments: String) -> some View {
         SettingsRow(title: "Command preview") {
-            Text(AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
+            Text(verbatim: AgentCLIArgumentsPreview.preview(binary: binary, extraArguments: extraArguments))
                 .font(.system(size: 11.5, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)

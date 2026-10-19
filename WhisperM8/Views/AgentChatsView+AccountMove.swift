@@ -143,11 +143,9 @@ extension AgentChatsView {
         )
         if !outcome.skippedRunning.isEmpty {
             // Auch ohne offenes Sheet sichtbar (Rueckgaengig aus dem Kontextmenue).
-            errorMessage = "Nicht zurückgenommen, weil gerade laufend: "
-                + outcome.skippedRunning.joined(separator: ", ")
-                + " — Chat anhalten und „Letzten Kontowechsel rückgängig machen“ erneut wählen."
+            errorMessage = String(localized: "Not reverted because still running: \(outcome.skippedRunning.joined(separator: ", ")) — pause the chat and choose “Undo last account switch” again.")
         } else if outcome.moved.isEmpty, outcome.failed.isEmpty {
-            errorMessage = "Es gibt keinen Kontowechsel, der zurückgenommen werden könnte."
+            errorMessage = String(localized: "There is no account switch that could be reverted.")
         }
         accountMovePhase = .finished(outcome)
         AccountMenuData.invalidateAll()
@@ -182,8 +180,8 @@ extension AgentChatsView {
             let sessions = group == [session.id] ? [session] : self.sessions(in: group)
             let currentProfiles = Set(sessions.map { $0.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName })
             let label = sessions.count == 1
-                ? "Zu Account verschieben"
-                : "\(sessions.count) Chats zu Account verschieben"
+                ? String(localized: "Move to account")
+                : String(localized: "Move \(sessions.count) chats to account")
             Menu(label, systemImage: "person.crop.circle.badge.checkmark") {
                 ForEach(AccountMenuData.claudeProfiles.value) { profile in
                     // Ziel ausblenden, wenn ALLE ausgewaehlten Chats schon dort
@@ -197,13 +195,13 @@ extension AgentChatsView {
                 }
                 if let pendingSwitch = AccountSwitchCoordinator.shared.pending[session.id] {
                     Divider()
-                    Button("Kontowechsel zu \(pendingSwitch.targetName) aufheben", systemImage: "xmark.circle") {
+                    Button("Cancel account switch to \(pendingSwitch.targetName)", systemImage: "xmark.circle") {
                         AccountSwitchCoordinator.shared.cancel(sessionID: session.id)
                     }
                 }
                 if hasUndoableAccountMove {
                     Divider()
-                    Button("Letzten Kontowechsel rückgängig machen", systemImage: "arrow.uturn.backward") {
+                    Button("Undo last account switch", systemImage: "arrow.uturn.backward") {
                         undoLastAccountMove()
                     }
                 }

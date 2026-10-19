@@ -14,38 +14,38 @@ struct VoiceGateMenuSection: View {
         }
 
         if AppPreferences.shared.isCodexVoiceGateDryRun {
-            Text("Trockenlauf: \(gate.wouldPressCount)× würde drücken, \(gate.skippedCount)× übersprungen")
+            Text("Dry run: would press \(gate.wouldPressCount)×, skipped \(gate.skippedCount)×")
         } else {
-            Text("Scharf: \(gate.pressCount)× umgeschaltet, \(gate.skippedCount)× übersprungen")
+            Text("Armed: toggled \(gate.pressCount)×, skipped \(gate.skippedCount)×")
         }
 
         if let event = gate.lastEvent, let at = gate.lastEventAt {
-            Text("Zuletzt \(Self.timeFormatter.string(from: at)): \(event)")
+            Text("Last at \(Self.timeFormatter.string(from: at)): \(event)")
         }
 
-        Menu("Codex-Mikrofon ist tatsächlich …") {
-            Button("offen") { gate.correctAssumedState(to: .open) }
-            Button("stumm") { gate.correctAssumedState(to: .muted) }
-            Button("unbekannt") { gate.correctAssumedState(to: .unknown) }
+        Menu("Codex microphone is actually …") {
+            Button("open") { gate.correctAssumedState(to: .open) }
+            Button("muted") { gate.correctAssumedState(to: .muted) }
+            Button("unknown") { gate.correctAssumedState(to: .unknown) }
         }
 
-        Button("Zähler zurücksetzen") { gate.resetCounters() }
+        Button("Reset counters") { gate.resetCounters() }
     }
 
     private var statusLine: String {
         let arm: String
         switch gate.armState {
-        case .armed: arm = "scharf"
-        case .codexNotRunning: arm = "Codex läuft nicht"
-        case .noRecentSession: arm = "keine Sprachsitzung"
-        case .pausedForDictation: arm = "pausiert (Diktat läuft)"
+        case .armed: arm = String(localized: "armed")
+        case .codexNotRunning: arm = String(localized: "Codex not running")
+        case .noRecentSession: arm = String(localized: "no voice session")
+        case .pausedForDictation: arm = String(localized: "paused (dictation running)")
         }
 
         let assumed: String
         switch gate.assumedState {
-        case .open: assumed = "Mikro offen"
-        case .muted: assumed = "Mikro stumm"
-        case .unknown: assumed = "Zustand unbekannt"
+        case .open: assumed = String(localized: "mic open")
+        case .muted: assumed = String(localized: "mic muted")
+        case .unknown: assumed = String(localized: "state unknown")
         }
 
         return "Voice Gate: \(arm) · \(assumed)"
@@ -53,7 +53,7 @@ struct VoiceGateMenuSection: View {
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
+        formatter.setLocalizedDateFormatFromTemplate("jmmss")
         return formatter
     }()
 }

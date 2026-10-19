@@ -322,18 +322,18 @@ struct AgentSessionDetailView: View {
             Image(systemName: "terminal")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(AgentTheme.textTertiary)
-            Text("Shell beendet")
+            Text("Shell ended")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AgentTheme.textSecondary)
             Text(project.path)
-                .font(.system(size: 10, design: .monospaced))
+                .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Button {
                 launchAfterCacheWarmup()
             } label: {
-                Label("Neue Shell starten", systemImage: "play.fill")
+                Label("Start new shell", systemImage: "play.fill")
                     .font(.system(size: 11, weight: .medium))
             }
             .buttonStyle(.bordered)
@@ -347,7 +347,7 @@ struct AgentSessionDetailView: View {
     private var loadingView: some View {
         VStack(spacing: 8) {
             ProgressView().controlSize(.small)
-            Text("Konversation wird geladen…")
+            Text("Loading conversation…")
                 .font(.system(size: 12))
                 .foregroundStyle(AgentTheme.textSecondary)
         }
@@ -555,8 +555,8 @@ struct AgentSessionDetailView: View {
 
     private func presentGPTBackendFallbackAlert() {
         let alert = NSAlert()
-        alert.messageText = "GPT-Backend nicht erreichbar"
-        alert.informativeText = "Chat startet mit dem Claude-Standardmodell. Details in Einstellungen > GPT-Backend."
+        alert.messageText = String(localized: "GPT backend unreachable")
+        alert.informativeText = String(localized: "The chat starts with the default Claude model. Details in Settings > GPT Backend.")
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
@@ -789,11 +789,6 @@ struct AgentResumeTranscriptMissingError: LocalizedError {
     let externalSessionID: String
 
     var errorDescription: String? {
-        "Chat-Verlauf momentan nicht auffindbar: Für Session \(externalSessionID) "
-            + "existiert weder unter ~/.claude/projects noch in einem Account-Profil "
-            + "(~/.claude-profiles/*/projects) eine Transcript-Datei. Falls sie "
-            + "gelöscht wurde, lege für neue Arbeit einen neuen Chat an — dieser "
-            + "Tab behält seine Zuordnung und resumed automatisch wieder, sobald "
-            + "die Datei wieder auftaucht."
+        String(localized: "Chat history currently not found: for session \(externalSessionID) there is no transcript file under ~/.claude/projects or in any account profile (~/.claude-profiles/*/projects). If it was deleted, start a new chat for new work — this tab keeps its assignment and resumes automatically as soon as the file reappears.")
     }
 }

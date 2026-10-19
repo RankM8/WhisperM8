@@ -905,21 +905,22 @@ final class SidebarRelativeTimeTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
     private func label(secondsAgo: TimeInterval) -> String {
-        SidebarRelativeTime.short(now.addingTimeInterval(-secondsAgo), now: now)
+        SidebarRelativeTime.short(now.addingTimeInterval(-secondsAgo), now: now, locale: Locale(identifier: "en"))
     }
 
     func testFormatsAcrossUnits() {
-        XCTAssertEqual(label(secondsAgo: 5), "jetzt")
-        XCTAssertEqual(label(secondsAgo: 59), "jetzt")
-        XCTAssertEqual(label(secondsAgo: 60), "1m")
-        XCTAssertEqual(label(secondsAgo: 45 * 60), "45m")
-        XCTAssertEqual(label(secondsAgo: 60 * 60), "1h")
-        XCTAssertEqual(label(secondsAgo: 5 * 3600), "5h")
-        XCTAssertEqual(label(secondsAgo: 24 * 3600), "1d")
-        XCTAssertEqual(label(secondsAgo: 3 * 24 * 3600), "3d")
-        XCTAssertEqual(label(secondsAgo: 7 * 24 * 3600), "1w")
-        XCTAssertEqual(label(secondsAgo: 21 * 24 * 3600), "3w")
-        XCTAssertEqual(label(secondsAgo: 60 * 24 * 3600), "2mo")
+        XCTAssertEqual(label(secondsAgo: 5), "now")
+        XCTAssertEqual(label(secondsAgo: 59), "now")
+        XCTAssertEqual(label(secondsAgo: 60), "1m ago")
+        XCTAssertEqual(label(secondsAgo: 45 * 60), "45m ago")
+        XCTAssertEqual(label(secondsAgo: 60 * 60), "1h ago")
+        XCTAssertEqual(label(secondsAgo: 5 * 3600), "5h ago")
+        XCTAssertEqual(label(secondsAgo: 24 * 3600), "1d ago")
+        XCTAssertEqual(label(secondsAgo: 3 * 24 * 3600), "3d ago")
+        XCTAssertEqual(label(secondsAgo: 7 * 24 * 3600), "1w ago")
+        XCTAssertEqual(label(secondsAgo: 21 * 24 * 3600), "3w ago")
+        XCTAssertEqual(label(secondsAgo: 60 * 24 * 3600), "1mo ago")
+        XCTAssertEqual(label(secondsAgo: 95 * 24 * 3600), "3mo ago")
     }
 }
 
@@ -1122,7 +1123,7 @@ final class SidebarCloseActionTests: XCTestCase {
         let action = SidebarCloseAction.resolve(scope: .active, session: chat())
         XCTAssertEqual(action, .endSession)
         XCTAssertEqual(action.icon, "minus")
-        XCTAssertEqual(action.help, "Tab schließen und Chat beenden")
+        XCTAssertEqual(action.help, "Close tab and end chat")
     }
 
     func testOtherScopesKeepArchiving() {
@@ -1130,7 +1131,7 @@ final class SidebarCloseActionTests: XCTestCase {
             let action = SidebarCloseAction.resolve(scope: scope, session: chat())
             XCTAssertEqual(action, .archive, "Scope \(scope.rawValue) darf weiter archivieren")
             XCTAssertEqual(action.icon, "xmark")
-            XCTAssertEqual(action.help, "Archivieren")
+            XCTAssertEqual(action.help, "Archive")
         }
     }
 
@@ -1139,7 +1140,7 @@ final class SidebarCloseActionTests: XCTestCase {
             let action = SidebarCloseAction.resolve(scope: scope, session: chat(kind: .terminal))
             XCTAssertEqual(action, .closeTerminal, "Terminal in Scope \(scope.rawValue)")
             XCTAssertEqual(action.icon, "xmark")
-            XCTAssertEqual(action.help, "Terminal schließen")
+            XCTAssertEqual(action.help, "Close terminal")
         }
     }
 
@@ -1154,7 +1155,7 @@ final class SidebarCloseActionTests: XCTestCase {
         let action = SidebarCloseAction.resolveForWorkspaceRow(session: chat())
         XCTAssertEqual(action, .endAndRemoveFromWorkspace)
         XCTAssertEqual(action.icon, "minus")
-        XCTAssertEqual(action.help, "Tab schließen, Chat beenden und aus dem Workspace nehmen")
+        XCTAssertEqual(action.help, "Close tab, end chat and remove from workspace")
     }
 
     func testWorkspaceRowKeepsTerminalClose() {

@@ -110,10 +110,10 @@ struct AIOutputModesTab: View {
                         .frame(width: 8, height: 8)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(mode.name)
+                        Text(settingsLocalized: mode.name)
                             .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                             .foregroundStyle(isSelected ? AppTheme.accent : AppTheme.textPrimary)
-                        Text(isLocked ? "Needs AI enrichment (Codex)" : model.modeSummary(mode))
+                        Text(settingsLocalized: isLocked ? "Needs AI enrichment (Codex)" : model.modeSummary(mode))
                             .font(.system(size: 11))
                             .foregroundStyle(AppTheme.textTertiary)
                             .lineLimit(1)
@@ -192,26 +192,26 @@ struct AIOutputModesTab: View {
                     SettingsSection("Codex Overrides") {
                         SettingsToggleRow(
                             title: "Use global Codex model",
-                            subtitle: mode.codexModelRawOverride == nil ? "Uses Account default: \(catalogModelLabel(for: globalCodexModelRaw))." : nil,
+                            subtitle: mode.codexModelRawOverride == nil ? String(localized: "Uses Account default: \(catalogModelLabel(for: globalCodexModelRaw)).") : nil,
                             isOn: useGlobalModelBinding(for: mode.id)
                         )
 
                         if mode.codexModelRawOverride != nil {
                             SettingsPickerRow(
                                 title: "Mode model",
-                                subtitle: catalog.model(slug: effectiveModeModelSlug(for: mode))?.detail
+                                subtitle: catalog.model(slug: effectiveModeModelSlug(for: mode))?.detail.map(runtimeLocalized)
                                     ?? "Not listed in your Codex CLI's model catalog.",
                                 selection: modeModelBinding(for: mode.id),
                                 options: [CodexModelSelection.autoRawValue]
                                     + catalog.pickerModelSlugs(including: mode.resolvedCodexModelRaw(defaultModelRaw: globalCodexModelRaw))
                             ) { rawValue in
-                                Text(catalogModelLabel(for: rawValue))
+                                Text(settingsLocalized: catalogModelLabel(for: rawValue))
                             }
                         }
 
                         SettingsToggleRow(
                             title: "Use global Thinking level",
-                            subtitle: mode.codexReasoningEffortRawOverride == nil ? "Uses Account default: \(CodexModelCatalog.effortDisplayName(globalReasoningEffortRaw))." : nil,
+                            subtitle: mode.codexReasoningEffortRawOverride == nil ? String(localized: "Uses Account default: \(runtimeLocalized(CodexModelCatalog.effortDisplayName(globalReasoningEffortRaw))).") : nil,
                             isOn: useGlobalReasoningBinding(for: mode.id)
                         )
 
@@ -222,14 +222,14 @@ struct AIOutputModesTab: View {
                                 title: "Thinking level",
                                 subtitle: catalog.efforts(forModelSlug: effectiveModeModelSlug(for: mode))
                                     .first { $0.effort == mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw) }?
-                                    .detail ?? "Reasoning depth for this mode.",
+                                    .detail.map(runtimeLocalized) ?? "Reasoning depth for this mode.",
                                 selection: modeReasoningBinding(for: mode.id),
                                 options: catalog.pickerEffortValues(
                                     forModelSlug: effectiveModeModelSlug(for: mode),
                                     including: mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)
                                 )
                             ) { rawValue in
-                                Text(CodexModelCatalog.effortDisplayName(rawValue))
+                                Text(settingsLocalized: CodexModelCatalog.effortDisplayName(rawValue))
                             }
                         }
 
@@ -239,7 +239,7 @@ struct AIOutputModesTab: View {
 
                         SettingsToggleRow(
                             title: "Use global Fast mode",
-                            subtitle: mode.codexServiceTierRawOverride == nil ? "Uses Account default: \(CodexServiceTier.resolve(globalServiceTierRaw).displayName)." : nil,
+                            subtitle: mode.codexServiceTierRawOverride == nil ? String(localized: "Uses Account default: \(runtimeLocalized(CodexServiceTier.resolve(globalServiceTierRaw).displayName)).") : nil,
                             isOn: useGlobalServiceTierBinding(for: mode.id)
                         )
 
@@ -250,7 +250,7 @@ struct AIOutputModesTab: View {
                                 selection: modeServiceTierBinding(for: mode.id),
                                 options: CodexServiceTier.allCases.map(\.rawValue)
                             ) { rawValue in
-                                Text(CodexServiceTier.resolve(rawValue).displayName)
+                                Text(settingsLocalized: CodexServiceTier.resolve(rawValue).displayName)
                             }
                         }
                     }
@@ -262,7 +262,7 @@ struct AIOutputModesTab: View {
                             selection: contextPolicyBinding(for: mode.id),
                             options: ContextCapturePolicy.allCases
                         ) { policy in
-                            Text(policy.displayName)
+                            Text(settingsLocalized: policy.displayName)
                         }
 
                         SettingsToggleRow(
@@ -277,7 +277,7 @@ struct AIOutputModesTab: View {
                             selection: templateBinding(for: mode.id),
                             options: model.templates.map(\.id)
                         ) { templateID in
-                            Text(model.templates.first { $0.id == templateID }?.name ?? templateID)
+                            Text(settingsLocalized: model.templates.first { $0.id == templateID }?.name ?? templateID)
                         }
 
                         SettingsButtonRow(
@@ -323,22 +323,29 @@ struct AIOutputModesTab: View {
     private func editorHeader(_ mode: OutputMode) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(mode.name)
+                Text(settingsLocalized: mode.name)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(AppTheme.textPrimary)
-                Text(mode.kind == .custom ? "Custom mode" : "Built-in mode")
+                Text(settingsLocalized: mode.kind == .custom ? "Custom mode" : "Built-in mode")
                     .font(.system(size: 11.5))
                     .foregroundStyle(AppTheme.textTertiary)
             }
 
             Spacer()
 
-            Button(mode.id == model.defaultOutputModeID ? "Default" : "Make Default") {
+            Button {
                 model.setDefault(mode.id)
+            } label: {
+                mode.id == model.defaultOutputModeID ? Text("Default") : Text("Make Default")
             }
             .disabled(mode.id == model.defaultOutputModeID)
             .buttonStyle(SettingsButtonStyle.primary)
         }
+    }
+
+    /// Übersetzt einen zur Laufzeit gelieferten englischen Text (Katalog-Schlüssel).
+    private func runtimeLocalized(_ key: String) -> String {
+        String(localized: String.LocalizationValue(key))
     }
 
     private func indicatorColor(for mode: OutputMode, isLocked: Bool) -> Color {
@@ -431,11 +438,11 @@ struct AIOutputModesTab: View {
 
     private func catalogModelLabel(for rawValue: String) -> String {
         if rawValue == CodexModelSelection.autoRawValue {
-            let frontier = catalog.frontierModel?.displayName ?? "latest"
-            return "Auto — latest (\(frontier))"
+            let frontier = catalog.frontierModel?.displayName ?? String(localized: "latest")
+            return String(localized: "Auto — latest (\(frontier))")
         }
         guard catalog.model(slug: rawValue) != nil else {
-            return "\(rawValue) (not in catalog)"
+            return String(localized: "\(rawValue) (not in catalog)")
         }
         return catalog.modelDisplayName(rawValue)
     }
@@ -449,7 +456,8 @@ struct AIOutputModesTab: View {
         let effort = mode.resolvedCodexReasoningEffortRaw(defaultReasoningEffortRaw: globalReasoningEffortRaw)
         guard let catalogModel = catalog.model(slug: slug),
               !catalogModel.supportsEffort(effort) else { return nil }
-        return "\(CodexModelCatalog.effortDisplayName(effort)) is not listed for \(catalogModel.displayName) — Codex may reject or downgrade it."
+        let effortName = runtimeLocalized(CodexModelCatalog.effortDisplayName(effort))
+        return String(localized: "\(effortName) is not listed for \(catalogModel.displayName) — Codex may reject or downgrade it.")
     }
 
     private func useGlobalReasoningBinding(for modeID: String) -> Binding<Bool> {

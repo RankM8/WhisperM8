@@ -136,7 +136,7 @@ extension AgentChatsView {
             if selectedSessionID == session.id {
                 selectedSessionID = openTabIDs.first
             }
-            errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: Worker-Settings mit GPT-Router-Environment konnten nicht geschrieben werden."
+            errorMessage = String(localized: "Background agent could not be started: worker settings with the GPT router environment could not be written.")
             return
         }
 
@@ -195,7 +195,7 @@ extension AgentChatsView {
                     updated.status = .closed
                 }
             }
-            errorMessage = "Hintergrund-Agent konnte nicht gestartet werden: \(error.localizedDescription)"
+            errorMessage = String(localized: "Background agent could not be started: \(error.localizedDescription)")
         }
     }
 
@@ -321,6 +321,6 @@ extension AgentChatsView {
         let firstLine = trimmed.split(whereSeparator: { $0.isNewline }).first.map(String.init) ?? trimmed
         let cap = 60
         let snippet = firstLine.count > cap ? String(firstLine.prefix(cap - 1)) + "…" : firstLine
-        return snippet.isEmpty ? "Hintergrund-Agent" : snippet
+        return snippet.isEmpty ? String(localized: "Background agent") : snippet
     }
 }

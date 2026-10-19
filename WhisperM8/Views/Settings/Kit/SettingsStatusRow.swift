@@ -29,7 +29,7 @@ struct SettingsStatusRow<Actions: View>: View {
                         .fill(tone.color)
                         .frame(width: 8, height: 8)
 
-                    Text(detail)
+                    Text(settingsLocalized: detail)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }

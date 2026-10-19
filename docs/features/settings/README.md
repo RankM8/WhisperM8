@@ -21,6 +21,41 @@ Aktuelle Code-Aufhängung: `SettingsPage` und `SettingsView` in
 `WhisperM8/Views/Settings/Kit/`, testbare Zustandsmodelle in
 `WhisperM8/Views/Settings/Models/`.
 
+## Seitenleiste nach Launch-Klassen (seit 19.10.2026, LR-ONB-012)
+
+Die Seitenleiste ordnet die Seiten nach den Launch-Klassen (Logik rein und
+getestet in `Models/SettingsNavigation.swift`, Tests `SettingsNavigationTests`):
+
+| Gruppe | Klasse | Seiten |
+|---|---|---|
+| Dictation | Kern | Recording, Transcription, AI Output, Context & Privacy, Output |
+| Agent Chats | Kern | Agent Chats, CLI & Skills |
+| App | Kern | General, Permissions, About |
+| Advanced | Erweitert | Accounts, Hooks |
+| Labs | Labs | GPT-Backend, Codex Voice Agent, Jarvis & Callouts |
+
+- **Diktat-Profile** (`dictationRaw`, `dictationEnrichment`) sehen die
+  Agent-Chats-Seiten (Agent Chats, CLI & Skills, Accounts, Hooks, GPT-Backend,
+  Jarvis & Callouts) nicht in der Hauptliste; „Show Agent Chats settings"
+  klappt sie auf. Ein Deep-Link auf eine ausgeblendete Seite klappt die Liste
+  selbst auf. Nichts wird entfernt, alles bleibt erreichbar.
+- **Labs** (inoffizieller Upstream oder experimentell) tragen oben die
+  Kennzeichnung `SettingsLabsNotice`. Der Transkriptionsanbieter „ChatGPT-Abo"
+  erscheint nur, wenn das GPT-Backend eingerichtet ist oder er bereits gewählt
+  wurde (`TranscriptionProvider.settingsOptions`).
+- Der frühere Tab „Codex Voice Agent" von „Agent Chats" ist die Labs-Seite
+  `voice-gate` (Alt-Route `voiceAgent` führt dorthin). Neu: `jarvis` (Jarvis-Board,
+  Notizen, gesprochene Ansagen, Terminal-Experimente).
+
+### Kein `defaults write` als Bedienweg
+
+Jeder Schalter aus `PreferenceKeys` hat einen UI-Weg oder steht begründet in
+`Models/PreferenceBedienweg.swift` (Notbremsen, interner Zustand, indirekte
+UI, Messwerkzeuge). `PreferenceBedienwegGuardTests` prüft das gegen
+`AppPreferences`; ein neuer Schalter ohne Binding in den Einstellungen fällt dort
+auf. Notbremsen bleiben bewusst ohne Oberfläche — der Support nennt den
+`defaults write`-Befehl aus dem Kommentar in `AppPreferences`.
+
 ## Aktuelle Seiten
 
 Die Tabelle beschreibt die 10 Seiten des Refactors. Seither ist die Gruppe

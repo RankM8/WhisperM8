@@ -22,7 +22,7 @@ struct AIOutputTestLabTab: View {
                     selection: $selectedModeID,
                     options: modes.map(\.id)
                 ) { modeID in
-                    Text(modes.first { $0.id == modeID }?.name ?? modeID)
+                    Text(settingsLocalized: modes.first { $0.id == modeID }?.name ?? modeID)
                 }
 
                 SettingsRow(title: "Input — raw transcript")
@@ -127,7 +127,7 @@ struct AIOutputTestLabTab: View {
             guard generation == previewGeneration, !Task.isCancelled else { return }
             if shouldFallbackToRaw {
                 previewText = normalizedText
-                errorMessage = "\(error.localizedDescription) Showing Raw fallback."
+                errorMessage = String(localized: "\(error.localizedDescription) Showing Raw fallback.")
             } else {
                 previewText = ""
                 errorMessage = error.localizedDescription

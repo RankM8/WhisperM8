@@ -32,7 +32,7 @@ struct GPTAccountsSection: View {
 
     var body: some View {
         Group {
-            SettingsSection("ChatGPT-Konten (GPT-Backend)") {
+            SettingsSection("ChatGPT accounts (GPT-Backend)") {
                 ForEach(profiles) { profile in
                     profileRow(profile)
                 }
@@ -41,25 +41,25 @@ struct GPTAccountsSection: View {
                     deviceCodeRows(deviceCodeInfo, profileName: loginProfileName)
                 }
 
-                SettingsHelpText("Das aktive Konto gilt für neu gestartete Claude-Chats (auch für einen späteren /model-Wechsel auf GPT). Laufende Chats behalten ihr Konto; bestehende Chats lassen sich im Kontextmenü umstellen. Background-Agents (claude --bg) nutzen immer das Hauptkonto. Diese Konten sind die Proxy-Logins des GPT-Backends — Codex-CLI, Diktat und die ChatGPT-App nutzen ihren eigenen „codex login“.")
+                SettingsHelpText("The active account applies to newly started Claude chats (also for a later /model switch to GPT). Running chats keep their account; existing chats can be switched in the context menu. Background agents (claude --bg) always use the main account. These accounts are the proxy logins of the GPT-Backend — the Codex CLI, dictation and the ChatGPT app use their own “codex login”.")
 
                 if let feedback {
                     SettingsHelpText(feedback, tone: feedbackTone)
                 }
             }
 
-            SettingsSection("Konto hinzufügen") {
+            SettingsSection("Add account") {
                 SettingsRow(
-                    title: "Neues Kontoprofil",
-                    subtitle: "Legt einen eigenen Proxy-Login an (CCP_CONFIG_DIR), der dauerhaft angemeldet bleibt. Der Login läuft per Gerätecode im Browser — dort mit dem gewünschten ChatGPT-Konto anmelden; ist im Browser schon ein anderes Konto aktiv, ein Inkognito-Fenster nehmen."
+                    title: "New account profile",
+                    subtitle: "Creates a separate proxy login (CCP_CONFIG_DIR) that stays signed in permanently. The login runs via device code in the browser — sign in there with the ChatGPT account you want; if another account is already active in the browser, use an incognito window."
                 ) {
                     HStack(spacing: 8) {
-                        TextField("z. B. ai", text: $newProfileName)
+                        TextField("e.g. ai", text: $newProfileName)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(size: 12, weight: .regular, design: .monospaced))
                             .frame(width: 160)
 
-                        Button("Anlegen & anmelden…") {
+                        Button("Create & sign in…") {
                             createProfileAndLogin()
                         }
                         .buttonStyle(SettingsButtonStyle.primary)
@@ -73,11 +73,13 @@ struct GPTAccountsSection: View {
                 }
 
                 SettingsButtonRow(
-                    title: "Limits aktualisieren",
-                    subtitle: "Fragt die Wochen-Limits aller angemeldeten Konten live ab."
+                    title: "Refresh limits",
+                    subtitle: "Queries the weekly limits of all signed-in accounts live."
                 ) {
-                    Button(isFetchingUsage ? "Lade…" : "Aktualisieren") {
+                    Button {
                         fetchUsage()
+                    } label: {
+                        isFetchingUsage ? Text("Loading…") : Text("Refresh")
                     }
                     .buttonStyle(SettingsButtonStyle.standard)
                     .disabled(isFetchingUsage)
@@ -146,22 +148,22 @@ struct GPTAccountsSection: View {
         .buttonStyle(.plain)
         .disabled(!profile.isLoggedIn || isBusy || loginInProgress)
         .help(isActive
-            ? "Aktives Konto für neue GPT-Chats"
+            ? Text("Active account for new GPT chats")
             : profile.isLoggedIn
-                ? "Dieses Konto für neue GPT-Chats verwenden"
-                : "Zuerst anmelden (⋯-Menü)")
+                ? Text("Use this account for new GPT chats")
+                : Text("Sign in first (⋯ menu)"))
     }
 
     private func identityColumn(for profile: GPTAccountProfile, isActive: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 7) {
-                Text(profile.name)
+                Text(settingsLocalized: profile.name)
                     .font(.system(size: 13.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? AppTheme.statusWorking : AppTheme.textPrimary)
 
                 if let plan = profile.planDisplayName ?? usageByProfile[profile.name]?.planType
                     .flatMap(GPTAccountProfiles.planDisplayName) {
-                    Text(plan)
+                    Text(settingsLocalized: plan)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(AppTheme.textSecondary)
                         .padding(.horizontal, 6)
@@ -181,29 +183,29 @@ struct GPTAccountsSection: View {
 
             if profile.isLoggedIn {
                 if let email = profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress {
-                    Text(email)
+                    Text(settingsLocalized: email)
                         .font(.system(size: 11.5))
                         .foregroundStyle(AppTheme.textTertiary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 } else if let accountID = profile.accountID {
-                    Text("Konto …\(accountID.suffix(8))")
+                    Text("Account …\(String(accountID.suffix(8)))")
                         .font(.system(size: 11.5, design: .monospaced))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
                 if let port = runningPorts[profile.name] {
                     // verbatim: SwiftUI formatiert interpolierte Ints sonst mit
                     // Tausendertrennzeichen („18'775").
-                    Text(verbatim: "Proxy-Instanz auf Port \(port)")
+                    Text(verbatim: String(localized: "Proxy instance on port \(String(port))"))
                         .font(.system(size: 10.5))
                         .foregroundStyle(AppTheme.textTertiary)
                 }
             } else if loginProfileName == profile.name, loginInProgress {
-                Text("Login läuft…")
+                Text("Login running…")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             } else {
-                Text("Nicht angemeldet")
+                Text("Not signed in")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             }
@@ -215,12 +217,14 @@ struct GPTAccountsSection: View {
         if profile.isLoggedIn {
             usageView(for: profile)
         } else {
-            Button(loginProfileName == profile.name && loginInProgress ? "Login läuft…" : "Anmelden…") {
+            Button {
                 startLogin(for: profile)
+            } label: {
+                loginProfileName == profile.name && loginInProgress ? Text("Login running…") : Text("Sign in…")
             }
             .buttonStyle(SettingsButtonStyle.standard)
             .disabled(loginInProgress)
-            .help("Öffnet den Gerätecode-Login für dieses Profil — im Browser mit dem gewünschten ChatGPT-Konto anmelden, bei Bedarf in einem Inkognito-Fenster.")
+            .help("Opens the device-code login for this profile — sign in in the browser with the ChatGPT account you want, in an incognito window if needed.")
         }
     }
 
@@ -243,18 +247,18 @@ struct GPTAccountsSection: View {
                     )
                 }
                 if usage.isLimitReached {
-                    Text("Gesperrt — Kontingent erschöpft\(Self.untilText(Self.lockedUntil(usage)))")
+                    Text("Locked — quota exhausted\(Self.untilText(Self.lockedUntil(usage)))")
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(AppTheme.statusError)
                 }
             }
         } else if let problem = usageProblemByProfile[profile.name] {
-            Text(problem)
+            Text(settingsLocalized: problem)
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(AppTheme.statusAwaiting)
                 .frame(maxWidth: 260, alignment: .leading)
         } else if isFetchingUsage {
-            Text("lade…")
+            Text("loading…")
                 .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.textTertiary)
         }
@@ -279,7 +283,7 @@ struct GPTAccountsSection: View {
         }()
 
         return HStack(spacing: 7) {
-            Text(label)
+            Text(settingsLocalized: label)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AppTheme.textTertiary)
                 .lineLimit(1)
@@ -296,12 +300,12 @@ struct GPTAccountsSection: View {
                 }
             }
 
-            Text(percent.map { "\(Int($0.rounded())) %" } ?? "—")
+            Text(settingsLocalized: percent.map { "\(Int($0.rounded())) %" } ?? "—")
                 .font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(percent != nil ? color : AppTheme.textTertiary)
                 .frame(width: 38, alignment: .trailing)
 
-            Text(Self.resetText(resetsAt))
+            Text(settingsLocalized: Self.resetText(resetsAt))
                 .font(.system(size: 10, weight: .regular).monospacedDigit())
                 .foregroundStyle(AppTheme.textTertiary)
                 .frame(width: 66, alignment: .leading)
@@ -311,19 +315,19 @@ struct GPTAccountsSection: View {
     @ViewBuilder
     private func manageMenu(for profile: GPTAccountProfile, isActive: Bool) -> some View {
         Menu {
-            Button(profile.isLoggedIn ? "Neu anmelden…" : "Anmelden…") { startLogin(for: profile) }
+            Button { startLogin(for: profile) } label: { profile.isLoggedIn ? Text("Sign in again…") : Text("Sign in…") }
                 .disabled(loginInProgress)
             if profile.isLoggedIn {
-                Button("Abmelden…") { logout(profile) }
+                Button("Sign out…") { logout(profile) }
                     .disabled(isBusy || loginInProgress)
             }
             if !profile.isMain, profile.isLoggedIn {
-                Button("Zum Hauptkonto machen…") { promoteToMain(profile) }
+                Button("Make main account…") { promoteToMain(profile) }
                     .disabled(isBusy || loginInProgress)
             }
             if !profile.isMain {
                 Divider()
-                Button("Entfernen…", role: .destructive) { removeProfile(profile) }
+                Button("Remove…", role: .destructive) { removeProfile(profile) }
                     .disabled(isActive || isBusy || loginInProgress)
             }
         } label: {
@@ -336,31 +340,31 @@ struct GPTAccountsSection: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(profile.isMain ? "Anmelden, abmelden" : "Zum Hauptkonto machen, anmelden, abmelden, entfernen")
+        .help(profile.isMain ? Text("Sign in, sign out") : Text("Make main account, sign in, sign out, remove"))
     }
 
     @ViewBuilder
     private func deviceCodeRows(_ info: ClaudeCodeProxyDeviceCodeInfo, profileName: String) -> some View {
         SettingsRow(
-            title: "Login für „\(profileName)“",
-            subtitle: "URL im Browser öffnen, dort mit dem gewünschten ChatGPT-Konto anmelden und den Code eingeben. Ist im Browser ein anderes Konto aktiv, ein Inkognito-Fenster verwenden."
+            title: String(localized: "Login for “\(profileName)”"),
+            subtitle: "Open the URL in the browser, sign in there with the ChatGPT account you want and enter the code. If another account is active in the browser, use an incognito window."
         ) {
             if let url = URL(string: info.visitURL) {
                 Link(info.visitURL, destination: url)
                     .font(.system(size: 13, weight: .medium))
             } else {
-                Text(info.visitURL).textSelection(.enabled)
+                Text(settingsLocalized: info.visitURL).textSelection(.enabled)
             }
         }
 
-        SettingsRow(title: "Gerätecode") {
+        SettingsRow(title: "Device code") {
             HStack(spacing: 10) {
-                Text(info.code)
+                Text(settingsLocalized: info.code)
                     .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.textPrimary)
                     .textSelection(.enabled)
 
-                Button("Code kopieren") {
+                Button("Copy code") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(info.code, forType: .string)
                 }
@@ -420,7 +424,7 @@ struct GPTAccountsSection: View {
                     } else {
                         usageByProfile[profile.name] = nil
                         usageProblemByProfile[profile.name] =
-                            "Limits nicht abrufbar — Token in der Datei veraltet. Die Instanz läuft weiter; zur Anzeige „Neu anmelden…“ (⋯)."
+                            "Limits unavailable — token in the file is outdated. The instance keeps running; to show them, use “Sign in again…” (⋯)."
                     }
                 }
                 profiles = service.profiles()
@@ -435,9 +439,9 @@ struct GPTAccountsSection: View {
         do {
             try profileService.setActiveProfile(profile.name)
             activeProfileName = profile.name
-            showFeedback("Neue GPT-Chats laufen jetzt über „\(profile.name)“. Laufende Chats bleiben unverändert.", tone: .secondary)
+            showFeedback(String(localized: "New GPT chats now run through “\(profile.name)”. Running chats stay unchanged."), tone: .secondary)
         } catch {
-            showFeedback("Konto konnte nicht aktiviert werden: \(error.localizedDescription)", tone: .error)
+            showFeedback(String(localized: "Could not activate account: \(error.localizedDescription)"), tone: .error)
             return
         }
         onAccountsChanged()
@@ -449,7 +453,7 @@ struct GPTAccountsSection: View {
             await MainActor.run {
                 runningPorts = manager.runningProfileInstances()
                 if case .failure(let error) = result {
-                    showFeedback("Proxy-Instanz für „\(profile.name)“ konnte nicht starten: \(error.localizedDescription)", tone: .error)
+                    showFeedback(String(localized: "Proxy instance for “\(profile.name)” could not start: \(error.localizedDescription)"), tone: .error)
                 }
             }
         }
@@ -469,7 +473,7 @@ struct GPTAccountsSection: View {
 
     private func startLogin(for profile: GPTAccountProfile) {
         guard !loginInProgress else {
-            showFeedback("Es läuft bereits ein Login — bitte zuerst abschließen.", tone: .warning)
+            showFeedback("A login is already running — please finish it first.", tone: .warning)
             return
         }
         feedback = nil
@@ -490,12 +494,12 @@ struct GPTAccountsSection: View {
                     deviceCodeInfo = nil
                     loginProfileName = nil
                     if exitCode != 0 {
-                        showFeedback("Login für „\(profile.name)“ wurde mit Status \(exitCode) beendet.", tone: .error)
+                        showFeedback(String(localized: "Login for “\(profile.name)” ended with status \(exitCode)."), tone: .error)
                     } else if let newAccountID = service.storedAccountID(forProfile: profile.name) {
                         if let duplicate = others.first(where: { $0.accountID == newAccountID }) {
-                            showFeedback("Achtung: Dieses ChatGPT-Konto ist bereits als „\(duplicate.name)“ verbunden. Im Browser war vermutlich das andere Konto angemeldet — für ein zweites Konto den Login in einem Inkognito-Fenster wiederholen (⋯ → Neu anmelden…).", tone: .warning)
+                            showFeedback(String(localized: "Warning: this ChatGPT account is already connected as “\(duplicate.name)”. The browser was probably signed in to the other account — for a second account, repeat the login in an incognito window (⋯ → Sign in again…)."), tone: .warning)
                         } else {
-                            showFeedback("„\(profile.name)“ ist angemeldet.", tone: .secondary)
+                            showFeedback(String(localized: "“\(profile.name)” is signed in."), tone: .secondary)
                         }
                         if !profile.isMain {
                             // Laufende Instanz benutzt den alten Grant im Speicher —
@@ -503,7 +507,7 @@ struct GPTAccountsSection: View {
                             proxyManager.stopInstance(profile: profile.name)
                         }
                     } else {
-                        showFeedback("Login für „\(profile.name)“ beendet, aber keine Anmeldedaten gefunden.", tone: .error)
+                        showFeedback(String(localized: "Login for “\(profile.name)” finished, but no credentials were found."), tone: .error)
                     }
                     reload()
                     onAccountsChanged()
@@ -519,13 +523,13 @@ struct GPTAccountsSection: View {
 
     private func logout(_ profile: GPTAccountProfile) {
         let alert = NSAlert()
-        alert.messageText = "GPT-Konto „\(profile.name)“ abmelden?"
+        alert.messageText = String(localized: "Sign out GPT account “\(profile.name)”?")
         alert.informativeText = profile.isMain
-            ? "Der Proxy-Login des Hauptkontos wird gelöscht. Chats auf dem Hauptkonto starten dann ohne GPT-Backend, bis du dich erneut anmeldest."
-            : "Der Proxy-Login dieses Profils wird gelöscht und seine Instanz beendet. Chats auf diesem Konto laufen beim nächsten Start über das Hauptkonto, bis du dich erneut anmeldest."
+            ? String(localized: "The main account’s proxy login will be deleted. Chats on the main account then start without the GPT-Backend until you sign in again.")
+            : String(localized: "This profile’s proxy login will be deleted and its instance stopped. Chats on this account run through the main account on their next start until you sign in again.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Abmelden")
-        alert.addButton(withTitle: "Abbrechen")
+        alert.addButton(withTitle: String(localized: "Sign out"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         isBusy = true
@@ -541,9 +545,9 @@ struct GPTAccountsSection: View {
                     }
                     usageByProfile[profile.name] = nil
                     usageProblemByProfile[profile.name] = nil
-                    showFeedback("„\(profile.name)“ ist abgemeldet.", tone: .secondary)
+                    showFeedback(String(localized: "“\(profile.name)” is signed out."), tone: .secondary)
                 case .failure(let error):
-                    showFeedback("Abmelden fehlgeschlagen: \(error.localizedDescription)", tone: .error)
+                    showFeedback(String(localized: "Sign-out failed: \(error.localizedDescription)"), tone: .error)
                 }
                 reload()
                 onAccountsChanged()
@@ -562,15 +566,13 @@ struct GPTAccountsSection: View {
         let newAccount = (profile.emailAddress ?? usageByProfile[profile.name]?.emailAddress)
             .map { " (\($0))" } ?? ""
         let alert = NSAlert()
-        alert.messageText = "„\(profile.name)“ zum Hauptkonto machen?"
-        alert.informativeText = """
-        Der Proxy-Login von „\(profile.name)“\(newAccount) ersetzt den des Hauptkontos\(oldMain), der dabei abgemeldet wird — bei Bedarf unter „Konto hinzufügen“ wieder anmelden.
-
-        Chats auf „\(profile.name)“ laufen danach über das Hauptkonto weiter, das Profil verschwindet. Der Proxy des Hauptkontos startet dafür kurz neu.
-        """
+        alert.messageText = String(localized: "Make “\(profile.name)” the main account?")
+        alert.informativeText = String(localized: "The proxy login of “\(profile.name)”\(newAccount) replaces that of the main account\(oldMain), which is signed out in the process — sign in again under “Add account” if needed.")
+            + "\n\n"
+            + String(localized: "Chats on “\(profile.name)” then continue through the main account, and the profile disappears. The main account’s proxy restarts briefly for this.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Zum Hauptkonto machen")
-        alert.addButton(withTitle: "Abbrechen")
+        alert.addButton(withTitle: String(localized: "Make main account"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         isBusy = true
@@ -601,9 +603,9 @@ struct GPTAccountsSection: View {
                 }
                 switch result {
                 case .success:
-                    showFeedback("„\(name)“ ist jetzt das Hauptkonto.", tone: .secondary)
+                    showFeedback(String(localized: "“\(name)” is now the main account."), tone: .secondary)
                 case .failure(let error) where promoted:
-                    showFeedback("„\(name)“ ist jetzt das Hauptkonto, aber der Proxy startete nicht neu: \(error.localizedDescription)", tone: .warning)
+                    showFeedback(String(localized: "“\(name)” is now the main account, but the proxy did not restart: \(error.localizedDescription)"), tone: .warning)
                 case .failure(let error):
                     showFeedback(error.localizedDescription, tone: .error)
                 }
@@ -615,11 +617,11 @@ struct GPTAccountsSection: View {
 
     private func removeProfile(_ profile: GPTAccountProfile) {
         let alert = NSAlert()
-        alert.messageText = "GPT-Konto „\(profile.name)“ entfernen?"
-        alert.informativeText = "Der Proxy-Login dieses Profils wird gelöscht und seine Instanz beendet. Chats, die auf dieses Konto gestempelt sind, werden auf das Hauptkonto umgestellt."
+        alert.messageText = String(localized: "Remove GPT account “\(profile.name)”?")
+        alert.informativeText = String(localized: "This profile’s proxy login will be deleted and its instance stopped. Chats stamped with this account are switched to the main account.")
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Entfernen")
-        alert.addButton(withTitle: "Abbrechen")
+        alert.addButton(withTitle: String(localized: "Remove"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         if loginProfileName == profile.name {
@@ -639,7 +641,7 @@ struct GPTAccountsSection: View {
             try profileService.removeProfile(named: profile.name)
             usageByProfile[profile.name] = nil
             usageProblemByProfile[profile.name] = nil
-            showFeedback("„\(profile.name)“ wurde entfernt.", tone: .secondary)
+            showFeedback(String(localized: "“\(profile.name)” was removed."), tone: .secondary)
         } catch {
             showFeedback(error.localizedDescription, tone: .error)
         }
@@ -656,17 +658,11 @@ struct GPTAccountsSection: View {
 
     private static func resetText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE HH:mm" : "HH:mm"
-        return "→ \(formatter.string(from: resetsAt))"
+        return "→ \(UsageResetDateFormat.short(resetsAt))"
     }
 
     private static func untilText(_ resetsAt: Date?) -> String {
         guard let resetsAt else { return "" }
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "de_DE")
-        formatter.dateFormat = resetsAt.timeIntervalSinceNow > 86_400 ? "EE dd.MM. HH:mm" : "HH:mm"
-        return " · frei ab \(formatter.string(from: resetsAt))"
+        return String(localized: " · free from \(UsageResetDateFormat.long(resetsAt))")
     }
 }
