@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 import ScreenCaptureKit
 
@@ -11,7 +12,7 @@ import ScreenCaptureKit
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
         "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
-        "debug.context",
+        "debug.context", "debug.record",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -24,6 +25,7 @@ extension AgentControlRequestHandler {
             case "debug.dictate": response = debugDictate(request)
             case "debug.status": response = await debugStatus(request)
             case "debug.context": response = await debugContext(request)
+            case "debug.record": response = await debugRecord(request)
             default: response = debugJob(request)
             }
         } else {
@@ -95,6 +97,51 @@ extension AgentControlRequestHandler {
                 "restoredBaseline": pasteboard.string(forType: .string) == "debug-baseline",
             ]
         }.value
+        return .success(requestID: request.requestID, result: .object(result))
+    }
+
+    // MARK: record
+
+    /// Echter Hotkey-Start (Engine, Bluetooth-Neustart, „Mikrofon verbindet …"),
+    /// kurze Aufnahme, dann Abbruch: Datei verworfen, kein Transkript, kein
+    /// Einfügen, kein Kontext-Capture. Fragt nie nach der Mikrofonfreigabe.
+    private func debugRecord(_ request: ChatsControlRequest) async -> ChatsControlResponse {
+        let seconds = min(max(request.params["seconds"]?.doubleValue ?? 1.0, 0.3), 5.0)
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            return .failure(requestID: request.requestID, code: .conflict,
+                            message: "Keine Mikrofonfreigabe — debug record fragt bewusst nicht nach.")
+        }
+        let result = await Task { @MainActor () -> [String: Any]? in
+            let appState = AppState.shared
+            guard !appState.isRecording, !appState.isTranscribing else { return nil }
+            let manager = AudioDeviceManager.shared
+            let inputID = manager.selectedDeviceID ?? manager.getDefaultInputDeviceID()
+            let inputName = manager.availableDevices.first { $0.id == inputID }?.name
+            let report = await appState.startRecordingForDebug()
+            var maxLevel: Float = 0
+            let recording = appState.isRecording
+            if recording {
+                let deadline = Date().addingTimeInterval(seconds)
+                while Date() < deadline {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    maxLevel = max(maxLevel, appState.audioLevel)
+                }
+                appState.cancelRecording()
+            }
+            return [
+                "recording": recording,
+                "startMs": report?.startMs ?? NSNull(),
+                "connectingShown": report?.connectingShown ?? NSNull(),
+                "engineAttempts": report?.engineAttempts ?? NSNull(),
+                "error": report?.error ?? NSNull(),
+                "maxLevel": Double(maxLevel),
+                "seconds": seconds,
+                "input": inputName ?? NSNull(),
+            ]
+        }.value
+        guard let result else {
+            return .failure(requestID: request.requestID, code: .conflict, message: "Diktat läuft gerade — später erneut.")
+        }
         return .success(requestID: request.requestID, result: .object(result))
     }
 

@@ -113,6 +113,12 @@ final class AppState {
         await recordingCoordinator.stopRecording()
     }
 
+    /// `whisperm8 debug record`: echter Hotkey-Start ohne Kontext-Capture.
+    func startRecordingForDebug() async -> RecordingCoordinator.StartReport? {
+        await recordingCoordinator.startRecording(captureContext: false)
+        return recordingCoordinator.lastStartReport
+    }
+
     func cancelRecording() {
         recordingCoordinator.cancelRecording()
     }

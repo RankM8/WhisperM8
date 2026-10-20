@@ -220,6 +220,9 @@ final class DebugControlTests: XCTestCase {
         XCTAssertEqual(try DebugCLIArguments.parse(["state"], cwd: cwd), .state)
         XCTAssertEqual(try DebugCLIArguments.parse(["context"], cwd: cwd), .context)
         XCTAssertThrowsError(try DebugCLIArguments.parse(["context", "x"], cwd: cwd))
+        XCTAssertEqual(try DebugCLIArguments.parse(["record"], cwd: cwd), .record(seconds: nil))
+        XCTAssertEqual(try DebugCLIArguments.parse(["record", "2"], cwd: cwd), .record(seconds: 2))
+        XCTAssertThrowsError(try DebugCLIArguments.parse(["record", "9"], cwd: cwd))
         XCTAssertEqual(try DebugCLIArguments.parse(["open", "settings/transcription"], cwd: cwd),
                        .open(target: "settings/transcription"))
         XCTAssertEqual(try DebugCLIArguments.parse(["snapshot"], cwd: cwd), .snapshot(window: nil, outputDir: nil))

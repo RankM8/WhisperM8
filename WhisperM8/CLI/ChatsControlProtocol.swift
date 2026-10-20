@@ -264,6 +264,11 @@ indirect enum ChatsControlJSON: Codable, Equatable {
         return nil
     }
 
+    var doubleValue: Double? {
+        if case .number(let value) = self { return value }
+        return nil
+    }
+
     subscript(key: String) -> ChatsControlJSON? {
         if case .object(let dict) = self { return dict[key] }
         return nil

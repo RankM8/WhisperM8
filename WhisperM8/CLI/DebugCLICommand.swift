@@ -12,6 +12,7 @@ enum DebugCLIArguments: Equatable {
     case job(id: String)
     case status(ref: String, status: String)
     case context
+    case record(seconds: Double?)
 
     static let defaultDictateTimeout = 300
 
@@ -79,6 +80,13 @@ enum DebugCLIArguments: Equatable {
         case "context":
             try noRest()
             return .context
+        case "record":
+            guard rest.count <= 1 else { throw ParseError.usage("record [<sekunden>]") }
+            guard let raw = rest.first else { return .record(seconds: nil) }
+            guard let seconds = Double(raw), seconds > 0, seconds <= 5 else {
+                throw ParseError.usage("record: Sekunden zwischen 0 und 5")
+            }
+            return .record(seconds: seconds)
         default:
             throw ParseError.usage("Unbekannter debug-Befehl: \(command)")
         }
@@ -108,6 +116,8 @@ enum DebugCLICommand {
                                     von Status-Punkten; der nächste echte Wechsel überschreibt ihn
       context                       Clipboard-Fallback des Diktatstarts durchlaufen (private
                                     Zwischenablage, kein Tastendruck) — Tastencodes für Cmd+C/V
+      record [<sekunden>]           Echten Aufnahmestart wie per Hotkey messen (Default 1 s,
+                                    max. 5), danach Abbruch ohne Transkript und ohne Kontext
 
     Ausgabe: JSON auf stdout. Exit: 0 ok, 1 Aufruf/Parameter, 3 nicht gefunden,
     4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.
@@ -144,6 +154,8 @@ enum DebugCLICommand {
             return call("debug.status", ["ref": ref, "status": status])
         case .context:
             return call("debug.context", [:])
+        case .record(let seconds):
+            return call("debug.record", seconds.map { ["seconds": $0] } ?? [:])
         case .dictate(let audioPath, let provider, let language, let timeout):
             var params: [String: Any] = ["audioPath": audioPath]
             if let provider { params["provider"] = provider }
