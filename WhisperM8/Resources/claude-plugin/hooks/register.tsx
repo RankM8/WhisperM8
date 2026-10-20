@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { BoardEntry, BoardLight, BoardView } from '../types'
+import { registerTasks, startTasks } from './tasks'
 
 // Jarvis-Board: Übersicht der Chats, die Jarvis aktiv betreut, als Band über
 // dem Prompt. Die Wahrheit liegt in der App (`whisperm8 chats board`), die Mod
@@ -439,11 +440,15 @@ const speak = async ($: EngineInterface, text: string): Promise<string> => {
 
 export const register: Register = (on, options) => {
   wakeMode = typeof options.wecken === 'string' ? options.wecken : 'turn'
+  // Task-Anzeige (tasks.tsx): vor den Board-Hooks, damit ihr Band außen liegt.
+  registerTasks(on, options)
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     sessionEnded = false
     sessionID = (await $.env.get('WHISPERM8_SESSION_ID')) ?? null
+    // Die Task-Anzeige gilt in jeder Session, auch außerhalb von WhisperM8.
+    await startTasks($).catch(() => undefined)
     // Außerhalb eines WhisperM8-Chats gibt es weder Board noch Ansagen.
     if (sessionID === null) return started
     try {

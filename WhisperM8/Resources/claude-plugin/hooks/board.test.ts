@@ -82,11 +82,20 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
 
 const SURFACES = ['terminal', 'desktop'] as const
 
+/**
+ * Das Board liest session.start nicht awaitet. Vor dem Board-Hook liegt der
+ * AbovePrompt-Hook der Task-Anzeige (tasks.tsx): ohne kurzes Warten zeichnet
+ * der erste Mount noch vor dem Lesen, das Band käme erst mit dem Neuzeichnen.
+ */
+declare const setTimeout: (fn: () => void, ms: number) => unknown
+const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0))
+
 describe('Band', () => {
   test('zeigt wartende Chats zuerst, breit mit Wörtern, im Slot knapp', async ($, on) => {
     mock.clock(on, { now: NOW })
     world(on)
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
     for (const surface of SURFACES) {
       const wide = await $.ui.mount({ ...band(179), surface })
       expect(await wide.find({ text: /1 wartet/ })).toBeDefined()
@@ -150,6 +159,7 @@ describe('Band', () => {
     mock.clock(on, { now: NOW })
     const calls = world(on)
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
     for (const surface of SURFACES) {
       const ui = await $.ui.mount({ ...band(120), surface })
       // Oberste Zeile = wartender Chat (a3f2c1d0), Hotkey „1“.
@@ -204,6 +214,7 @@ describe('Arbeitspaket, Blockade, Meilensteine', () => {
       },
     })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
     const ui = await $.ui.mount({ ...band(179), surface: 'terminal' })
     expect(await ui.find({ text: /Baut die letzte Variante \(L22\)/ })).toBeDefined()
     expect(await ui.find({ text: /Nur next gesetzt/ })).toBeDefined()
