@@ -14,6 +14,11 @@ private final class FakeRecorderEngine: RecorderEngine {
     )
     var installTapError: Error?
     var startError: Error?
+    /// So viele `start()`-Aufrufe scheitern zuerst; `onFailedStart` läuft dabei
+    /// (z. B. Bluetooth-Profilwechsel: Format springt mitten im Start).
+    var startFailures = 0
+    var onFailedStart: (() -> Void)?
+    private(set) var lastTapFormat: AVAudioFormat?
     private(set) var installTapCount = 0
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -23,12 +28,18 @@ private final class FakeRecorderEngine: RecorderEngine {
     func removeTap() { handler = nil }
     func installTap(format: AVAudioFormat, handler: @escaping (AVAudioPCMBuffer) -> Void) throws {
         installTapCount += 1
+        lastTapFormat = format
         if let installTapError { throw installTapError }
         self.handler = handler
     }
     func prepare() {}
     func start() throws {
         startCount += 1
+        if startFailures > 0 {
+            startFailures -= 1
+            onFailedStart?()
+            throw FakeEngineError()
+        }
         if let startError { throw startError }
         isRunning = true
     }
@@ -141,6 +152,42 @@ final class AudioRecorderStateTests: XCTestCase {
     }
 
     // MARK: LR-DIK-004
+
+    func testEngineStartRetriesWithNewFormatAfterBluetoothProfileSwitch() async throws {
+        let recorder = makeRecorder()
+        let engine = FakeRecorderEngine()
+        let a2dp = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 1, interleaved: false)!
+        let hfp = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false)!
+        engine.format = a2dp
+        engine.startFailures = 1
+        engine.onFailedStart = { engine.format = hfp }
+
+        try await recorder.beginSessionRetryingFormatChange(
+            engine: engine, inputFormat: a2dp, file: FakeWriter(), url: tempURL()
+        )
+
+        XCTAssertTrue(recorder.isRecording, "zweiter Versuch muss die Aufnahme starten")
+        XCTAssertEqual(engine.startCount, 2)
+        XCTAssertEqual(engine.installTapCount, 2)
+        XCTAssertEqual(engine.lastTapFormat?.sampleRate, 24000, "Tap muss das neue Format nutzen")
+        _ = recorder.stopRecording()
+    }
+
+    func testEngineStartGivesUpAfterMaxAttempts() async throws {
+        let recorder = makeRecorder()
+        let engine = FakeRecorderEngine()
+        engine.startFailures = 99
+
+        do {
+            try await recorder.beginSessionRetryingFormatChange(
+                engine: engine, inputFormat: mono16k, file: FakeWriter(), url: tempURL()
+            )
+            XCTFail("dauerhaft scheiternder Start muss werfen")
+        } catch {}
+
+        XCTAssertFalse(recorder.isRecording)
+        XCTAssertEqual(engine.startCount, AudioRecorder.engineStartAttempts)
+    }
 
     func testFormatFailureAfterDeviceChangeKeepsPartialRecording() async throws {
         let recorder = makeRecorder()

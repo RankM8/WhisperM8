@@ -191,6 +191,14 @@ final class OverlayPhaseTests: XCTestCase {
         XCTAssertEqual(OverlayPhase.resolve(isTranscribing: false, isPostProcessing: true), .improving)
     }
 
+    func testConnectingPhaseShowsUntilMicrophoneRunsAndLocksControls() {
+        XCTAssertEqual(OverlayPhase.resolve(isConnecting: true, isTranscribing: false, isPostProcessing: false), .connecting)
+        XCTAssertEqual(OverlayPhase.resolve(isConnecting: false, isTranscribing: false, isPostProcessing: false), .recording)
+        XCTAssertTrue(OverlayPhase.connecting.isBusy, "Modus-Wahl erst, wenn die Aufnahme läuft")
+        XCTAssertNotNil(OverlayPhase.connecting.statusLabel(postProcessingStatusText: nil))
+        XCTAssertEqual(OverlayPhase.connecting.cancelHelp, OverlayPhase.recording.cancelHelp)
+    }
+
     func testStatusLabelOnlyWhereTextCarriesInformation() {
         // Recording: bewusst KEIN Dauerlabel — die Waveform ist der Status.
         XCTAssertNil(OverlayPhase.recording.statusLabel(postProcessingStatusText: nil))

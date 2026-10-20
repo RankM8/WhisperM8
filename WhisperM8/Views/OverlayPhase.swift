@@ -4,21 +4,26 @@ import SwiftUI
 
 /// Reiner Zustands-Layer der Recording-Pill: genau eine Phase zur Zeit.
 /// Bewegungsart des Kerns UND Statusfarbe hängen an der Phase (Ton „Farbig"):
-/// Mint = Aufnahme (Bars atmen mit dem Audio-Level), Amber = Transkription
+/// Grau = Mikrofon verbindet (Bluetooth-Profilwechsel, Lauflicht), Mint =
+/// Aufnahme (Bars atmen mit dem Audio-Level), Amber = Transkription
 /// (Scan-Lauflicht), Violett = Codex-Improve (gemeinsamer Puls).
 enum OverlayPhase: Equatable {
+    /// Hotkey gedrückt, das Mikrofon läuft noch nicht (AirPods: 1–2 s).
+    /// Sofortige Rückmeldung, damit niemand ein zweites Mal drückt.
+    case connecting
     case recording
     case transcribing
     case improving
 
-    static func resolve(isTranscribing: Bool, isPostProcessing: Bool) -> OverlayPhase {
+    static func resolve(isConnecting: Bool = false, isTranscribing: Bool, isPostProcessing: Bool) -> OverlayPhase {
         if isPostProcessing { return .improving }
         if isTranscribing { return .transcribing }
+        if isConnecting { return .connecting }
         return .recording
     }
 
-    /// `true` sobald die Aufnahme beendet ist und verarbeitet wird —
-    /// Mode-/Kontext-Bedienung ist dann gesperrt (wie heute).
+    /// `true`, solange die Aufnahme nicht läuft (verbindet oder wird
+    /// verarbeitet) — Mode-/Kontext-Bedienung ist dann gesperrt.
     var isBusy: Bool { self != .recording }
 
     /// Status-Text der Phase — seit dem Label-Rückbau NUR noch als Tooltip
@@ -26,6 +31,8 @@ enum OverlayPhase: Equatable {
     /// beim Phasenwechsel stören; die Bewegungsart trägt den Zustand).
     func statusLabel(postProcessingStatusText: String?) -> String? {
         switch self {
+        case .connecting:
+            return String(localized: "Connecting microphone…")
         case .recording:
             return nil
         case .transcribing:
@@ -38,7 +45,7 @@ enum OverlayPhase: Equatable {
     /// Cancel-Semantik des ✕ wechselt mit der Phase — Texte unverändert zu heute.
     var cancelHelp: String {
         switch self {
-        case .recording:
+        case .connecting, .recording:
             return "Aufnahme abbrechen"
         case .transcribing:
             return "Transkription abbrechen — die Aufnahme bleibt gesichert"
@@ -49,7 +56,7 @@ enum OverlayPhase: Equatable {
 
     var cancelAccessibilityLabel: String {
         switch self {
-        case .recording:
+        case .connecting, .recording:
             return "Cancel recording"
         case .transcribing:
             return "Cancel transcription"
@@ -60,6 +67,8 @@ enum OverlayPhase: Equatable {
 
     var accessibilityLabel: String {
         switch self {
+        case .connecting:
+            return "Connecting microphone"
         case .recording:
             return "Recording"
         case .transcribing:
@@ -75,6 +84,12 @@ enum OverlayPhase: Equatable {
 /// Zustandsfarben der Pill. Auf hellem Glas (`.thinMaterial` im Light-Modus)
 /// brauchen die vibranten Dark-Töne dunklere Pendants, sonst fehlt Kontrast.
 enum OverlayPalette {
+    /// Neutralgrau — Mikrofon verbindet noch.
+    static let connecting = dynamicColor(
+        light: NSColor(white: 0.42, alpha: 1),
+        dark: NSColor(white: 0.72, alpha: 1)
+    )
+
     /// Mint — Aufnahme läuft.
     static let recording = dynamicColor(
         light: NSColor(red: 0.10, green: 0.62, blue: 0.42, alpha: 1),   // #1A9E6B
@@ -112,6 +127,7 @@ enum OverlayPalette {
 
     static func tint(for phase: OverlayPhase) -> Color {
         switch phase {
+        case .connecting: return connecting
         case .recording: return recording
         case .transcribing: return transcribing
         case .improving: return improving

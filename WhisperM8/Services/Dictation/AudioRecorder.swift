@@ -51,6 +51,8 @@ class AudioRecorder {
 
     var audioLevel: Float = 0
     var isRecording = false
+    /// Engine-Startversuche des letzten Starts (1 = ohne Neustart) — für `debug record`.
+    @ObservationIgnored private(set) var lastStartAttempts = 0
 
     /// Wird (auf dem Main Thread) gemeldet, wenn die Aufnahme von selbst endet.
     @ObservationIgnored var onInterruption: ((RecordingInterruption) -> Void)?
@@ -101,9 +103,11 @@ class AudioRecorder {
         isRestarting = false
         lastConfigChangeTime = .distantPast
 
-        // Check permission
+        // Check permission — ist sie erteilt, ohne TCC-Rundreise (Hotkey-Pfad).
         Logger.debug("[AudioRecorder] Requesting microphone permission...")
-        let permission = await AVCaptureDevice.requestAccess(for: .audio)
+        let permission = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            ? true
+            : await AVCaptureDevice.requestAccess(for: .audio)
         Logger.debug("[AudioRecorder] Microphone permission: \(permission)")
         guard permission else {
             Logger.debug("[AudioRecorder] ERROR: Microphone permission denied!")
@@ -155,18 +159,7 @@ class AudioRecorder {
         // (Bluetooth-Wechsel, Systemlast) zeitweise 0 Hz / 0 Kanäle — ein
         // installTap damit wirft eine unfangbare NSException → Prozess-Abort.
         // Gleiche Schutzlogik wie in handleConfigurationChange().
-        var validFormat: AVAudioFormat?
-        for attempt in 1...5 {
-            let format = engine.currentInputFormat()
-            if let format, AudioFormatDecision.isRecordable(format) {
-                validFormat = format
-                Logger.debug("[AudioRecorder] Input format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount) channels")
-                break
-            }
-            Logger.debug("[AudioRecorder] Input format invalid (attempt \(attempt)): \(format?.sampleRate ?? 0)Hz, \(format?.channelCount ?? 0)ch — retrying…")
-            await sleeper(100_000_000) // 100ms
-        }
-        guard let inputFormat = validFormat else {
+        guard let inputFormat = await waitForRecordableFormat(engine) else {
             Logger.debug("[AudioRecorder] ERROR: No recordable input format after retries — aborting start")
             throw RecordingError.invalidFormat
         }
@@ -186,10 +179,64 @@ class AudioRecorder {
         ]
 
         let file = try AVAudioFile(forWriting: url, settings: settings)
-        try beginSession(engine: engine, inputFormat: inputFormat, file: file, url: url)
+        try await beginSessionRetryingFormatChange(engine: engine, inputFormat: inputFormat, file: file, url: url)
 
         Logger.debug("[AudioRecorder] Recording started successfully")
         Logger.debug("[AudioRecorder] =====================================")
+    }
+
+    /// Startversuche, wenn `engine.start()` scheitert (siehe unten).
+    static let engineStartAttempts = 3
+
+    /// Bluetooth-Headsets (AirPods) wechseln beim Öffnen des Mikrofons das
+    /// Profil (A2DP → HFP) — oft erst WÄHREND `engine.start()`. Das
+    /// Hardware-Format springt dann (48 → 24 kHz), AVAudioEngine bricht mit
+    /// -10868 ab („formats don't match"). Früher endete der Start damit still,
+    /// und man musste den Hotkey ein zweites Mal drücken (20.10.2026). Jetzt:
+    /// kurz warten, das neue Format lesen, Tap neu installieren, erneut starten.
+    func beginSessionRetryingFormatChange(
+        engine: RecorderEngine,
+        inputFormat: AVAudioFormat,
+        file: RecordingFileWriter,
+        url: URL
+    ) async throws {
+        var format = inputFormat
+        for attempt in 1...Self.engineStartAttempts {
+            lastStartAttempts = attempt
+            do {
+                try beginSession(engine: engine, inputFormat: format, file: file, url: url)
+                if attempt > 1 {
+                    Logger.info("[AudioRecorder] Engine-Start im Versuch \(attempt) gelungen (\(format.sampleRate)Hz)")
+                }
+                return
+            } catch {
+                guard attempt < Self.engineStartAttempts else { throw error }
+                Logger.info(
+                    "[AudioRecorder] Engine-Start fehlgeschlagen (Versuch \(attempt), \(format.sampleRate)Hz) — "
+                    + "warte auf das neue Geräteformat: \(error.localizedDescription)"
+                )
+                engine.stop()
+                await sleeper(150_000_000)
+                guard let newFormat = await waitForRecordableFormat(engine) else { throw error }
+                format = newFormat
+            }
+        }
+    }
+
+    /// Liest das Eingangsformat mit bis zu fünf Versuchen à 100 ms: CoreAudio
+    /// liefert direkt nach dem Binden (Bluetooth-Wechsel, Systemlast) zeitweise
+    /// 0 Hz / 0 Kanäle — ein installTap damit wirft eine unfangbare NSException.
+    private func waitForRecordableFormat(_ engine: RecorderEngine) async -> AVAudioFormat? {
+        for attempt in 1...5 {
+            let format = engine.currentInputFormat()
+            if let format, AudioFormatDecision.isRecordable(format) {
+                Logger.debug("[AudioRecorder] Input format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount) channels")
+                return format
+            }
+            Logger.debug("[AudioRecorder] Input format invalid (attempt \(attempt)): \(format?.sampleRate ?? 0)Hz, \(format?.channelCount ?? 0)ch — retrying…")
+            await sleeper(100_000_000) // 100ms
+        }
+        return nil
     }
 
     /// Gemeinsamer Kern von Erststart und Tests: Converter, Datei, Tap,

@@ -283,6 +283,8 @@ struct PillCoreView: View {
 
     private func barState(index: Int, time: TimeInterval) -> BarState {
         switch phase {
+        case .connecting:
+            return connectingBarState(index: index, time: time)
         case .recording:
             return recordingBarState(index: index)
         case .transcribing:
@@ -318,6 +320,16 @@ struct PillCoreView: View {
         return BarState(height: height, opacity: 0.6 + 0.4 * Double(intensity))
     }
 
+    /// Mikrofon verbindet: ruhige graue Ruhelinie, langsames Lauflicht —
+    /// „angekommen, gleich geht's los", bewusst leiser als die Transkription.
+    private func connectingBarState(index: Int, time: TimeInterval) -> BarState {
+        let period = 1.2
+        let raw = (time - Double(index) * 0.15).truncatingRemainder(dividingBy: period) / period
+        let progress = raw < 0 ? raw + 1 : raw
+        let peak = max(0, 1 - abs(progress - 0.25) / 0.25)
+        return BarState(height: 4 + 3 * CGFloat(peak), opacity: 0.35 + 0.65 * peak)
+    }
+
     /// Transkription: Scan-Lauflicht (Höhe konstant, Helligkeit wandert).
     private func transcribingBarState(index: Int, time: TimeInterval) -> BarState {
         let period = 1.0
@@ -337,6 +349,8 @@ struct PillCoreView: View {
 
     private func staticBarState(index: Int) -> BarState {
         switch phase {
+        case .connecting:
+            return BarState(height: 4, opacity: 0.7)
         case .recording:
             // Nicht erreichbar (Recording ist immer level-getrieben) —
             // konsistent zur Ruhelinie, falls sich die Verzweigung ändert.
@@ -627,7 +641,7 @@ private struct PillCancelButton: View {
     var body: some View {
         Button {
             switch phase {
-            case .recording:
+            case .connecting, .recording:
                 controller.cancelRecording()
             case .transcribing:
                 controller.cancelTranscription()

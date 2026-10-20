@@ -59,6 +59,23 @@ final class RecordingCoordinator {
 
     var recordingStartTime: Date?
     private(set) var isProcessing = false
+    /// Hotkey gedrückt, Mikrofon läuft noch nicht (AirPods: Bluetooth-Profilwechsel 1–2 s).
+    private(set) var isStartingRecording = false
+    /// ✕ während „Mikrofon verbindet …": Der Start wird nach dem Engine-Start verworfen.
+    private var startCancelledWhileConnecting = false
+    /// Erst nach dieser Wartezeit zeigt die Pill „Mikrofon verbindet …" — ein
+    /// schneller Start (eingebautes Mikrofon, ~130 ms) geht ohne Zwischenzustand
+    /// direkt in die Aufnahme und flackert nicht.
+    static let connectingOverlayDelay: Duration = .milliseconds(150)
+
+    /// Messwerte des letzten Aufnahmestarts (`whisperm8 debug record`).
+    struct StartReport {
+        var startMs: Int
+        var connectingShown: Bool
+        var engineAttempts: Int
+        var error: String?
+    }
+    private(set) var lastStartReport: StartReport?
     /// Schon gestoppte Datei, solange der Stop noch auf den Kontext-Capture
     /// wartet (bis 1 s). Ein Cmd+Q in diesem Fenster rettet sie darüber —
     /// der Recorder liefert dann keine URL mehr (Review W2a zu LR-DIK-001/018).
@@ -151,7 +168,9 @@ final class RecordingCoordinator {
         refreshPreservedRecordingFlag()
     }
 
-    func startRecording() async {
+    /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
+    /// Vordergrund-App, keine Screenshots.
+    func startRecording(captureContext: Bool = true) async {
         guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing else { return }
         // Budget 400 ms für Hotkey → Aufnahme läuft. Beim allerersten Start
         // (Mikrofon-Permission-Dialog) reisst das Budget bewusst — genau das
@@ -161,6 +180,7 @@ final class RecordingCoordinator {
 
         let hotkeyAt = Date()
         isProcessing = true
+        lastStartReport = nil
         // Eine laufende Ansage (`whisperm8 speak`) bricht ab und kommt nach
         // der Aufnahme von vorn — das Mikrofon nähme sie sonst mit auf.
         SpeechCalloutCenter.shared.holdForRecording()
@@ -175,12 +195,34 @@ final class RecordingCoordinator {
         // VS Code/Browser arbeitet, ist der Chat-Kontext bewusst irrelevant.
         let activeAgentChat: AgentChatContextRef?
         if contextSourceApp?.bundleIdentifier == Bundle.main.bundleIdentifier {
-            let keyAgentWindow = await MainActor.run {
-                AgentWindowStore.shared.keyAgentChatWindowID
-            }
+            // Synchron: Der Coordinator läuft schon auf dem MainActor — ein
+            // `await MainActor.run` ließe hier anstehende Main-Arbeit vor den
+            // Mikrofonstart.
+            let keyAgentWindow = AgentWindowStore.shared.keyAgentChatWindowID
             activeAgentChat = keyAgentWindow != nil ? appState.activeAgentChat : nil
         } else {
             activeAgentChat = nil
+        }
+
+        // Sofortige Rückmeldung: Ohne sichtbare Pill während des Bluetooth-
+        // Profilwechsels wirkte der erste Druck verloren, und man drückte ein
+        // zweites Mal (20.10.2026).
+        isStartingRecording = true
+        startCancelledWhileConnecting = false
+        let connectingIndicator = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.connectingOverlayDelay)
+            guard let self, !Task.isCancelled, self.isStartingRecording,
+                  !self.startCancelledWhileConnecting else { return }
+            self.presentOverlay(appState: appState)
+            // Anzeige neutral: AppState trägt bis zum Engine-Start noch Timer,
+            // Modus und Kontext des vorigen Diktats; `update` übernimmt danach.
+            let overlay = self.overlayController
+            overlay.isConnecting = true
+            overlay.clockModel.update(duration: 0)
+            overlay.levelModel.level = 0
+            overlay.selectedOutputMode = OutputMode.defaultMode()
+            overlay.selectedContext = .empty
+            overlay.contextBundle = .empty
         }
 
         do {
@@ -200,9 +242,43 @@ final class RecordingCoordinator {
                 try await audioRecorder.startRecording()
             }
         } catch {
+            connectingIndicator.cancel()
+            isStartingRecording = false
+            Logger.transcription.info(
+                "recording_start_failed error=\(error.localizedDescription, privacy: .public)"
+            )
+            lastStartReport = StartReport(
+                startMs: Int(Date().timeIntervalSince(hotkeyAt) * 1000),
+                connectingShown: overlayController.isConnecting,
+                engineAttempts: audioRecorder.lastStartAttempts,
+                error: error.localizedDescription
+            )
             appState.lastError = error.localizedDescription
             AudioDuckingManager.shared.endCaptureImmediate()
+            overlayController.hide()
+            // Hörbar statt still: der Druck kam an, das Mikrofon nicht.
+            if !startCancelledWhileConnecting { NSSound.beep() }
             isProcessing = false
+            return
+        }
+        connectingIndicator.cancel()
+        isStartingRecording = false
+        let isConnectingOverlayVisible = overlayController.isConnecting
+        lastStartReport = StartReport(
+            startMs: Int(Date().timeIntervalSince(hotkeyAt) * 1000),
+            connectingShown: isConnectingOverlayVisible,
+            engineAttempts: audioRecorder.lastStartAttempts,
+            error: nil
+        )
+
+        if startCancelledWhileConnecting {
+            if let audioURL = audioRecorder.stopRecording() {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            AudioDuckingManager.shared.endCaptureImmediate()
+            overlayController.hide()
+            isProcessing = false
+            Logger.paste.info("Recording cancelled while microphone was connecting")
             return
         }
 
@@ -232,15 +308,23 @@ final class RecordingCoordinator {
         userClearedContextDuringCapture = false
         isProcessing = false
 
-        presentOverlay(appState: appState)
+        if isConnectingOverlayVisible {
+            // Pill steht schon („Mikrofon verbindet …") — nur in die Aufnahme kippen.
+            overlayController.isConnecting = false
+            overlayController.update(appState: appState)
+        } else {
+            presentOverlay(appState: appState)
+        }
         setupEscKeyMonitor()
         startDurationTimer()
 
-        startContextCapture(
-            appState: appState,
-            sourceApp: contextSourceApp,
-            agentChat: activeAgentChat
-        )
+        if captureContext {
+            startContextCapture(
+                appState: appState,
+                sourceApp: contextSourceApp,
+                agentChat: activeAgentChat
+            )
+        }
 
         // Aufnahme läuft — Budget hier schließen (`end` ist idempotent), der
         // Prewarm gehört nicht in den Hotkey→Aufnahme-Pfad. Er dispatcht
@@ -531,6 +615,11 @@ final class RecordingCoordinator {
     }
 
     func cancelRecording() {
+        if isStartingRecording {
+            startCancelledWhileConnecting = true
+            overlayController.hide()
+            return
+        }
         guard let appState, appState.isRecording else { return }
 
         recordingTimer.stop()

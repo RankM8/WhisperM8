@@ -384,6 +384,9 @@ class OverlayController: ObservableObject {
     let levelModel = OverlayLevelModel()
     let clockModel = OverlayClockModel()
 
+    /// Hotkey gedrückt, Mikrofon noch nicht bereit — setzt der Coordinator
+    /// nach `show`; `hide` setzt zurück.
+    @Published var isConnecting: Bool = false
     @Published var isTranscribing: Bool = false
     @Published var isPostProcessing: Bool = false
     @Published var overlayStyle: OverlayStyle = .mini
@@ -423,7 +426,9 @@ class OverlayController: ObservableObject {
     private var lastPillActionAt = Date.distantPast
 
     var phase: OverlayPhase {
-        OverlayPhase.resolve(isTranscribing: isTranscribing, isPostProcessing: isPostProcessing)
+        OverlayPhase.resolve(
+            isConnecting: isConnecting, isTranscribing: isTranscribing, isPostProcessing: isPostProcessing
+        )
     }
 
     func show(
@@ -580,6 +585,7 @@ class OverlayController: ObservableObject {
     }
 
     func hide() {
+        isConnecting = false
         if let modesObserver {
             NotificationCenter.default.removeObserver(modesObserver)
             self.modesObserver = nil

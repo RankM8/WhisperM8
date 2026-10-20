@@ -262,6 +262,19 @@ final class UISnapshotGallery: XCTestCase {
             Fixture(name: "onboarding-claude-schritt", size: onboardingSize) {
                 AnyView(ClaudeCLIStep())
             },
+            // Recording-Pill: „Mikrofon verbindet …" (AirPods-Profilwechsel) neben der laufenden Aufnahme.
+            Fixture(name: "pill-verbindet", size: CGSize(width: 320, height: 80)) {
+                let controller = OverlayController()
+                controller.overlayStyle = .mini
+                controller.isConnecting = true
+                return AnyView(RecordingPillView(controller: controller).padding(20))
+            },
+            Fixture(name: "pill-aufnahme", size: CGSize(width: 320, height: 80)) {
+                let controller = OverlayController()
+                controller.overlayStyle = .mini
+                controller.levelModel.level = 0.5
+                return AnyView(RecordingPillView(controller: controller).padding(20))
+            },
             // CLI-Installation (LR-ONB-003/DIK-015/AU-022): feste Zustände, kein echtes brew.
             Fixture(name: "cli-claude-fehlt-brew", size: CGSize(width: 480, height: 320)) {
                 AnyView(AgentCLIInstallPanel(model: self.cliModel(.claude, command: nil, brew: "/opt/homebrew/bin/brew")).padding(24))
