@@ -26,6 +26,13 @@ class AudioRecorder {
     /// mehr, wenn inzwischen gestoppt, unterbrochen oder neu gestartet wurde.
     private var sessionGeneration = 0
     private var reconfigurationTask: Task<Void, Never>?
+    /// Serielle Queue für die blockierenden Engine-Aufrufe der Rekonfiguration.
+    /// Mitten im Bluetooth-Profilwechsel (AirPods A2DP → HFP) wartet jeder
+    /// CoreAudio-Aufruf auf die HAL — am 20.10.2026 fünfmal ~0,8 s hintereinander,
+    /// zusammen 4,1 s eingefrorener Main Thread. Seriell, weil AVAudioEngine
+    /// nicht threadsicher ist: ein Abbau während der Rekonfiguration reiht sich
+    /// hier ein, statt parallel an derselben Engine zu arbeiten.
+    private let engineQueue = DispatchQueue(label: "com.whisperm8.audio-engine", qos: .userInitiated)
     /// Teilaufnahme nach einer Unterbrechung — wartet auf das nächste `stopRecording()`.
     private var interruptedPartialURL: URL?
     private var notRunningTicks = 0
@@ -271,7 +278,10 @@ class AudioRecorder {
         // Install tap for recording + level metering
         Logger.debug("[AudioRecorder] Installing tap on inputNode...")
         do {
-            try installRecordingTap(on: engine, inputFormat: inputFormat, label: "TAP", logHundredthCallback: true)
+            try installRecordingTap(
+                on: engine, inputFormat: inputFormat, label: "TAP",
+                logHundredthCallback: true, generation: sessionGeneration
+            )
         } catch {
             // Statt Prozess-Abort: sauber abbrechen. Der Nutzer bekommt die
             // normale Fehlermeldung und kann es erneut versuchen — beim
@@ -326,21 +336,16 @@ class AudioRecorder {
 
         // Alles Hängende abschalten: Beobachter, laufende Rekonfiguration
         // (sie prüft die Generation und fasst nichts mehr an).
+        let wasReconfiguring = isRestarting
         removeConfigurationObserver()
         removeWakeObserver()
         reconfigurationTask?.cancel()
         reconfigurationTask = nil
         sessionGeneration += 1
 
-        // Remove tap first. Beides ist synchron und kann auf die CoreAudio-HAL
-        // warten — siehe `PerfBudgets.engineStop`: der laengste gemessene
-        // Main-Thread-Stillstand stand unmittelbar hinter genau diesem Abbau.
         if let engine = engine {
             Logger.debug("[AudioRecorder] Removing tap and stopping engine")
-            PerfBudgets.engineStop.withInterval {
-                engine.removeTap()
-                engine.stop()
-            }
+            tearDown(engine, behindReconfiguration: wasReconfiguring)
         }
         engine = nil
         resourceLock.withLock {
@@ -437,6 +442,7 @@ class AudioRecorder {
         if let generation, generation != sessionGeneration { return }
 
         Logger.info("[AudioRecorder] Aufnahme unterbrochen: \(reason)")
+        let wasReconfiguring = isRestarting
         removeConfigurationObserver()
         removeWakeObserver()
         reconfigurationTask?.cancel()
@@ -444,10 +450,7 @@ class AudioRecorder {
         sessionGeneration += 1
 
         if let engine {
-            PerfBudgets.engineStop.withInterval {
-                engine.removeTap()
-                engine.stop()
-            }
+            tearDown(engine, behindReconfiguration: wasReconfiguring)
         }
         engine = nil
         let hadAudio = resourceLock.withLock { () -> Bool in
@@ -470,6 +473,38 @@ class AudioRecorder {
         recordingURL = nil
 
         onInterruption?(reason)
+    }
+
+    /// Abbau der Engine: `removeTap` + `stop`. Beides ist synchron und kann auf
+    /// die CoreAudio-HAL warten — siehe `PerfBudgets.engineStop`. Läuft gerade
+    /// eine Rekonfiguration, arbeitet die Engine-Queue womöglich noch an genau
+    /// dieser Engine (Tap, Start): Dann reiht sich der Abbau dahinter ein — nicht
+    /// parallel an derselben Engine und ohne den Main Thread warten zu lassen.
+    private func tearDown(_ engine: RecorderEngine, behindReconfiguration: Bool) {
+        let work = {
+            PerfBudgets.engineStop.withInterval {
+                engine.removeTap()
+                engine.stop()
+            }
+        }
+        if behindReconfiguration {
+            engineQueue.async(execute: work)
+        } else {
+            work()
+        }
+    }
+
+    /// Führt blockierende Engine-Aufrufe auf `engineQueue` aus; der Main Thread
+    /// wartet nur asynchron. Nach dem `await` prüft der Aufrufer mit `isCurrent()`.
+    private func onEngineQueue<T>(_ work: @escaping () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            engineQueue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    private enum RestartFailure: Error {
+        case tap(Error)
+        case start(Error)
     }
 
     private func removeConfigurationObserver() {
@@ -499,10 +534,17 @@ class AudioRecorder {
         // Remove observer to prevent re-entry during handling
         removeConfigurationObserver()
 
-        // 1. Stop engine and remove old tap (but DON'T destroy engine)
-        engine.stop()
-        engine.removeTap()
+        // 1. Stop engine and remove old tap (but DON'T destroy engine).
+        // Alle Engine-Aufrufe ab hier laufen auf `engineQueue`, nie auf Main.
+        await onEngineQueue {
+            engine.stop()
+            engine.removeTap()
+        }
         Logger.debug("[AudioRecorder] Tap removed, engine stopped")
+        guard isCurrent() else {
+            Logger.debug("[AudioRecorder] Config change obsolete (stopped during engine stop)")
+            return
+        }
 
         // 2. Wait for Bluetooth HFP profile switch to stabilize (300ms is sufficient)
         Logger.debug("[AudioRecorder] Waiting 300ms for HFP stabilization...")
@@ -518,7 +560,12 @@ class AudioRecorder {
 
         for attempt in 1...maxRetries {
             // CRITICAL: Use inputFormat(forBus:) NOT outputFormat(forBus:)
-            if let format = engine.currentInputFormat(), AudioFormatDecision.isRecordable(format) {
+            let format = await onEngineQueue { engine.currentInputFormat() }
+            guard isCurrent() else {
+                Logger.debug("[AudioRecorder] Config change obsolete (stopped during format read)")
+                return
+            }
+            if let format, AudioFormatDecision.isRecordable(format) {
                 newFormat = format
                 Logger.debug("[AudioRecorder] New format (attempt \(attempt)): \(format.sampleRate)Hz, \(format.channelCount)ch")
                 break
@@ -559,25 +606,41 @@ class AudioRecorder {
         let hasAudioFile = resourceLock.withLock { self.audioFile != nil }
         Logger.debug("[AudioRecorder] audioFile is \(hasAudioFile ? "valid" : "NIL")")
 
-        do {
-            try installRecordingTap(on: engine, inputFormat: inputFormat, label: "NEW TAP", logHundredthCallback: false)
-        } catch {
+        // 6. Tap + Neustart in einem Schritt auf der Engine-Queue.
+        Logger.debug("[AudioRecorder] Restarting engine...")
+        let restart: Result<Void, RestartFailure> = await onEngineQueue { [self] in
+            do {
+                try installRecordingTap(
+                    on: engine, inputFormat: inputFormat, label: "NEW TAP",
+                    logHundredthCallback: false, generation: generation
+                )
+            } catch {
+                return .failure(.tap(error))
+            }
+            engine.prepare()
+            do {
+                try engine.start()
+            } catch {
+                return .failure(.start(error))
+            }
+            return .success(())
+        }
+        // Während des Neustarts gestoppt: Der Abbau steht schon hinter uns in der Queue.
+        guard isCurrent() else {
+            Logger.debug("[AudioRecorder] Config change obsolete (stopped during restart)")
+            return
+        }
+        switch restart {
+        case .success:
+            Logger.debug("[AudioRecorder] Engine restarted successfully!")
+        case .failure(.tap(let error)):
             // Reconnect nach Gerätewechsel: Schlägt der Tap fehl, ist die
             // Aufnahme verloren — aber die App bleibt am Leben. Ohne Tap
             // weiterzulaufen wäre schlimmer als ein sauberer Stopp.
             Logger.info("[AudioRecorder] ERROR: Tap-Reinstall fehlgeschlagen — \(error.localizedDescription)")
             interrupt(.engineFailed(error.localizedDescription), generation: generation)
             return
-        }
-
-        // 6. Restart the engine
-        Logger.debug("[AudioRecorder] Restarting engine...")
-        do {
-            engine.prepare()
-            try engine.start()
-            Logger.debug("[AudioRecorder] Engine restarted successfully!")
-
-        } catch {
+        case .failure(.start(let error)):
             Logger.info("[AudioRecorder] ERROR: Engine-Neustart fehlgeschlagen — \(error.localizedDescription)")
             interrupt(.engineFailed(error.localizedDescription), generation: generation)
             return
@@ -603,12 +666,15 @@ class AudioRecorder {
     /// Pegelmessung und Schreiben in die Datei. `label` unterscheidet die Log-Zeilen
     /// der beiden Aufrufer ("TAP" beim Erststart, "NEW TAP" beim Format-Reinstall).
     /// `logHundredthCallback` bewahrt das bisherige Verhalten: nur der Erststart
-    /// loggt zusaetzlich den 100. Callback.
+    /// loggt zusaetzlich den 100. Callback. Läuft auch auf `engineQueue` — fasst
+    /// daher nur Parameter und lock-geschützten Zustand an (`generation` statt
+    /// `sessionGeneration`).
     private func installRecordingTap(
         on engine: RecorderEngine,
         inputFormat requestedFormat: AVAudioFormat,
         label: String,
-        logHundredthCallback: Bool
+        logHundredthCallback: Bool,
+        generation capturedGeneration: Int
     ) throws {
         // Defensiv: ein evtl. vorhandener Tap würde installTap ebenfalls mit
         // einer unfangbaren NSException quittieren; removeTap ohne Tap ist
@@ -644,7 +710,6 @@ class AudioRecorder {
         var tapCallCount = 0
         let capturedTargetFormat = self.targetFormat
         let capturedFormat = inputFormat
-        let capturedGeneration = sessionGeneration
         // Installation (inkl. ObjC-Exception-Schutz) liegt im Engine-Adapter.
         try engine.installTap(format: capturedFormat) { [weak self] buffer in
             guard let self else { return }

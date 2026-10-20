@@ -23,18 +23,32 @@ private final class FakeRecorderEngine: RecorderEngine {
     private(set) var startCount = 0
     private(set) var stopCount = 0
     private(set) var handler: ((AVAudioPCMBuffer) -> Void)?
+    /// Engine-Aufrufe auf dem Main Thread (Rekonfiguration darf keine machen).
+    var mainThreadCalls = 0
+    /// Gesetzt: `start()` meldet den Eintritt und hängt, bis der Test freigibt —
+    /// wie ein CoreAudio-Aufruf mitten im Bluetooth-Profilwechsel.
+    var startEntered: DispatchSemaphore?
+    var startRelease: DispatchSemaphore?
 
-    func currentInputFormat() -> AVAudioFormat? { format }
-    func removeTap() { handler = nil }
+    private func note() { if Thread.isMainThread { mainThreadCalls += 1 } }
+
+    func currentInputFormat() -> AVAudioFormat? { note(); return format }
+    func removeTap() { note(); handler = nil }
     func installTap(format: AVAudioFormat, handler: @escaping (AVAudioPCMBuffer) -> Void) throws {
+        note()
         installTapCount += 1
         lastTapFormat = format
         if let installTapError { throw installTapError }
         self.handler = handler
     }
-    func prepare() {}
+    func prepare() { note() }
     func start() throws {
+        note()
         startCount += 1
+        if let startEntered, let startRelease {
+            startEntered.signal()
+            startRelease.wait()
+        }
         if startFailures > 0 {
             startFailures -= 1
             onFailedStart?()
@@ -44,6 +58,7 @@ private final class FakeRecorderEngine: RecorderEngine {
         isRunning = true
     }
     func stop() {
+        note()
         stopCount += 1
         isRunning = false
     }
@@ -298,6 +313,50 @@ final class AudioRecorderStateTests: XCTestCase {
         // Der neue Lauf muss weiter normal umkonfigurierbar sein (isRestarting nicht verklemmt).
         center.post(name: .AVAudioEngineConfigurationChange, object: newEngine)
         await waitMain("neuer Lauf reagiert weiter auf Gerätewechsel") { newEngine.installTapCount == 2 }
+    }
+
+    // MARK: AirPods-Profilwechsel mitten in der Aufnahme (20.10.2026)
+
+    func testReconfigurationNeverCallsEngineOnMainThread() async throws {
+        let recorder = makeRecorder()
+        let engine = FakeRecorderEngine()
+        try beginSession(recorder, engine: engine)
+        engine.mainThreadCalls = 0
+
+        await recorder.handleConfigurationChange()
+
+        XCTAssertEqual(engine.startCount, 2, "Engine wurde neu gestartet")
+        XCTAssertEqual(engine.installTapCount, 2)
+        XCTAssertEqual(engine.mainThreadCalls, 0, "stop/Format/Tap/start gehören auf die Engine-Queue")
+        XCTAssertTrue(recorder.isRecording)
+    }
+
+    func testStopDuringHangingRestartNeitherBlocksNorRacesTheEngine() async throws {
+        let recorder = makeRecorder()
+        let engine = FakeRecorderEngine()
+        let url = try beginSession(recorder, engine: engine)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        engine.startEntered = entered
+        engine.startRelease = release
+
+        let task = Task { @MainActor in await recorder.handleConfigurationChange() }
+        // Warten, bis `start()` auf der Engine-Queue hängt — ohne den Main Thread zu blockieren.
+        var hanging = false
+        await waitMain("Neustart hängt in start()") {
+            if !hanging { hanging = entered.wait(timeout: .now()) == .success }
+            return hanging
+        }
+        let stopsBefore = engine.stopCount
+
+        XCTAssertEqual(recorder.stopRecording(), url, "Stop kehrt sofort zurück und liefert die Aufnahme")
+        XCTAssertEqual(engine.stopCount, stopsBefore, "Abbau wartet hinter dem laufenden Start, nicht parallel")
+
+        release.signal()
+        await task.value
+        await waitMain("Engine nach dem Start abgebaut") { engine.stopCount == stopsBefore + 1 }
+        XCTAssertFalse(engine.isRunning)
+        XCTAssertFalse(recorder.isRecording)
     }
 
     // MARK: LR-DIK-006

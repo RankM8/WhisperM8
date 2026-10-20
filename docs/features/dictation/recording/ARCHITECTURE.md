@@ -55,11 +55,17 @@ bis zu fünfmal auf ein recordable Format. Das schützt vor CoreAudio-Zuständen
 mit 0 Hz oder 0 Kanälen, die bei Bluetooth- oder Gerätewechseln auftreten und
 bei `installTap` als nicht fangbare Objective-C-Exception enden würden.
 
-Im System-Default-Modus beobachtet der Recorder
-`.AVAudioEngineConfigurationChange`. Bei einem Wechsel stoppt er Engine und
-Tap, wartet 300 ms, liest das neue Hardware-Format mit denselben Retries,
+In jedem Modus (System-Default wie fest gewähltes Mikrofon) beobachtet der
+Recorder `.AVAudioEngineConfigurationChange`. Bei einem Wechsel stoppt er Engine
+und Tap, wartet 300 ms, liest das neue Hardware-Format mit denselben Retries,
 setzt den Converter neu und startet die Engine wieder, ohne die bestehende
-Audiodatei zu verwerfen.
+Audiodatei zu verwerfen. Alle Engine-Aufrufe dieser Rekonfiguration laufen auf
+einer seriellen Engine-Queue, nie auf dem Main Thread: Mitten im
+AirPods-Profilwechsel (A2DP → HFP) wartet jeder CoreAudio-Aufruf auf die HAL —
+am 20.10.2026 fünfmal rund 0,8 s, zusammen 4,1 s eingefrorene App. Stoppt der
+Nutzer währenddessen, reiht sich der Engine-Abbau hinter den laufenden Schritt
+in dieselbe Queue ein (AVAudioEngine ist nicht threadsicher); `stopRecording()`
+kehrt trotzdem sofort mit der Datei zurück.
 
 ## Datenfluss: Stop und Delivery
 
