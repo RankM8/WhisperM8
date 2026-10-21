@@ -99,7 +99,7 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertTrue(subagentScript.contains(StatuslineInstaller.managedMarker))
         XCTAssertTrue(subagentScript.contains("startTime"))
         XCTAssertTrue(subagentScript.contains("elapsed_label"))
-        XCTAssertFalse(subagentScript.contains("tokenCount"))
+        XCTAssertTrue(subagentScript.contains("tokenCount"))
         XCTAssertFalse(subagentScript.contains("contextWindowSize"))
     }
 
@@ -727,7 +727,7 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(text.contains("9k/272k"), text)
     }
 
-    func testSubagentStatuslineShowsElapsedTimeInsteadOfTokens() throws {
+    func testSubagentStatuslineShowsElapsedTimeAndHidesZeroTokens() throws {
         let now = 1_700_000_712_000
         let input: [String: Any] = [
             "columns": 120,
@@ -793,9 +793,12 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertTrue(running.contains("gpt-5.6-sol"), running)
         XCTAssertTrue(running.contains("Review UI-Regeländerungen"), running)
         XCTAssertTrue(running.contains("11m 52s"), running)
+        // GPTs dauerhafte 0 bleibt unsichtbar.
+        XCTAssertFalse(running.contains(" · 0"), running)
 
         let completed = try XCTUnwrap(byID["completed-task"])
         XCTAssertTrue(completed.contains("gpt-5.6-terra"), completed)
+        XCTAssertTrue(plain(completed).contains("[gpt-5.6-terra · 9k]"), completed)
         XCTAssertFalse(completed.contains("11m 52s"), completed)
 
         let missingStart = try XCTUnwrap(byID["missing-start-task"])
@@ -805,6 +808,55 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(allContent.contains("0k/"), allContent)
         XCTAssertFalse(allContent.contains("9k/"), allContent)
         XCTAssertFalse(allContent.contains("272k"), allContent)
+    }
+
+    func testSubagentStatuslineShowsModelAndTokensTogether() throws {
+        let now = 1_700_000_234_000
+        let task: [String: Any] = [
+            "id": "whatsapp",
+            "name": "Reading Hochschule Aalen Zulassungsbescheid photos",
+            "status": "running",
+            "startTime": now - 234_000,
+            "model": "claude-opus-5-5",
+            "description": "WhatsApp-Chat nach Versicherungen auswerten",
+            "tokenCount": 48_210,
+            "contextWindowSize": 1_000_000,
+        ]
+        let small: [String: Any] = [
+            "id": "small", "name": "probe", "status": "completed",
+            "model": "claude-sonnet-4-5-20250929[1m]", "tokenCount": 4_210,
+        ]
+
+        func run(columns: Int) throws -> [String: String] {
+            let output = try runStatuslineScript(
+                try makeInstaller().bundledSubagentScript(),
+                named: "subagent-tokens-\(columns).sh",
+                input: ["columns": columns, "tasks": [task, small]],
+                environmentOverrides: ["WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS": String(now)]
+            )
+            let lines = try XCTUnwrap(String(data: output, encoding: .utf8)).split(separator: "\n")
+            return Dictionary(uniqueKeysWithValues: try lines.map { line -> (String, String) in
+                let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])
+                return (try XCTUnwrap(object["id"] as? String), plain(try XCTUnwrap(object["content"] as? String)))
+            })
+        }
+
+        let wide = try run(columns: 130)
+        let row = try XCTUnwrap(wide["whatsapp"])
+        XCTAssertTrue(row.contains("[Opus 5.5 · 48k] WhatsApp-Chat nach Versicherungen auswerten"), row)
+        XCTAssertTrue(row.hasSuffix("3m 54s"), row)
+        XCTAssertFalse(row.contains("1000k"), row)
+        XCTAssertTrue(try XCTUnwrap(wide["small"]).contains("[Sonnet 4.5 · 4.2k]"))
+
+        // Schmal: Laufzeit und Beschreibung weichen, Modell und Tokens bleiben.
+        let narrow = try XCTUnwrap(try run(columns: 22)["whatsapp"])
+        XCTAssertTrue(narrow.contains("[Opus 5.5 · 48k]"), narrow)
+        XCTAssertFalse(narrow.contains("3m 54s"), narrow)
+    }
+
+    /// Inhalt ohne ANSI-Farben, wie er im Terminal zu lesen ist.
+    private func plain(_ content: String) -> String {
+        content.replacingOccurrences(of: "\u{001B}\\[[0-9;]*m", with: "", options: .regularExpression)
     }
 
     func testSubagentStatuslineFormatsElapsedTimeAcrossRanges() throws {

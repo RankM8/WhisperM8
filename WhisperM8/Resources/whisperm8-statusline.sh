@@ -402,46 +402,76 @@ fi
 # Diese Quelle ist sauber auf DIESE Session beschränkt — fremde Sessions/Tabs
 # können nicht mitgezählt werden.
 SUBAGENT_WINDOW=60
+# Tokens je Subagent: Kontext der letzten Anfrage (wie Claude Codes Zähler),
+# gelesen aus dem Ende des Transcripts. Nur die letzten Bytes — mit Bildern
+# werden Subagent-Transcripts schnell dreistellige MB groß.
+SUBAGENT_TAIL_BYTES=1048576
 subagent_display=""
 transcript_path=$(printf '%s\n' "$input" | jq -r '.transcript_path // empty')
 subagent_dir="${transcript_path%.jsonl}/subagents"
+
+# „claude-opus-5-5“ → „Opus 5.5“, „gpt-6.1-sol“ → „GPT“ (Version steht im Agent-Band).
+subagent_model_label() {
+    case "$1" in
+        gpt-*) printf 'GPT' ;;
+        claude-*)
+            printf '%s' "$1" | sed -E \
+                -e 's/\[[^]]*\]$//' \
+                -e 's/-[0-9]{8}$//' \
+                -e 's/^claude-([a-z]+)-([0-9]+)-([0-9]{1,2})$/\1 \2.\3/' \
+                -e 's/^claude-([a-z]+)-([0-9]+)$/\1 \2/' \
+                -e 's/^claude-//' \
+                | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }'
+            ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
 if [ -n "$transcript_path" ] && [ -d "$subagent_dir" ]; then
     now_ts=$(date +%s)
     subagent_count=0
+    subagent_tokens=0
     model_list=""
 
     while IFS= read -r sub_file; do
-        # Nur kürzlich geschriebene Transcripts = aktuell laufende Subagents
+        # Nur kürzlich geschriebene Transcripts = aktuell laufende Subagents;
+        # meldet die Meta-Datei „finished“, ist er fertig, auch wenn frisch.
         file_mtime=$(stat -f %m "$sub_file" 2>/dev/null || echo 0)
         sub_age=$((now_ts - file_mtime))
         [ "$sub_age" -gt "$SUBAGENT_WINDOW" ] && continue
+        grep -q '"finished":true' "${sub_file%.jsonl}.meta.json" 2>/dev/null && continue
 
         subagent_count=$((subagent_count + 1))
 
-        # Modell aus dem Transcript lesen (erstes Vorkommen reicht — konstant je Agent)
-        raw_model=$(grep -o -m1 -E '"model":"(claude|gpt)-[a-z0-9.-]+"' "$sub_file" 2>/dev/null | head -1)
-        if [ -n "$raw_model" ]; then
-            case "$raw_model" in
-                *opus*)   short="Opus" ;;
-                *sonnet*) short="Sonnet" ;;
-                *haiku*)  short="Haiku" ;;
-                *fable*)  short="Fable" ;;
-                *gpt*)    short="GPT" ;;
-                *)        short=$(echo "$raw_model" | sed -E 's/.*"(claude|gpt)-([a-z]+).*/\2/') ;;
+        # Letzte Antwort des Subagents: Modell und Usage. Fehlt sie im Ende
+        # (große Tool-Ergebnisse), das Modell aus dem ersten Vorkommen.
+        last_line=$(tail -c "$SUBAGENT_TAIL_BYTES" "$sub_file" 2>/dev/null | grep '"type":"assistant"' | tail -1)
+        raw_model=""
+        if [ -n "$last_line" ]; then
+            read -r raw_model sub_tokens < <(printf '%s\n' "$last_line" | jq -R -r 'fromjson? | .message
+                | [(.model // ""), ((.usage // {}) | ((.input_tokens // 0) + (.output_tokens // 0)
+                    + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)))]
+                | @tsv' 2>/dev/null)
+            case "$sub_tokens" in
+                ''|*[!0-9]*) ;;
+                *) subagent_tokens=$((subagent_tokens + sub_tokens)) ;;
             esac
-            # Deduplizieren (gleiche Modelle nur einmal listen)
-            if [ -n "$short" ] && ! echo "$model_list" | grep -qw "$short"; then
-                [ -n "$model_list" ] && model_list="${model_list}, ${short}" || model_list="$short"
-            fi
+        fi
+        if [ -z "$raw_model" ]; then
+            raw_model=$(grep -o -m1 -E '"model":"(claude|gpt)-[a-z0-9.-]+"' "$sub_file" 2>/dev/null | head -1 | sed -E 's/^"model":"(.*)"$/\1/')
+        fi
+        short=$(subagent_model_label "$raw_model")
+        # Deduplizieren (gleiche Modelle nur einmal listen)
+        if [ -n "$short" ] && ! printf '%s\n' "$model_list" | tr ',' '\n' | sed 's/^ //' | grep -qxF "$short"; then
+            [ -n "$model_list" ] && model_list="${model_list}, ${short}" || model_list="$short"
         fi
     done < <(find "$subagent_dir" -maxdepth 1 -name 'agent-*.jsonl' 2>/dev/null)
 
     if [ "$subagent_count" -gt 0 ]; then
-        if [ -n "$model_list" ]; then
-            subagent_display="${ansi_escape}[36m⚡${subagent_count} sub (${model_list})${ansi_escape}[0m"
-        else
-            subagent_display="${ansi_escape}[36m⚡${subagent_count} sub${ansi_escape}[0m"
-        fi
+        subagent_display="${ansi_escape}[36m⚡${subagent_count} sub"
+        [ -n "$model_list" ] && subagent_display="${subagent_display} · ${model_list}"
+        [ "$subagent_tokens" -gt 0 ] && subagent_display="${subagent_display} · $((subagent_tokens / 1000))k"
+        subagent_display="${subagent_display}${ansi_escape}[0m"
     fi
 fi
 
@@ -477,7 +507,7 @@ if [ "$is_supported_gpt" -eq 1 ]; then
 fi
 
 # Ausgabe zusammenbauen
-# Format: repo (branch) ✗ ↑3 | 30% 258k/1000k | [Fable 5] ⇄PowerUser ⇄gpt:ai | high | 32%/5h · 42%/w ↻Sa | $16.20 | ⚡2 sub (Fable, GPT) | MCP:1 server:4%
+# Format: repo (branch) ✗ ↑3 | 30% 258k/1000k | [Fable 5] ⇄PowerUser ⇄gpt:ai | high | 32%/5h · 42%/w ↻Sa | $16.20 | ⚡2 sub · Fable 5, GPT · 79k | MCP:1 server:4%
 output="${repo_display}"
 
 if [ -n "$branch_display" ]; then

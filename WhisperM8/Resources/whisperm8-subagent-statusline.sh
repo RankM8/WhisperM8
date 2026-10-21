@@ -18,8 +18,10 @@ fi
 
 # Pro aufgelöstem Task genau eine JSONL-Zeile ausgeben. Die Beschreibung wird
 # gegen die nutzbare Zeilenbreite gekürzt; ANSI-Sequenzen zählen dabei nicht.
-# Laufende Tasks zeigen statt der unzuverlässigen Token-Metadaten ihre seit dem
-# Start verstrichene Zeit. Claude Code ruft das Skript etwa alle fünf Sekunden auf.
+# Modell und Tokens stehen immer zusammen in der Klammer ([Opus 5.5 · 48k]);
+# laufende Tasks zeigen rechts die seit dem Start verstrichene Zeit. Tokens nur
+# mit echtem Wert: GPT-Subagents melden dauerhaft 0, das bliebe Rauschen.
+# Claude Code ruft das Skript etwa alle fünf Sekunden auf.
 printf '%s\n' "$input" | jq -c \
     --arg now_ms_override "${WHISPERM8_SUBAGENT_STATUSLINE_NOW_MS:-}" '
     def sanitize_text:
@@ -42,6 +44,20 @@ printf '%s\n' "$input" | jq -c \
     def two_digits($value):
         ($value | floor | tostring) as $text
         | if ($text | length) < 2 then "0" + $text else $text end;
+    # Kontext des Subagents wie Claude Codes eigener Zähler, ohne Fenstergröße.
+    def tokens_label($count):
+        if ($count | type) != "number" or $count <= 0 then ""
+        elif $count < 1000 then ($count | floor | tostring)
+        elif $count < 10000 then ((($count / 100) | round) / 10 | tostring) + "k"
+        else (($count / 1000) | round | tostring) + "k"
+        end;
+    # „claude-opus-5-5[1m]“ → „Opus 5.5“ wie in der Hauptstatuszeile; GPT bleibt.
+    def model_label($model):
+        ([$model | capture("^claude-(?<family>[a-z]+)-(?<major>[0-9]+)(-(?<minor>[0-9]{1,2}))?(-[0-9]{8})?(\\[[^]]*\\])?$")] | .[0]) as $parts
+        | if $parts == null then ($model | sub("^claude-"; ""))
+          else ($parts.family[0:1] | ascii_upcase) + $parts.family[1:] + " " + $parts.major
+               + (if $parts.minor == null then "" else "." + $parts.minor end)
+          end;
     def elapsed_label($task; $now_ms):
         if (($task.status // "") == "running"
             and ($task.startTime | type) == "number"
@@ -74,15 +90,24 @@ printf '%s\n' "$input" | jq -c \
     | (nonempty($task.name) // nonempty($task.label) // nonempty($task.id) // "subagent") as $name
     | ($task.model | sanitize_text) as $safe_model
     | select(($safe_model | length) > 0)
-    | ($safe_model | sub("^claude-"; "")) as $short_model
+    | model_label($safe_model) as $short_model
+    | tokens_label($task.tokenCount) as $tokens
     | (if ($safe_model | startswith("gpt-")) then "[36m" else "[35m" end) as $model_color
     | elapsed_label($task; $now_ms) as $elapsed
     # Bei extrem schmalen Panels zuerst die Laufzeit weglassen und danach Name
-    # sowie Modell kürzen. Das Modell bleibt gegenüber der Beschreibung priorisiert.
+    # sowie Modell kürzen. Modell und Tokens bleiben gegenüber der Beschreibung
+    # priorisiert; die Tokens fallen erst, wenn nicht einmal sie Platz haben.
     | ($columns >= 3) as $use_brackets
     | shorten($short_model; ($columns - (if $use_brackets then 2 else 0 end))) as $display_model
+    | (if $tokens != ""
+          and ($display_model | length) + ($tokens | length) + 3
+              + (if $use_brackets then 2 else 0 end) <= $columns
+       then $tokens
+       else ""
+       end) as $display_tokens
     | ((if $use_brackets then "[" else "" end)
        + $display_model
+       + (if $display_tokens == "" then "" else " · " + $display_tokens end)
        + (if $use_brackets then "]" else "" end)) as $model_plain
     | (if $elapsed != "" and ($model_plain | length) + ($elapsed | length) + 3 <= $columns
        then $elapsed
@@ -110,6 +135,7 @@ printf '%s\n' "$input" | jq -c \
        + (if $display_name == "" then "" else " " end)
        + (if $use_brackets then "[2m[[0m" else "" end)
        + $model_color + $display_model + "[0m"
+       + (if $display_tokens == "" then "" else "[2m · " + $display_tokens + "[0m" end)
        + (if $use_brackets then "[2m][0m" else "" end)
        + (if $description == "" then "" else " " + $description end)
        + (if $display_elapsed == "" then ""
