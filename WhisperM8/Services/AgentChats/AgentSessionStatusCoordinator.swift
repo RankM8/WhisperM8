@@ -216,6 +216,11 @@ final class AgentSessionStatusCoordinator {
         ClaudeCLIVersionProbe.shared.prewarm()
 
         self.hookBridge.setDecisionHandler { [weak self] localID, event in
+            // Task-Hooks tragen keinen Status, nur den Ordner der Task-Liste.
+            if event.hookEventName.isTaskEvent {
+                AgentChatTasksStore.shared.handleHookEvent(localSessionID: localID, event: event)
+                return
+            }
             self?.handleHookEvent(localID: localID, event: event)
         }
         watcher.onDecision = { [weak self] sessionID, decision in
@@ -1173,7 +1178,7 @@ final class AgentSessionStatusCoordinator {
              .permissionRequest, .stop:
             pendingExternalIDs[localID] = nil
             setExternalSessionID(localID: localID, newID: pendingID)
-        case .sessionStart, .notification, .promptGuardBlock, .other:
+        case .sessionStart, .notification, .promptGuardBlock, .other, .taskCreated, .taskCompleted:
             break
         }
     }

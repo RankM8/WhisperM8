@@ -75,7 +75,21 @@ final class UISnapshotGallery: XCTestCase {
                 },
                 updatedAt: noteNow.addingTimeInterval(-120))
         }
-        func jarvisNoteFixture(_ name: String, entry: JarvisBoardEntry, focused: Bool = false) -> Fixture {
+        func noteTask(_ id: String, _ subject: String, _ status: AgentChatTask.Status, activeForm: String? = nil,
+                      owner: String? = nil, blockedBy: [String] = [], links: [(String, String)] = []) -> AgentChatTask {
+            AgentChatTask(id: id, subject: subject, activeForm: activeForm, status: status, owner: owner,
+                          blockedBy: blockedBy, links: links.map { .init(label: $0.0, url: URL(string: $0.1)!) })
+        }
+        let noteTasks = [
+            noteTask("1", "Release-Notizen für 2.23 schreiben und mit dem Changelog der letzten drei Wochen abgleichen", .completed),
+            noteTask("2", "Tests grün", .completed),
+            noteTask("3", "Sequenzen G in die App übernehmen", .inProgress, activeForm: "Baut die Sequenz-Seite",
+                     owner: "bau-78-g", links: [("App", "https://listm8.test/campaigns/3799/setup"), ("Design", "https://www.figma.com/file/abc")]),
+            noteTask("4", "Versand und MCP nachziehen", .pending),
+            noteTask("5", "PR vorbereiten", .pending, blockedBy: ["4"]),
+        ]
+        func jarvisNoteFixture(_ name: String, entry: JarvisBoardEntry?, tasks: [AgentChatTask] = [],
+                               focused: Bool = false) -> Fixture {
             Fixture(name: name, size: CGSize(width: 560, height: 420)) {
                 let headerHeight = AgentChatsView.gridPaneHeaderHeight
                 let opacity = AgentChatsView.gridPaneHeaderOpacity(isFocused: focused)
@@ -101,7 +115,7 @@ final class UISnapshotGallery: XCTestCase {
                     }
                     .background(AgentTheme.background)
                     .overlay(alignment: .topLeading) {
-                        JarvisNoteCard(entry: entry, width: 400, maxHeight: 300, headerOpacity: opacity,
+                        JarvisNoteCard(entry: entry, tasks: tasks, width: 400, maxHeight: 300, headerOpacity: opacity,
                                        isOwnNote: focused, now: noteNow)
                             .padding(.leading, JarvisNoteCardOverlay.leadingInset)
                             .padding(.top, headerHeight)
@@ -234,6 +248,11 @@ final class UISnapshotGallery: XCTestCase {
             jarvisNoteFixture("jarvis-notiz-eigene", entry: jarvisNoteEntry(
                 work: "Baut die letzte Variante der Lead-Ansicht (L22)",
                 milestones: ["L21 „Zwei Spalten mit Sinn“ fertig und im Vorschau-Fenster"]), focused: true),
+            // Tasks des Chats in der Karte: allein (ohne Jarvis) und unter einer Notiz.
+            jarvisNoteFixture("notiz-tasks", entry: nil, tasks: noteTasks),
+            jarvisNoteFixture("notiz-tasks-mit-jarvis", entry: jarvisNoteEntry(
+                work: "Sequenzen G, Versand und MCP in die App",
+                milestones: ["Kampagnen und Dashboard ohne KI-Verbindung fertig (da0af1f)"]), tasks: noteTasks),
             // Glocken-Schalter im Sidebar-Footer: eine Fixture je Ruhe-Stufe.
             sidebarAlertLevel(.all),
             sidebarAlertLevel(.soundOff),

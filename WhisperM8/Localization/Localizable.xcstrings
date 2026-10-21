@@ -4041,6 +4041,16 @@
         }
       }
     },
+    "Every Claude chat with open tasks gets a note card listing them, with clickable links. Works without Jarvis.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeder Claude-Chat mit offenen Tasks bekommt eine Notiz-Karte mit seinen Tasks und klickbaren Links. Funktioniert auch ohne Jarvis."
+          }
+        }
+      }
+    },
     "Everything that happens while you record — hotkey, microphone, ducking, overlay, delivery.": {
       "localizations": {
         "de": {
@@ -10064,6 +10074,16 @@
         }
       }
     },
+    "Show chat tasks in notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks der Chats in Notizen zeigen"
+          }
+        }
+      }
+    },
     "Show chats": {
       "localizations": {
         "de": {
@@ -11130,6 +11150,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "ÜBERNOMMEN"
+          }
+        }
+      }
+    },
+    "TASKS": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TASKS"
           }
         }
       }
@@ -14254,6 +14284,16 @@
         }
       }
     },
+    "⊘ waiting for %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⊘ wartet auf %@"
+          }
+        }
+      }
+    },
     "⌃Tab next · ⇧ back · arrows move spatially · Esc": {
       "localizations": {
         "de": {
@@ -14284,6 +14324,16 @@
         }
       }
     },
+    "▴ hide done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "▴ erledigte ausblenden"
+          }
+        }
+      }
+    },
     "▴ less": {
       "localizations": {
         "de": {
@@ -14294,12 +14344,42 @@
         }
       }
     },
+    "▸ %lld done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "▸ %lld erledigt"
+          }
+        }
+      }
+    },
     "▸ %lld older": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "▸ %lld ältere"
+          }
+        }
+      }
+    },
+    "◻ %lld open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "◻ %lld offen"
+          }
+        }
+      }
+    },
+    "◼ %lld active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "◼ %lld aktiv"
           }
         }
       }

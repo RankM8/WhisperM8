@@ -390,7 +390,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
             eventFilePath: "/tmp/events.jsonl", promptGuardCommand: "guard",
             eventNames: ClaudeHookSettingsBuilder.registryModeEventNames)
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
-        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "SessionEnd", "UserPromptSubmit"])
+        // TaskCreated/TaskCompleted: selten, nur für den Ordner der Task-Liste.
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "SessionEnd", "TaskCreated", "TaskCompleted", "UserPromptSubmit"])
         let guardEntries = try XCTUnwrap(hooks["UserPromptSubmit"] as? [[String: Any]])
         XCTAssertEqual(guardEntries.count, 1, "nur der Send-Guard, kein Status-Append")
         XCTAssertTrue(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: true, isBackground: false))

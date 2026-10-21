@@ -44,7 +44,13 @@ enum ClaudeHookSettingsBuilder {
     /// Übrig bleiben nur Binding der externen ID und Lebenszyklus — kein
     /// Shell-Aufruf mehr pro Tool-Aufruf. Der Send-Guard hängt unabhängig
     /// davon als eigener `UserPromptSubmit`-Eintrag dran.
-    static let registryModeEventNames: [String] = ["SessionStart", "SessionEnd"]
+    ///
+    /// Dazu `TaskCreated`/`TaskCompleted`: feuern nur beim Anlegen und
+    /// Abschließen einer Task und nennen den Teamnamen (= Ordner der
+    /// Task-Liste) für die Notiz-Karte. Nur hier, nicht im vollen Satz: der
+    /// reduzierte Satz setzt Claude Code mit Registry voraus (≥ 2.1.302), das
+    /// beide Events kennt — ältere CLIs bekommen keine neuen Event-Namen.
+    static let registryModeEventNames: [String] = ["SessionStart", "SessionEnd", "TaskCreated", "TaskCompleted"]
 
     static func makeSettings(
         eventFilePath: String,

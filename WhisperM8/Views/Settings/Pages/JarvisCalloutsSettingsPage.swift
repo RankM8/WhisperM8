@@ -7,6 +7,7 @@ struct JarvisCalloutsSettingsPage: View {
     @AppStorage(PreferenceKeys.jarvisBoardEnabled) private var boardEnabled = true
     @AppStorage(PreferenceKeys.jarvisNotesEnabled) private var notesEnabled = true
     @AppStorage(PreferenceKeys.jarvisNotesDefaultOpen) private var notesDefaultOpen = true
+    @AppStorage(PreferenceKeys.agentChatTasksInNotesEnabled) private var tasksInNotesEnabled = true
     @AppStorage(PreferenceKeys.speechCalloutsEnabled) private var calloutsEnabled = true
     @AppStorage(PreferenceKeys.speechCalloutsMuted) private var calloutsMuted = false
     @AppStorage(PreferenceKeys.speechCalloutVoiceIdentifier) private var voiceIdentifier = ""
@@ -37,6 +38,11 @@ struct JarvisCalloutsSettingsPage: View {
                     title: "Show notes on grid tiles",
                     subtitle: "A small card on each tile of the Jarvis board: work package, what needs you, blockers.",
                     isOn: $notesEnabled
+                )
+                SettingsToggleRow(
+                    title: "Show chat tasks in notes",
+                    subtitle: "Every Claude chat with open tasks gets a note card listing them, with clickable links. Works without Jarvis.",
+                    isOn: $tasksInNotesEnabled
                 )
                 SettingsToggleRow(
                     title: "Open notes by default",

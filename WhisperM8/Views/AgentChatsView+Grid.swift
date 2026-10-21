@@ -858,10 +858,11 @@ extension AgentChatsView {
         .background(AgentTheme.background)
         // Jarvis-Notiz: hängt unter dem Kopf über dem Terminal (verschiebt es nicht).
         .overlay(alignment: .topLeading) {
-            if AppPreferences.shared.isJarvisNotesEnabled {
+            if Self.showsNoteCards {
                 JarvisNoteCardOverlay(
                     sessionID: session.id,
                     windowID: windowID,
+                    taskSource: Self.noteTaskSource(session, project: project),
                     isFocused: isFocused,
                     headerHeight: Self.gridPaneHeaderHeight,
                     headerOpacity: Self.gridPaneHeaderOpacity(isFocused: isFocused),
@@ -921,6 +922,20 @@ extension AgentChatsView {
     /// Die Notiz-Karte setzt genau diese Fläche fort.
     static func gridPaneHeaderOpacity(isFocused: Bool) -> Double { isFocused ? 1 : 0.55 }
 
+    /// Notiz-Karten gibt es für Jarvis-Notizen oder für die Tasks der Chats.
+    static var showsNoteCards: Bool {
+        AppPreferences.shared.isJarvisNotesEnabled || AppPreferences.shared.isAgentChatTasksInNotesEnabled
+    }
+
+    /// Woran der Task-Store die Liste eines Chats findet: nur Claude, erst mit
+    /// externer ID (Codex-Chats haben keine Task-Tools).
+    static func noteTaskSource(_ session: AgentChatSession, project: AgentProject?) -> AgentChatTasksStore.Source? {
+        guard session.provider == .claude, let project,
+              let externalID = session.externalSessionID, !externalID.isEmpty else { return nil }
+        return AgentChatTasksStore.Source(
+            externalSessionID: externalID, cwd: AgentSessionStore.canonicalProjectPath(project.path))
+    }
+
     private func gridPaneHeader(
         _ session: AgentChatSession,
         project: AgentProject?,
@@ -945,8 +960,10 @@ extension AgentChatsView {
                     .help(project.name)
             }
             accountBadge(for: session)
-            if AppPreferences.shared.isJarvisNotesEnabled {
-                JarvisNoteChevron(sessionID: session.id, windowID: windowID, isFocused: isFocused,
+            if Self.showsNoteCards {
+                JarvisNoteChevron(sessionID: session.id, windowID: windowID,
+                                  taskSource: Self.noteTaskSource(session, project: project),
+                                  isFocused: isFocused,
                                   onHoverChanged: noteHoverHandler(for: session.id))
             }
             Spacer(minLength: 6)

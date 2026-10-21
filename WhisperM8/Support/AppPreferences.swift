@@ -569,6 +569,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.jarvisNotesEnabled) }
     }
 
+    /// Tasks der Claude-Chats (TaskCreate/TaskUpdate) in der Notiz-Karte am
+    /// Kachelkopf, auch ohne Jarvis: Aus = keine Tasks in Karte und Pfeil.
+    /// `defaults write com.whisperm8.app agentChatTasksInNotesEnabled -bool NO`
+    var isAgentChatTasksInNotesEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.agentChatTasksInNotesEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.agentChatTasksInNotesEnabled) }
+    }
+
     /// Schalter „Notizen auf/zu“ in der Workspace-Leiste: Standard für alle
     /// Notiz-Karten, App-weit. Gelesen per `@AppStorage` in den Ansichten.
     var jarvisNotesDefaultOpen: Bool {
@@ -966,6 +974,7 @@ enum PreferenceKeys {
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
     static let jarvisNotesEnabled = "jarvisNotesEnabled"
     static let jarvisNotesDefaultOpen = "jarvisNotesDefaultOpen"
+    static let agentChatTasksInNotesEnabled = "agentChatTasksInNotesEnabled"
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"
     static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"

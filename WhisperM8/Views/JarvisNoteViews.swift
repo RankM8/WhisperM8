@@ -56,19 +56,29 @@ struct HangingNoteShape: Shape {
 
 // MARK: - Zustand einer Kachel
 
-/// Gemeinsamer Zustand für Pfeil und Karte einer Kachel: Notiz und Handklick
+/// Hat die Kachel etwas zu zeigen: eine Jarvis-Notiz oder laufende/offene Tasks.
+enum JarvisNoteContent {
+    static func exists(note: JarvisBoardEntry?, tasks: [AgentChatTask]) -> Bool {
+        note != nil || AgentChatTaskSummary.hasOpen(tasks)
+    }
+}
+
+/// Gemeinsamer Zustand für Pfeil und Karte einer Kachel: Notiz, Tasks und Handklick
 /// je Session aus dem Store, Standard aus `@AppStorage`. Eigene kleine
 /// Ansichten statt Lesen im Grid-Body, damit eine Notiz-Änderung nur sie neu
 /// zeichnet (siehe `JarvisNotesStore`).
 private struct JarvisNoteSubscription: ViewModifier {
     let sessionID: UUID
     let windowID: UUID
+    let taskSource: AgentChatTasksStore.Source?
     @Binding var note: JarvisBoardEntry?
+    @Binding var tasks: [AgentChatTask]
     @Binding var override: Bool?
 
     func body(content: Content) -> some View {
         content
             .onReceive(JarvisNotesStore.shared.notePublisher(for: sessionID)) { note = $0 }
+            .onReceive(AgentChatTasksStore.shared.tasksPublisher(for: sessionID, source: taskSource)) { tasks = $0 }
             .onReceive(JarvisNotesStore.shared.overridePublisher(windowID: windowID, sessionID: sessionID)) {
                 override = $0
             }
@@ -80,6 +90,8 @@ private struct JarvisNoteSubscription: ViewModifier {
 struct JarvisNoteChevron: View {
     let sessionID: UUID
     let windowID: UUID
+    /// Woran der Store die Tasks des Chats findet; `nil` = keine Tasks (Codex).
+    var taskSource: AgentChatTasksStore.Source?
     let isFocused: Bool
     /// Maus über dem Pfeil: Der Klick soll nur klappen, nicht die Kachel
     /// fokussieren — der Fokuswechsel liefe beim Drücken, die Knopf-Aktion erst
@@ -88,11 +100,12 @@ struct JarvisNoteChevron: View {
 
     @AppStorage(PreferenceKeys.jarvisNotesDefaultOpen) private var defaultOpen = true
     @State private var note: JarvisBoardEntry?
+    @State private var tasks: [AgentChatTask] = []
     @State private var override: Bool?
 
     var body: some View {
         Group {
-            if let note {
+            if JarvisNoteContent.exists(note: note, tasks: tasks) {
                 let open = JarvisNoteExpansion.isOpen(
                     hasNote: true, override: override, isFocused: isFocused, defaultOpen: defaultOpen)
                 Button {
@@ -101,7 +114,7 @@ struct JarvisNoteChevron: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(open ? 90 : 0))
-                        .foregroundStyle(note.light == .needsYou ? AgentTheme.statusError : AgentTheme.textTertiary)
+                        .foregroundStyle(note?.light == .needsYou ? AgentTheme.statusError : AgentTheme.textTertiary)
                         .frame(width: 16, height: 16)
                         .contentShape(Rectangle())
                 }
@@ -113,7 +126,8 @@ struct JarvisNoteChevron: View {
                 .accessibilityLabel(open ? String(localized: "Collapse Jarvis note") : String(localized: "Expand Jarvis note"))
             }
         }
-        .modifier(JarvisNoteSubscription(sessionID: sessionID, windowID: windowID, note: $note, override: $override))
+        .modifier(JarvisNoteSubscription(sessionID: sessionID, windowID: windowID, taskSource: taskSource,
+                                         note: $note, tasks: $tasks, override: $override))
     }
 }
 
@@ -124,6 +138,7 @@ struct JarvisNoteChevron: View {
 struct JarvisNoteCardOverlay: View {
     let sessionID: UUID
     let windowID: UUID
+    var taskSource: AgentChatTasksStore.Source?
     let isFocused: Bool
     let headerHeight: CGFloat
     /// Deckkraft des Kopf-Graus dieser Kachel — die Karte setzt die Fläche fort.
@@ -135,6 +150,7 @@ struct JarvisNoteCardOverlay: View {
     @AppStorage(PreferenceKeys.jarvisNotesDefaultOpen) private var defaultOpen = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var note: JarvisBoardEntry?
+    @State private var tasks: [AgentChatTask] = []
     @State private var override: Bool?
 
     static let leadingInset: CGFloat = 10
@@ -153,13 +169,15 @@ struct JarvisNoteCardOverlay: View {
     }
 
     var body: some View {
+        let hasContent = JarvisNoteContent.exists(note: note, tasks: tasks)
         let open = JarvisNoteExpansion.isOpen(
-            hasNote: note != nil, override: override, isFocused: isFocused, defaultOpen: defaultOpen)
+            hasNote: hasContent, override: override, isFocused: isFocused, defaultOpen: defaultOpen)
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
-                if open, let note {
+                if open, hasContent {
                     JarvisNoteCard(
                         entry: note,
+                        tasks: tasks,
                         width: min(geometry.size.width * Self.widthFraction, Self.maxWidth),
                         maxHeight: Self.maxCardHeight(paneHeight: geometry.size.height, headerHeight: headerHeight),
                         headerOpacity: headerOpacity,
@@ -181,7 +199,8 @@ struct JarvisNoteCardOverlay: View {
         }
         // Sicherheitsnetz: nie über die eigene Kachel hinaus zeichnen.
         .clipped()
-        .modifier(JarvisNoteSubscription(sessionID: sessionID, windowID: windowID, note: $note, override: $override))
+        .modifier(JarvisNoteSubscription(sessionID: sessionID, windowID: windowID, taskSource: taskSource,
+                                         note: $note, tasks: $tasks, override: $override))
         // Handklick verwerfen beim Hineingehen/Verlassen: fensterweit in
         // `AgentChatsView` (`JarvisNotesStore.selectionChanged`), nicht hier —
         // die Einzelansicht hat keine Kacheln, wechselt aber Chats.
@@ -210,7 +229,9 @@ private struct TopReveal: ViewModifier, Animatable {
 /// Die Karte selbst: hängende Form plus Inhalt. Eigenständig, damit Snapshots
 /// sie ohne Store zeigen können.
 struct JarvisNoteCard: View {
-    let entry: JarvisBoardEntry
+    /// Jarvis-Notiz; `nil` = Karte nur mit den Tasks des Chats.
+    let entry: JarvisBoardEntry?
+    var tasks: [AgentChatTask] = []
     let width: CGFloat
     let maxHeight: CGFloat
     var headerOpacity: Double = 1
@@ -252,7 +273,7 @@ struct JarvisNoteCard: View {
 
     private var content: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            JarvisNoteCardContent(entry: entry, now: now ?? context.date)
+            JarvisNoteCardContent(entry: entry, tasks: tasks, now: now ?? context.date)
         }
     }
 }
@@ -262,9 +283,11 @@ private struct JarvisNoteHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// Inhalt der Karte: Arbeitspaket, Eingriff, Blockade, Ziel, drei Meilensteine.
+/// Inhalt der Karte: Arbeitspaket, Eingriff, Blockade, Ziel, drei Meilensteine
+/// (Jarvis-Notiz), darunter die Tasks des Chats. Ohne Notiz nur die Tasks.
 struct JarvisNoteCardContent: View {
-    let entry: JarvisBoardEntry
+    let entry: JarvisBoardEntry?
+    var tasks: [AgentChatTask] = []
     let now: Date
 
     static let visibleMilestones = 3
@@ -272,27 +295,12 @@ struct JarvisNoteCardContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            lead
-            if !entry.needs.isEmpty {
-                callout(entry.needs, color: AgentTheme.statusError)
+            if let entry {
+                note(entry)
             }
-            if !entry.blocker.isEmpty {
-                callout(entry.blocker, color: AgentTheme.statusAwaiting)
+            if !tasks.isEmpty {
+                AgentChatTasksSection(tasks: tasks, showsTitle: entry != nil)
             }
-            if !entry.mission.isEmpty, !entry.work.isEmpty {
-                section("Ziel") {
-                    Text(entry.mission)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AgentTheme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            if !entry.milestones.isEmpty {
-                section("Meilensteine") { milestones }
-            }
-            Text("Aktualisiert \(entry.updatedAt.formatted(date: .omitted, time: .shortened)) · Jarvis")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
         }
         .padding(.horizontal, 13)
         .padding(.top, 9)
@@ -300,8 +308,33 @@ struct JarvisNoteCardContent: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    @ViewBuilder
+    private func note(_ entry: JarvisBoardEntry) -> some View {
+        lead(entry)
+        if !entry.needs.isEmpty {
+            callout(entry.needs, color: AgentTheme.statusError)
+        }
+        if !entry.blocker.isEmpty {
+            callout(entry.blocker, color: AgentTheme.statusAwaiting)
+        }
+        if !entry.mission.isEmpty, !entry.work.isEmpty {
+            section("Ziel") {
+                Text(entry.mission)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        if !entry.milestones.isEmpty {
+            section("Meilensteine") { milestones(entry) }
+        }
+        Text("Aktualisiert \(entry.updatedAt.formatted(date: .omitted, time: .shortened)) · Jarvis")
+            .font(.system(size: 11))
+            .foregroundStyle(AgentTheme.textTertiary)
+    }
+
     /// Arbeitspaket fett; fehlt es, steht das Ziel an seiner Stelle.
-    private var lead: some View {
+    private func lead(_ entry: JarvisBoardEntry) -> some View {
         let text = entry.work.isEmpty ? entry.mission : entry.work
         return ((text.isEmpty ? Text("No note yet") : Text(verbatim: text))
                     .font(.system(size: 12.5, weight: .semibold))
@@ -333,7 +366,7 @@ struct JarvisNoteCardContent: View {
         }
     }
 
-    private var milestones: some View {
+    private func milestones(_ entry: JarvisBoardEntry) -> some View {
         let shown = showsAllMilestones ? entry.milestones : Array(entry.milestones.prefix(Self.visibleMilestones))
         let hidden = entry.milestones.count - shown.count
         return VStack(alignment: .leading, spacing: 3) {
@@ -389,10 +422,11 @@ struct JarvisNotesToggleButton: View {
 
     @AppStorage(PreferenceKeys.jarvisNotesDefaultOpen) private var defaultOpen = true
     @State private var notedSessions: Set<UUID> = []
+    @State private var sessionsWithTasks: Set<UUID> = []
 
     var body: some View {
         Group {
-            if !notedSessions.isDisjoint(with: sessionIDs) {
+            if !notedSessions.union(sessionsWithTasks).isDisjoint(with: sessionIDs) {
                 Button {
                     JarvisNotesShortcut.toggleDefault(windowID: windowID)
                 } label: {
@@ -417,5 +451,6 @@ struct JarvisNotesToggleButton: View {
             }
         }
         .onReceive(JarvisNotesStore.shared.notedSessionsPublisher) { notedSessions = $0 }
+        .onReceive(AgentChatTasksStore.shared.sessionsWithOpenTasksPublisher) { sessionsWithTasks = $0 }
     }
 }

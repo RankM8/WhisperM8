@@ -36,7 +36,14 @@ struct ClaudeHookEvent: Equatable, Codable {
         /// daraufhin den Composer (der geblockte Text bliebe sonst kleben)
         /// und nimmt das „working" des geblockten Submits zurück.
         case promptGuardBlock = "WhisperM8PromptGuardBlock"
+        /// Claude hat eine Task angelegt bzw. abgeschlossen (TaskCreate/
+        /// TaskUpdate). Kein Status-Signal: liefert nur `team_name`, den Namen
+        /// der Task-Liste, für die Notiz-Karte (`AgentChatTasksStore`).
+        case taskCreated = "TaskCreated"
+        case taskCompleted = "TaskCompleted"
         case other
+
+        var isTaskEvent: Bool { self == .taskCreated || self == .taskCompleted }
     }
 
     var hookEventName: EventName
@@ -55,6 +62,9 @@ struct ClaudeHookEvent: Equatable, Codable {
     /// einen Background-Agent (`/background`, Left-Arrow) — über dieselbe
     /// Settings-Datei, also im Event-File des Vordergrund-Chats.
     var source: String? = nil
+    /// Bei TaskCreated/TaskCompleted: Teamname der Session = Ordner der
+    /// Task-Liste unter `<config>/tasks/`.
+    var teamName: String? = nil
 }
 
 /// Tail-Reader fuer das JSONL-File einer lokalen Session. Speichert pro
@@ -144,7 +154,8 @@ final class ClaudeHookEventStore {
             reason: object["reason"] as? String,
             toolName: object["tool_name"] as? String,
             rawJSON: line,
-            source: object["source"] as? String
+            source: object["source"] as? String,
+            teamName: object["team_name"] as? String
         )
     }
 

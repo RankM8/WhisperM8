@@ -122,7 +122,7 @@ enum AgentSessionSignal: Equatable {
             // UserPromptSubmit muss ZURÜCKgenommen werden — der Turn ist
             // nie gelaufen) und leert den Composer.
             return nil
-        case .notification, .other:
+        case .notification, .other, .taskCreated, .taskCompleted:
             return nil
         }
     }

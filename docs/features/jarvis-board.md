@@ -10,7 +10,7 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
   `whisperm8:codex-subagent`, `whisperm8:gpt-coworker`,
   `whisperm8:gpt-workflow`, `whisperm8:whisperm8-transcription`,
   `whisperm8:callout`) und der Mod „Jarvis-Board“ samt Voice-Callouts
-  (`docs/features/speech-callouts.md`). Jede Claude-Session, die die App startet, lädt es, in jedem
+  (`docs/features/speech-callouts.md`) und Task-Anzeige (`/t`, § Task-Anzeige). Jede Claude-Session, die die App startet, lädt es, in jedem
   Profil und ohne `claude plugin install`.
 - **Jarvis-Board:** Ein Band über dem Prompt der Jarvis-Session. Es zeigt die
   Chats, die Jarvis aktiv betreut, mit Ampel, Anliegen oder nächstem Schritt
@@ -153,13 +153,81 @@ Entwurf: `docs/design/randnotiz-karte.html`.
 - **Kill-Switch:** `defaults write com.whisperm8.app jarvisNotesEnabled -bool NO`
   (keine Karten, kein Schalter; das Board bleibt unberührt).
 
+## Task-Anzeige (seit 21.10.2026)
+
+Claude Codes eigene Task-Liste (ctrl+t) kürzt („… +8 completed“, lange Titel
+abgeschnitten) und kennt nur auf/zu. Sie hat keinen `ui.render`-Ort, und
+`app:toggleTodos` lässt sich nicht übernehmen, solange der Engine-Handler
+gemountet ist. Deshalb zwei eigene Anzeigen derselben Daten:
+
+- **Wahrheit:** Claudes Dateien `<config-dir>/tasks/<liste>/<id>.json`
+  (`id`, `subject`, `description`, `activeForm`, `status`, `owner`,
+  `blockedBy`, `metadata`). Nur gelesen. **Der Ordner heißt nach dem
+  Teamnamen der Session**, nicht verlässlich nach der Session-ID: mit
+  `--session-id` gestartet war er im Test `session-412eed50` statt
+  `session-a96985f9`. Claude nennt ihn nur im Hook `TaskCreated`/
+  `TaskCompleted` (`team_name`) bzw. im Ergebnis eines `TaskCreate`.
+- **Links:** `metadata.links` (`[{label, url}]`, `{label: url}` oder URLs) und
+  http(s)-/file-URLs aus Titel und Beschreibung, höchstens sechs. Die Mod
+  ergänzt die Beschreibung von `TaskCreate`/`TaskUpdate` (`tool.describe`), damit
+  das Modell Links an die Task hängt statt sie in jeder Antwort zu wiederholen.
+
+### Im Chat: Mod-Teil `hooks/tasks.tsx`
+
+Eigene Datei, von `register.tsx` nur eingebunden (`registerTasks` vor den
+Board-Hooks, `startTasks` im einzigen `session.start`). Die Engine folgt `on` und
+`$` über einen Import nur in **Funktions-Deklarationen** (`export function`), nicht
+in Pfeil-Konstanten; zwei `session.start` ohne Matcher lehnt sie ab.
+
+- **Modi:** Aus · Normal (laufende und offene, eine Zeile je Task) · Alle (auch
+  erledigte, Titel umbrochen). `/t` schaltet weiter, `/t aus|normal|alle`
+  direkt, in der Anzeige die Ziffern 1/2/3 (im Band mit offenem Jarvis-Board ohne
+  Ziffern — die öffnen dort Chats). Modus in `$.store` (`taskMode`), gilt für alle
+  Sessions und überlebt Neustarts. Standard: Aus.
+- **Ort:** Vollbild-Terminal → Pane, ab 110 Spalten rechts angedockt, schmaler
+  über dem Prompt. Main-Screen (App-Sessions) → Band über dem Prompt; es liegt
+  außen um das Board-Band (der zuerst registrierte `AbovePrompt`-Hook läuft außen).
+  Pane von Hand geschlossen heißt Aus.
+- **Je Task:** Symbol (◼ läuft, ◻ offen, ✔ erledigt), `#id`, Titel, `@owner`,
+  bei laufenden `↳ activeForm`, `⊘ wartet auf #n`, `↗ Link` (OSC 8, im
+  WhisperM8-Terminal per cmd+Klick).
+- **Zähler:** „Tasks 1 aktiv · 4 offen“ am Ende der Hinweiszeile unter dem
+  Prompt (`PromptHint.tail`, nicht `$.ui.status` — davor setzt Claude „⚠“).
+- **Ordner:** `CLAUDE_CODE_TASK_LIST_ID`, sonst der beim ersten `TaskCreate`
+  gefundene (`$.state.taskDir`, je Session-ID in `$.store.taskDirs` für
+  `--resume`), sonst die Vermutung `session-<8>`. Gelesen nach jedem
+  `TaskCreate`/`TaskUpdate` und alle 5 s (Teammates anderer Prozesse), nur wenn
+  Liste oder Zähler an sind; nur geänderte Dateien (mtime/Größe).
+- **Abschalten:** `userConfig` `taskliste` (weder `/t` noch Anzeige) und
+  `taskzaehler`.
+
+### In der App: Tasks in der Notiz-Karte
+
+- **Was:** Jeder Claude-Chat mit laufenden oder offenen Tasks bekommt im Grid die
+  Notiz-Karte am Kachelkopf, auch ohne Jarvis. Mit Jarvis-Notiz stehen die Tasks
+  als Abschnitt „TASKS“ darunter. Erledigte hinter „▸ N erledigt“. Links sind
+  klickbar (Browser bzw. bei file:// die zugehörige App). Auf/zu, Pfeil und Fokus
+  wie bei den Jarvis-Notizen; der Schalter „Notizen auf/zu“ zählt Chats mit Tasks mit.
+- **Technik:** `AgentChatTasksStore` (MainActor, Publisher je Session wie
+  `JarvisNotesStore`) liest auf einer Utility-Queue (`AgentChatTaskDirectory`,
+  Parser `AgentChatTaskParser`) und hört per FSEvents auf die `tasks`-Ordner der
+  Konten — kein Polling. Den Ordner lernt er aus den Hooks `TaskCreated`/
+  `TaskCompleted` (`ClaudeHookSettingsBuilder.registryModeEventNames`, nur im
+  reduzierten Satz, also Claude Code ≥ 2.1.302; kein Status-Signal, der
+  Coordinator reicht sie direkt an den Store) und merkt ihn je Claude-Session-ID
+  in `Application Support/WhisperM8/agent-task-lists.json` (höchstens 400).
+  Ohne Hook: Vermutung `session-<8>` im Konfig-Ordner des Transcripts.
+- **Einstellung:** Labs › Jarvis & Callouts › „Show chat tasks in notes“;
+  `defaults write com.whisperm8.app agentChatTasksInNotesEnabled -bool NO`.
+
 ## Entwickeln und prüfen
 
 ```bash
 make plugin-test   # claude plugin validate + claude plugin test auf die Mod
 make skills        # Plugin aus dem Repo ablegen (ohne App-Build); neue Sessions sehen es
-swift test --filter "WhisperM8ClaudePluginTests|JarvisBoard|ChatsBoard|JarvisNotes|JarvisNoteExpansion|HangingNoteShape|ClaudeRecap"
+swift test --filter "WhisperM8ClaudePluginTests|JarvisBoard|ChatsBoard|JarvisNotes|JarvisNoteExpansion|HangingNoteShape|ClaudeRecap|AgentChatTasks"
 make snapshots ONLY=jarvis-notiz   # Karte hell + dunkel ansehen
+make snapshots ONLY=notiz-tasks    # Karte mit Tasks (allein und unter einer Notiz)
 ```
 
 ## Kill-Switches
