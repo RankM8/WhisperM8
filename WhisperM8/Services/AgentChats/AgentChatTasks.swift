@@ -4,8 +4,8 @@ import Foundation
 //
 // Claude Code legt jede Task als `<config-dir>/tasks/<liste>/<id>.json` ab.
 // Die App liest sie nur (fremde Daten unter ~/.claude*) und zeigt sie in der
-// Notiz-Karte am Kachelkopf. Dieselben Regeln wie die Mod `hooks/tasks.tsx`
-// des Plugins: Links aus `metadata.links` oder URLs im Text, Liste nach ID.
+// Notiz-Karte am Kachelkopf: Links aus `metadata.links` (die Mod
+// `hooks/tasks.tsx` erklärt sie dem Modell) oder URLs im Text, Liste nach ID.
 // Doku: docs/features/jarvis-board.md § Tasks in der Notiz-Karte.
 
 struct AgentChatTask: Equatable, Identifiable, Sendable {

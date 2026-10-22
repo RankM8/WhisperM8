@@ -83,8 +83,7 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
 const SURFACES = ['terminal', 'desktop'] as const
 
 /**
- * Das Board liest session.start nicht awaitet. Vor dem Board-Hook liegt der
- * AbovePrompt-Hook der Task-Anzeige (tasks.tsx): ohne kurzes Warten zeichnet
+ * Das Board liest session.start nicht awaitet: ohne kurzes Warten zeichnet
  * der erste Mount noch vor dem Lesen, das Band käme erst mit dem Neuzeichnen.
  */
 declare const setTimeout: (fn: () => void, ms: number) => unknown

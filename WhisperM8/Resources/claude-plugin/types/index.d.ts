@@ -44,32 +44,16 @@ export type BoardView = {
 }
 
 // MARK: Tasks (hooks/tasks.tsx)
-// Nur Anzeige-Zustand: die Wahrheit liegt in Claude Codes Task-Dateien
-// (`<config-dir>/tasks/<liste>/<id>.json`), der Modus zusätzlich in $.store.
-
-/** Aus · Normal (aktive und offene) · Alle (auch erledigte). */
-export type TaskMode = 'off' | 'normal' | 'all'
+// Nur für den Zähler: die Wahrheit liegt in Claude Codes Task-Dateien
+// (`<config-dir>/tasks/<liste>/<id>.json`).
 
 export type TaskStatus = 'pending' | 'in_progress' | 'completed'
 
-/** Ein anklickbarer Link unter einem Task (aus `metadata.links` oder einer URL im Text). */
-export type TaskLink = {
-  label: string
-  url: string
-}
-
-/** Ein Task, wie Claude Code ihn als `<id>.json` ablegt (nur die angezeigten Felder). */
+/** Ein Task, wie Claude Code ihn als `<id>.json` ablegt (nur die gelesenen Felder). */
 export type TaskItem = {
   id: string
   subject: string
-  description: string
-  /** Tätigkeit im Verlauf („Running tests“), nur bei laufenden sinnvoll. */
-  activeForm?: string
   status: TaskStatus
-  /** Agent oder Teammate, der den Task übernommen hat. */
-  owner?: string
-  blockedBy: string[]
-  links: TaskLink[]
 }
 
 declare module 'claude-code' {
@@ -85,8 +69,6 @@ declare module 'claude-code' {
       woken: string[]
       /** Callout-Modus der Session: Claude darf am Turn-Ende sprechen. */
       callout: boolean
-      /** Anzeige-Modus der Task-Liste; über Neustarts in $.store `taskMode`. */
-      taskMode: TaskMode
       /** Tasks der laufenden Session, nach ID sortiert. */
       taskItems: TaskItem[]
       /** Ordner der Task-Liste, beim ersten TaskCreate gefunden; '' = noch unbekannt. */

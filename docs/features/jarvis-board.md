@@ -10,7 +10,7 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
   `whisperm8:codex-subagent`, `whisperm8:gpt-coworker`,
   `whisperm8:gpt-workflow`, `whisperm8:whisperm8-transcription`,
   `whisperm8:callout`) und der Mod „Jarvis-Board“ samt Voice-Callouts
-  (`docs/features/speech-callouts.md`) und Task-Anzeige (`/t`, § Task-Anzeige). Jede Claude-Session, die die App startet, lädt es, in jedem
+  (`docs/features/speech-callouts.md`) und Task-Zähler (§ Task-Anzeige). Jede Claude-Session, die die App startet, lädt es, in jedem
   Profil und ohne `claude plugin install`.
 - **Jarvis-Board:** Ein Band über dem Prompt der Jarvis-Session. Es zeigt die
   Chats, die Jarvis aktiv betreut, mit Ampel, Anliegen oder nächstem Schritt
@@ -155,10 +155,10 @@ Entwurf: `docs/design/randnotiz-karte.html`.
 
 ## Task-Anzeige (seit 21.10.2026)
 
-Claude Codes eigene Task-Liste (ctrl+t) kürzt („… +8 completed“, lange Titel
-abgeschnitten) und kennt nur auf/zu. Sie hat keinen `ui.render`-Ort, und
-`app:toggleTodos` lässt sich nicht übernehmen, solange der Engine-Handler
-gemountet ist. Deshalb zwei eigene Anzeigen derselben Daten:
+Im Terminal bleibt Claude Codes eigene Task-Liste (ctrl+t) die einzige Liste. Sie
+kürzt („… +8 completed“, lange Titel abgeschnitten) und kennt keine Links; die
+volle Liste mit Links zeigt die Notiz-Karte der App. Die Mod ergänzt im Chat nur
+einen Zähler und erklärt dem Modell die Links.
 
 - **Wahrheit:** Claudes Dateien `<config-dir>/tasks/<liste>/<id>.json`
   (`id`, `subject`, `description`, `activeForm`, `status`, `owner`,
@@ -174,32 +174,28 @@ gemountet ist. Deshalb zwei eigene Anzeigen derselben Daten:
 
 ### Im Chat: Mod-Teil `hooks/tasks.tsx`
 
-Eigene Datei, von `register.tsx` nur eingebunden (`registerTasks` vor den
-Board-Hooks, `startTasks` im einzigen `session.start`). Die Engine folgt `on` und
-`$` über einen Import nur in **Funktions-Deklarationen** (`export function`), nicht
-in Pfeil-Konstanten; zwei `session.start` ohne Matcher lehnt sie ab.
+Eigene Datei, von `register.tsx` nur eingebunden (`registerTasks`, `startTasks` im
+einzigen `session.start`). Die Engine folgt `on` und `$` über einen Import nur in
+**Funktions-Deklarationen** (`export function`), nicht in Pfeil-Konstanten; zwei
+`session.start` ohne Matcher lehnt sie ab.
 
-- **Modi:** Aus · Normal (laufende und offene, eine Zeile je Task) · Alle (auch
-  erledigte, Titel umbrochen). `/t` schaltet weiter, `/t aus|normal|alle`
-  direkt, in der Anzeige die Ziffern 1/2/3 (im Band mit offenem Jarvis-Board ohne
-  Ziffern — die öffnen dort Chats). Modus in `$.store` (`taskMode`), gilt für alle
-  Sessions und überlebt Neustarts. Standard: Aus.
-- **Ort:** Vollbild-Terminal → Pane, ab 110 Spalten rechts angedockt, schmaler
-  über dem Prompt. Main-Screen (App-Sessions) → Band über dem Prompt; es liegt
-  außen um das Board-Band (der zuerst registrierte `AbovePrompt`-Hook läuft außen).
-  Pane von Hand geschlossen heißt Aus.
-- **Je Task:** Symbol (◼ läuft, ◻ offen, ✔ erledigt), `#id`, Titel, `@owner`,
-  bei laufenden `↳ activeForm`, `⊘ wartet auf #n`, `↗ Link` (OSC 8, im
-  WhisperM8-Terminal per cmd+Klick).
 - **Zähler:** „Tasks 1 aktiv · 4 offen“ am Ende der Hinweiszeile unter dem
   Prompt (`PromptHint.tail`, nicht `$.ui.status` — davor setzt Claude „⚠“).
+- **Links:** `tool.describe` von `TaskCreate`/`TaskUpdate` erklärt `metadata.links`.
 - **Ordner:** `CLAUDE_CODE_TASK_LIST_ID`, sonst der beim ersten `TaskCreate`
   gefundene (`$.state.taskDir`, je Session-ID in `$.store.taskDirs` für
   `--resume`), sonst die Vermutung `session-<8>`. Gelesen nach jedem
-  `TaskCreate`/`TaskUpdate` und alle 5 s (Teammates anderer Prozesse), nur wenn
-  Liste oder Zähler an sind; nur geänderte Dateien (mtime/Größe).
-- **Abschalten:** `userConfig` `taskliste` (weder `/t` noch Anzeige) und
-  `taskzaehler`.
+  `TaskCreate`/`TaskUpdate` und alle 5 s (Teammates anderer Prozesse); nur
+  geänderte Dateien (mtime/Größe).
+- **Abschalten:** `userConfig` `taskzaehler` (dann liest die Mod gar nicht).
+- **Keine eigene Liste mehr (22.10.2026):** Bis dahin zeigte die Mod die ganze
+  Liste selbst (`/t` mit Aus · Normal · Alle, Pane im Vollbild, Band über dem
+  Prompt). In App-Sessions (Main-Screen) zeichnet Claude den Bereich über dem
+  Prompt bei jeder Änderung neu; die hohe Liste hinterließ dabei Rahmen und
+  doppelte Zeilen fest im Verlauf. Dazu öffnete sich das Pane in App-Sessions mit,
+  weil „zuletzt Vollbild“ in `$.store` für alle Sessions galt. Claudes eigene
+  Liste hält den Bereich klein. Nicht wieder einbauen, ohne dieses Problem zu lösen;
+  die alten Store-Schlüssel `taskMode`/`taskFullscreen` werden ignoriert.
 
 ### In der App: Tasks in der Notiz-Karte
 

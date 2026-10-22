@@ -2,8 +2,8 @@ import SwiftUI
 
 // MARK: - Tasks in der Notiz-Karte
 //
-// Daten: `AgentChatTasksStore` (Claudes Task-Dateien des Chats). Gleiche Zeilen
-// wie die Task-Anzeige der Mod (`/t` im Chat): Symbol, #ID, voller Titel,
+// Daten: `AgentChatTasksStore` (Claudes Task-Dateien des Chats). Die volle
+// Liste, die Claudes eigene im Terminal kürzt: Symbol, #ID, voller Titel,
 // @Besitzer, bei laufenden die Tätigkeit, Blocker, klickbare Links. Laufende
 // und offene stehen immer da, erledigte hinter „▸ N done“.
 

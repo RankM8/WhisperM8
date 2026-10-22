@@ -1,7 +1,7 @@
 {
   "name": "whisperm8",
   "version": "0.0.0-dev",
-  "description": "WhisperM8: Agent-Skills (Chats, Jarvis, Codex-Subagents, GPT-Workflows, Transkription) das Jarvis-Board über dem Prompt und eine vollständige Task-Liste (/t).",
+  "description": "WhisperM8: Agent-Skills (Chats, Jarvis, Codex-Subagents, GPT-Workflows, Transkription), das Jarvis-Board über dem Prompt und ein Task-Zähler unter dem Prompt.",
   "author": { "name": "WhisperM8" },
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -11,12 +11,6 @@
       "description": "Wenn ein Board-Chat auf dich wartet oder fertig ist: turn = Hinweis und ein Prompt an Jarvis; toast = nur Hinweis; aus = nichts.",
       "options": ["turn", "toast", "aus"],
       "default": "turn"
-    },
-    "taskliste": {
-      "type": "boolean",
-      "title": "Task-Liste",
-      "description": "Eigene Task-Anzeige (Aus · Normal · Alle), umschalten mit /t. Aus = weder Befehl noch Anzeige.",
-      "default": true
     },
     "taskzaehler": {
       "type": "boolean",
