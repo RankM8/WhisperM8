@@ -26,9 +26,14 @@ let package = Package(
         // #599 (offizielle Subclass-Hooks fuer Link-/Key-Handling) und #600
         // (zeilengenaues Wheel-Scrolling).
         //
+        // Dazu der Backport von Upstream #620 (5365a76): steht der Viewport
+        // auch nur eine Zeile ueber dem Ende, invalidierte updateDisplay die
+        // falschen Zeilen — Prompt und Statusblock von Claude Code blieben
+        // stehen, bis ein Klick alles neu zeichnete.
+        //
         // Upstream-PR-faehig — bei Merge zurueck auf migueldeicaza/SwiftTerm +
         // Version-Bump. Pin auf Commit fuer reproduzierbare Builds.
-        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "2671405c3157ed259ee1051fb372ec5d9b44682d"),
+        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "5365a76a953251550fbcb14c3a835d18bc0bb51b"),
     ],
     targets: [
         // Winziges Objective-C-Target, nur damit Swift eine NSException

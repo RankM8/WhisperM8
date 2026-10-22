@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-22
 ---
 
 # Terminal
@@ -56,6 +56,15 @@ Der Scroll-Lock trennt Output-Scrolls von User-Scrolls. Wenn der User im
 normalen Buffer vom Tail wegscrollt, merkt die View die gewünschte `yDisp` und
 korrigiert output-getriebene Sprünge zurück. Im Alternate Buffer wird immer
 Tail-Following erzwungen, weil dort kein normaler Scrollback existiert.
+
+„Am Tail“ heißt zeilengenau am Ende (`TerminalTailFollow`, pur und getestet).
+Ein Abwärts-Scroll, der bis zu drei Zeilen vor dem Ende stehen bleibt, rastet
+exakt ein. Erst dort beendet SwiftTerm seinen `userScrolling`-Zustand. Die
+frühere Toleranz `position >= 0.985` ließ den Viewport dauerhaft ein paar
+Zeilen über dem Ende stehen. Dort zeichnete SwiftTerm v1.15 Neuzeichnungen an
+Ort und Stelle in die falschen Zeilen: Prompt und Statusblock von Claude Code
+blieben stehen, bis ein Klick alles neu zeichnete. Behoben im Fork durch den
+Backport von Upstream #620 (Commit `5365a76`). Analyse vom 22.10.2026.
 
 `TerminalScrollGuard` ist ein lokaler ScrollWheel-Monitor. Trifft ein
 Scroll-Event das Terminal im Alternate Buffer, sendet er XTerm-SGR-Wheel-Bytes

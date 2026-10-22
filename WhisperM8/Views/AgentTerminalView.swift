@@ -54,11 +54,15 @@ final class QuietableTerminalView: LocalProcessTerminalView {
         }
     }
 
-    /// `true`, solange der User nahe genug am Buffer-Ende ist, dass neuer
+    /// `true`, solange die Ansicht exakt am Buffer-Ende steht und neuer
     /// Output sichtbar bleiben soll. Faellt auf `false`, sobald der User
-    /// hochscrollt; wird wieder `true`, sobald er bewusst ans Ende
-    /// zurueckkehrt.
+    /// hochscrollt; wird wieder `true`, sobald er ans Ende zurueckkehrt
+    /// (knapp davor rastet ein Abwaerts-Scroll ein, `TerminalTailFollow`).
     private var isFollowingTail: Bool = true
+
+    /// Zuletzt gesehene Display-Row — daraus die Scroll-Richtung fuers
+    /// Einrasten. Auch Output-Scrolls aktualisieren sie.
+    private var lastObservedYDisp: Int?
 
     /// Die Display-Row, an der der User stehen wollte, als er das Tail-
     /// Following verlassen hat. Nach jedem Output-getriggerten Scroll
@@ -70,11 +74,6 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     /// User-Scroll werten.
     private var isRestoringScroll: Bool = false
     private var isOutputScrollInFlight: Bool = false
-
-    /// Toleranz: ab `scrollPosition >= bottomThreshold` gilt der User als
-    /// „am Tail". Wir lassen ein bisschen Luft, damit Sub-Pixel-Float-
-    /// Vergleiche nicht jeden Klick als „nicht ganz unten" markieren.
-    private static let bottomThreshold: Double = 0.985
 
     override func bell(source: Terminal) {
         guard AppPreferences.shared.isTerminalBellEnabled,
@@ -187,6 +186,10 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     override func scrolled(source: TerminalView, position: Double) {
         super.scrolled(source: source, position: position)
 
+        let yDisp = getTerminal().getTopVisibleRow()
+        let previousYDisp = lastObservedYDisp
+        lastObservedYDisp = yDisp
+
         if isRestoringScroll || isOutputScrollInFlight { return }
         if getTerminal().isCurrentBufferAlternate {
             isFollowingTail = true
@@ -194,12 +197,25 @@ final class QuietableTerminalView: LocalProcessTerminalView {
             return
         }
 
-        if position >= Self.bottomThreshold {
+        let distance = TerminalTailFollow.distanceToTail(
+            yDisp: yDisp, position: position, canScroll: canScroll
+        )
+        let movedDown = previousYDisp.map { yDisp > $0 } ?? false
+        switch TerminalTailFollow.decide(distanceToTail: distance, movedDown: movedDown) {
+        case .follow:
             isFollowingTail = true
             preservedYDisp = nil
-        } else {
+        case .snapToTail:
+            // Exakt ans Ende — erst dort beendet SwiftTerm `userScrolling`
+            // und laesst den Viewport wieder mit dem Output mitlaufen.
+            isRestoringScroll = true
+            scrollTo(row: Int.max, notifyAccessibility: false)
+            isRestoringScroll = false
+            isFollowingTail = true
+            preservedYDisp = nil
+        case .detach:
             isFollowingTail = false
-            preservedYDisp = getTerminal().getTopVisibleRow()
+            preservedYDisp = yDisp
         }
     }
 }
