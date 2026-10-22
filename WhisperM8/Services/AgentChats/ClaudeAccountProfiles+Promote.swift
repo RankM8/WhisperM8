@@ -89,7 +89,7 @@ extension ClaudeAccountProfiles {
             throw PromoteError.notLoggedIn(name)
         }
         let profileService = keychainService(forProfile: name)
-        let (readStatus, rawSecret) = securityRunner(["find-generic-password", "-s", profileService, "-w"])
+        let (readStatus, rawSecret) = readKeychainSecret(service: profileService)
         let secret = rawSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard readStatus == 0, !secret.isEmpty else { throw PromoteError.notLoggedIn(name) }
 
@@ -103,7 +103,7 @@ extension ClaudeAccountProfiles {
         }
         let previousMainJSONData = try? Data(contentsOf: mainJSONURL)
         let mainService = keychainService(forProfile: Self.mainProfileName)
-        let (oldMainStatus, oldMainRaw) = securityRunner(["find-generic-password", "-s", mainService, "-w"])
+        let (oldMainStatus, oldMainRaw) = readKeychainSecret(service: mainService)
         let previousMainSecret = oldMainStatus == 0
             ? oldMainRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
@@ -154,7 +154,7 @@ extension ClaudeAccountProfiles {
         }
 
         // (3) Aufräumen — der Umzug ist vollzogen.
-        _ = securityRunner(["delete-generic-password", "-s", profileService])
+        deleteKeychainSecret(service: profileService)
         do {
             try trashItem(profileDir)
         } catch {
@@ -223,7 +223,7 @@ extension ClaudeAccountProfiles {
     }
 
     private func writeMainSecret(_ secret: String, service: String) throws {
-        let status = writeKeychainSecretVerified(service: service, account: NSUserName(), secret: secret)
+        let status = writeKeychainSecretVerified(service: service, account: keychainAccount, secret: secret)
         guard status == 0 else {
             throw PromoteError.keychainWriteFailed("security add-generic-password exit \(status)")
         }
@@ -233,7 +233,7 @@ extension ClaudeAccountProfiles {
     /// keinen, das neu angelegte Item wieder löschen.
     private func restoreMainSecret(_ previousSecret: String, service: String) {
         if previousSecret.isEmpty {
-            _ = securityRunner(["delete-generic-password", "-s", service])
+            deleteKeychainSecret(service: service)
         } else {
             _ = try? writeMainSecret(previousSecret, service: service)
         }

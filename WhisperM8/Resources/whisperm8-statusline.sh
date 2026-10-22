@@ -188,8 +188,13 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
         else
             keychain_service="Claude Code-credentials-$(echo -n "$cfg_dir" | shasum -a 256 | cut -c1-8)"
         fi
+        # Immer mit Account lesen, wie Claude Code selbst ($USER, sonst
+        # Login-Name): ohne -a liefert security bei mehreren Items gleichen
+        # Service-Namens ein beliebiges — z. B. ein fremdes mit nur mcpOAuth.
+        keychain_account="${USER:-$(id -un)}"
+        case "$keychain_account" in *[!a-zA-Z0-9._-]*|"") keychain_account="claude-code-user" ;; esac
         access_token=""
-        [ -n "$keychain_service" ] && access_token=$(security find-generic-password -s "$keychain_service" -w 2>/dev/null | jq -r '.claudeAiOauth.accessToken // empty')
+        [ -n "$keychain_service" ] && access_token=$(security find-generic-password -a "$keychain_account" -s "$keychain_service" -w 2>/dev/null | jq -r '.claudeAiOauth.accessToken // empty')
         if [ -n "$access_token" ]; then
             # Token via stdin-Header (-H @-) statt Prozessargument — Argumente
             # sind in der Prozessliste für lokale Beobachter sichtbar.

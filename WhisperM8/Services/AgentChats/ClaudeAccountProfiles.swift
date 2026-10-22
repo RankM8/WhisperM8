@@ -43,6 +43,8 @@ struct ClaudeAccountProfiles {
 
     var homeDirectory: URL = AppInstance.home
     var fileManager: FileManager = .default
+    /// Keychain-Account aller Login-Items (siehe `claudeKeychainAccount`).
+    var keychainAccount: String = ClaudeAccountProfiles.claudeKeychainAccount()
 
     var profilesRoot: URL {
         homeDirectory.appendingPathComponent(".claude-profiles", isDirectory: true)
@@ -387,6 +389,38 @@ struct ClaudeAccountProfiles {
         return "Claude Code-credentials-\(suffix)"
     }
 
+    /// Keychain-Account, unter dem Claude Code seine Logins schreibt UND liest
+    /// (`security … -a <account> -s <service>`): `$USER`, sonst der
+    /// Login-Name; passt der nicht auf `[a-zA-Z0-9._-]+`, nimmt Claude
+    /// `claude-code-user` — hier identisch nachgebaut (v2.1.308).
+    static func claudeKeychainAccount(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        userName: String = NSUserName()
+    ) -> String {
+        let candidate = environment["USER"].flatMap { $0.isEmpty ? nil : $0 } ?? userName
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+        guard !candidate.isEmpty, candidate.unicodeScalars.allSatisfy(allowed.contains) else {
+            return "claude-code-user"
+        }
+        return candidate
+    }
+
+    /// Liest das Login-Secret eines Service-Namens — immer MIT Account, genau
+    /// wie Claude Code. Ohne `-a` liefert `security` bei mehreren Items mit
+    /// gleichem Service-Namen ein beliebiges davon (Vorfall 22.10.2026: ein
+    /// fremdes Item `Claude Code-credentials`/Account `unknown` mit nur
+    /// `mcpOAuth` verdeckte den echten main-Login — „Keine Daten" für das
+    /// gerade genutzte Konto). Rückgabe: (exitCode, stdout).
+    func readKeychainSecret(service: String) -> (Int32, String) {
+        securityRunner(["find-generic-password", "-a", keychainAccount, "-s", service, "-w"])
+    }
+
+    /// Löscht genau das Item, das Claude Code liest — nie ein fremdes Item
+    /// mit gleichem Service-Namen.
+    func deleteKeychainSecret(service: String) {
+        _ = securityRunner(["delete-generic-password", "-a", keychainAccount, "-s", service])
+    }
+
     /// Hinterlegt den (berechneten) Service-Namen als `.keychain-service` im
     /// Profil — die Statusline (`statusline-command.sh`) und `ccs status`
     /// lesen diese Datei. Heilt auch Profile nach, die vor dieser Logik
@@ -501,7 +535,7 @@ struct ClaudeAccountProfiles {
     func writeKeychainSecretVerified(service: String, account: String, secret: String) -> Int32 {
         let status = keychainWriter(service, account, secret)
         guard status == 0 else { return status }
-        let (readStatus, readBack) = securityRunner(["find-generic-password", "-s", service, "-w"])
+        let (readStatus, readBack) = readKeychainSecret(service: service)
         guard readStatus == 0,
               readBack.trimmingCharacters(in: .whitespacesAndNewlines) == secret.trimmingCharacters(in: .whitespacesAndNewlines) else {
             Logger.agentStore.error("keychain_write_verify_failed service=\(service, privacy: .public)")
@@ -546,23 +580,23 @@ struct ClaudeAccountProfiles {
         let oldService = keychainService(forProfile: oldName)
         // Secret VOR dem Rename lesen (Exit != 0 = kein Login vorhanden — dann
         // ist nichts zu retten und der reine Ordner-Rename reicht).
-        let (readStatus, secret) = securityRunner(["find-generic-password", "-s", oldService, "-w"])
+        let (readStatus, secret) = readKeychainSecret(service: oldService)
         let trimmedSecret = secret.trimmingCharacters(in: .whitespacesAndNewlines)
 
         try fileManager.moveItem(at: oldDir, to: newDir)
 
         if readStatus == 0, !trimmedSecret.isEmpty {
             let newService = keychainService(forProfile: newName)
-            let account = NSUserName()
+            let account = keychainAccount
             let addStatus = writeKeychainSecretVerified(service: newService, account: account, secret: trimmedSecret)
             guard addStatus == 0 else {
                 // Rollback: Ordner zurueck, Login bleibt am alten Namen intakt;
                 // ein falsch geschriebenes neues Item wieder entfernen.
-                if addStatus == 98 { _ = securityRunner(["delete-generic-password", "-s", newService]) }
+                if addStatus == 98 { deleteKeychainSecret(service: newService) }
                 try? fileManager.moveItem(at: newDir, to: oldDir)
                 throw RenameError.keychainMoveFailed("security add-generic-password exit \(addStatus)")
             }
-            _ = securityRunner(["delete-generic-password", "-s", oldService])
+            deleteKeychainSecret(service: oldService)
         }
 
         writeKeychainServiceMarker(forProfile: newName)

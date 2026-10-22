@@ -670,11 +670,14 @@ extension ClaudeAccountUsageFetcherTests {
         XCTAssertEqual(usage.liveFetchProblem, .tokenExpired)
     }
 
-    func testMissingKeychainSecretWithoutCacheReturnsNil() async throws {
+    func testMissingKeychainSecretWithoutCacheReportsNoCredentials() async throws {
         let recorder = Recorder()
         let fetcher = try makeFetcher(secretJSON: nil, validTokens: [], recorder: recorder)
-        let usage = await fetcher.fetchUsage(forProfile: "acc")
-        XCTAssertNil(usage)
+        let fetched = await fetcher.fetchUsage(forProfile: "acc")
+        let usage = try XCTUnwrap(fetched)
+        XCTAssertTrue(recorder.requests.isEmpty)
+        XCTAssertFalse(usage.hasLimitData)
+        XCTAssertEqual(usage.liveFetchProblem, .noCredentials)
     }
 
     func testCacheFallbackReadsLegacyTmpPath() async throws {

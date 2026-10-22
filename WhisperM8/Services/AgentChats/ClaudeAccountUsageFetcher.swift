@@ -154,9 +154,11 @@ struct ClaudeAccountUsageFetcher {
                 cached.liveFetchProblem = problem
                 return cached
             }
-            // Nie eingeloggt + kein Cache: nichts anzuzeigen. Sonst einen
-            // leeren Stand liefern, damit die UI den Fehler ausweisen kann.
-            guard problem != .noCredentials else { return nil }
+            // Kein Cache: leeren Stand mit Grund liefern — auch bei fehlendem
+            // Token. Die Aufrufer fragen nur Profile mit `oauthAccount` ab;
+            // fehlt dort das Secret (Logout, verworfener Refresh), braucht es
+            // einen neuen Login, und genau das soll die UI sagen statt
+            // „Keine Daten".
             return ClaudeAccountUsage(fetchedAt: now(), isLive: false, liveFetchProblem: problem)
         }
     }
@@ -229,7 +231,7 @@ struct ClaudeAccountUsageFetcher {
 
     private func readSecret(forProfile name: String) -> KeychainSecret? {
         let service = profiles.keychainService(forProfile: name)
-        let (status, secret) = profiles.securityRunner(["find-generic-password", "-s", service, "-w"])
+        let (status, secret) = profiles.readKeychainSecret(service: service)
         guard status == 0,
               let data = secret.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
               let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
