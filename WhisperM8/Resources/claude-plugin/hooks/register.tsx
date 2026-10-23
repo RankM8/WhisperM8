@@ -24,7 +24,6 @@ const woken = atom({ plugin: 'whisperm8', key: 'woken' } as const, [] as string[
 const callout = atom({ plugin: 'whisperm8', key: 'callout' } as const, false)
 
 const TOOL = 'mcp__whisperm8__board'
-const PANE = 'whisperm8-board'
 const JARVIS_SKILL = 'whisperm8:jarvis'
 const SPEAK_TOOL = 'mcp__whisperm8__speak'
 const CALLOUT_SKILL = 'whisperm8:callout'
@@ -163,7 +162,7 @@ const fitHeader = (c: Record<BoardLight, number>, room: number, title: string, w
  * leeren Prompt geht dagegen überall.
  */
 const OPEN_HINTS = ['Ziffer = Tab öffnen', 'Ziffer: Tab']
-const FOLDED_HINTS = ['/board auf']
+const FOLDED_HINTS = ['/board auf', '/board']
 
 
 /** Aktiv: Schema ab Turn 1 in der Liste. Sonst nur der Name (ToolSearch). */
@@ -452,7 +451,7 @@ export const register: Register = (on, options) => {
     // Außerhalb eines WhisperM8-Chats gibt es weder Board noch Ansagen.
     if (sessionID === null) return started
     try {
-      await $.command.register({ name: 'board', description: 'Jarvis-Board: Details anzeigen; an | aus | zu | auf' })
+      await $.command.register({ name: 'board', description: 'Jarvis-Board ein-/ausklappen; an | aus | zu | auf' })
       await $.command.register({ name: 'callout', description: 'Gesprochene Ansagen am Turn-Ende: an | aus' })
     } catch {
       // Ohne Befehl bleiben Band und Tool.
@@ -566,11 +565,15 @@ export const register: Register = (on, options) => {
     return { result: ran.ok ? ran.stdout.trim() || 'ok' : `FEHLER: ${ran.message}` }
   })
 
+  // Kein Detail-Panel: In App-Sessions setzt Claude ein Pane als zweiten Kasten
+  // über das Band, die Chats stehen dann doppelt da. Details zeigt die
+  // Notiz-Karte am Kachelkopf.
   on('command.run', { command: 'board' }, async ($, e) => {
     const arg = e.args.trim()
-    if (arg === 'zu' || arg === 'auf') {
-      await update($, folded, () => arg === 'zu')
-      return { text: arg === 'zu' ? 'Board eingeklappt.' : 'Board ausgeklappt.' }
+    if (arg === '' || arg === 'zu' || arg === 'auf') {
+      const fold = arg === '' ? !(await read($, folded)) : arg === 'zu'
+      await update($, folded, () => fold)
+      return { text: fold ? 'Board eingeklappt.' : 'Board ausgeklappt.' }
     }
     if (arg === 'an' || arg === 'aus') {
       const ran = await cli($, ['chats', 'board', arg === 'an' ? 'activate' : 'deactivate', '--json'])
@@ -578,13 +581,7 @@ export const register: Register = (on, options) => {
       if (!ran.ok) return { text: `Board nicht umgeschaltet: ${ran.message}` }
       return { text: arg === 'an' ? 'Board an.' : 'Board aus.' }
     }
-    await refresh($).catch(() => undefined)
-    const view = await read($, board)
-    if (view === null || !view.isActive) return { text: 'Kein aktives Board in dieser Session. /board an schaltet es ein.' }
-    // Mit Fokus, damit die Ziffern sofort greifen (Klicks gibt es im
-    // Main-Screen der App-Sessions nicht); Escape schließt es wieder.
-    await $.ui.open({ id: PANE, title: 'Jarvis-Board', focus: true, closeOnEscape: true })
-    return { text: `Board: ${view.entries.length} Chats.` }
+    return { text: 'Unbekannt. /board klappt das Band ein und aus, dazu gibt es an, aus, zu und auf.' }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -702,64 +699,7 @@ export const register: Register = (on, options) => {
             </Box>
           </Box>
         ))}
-        {hidden > 0 && <Text dimColor>+{hidden} weitere · /board</Text>}
-      </Box>
-    )
-  })
-
-  // Details auf Zuruf (`/board`): alle Felder, je Chat zwei Knöpfe, die Jarvis
-  // den nächsten Schritt in den Prompt legen. Das Umräumen des Workspaces
-  // bleibt bei Jarvis, der seine Slot-Regeln kennt.
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const view = await read($, board)
-    const t = await read($, now)
-    const list = view === null ? [] : sorted(view.entries)
-    if (list.length === 0) return <Text dimColor>Keine Chats auf dem Board.</Text>
-    return (
-      <Box flexDirection="column" rowGap={1}>
-        {list.map((entry, index) => (
-          <Box key={entry.sessionID} flexDirection="column">
-            <Text>
-              <Text color={COLOR[entry.light]}>{GLYPH[entry.light]} </Text>
-              <Text bold>{entry.title}</Text>
-              <Text dimColor>
-                {' '}
-                {entry.ref} · {entry.project} · {LABEL[entry.light]} · Status {entry.status} · {age(entry.updatedAt, t, false)}
-              </Text>
-            </Text>
-            {entry.mission !== '' && <Text>  Ziel: {entry.mission}</Text>}
-            {workOf(entry) !== '' && <Text>  Arbeitet an: {workOf(entry)}</Text>}
-            {entry.needs !== '' && <Text color="error">  Braucht: {entry.needs}</Text>}
-            {(entry.blocker ?? '') !== '' && <Text color="warning">  Hängt: {entry.blocker}</Text>}
-            {(entry.milestones ?? []).slice(0, 3).map(m => (
-              <Text key={`${entry.sessionID}-${m.at}`} dimColor>
-                {'  ✓ '}
-                {m.text} · {age(m.at, t, true)}
-              </Text>
-            ))}
-            {entry.otherOwners.length > 0 && <Text dimColor>  Auch auf dem Board von {entry.otherOwners.join(', ')}</Text>}
-            <Box flexDirection="row" columnGap={2}>
-              <Button
-                key={`open-${entry.sessionID}`}
-                label={index < 9 ? `${index + 1} Tab öffnen` : 'Tab öffnen'}
-                hotkey={index < 9 ? String(index + 1) : undefined}
-                variant="primary"
-                onPress={() => openChat($, entry)}
-              />
-              <Button
-                key={`ask-${entry.sessionID}`}
-                label="Stand fragen"
-                onPress={() => $.prompt.fill({ text: `Stand zu ${entry.title} (${entry.ref})?` })}
-              />
-              <Button
-                key={`ws-${entry.sessionID}`}
-                label="In den Workspace holen"
-                onPress={() => $.prompt.fill({ text: `Hol ${entry.title} (${entry.ref}) in den Aktiv-Workspace.` })}
-              />
-            </Box>
-          </Box>
-        ))}
+        {hidden > 0 && <Text dimColor>+{hidden} weitere</Text>}
       </Box>
     )
   })

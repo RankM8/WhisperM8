@@ -256,7 +256,7 @@ zeigt sie an und weckt dich.
   User melden (2). Chats, die NICHT auf dem Board stehen, weckt die Mod nicht.
 - **Aktiv-Workspace bleibt** die Klick-Ansicht für „braucht dich jetzt"
   (Abschnitt 3); das Board ist die Übersicht, der Workspace der Arbeitsplatz.
-- Der User schaltet mit `/board an | aus | zu | auf`, `/board` zeigt Details.
+- Der User schaltet mit `/board an | aus | zu | auf`, `/board` klappt das Band ein und aus. Details zu einem Chat fragt er dich.
 
 ### Ansagen (Voice-Callouts)
 

@@ -33,8 +33,8 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
-| User | `/board` Details (Panel, öffnet mit Fokus, Escape schließt), `/board an` / `aus`, `/board zu` / `auf` (einklappen) |
-| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt (ohne Enter) öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). Im Panel `[ 1 Tab öffnen ]` je Chat, ebenfalls per Ziffer. |
+| User | `/board` klappt das Band ein und aus, `/board zu` / `auf` gezielt, `/board an` / `aus` |
+| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt (ohne Enter) öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). |
 
 **Kein Klick in der App:** Claude Code meldet Mausklicks nur im
 Vollbild-Terminal. App-Sessions laufen im Main-Screen, dort landet ein Klick
@@ -109,10 +109,14 @@ mehreren Boards stehen (`otherOwners`).
   Hinweis, zuletzt jedes Wort außer „wartet“ (live geprüft bei 50, 58, 72
   und 120 Spalten; feste Stufen ließen ihn bei 72 umbrechen). Keine
   Statuszeile: Claude Code setzt „⚠“ vor jede Plugin-Statuszeile, sie sah
-  nach einer Warnung aus und wiederholte nur das Band. `/board` öffnet
-  das Panel; dessen Knöpfe legen Jarvis eine Frage in den Prompt. Das
-  Umräumen des Aktiv-Workspaces bleibt bei Jarvis, der seine Slot-Regeln
-  kennt.
+  nach einer Warnung aus und wiederholte nur das Band.
+- **Kein Detail-Panel mehr (seit 23.10.2026):** Früher hat `/board` ein Pane
+  mit Ziel, Meilensteinen und Knöpfen geöffnet. In App-Sessions zeigt Claude so
+  ein Pane aber nicht daneben, sondern als zweiten Kasten über dem Band. Alle
+  Chats standen dann doppelt da, der Kasten war abgeschnitten und blieb teils im
+  Verlauf hängen. Zwei der Knöpfe ließen sich ohne Maus gar nicht bedienen. Ziel,
+  Arbeitspaket und Meilensteine stehen in der Notiz-Karte am Kachelkopf. Wer den
+  Stand eines Chats wissen will, fragt Jarvis.
 
 ## Notiz-Karte im Grid (Jarvis-Randnotizen, seit 17.10.2026)
 
@@ -188,14 +192,15 @@ einzigen `session.start`). Die Engine folgt `on` und `$` über einen Import nur 
   `TaskCreate`/`TaskUpdate` und alle 5 s (Teammates anderer Prozesse); nur
   geänderte Dateien (mtime/Größe).
 - **Abschalten:** `userConfig` `taskzaehler` (dann liest die Mod gar nicht).
-- **Keine eigene Liste mehr (22.10.2026):** Bis dahin zeigte die Mod die ganze
-  Liste selbst (`/t` mit Aus · Normal · Alle, Pane im Vollbild, Band über dem
-  Prompt). In App-Sessions (Main-Screen) zeichnet Claude den Bereich über dem
-  Prompt bei jeder Änderung neu; die hohe Liste hinterließ dabei Rahmen und
-  doppelte Zeilen fest im Verlauf. Dazu öffnete sich das Pane in App-Sessions mit,
-  weil „zuletzt Vollbild“ in `$.store` für alle Sessions galt. Claudes eigene
-  Liste hält den Bereich klein. Nicht wieder einbauen, ohne dieses Problem zu lösen;
-  die alten Store-Schlüssel `taskMode`/`taskFullscreen` werden ignoriert.
+- **Keine eigene Liste mehr (22.10.2026):** Bis dahin hat die Mod die ganze
+  Liste selbst gezeigt (`/t` mit Aus · Normal · Alle, im Vollbild als Pane, sonst
+  als Band über dem Prompt). In App-Sessions zeichnet Claude den Bereich über dem
+  Prompt bei jeder Änderung neu. Bei einer hohen Liste blieben dabei Rahmen und
+  doppelte Zeilen im Verlauf stehen. Außerdem ging das Pane auch in App-Sessions
+  auf, weil sich die Mod „zuletzt Vollbild“ für alle Sessions gemerkt hat.
+  Claudes eigene Liste bleibt klein und hat das Problem nicht. Wer die Liste
+  zurückholen will, muss das zuerst lösen. Die alten Store-Schlüssel `taskMode`
+  und `taskFullscreen` liest die Mod nicht mehr.
 
 ### In der App: Tasks in der Notiz-Karte
 
@@ -243,8 +248,9 @@ nach `~/.claude/skills` installieren. Die Sicherung der Migration liegt unter
   Plugin-Ordner später als lokaler Marketplace dienen.
 - Ob Background-Agents (`claude --bg`, vom Supervisor-Daemon gehostet) die
   Umgebung erben, ist nicht belegt.
-- App-Sessions laufen im Main-Screen (`tui: default`): Das Panel erscheint
-  dort immer inline über dem Prompt, nie als Seitenleiste.
+- App-Sessions laufen im Main-Screen (`tui: default`): Ein Pane erscheint
+  dort immer inline über dem Prompt, nie als Seitenleiste. Deshalb hat die Mod
+  keine Panes mehr (Board und Tasks), nur Band und Hinweiszeile.
 
 ## Betriebswissen aus CLAUDE.md
 
