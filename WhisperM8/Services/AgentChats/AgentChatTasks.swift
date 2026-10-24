@@ -119,10 +119,83 @@ enum AgentChatTaskParser {
 }
 
 /// Wo die Task-Liste eines Chats liegt. Claude Code nimmt den Teamnamen der
-/// Session — der folgt nicht immer der Session-ID (mit `--session-id`
-/// gestartet ein anderer) und steht nur im Hook `TaskCreated`/`TaskCompleted`
-/// (`team_name`). Ohne Hook bleibt die Vermutung `session-<erste 8 Zeichen>`.
+/// Session: `session-<erste 8 Zeichen einer ID, die jeder Prozessstart neu
+/// würfelt>` — nach `--resume` passt er also nie zur Session-ID des Chats
+/// (Befund 23.10.2026, v2.1.309: Chat `ab7a103f…`, Liste in
+/// `tasks/session-31af24ce`; im selben Transcript fünf Teams aus fünf Starts).
+/// Der Hook `TaskCreated` liefert `team_name` nicht mit. Verlässlich ist die
+/// Registry: Claude legt `teams/<name>/config.json` beim Start an, rund eine
+/// Sekunde vor `sessions/<pid>.json` (`startedAt`), im selben Ordner.
 enum AgentChatTaskDirectory {
+    /// Ein Team aus `<config>/teams/<name>/config.json`.
+    struct Team: Equatable, Sendable {
+        var name: String
+        var createdAt: Date
+        /// Ordner des `team-lead` (= cwd des Claude-Prozesses).
+        var leadCwd: String?
+    }
+
+    /// Größter Abstand zwischen Team-Anlage und Registry-`startedAt`
+    /// (gemessen: 0,9–1,3 s bei fünf Sessions).
+    static let teamMatchTolerance: TimeInterval = 15
+
+    /// Pure: das Team des laufenden Prozesses — das zeitlich nächste innerhalb
+    /// der Toleranz, bei bekanntem Ordner nur mit gleichem Ordner.
+    static func matchTeam(_ teams: [Team], startedAt: Date, cwd: String?) -> String? {
+        teams
+            .filter { abs($0.createdAt.timeIntervalSince(startedAt)) <= teamMatchTolerance }
+            .filter { team in
+                guard let cwd, let lead = team.leadCwd else { return true }
+                return URL(fileURLWithPath: lead).standardizedFileURL.path
+                    == URL(fileURLWithPath: cwd).standardizedFileURL.path
+            }
+            .min { abs($0.createdAt.timeIntervalSince(startedAt)) < abs($1.createdAt.timeIntervalSince(startedAt)) }?
+            .name
+    }
+
+    static func parseTeam(_ data: Data) -> Team? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let name = object["name"] as? String, !name.isEmpty,
+              let created = object["createdAt"] as? NSNumber else { return nil }
+        let members = object["members"] as? [[String: Any]] ?? []
+        let lead = members.first { ($0["name"] as? String) == "team-lead" || ($0["agentType"] as? String) == "team-lead" }
+        return Team(
+            name: name,
+            createdAt: Date(timeIntervalSince1970: created.doubleValue / 1000),
+            leadCwd: lead?["cwd"] as? String
+        )
+    }
+
+    static func readTeams(configDir: URL, fileManager: FileManager = .default) -> [Team] {
+        let root = configDir.appendingPathComponent("teams", isDirectory: true)
+        guard let names = try? fileManager.contentsOfDirectory(atPath: root.path) else { return [] }
+        return names.filter { !$0.hasPrefix(".") }.compactMap { name in
+            let file = root.appendingPathComponent(name, isDirectory: true).appendingPathComponent("config.json")
+            return fileManager.contents(atPath: file.path).flatMap(parseTeam)
+        }
+    }
+
+    /// Task-Ordner des laufenden Prozesses einer Session, `nil` ohne lebenden
+    /// Registry-Eintrag oder ohne passendes Team. Liest Disk — nur off-main.
+    static func liveDirectory(
+        externalSessionID: String,
+        records: [ClaudeSessionRecord],
+        configDir: (String) -> URL,
+        readTeams: (URL) -> [Team] = { readTeams(configDir: $0) }
+    ) -> URL? {
+        let candidates = records
+            .filter { $0.sessionID.caseInsensitiveCompare(externalSessionID) == .orderedSame && $0.startedAt != nil }
+            .sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+        for record in candidates {
+            guard let startedAt = record.startedAt else { continue }
+            let dir = configDir(record.profileName)
+            if let team = matchTeam(readTeams(dir), startedAt: startedAt, cwd: record.cwd) {
+                return listDirectory(configDir: dir, teamName: team)
+            }
+        }
+        return nil
+    }
+
     /// Claudes Dateiname der Liste: alles außer `[A-Za-z0-9_-]` wird `-`.
     static func sanitize(_ name: String) -> String {
         String(name.unicodeScalars.map { scalar -> Character in

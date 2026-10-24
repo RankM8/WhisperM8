@@ -142,6 +142,7 @@ final class AgentChatTasksTests: XCTestCase {
             index: AgentChatTaskListIndex(fileURL: temp.appendingPathComponent("index.json")),
             isEnabled: { true },
             locateTranscript: { _ in transcript },
+            liveDirectory: { _ in nil },
             watchesFileSystem: false)
         let sessionID = UUID()
         var received: [[AgentChatTask]] = []
@@ -164,6 +165,112 @@ final class AgentChatTasksTests: XCTestCase {
         wait(for: [loaded], timeout: 2)
         XCTAssertEqual(store.tasks[sessionID]?.map(\.subject), ["Doku"])
         XCTAssertEqual(received.last?.first?.activeForm, "Schreibt")
+    }
+
+    // MARK: Team des laufenden Prozesses (Registry)
+
+    private func team(_ name: String, _ seconds: TimeInterval, cwd: String? = "/repo") -> AgentChatTaskDirectory.Team {
+        .init(name: name, createdAt: Date(timeIntervalSince1970: 1_000 + seconds), leadCwd: cwd)
+    }
+
+    /// Befund 23.10.2026: Jeder Prozessstart bekommt ein neues Team; das des
+    /// laufenden Prozesses entsteht ~1 s vor `startedAt`, im selben Ordner.
+    func testMatchTeamPicksClosestTeamInSameDirectory() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let teams = [
+            team("session-alt", -3_600),               // früherer Start desselben Chats
+            team("session-31af24ce", -0.9),
+            team("session-nachbar", -0.5, cwd: "/anderes-repo"),
+            team("session-spaeter", 9),
+        ]
+        XCTAssertEqual(AgentChatTaskDirectory.matchTeam(teams, startedAt: start, cwd: "/repo"), "session-31af24ce")
+        XCTAssertNil(AgentChatTaskDirectory.matchTeam([team("session-alt", -3_600)], startedAt: start, cwd: "/repo"))
+        // Ohne bekannten Ordner zählt nur die Zeit.
+        XCTAssertEqual(AgentChatTaskDirectory.matchTeam(teams, startedAt: start, cwd: nil), "session-nachbar")
+    }
+
+    func testParseTeamReadsLeadDirectory() throws {
+        let json = #"{"name":"session-31af24ce","createdAt":1792734069526,"leadSessionId":"31af24ce-8c32","members":[{"name":"team-lead","agentType":"team-lead","cwd":"/Users/x/repos/ListM8"},{"name":"bilder","cwd":"/Users/x/repos/ListM8/client"}]}"#
+        let parsed = try XCTUnwrap(AgentChatTaskDirectory.parseTeam(Data(json.utf8)))
+        XCTAssertEqual(parsed.name, "session-31af24ce")
+        XCTAssertEqual(parsed.leadCwd, "/Users/x/repos/ListM8")
+        XCTAssertEqual(parsed.createdAt.timeIntervalSince1970, 1_792_734_069.526, accuracy: 0.001)
+    }
+
+    func testRegistryStartedAtIsParsed() throws {
+        let json = #"{"pid":84739,"sessionId":"ab7a103f","cwd":"/repo","startedAt":1792734070442}"#
+        let record = try XCTUnwrap(ClaudeSessionRegistry.parse(data: Data(json.utf8), profileName: "main"))
+        XCTAssertEqual(try XCTUnwrap(record.startedAt).timeIntervalSince1970, 1_792_734_070.442, accuracy: 0.001)
+    }
+
+    func testLiveDirectoryUsesRegistryRecordOfSession() throws {
+        let config = temp.appendingPathComponent("cfg", isDirectory: true)
+        let teamDir = config.appendingPathComponent("teams/session-31af24ce", isDirectory: true)
+        try FileManager.default.createDirectory(at: teamDir, withIntermediateDirectories: true)
+        try Data(#"{"name":"session-31af24ce","createdAt":999100,"members":[{"name":"team-lead","cwd":"/repo"}]}"#.utf8)
+            .write(to: teamDir.appendingPathComponent("config.json"))
+        var record = ClaudeSessionRecord(profileName: "main", pid: 1, sessionID: "ab7a103f-5df4")
+        record.cwd = "/repo"
+        record.startedAt = Date(timeIntervalSince1970: 1_000)
+
+        let dir = AgentChatTaskDirectory.liveDirectory(
+            externalSessionID: "ab7a103f-5df4", records: [record], configDir: { _ in config })
+        XCTAssertEqual(dir?.path, config.appendingPathComponent("tasks/session-31af24ce").path)
+        XCTAssertNil(AgentChatTaskDirectory.liveDirectory(
+            externalSessionID: "anderer", records: [record], configDir: { _ in config }))
+    }
+
+    func testResolvePrefersLiveTeamAndRemembersIt() throws {
+        let config = temp.appendingPathComponent("cfg", isDirectory: true)
+        let transcript = config.appendingPathComponent("projects/-repo/ab7a103f-0000.jsonl")
+        let index = AgentChatTaskListIndex(fileURL: temp.appendingPathComponent("index.json"))
+        let source = AgentChatTasksStore.Source(externalSessionID: "ab7a103f-0000", cwd: "/repo")
+        index.remember(config.appendingPathComponent("tasks/session-alt"), forExternalID: source.externalSessionID)
+        let live = config.appendingPathComponent("tasks/session-31af24ce", isDirectory: true)
+
+        XCTAssertEqual(AgentChatTasksStore.resolveDirectory(
+            source: source, index: index, locate: { _ in transcript }, live: { _ in live }), live)
+        // Nach dem Prozessende bleibt die zuletzt laufende Liste.
+        XCTAssertEqual(AgentChatTasksStore.resolveDirectory(
+            source: source, index: index, locate: { _ in transcript }, live: { _ in nil }), live)
+    }
+
+    @MainActor
+    func testHookWithoutTeamNameResolvesViaRegistry() throws {
+        let config = temp.appendingPathComponent("cfg", isDirectory: true)
+        let transcript = config.appendingPathComponent("projects/-repo/s1.jsonl")
+        let live = config.appendingPathComponent("tasks/session-31af24ce", isDirectory: true)
+        let liveBox = LiveBox()
+        let store = AgentChatTasksStore(
+            index: AgentChatTaskListIndex(fileURL: temp.appendingPathComponent("index.json")),
+            isEnabled: { true },
+            locateTranscript: { _ in transcript },
+            liveDirectory: { _ in liveBox.directory },
+            watchesFileSystem: false)
+        let sessionID = UUID()
+        let cancellable = store.tasksPublisher(for: sessionID, source: .init(externalSessionID: "s1", cwd: "/repo"))
+            .sink { _ in }
+        defer { cancellable.cancel() }
+        let registered = expectation(description: "registriert")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { registered.fulfill() }
+        wait(for: [registered], timeout: 2)
+        XCTAssertEqual(store.tasks[sessionID] ?? [], [])
+
+        // Erste Task des laufenden Prozesses; der Hook trägt keinen team_name (v2.1.309).
+        try write(["id": "1", "subject": "RIO: Dashboard", "status": "pending"], to: live, name: "1.json")
+        liveBox.directory = live
+        let event = try XCTUnwrap(ClaudeHookEventStore.parseLine(
+            #"{"hook_event_name":"TaskCreated","session_id":"s1","transcript_path":"\#(transcript.path)","task_id":"1"}"#))
+        XCTAssertNil(event.teamName)
+        store.handleHookEvent(localSessionID: sessionID, event: event)
+        let loaded = expectation(description: "Registry-Ordner gelesen")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { loaded.fulfill() }
+        wait(for: [loaded], timeout: 2)
+        XCTAssertEqual(store.tasks[sessionID]?.map(\.subject), ["RIO: Dashboard"])
+    }
+
+    private final class LiveBox: @unchecked Sendable {
+        var directory: URL?
     }
 
     func testKillSwitchDefaultsOn() {

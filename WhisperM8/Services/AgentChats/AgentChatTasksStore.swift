@@ -85,6 +85,7 @@ final class AgentChatTasksStore {
     private let index: AgentChatTaskListIndex
     private let isEnabled: () -> Bool
     private let locateTranscript: @Sendable (Source) -> URL?
+    private let liveDirectory: @Sendable (Source) -> URL?
     private let watchesFileSystem: Bool
 
     init(
@@ -93,11 +94,13 @@ final class AgentChatTasksStore {
         locateTranscript: @escaping @Sendable (Source) -> URL? = { source in
             AgentTranscriptLocator.locate(provider: .claude, externalSessionID: source.externalSessionID, cwd: source.cwd)
         },
+        liveDirectory: @escaping @Sendable (Source) -> URL? = AgentChatTasksStore.liveDirectoryFromRegistry,
         watchesFileSystem: Bool = true
     ) {
         self.index = index
         self.isEnabled = isEnabled
         self.locateTranscript = locateTranscript
+        self.liveDirectory = liveDirectory
         self.watchesFileSystem = watchesFileSystem
     }
 
@@ -134,13 +137,17 @@ final class AgentChatTasksStore {
 
     // MARK: Hooks
 
-    /// `TaskCreated`/`TaskCompleted` aus der Hook-Bridge: Claude nennt den
-    /// Teamnamen der Session — daraus der Ordner, gemerkt je Session-ID.
+    /// `TaskCreated`/`TaskCompleted` aus der Hook-Bridge. Nennt Claude den
+    /// Teamnamen, ist das der Ordner (gemerkt je Session-ID). v2.1.309 lässt
+    /// `team_name` weg — dann den Ordner über die Registry neu auflösen.
     func handleHookEvent(localSessionID: UUID, event: ClaudeHookEvent) {
-        guard isEnabled(),
-              let externalID = event.sessionID, !externalID.isEmpty,
+        guard isEnabled() else { return }
+        guard let externalID = event.sessionID, !externalID.isEmpty,
               let team = event.teamName, !team.isEmpty,
-              let transcript = event.transcriptPath, !transcript.isEmpty else { return }
+              let transcript = event.transcriptPath, !transcript.isEmpty else {
+            if sources[localSessionID] != nil { resolveAndLoad(localSessionID) }
+            return
+        }
         let configDir = AgentChatTaskDirectory.configDir(forTranscript: URL(fileURLWithPath: transcript))
         let directory = AgentChatTaskDirectory.listDirectory(configDir: configDir, teamName: team)
         let index = self.index
@@ -156,14 +163,30 @@ final class AgentChatTasksStore {
         }
     }
 
+    /// `SessionStart` (Start, Resume, Clear): jeder Prozessstart bekommt ein
+    /// neues Team und damit eine neue, leere Liste. Kurz warten, bis Claude
+    /// seinen Registry-Eintrag geschrieben hat, dann neu auflösen.
+    func sessionDidStart(localSessionID: UUID) {
+        guard isEnabled(), sources[localSessionID] != nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.sessionStartResolveDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.sources[localSessionID] != nil else { return }
+                self.resolveAndLoad(localSessionID)
+            }
+        }
+    }
+
+    static let sessionStartResolveDelay: TimeInterval = 2
+
     // MARK: Auflösen und Lesen
 
     private func resolveAndLoad(_ sessionID: UUID) {
         guard let source = sources[sessionID] else { return }
         let index = self.index
         let locate = self.locateTranscript
+        let live = self.liveDirectory
         ioQueue.async { [weak self] in
-            let directory = Self.resolveDirectory(source: source, index: index, locate: locate)
+            let directory = Self.resolveDirectory(source: source, index: index, locate: locate, live: live)
             let loaded = directory.map { AgentChatTaskDirectory.readTasks(in: $0) } ?? []
             Task { @MainActor [weak self] in
                 guard let self, self.sources[sessionID] == source else { return }
@@ -174,21 +197,37 @@ final class AgentChatTasksStore {
         }
     }
 
-    /// Gemerkter Ordner aus dem Hook, sonst die erste vorhandene Vermutung im
-    /// Konfig-Ordner des Transcripts, sonst die erste Vermutung (entsteht mit
-    /// der ersten Task). Ohne Transcript (Chat noch ohne ersten Turn) keiner.
+    /// Läuft der Chat, das Team seines Prozesses (Registry) — gemerkt, damit
+    /// die Liste nach dem Prozessende bleibt. Sonst der gemerkte Ordner, sonst
+    /// die erste vorhandene Vermutung im Konfig-Ordner des Transcripts, sonst
+    /// die erste Vermutung. Ohne Transcript (Chat noch ohne ersten Turn) keiner.
     nonisolated static func resolveDirectory(
         source: Source,
         index: AgentChatTaskListIndex,
         locate: (Source) -> URL?,
+        live: (Source) -> URL? = { _ in nil },
         fileManager: FileManager = .default
     ) -> URL? {
+        if let running = live(source) {
+            index.remember(running, forExternalID: source.externalSessionID)
+            return running
+        }
         if let known = index.directory(forExternalID: source.externalSessionID) { return known }
         guard let transcript = locate(source) else { return nil }
         let guesses = AgentChatTaskDirectory.guessedDirectories(
             configDir: AgentChatTaskDirectory.configDir(forTranscript: transcript),
             externalSessionID: source.externalSessionID)
         return guesses.first { fileManager.fileExists(atPath: $0.path) } ?? guesses.first
+    }
+
+    /// Default für `liveDirectory`: Claudes Registry aller Konten.
+    nonisolated static let liveDirectoryFromRegistry: @Sendable (Source) -> URL? = { source in
+        let profiles = ClaudeAccountProfiles()
+        return AgentChatTaskDirectory.liveDirectory(
+            externalSessionID: source.externalSessionID,
+            records: ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots(profiles: profiles)),
+            configDir: { profiles.configDir(forProfile: $0) }
+        )
     }
 
     private func scheduleLoad(_ sessionID: UUID) {

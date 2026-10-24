@@ -167,10 +167,12 @@ einen Zähler und erklärt dem Modell die Links.
 - **Wahrheit:** Claudes Dateien `<config-dir>/tasks/<liste>/<id>.json`
   (`id`, `subject`, `description`, `activeForm`, `status`, `owner`,
   `blockedBy`, `metadata`). Nur gelesen. **Der Ordner heißt nach dem
-  Teamnamen der Session**, nicht verlässlich nach der Session-ID: mit
-  `--session-id` gestartet war er im Test `session-412eed50` statt
-  `session-a96985f9`. Claude nennt ihn nur im Hook `TaskCreated`/
-  `TaskCompleted` (`team_name`) bzw. im Ergebnis eines `TaskCreate`.
+  Teamnamen der Session**, nicht nach der Session-ID: Jeder Prozessstart legt
+  ein neues Team `session-<8 Zeichen einer frischen ID>` an (`teams/<name>/
+  config.json`, `leadSessionId`), auch bei `--resume`. Befund 23.10.2026
+  (v2.1.309): Chat `ab7a103f…`, Liste in `session-31af24ce`, im Transcript fünf
+  Teams aus fünf Starts. Der Hook `TaskCreated`/`TaskCompleted` liefert
+  `team_name` in v2.1.309 nicht mit.
 - **Links:** `metadata.links` (`[{label, url}]`, `{label: url}` oder URLs) und
   http(s)-/file-URLs aus Titel und Beschreibung, höchstens sechs. Die Mod
   ergänzt die Beschreibung von `TaskCreate`/`TaskUpdate` (`tool.describe`), damit
@@ -212,12 +214,20 @@ einzigen `session.start`). Die Engine folgt `on` und `$` über einen Import nur 
 - **Technik:** `AgentChatTasksStore` (MainActor, Publisher je Session wie
   `JarvisNotesStore`) liest auf einer Utility-Queue (`AgentChatTaskDirectory`,
   Parser `AgentChatTaskParser`) und hört per FSEvents auf die `tasks`-Ordner der
-  Konten — kein Polling. Den Ordner lernt er aus den Hooks `TaskCreated`/
-  `TaskCompleted` (`ClaudeHookSettingsBuilder.registryModeEventNames`, nur im
-  reduzierten Satz, also Claude Code ≥ 2.1.302; kein Status-Signal, der
-  Coordinator reicht sie direkt an den Store) und merkt ihn je Claude-Session-ID
-  in `Application Support/WhisperM8/agent-task-lists.json` (höchstens 400).
-  Ohne Hook: Vermutung `session-<8>` im Konfig-Ordner des Transcripts.
+  Konten — kein Polling. **Ordner eines laufenden Chats** (seit 23.10.2026,
+  `AgentChatTaskDirectory.liveDirectory`): Registry-Eintrag der Session
+  (`sessions/<pid>.json`, `startedAt`, `cwd`) gegen die Teams des Kontos — das
+  zeitlich nächste Team innerhalb von 15 s mit gleichem Ordner des `team-lead`
+  (gemessen: Team entsteht 0,9–1,3 s vor `startedAt`). Neu aufgelöst bei jedem
+  `TaskCreated`/`TaskCompleted` ohne `team_name` und 2 s nach `SessionStart`
+  (neuer Prozess = neue, leere Liste). Nennt ein Hook `team_name`, gilt der.
+  Der Ordner wird je Claude-Session-ID in
+  `Application Support/WhisperM8/agent-task-lists.json` gemerkt (höchstens 400),
+  damit die Liste nach dem Prozessende bleibt. Läuft der Chat nicht und ist
+  nichts gemerkt: Vermutung `session-<8>` im Konfig-Ordner des Transcripts. Die
+  Hooks kommen nur im reduzierten Satz (`ClaudeHookSettingsBuilder.registryModeEventNames`,
+  Claude Code ≥ 2.1.302); kein Status-Signal, der Coordinator reicht sie direkt
+  an den Store.
 - **Einstellung:** Labs › Jarvis & Callouts › „Show chat tasks in notes“;
   `defaults write com.whisperm8.app agentChatTasksInNotesEnabled -bool NO`.
 

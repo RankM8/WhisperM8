@@ -221,6 +221,10 @@ final class AgentSessionStatusCoordinator {
                 AgentChatTasksStore.shared.handleHookEvent(localSessionID: localID, event: event)
                 return
             }
+            // Neuer Prozess = neues Team = neue Task-Liste.
+            if event.hookEventName == .sessionStart {
+                AgentChatTasksStore.shared.sessionDidStart(localSessionID: localID)
+            }
             self?.handleHookEvent(localID: localID, event: event)
         }
         watcher.onDecision = { [weak self] sessionID, decision in

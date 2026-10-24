@@ -39,6 +39,10 @@ struct ClaudeSessionRecord: Equatable, Sendable {
     /// Prozess-Startzeit in `ps -o lstart`-Form (`Sat Oct 17 10:12:17 2026`).
     var procStart: String?
     var version: String?
+    /// `startedAt` (ms) — Start des Claude-Prozesses. Claude legt beim Start
+    /// sein Team `session-<neue ID>` an, wenige Sekunden davor; darüber findet
+    /// `AgentChatTaskDirectory.liveDirectory` den Task-Ordner.
+    var startedAt: Date? = nil
 
     /// Adresse für `SendMessage({to: …})` über alle Konten.
     var messagingAddress: String? {
@@ -100,7 +104,10 @@ enum ClaudeSessionRegistry {
             },
             messagingSocketPath: object["messagingSocketPath"] as? String,
             procStart: object["procStart"] as? String,
-            version: object["version"] as? String
+            version: object["version"] as? String,
+            startedAt: (object["startedAt"] as? NSNumber).map {
+                Date(timeIntervalSince1970: $0.doubleValue / 1000)
+            }
         )
     }
 
