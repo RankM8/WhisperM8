@@ -157,24 +157,25 @@ zeigen den Status aber flächig und zusätzlich als Wort und Symbol.
 
 `AgentChatsView.runningResourceDescriptors` liefert nur Sessions mit
 Workspace-Status `.running` und nimmt ihre Root-PID aus dem zugehörigen
-`AgentTerminalController`. `AgentResourceMonitor` ruft `/bin/ps -axo
-pid=,ppid=,%cpu=,rss=,comm=` auf, baut aus PID/PPID den vollständigen
-Nachfahrenbaum jeder Root-PID und summiert CPU sowie RSS erst pro Session, dann
-pro Projekt und insgesamt. `hw.memsize` kommt einmalig gecacht aus `sysctl`;
-daraus entsteht der sichtbare RAM-Anteil.
+`AgentTerminalController`. `AgentResourceMonitor` liest die Prozesse direkt
+über libproc, ohne eigenen Prozess zu starten: `proc_listchildpids` für den
+Baum unter jeder Root-PID, `proc_pid_rusage` für CPU-Zeit und Speicher
+(`phys_footprint`, derselbe Wert wie in der Aktivitätsanzeige) und
+`proc_pidpath` für den Programmpfad. Summiert wird erst pro Session, dann pro
+Projekt und insgesamt. Der RAM-Anteil rechnet mit
+`ProcessInfo.physicalMemory`.
+
+Die CPU-Prozente sind die Auslastung seit der vorigen Messung.
+`AgentResourceCPUTracker` merkt sich dafür die CPU-Zeit je PID. Ist ein Prozess
+neu, misst der Monitor zweimal im Abstand von 0,3 s. 100 % entsprechen einem
+ausgelasteten Kern. Bis Oktober 2026 lief hier `/bin/ps`. In einer App mit
+`LANG=de_DE` (Start aus dem Terminal) schrieb das die CPU mit Komma, der Parser
+verwarf jede Zeile, und das Badge zeigte 0.
 
 `AgentResourceSummaryButton` führt die Erfassung off-main aus und verhindert
-parallele Refreshes. Das kompakte Badge pollt alle 10 Sekunden, das geöffnete
-Popover alle 2 Sekunden. `controlActiveState == .inactive` beendet die
-Polling-Schleife; der inaktive Zweig führt beim Zustandswechsel allerdings noch
-einen einmaligen `refresh()` aus, bevor keine weiteren `ps`-Kinder mehr
-entstehen.
-
-Beim Subprozess-Drain liest `runProcess` zuerst stdout vollständig, leert dann
-stderr und ruft erst danach `waitUntilExit()` auf. Das vermeidet den häufigsten
-Deadlock (Warten auf Exit bei vollem Puffer), ist aber keine Garantie: Füllt ein
-Child zuerst stderr, kann es blockieren, während der Parent stdout noch bis EOF
-liest.
+parallele Refreshes. Das Badge misst alle 30 Sekunden, das geöffnete Popover
+alle 2 Sekunden. Eine Änderung der Chat-Prozesse löst nach einer Sekunde eine
+Messung aus. `controlActiveState == .inactive` beendet die Schleife.
 
 ## Tab-Logik
 
@@ -254,8 +255,8 @@ Recording-Start dem aktiven Agent-Chat zuzuordnen.
 - `WhisperM8/Services/AgentChats/AgentDragDropPlanner.swift` ist die pure Planungslogik für Session-Reorder, Cross-Project-Moves und Projekt-Reorder.
 - `WhisperM8/Views/AgentChatsSidebarViews.swift` ist die Sidebar-View-Schicht für Projektgruppen, Session-Rows, Pins, Subagent-Kinder, Footer und Drag-Drop.
 - `WhisperM8/Services/AgentChats/AgentWindowStore.swift` ist die observable Single Source of Truth für Fenster, Tabs, Pins, Expansion, Unread-Subagents und Multi-Selection.
-- `WhisperM8/Services/AgentChats/AgentResourceMonitor.swift` liest Prozessdaten und aggregiert CPU/RAM über Session-Prozessbäume und Projekte.
-- `WhisperM8/Views/AgentResourceSummaryButton.swift` enthält Badge, Popover und aktivitätsabhängiges 10-s-/2-s-Polling.
+- `WhisperM8/Services/AgentChats/AgentResourceMonitor.swift` liest Prozessdaten über libproc und summiert CPU und RAM über Session-Prozessbäume und Projekte.
+- `WhisperM8/Views/AgentResourceSummaryButton.swift` enthält Badge, Popover und aktivitätsabhängiges 30-s-/2-s-Polling.
 - `WhisperM8/Views/OverlayScrollers.swift` erzwingt AppKits Overlay-Scroller und setzt den Stil nach Systemänderungen erneut.
 - `WhisperM8/Views/AgentStatusIndicator.swift` ist die gemeinsame Statusanzeige für row-lokale Live-Zustände.
 - `WhisperM8/Views/AgentTabSelection.swift` ist die pure Multi-Select-Entscheidungslogik der Tab-Leiste.
@@ -270,7 +271,7 @@ Recording-Start dem aktiven Agent-Chat zuzuordnen.
 - `Tests/WhisperM8Tests/AgentChatsViewModelTests.swift` deckt die ViewModel-Fassade für Session-/Projektmutationen ab.
 - `Tests/WhisperM8Tests/AgentSidebarTests.swift` deckt Sidebar-Gruppierung, Scope, Subagent-Kindgruppierung, Footer-Split und sichtbare Rows ab.
 - `Tests/WhisperM8Tests/AgentDragDropPlannerTests.swift` deckt beide Reorder-Richtungen, No-ops, Cross-Project-Moves, Projekt-Reorder und Store-Ausführung ab.
-- `Tests/WhisperM8Tests/AgentResourceMonitorTests.swift` deckt Prozessbaum-Aggregation, fehlenden Gesamtspeicher und nicht laufende Root-Prozesse ab.
+- `Tests/WhisperM8Tests/AgentResourceMonitorTests.swift` deckt Prozessbaum-Aggregation, CPU-Berechnung über das Intervall, wiederverwendete PIDs, einen echten Kindprozess und nicht laufende Root-Prozesse ab.
 - `Tests/WhisperM8Tests/AgentWindowStoreTests.swift` und `Tests/WhisperM8Tests/AgentUIStateTests.swift` decken Fenster-/Tab-Store, Persistenz, Invarianten und Migration ab.
 - `Tests/WhisperM8Tests/TabSelectionResolverTests.swift`, `TabReorderGeometryTests.swift`, `TabGroupReorderTests.swift`, `TabNavigationTests.swift`, `TabNavShortcutTests.swift`, `TabSwitcherModelTests.swift`, `TabSwitcherShortcutTests.swift`, `TabSwitcherScopeTests.swift`, `TabSwitcherTileModelTests.swift`, `TabSwitcherMiniMapGeometryTests.swift`, `TabSwitcherGridMarkingTests.swift` und `TabScrollSwipeRecognizerTests.swift` decken Tab-Auswahl, Reorder, Navigation, Switcher und Swipe ab.
 - `Tests/WhisperM8Tests/TerminalKeyboardShortcutTests.swift`, `TerminalLinkResolverTests.swift` und `AgentTerminalSessionTests.swift` decken die terminalnahen UI-Resolver und Session-Integration ab.

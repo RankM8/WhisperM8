@@ -79,27 +79,70 @@ final class AgentResourceMonitorTests: XCTestCase {
         XCTAssertTrue(snapshot.projects.isEmpty)
     }
 
-    // MARK: - LR-AU-003: kein ps -ax mehr
+    // MARK: - libproc statt ps
 
-    func testCurrentProcessSamplesRunsPsOnlyForChatPIDsAndChildren() {
-        var calls: [(String, [String])] = []
-        let samples = AgentResourceMonitor.currentProcessSamples(
-            rootPIDs: [10, 20],
-            descendants: { roots in roots + [11, 21] },
-            run: { exe, args in
-                calls.append((exe, args))
-                return "10 1 0.5 100 codex\n11 10 0.1 50 node\n"
-            }
-        )
-        XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls.first?.1.first, "-p")
-        XCTAssertEqual(calls.first?.1[1], "10,20,11,21")
-        XCTAssertFalse(calls.first?.1.contains("-ax") ?? true)
-        XCTAssertFalse(calls.first?.1.contains("-axo") ?? true)
-        XCTAssertEqual(samples.map(\.pid), [10, 11])
+    private func reading(_ pid: Int32, parent: Int32 = 0, cpu: UInt64, memory: Int64 = 1_000) -> AgentResourceProcessReading {
+        AgentResourceProcessReading(pid: pid, parentPID: parent, cpuTimeNanos: cpu, memoryBytes: memory, command: "claude")
     }
 
-    func testSnapshotWithoutRunningChatsForksNothing() {
+    /// Eine Sekunde Wandzeit, eine halbe Sekunde CPU = 50 %; zwei Kerne voll = 200 %.
+    func testCPUTrackerComputesPercentOverInterval() {
+        let tracker = AgentResourceCPUTracker()
+        XCTAssertTrue(tracker.needsBaseline([10]))
+        XCTAssertEqual(tracker.update([reading(10, cpu: 1_000_000_000), reading(11, cpu: 0)], at: 5_000_000_000), [:])
+        XCTAssertFalse(tracker.needsBaseline([10, 11]))
+        let percents = tracker.update(
+            [reading(10, cpu: 1_500_000_000), reading(11, cpu: 2_000_000_000)], at: 6_000_000_000)
+        XCTAssertEqual(try XCTUnwrap(percents[10]), 50, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(percents[11]), 200, accuracy: 0.001)
+    }
+
+    func testCPUTrackerTreatsReusedPIDAsNewProcessAndForgetsGoneOnes() {
+        let tracker = AgentResourceCPUTracker()
+        tracker.update([reading(10, cpu: 9_000_000_000), reading(11, cpu: 1)], at: 1_000)
+        // PID 10 gehört jetzt einem neuen Prozess mit weniger CPU-Zeit.
+        XCTAssertNil(tracker.update([reading(10, cpu: 5)], at: 2_000)[10])
+        XCTAssertTrue(tracker.needsBaseline([11]))
+    }
+
+    func testFirstSampleWaitsForBaselineThenReportsPercent() {
+        let tracker = AgentResourceCPUTracker()
+        var clock: UInt64 = 0
+        var cpu: UInt64 = 0
+        var waits: [TimeInterval] = []
+        let read: ([Int32]) -> [AgentResourceProcessReading] = { roots in
+            XCTAssertEqual(roots, [10])
+            return [self.reading(10, cpu: cpu, memory: 4_096), self.reading(11, parent: 10, cpu: cpu)]
+        }
+        let samples = AgentResourceMonitor.currentProcessSamples(
+            rootPIDs: [10], read: read, tracker: tracker, now: { clock },
+            wait: { seconds in
+                waits.append(seconds)
+                clock += 1_000_000_000
+                cpu += 250_000_000
+            })
+        XCTAssertEqual(waits, [AgentResourceMonitor.baselineInterval])
+        XCTAssertEqual(samples.map(\.pid), [10, 11])
+        XCTAssertEqual(samples.first?.parentPID, 0)
+        XCTAssertEqual(samples.last?.parentPID, 10)
+        XCTAssertEqual(samples.first?.memoryBytes, 4_096)
+        XCTAssertEqual(try XCTUnwrap(samples.first?.cpuPercent), 25, accuracy: 0.001)
+
+        // Zweiter Refresh rechnet gegen den ersten, ohne zu warten.
+        clock += 2_000_000_000
+        cpu += 2_000_000_000
+        let next = AgentResourceMonitor.currentProcessSamples(
+            rootPIDs: [10], read: read, tracker: tracker, now: { clock }, wait: { waits.append($0) })
+        XCTAssertEqual(waits.count, 1)
+        XCTAssertEqual(try XCTUnwrap(next.first?.cpuPercent), 100, accuracy: 0.001)
+    }
+
+    func testMachTimeConversionIsMonotonic() {
+        XCTAssertEqual(AgentResourceMonitor.machTimeToNanos(0), 0)
+        XCTAssertGreaterThan(AgentResourceMonitor.machTimeToNanos(1_000_000), 0)
+    }
+
+    func testSnapshotWithoutRunningChatsMeasuresNothing() {
         var asked = 0
         let monitor = AgentResourceMonitor(processSamples: { _ in asked += 1; return [] }, totalMemoryBytes: { nil })
         _ = monitor.snapshot(for: [
@@ -118,15 +161,21 @@ final class AgentResourceMonitorTests: XCTestCase {
         XCTAssertEqual(received, [42])
     }
 
-    func testDescendantPIDsFindsRealChildren() throws {
+    /// Echter Prozessbaum: eigener Prozess als Wurzel, ein `sleep` als Kind.
+    func testReadProcessesFindsRealChildWithMemoryAndPath() throws {
         let child = Process()
         child.executableURL = URL(fileURLWithPath: "/bin/sleep")
         child.arguments = ["5"]
         try child.run()
         defer { child.terminate(); child.waitUntilExit() }
-        let found = AgentResourceMonitor.descendantPIDs(of: [getpid()])
-        XCTAssertTrue(found.contains(getpid()))
-        XCTAssertTrue(found.contains(child.processIdentifier), "found=\(found)")
+        let readings = AgentResourceMonitor.readProcesses(rootPIDs: [getpid()])
+        let me = try XCTUnwrap(readings.first { $0.pid == getpid() })
+        XCTAssertGreaterThan(me.memoryBytes, 0)
+        XCTAssertGreaterThan(me.cpuTimeNanos, 0)
+        let sleeper = try XCTUnwrap(readings.first { $0.pid == child.processIdentifier }, "readings=\(readings.map(\.pid))")
+        XCTAssertEqual(sleeper.parentPID, getpid())
+        XCTAssertEqual(sleeper.command, "/bin/sleep")
+        XCTAssertNil(AgentResourceMonitor.readProcess(999_999, parentPID: 0))
     }
 
     func testProcessKeyIgnoresTitleChangesAndOrder() {

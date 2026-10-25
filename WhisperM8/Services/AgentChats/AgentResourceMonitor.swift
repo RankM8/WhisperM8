@@ -73,8 +73,8 @@ struct AgentResourceSnapshot: Equatable {
     }
 }
 
-/// Takt- und Entprellregeln des Ressourcen-Badges (LR-AU-003) — pur, damit die
-/// Fork-Last testbar bleibt.
+/// Takt- und Entprellregeln des Ressourcen-Badges (LR-AU-003) — pur und
+/// testbar.
 enum AgentResourceRefreshPolicy {
     /// Badge-Betrieb (Popover zu): Zähler + Summe brauchen keine 10-s-Auflösung.
     static let badgeInterval: Duration = .seconds(30)
@@ -84,7 +84,7 @@ enum AgentResourceRefreshPolicy {
     static let changeDebounce: Duration = .seconds(1)
 
     /// Nur was die Messung ändert: Session-ID + Wurzel-PID. Titel-, Status- oder
-    /// Projektwechsel verändern den Schlüssel nicht und lösen keinen Fork aus.
+    /// Projektwechsel verändern den Schlüssel nicht und lösen keine Messung aus.
     static func processKey(_ descriptors: [AgentResourceSessionDescriptor]) -> String {
         descriptors
             .map { "\($0.id.uuidString):\($0.rootProcessID ?? 0)" }
@@ -94,14 +94,13 @@ enum AgentResourceRefreshPolicy {
 }
 
 struct AgentResourceMonitor {
-    /// Bekommt die Wurzel-PIDs der Chats und liefert nur deren Prozessbäume —
-    /// kein `ps -ax`-Vollscan mehr (LR-AU-003).
+    /// Bekommt die Wurzel-PIDs der Chats und liefert nur deren Prozessbäume.
     var processSamples: ([Int32]) -> [AgentResourceProcessSample] = { Self.currentProcessSamples(rootPIDs: $0) }
     var totalMemoryBytes: () -> Int64? = Self.currentTotalMemoryBytes
 
     func snapshot(for descriptors: [AgentResourceSessionDescriptor]) -> AgentResourceSnapshot {
         let rootPIDs = descriptors.compactMap(\.rootProcessID)
-        // Ohne laufende Chats gibt es nichts zu messen — dann auch kein Fork.
+        // Ohne laufende Chats gibt es nichts zu messen.
         let samples = rootPIDs.isEmpty ? [] : processSamples(rootPIDs)
         let byPID = Dictionary(uniqueKeysWithValues: samples.map { ($0.pid, $0) })
         let childrenByParent = Dictionary(grouping: samples, by: \.parentPID)
@@ -178,39 +177,94 @@ struct AgentResourceMonitor {
         return result
     }
 
-    static func parseProcessSamples(_ output: String) -> [AgentResourceProcessSample] {
-        output.split(whereSeparator: \.isNewline).compactMap { line in
-            let parts = line.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
-            guard parts.count == 5,
-                  let pid = Int32(parts[0]),
-                  let parentPID = Int32(parts[1]),
-                  let cpuPercent = Double(parts[2]),
-                  let rssKilobytes = Int64(parts[3])
-            else {
-                return nil
-            }
-            return AgentResourceProcessSample(
-                pid: pid,
-                parentPID: parentPID,
-                cpuPercent: cpuPercent,
-                memoryBytes: rssKilobytes * 1024,
-                command: String(parts[4])
+    /// Wartezeit für die erste Messung eines Prozesses: CPU-Prozente brauchen
+    /// zwei Zeitpunkte. Danach rechnet jeder Refresh gegen den vorigen.
+    static let baselineInterval: TimeInterval = 0.3
+
+    /// Prozesse der Chats samt Kindern, direkt über libproc gelesen. Früher
+    /// lief hier `/bin/ps`; das schrieb in einer App mit `LANG=de_DE` die CPU
+    /// mit Komma, der Parser verwarf jede Zeile und das Badge zeigte 0.
+    static func currentProcessSamples(
+        rootPIDs: [Int32],
+        read: ([Int32]) -> [AgentResourceProcessReading] = { readProcesses(rootPIDs: $0) },
+        tracker: AgentResourceCPUTracker = .shared,
+        now: () -> UInt64 = { DispatchTime.now().uptimeNanoseconds },
+        wait: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) -> [AgentResourceProcessSample] {
+        var readings = read(rootPIDs)
+        if tracker.needsBaseline(readings.map(\.pid)) {
+            tracker.update(readings, at: now())
+            wait(baselineInterval)
+            readings = read(rootPIDs)
+        }
+        let percents = tracker.update(readings, at: now())
+        return readings.map { reading in
+            AgentResourceProcessSample(
+                pid: reading.pid,
+                parentPID: reading.parentPID,
+                cpuPercent: percents[reading.pid] ?? 0,
+                memoryBytes: reading.memoryBytes,
+                command: reading.command
             )
         }
     }
 
-    /// Alle Nachfahren der Wurzel-PIDs (inkl. Wurzeln) über libproc — ohne Fork.
-    static func descendantPIDs(of rootPIDs: [Int32]) -> [Int32] {
-        var result: [Int32] = []
+    /// Wurzeln und alle Nachfahren mit Rohwerten. Die Wurzeln bekommen
+    /// `parentPID` 0: Der Baum wird nur von ihnen abwärts aufgebaut.
+    static func readProcesses(rootPIDs: [Int32]) -> [AgentResourceProcessReading] {
+        var result: [AgentResourceProcessReading] = []
         var seen = Set<Int32>()
-        var queue = rootPIDs
+        var queue = rootPIDs.map { (pid: $0, parent: Int32(0)) }
         while !queue.isEmpty {
-            let pid = queue.removeFirst()
-            guard pid > 0, seen.insert(pid).inserted else { continue }
-            result.append(pid)
-            queue.append(contentsOf: childPIDs(of: pid))
+            let (pid, parent) = queue.removeFirst()
+            guard pid > 0, seen.insert(pid).inserted, let reading = readProcess(pid, parentPID: parent) else { continue }
+            result.append(reading)
+            queue.append(contentsOf: childPIDs(of: pid).map { (pid: $0, parent: pid) })
         }
         return result
+    }
+
+    /// CPU-Zeit und Speicher wie in der Aktivitätsanzeige (`phys_footprint`).
+    /// `nil`, wenn der Prozess schon weg ist.
+    static func readProcess(_ pid: Int32, parentPID: Int32) -> AgentResourceProcessReading? {
+        var usage = rusage_info_v2()
+        let status = withUnsafeMutablePointer(to: &usage) { pointer in
+            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(pid, RUSAGE_INFO_V2, $0)
+            }
+        }
+        guard status == 0 else { return nil }
+        return AgentResourceProcessReading(
+            pid: pid,
+            parentPID: parentPID,
+            cpuTimeNanos: machTimeToNanos(usage.ri_user_time &+ usage.ri_system_time),
+            memoryBytes: Int64(clamping: usage.ri_phys_footprint),
+            command: executablePath(of: pid)
+        )
+    }
+
+    /// `ri_user_time`/`ri_system_time` zählen auf Apple Silicon in Mach-Ticks,
+    /// nicht in Nanosekunden.
+    private static let timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    static func machTimeToNanos(_ ticks: UInt64) -> UInt64 {
+        guard timebase.denom > 0 else { return ticks }
+        return ticks.multipliedReportingOverflow(by: UInt64(timebase.numer)).partialValue / UInt64(timebase.denom)
+    }
+
+    private static func executablePath(of pid: Int32) -> String {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        if proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 {
+            return String(cString: buffer)
+        }
+        if proc_name(pid, &buffer, UInt32(buffer.count)) > 0 {
+            return String(cString: buffer)
+        }
+        return "pid \(pid)"
     }
 
     private static func childPIDs(of pid: Int32) -> [Int32] {
@@ -228,64 +282,55 @@ struct AgentResourceMonitor {
         }
     }
 
-    /// `ps` nur für die Chat-PIDs samt Kindern (`-p`), nicht für alle Prozesse.
-    /// `descendants` und `run` sind injizierbar (Process-Runner-Spy im Test).
-    static func currentProcessSamples(
-        rootPIDs: [Int32],
-        descendants: ([Int32]) -> [Int32] = { descendantPIDs(of: $0) },
-        run: (String, [String]) -> String = { runProcess(executable: $0, arguments: $1) }
-    ) -> [AgentResourceProcessSample] {
-        let pids = descendants(rootPIDs)
-        guard !pids.isEmpty else { return [] }
-        let output = run(
-            "/bin/ps",
-            ["-p", pids.map(String.init).joined(separator: ","), "-o", "pid=,ppid=,%cpu=,rss=,comm="]
-        )
-        return parseProcessSamples(output)
-    }
-
-    /// hw.memsize ändert sich zur Laufzeit nie — einmal lesen, dann aus dem
-    /// Cache (P2 S5: halbiert die Forks pro Refresh).
-    private static let cachedTotalMemoryBytes: Int64? = {
-        let output = runProcess(executable: "/usr/sbin/sysctl", arguments: ["-n", "hw.memsize"])
-        return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
-    }()
-
     static func currentTotalMemoryBytes() -> Int64? {
-        cachedTotalMemoryBytes
+        Int64(clamping: ProcessInfo.processInfo.physicalMemory)
+    }
+}
+
+/// Rohwerte eines Prozesses: CPU-Zeit seit Prozessstart und Speicher.
+struct AgentResourceProcessReading: Equatable {
+    var pid: Int32
+    var parentPID: Int32
+    var cpuTimeNanos: UInt64
+    var memoryBytes: Int64
+    var command: String
+}
+
+/// Merkt sich die CPU-Zeit jedes Prozesses vom letzten Refresh. Daraus wird
+/// die Auslastung im Intervall seitdem, also ein echter aktueller Wert.
+/// 100 % entsprechen einem voll ausgelasteten Kern, wie in der Aktivitätsanzeige.
+final class AgentResourceCPUTracker: @unchecked Sendable {
+    static let shared = AgentResourceCPUTracker()
+
+    private struct Mark {
+        var cpuTimeNanos: UInt64
+        var at: UInt64
     }
 
-    /// Forkt einen Subprocess und sammelt stdout. Wichtig: erst stdout
-    /// vollstaendig lesen DANN `waitUntilExit()` — sonst kann der Child
-    /// blockieren weil der Pipe-Puffer (~64 KB) voll laeuft und auf einen
-    /// Leser wartet. Symptom des alten Bugs: ps-Children blieben als
-    /// "sleeping" Prozesse stehen und unser Parent-Thread sass in
-    /// waitUntilExit fest. Plus: stderr-Pipe leeren damit auch dort kein
-    /// Block entsteht.
-    private static func runProcess(executable: String, arguments: [String]) -> String {
-        let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+    private let lock = NSLock()
+    private var marks: [Int32: Mark] = [:]
 
-        do {
-            try process.run()
-        } catch {
-            return ""
+    /// Fehlt für einen der Prozesse ein früherer Wert?
+    func needsBaseline(_ pids: [Int32]) -> Bool {
+        lock.withLock { pids.contains { marks[$0] == nil } }
+    }
+
+    /// Prozent seit dem letzten Wert je PID; ohne früheren Wert keiner.
+    /// Vergisst Prozesse, die nicht mehr gemeldet werden.
+    @discardableResult
+    func update(_ readings: [AgentResourceProcessReading], at now: UInt64) -> [Int32: Double] {
+        lock.withLock {
+            var percents: [Int32: Double] = [:]
+            var next: [Int32: Mark] = [:]
+            for reading in readings {
+                // Weniger CPU-Zeit als zuvor: Die PID gehört einem neuen Prozess.
+                if let mark = marks[reading.pid], now > mark.at, reading.cpuTimeNanos >= mark.cpuTimeNanos {
+                    percents[reading.pid] = Double(reading.cpuTimeNanos - mark.cpuTimeNanos) / Double(now - mark.at) * 100
+                }
+                next[reading.pid] = Mark(cpuTimeNanos: reading.cpuTimeNanos, at: now)
+            }
+            marks = next
+            return percents
         }
-
-        // stdout vor waitUntilExit lesen — Pipe-Puffer waere sonst der
-        // Deadlock-Risiko. `readDataToEndOfFile` blockiert bis der Child
-        // seinen stdout schliesst, was bei Exit passiert.
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        // stderr leer-lesen damit der Child nicht in einer write() haengt
-        // (rare, aber moeglich bei Diagnostics).
-        _ = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
-        process.waitUntilExit()
-        return String(data: stdoutData, encoding: .utf8) ?? ""
     }
 }

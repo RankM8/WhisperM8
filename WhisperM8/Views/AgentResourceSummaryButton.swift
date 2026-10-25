@@ -9,7 +9,7 @@ struct AgentResourceSummaryButton: View {
     @State private var refreshTask: Task<Void, Never>?
     @State private var debounceTask: Task<Void, Never>?
     /// P2 S5: Bei inaktivem Fenster pausiert das Badge-Polling komplett —
-    /// die .task-Loop terminiert, statt im Hintergrund zu schlafen-und-forken.
+    /// die .task-Loop terminiert, statt im Hintergrund weiterzumessen.
     @Environment(\.controlActiveState) private var controlActiveState
 
     private var shouldPoll: Bool {
@@ -53,8 +53,7 @@ struct AgentResourceSummaryButton: View {
         }
         .onAppear(perform: refresh)
         // Nur eine Änderung der Chat-Prozesse (ID/PID) zählt, und auch die
-        // entprellt: Status-/Titelwechsel feuern `descriptors` laufend, jeder
-        // Refresh war ein Fork (LR-AU-003).
+        // entprellt: Status-/Titelwechsel feuern `descriptors` laufend (LR-AU-003).
         .onChange(of: AgentResourceRefreshPolicy.processKey(descriptors)) { _, _ in
             debouncedRefresh()
         }
@@ -66,8 +65,8 @@ struct AgentResourceSummaryButton: View {
 
             // Schnelles Refresh nur wenn der Popover offen ist — der User
             // schaut aktiv hin. Badge-Betrieb: 30 s reichen für Counter +
-            // Total. Mit der Inaktiv-Pause oben: ≤2 /bin/ps-Forks pro Minute
-            // im Badge-Betrieb, 0 bei inaktivem Fenster.
+            // Total. Bei inaktivem Fenster wird gar nicht gemessen. Eine
+            // Messung liest libproc direkt und startet keinen Prozess.
             while !Task.isCancelled {
                 refresh()
                 let interval: Duration = isPopoverPresented
