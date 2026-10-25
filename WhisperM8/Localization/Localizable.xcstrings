@@ -1311,6 +1311,16 @@
         }
       }
     },
+    "Always awake, also on battery and with the lid closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Immer wach, auch mit Akku und zugeklappt"
+          }
+        }
+      }
+    },
     "Always uses the newest frontier model from your Codex CLI — currently %@.": {
       "localizations": {
         "de": {
@@ -1657,6 +1667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch wählt die beste installierte Stimme für die Sprache der Ansage."
+          }
+        }
+      }
+    },
+    "Awake on power while a chat works, even with the lid closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am Strom wach, solange ein Chat arbeitet, auch zugeklappt"
           }
         }
       }
@@ -2261,6 +2281,16 @@
         }
       }
     },
+    "Checking …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird geprüft …"
+          }
+        }
+      }
+    },
     "Checking...": {
       "localizations": {
         "de": {
@@ -2567,6 +2597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Klicke jeden Button, um die Berechtigung zu erteilen"
+          }
+        }
+      }
+    },
+    "Click: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klick: %@"
           }
         }
       }
@@ -4031,6 +4071,16 @@
         }
       }
     },
+    "Ends at %@, or earlier on low battery or when the Mac gets hot.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endet um %@, früher bei wenig Akku oder wenn der Mac zu heiß wird."
+          }
+        }
+      }
+    },
     "Error": {
       "localizations": {
         "de": {
@@ -4647,6 +4697,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Homebrew holen"
+          }
+        }
+      }
+    },
+    "Goes through permissions, transcription provider, and the agent CLIs again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geht Berechtigungen, Transkriptionsanbieter und die Agent-CLIs noch einmal durch."
           }
         }
       }
@@ -5311,6 +5371,26 @@
         }
       }
     },
+    "Keep Mac awake": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac wach halten"
+          }
+        }
+      }
+    },
+    "Keep Mac awake while chats work": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac wach halten, solange Chats arbeiten"
+          }
+        }
+      }
+    },
     "Keep capacity unchanged": {
       "localizations": {
         "de": {
@@ -5857,6 +5937,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "MCP-Server"
+          }
+        }
+      }
+    },
+    "Mac sleeps as usual": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac schläft wie gewohnt"
           }
         }
       }
@@ -7101,6 +7191,16 @@
         }
       }
     },
+    "Not granted yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht erteilt"
+          }
+        }
+      }
+    },
     "Not installed": {
       "localizations": {
         "de": {
@@ -7374,6 +7474,16 @@
         }
       }
     },
+    "On power, the Mac stays awake while a chat works, even with the lid closed, and for two more minutes after. The sidebar button also has “Always awake” for battery, which ends at 20 % battery, when the Mac gets hot, or after 4 hours.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am Strom bleibt der Mac wach, solange ein Chat arbeitet, auch zugeklappt, und danach noch zwei Minuten. Der Knopf in der Seitenleiste hat zusätzlich „Immer wach“ für den Akku. Das endet bei 20 Prozent Akku, wenn der Mac zu heiß wird, oder nach 4 Stunden."
+          }
+        }
+      }
+    },
     "On questions (permission, question, plan approval)": {
       "localizations": {
         "de": {
@@ -7410,6 +7520,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Das brauchen nur Claude-Sitzungen außerhalb von WhisperM8. Von der App gestartete Sitzungen erhalten den Skill bereits über das Plugin und würden ihn dann doppelt laden."
+          }
+        }
+      }
+    },
+    "Only a closed lid needs administrator rights. On first use, macOS asks for your password once, and WhisperM8 adds a rule that allows exactly “pmset -a disablesleep 0” and “… 1”. If WhisperM8 quits or crashes, sleep is turned back on.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur für den zugeklappten Mac braucht es Administratorrechte. Beim ersten Mal fragt macOS einmal nach deinem Passwort, und WhisperM8 legt eine Regel an, die genau „pmset -a disablesleep 0“ und „… 1“ erlaubt. Beendet sich WhisperM8 oder stürzt es ab, ist der Ruhezustand wieder an."
           }
         }
       }
@@ -7540,16 +7660,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notizen standardmäßig aufklappen"
-          }
-        }
-      }
-    },
-    "Open onboarding / help": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Onboarding / Hilfe öffnen"
           }
         }
       }
@@ -7830,6 +7940,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dauerhafter Supervisor-Modus über alle Agent-Sitzungen: Benennung, Statusberichte, aktiver Workspace, Delegation und Verifikation. Schaltet das Jarvis-Board über dem Prompt ein. Lädt den Agent-Chats-Skill für die CLI-Mechanik."
+          }
+        }
+      }
+    },
+    "Permission": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabe"
           }
         }
       }
@@ -8844,6 +8964,16 @@
         }
       }
     },
+    "Remove permission": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigabe entfernen"
+          }
+        }
+      }
+    },
     "Remove this background agent?": {
       "localizations": {
         "de": {
@@ -9404,12 +9534,42 @@
         }
       }
     },
+    "Right now: keeping the Mac awake.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerade: Der Mac wird wach gehalten."
+          }
+        }
+      }
+    },
+    "Right now: no chat is working or not on power.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerade: Kein Chat arbeitet, oder der Mac hängt nicht am Strom."
+          }
+        }
+      }
+    },
     "Routes GPT subagent requests: native `gpt` agent type by default (WhisperM8 GPT backend), plus the full Codex CLI path — commands, flags, exit codes, image generation, and workflows.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Leitet GPT-Subagent-Anfragen: standardmäßig der native `gpt`-Agent-Typ (WhisperM8-GPT-Backend), dazu der vollständige Codex-CLI-Weg mit Befehlen, Flags, Exit-Codes, Bildgenerierung und Workflows."
+          }
+        }
+      }
+    },
+    "Run setup again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einrichtung erneut starten"
           }
         }
       }
@@ -9920,6 +10080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einrichtung"
+          }
+        }
+      }
+    },
+    "Setup assistant": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einrichtungsassistent"
           }
         }
       }
@@ -13164,6 +13334,26 @@
         }
       }
     },
+    "WhisperM8 wants to keep your Mac awake while chats work. This is asked only once.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 möchte deinen Mac wach halten, während Chats arbeiten. Das wird nur einmal gefragt."
+          }
+        }
+      }
+    },
+    "WhisperM8 wants to remove its permission to keep your Mac awake.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 möchte die Freigabe zum Wachhalten deines Macs entfernen."
+          }
+        }
+      }
+    },
     "WhisperM8 will run “%@” with Homebrew. Nothing else is changed on your Mac.\n\nIf you have already installed %@ another way, do not continue here.": {
       "localizations": {
         "de": {
@@ -13374,6 +13564,16 @@
         }
       }
     },
+    "always awake": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "immer wach"
+          }
+        }
+      }
+    },
     "armed": {
       "localizations": {
         "de": {
@@ -13390,6 +13590,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "wartet"
+          }
+        }
+      }
+    },
+    "awake while chats work": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wach, solange Chats arbeiten"
           }
         }
       }
@@ -13680,6 +13890,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "aktuell"
+          }
+        }
+      }
+    },
+    "let the Mac sleep": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac schlafen lassen"
           }
         }
       }
@@ -14240,6 +14460,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "„%@“ wurde entfernt."
+          }
+        }
+      }
+    },
+    "“Always awake” ended after 4 hours.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Immer wach“ nach 4 Stunden beendet."
+          }
+        }
+      }
+    },
+    "“Always awake” ended: battery at 20 %.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Immer wach“ beendet: Akku bei 20 %."
+          }
+        }
+      }
+    },
+    "“Always awake” ended: the Mac got too hot.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Immer wach“ beendet: Der Mac wurde zu heiß."
           }
         }
       }

@@ -19,6 +19,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Models/OnboardingLogic.swift",
         "WhisperM8/Models/DictationLanguage.swift",
         "WhisperM8/Services/Shared/AgentCLIInstaller.swift",
+        "WhisperM8/Views/SidebarStayAwakeButton.swift",
     ] + settingsFiles
 
     /// Alle Einstellungsdateien (W6 · LR-ONB-011/LR-AU-030) außer der Entwickler-Vorschau
@@ -75,6 +76,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Pages/OutputWorkspacePage.swift",
         "WhisperM8/Views/Settings/Pages/PermissionsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/RecordingSettingsPage.swift",
+        "WhisperM8/Views/Settings/Pages/StayAwakeSettingsSection.swift",
         "WhisperM8/Views/Settings/Pages/TranscriptionSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/VoiceGateSettingsPage.swift",
         "WhisperM8/Views/SettingsView.swift",

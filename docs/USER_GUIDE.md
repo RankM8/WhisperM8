@@ -153,6 +153,24 @@ VoiceOver reads the status out loud. You can get a notification and a sound when
 
 WhisperM8 asks before an action interrupts a chat that is still working.
 
+### Keep the Mac awake
+
+The button with the moon at the bottom of the sidebar, next to the archive, keeps your Mac from sleeping
+while agents work. Each click moves to the next stage:
+
+| Stage | Symbol | What happens |
+|---|---|---|
+| **Off** | Moon | The Mac sleeps as usual. |
+| **While chats work** | Plug | On power, the Mac stays awake while a chat works, even with the lid closed, and for two more minutes after. On battery it sleeps as usual. |
+| **Always awake** | Sun (orange) | Awake on battery too and with the lid closed. Ends at 20 % battery, when the Mac gets too hot, or after 4 hours, then falls back to *While chats work*. Never kept after a restart of WhisperM8. |
+
+The first time, macOS asks for your password once: keeping a Mac with a closed lid awake needs
+administrator rights. WhisperM8 then adds a rule that allows only this one setting. You can remove it in
+Settings → Agent Chats → Workspace → Keep Mac awake. If WhisperM8 quits or crashes, sleep is turned back
+on. Don't carry a closed Mac in a bag while *Always awake* is on: it gets hot.
+
+The setup assistant is in Settings → General → Setup.
+
 ### Quit and resume
 
 - **Cmd+Q** with a chat that is working or waiting asks first. *Quit and Reopen Later* reopens all chats

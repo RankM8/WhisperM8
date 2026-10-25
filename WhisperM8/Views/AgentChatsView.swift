@@ -2027,23 +2027,14 @@ struct AgentChatsView: View {
             .buttonStyle(.plain)
             .help(archiveModeActive ? String(localized: "Leave archive") : String(localized: "Archive (\(archivedSidebarSessions.count))"))
 
+            // Mac wach halten: am Strom, solange Chats arbeiten, oder immer
+            SidebarStayAwakeButton()
+
             // Ruhe-Stufe: Fertig-Ton / Mitteilungen per Klick dämpfen
             SidebarAlertLevelButton()
 
             // Usage-Limits der verbundenen Claude-/ChatGPT-Accounts
             SidebarUsageButtons()
-
-            Button {
-                WindowRequestCenter.shared.request(.onboarding)
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(AgentTheme.textSecondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Open onboarding / help")
         }
         .padding(.trailing, 8)
         .padding(.vertical, 7)

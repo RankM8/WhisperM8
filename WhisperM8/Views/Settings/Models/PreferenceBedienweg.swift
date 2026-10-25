@@ -19,6 +19,7 @@ enum PreferenceBedienweg {
         "WhisperM8/Views/OnboardingView.swift",
         "WhisperM8/Views/MenuBarView.swift",
         "WhisperM8/Views/SidebarAlertLevelButton.swift",
+        "WhisperM8/Views/SidebarStayAwakeButton.swift",
         "WhisperM8/Views/VoiceGateMenuSection.swift",
     ]
 

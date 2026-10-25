@@ -87,7 +87,7 @@ gelöscht.
 
 ### Glocken-Schalter im Footer (Ruhe-Stufe)
 
-Neben dem Archiv-Button sitzt `SidebarAlertLevelButton` (seit 10.10.2026).
+Rechts neben dem Wach-Knopf sitzt `SidebarAlertLevelButton` (seit 10.10.2026).
 Ein Klick schaltet die Ruhe-Stufe `AgentAlertLevel` weiter:
 
 | Stufe | Symbol | Fertig-Ton + Voice-Callouts | Mitteilungen (Fertig, Rückfrage, Subagent) + Terminal-Glocke |
@@ -107,6 +107,52 @@ stumm zu schalten gibt (Fertig-Ton aus und Callouts aus oder stumm). Die
 Stufe bleibt über Neustarts (`agentAlertLevel`); die Notifications-Seite
 zeigt einen Hinweis, solange sie nicht auf `all` steht. Hooks und
 Status-Erkennung bleiben in jeder Stufe unberührt. Log: `alert_level_changed`.
+
+### Wach-Knopf im Footer (Mac wach halten)
+
+Die Fußzeile heißt von links: Archiv, Wach-Knopf, Glocke, Claude- und
+ChatGPT-Limits. Das Fragezeichen, das nur das Onboarding öffnete, ist am
+25.10.2026 rausgeflogen. Den Einrichtungsassistenten gibt es jetzt unter
+Einstellungen › Allgemein › Setup und weiter im Menüleisten-Menü.
+
+`SidebarStayAwakeButton` schaltet `StayAwakeMode` weiter:
+
+| Stufe | Symbol | Ruhezustand aus, wenn … |
+|---|---|---|
+| `off` | `moon.zzz` | nie |
+| `whileWorking` | `powerplug` (Akzentfarbe, solange gehalten) | am Strom ein Chat auf „arbeitet“ steht, plus 2 min Nachlauf (`StayAwakePolicy.workingGrace`) |
+| `always` | `sun.max.fill` (orange) | immer, bis 20 % Akku ohne Netzteil, `thermalState` `serious`/`critical` oder 4 h |
+
+**Warum `pmset disablesleep` und keine Assertion:** Laut `IOPMLib.h` lässt
+`PreventUserIdleSystemSleep` den Mac beim Zuklappen trotzdem schlafen, und
+`PreventSystemSleep` ist seit 10.9 abgekündigt. Die Leerlauf-Sperre setzt
+Claude Code während eines Turns ohnehin selbst (`caffeinate -i -t 300`). Nur
+`pmset -a disablesleep 1` hält den Mac auch zugeklappt und mit Akku wach, und
+das braucht root.
+
+**Freigabe:** Beim ersten Einschalten fragt macOS über `osascript … with
+administrator privileges` einmal nach dem Passwort. Das Skript schreibt
+`/etc/sudoers.d/whisperm8-sleep`, die Regel erlaubt nur
+`/usr/bin/pmset -a disablesleep 0` und `… 1` für den angemeldeten User. Sie
+wird vorher mit `visudo -cf` geprüft. Danach läuft alles über `sudo -n`, ohne
+weitere Abfrage. Ob die Regel da ist, prüft `sudo -n -l`. Entfernen geht in
+Einstellungen › Agent Chats › Workspace › Keep Mac awake.
+
+**Absturzschutz:** Beim ersten Einschalten startet eine Wache (`/bin/sh`,
+`SleepDisablePermission.watchdogScript`), die alle 2 s prüft, ob die App noch
+lebt. Stirbt sie, während die Merker-Datei
+`Application Support/WhisperM8/stay-awake.active` steht, setzt die Wache
+`disablesleep 0`. Beim normalen Beenden räumt `willTerminate` selbst auf.
+Beim Start setzt der Controller einen liegengebliebenen Merker zurück.
+„Immer“ wird nie gespeichert, `stayAwakeWhileWorking` schon. Endet „Immer“
+von selbst, fällt der Knopf auf `whileWorking` zurück und nennt den Grund im
+Tooltip. Logs: `stay_awake_mode`, `stay_awake_applied`,
+`stay_awake_always_ended`, `stay_awake_permission`.
+
+Der Controller (`StayAwakeController`) startet beim ersten Erscheinen der
+Sidebar und hört auf `AgentSessionRuntimeStatusStore.statuses` (irgendein
+`.working`), alle 30 s auf Strom und Akku (`IOPSCopyPowerSourcesInfo`) und auf
+`thermalStateDidChangeNotification`. Systemaufrufe laufen off-main.
 
 ## Tabs
 

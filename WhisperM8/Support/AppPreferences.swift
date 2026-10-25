@@ -847,6 +847,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.agentAlertLevel) }
     }
 
+    /// Stufe 1 des Wach-Knopfs: am Strom wach, solange ein Chat arbeitet
+    /// (`StayAwakeController`). Stufe 2 („Immer“) wird nie gespeichert.
+    var stayAwakeWhileWorking: Bool {
+        get { defaults.bool(forKey: Keys.stayAwakeWhileWorking) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.stayAwakeWhileWorking) }
+    }
+
     /// Automatischer Update-Check gegen die GitHub-Releases (Start + 24 h).
     /// Kill-Switch ohne Rebuild:
     /// `defaults write com.whisperm8.app updateCheckEnabled -bool NO`
@@ -1000,6 +1007,7 @@ enum PreferenceKeys {
     static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
     static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
     static let agentAlertLevel = "agentAlertLevel"
+    static let stayAwakeWhileWorking = "stayAwakeWhileWorking"
     static let updateCheckEnabled = "updateCheckEnabled"
     static let codexVoiceGateEnabled = "codexVoiceGateEnabled"
     static let codexVoiceGateDryRun = "codexVoiceGateDryRun"

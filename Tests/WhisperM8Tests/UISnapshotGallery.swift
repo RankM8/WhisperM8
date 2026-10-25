@@ -142,6 +142,36 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
+        /// Fußzeile mit den drei Stufen des Wach-Knopfs. Statisch gezeichnet: Der
+        /// echte Knopf startet beim Erscheinen den Controller samt `sudo -n -l`.
+        func sidebarStayAwake() -> Fixture {
+            Fixture(name: "sidebar-wach-stufen", size: CGSize(width: 420, height: 130)) {
+                AnyView(VStack(alignment: .leading, spacing: 6) {
+                    ForEach([StayAwakeMode.off, .whileWorking, .always], id: \.self) { mode in
+                        HStack(spacing: 8) {
+                            Image(systemName: "archivebox")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AgentTheme.textSecondary)
+                                .frame(width: 28, height: 28)
+                            Image(systemName: SidebarStayAwakeButton.symbolName(for: mode))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(mode == .off ? AgentTheme.textSecondary : (mode == .always ? Color.orange : AgentTheme.accent))
+                                .frame(width: 28, height: 28)
+                            Image(systemName: "bell.slash")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(AgentTheme.accent)
+                                .frame(width: 28, height: 28)
+                            Text(SidebarStayAwakeButton.title(for: mode))
+                                .font(.system(size: 11))
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .background(AppTheme.sidebar))
+            }
+        }
+
         // Status-Punkte im Ruhig-Modus (LR-AU-002): working muss ohne Bewegung
         // von idle/Rückfrage unterscheidbar sein.
         func statusDots() -> Fixture {
@@ -254,6 +284,7 @@ final class UISnapshotGallery: XCTestCase {
                 work: "Sequenzen G, Versand und MCP in die App",
                 milestones: ["Kampagnen und Dashboard ohne KI-Verbindung fertig (da0af1f)"]), tasks: noteTasks),
             // Glocken-Schalter im Sidebar-Footer: eine Fixture je Ruhe-Stufe.
+            sidebarStayAwake(),
             sidebarAlertLevel(.all),
             sidebarAlertLevel(.soundOff),
             sidebarAlertLevel(.off),

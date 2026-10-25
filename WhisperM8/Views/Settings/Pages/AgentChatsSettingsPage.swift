@@ -142,6 +142,8 @@ struct AgentChatsWorkspaceSettingsTab: View {
                     isOn: $isAutoSummaryEnabled
                 )
             }
+
+            StayAwakeSettingsSection()
         }
         .onAppear {
             defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath

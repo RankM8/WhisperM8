@@ -127,6 +127,9 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
 - Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
   `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, Reports, FailedRecordings).
 - Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.
+- `pmset -a disablesleep 1` setzt nur der `StayAwakeController`, und nie ohne laufende Wache, die beim Tod
+  der App zurücksetzt. Einziger Write außerhalb der eigenen Daten ist `/etc/sudoers.d/whisperm8-sleep`
+  (nutzerausgelöst, mit Admin-Dialog): [ui/README.md](docs/features/agent-chats/ui/README.md).
 
 **Agent Chats**
 - Status für Claude-Chats kommt aus Claudes Registry (`<config-dir>/sessions/<pid>.json`); Hooks binden nur die

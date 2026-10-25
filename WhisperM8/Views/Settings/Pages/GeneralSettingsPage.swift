@@ -60,6 +60,18 @@ struct GeneralSettingsPage: View {
                 )
             }
 
+            SettingsSection("Setup") {
+                SettingsButtonRow(
+                    title: "Setup assistant",
+                    subtitle: "Goes through permissions, transcription provider, and the agent CLIs again."
+                ) {
+                    Button("Run setup again") {
+                        WindowRequestCenter.shared.request(.onboarding)
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                }
+            }
+
             SettingsSection("Troubleshooting") {
                 SettingsToggleRow(
                     title: "Write a debug log file",
