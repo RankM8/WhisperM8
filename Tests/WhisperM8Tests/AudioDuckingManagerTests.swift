@@ -274,8 +274,8 @@ final class AudioDuckingManagerTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(20))
 
             manager.endCapture()
-            // BT-Stack manipuliert A2DP-Volume nach Hotkey-Release
-            world.setVolumeExternally(deviceID: 100, value: 0.3)
+            // BT-Stack spielt nach Hotkey-Release den gemerkten Duck-Wert zurueck
+            world.setVolumeExternally(deviceID: 100, value: 0.2)
             // Reverse-Switch zurueck auf A2DP
             world.simulateDefaultOutputChange(to: 100)
             await Task.yield()
@@ -561,6 +561,348 @@ final class AudioDuckingManagerTests: XCTestCase {
             XCTAssertEqual(world.defaultOutputListenerCount, 0)
         }
     }
+
+    // MARK: - 7) Profil-Gedaechtnis nach dem Stop (Vorfall 25.10.2026)
+
+    /// **REGRESSION:** macOS hielt das Headset-Profil nach dem Stop noch ~2 s
+    /// offen; beim Rueckwechsel kamen die AirPods mit dem gemerkten Duck-Wert
+    /// zurueck, 0,1 s nachdem das alte 2-s-Settle-Window zu war. Der Settle-Loop
+    /// muss einen spaet zurueckgespielten Duck-Wert erkennen und korrigieren.
+    func test_lateProfileMemoryReturnsDuckValue_settleLoopRestoresAgain() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("AirPods", 0.8)])
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 2.0,
+                enforceInterval: 0.02
+            )
+
+            manager.beginCapture()
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+
+            // Rueckwechsel deutlich nach dem Stop: der BT-Stack spielt 20 % zurueck.
+            try? await Task.sleep(for: .milliseconds(150))
+            world.setVolumeExternally(deviceID: 1, value: 0.2)
+
+            await waitUntil { abs(world.volume(1) - 0.8) < 0.001 }
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001,
+                           "Duck value replayed after stop must be restored again")
+        }
+    }
+
+    /// Dreht der Nutzer im Settle-Window selbst, bleibt sein Wert stehen —
+    /// nur unser eigener Duck-Wert wird korrigiert.
+    func test_userVolumeChangeDuringSettleWindow_isKept() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 1.0,
+                enforceInterval: 0.02
+            )
+
+            manager.beginCapture()
+            manager.endCapture()
+            world.setVolumeExternally(deviceID: 1, value: 0.5)
+            try? await Task.sleep(for: .milliseconds(150))
+
+            XCTAssertEqual(world.volume(1), 0.5, accuracy: 0.001,
+                           "A volume the user picked after the stop must not be overwritten")
+        }
+    }
+
+    // MARK: - 8) Bluetooth: erst im Headset-Profil ducken
+
+    /// Aufnahme ueber das AirPods-Mikrofon: Das Musik-Profil wird nie geduckt.
+    /// Geduckt wird erst im Headset-Profil, und dort wird auch zurueckgestellt.
+    /// Der Rueckwechsel bringt deshalb die alte Musik-Lautstaerke von selbst mit.
+    func test_bluetoothInput_ducksOnlyHeadsetProfile_musicProfileUntouched() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.1
+
+            let world = AudioWorld(
+                defaultDeviceID: 97,
+                devices: [97: ("AirPods", 0.75), 103: ("AirPods Mic", 0)],
+                bluetooth: [97, 103]
+            )
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                recordingInputDeviceID: { 103 },
+                settleWindowDuration: 5.0
+            )
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(97), 0.75, accuracy: 0.001,
+                           "Music profile must not be ducked before the headset switch")
+
+            world.setHeadsetMode(97, active: true, headsetVolume: 0.44)
+            manager.recorderDidStart()
+            XCTAssertEqual(world.volume(97), 0.1, accuracy: 0.001, "Headset profile ducked")
+            XCTAssertEqual(world.musicProfileVolume(97), 0.75, accuracy: 0.001)
+
+            manager.endCapture()
+            XCTAssertEqual(world.volume(97), 0.75, accuracy: 0.001,
+                           "Headset profile restored to the pre-recording volume")
+
+            world.setHeadsetMode(97, active: false)
+            XCTAssertEqual(world.volume(97), 0.75, accuracy: 0.001,
+                           "Back in the music profile the volume is untouched")
+        }
+    }
+
+    /// Kommt kein Profilwechsel (z. B. Mikro haengt), duckt der Manager nach
+    /// dem Timeout trotzdem — die Aufnahme laeuft nie ungeduckt durch.
+    func test_bluetoothInput_noHeadsetSwitch_ducksAfterTimeout() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 97,
+                devices: [97: ("AirPods", 0.8), 103: ("AirPods Mic", 0)],
+                bluetooth: [97, 103]
+            )
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                recordingInputDeviceID: { 103 },
+                settleWindowDuration: 1.0,
+                enforceInterval: 0.02,
+                headsetSwitchTimeout: 0.05
+            )
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(97), 0.8, accuracy: 0.001)
+
+            await waitUntil { abs(world.volume(97) - 0.2) < 0.001 }
+            XCTAssertEqual(world.volume(97), 0.2, accuracy: 0.001, "Ducked after the headset timeout")
+
+            manager.endCapture()
+            XCTAssertEqual(world.volume(97), 0.8, accuracy: 0.001)
+        }
+    }
+
+    /// AirPods als Ausgang, aber Aufnahme ueber das eingebaute Mikrofon: kein
+    /// Profilwechsel zu erwarten, also sofort ducken.
+    func test_bluetoothOutputWithBuiltInMic_ducksImmediately() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 97,
+                devices: [97: ("AirPods", 0.8), 90: ("Built-in Mic", 0)],
+                bluetooth: [97]
+            )
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                recordingInputDeviceID: { 90 },
+                settleWindowDuration: 5.0
+            )
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(97), 0.2, accuracy: 0.001)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(97), 0.8, accuracy: 0.001)
+        }
+    }
+
+    // MARK: - 9) Zweites Diktat im Settle-Window
+
+    /// **REGRESSION:** Startet das naechste Diktat, waehrend der BT-Stack gerade
+    /// den Duck-Wert zurueckgespielt hat, galt das Geraet als „schon leise
+    /// genug" — kein Capture, kein Restore, dauerhaft leise.
+    func test_secondDictationDuringSettle_keepsOriginalDespiteReplayedDuckValue() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("AirPods", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+
+            manager.beginCapture()
+            manager.endCapture()
+            world.setVolumeExternally(deviceID: 1, value: 0.2)
+
+            manager.beginCapture()
+            #if DEBUG
+            XCTAssertEqual(manager.debug_originalVolume(for: 1) ?? -1, 0.8, accuracy: 0.001)
+            #endif
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+        }
+    }
+
+    /// Hat der Nutzer zwischen zwei Diktaten selbst gedreht, ist das sein neues Original.
+    func test_secondDictationDuringSettle_takesUserChangeAsNewOriginal() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+
+            manager.beginCapture()
+            manager.endCapture()
+            world.setVolumeExternally(deviceID: 1, value: 0.6)
+
+            manager.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            manager.endCapture()
+            XCTAssertEqual(world.volume(1), 0.6, accuracy: 0.001)
+        }
+    }
+
+    // MARK: - 10) Journal: Absturz und getrenntes Geraet
+
+    /// App stirbt waehrend der Aufnahme (kein endCapture): Beim naechsten Start
+    /// stellt `recoverPendingRestores()` die Lautstaerke zurueck.
+    func test_crashDuringRecording_recoveredOnNextLaunch() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let crashed = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+            crashed.beginCapture()
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            XCTAssertFalse(AudioDuckingJournal().isEmpty)
+
+            let relaunched = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+            relaunched.recoverPendingRestores()
+
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+            XCTAssertTrue(AudioDuckingJournal().isEmpty)
+            #if DEBUG
+            XCTAssertFalse(relaunched.debug_hasRecoveryListener)
+            #endif
+        }
+    }
+
+    /// Nach dem Absturz zuerst wieder diktiert: Das gemerkte Original gilt,
+    /// nicht der noch geduckte Wert.
+    func test_crashThenNewDictation_restoresJournalOriginal() {
+        withIsolatedDuckingPreferences { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0).beginCapture()
+
+            let relaunched = AudioDuckingManager(volumeController: world, settleWindowDuration: 5.0)
+            relaunched.beginCapture()
+            relaunched.endCapture()
+            XCTAssertEqual(world.volume(1), 0.8, accuracy: 0.001)
+        }
+    }
+
+    /// AirPods mitten in der Aufnahme abgesetzt: Restore geht ins Leere, das
+    /// Journal behaelt den Eintrag, und beim Wiederverbinden wird nachgeholt.
+    func test_deviceGoneDuringRecording_restoredWhenItReconnects() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(
+                defaultDeviceID: 100,
+                devices: [100: ("AirPods", 0.8), 1: ("Built-in", 0.6)]
+            )
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 0.05,
+                enforceInterval: 0.02
+            )
+
+            manager.beginCapture()
+            world.disconnectDevice(100, newDefault: 1)
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(20))
+            manager.endCapture()
+            await waitUntil { manager.phase == .idle }
+
+            XCTAssertNotNil(AudioDuckingJournal().entry(forUID: "uid-100"))
+            #if DEBUG
+            XCTAssertTrue(manager.debug_hasRecoveryListener)
+            #endif
+
+            world.reconnectDevice(100)
+            await waitUntil { abs(world.volume(100) - 0.8) < 0.001 }
+
+            XCTAssertEqual(world.volume(100), 0.8, accuracy: 0.001)
+            XCTAssertTrue(AudioDuckingJournal().isEmpty)
+            #if DEBUG
+            XCTAssertFalse(manager.debug_hasRecoveryListener)
+            #endif
+        }
+    }
+
+    /// Ein sauber beendetes Diktat hinterlaesst kein Journal.
+    func test_cleanSession_leavesJournalEmpty() async {
+        await withIsolatedDuckingPreferencesAsync { preferences in
+            preferences.isAudioDuckingEnabled = true
+            preferences.audioDuckingFactor = 0.2
+
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.8)])
+            let manager = AudioDuckingManager(
+                volumeController: world,
+                settleWindowDuration: 0.05,
+                enforceInterval: 0.02
+            )
+
+            manager.beginCapture()
+            manager.endCapture()
+            await waitUntil { manager.phase == .idle }
+
+            XCTAssertTrue(AudioDuckingJournal().isEmpty)
+            XCTAssertEqual(world.defaultOutputListenerCount, 0)
+        }
+    }
+
+    /// Ein uralter Eintrag wird verworfen, nicht angewendet.
+    func test_staleJournalEntry_isDroppedWithoutTouchingVolume() {
+        withIsolatedDuckingPreferences { _ in
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.2)])
+            AudioDuckingJournal().record(.init(
+                uid: "uid-1",
+                name: "Built-in",
+                originalVolume: 0.8,
+                duckedVolume: 0.2,
+                duckedAt: Date().addingTimeInterval(-AudioDuckingJournal.maxAge - 60)
+            ))
+
+            AudioDuckingManager(volumeController: world).recoverPendingRestores()
+
+            XCTAssertEqual(world.volume(1), 0.2, accuracy: 0.001)
+            XCTAssertTrue(AudioDuckingJournal().isEmpty)
+        }
+    }
+
+    /// Steht das Geraet beim Nachholen nicht mehr auf dem Duck-Wert, hat der
+    /// Nutzer laengst selbst gedreht — Eintrag weg, Lautstaerke bleibt.
+    func test_journalRecovery_leavesUserChosenVolumeAlone() {
+        withIsolatedDuckingPreferences { _ in
+            let world = AudioWorld(defaultDeviceID: 1, devices: [1: ("Built-in", 0.5)])
+            AudioDuckingJournal().record(.init(
+                uid: "uid-1",
+                name: "Built-in",
+                originalVolume: 0.8,
+                duckedVolume: 0.2,
+                duckedAt: Date()
+            ))
+
+            AudioDuckingManager(volumeController: world).recoverPendingRestores()
+
+            XCTAssertEqual(world.volume(1), 0.5, accuracy: 0.001)
+            XCTAssertTrue(AudioDuckingJournal().isEmpty)
+        }
+    }
 }
 
 // MARK: - AudioWorld: Test-Fake fuer macOS-Audio-Verhalten
@@ -582,11 +924,17 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
     private var unsupportedDeviceIDs: Set<AudioDeviceID> = []
     private var disappearedDeviceIDs: Set<AudioDeviceID> = []
     private var defaultOutputListeners: [UUID: () -> Void] = [:]
+    /// Bluetooth-Geraete; im Headset-Profil gilt eine eigene Lautstaerke
+    /// (`headsetVolumes`), das Musik-Profil behaelt `deviceVolumes` — wie AirPods.
+    private var bluetoothDeviceIDs: Set<AudioDeviceID> = []
+    private var headsetModeDeviceIDs: Set<AudioDeviceID> = []
+    private var headsetVolumes: [AudioDeviceID: Float] = [:]
 
     init(
         defaultDeviceID: AudioDeviceID,
         devices: [AudioDeviceID: (name: String, volume: Float)],
-        unsupported: Set<AudioDeviceID> = []
+        unsupported: Set<AudioDeviceID> = [],
+        bluetooth: Set<AudioDeviceID> = []
     ) {
         self.defaultDeviceID = defaultDeviceID
         for (id, info) in devices {
@@ -594,6 +942,7 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
             self.deviceVolumes[id] = info.volume
         }
         self.unsupportedDeviceIDs = unsupported
+        self.bluetoothDeviceIDs = bluetooth
     }
 
     // MARK: AudioVolumeControlling
@@ -612,6 +961,9 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
         if unsupportedDeviceIDs.contains(deviceID) {
             throw AudioVolumeError.unsupportedProperty(deviceID)
         }
+        if headsetModeDeviceIDs.contains(deviceID), let volume = headsetVolumes[deviceID] {
+            return volume
+        }
         guard let volume = deviceVolumes[deviceID] else {
             throw AudioVolumeError.noDevice
         }
@@ -625,7 +977,25 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
         if unsupportedDeviceIDs.contains(deviceID) {
             throw AudioVolumeError.unsupportedProperty(deviceID)
         }
-        deviceVolumes[deviceID] = volume
+        setActiveVolume(volume, deviceID: deviceID)
+    }
+
+    func deviceUID(deviceID: AudioDeviceID) -> String? {
+        deviceNames[deviceID] == nil ? nil : "uid-\(deviceID)"
+    }
+
+    func deviceID(forUID uid: String) -> AudioDeviceID? {
+        guard uid.hasPrefix("uid-"), let id = AudioDeviceID(uid.dropFirst(4)),
+              deviceNames[id] != nil, !disappearedDeviceIDs.contains(id) else { return nil }
+        return id
+    }
+
+    func isBluetooth(deviceID: AudioDeviceID) -> Bool {
+        bluetoothDeviceIDs.contains(deviceID)
+    }
+
+    func isInHeadsetMode(deviceID: AudioDeviceID) -> Bool {
+        headsetModeDeviceIDs.contains(deviceID)
     }
 
     func deviceName(deviceID: AudioDeviceID) -> String {
@@ -649,7 +1019,16 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
         defaultOutputListeners.count
     }
 
+    /// Lautstaerke des gerade aktiven Profils.
     func volume(_ deviceID: AudioDeviceID) -> Float {
+        if headsetModeDeviceIDs.contains(deviceID), let volume = headsetVolumes[deviceID] {
+            return volume
+        }
+        return deviceVolumes[deviceID] ?? -1
+    }
+
+    /// Gemerkte Lautstaerke des Musik-Profils, auch waehrend das Headset-Profil laeuft.
+    func musicProfileVolume(_ deviceID: AudioDeviceID) -> Float {
         deviceVolumes[deviceID] ?? -1
     }
 
@@ -665,7 +1044,33 @@ final class AudioWorld: AudioVolumeControlling, @unchecked Sendable {
     /// (z. B. User-Slider, BT-Stack, andere App). Feuert KEINEN Listener — wir
     /// haben bewusst keine per-Device-Volume-Listener mehr im neuen Design.
     func setVolumeExternally(deviceID: AudioDeviceID, value: Float) {
-        deviceVolumes[deviceID] = value
+        setActiveVolume(value, deviceID: deviceID)
+    }
+
+    /// Mikrofon an/aus: Bluetooth wechselt ins Headset-Profil (mit dessen
+    /// eigener gemerkter Lautstaerke) bzw. zurueck ins Musik-Profil.
+    func setHeadsetMode(_ deviceID: AudioDeviceID, active: Bool, headsetVolume: Float? = nil) {
+        if let headsetVolume { headsetVolumes[deviceID] = headsetVolume }
+        if active {
+            if headsetVolumes[deviceID] == nil { headsetVolumes[deviceID] = deviceVolumes[deviceID] }
+            headsetModeDeviceIDs.insert(deviceID)
+        } else {
+            headsetModeDeviceIDs.remove(deviceID)
+        }
+    }
+
+    /// Geraet ist wieder da und wird Default-Output.
+    func reconnectDevice(_ deviceID: AudioDeviceID) {
+        disappearedDeviceIDs.remove(deviceID)
+        simulateDefaultOutputChange(to: deviceID)
+    }
+
+    private func setActiveVolume(_ volume: Float, deviceID: AudioDeviceID) {
+        if headsetModeDeviceIDs.contains(deviceID) {
+            headsetVolumes[deviceID] = volume
+        } else {
+            deviceVolumes[deviceID] = volume
+        }
     }
 
     /// Geraet wird getrennt. Default switcht auf `newDefault`.

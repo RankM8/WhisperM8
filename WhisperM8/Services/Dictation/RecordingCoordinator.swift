@@ -240,6 +240,9 @@ final class RecordingCoordinator {
             try await PerfBudgets.engineStart.withInterval {
                 AudioDuckingManager.shared.beginCapture()
                 try await audioRecorder.startRecording()
+                // Bluetooth-Mikro: jetzt steht meist das Headset-Profil, das
+                // wartende Ducken greift sofort statt erst beim nächsten Tick.
+                AudioDuckingManager.shared.recorderDidStart()
             }
         } catch {
             connectingIndicator.cancel()
@@ -254,7 +257,9 @@ final class RecordingCoordinator {
                 error: error.localizedDescription
             )
             appState.lastError = error.localizedDescription
-            AudioDuckingManager.shared.endCaptureImmediate()
+            // Mit Settle-Window: Ein schon angestoßener Profilwechsel der
+            // AirPods kommt erst ~2 s später zurück (Vorfall 25.10.2026).
+            AudioDuckingManager.shared.endCapture()
             overlayController.hide()
             // Hörbar statt still: der Druck kam an, das Mikrofon nicht.
             if !startCancelledWhileConnecting { NSSound.beep() }
@@ -275,7 +280,7 @@ final class RecordingCoordinator {
             if let audioURL = audioRecorder.stopRecording() {
                 try? FileManager.default.removeItem(at: audioURL)
             }
-            AudioDuckingManager.shared.endCaptureImmediate()
+            AudioDuckingManager.shared.endCapture()
             overlayController.hide()
             isProcessing = false
             Logger.paste.info("Recording cancelled while microphone was connecting")

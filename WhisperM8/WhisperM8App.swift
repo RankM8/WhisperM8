@@ -248,6 +248,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         KeyboardLayoutCache.shared.startObserving()
         sigtermSource = sigterm
 
+        // Lautstärke nachholen, die eine abgebrochene Aufnahme (Absturz,
+        // `make kill`) geduckt zurückgelassen hat. Leeres Journal: ein Lesezugriff.
+        AudioDuckingManager.shared.recoverPendingRestores()
+
         // Claude-Code-Plugin `whisperm8` ablegen, bevor der erste Chat
         // startet (Crash-Recovery, Tabs): jede Claude-Session bekommt es per
         // `CLAUDE_CODE_PLUGIN_DIRS`. Synchron und klein (eine Handvoll
@@ -510,8 +514,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     /// Sicherheitsnetz: Falls die App waehrend einer aktiven Ducking-Session
-    /// beendet wird (Cmd+Q oder System-Shutdown), Volume sofort zurueckstellen
-    /// — sonst bleibt das System-Audio leise bis manueller Slider-Eingriff.
+    /// beendet wird (Cmd+Q oder System-Shutdown), Volume sofort zurueckstellen.
+    /// Was danach noch geduckt ist, holt das Journal beim naechsten Start nach.
     func applicationWillTerminate(_ notification: Notification) {
         AudioDuckingManager.shared.endCaptureImmediate()
         // Letzten (debounced) Fenster-/Tab-State noch festschreiben.

@@ -60,6 +60,7 @@ enum PreferenceBedienweg {
         Entry(key: "claudeGPTRouterPort", reason: "Interner Port des Mix-Routers, abgeleitet vom Backend-Port; kein Nutzerwert."),
         Entry(key: "claudeGPTBackendDefaultModel", reason: "Veraltet: das Modell bestimmt Claude Code per /model, nicht die App."),
         Entry(key: "summaryStartupReconciliationEnabled", reason: "Auto-Zusammenfassungen beim Start; Default aus, die Karte erzeugt sie beim Anzeigen."),
+        Entry(key: "audioDuckingPendingRestores", reason: "Offene Lautstärke-Rückstellungen des Audio-Duckings, damit nach Absturz oder getrenntem Gerät nichts leise bleibt."),
     ]
 
     /// Der UI-Weg existiert, läuft aber über einen Manager oder eine Ansicht außerhalb der

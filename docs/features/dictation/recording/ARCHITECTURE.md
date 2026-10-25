@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-10-25
 ---
 
 # Recording — Architektur
@@ -141,7 +141,7 @@ loggen `perf_budget_exceeded`, wenn die gemessene Dauer überschritten wird.
 ## Invarianten und Gotchas
 
 - `AppState.recordingPhase` priorisiert Recording vor Post-Processing und Transcribing; die Pill nutzt zusätzlich `OverlayPhase`, die ohne Idle-Zustand auskommt.
-- Audio-Ducking startet vor `audioRecorder.startRecording()` und endet beim Stop oder Cancel, weil Bluetooth-Profile sonst falsche Ausgangslautstärken liefern können.
+- Audio-Ducking startet vor `audioRecorder.startRecording()` und endet beim Stop, Cancel oder Startfehler immer mit Settle-Window (`endCapture()`), weil Bluetooth-Profile sonst falsche Ausgangslautstärken liefern können. Bei Bluetooth-Mikrofon duckt es erst im Headset-Profil; offene Rückstellungen holt das `AudioDuckingJournal` nach Absturz oder Gerätewechsel nach ([audio-ducking.md](audio-ducking.md)).
 - `AgentWorkspaceStore` ist nicht Teil des Recording-Hotpaths; Agent-Chat-Bezug entsteht über Kontext-Refs, Codex-Projektpfad und späteres Session-Matching.
 - Der Clipboard-Monitor läuft bewusst auch während Transcribing und Improving weiter, damit nachträglich kopierter Kontext noch ins Post-Processing einfließt.
 - Nach Eintreffen der Transkriptionsresponse setzt der Coordinator `isDeliveringTranscription`; Cancel ist dann ein No-op, damit Paste-Delays nicht kollabieren.

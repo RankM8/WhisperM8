@@ -61,6 +61,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.audioDuckingFactor) }
     }
 
+    /// Offene Lautstärke-Rückstellungen des Audio-Duckings (`AudioDuckingJournal`).
+    /// Überlebt Absturz und Neustart, damit eine geduckte Lautstärke nie hängen bleibt.
+    var audioDuckingPendingRestores: Data? {
+        get { defaults.data(forKey: Keys.audioDuckingPendingRestores) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.audioDuckingPendingRestores) }
+    }
+
     var overlayStyleRaw: String {
         get { defaults.string(forKey: Keys.overlayStyle) ?? OverlayStyle.mini.rawValue }
         nonmutating set { defaults.set(newValue, forKey: Keys.overlayStyle) }
@@ -927,6 +934,7 @@ enum PreferenceKeys {
     static let autoPasteEnabled = "autoPasteEnabled"
     static let audioDuckingEnabled = "audioDuckingEnabled"
     static let audioDuckingFactor = "audioDuckingFactor"
+    static let audioDuckingPendingRestores = "audioDuckingPendingRestores"
     static let overlayStyle = "overlayStyle"
     static let overlayPositionX = "overlayPositionX"
     static let overlayPositionY = "overlayPositionY"
