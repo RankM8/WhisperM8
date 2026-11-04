@@ -27,6 +27,7 @@ const TOOL = 'mcp__whisperm8__board'
 const JARVIS_SKILL = 'whisperm8:jarvis'
 const SPEAK_TOOL = 'mcp__whisperm8__speak'
 const CALLOUT_SKILL = 'whisperm8:callout'
+const CLIPBOARD_TOOL = 'mcp__whisperm8__clipboard'
 const MIN = 60_000
 /** Mehrere Weck-Gründe kurz hintereinander werden zu einem Prompt gebündelt. */
 const WAKE_COALESCE_MS = 5_000
@@ -435,6 +436,56 @@ const speak = async ($: EngineInterface, text: string): Promise<string> => {
   }
 }
 
+// MARK: Zwischenablage-Verlauf
+
+/**
+ * Tool `clipboard`: liest den Zwischenablage-Verlauf des Users über
+ * `whisperm8 clipboard`. Immer hinter ToolSearch (isDeferred), damit es keinen
+ * Kontext kostet; die Beschreibung trägt die Stichworte, nach denen Claude sucht.
+ */
+const registerClipboardTool = async ($: EngineInterface) => {
+  await $.tool.register({
+    name: 'clipboard',
+    description:
+      'Zwischenablage-Verlauf des Users lesen (Maccy-Ersatz der WhisperM8-App). Nutzen, wenn der User sich auf etwas bezieht, das er kopiert hat: "das, was ich kopiert habe", "aus meiner Zwischenablage", "den Fehler, den ich vorhin kopiert hatte", "der Link von eben", "das Bild, das ich kopiert habe". action: list (neueste Einträge, limit), search (query, Teilwort, Groß/Klein egal), get (nr = Nummer, 1 ist der neueste, oder ID). get liefert Text komplett; bei Bildern den absoluten Dateipfad (mit Read ansehen), bei Dateien die Pfade. Typische Geheimnisse (API-Keys, Tokens, Schlüssel) sind maskiert. Ist der Verlauf aus oder der Zugriff für Agents gesperrt, kommt eine Meldung: dem User sagen, er kann es in WhisperM8 unter Einstellungen > Clipboard einschalten.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list', 'search', 'get'], description: 'list | search | get' },
+        query: { type: 'string', description: 'Suchtext (für search)' },
+        nr: { type: 'string', description: 'Nummer (1 = neuester Eintrag) oder ID (für get)' },
+        limit: { type: 'number', description: 'Höchstzahl der Einträge (list und search, Standard 20)' },
+      },
+      required: ['action'],
+    },
+    isDeferred: true,
+  })
+}
+
+type ClipboardInput = { action?: string; query?: string; nr?: string | number; limit?: number }
+
+/** Baut die CLI-Argumente; `null` heißt: Eingabe unvollständig (Meldung in `error`). */
+const clipboardArgs = (input: ClipboardInput): { args: string[] } | { error: string } => {
+  const action = input.action ?? 'list'
+  const limit = typeof input.limit === 'number' && input.limit >= 1 ? ['--limit', String(Math.floor(input.limit))] : []
+  switch (action) {
+    case 'list':
+      return { args: ['clipboard', 'list', ...limit, '--json'] }
+    case 'search': {
+      const query = (input.query ?? '').trim()
+      if (query === '') return { error: 'FEHLER: search braucht query.' }
+      return { args: ['clipboard', 'search', ...limit, '--json', '--', query] }
+    }
+    case 'get': {
+      const nr = String(input.nr ?? '').trim()
+      if (nr === '') return { error: 'FEHLER: get braucht nr (Nummer oder ID).' }
+      return { args: ['clipboard', 'get', '--json', nr] }
+    }
+    default:
+      return { error: `FEHLER: unbekannte action ${action}. list | search | get` }
+  }
+}
+
 // MARK: Hooks
 
 export const register: Register = (on, options) => {
@@ -463,6 +514,8 @@ export const register: Register = (on, options) => {
     } catch {
       // Ohne Tool pflegt Jarvis das Board per CLI.
     }
+    // Zwischenablage-Verlauf: Lesetool, immer hinter ToolSearch.
+    await registerClipboardTool($).catch(() => undefined)
     // Nach Neustart oder Reload: ein aktives Board ist sofort wieder da.
     // Nicht awaiten: das Lesen startet einen CLI-Prozess (App-Binary im
     // CLI-Modus), der den Chatstart sonst bremst — das Band erscheint, sobald
@@ -506,6 +559,13 @@ export const register: Register = (on, options) => {
     const text = (input.text ?? '').trim()
     if (text === '') return { result: 'FEHLER: text fehlt.' }
     return { result: await speak($, text) }
+  })
+
+  on('tool.call', { tool: CLIPBOARD_TOOL }, async ($, e) => {
+    const built = clipboardArgs(e as unknown as ClipboardInput)
+    if ('error' in built) return { result: built.error }
+    const ran = await cli($, built.args)
+    return { result: ran.ok ? ran.stdout.trim() || '[]' : `FEHLER: ${ran.message}` }
   })
 
   on('command.run', { command: 'callout' }, async ($, e) => {

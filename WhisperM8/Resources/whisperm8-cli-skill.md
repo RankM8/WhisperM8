@@ -1,6 +1,6 @@
 ---
 name: whisperm8-transcription
-description: Transcribe audio and video files to text, JSON, or SRT/VTT subtitles using the local whisperm8 CLI (installed with the WhisperM8 macOS app). Use when the user wants to transcribe a recording, meeting, voice memo, interview, podcast, lecture, call, or video file, generate subtitles, or summarize/analyze the spoken content of a media file on their Mac.
+description: Transcribe audio and video files to text, JSON, or SRT/VTT subtitles using the local whisperm8 CLI (installed with the WhisperM8 macOS app). Use when the user wants to transcribe a recording, meeting, voice memo, interview, podcast, lecture, call, or video file, generate subtitles, or summarize/analyze the spoken content of a media file on their Mac. Also covers `whisperm8 clipboard`, which reads the user's clipboard history ("what I copied earlier", "the error I copied").
 ---
 
 # WhisperM8 CLI — Audio/Video Transcription
@@ -116,3 +116,21 @@ whisperm8 transcribe video.mp4 -f srt -l de -o video.srt
 | `Kein API-Key … gefunden` (exit 78) | Open WhisperM8 → Settings → Transcription API and save a Groq or OpenAI key, or export `GROQ_API_KEY`. |
 | `Format 'srt' braucht Timestamps …` | The chosen model returns no segments — drop `--model gpt-4o-transcribe` or switch to a Whisper model. |
 | `Keine Audiospur … gefunden` | The file has no audio track, or the container needs ffmpeg (`brew install ffmpeg`) for the fallback extraction. |
+
+## Clipboard history (`whisperm8 clipboard`)
+
+WhisperM8 can keep a searchable clipboard history (Settings → Clipboard, off by default). When the user refers to something they copied ("the error I copied earlier", "what is in my clipboard", "the link from before"), read it instead of asking them to paste it again.
+
+```bash
+whisperm8 clipboard list --limit 10          # newest first, number 1 is the newest entry
+whisperm8 clipboard search "stack trace"     # case-insensitive, every word must match
+whisperm8 clipboard get 2                    # full text; for images the absolute PNG path, for files the paths
+whisperm8 clipboard get 2 --json             # same with metadata (source app, time, kind)
+whisperm8 clipboard copy 2                   # put the entry back on the clipboard (needs the running app)
+```
+
+- Numbers refer to the newest-first order of `list`; an ID (or a unique prefix of at least 4 characters) works too.
+- Typical secrets (API keys, tokens, JWTs, private keys) come back as `[REDACTED:…]`. Do not try to work around that.
+- Exit 1 with a message means the history is off or the user blocked agent access. Tell the user where to switch it on; do not retry.
+- To look at a copied image, run `get` and read the returned file path.
+- Inside Claude Code chats started by the app, the same data is available through the `clipboard` tool.

@@ -19,6 +19,12 @@ enum ClipboardCLIArguments: Equatable {
     static func parse(_ arguments: [String]) throws -> ClipboardCLIArguments {
         guard let command = arguments.first else { return .help }
         var rest = Array(arguments.dropFirst())
+        // Alles nach `--` ist Text, auch wenn er mit `-` beginnt.
+        var literal: [String] = []
+        if let separator = rest.firstIndex(of: "--") {
+            literal = Array(rest[(separator + 1)...])
+            rest = Array(rest[..<separator])
+        }
 
         func takeFlag(_ names: Set<String>) -> Bool {
             guard let index = rest.firstIndex(where: names.contains) else { return false }
@@ -46,24 +52,26 @@ enum ClipboardCLIArguments: Equatable {
             let json = takeFlag(["--json"])
             let limit = try takeLimit()
             try rejectOptions()
-            if let extra = rest.first { throw ParseError.usage("Unbekanntes Argument: \(extra)") }
+            if let extra = (rest + literal).first { throw ParseError.usage("Unbekanntes Argument: \(extra)") }
             return .list(limit: limit, json: json)
         case "get", "show":
             let json = takeFlag(["--json"])
             try rejectOptions()
-            guard rest.count == 1 else { throw ParseError.usage("get braucht genau eine Nummer oder ID") }
-            return .get(ref: rest[0], json: json)
+            let refs = rest + literal
+            guard refs.count == 1 else { throw ParseError.usage("get braucht genau eine Nummer oder ID") }
+            return .get(ref: refs[0], json: json)
         case "search", "find":
             let json = takeFlag(["--json"])
             let limit = try takeLimit()
             try rejectOptions()
-            let query = rest.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+            let query = (rest + literal).joined(separator: " ").trimmingCharacters(in: .whitespaces)
             guard !query.isEmpty else { throw ParseError.usage("search braucht einen Suchtext") }
             return .search(query: query, limit: limit, json: json)
         case "copy":
             try rejectOptions()
-            guard rest.count == 1 else { throw ParseError.usage("copy braucht genau eine Nummer oder ID") }
-            return .copy(ref: rest[0])
+            let refs = rest + literal
+            guard refs.count == 1 else { throw ParseError.usage("copy braucht genau eine Nummer oder ID") }
+            return .copy(ref: refs[0])
         default:
             throw ParseError.usage("Unbekannter Befehl: \(command)")
         }

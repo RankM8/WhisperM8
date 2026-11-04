@@ -209,6 +209,12 @@ final class ClipboardCLITests: XCTestCase {
         XCTAssertEqual(ClipboardCLIFormatter.ageLabel(from: base.addingTimeInterval(-172_800), now: base), "2d")
     }
 
+    func testDoubleDashTreatsRestAsText() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["search", "--json", "--", "-v", "fehler"]),
+                       .search(query: "-v fehler", limit: 20, json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "--", "ab12cd"]), .get(ref: "ab12cd", json: false))
+    }
+
     func testCLIModeRecognisesClipboardCommand() {
         XCTAssertTrue(CLIModeDetector.shouldRunCLI(["/x/WhisperM8", "clipboard", "list"]))
     }

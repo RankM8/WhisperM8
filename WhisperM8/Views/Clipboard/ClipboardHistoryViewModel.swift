@@ -72,6 +72,12 @@ final class ClipboardHistoryViewModel: ObservableObject {
         loadPreview()
     }
 
+    /// Miniaturen von außen setzen (Snapshots, Tests), ohne Laden von Disk.
+    func preload(thumbnails: [String: NSImage]) {
+        self.thumbnails = thumbnails
+        loadPreview()
+    }
+
     func appIcon(for entry: ClipboardEntry) -> NSImage? { loaders.appIcon(entry.sourceBundleID) }
 
     func reset() {

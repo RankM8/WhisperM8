@@ -94,7 +94,7 @@ Doku: [docs/features/dictation/](docs/features/dictation/).
 Doku-Einstieg: [docs/features/agent-chats/](docs/features/agent-chats/README.md); Konten:
 [claude-konten.md](docs/features/agent-chats/claude-konten.md), [gpt-konten.md](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board.md](docs/features/jarvis-board.md);
-Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
+Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history.md](docs/features/clipboard-history.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
 
 ## Invarianten (nicht brechen)
 
@@ -105,6 +105,8 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
 - Neue Dateideskriptoren (Locks, Sockets, Watcher) close-on-exec — SwiftTerm `forkpty`+`execve` schließt nichts.
 - An Pipes nur `write(contentsOf:)` (throwing), nie `FileHandle.write(_:)` (NSException bei EPIPE). SIGPIPE
   wird per leerem `sigaction`-Handler abgefangen, nie per `SIG_IGN` (würde an jede Chat-Shell vererbt).
+- Eigene Schreibvorgänge auf der allgemeinen Zwischenablage mit `ClipboardInternalWrites.begin()/end()` klammern
+  (oder `markPasteboard`), sonst landen sie im Zwischenablage-Verlauf.
 - Kein `installTap` ohne `ObjCException.catching`; das Format unmittelbar vor dem Tap neu lesen.
   Absturzrelevante Ereignisse auf `Logger.info` oder höher (`.info` ist per `OSLogPreferences` persistent).
 
@@ -125,7 +127,7 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [vo
   liegen in Application Support, nicht unter `~/.claude`.
 - Logins werden zwischen Konten **verschoben, nie kopiert** (gleiche Refresh-Familie entwertet sich sonst).
 - Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
-  `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, Reports, FailedRecordings).
+  `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, `clipboard-history/` (Index plus Bilder, 0700/0600), Reports, FailedRecordings).
 - Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.
 - `pmset -a disablesleep 1` setzt nur der `StayAwakeController`, und nie ohne laufende Wache, die beim Tod
   der App zurücksetzt. Einziger Write außerhalb der eigenen Daten ist `/etc/sudoers.d/whisperm8-sleep`
@@ -169,7 +171,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`.
-Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `clipboardHistoryEnabled` (zugleich UI-Schalter, Standard aus),
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 
 ## Dependencies (Package.swift)

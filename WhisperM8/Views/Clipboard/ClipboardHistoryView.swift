@@ -200,9 +200,9 @@ struct ClipboardHistoryView: View {
                         Image(nsImage: image)
                             .resizable()
                             .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: 280)
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(AppTheme.border))
+                            .frame(maxWidth: .infinity, maxHeight: 280)
                     }
                     Spacer(minLength: 0)
                 } else {
