@@ -208,9 +208,15 @@ struct ClipboardSettingsPage: View {
         }
     }
 
-    /// „1Password, Bitwarden, Keychain Access und 10 weitere“ statt 13 Zeilen.
+    /// „1Password, Bitwarden, Keychain Access und 8 weitere“ statt 13 Zeilen.
+    /// Versionen derselben App („1Password 7“) zählen als eine.
     static func summary(of bundleIDs: [String], shown: Int = 3) -> String {
-        let names = bundleIDs.map(ClipboardSettings.displayName(for:))
+        var names: [String] = []
+        for id in bundleIDs {
+            let name = ClipboardSettings.displayName(for: id)
+                .replacingOccurrences(of: #" \d+$"#, with: "", options: .regularExpression)
+            if !names.contains(name) { names.append(name) }
+        }
         guard names.count > shown else { return names.joined(separator: ", ") }
         let rest = names.count - shown
         return names.prefix(shown).joined(separator: ", ") + " " + String(localized: "and \(rest) more")

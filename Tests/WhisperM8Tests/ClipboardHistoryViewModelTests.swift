@@ -151,6 +151,7 @@ final class ClipboardHistoryViewModelTests: XCTestCase {
     func testExcludedSummaryNamesTheFirstFew() {
         let summary = ClipboardSettingsPage.summary(of: ["com.1password.1password", "com.bitwarden.desktop"])
         XCTAssertEqual(summary, "1Password, Bitwarden")
-        XCTAssertTrue(ClipboardSettingsPage.summary(of: ClipboardSettings.defaultExcludedApps).hasPrefix("1Password, 1Password 7, 1Password 6"))
+        XCTAssertEqual(ClipboardSettingsPage.summary(of: ClipboardSettings.defaultExcludedApps),
+                       "1Password, Bitwarden, Keychain Access and 8 more")
     }
 }

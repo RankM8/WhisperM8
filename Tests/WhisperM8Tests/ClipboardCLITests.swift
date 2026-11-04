@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import WhisperM8
 
@@ -285,6 +286,42 @@ final class ClipboardCLITests: XCTestCase {
         let output = ClipboardCLIRunner.execute(.list(limit: 1, json: true), environment: environment(entries: samples()))
         let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
         XCTAssertEqual(Set(array[0].keys), ["number", "id", "kind", "pinned", "copiedAt", "preview", "sourceApp", "chars"])
+    }
+
+    /// Ganzer Weg über Disk: die App schreibt mit dem Store, die CLI liest den
+    /// Index und die Dateien wie im Betrieb (ohne laufende App).
+    func testCLIReadsWhatTheStoreWroteIncludingLongTextsAndImages() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-cli-e2e-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var limits = ClipboardHistoryStore.Limits()
+        limits.maxInlineTextChars = 50
+        let store = ClipboardHistoryStore(directory: dir, limits: limits, debounceSeconds: 0.01)
+        let log = String(repeating: "ok\n", count: 200) + "panic: OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123 kaputt"
+        store.add(ClipboardCapture(text: log, sourceName: "Terminal", date: Date(timeIntervalSince1970: 1)), maxItems: 10)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        store.add(ClipboardCapture(imageData: rep.representation(using: .png, properties: [:])!, imageIsPNG: true,
+                                   date: Date(timeIntervalSince1970: 2)), maxItems: 10)
+        store.flush()
+
+        let env = ClipboardCLIEnvironment(
+            settings: { ClipboardSettings(enabled: true) }, directory: dir,
+            loadEntries: { ClipboardHistoryStore.loadIndex(directory: dir) },
+            fullText: { ClipboardHistoryStore.fullText(of: $0, directory: dir) },
+            now: { Date(timeIntervalSince1970: 100) },
+            copyViaApp: { _ in .failed(message: "nicht im Test", exitCode: ChatsCLIExit.appUnreachable) }
+        )
+        let found = ClipboardCLIRunner.execute(.search(query: "panic kaputt", limit: 5, json: true), environment: env)
+        let hits = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(found.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(hits.first?["number"] as? Int, 2, "Treffer tief im langen Text, Nummer aus der Zeitreihe")
+
+        let text = ClipboardCLIRunner.execute(.get(ref: "2", json: false, maxChars: 0), environment: env)
+        XCTAssertTrue(text.stdout.hasSuffix("panic: OPENAI_API_KEY=[REDACTED:api-key] kaputt"))
+        XCTAssertFalse(text.stdout.contains("sk-proj"))
+
+        let image = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: env)
+        XCTAssertTrue(image.stdout.hasPrefix(dir.path), image.stdout)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: image.stdout))
     }
 
     func testCLIModeRecognisesClipboardCommand() {

@@ -78,7 +78,7 @@ extension UISnapshotGallery {
                 return AnyView(ClipboardHistoryView(model: empty, now: now))
             },
             Fixture(
-                name: "clipboard-einstellungen", size: CGSize(width: 700, height: 1500),
+                name: "clipboard-einstellungen", size: CGSize(width: 700, height: 1000),
                 storage: [ClipboardPreferenceKeys.enabled: true]
             ) {
                 AnyView(ClipboardSettingsPage(dependencies: ClipboardSettingsDependencies(
@@ -87,7 +87,7 @@ extension UISnapshotGallery {
                     runningApps: { [ClipboardRunningApp(bundleID: "com.apple.Safari", name: "Safari")] }
                 )))
             },
-            Fixture(name: "clipboard-einstellungen-aus", size: CGSize(width: 700, height: 1500)) {
+            Fixture(name: "clipboard-einstellungen-aus", size: CGSize(width: 700, height: 1000)) {
                 AnyView(ClipboardSettingsPage(dependencies: ClipboardSettingsDependencies(
                     entryCount: { 0 }, clearHistory: {}, runningApps: { [] }
                 )))
