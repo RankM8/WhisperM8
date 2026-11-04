@@ -27,6 +27,8 @@ enum Logger {
     /// nie protokolliert, nur Längen und Entscheidungen.
     static let speechCallouts = os.Logger(subsystem: subsystem, category: "speech.callouts")
     static let stayAwake = os.Logger(subsystem: subsystem, category: "stay.awake")
+    /// Tastatursperre zum Reinigen: Start, Ende mit Grund, Tap-Neustart.
+    static let keyboardLock = os.Logger(subsystem: subsystem, category: "keyboard.lock")
 
     // MARK: - Optional File Logging
 

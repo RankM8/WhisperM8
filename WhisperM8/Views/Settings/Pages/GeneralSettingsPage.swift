@@ -60,6 +60,8 @@ struct GeneralSettingsPage: View {
                 )
             }
 
+            KeyboardCleaningSettingsSection()
+
             SettingsSection("Setup") {
                 SettingsButtonRow(
                     title: "Setup assistant",
