@@ -21,6 +21,7 @@ final class ClipboardHistoryController {
     /// Control-Socket lesen hier, ohne auf die Store-Queue zu warten.
     private(set) var entries: [ClipboardEntry] = []
     private var started = false
+    private var observing = false
     private var appliedEnabled: Bool?
     private var defaultsObserver: NSObjectProtocol?
 
@@ -40,15 +41,6 @@ final class ClipboardHistoryController {
     func start() {
         guard !started else { return }
         started = true
-        // Laden passiert auf der Store-Queue; bis dahin ist das Fenster nur leer.
-        store.observe { [weak self] state in
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    self?.entries = state.entries
-                    self?.model.setEntries(state.entries, search: state.search)
-                }
-            }
-        }
         KeyboardShortcuts.onKeyDown(for: .clipboardHistory) { [weak self] in
             Task { @MainActor in self?.togglePanel() }
         }
@@ -60,9 +52,25 @@ final class ClipboardHistoryController {
         applySettings()
     }
 
+    /// Lädt den Verlauf (auf der Store-Queue) und hält danach den Stand
+    /// aktuell. Erst beim Einschalten oder wenn die Einstellungen die Anzahl
+    /// brauchen: bei abgeschaltetem Verlauf liest die App beim Start nichts.
+    func ensureLoaded() {
+        guard !observing else { return }
+        observing = true
+        store.observe { [weak self] state in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.entries = state.entries
+                    self?.model.setEntries(state.entries, search: state.search)
+                }
+            }
+        }
+    }
+
     /// Beim Beenden: optional leeren (Angepinnte bleiben), Index festschreiben.
     func shutdown() {
-        guard started else { return }
+        guard started, observing else { return }
         if ClipboardSettings.readLive().clearOnQuit { store.clear(keepPinned: true) }
         store.flush()
     }
@@ -73,6 +81,7 @@ final class ClipboardHistoryController {
         let enabled = ClipboardSettings.readLive().enabled
         guard enabled != appliedEnabled else { return }
         appliedEnabled = enabled
+        if enabled { ensureLoaded() }
         Self.apply(enabled: enabled, monitor: monitor)
         if !enabled, panel != nil { hidePanel() }
     }

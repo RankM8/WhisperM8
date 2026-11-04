@@ -10,7 +10,10 @@ struct ClipboardSettingsDependencies {
 
     /// Anzahl aus dem Stand des Controllers: kein Warten auf die Store-Queue.
     static let live = ClipboardSettingsDependencies(
-        entryCount: { ClipboardHistoryController.shared.entries.count },
+        entryCount: {
+            ClipboardHistoryController.shared.ensureLoaded()
+            return ClipboardHistoryController.shared.entries.count
+        },
         clearHistory: { ClipboardHistoryController.shared.store.clear(keepPinned: false) },
         runningApps: {
             NSWorkspace.shared.runningApplications
