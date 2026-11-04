@@ -215,6 +215,78 @@ final class ClipboardCLITests: XCTestCase {
         XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "--", "ab12cd"]), .get(ref: "ab12cd", json: false))
     }
 
+    // MARK: status, lange Texte, JSON-Vertrag
+
+    func testParseStatusAndChunkOptions() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["status"]), .status(json: false))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["status", "--json"]), .status(json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "1", "--max-chars", "100", "--from", "50"]),
+                       .get(ref: "1", json: false, maxChars: 100, from: 50))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "1", "--max-chars", "0"]), .get(ref: "1", json: false, maxChars: 0))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["get", "1", "--from", "-3"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["status", "extra"]))
+    }
+
+    func testStatusWorksEvenWhenOffOrBlockedAndShowsNoContent() throws {
+        var settings = ClipboardSettings(enabled: true)
+        settings.agentAccess = false
+        let blocked = ClipboardCLIRunner.execute(.status(json: true), environment: environment(entries: samples(), settings: settings))
+        XCTAssertEqual(blocked.exitCode, 0)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(blocked.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual(object["enabled"] as? Bool, true)
+        XCTAssertEqual(object["agentAccess"] as? Bool, false)
+        XCTAssertEqual(object["entries"] as? Int, 3)
+        XCTAssertFalse(blocked.stdout.contains("TypeError"))
+
+        let off = ClipboardCLIRunner.execute(.status(json: false), environment: environment(entries: samples(), settings: ClipboardSettings()))
+        XCTAssertEqual(off.exitCode, 0)
+        XCTAssertTrue(off.stdout.contains("Verlauf: aus"))
+        XCTAssertFalse(off.stdout.contains("Einträge"))
+    }
+
+    func testGetSplitsLongTextIntoChunks() throws {
+        let long = String(repeating: "abcdefghij", count: 10)   // 100 Zeichen
+        let env = environment(entries: [entry("lng00001", long, ago: 1)])
+        let first = ClipboardCLIRunner.execute(.get(ref: "1", json: true, maxChars: 30, from: 0), environment: env)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(first.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual((object["text"] as? String)?.count, 30)
+        XCTAssertEqual(object["totalChars"] as? Int, 100)
+        XCTAssertEqual(object["truncated"] as? Bool, true)
+        XCTAssertEqual(object["nextFrom"] as? Int, 30)
+        XCTAssertTrue(first.stderr.contains("--from 30"))
+
+        let last = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 30, from: 90), environment: env)
+        XCTAssertEqual(last.stdout, "abcdefghij")
+        XCTAssertEqual(last.stderr, "")
+
+        let all = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 0, from: 0), environment: env)
+        XCTAssertEqual(all.stdout, long)
+    }
+
+    func testChunkingNeverCutsASecretInHalf() {
+        let text = String(repeating: "x", count: 20) + " sk-abcdefghijklmnopqrstuvwxyz0123 ende"
+        let env = environment(entries: [entry("sec00002", text, ago: 1)])
+        let out = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 30, from: 0), environment: env)
+        XCTAssertFalse(out.stdout.contains("sk-abc"), "erst maskieren, dann schneiden")
+    }
+
+    func testCharsCountsTheFullTextEvenWhenItLivesInAFile() throws {
+        var big = entry("big00001", "kurz", ago: 1)
+        big.text = nil
+        big.textFile = "big00001.txt"
+        big.preview = "Anfang …"
+        big.charCount = 50_000
+        let output = ClipboardCLIRunner.execute(.list(limit: 5, json: true), environment: environment(entries: [big]))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(array.first?["chars"] as? Int, 50_000)
+    }
+
+    func testListJSONFieldsAreStable() throws {
+        let output = ClipboardCLIRunner.execute(.list(limit: 1, json: true), environment: environment(entries: samples()))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(Set(array[0].keys), ["number", "id", "kind", "pinned", "copiedAt", "preview", "sourceApp", "chars"])
+    }
+
     func testCLIModeRecognisesClipboardCommand() {
         XCTAssertTrue(CLIModeDetector.shouldRunCLI(["/x/WhisperM8", "clipboard", "list"]))
     }

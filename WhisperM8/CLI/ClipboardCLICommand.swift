@@ -5,12 +5,15 @@ import Foundation
 /// Pure Argument-Auswertung, testbar ohne Dateien und Socket.
 enum ClipboardCLIArguments: Equatable {
     case help
+    case status(json: Bool)
     case list(limit: Int, json: Bool)
-    case get(ref: String, json: Bool)
+    case get(ref: String, json: Bool, maxChars: Int = defaultMaxChars, from: Int = 0)
     case search(query: String, limit: Int, json: Bool)
     case copy(ref: String)
 
     static let defaultLimit = 20
+    /// `get` liefert höchstens so viele Zeichen am Stück (`--max-chars 0` = alles).
+    static let defaultMaxChars = 50_000
 
     enum ParseError: Error, Equatable {
         case usage(String)
@@ -39,6 +42,14 @@ enum ClipboardCLIArguments: Equatable {
             rest.removeSubrange(index...(index + 1))
             return min(value, 500)
         }
+        func takeNumber(_ name: String, default value: Int) throws -> Int {
+            guard let index = rest.firstIndex(of: name) else { return value }
+            guard index + 1 < rest.count, let number = Int(rest[index + 1]), number >= 0 else {
+                throw ParseError.usage("\(name) braucht eine Zahl ab 0")
+            }
+            rest.removeSubrange(index...(index + 1))
+            return number
+        }
         func rejectOptions() throws {
             if let option = rest.first(where: { $0.hasPrefix("-") && Int($0) == nil }) {
                 throw ParseError.usage("Unbekannte Option: \(option)")
@@ -48,6 +59,11 @@ enum ClipboardCLIArguments: Equatable {
         switch command {
         case "help", "--help", "-h":
             return .help
+        case "status":
+            let json = takeFlag(["--json"])
+            try rejectOptions()
+            if let extra = (rest + literal).first { throw ParseError.usage("Unbekanntes Argument: \(extra)") }
+            return .status(json: json)
         case "list", "ls":
             let json = takeFlag(["--json"])
             let limit = try takeLimit()
@@ -56,10 +72,12 @@ enum ClipboardCLIArguments: Equatable {
             return .list(limit: limit, json: json)
         case "get", "show":
             let json = takeFlag(["--json"])
+            let maxChars = try takeNumber("--max-chars", default: defaultMaxChars)
+            let from = try takeNumber("--from", default: 0)
             try rejectOptions()
             let refs = rest + literal
             guard refs.count == 1 else { throw ParseError.usage("get braucht genau eine Nummer oder ID") }
-            return .get(ref: refs[0], json: json)
+            return .get(ref: refs[0], json: json, maxChars: maxChars, from: from)
         case "search", "find":
             let json = takeFlag(["--json"])
             let limit = try takeLimit()
@@ -142,7 +160,7 @@ enum ClipboardCLIFormatter {
         if let id = entry.sourceBundleID { object["sourceBundleID"] = id }
         switch entry.kind {
         case .text:
-            object["chars"] = (entry.text ?? entry.preview).count
+            object["chars"] = entry.textLength
         case .image:
             if let file = entry.imageFile {
                 object["imagePath"] = ClipboardHistoryStore.blobURL(file, directory: context.directory).path
@@ -182,25 +200,78 @@ enum ClipboardCLIFormatter {
         var note: String?
     }
 
-    /// `get`: Text komplett (maskiert), bei Bildern der Dateipfad, bei Dateien die Pfade.
-    static func detail(_ entry: ClipboardEntry, number: Int, json: Bool, context: Context) -> GetOutput {
-        var note: String?
+    /// `get`: Text (maskiert, dann ausgeschnitten), bei Bildern der Dateipfad,
+    /// bei Dateien die Pfade. Lange Texte kommen in Stücken von `maxChars`
+    /// Zeichen ab `from`; `maxChars == 0` heißt alles.
+    static func detail(
+        _ entry: ClipboardEntry, number: Int, json: Bool, context: Context,
+        maxChars: Int = ClipboardCLIArguments.defaultMaxChars, from: Int = 0
+    ) -> GetOutput {
+        var notes: [String] = []
         var object = summary(entry, number: number, context: context)
         var plain = ""
         switch entry.kind {
         case .text:
             let full = context.fullText(entry) ?? entry.preview
             let result = masked(full, context)
-            plain = result.text
-            object["text"] = result.text
+            let slice = slice(result.text, maxChars: maxChars, from: from)
+            plain = slice.text
+            object["text"] = slice.text
+            object["totalChars"] = slice.total
+            object["from"] = slice.from
+            object["truncated"] = slice.nextFrom != nil
+            if let next = slice.nextFrom {
+                object["nextFrom"] = next
+                notes.append("Gekürzt: Zeichen \(slice.from) bis \(next) von \(slice.total). Weiter mit --from \(next), alles mit --max-chars 0.")
+            }
             object["secretsMasked"] = result.count
-            if result.count > 0 { note = "\(result.count) Geheimnis(se) maskiert (Einstellung „Mask secrets for agents“)." }
+            if result.count > 0 { notes.append("\(result.count) Geheimnis(se) maskiert (Einstellung „Mask secrets for agents“).") }
         case .image:
             plain = (object["imagePath"] as? String) ?? ""
         case .files:
             plain = (entry.filePaths ?? []).joined(separator: "\n")
         }
-        return GetOutput(stdout: json ? jsonString(object) : plain, note: note)
+        return GetOutput(stdout: json ? jsonString(object) : plain, note: notes.isEmpty ? nil : notes.joined(separator: "\n"))
+    }
+
+    struct Slice: Equatable {
+        var text: String
+        var from: Int
+        var total: Int
+        var nextFrom: Int?
+    }
+
+    static func slice(_ text: String, maxChars: Int, from: Int) -> Slice {
+        let total = text.count
+        let start = min(max(0, from), total)
+        guard maxChars > 0 else {
+            return Slice(text: String(text.dropFirst(start)), from: start, total: total, nextFrom: nil)
+        }
+        let end = min(total, start + maxChars)
+        let lower = text.index(text.startIndex, offsetBy: start)
+        let upper = text.index(lower, offsetBy: end - start)
+        return Slice(text: String(text[lower..<upper]), from: start, total: total, nextFrom: end < total ? end : nil)
+    }
+
+    static func status(_ settings: ClipboardSettings, entryCount: Int?, json: Bool) -> String {
+        if json {
+            var object: [String: Any] = [
+                "enabled": settings.enabled,
+                "paused": settings.paused,
+                "agentAccess": settings.agentAccess,
+                "maskSecrets": settings.maskSecrets,
+            ]
+            if let entryCount { object["entries"] = entryCount }
+            return jsonString(object)
+        }
+        func onOff(_ value: Bool) -> String { value ? "an" : "aus" }
+        var lines = [
+            "Verlauf: \(onOff(settings.enabled))\(settings.paused ? " (pausiert)" : "")",
+            "Zugriff für Agents: \(onOff(settings.agentAccess))",
+            "Geheimnisse maskieren: \(onOff(settings.maskSecrets))",
+        ]
+        if let entryCount { lines.append("Einträge: \(entryCount)") }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -244,6 +315,11 @@ enum ClipboardCLIRunner {
         if case .help = arguments { return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLICommand.help) }
 
         let settings = env.settings()
+        // Status verrät keinen Inhalt und geht deshalb immer.
+        if case .status(let json) = arguments {
+            let count = settings.enabled ? env.loadEntries().count : nil
+            return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.status(settings, entryCount: count, json: json))
+        }
         guard settings.enabled else {
             return Output(exitCode: ChatsCLIExit.usage, stderr: ClipboardSettings.disabledMessage)
         }
@@ -258,7 +334,7 @@ enum ClipboardCLIRunner {
         )
 
         switch arguments {
-        case .help:
+        case .help, .status:
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLICommand.help)
         case .list(let limit, let json):
             let rows = ordered.prefix(limit).enumerated().map { (number: $0 + 1, entry: $1) }
@@ -271,12 +347,14 @@ enum ClipboardCLIRunner {
             }
             let rows = found.prefix(limit).map { (number: numbers[$0.id] ?? 0, entry: $0) }
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.listing(rows, json: json, context: context))
-        case .get(let ref, let json):
+        case .get(let ref, let json, let maxChars, let from):
             switch ClipboardHistoryCore.resolve(ref, in: entries) {
             case .failure(let error):
                 return Output(exitCode: ChatsCLIExit.notFound, stderr: ClipboardCLIText.message(for: error))
             case .success(let entry):
-                let detail = ClipboardCLIFormatter.detail(entry, number: numbers[entry.id] ?? 0, json: json, context: context)
+                let detail = ClipboardCLIFormatter.detail(
+                    entry, number: numbers[entry.id] ?? 0, json: json, context: context, maxChars: maxChars, from: from
+                )
                 return Output(exitCode: ChatsCLIExit.ok, stdout: detail.stdout, stderr: detail.note ?? "")
             }
         case .copy(let ref):
@@ -325,22 +403,28 @@ enum ClipboardCLICommand {
     whisperm8 clipboard: Zwischenablage-Verlauf lesen (WhisperM8 ersetzt Maccy)
 
     VERWENDUNG
+      whisperm8 clipboard status [--json]
       whisperm8 clipboard list [--limit N] [--json]
-      whisperm8 clipboard get <nr|id> [--json]
       whisperm8 clipboard search <text> [--limit N] [--json]
+      whisperm8 clipboard get <nr|id> [--json] [--max-chars N] [--from N]
       whisperm8 clipboard copy <nr|id>
 
-    Nummer 1 ist der neueste Eintrag. `get` liefert Text komplett, bei Bildern
-    den absoluten Pfad der PNG-Datei (der Agent kann sie lesen), bei Dateien
-    die Pfade. `copy` legt den Eintrag über die App wieder in die Zwischenablage.
+    Nummer 1 ist der neueste Eintrag (Zeitreihe, Angepinnte zählen mit).
+    `get` liefert Text, bei Bildern den absoluten Pfad der PNG-Datei (der
+    Agent kann sie lesen), bei Dateien die Pfade. Lange Texte kommen in
+    Stücken von 50.000 Zeichen: `--from N` liest weiter, `--max-chars 0`
+    liefert alles. `copy` legt den Eintrag über die App wieder in die
+    Zwischenablage. `status` zeigt die Schalter und geht immer.
 
-    Schutz: Typische Geheimnisse (API-Keys, Tokens, JWTs, private Schlüssel)
-    werden maskiert ([REDACTED:…]). Passwort-Manager-Kopien und ausgeschlossene
-    Apps landen gar nicht erst im Verlauf. Beides steht in den Einstellungen
-    (Seite Clipboard); ist „Let agents read the history“ aus, verweigert die CLI.
+    Schutz: Typische Geheimnisse (API-Keys, Tokens, JWTs, private Schlüssel,
+    Passwörter in Zuweisungen) werden maskiert ([REDACTED:…]). Passwort-
+    Manager-Kopien und ausgeschlossene Apps landen gar nicht erst im Verlauf.
+    Beides steht in den Einstellungen (Seite Clipboard); ist „Let agents
+    read the history“ aus, verweigert die CLI.
 
-    Exit: 0 ok, 1 Aufruf oder abgeschaltet oder verweigert, 3 Eintrag nicht
-    gefunden, 5 App nicht erreichbar (nur `copy`).
+    Exit: 0 ok, 1 Aufruf falsch, Verlauf aus oder Zugriff gesperrt, 3 Eintrag
+    nicht gefunden, 4 Kopieren fehlgeschlagen, 5 App nicht erreichbar (4 und
+    5 nur bei `copy`).
     """
 
     static func run(arguments: [String]) async -> Int32 {
