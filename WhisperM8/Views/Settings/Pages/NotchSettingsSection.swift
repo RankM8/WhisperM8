@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Einstellungen der Statusanzeige an der Notch (Tab Workspace der Agent-Chats-Seite).
 struct NotchSettingsSection: View {
-    @AppStorage(PreferenceKeys.notchStatusEnabled) private var isEnabled = false
+    @AppStorage(PreferenceKeys.notchStatusEnabled) private var isEnabled = true
     @AppStorage(PreferenceKeys.notchStatusScreen) private var screenRaw = NotchScreenChoice.auto.rawValue
     @AppStorage(PreferenceKeys.notchStatusHideFromCapture) private var hideFromCapture = true
     @AppStorage(PreferenceKeys.notchStatusShowFreshDone) private var showFreshDone = true

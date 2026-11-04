@@ -239,7 +239,7 @@ final class ClipboardCLITests: XCTestCase {
         XCTAssertEqual(object["entries"] as? Int, 3)
         XCTAssertFalse(blocked.stdout.contains("TypeError"))
 
-        let off = ClipboardCLIRunner.execute(.status(json: false), environment: environment(entries: samples(), settings: ClipboardSettings()))
+        let off = ClipboardCLIRunner.execute(.status(json: false), environment: environment(entries: samples(), settings: ClipboardSettings(enabled: false)))
         XCTAssertEqual(off.exitCode, 0)
         XCTAssertTrue(off.stdout.contains("Verlauf: aus"))
         XCTAssertFalse(off.stdout.contains("Einträge"))

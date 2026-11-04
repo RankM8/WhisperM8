@@ -33,7 +33,7 @@ struct ClipboardRunningApp: Hashable {
 }
 
 struct ClipboardSettingsPage: View {
-    @AppStorage(ClipboardPreferenceKeys.enabled) private var enabled = false
+    @AppStorage(ClipboardPreferenceKeys.enabled) private var enabled = true
     @AppStorage(ClipboardPreferenceKeys.paused) private var paused = false
     @AppStorage(ClipboardPreferenceKeys.maxItems) private var maxItems = 200
     @AppStorage(ClipboardPreferenceKeys.autoPaste) private var autoPaste = true

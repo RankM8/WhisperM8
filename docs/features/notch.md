@@ -13,7 +13,7 @@ arbeitet, sieht auf einen Blick, ob er gebraucht wird, und springt mit einem
 Klick in den passenden Chat. Prototyp der Zustände:
 [`../design/notch-prototype.html`](../design/notch-prototype.html).
 
-Standardmäßig **aus**.
+Standardmäßig **an** (seit 05.11.2026, vorher aus).
 
 ## Bedienung
 
@@ -69,7 +69,7 @@ Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"
 
 | Einstellung | Schlüssel | Standard |
 |---|---|---|
-| Chat-Status an der Notch anzeigen | `notchStatusEnabled` | aus |
+| Chat-Status an der Notch anzeigen | `notchStatusEnabled` | an |
 | Bildschirm: Automatisch, Eingebaut, Hauptbildschirm | `notchStatusScreen` | automatisch |
 | In Screenshots und Bildschirmfreigabe ausblenden | `notchStatusHideFromCapture` | an |
 | Fertige Chats anzeigen | `notchStatusShowFreshDone` | an |

@@ -11,9 +11,9 @@ kopiert, und ersetzt damit Maccy. Claude kann den Verlauf lesen
 (`whisperm8 clipboard`, Tool `clipboard`), damit „der Fehler, den ich vorhin
 kopiert hatte“ ohne erneutes Einfügen funktioniert.
 
-Standardmäßig **aus**. Einschalten: Einstellungen, Seite „Clipboard“. Solange
-der Schalter aus ist, liest die App beim Start nichts vom Verlauf, pollt nicht
-und belegt keinen Hotkey.
+Standardmäßig **an** (seit 05.11.2026, vorher aus). Ausschalten: Einstellungen,
+Seite „Clipboard“. Solange der Schalter aus ist, liest die App beim Start
+nichts vom Verlauf, pollt nicht und belegt keinen Hotkey.
 
 ## Bedienung
 
@@ -273,7 +273,7 @@ Monitor und Hotkey ab (es ist zugleich der UI-Schalter). Aus: kein Polling, der
 Hotkey ist freigegeben (`KeyboardShortcuts.disable`), der Menüeintrag ist weg,
 CLI und Tool verweigern.
 
-**Maccy:** Beide nutzen standardmäßig ⇧⌘C. Nach dem Einschalten Maccy beenden
+**Maccy:** Beide nutzen standardmäßig ⇧⌘C. Wer Maccy nutzt, beendet es
 und aus den Anmeldeobjekten nehmen, sonst gewinnt eine der beiden Apps den
 Hotkey zufällig. Der alte Maccy-Verlauf wird nicht übernommen.
 

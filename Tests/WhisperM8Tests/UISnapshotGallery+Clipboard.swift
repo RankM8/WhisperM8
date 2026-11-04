@@ -73,7 +73,7 @@ extension UISnapshotGallery {
             return model
         }
 
-        let size = CGSize(width: 760, height: 460)
+        let size = ClipboardHistoryView.size
         return [
             Fixture(name: "clipboard-verlauf", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "err"), now: now))

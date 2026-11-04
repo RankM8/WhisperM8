@@ -9,7 +9,7 @@ final class ClipboardPanel: NSPanel {
 
     init(contentView: NSView) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 460),
+            contentRect: NSRect(origin: .zero, size: ClipboardHistoryView.size),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false

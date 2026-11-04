@@ -625,9 +625,9 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusFeatureEnabled) }
     }
 
-    /// Nutzer-Schalter (Einstellungen, Menüleiste, Hotkey). Standard: aus.
+    /// Nutzer-Schalter (Einstellungen, Menüleiste, Hotkey). Standard: an.
     var isNotchStatusEnabled: Bool {
-        get { defaults.bool(forKey: Keys.notchStatusEnabled) }
+        get { boolWithDefault(true, forKey: Keys.notchStatusEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusEnabled) }
     }
 

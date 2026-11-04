@@ -35,7 +35,7 @@ final class ClipboardDictationTests: XCTestCase {
 
     func testNoCaptureWhenHistoryOffOrPaused() {
         XCTAssertNil(ClipboardHistoryCore.dictationCapture(
-            text: "x", modeName: "Fast", targetBundleID: nil, targetName: nil, settings: ClipboardSettings()
+            text: "x", modeName: "Fast", targetBundleID: nil, targetName: nil, settings: ClipboardSettings(enabled: false)
         ))
         var paused = enabled
         paused.paused = true

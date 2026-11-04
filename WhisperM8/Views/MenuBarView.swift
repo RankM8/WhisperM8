@@ -13,8 +13,8 @@ struct MenuBarView: View {
     /// erscheint nur, wenn das Feature eingeschaltet ist.
     @State private var voiceGate = VoiceGateCoordinator.shared
     @State private var speechCallouts = SpeechCalloutCenter.shared
-    @AppStorage(PreferenceKeys.notchStatusEnabled) private var notchStatusEnabled = false
-    @AppStorage(ClipboardPreferenceKeys.enabled) private var clipboardEnabled = false
+    @AppStorage(PreferenceKeys.notchStatusEnabled) private var notchStatusEnabled = true
+    @AppStorage(ClipboardPreferenceKeys.enabled) private var clipboardEnabled = true
     @AppStorage(ClipboardPreferenceKeys.paused) private var clipboardPaused = false
 
     /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)

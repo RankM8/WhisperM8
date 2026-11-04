@@ -5,9 +5,9 @@ import XCTest
 final class ClipboardSettingsAndKeysTests: XCTestCase {
     // MARK: Einstellungen
 
-    func testDefaultsAreOffAndSafe() {
+    func testDefaultsAreOnAndSafe() {
         let settings = ClipboardSettings.read { _ in nil }
-        XCTAssertFalse(settings.enabled)
+        XCTAssertTrue(settings.enabled)
         XCTAssertFalse(settings.paused)
         XCTAssertEqual(settings.maxItems, 200)
         XCTAssertTrue(settings.autoPaste)

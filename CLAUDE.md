@@ -172,8 +172,9 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
-`jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`.
-Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `clipboardHistoryEnabled` (zugleich UI-Schalter, Standard aus),
+`jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
+`clipboardHistoryEnabled` (zugleich UI-Schalter).
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 
 ## Dependencies (Package.swift)

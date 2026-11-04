@@ -191,4 +191,18 @@ final class ClipboardDictationWindowTests: XCTestCase {
         XCTAssertEqual(fallback.stdout, "nur kopiert")
         XCTAssertTrue(fallback.note?.contains("Kein Roh-Transkript") == true)
     }
+
+    // MARK: Schrift der Vorschau
+
+    func testPreviewUsesMonospaceOnlyForCodeLikeText() {
+        XCTAssertFalse(ClipboardPreviewStyle.prefersMonospace("Klar, ich schaue mir den PR heute Abend an."))
+        XCTAssertFalse(ClipboardPreviewStyle.prefersMonospace("https://github.com/rankm8/whisperm8/pull/42"))
+        XCTAssertFalse(ClipboardPreviewStyle.prefersMonospace("Erste Zeile\nZweite Zeile\nDritte Zeile"))
+        XCTAssertTrue(ClipboardPreviewStyle.prefersMonospace("TypeError: x\n    at renderList (app.js:128:22)\n    at App (app.js:40:9)"))
+        XCTAssertTrue(ClipboardPreviewStyle.prefersMonospace("func paste(_ entry: ClipboardEntry) { }"))
+        XCTAssertTrue(ClipboardPreviewStyle.prefersMonospace("~/repos/whisperm8/WhisperM8"))
+        XCTAssertTrue(ClipboardPreviewStyle.prefersMonospace("$ swift test --filter Clipboard"))
+        XCTAssertFalse(ClipboardPreviewStyle.prefersMonospace(""))
+    }
 }
+

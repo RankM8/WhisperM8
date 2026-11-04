@@ -7,6 +7,10 @@ import SwiftUI
 /// Tasten laufen über das Panel (`ClipboardPanel`), nicht über SwiftUI: so
 /// bleibt das Suchfeld für Text zuständig und die Befehle sind fensterweit gleich.
 struct ClipboardHistoryView: View {
+    /// Feste Größe des Panels (passt auch auf ein 13-Zoll-MacBook).
+    static let size = CGSize(width: 940, height: 580)
+    static let listWidth: CGFloat = 390
+
     @ObservedObject var model: ClipboardHistoryViewModel
     @FocusState private var searchFocused: Bool
     var now: Date = Date()
@@ -18,14 +22,14 @@ struct ClipboardHistoryView: View {
             Divider().overlay(AppTheme.border)
             HStack(spacing: 0) {
                 listColumn(list)
-                    .frame(width: 330)
+                    .frame(width: Self.listWidth)
                 Divider().overlay(AppTheme.border)
                 previewColumn
             }
             Divider().overlay(AppTheme.border)
             shortcutBar
         }
-        .frame(width: 760, height: 460)
+        .frame(width: Self.size.width, height: Self.size.height)
         .background(AppTheme.panel)
         .onAppear { searchFocused = true }
     }
@@ -33,20 +37,23 @@ struct ClipboardHistoryView: View {
     // MARK: Suche
 
     private func searchBar(count: Int) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
+                .font(.system(size: 15))
                 .foregroundStyle(AppTheme.textTertiary)
             TextField("Search clipboard history", text: $model.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15))
+                .font(.system(size: 17))
                 .focused($searchFocused)
             filterPicker
             Text("Items: \(count)")
-                .font(.system(size: 11.5))
+                .font(.system(size: 12))
+                .monospacedDigit()
                 .foregroundStyle(AppTheme.textTertiary)
+                .fixedSize()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
     }
 
     /// Alles oder nur Diktate (⌘D). Zwei sichtbare Knöpfe, kein Menü.
@@ -69,10 +76,11 @@ struct ClipboardHistoryView: View {
         let active = model.filter == filter
         return Button { model.filter = filter } label: {
             label()
-                .font(.system(size: 11.5, weight: active ? .semibold : .regular))
+                .font(.system(size: 12, weight: active ? .semibold : .regular))
                 .foregroundStyle(active ? AppTheme.textPrimary : AppTheme.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .fixedSize()
                 .background(active ? AppTheme.panel : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                 .contentShape(Rectangle())
         }
@@ -145,13 +153,13 @@ struct ClipboardHistoryView: View {
         let selected = entry.id == model.selectedID
         return HStack(spacing: 8) {
             leadingIcon(entry)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: entry.preview.isEmpty ? " " : entry.preview)
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .lineLimit(1)
                     .foregroundStyle(AppTheme.textPrimary)
                 Text(verbatim: subtitle(for: entry))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: 12))
                     .lineLimit(1)
                     .foregroundStyle(AppTheme.textTertiary)
             }
@@ -160,7 +168,7 @@ struct ClipboardHistoryView: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 34, height: 24)
+                    .frame(width: 42, height: 30)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
             }
             if number <= 9 {
@@ -178,8 +186,8 @@ struct ClipboardHistoryView: View {
             .buttonStyle(.plain)
             .help(entry.isPinned ? String(localized: "Unpin") : String(localized: "Pin"))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .background(selected ? AppTheme.accentTint : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .contentShape(Rectangle())
@@ -193,19 +201,19 @@ struct ClipboardHistoryView: View {
         if entry.dictationMode != nil {
             // Diktat-Ergebnisse erkennt man am Mikrofon, nicht am Ziel-App-Icon.
             Image(systemName: "mic.fill")
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(AppTheme.accent)
-                .frame(width: 18, height: 18)
+                .frame(width: 22, height: 22)
                 .background(AppTheme.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         } else if let icon = model.appIcon(for: entry) {
             Image(nsImage: icon)
                 .resizable()
-                .frame(width: 18, height: 18)
+                .frame(width: 22, height: 22)
         } else {
             Image(systemName: symbol(for: entry.kind))
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(AppTheme.textSecondary)
-                .frame(width: 18, height: 18)
+                .frame(width: 22, height: 22)
                 .background(AppTheme.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
     }
@@ -236,8 +244,9 @@ struct ClipboardHistoryView: View {
                     kindTitle(entry.kind)
                     Spacer()
                     Text(verbatim: detail(for: entry))
+                        .monospacedDigit()
                 }
-                .font(.system(size: 11.5))
+                .font(.system(size: 12))
                 .foregroundStyle(AppTheme.textTertiary)
 
                 if entry.kind == .image {
@@ -253,7 +262,10 @@ struct ClipboardHistoryView: View {
                 } else {
                     ScrollView {
                         Text(verbatim: model.previewText)
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(ClipboardPreviewStyle.prefersMonospace(model.previewText)
+                                  ? .system(size: 12.5, design: .monospaced)
+                                  : .system(size: 14))
+                            .lineSpacing(3)
                             .foregroundStyle(AppTheme.textPrimary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -267,7 +279,7 @@ struct ClipboardHistoryView: View {
                 Spacer()
             }
         }
-        .padding(14)
+        .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppTheme.surface)
     }
@@ -282,7 +294,8 @@ struct ClipboardHistoryView: View {
                 .foregroundStyle(AppTheme.textTertiary)
             ScrollView {
                 Text(verbatim: original)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
+                    .lineSpacing(2)
                     .foregroundStyle(AppTheme.textSecondary)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,9 +378,9 @@ struct ClipboardHistoryView: View {
                 footerButton("Settings…", systemImage: "gearshape") { model.actions.openSettings() }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .frame(minHeight: 36)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(minHeight: 40)
         .background(AppTheme.header)
     }
 
@@ -375,8 +388,9 @@ struct ClipboardHistoryView: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: systemImage).font(.system(size: 11))
-                Text(title).font(.system(size: 11.5))
+                Text(title).font(.system(size: 12)).lineLimit(1)
             }
+            .fixedSize()
             .foregroundStyle(AppTheme.textSecondary)
             .contentShape(Rectangle())
         }
@@ -392,8 +406,10 @@ struct ClipboardHistoryView: View {
                 .background(AppTheme.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             Text(label)
                 .font(.system(size: 11))
+                .lineLimit(1)
                 .foregroundStyle(AppTheme.textTertiary)
         }
+        .fixedSize()
     }
 }
 
@@ -411,3 +427,28 @@ enum ClipboardRelativeTime {
         return formatter.localizedString(for: date, relativeTo: now)
     }
 }
+
+// MARK: - Schrift der Vorschau
+
+/// Code, Logs, Pfade und Befehle in Festbreitenschrift, Fließtext in der
+/// normalen Schrift. Rein, damit es ohne Ansicht testbar ist.
+enum ClipboardPreviewStyle {
+    private static let codeMarkers = ["{", "}", ";", "=>", "->", "</", "()", "::", "&&", "||", "$ ", "#!", "```"]
+
+    static func prefersMonospace(_ text: String) -> Bool {
+        let sample = String(text.prefix(4_000))
+        let lines = sample.split(separator: "\n", omittingEmptySubsequences: true)
+        guard !lines.isEmpty else { return false }
+        // Eingerückte Zeilen (Stacktraces, Code, YAML) ab einem Drittel der Zeilen.
+        let indented = lines.filter { $0.hasPrefix("\t") || $0.hasPrefix("  ") }.count
+        if lines.count >= 2, Double(indented) / Double(lines.count) >= 0.3 { return true }
+        if codeMarkers.contains(where: sample.contains) { return true }
+        // Ein einzelnes Wort ohne Leerzeichen mit Pfad- oder Befehlszeichen.
+        if lines.count == 1, !sample.contains(" "), sample.contains(where: { "/_~=".contains($0) }),
+           !sample.hasPrefix("http") {
+            return true
+        }
+        return false
+    }
+}
+

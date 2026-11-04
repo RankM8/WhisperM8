@@ -665,8 +665,14 @@ final class NotchConfigTests: XCTestCase {
         return AppPreferences(defaults: defaults)
     }
 
-    func testFeatureIsOffByDefault() {
-        XCTAssertFalse(NotchConfig.current(prefs()).isActive)
+    func testFeatureIsOnByDefault() {
+        XCTAssertTrue(NotchConfig.current(prefs()).isActive)
+    }
+
+    func testUserSwitchTurnsItOff() {
+        let p = prefs()
+        p.isNotchStatusEnabled = false
+        XCTAssertFalse(NotchConfig.current(p).isActive)
     }
 
     func testUserSwitchActivatesIt() {

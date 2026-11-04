@@ -27,7 +27,8 @@ enum ClipboardWindowPosition: String, CaseIterable, Sendable {
 
 /// Gelesene Werte; Standardwerte stehen an genau einer Stelle.
 struct ClipboardSettings: Equatable, Sendable {
-    var enabled = false
+    /// Standard an: der Verlauf läuft ab Werk, ausschalten in den Einstellungen.
+    var enabled = true
     var paused = false
     var maxItems = 200
     var autoPaste = true
