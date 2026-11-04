@@ -56,7 +56,8 @@ extension RecordingCoordinator {
         // Ab hier ist die Response da: Ein Cancel darf nichts mehr abbrechen.
         isDeliveringTranscription = true
 
-        let normalizedRawText = TextNormalizer.normalizeTranscriptionText(rawText)
+        // Auch im Fast-Modus keine Gedankenstriche (Whisper setzt gelegentlich –).
+        let normalizedRawText = DashFilter.apply(TextNormalizer.normalizeTranscriptionText(rawText))
 
         Logger.debug(" Transcription SUCCESS! Raw length: \(rawText.count), normalized length: \(normalizedRawText.count)")
 

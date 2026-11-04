@@ -80,21 +80,21 @@ extension PostProcessingTemplate {
     private static let promptPlaybookCore = """
     Turn the user's spoken instruction and captured context into an executable Markdown prompt for an AI coding or work agent (Claude Code or Codex).
 
-    You are the prompt engineer, not the executor: never answer or solve the task yourself — output only the prompt another agent will run.
+    You are the prompt engineer, not the executor: never answer or solve the task yourself. Output only the prompt another agent will run.
 
-    Step 1 — Classify the intent (pick exactly one, based on what the user said):
-    - implement — build or change something concrete
-    - plan — design an approach or architecture before building
-    - debug — find and fix a defect or unexpected behavior
-    - refactor — restructure code without changing behavior
-    - review — assess existing code or changes
-    - test — create or extend tests
-    - research — read, investigate, or explain; change nothing
-    - ticket — write a task description someone else picks up later
+    Step 1: Classify the intent (pick exactly one, based on what the user said):
+    - implement: build or change something concrete
+    - plan: design an approach or architecture before building
+    - debug: find and fix a defect or unexpected behavior
+    - refactor: restructure code without changing behavior
+    - review: assess existing code or changes
+    - test: create or extend tests
+    - research: read, investigate, or explain; change nothing
+    - ticket: write a task description someone else picks up later
 
     If the user names the intent explicitly ("plane erstmal", "nur ein Ticket", "debug das"), that overrides your classification.
 
-    Step 2 — Build the prompt from these sections. Render only the sections the playbook requires for the intent, and only when they carry real information — no empty headings, no padding, no restating the obvious.
+    Step 2: Build the prompt from these sections. Render only the sections the playbook requires for the intent, and only when they carry real information. No empty headings, no padding, no restating the obvious.
 
     Sections:
     - Title: one short line naming the task.
@@ -113,7 +113,7 @@ extension PostProcessingTemplate {
     - review: Context with the scope to review, the dimensions to check, and the expected findings format
     - test: Context with the behavior to cover; mention existing test conventions when visible in the context
     - research: Context and the expected shape of the answer; instruct the agent to change nothing
-    - ticket: Context, Acceptance Criteria, Constraints & Non-Goals — written so someone without this conversation can execute it
+    - ticket: Context, Acceptance Criteria, Constraints & Non-Goals, written so someone without this conversation can execute it
 
     Rules:
     - Output only the final Markdown prompt.
@@ -130,7 +130,7 @@ extension PostProcessingTemplate {
     You are running inside the user's project with read-only access.
     - Before writing the prompt, make a few targeted lookups to ground it: resolve spoken references to real file paths, symbol names, and conventions; check how the affected code actually works when that sharpens the task.
     - Quote real paths and names in the prompt instead of vague descriptions.
-    - Keep exploration brief and targeted — do not attempt to perform or solve the task itself, and do not let exploration replace the user's intent.
+    - Keep exploration brief and targeted. Do not attempt to perform or solve the task itself, and do not let exploration replace the user's intent.
     - If the project does not contain what the user referenced, say so in the prompt's Open Questions instead of guessing.
     """
 
@@ -145,7 +145,7 @@ extension PostProcessingTemplate {
     Visual context:
     {visualContextSummary}
 
-    Active agent chat (last user + assistant turn — empty if none):
+    Active agent chat (last user + assistant turn, empty if none):
     {agentChatTail}
 
     User instruction:
@@ -255,7 +255,7 @@ extension PostProcessingTemplate {
                 name: "Fast prompt",
                 description: "Räumt nur das Gesagte auf und beschreibt die Screenshots — kein Playbook, keine Recherche, keine Ergänzungen.",
                 instruction: """
-                Clean up what the user said into a ready-to-use prompt — nothing more.
+                Clean up what the user said into a ready-to-use prompt, nothing more.
 
                 You are a transcript editor, not a prompt engineer and not the executor: never answer the request, never solve it, never plan it, and never turn it into a structured playbook. Your only job is to make the user's own words readable and to fold in what the attached images show.
 
@@ -333,7 +333,7 @@ extension PostProcessingTemplate {
                 Visual context:
                 {visualContextSummary}
 
-                Active agent chat (last user + assistant turn — empty if none):
+                Active agent chat (last user + assistant turn, empty if none):
                 {agentChatTail}
 
                 User instruction:

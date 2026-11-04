@@ -28,12 +28,14 @@ struct PostProcessingService {
             throw PostProcessingError.codexUnavailable("This mode requires context, but no selected text or visual context was captured.")
         }
 
-        return try await processor.process(
+        let output = try await processor.process(
             rawText: rawText,
             mode: mode,
             language: language,
             contextBundle: allowedContext
         )
+        // Gedankenstriche verbietet der Prompt; Modelle setzen sie trotzdem.
+        return DashFilter.apply(output)
     }
 
     func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {

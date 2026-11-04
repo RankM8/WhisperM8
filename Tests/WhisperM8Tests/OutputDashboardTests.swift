@@ -232,7 +232,7 @@ final class OutputDashboardTests: XCTestCase {
         // Nur Prompt+ enthält den begrenzten Explorations-Block.
         XCTAssertEqual(promptPlusTemplate?.name, "Agent prompt (project-aware)")
         XCTAssertTrue(promptPlusTemplate?.instruction.contains("read-only access") == true)
-        XCTAssertTrue(promptPlusTemplate?.instruction.contains("do not attempt to perform or solve the task itself") == true)
+        XCTAssertTrue(promptPlusTemplate?.instruction.contains("Do not attempt to perform or solve the task itself") == true)
         XCTAssertFalse(promptTemplate?.instruction.contains("Project exploration") == true)
         // Chat-Modus 2026-07-07 ausgebaut — das Built-in-Template darf nicht mehr existieren.
         XCTAssertFalse(PostProcessingTemplate.builtInTemplates.contains { $0.id == PostProcessingTemplate.retiredChatID })

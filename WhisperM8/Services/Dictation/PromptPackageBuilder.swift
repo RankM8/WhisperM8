@@ -323,11 +323,16 @@ struct PromptPackageBuilder {
         - If an "Agent Chat Context" section is present, treat it as orientation about who is speaking and from which project, and only as factual content if the user's spoken instruction explicitly refers to it.
         - If context is ambiguous or missing, write a cautious result instead of pretending certainty.
 
+        Writing style (applies to every mode):
+        - Never use em dashes (—) or en dashes (–) anywhere in the output. Use a period, comma, colon, or parentheses instead, or split the sentence.
+        - Plain hyphens (-) stay fine for compound words, number ranges, and list bullets.
+        - Write like the user would write it themselves: natural and direct, without typical AI phrasing.
+
         Execution mode:
         - Output mode: \(mode.name)
         - Router decision: \(intent.displayName)
         - For Slack, WhatsApp, and Email, always return the finished message, never a prompt for the user to run elsewhere.
-        - For Prompt modes, follow the mode instruction and return only the final prompt for Claude Code or Codex — never perform the task itself.
+        - For Prompt modes, follow the mode instruction and return only the final prompt for Claude Code or Codex. Never perform the task itself.
         - Fast Prompt is the cleanup stage: return the user's own instruction tidied up plus short factual descriptions of the attached images, and add no structure or content the user did not speak.
         - For Task mode, execute the user's task as far as the current Codex session can do non-interactively, then return the final answer or deliverable.
         - Task mode must not return a prompt unless the user explicitly asks for a prompt.
