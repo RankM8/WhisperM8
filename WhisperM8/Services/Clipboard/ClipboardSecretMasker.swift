@@ -26,22 +26,54 @@ enum ClipboardSecretMasker {
              group: group, validate: validate)
     }
 
+    /// Reihenfolge zählt: spezifische Formate zuerst, damit der Platzhalter
+    /// sagt, was es war; die groben Regeln am Ende fangen den Rest.
     private static let rules: [Rule] = [
         rule("private-key", #"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|\z)"#),
         rule("jwt", #"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]*"#),
         rule("github-token", #"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})"#),
-        rule("slack-token", #"\bxox[abprs]-[A-Za-z0-9-]{10,}"#),
+        rule("slack-token", #"\bxox[abeoprs]-[A-Za-z0-9-]{10,}|\bxapp-[0-9]-[A-Za-z0-9-]{10,}"#),
         rule("aws-key", #"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"#),
-        rule("google-key", #"\bAIza[0-9A-Za-z_-]{35}\b"#),
+        rule("google-key", #"\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"#),
+        // Stripe: geheime und eingeschränkte Schlüssel, nicht die öffentlichen pk_.
+        rule("stripe-key", #"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"#),
+        // OpenAI (sk-…, sk-proj-…), Anthropic (sk-ant-…) und ähnliche.
         rule("api-key", #"\bsk-[A-Za-z0-9_-]{20,}"#),
         rule("bearer", #"\b[Bb]earer\s+([A-Za-z0-9._~+/=-]{16,})"#, group: 1),
-        // password=…, token: …, api_key = … (Wert ab sechs Zeichen).
-        rule("secret", #"(?i)\b(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key)\b["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1),
-        // Lange Hex-Ketten (Hashes, Tokens), mindestens 32 Zeichen.
-        rule("hex-token", #"(?<![A-Za-z0-9])[A-Fa-f0-9]{32,}(?![A-Za-z0-9])"#),
+        rule("basic-auth", #"\b[Bb]asic\s+([A-Za-z0-9+/]{12,}={0,2})(?![A-Za-z0-9+/=])"#, group: 1, validate: looksLikeBase64),
+        // Passwort in einer URL: scheme://user:passwort@host
+        rule("url-password", #"\b[a-z][a-z0-9+.-]*://[^\s/:@]+:([^\s/@]+)@"#, group: 1),
+        // .env-Zeilen: OPENAI_API_KEY=…, DB_PASSWORD="…", export GITHUB_TOKEN=…
+        rule("env-secret", #"(?m)^[ \t]*(?:export[ \t]+)?[A-Za-z0-9_]*(?i:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?)[A-Za-z0-9_]*[ \t]*=[ \t]*["']?([^\s"'#]{4,})"#, group: 1, validate: isSecretValue),
+        // password=…, token: …, api_key = …, "client_secret": "…" (Wert ab sechs Zeichen).
+        rule("secret", #"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1, validate: isSecretValue),
         // Lange Base64-/URL-safe-Ketten mit Ziffer, Groß- und Kleinbuchstabe.
+        // Reine Hex-Ketten (Git-Hashes, SHA-256, MD5) bleiben bewusst stehen:
+        // ohne Zusammenhang sind sie fast immer Prüfsummen, keine Geheimnisse.
         rule("token", #"(?<![A-Za-z0-9+_=/.-])[A-Za-z0-9+_=-]{40,}(?![A-Za-z0-9+_=/.-])"#, validate: looksLikeRandomToken),
     ]
+
+    /// Ein Wert in `KEY=…` ist ein Geheimnis, wenn er kein Platzhalter und keine reine Zahl ist
+    /// (`MAX_TOKENS=4096` bleibt stehen).
+    static func isSecretValue(_ value: String) -> Bool {
+        !isPlaceholderValue(value) && !value.allSatisfy(\.isNumber)
+    }
+
+    /// Base64 nach `Basic`: Großbuchstaben mitten im Wort, eine Ziffer oder `=`.
+    /// „Basic Configuration“ ist Text, „dXNlcjpwYXNz“ nicht.
+    static func looksLikeBase64(_ value: String) -> Bool {
+        if value.contains(where: { $0.isNumber || $0 == "=" || $0 == "+" || $0 == "/" }) { return true }
+        return value.dropFirst().contains(where: \.isUppercase)
+    }
+
+    /// Werte wie `null`, `<your-key>`, `${API_KEY}` oder `xxxxxx` sind keine Geheimnisse.
+    static func isPlaceholderValue(_ value: String) -> Bool {
+        let lower = value.lowercased()
+        if ["null", "nil", "none", "undefined", "true", "false", "changeme", "redacted"].contains(lower) { return true }
+        if value.hasPrefix("<") || value.hasPrefix("${") || value.hasPrefix("$(") || value.hasPrefix("{{") { return true }
+        if Set(lower).count <= 2 { return true }
+        return false
+    }
 
     static func looksLikeRandomToken(_ value: String) -> Bool {
         var upper = false, lower = false, digit = false
