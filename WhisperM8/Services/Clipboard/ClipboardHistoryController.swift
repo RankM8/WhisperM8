@@ -68,6 +68,20 @@ final class ClipboardHistoryController {
         }
     }
 
+    /// Fertiges Diktat in den Verlauf. Der Monitor übergeht den Schreibvorgang
+    /// des Diktats (er ist beansprucht, wie Anhänge und das Zurücklegen nach
+    /// dem Einfügen); deshalb kommt das Ergebnis genau einmal über diesen Weg.
+    func recordDictation(text: String, modeName: String, targetApp: NSRunningApplication?) {
+        let settings = ClipboardSettings.readLive()
+        guard let capture = ClipboardHistoryCore.dictationCapture(
+            text: text, modeName: modeName,
+            targetBundleID: targetApp?.bundleIdentifier, targetName: targetApp?.localizedName,
+            settings: settings
+        ) else { return }
+        ensureLoaded()
+        store.add(capture, maxItems: settings.maxItems)
+    }
+
     /// Beim Beenden: optional leeren (Angepinnte bleiben), Index festschreiben.
     func shutdown() {
         guard started, observing else { return }

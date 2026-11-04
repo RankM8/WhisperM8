@@ -158,6 +158,7 @@ enum ClipboardCLIFormatter {
         ]
         if let name = entry.sourceName { object["sourceApp"] = name }
         if let id = entry.sourceBundleID { object["sourceBundleID"] = id }
+        if let mode = entry.dictationMode { object["dictationMode"] = mode }
         switch entry.kind {
         case .text:
             object["chars"] = entry.textLength
@@ -189,7 +190,7 @@ enum ClipboardCLIFormatter {
         return rows.map { row in
             let entry = row.entry
             let pin = entry.isPinned ? "*" : " "
-            let app = entry.sourceName ?? "-"
+            let app = entry.dictationMode.map { "Diktat \($0)" } ?? entry.sourceName ?? "-"
             let text = oneLine(masked(entry.preview, context).text)
             return "\(String(row.number).padding(toLength: 4, withPad: " ", startingAt: 0))\(pin) \(entry.kind.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)) \(ageLabel(from: entry.lastCopiedAt, now: context.now).padding(toLength: 4, withPad: " ", startingAt: 0)) \(app.padding(toLength: 14, withPad: " ", startingAt: 0)) \(text)"
         }.joined(separator: "\n")

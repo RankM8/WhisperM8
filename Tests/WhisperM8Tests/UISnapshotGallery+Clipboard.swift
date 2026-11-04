@@ -37,9 +37,13 @@ extension UISnapshotGallery {
         files.filePaths = ["/Users/demo/Angebote/angebot-2026-11.pdf"]
         files.preview = "angebot-2026-11.pdf"
 
+        var dictation = entry("dict", "Klar, ich schaue mir den PR heute Abend an und melde mich danach bei dir.", ago: 30, app: "Slack")
+        dictation.dictationMode = "Slack"
+
         let entries: [ClipboardEntry] = [
             entry("pin1", "ssh deploy@staging.example.com -p 2222", ago: 90_000, app: "Terminal", pinned: true),
             entry("pin2", "Mit freundlichen Grüßen, Giuliano Costa", ago: 200_000, app: "Mail", pinned: true),
+            dictation,
             entry("err", "TypeError: Cannot read properties of undefined (reading 'map')\n    at renderList (app.js:128:22)\n    at App (app.js:40:9)", ago: 60, app: "Safari"),
             image,
             files,

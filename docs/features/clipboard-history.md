@@ -81,6 +81,21 @@ kein Dateizugriff und kein Falten langer Texte.
   Einträge nur noch Anfang und Ende je 32 KB.
 - Gesucht wird auch im Namen der Herkunfts-App und in Dateipfaden.
 
+## Diktate im Verlauf
+
+Jedes fertige Diktat (alle Modi, auch Fast und Retry) kommt genau einmal in
+den Verlauf, mit Mikrofon-Symbol und Modus („Dictation (Slack) · Safari“).
+Herkunft ist die App, in die diktiert wurde. Der Weg führt nicht über den
+Monitor, sondern direkt aus dem Diktat-Ablauf
+(`RecordingCoordinator.dictationHistoryRecorder` →
+`ClipboardHistoryController.recordDictation`), denn die Schreibvorgänge des
+Diktats sind beansprucht. So landen Bild-Anhänge und das Zurücklegen nach dem
+Einfügen nicht als Extra-Einträge im Verlauf. Es gelten dieselben Regeln wie
+für Kopien: Verlauf aus oder pausiert, oder Diktat in eine ausgeschlossene
+App, dann kein Eintrag (`ClipboardHistoryCore.dictationCapture`). Den
+Kontext, den das Diktat per Cmd+C einsammelt, erfasst der Verlauf nicht. Die
+CLI zeigt das Feld `dictationMode`.
+
 ## Datenschutz-Regeln
 
 1. **Nie gespeichert:** Inhalte mit `org.nspasteboard.ConcealedType`,
@@ -94,8 +109,8 @@ kein Dateizugriff und kein Falten langer Texte.
    Passwörter-App, KeePassXC, KeePassX, LastPass, Dashlane, Enpass, NordPass,
    Proton Pass. Die Einstellungen zeigen sie als eine aufklappbare Zeile,
    selbst ergänzte Apps einzeln.
-3. **Eigene Schreibvorgänge der App** landen nicht im Verlauf: Diktat-Ergebnis
-   und Diktat-Paste, Kontext-Erfassung per Cmd+C mit Zurückschreiben und das
+3. **Eigene Schreibvorgänge der App** landen nicht über den Monitor im Verlauf:
+   Diktat-Paste (Anhänge, Zurücklegen nach dem Einfügen), Kontext-Erfassung per Cmd+C mit Zurückschreiben und das
    Einfügen aus dem Verlauf. Technik: Wer schreibt, beansprucht danach genau
    den neuen `changeCount` (`ClipboardInternalWrites.claim`), zusätzlich trägt
    der Inhalt den Marker-Typ `com.whisperm8.app.clipboard-internal`. Der

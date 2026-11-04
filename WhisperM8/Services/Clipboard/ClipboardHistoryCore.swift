@@ -217,3 +217,36 @@ enum ClipboardHistoryCore {
 enum ClipboardInternalMarker {
     static let typeName = "com.whisperm8.app.clipboard-internal"
 }
+
+// MARK: - Diktat-Ergebnisse
+
+extension ClipboardHistoryCore {
+    /// Typen, die ein Diktat in die Zwischenablage legt (reiner Text).
+    static let dictationTypes = ["public.utf8-plain-text"]
+
+    /// Baut aus einem fertigen Diktat den Verlaufseintrag, oder `nil`, wenn er
+    /// nicht hineingehört: Verlauf aus oder pausiert, leerer Text, oder das
+    /// Diktat ging in eine ausgeschlossene App (etwa einen Passwort-Manager).
+    /// Herkunft ist die App, in die diktiert wurde.
+    static func dictationCapture(
+        text: String,
+        modeName: String,
+        targetBundleID: String?,
+        targetName: String?,
+        settings: ClipboardSettings,
+        date: Date = Date()
+    ) -> ClipboardCapture? {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let decision = decide(
+            enabled: settings.enabled, paused: settings.paused, isInternalWrite: false,
+            types: dictationTypes, sourceBundleID: targetBundleID,
+            excludedApps: Set(settings.excludedApps)
+        )
+        guard decision == .store else { return nil }
+        return ClipboardCapture(
+            types: dictationTypes, text: text,
+            sourceBundleID: targetBundleID, sourceName: targetName,
+            date: date, dictationMode: modeName
+        )
+    }
+}

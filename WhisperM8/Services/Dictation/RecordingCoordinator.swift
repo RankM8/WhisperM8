@@ -118,6 +118,9 @@ final class RecordingCoordinator {
     /// aktiven Profils hochfahren). Darf nicht blockieren — der Default
     /// dispatcht sofort in den Hintergrund.
     let transcriptionPrewarmer: (TranscriptionProvider) -> Void
+    /// Legt das fertige Diktat in den Zwischenablage-Verlauf (Text, Modus,
+    /// Ziel-App). Nur in der echten App, nie unter `swift test`.
+    let dictationHistoryRecorder: @MainActor (String, OutputMode, NSRunningApplication?) -> Void
 
     init(
         appState: AppState,
@@ -139,6 +142,10 @@ final class RecordingCoordinator {
         },
         transcriptionPrewarmer: @escaping (TranscriptionProvider) -> Void = { provider in
             ChatGPTTranscriptionWarmup.prewarmIfNeeded(provider: provider)
+        },
+        dictationHistoryRecorder: @escaping @MainActor (String, OutputMode, NSRunningApplication?) -> Void = { text, mode, target in
+            guard AppInstance.isAppBundleProcess else { return }
+            ClipboardHistoryController.shared.recordDictation(text: text, modeName: mode.name, targetApp: target)
         }
     ) {
         self.appState = appState
@@ -159,6 +166,7 @@ final class RecordingCoordinator {
         self.apiKeyResolver = apiKeyResolver
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer
+        self.dictationHistoryRecorder = dictationHistoryRecorder
 
         // Recorder beendet die Aufnahme von selbst (Gerät weg, Schreibfehler):
         // Teilaufnahme sichern und sichtbar beenden (LR-DIK-004/006/026).

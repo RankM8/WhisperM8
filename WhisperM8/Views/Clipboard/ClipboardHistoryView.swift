@@ -154,7 +154,14 @@ struct ClipboardHistoryView: View {
 
     @ViewBuilder
     private func leadingIcon(_ entry: ClipboardEntry) -> some View {
-        if let icon = model.appIcon(for: entry) {
+        if entry.dictationMode != nil {
+            // Diktat-Ergebnisse erkennt man am Mikrofon, nicht am Ziel-App-Icon.
+            Image(systemName: "mic.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: 18, height: 18)
+                .background(AppTheme.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+        } else if let icon = model.appIcon(for: entry) {
             Image(nsImage: icon)
                 .resizable()
                 .frame(width: 18, height: 18)
@@ -177,8 +184,11 @@ struct ClipboardHistoryView: View {
 
     private func subtitle(for entry: ClipboardEntry) -> String {
         let time = ClipboardRelativeTime.string(from: entry.lastCopiedAt, now: now)
-        if let name = entry.sourceName, !name.isEmpty { return "\(name) · \(time)" }
-        return time
+        var parts: [String] = []
+        if let mode = entry.dictationMode { parts.append(String(localized: "Dictation (\(mode))")) }
+        if let name = entry.sourceName, !name.isEmpty { parts.append(name) }
+        parts.append(time)
+        return parts.joined(separator: " · ")
     }
 
     // MARK: Vorschau
