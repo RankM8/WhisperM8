@@ -48,6 +48,7 @@ let refreshPending = false
 let tickerStarted = false
 let toolDeferred: boolean | null = null
 let speakToolDeferred: boolean | null = null
+let clipboardToolDeferred: boolean | null = null
 let wakeQueue: string[] = []
 let wakeTimerArmed = false
 let lastWakeAt = 0
@@ -440,34 +441,67 @@ const speak = async ($: EngineInterface, text: string): Promise<string> => {
 
 /**
  * Tool `clipboard`: liest den Zwischenablage-Verlauf des Users über
- * `whisperm8 clipboard`. Immer hinter ToolSearch (isDeferred), damit es keinen
- * Kontext kostet; die Beschreibung trägt die Stichworte, nach denen Claude sucht.
+ * `whisperm8 clipboard`. Ist der Verlauf an und für Agents freigegeben, steht
+ * das Tool direkt in der Liste (sonst übersieht Claude es bei „der Fehler, den
+ * ich kopiert habe“); andernfalls nur hinter ToolSearch, ohne Kontext zu kosten.
  */
-const registerClipboardTool = async ($: EngineInterface) => {
+const syncClipboardTool = async ($: EngineInterface, active: boolean) => {
+  const deferred = !active
+  if (clipboardToolDeferred === deferred) return
+  clipboardToolDeferred = null
   await $.tool.register({
     name: 'clipboard',
     description:
-      'Zwischenablage-Verlauf des Users lesen (Maccy-Ersatz der WhisperM8-App). Nutzen, wenn der User sich auf etwas bezieht, das er kopiert hat: "das, was ich kopiert habe", "aus meiner Zwischenablage", "den Fehler, den ich vorhin kopiert hatte", "der Link von eben", "das Bild, das ich kopiert habe". action: list (neueste Einträge, limit), search (query, Teilwort, Groß/Klein egal), get (nr = Nummer, 1 ist der neueste, oder ID). get liefert Text komplett; bei Bildern den absoluten Dateipfad (mit Read ansehen), bei Dateien die Pfade. Typische Geheimnisse (API-Keys, Tokens, Schlüssel) sind maskiert. Ist der Verlauf aus oder der Zugriff für Agents gesperrt, kommt eine Meldung: dem User sagen, er kann es in WhisperM8 unter Einstellungen > Clipboard einschalten.',
+      'Clipboard history of the user (Zwischenablage-Verlauf, WhisperM8 replaces Maccy). Use it whenever the user refers to something they copied instead of asking them to paste it: "what I copied", "the error I copied earlier", "from my clipboard", "the link from before", "the screenshot I copied", "was ich kopiert habe", "aus der Zwischenablage", "den Fehler von vorhin", "der Link von eben". action: list (newest first, number 1 = newest), search (query: words, case-insensitive, searches full text), get (nr = number or ID; text in chunks of 50000 chars, continue with from; images return an absolute PNG path to open with Read, files return paths). Typical secrets are masked as [REDACTED:…]; do not try to work around that. If the history is off or agent access is blocked, tell the user: WhisperM8 Settings > Clipboard.',
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['list', 'search', 'get'], description: 'list | search | get' },
-        query: { type: 'string', description: 'Suchtext (für search)' },
-        nr: { type: 'string', description: 'Nummer (1 = neuester Eintrag) oder ID (für get)' },
-        limit: { type: 'number', description: 'Höchstzahl der Einträge (list und search, Standard 20)' },
+        query: { type: 'string', description: 'Search words (search)' },
+        nr: { type: 'string', description: 'Number (1 = newest) or ID (get)' },
+        limit: { type: 'number', description: 'Max entries (list and search, default 20)' },
+        from: { type: 'number', description: 'Character offset for long texts (get, default 0; use nextFrom from the previous answer)' },
+        maxChars: { type: 'number', description: 'Max characters per answer (get, default 50000)' },
       },
       required: ['action'],
     },
-    isDeferred: true,
+    isDeferred: deferred,
   })
+  clipboardToolDeferred = deferred
 }
 
-type ClipboardInput = { action?: string; query?: string; nr?: string | number; limit?: number }
+type ClipboardStatus = { enabled?: boolean; agentAccess?: boolean }
 
-/** Baut die CLI-Argumente; `null` heißt: Eingabe unvollständig (Meldung in `error`). */
+/** Nach dem Start: Schalter lesen und das Tool bei freigegebenem Verlauf nach vorn holen. */
+const refreshClipboardTool = async ($: EngineInterface) => {
+  const ran = await cli($, ['clipboard', 'status', '--json'], 10_000)
+  if (!ran.ok) return
+  let status: ClipboardStatus = {}
+  try {
+    status = JSON.parse(ran.stdout) as ClipboardStatus
+  } catch {
+    return
+  }
+  await syncClipboardTool($, status.enabled === true && status.agentAccess === true)
+}
+
+type ClipboardInput = {
+  action?: string
+  query?: string
+  nr?: string | number
+  limit?: number
+  from?: number
+  maxChars?: number
+}
+
+const wholeNumber = (value: unknown, min: number): string | null =>
+  typeof value === 'number' && Number.isFinite(value) && value >= min ? String(Math.floor(value)) : null
+
+/** Baut die CLI-Argumente; bei unvollständiger Eingabe steht die Meldung in `error`. */
 const clipboardArgs = (input: ClipboardInput): { args: string[] } | { error: string } => {
   const action = input.action ?? 'list'
-  const limit = typeof input.limit === 'number' && input.limit >= 1 ? ['--limit', String(Math.floor(input.limit))] : []
+  const limitValue = wholeNumber(input.limit, 1)
+  const limit = limitValue === null ? [] : ['--limit', limitValue]
   switch (action) {
     case 'list':
       return { args: ['clipboard', 'list', ...limit, '--json'] }
@@ -479,7 +513,16 @@ const clipboardArgs = (input: ClipboardInput): { args: string[] } | { error: str
     case 'get': {
       const nr = String(input.nr ?? '').trim()
       if (nr === '') return { error: 'FEHLER: get braucht nr (Nummer oder ID).' }
-      return { args: ['clipboard', 'get', '--json', nr] }
+      const from = wholeNumber(input.from, 0)
+      const maxChars = wholeNumber(input.maxChars, 1)
+      return {
+        args: [
+          'clipboard', 'get', '--json',
+          ...(from === null ? [] : ['--from', from]),
+          ...(maxChars === null ? [] : ['--max-chars', maxChars]),
+          '--', nr,
+        ],
+      }
     }
     default:
       return { error: `FEHLER: unbekannte action ${action}. list | search | get` }
@@ -514,8 +557,11 @@ export const register: Register = (on, options) => {
     } catch {
       // Ohne Tool pflegt Jarvis das Board per CLI.
     }
-    // Zwischenablage-Verlauf: Lesetool, immer hinter ToolSearch.
-    await registerClipboardTool($).catch(() => undefined)
+    // Zwischenablage-Verlauf: Lesetool erst hinter ToolSearch; ist der
+    // Verlauf freigegeben, holt der Status-Abruf es nach vorn (nicht awaiten,
+    // der CLI-Prozess soll den Chatstart nicht bremsen).
+    await syncClipboardTool($, false).catch(() => undefined)
+    void refreshClipboardTool($).catch(() => undefined)
     // Nach Neustart oder Reload: ein aktives Board ist sofort wieder da.
     // Nicht awaiten: das Lesen startet einen CLI-Prozess (App-Binary im
     // CLI-Modus), der den Chatstart sonst bremst — das Band erscheint, sobald

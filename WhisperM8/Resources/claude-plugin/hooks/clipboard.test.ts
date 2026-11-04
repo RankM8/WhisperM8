@@ -9,7 +9,10 @@ const TOOL = 'mcp__whisperm8__clipboard'
 type Calls = { argv: string[][]; registered: { name: string; isDeferred?: boolean }[] }
 
 /** Engine unter der Mod: Session und `whisperm8 clipboard` gespielt. */
-const world = (on: On, opts: { stdout?: string; exitCode?: number; stderr?: string } = {}): Calls => {
+const world = (
+  on: On,
+  opts: { stdout?: string; exitCode?: number; stderr?: string; status?: { enabled: boolean; agentAccess: boolean } } = {},
+): Calls => {
   const calls: Calls = { argv: [], registered: [] }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('skill.prompt', (_$, e) => ({ text: e.text }))
@@ -17,11 +20,14 @@ const world = (on: On, opts: { stdout?: string; exitCode?: number; stderr?: stri
   on('process.run', (_$, e) => {
     calls.argv.push([...e.argv])
     const isClipboard = e.argv[1] === 'clipboard'
-    const stdout = isClipboard
-      ? (opts.stdout ?? '[]')
-      : JSON.stringify({ owner: SID, isActive: false, cursor: null, entries: [] })
+    const isStatus = isClipboard && e.argv[2] === 'status'
+    const stdout = isStatus
+      ? JSON.stringify(opts.status ?? { enabled: false, agentAccess: true })
+      : isClipboard
+        ? (opts.stdout ?? '[]')
+        : JSON.stringify({ owner: SID, isActive: false, cursor: null, entries: [] })
     return {
-      value: { exitCode: isClipboard ? (opts.exitCode ?? 0) : 0, stdout, stderr: opts.stderr ?? '', isStdoutTruncated: false, isStderrTruncated: false },
+      value: { exitCode: isClipboard && !isStatus ? (opts.exitCode ?? 0) : 0, stdout, stderr: opts.stderr ?? '', isStdoutTruncated: false, isStderrTruncated: false },
     }
   })
   on('process.spawn', async function* () {
@@ -34,17 +40,34 @@ const world = (on: On, opts: { stdout?: string; exitCode?: number; stderr?: stri
   return calls
 }
 
-const clipboardCalls = (calls: Calls) => calls.argv.filter(argv => argv[1] === 'clipboard')
+const clipboardCalls = (calls: Calls) => calls.argv.filter(argv => argv[1] === 'clipboard' && argv[2] !== 'status')
+const settle = () => new Promise(resolve => setTimeout(resolve, 0))
 const callTool = ($: Parameters<Parameters<typeof test>[1]>[0], input: Record<string, unknown>) =>
   $.tool.call({ tool: TOOL, ...input } as unknown as Parameters<typeof $.tool.call>[0]) as Promise<{ result: string }>
 
 describe('Clipboard', () => {
-  test('das Tool wird bei Sessionstart hinter ToolSearch angemeldet', async ($, on) => {
+  test('bei abgeschaltetem Verlauf bleibt das Tool hinter ToolSearch', async ($, on) => {
     const calls = world(on)
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
-    const entry = calls.registered.find(r => r.name === 'clipboard')
-    expect(entry).toBeDefined()
-    expect(entry?.isDeferred).toBe(true)
+    await settle()
+    const entries = calls.registered.filter(r => r.name === 'clipboard')
+    expect(entries.length).toBe(1)
+    expect(entries[0]?.isDeferred).toBe(true)
+  })
+
+  test('bei freigegebenem Verlauf steht das Tool direkt in der Liste', async ($, on) => {
+    const calls = world(on, { status: { enabled: true, agentAccess: true } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const entries = calls.registered.filter(r => r.name === 'clipboard')
+    expect(entries.at(-1)?.isDeferred).toBe(false)
+  })
+
+  test('gesperrter Agent-Zugriff holt das Tool nicht nach vorn', async ($, on) => {
+    const calls = world(on, { status: { enabled: true, agentAccess: false } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    expect(calls.registered.filter(r => r.name === 'clipboard').every(r => r.isDeferred === true)).toBe(true)
   })
 
   test('list ruft die CLI mit Limit und --json', async ($, on) => {
@@ -66,8 +89,17 @@ describe('Clipboard', () => {
     const calls = world(on, { stdout: '{"text":"Fehler"}' })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     const out = await callTool($, { action: 'get', nr: 2 })
-    expect(clipboardCalls(calls)).toEqual([['whisperm8', 'clipboard', 'get', '--json', '2']])
+    expect(clipboardCalls(calls)).toEqual([['whisperm8', 'clipboard', 'get', '--json', '--', '2']])
     expect(out.result).toContain('Fehler')
+  })
+
+  test('get reicht Stücke langer Texte weiter (from, maxChars)', async ($, on) => {
+    const calls = world(on, { stdout: '{"text":"…","nextFrom":100}' })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await callTool($, { action: 'get', nr: '1', from: 50000, maxChars: 20000 })
+    expect(clipboardCalls(calls)).toEqual([
+      ['whisperm8', 'clipboard', 'get', '--json', '--from', '50000', '--max-chars', '20000', '--', '1'],
+    ])
   })
 
   test('fehlende Eingaben ergeben eine Meldung ohne CLI-Aufruf', async ($, on) => {

@@ -72,6 +72,12 @@ struct CLISkillExporter {
             resourceName: "whisperm8-chats-skill"
         )
 
+        /// Zwischenablage-Verlauf lesen (`whisperm8 clipboard …`).
+        static let clipboard = SkillDefinition(
+            name: "whisperm8-clipboard",
+            resourceName: "whisperm8-clipboard-skill"
+        )
+
         /// Session-weiter Delegations-Modus für GPT-Subagents.
         static let gptCoworker = SkillDefinition(
             name: "gpt-coworker",
@@ -100,6 +106,7 @@ struct CLISkillExporter {
             .transcription,
             .codexAgent,
             .chats,
+            .clipboard,
             .gptCoworker,
             .gptWorkflow,
         ]
