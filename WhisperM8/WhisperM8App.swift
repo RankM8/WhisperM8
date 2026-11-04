@@ -280,6 +280,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // das ist Opt-in, siehe AppPreferences.
         TerminalMetalWarmup.warmUpIfNeeded()
 
+        // Statusanzeige an der Notch (Standard aus): hängt nur einen
+        // Preference-Beobachter ein, solange sie nicht eingeschaltet ist.
+        NotchStatusController.shared.start()
+
         // Stillstands-Wächter: meldet, wenn der Main Thread nicht mehr
         // reagiert — unabhängig davon, wer ihn blockiert. Kostet zehn
         // Timer-Ticks pro Sekunde und läuft deshalb immer mit.

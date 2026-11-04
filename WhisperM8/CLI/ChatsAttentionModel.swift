@@ -65,13 +65,29 @@ enum AttentionModelBuilder {
         runtime: ChatsRuntimeInfo,
         now: Date
     ) -> (ChatsAttentionCategory, Int) {
-        switch runtime.status {
+        classify(
+            status: runtime.status,
+            lastTurnAt: entry.session.lastTurnAt,
+            since: runtime.since,
+            now: now
+        )
+    }
+
+    /// Rang-Logik ohne CLI-Typen, damit auch die Notch-Anzeige dieselbe
+    /// Einteilung nutzt (`NotchStatusModel`).
+    static func classify(
+        status: AgentSessionRuntimeStatus?,
+        lastTurnAt: Date?,
+        since: Date?,
+        now: Date
+    ) -> (ChatsAttentionCategory, Int) {
+        switch status {
         case .awaitingInput:
             return (.needsYou, 1)
         case .errored:
             return (.needsYou, 2)
         case .idle:
-            let reference = entry.session.lastTurnAt ?? runtime.since
+            let reference = lastTurnAt ?? since
             if let reference, now.timeIntervalSince(reference) <= freshDoneWindow {
                 return (.freshDone, 3)
             }

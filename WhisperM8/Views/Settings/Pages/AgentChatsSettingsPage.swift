@@ -144,6 +144,8 @@ struct AgentChatsWorkspaceSettingsTab: View {
             }
 
             StayAwakeSettingsSection()
+
+            NotchSettingsSection()
         }
         .onAppear {
             defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath

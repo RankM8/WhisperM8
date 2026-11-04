@@ -95,6 +95,7 @@ Doku-Einstieg: [docs/features/agent-chats/](docs/features/agent-chats/README.md)
 [claude-konten.md](docs/features/agent-chats/claude-konten.md), [gpt-konten.md](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board.md](docs/features/jarvis-board.md);
 Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
+Notch-Statusanzeige: [notch.md](docs/features/notch.md).
 
 ## Invarianten (nicht brechen)
 
@@ -168,7 +169,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
-`jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`.
+`jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`.
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 

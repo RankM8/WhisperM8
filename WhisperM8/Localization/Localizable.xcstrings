@@ -241,6 +241,16 @@
         }
       }
     },
+    "%lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld"
+          }
+        }
+      }
+    },
     "%lld available": {
       "localizations": {
         "de": {
@@ -411,6 +421,16 @@
         }
       }
     },
+    "%lld just finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld frisch fertig"
+          }
+        }
+      }
+    },
     "%lld left": {
       "localizations": {
         "de": {
@@ -531,6 +551,36 @@
         }
       }
     },
+    "%lld waiting for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf dich: %lld"
+          }
+        }
+      }
+    },
+    "%lld with an error": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mit Fehler"
+          }
+        }
+      }
+    },
+    "%lld working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet: %lld"
+          }
+        }
+      }
+    },
     "%lld/%lld selected": {
       "localizations": {
         "de": {
@@ -577,6 +627,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "(kein Output)"
+          }
+        }
+      }
+    },
+    "+%lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld"
           }
         }
       }
@@ -687,6 +747,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine kleine Karte an jeder Kachel des Jarvis-Boards: Arbeitspaket, was von dir gebraucht wird, Blockaden."
+          }
+        }
+      }
+    },
+    "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. Off by default.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein schmaler Streifen an der Notch (ohne Notch eine Pille oben am Bildschirm) zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, ein weiterer springt zum Chat. Standardmäßig aus."
           }
         }
       }
@@ -1671,6 +1741,16 @@
         }
       }
     },
+    "Automatic uses the built-in display with a notch, otherwise the main display.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch nimmt den eingebauten Bildschirm mit Notch, sonst den Hauptbildschirm."
+          }
+        }
+      }
+    },
     "Awake on power while a chat works, even with the lid closed": {
       "localizations": {
         "de": {
@@ -1931,6 +2011,16 @@
         }
       }
     },
+    "Built-in display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingebauter Bildschirm"
+          }
+        }
+      }
+    },
     "Built-in exact aliases: “Anna Stopp/Stop” also mutes; “Anna Resume/Resümee” also resumes. The carrier word and a short pause are still required.": {
       "localizations": {
         "de": {
@@ -2077,6 +2167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Änderungen gelten ab der nächsten Aufnahme. Bluetooth-Geräte können auf den Systemstandard zurückfallen."
+          }
+        }
+      }
+    },
+    "Chat Status at the Notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status an der Notch"
           }
         }
       }
@@ -2591,6 +2691,16 @@
         }
       }
     },
+    "Click a row to open the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Klick auf eine Zeile öffnet den Chat"
+          }
+        }
+      }
+    },
     "Click each button to grant permission": {
       "localizations": {
         "de": {
@@ -2727,6 +2837,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld schließen/archivieren"
+          }
+        }
+      }
+    },
+    "Closes the chat list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließt die Chat-Liste"
           }
         }
       }
@@ -3291,6 +3411,16 @@
         }
       }
     },
+    "Counts chats that just finished and briefly widens the strip when one does.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zählt Chats, die gerade fertig wurden, und verbreitert den Streifen kurz, wenn einer fertig wird."
+          }
+        }
+      }
+    },
     "Create & Log in…": {
       "localizations": {
         "de": {
@@ -3841,6 +3971,16 @@
         }
       }
     },
+    "Display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirm"
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "de": {
@@ -4087,6 +4227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehler"
+          }
+        }
+      }
+    },
+    "Esc closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esc schließt"
           }
         }
       }
@@ -4831,6 +4981,16 @@
         }
       }
     },
+    "Hide from screenshots and screen sharing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Aufnahmen und Bildschirmfreigabe ausblenden"
+          }
+        }
+      }
+    },
     "Hide pinned chats": {
       "localizations": {
         "de": {
@@ -5057,6 +5217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stimmt die Richtung einmal nicht, wiederhole dieselbe Phrase innerhalb von vier Sekunden. Das überstimmt die Annahme und schaltet trotzdem – so holt dich das zweimalige Frei-Wort immer aus dem Stumm-Zustand."
+          }
+        }
+      }
+    },
+    "In addition to clicking. Off by default so the list does not pop open when the pointer passes by.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
           }
         }
       }
@@ -5351,6 +5521,16 @@
         }
       }
     },
+    "Just finished": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frisch fertig"
+          }
+        }
+      }
+    },
     "Just pinged — next attempt from %@": {
       "localizations": {
         "de": {
@@ -5397,6 +5577,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kapazität unverändert lassen"
+          }
+        }
+      }
+    },
+    "Keeps chat titles out of recordings and shared screens.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hält Chat-Titel aus Aufnahmen und geteilten Bildschirmen heraus."
           }
         }
       }
@@ -5947,6 +6137,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mac schläft wie gewohnt"
+          }
+        }
+      }
+    },
+    "Main display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hauptbildschirm"
           }
         }
       }
@@ -6557,6 +6757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Braucht die Berechtigung „Bildschirmaufnahme“ (optional) – siehe Berechtigungen."
+          }
+        }
+      }
+    },
+    "Needs you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Braucht dich"
           }
         }
       }
@@ -7311,6 +7521,16 @@
         }
       }
     },
+    "Notch Status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch-Status"
+          }
+        }
+      }
+    },
     "Notes": {
       "localizations": {
         "de": {
@@ -7714,6 +7934,16 @@
         }
       }
     },
+    "Open the list on hover": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste beim Darüberfahren öffnen"
+          }
+        }
+      }
+    },
     "Open workspace %@ as grid": {
       "localizations": {
         "de": {
@@ -7740,6 +7970,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Öffnet das Terminal mit diesem Profil. Schließe dort die einmalige Anmeldung im Browser ab."
+          }
+        }
+      }
+    },
+    "Opens the chat list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnet die Chat-Liste"
           }
         }
       }
@@ -10244,6 +10484,16 @@
         }
       }
     },
+    "Show chat status at the notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status an der Notch anzeigen"
+          }
+        }
+      }
+    },
     "Show chat tasks in notes": {
       "localizations": {
         "de": {
@@ -10280,6 +10530,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bestätigen-Button (✓) im Overlay anzeigen"
+          }
+        }
+      }
+    },
+    "Show finished chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertige Chats anzeigen"
           }
         }
       }
@@ -10340,6 +10600,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notizen auf Raster-Kacheln anzeigen"
+          }
+        }
+      }
+    },
+    "Show or hide hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkey zum Ein- und Ausblenden"
           }
         }
       }
@@ -12564,6 +12834,16 @@
         }
       }
     },
+    "Turns the notch status on or off from anywhere.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet den Notch-Status von überall ein oder aus."
+          }
+        }
+      }
+    },
     "Turquoise": {
       "localizations": {
         "de": {
@@ -13794,6 +14074,16 @@
         }
       }
     },
+    "failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler"
+          }
+        }
+      }
+    },
     "folder not approved in the target account — switch again after the turn": {
       "localizations": {
         "de": {
@@ -14260,6 +14550,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "v%@ installiert: %@. Ein laufender Proxy nutzt das Update nach „Proxy stoppen“ + Neustart."
+          }
+        }
+      }
+    },
+    "waiting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet"
           }
         }
       }
