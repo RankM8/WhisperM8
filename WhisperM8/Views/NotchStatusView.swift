@@ -68,6 +68,9 @@ struct NotchPalette {
 /// Statusanzeige an der Notch: Ruhezustand (Zähler), „braucht dich" (kurz
 /// verbreitert) und aufgeklappte Liste. Keine eigene Dauerbewegung: das Fenster
 /// wechselt die Größe einmalig, die Inhalte blenden einmal ein.
+///
+/// An der Notch füllt ein Band genau die Aussparung, der Inhalt hängt darunter
+/// (`NotchGeometry.layout`). Die Menüleiste neben der Notch bleibt frei.
 struct NotchStatusView: View {
     let display: NotchDisplay
     var onToggle: () -> Void = {}
@@ -76,17 +79,12 @@ struct NotchStatusView: View {
     var onHover: (Bool) -> Void = { _ in }
 
     private var palette: NotchPalette { display.isNotch ? .notch : .pill }
-    private var headerHeight: CGFloat {
-        if case .notch(_, let height) = display.style { return height }
-        return NotchGeometry.pillHeight
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onToggle) {
                 header
-                    .frame(height: headerHeight)
-                    .contentShape(Rectangle())
+                    .contentShape(shape)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(headerAccessibilityLabel)
@@ -99,21 +97,25 @@ struct NotchStatusView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(shape.fill(palette.background))
-        .overlay(shape.strokeBorder(palette.border, lineWidth: display.isNotch ? 0 : 1))
+        // Mittig gezogen und danach beschnitten: sichtbar bleibt 1 pt innen.
+        .overlay(shape.stroke(palette.border, lineWidth: display.isNotch ? 0 : 2))
         .clipShape(shape)
+        .contentShape(shape)
         .ignoresSafeArea()
         .onHover(perform: onHover)
         .animation(.easeOut(duration: 0.22), value: display)
     }
 
-    private var shape: UnevenRoundedRectangle {
-        if display.isNotch {
-            return UnevenRoundedRectangle(bottomLeadingRadius: 14, bottomTrailingRadius: 14)
+    private var shape: AnyShape {
+        if case .notch(let notchWidth, let notchHeight) = display.style {
+            return AnyShape(NotchHangingShape(
+                bandWidth: notchWidth, bandHeight: notchHeight,
+                bottomRadius: display.isExpanded ? 18 : 11))
         }
-        let radius: CGFloat = display.isExpanded ? 16 : headerHeight / 2
-        return UnevenRoundedRectangle(
+        let radius: CGFloat = display.isExpanded ? 16 : NotchGeometry.pillHeight / 2
+        return AnyShape(UnevenRoundedRectangle(
             topLeadingRadius: radius, bottomLeadingRadius: radius,
-            bottomTrailingRadius: radius, topTrailingRadius: radius)
+            bottomTrailingRadius: radius, topTrailingRadius: radius))
     }
 
     // MARK: Kopfzeile
@@ -121,48 +123,33 @@ struct NotchStatusView: View {
     @ViewBuilder
     private var header: some View {
         switch display.style {
-        case .notch(let notchWidth, _):
-            HStack(spacing: 0) {
-                leftWing.frame(maxWidth: .infinity, alignment: .leading)
-                Color.clear.frame(width: notchWidth)
-                rightWing.frame(maxWidth: .infinity, alignment: .leading)
+        case .notch(_, let notchHeight):
+            VStack(spacing: 0) {
+                // Die Aussparung selbst: schwarz, ohne Inhalt.
+                Color.clear.frame(height: notchHeight)
+                headerRow
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: NotchGeometry.chinHeight)
             }
         case .pill:
-            HStack(spacing: 12) {
-                if let alert = display.alert, !display.isExpanded {
-                    if display.summary.working > 0 { chip(.working, display.summary.working) }
-                    NotchAlertLabel(alert: alert, palette: palette)
-                } else {
-                    chips
-                }
-            }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity)
+            headerRow
+                .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
+                .frame(height: NotchGeometry.pillHeight)
         }
     }
 
-    /// Links: arbeitende Chats.
-    private var leftWing: some View {
-        HStack(spacing: 8) {
-            if display.summary.working > 0 { chip(.working, display.summary.working) }
-        }
-        .padding(.leading, 14)
-    }
-
-    /// Rechts: im Alarm der Chat-Name, sonst Warten, Fehler, frisch fertig.
+    /// Zähler, im Alarm der Chat-Name mit den arbeitenden Chats davor.
     @ViewBuilder
-    private var rightWing: some View {
-        if let alert = display.alert, !display.isExpanded {
-            NotchAlertLabel(alert: alert, palette: palette)
-                .padding(.leading, 14)
-                .padding(.trailing, 12)
-        } else {
-            HStack(spacing: 10) {
-                if display.summary.waiting > 0 { chip(.waiting, display.summary.waiting) }
-                if display.summary.errored > 0 { chip(.errored, display.summary.errored) }
-                if display.summary.freshDone > 0 { chip(.done, display.summary.freshDone) }
+    private var headerRow: some View {
+        HStack(spacing: 12) {
+            if let alert = display.alert, !display.isExpanded {
+                if display.summary.working > 0 { chip(.working, display.summary.working) }
+                NotchAlertLabel(alert: alert, palette: palette)
+            } else {
+                chips
             }
-            .padding(.leading, 12)
         }
     }
 
@@ -196,6 +183,61 @@ struct NotchStatusView: View {
 }
 
 // MARK: - Bausteine
+
+/// Umriss an der Notch: oben ein Band in Breite der Aussparung, darunter der
+/// Körper. Ist der Körper breiter, gehen Band und Körper mit kleinen
+/// Hohlkehlen ineinander über (wie die Menüleiste an der Notch).
+struct NotchHangingShape: Shape {
+    var bandWidth: CGFloat
+    var bandHeight: CGFloat
+    var bottomRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let width = rect.width
+        let bandW = min(bandWidth, width)
+        let bandH = min(bandHeight, rect.height)
+        let bodyH = rect.height - bandH
+        let side = (width - bandW) / 2
+        let bottom = max(0, min(bottomRadius, bodyH / 2, width / 2))
+
+        let minX = rect.minX, maxX = rect.maxX, minY = rect.minY, maxY = rect.maxY
+        let bandMinX = minX + side, bandMaxX = bandMinX + bandW
+        let bodyTop = minY + bandH
+        var path = Path()
+
+        guard side >= 0.5 else {
+            // Körper so breit wie die Notch: Rechteck mit runden unteren Ecken.
+            path.move(to: CGPoint(x: minX, y: minY))
+            path.addLine(to: CGPoint(x: maxX, y: minY))
+            corner(&path, CGPoint(x: maxX, y: maxY), CGPoint(x: minX, y: maxY), bottom)
+            corner(&path, CGPoint(x: minX, y: maxY), CGPoint(x: minX, y: minY), bottom)
+            path.closeSubpath()
+            return path
+        }
+
+        let fillet = max(0, min(6, side / 2, bandH))
+        let top = max(0, min(8, side - fillet, bodyH - bottom))
+        path.move(to: CGPoint(x: bandMinX, y: minY))
+        path.addLine(to: CGPoint(x: bandMaxX, y: minY))
+        corner(&path, CGPoint(x: bandMaxX, y: bodyTop), CGPoint(x: maxX, y: bodyTop), fillet)
+        corner(&path, CGPoint(x: maxX, y: bodyTop), CGPoint(x: maxX, y: maxY), top)
+        corner(&path, CGPoint(x: maxX, y: maxY), CGPoint(x: minX, y: maxY), bottom)
+        corner(&path, CGPoint(x: minX, y: maxY), CGPoint(x: minX, y: bodyTop), bottom)
+        corner(&path, CGPoint(x: minX, y: bodyTop), CGPoint(x: bandMinX, y: bodyTop), top)
+        corner(&path, CGPoint(x: bandMinX, y: bodyTop), CGPoint(x: bandMinX, y: minY), fillet)
+        path.closeSubpath()
+        return path
+    }
+
+    /// Ecke bei `point`, gerundet in Richtung `next`; Radius 0 ergibt eine Spitze.
+    private func corner(_ path: inout Path, _ point: CGPoint, _ next: CGPoint, _ radius: CGFloat) {
+        if radius < 0.5 {
+            path.addLine(to: point)
+        } else {
+            path.addArc(tangent1End: point, tangent2End: next, radius: radius)
+        }
+    }
+}
 
 /// Statuspunkt in den Formen von `AgentStatusAccessibility` (Scheibe, Raute,
 /// Ring), aber mit der Palette der Anzeige statt der Theme-Farben.
@@ -416,11 +458,17 @@ struct NotchRowButton: View {
             .frame(height: NotchGeometry.rowHeight, alignment: .top)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(row.category == .needsYou ? palette.attentionTint : (isHovering ? palette.rowHover : .clear)))
+                    .fill(background))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .accessibilityLabel(AgentRowAccessibility.summary(title: row.title, status: row.status, project: row.project))
+    }
+
+    /// Wartende Zeilen leicht amber, Fehler leicht rot, sonst nur beim Darüberfahren.
+    private var background: Color {
+        guard row.category == .needsYou else { return isHovering ? palette.rowHover : .clear }
+        return row.status == .errored ? palette.error.opacity(0.14) : palette.attentionTint
     }
 }

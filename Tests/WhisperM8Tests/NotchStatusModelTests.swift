@@ -82,6 +82,98 @@ final class NotchStatusModelTests: XCTestCase {
         }
     }
 
+    /// Dieselben Chats durch den echten CLI-Builder und durch die Notch:
+    /// gleiche Reihenfolge, gleiche Kategorien.
+    func testOrderMatchesTheCLIBoard() {
+        let project = AgentProject(name: "p", path: "/tmp/p")
+        func session(_ title: String, lastTurnAgo: TimeInterval? = nil, activityAgo: TimeInterval = 3_600) -> AgentChatSession {
+            AgentChatSession(
+                provider: .claude, projectID: project.id, title: title,
+                lastActivityAt: now.addingTimeInterval(-activityAgo),
+                lastTurnAt: lastTurnAgo.map { now.addingTimeInterval(-$0) })
+        }
+        let cases: [(AgentChatSession, AgentSessionRuntimeStatus?, TimeInterval?)] = [
+            (session("ready-alt"), .idle, 9_000),
+            (session("arbeitet-neu"), .working, 5),
+            (session("arbeitet-alt"), .working, 900),
+            (session("fertig", lastTurnAgo: 100), .idle, 100),
+            (session("fertig-ohne-turn"), .idle, 50),
+            (session("fehler"), .errored, 30),
+            (session("wartet-alt"), .awaitingInput, 400),
+            (session("wartet-neu"), .awaitingInput, 10),
+            (session("ohne-since", activityAgo: 20), .working, nil),
+        ]
+        let board = AttentionModelBuilder.build(
+            items: cases.map { session, status, sinceAgo in
+                (ChatsSessionEntry(session: session, projectName: "p", projectPath: "/tmp/p"),
+                 ChatsRuntimeInfo(status: status, source: "app", since: sinceAgo.map { now.addingTimeInterval(-$0) },
+                                  revision: nil, transcriptPath: nil, transcriptSizeBytes: nil, availability: .available))
+            },
+            now: now)
+        let inputs = cases.map { session, status, sinceAgo in
+            NotchChatInput(
+                id: session.id, title: session.title, project: "p", status: status,
+                statusSince: sinceAgo.map { now.addingTimeInterval(-$0) },
+                lastTurnAt: session.lastTurnAt, lastActivityAt: session.lastActivityAt, activity: nil)
+        }
+        let rows = NotchStatusModel.rows(from: inputs, now: now, showFreshDone: true)
+        XCTAssertEqual(rows.map(\.title), board.items.map(\.entry.session.title))
+        XCTAssertEqual(rows.map(\.category), board.items.map(\.category))
+        XCTAssertEqual(rows.map(\.rank), board.items.map(\.rank))
+    }
+
+    // MARK: Alarm-Gültigkeit und Turn-Enden
+
+    func testAlertDisappearsOnceItsReasonIsGone() {
+        let id = UUID()
+        let waiting = NotchAlert(sessionID: id, title: "x", kind: .awaitingInput)
+        XCTAssertTrue(NotchStatusModel.isStillValid(waiting, statuses: [id: .awaitingInput]))
+        XCTAssertFalse(NotchStatusModel.isStillValid(waiting, statuses: [id: .working]))
+        // Chat gelöscht oder archiviert: kein Status mehr.
+        XCTAssertFalse(NotchStatusModel.isStillValid(waiting, statuses: [:]))
+
+        let failed = NotchAlert(sessionID: id, title: "x", kind: .errored)
+        XCTAssertTrue(NotchStatusModel.isStillValid(failed, statuses: [id: .errored]))
+        XCTAssertFalse(NotchStatusModel.isStillValid(failed, statuses: [id: .working]))
+
+        let done = NotchAlert(sessionID: id, title: "x", kind: .finished)
+        XCTAssertTrue(NotchStatusModel.isStillValid(done, statuses: [id: .idle]))
+        XCTAssertFalse(NotchStatusModel.isStillValid(done, statuses: [id: .working]))
+    }
+
+    /// Der Workspace kennt das Turn-Ende noch nicht (`lastTurnAt` ist alt),
+    /// die Anzeige hat `working → idle` aber gesehen: frisch fertig.
+    func testObservedTurnEndBeatsAStaleLastTurnAt() {
+        var stale = input("gerade fertig", .idle, since: 2, lastTurnAgo: 7_200)
+        let ends = [stale.id: now.addingTimeInterval(-2)]
+        XCTAssertEqual(NotchStatusModel.rows(from: [stale], now: now, showFreshDone: true).first?.category, .idle)
+        let patched = NotchStatusModel.applyingObservedTurnEnds([stale], ends)
+        XCTAssertEqual(NotchStatusModel.rows(from: patched, now: now, showFreshDone: true).first?.category, .freshDone)
+        XCTAssertEqual(NotchStatusModel.nextFreshDoneExpiry(in: patched, now: now),
+                       now.addingTimeInterval(-2 + AttentionModelBuilder.freshDoneWindow))
+
+        // Ein neuerer Workspace-Wert gewinnt, und arbeitende Chats bleiben unberührt.
+        stale.lastTurnAt = now
+        XCTAssertEqual(NotchStatusModel.applyingObservedTurnEnds([stale], ends).first?.lastTurnAt, now)
+        let working = input("arbeitet", .working, since: 1, lastTurnAgo: 7_200)
+        XCTAssertEqual(
+            NotchStatusModel.applyingObservedTurnEnds([working], [working.id: now]).first?.lastTurnAt,
+            working.lastTurnAt)
+    }
+
+    func testPanelModePrefersExpandedThenAlert() {
+        let rows = NotchStatusModel.rows(from: [
+            input("w", .working, since: 1), input("a", .awaitingInput, since: 2),
+        ], now: now, showFreshDone: true)
+        let sections = NotchStatusModel.sections(of: rows)
+        let alert = NotchAlert(sessionID: UUID(), title: "a", kind: .awaitingInput)
+        XCTAssertEqual(NotchStatusModel.panelMode(isExpanded: false, alert: nil, rows: rows, sections: []),
+                       .compact(chipCount: 2))
+        XCTAssertEqual(NotchStatusModel.panelMode(isExpanded: false, alert: alert, rows: rows, sections: []), .alert)
+        XCTAssertEqual(NotchStatusModel.panelMode(isExpanded: true, alert: alert, rows: rows, sections: sections),
+                       .expanded(rowCount: 2, sectionCount: 2))
+    }
+
     // MARK: Zähler und Abschnitte
 
     func testSummaryCountsEachKind() {
@@ -192,8 +284,8 @@ final class NotchAlertTrackerTests: XCTestCase {
 
     func testFirstSnapshotIsOnlyTheBaseline() {
         var tracker = NotchAlertTracker()
-        XCTAssertNil(ingest(&tracker, [a: .awaitingInput]))
-        XCTAssertNil(ingest(&tracker, [a: .awaitingInput], at: 1))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput, b: .errored]))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput, b: .errored], at: 1))
     }
 
     func testTransitionToAwaitingInputFires() {
@@ -203,10 +295,62 @@ final class NotchAlertTrackerTests: XCTestCase {
         XCTAssertEqual(alert, NotchAlert(sessionID: a, title: "Alpha", kind: .awaitingInput))
     }
 
-    func testNewChatThatStartsAwaitingFires() {
+    /// Beim App-Start füllt sich der Status-Store nach und nach. Chats, die
+    /// dabei schon wartend oder mit Fehler auftauchen, sind Ausgangslage.
+    func testChatsAppearingAfterStartDoNotFire() {
         var tracker = NotchAlertTracker()
-        _ = ingest(&tracker, [:])
+        XCTAssertNil(ingest(&tracker, [:]))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput], at: 1))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput, b: .errored], at: 2))
+        // Danach meldet ein echter Wechsel wieder.
+        _ = ingest(&tracker, [a: .working, b: .errored], at: 3)
+        XCTAssertEqual(ingest(&tracker, [a: .awaitingInput, b: .errored], at: 4)?.sessionID, a)
+    }
+
+    func testChatThatDisappearsAndComesBackIsBaselineAgain() {
+        var tracker = NotchAlertTracker()
+        _ = ingest(&tracker, [a: .working])
+        _ = ingest(&tracker, [:], at: 1)
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput], at: 2))
+    }
+
+    func testRepeatedSnapshotWithoutChangeDoesNotFireTwice() {
+        var tracker = NotchAlertTracker()
+        _ = ingest(&tracker, [a: .working])
+        XCTAssertNotNil(ingest(&tracker, [a: .awaitingInput], at: 1))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput], at: 2))
+        XCTAssertNil(ingest(&tracker, [a: .awaitingInput], at: 60))
+    }
+
+    func testObservedTurnEndsAreRecordedAndPruned() {
+        var tracker = NotchAlertTracker()
+        _ = ingest(&tracker, [a: .working, b: .awaitingInput])
+        // Auch bei ausgeschaltetem „fertig" und aktiver App wird das Turn-Ende gemerkt.
+        _ = ingest(&tracker, [a: .idle, b: .idle], showFreshDone: false, appIsActive: true, at: 5)
+        XCTAssertEqual(tracker.observedTurnEnds, [a: now.addingTimeInterval(5)])
+        _ = ingest(&tracker, [b: .idle], at: 6)
+        XCTAssertTrue(tracker.observedTurnEnds.isEmpty)
+    }
+
+    func testDifferentKindsForTheSameChatAreNotThrottledTogether() {
+        var tracker = NotchAlertTracker()
+        _ = ingest(&tracker, [a: .working])
         XCTAssertEqual(ingest(&tracker, [a: .awaitingInput], at: 1)?.kind, .awaitingInput)
+        XCTAssertEqual(ingest(&tracker, [a: .errored], at: 2)?.kind, .errored)
+    }
+
+    func testThreeSimultaneousEventsOrderErrorWaitingDone() {
+        let c = UUID()
+        var tracker = NotchAlertTracker()
+        let titles = [a: "Alpha", b: "Beta", c: "Gamma"]
+        _ = tracker.ingest(statuses: [a: .working, b: .working, c: .working], titles: titles,
+                           showFreshDone: true, appIsActive: false, now: now)
+        let alert = tracker.ingest(statuses: [a: .idle, b: .awaitingInput, c: .awaitingInput], titles: titles,
+                                   showFreshDone: true, appIsActive: false, now: now.addingTimeInterval(1))
+        XCTAssertEqual(alert?.kind, .awaitingInput)
+        XCTAssertEqual(alert?.extraCount, 2)
+        // Zwei wartende: gleiche Stufe, die Wahl ist stabil (nicht zufällig).
+        XCTAssertEqual(alert?.sessionID, [b, c].min { $0.uuidString < $1.uuidString })
     }
 
     func testErrorFires() {
@@ -325,16 +469,93 @@ final class NotchGeometryTests: XCTestCase {
         XCTAssertNil(NotchGeometry.selectScreen(choice: .auto, screens: [], mainDisplayID: nil))
     }
 
-    func testNotchCompactFrameHangsFlushAtTheTopAroundTheNotch() {
+    func testNotchCompactFrameIsTheNotchPlusAChinBelow() {
         let screen = notchScreen()
         let frame = NotchGeometry.panelFrame(screen: screen, mode: .compact(chipCount: 2))
         XCTAssertEqual(frame.maxY, screen.frame.maxY)
-        XCTAssertEqual(frame.height, 38)
+        XCTAssertEqual(frame.height, 38 + NotchGeometry.chinHeight)
         XCTAssertEqual(frame.midX, screen.notchCenterX, accuracy: 0.001)
-        XCTAssertEqual(frame.width, 185 + 2 * NotchGeometry.compactWing, accuracy: 0.001)
+        // Nicht breiter als die Notch: links und rechts bleibt die Menüleiste frei.
+        XCTAssertEqual(frame.width, 185, accuracy: 0.001)
     }
 
-    func testNotchAlertIsWiderThanCompact() {
+    // MARK: Menüleiste bleibt frei
+
+    /// Bildschirme mit Notch in verschiedenen Größen und Skalierungen,
+    /// auch rechts neben einem externen Hauptbildschirm.
+    private var notchScreens: [NotchScreenInfo] {
+        [
+            notchScreen(),
+            // 16 Zoll, Standard: 1728 x 1117, Notch ca. 190 pt, Leiste 38 pt.
+            NotchScreenInfo(
+                displayID: 3, frame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
+                visibleFrame: CGRect(x: 0, y: 0, width: 1728, height: 1079), safeAreaTop: 38,
+                auxiliaryLeftWidth: 769, auxiliaryRightWidth: 769, isBuiltIn: true),
+            // 13 Zoll Air, „Mehr Platz": schmalere Leiste.
+            NotchScreenInfo(
+                displayID: 4, frame: CGRect(x: 0, y: 0, width: 1710, height: 1112),
+                visibleFrame: CGRect(x: 0, y: 0, width: 1710, height: 1080), safeAreaTop: 32,
+                auxiliaryLeftWidth: 772, auxiliaryRightWidth: 772, isBuiltIn: true),
+            // Notch-Bildschirm rechts unterhalb eines großen Hauptbildschirms.
+            NotchScreenInfo(
+                displayID: 5, frame: CGRect(x: 2560, y: -300, width: 1512, height: 982),
+                visibleFrame: CGRect(x: 2560, y: -300, width: 1512, height: 944), safeAreaTop: 38,
+                auxiliaryLeftWidth: 663.5, auxiliaryRightWidth: 663.5, isBuiltIn: true),
+        ]
+    }
+
+    private var allModes: [NotchPanelMode] {
+        (0...4).map { NotchPanelMode.compact(chipCount: $0) } + [
+            .alert, .expanded(rowCount: 1, sectionCount: 1), .expanded(rowCount: 40, sectionCount: 4),
+        ]
+    }
+
+    func testNothingVisibleTouchesTheMenuBarBesideTheNotch() {
+        for screen in notchScreens {
+            let areas = NotchGeometry.menuBarItemAreas(screen: screen)
+            XCTAssertEqual(areas.count, 2)
+            for mode in allModes {
+                let layout = NotchGeometry.layout(screen: screen, mode: mode)
+                // In der Menüleiste nur die Aussparung selbst.
+                XCTAssertEqual(layout.band.width, screen.notchWidth, accuracy: 0.001, "\(mode)")
+                XCTAssertEqual(layout.band.midX, screen.notchCenterX, accuracy: 0.001, "\(mode)")
+                XCTAssertEqual(layout.band.maxY, screen.frame.maxY, accuracy: 0.001, "\(mode)")
+                XCTAssertEqual(layout.band.height, screen.safeAreaTop, accuracy: 0.001, "\(mode)")
+                // Der Körper hängt ganz unter der Menüleiste.
+                XCTAssertLessThanOrEqual(layout.body.maxY, screen.frame.maxY - screen.safeAreaTop + 0.001, "\(mode)")
+                for area in areas {
+                    XCTAssertLessThan(layout.band.intersection(area).width, 0.001, "\(mode)")
+                    XCTAssertTrue(layout.body.intersection(area).isEmpty, "\(mode)")
+                }
+                // Fenster = Band und Körper, bündig an der Oberkante, auf dem Bildschirm.
+                XCTAssertEqual(layout.frame, layout.band.union(layout.body))
+                XCTAssertTrue(screen.frame.contains(layout.frame), "\(mode)")
+            }
+        }
+    }
+
+    func testPillNeverTouchesTheMenuBar() {
+        let screens = [plainScreen(id: 2), plainScreen(id: 6, x: -1920)]
+        for screen in screens {
+            let bar = NotchGeometry.menuBarItemAreas(screen: screen)
+            XCTAssertEqual(bar.count, 1)
+            for mode in allModes {
+                let frame = NotchGeometry.panelFrame(screen: screen, mode: mode)
+                XCTAssertTrue(frame.intersection(bar[0]).isEmpty, "\(mode)")
+                XCTAssertTrue(screen.frame.contains(frame), "\(mode)")
+                XCTAssertEqual(frame.midX, screen.frame.midX, accuracy: 0.001)
+            }
+        }
+    }
+
+    func testManyChipsWidenOnlyTheChinNotTheBand() {
+        let screen = notchScreen()
+        let layout = NotchGeometry.layout(screen: screen, mode: .compact(chipCount: 4))
+        XCTAssertGreaterThanOrEqual(layout.body.width, NotchGeometry.chipsWidth(chipCount: 4))
+        XCTAssertEqual(layout.band.width, 185, accuracy: 0.001)
+    }
+
+    func testNotchAlertIsWiderThanCompactAndCentered() {
         let screen = notchScreen()
         let compact = NotchGeometry.panelFrame(screen: screen, mode: .compact(chipCount: 1))
         let alert = NotchGeometry.panelFrame(screen: screen, mode: .alert)
@@ -391,6 +612,26 @@ final class NotchFullscreenDetectorTests: XCTestCase {
     func testMaximizedWindowBelowTheMenuBarIsNotFullscreen() {
         let windows = [NotchWindowSample(layer: 0, bounds: CGRect(x: 0, y: 38, width: 1512, height: 944), ownerPID: 500)]
         XCTAssertFalse(NotchFullscreenDetector.isFullscreen(screenFrameQuartz: screen, windows: windows, ownPID: 1))
+    }
+
+    /// Vollbild unter der Kamera (Standard auf Notch-Bildschirmen): zählt nur,
+    /// wenn das System Vollbild meldet; sonst ist es ein maximiertes Fenster
+    /// bei ausgeblendetem Dock.
+    func testFullscreenBelowTheNotchNeedsTheSystemFlag() {
+        let belowNotch = [NotchWindowSample(layer: 0, bounds: CGRect(x: 0, y: 38, width: 1512, height: 944), ownerPID: 500)]
+        XCTAssertTrue(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: belowNotch, ownPID: 1, systemReportsFullScreen: true))
+        XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: belowNotch, ownPID: 1, systemReportsFullScreen: false))
+        // Ohne Notch gibt es den Fall nicht.
+        XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 0, windows: belowNotch, ownPID: 1, systemReportsFullScreen: true))
+    }
+
+    func testFullscreenOnAnotherScreenDoesNotHideThisOne() {
+        let other = [NotchWindowSample(layer: 0, bounds: CGRect(x: 1512, y: 0, width: 2560, height: 1440), ownerPID: 500)]
+        XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: other, ownPID: 1, systemReportsFullScreen: true))
     }
 
     func testOwnWindowsAndOtherLayersDoNotCount() {

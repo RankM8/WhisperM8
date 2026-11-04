@@ -142,6 +142,37 @@ enum NotchStatusModel {
     static func isVisible(summary: NotchSummary, isExpanded: Bool, alert: NotchAlert?) -> Bool {
         isExpanded || alert != nil || summary.hasActivity
     }
+
+    /// Darstellungsart: aufgeklappt vor Alarm vor Ruhe.
+    static func panelMode(isExpanded: Bool, alert: NotchAlert?, rows: [NotchRow], sections: [NotchSection]) -> NotchPanelMode {
+        if isExpanded { return .expanded(rowCount: rows.count, sectionCount: sections.count) }
+        if alert != nil { return .alert }
+        return .compact(chipCount: summary(of: rows).chipCount)
+    }
+
+    /// Steht der Anlass des Alarms noch? Antwortet man in den 4 Sekunden, ist
+    /// der Chat gelöscht oder archiviert, verschwindet die Verbreiterung sofort,
+    /// statt noch „wartet" zu zeigen.
+    static func isStillValid(_ alert: NotchAlert, statuses: [UUID: AgentSessionRuntimeStatus]) -> Bool {
+        switch (alert.kind, statuses[alert.sessionID]) {
+        case (.awaitingInput, .awaitingInput?), (.errored, .errored?), (.finished, .idle?): return true
+        default: return false
+        }
+    }
+
+    /// Ergänzt `lastTurnAt` um Turn-Enden, die die Anzeige selbst gesehen hat
+    /// (`working → idle`). Der Workspace schreibt `lastTurnAt` erst, wenn das
+    /// Transkript das Turn-Ende zeigt; das kann nach dem Statuswechsel kommen,
+    /// und ohne Ergänzung stünde ein gerade fertiger Chat als „bereit" da.
+    static func applyingObservedTurnEnds(_ inputs: [NotchChatInput], _ ends: [UUID: Date]) -> [NotchChatInput] {
+        guard !ends.isEmpty else { return inputs }
+        return inputs.map { input in
+            guard input.status == .idle, let observed = ends[input.id] else { return input }
+            var copy = input
+            copy.lastTurnAt = max(input.lastTurnAt ?? observed, observed)
+            return copy
+        }
+    }
 }
 
 // MARK: - „Braucht dich"-Auslöser
@@ -164,23 +195,28 @@ struct NotchAlert: Equatable {
 /// Erkennt aus Status-Schnappschüssen, wann die Anzeige „braucht dich" melden
 /// soll. Reiner Wert, der Aufrufer reicht `now` herein.
 ///
-/// - Der erste Schnappschuss ist nur die Ausgangslage: ein beim Start bereits
-///   wartender Chat blitzt nicht auf (er steht ohnehin als Amber-Zähler da).
-/// - Ausgelöst wird beim Wechsel nach `awaitingInput`, nach `errored` und
-///   bei `working → idle` (frisch fertig).
+/// - Ausgelöst wird nur bei einem echten Wechsel eines schon bekannten Chats:
+///   nach `awaitingInput`, nach `errored` und bei `working → idle` (frisch
+///   fertig). Ein Chat, der zum ersten Mal auftaucht, ist Ausgangslage. Das
+///   deckt den App-Start ab (der Status-Store füllt sich erst nach und nach,
+///   schon wartende Chats blitzen trotzdem nicht auf) und neue Chats.
 /// - Derselbe Chat mit derselben Art löst höchstens alle `cooldown` Sekunden
 ///   erneut aus (Status, der zwischen Warten und Arbeiten flattert).
 struct NotchAlertTracker {
     static let cooldown: TimeInterval = 20
 
-    private var previous: [UUID: AgentSessionRuntimeStatus]?
+    private var previous: [UUID: AgentSessionRuntimeStatus] = [:]
     private var lastFired: [String: Date] = [:]
+    /// Selbst beobachtete Turn-Enden (`working → idle`), unabhängig davon, ob
+    /// ein Alarm ausgelöst wurde. Nur Chats, die noch einen Status haben.
+    private(set) var observedTurnEnds: [UUID: Date] = [:]
 
     init() {}
 
     mutating func reset() {
-        previous = nil
+        previous = [:]
         lastFired = [:]
+        observedTurnEnds = [:]
     }
 
     mutating func ingest(
@@ -190,11 +226,16 @@ struct NotchAlertTracker {
         appIsActive: Bool,
         now: Date
     ) -> NotchAlert? {
-        defer { previous = statuses }
-        guard let previous else { return nil }
+        let previous = self.previous
+        self.previous = statuses
+        observedTurnEnds = observedTurnEnds.filter { statuses[$0.key] != nil }
+        // Abkühl-Einträge räumen, damit das Wörterbuch nicht mit jedem Chat wächst.
+        lastFired = lastFired.filter { now.timeIntervalSince($0.value) < Self.cooldown }
 
         var fired: [(kind: NotchAlertKind, id: UUID)] = []
-        for (id, status) in statuses where previous[id] != status {
+        for (id, status) in statuses {
+            guard let before = previous[id], before != status else { continue }
+            if before == .working, status == .idle { observedTurnEnds[id] = now }
             let kind: NotchAlertKind?
             switch status {
             case .awaitingInput: kind = .awaitingInput
@@ -202,7 +243,7 @@ struct NotchAlertTracker {
             case .idle:
                 // Frisch fertig nur, wenn der Chat vorher wirklich gearbeitet hat,
                 // und nicht, solange man ohnehin in WhisperM8 arbeitet.
-                kind = (previous[id] == .working && showFreshDone && !appIsActive) ? .finished : nil
+                kind = (before == .working && showFreshDone && !appIsActive) ? .finished : nil
             case .working, .stopped: kind = nil
             }
             guard let kind else { continue }

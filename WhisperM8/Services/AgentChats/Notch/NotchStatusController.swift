@@ -128,6 +128,10 @@ final class NotchStatusController {
     private var inputs: [NotchChatInput] = []
     private var lastDisplay: NotchDisplay?
     private var lastFrame: CGRect?
+    /// Gewählter Bildschirm; neu bestimmt bei Bildschirmwechsel und Einstellung.
+    private var cachedScreen: NotchScreenInfo??
+    /// Zählt Vollbild-Prüfungen, damit eine überholte Antwort verworfen wird.
+    private var fullscreenGeneration = 0
 
     private var generalCancellables = Set<AnyCancellable>()
     private var activeCancellables = Set<AnyCancellable>()
@@ -185,6 +189,7 @@ final class NotchStatusController {
         guard force || new != config else { return }
         let wasActive = config.isActive
         config = new
+        cachedScreen = nil
         if new.isActive {
             if !wasActive || force { activate() }
             panel?.sharingType = new.hideFromCapture ? .none : .readOnly
@@ -208,6 +213,7 @@ final class NotchStatusController {
             .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.lastFrame = nil
+                self?.cachedScreen = nil
                 self?.scheduleFullscreenCheck()
                 self?.render()
             }
@@ -229,11 +235,13 @@ final class NotchStatusController {
         expiryTask?.cancel(); expiryTask = nil
         hoverTask?.cancel(); hoverTask = nil
         fullscreenRecheckTask?.cancel(); fullscreenRecheckTask = nil
+        fullscreenGeneration += 1
         collapse(rebuildAfter: false)
         alert = nil
         inputs = []
         lastDisplay = nil
         lastFrame = nil
+        cachedScreen = nil
         isFullscreenHidden = false
         panel?.orderOut(nil)
     }
@@ -246,7 +254,7 @@ final class NotchStatusController {
         let statuses = statusStore.statuses
         let current = now()
         let workspace = workspaceProvider()
-        inputs = NotchInputBuilder.inputs(
+        let built = NotchInputBuilder.inputs(
             statuses: statuses,
             workspace: workspace,
             statusSince: { [activityStore] in activityStore.statusSince(for: $0) },
@@ -255,15 +263,20 @@ final class NotchStatusController {
         // Auslöser: nur über die Chats, die die Anzeige auch kennt.
         var relevant: [UUID: AgentSessionRuntimeStatus] = [:]
         var titles: [UUID: String] = [:]
-        for input in inputs {
+        for input in built {
             if let status = input.status { relevant[input.id] = status }
             titles[input.id] = input.title
         }
-        if let fired = tracker.ingest(
+        let fired = tracker.ingest(
             statuses: relevant, titles: titles, showFreshDone: config.showFreshDone,
-            appIsActive: appIsActive(), now: current) {
-            show(alert: fired)
+            appIsActive: appIsActive(), now: current)
+        inputs = NotchStatusModel.applyingObservedTurnEnds(built, tracker.observedTurnEnds)
+
+        if let alert, !NotchStatusModel.isStillValid(alert, statuses: relevant) {
+            alertTask?.cancel(); alertTask = nil
+            self.alert = nil
         }
+        if let fired { show(alert: fired) }
 
         scheduleExpiry(current)
         render()
@@ -285,7 +298,8 @@ final class NotchStatusController {
     private func scheduleExpiry(_ current: Date) {
         expiryTask?.cancel()
         expiryTask = nil
-        guard let expiry = NotchStatusModel.nextFreshDoneExpiry(in: inputs, now: current) else { return }
+        guard config.showFreshDone,
+              let expiry = NotchStatusModel.nextFreshDoneExpiry(in: inputs, now: current) else { return }
         let delay = max(1, expiry.timeIntervalSince(current) + 1)
         expiryTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
@@ -311,14 +325,7 @@ final class NotchStatusController {
             return
         }
 
-        let mode: NotchPanelMode
-        if isExpanded {
-            mode = .expanded(rowCount: rows.count, sectionCount: sections.count)
-        } else if alert != nil {
-            mode = .alert
-        } else {
-            mode = .compact(chipCount: summary.chipCount)
-        }
+        let mode = NotchStatusModel.panelMode(isExpanded: isExpanded, alert: alert, rows: rows, sections: sections)
         let display = NotchDisplay(
             style: screen.hasNotch ? .notch(width: screen.notchWidth, height: screen.safeAreaTop) : .pill,
             summary: summary, alert: alert, isExpanded: isExpanded, sections: sections)
@@ -333,8 +340,17 @@ final class NotchStatusController {
         }
         if frame != lastFrame {
             lastFrame = frame
-            let animate = wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            panel.setFrame(frame, display: true, animate: animate)
+            if wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                // Über den Animator: `setFrame(_:display:animate:)` hielte den
+                // Main Thread für die ganze Animation fest.
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.2
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    panel.animator().setFrame(frame, display: true)
+                }
+            } else {
+                panel.setFrame(frame, display: true)
+            }
         }
         if !wasVisible { panel.orderFrontRegardless() }
     }
@@ -363,9 +379,14 @@ final class NotchStatusController {
     // MARK: Bildschirm
 
     private func selectedScreen() -> NotchScreenInfo? {
+        if let cachedScreen { return cachedScreen }
         let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
-        let mainID = NSScreen.main.flatMap(NotchScreenInfo.init(screen:))?.displayID
-        return NotchGeometry.selectScreen(choice: config.screenChoice, screens: screens, mainDisplayID: mainID)
+        // Hauptbildschirm = der mit der Menüleiste (`CGMainDisplayID`), nicht
+        // `NSScreen.main`: das folgt dem Fokus und ließe die Anzeige springen.
+        let screen = NotchGeometry.selectScreen(
+            choice: config.screenChoice, screens: screens, mainDisplayID: CGMainDisplayID())
+        cachedScreen = .some(screen)
+        return screen
     }
 
     /// Vollbild-Spaces verstecken die Anzeige. Geprüft bei Space- und App-Wechsel
@@ -380,25 +401,43 @@ final class NotchStatusController {
         }
     }
 
+    /// Die Fensterliste kostet je nach Anzahl der Fenster einige Millisekunden
+    /// und wird deshalb abseits des Main Threads gelesen.
     private func updateFullscreenState() {
         guard config.isActive, let screen = selectedScreen() else { return }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
+        let screenQuartz = NotchFullscreenDetector.quartzFrame(fromCocoa: screen.frame, primaryHeight: primaryHeight)
+        let safeAreaTop = screen.safeAreaTop
+        let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        fullscreenGeneration += 1
+        let generation = fullscreenGeneration
+        Task.detached(priority: .utility) { [weak self] in
+            let hidden = NotchFullscreenDetector.isFullscreen(
+                screenFrameQuartz: screenQuartz,
+                safeAreaTop: safeAreaTop,
+                windows: Self.onScreenWindows(),
+                ownPID: ownPID,
+                systemReportsFullScreen: systemFullScreen)
+            await MainActor.run { [weak self] in
+                guard let self, self.fullscreenGeneration == generation,
+                      hidden != self.isFullscreenHidden else { return }
+                self.isFullscreenHidden = hidden
+                self.render()
+            }
+        }
+    }
+
+    nonisolated private static func onScreenWindows() -> [NotchWindowSample] {
         let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
             as? [[String: Any]] ?? []
-        let samples: [NotchWindowSample] = list.compactMap { info in
+        return list.compactMap { info in
             guard let layer = info[kCGWindowLayer as String] as? Int,
                   let pid = info[kCGWindowOwnerPID as String] as? Int32,
                   let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
                   let bounds = CGRect(dictionaryRepresentation: boundsDict) else { return nil }
             return NotchWindowSample(layer: layer, bounds: bounds, ownerPID: pid)
         }
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
-        let hidden = NotchFullscreenDetector.isFullscreen(
-            screenFrameQuartz: NotchFullscreenDetector.quartzFrame(fromCocoa: screen.frame, primaryHeight: primaryHeight),
-            windows: samples,
-            ownPID: ProcessInfo.processInfo.processIdentifier)
-        guard hidden != isFullscreenHidden else { return }
-        isFullscreenHidden = hidden
-        render()
     }
 
     // MARK: Aufklappen

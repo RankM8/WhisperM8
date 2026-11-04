@@ -71,9 +71,12 @@ extension UISnapshotGallery {
                 Rectangle()
                     .fill(Color.white.opacity(0.55))
                     .frame(height: display.isNotch ? notchHeight : 25)
+                // Menüs links und Statussymbole rechts, beide bis dicht an die
+                // Notch: so sieht man, dass die Anzeige sie nicht verdeckt.
+                menuBarItems(menuBarHeight: display.isNotch ? notchHeight : 25, size: size, notch: display.isNotch)
                 // Hardware-Notch als schwarze Kappe unter der Anzeige.
                 if display.isNotch {
-                    UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12)
+                    UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10)
                         .fill(Color.black)
                         .frame(width: notchWidth, height: notchHeight)
                         .position(x: size.width / 2, y: notchHeight / 2)
@@ -84,6 +87,38 @@ extension UISnapshotGallery {
             }
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .clipped())
+    }
+
+    private static func menuBarItems(menuBarHeight: CGFloat, size: CGSize, notch: Bool) -> some View {
+        let gap = notch ? notchWidth : 0
+        let side = (size.width - gap) / 2
+        return HStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Image(systemName: "apple.logo")
+                Text(verbatim: "Safari").fontWeight(.bold)
+                Text(verbatim: "File")
+                Text(verbatim: "Edit")
+                Text(verbatim: "View")
+                Text(verbatim: "History")
+            }
+            .padding(.leading, 14)
+            .frame(width: side, alignment: .leading)
+            Color.clear.frame(width: gap)
+            HStack(spacing: 14) {
+                Image(systemName: "waveform")
+                Image(systemName: "bolt.horizontal.circle")
+                Image(systemName: "wifi")
+                Image(systemName: "battery.75percent")
+                Text(verbatim: "Mi. 4. Nov. 9:41")
+            }
+            .padding(.leading, notch ? 8 : 0)
+            .padding(.trailing, 12)
+            .frame(width: side, alignment: notch ? .leading : .trailing)
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(Color.black.opacity(0.85))
+        .lineLimit(1)
+        .frame(width: size.width, height: menuBarHeight)
     }
 
     static var notchFixtures: [Fixture] {
@@ -97,14 +132,21 @@ extension UISnapshotGallery {
         let compactMode = NotchPanelMode.compact(chipCount: NotchStatusModel.summary(of: rows).chipCount)
 
         func fixture(_ name: String, notch: Bool, mode: NotchPanelMode, expanded: Bool = false,
-                     alert: NotchAlert? = nil, size: CGSize) -> Fixture {
+                     alert: NotchAlert? = nil, inputs: [NotchChatInput]? = nil, size: CGSize) -> Fixture {
             Fixture(name: name, size: size) {
-                let d = display(notch: notch, expanded: expanded, alert: alert)
+                let d = display(notch: notch, expanded: expanded, alert: alert, inputs: inputs)
                 return screen(d, mode: mode, size: size)
             }
         }
+        // Alle vier Zähler, zweistellig: breiter als die Notch, bleibt unter der Leiste.
+        let busy = (0..<12).map { input("Job \($0)", "p", .working, since: Double($0)) }
+            + (0..<3).map { input("Wartet \($0)", "p", .awaitingInput, since: Double($0)) }
+            + [input("Fehler", "p", .errored, since: 5), input("Fertig", "p", .idle, since: 9, turnAgo: 9)]
+        let busyMode = NotchPanelMode.compact(
+            chipCount: NotchStatusModel.summary(of: NotchStatusModel.rows(from: busy, now: now, showFreshDone: true)).chipCount)
         return [
             fixture("notch-ruhe", notch: true, mode: compactMode, size: size),
+            fixture("notch-ruhe-voll", notch: true, mode: busyMode, inputs: busy, size: size),
             fixture("notch-braucht-dich", notch: true, mode: .alert, alert: alert, size: size),
             fixture("notch-fehler", notch: true, mode: .alert, alert: errorAlert, size: size),
             fixture("notch-aufgeklappt", notch: true, mode: expandedMode, expanded: true, size: tall),

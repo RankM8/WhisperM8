@@ -41,19 +41,29 @@ enum NotchScreenChoice: String, CaseIterable {
 
 /// Darstellungsart der Anzeige im Fenster.
 enum NotchPanelMode: Equatable {
-    /// `chipCount`: wie viele Zähler sichtbar sind (bestimmt die Breite der Pille).
+    /// `chipCount`: wie viele Zähler sichtbar sind (bestimmt die Breite).
     case compact(chipCount: Int)
     case alert
     case expanded(rowCount: Int, sectionCount: Int)
 }
 
+/// Sichtbare Teile der Anzeige an der Notch, in globalen Cocoa-Koordinaten.
+/// `band` liegt in der Menüleiste und ist nie breiter als die Aussparung
+/// selbst; alles andere (`body`) hängt unter der Menüleiste. So verdeckt die
+/// Anzeige kein Menü und kein Statussymbol neben der Notch.
+struct NotchLayout: Equatable {
+    var frame: CGRect
+    var band: CGRect
+    var body: CGRect
+}
+
 enum NotchGeometry {
     // MARK: Maße
 
-    /// Seitenflügel neben der Notch im Ruhezustand (Platz für Zähler).
-    static let compactWing: CGFloat = 92
-    /// Seitenflügel bei „braucht dich" (rechts steht der Chat-Name).
-    static let alertWing: CGFloat = 200
+    /// Höhe der Zeile unter der Notch (Zähler bzw. Chat-Name).
+    static let chinHeight: CGFloat = 24
+    /// Breite des Körpers bei „braucht dich" (Platz für den Chat-Namen).
+    static let alertWidth: CGFloat = 340
     static let expandedMinWidth: CGFloat = 380
     static let expandedMaxListHeight: CGFloat = 400
     static let rowHeight: CGFloat = 50
@@ -62,7 +72,7 @@ enum NotchGeometry {
     static let listPadding: CGFloat = 12
 
     static let pillHeight: CGFloat = 28
-    static let pillAlertWidth: CGFloat = 380
+    static let pillAlertWidth: CGFloat = 340
     static let pillExpandedWidth: CGFloat = 380
     /// Abstand der Pille zur Menüleiste.
     static let pillTopGap: CGFloat = 6
@@ -75,11 +85,16 @@ enum NotchGeometry {
         return min(expandedMaxListHeight, content) + footerHeight + listPadding
     }
 
+    /// Platz, den die Zähler im Ruhezustand brauchen (Punkt, Zahl, Abstand).
+    static func chipsWidth(chipCount: Int) -> CGFloat {
+        28 + CGFloat(max(0, chipCount)) * 46
+    }
+
     /// Breite des Ruhezustands der Pille aus den sichtbaren Zählern.
     static func pillCompactWidth(chipCount: Int) -> CGFloat {
         // Ohne Zähler steht der Hinweis "No active chats" in der Pille.
         guard chipCount > 0 else { return 150 }
-        return max(64, 28 + CGFloat(chipCount) * 46)
+        return max(64, chipsWidth(chipCount: chipCount))
     }
 
     // MARK: Bildschirmwahl
@@ -110,27 +125,37 @@ enum NotchGeometry {
     // MARK: Fenster-Rahmen
 
     /// Rahmen des Fensters in globalen Cocoa-Koordinaten (Ursprung unten links).
-    /// Mit Notch hängt die Anzeige bündig an der Oberkante und wächst um die
-    /// Aussparung herum; ohne Notch sitzt eine Pille mittig unter der Menüleiste.
     static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode) -> CGRect {
+        layout(screen: screen, mode: mode).frame
+    }
+
+    /// Mit Notch: Oben deckt ein schwarzes Band genau die Aussparung (sie ist
+    /// ohnehin schwarz), darunter hängt der Körper mit Zählern, Chat-Name oder
+    /// Liste. Das Band ist nie breiter als die Notch, die Menüleiste daneben
+    /// bleibt frei. Ohne Notch sitzt eine Pille mittig unter der Menüleiste.
+    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode) -> NotchLayout {
         if screen.hasNotch {
-            let height = screen.safeAreaTop
-            let width: CGFloat
-            var totalHeight = height
+            let bandHeight = screen.safeAreaTop
+            let notchWidth = screen.notchWidth
+            let bodyWidth: CGFloat
+            var bodyHeight = chinHeight
             switch mode {
-            case .compact:
-                width = screen.notchWidth + 2 * compactWing
+            case .compact(let chipCount):
+                bodyWidth = max(notchWidth, chipsWidth(chipCount: chipCount))
             case .alert:
-                width = screen.notchWidth + 2 * alertWing
+                bodyWidth = max(notchWidth, alertWidth)
             case .expanded(let rows, let sections):
-                width = max(expandedMinWidth, screen.notchWidth + 2 * compactWing)
-                totalHeight += listHeight(rowCount: rows, sectionCount: sections)
+                bodyWidth = max(notchWidth, expandedMinWidth)
+                bodyHeight += listHeight(rowCount: rows, sectionCount: sections)
             }
-            return CGRect(
-                x: screen.notchCenterX - width / 2,
-                y: screen.frame.maxY - totalHeight,
-                width: width,
-                height: totalHeight)
+            let top = screen.frame.maxY
+            let band = CGRect(
+                x: screen.notchCenterX - notchWidth / 2, y: top - bandHeight,
+                width: notchWidth, height: bandHeight)
+            let body = CGRect(
+                x: screen.notchCenterX - bodyWidth / 2, y: band.minY - bodyHeight,
+                width: bodyWidth, height: bodyHeight)
+            return NotchLayout(frame: band.union(body), band: band, body: body)
         }
 
         let menuBar = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
@@ -146,7 +171,26 @@ enum NotchGeometry {
             width = pillExpandedWidth
             height += listHeight(rowCount: rows, sectionCount: sections)
         }
-        return CGRect(x: screen.frame.midX - width / 2, y: top - height, width: width, height: height)
+        let frame = CGRect(x: screen.frame.midX - width / 2, y: top - height, width: width, height: height)
+        return NotchLayout(frame: frame, band: .zero, body: frame)
+    }
+
+    /// Bereich der Menüleiste neben der Notch, den die Anzeige nicht berühren
+    /// darf (links und rechts der Aussparung). Ohne Notch die ganze Leiste.
+    static func menuBarItemAreas(screen: NotchScreenInfo) -> [CGRect] {
+        let menuBarHeight = screen.hasNotch
+            ? screen.safeAreaTop
+            : max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        let bar = CGRect(
+            x: screen.frame.minX, y: screen.frame.maxY - menuBarHeight,
+            width: screen.frame.width, height: menuBarHeight)
+        guard screen.hasNotch else { return [bar] }
+        let notchMinX = screen.notchCenterX - screen.notchWidth / 2
+        let notchMaxX = screen.notchCenterX + screen.notchWidth / 2
+        return [
+            CGRect(x: bar.minX, y: bar.minY, width: notchMinX - bar.minX, height: bar.height),
+            CGRect(x: notchMaxX, y: bar.minY, width: bar.maxX - notchMaxX, height: bar.height),
+        ]
     }
 }
 
@@ -161,23 +205,34 @@ struct NotchWindowSample: Equatable {
 }
 
 enum NotchFullscreenDetector {
-    /// Deckt ein fremdes Fenster der normalen Ebene den Bildschirm samt
-    /// Menüleistenbereich exakt ab? Das ist ein Vollbild-Space (Video, Spiel,
-    /// Vollbild-App). Ein bloß maximiertes Fenster lässt die Menüleiste frei
-    /// und zählt nicht.
+    /// Läuft auf diesem Bildschirm eine fremde App im Vollbild?
+    ///
+    /// - Ein fremdes Fenster der normalen Ebene deckt den Bildschirm samt
+    ///   Menüleistenbereich exakt ab (Vollbild ohne Notch, Video, Spiel).
+    /// - Auf Bildschirmen mit Notch legt macOS Vollbild-Apps meist unter die
+    ///   Kamera: das Fenster beginnt an der Unterkante der Notch. Dieselben
+    ///   Maße hat ein maximiertes Fenster bei ausgeblendetem Dock, deshalb
+    ///   zählt das nur, wenn das System gerade Vollbild meldet
+    ///   (`NSApp.currentSystemPresentationOptions` enthält `.fullScreen`).
+    ///
+    /// Ein bloß maximiertes Fenster lässt die Menüleiste frei und zählt nicht.
     static func isFullscreen(
         screenFrameQuartz: CGRect,
+        safeAreaTop: CGFloat = 0,
         windows: [NotchWindowSample],
         ownPID: Int32,
+        systemReportsFullScreen: Bool = false,
         tolerance: CGFloat = 1
     ) -> Bool {
-        windows.contains { window in
-            window.layer == 0
-                && window.ownerPID != ownPID
-                && abs(window.bounds.minX - screenFrameQuartz.minX) <= tolerance
-                && abs(window.bounds.minY - screenFrameQuartz.minY) <= tolerance
-                && abs(window.bounds.width - screenFrameQuartz.width) <= tolerance
-                && abs(window.bounds.height - screenFrameQuartz.height) <= tolerance
+        func close(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= tolerance }
+        return windows.contains { window in
+            guard window.layer == 0, window.ownerPID != ownPID,
+                  close(window.bounds.minX, screenFrameQuartz.minX),
+                  close(window.bounds.width, screenFrameQuartz.width),
+                  close(window.bounds.maxY, screenFrameQuartz.maxY) else { return false }
+            if close(window.bounds.minY, screenFrameQuartz.minY) { return true }
+            return systemReportsFullScreen && safeAreaTop > 0
+                && close(window.bounds.minY, screenFrameQuartz.minY + safeAreaTop)
         }
     }
 
