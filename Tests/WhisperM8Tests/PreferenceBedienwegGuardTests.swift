@@ -24,6 +24,32 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
         let constant: String
         let value: String
         let properties: [String]
+        /// Enum der Konstante; Features mit eigenen Schlüsseln haben ein eigenes.
+        var namespace = "PreferenceKeys"
+    }
+
+    /// Schlüssel-Enums außerhalb von `PreferenceKeys`: Datei und Enum-Name.
+    private static let featureKeyEnums: [(file: String, name: String)] = [
+        ("WhisperM8/Services/Clipboard/ClipboardSettings.swift", "ClipboardPreferenceKeys"),
+    ]
+
+    /// `static let x = "y"` innerhalb von `enum <name> { … }` (bis zur ersten
+    /// Zeile, die mit `}` beginnt).
+    private func featureKeys() throws -> [Key] {
+        try Self.featureKeyEnums.flatMap { file, name -> [Key] in
+            let source = try read(file)
+            guard let start = source.range(of: "enum \(name) {"),
+                  let end = source.range(of: "\n}", range: start.upperBound..<source.endIndex) else {
+                XCTFail("enum \(name) nicht in \(file) gefunden")
+                return []
+            }
+            let body = String(source[start.upperBound..<end.lowerBound])
+            let regex = try NSRegularExpression(pattern: #"static let (\w+) = "(\w+)""#)
+            return regex.matches(in: body, range: NSRange(body.startIndex..., in: body)).compactMap { m in
+                guard let a = Range(m.range(at: 1), in: body), let b = Range(m.range(at: 2), in: body) else { return nil }
+                return Key(constant: String(body[a]), value: String(body[b]), properties: [], namespace: name)
+            }
+        }
     }
 
     /// Alle `static let name = "name"` aus `PreferenceKeys` samt den Eigenschaften,
@@ -50,6 +76,7 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
             }
         }
         return constants.map { Key(constant: $0.0, value: $0.1, properties: propertiesByKey[$0.0] ?? []) }
+            + (try featureKeys())
     }
 
     /// Bedienflächen: Einstellungen plus die wenigen Oberflächen, die Schalter direkt anbieten.
@@ -69,7 +96,7 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
         // `@AppStorage(PreferenceKeys.x) private var name` → wird `name` IN DERSELBEN
         // Datei gebunden/gesetzt? Sonst machte ein gleichnamiges Property einer
         // fremden Datei (`port`, `enabled` …) einen Schlüssel ohne UI grün.
-        let declaration = "@AppStorage\\(\\s*(?:PreferenceKeys\\.\(key.constant)\\b|\"\(key.value)\")[^\\n]*?\\bvar (\\w+)"
+        let declaration = "@AppStorage\\(\\s*(?:\(key.namespace)\\.\(key.constant)\\b|\"\(key.value)\")[^\\n]*?\\bvar (\\w+)"
         if let regex = try? NSRegularExpression(pattern: declaration) {
             for file in surface {
                 let range = NSRange(file.startIndex..., in: file)
@@ -134,6 +161,12 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
             guard let key = keys.first(where: { $0.value == entry.key }) else { continue }
             XCTAssertFalse(hasUIPath(key, in: surface), "„\(entry.key)“ hat inzwischen einen UI-Weg — aus killSwitches streichen")
         }
+    }
+
+    func testFeatureKeyEnumsAreScanned() throws {
+        let values = Set(try preferenceKeys().filter { $0.namespace == "ClipboardPreferenceKeys" }.map(\.value))
+        XCTAssertTrue(values.contains("clipboardHistoryEnabled"))
+        XCTAssertTrue(values.contains("clipboardHistoryAgentAccess"))
     }
 
     func testBindingInForeignFileDoesNotCount() {

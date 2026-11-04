@@ -33,6 +33,12 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     var rtfFile: String?
     var htmlFile: String?
     var imageFile: String?
+    /// Alle Typen der Originalkopie (Text, RTF, HTML, Bild, App-eigene
+    /// Formate), damit Einfügen den Inhalt so vollständig wie möglich
+    /// zurückbringt, etwa Tabellen aus Excel oder Numbers mit Bild.
+    var archiveFile: String?
+    /// Zeichenzahl des vollen Texts (auch wenn er in einer Datei liegt).
+    var charCount: Int?
     var imageWidth: Int?
     var imageHeight: Int?
     var imageBytes: Int?
@@ -40,8 +46,11 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
 
     /// Dateien dieses Eintrags im Verlaufsordner.
     var blobFiles: [String] {
-        [textFile, rtfFile, htmlFile, imageFile].compactMap { $0 }
+        [textFile, rtfFile, htmlFile, imageFile, archiveFile].compactMap { $0 }
     }
+
+    /// Zeichen des vollen Texts; ältere Einträge ohne Zähler nehmen den Index-Text.
+    var textLength: Int { charCount ?? text?.count ?? preview.count }
 
     static let previewLimit = 240
 
@@ -64,6 +73,31 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     static func hash(paths: [String]) -> String { hash(Data(paths.joined(separator: "\n").utf8)) }
 }
 
+// MARK: - Originaltypen einer Kopie
+
+/// Eine Darstellung eines Pasteboard-Eintrags (Typ plus Daten).
+struct ClipboardRepresentation: Codable, Equatable, Sendable {
+    var type: String
+    var data: Data
+}
+
+/// Alle Pasteboard-Einträge einer Kopie mit allen Typen, in Originalreihenfolge.
+struct ClipboardArchive: Codable, Equatable, Sendable {
+    var items: [[ClipboardRepresentation]]
+
+    var byteCount: Int { items.reduce(0) { $0 + $1.reduce(0) { $0 + $1.data.count } } }
+
+    func encoded() -> Data? {
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        return try? encoder.encode(self)
+    }
+
+    static func decode(_ data: Data) -> ClipboardArchive? {
+        try? PropertyListDecoder().decode(ClipboardArchive.self, from: data)
+    }
+}
+
 // MARK: - Erfasster Zwischenablage-Inhalt (Rohdaten, noch nicht gespeichert)
 
 /// Was der Monitor beim Lesen der Zwischenablage gesehen hat. Reine Daten,
@@ -77,6 +111,8 @@ struct ClipboardCapture: Sendable {
     var imageData: Data?
     var imageIsPNG: Bool
     var filePaths: [String]
+    /// Alle Typen der Kopie; `nil`, wenn sie das Größenlimit sprengt.
+    var archive: ClipboardArchive?
     var sourceBundleID: String?
     var sourceName: String?
     var date: Date
@@ -89,6 +125,7 @@ struct ClipboardCapture: Sendable {
         imageData: Data? = nil,
         imageIsPNG: Bool = false,
         filePaths: [String] = [],
+        archive: ClipboardArchive? = nil,
         sourceBundleID: String? = nil,
         sourceName: String? = nil,
         date: Date = Date()
@@ -100,6 +137,7 @@ struct ClipboardCapture: Sendable {
         self.imageData = imageData
         self.imageIsPNG = imageIsPNG
         self.filePaths = filePaths
+        self.archive = archive
         self.sourceBundleID = sourceBundleID
         self.sourceName = sourceName
         self.date = date

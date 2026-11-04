@@ -241,6 +241,16 @@
         }
       }
     },
+    "%lld apps, built in: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Apps, mitgeliefert: %@"
+          }
+        }
+      }
+    },
     "%lld available": {
       "localizations": {
         "de": {
@@ -3331,12 +3341,12 @@
         }
       }
     },
-    "Copies from these apps are never stored (bundle identifiers). Anything marked confidential by an app is skipped anyway.": {
+    "Copies from these apps are never stored. Anything marked confidential by an app is skipped anyway.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kopien aus diesen Apps werden nie gespeichert (Bundle-IDs). Was eine App als vertraulich markiert, wird ohnehin übersprungen."
+            "value": "Kopien aus diesen Apps werden nie gespeichert. Was eine App als vertraulich markiert, wird ohnehin übersprungen."
           }
         }
       }
@@ -5027,6 +5037,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hier"
+          }
+        }
+      }
+    },
+    "Hide": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausblenden"
           }
         }
       }
@@ -8254,6 +8274,16 @@
         }
       }
     },
+    "Password managers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Passwort-Manager"
+          }
+        }
+      }
+    },
     "Paste": {
       "localizations": {
         "de": {
@@ -10700,6 +10730,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kurze Wörter lösen viel häufiger versehentlich aus. Ab vier Buchstaben ist es deutlich sicherer."
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anzeigen"
           }
         }
       }
@@ -14150,6 +14190,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "immer wach"
+          }
+        }
+      }
+    },
+    "and %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "und %lld weitere"
           }
         }
       }

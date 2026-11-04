@@ -57,6 +57,34 @@ struct ClipboardSettings: Equatable, Sendable {
         "com.proton.pass.macos",
     ]
 
+    /// Lesbare Namen der Standard-Einträge für die Einstellungen.
+    static let defaultExcludedAppNames: [String: String] = [
+        "com.1password.1password": "1Password",
+        "com.agilebits.onepassword7": "1Password 7",
+        "com.agilebits.onepassword-osx": "1Password 6",
+        "com.bitwarden.desktop": "Bitwarden",
+        "com.apple.keychainaccess": "Keychain Access",
+        "com.apple.Passwords": "Passwords",
+        "org.keepassxc.keepassxc": "KeePassXC",
+        "org.keepassx.keepassxc": "KeePassX",
+        "com.lastpass.LastPass": "LastPass",
+        "com.dashlane.dashlanephonefinal": "Dashlane",
+        "in.sinew.Enpass-Desktop": "Enpass",
+        "com.nordsec.nordpass": "NordPass",
+        "com.proton.pass.macos": "Proton Pass",
+    ]
+
+    static func displayName(for bundleID: String) -> String {
+        defaultExcludedAppNames[bundleID] ?? bundleID
+    }
+
+    /// Teilt die Liste für die Anzeige: mitgelieferte Passwort-Manager (als
+    /// eine aufklappbare Zeile) und selbst ergänzte Apps (einzeln).
+    static func partitionExcluded(_ apps: [String]) -> (builtIn: [String], custom: [String]) {
+        let defaults = Set(defaultExcludedApps)
+        return (apps.filter { defaults.contains($0) }, apps.filter { !defaults.contains($0) })
+    }
+
     /// Liest aus beliebiger Quelle (App: Defaults, CLI: App-Domain, Tests: Wörterbuch).
     static func read(_ value: (String) -> Any?) -> ClipboardSettings {
         var settings = ClipboardSettings()

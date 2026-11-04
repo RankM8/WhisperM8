@@ -57,6 +57,7 @@ final class PasteService {
         pasteboard.setString(text, forType: .string)
         // Eigener Schreibvorgang: der Zwischenablage-Verlauf übergeht ihn.
         ClipboardInternalWrites.markPasteboard(pasteboard)
+        ClipboardInternalWrites.claim(pasteboard)
     }
 
     func pasteToActiveApp(
@@ -80,9 +81,6 @@ final class PasteService {
         onMissingPermission: () -> Void,
         onMissingTarget: () -> Void
     ) async -> PasteDeliveryResult {
-        // Alle Schreibvorgänge dieses Einfügens sind eigene (Zwischenablage-Verlauf).
-        ClipboardInternalWrites.begin()
-        defer { ClipboardInternalWrites.end(pasteboard: environment.pasteboard) }
         guard environment.hasAccessibilityPermission() else {
             Logger.permission.error("Accessibility permission missing - cannot auto-paste")
             environment.requestAccessibilityPermission()
@@ -230,10 +228,12 @@ final class PasteService {
             item.setData(tiffData, forType: .tiff)
         }
 
+        ClipboardInternalWrites.mark(item)
         pasteboard.clearContents()
         guard pasteboard.writeObjects([item]) else {
             throw PasteServiceError.clipboardWriteFailed(attachment.label)
         }
+        ClipboardInternalWrites.claim(pasteboard)
     }
 
     private func postPasteEvent() -> Bool {

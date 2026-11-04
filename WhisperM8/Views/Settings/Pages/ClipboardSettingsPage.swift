@@ -4,12 +4,13 @@ import SwiftUI
 /// Was die Seite von außen braucht: Anzahl, Leeren, laufende Apps. Snapshots
 /// und Tests setzen eigene Werte; `.live` greift auf Store und Workspace zu.
 struct ClipboardSettingsDependencies {
-    var entryCount: () -> Int
-    var clearHistory: () -> Void
+    var entryCount: @MainActor () -> Int
+    var clearHistory: @MainActor () -> Void
     var runningApps: () -> [ClipboardRunningApp]
 
+    /// Anzahl aus dem Stand des Controllers: kein Warten auf die Store-Queue.
     static let live = ClipboardSettingsDependencies(
-        entryCount: { ClipboardHistoryController.shared.store.snapshot().count },
+        entryCount: { ClipboardHistoryController.shared.entries.count },
         clearHistory: { ClipboardHistoryController.shared.store.clear(keepPinned: false) },
         runningApps: {
             NSWorkspace.shared.runningApplications
@@ -43,6 +44,8 @@ struct ClipboardSettingsPage: View {
     @State private var entryCount = 0
     @State private var confirmClear = false
     @State private var newBundleID = ""
+    @State private var showBuiltIn = false
+    @State private var runningApps: [ClipboardRunningApp] = []
 
     init(dependencies: ClipboardSettingsDependencies = .live) {
         self.dependencies = dependencies
@@ -117,12 +120,28 @@ struct ClipboardSettingsPage: View {
             }
 
             SettingsSection("Excluded apps") {
-                SettingsHelpText("Copies from these apps are never stored (bundle identifiers). Anything marked confidential by an app is skipped anyway.")
-                ForEach(excludedApps, id: \.self) { bundleID in
-                    SettingsRow(title: bundleID) {
-                        Button("Remove") { removeApp(bundleID) }
-                            .buttonStyle(SettingsButtonStyle.standard)
+                SettingsHelpText("Copies from these apps are never stored. Anything marked confidential by an app is skipped anyway.")
+                let groups = ClipboardSettings.partitionExcluded(excludedApps)
+                if !groups.builtIn.isEmpty {
+                    SettingsRow(
+                        title: "Password managers",
+                        subtitle: String(localized: "\(groups.builtIn.count) apps, built in: \(Self.summary(of: groups.builtIn))")
+                    ) {
+                        Button {
+                            showBuiltIn.toggle()
+                        } label: {
+                            if showBuiltIn { Text("Hide") } else { Text("Show") }
+                        }
+                        .buttonStyle(SettingsButtonStyle.standard)
                     }
+                    if showBuiltIn {
+                        ForEach(groups.builtIn, id: \.self) { bundleID in
+                            excludedRow(bundleID)
+                        }
+                    }
+                }
+                ForEach(groups.custom, id: \.self) { bundleID in
+                    excludedRow(bundleID)
                 }
                 SettingsRow(title: "Add app", subtitle: "Pick a running app or type a bundle identifier.") {
                     HStack(spacing: 6) {
@@ -131,7 +150,7 @@ struct ClipboardSettingsPage: View {
                             .frame(width: 190)
                             .onSubmit(addTypedApp)
                         Menu("Running apps") {
-                            ForEach(dependencies.runningApps(), id: \.bundleID) { app in
+                            ForEach(runningApps, id: \.bundleID) { app in
                                 Button(app.name) { addApp(app.bundleID) }
                             }
                         }
@@ -161,7 +180,10 @@ struct ClipboardSettingsPage: View {
                 .disabled(!agentAccess)
             }
         }
-        .onAppear { entryCount = dependencies.entryCount() }
+        .onAppear {
+            entryCount = dependencies.entryCount()
+            runningApps = dependencies.runningApps()
+        }
         .confirmationDialog("Clear the clipboard history?", isPresented: $confirmClear) {
             Button("Clear history", role: .destructive) {
                 dependencies.clearHistory()
@@ -171,6 +193,24 @@ struct ClipboardSettingsPage: View {
         } message: {
             Text("All stored entries are deleted, pinned ones too. This cannot be undone.")
         }
+    }
+
+    private func excludedRow(_ bundleID: String) -> some View {
+        SettingsRow(
+            title: ClipboardSettings.displayName(for: bundleID),
+            subtitle: ClipboardSettings.defaultExcludedAppNames[bundleID] == nil ? nil : bundleID
+        ) {
+            Button("Remove") { removeApp(bundleID) }
+                .buttonStyle(SettingsButtonStyle.standard)
+        }
+    }
+
+    /// „1Password, Bitwarden, Keychain Access und 10 weitere“ statt 13 Zeilen.
+    static func summary(of bundleIDs: [String], shown: Int = 3) -> String {
+        let names = bundleIDs.map(ClipboardSettings.displayName(for:))
+        guard names.count > shown else { return names.joined(separator: ", ") }
+        let rest = names.count - shown
+        return names.prefix(shown).joined(separator: ", ") + " " + String(localized: "and \(rest) more")
     }
 
     private func addTypedApp() {

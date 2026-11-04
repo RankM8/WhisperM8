@@ -179,6 +179,45 @@ final class ClipboardHistoryCoreTests: XCTestCase {
         XCTAssertEqual(ClipboardHistoryCore.search([files, text], query: "safari").map(\.id), ["t"])
     }
 
+    func testSearchFindsTextFarBeyondThePreview() {
+        let long = String(repeating: "füllzeile ", count: 3000) + "ConnectionRefusedError: port 5432"
+        let entries = [entry("long", text: long, at: 1), entry("short", text: "port", at: 2)]
+        XCTAssertEqual(ClipboardHistoryCore.search(entries, query: "connectionrefused 5432").map(\.id), ["long"])
+    }
+
+    func testSearchIndexKeepsHeadAndTailOfHugeTexts() {
+        let limits = ClipboardSearchIndex.Limits(headBytes: 100, tailBytes: 100, totalBytes: .max, reducedBytes: 10)
+        let text = "START-MARKE " + String(repeating: "m", count: 10_000) + " mitte-marke " + String(repeating: "n", count: 10_000) + " ENDE-MARKE"
+        let bytes = ClipboardSearchIndex.haystack(for: entry("x", text: "", at: 1), fullText: text, limits: limits)
+        XCTAssertLessThanOrEqual(bytes.count, 201)
+        XCTAssertNotNil(ClipboardSearchIndex.firstIndex(of: Array("start-marke".utf8), in: bytes))
+        XCTAssertNotNil(ClipboardSearchIndex.firstIndex(of: Array("ende-marke".utf8), in: bytes))
+        XCTAssertNil(ClipboardSearchIndex.firstIndex(of: Array("mitte-marke".utf8), in: bytes))
+    }
+
+    func testSearchIndexBudgetShrinksOldestFirst() {
+        let limits = ClipboardSearchIndex.Limits(headBytes: 5000, tailBytes: 5000, totalBytes: 12_000, reducedBytes: 100)
+        var index = ClipboardSearchIndex(limits: limits)
+        let old = entry("old", text: "", at: 1)
+        let new = entry("new", text: "", at: 2)
+        index.set(old, fullText: String(repeating: "a", count: 8000))
+        index.set(new, fullText: String(repeating: "b", count: 8000))
+        index.enforceBudget([old, new])
+        XCTAssertLessThanOrEqual(index.totalBytes, 12_000)
+        XCTAssertEqual(index.haystack(for: "new")?.count, 8000, "neuester Eintrag bleibt vollständig")
+        XCTAssertEqual(index.haystack(for: "old")?.count, 201)
+    }
+
+    func testIgnoredTypesFromOtherToolsAreConfidential() {
+        for type in ClipboardHistoryCore.ignoredTypes {
+            XCTAssertEqual(
+                ClipboardHistoryCore.decide(enabled: true, paused: false, isInternalWrite: false, types: ["public.utf8-plain-text", type],
+                                            sourceBundleID: nil, excludedApps: []),
+                .skip(.confidential), type
+            )
+        }
+    }
+
     func testPreviewCollapsesWhitespaceAndTruncates() {
         XCTAssertEqual(ClipboardEntry.makePreview(from: "  a\n\n  b  \n"), "a b")
         let long = String(repeating: "x", count: 500)

@@ -44,6 +44,25 @@ final class ClipboardPanel: NSPanel {
         super.sendEvent(event)
     }
 
+    /// Fokus ins Suchfeld, auch wenn `@FocusState` beim ersten Zeigen zu früh
+    /// kam (das Panel war da noch nicht Key-Fenster).
+    func focusSearchField() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let field = Self.firstEditableTextField(in: self.contentView) else { return }
+            if let editor = self.firstResponder as? NSTextView, editor.delegate === field { return }
+            self.makeFirstResponder(field)
+        }
+    }
+
+    private static func firstEditableTextField(in view: NSView?) -> NSTextField? {
+        guard let view else { return nil }
+        if let field = view as? NSTextField, field.isEditable { return field }
+        for subview in view.subviews {
+            if let field = firstEditableTextField(in: subview) { return field }
+        }
+        return nil
+    }
+
     override func cancelOperation(_ sender: Any?) {
         _ = onCommand?(.close)
     }

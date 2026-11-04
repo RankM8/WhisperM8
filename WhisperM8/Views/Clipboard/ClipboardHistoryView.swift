@@ -69,22 +69,21 @@ struct ClipboardHistoryView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .foregroundStyle(AppTheme.textPrimary)
         } else {
-            let pinned = list.filter(\.isPinned)
-            let rest = list.filter { !$0.isPinned }
+            // Nummern zählen genau in der gezeigten Reihenfolge (wie ⌘1 bis ⌘9).
+            let numbered = Array(list.enumerated())
+            let pinnedCount = model.showsPinnedGroup ? list.prefix { $0.isPinned }.count : 0
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        if !pinned.isEmpty {
+                        if pinnedCount > 0 {
                             groupHeader("Pinned")
-                            ForEach(Array(pinned.enumerated()), id: \.element.id) { index, entry in
+                            ForEach(numbered.prefix(pinnedCount), id: \.element.id) { index, entry in
                                 row(entry, number: index + 1)
                             }
+                            if pinnedCount < list.count { groupHeader("History") }
                         }
-                        if !rest.isEmpty {
-                            if !pinned.isEmpty { groupHeader("History") }
-                            ForEach(Array(rest.enumerated()), id: \.element.id) { index, entry in
-                                row(entry, number: pinned.count + index + 1)
-                            }
+                        ForEach(numbered.dropFirst(pinnedCount), id: \.element.id) { index, entry in
+                            row(entry, number: index + 1)
                         }
                     }
                     .padding(6)
@@ -232,8 +231,10 @@ struct ClipboardHistoryView: View {
                 Button("Paste as plain text") { model.actions.paste(entry, true) }
                     .buttonStyle(SettingsButtonStyle.standard)
             }
-            Button(entry.isPinned ? "Unpin" : "Pin") { model.actions.togglePin(entry) }
-                .buttonStyle(SettingsButtonStyle.standard)
+            Button { model.actions.togglePin(entry) } label: {
+                if entry.isPinned { Text("Unpin") } else { Text("Pin") }
+            }
+            .buttonStyle(SettingsButtonStyle.standard)
             Button("Delete") { model.deleteEntry(entry) }
                 .buttonStyle(SettingsButtonStyle.destructive)
         }
@@ -250,7 +251,7 @@ struct ClipboardHistoryView: View {
     private func detail(for entry: ClipboardEntry) -> String {
         switch entry.kind {
         case .text:
-            let count = (entry.text ?? entry.preview).count
+            let count = entry.textLength
             return String(localized: "\(count) characters")
         case .image:
             if let w = entry.imageWidth, let h = entry.imageHeight {
@@ -270,7 +271,7 @@ struct ClipboardHistoryView: View {
             hint("↑↓", "Select")
             hint("↩", "Paste")
             hint("⌥↩", "Plain text")
-            hint("⌘1–9", "Quick paste")
+            hint("⌘1-9", "Quick paste")
             hint("⌘P", "Pin")
             hint("⌘⌫", "Delete")
             hint("esc", "Close")

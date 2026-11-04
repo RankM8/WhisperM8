@@ -17,8 +17,11 @@ final class ClipboardHistoryController {
     private let model = ClipboardHistoryViewModel()
     private var panel: ClipboardPanel?
     private var previousApp: NSRunningApplication?
-    private var cachedEntries: [ClipboardEntry] = []
+    /// Letzter Stand des Stores auf dem Main Thread; Fenster, Einstellungen und
+    /// Control-Socket lesen hier, ohne auf die Store-Queue zu warten.
+    private(set) var entries: [ClipboardEntry] = []
     private var started = false
+    private var appliedEnabled: Bool?
     private var defaultsObserver: NSObjectProtocol?
 
     init(store: ClipboardHistoryStore = ClipboardHistoryStore()) {
@@ -37,11 +40,12 @@ final class ClipboardHistoryController {
     func start() {
         guard !started else { return }
         started = true
-        store.onChange = { [weak self] entries in
+        // Laden passiert auf der Store-Queue; bis dahin ist das Fenster nur leer.
+        store.observe { [weak self] state in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    self?.cachedEntries = entries
-                    self?.model.setEntries(entries)
+                    self?.entries = state.entries
+                    self?.model.setEntries(state.entries, search: state.search)
                 }
             }
         }
@@ -54,15 +58,6 @@ final class ClipboardHistoryController {
             MainActor.assumeIsolated { self?.applySettings() }
         }
         applySettings()
-        // Index off-main laden; bis dahin ist das Fenster nur leer.
-        let store = store
-        Task.detached(priority: .utility) { [weak self] in
-            let entries = store.snapshot()
-            await MainActor.run {
-                self?.cachedEntries = entries
-                self?.model.setEntries(entries)
-            }
-        }
     }
 
     /// Beim Beenden: optional leeren (Angepinnte bleiben), Index festschreiben.
@@ -72,16 +67,25 @@ final class ClipboardHistoryController {
         store.flush()
     }
 
-    /// Schalter ausgewertet; billig, darf bei jeder Defaults-Änderung laufen.
+    /// Schalter ausgewertet. Läuft bei jeder Defaults-Änderung der App, tut
+    /// aber nur etwas, wenn sich der Hauptschalter wirklich geändert hat.
     func applySettings() {
-        let settings = ClipboardSettings.readLive()
-        if settings.enabled {
-            if !monitor.isRunning { monitor.start() }
+        let enabled = ClipboardSettings.readLive().enabled
+        guard enabled != appliedEnabled else { return }
+        appliedEnabled = enabled
+        Self.apply(enabled: enabled, monitor: monitor)
+        if !enabled, panel != nil { hidePanel() }
+    }
+
+    /// Monitor und Hotkey folgen dem Schalter: aus heißt auch, dass ⇧⌘C
+    /// wieder frei ist (für Maccy oder andere Apps).
+    static func apply(enabled: Bool, monitor: ClipboardMonitor) {
+        if enabled {
+            monitor.start()
             KeyboardShortcuts.enable(.clipboardHistory)
         } else {
-            if monitor.isRunning { monitor.stop() }
+            monitor.stop()
             KeyboardShortcuts.disable(.clipboardHistory)
-            if panel != nil { hidePanel() }
         }
     }
 
@@ -94,11 +98,11 @@ final class ClipboardHistoryController {
     func showPanel() {
         let settings = ClipboardSettings.readLive()
         guard settings.enabled else { return }
-        let front = NSWorkspace.shared.frontmostApplication
-        previousApp = front?.bundleIdentifier == Bundle.main.bundleIdentifier ? previousApp : front
+        // Ziel des Einfügens ist die App davor, auch WhisperM8 selbst (Chat-Prompt).
+        previousApp = NSWorkspace.shared.frontmostApplication
 
-        model.setEntries(cachedEntries)
         model.reset()
+        model.isPresented = true
         let hosting = NSHostingView(rootView: ClipboardHistoryView(model: model))
         let panel = ClipboardPanel(contentView: hosting)
         panel.onCommand = { [weak self] command in
@@ -117,6 +121,7 @@ final class ClipboardHistoryController {
         ))
         self.panel = panel
         panel.makeKeyAndOrderFront(nil)
+        panel.focusSearchField()
     }
 
     private func hidePanelIfNotKey() {
@@ -124,6 +129,7 @@ final class ClipboardHistoryController {
     }
 
     func hidePanel() {
+        model.isPresented = false
         panel?.onResignKey = nil
         panel?.orderOut(nil)
         panel = nil
@@ -145,9 +151,12 @@ final class ClipboardHistoryController {
         let target = previousApp
         let autoPaste = ClipboardSettings.readLive().autoPaste
         hidePanel()
-        guard writeToPasteboard(entry, plain: plain) else { return }
-        guard autoPaste else { return }
         Task { @MainActor in
+            guard await writeToPasteboard(entry, plain: plain) else {
+                NSSound.beep()
+                return
+            }
+            guard autoPaste else { return }
             let ok = await pasteService.pasteClipboardContents(
                 to: target,
                 onMissingPermission: { Logger.paste.warning("Clipboard history: accessibility permission missing, entry stays on the clipboard") },
@@ -158,52 +167,19 @@ final class ClipboardHistoryController {
     }
 
     /// Für `whisperm8 clipboard copy`: zurück in die Zwischenablage, ohne Einfügen.
-    @discardableResult
-    func copyToPasteboard(_ entry: ClipboardEntry) -> Bool {
-        writeToPasteboard(entry, plain: false)
+    func copyToPasteboard(_ entry: ClipboardEntry) async -> Bool {
+        await writeToPasteboard(entry, plain: false)
     }
 
-    /// Schreibt den Eintrag mit Marker (der Monitor übergeht ihn) und
-    /// schiebt ihn im Verlauf nach oben.
-    private func writeToPasteboard(_ entry: ClipboardEntry, plain: Bool) -> Bool {
-        let pasteboard = NSPasteboard.general
-        ClipboardInternalWrites.begin()
-        defer { ClipboardInternalWrites.end(pasteboard: pasteboard) }
-        let dir = store.directory
-
-        let written: Bool
-        switch entry.kind {
-        case .text:
-            guard let text = ClipboardHistoryStore.fullText(of: entry, directory: dir) else { return false }
-            pasteboard.clearContents()
-            let item = NSPasteboardItem()
-            item.setString(text, forType: .string)
-            if !plain {
-                if let file = entry.rtfFile, let data = try? Data(contentsOf: ClipboardHistoryStore.blobURL(file, directory: dir)) {
-                    item.setData(data, forType: .rtf)
-                }
-                if let file = entry.htmlFile, let data = try? Data(contentsOf: ClipboardHistoryStore.blobURL(file, directory: dir)) {
-                    item.setData(data, forType: .html)
-                }
-            }
-            ClipboardInternalWrites.mark(item)
-            written = pasteboard.writeObjects([item])
-        case .image:
-            guard let file = entry.imageFile,
-                  let data = try? Data(contentsOf: ClipboardHistoryStore.blobURL(file, directory: dir)) else { return false }
-            pasteboard.clearContents()
-            let item = NSPasteboardItem()
-            item.setData(data, forType: .png)
-            if let tiff = NSImage(data: data)?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
-            ClipboardInternalWrites.mark(item)
-            written = pasteboard.writeObjects([item])
-        case .files:
-            let urls = (entry.filePaths ?? []).map { URL(fileURLWithPath: $0) as NSURL }
-            guard !urls.isEmpty else { return false }
-            pasteboard.clearContents()
-            written = pasteboard.writeObjects(urls)
-            ClipboardInternalWrites.markPasteboard(pasteboard)
-        }
+    /// Dateien lesen und Bilder umwandeln abseits des Main Threads, dann
+    /// schreiben (markiert, der Monitor übergeht es) und nach oben schieben.
+    private func writeToPasteboard(_ entry: ClipboardEntry, plain: Bool) async -> Bool {
+        let directory = store.directory
+        let payload = await Task.detached(priority: .userInitiated) {
+            ClipboardRestore.payload(for: entry, plain: plain, directory: directory)
+        }.value
+        guard let payload else { return false }
+        let written = ClipboardRestore.write(payload, to: .general)
         if written { store.bump(id: entry.id) }
         return written
     }

@@ -50,7 +50,7 @@ extension UISnapshotGallery {
 
         func model(selected: String, query: String = "") -> ClipboardHistoryViewModel {
             let model = ClipboardHistoryViewModel(
-                loaders: .init(fullText: { $0.text }, image: { _ in nil }, appIcon: { _ in nil }),
+                loaders: .init(fullText: { $0.text }, image: { _, _ in nil }, appIcon: { _ in nil }),
                 now: { now }
             )
             model.setEntries(entries)
@@ -73,7 +73,7 @@ extension UISnapshotGallery {
             },
             Fixture(name: "clipboard-verlauf-leer", size: size) {
                 let empty = ClipboardHistoryViewModel(
-                    loaders: .init(fullText: { _ in nil }, image: { _ in nil }, appIcon: { _ in nil }), now: { now }
+                    loaders: .init(fullText: { _ in nil }, image: { _, _ in nil }, appIcon: { _ in nil }), now: { now }
                 )
                 return AnyView(ClipboardHistoryView(model: empty, now: now))
             },
