@@ -96,15 +96,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await auditNote(request)
         case "session.moveAccount":
             return await sessionMoveAccount(request)
-        case let method where Self.boardMethods.contains(method):
-            return await boardMutation(request)
-        case let method where Self.debugMethods.contains(method):
-            return await debugRequest(request)
-        case let method where Self.speechMethods.contains(method) || Self.clipboardMethods.contains(method):
-            return Self.clipboardMethods.contains(request.method) ? await clipboardRequest(request) : await speechRequest(request)
         default:
-            return .failure(requestID: request.requestID, code: .unsupported,
-                            message: "Unbekannte Methode: \(request.method)")
+            // Board, Debug, Ansagen, Zwischenablage: eigene Dateien (+Routing).
+            return await featureRequest(request)
         }
     }
 
