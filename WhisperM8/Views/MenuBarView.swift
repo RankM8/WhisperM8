@@ -13,6 +13,7 @@ struct MenuBarView: View {
     /// erscheint nur, wenn das Feature eingeschaltet ist.
     @State private var voiceGate = VoiceGateCoordinator.shared
     @State private var speechCallouts = SpeechCalloutCenter.shared
+    @AppStorage(PreferenceKeys.notchStatusEnabled) private var notchStatusEnabled = false
 
     /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)
     private static func hasTranscriptionCredentials() -> Bool {
@@ -144,6 +145,12 @@ struct MenuBarView: View {
                 get: { speechCallouts.isMuted },
                 set: { speechCallouts.setMuted($0) }
             ))
+        }
+
+        // Statusanzeige an der Notch; weg bei Kill-Switch.
+        if AppPreferences.shared.isNotchStatusFeatureEnabled {
+            Divider()
+            Toggle("Chat Status at the Notch", isOn: $notchStatusEnabled)
         }
 
         Divider()

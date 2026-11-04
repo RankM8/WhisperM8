@@ -615,6 +615,47 @@ struct AppPreferences {
         nonmutating set { setOptionalString(newValue, forKey: Keys.speechCalloutVoiceIdentifier) }
     }
 
+    // MARK: Notch-Status
+
+    /// Notbremse für die Statusanzeige an der Notch: Aus = kein Fenster, keine
+    /// Beobachter, der Nutzer-Schalter wirkt nicht.
+    /// `defaults write com.whisperm8.app notchStatusFeatureEnabled -bool NO`
+    var isNotchStatusFeatureEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.notchStatusFeatureEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusFeatureEnabled) }
+    }
+
+    /// Nutzer-Schalter (Einstellungen, Menüleiste, Hotkey). Standard: aus.
+    var isNotchStatusEnabled: Bool {
+        get { defaults.bool(forKey: Keys.notchStatusEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusEnabled) }
+    }
+
+    /// Bildschirm der Anzeige: `auto` (eingebauter mit Notch, sonst Hauptbildschirm),
+    /// `builtIn` oder `main`.
+    var notchStatusScreenRaw: String {
+        get { defaults.string(forKey: Keys.notchStatusScreen) ?? "auto" }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusScreen) }
+    }
+
+    /// Fenster aus Bildschirmaufnahmen und Screen-Sharing ausnehmen. Standard: an.
+    var isNotchStatusHiddenFromCapture: Bool {
+        get { boolWithDefault(true, forKey: Keys.notchStatusHideFromCapture) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusHideFromCapture) }
+    }
+
+    /// Frisch fertige Chats anzeigen (Zähler, Liste, kurze Verbreiterung). Standard: an.
+    var isNotchStatusShowingFreshDone: Bool {
+        get { boolWithDefault(true, forKey: Keys.notchStatusShowFreshDone) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusShowFreshDone) }
+    }
+
+    /// Liste auch beim Darüberfahren aufklappen (zusätzlich zum Klick). Standard: aus.
+    var isNotchStatusExpandingOnHover: Bool {
+        get { defaults.bool(forKey: Keys.notchStatusExpandOnHover) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusExpandOnHover) }
+    }
+
     /// Claude-Code-Plugin `whisperm8` (Skills + Jarvis-Board-Mod): Die App legt
     /// es beim Start unter Application Support ab und gibt es jeder
     /// Claude-Session per `CLAUDE_CODE_PLUGIN_DIRS` mit. Aus = keine Variable,
@@ -993,6 +1034,12 @@ enum PreferenceKeys {
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"
     static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"
+    static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
+    static let notchStatusEnabled = "notchStatusEnabled"
+    static let notchStatusScreen = "notchStatusScreen"
+    static let notchStatusHideFromCapture = "notchStatusHideFromCapture"
+    static let notchStatusShowFreshDone = "notchStatusShowFreshDone"
+    static let notchStatusExpandOnHover = "notchStatusExpandOnHover"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"
