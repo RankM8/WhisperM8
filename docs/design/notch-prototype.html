@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notch-Status Prototyp</title>
+<style>
+  :root {
+    --bg: #f2f2f4; --panel: #ffffff; --ink: #1c1c1e; --ink2: #5f6064; --ink3: #8d8e93;
+    --line: rgba(0,0,0,.09);
+    --working: #3fa873; --awaiting: #c9962a; --error: #d6473d; --idle: #8d8e93;
+    --menubar: rgba(255,255,255,.72); --wall: linear-gradient(160deg,#cfd8ee,#e8d9ee 55%,#f3e4d6);
+    --pill-bg: rgba(250,250,252,.92); --pill-ink: #1c1c1e; --pill-line: rgba(0,0,0,.12);
+  }
+  [data-theme="dark"] {
+    --bg: #17181b; --panel: #1f2023; --ink: #f1f1f3; --ink2: #a4a5ab; --ink3: #76777d;
+    --line: rgba(255,255,255,.09);
+    --working: #4cc38a; --awaiting: #e9b949; --error: #e5594f; --idle: #76777d;
+    --menubar: rgba(30,30,34,.7); --wall: linear-gradient(160deg,#1b2238,#2a2140 55%,#3a2b2e);
+    --pill-bg: rgba(14,14,16,.94); --pill-ink: #f1f1f3; --pill-line: rgba(255,255,255,.12);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; align-items: center; gap: 16px; padding: 18px 28px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header p { margin: 0; color: var(--ink2); }
+  header button { margin-left: auto; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  main { padding: 24px 28px 60px; display: grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap: 22px; }
+  figure { margin: 0; }
+  figcaption { margin: 8px 2px 0; color: var(--ink2); }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* Bildschirm-Attrappe */
+  .screen { position: relative; height: 330px; border-radius: 12px; overflow: hidden; background: var(--wall); border: 1px solid var(--line); }
+  .menubar { position: absolute; inset: 0 0 auto 0; height: 32px; background: var(--menubar); backdrop-filter: blur(14px);
+             display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font-size: 12px; color: var(--ink); }
+  .menubar.nonotch { height: 24px; }
+  .menubar .l, .menubar .r { display: flex; gap: 14px; opacity: .85; }
+
+  /* Notch: immer schwarz, wie die Hardware */
+  .notch-shape { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #000; color: #f4f4f6;
+                 border-radius: 0 0 14px 14px; overflow: hidden; }
+  .notch-hw { position: absolute; top: 0; left: 50%; width: 184px; height: 32px; transform: translateX(-50%); background: #000; border-radius: 0 0 12px 12px; z-index: 2; }
+  .row-compact { height: 32px; display: flex; align-items: center; justify-content: space-between; }
+  .wing { display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wing.left { justify-content: flex-start; }
+  .wing.right { justify-content: flex-end; }
+  .gap { width: 184px; flex: none; }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .dot.working { background: #4cc38a; box-shadow: 0 0 0 3px rgba(76,195,138,.22); }
+  .dot.awaiting { background: #e9b949; border-radius: 2px; transform: rotate(45deg) scale(.82); box-shadow: 0 0 0 3px rgba(233,185,73,.25); }
+  .dot.error { background: transparent; border: 1.5px solid #e5594f; }
+  .dot.idle { background: #76777d; opacity: .7; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .chip.awaiting { color: #e9b949; } .chip.working { color: #4cc38a; } .chip.error { color: #e5594f; } .chip.done { color: #a4a5ab; }
+
+  .alert-title { max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f4f4f6; font-weight: 500; }
+  .alert-sub { color: #e9b949; font-weight: 600; }
+
+  /* Aufgeklappt */
+  .list { padding: 4px 10px 12px; width: 100%; }
+  .list h4 { margin: 8px 6px 4px; font: 600 11px/1 -apple-system, system-ui; letter-spacing: .06em; color: #8d8e93; text-transform: uppercase; }
+  .item { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: start; padding: 7px 8px; border-radius: 8px; }
+  .item:hover { background: rgba(255,255,255,.07); }
+  .item.attn { background: rgba(233,185,73,.10); }
+  .item .t { font-size: 12.5px; font-weight: 600; color: #f4f4f6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .p { font-size: 11px; color: #8d8e93; }
+  .item .s { font-size: 11px; color: #a4a5ab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .w { font-size: 11px; color: #8d8e93; text-align: right; white-space: nowrap; }
+  .item .dotcol { padding-top: 4px; display: flex; justify-content: center; }
+  .foot { display: flex; justify-content: space-between; padding: 6px 12px 2px; font-size: 11px; color: #76777d; }
+
+  /* Ohne Notch: Pille unter der Menüleiste, folgt hell/dunkel */
+  .pill { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: var(--pill-bg); color: var(--pill-ink);
+          border: 1px solid var(--pill-line); border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.18); backdrop-filter: blur(16px); }
+  .pill.compact { height: 26px; padding: 0 12px; display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pill.expanded { border-radius: 16px; width: 340px; padding: 8px 8px 10px; }
+  .pill .alert-title { color: var(--pill-ink); }
+  .pill .chip.awaiting { color: var(--awaiting); } .pill .chip.working { color: var(--working); } .pill .chip.done { color: var(--ink2); }
+  .pill .dot.working { background: var(--working); box-shadow: 0 0 0 3px color-mix(in srgb, var(--working) 22%, transparent); }
+  .pill .dot.awaiting { background: var(--awaiting); }
+  .pill .dot.idle { background: var(--idle); }
+  .pill .item .t { color: var(--pill-ink); } .pill .item .p, .pill .item .w { color: var(--ink3); } .pill .item .s { color: var(--ink2); }
+  .pill .item:hover { background: var(--line); }
+  .pill .list h4 { color: var(--ink3); } .pill .foot { color: var(--ink3); }
+  .pill .item.attn { background: color-mix(in srgb, var(--awaiting) 14%, transparent); }
+
+  /* Einmalige Verbreiterung, keine Dauerbewegung */
+  .grow { animation: grow .32s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes grow { from { width: 250px; } }
+  .legend { grid-column: 1 / -1; display: flex; gap: 22px; color: var(--ink2); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Notch-Status</h1>
+  <p>Prototyp der Zustände: Ruhe, braucht dich, aufgeklappt, ohne Notch</p>
+  <button id="theme">Hell / Dunkel</button>
+</header>
+<main>
+  <div class="legend">
+    <span><i class="dot working"></i>arbeitet (Grün nur hier)</span>
+    <span><i class="dot awaiting"></i>wartet auf dich (Amber, Raute)</span>
+    <span><i class="dot error"></i>Fehler (Rot, Ring)</span>
+    <span><i class="dot idle"></i>bereit (Grau)</span>
+  </div>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="notch-hw"></div>
+      <div class="notch-shape" style="width:184px"><div class="row-compact"></div></div>
+    </div>
+    <figcaption><b>1 · Ruhe, nichts los.</b> Nur die Hardware-Notch. Die Anzeige ist ausgeblendet, solange kein Chat arbeitet, wartet oder frisch fertig ist.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="notch-shape" style="width:300px">
+        <div class="row-compact">
+          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
+          <div class="gap"></div>
+          <div class="wing right"><span class="chip awaiting"><i class="dot awaiting"></i>1</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>2 · Ruhezustand mit Aktivität.</b> Links die arbeitenden, rechts die wartenden Chats. Ein Klick klappt die Liste auf.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="notch-shape grow" style="width:520px">
+        <div class="row-compact">
+          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
+          <div class="gap"></div>
+          <div class="wing right" style="flex:1;justify-content:flex-start;gap:9px"><i class="dot awaiting"></i><span class="alert-title">Release-Notizen prüfen</span><span class="alert-sub">wartet</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>3 · Braucht dich.</b> Verbreitert sich einmal kurz (ca. 4 s) mit dem Chat-Namen, zieht sich dann auf Zustand 2 zurück. Der Amber-Hinweis bleibt, bis der Chat wieder arbeitet.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="notch-shape" style="width:420px">
+        <div class="row-compact">
+          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
+          <div class="gap"></div>
+          <div class="wing right"><span class="chip awaiting"><i class="dot awaiting"></i>1</span><span class="chip done">✓ 1</span></div>
+        </div>
+        <div class="list">
+          <h4>Braucht dich</h4>
+          <div class="item attn"><div class="dotcol"><i class="dot awaiting"></i></div><div><div class="t">Release-Notizen prüfen</div><div class="s">Freigabe: Bash git push</div></div><div class="w">wartet · 2 min<div class="p">whisperm8</div></div></div>
+          <h4>Frisch fertig</h4>
+          <div class="item"><div class="dotcol"><i class="dot idle"></i></div><div><div class="t">Tab-Switcher Review</div><div class="s">Alle Befunde eingearbeitet.</div></div><div class="w">vor 6 min<div class="p">whisperm8</div></div></div>
+          <h4>Arbeitet</h4>
+          <div class="item"><div class="dotcol"><i class="dot working"></i></div><div><div class="t">Clipboard Verlauf</div><div class="s">› Edit ClipboardStore.swift</div></div><div class="w">arbeitet · 8 min<div class="p">whisperm8</div></div></div>
+          <div class="item"><div class="dotcol"><i class="dot working"></i></div><div><div class="t">Landing Page Texte</div><div class="s">› writing reply</div></div><div class="w">arbeitet · 1 min<div class="p">rankm8-web</div></div></div>
+          <div class="foot"><span>Klick auf eine Zeile öffnet den Chat</span><span>Esc schließt</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>4 · Aufgeklappt.</b> Sortiert nach Aufmerksamkeit: braucht dich, frisch fertig, arbeitet, bereit. Zeile = Status, Titel, Projekt, Stand, seit wann. Klick öffnet genau diesen Chat.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar nonotch"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="pill compact"><span class="chip working"><i class="dot working"></i>2</span><span class="chip awaiting"><i class="dot awaiting"></i>1</span></div>
+    </div>
+    <figcaption><b>5 · Ohne Notch, Ruhe.</b> Kleine Pille oben mittig unter der Menüleiste, folgt hell/dunkel.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar nonotch"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="pill compact grow" style="gap:10px"><span class="chip working"><i class="dot working"></i>2</span><i class="dot awaiting"></i><span class="alert-title">Release-Notizen prüfen</span><span class="alert-sub" style="color:var(--awaiting)">wartet</span></div>
+    </div>
+    <figcaption><b>6 · Ohne Notch, braucht dich.</b> Gleiche Verbreiterung, gleiche Rückkehr.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar nonotch"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
+      <div class="pill expanded">
+        <div class="list" style="padding:0">
+          <h4>Braucht dich</h4>
+          <div class="item attn"><div class="dotcol"><i class="dot awaiting"></i></div><div><div class="t">Release-Notizen prüfen</div><div class="s">Freigabe: Bash git push</div></div><div class="w">wartet · 2 min<div class="p">whisperm8</div></div></div>
+          <h4>Arbeitet</h4>
+          <div class="item"><div class="dotcol"><i class="dot working"></i></div><div><div class="t">Clipboard Verlauf</div><div class="s">› Edit ClipboardStore.swift</div></div><div class="w">arbeitet · 8 min<div class="p">whisperm8</div></div></div>
+          <div class="foot"><span>Klick öffnet den Chat</span><span>Esc schließt</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>7 · Ohne Notch, aufgeklappt.</b> Dieselbe Liste in einer abgerundeten Karte.</figcaption>
+  </figure>
+</main>
+<script>
+  const root = document.documentElement;
+  const saved = (() => { try { return localStorage.getItem('notch-theme'); } catch (e) { return null; } })();
+  if (saved) root.dataset.theme = saved;
+  else if (matchMedia('(prefers-color-scheme: dark)').matches) root.dataset.theme = 'dark';
+  document.getElementById('theme').addEventListener('click', () => {
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('notch-theme', root.dataset.theme); } catch (e) {}
+  });
+</script>
+</body>
+</html>
