@@ -37,7 +37,7 @@ enum SettingsNavigation {
     static func launchClass(of page: SettingsPage) -> SettingsLaunchClass {
         switch page {
         case .recording, .transcription, .aiOutput, .context, .output,
-             .agentChats, .cli, .general, .permissions, .about:
+             .agentChats, .cli, .clipboard, .general, .permissions, .about:
             return .core
         case .claudeAccounts, .claudeHooks:
             return .advanced
@@ -63,7 +63,7 @@ enum SettingsNavigation {
                 pages: [.recording, .transcription, .aiOutput, .context, .output]
             ),
             SettingsPageGroup(title: "Agent Chats", launchClass: .core, pages: visible([.agentChats, .cli])),
-            SettingsPageGroup(title: "App", launchClass: .core, pages: [.general, .permissions, .about]),
+            SettingsPageGroup(title: "App", launchClass: .core, pages: [.clipboard, .general, .permissions, .about]),
             SettingsPageGroup(
                 title: "Advanced", launchClass: .advanced,
                 pages: visible([.claudeAccounts, .claudeHooks])

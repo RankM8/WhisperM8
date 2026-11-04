@@ -102,6 +102,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return await debugRequest(request)
         case let method where Self.speechMethods.contains(method):
             return await speechRequest(request)
+        case let method where Self.clipboardMethods.contains(method):
+            return await clipboardRequest(request)
         default:
             return .failure(requestID: request.requestID, code: .unsupported,
                             message: "Unbekannte Methode: \(request.method)")

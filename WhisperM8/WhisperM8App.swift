@@ -347,6 +347,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // hoppt selbst auf den MainActor. Kill-Switch:
         // `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
         AgentControlServer.shared.start(handler: AgentControlRequestHandler())
+        // Zwischenablage-Verlauf (Maccy-Ersatz): wirkt nur bei eingeschaltetem
+        // Schalter, sonst weder Monitor noch Hotkey.
+        MainActor.assumeIsolated { ClipboardHistoryController.shared.start() }
         // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der
         // Zustellung stand, ist von unbekanntem Ausgang — als `unknown`
         // markieren statt blind erneut zu senden (höchstens-einmal-Garantie).
@@ -519,7 +522,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationWillTerminate(_ notification: Notification) {
         AudioDuckingManager.shared.endCaptureImmediate()
         // Letzten (debounced) Fenster-/Tab-State noch festschreiben.
-        MainActor.assumeIsolated { AgentWindowStore.shared.flush() }
+        MainActor.assumeIsolated {
+            AgentWindowStore.shared.flush()
+            ClipboardHistoryController.shared.shutdown()
+        }
     }
 
     private func requestNotificationPermission() {

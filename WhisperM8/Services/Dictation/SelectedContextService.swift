@@ -161,6 +161,11 @@ struct SelectedContextService {
             return nil
         }
 
+        // Cmd+C und Zurückschreiben sind eigene Schreibvorgänge: der
+        // Zwischenablage-Verlauf übergeht sie.
+        ClipboardInternalWrites.begin()
+        defer { ClipboardInternalWrites.end(pasteboard: pasteboard) }
+
         let baseline = pasteboard.changeCount
         guard let snapshot = await PasteboardSnapshot.capture(
             from: pasteboard, maxBytes: maxSnapshotBytes, timeout: snapshotTimeout

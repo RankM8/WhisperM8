@@ -251,6 +251,16 @@
         }
       }
     },
+    "%lld characters": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Zeichen"
+          }
+        }
+      }
+    },
     "%lld chats": {
       "localizations": {
         "de": {
@@ -317,6 +327,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld fertig"
+          }
+        }
+      }
+    },
+    "%lld entries are stored on this Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Einträge sind auf diesem Mac gespeichert."
           }
         }
       }
@@ -681,6 +701,26 @@
         }
       }
     },
+    "A searchable clipboard history with a hotkey and access for Claude.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durchsuchbarer Zwischenablage-Verlauf mit Hotkey und Zugriff für Claude."
+          }
+        }
+      }
+    },
+    "A searchable history of what you copy, with a hotkey and access for Claude.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein durchsuchbarer Verlauf dessen, was du kopierst, mit Hotkey und Zugriff für Claude."
+          }
+        }
+      }
+    },
     "A small card on each tile of the Jarvis board: work package, what needs you, blockers.": {
       "localizations": {
         "de": {
@@ -751,12 +791,32 @@
         }
       }
     },
+    "API keys, tokens, JWTs and private keys are replaced by a placeholder in what agents see.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Keys, Tokens, JWTs und private Schlüssel werden in dem, was Agents sehen, durch einen Platzhalter ersetzt."
+          }
+        }
+      }
+    },
     "About": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Info"
+          }
+        }
+      }
+    },
+    "Access for Claude": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugriff für Claude"
           }
         }
       }
@@ -891,6 +951,16 @@
         }
       }
     },
+    "Add": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinzufügen"
+          }
+        }
+      }
+    },
     "Add Account": {
       "localizations": {
         "de": {
@@ -947,6 +1017,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Konto hinzufügen"
+          }
+        }
+      }
+    },
+    "Add app": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App hinzufügen"
           }
         }
       }
@@ -1231,6 +1311,16 @@
         }
       }
     },
+    "All stored entries are deleted, pinned ones too. This cannot be undone.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle gespeicherten Einträge werden gelöscht, auch angepinnte. Das lässt sich nicht rückgängig machen."
+          }
+        }
+      }
+    },
     "All tabs": {
       "localizations": {
         "de": {
@@ -1267,6 +1357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erlaubt"
+          }
+        }
+      }
+    },
+    "Allows `whisperm8 clipboard` and the clipboard tool in Claude chats, so \"the error I copied earlier\" works.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaubt `whisperm8 clipboard` und das Clipboard-Tool in Claude-Chats, damit „der Fehler, den ich vorhin kopiert hatte“ funktioniert."
           }
         }
       }
@@ -1691,6 +1791,16 @@
         }
       }
     },
+    "Back to password managers and the Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zu Passwort-Managern und Schlüsselbund."
+          }
+        }
+      }
+    },
     "Back to project view “%@”": {
       "localizations": {
         "de": {
@@ -2067,6 +2177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vorsichtiger Rückfall"
+          }
+        }
+      }
+    },
+    "Center of screen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildschirmmitte"
           }
         }
       }
@@ -2571,6 +2691,46 @@
         }
       }
     },
+    "Clear history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf leeren"
+          }
+        }
+      }
+    },
+    "Clear history…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf leeren…"
+          }
+        }
+      }
+    },
+    "Clear the clipboard history?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf leeren?"
+          }
+        }
+      }
+    },
+    "Clear when WhisperM8 quits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beim Beenden von WhisperM8 leeren"
+          }
+        }
+      }
+    },
     "Click **%@** at the top of the header to start %@ and continue this session.": {
       "localizations": {
         "de": {
@@ -2607,6 +2767,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Klick: %@"
+          }
+        }
+      }
+    },
+    "Clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage"
+          }
+        }
+      }
+    },
+    "Clipboard History...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf..."
           }
         }
       }
@@ -3151,6 +3331,16 @@
         }
       }
     },
+    "Copies from these apps are never stored (bundle identifiers). Anything marked confidential by an app is skipped anyway.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopien aus diesen Apps werden nie gespeichert (Bundle-IDs). Was eine App als vertraulich markiert, wird ohnehin übersprungen."
+          }
+        }
+      }
+    },
     "Copy": {
       "localizations": {
         "de": {
@@ -3197,6 +3387,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pfad kopieren"
+          }
+        }
+      }
+    },
+    "Copy something and it shows up here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kopiere etwas, dann erscheint es hier."
           }
         }
       }
@@ -4081,6 +4281,26 @@
         }
       }
     },
+    "Enter pastes into the app you came from. Off: the entry is only copied.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter fügt in die vorherige App ein. Aus: der Eintrag wird nur kopiert."
+          }
+        }
+      }
+    },
+    "Entries to keep": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge behalten"
+          }
+        }
+      }
+    },
     "Error": {
       "localizations": {
         "de": {
@@ -4137,6 +4357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ausschließen"
+          }
+        }
+      }
+    },
+    "Excluded apps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeschlossene Apps"
           }
         }
       }
@@ -4421,6 +4651,16 @@
         }
       }
     },
+    "Files": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien"
+          }
+        }
+      }
+    },
     "Filter…": {
       "localizations": {
         "de": {
@@ -4701,6 +4941,16 @@
         }
       }
     },
+    "Global shortcut. Default ⇧⌘C, like Maccy.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Globales Kürzel. Standard ⇧⌘C, wie bei Maccy."
+          }
+        }
+      }
+    },
     "Goes through permissions, transcription provider, and the agent CLIs again.": {
       "localizations": {
         "de": {
@@ -4901,6 +5151,16 @@
         }
       }
     },
+    "History": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        }
+      }
+    },
     "History deleted, can't be continued": {
       "localizations": {
         "de": {
@@ -5057,6 +5317,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stimmt die Richtung einmal nicht, wiederhole dieselbe Phrase innerhalb von vier Sekunden. Das überstimmt die Annahme und schaltet trotzdem – so holt dich das zweimalige Frei-Wort immer aus dem Stumm-Zustand."
+          }
+        }
+      }
+    },
+    "Image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild"
           }
         }
       }
@@ -5281,6 +5551,16 @@
         }
       }
     },
+    "Items: %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einträge: %lld"
+          }
+        }
+      }
+    },
     "Jarvis & Callouts": {
       "localizations": {
         "de": {
@@ -5387,6 +5667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mac wach halten, solange Chats arbeiten"
+          }
+        }
+      }
+    },
+    "Keep a clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf führen"
           }
         }
       }
@@ -5537,6 +5827,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verlässt"
+          }
+        }
+      }
+    },
+    "Let agents read the history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents den Verlauf lesen lassen"
           }
         }
       }
@@ -6051,6 +6351,16 @@
         }
       }
     },
+    "Mask secrets for agents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geheimnisse für Agents maskieren"
+          }
+        }
+      }
+    },
     "Max": {
       "localizations": {
         "de": {
@@ -6541,6 +6851,16 @@
         }
       }
     },
+    "Near the mouse pointer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nahe dem Mauszeiger"
+          }
+        }
+      }
+    },
     "Needs AI enrichment (Codex)": {
       "localizations": {
         "de": {
@@ -6937,6 +7257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Chats im Zeitraum"
+          }
+        }
+      }
+    },
+    "No clipboard history yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Verlauf"
           }
         }
       }
@@ -7351,6 +7681,16 @@
         }
       }
     },
+    "Nothing found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts gefunden"
+          }
+        }
+      }
+    },
     "Nothing to do. Servers with different definitions per account are never copied.": {
       "localizations": {
         "de": {
@@ -7610,6 +7950,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Als Workspace öffnen"
+          }
+        }
+      }
+    },
+    "Open history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf öffnen"
           }
         }
       }
@@ -7904,6 +8254,36 @@
         }
       }
     },
+    "Paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einfügen"
+          }
+        }
+      }
+    },
+    "Paste as plain text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Text einfügen"
+          }
+        }
+      }
+    },
+    "Paste automatically": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch einfügen"
+          }
+        }
+      }
+    },
     "Paste screenshots into target app": {
       "localizations": {
         "de": {
@@ -7920,6 +8300,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fügt das Ergebnis in die vorderste App ein; braucht Bedienungshilfen und fällt auf die Zwischenablage zurück."
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "Pause clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf pausieren"
           }
         }
       }
@@ -7984,6 +8384,16 @@
         }
       }
     },
+    "Pick a running app or type a bundle identifier.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
+          }
+        }
+      }
+    },
     "Pin": {
       "localizations": {
         "de": {
@@ -8010,6 +8420,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ping fehlgeschlagen: %@."
+          }
+        }
+      }
+    },
+    "Pinned": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angepinnt"
+          }
+        }
+      }
+    },
+    "Pinned entries do not count and stay.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angepinnte Einträge zählen nicht und bleiben."
+          }
+        }
+      }
+    },
+    "Pinned entries stay.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angepinnte Einträge bleiben."
           }
         }
       }
@@ -8050,6 +8490,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Normales Terminal — Login-Shell im Projektverzeichnis, kein Agent"
+          }
+        }
+      }
+    },
+    "Plain text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Text"
           }
         }
       }
@@ -8110,6 +8560,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Port"
+          }
+        }
+      }
+    },
+    "Position": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Position"
           }
         }
       }
@@ -8420,6 +8880,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Frage: %@"
+          }
+        }
+      }
+    },
+    "Quick paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellwahl"
           }
         }
       }
@@ -8820,6 +9290,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ausgabearchiv neu laden"
+          }
+        }
+      }
+    },
+    "Remembers text, images and files you copy. Off by default. Passwords from password managers are never stored.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Merkt sich kopierten Text, Bilder und Dateien. Standardmäßig aus. Passwörter aus Passwort-Managern werden nie gespeichert."
           }
         }
       }
@@ -9384,6 +9864,16 @@
         }
       }
     },
+    "Reset list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste zurücksetzen"
+          }
+        }
+      }
+    },
     "Reset name": {
       "localizations": {
         "de": {
@@ -9570,6 +10060,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einrichtung erneut starten"
+          }
+        }
+      }
+    },
+    "Running apps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Apps"
           }
         }
       }
@@ -9834,6 +10334,16 @@
         }
       }
     },
+    "Search clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage durchsuchen"
+          }
+        }
+      }
+    },
     "Search projects": {
       "localizations": {
         "de": {
@@ -9880,6 +10390,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Volltext wird durchsucht …"
+          }
+        }
+      }
+    },
+    "Select": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen"
           }
         }
       }
@@ -11094,6 +11614,26 @@
         }
       }
     },
+    "Stops recording for now. Also in the menu bar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hält die Aufzeichnung vorerst an. Auch in der Menüleiste."
+          }
+        }
+      }
+    },
+    "Storage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicher"
+          }
+        }
+      }
+    },
     "Strong model for everyday coding.": {
       "localizations": {
         "de": {
@@ -11580,6 +12120,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Teste dein Setup"
+          }
+        }
+      }
+    },
+    "Text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text"
           }
         }
       }
@@ -13194,6 +13744,16 @@
         }
       }
     },
+    "Where the window appears.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wo das Fenster erscheint."
+          }
+        }
+      }
+    },
     "Which Claude session belongs to this tab?": {
       "localizations": {
         "de": {
@@ -13250,6 +13810,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperM8-Statuszeile"
+          }
+        }
+      }
+    },
+    "WhisperM8 can replace Maccy. Turn Maccy off afterwards: both use the shortcut ⇧⌘C by default, so only one of them should be running.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 kann Maccy ersetzen. Schalte Maccy danach ab: beide nutzen standardmäßig das Kürzel ⇧⌘C, deshalb sollte nur eines laufen."
           }
         }
       }
@@ -13370,6 +13940,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperM8 · Claude-Kontoprofil „%@“"
+          }
+        }
+      }
+    },
+    "Window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fenster"
           }
         }
       }

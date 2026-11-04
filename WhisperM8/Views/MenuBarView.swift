@@ -13,6 +13,8 @@ struct MenuBarView: View {
     /// erscheint nur, wenn das Feature eingeschaltet ist.
     @State private var voiceGate = VoiceGateCoordinator.shared
     @State private var speechCallouts = SpeechCalloutCenter.shared
+    @AppStorage(ClipboardPreferenceKeys.enabled) private var clipboardEnabled = false
+    @AppStorage(ClipboardPreferenceKeys.paused) private var clipboardPaused = false
 
     /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)
     private static func hasTranscriptionCredentials() -> Bool {
@@ -144,6 +146,15 @@ struct MenuBarView: View {
                 get: { speechCallouts.isMuted },
                 set: { speechCallouts.setMuted($0) }
             ))
+        }
+
+        // Zwischenablage-Verlauf (Maccy-Ersatz); erscheint nur bei eingeschaltetem Schalter.
+        if clipboardEnabled {
+            Divider()
+            Button("Clipboard History...") {
+                ClipboardHistoryController.shared.showPanel()
+            }
+            Toggle("Pause clipboard history", isOn: $clipboardPaused)
         }
 
         Divider()

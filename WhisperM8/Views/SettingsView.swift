@@ -16,6 +16,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case output
     case voiceGate = "voice-gate"
     case jarvis
+    case clipboard
 
     var id: String { rawValue }
 
@@ -55,6 +56,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Codex Voice Agent")
         case .jarvis:
             return String(localized: "Jarvis & Callouts")
+        case .clipboard:
+            return String(localized: "Clipboard")
         }
     }
 
@@ -90,6 +93,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "mic.slash"
         case .jarvis:
             return "text.bubble"
+        case .clipboard:
+            return "doc.on.clipboard"
         }
     }
 
@@ -125,6 +130,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Mute and unmute a Codex Desktop voice session with a spoken code word.")
         case .jarvis:
             return String(localized: "Experimental: Jarvis board, per-chat notes and spoken callouts.")
+        case .clipboard:
+            return String(localized: "A searchable clipboard history with a hotkey and access for Claude.")
         }
     }
 }
@@ -324,6 +331,8 @@ struct SettingsView: View {
             VoiceGateSettingsPage()
         case .jarvis:
             JarvisCalloutsSettingsPage()
+        case .clipboard:
+            ClipboardSettingsPage()
         }
     }
 
