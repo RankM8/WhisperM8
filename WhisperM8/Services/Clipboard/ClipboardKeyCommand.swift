@@ -19,6 +19,8 @@ enum ClipboardKeyCommand: Equatable {
     case quickSelect(Int)
     case togglePin
     case delete
+    /// ⌘D: nur Diktate zeigen bzw. wieder alles.
+    case toggleDictationFilter
     case close
 
     /// `nil` heißt: die Taste gehört dem Suchfeld (Tippen, Cursor, Auswahl).
@@ -37,6 +39,7 @@ enum ClipboardKeyCommand: Equatable {
         }
         guard flags == .command, let characters, characters.count == 1 else { return nil }
         if characters == "p" { return .togglePin }
+        if characters == "d" { return .toggleDictationFilter }
         if let digit = Int(characters), (1...9).contains(digit) { return .quickSelect(digit) }
         return nil
     }

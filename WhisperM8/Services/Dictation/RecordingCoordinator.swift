@@ -118,9 +118,10 @@ final class RecordingCoordinator {
     /// aktiven Profils hochfahren). Darf nicht blockieren — der Default
     /// dispatcht sofort in den Hintergrund.
     let transcriptionPrewarmer: (TranscriptionProvider) -> Void
-    /// Legt das fertige Diktat in den Zwischenablage-Verlauf (Text, Modus,
-    /// Ziel-App). Nur in der echten App, nie unter `swift test`.
-    let dictationHistoryRecorder: @MainActor (String, OutputMode, NSRunningApplication?) -> Void
+    /// Legt das fertige Diktat in den Zwischenablage-Verlauf (Ergebnis,
+    /// Roh-Transkript bei Nachbearbeitung, Modus, Ziel-App). Nur in der echten
+    /// App, nie unter `swift test`.
+    let dictationHistoryRecorder: @MainActor (DictationHistoryRecord) -> Void
 
     init(
         appState: AppState,
@@ -143,9 +144,12 @@ final class RecordingCoordinator {
         transcriptionPrewarmer: @escaping (TranscriptionProvider) -> Void = { provider in
             ChatGPTTranscriptionWarmup.prewarmIfNeeded(provider: provider)
         },
-        dictationHistoryRecorder: @escaping @MainActor (String, OutputMode, NSRunningApplication?) -> Void = { text, mode, target in
+        dictationHistoryRecorder: @escaping @MainActor (DictationHistoryRecord) -> Void = { record in
             guard AppInstance.isAppBundleProcess else { return }
-            ClipboardHistoryController.shared.recordDictation(text: text, modeName: mode.name, targetApp: target)
+            ClipboardHistoryController.shared.recordDictation(
+                text: record.text, original: record.original,
+                modeName: record.mode.name, targetApp: record.targetApp
+            )
         }
     ) {
         self.appState = appState
@@ -674,4 +678,24 @@ final class RecordingCoordinator {
         PermissionService.requestAccessibilityPermission()
     }
 
+}
+
+/// Was ein fertiges Diktat an den Zwischenablage-Verlauf gibt.
+struct DictationHistoryRecord {
+    var text: String
+    /// Roh-Transkript, nur wenn der Modus nachbearbeitet.
+    var original: String?
+    var mode: OutputMode
+    var targetApp: NSRunningApplication?
+
+    /// Rein: welches Roh-Transkript mitgeht. Ohne Nachbearbeitung ist das
+    /// Ergebnis das Transkript selbst.
+    static func make(finalText: String, rawText: String, mode: OutputMode, targetApp: NSRunningApplication?) -> DictationHistoryRecord {
+        DictationHistoryRecord(
+            text: finalText,
+            original: mode.usesPostProcessing ? rawText : nil,
+            mode: mode,
+            targetApp: targetApp
+        )
+    }
 }

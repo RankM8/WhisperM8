@@ -227,9 +227,12 @@ extension ClipboardHistoryCore {
     /// Baut aus einem fertigen Diktat den Verlaufseintrag, oder `nil`, wenn er
     /// nicht hineingehört: Verlauf aus oder pausiert, leerer Text, oder das
     /// Diktat ging in eine ausgeschlossene App (etwa einen Passwort-Manager).
-    /// Herkunft ist die App, in die diktiert wurde.
+    /// Herkunft ist die App, in die diktiert wurde. `original` ist das
+    /// Roh-Transkript; es wird nur behalten, wenn es sich vom Ergebnis
+    /// unterscheidet und nicht übermäßig lang ist.
     static func dictationCapture(
         text: String,
+        original: String? = nil,
         modeName: String,
         targetBundleID: String?,
         targetName: String?,
@@ -246,7 +249,19 @@ extension ClipboardHistoryCore {
         return ClipboardCapture(
             types: dictationTypes, text: text,
             sourceBundleID: targetBundleID, sourceName: targetName,
-            date: date, dictationMode: modeName
+            date: date, dictationMode: modeName,
+            dictationOriginal: keptOriginal(original, text: text)
         )
+    }
+
+    /// Längstes Roh-Transkript, das neben dem Ergebnis gespeichert wird.
+    static let maxDictationOriginalChars = 100_000
+
+    static func keptOriginal(_ original: String?, text: String) -> String? {
+        guard let original else { return nil }
+        let trimmed = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= maxDictationOriginalChars,
+              trimmed != text.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+        return trimmed
     }
 }

@@ -72,9 +72,12 @@ struct CLISkillExporter {
             resourceName: "whisperm8-chats-skill"
         )
 
-        /// Zwischenablage-Verlauf lesen (`whisperm8 clipboard …`).
+        /// Zwischenablage-Verlauf samt Diktaten (`whisperm8 clipboard …`). Wie
+        /// `callout` nur im Plugin (als `whisperm8:clipboard`, auch direkt
+        /// aufrufbar): das Tool dazu bringt die Mod mit, und ein loser Skill
+        /// namens `clipboard` in `~/.claude/skills` wäre zu allgemein.
         static let clipboard = SkillDefinition(
-            name: "whisperm8-clipboard",
+            name: "clipboard",
             resourceName: "whisperm8-clipboard-skill"
         )
 
@@ -106,7 +109,6 @@ struct CLISkillExporter {
             .transcription,
             .codexAgent,
             .chats,
-            .clipboard,
             .gptCoworker,
             .gptWorkflow,
         ]
@@ -128,7 +130,7 @@ struct CLISkillExporter {
         )
 
         /// Alle Skills des Plugins `whisperm8`.
-        static let plugin: [SkillDefinition] = all + [.jarvis, .callout]
+        static let plugin: [SkillDefinition] = all + [.jarvis, .callout, .clipboard]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).

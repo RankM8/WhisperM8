@@ -40,12 +40,43 @@ struct ClipboardHistoryView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .focused($searchFocused)
+            filterPicker
             Text("Items: \(count)")
                 .font(.system(size: 11.5))
                 .foregroundStyle(AppTheme.textTertiary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+    }
+
+    /// Alles oder nur Diktate (⌘D). Zwei sichtbare Knöpfe, kein Menü.
+    private var filterPicker: some View {
+        HStack(spacing: 2) {
+            filterButton(.all) { Text("All") }
+            filterButton(.dictations) {
+                HStack(spacing: 3) {
+                    Image(systemName: "mic.fill").font(.system(size: 10))
+                    Text("Dictations")
+                }
+            }
+        }
+        .padding(2)
+        .background(AppTheme.control, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .help(String(localized: "Show only dictations (⌘D)"))
+    }
+
+    private func filterButton(_ filter: ClipboardHistoryViewModel.Filter, @ViewBuilder label: () -> some View) -> some View {
+        let active = model.filter == filter
+        return Button { model.filter = filter } label: {
+            label()
+                .font(.system(size: 11.5, weight: active ? .semibold : .regular))
+                .foregroundStyle(active ? AppTheme.textPrimary : AppTheme.textSecondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(active ? AppTheme.panel : Color.clear, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Liste
@@ -59,6 +90,11 @@ struct ClipboardHistoryView: View {
                     .foregroundStyle(AppTheme.textTertiary)
                 if model.isSearching {
                     Text("Nothing found").font(.system(size: 13, weight: .medium))
+                } else if model.filter == .dictations {
+                    Text("No dictations yet").font(.system(size: 13, weight: .medium))
+                    Text("Finished dictations show up here.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AppTheme.textSecondary)
                 } else {
                     Text("No clipboard history yet").font(.system(size: 13, weight: .medium))
                     Text("Copy something and it shows up here.")
@@ -222,6 +258,9 @@ struct ClipboardHistoryView: View {
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    if let original = entry.dictationOriginal {
+                        originalSection(original)
+                    }
                 }
                 actionRow(entry)
             } else {
@@ -233,20 +272,47 @@ struct ClipboardHistoryView: View {
         .background(AppTheme.surface)
     }
 
+    /// Roh-Transkript eines nachbearbeiteten Diktats, unter dem Ergebnis.
+    private func originalSection(_ original: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Divider().overlay(AppTheme.border)
+            Text("Original transcript")
+                .font(.system(size: 11, weight: .semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(AppTheme.textTertiary)
+            ScrollView {
+                Text(verbatim: original)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.textSecondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 96)
+        }
+    }
+
     private func actionRow(_ entry: ClipboardEntry) -> some View {
         HStack(spacing: 6) {
             Button("Paste") { model.actions.paste(entry, false) }
                 .buttonStyle(SettingsButtonStyle.primary)
-            if entry.kind == .text {
+            // Diktate sind ohnehin reiner Text; dort steht stattdessen "Original einfügen".
+            if entry.kind == .text, entry.dictationMode == nil {
                 Button("Paste as plain text") { model.actions.paste(entry, true) }
                     .buttonStyle(SettingsButtonStyle.standard)
+            }
+            if entry.dictationOriginal != nil {
+                Button("Paste original") { model.actions.pasteOriginal(entry) }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .help(String(localized: "Paste what you said, before the mode rewrote it"))
             }
             Button { model.actions.togglePin(entry) } label: {
                 if entry.isPinned { Text("Unpin") } else { Text("Pin") }
             }
             .buttonStyle(SettingsButtonStyle.standard)
+            .help(String(localized: "Pin (⌘P)"))
             Button("Delete") { model.deleteEntry(entry) }
                 .buttonStyle(SettingsButtonStyle.destructive)
+                .help(String(localized: "Delete (⌘⌫)"))
         }
     }
 
@@ -277,19 +343,44 @@ struct ClipboardHistoryView: View {
     // MARK: Tastenhinweise
 
     private var shortcutBar: some View {
-        HStack(spacing: 14) {
-            hint("↑↓", "Select")
-            hint("↩", "Paste")
-            hint("⌥↩", "Plain text")
-            hint("⌘1-9", "Quick paste")
-            hint("⌘P", "Pin")
-            hint("⌘⌫", "Delete")
-            hint("esc", "Close")
-            Spacer(minLength: 0)
+        HStack(spacing: 12) {
+            if model.isConfirmingClear {
+                Text("Clear all entries except pinned ones?")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.textPrimary)
+                Spacer(minLength: 0)
+                Button("Cancel") { model.isConfirmingClear = false }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                Button("Clear History") { model.confirmClear() }
+                    .buttonStyle(SettingsButtonStyle.destructive)
+            } else {
+                hint("↑↓", "Select")
+                hint("↩", "Paste")
+                hint("⌥↩", "Plain text")
+                hint("⌘1-9", "Quick paste")
+                hint("⌘D", "Dictations")
+                hint("esc", "Close")
+                Spacer(minLength: 0)
+                footerButton("Clear History…", systemImage: "trash") { model.isConfirmingClear = true }
+                footerButton("Settings…", systemImage: "gearshape") { model.actions.openSettings() }
+            }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
+        .frame(minHeight: 36)
         .background(AppTheme.header)
+    }
+
+    private func footerButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: systemImage).font(.system(size: 11))
+                Text(title).font(.system(size: 11.5))
+            }
+            .foregroundStyle(AppTheme.textSecondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func hint(_ keys: String, _ label: LocalizedStringKey) -> some View {

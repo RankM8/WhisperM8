@@ -39,6 +39,9 @@ extension UISnapshotGallery {
 
         var dictation = entry("dict", "Klar, ich schaue mir den PR heute Abend an und melde mich danach bei dir.", ago: 30, app: "Slack")
         dictation.dictationMode = "Slack"
+        dictation.dictationOriginal = "jo klar ich schau mir den PR heute abend an und meld mich danach bei dir"
+        var dictation2 = entry("dict2", "Termin mit Jonas am Donnerstag um 14 Uhr, bitte Agenda vorher schicken.", ago: 5_400, app: "Mail")
+        dictation2.dictationMode = "Email"
 
         let entries: [ClipboardEntry] = [
             entry("pin1", "ssh deploy@staging.example.com -p 2222", ago: 90_000, app: "Terminal", pinned: true),
@@ -50,9 +53,13 @@ extension UISnapshotGallery {
             entry("url", "https://github.com/rankm8/whisperm8/pull/42", ago: 1_500, app: "Safari"),
             entry("code", "func paste(_ entry: ClipboardEntry, plain: Bool) async", ago: 3_600, app: "Xcode"),
             entry("team", "Das Team trifft sich um 10 Uhr zum Meeting, Agenda folgt.", ago: 7_200, app: "Slack"),
+            dictation2,
         ]
 
-        func model(selected: String, query: String = "") -> ClipboardHistoryViewModel {
+        func model(
+            selected: String, query: String = "",
+            filter: ClipboardHistoryViewModel.Filter = .all, confirmingClear: Bool = false
+        ) -> ClipboardHistoryViewModel {
             let model = ClipboardHistoryViewModel(
                 loaders: .init(fullText: { $0.text }, image: { _, _ in nil }, appIcon: { _ in nil }),
                 now: { now }
@@ -60,7 +67,9 @@ extension UISnapshotGallery {
             model.setEntries(entries)
             model.preload(thumbnails: ["img": demoImage()])
             model.query = query
+            model.filter = filter
             model.select(selected)
+            model.isConfirmingClear = confirmingClear
             return model
         }
 
@@ -71,6 +80,15 @@ extension UISnapshotGallery {
             },
             Fixture(name: "clipboard-verlauf-suche", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "team", query: "team"), now: now))
+            },
+            Fixture(name: "clipboard-verlauf-diktat", size: size) {
+                AnyView(ClipboardHistoryView(model: model(selected: "dict"), now: now))
+            },
+            Fixture(name: "clipboard-verlauf-nur-diktate", size: size) {
+                AnyView(ClipboardHistoryView(model: model(selected: "dict2", filter: .dictations), now: now))
+            },
+            Fixture(name: "clipboard-verlauf-leeren", size: size) {
+                AnyView(ClipboardHistoryView(model: model(selected: "err", confirmingClear: true), now: now))
             },
             Fixture(name: "clipboard-verlauf-bild", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "img"), now: now))

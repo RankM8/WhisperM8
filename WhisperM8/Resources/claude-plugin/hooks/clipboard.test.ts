@@ -93,6 +93,13 @@ describe('Clipboard', () => {
     expect(out.result).toContain('Fehler')
   })
 
+  test('get mit original holt das Roh-Transkript eines Diktats', async ($, on) => {
+    const calls = world(on, { stdout: '{"text":"gesagt","source":"original"}' })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await callTool($, { action: 'get', nr: 1, original: true })
+    expect(clipboardCalls(calls)).toEqual([['whisperm8', 'clipboard', 'get', '--json', '--original', '--', '1']])
+  })
+
   test('get reicht Stücke langer Texte weiter (from, maxChars)', async ($, on) => {
     const calls = world(on, { stdout: '{"text":"…","nextFrom":100}' })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })

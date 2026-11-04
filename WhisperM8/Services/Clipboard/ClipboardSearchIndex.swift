@@ -86,6 +86,10 @@ struct ClipboardSearchIndex: Sendable, Equatable {
             parts.append(contentsOf: entry.filePaths ?? [])
             parts.append(entry.preview)
         }
+        // Gesagtes eines Diktats ist mit durchsuchbar, auch wenn der Modus es umformuliert hat.
+        if let original = entry.dictationOriginal {
+            parts.append(excerpt(original, head: limits.headBytes, tail: limits.tailBytes))
+        }
         if let name = entry.sourceName { parts.append(name) }
         return Array(fold(parts.joined(separator: "\n")).utf8)
     }

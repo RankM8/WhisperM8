@@ -27,7 +27,11 @@ und belegt keinen Hotkey.
 | Schnellwahl | ⌘1 bis ⌘9, genau wie die Liste nummeriert ist |
 | Anpinnen und lösen | ⌘P oder die Pin-Schaltfläche am Eintrag |
 | Löschen | ⌘⌫ oder Schaltfläche in der Vorschau |
-| Schließen | Esc oder Klick daneben |
+| Nur Diktate zeigen | ⌘D oder Umschalter „All / Dictations“ neben dem Suchfeld (kombinierbar mit der Suche) |
+| Original eines Diktats einfügen | Schaltfläche „Paste original“ in der Vorschau |
+| Verlauf leeren | Fußzeile „Clear History…“, mit Rückfrage in der Fußzeile; Angepinnte bleiben |
+| Einstellungen | Fußzeile „Settings…“ öffnet die Seite Clipboard |
+| Schließen | Esc oder Klick daneben (Esc bricht zuerst eine offene Rückfrage ab) |
 | Pausieren | Menüleiste „Pause clipboard history“ oder Einstellungen |
 
 Ohne Suche stehen Angepinnte als eigene Gruppe oben; mit Suche gilt die
@@ -95,6 +99,14 @@ für Kopien: Verlauf aus oder pausiert, oder Diktat in eine ausgeschlossene
 App, dann kein Eintrag (`ClipboardHistoryCore.dictationCapture`). Den
 Kontext, den das Diktat per Cmd+C einsammelt, erfasst der Verlauf nicht. Die
 CLI zeigt das Feld `dictationMode`.
+
+**Original-Transkript:** Hat ein Modus nachbearbeitet (alles außer Fast),
+bleibt das Roh-Transkript am Eintrag (`dictationOriginal`), sofern es sich vom
+Ergebnis unterscheidet und höchstens 100.000 Zeichen hat
+(`ClipboardHistoryCore.keptOriginal`). Die Vorschau zeigt es unter dem
+Ergebnis („Original transcript“), „Paste original“ fügt es als reinen Text
+ein. Die Suche findet auch Wörter, die nur im Original stehen. CLI:
+`hasOriginal` in `list`, `get <nr> --original`; Plugin-Tool: `original: true`.
 
 ## Datenschutz-Regeln
 
@@ -230,9 +242,13 @@ sicher findet. Sonst kostet es keinen Kontext. Aktionen `list`, `search`
 `whisperm8 clipboard … --json`. Tests: `hooks/clipboard.test.ts`
 (`make plugin-test`).
 
-Für Sessions ohne Plugin (Terminal, Codex) gibt es den eigenen Skill
-`whisperm8-clipboard` (`Resources/whisperm8-clipboard-skill.md`), installierbar
-wie die anderen Skills und Teil des Plugins.
+Dazu gehört der Plugin-Skill `whisperm8:clipboard`
+(`Resources/whisperm8-clipboard-skill.md`): Claude lädt ihn, wenn du dich auf
+Kopiertes oder Diktiertes beziehst, und du kannst ihn direkt aufrufen
+(`/whisperm8:clipboard`, `/whisperm8:clipboard stripe webhook`,
+`/whisperm8:clipboard 3`, `/whisperm8:clipboard diktate`). Wie `callout` und
+`jarvis` gibt es ihn nur im Plugin, nicht als losen Skill unter
+`~/.claude/skills`; ohne Plugin (Codex, Skripte) bleibt die CLI.
 
 ## Einstellungen
 

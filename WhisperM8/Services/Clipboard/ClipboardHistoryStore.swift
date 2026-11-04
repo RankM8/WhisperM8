@@ -357,6 +357,7 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             contentHash: "", preview: ""
         )
         entry.dictationMode = capture.dictationMode
+        entry.dictationOriginal = capture.dictationOriginal
 
         // Dateien vor Bild vor Text: Finder liefert beim Kopieren einer Datei
         // auch ihren Namen als Text und ein Symbolbild.

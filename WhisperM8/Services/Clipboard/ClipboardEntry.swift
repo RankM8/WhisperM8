@@ -46,6 +46,10 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     /// Modus des Diktats (etwa "Slack"), wenn der Eintrag ein Diktat-Ergebnis
     /// ist. Fehlt bei normalen Kopien und in älteren Indexdateien.
     var dictationMode: String? = nil
+    /// Roh-Transkript eines nachbearbeiteten Diktats, wenn es sich vom
+    /// Ergebnis unterscheidet. So kommt man an das Gesagte zurück, falls ein
+    /// Modus schlecht umformuliert hat.
+    var dictationOriginal: String? = nil
 
     /// Dateien dieses Eintrags im Verlaufsordner.
     var blobFiles: [String] {
@@ -121,6 +125,8 @@ struct ClipboardCapture: Sendable {
     var date: Date
     /// Siehe `ClipboardEntry.dictationMode`.
     var dictationMode: String?
+    /// Siehe `ClipboardEntry.dictationOriginal`.
+    var dictationOriginal: String?
 
     init(
         types: [String] = [],
@@ -134,7 +140,8 @@ struct ClipboardCapture: Sendable {
         sourceBundleID: String? = nil,
         sourceName: String? = nil,
         date: Date = Date(),
-        dictationMode: String? = nil
+        dictationMode: String? = nil,
+        dictationOriginal: String? = nil
     ) {
         self.types = types
         self.text = text
@@ -148,5 +155,6 @@ struct ClipboardCapture: Sendable {
         self.sourceName = sourceName
         self.date = date
         self.dictationMode = dictationMode
+        self.dictationOriginal = dictationOriginal
     }
 }

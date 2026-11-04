@@ -30,8 +30,11 @@ final class ClipboardHistoryController {
         self.monitor = ClipboardMonitor(store: store)
         model.actions = ClipboardHistoryViewModel.Actions(
             paste: { [weak self] entry, plain in self?.paste(entry, plain: plain) },
+            pasteOriginal: { [weak self] entry in self?.pasteOriginal(entry) },
             togglePin: { [weak self] entry in self?.togglePin(entry) },
             delete: { [weak self] entry in self?.delete(entry) },
+            clearUnpinned: { [weak self] in self?.store.clear(keepPinned: true) },
+            openSettings: { [weak self] in self?.openSettings() },
             close: { [weak self] in self?.hidePanel() }
         )
     }
@@ -71,10 +74,10 @@ final class ClipboardHistoryController {
     /// Fertiges Diktat in den Verlauf. Der Monitor übergeht den Schreibvorgang
     /// des Diktats (er ist beansprucht, wie Anhänge und das Zurücklegen nach
     /// dem Einfügen); deshalb kommt das Ergebnis genau einmal über diesen Weg.
-    func recordDictation(text: String, modeName: String, targetApp: NSRunningApplication?) {
+    func recordDictation(text: String, original: String?, modeName: String, targetApp: NSRunningApplication?) {
         let settings = ClipboardSettings.readLive()
         guard let capture = ClipboardHistoryCore.dictationCapture(
-            text: text, modeName: modeName,
+            text: text, original: original, modeName: modeName,
             targetBundleID: targetApp?.bundleIdentifier, targetName: targetApp?.localizedName,
             settings: settings
         ) else { return }
@@ -171,11 +174,34 @@ final class ClipboardHistoryController {
     /// Legt den Eintrag in die Zwischenablage und fügt ihn, wenn gewünscht,
     /// in die vorherige App ein.
     private func paste(_ entry: ClipboardEntry, plain: Bool) {
+        deliver { [weak self] in await self?.writeToPasteboard(entry, plain: plain) ?? false }
+    }
+
+    /// Roh-Transkript eines Diktats einfügen (immer als reiner Text).
+    private func pasteOriginal(_ entry: ClipboardEntry) {
+        guard let original = entry.dictationOriginal else { return }
+        deliver { [weak self] in
+            let item = [ClipboardRepresentation(type: ClipboardRestore.plainTextType, data: Data(original.utf8))]
+            let written = ClipboardRestore.write(.items([item]), to: .general)
+            if written { self?.store.bump(id: entry.id) }
+            return written
+        }
+    }
+
+    private func openSettings() {
+        hidePanel()
+        NSApp.activate(ignoringOtherApps: true)
+        WindowRequestCenter.shared.requestSettings(routeID: SettingsPage.clipboard.rawValue)
+    }
+
+    /// Fenster zu, Inhalt in die Zwischenablage, dann (wenn gewünscht) in die
+    /// App davor einfügen.
+    private func deliver(_ write: @escaping @MainActor () async -> Bool) {
         let target = previousApp
         let autoPaste = ClipboardSettings.readLive().autoPaste
         hidePanel()
         Task { @MainActor in
-            guard await writeToPasteboard(entry, plain: plain) else {
+            guard await write() else {
                 NSSound.beep()
                 return
             }

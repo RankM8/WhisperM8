@@ -31,9 +31,20 @@ final class ClipboardHistoryViewModel: ObservableObject {
 
     struct Actions {
         var paste: (ClipboardEntry, Bool) -> Void = { _, _ in }
+        /// Roh-Transkript eines Diktats einfügen.
+        var pasteOriginal: (ClipboardEntry) -> Void = { _ in }
         var togglePin: (ClipboardEntry) -> Void = { _ in }
         var delete: (ClipboardEntry) -> Void = { _ in }
+        /// Alles außer den Angepinnten löschen.
+        var clearUnpinned: () -> Void = {}
+        var openSettings: () -> Void = {}
         var close: () -> Void = {}
+    }
+
+    /// Was die Liste zeigt: alles oder nur Diktate.
+    enum Filter: Equatable {
+        case all
+        case dictations
     }
 
     nonisolated static let thumbnailPixels = 96
@@ -51,6 +62,15 @@ final class ClipboardHistoryViewModel: ObservableObject {
         }
     }
     @Published var selectedID: String?
+    @Published var filter: Filter = .all {
+        didSet {
+            guard filter != oldValue else { return }
+            recomputeVisible()
+            selectFirstIfNeeded(force: true)
+        }
+    }
+    /// Die Fußzeile fragt nach, bevor sie den Verlauf leert.
+    @Published var isConfirmingClear = false
     @Published private(set) var thumbnails: [String: NSImage] = [:]
     @Published private(set) var previewText = ""
     @Published private(set) var previewImage: NSImage?
@@ -127,6 +147,8 @@ final class ClipboardHistoryViewModel: ObservableObject {
 
     func reset() {
         query = ""
+        filter = .all
+        isConfirmingClear = false
         recomputeVisible()
         selectedID = visible.first?.id
         loadPreview()
@@ -134,10 +156,27 @@ final class ClipboardHistoryViewModel: ObservableObject {
 
     private func recomputeVisible() {
         let index = search
-        visible = ClipboardHistoryCore.search(entries, query: query) { entry in
+        let source = Self.filtered(entries, by: filter)
+        visible = ClipboardHistoryCore.search(source, query: query) { entry in
             index.haystack(for: entry.id)
                 ?? ClipboardSearchIndex.haystack(for: entry, fullText: entry.text)
         }
+    }
+
+    nonisolated static func filtered(_ entries: [ClipboardEntry], by filter: Filter) -> [ClipboardEntry] {
+        switch filter {
+        case .all: return entries
+        case .dictations: return entries.filter { $0.dictationMode != nil }
+        }
+    }
+
+    func toggleDictationFilter() {
+        filter = filter == .all ? .dictations : .all
+    }
+
+    func confirmClear() {
+        isConfirmingClear = false
+        actions.clearUnpinned()
     }
 
     private func selectFirstIfNeeded(force: Bool) {
@@ -239,7 +278,10 @@ final class ClipboardHistoryViewModel: ObservableObject {
         case .quickSelect(let number): if let entry = entry(forQuickSelect: number) { actions.paste(entry, false) }
         case .togglePin: if let entry = selectedEntry { actions.togglePin(entry) }
         case .delete: if let entry = selectedEntry { deleteEntry(entry) }
-        case .close: actions.close()
+        case .toggleDictationFilter: toggleDictationFilter()
+        case .close:
+            // Esc bricht zuerst eine offene Rückfrage ab, erst dann schließt es.
+            if isConfirmingClear { isConfirmingClear = false } else { actions.close() }
         }
     }
 

@@ -7,7 +7,7 @@ enum ClipboardCLIArguments: Equatable {
     case help
     case status(json: Bool)
     case list(limit: Int, json: Bool)
-    case get(ref: String, json: Bool, maxChars: Int = defaultMaxChars, from: Int = 0)
+    case get(ref: String, json: Bool, maxChars: Int = defaultMaxChars, from: Int = 0, original: Bool = false)
     case search(query: String, limit: Int, json: Bool)
     case copy(ref: String)
 
@@ -72,12 +72,13 @@ enum ClipboardCLIArguments: Equatable {
             return .list(limit: limit, json: json)
         case "get", "show":
             let json = takeFlag(["--json"])
+            let original = takeFlag(["--original"])
             let maxChars = try takeNumber("--max-chars", default: defaultMaxChars)
             let from = try takeNumber("--from", default: 0)
             try rejectOptions()
             let refs = rest + literal
             guard refs.count == 1 else { throw ParseError.usage("get braucht genau eine Nummer oder ID") }
-            return .get(ref: refs[0], json: json, maxChars: maxChars, from: from)
+            return .get(ref: refs[0], json: json, maxChars: maxChars, from: from, original: original)
         case "search", "find":
             let json = takeFlag(["--json"])
             let limit = try takeLimit()
@@ -159,6 +160,7 @@ enum ClipboardCLIFormatter {
         if let name = entry.sourceName { object["sourceApp"] = name }
         if let id = entry.sourceBundleID { object["sourceBundleID"] = id }
         if let mode = entry.dictationMode { object["dictationMode"] = mode }
+        if entry.dictationOriginal != nil { object["hasOriginal"] = true }
         switch entry.kind {
         case .text:
             object["chars"] = entry.textLength
@@ -203,17 +205,25 @@ enum ClipboardCLIFormatter {
 
     /// `get`: Text (maskiert, dann ausgeschnitten), bei Bildern der Dateipfad,
     /// bei Dateien die Pfade. Lange Texte kommen in Stücken von `maxChars`
-    /// Zeichen ab `from`; `maxChars == 0` heißt alles.
+    /// Zeichen ab `from`; `maxChars == 0` heißt alles. `original` liefert bei
+    /// Diktaten das Roh-Transkript statt des Ergebnisses.
     static func detail(
         _ entry: ClipboardEntry, number: Int, json: Bool, context: Context,
-        maxChars: Int = ClipboardCLIArguments.defaultMaxChars, from: Int = 0
+        maxChars: Int = ClipboardCLIArguments.defaultMaxChars, from: Int = 0, original: Bool = false
     ) -> GetOutput {
         var notes: [String] = []
         var object = summary(entry, number: number, context: context)
         var plain = ""
+        if original, entry.dictationOriginal == nil {
+            notes.append("Kein Roh-Transkript: der Eintrag ist kein nachbearbeitetes Diktat. Ausgabe ist der Eintrag selbst.")
+        } else if !original, entry.dictationOriginal != nil {
+            notes.append("Diktat mit Nachbearbeitung. Das Gesagte vor der Umformulierung: --original.")
+        }
         switch entry.kind {
         case .text:
-            let full = context.fullText(entry) ?? entry.preview
+            let useOriginal = original && entry.dictationOriginal != nil
+            object["source"] = useOriginal ? "original" : "result"
+            let full = useOriginal ? (entry.dictationOriginal ?? "") : (context.fullText(entry) ?? entry.preview)
             let result = masked(full, context)
             let slice = slice(result.text, maxChars: maxChars, from: from)
             plain = slice.text
@@ -343,18 +353,20 @@ enum ClipboardCLIRunner {
         case .search(let query, let limit, let json):
             // Gesucht wird im maskierten Text: die Suche verrät kein Geheimnis Zeichen für Zeichen.
             let found = ClipboardHistoryCore.search(entries, query: query) { entry in
-                let text = env.fullText(entry) ?? entry.preview
+                var text = env.fullText(entry) ?? entry.preview
+                if let original = entry.dictationOriginal { text += "\n" + original }
                 return settings.maskSecrets ? ClipboardSecretMasker.mask(text).text : text
             }
             let rows = found.prefix(limit).map { (number: numbers[$0.id] ?? 0, entry: $0) }
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.listing(rows, json: json, context: context))
-        case .get(let ref, let json, let maxChars, let from):
+        case .get(let ref, let json, let maxChars, let from, let original):
             switch ClipboardHistoryCore.resolve(ref, in: entries) {
             case .failure(let error):
                 return Output(exitCode: ChatsCLIExit.notFound, stderr: ClipboardCLIText.message(for: error))
             case .success(let entry):
                 let detail = ClipboardCLIFormatter.detail(
-                    entry, number: numbers[entry.id] ?? 0, json: json, context: context, maxChars: maxChars, from: from
+                    entry, number: numbers[entry.id] ?? 0, json: json, context: context,
+                    maxChars: maxChars, from: from, original: original
                 )
                 return Output(exitCode: ChatsCLIExit.ok, stdout: detail.stdout, stderr: detail.note ?? "")
             }
@@ -407,7 +419,7 @@ enum ClipboardCLICommand {
       whisperm8 clipboard status [--json]
       whisperm8 clipboard list [--limit N] [--json]
       whisperm8 clipboard search <text> [--limit N] [--json]
-      whisperm8 clipboard get <nr|id> [--json] [--max-chars N] [--from N]
+      whisperm8 clipboard get <nr|id> [--json] [--max-chars N] [--from N] [--original]
       whisperm8 clipboard copy <nr|id>
 
     Nummer 1 ist der neueste Eintrag (Zeitreihe, Angepinnte zählen mit).
@@ -416,6 +428,10 @@ enum ClipboardCLICommand {
     Stücken von 50.000 Zeichen: `--from N` liest weiter, `--max-chars 0`
     liefert alles. `copy` legt den Eintrag über die App wieder in die
     Zwischenablage. `status` zeigt die Schalter und geht immer.
+
+    Diktate: Fertige Diktate stehen mit im Verlauf (Feld `dictationMode`).
+    Hat der Modus nachbearbeitet, liefert `get <nr> --original` das
+    Roh-Transkript, also das Gesagte vor der Umformulierung (`hasOriginal`).
 
     Schutz: Typische Geheimnisse (API-Keys, Tokens, JWTs, private Schlüssel,
     Passwörter in Zuweisungen) werden maskiert ([REDACTED:…]). Passwort-

@@ -2791,6 +2791,36 @@
         }
       }
     },
+    "Clear History": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf leeren"
+          }
+        }
+      }
+    },
+    "Clear History…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf leeren…"
+          }
+        }
+      }
+    },
+    "Clear all entries except pinned ones?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Einträge außer den angepinnten löschen?"
+          }
+        }
+      }
+    },
     "Clear filter — show all chats": {
       "localizations": {
         "de": {
@@ -3901,6 +3931,16 @@
         }
       }
     },
+    "Delete (⌘⌫)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen (⌘⌫)"
+          }
+        }
+      }
+    },
     "Delete Report": {
       "localizations": {
         "de": {
@@ -4177,6 +4217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nur Diktat"
+          }
+        }
+      }
+    },
+    "Dictations": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktate"
           }
         }
       }
@@ -4847,6 +4897,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Final / Rückfall"
+          }
+        }
+      }
+    },
+    "Finished dictations show up here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertige Diktate erscheinen hier."
           }
         }
       }
@@ -7531,6 +7591,16 @@
         }
       }
     },
+    "No dictations yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Diktate"
+          }
+        }
+      }
+    },
     "No job state — sending not possible.": {
       "localizations": {
         "de": {
@@ -8414,6 +8484,16 @@
         }
       }
     },
+    "Original transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original-Transkript"
+          }
+        }
+      }
+    },
     "Our most capable model for complex, demanding work.": {
       "localizations": {
         "de": {
@@ -8564,12 +8644,32 @@
         }
       }
     },
+    "Paste original": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original einfügen"
+          }
+        }
+      }
+    },
     "Paste screenshots into target app": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Screenshots in die Ziel-App einfügen"
+          }
+        }
+      }
+    },
+    "Paste what you said, before the mode rewrote it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fügt ein, was du gesagt hast, bevor der Modus es umformuliert hat"
           }
         }
       }
@@ -8690,6 +8790,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld anpinnen"
+          }
+        }
+      }
+    },
+    "Pin (⌘P)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anpinnen (⌘P)"
           }
         }
       }
@@ -10874,6 +10984,16 @@
         }
       }
     },
+    "Settings…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen…"
+          }
+        }
+      }
+    },
     "Setup": {
       "localizations": {
         "de": {
@@ -11170,6 +11290,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notizen auf Raster-Kacheln anzeigen"
+          }
+        }
+      }
+    },
+    "Show only dictations (⌘D)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Diktate zeigen (⌘D)"
           }
         }
       }
