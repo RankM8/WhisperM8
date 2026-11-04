@@ -4,7 +4,10 @@ import AppKit
 struct PostProcessingService {
     var processor: PostProcessing
 
-    init(processor: PostProcessing = CodexPostProcessor()) {
+    /// Default: Weiche zwischen GPT-Backend und Codex-CLI. Die Kommandozeile
+    /// (`whisperm8 transcribe --mode`) übergibt ausdrücklich den
+    /// `CodexPostProcessor`, weil ein CLI-Prozess keinen Proxy starten soll.
+    init(processor: PostProcessing = PostProcessingEngineRouter()) {
         self.processor = processor
     }
 
@@ -14,13 +17,18 @@ struct PostProcessingService {
         language: String,
         contextBundle: TranscriptContextBundle = .empty
     ) async throws -> String {
+        try await processRun(rawText: rawText, mode: mode, language: language, contextBundle: contextBundle).text
+    }
+
+    /// Wie `process`, nennt aber den Weg der Nacharbeit (Diktat-Bericht).
+    func processRun(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        contextBundle: TranscriptContextBundle = .empty
+    ) async throws -> PostProcessingRun {
         guard mode.usesPostProcessing else {
-            return try await NoOpPostProcessor().process(
-                rawText: rawText,
-                mode: mode,
-                language: language,
-                contextBundle: contextBundle
-            )
+            return PostProcessingRun(text: rawText)
         }
 
         let allowedContext = allowedContextBundle(for: mode, capturedContext: contextBundle)
@@ -28,14 +36,15 @@ struct PostProcessingService {
             throw PostProcessingError.codexUnavailable("This mode requires context, but no selected text or visual context was captured.")
         }
 
-        let output = try await processor.process(
+        var run = try await processor.processRun(
             rawText: rawText,
             mode: mode,
             language: language,
             contextBundle: allowedContext
         )
         // Gedankenstriche verbietet der Prompt; Modelle setzen sie trotzdem.
-        return DashFilter.apply(output)
+        run.text = DashFilter.apply(run.text)
+        return run
     }
 
     func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {

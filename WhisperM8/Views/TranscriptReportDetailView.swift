@@ -157,6 +157,18 @@ struct TranscriptReportDetailView: View {
                 chips.append(RunSummaryChip("Video Fallback", "Frames sent via --image"))
             }
         }
+        if let postProcessing = report.postProcessing {
+            let engine: String
+            switch postProcessing.engine {
+            case .gptBackend: engine = "GPT backend"
+            case .codexCLI: engine = "Codex CLI"
+            case nil: engine = "Failed"
+            }
+            chips.append(RunSummaryChip("Clean-up", engine))
+            chips.append(RunSummaryChip("Clean-up Time", String(format: "%.1fs", Double(postProcessing.durationMs) / 1000)))
+            appendChip("GPT Account", postProcessing.gptProfile, to: &chips)
+            appendChip("Fell Back to Codex", postProcessing.fallbackReason, tone: .warn, to: &chips)
+        }
         if let replyIntent = report.replyIntent {
             chips.append(RunSummaryChip("Router", replyIntent.displayName))
         }

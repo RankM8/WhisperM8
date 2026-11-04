@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-11-05
 ---
 
 # AI Output — Post-Processing, Modes und Templates
@@ -8,9 +8,10 @@ updated: 2026-07-09
 AI Output ist die Codex-Nachbearbeitung nach der Spracherkennung. WhisperM8
 nimmt ein Diktat auf, erzeugt über Whisper/Groq ein Raw-Transkript und liefert
 dieses je nach Output-Mode unverändert oder als Codex-verarbeitete Ausgabe aus.
-Die Nachbearbeitung läuft nicht über den Agent-Chat-PTY, sondern über einen
-kurzlebigen `codex exec`-Prozess, dessen letzte Antwort als fertiger
-Nutzertext gelesen wird.
+Die Nachbearbeitung läuft nicht über den Agent-Chat-PTY. Reine Textmodi gehen
+bei aktivem GPT-Backend als eine Anfrage an den laufenden GPT-Proxy, alle
+anderen an einen kurzlebigen `codex exec`-Prozess, dessen letzte Antwort als
+fertiger Nutzertext gelesen wird (siehe „Zwei Wege“).
 
 ## Output-Modes
 
@@ -111,6 +112,54 @@ die Ziel-App ein. Bei Post-Processing-Fehlern liefert die App je nach
 Preference entweder einen Raw- oder vorsichtigen Fallback aus oder wirft den
 Fehler weiter.
 
+## Zwei Wege: GPT-Backend und Codex-CLI
+
+Seit 05.11.2026 entscheidet `PostProcessingEngineRouter` je Diktat, wer die
+Nacharbeit macht. Anlass war eine Messung an 69 echten Läufen: Der Start von
+`codex exec` kostete im Mittel 3,1 s (bis 12,9 s), weil Codex bei jedem Lauf
+die ganze Nutzer-Einrichtung lädt (MCP-Server, Plugins, Skill-Liste, Hooks),
+und schickte im Mittel 25.700 Token, davon nur 1.000 bis 2.000 aus dem
+eigenen Prompt. Beratung: `docs/plans/beratung-diktat-nacharbeit-gpt-backend.md`.
+
+| Modus | Weg |
+|---|---|
+| ohne Projektzugriff (Clean, Fast Prompt, Prompt, Email, Slack, WhatsApp, Notes, eigene Modi) | GPT-Backend, wenn es an ist und der Schalter „GPT-Backend für Textmodi nutzen“ (AI-Output → Konto) an ist; sonst Codex-CLI |
+| mit Projektzugriff (Ultra-Prompt, Task) | immer Codex-CLI, denn nur sie kann im Projekt lesen |
+| `whisperm8 transcribe --mode` | immer Codex-CLI (`CLITranscribe` übergibt den `CodexPostProcessor`); ein CLI-Prozess startet keinen Proxy |
+
+**GPT-Backend** (`GPTBackendPostProcessor`): dasselbe Prompt wie für Codex
+geht als Anthropic-Anfrage `POST /v1/messages` ohne Streaming an den
+Instanz-Port des aktiven GPT-Kontos, also an dasselbe Konto wie die
+ChatGPT-Abo-Transkription. Bilder kommen als Base64-Blöcke mit, die
+Denktiefe als `output_config.effort`, die Fast-Stufe als Modellendung `-fast`
+(nur wenn der Katalog sie für das Modell kennt). Kennt der laufende Proxy das
+Modell nicht (`/v1/models`), übernimmt gleich Codex. Läuft die Instanz nicht
+oder kommt „Connection refused“, wird sie einmal gestartet und die Anfrage
+einmal wiederholt. Zeitlimit 90 s.
+
+**Rückfall:** Jeder Fehler des Backends (aus, Konto nicht angemeldet, Proxy
+nicht erreichbar, 401, 429, 5xx, leere Antwort, Netzfehler) führt zum selben
+Auftrag über die Codex-CLI. Kein Rückfall bei Abbruch durch den Nutzer und
+bei Zeitüberschreitung. Scheitern beide Wege, nennt die Meldung beide Gründe
+(`PostProcessingError.bothEnginesFailed`), danach greift wie bisher der
+Rohtext-Rückfall.
+
+**Diktat-Bericht:** `postProcessing` hält Weg, Dauer, GPT-Konto und den
+Grund eines Rückfalls fest; die Detailansicht zeigt sie als Chips. Log:
+`dictation_postprocess engine=… status=… ms=…`,
+`dictation_postprocess_fallback`, `dictation_postprocess_done`.
+
+**Abbruch und Zeitlimit:** Der Knopf im Overlay und ESC brechen beide Wege ab
+(`CodexProcessRegistry` und `GPTBackendRunRegistry`, jeweils nur Läufe des
+Diktats, nie eine Test-Labor-Vorschau); eingefügt wird der Rohtext. Codex-Läufe
+ohne Projektzugriff enden nach 90 s (vorher 300 s), Task und Modi mit
+Projektzugriff weiter nach 900 s.
+
+**Hotkey während der Nacharbeit:** Ein zweites Diktat wird weiterhin nicht
+aufgenommen, solange das erste transkribiert oder nachgearbeitet wird. Statt
+still zu verschwinden, gibt es einen Ton und höchstens alle 10 s eine
+Mitteilung (`signalBusyHotkeyPressIfNeeded`).
+
 ## Visual Context und Anhänge
 
 AI Output benutzt denselben `TranscriptContextBundle` wie die Diktat-Pipeline:
@@ -188,6 +237,8 @@ Report; wenn noch kein Report geladen oder vorhanden ist, kann
 
 - `WhisperM8/Services/Dictation/PostProcessing.swift` definiert das Post-Processing-Protokoll, die Fehlerfälle und No-Op-/Mock-Implementierungen.
 - `WhisperM8/Services/Dictation/PostProcessingService.swift` ist die Fassade, die Raw-Modes kurzschließt, Kontext nach Mode-Policy filtert und Prompt-Packages für UI/Reports bereitstellt.
+- `WhisperM8/Services/Dictation/PostProcessingEngineRouter.swift` wählt je Modus GPT-Backend oder Codex-CLI und übernimmt den Rückfall auf Codex.
+- `WhisperM8/Services/Dictation/GPTBackendPostProcessor.swift` schickt das Prompt als `/v1/messages`-Anfrage an die Proxy-Instanz des aktiven GPT-Kontos und hält die Abbruch-Registry `GPTBackendRunRegistry`.
 - `WhisperM8/Services/Dictation/CodexPostProcessor.swift` lädt Templates, prüft Codex-Bereitschaft, löst Projektpfade auf und startet den echten `codex exec`-Prozess.
 - `WhisperM8/Services/Dictation/CodexSupport.swift` enthält Process-Cancel-Registry, Codex-Argumentbau, Status-Probe und Visual-Input-Auswahl.
 - `WhisperM8/Services/Dictation/PromptPackageBuilder.swift` baut den finalen Prompt aus Globalvertrag, Agent-Chat-Kontext, Captured Context, Visual Manifest und Template.

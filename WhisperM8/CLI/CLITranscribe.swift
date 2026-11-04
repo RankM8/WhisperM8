@@ -142,7 +142,7 @@ enum CLITranscribeCommand {
         var segments = stitched.segments
         if let mode, mode.usesPostProcessing {
             CLIIO.err("  Nachbearbeitung via Mode '\(mode.name)' …")
-            text = try await PostProcessingService().process(
+            text = try await PostProcessingService(processor: CodexPostProcessor()).process(
                 rawText: text,
                 mode: mode,
                 language: options.language ?? ""

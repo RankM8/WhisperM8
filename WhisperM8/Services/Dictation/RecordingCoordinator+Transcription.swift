@@ -164,7 +164,8 @@ extension RecordingCoordinator {
             deliveryAttachmentLabels: deliveryAttachments.map(\.label),
             agentProvider: postProcessingResult.agentProvider,
             agentSessionID: postProcessingResult.agentSessionID,
-            agentProjectPath: postProcessingResult.agentProjectPath
+            agentProjectPath: postProcessingResult.agentProjectPath,
+            postProcessing: postProcessingResult.postProcessing
         )
 
         try? FileManager.default.removeItem(at: audioURL)
@@ -212,12 +213,27 @@ extension RecordingCoordinator {
         appState.postProcessingStatusText = promptPackage?.intent.overlayStatusText
         overlayController.update(appState: appState)
 
+        let startedAt = Date()
+        func snapshot(_ run: PostProcessingRun?) -> TranscriptRunReport.PostProcessingSnapshot {
+            TranscriptRunReport.PostProcessingSnapshot(
+                engine: run?.engine,
+                durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+                gptProfile: run?.gptProfile,
+                fallbackReason: run?.fallbackReason
+            )
+        }
+
         do {
-            let processedText = try await postProcessingService.process(
+            let run = try await postProcessingService.processRun(
                 rawText: rawText,
                 mode: mode,
                 language: language,
                 contextBundle: contextBundle
+            )
+            let processedText = run.text
+            let postProcessingSnapshot = snapshot(run)
+            Logger.transcription.info(
+                "dictation_postprocess_done mode=\(mode.id, privacy: .public) engine=\(run.engine?.rawValue ?? "unknown", privacy: .public) ms=\(postProcessingSnapshot.durationMs, privacy: .public) fallback=\(run.fallbackReason != nil, privacy: .public)"
             )
             let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
             appState.isPostProcessing = false
@@ -231,12 +247,14 @@ extension RecordingCoordinator {
                 agentProvider: agentSession?.provider,
                 agentSessionID: agentSession?.externalSessionID,
                 agentProjectPath: agentSession?.projectPath,
-                effectiveContextBundle: contextBundle
+                effectiveContextBundle: contextBundle,
+                postProcessing: postProcessingSnapshot
             )
         } catch {
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
+            let failedSnapshot = snapshot(nil)
 
             if case PostProcessingError.userCancelled = error {
                 Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
@@ -246,7 +264,8 @@ extension RecordingCoordinator {
                     replyIntent: promptPackage?.intent,
                     visualManifest: promptPackage?.visualManifest,
                     fallbackStatus: .rawFallback,
-                    effectiveContextBundle: contextBundle
+                    effectiveContextBundle: contextBundle,
+                    postProcessing: failedSnapshot
                 )
             }
 
@@ -266,7 +285,8 @@ extension RecordingCoordinator {
                     visualManifest: promptPackage?.visualManifest,
                     fallbackStatus: fallback.status,
                     errorMessage: message,
-                    effectiveContextBundle: contextBundle
+                    effectiveContextBundle: contextBundle,
+                    postProcessing: failedSnapshot
                 )
             }
 
@@ -332,7 +352,8 @@ extension RecordingCoordinator {
         deliveryAttachmentLabels: [String] = [],
         agentProvider: AgentProvider? = nil,
         agentSessionID: String? = nil,
-        agentProjectPath: String? = nil
+        agentProjectPath: String? = nil,
+        postProcessing: TranscriptRunReport.PostProcessingSnapshot? = nil
     ) async {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
@@ -359,7 +380,8 @@ extension RecordingCoordinator {
             deliveryAttachmentLabels: deliveryAttachmentLabels,
             agentProvider: agentProvider,
             agentSessionID: agentSessionID,
-            agentProjectPath: agentProjectPath
+            agentProjectPath: agentProjectPath,
+            postProcessing: postProcessing
         )
 
         // LR-DIK-017: Attachment-Kopien und Archiv-Cleanup laufen off-main. Der Aufrufer wartet

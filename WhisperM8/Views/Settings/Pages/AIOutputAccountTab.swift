@@ -7,6 +7,11 @@ struct AIOutputAccountTab: View {
     @AppStorage("codexVisualInputMode") private var visualInputModeRaw = CodexVisualInputMode.defaultMode.rawValue
     @AppStorage("defaultOutputModeID") private var defaultOutputModeID = OutputMode.rawID
     @AppStorage("fallbackToRawOnProcessingError") private var fallbackToRawOnProcessingError = true
+    @AppStorage(PreferenceKeys.dictationGPTBackendPostProcessing) private var useGPTBackendForTextModes = true
+    @AppStorage("claudeGPTBackendEnabled") private var isGPTBackendEnabled = false
+
+    /// Aktives GPT-Konto (Dateizugriff, deshalb in `.task` gelesen).
+    @State private var activeGPTAccount = GPTAccountProfiles.mainProfileName
 
     @State private var connectionModel = CodexConnectionModel()
     @State private var codexInstallModel = AgentCLIInstallModel(cli: .codex)
@@ -71,6 +76,16 @@ struct AIOutputAccountTab: View {
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
+            }
+
+            SettingsSection("GPT Backend") {
+                SettingsToggleRow(
+                    title: "Use the GPT backend for text modes",
+                    subtitle: "Clean, Prompt, Email, Slack, WhatsApp and Notes go straight to the running GPT proxy instead of starting the Codex CLI for every dictation. Faster and far fewer tokens. Task and Ultra-Prompt read your project and always use the Codex CLI.",
+                    isOn: $useGPTBackendForTextModes
+                )
+
+                SettingsHelpText(gptBackendStatusText, tone: isGPTBackendEnabled ? .secondary : .warning)
             }
 
             SettingsSection("Post-processing Defaults") {
@@ -148,6 +163,9 @@ struct AIOutputAccountTab: View {
             }
         }
         .task {
+            activeGPTAccount = await Task.detached(priority: .utility) {
+                GPTAccountProfiles().activeProfileNameOrNil() ?? GPTAccountProfiles.mainProfileName
+            }.value
             catalog = CodexModelCatalogStore.shared.catalog()
             await connectionModel.refresh()
             enabledModes = OutputModeStore().enabledModes
@@ -162,6 +180,18 @@ struct AIOutputAccountTab: View {
                 reasoningEffortRaw = CodexModelCatalog.conflictFallbackEffort
             }
         }
+    }
+
+    // MARK: - GPT-Backend
+
+    private var gptBackendStatusText: String {
+        if !isGPTBackendEnabled {
+            return String(localized: "The GPT backend is off, so all modes use the Codex CLI. Turn it on under GPT Backend.")
+        }
+        if !useGPTBackendForTextModes {
+            return String(localized: "All modes use the Codex CLI.")
+        }
+        return String(localized: "Text modes use the GPT account “\(activeGPTAccount)”, the same one as ChatGPT transcription. If the GPT backend fails, the Codex CLI takes over.")
     }
 
     // MARK: - Katalog-Helper

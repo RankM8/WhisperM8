@@ -129,6 +129,20 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     var agentProvider: AgentProvider?
     var agentSessionID: String?
     var agentProjectPath: String?
+    /// Weg und Dauer der Nacharbeit (seit 05.11.2026; ältere Berichte: `nil`).
+    var postProcessing: PostProcessingSnapshot? = nil
+}
+
+extension TranscriptRunReport {
+    struct PostProcessingSnapshot: Codable, Equatable {
+        /// `nil`, wenn die Nacharbeit gescheitert ist oder abgebrochen wurde.
+        var engine: PostProcessingEngine?
+        var durationMs: Int
+        /// GPT-Konto, wenn das Backend geliefert hat.
+        var gptProfile: String?
+        /// Warum das GPT-Backend nicht geliefert hat und Codex übernommen hat.
+        var fallbackReason: String?
+    }
 }
 
 extension TranscriptRunReport {

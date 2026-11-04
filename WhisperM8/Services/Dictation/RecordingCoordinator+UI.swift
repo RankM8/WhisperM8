@@ -42,6 +42,15 @@ extension RecordingCoordinator {
                 return nil
             }
 
+            // ESC während der Nacharbeit bricht sie ab, wie der Knopf im
+            // Overlay: der Rohtext wird eingefügt.
+            if event.keyCode == 53, self.appState?.isPostProcessing == true {
+                Task { @MainActor in
+                    self.cancelPostProcessing()
+                }
+                return nil
+            }
+
             // ESC während "Transcribing…" bricht den Upload ab; die Aufnahme
             // landet gesichert im FailedRecordings-Ordner. Der Task-Check
             // verhindert, dass ESC geschluckt wird, wenn kein Upload mehr
@@ -55,6 +64,32 @@ extension RecordingCoordinator {
 
             return event
         }
+    }
+
+    /// Der Hotkey kam, während das letzte Diktat noch transkribiert oder
+    /// nachgearbeitet wird. Nichts wird aufgenommen; das soll der Nutzer
+    /// merken. Gedrückt gehaltene Tasten (Aufnahme läuft) und der kurze
+    /// Mikrofonstart lösen keinen Hinweis aus.
+    func signalBusyHotkeyPressIfNeeded(now: Date = Date()) {
+        guard let appState, !appState.isRecording,
+              appState.isTranscribing || appState.isPostProcessing else { return }
+        let showNotice = lastBusyHotkeyNoticeAt.map { now.timeIntervalSince($0) >= 10 } ?? true
+        if showNotice { lastBusyHotkeyNoticeAt = now }
+        Logger.transcription.info("dictation_hotkey_ignored_busy postProcessing=\(appState.isPostProcessing, privacy: .public)")
+        busyHotkeyNotifier(showNotice)
+    }
+
+    static func playBusySignal(showNotice: Bool) {
+        if let sound = NSSound(named: "Funk") {
+            sound.play()
+        } else {
+            NSSound.beep()
+        }
+        guard showNotice else { return }
+        DictationNotice.post(
+            title: String(localized: "Still working on your last dictation"),
+            body: String(localized: "Nothing was recorded. Wait until the text is inserted, then press the hotkey again. Esc cancels the clean-up.")
+        )
     }
 
     func removeEscKeyMonitor() {

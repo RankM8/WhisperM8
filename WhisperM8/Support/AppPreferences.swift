@@ -731,6 +731,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.chatGPTTranscriptionEnabled) }
     }
 
+    /// Diktat-Nacharbeit der reinen Textmodi über das GPT-Backend statt über
+    /// die Codex-CLI (Einstellungen → AI-Output → Konto). Greift nur, wenn das
+    /// GPT-Backend an ist; Modi mit Projektzugriff laufen immer über Codex, und
+    /// jeder Fehler des Backends fällt auf die Codex-CLI zurück.
+    var isDictationGPTBackendPostProcessingEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.dictationGPTBackendPostProcessing) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.dictationGPTBackendPostProcessing) }
+    }
+
     /// Debug-Steuerkanal (`whisperm8 debug …`, Doku docs/features/ui-testing.md):
     /// Zustand lesen, Fenster öffnen und fotografieren, Diktat mit Audiodatei.
     /// Default AUS — ein Fenster-Foto zeigt auch Chat-Inhalte, ein Diktat
@@ -1047,6 +1056,7 @@ enum PreferenceKeys {
     static let gptAccountProfilesEnabled = "gptAccountProfilesEnabled"
     static let gptRouterAuthEnabled = "gptRouterAuthEnabled"
     static let chatGPTTranscriptionEnabled = "chatGPTTranscriptionEnabled"
+    static let dictationGPTBackendPostProcessing = "dictationGPTBackendPostProcessing"
     static let debugControlEnabled = "debugControlEnabled"
     static let subagentJobRetentionEnabled = "subagentJobRetentionEnabled"
     static let agentCrashRecoveryEnabled = "agentCrashRecoveryEnabled"

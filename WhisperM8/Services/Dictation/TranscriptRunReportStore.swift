@@ -28,6 +28,7 @@ struct TranscriptRunReportDraft {
     var agentProvider: AgentProvider?
     var agentSessionID: String?
     var agentProjectPath: String?
+    var postProcessing: TranscriptRunReport.PostProcessingSnapshot?
 }
 
 struct TranscriptRunReportStore {
@@ -195,7 +196,8 @@ struct TranscriptRunReportStore {
             deliveryAttachmentLabels: draft.deliveryAttachmentLabels,
             agentProvider: draft.agentProvider,
             agentSessionID: draft.agentSessionID,
-            agentProjectPath: draft.agentProjectPath
+            agentProjectPath: draft.agentProjectPath,
+            postProcessing: draft.postProcessing
         )
 
         let encoder = JSONEncoder()
