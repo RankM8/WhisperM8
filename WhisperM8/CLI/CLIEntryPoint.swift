@@ -83,7 +83,7 @@ enum CLIModeDetector {
         "debug",
         // Gesprochene Ansagen der Chats — docs/features/speech-callouts.md.
         "speak",
-        // Zwischenablage-Verlauf für Agents — docs/features/clipboard-history.md.
+        // Zwischenablage-Verlauf für Agents, siehe docs/features/clipboard-history.md.
         "clipboard",
     ]
 
@@ -198,7 +198,7 @@ enum CLIHelp {
       whisperm8 chats <befehl>                    (Agent-Sessions sehen/verwalten — siehe `whisperm8 chats help`)
       whisperm8 debug <befehl>                    (Debug-Steuerkanal der App — siehe `whisperm8 debug help`)
       whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
-      whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen — siehe `whisperm8 clipboard --help`)
+      whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
       whisperm8 --help | --version
 
     TRANSCRIBE

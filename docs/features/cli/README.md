@@ -14,13 +14,13 @@ Symlink auf `Bundle.main.executableURL`; die tatsächliche Code-Signatur eines
 ausgelieferten Bundles ist Laufzeit-/Build-Artefakt und nicht aus dem
 Quellcode ableitbar.
 
-Das Binary hat drei Kern-Facetten (dazu kommen `chats`, `debug`, `speak` und `clipboard`, siehe unten):
+Das Binary hat diese Kern-Facetten (dazu kommen `chats`, `debug` und `speak`, siehe unten):
 
 | Facette | Zweck |
 |---------|-------|
 | `whisperm8 transcribe` | Speech-to-Text für Audio- oder Videodateien mit Groq oder OpenAI, optionalem Chunking, Ausgabeformaten und WhisperM8-OutputMode-Nachbearbeitung. |
 | `whisperm8 agent` | Maschinenfreundliche Steuerung von Codex-Subagent-Jobs: starten, fortsetzen, listen, Status lesen, Logs ansehen, stoppen und entfernen. |
-| `whisperm8 clipboard` | Zwischenablage-Verlauf lesen (`list`, `get`, `search`) und zurückkopieren (`copy`, über die App). Details: [../clipboard-history.md](../clipboard-history.md). |
+| `whisperm8 clipboard` | Zwischenablage-Verlauf lesen (`status`, `list`, `search`, `get`) und zurückkopieren (`copy`, über die App). Details: [../clipboard-history.md](../clipboard-history.md). |
 | `whisperm8 agent-supervise` | Interner Detach-Supervisor, der von WhisperM8 selbst gestartet wird und genau einen Codex-Turn fährt. |
 
 Die fachliche Subagent-Dokumentation liegt unter

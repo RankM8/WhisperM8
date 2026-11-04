@@ -105,8 +105,9 @@ Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-
 - Neue Dateideskriptoren (Locks, Sockets, Watcher) close-on-exec — SwiftTerm `forkpty`+`execve` schließt nichts.
 - An Pipes nur `write(contentsOf:)` (throwing), nie `FileHandle.write(_:)` (NSException bei EPIPE). SIGPIPE
   wird per leerem `sigaction`-Handler abgefangen, nie per `SIG_IGN` (würde an jede Chat-Shell vererbt).
-- Eigene Schreibvorgänge auf der allgemeinen Zwischenablage mit `ClipboardInternalWrites.begin()/end()` klammern
-  (oder `markPasteboard`), sonst landen sie im Zwischenablage-Verlauf.
+- Eigene Schreibvorgänge auf der allgemeinen Zwischenablage direkt danach mit `ClipboardInternalWrites.claim(_:)`
+  beanspruchen (schreibt eine fremde App für uns, etwa per Cmd+C, zusätzlich `begin()/end()`), sonst landen sie im
+  Zwischenablage-Verlauf.
 - Kein `installTap` ohne `ObjCException.catching`; das Format unmittelbar vor dem Tap neu lesen.
   Absturzrelevante Ereignisse auf `Logger.info` oder höher (`.info` ist per `OSLogPreferences` persistent).
 
