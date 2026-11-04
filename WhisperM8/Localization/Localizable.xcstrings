@@ -671,6 +671,16 @@
         }
       }
     },
+    "+1 Minute": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+1 Minute"
+          }
+        }
+      }
+    },
     "1 chat": {
       "localizations": {
         "de": {
@@ -767,6 +777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Es läuft bereits ein Login — bitte zuerst abschließen."
+          }
+        }
+      }
+    },
+    "A password field or secure keyboard entry is active. macOS lets keys through to it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Passwortfeld oder die sichere Tastatureingabe ist aktiv. Dorthin lässt macOS Tasten durch."
           }
         }
       }
@@ -2091,6 +2111,16 @@
         }
       }
     },
+    "Blocks every key, including media keys and shortcuts, so you can wipe the keyboard. Mouse and trackpad keep working. Unlock with the mouse in the floating panel; it unlocks by itself after 2 minutes, and when the Mac locks or sleeps.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sperrt alle Tasten, auch Medientasten und Tastenkürzel, damit du die Tastatur abwischen kannst. Maus und Trackpad funktionieren weiter. Entsperrt wird per Maus im schwebenden Fenster; nach 2 Minuten und wenn der Mac sich sperrt oder schläft, entsperrt sie sich von selbst."
+          }
+        }
+      }
+    },
     "Blue": {
       "localizations": {
         "de": {
@@ -2247,6 +2277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kapazität %@"
+          }
+        }
+      }
+    },
+    "Caps Lock is on.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Feststelltaste ist an."
           }
         }
       }
@@ -2767,6 +2807,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude · Usage-Limits"
+          }
+        }
+      }
+    },
+    "Clean away. Mouse and trackpad keep working.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt putzen. Maus und Trackpad funktionieren weiter."
           }
         }
       }
@@ -5971,6 +6021,26 @@
         }
       }
     },
+    "Keyboard Cleaning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur reinigen"
+          }
+        }
+      }
+    },
+    "Keyboard locked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur gesperrt"
+          }
+        }
+      }
+    },
     "Labs": {
       "localizations": {
         "de": {
@@ -6361,12 +6431,52 @@
         }
       }
     },
+    "Lock Keyboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur sperren"
+          }
+        }
+      }
+    },
+    "Lock Keyboard for Cleaning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur zum Reinigen sperren"
+          }
+        }
+      }
+    },
+    "Lock keyboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur sperren"
+          }
+        }
+      }
+    },
     "Locked — quota exhausted%@": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Gesperrt — Kontingent erschöpft%@"
+          }
+        }
+      }
+    },
+    "Locking the keyboard needs the Accessibility permission. Grant it, then try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Sperren der Tastatur braucht WhisperM8 die Bedienungshilfen-Freigabe. Erteile sie und versuche es dann erneut."
           }
         }
       }
@@ -13024,6 +13134,16 @@
         }
       }
     },
+    "The power button and Touch ID can't be locked. Pressing them puts the Mac to sleep and unlocks the keyboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein-/Ausschalter und Touch ID lassen sich nicht sperren. Ein Druck darauf schickt den Mac in den Ruhezustand und entsperrt die Tastatur."
+          }
+        }
+      }
+    },
     "The proxy login of “%@”%@ replaces that of the main account%@, which is signed out in the process — sign in again under “Add account” if needed.": {
       "localizations": {
         "de": {
@@ -13660,6 +13780,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unbekannt"
+          }
+        }
+      }
+    },
+    "Unlock Keyboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastatur entsperren"
+          }
+        }
+      }
+    },
+    "Unlocks automatically in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entsperrt automatisch in"
           }
         }
       }

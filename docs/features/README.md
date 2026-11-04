@@ -27,6 +27,7 @@ Features, die quer zu den Säulen liegen und (noch) keinen eigenen Unterordner h
 | [`voice-gate.md`](voice-gate.md) | Codewort-Steuerung der Codex-Sprachsitzung („Codex Voice Agent") |
 | [`notch.md`](notch.md) | Statusanzeige an der Notch: Zähler, „braucht dich", Liste mit Sprung in den Chat |
 | [`clipboard-history.md`](clipboard-history.md) | Zwischenablage-Verlauf (Maccy-Ersatz) mit Hotkey-Fenster, Datenschutz-Regeln, `whisperm8 clipboard` und Plugin-Tool |
+| [`keyboard-cleaning.md`](keyboard-cleaning.md) | Tastatur zum Reinigen per Mausklick sperren: Event-Tap, Entsperr-Panel, Auto-Entsperren |
 | [`ui-testing.md`](ui-testing.md) | UI-Tests ohne Computer Use: UI-Snapshots (`make snapshots`), Debug-Steuerkanal |
 
 ## Konventionen

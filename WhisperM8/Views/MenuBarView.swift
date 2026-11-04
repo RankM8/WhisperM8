@@ -16,6 +16,7 @@ struct MenuBarView: View {
     @AppStorage(PreferenceKeys.notchStatusEnabled) private var notchStatusEnabled = false
     @AppStorage(ClipboardPreferenceKeys.enabled) private var clipboardEnabled = false
     @AppStorage(ClipboardPreferenceKeys.paused) private var clipboardPaused = false
+    @ObservedObject private var keyboardLock = KeyboardLockController.shared
 
     /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)
     private static func hasTranscriptionCredentials() -> Bool {
@@ -161,6 +162,21 @@ struct MenuBarView: View {
                 ClipboardHistoryController.shared.showPanel()
             }
             Toggle("Pause clipboard history", isOn: $clipboardPaused)
+        }
+
+        Divider()
+
+        // Tastatur zum Reinigen sperren; entsperrt wird per Maus im Panel.
+        if keyboardLock.isLocked {
+            Button("Unlock Keyboard") {
+                keyboardLock.unlock(reason: .user)
+            }
+        } else {
+            Button("Lock Keyboard for Cleaning") {
+                if keyboardLock.lock() == .missingPermission {
+                    PermissionService.requestAccessibilityPermission()
+                }
+            }
         }
 
         Divider()
