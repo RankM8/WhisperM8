@@ -150,7 +150,7 @@ final class CLISkillExporterTests: XCTestCase {
         let definitions = CLISkillExporter.SkillDefinition.all
         XCTAssertEqual(
             definitions.map(\.name),
-            ["whisperm8-transcription", "codex-subagent", "whisperm8-chats", "gpt-coworker", "gpt-workflow"]
+            ["whisperm8-transcription", "codex-subagent", "whisperm8-chats", "whisperm8-clipboard", "gpt-coworker", "gpt-workflow"]
         )
 
         for definition in definitions {

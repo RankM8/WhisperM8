@@ -161,6 +161,12 @@ struct SelectedContextService {
             return nil
         }
 
+        // Cmd+C und Zurückschreiben sind eigene Schreibvorgänge: der
+        // Zwischenablage-Verlauf wartet, bis ihre Stände beansprucht sind, und
+        // übergeht dann genau diese (eine echte Kopie daneben bleibt drin).
+        ClipboardInternalWrites.begin()
+        defer { ClipboardInternalWrites.end() }
+
         let baseline = pasteboard.changeCount
         guard let snapshot = await PasteboardSnapshot.capture(
             from: pasteboard, maxBytes: maxSnapshotBytes, timeout: snapshotTimeout
@@ -186,6 +192,7 @@ struct SelectedContextService {
         // wird trotzdem noch einmal geprüft.
         let afterCopy = pasteboard.changeCount
         guard afterCopy != baseline else { return nil }
+        ClipboardInternalWrites.claim(count: baseline + 1, through: afterCopy, on: pasteboard)
         if afterCopy > baseline + 1 {
             Logger.info("clipboard_fallback_multi_write changes=\(afterCopy - baseline)")
         }
@@ -202,6 +209,7 @@ struct SelectedContextService {
         // Nur zurückschreiben, wenn seit der Kopie niemand mehr kopiert hat.
         if !snapshot.isConfidential, pasteboard.changeCount == afterCopy {
             await snapshot.restoreOffMain(to: pasteboard)
+            ClipboardInternalWrites.claim(pasteboard)
         }
         outcome.resyncChangeCount = pasteboard.changeCount
         return selectedText

@@ -83,6 +83,8 @@ enum CLIModeDetector {
         "debug",
         // Gesprochene Ansagen der Chats — docs/features/speech-callouts.md.
         "speak",
+        // Zwischenablage-Verlauf für Agents, siehe docs/features/clipboard-history.md.
+        "clipboard",
     ]
 
     static func shouldRunCLI(_ arguments: [String]) -> Bool {
@@ -146,6 +148,8 @@ enum CLICommand {
             return await DebugCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "speak":
             return await SpeakCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "clipboard":
+            return await ClipboardCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "agent-supervise":
             // Interner Detach-Modus — wird nur vom AgentSupervisorLauncher
             // gestartet, nie von Hand.
@@ -194,6 +198,7 @@ enum CLIHelp {
       whisperm8 chats <befehl>                    (Agent-Sessions sehen/verwalten — siehe `whisperm8 chats help`)
       whisperm8 debug <befehl>                    (Debug-Steuerkanal der App — siehe `whisperm8 debug help`)
       whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
+      whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
       whisperm8 --help | --version
 
     TRANSCRIBE

@@ -14,6 +14,8 @@ struct MenuBarView: View {
     @State private var voiceGate = VoiceGateCoordinator.shared
     @State private var speechCallouts = SpeechCalloutCenter.shared
     @AppStorage(PreferenceKeys.notchStatusEnabled) private var notchStatusEnabled = false
+    @AppStorage(ClipboardPreferenceKeys.enabled) private var clipboardEnabled = false
+    @AppStorage(ClipboardPreferenceKeys.paused) private var clipboardPaused = false
 
     /// Zugang des gewählten Anbieters vorhanden? (Keychain-Probe ohne UI.)
     private static func hasTranscriptionCredentials() -> Bool {
@@ -151,6 +153,14 @@ struct MenuBarView: View {
         if AppPreferences.shared.isNotchStatusFeatureEnabled {
             Divider()
             Toggle("Chat Status at the Notch", isOn: $notchStatusEnabled)
+        }
+        // Zwischenablage-Verlauf (Maccy-Ersatz); erscheint nur bei eingeschaltetem Schalter.
+        if clipboardEnabled {
+            Divider()
+            Button("Clipboard History...") {
+                ClipboardHistoryController.shared.showPanel()
+            }
+            Toggle("Pause clipboard history", isOn: $clipboardPaused)
         }
 
         Divider()

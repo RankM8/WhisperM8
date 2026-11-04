@@ -55,6 +55,9 @@ final class PasteService {
         let pasteboard = environment.pasteboard
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        // Eigener Schreibvorgang: der Zwischenablage-Verlauf übergeht ihn.
+        ClipboardInternalWrites.markPasteboard(pasteboard)
+        ClipboardInternalWrites.claim(pasteboard)
     }
 
     func pasteToActiveApp(
@@ -158,6 +161,34 @@ final class PasteService {
         )
     }
 
+    /// Fügt den aktuellen Inhalt der Zwischenablage in `previousApp` ein
+    /// (Cmd+V), ohne ihn anzufassen. Der Verlauf legt vorher selbst ab, was
+    /// eingefügt werden soll. `false`, wenn Recht oder Ziel fehlen; der Inhalt
+    /// bleibt dann in der Zwischenablage.
+    func pasteClipboardContents(
+        to previousApp: NSRunningApplication?,
+        onMissingPermission: () -> Void,
+        onMissingTarget: () -> Void
+    ) async -> Bool {
+        guard environment.hasAccessibilityPermission() else {
+            environment.requestAccessibilityPermission()
+            onMissingPermission()
+            return false
+        }
+        guard let targetApp = previousApp else {
+            onMissingTarget()
+            return false
+        }
+        await sleep(seconds: 0.05)
+        environment.activate(targetApp)
+        guard await waitForActivation(of: targetApp) else {
+            onMissingTarget()
+            return false
+        }
+        await sleep(seconds: 0.08)
+        return postPasteEvent()
+    }
+
     /// `true`, sobald die Ziel-App frontmost ist; `false` nach dem Timeout.
     private func waitForActivation(of app: NSRunningApplication) async -> Bool {
         let start = Date()
@@ -197,10 +228,12 @@ final class PasteService {
             item.setData(tiffData, forType: .tiff)
         }
 
+        ClipboardInternalWrites.mark(item)
         pasteboard.clearContents()
         guard pasteboard.writeObjects([item]) else {
             throw PasteServiceError.clipboardWriteFailed(attachment.label)
         }
+        ClipboardInternalWrites.claim(pasteboard)
     }
 
     private func postPasteEvent() -> Bool {

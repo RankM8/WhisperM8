@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipboard-Verlauf, Prototyp</title>
+<style>
+  :root {
+    --bg: #f4f4f6; --panel: #ffffff; --panel2: #f7f7f9; --border: rgba(0,0,0,.09);
+    --text: #1d1d1f; --text2: #5b5b61; --text3: #8a8a90;
+    --sel: rgba(0,0,0,.075); --accent: #4f46e5; --accent-tint: rgba(79,70,229,.10);
+    --pin: #d97706; --shadow: 0 18px 50px rgba(0,0,0,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f0f10; --panel: #1b1b1d; --panel2: #151517; --border: rgba(255,255,255,.09);
+      --text: #f2f2f4; --text2: #b2b2b8; --text3: #8a8a92;
+      --sel: rgba(255,255,255,.09); --accent: #8b85ff; --accent-tint: rgba(139,133,255,.16);
+      --pin: #f5a524; --shadow: 0 18px 50px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f0f10; --panel: #1b1b1d; --panel2: #151517; --border: rgba(255,255,255,.09);
+    --text: #f2f2f4; --text2: #b2b2b8; --text3: #8a8a92;
+    --sel: rgba(255,255,255,.09); --accent: #8b85ff; --accent-tint: rgba(139,133,255,.16);
+    --pin: #f5a524; --shadow: 0 18px 50px rgba(0,0,0,.6);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 24px 16px; gap: 14px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; color: var(--text2); font-size: 12px; }
+  .toolbar button { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text); cursor: pointer; }
+  .window { width: min(760px, 100%); height: 480px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+  .search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 15px; }
+  .search .count { color: var(--text3); font-size: 11.5px; }
+  .body { display: grid; grid-template-columns: 1fr 1.05fr; min-height: 0; }
+  .list { overflow: auto; border-right: 1px solid var(--border); padding: 6px; }
+  .group { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; padding: 8px 8px 4px; }
+  .row { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 8px;
+    padding: 6px 8px; border-radius: 7px; cursor: default; }
+  .row.sel { background: var(--accent-tint); }
+  .row .ico { width: 18px; height: 18px; border-radius: 4px; background: var(--sel); display: grid; place-items: center; font-size: 10px; color: var(--text2); }
+  .row .main { min-width: 0; }
+  .row .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .s { color: var(--text3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .meta { display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 11.5px; }
+  .kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; color: var(--text2); background: var(--panel2); }
+  .pin { color: var(--pin); }
+  .thumb { width: 34px; height: 24px; border-radius: 4px; background: linear-gradient(135deg, #7dd3fc, #a78bfa); }
+  .preview { padding: 14px 16px; overflow: auto; background: var(--panel2); display: flex; flex-direction: column; gap: 10px; }
+  .preview .head { display: flex; justify-content: space-between; align-items: center; color: var(--text3); font-size: 11.5px; }
+  .preview pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+  .preview .img { height: 160px; border-radius: 8px; background: linear-gradient(135deg, #7dd3fc, #a78bfa); border: 1px solid var(--border); }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .btn { font: inherit; font-size: 12px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .foot { display: flex; gap: 14px; flex-wrap: wrap; padding: 7px 12px; border-top: 1px solid var(--border); color: var(--text3); font-size: 11.5px; }
+  .foot span { display: inline-flex; gap: 5px; align-items: center; }
+  @media (max-width: 640px) { .body { grid-template-columns: 1fr; } .preview { display: none; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span>Clipboard-Verlauf (Prototyp)</span>
+  <button onclick="document.documentElement.dataset.theme='light'">Hell</button>
+  <button onclick="document.documentElement.dataset.theme='dark'">Dunkel</button>
+</div>
+
+<div class="window" role="dialog" aria-label="Clipboard history">
+  <div class="search">
+    <span aria-hidden="true">&#128269;</span>
+    <input value="" placeholder="Search clipboard history" aria-label="Search">
+    <span class="count">7 Einträge</span>
+  </div>
+  <div class="body">
+    <div class="list">
+      <div class="group">Angepinnt</div>
+      <div class="row"><span class="ico pin">&#9733;</span><div class="main"><div class="t">ssh deploy@staging.example.com -p 2222</div><div class="s">Terminal</div></div><div class="meta"><span class="kbd">&#8984;1</span></div></div>
+      <div class="row"><span class="ico pin">&#9733;</span><div class="main"><div class="t">Mit freundlichen Grüßen, Giuliano Costa</div><div class="s">Mail</div></div><div class="meta"><span class="kbd">&#8984;2</span></div></div>
+      <div class="group">Verlauf</div>
+      <div class="row sel"><span class="ico">T</span><div class="main"><div class="t">TypeError: Cannot read properties of undefined (reading 'map')</div><div class="s">Safari &middot; vor 1 Min</div></div><div class="meta"><span class="kbd">&#8984;3</span></div></div>
+      <div class="row"><span class="ico">&#9633;</span><div class="main"><div class="t">Bildschirmfoto, 1280 x 720</div><div class="s">Vorschau &middot; vor 6 Min</div></div><div class="meta"><div class="thumb"></div><span class="kbd">&#8984;4</span></div></div>
+      <div class="row"><span class="ico">&#128196;</span><div class="main"><div class="t">angebot-2026-11.pdf</div><div class="s">Finder &middot; vor 12 Min</div></div><div class="meta"><span class="kbd">&#8984;5</span></div></div>
+      <div class="row"><span class="ico">T</span><div class="main"><div class="t">https://github.com/rankm8/whisperm8/pull/42</div><div class="s">Safari &middot; vor 25 Min</div></div><div class="meta"><span class="kbd">&#8984;6</span></div></div>
+      <div class="row"><span class="ico">T</span><div class="main"><div class="t">func paste(_ entry: ClipboardEntry, plain: Bool) async</div><div class="s">Xcode &middot; vor 1 Std</div></div><div class="meta"><span class="kbd">&#8984;7</span></div></div>
+    </div>
+    <div class="preview">
+      <div class="head"><span>Text &middot; Safari &middot; 14:02</span><span>2 Zeilen, 74 Zeichen</span></div>
+      <pre>TypeError: Cannot read properties of undefined (reading 'map')
+    at renderList (app.js:128:22)</pre>
+      <div class="actions">
+        <span class="btn primary">Einfügen</span>
+        <span class="btn">Als Text einfügen</span>
+        <span class="btn">Anpinnen</span>
+        <span class="btn">Löschen</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <span><span class="kbd">&#8593;&#8595;</span> wählen</span>
+    <span><span class="kbd">&#9166;</span> einfügen</span>
+    <span><span class="kbd">&#8997;&#9166;</span> als Text</span>
+    <span><span class="kbd">&#8984;1&ndash;9</span> Schnellwahl</span>
+    <span><span class="kbd">&#8984;P</span> anpinnen</span>
+    <span><span class="kbd">&#8984;&#9003;</span> löschen</span>
+    <span><span class="kbd">esc</span> schließen</span>
+  </div>
+</div>
+
+<div class="window" style="height:auto" aria-label="Bild-Eintrag">
+  <div class="body" style="grid-template-columns:1fr">
+    <div class="preview">
+      <div class="head"><span>Bild &middot; Vorschau &middot; 14:00</span><span>1280 x 720, PNG, 312 KB</span></div>
+      <div class="img"></div>
+      <div class="actions"><span class="btn primary">Einfügen</span><span class="btn">Anpinnen</span><span class="btn">Löschen</span></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

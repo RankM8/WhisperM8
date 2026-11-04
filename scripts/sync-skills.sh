@@ -42,6 +42,7 @@ SKILLS=(
   "whisperm8-transcription|whisperm8-cli-skill||"
   "codex-subagent|whisperm8-agent-skill|codex-cli.md=whisperm8-agent-skill-ref-codex-cli,playwright-browser-qa.md=whisperm8-agent-skill-ref-playwright-browser-qa,1password-cli.md=whisperm8-agent-skill-ref-1password-cli,claude-workflows.md=whisperm8-agent-skill-ref-claude-workflows|"
   "whisperm8-chats|whisperm8-chats-skill||"
+  "whisperm8-clipboard|whisperm8-clipboard-skill||"
   "gpt-coworker|whisperm8-gpt-coworker-skill||"
   "gpt-workflow|whisperm8-gpt-workflow-skill||examples/wf-code-review.js=whisperm8-gpt-workflow-example-code-review.js,examples/wf-docs-review.js=whisperm8-gpt-workflow-example-docs-review.js"
 )

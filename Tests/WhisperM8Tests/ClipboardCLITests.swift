@@ -1,0 +1,330 @@
+import AppKit
+import XCTest
+@testable import WhisperM8
+
+final class ClipboardCLITests: XCTestCase {
+    // MARK: Argumente
+
+    func testParseList() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["list"]), .list(limit: 20, json: false))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["list", "--limit", "5", "--json"]), .list(limit: 5, json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["list", "--json", "-n", "999"]), .list(limit: 500, json: true))
+    }
+
+    func testParseGetSearchCopy() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "3"]), .get(ref: "3", json: false))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "--json", "ab12cd"]), .get(ref: "ab12cd", json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["search", "stack", "trace"]), .search(query: "stack trace", limit: 20, json: false))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["search", "x", "--limit", "3", "--json"]), .search(query: "x", limit: 3, json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["copy", "2"]), .copy(ref: "2"))
+    }
+
+    func testParseHelpAndErrors() {
+        XCTAssertEqual(try ClipboardCLIArguments.parse([]), .help)
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["--help"]), .help)
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["get"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["get", "1", "2"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["list", "--limit", "x"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["list", "--bogus"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["search"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["frobnicate"]))
+    }
+
+    // MARK: Ausführung
+
+    private let directory = URL(fileURLWithPath: "/tmp/clipboard-cli-test", isDirectory: true)
+    private let now = Date(timeIntervalSince1970: 10_000)
+
+    private func entry(_ id: String, _ text: String, ago: TimeInterval, pinned: Bool = false, app: String? = "Safari") -> ClipboardEntry {
+        let date = now.addingTimeInterval(-ago)
+        return ClipboardEntry(
+            id: id, kind: .text, createdAt: date, lastCopiedAt: date, copyCount: 1, isPinned: pinned,
+            sourceBundleID: nil, sourceName: app, contentHash: ClipboardEntry.hash(text: text),
+            preview: ClipboardEntry.makePreview(from: text), text: text
+        )
+    }
+
+    private func environment(
+        entries: [ClipboardEntry], settings: ClipboardSettings = ClipboardSettings(enabled: true),
+        copy: @escaping (String) -> ClipboardCLIRunner.CopyOutcome = { _ in .copied(kind: "text") }
+    ) -> ClipboardCLIEnvironment {
+        ClipboardCLIEnvironment(
+            settings: { settings }, directory: directory, loadEntries: { entries },
+            fullText: { $0.text }, now: { self.now }, copyViaApp: copy
+        )
+    }
+
+    private let sample: [ClipboardEntry] = []
+
+    private func samples() -> [ClipboardEntry] {
+        [
+            entry("old00001", "alte Notiz", ago: 7200),
+            entry("new00002", "TypeError: undefined is not a function", ago: 120),
+            entry("mid00003", "Mittlerer Eintrag\nzweite Zeile", ago: 3600, pinned: true, app: nil),
+        ]
+    }
+
+    func testListNumbersNewestFirstAndShowsMetadata() {
+        let output = ClipboardCLIRunner.execute(.list(limit: 20, json: false), environment: environment(entries: samples()))
+        XCTAssertEqual(output.exitCode, 0)
+        let lines = output.stdout.split(separator: "\n").map(String.init)
+        XCTAssertEqual(lines.count, 3)
+        XCTAssertTrue(lines[0].hasPrefix("1 "), lines[0])
+        XCTAssertTrue(lines[0].contains("TypeError"))
+        XCTAssertTrue(lines[0].contains("2m"))
+        XCTAssertTrue(lines[0].contains("Safari"))
+        XCTAssertTrue(lines[1].hasPrefix("2 ") && lines[1].contains("*"), lines[1])
+        XCTAssertTrue(lines[1].contains("Mittlerer Eintrag zweite Zeile"))
+        XCTAssertTrue(lines[2].contains("2h"))
+    }
+
+    func testListLimitAndJSON() throws {
+        let output = ClipboardCLIRunner.execute(.list(limit: 2, json: true), environment: environment(entries: samples()))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(array.count, 2)
+        XCTAssertEqual(array[0]["number"] as? Int, 1)
+        XCTAssertEqual(array[0]["id"] as? String, "new00002")
+        XCTAssertEqual(array[0]["kind"] as? String, "text")
+        XCTAssertEqual(array[1]["pinned"] as? Bool, true)
+    }
+
+    func testGetByNumberReturnsFullText() {
+        let output = ClipboardCLIRunner.execute(.get(ref: "2", json: false), environment: environment(entries: samples()))
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertEqual(output.stdout, "Mittlerer Eintrag\nzweite Zeile")
+    }
+
+    func testGetImageReturnsAbsolutePath() throws {
+        var image = entry("img00001", "", ago: 10)
+        image.kind = .image
+        image.text = nil
+        image.imageFile = "img00001.png"
+        image.imageWidth = 10
+        image.imageHeight = 5
+        let plain = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: environment(entries: [image]))
+        XCTAssertEqual(plain.stdout, "/tmp/clipboard-cli-test/img00001.png")
+        let json = ClipboardCLIRunner.execute(.get(ref: "img00001", json: true), environment: environment(entries: [image]))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual(object["imagePath"] as? String, "/tmp/clipboard-cli-test/img00001.png")
+        XCTAssertEqual(object["width"] as? Int, 10)
+    }
+
+    func testGetFilesListsPaths() {
+        var files = entry("fil00001", "", ago: 10)
+        files.kind = .files
+        files.text = nil
+        files.filePaths = ["/a/b.txt", "/a/c.txt"]
+        let output = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: environment(entries: [files]))
+        XCTAssertEqual(output.stdout, "/a/b.txt\n/a/c.txt")
+    }
+
+    func testGetUnknownReferenceExitsNotFound() {
+        let output = ClipboardCLIRunner.execute(.get(ref: "9", json: false), environment: environment(entries: samples()))
+        XCTAssertEqual(output.exitCode, ChatsCLIExit.notFound)
+        XCTAssertTrue(output.stderr.contains("1 bis 3"))
+    }
+
+    func testSecretsAreMaskedByDefaultEverywhere() throws {
+        let secret = entry("sec00001", "export KEY=sk-abcdefghijklmnopqrstuvwxyz0123", ago: 5)
+        let env = environment(entries: [secret])
+        let list = ClipboardCLIRunner.execute(.list(limit: 5, json: false), environment: env)
+        XCTAssertFalse(list.stdout.contains("sk-abcdef"))
+        XCTAssertTrue(list.stdout.contains("[REDACTED:api-key]"))
+        let get = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: env)
+        XCTAssertEqual(get.stdout, "export KEY=[REDACTED:api-key]")
+        XCTAssertTrue(get.stderr.contains("maskiert"))
+        let json = ClipboardCLIRunner.execute(.get(ref: "1", json: true), environment: env)
+        XCTAssertFalse(json.stdout.contains("sk-abcdef"))
+        let found = ClipboardCLIRunner.execute(.search(query: "REDACTED", limit: 5, json: false), environment: env)
+        XCTAssertTrue(found.stdout.contains("REDACTED"))
+        // Die Suche nach dem echten Schlüssel findet nichts: kein Rätselraten Zeichen für Zeichen.
+        let probe = ClipboardCLIRunner.execute(.search(query: "sk-abcdefghij", limit: 5, json: false), environment: env)
+        XCTAssertEqual(probe.stdout, "(keine Einträge)")
+    }
+
+    func testMaskingCanBeSwitchedOff() {
+        let secret = entry("sec00001", "sk-abcdefghijklmnopqrstuvwxyz0123", ago: 5)
+        var settings = ClipboardSettings(enabled: true)
+        settings.maskSecrets = false
+        let output = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: environment(entries: [secret], settings: settings))
+        XCTAssertEqual(output.stdout, "sk-abcdefghijklmnopqrstuvwxyz0123")
+        XCTAssertEqual(output.stderr, "")
+    }
+
+    func testSearchKeepsChronologicalNumbers() throws {
+        let output = ClipboardCLIRunner.execute(.search(query: "eintrag", limit: 5, json: true), environment: environment(entries: samples()))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(array.count, 1)
+        // „Mittlerer Eintrag“ ist der zweitneueste Eintrag, unabhängig vom Ranking.
+        XCTAssertEqual(array[0]["number"] as? Int, 2)
+    }
+
+    func testSearchWithoutHitsSaysSo() {
+        let output = ClipboardCLIRunner.execute(.search(query: "zzzz", limit: 5, json: false), environment: environment(entries: samples()))
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertEqual(output.stdout, "(keine Einträge)")
+    }
+
+    func testDisabledFeatureRefusesWithClearMessage() {
+        let output = ClipboardCLIRunner.execute(.list(limit: 5, json: false), environment: environment(entries: samples(), settings: ClipboardSettings(enabled: false)))
+        XCTAssertEqual(output.exitCode, ChatsCLIExit.usage)
+        XCTAssertEqual(output.stderr, ClipboardSettings.disabledMessage)
+        XCTAssertEqual(output.stdout, "")
+    }
+
+    func testAgentAccessOffRefusesEveryCommand() {
+        var settings = ClipboardSettings(enabled: true)
+        settings.agentAccess = false
+        for command in [ClipboardCLIArguments.list(limit: 5, json: false), .get(ref: "1", json: false),
+                        .search(query: "a", limit: 5, json: false), .copy(ref: "1")] {
+            let output = ClipboardCLIRunner.execute(command, environment: environment(entries: samples(), settings: settings))
+            XCTAssertEqual(output.exitCode, ChatsCLIExit.usage, "\(command)")
+            XCTAssertEqual(output.stderr, ClipboardSettings.agentAccessDeniedMessage)
+        }
+    }
+
+    func testCopyGoesThroughTheAppWithResolvedID() {
+        var received: String?
+        let env = environment(entries: samples()) { id in
+            received = id
+            return .copied(kind: "text")
+        }
+        let output = ClipboardCLIRunner.execute(.copy(ref: "1"), environment: env)
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertEqual(received, "new00002")
+        XCTAssertTrue(output.stdout.contains("new00002"))
+    }
+
+    func testCopyReportsUnreachableApp() {
+        let env = environment(entries: samples()) { _ in .failed(message: "App nicht erreichbar", exitCode: ChatsCLIExit.appUnreachable) }
+        let output = ClipboardCLIRunner.execute(.copy(ref: "1"), environment: env)
+        XCTAssertEqual(output.exitCode, ChatsCLIExit.appUnreachable)
+        XCTAssertEqual(output.stderr, "App nicht erreichbar")
+    }
+
+    func testAgeLabels() {
+        let base = Date(timeIntervalSince1970: 100_000)
+        XCTAssertEqual(ClipboardCLIFormatter.ageLabel(from: base.addingTimeInterval(-5), now: base), "5s")
+        XCTAssertEqual(ClipboardCLIFormatter.ageLabel(from: base.addingTimeInterval(-300), now: base), "5m")
+        XCTAssertEqual(ClipboardCLIFormatter.ageLabel(from: base.addingTimeInterval(-7200), now: base), "2h")
+        XCTAssertEqual(ClipboardCLIFormatter.ageLabel(from: base.addingTimeInterval(-172_800), now: base), "2d")
+    }
+
+    func testDoubleDashTreatsRestAsText() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["search", "--json", "--", "-v", "fehler"]),
+                       .search(query: "-v fehler", limit: 20, json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "--", "ab12cd"]), .get(ref: "ab12cd", json: false))
+    }
+
+    // MARK: status, lange Texte, JSON-Vertrag
+
+    func testParseStatusAndChunkOptions() throws {
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["status"]), .status(json: false))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["status", "--json"]), .status(json: true))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "1", "--max-chars", "100", "--from", "50"]),
+                       .get(ref: "1", json: false, maxChars: 100, from: 50))
+        XCTAssertEqual(try ClipboardCLIArguments.parse(["get", "1", "--max-chars", "0"]), .get(ref: "1", json: false, maxChars: 0))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["get", "1", "--from", "-3"]))
+        XCTAssertThrowsError(try ClipboardCLIArguments.parse(["status", "extra"]))
+    }
+
+    func testStatusWorksEvenWhenOffOrBlockedAndShowsNoContent() throws {
+        var settings = ClipboardSettings(enabled: true)
+        settings.agentAccess = false
+        let blocked = ClipboardCLIRunner.execute(.status(json: true), environment: environment(entries: samples(), settings: settings))
+        XCTAssertEqual(blocked.exitCode, 0)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(blocked.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual(object["enabled"] as? Bool, true)
+        XCTAssertEqual(object["agentAccess"] as? Bool, false)
+        XCTAssertEqual(object["entries"] as? Int, 3)
+        XCTAssertFalse(blocked.stdout.contains("TypeError"))
+
+        let off = ClipboardCLIRunner.execute(.status(json: false), environment: environment(entries: samples(), settings: ClipboardSettings()))
+        XCTAssertEqual(off.exitCode, 0)
+        XCTAssertTrue(off.stdout.contains("Verlauf: aus"))
+        XCTAssertFalse(off.stdout.contains("Einträge"))
+    }
+
+    func testGetSplitsLongTextIntoChunks() throws {
+        let long = String(repeating: "abcdefghij", count: 10)   // 100 Zeichen
+        let env = environment(entries: [entry("lng00001", long, ago: 1)])
+        let first = ClipboardCLIRunner.execute(.get(ref: "1", json: true, maxChars: 30, from: 0), environment: env)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(first.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual((object["text"] as? String)?.count, 30)
+        XCTAssertEqual(object["totalChars"] as? Int, 100)
+        XCTAssertEqual(object["truncated"] as? Bool, true)
+        XCTAssertEqual(object["nextFrom"] as? Int, 30)
+        XCTAssertTrue(first.stderr.contains("--from 30"))
+
+        let last = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 30, from: 90), environment: env)
+        XCTAssertEqual(last.stdout, "abcdefghij")
+        XCTAssertEqual(last.stderr, "")
+
+        let all = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 0, from: 0), environment: env)
+        XCTAssertEqual(all.stdout, long)
+    }
+
+    func testChunkingNeverCutsASecretInHalf() {
+        let text = String(repeating: "x", count: 20) + " sk-abcdefghijklmnopqrstuvwxyz0123 ende"
+        let env = environment(entries: [entry("sec00002", text, ago: 1)])
+        let out = ClipboardCLIRunner.execute(.get(ref: "1", json: false, maxChars: 30, from: 0), environment: env)
+        XCTAssertFalse(out.stdout.contains("sk-abc"), "erst maskieren, dann schneiden")
+    }
+
+    func testCharsCountsTheFullTextEvenWhenItLivesInAFile() throws {
+        var big = entry("big00001", "kurz", ago: 1)
+        big.text = nil
+        big.textFile = "big00001.txt"
+        big.preview = "Anfang …"
+        big.charCount = 50_000
+        let output = ClipboardCLIRunner.execute(.list(limit: 5, json: true), environment: environment(entries: [big]))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(array.first?["chars"] as? Int, 50_000)
+    }
+
+    func testListJSONFieldsAreStable() throws {
+        let output = ClipboardCLIRunner.execute(.list(limit: 1, json: true), environment: environment(entries: samples()))
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(output.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(Set(array[0].keys), ["number", "id", "kind", "pinned", "copiedAt", "preview", "sourceApp", "chars"])
+    }
+
+    /// Ganzer Weg über Disk: die App schreibt mit dem Store, die CLI liest den
+    /// Index und die Dateien wie im Betrieb (ohne laufende App).
+    func testCLIReadsWhatTheStoreWroteIncludingLongTextsAndImages() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("clipboard-cli-e2e-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var limits = ClipboardHistoryStore.Limits()
+        limits.maxInlineTextChars = 50
+        let store = ClipboardHistoryStore(directory: dir, limits: limits, debounceSeconds: 0.01)
+        let log = String(repeating: "ok\n", count: 200) + "panic: OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz0123 kaputt"
+        store.add(ClipboardCapture(text: log, sourceName: "Terminal", date: Date(timeIntervalSince1970: 1)), maxItems: 10)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
+                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        store.add(ClipboardCapture(imageData: rep.representation(using: .png, properties: [:])!, imageIsPNG: true,
+                                   date: Date(timeIntervalSince1970: 2)), maxItems: 10)
+        store.flush()
+
+        let env = ClipboardCLIEnvironment(
+            settings: { ClipboardSettings(enabled: true) }, directory: dir,
+            loadEntries: { ClipboardHistoryStore.loadIndex(directory: dir) },
+            fullText: { ClipboardHistoryStore.fullText(of: $0, directory: dir) },
+            now: { Date(timeIntervalSince1970: 100) },
+            copyViaApp: { _ in .failed(message: "nicht im Test", exitCode: ChatsCLIExit.appUnreachable) }
+        )
+        let found = ClipboardCLIRunner.execute(.search(query: "panic kaputt", limit: 5, json: true), environment: env)
+        let hits = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(found.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(hits.first?["number"] as? Int, 2, "Treffer tief im langen Text, Nummer aus der Zeitreihe")
+
+        let text = ClipboardCLIRunner.execute(.get(ref: "2", json: false, maxChars: 0), environment: env)
+        XCTAssertTrue(text.stdout.hasSuffix("panic: OPENAI_API_KEY=[REDACTED:api-key] kaputt"))
+        XCTAssertFalse(text.stdout.contains("sk-proj"))
+
+        let image = ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: env)
+        XCTAssertTrue(image.stdout.hasPrefix(dir.path), image.stdout)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: image.stdout))
+    }
+
+    func testCLIModeRecognisesClipboardCommand() {
+        XCTAssertTrue(CLIModeDetector.shouldRunCLI(["/x/WhisperM8", "clipboard", "list"]))
+    }
+}
