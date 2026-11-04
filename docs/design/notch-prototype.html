@@ -38,14 +38,15 @@
   .menubar .l, .menubar .r { display: flex; gap: 14px; opacity: .85; }
 
   /* Notch: immer schwarz, wie die Hardware */
-  .notch-shape { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: #000; color: #f4f4f6;
-                 border-radius: 0 0 14px 14px; overflow: hidden; }
   .notch-hw { position: absolute; top: 0; left: 50%; width: 184px; height: 32px; transform: translateX(-50%); background: #000; border-radius: 0 0 12px 12px; z-index: 2; }
-  .row-compact { height: 32px; display: flex; align-items: center; justify-content: space-between; }
-  .wing { display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .wing.left { justify-content: flex-start; }
-  .wing.right { justify-content: flex-end; }
-  .gap { width: 184px; flex: none; }
+  /* In der Menüleiste nur die Aussparung selbst, alles andere hängt darunter. */
+  .hang { position: absolute; top: 0; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; color: #f4f4f6; }
+  .hang .band { width: 184px; height: 32px; background: #000; flex: none; }
+  .hang .body { background: #000; min-width: 184px; border-radius: 0 0 11px 11px; }
+  .hang .body.wide { border-radius: 8px 8px 12px 12px; }
+  .hang .body.list-open { border-radius: 8px 8px 18px 18px; }
+  .chin { height: 24px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 14px;
+          font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
   .dot.working { background: #4cc38a; box-shadow: 0 0 0 3px rgba(76,195,138,.22); }
@@ -88,7 +89,7 @@
 
   /* Einmalige Verbreiterung, keine Dauerbewegung */
   .grow { animation: grow .32s cubic-bezier(.2,.8,.2,1) both; }
-  @keyframes grow { from { width: 250px; } }
+  @keyframes grow { from { width: 184px; } }
   .legend { grid-column: 1 / -1; display: flex; gap: 22px; color: var(--ink2); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 7px; }
 </style>
@@ -111,7 +112,6 @@
     <div class="screen">
       <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
       <div class="notch-hw"></div>
-      <div class="notch-shape" style="width:184px"><div class="row-compact"></div></div>
     </div>
     <figcaption><b>1 · Ruhe, nichts los.</b> Nur die Hardware-Notch. Die Anzeige ist ausgeblendet, solange kein Chat arbeitet, wartet oder frisch fertig ist.</figcaption>
   </figure>
@@ -119,40 +119,28 @@
   <figure>
     <div class="screen">
       <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
-      <div class="notch-shape" style="width:300px">
-        <div class="row-compact">
-          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
-          <div class="gap"></div>
-          <div class="wing right"><span class="chip awaiting"><i class="dot awaiting"></i>1</span></div>
-        </div>
-      </div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:184px">
+        <div class="chin"><span class="chip working"><i class="dot working"></i>2</span><span class="chip awaiting"><i class="dot awaiting"></i>1</span></div>
+      </div></div>
     </div>
-    <figcaption><b>2 · Ruhezustand mit Aktivität.</b> Links die arbeitenden, rechts die wartenden Chats. Ein Klick klappt die Liste auf.</figcaption>
+    <figcaption><b>2 · Ruhezustand mit Aktivität.</b> Die Notch wird ein Stück länger, die Zähler stehen darunter. Menüs und Statussymbole neben der Notch bleiben frei. Ein Klick klappt die Liste auf.</figcaption>
   </figure>
 
   <figure>
     <div class="screen">
       <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
-      <div class="notch-shape grow" style="width:520px">
-        <div class="row-compact">
-          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
-          <div class="gap"></div>
-          <div class="wing right" style="flex:1;justify-content:flex-start;gap:9px"><i class="dot awaiting"></i><span class="alert-title">Release-Notizen prüfen</span><span class="alert-sub">wartet</span></div>
-        </div>
-      </div>
+      <div class="hang"><div class="band"></div><div class="body wide grow" style="width:340px">
+        <div class="chin" style="gap:9px"><span class="chip working"><i class="dot working"></i>2</span><i class="dot awaiting"></i><span class="alert-title">Release-Notizen prüfen</span><span class="alert-sub">wartet</span></div>
+      </div></div>
     </div>
-    <figcaption><b>3 · Braucht dich.</b> Verbreitert sich einmal kurz (ca. 4 s) mit dem Chat-Namen, zieht sich dann auf Zustand 2 zurück. Der Amber-Hinweis bleibt, bis der Chat wieder arbeitet.</figcaption>
+    <figcaption><b>3 · Braucht dich.</b> Die Zeile unter der Notch verbreitert sich einmal kurz (ca. 4 s) mit dem Chat-Namen und zieht sich dann auf Zustand 2 zurück, auch sofort, sobald der Chat wieder arbeitet. Der Amber-Zähler bleibt, bis der Chat wieder arbeitet.</figcaption>
   </figure>
 
   <figure>
-    <div class="screen">
+    <div class="screen" style="height:420px">
       <div class="menubar"><div class="l"><b>Finder</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Di 14:02</span></div></div>
-      <div class="notch-shape" style="width:420px">
-        <div class="row-compact">
-          <div class="wing left"><span class="chip working"><i class="dot working"></i>2</span></div>
-          <div class="gap"></div>
-          <div class="wing right"><span class="chip awaiting"><i class="dot awaiting"></i>1</span><span class="chip done">✓ 1</span></div>
-        </div>
+      <div class="hang"><div class="band"></div><div class="body list-open" style="width:380px">
+        <div class="chin"><span class="chip working"><i class="dot working"></i>2</span><span class="chip awaiting"><i class="dot awaiting"></i>1</span><span class="chip done">✓ 1</span></div>
         <div class="list">
           <h4>Braucht dich</h4>
           <div class="item attn"><div class="dotcol"><i class="dot awaiting"></i></div><div><div class="t">Release-Notizen prüfen</div><div class="s">Freigabe: Bash git push</div></div><div class="w">wartet · 2 min<div class="p">whisperm8</div></div></div>
@@ -163,7 +151,7 @@
           <div class="item"><div class="dotcol"><i class="dot working"></i></div><div><div class="t">Landing Page Texte</div><div class="s">› writing reply</div></div><div class="w">arbeitet · 1 min<div class="p">rankm8-web</div></div></div>
           <div class="foot"><span>Klick auf eine Zeile öffnet den Chat</span><span>Esc schließt</span></div>
         </div>
-      </div>
+      </div></div>
     </div>
     <figcaption><b>4 · Aufgeklappt.</b> Sortiert nach Aufmerksamkeit: braucht dich, frisch fertig, arbeitet, bereit. Zeile = Status, Titel, Projekt, Stand, seit wann. Klick öffnet genau diesen Chat.</figcaption>
   </figure>

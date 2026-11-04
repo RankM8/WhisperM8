@@ -1,12 +1,12 @@
 ---
-status: umgesetzt, wartet auf make-dev-QA
+status: umgesetzt, Review-Fixes drin, wartet auf make-dev-QA
 stand: 2026-11-04
 feature: Statusanzeige an der Notch
 ---
 
 # Statusanzeige an der Notch
 
-Ein schmaler Streifen an der MacBook-Notch (ohne Notch eine Pille oben mittig
+Eine kleine Anzeige an der MacBook-Notch (ohne Notch eine Pille oben mittig
 unter der Menüleiste) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
 wie viele auf dich warten, wie viele gerade fertig wurden. Wer woanders
 arbeitet, sieht auf einen Blick, ob er gebraucht wird, und springt mit einem
@@ -19,8 +19,8 @@ Standardmäßig **aus**.
 
 | Zustand | Aussehen | Wie man hinkommt |
 |---|---|---|
-| Ruhe | Links grüner Punkt mit Zahl (arbeitet), rechts Amber-Raute (wartet), roter Ring (Fehler), Häkchen (frisch fertig) | Mindestens ein Chat arbeitet, wartet, hat einen Fehler oder wurde frisch fertig |
-| Braucht dich | Streifen verbreitert sich einmal kurz (ca. 4 s) und zeigt den Chat-Titel mit „wartet", „Fehler" oder „fertig", bei mehreren „+n" | Ein Chat wechselt nach `awaitingInput` oder `errored`, oder von `working` nach `idle` |
+| Ruhe | Die Notch wird ein Stück länger, darunter grüner Punkt mit Zahl (arbeitet), Amber-Raute (wartet), roter Ring (Fehler), Häkchen (frisch fertig) | Mindestens ein Chat arbeitet, wartet, hat einen Fehler oder wurde frisch fertig |
+| Braucht dich | Die Zeile unter der Notch verbreitert sich einmal kurz (ca. 4 s) und zeigt den Chat-Titel mit „wartet", „Fehler" oder „fertig", bei mehreren „+n" | Ein bekannter Chat wechselt nach `awaitingInput` oder `errored`, oder von `working` nach `idle` |
 | Aufgeklappt | Liste nach Aufmerksamkeit: Braucht dich, Frisch fertig, Arbeitet, Bereit | Klick auf den Streifen (optional Darüberfahren) |
 | Ausgeblendet | nichts | Nur bereite Chats, nichts Aktives, Funktion aus oder Vollbild-App im Vordergrund |
 
@@ -41,10 +41,25 @@ Standardmäßig **aus**.
 - Die Verbreiterung für „fertig" bleibt aus, solange WhisperM8 die aktive App
   ist (man sieht den Status dort ohnehin). „Wartet" und „Fehler" melden sich
   immer.
+- Die Verbreiterung endet vorzeitig, sobald ihr Anlass weg ist: der Chat
+  arbeitet wieder, wurde gelöscht oder archiviert.
 
-Mit Notch hängt der Streifen bündig an der Oberkante, ist immer schwarz (die
-Hardware ist es) und wächst links und rechts um die Aussparung. Ohne Notch ist
-es eine Pille unter der Menüleiste, die hell und dunkel mitgeht.
+### Lage an der Notch: Menüleiste bleibt frei
+
+In der Menüleiste belegt die Anzeige nur die Aussparung selbst: ein schwarzes
+Band genau in Notch-Breite (sie ist ohnehin schwarz). Zähler, Chat-Name und
+Liste hängen darunter (`NotchGeometry.layout`, Teile `band` und `body`).
+Menüs links und Statussymbole rechts der Notch werden nie verdeckt, auch nicht
+beim Alarm oder in der Liste. Ist der Körper breiter als die Notch, liegt das
+Fenster zwar über einem Stück Menüleiste, dort ist es aber vollständig
+transparent: Der Window-Server reicht Klicks auf transparente Pixel eines nicht
+deckenden Fensters an das Fenster darunter weiter. Deshalb wird
+`ignoresMouseEvents` nie gesetzt (ein ausdrückliches `false` ließe das
+Fenster auch dort Klicks annehmen).
+Band und Körper gehen mit kleinen Hohlkehlen ineinander über
+(`NotchHangingShape`).
+
+Ohne Notch ist es eine Pille unter der Menüleiste, die hell und dunkel mitgeht.
 
 ## Einstellungen
 
@@ -63,8 +78,10 @@ Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"
 Auch im Menüleisten-Menü: „Chat Status at the Notch" (Schalter).
 
 Bildschirmwahl „Automatisch": eingebauter Bildschirm mit Notch, sonst der
-Hauptbildschirm. Die Anzeige folgt Bildschirmwechseln
-(`NSApplication.didChangeScreenParametersNotification`).
+Hauptbildschirm. Hauptbildschirm heißt der mit der Menüleiste
+(`CGMainDisplayID`), nicht `NSScreen.main` (das folgt dem Fokus). Die Anzeige
+folgt Bildschirmwechseln (`NSApplication.didChangeScreenParametersNotification`),
+die Wahl wird bis dahin zwischengespeichert.
 
 Das Aufnahme-Verbergen setzt `NSWindow.sharingType = .none`: Titel erscheinen
 weder in Screenshots noch in Screen-Sharing.
@@ -114,14 +131,21 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 
 `NotchAlertTracker` vergleicht Status-Schnappschüsse:
 
-- Der erste Schnappschuss ist nur die Ausgangslage. Ein beim Start schon
-  wartender Chat blitzt nicht auf.
-- Ausgelöst wird beim Wechsel nach `awaitingInput`, nach `errored` und bei
-  `working → idle`.
+- Ausgelöst wird nur bei einem echten Wechsel eines schon bekannten Chats:
+  nach `awaitingInput`, nach `errored` und bei `working → idle`.
+- Ein Chat, der zum ersten Mal auftaucht, ist Ausgangslage. Beim App-Start
+  füllt sich der Status-Store nach und nach; schon wartende Chats blitzen
+  deshalb nicht auf. Dasselbe gilt für neue Chats.
 - Mehrere Auslöser im selben Takt: der dringendste gewinnt (Fehler vor Warten
   vor Fertig), die übrigen zählen als „+n".
 - Derselbe Chat mit derselben Art löst höchstens alle 20 s erneut aus
   (Status, der zwischen Warten und Arbeiten flattert).
+- Der Tracker merkt sich außerdem jedes gesehene `working → idle`
+  (`observedTurnEnds`). Der Workspace schreibt `lastTurnAt` erst, wenn das
+  Transkript das Turn-Ende zeigt, das kann nach dem Statuswechsel kommen.
+  `NotchStatusModel.applyingObservedTurnEnds` ergänzt den Wert, sonst stünde
+  ein gerade fertiger Chat als „bereit" da. Die Einteilung selbst bleibt
+  `AttentionModelBuilder.classify`.
 
 ## Fenster-Technik
 
@@ -134,14 +158,23 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   das Fenster unter die Menüleiste.
 - Hosting-View ohne Safe-Area-Regionen (sonst verschöbe die Notch den Inhalt)
   und mit `acceptsFirstMouse`.
-- Fenstergröße wechselt je Zustand einmalig (animiert, bei „Bewegung
-  reduzieren" ohne Animation). Keine `repeatForever`-Animation.
+- Fenstergröße wechselt je Zustand einmalig über `animator().setFrame`
+  (blockiert den Main Thread nicht, anders als `setFrame(_:display:animate:)`),
+  bei „Bewegung reduzieren" ohne Animation. Keine `repeatForever`-Animation.
 - Notch-Erkennung: `safeAreaInsets.top > 0` und beide `auxiliaryTop…Area`.
   Notch-Breite = Bildschirmbreite minus die beiden freien Bereiche.
 - Vollbild: Über Vollbild-Apps wird die Anzeige ausgeblendet. Erkannt wird ein
   fremdes Fenster der Ebene 0, das den Bildschirm samt Menüleistenbereich exakt
-  deckt (`CGWindowListCopyWindowInfo`, braucht keine Aufnahmerechte). Geprüft bei
-  Space- und App-Wechsel und 0,9 s danach, nie in einer Schleife.
+  deckt (`CGWindowListCopyWindowInfo`, braucht keine Aufnahmerechte). Auf
+  Notch-Bildschirmen legt macOS Vollbild-Apps meist unter die Kamera; ein
+  Fenster, das an der Unterkante der Notch beginnt und bis unten reicht, zählt
+  deshalb auch, aber nur wenn `NSApp.currentSystemPresentationOptions`
+  `.fullScreen` meldet (sonst wäre es ein maximiertes Fenster bei
+  ausgeblendetem Dock). Geprüft bei Space- und App-Wechsel und 0,9 s danach,
+  nie in einer Schleife; die Fensterliste wird abseits des Main Threads gelesen.
+- Klick daneben: ein globaler und ein lokaler Monitor auf Mausklicks, nur
+  solange die Liste offen ist. Beide schlucken nichts (der globale kann es
+  nicht, der lokale gibt das Ereignis immer zurück).
 - Keine Dateideskriptoren, keine Subprozesse.
 
 ## Performance-Regeln
@@ -165,13 +198,21 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 
 - `NotchStatusModelTests`: Sortierung, Zähler, Abschnitte, Sichtbarkeit,
   Gleichheit mit der CLI-Rang-Logik, Eingaben aus dem Workspace.
-- `NotchAlertTrackerTests`: Ausgangslage, Auslöser, Unterdrückung,
-  Priorität, Abkühlzeit.
+- `NotchStatusModelTests` vergleicht die Reihenfolge außerdem direkt mit
+  `AttentionModelBuilder.build` (CLI), prüft die Alarm-Gültigkeit, die
+  ergänzten Turn-Enden und die Wahl der Darstellungsart.
+- `NotchAlertTrackerTests`: Ausgangslage beim Start und bei neu auftauchenden
+  Chats, Auslöser, Unterdrückung, Priorität bei mehreren gleichzeitigen,
+  Abkühlzeit, beobachtete Turn-Enden.
 - `NotchGeometryTests`, `NotchFullscreenDetectorTests`: Notch mit und ohne,
-  Bildschirmwahl, Rahmen je Zustand, Vollbild-Erkennung.
+  Bildschirmwahl, Rahmen je Zustand, Menüleiste neben der Notch bleibt in
+  jedem Zustand und auf mehreren Bildschirmgrößen frei, Vollbild-Erkennung
+  inklusive Vollbild unter der Kamera.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
-- Snapshots: `make snapshots ONLY=notch` (Ruhe, braucht dich, Fehler,
-  aufgeklappt, jeweils an der Notch und als Pille, hell und dunkel).
+- Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
+  braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille, hell
+  und dunkel). Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
+  Notch, damit man sieht, dass nichts verdeckt wird.
 
 ## Grenzen
 
@@ -180,8 +221,12 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Die Anzeige erscheint nur auf einem Bildschirm (der gewählte).
 - Ob man einen bestimmten Chat gerade ansieht, weiß sie nicht: die
   Fertig-Verbreiterung wird nur unterdrückt, solange WhisperM8 aktive App ist.
-- Eine genaue Prüfung gegen Menüleisten-Programme, die den Platz neben der
-  Notch belegen, fehlt. Die Anzeige liegt darüber.
+- Unter der Notch verdeckt die Anzeige ein kleines Stück oben in der
+  Bildschirmmitte (Notch-Breite mal 24 pt, beim Alarm kurz 340 pt breit).
+- Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort
+  bei offener Liste); die Anzeige beobachtet den Workspace nicht.
+- „Esc closes" wirkt nur, wenn die Liste per Klick geöffnet wurde. Beim
+  Öffnen per Darüberfahren nimmt sie keinen Tastaturfokus.
 
 ## Keywords
 
