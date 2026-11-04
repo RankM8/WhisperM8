@@ -204,5 +204,60 @@ final class ClipboardDictationWindowTests: XCTestCase {
         XCTAssertTrue(ClipboardPreviewStyle.prefersMonospace("$ swift test --filter Clipboard"))
         XCTAssertFalse(ClipboardPreviewStyle.prefersMonospace(""))
     }
+
+    // MARK: Große Bildansicht
+
+    private func imageEntry(_ id: String, ago: TimeInterval) -> ClipboardEntry {
+        var entry = entry(id, "", ago: ago)
+        entry.kind = .image
+        entry.text = nil
+        entry.preview = "Image 10 × 10"
+        entry.imageFile = "\(id).png"
+        return entry
+    }
+
+    func testZoomOnlyForImagesAndEscapeGoesBackFirst() {
+        let model = makeModel([imageEntry("img", ago: 1), entry("txt", "Text", ago: 2)])
+        var closed = 0
+        model.actions.close = { closed += 1 }
+
+        model.select("txt")
+        model.handle(.toggleZoom)
+        XCTAssertFalse(model.isZoomed)
+
+        model.select("img")
+        model.handle(.toggleZoom)
+        XCTAssertTrue(model.isZoomed)
+
+        model.handle(.close)
+        XCTAssertFalse(model.isZoomed)
+        XCTAssertEqual(closed, 0)
+        model.handle(.close)
+        XCTAssertEqual(closed, 1)
+    }
+
+    func testZoomClosesWhenSelectionMovesToTextAndEnterPastesTheImage() {
+        let model = makeModel([imageEntry("img", ago: 1), entry("txt", "Text", ago: 2)])
+        var pasted: [String] = []
+        model.actions.paste = { entry, _ in pasted.append(entry.id) }
+
+        model.select("img")
+        model.openZoom()
+        model.handle(.paste)
+        XCTAssertEqual(pasted, ["img"])
+
+        model.handle(.moveDown)
+        XCTAssertEqual(model.selectedID, "txt")
+        XCTAssertFalse(model.isZoomed)
+    }
+
+    func testCommandYTogglesZoomAndResetClosesIt() {
+        XCTAssertEqual(ClipboardKeyCommand.resolve(keyCode: 16, characters: "y", modifiers: .command), .toggleZoom)
+        let model = makeModel([imageEntry("img", ago: 1)])
+        model.openZoom()
+        XCTAssertTrue(model.isZoomed)
+        model.reset()
+        XCTAssertFalse(model.isZoomed)
+    }
 }
 

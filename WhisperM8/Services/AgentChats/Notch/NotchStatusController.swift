@@ -76,6 +76,7 @@ private struct NotchHostView: View {
             display: model.display,
             onToggle: { controller.toggleExpanded() },
             onSelect: { controller.select(sessionID: $0) },
+            onTurnOff: { controller.turnOff() },
             onHover: { controller.hoverChanged($0) })
     }
 }
@@ -174,6 +175,13 @@ final class NotchStatusController {
             }
         }
         applyConfigIfChanged(force: true)
+    }
+
+    /// Knopf in der Liste: Anzeige ausschalten (wie der Schalter in den
+    /// Einstellungen). Wieder an über Einstellungen, Menüleiste oder Hotkey.
+    func turnOff() {
+        AppPreferences.shared.isNotchStatusEnabled = false
+        applyConfigIfChanged()
     }
 
     /// Hotkey und Menüleiste: Anzeige ein- oder ausschalten.

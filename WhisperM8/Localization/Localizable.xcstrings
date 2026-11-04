@@ -1901,6 +1901,16 @@
         }
       }
     },
+    "Back (Esc)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück (Esc)"
+          }
+        }
+      }
+    },
     "Back to password managers and the Keychain.": {
       "localizations": {
         "de": {
@@ -5437,6 +5447,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspaces ausblenden"
+          }
+        }
+      }
+    },
+    "Hides the chat status at the notch. Turn it back on in Settings, the menu bar or with the hotkey.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blendet den Chat-Status an der Notch aus. Wieder einschalten in den Einstellungen, in der Menüleiste oder per Hotkey."
           }
         }
       }
@@ -13634,6 +13654,16 @@
         }
       }
     },
+    "Turn off notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch ausschalten"
+          }
+        }
+      }
+    },
     "Turn running — report follows": {
       "localizations": {
         "de": {
@@ -14200,6 +14230,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ansehen"
+          }
+        }
+      }
+    },
+    "View Large": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groß ansehen"
+          }
+        }
+      }
+    },
+    "View large (⌘Y)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groß ansehen (⌘Y)"
           }
         }
       }

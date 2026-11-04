@@ -75,6 +75,8 @@ struct NotchStatusView: View {
     let display: NotchDisplay
     var onToggle: () -> Void = {}
     var onSelect: (UUID) -> Void = { _ in }
+    /// Knopf unten links in der Liste: Anzeige ganz ausschalten.
+    var onTurnOff: () -> Void = {}
     /// Mauszeiger über der Anzeige (für das Aufklappen beim Darüberfahren).
     var onHover: (Bool) -> Void = { _ in }
 
@@ -91,7 +93,7 @@ struct NotchStatusView: View {
             .accessibilityHint(display.isExpanded ? Text("Closes the chat list") : Text("Opens the chat list"))
 
             if display.isExpanded {
-                NotchChatList(sections: display.sections, palette: palette, onSelect: onSelect)
+                NotchChatList(sections: display.sections, palette: palette, onSelect: onSelect, onTurnOff: onTurnOff)
                     .transition(.opacity)
             }
         }
@@ -373,6 +375,7 @@ struct NotchChatList: View {
     let sections: [NotchSection]
     let palette: NotchPalette
     var onSelect: (UUID) -> Void
+    var onTurnOff: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
@@ -390,7 +393,18 @@ struct NotchChatList: View {
             .scrollIndicators(.hidden)
 
             HStack {
-                Text("Click a row to open the chat")
+                // Sichtbarer Ausschalter direkt in der Notch. Wieder an:
+                // Einstellungen, Menüleiste oder Hotkey.
+                Button(action: onTurnOff) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "power")
+                        Text("Turn off notch")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(palette.secondary)
+                .help(String(localized: "Hides the chat status at the notch. Turn it back on in Settings, the menu bar or with the hotkey."))
                 Spacer()
                 Text("Esc closes")
             }

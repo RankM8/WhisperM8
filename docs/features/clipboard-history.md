@@ -27,6 +27,7 @@ nichts vom Verlauf, pollt nicht und belegt keinen Hotkey.
 | Schnellwahl | ⌘1 bis ⌘9, genau wie die Liste nummeriert ist |
 | Anpinnen und lösen | ⌘P oder die Pin-Schaltfläche am Eintrag |
 | Löschen | ⌘⌫ oder Schaltfläche in der Vorschau |
+| Bild groß ansehen | Klick aufs Vorschaubild, „View Large“ oder ⌘Y. Das Bild füllt das Fenster, Enter fügt ein, ↑/↓ blättern, Esc oder ⌘Y geht zurück |
 | Nur Diktate zeigen | ⌘D oder Umschalter „All / Dictations“ neben dem Suchfeld (kombinierbar mit der Suche) |
 | Original eines Diktats einfügen | Schaltfläche „Paste original“ in der Vorschau |
 | Verlauf leeren | Fußzeile „Clear History…“, mit Rückfrage in der Fußzeile; Angepinnte bleiben |

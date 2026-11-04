@@ -49,6 +49,8 @@ final class ClipboardHistoryViewModel: ObservableObject {
 
     nonisolated static let thumbnailPixels = 96
     nonisolated static let previewPixels = 1200
+    /// Große Ansicht (⌘Y): scharf auch auf Retina bei voller Fenstergröße.
+    nonisolated static let zoomPixels = 3000
     /// Vorschau-Text sehr langer Einträge: nur der Anfang, sonst stockt das Layout.
     nonisolated static let previewCharacterLimit = 20_000
 
@@ -71,6 +73,10 @@ final class ClipboardHistoryViewModel: ObservableObject {
     }
     /// Die Fußzeile fragt nach, bevor sie den Verlauf leert.
     @Published var isConfirmingClear = false
+    /// Bild füllt das ganze Fenster (Klick aufs Vorschaubild oder ⌘Y).
+    @Published private(set) var isZoomed = false
+    @Published private(set) var zoomImage: NSImage?
+    private var zoomTask: Task<Void, Never>?
     @Published private(set) var thumbnails: [String: NSImage] = [:]
     @Published private(set) var previewText = ""
     @Published private(set) var previewImage: NSImage?
@@ -149,6 +155,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
         query = ""
         filter = .all
         isConfirmingClear = false
+        closeZoom()
         recomputeVisible()
         selectedID = visible.first?.id
         loadPreview()
@@ -253,6 +260,42 @@ final class ClipboardHistoryViewModel: ObservableObject {
     func select(_ id: String) {
         selectedID = id
         loadPreview()
+        if isZoomed { refreshZoom() }
+    }
+
+    // MARK: Große Bildansicht
+
+    /// Nur Bilder lassen sich groß ansehen; bei anderen Einträgen passiert nichts.
+    func toggleZoom() {
+        if isZoomed { closeZoom() } else { openZoom() }
+    }
+
+    func openZoom() {
+        guard selectedEntry?.kind == .image else { return }
+        isZoomed = true
+        refreshZoom()
+    }
+
+    func closeZoom() {
+        zoomTask?.cancel()
+        isZoomed = false
+        zoomImage = nil
+    }
+
+    /// Lädt das gewählte Bild in großer Auflösung, bis dahin steht die Vorschau.
+    private func refreshZoom() {
+        zoomTask?.cancel()
+        guard let entry = selectedEntry, entry.kind == .image else {
+            closeZoom()
+            return
+        }
+        zoomImage = previewImages[entry.id] ?? thumbnails[entry.id]
+        let loader = loaders.image
+        zoomTask = Task { [weak self] in
+            let image = await Task.detached(priority: .userInitiated) { loader(entry, Self.zoomPixels) }.value
+            guard !Task.isCancelled, let image, let self, self.selectedID == entry.id, self.isZoomed else { return }
+            self.zoomImage = image
+        }
     }
 
     func move(_ delta: Int) {
@@ -279,9 +322,16 @@ final class ClipboardHistoryViewModel: ObservableObject {
         case .togglePin: if let entry = selectedEntry { actions.togglePin(entry) }
         case .delete: if let entry = selectedEntry { deleteEntry(entry) }
         case .toggleDictationFilter: toggleDictationFilter()
+        case .toggleZoom: toggleZoom()
         case .close:
-            // Esc bricht zuerst eine offene Rückfrage ab, erst dann schließt es.
-            if isConfirmingClear { isConfirmingClear = false } else { actions.close() }
+            // Esc schließt zuerst die große Ansicht bzw. eine offene Rückfrage, erst dann das Fenster.
+            if isZoomed {
+                closeZoom()
+            } else if isConfirmingClear {
+                isConfirmingClear = false
+            } else {
+                actions.close()
+            }
         }
     }
 

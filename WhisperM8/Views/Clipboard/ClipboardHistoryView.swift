@@ -29,6 +29,11 @@ struct ClipboardHistoryView: View {
             Divider().overlay(AppTheme.border)
             shortcutBar
         }
+        .overlay {
+            if model.isZoomed, let entry = model.selectedEntry {
+                zoomOverlay(entry)
+            }
+        }
         .frame(width: Self.size.width, height: Self.size.height)
         .background(AppTheme.panel)
         .onAppear { searchFocused = true }
@@ -251,12 +256,26 @@ struct ClipboardHistoryView: View {
 
                 if entry.kind == .image {
                     if let image = model.previewImage {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(AppTheme.border))
-                            .frame(maxWidth: .infinity, maxHeight: 280)
+                        // Klick vergrößert aufs ganze Fenster (wie ⌘Y).
+                        Button { model.openZoom() } label: {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(AppTheme.border))
+                                .overlay(alignment: .bottomTrailing) {
+                                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .padding(6)
+                                        .background(.black.opacity(0.45), in: Circle())
+                                        .padding(8)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: 380)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(String(localized: "View large (⌘Y)"))
                     }
                     Spacer(minLength: 0)
                 } else {
@@ -282,6 +301,56 @@ struct ClipboardHistoryView: View {
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AppTheme.surface)
+    }
+
+    /// Bild über das ganze Fenster. Enter fügt ein, Esc oder ⌘Y geht zurück,
+    /// ↑ und ↓ blättern weiter durch die Liste.
+    private func zoomOverlay(_ entry: ClipboardEntry) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Text(verbatim: entry.preview)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                if let name = entry.sourceName {
+                    Text(verbatim: name)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button("Paste") { model.actions.paste(entry, false) }
+                    .buttonStyle(SettingsButtonStyle.primary)
+                Button { model.closeZoom() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(width: 26, height: 26)
+                        .background(.white.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Back (Esc)"))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Group {
+                if let image = model.zoomImage {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .scaledToFit()
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .contentShape(Rectangle())
+            .onTapGesture { model.closeZoom() }
+        }
+        .background(Color(white: 0.07))
     }
 
     /// Roh-Transkript eines nachbearbeiteten Diktats, unter dem Ergebnis.
@@ -312,6 +381,11 @@ struct ClipboardHistoryView: View {
             if entry.kind == .text, entry.dictationMode == nil {
                 Button("Paste as plain text") { model.actions.paste(entry, true) }
                     .buttonStyle(SettingsButtonStyle.standard)
+            }
+            if entry.kind == .image {
+                Button("View Large") { model.openZoom() }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .help(String(localized: "View large (⌘Y)"))
             }
             if entry.dictationOriginal != nil {
                 Button("Paste original") { model.actions.pasteOriginal(entry) }

@@ -62,6 +62,10 @@ Band und Körper gehen mit kleinen Hohlkehlen ineinander über
 
 Ohne Notch ist es eine Pille unter der Menüleiste, die hell und dunkel mitgeht.
 
+**Ausschalten direkt in der Notch:** Unten links in der aufgeklappten Liste
+steht „Turn off notch“. Das setzt denselben Schalter wie die Einstellungen
+(`notchStatusEnabled`). Wieder an über Einstellungen, Menüleiste oder Hotkey.
+
 ## Einstellungen
 
 Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"

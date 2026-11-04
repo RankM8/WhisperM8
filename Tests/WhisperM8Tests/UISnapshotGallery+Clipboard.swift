@@ -90,6 +90,11 @@ extension UISnapshotGallery {
             Fixture(name: "clipboard-verlauf-leeren", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "err", confirmingClear: true), now: now))
             },
+            Fixture(name: "clipboard-verlauf-bild-gross", size: size) {
+                let zoomed = model(selected: "img")
+                zoomed.openZoom()
+                return AnyView(ClipboardHistoryView(model: zoomed, now: now))
+            },
             Fixture(name: "clipboard-verlauf-bild", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "img"), now: now))
             },
