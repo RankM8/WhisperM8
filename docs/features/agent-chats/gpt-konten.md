@@ -1,6 +1,6 @@
 ---
 status: aktiv
-stand: 2026-09-23
+stand: 2026-11-05
 feature: GPT-Konten (mehrere ChatGPT-Konten im GPT-Backend)
 ---
 
@@ -25,8 +25,8 @@ sich leicht verwechseln:
 
 | Login | Store | Wer daran hängt |
 |---|---|---|
-| **GPT-Backend** (diese Seite) | Config-Dir des Proxys, darin `codex/auth.json` | Claude-Chats mit GPT-Modell, native `gpt`-Subagents, GPT-Modelle im `/model`-Picker |
-| **Codex-CLI** (`codex login`) | `~/.codex/auth.json` | Codex-Chats, Diktat-Nachbearbeitung, `whisperm8 agent`, ChatGPT-App |
+| **GPT-Backend** (diese Seite) | Config-Dir des Proxys, darin `codex/auth.json` | Claude-Chats mit GPT-Modell, native `gpt`-Subagents, GPT-Modelle im `/model`-Picker, Diktat: Transkription „ChatGPT-Abo“ und Nachbearbeitung der Textmodi (aktives Konto) |
+| **Codex-CLI** (`codex login`) | `~/.codex/auth.json` | Codex-Chats, Diktat-Nachbearbeitung für Task und Ultra-Prompt sowie als Rückfall, `whisperm8 agent`, ChatGPT-App |
 
 Ein `codex login` stellt also **nicht** das GPT-Backend um, und ein Login in
 den GPT-Backend-Einstellungen **nicht** die Codex-CLI. Die Trennung ist
@@ -201,19 +201,29 @@ Login gleichzeitig.
 - **CLI ohne Konto-Flag.** `whisperm8 chats new` kennt kein `--gpt-account`,
   `chats list` zeigt keine Konto-Spalte. Lesbar ist das Konto bisher nur über
   `chats show --json`.
-- **Erschöpftes Kontingent kostet Zeit.** Der Proxy wiederholt intern rund
-  170 Sekunden, bevor er ein 429 zurückgibt; die Session steht solange auf
-  „working". Eine Limit-Erkennung im Router, die den Zug sofort abbricht,
-  gibt es noch nicht.
+- **Erschöpftes Kontingent.** Ältere Proxy-Versionen wiederholten intern
+  rund 170 Sekunden, bevor ein 429 kam. Laut Upstream schlägt ein
+  erschöpftes Kontingent seit v0.1.40 sofort mit 429 und `retry-after` fehl
+  (raine/claude-code-proxy#139); mit v0.1.47 live noch nicht nachgeprüft.
+  Eine eigene Limit-Erkennung im Router gibt es nicht.
 - **Background-Agents (`claude --bg`) laufen immer über `main`.** Der
   Launch-Guard ist dort portbasiert; ein Konto-Stempel wäre eine Lüge.
 - **Login-Zustand lebt in der Settings-Seite.** Wer während eines
   Gerätecode-Logins die Seite verlässt, sieht den Code beim Zurückkommen
   nicht mehr; der Login-Prozess läuft weiter, und die Konto-Aktionen bleiben
   solange gesperrt. Im Zweifel den Login über ⋯ → Neu anmelden… erneut starten.
-- **Geteiltes Proxy-Log.** `CCP_CONFIG_DIR` hängt nur die Config-Wurzel um,
-  nicht das State-Verzeichnis: alle Instanzen schreiben in dieselbe
-  `proxy.log`. Jede Zeile trägt immerhin ihren Port.
+- **Proxy-Logs je Konto.** `CCP_CONFIG_DIR` allein hängt das
+  State-Verzeichnis nicht um. Weil Zusatzprofile aber mit `HOME` =
+  Profilordner laufen, schreibt jede Zusatzinstanz ihr eigenes Log nach
+  `~/.gpt-profiles/<name>/.local/state/claude-code-proxy/`, main nach
+  `~/.local/state/claude-code-proxy/`.
+- **Transport HTTP für alle Instanzen** (seit 05.11.2026). Der Proxy nimmt
+  bis v0.1.47 WebSocket als Standard; darüber kamen 401-Wellen und Abbrüche
+  nach rund 177 s (Upstream #73, #172). Die HTTP-Einstellung stand bisher nur
+  per Hand in der main-Config, Zusatzkonten liefen deshalb über WebSocket.
+  Jetzt setzt `launchEnvironment(forProfile:)` `CCP_CODEX_TRANSPORT=http` für
+  jede selbst gestartete Instanz; ein bewusst in der Login-Shell gesetzter
+  Wert bleibt stehen. Greift ab dem nächsten Start der Instanz.
 
 ## Schlüsseldateien
 
