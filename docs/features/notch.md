@@ -50,9 +50,10 @@ In der Menüleiste belegt die Anzeige nur die Aussparung selbst: ein schwarzes
 Band genau in Notch-Breite (sie ist ohnehin schwarz). Zähler, Chat-Name und
 Liste hängen darunter (`NotchGeometry.layout`, Teile `band` und `body`).
 Menüs links und Statussymbole rechts der Notch werden nie verdeckt, auch nicht
-beim Alarm oder in der Liste. Ist der Körper breiter als die Notch, liegt das
-Fenster zwar über einem Stück Menüleiste, dort ist es aber vollständig
-transparent: Der Window-Server reicht Klicks auf transparente Pixel eines nicht
+beim Alarm oder in der Liste. Im Ruhezustand ist das ganze Fenster genau so
+breit wie die Notch, es berührt die Menüleiste daneben also gar nicht. Beim
+Alarm und in der Liste ist der Körper breiter; dann liegt das Fenster zwar über
+einem Stück Menüleiste, dort ist es aber vollständig transparent: Der Window-Server reicht Klicks auf transparente Pixel eines nicht
 deckenden Fensters an das Fenster darunter weiter. Deshalb wird
 `ignoresMouseEvents` nie gesetzt (ein ausdrückliches `false` ließe das
 Fenster auch dort Klicks annehmen).

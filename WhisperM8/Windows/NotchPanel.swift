@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Nicht aktivierendes Fenster der Notch-Anzeige: stiehlt keinen Fokus, liegt
 /// über der Menüleiste, erscheint auf allen Spaces. Key-Status gibt es nur,
-/// damit Esc ankommt, solange die Liste offen ist.
+/// damit Esc ankommt, solange die Liste offen ist (`allowsKey`).
 final class NotchPanel: NSPanel {
     /// Esc im aufgeklappten Zustand.
     var onCancel: (() -> Void)?
@@ -27,7 +27,11 @@ final class NotchPanel: NSPanel {
         titleVisibility = .hidden
     }
 
-    override var canBecomeKey: Bool { true }
+    /// Key nur, solange die Liste per Klick offen ist (für Esc). Sonst bleibt
+    /// die Tastatur bei der App, in der man gerade arbeitet.
+    var allowsKey = false
+
+    override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 
     /// Borderless-Fenster werden sonst unter die Menüleiste geschoben, die

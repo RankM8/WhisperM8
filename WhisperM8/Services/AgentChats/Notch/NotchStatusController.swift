@@ -486,7 +486,10 @@ final class NotchStatusController {
         }
         installDismissMonitors()
         rebuild()
-        if !byHover { panel?.makeKey() }
+        if !byHover, let panel {
+            panel.allowsKey = true
+            panel.makeKey()
+        }
     }
 
     func collapse() { collapse(rebuildAfter: true) }
@@ -504,7 +507,9 @@ final class NotchStatusController {
 
     /// Key-Status zurückgeben, damit Tastatureingaben wieder in der App davor landen.
     private func releaseKey() {
-        guard let panel, panel.isKeyWindow else { return }
+        guard let panel else { return }
+        panel.allowsKey = false
+        guard panel.isKeyWindow else { return }
         isReleasingKey = true
         panel.orderOut(nil)
         panel.orderFrontRegardless()

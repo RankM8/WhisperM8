@@ -548,11 +548,17 @@ final class NotchGeometryTests: XCTestCase {
         }
     }
 
-    func testManyChipsWidenOnlyTheChinNotTheBand() {
-        let screen = notchScreen()
-        let layout = NotchGeometry.layout(screen: screen, mode: .compact(chipCount: 4))
-        XCTAssertGreaterThanOrEqual(layout.body.width, NotchGeometry.chipsWidth(chipCount: 4))
-        XCTAssertEqual(layout.band.width, 185, accuracy: 0.001)
+    /// Der Dauerzustand ist ein Rechteck in Notch-Breite: kein Pixel des
+    /// Fensters liegt neben der Notch, auch kein transparenter.
+    func testCompactWindowNeverReachesBesideTheNotch() {
+        for screen in notchScreens {
+            let areas = NotchGeometry.menuBarItemAreas(screen: screen)
+            for chips in 0...4 {
+                let frame = NotchGeometry.panelFrame(screen: screen, mode: .compact(chipCount: chips))
+                XCTAssertEqual(frame.width, screen.notchWidth, accuracy: 0.001)
+                for area in areas { XCTAssertLessThan(frame.intersection(area).width, 0.001) }
+            }
+        }
     }
 
     func testNotchAlertIsWiderThanCompactAndCentered() {

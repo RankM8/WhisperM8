@@ -128,7 +128,7 @@ struct NotchStatusView: View {
                 // Die Aussparung selbst: schwarz, ohne Inhalt.
                 Color.clear.frame(height: notchHeight)
                 headerRow
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity)
                     .frame(height: NotchGeometry.chinHeight)
             }
@@ -177,6 +177,9 @@ struct NotchStatusView: View {
         if summary.waiting > 0 { parts.append(String(localized: "\(summary.waiting) waiting for you")) }
         if summary.errored > 0 { parts.append(String(localized: "\(summary.errored) with an error")) }
         if summary.freshDone > 0 { parts.append(String(localized: "\(summary.freshDone) just finished")) }
+        if let alert = display.alert, !display.isExpanded {
+            parts.insert("\(alert.title), \(NotchAlertLabel.word(for: alert.kind))", at: 0)
+        }
         if parts.isEmpty { return Text("No active chats") }
         return Text(parts.joined(separator: ", "))
     }
@@ -353,11 +356,13 @@ struct NotchAlertLabel: View {
         }
     }
 
-    private var word: Text {
-        switch alert.kind {
-        case .awaitingInput: return Text("waiting")
-        case .errored: return Text("failed")
-        case .finished: return Text("done")
+    private var word: Text { Text(Self.word(for: alert.kind)) }
+
+    static func word(for kind: NotchAlertKind) -> String {
+        switch kind {
+        case .awaitingInput: return String(localized: "waiting")
+        case .errored: return String(localized: "failed")
+        case .finished: return String(localized: "done")
         }
     }
 }

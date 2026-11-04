@@ -140,8 +140,11 @@ enum NotchGeometry {
             let bodyWidth: CGFloat
             var bodyHeight = chinHeight
             switch mode {
-            case .compact(let chipCount):
-                bodyWidth = max(notchWidth, chipsWidth(chipCount: chipCount))
+            case .compact:
+                // Genau Notch-Breite: Das Fenster berührt die Menüleiste daneben
+                // im Dauerzustand gar nicht, auch kein transparenter Rand.
+                // Vier zweistellige Zähler passen in jede Notch.
+                bodyWidth = notchWidth
             case .alert:
                 bodyWidth = max(notchWidth, alertWidth)
             case .expanded(let rows, let sections):
