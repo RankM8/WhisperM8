@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Eigene Seite der CLAUDE-CODE-Sektion (IA-Umbau 2026-07-19) — vormals
-/// Tab „Claude Hooks" in `AgentChatsSettingsPage`; Inhalt unveraendert.
+/// Eigene Seite der CLAUDE-CODE-Sektion (IA-Umbau 2026-07-19), vormals
+/// Tab „Claude Hooks" in `AgentChatsSettingsPage`. Stand der Hooks:
+/// `docs/plans/einstellungen-ordnung/hooks-analyse.md`.
 struct ClaudeHooksSettingsPage: View {
     @AppStorage(PreferenceKeys.claudeHooksEnabled) private var hooksEnabled = true
 
@@ -9,6 +10,7 @@ struct ClaudeHooksSettingsPage: View {
     @State private var isExplainerExpanded = false
     @State private var isHookPreviewExpanded = false
     @State private var hookSettingsPreview = ""
+    @State private var hookPreviewUsesReducedSet = true
 
     var body: some View {
         SettingsPageContainer(
@@ -20,10 +22,10 @@ struct ClaudeHooksSettingsPage: View {
                     SettingsStatusRow(
                         title: hooksEnabled ? "Session hooks active" : "Session hooks disabled",
                         subtitle: hooksEnabled
-                            ? "Claude chats start with a temporary hook configuration. It links each chat to its Claude session and blocks prompts that were already delivered from being sent twice. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched."
-                            : "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, the double-send protection is off, and background agents lose their live status.",
+                            ? "Claude chats start with a temporary hook configuration that links each chat to its Claude session. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched."
+                            : "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, and background agents lose their live status.",
                         tone: hooksEnabled ? .ok : .off,
-                        detail: hooksEnabled ? "Session linking and send guard" : "Hooks off"
+                        detail: hooksEnabled ? "Session linking" : "Hooks off"
                     )
 
                     SettingsToggleRow(
@@ -44,12 +46,28 @@ struct ClaudeHooksSettingsPage: View {
                     }
 
                     DisclosureGroup("Hook settings preview", isExpanded: $isHookPreviewExpanded) {
-                        SettingsCodeBlock(text: hookSettingsPreview, minHeight: 220)
-                            .padding(.vertical, 8)
+                        VStack(alignment: .leading, spacing: 8) {
+                            hookPreviewExplanation
+                            SettingsCodeBlock(text: hookSettingsPreview, minHeight: 220)
+                        }
+                        .padding(.vertical, 8)
                     }
                 }
             }
             .onAppear(perform: refresh)
+        }
+    }
+
+    /// Erklärt, wer den gezeigten Satz bekommt. Bei ausgeschalteten Hooks
+    /// bekommt ihn niemand; die Vorschau zeigt dann, was mit Hooks gälte.
+    @ViewBuilder
+    private var hookPreviewExplanation: some View {
+        if !hooksEnabled {
+            SettingsHelpText("Session hooks are off, so new chats start without any of these hooks. The preview shows the set they would get with hooks on.")
+        } else if hookPreviewUsesReducedSet {
+            SettingsHelpText("Normal chats get only these four events; their live status comes from Claude's session registry. Background agents and Claude versions without the registry get the full set with eight events.")
+        } else {
+            SettingsHelpText("Chats currently get the full set with eight events, because the session registry is off or the installed Claude version does not write it yet.")
         }
     }
 
@@ -126,12 +144,22 @@ struct ClaudeHooksSettingsPage: View {
 
     private func refresh() {
         externalHookFindings = ExternalClaudeHooksInspector.inspectUserSettings()
-        if hookSettingsPreview.isEmpty {
-            let examplePath = "~/Library/Application Support/WhisperM8/claude-session-events/<session>.jsonl"
-            if let data = try? ClaudeHookSettingsBuilder.serializedSettings(eventFilePath: examplePath),
-               let json = String(data: data, encoding: .utf8) {
-                hookSettingsPreview = json
-            }
+        // Vorschau = der Satz, den ein normaler Chat beim nächsten Start
+        // bekäme (dieselbe Entscheidung wie `prepareLaunchSettings`).
+        let reduced = AgentSessionStatusCoordinator.usesReducedHooks(
+            registryEnabled: AppPreferences.shared.isClaudeRegistryStatusEnabled,
+            isBackground: false,
+            cliSupportsRegistry: ClaudeCLIVersion.supportsRegistry(
+                ClaudeCLIVersionProbe.shared.installedVersion()))
+        hookPreviewUsesReducedSet = reduced
+        let examplePath = "~/Library/Application Support/WhisperM8/claude-session-events/<session>.jsonl"
+        if let data = try? ClaudeHookSettingsBuilder.serializedSettings(
+            eventFilePath: examplePath,
+            eventNames: reduced
+                ? ClaudeHookSettingsBuilder.registryModeEventNames
+                : ClaudeHookSettingsBuilder.trackedEventNames),
+           let json = String(data: data, encoding: .utf8) {
+            hookSettingsPreview = json
         }
     }
 }

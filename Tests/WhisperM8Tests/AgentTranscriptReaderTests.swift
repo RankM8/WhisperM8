@@ -383,4 +383,190 @@ final class AgentTranscriptReaderTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: live).path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: orphan).path))
     }
+
+    /// Hook-Analyse 05.11.2026, Stufe 0: alte Event-Dateien von Chats im
+    /// Workspace räumen, Hintergrund-Agenten und frische Dateien behalten.
+    func testAgentSessionRetentionServicePrunesStaleEventFiles() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let staleChat = UUID(), freshChat = UUID(), backgroundAgent = UUID()
+        for id in [staleChat, freshChat, backgroundAgent] {
+            try fixture.writeEvent(id, contents: "{}\n")
+            try fixture.writeSettings(id)
+        }
+        try fixture.age(staleChat, by: 15)
+        try fixture.age(backgroundAgent, by: 15)
+
+        let result = fixture.service().prune(
+            liveLocalSessionIDs: [staleChat, freshChat, backgroundAgent],
+            protectedLocalSessionIDs: [backgroundAgent],
+            now: fixture.now)
+
+        XCTAssertEqual(result.hookEventsRemoved, 0)
+        XCTAssertEqual(result.staleHookEventsRemoved, 1)
+        XCTAssertEqual(result.staleHookEventBytesRemoved, 3)
+        XCTAssertFalse(fixture.eventExists(staleChat))
+        XCTAssertTrue(fixture.eventExists(freshChat))
+        XCTAssertTrue(fixture.eventExists(backgroundAgent))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.paths.settingsFileURL(localSessionID: staleChat).path),
+                      "Settings-Dateien bleiben")
+    }
+
+    /// Grenze: genau 14 Tage alt bleibt, eine Sekunde älter wird gelöscht.
+    func testAgentSessionRetentionServiceStaleAgeBoundary() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let atCutoff = UUID(), pastCutoff = UUID()
+        try fixture.writeEvent(atCutoff)
+        try fixture.writeEvent(pastCutoff)
+        try fixture.setModified(atCutoff, to: fixture.now.addingTimeInterval(-AgentSessionRetentionService.staleEventAge))
+        try fixture.setModified(pastCutoff, to: fixture.now.addingTimeInterval(-AgentSessionRetentionService.staleEventAge - 1))
+
+        let result = fixture.service().prune(liveLocalSessionIDs: [atCutoff, pastCutoff], now: fixture.now)
+
+        XCTAssertEqual(result.staleHookEventsRemoved, 1)
+        XCTAssertTrue(fixture.eventExists(atCutoff))
+        XCTAssertFalse(fixture.eventExists(pastCutoff))
+    }
+
+    /// Fremde Dateien im Ordner (kein UUID-Name, andere Endung) bleiben liegen.
+    func testAgentSessionRetentionServiceIgnoresForeignFiles() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let id = UUID()
+        let foreign = [
+            fixture.paths.eventsDirectory.appendingPathComponent("notes.jsonl"),
+            fixture.paths.eventsDirectory.appendingPathComponent("\(id.uuidString).log"),
+            fixture.paths.eventsDirectory.appendingPathComponent("\(id.uuidString).jsonl.bak"),
+        ]
+        for url in foreign {
+            try Data("x".utf8).write(to: url)
+            try FileManager.default.setAttributes(
+                [.modificationDate: fixture.now.addingTimeInterval(-30 * 24 * 60 * 60)], ofItemAtPath: url.path)
+        }
+
+        let result = fixture.service().prune(liveLocalSessionIDs: [], now: fixture.now)
+
+        XCTAssertEqual(result, RetentionResult())
+        for url in foreign {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), url.lastPathComponent)
+        }
+    }
+
+    /// Review Stufe 0, Befund 1: Ein wiederhergestellter Chat legt seine
+    /// Event-Datei neu an, nachdem das Aufräumen den Ordner gelesen hat. Das
+    /// frisch gelesene Änderungsdatum muss die Löschung verhindern.
+    func testAgentSessionRetentionServiceRechecksDateBeforeRemoving() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let restored = UUID()
+        try fixture.writeEvent(restored, contents: "alt\n")
+        try fixture.age(restored, by: 30)
+
+        let service = fixture.service(beforeRemoval: { url in
+            // Launch genau zwischen Auflisten und Löschen: Datei frisch angelegt.
+            try? FileManager.default.removeItem(at: url)
+            try? Data().write(to: url, options: .atomic)
+        })
+        let result = service.prune(liveLocalSessionIDs: [restored], now: fixture.now)
+
+        XCTAssertEqual(result.staleHookEventsRemoved, 0)
+        XCTAssertTrue(fixture.eventExists(restored))
+    }
+
+    /// Befund 1: Hat die App den Chat schon gestartet (Dateien beansprucht),
+    /// bleiben seine Dateien, auch wenn das Datum noch alt aussieht und der
+    /// Chat im Workspace-Snapshot noch fehlt.
+    @MainActor
+    func testAgentSessionRetentionServiceSkipsFilesClaimedByLaunch() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let restored = UUID(), newChat = UUID()
+        let bridge = ClaudeHookBridge(paths: fixture.paths)
+        for id in [restored, newChat] {
+            XCTAssertNotNil(bridge.prepareSettingsFile(localSessionID: id))
+            try fixture.age(id, by: 30)
+        }
+        XCTAssertTrue(ClaudeHookFileClaims.shared.isClaimed(restored))
+
+        let result = fixture.service(claims: .shared).prune(
+            liveLocalSessionIDs: [restored], now: fixture.now)
+
+        XCTAssertEqual(result, RetentionResult())
+        for id in [restored, newChat] {
+            XCTAssertTrue(fixture.eventExists(id))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.paths.settingsFileURL(localSessionID: id).path))
+        }
+    }
+
+    /// Verdrahtung beim App-Start: Workspace-Chats gelten als lebendig,
+    /// Hintergrund-Agenten als geschützt, alles andere ist verwaist.
+    func testAgentSessionRetentionServicePruneAtLaunchProtectsBackgroundChats() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let projectID = UUID()
+        let chat = AgentChatSession(provider: .claude, projectID: projectID, title: "Chat")
+        let background = AgentChatSession(provider: .claude, projectID: projectID, title: "BG", kind: .backgroundChat)
+        let orphan = UUID()
+        for id in [chat.id, background.id, orphan] {
+            try fixture.writeEvent(id)
+            try fixture.age(id, by: 20)
+        }
+
+        let result = fixture.service().pruneAtLaunch(
+            workspace: AgentWorkspace(projects: [], sessions: [chat, background]), now: fixture.now)
+
+        XCTAssertEqual(result.hookEventsRemoved, 1)
+        XCTAssertEqual(result.staleHookEventsRemoved, 1)
+        XCTAssertFalse(fixture.eventExists(orphan))
+        XCTAssertFalse(fixture.eventExists(chat.id))
+        XCTAssertTrue(fixture.eventExists(background.id))
+    }
 }
+
+/// Temporärer Hook-Ordner für die Retention-Tests.
+private struct RetentionFixture {
+    let root: URL
+    let paths: ClaudeHookPaths
+    let now = Date()
+
+    init() throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8Retention-\(UUID().uuidString)", isDirectory: true)
+        paths = ClaudeHookPaths(rootDirectory: root)
+        try FileManager.default.createDirectory(at: paths.settingsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: paths.eventsDirectory, withIntermediateDirectories: true)
+    }
+
+    func cleanUp() { try? FileManager.default.removeItem(at: root) }
+
+    /// Eigene Claims-Menge, damit parallele Tests sich nicht beeinflussen.
+    func service(
+        claims: ClaudeHookFileClaims = ClaudeHookFileClaims(),
+        beforeRemoval: @escaping (URL) -> Void = { _ in }
+    ) -> AgentSessionRetentionService {
+        AgentSessionRetentionService(hookPaths: paths, claims: claims, beforeRemoval: beforeRemoval)
+    }
+
+    func writeEvent(_ id: UUID, contents: String = "") throws {
+        try Data(contents.utf8).write(to: paths.eventFileURL(localSessionID: id))
+    }
+
+    func writeSettings(_ id: UUID) throws {
+        try Data().write(to: paths.settingsFileURL(localSessionID: id))
+    }
+
+    func age(_ id: UUID, by days: Double) throws {
+        try setModified(id, to: now.addingTimeInterval(-days * 24 * 60 * 60))
+    }
+
+    func setModified(_ id: UUID, to date: Date) throws {
+        try FileManager.default.setAttributes(
+            [.modificationDate: date], ofItemAtPath: paths.eventFileURL(localSessionID: id).path)
+    }
+
+    func eventExists(_ id: UUID) -> Bool {
+        FileManager.default.fileExists(atPath: paths.eventFileURL(localSessionID: id).path)
+    }
+}
+

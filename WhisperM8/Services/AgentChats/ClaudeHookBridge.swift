@@ -90,6 +90,9 @@ final class ClaudeHookBridge {
         hookEventNames: [String] = ClaudeHookSettingsBuilder.trackedEventNames
     ) -> String? {
         let settingsURL = paths.settingsFileURL(localSessionID: localSessionID)
+        // Vor dem Anlegen beanspruchen: Das Aufräumen beim App-Start lässt
+        // diese Dateien dann in Ruhe (`ClaudeHookFileClaims`).
+        ClaudeHookFileClaims.shared.claim(localSessionID)
         var fragments: [[String: Any]] = []
         do {
             if includeHooks {

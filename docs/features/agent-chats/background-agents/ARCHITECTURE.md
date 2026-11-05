@@ -25,7 +25,10 @@ File-Deskriptoren; Settings- und Event-Dateien bleiben bewusst auf Disk. Beim
 App-Start ruft `WhisperM8App` den `AgentSessionRetentionService` mit den
 aktuell lebenden lokalen Session-IDs auf. Dieser Retention-Job löscht
 verwaiste Hook-Settings und Hook-Event-Dateien, deren UUID-Dateiname zu keiner
-aktuellen Session mehr gehört.
+aktuellen Session mehr gehört. Event-Dateien, die seit 14 Tagen niemand
+geschrieben hat, löscht er auch bei Chats im Workspace; die IDs der
+Hintergrund-Agenten bekommt er als geschützt mit, weil diese Agenten den
+App-Neustart überleben und weiter in ihre Datei schreiben.
 
 Der Claude-Supervisor liegt außerhalb der App. `SupervisorJobReader` liest
 Snapshots aus `~/.claude/jobs/<short-id>/state.json`; das Format ist ein
@@ -179,7 +182,7 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `claude --bg` ist ein einmaliger Spawn-Subprozess; der laufende Agent wird vom externen Claude-Supervisor gehostet.
 - Hook-Settings müssen bereits beim `--bg`-Spawn injiziert werden, weil die Background-Session die Settings vom Supervisor erbt.
 - Die Hook-Bridge ist event-driven über `DispatchSource`; es gibt keinen Fallback-Polling-Loop für Hook-Dateien.
-- `stopTracking` löscht Hook-Dateien nicht sofort; verwaiste Dateien werden beim App-Start durch `AgentSessionRetentionService.prune` gegen das Live-Session-Set entfernt.
+- `stopTracking` löscht Hook-Dateien nicht sofort; verwaiste Dateien werden beim App-Start durch `AgentSessionRetentionService.prune` gegen das Live-Session-Set entfernt, alte Event-Dateien (14 Tage ohne Schreiben) auch bei Chats im Workspace, außer bei Hintergrund-Agenten.
 - Hooks können deaktiviert sein oder stumm bleiben; nach fünf Sekunden ohne erstes Hook-Event loggt die Bridge einmalig `binding_hook_silent`, die Session läuft aber weiter und Status sowie Rückfragen sind gröber.
 - `Notification` ist nicht Teil der registrierten Hook-Events, weil es auch Idle-Notifications erzeugen kann.
 - `PermissionRequest`, `AskUserQuestion` und `ExitPlanMode` sind die expliziten Quellen für `awaitingInput`.
@@ -188,7 +191,7 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `SessionEnd` mit `clear`, `resume` oder `compact` wird als In-Place-Wechsel behandelt, nicht als Prozessende.
 - Der Supervisor-State unter `~/.claude/jobs/` ist ein externes, defensiv geparstes Claude-Implementation-Detail.
 - Reine TUI-Navigation in `claude agents` ist nicht detektierbar; der aktive Background-Job wird über JSONL-Schreibaktivität angenähert.
-- `ExternalClaudeHooksInspector` meldet Überschneidungen mit User-Hooks, verändert aber keine User-Settings.
+- `ExternalClaudeHooksInspector` meldet nur fremde Hooks, die doppelte Mitteilungen erzeugen könnten (`Stop`, `Notification`, `PermissionRequest`, `PreToolUse` mit Matcher auf `AskUserQuestion`/`ExitPlanMode`). Hooks mit führendem Umgebungs-Wächter (`[ -n "$VAR" ] && …`), deren Variable in WhisperM8-Chats fehlt, zählen nicht, etwa die Superset-Hooks. User-Settings verändert er nie.
 - `ClaudeThemeWriter` ist nur eine Abgrenzung zur Background-Agent-Persistenz; Details der globalen Theme-Synchronisation gehören nicht in diesen Feature-Bereich.
 
 ## Schlüsseldateien
@@ -200,7 +203,7 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `WhisperM8/Services/AgentChats/ClaudeHookEventStore.swift` tailt Hook-JSONL-Dateien cursorbasiert und parst `ClaudeHookEvent`.
 - `WhisperM8/Services/AgentChats/ClaudeHookSettingsBuilder.swift` erzeugt die temporäre Settings-JSON und die Append-Commands für alle getrackten Hook-Events.
 - `WhisperM8/Services/AgentChats/AgentSessionRetentionService.swift` entfernt verwaiste Hook-Settings und Event-Dateien beim App-Start.
-- `WhisperM8/Services/AgentChats/ExternalClaudeHooksInspector.swift` liest globale Claude-Settings read-only und findet Hooks auf denselben Events wie WhisperM8.
+- `WhisperM8/Services/AgentChats/ExternalClaudeHooksInspector.swift` liest globale Claude-Settings read-only und findet fremde Hooks, die in WhisperM8-Chats doppelte Mitteilungen auslösen könnten.
 - `WhisperM8/Services/AgentChats/ActiveBackgroundSessionTracker.swift` pollt Supervisor-Snapshots für die zuletzt aktive Background-Session in der Agents View.
 - `WhisperM8/Services/AgentChats/ClaudeActiveSessionTracker.swift` enthält die pure Rebind-Entscheidung für externe Claude-Session-IDs ohne laufenden Poller.
 - `WhisperM8/Services/AgentChats/SummaryStartupPlanner.swift` plant Startup-Summaries und schließt Background-Chats von dieser Verarbeitung aus.

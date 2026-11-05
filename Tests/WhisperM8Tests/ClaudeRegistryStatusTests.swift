@@ -615,6 +615,75 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(pending.count, 1, "nach 30 s wird das nil-Ergebnis erneuert")
     }
 
+    /// Startrennen (Hook-Analyse 05.11.2026): Chats, die beim App-Start wieder
+    /// aufgehen, bekamen ohne bekannte Version den vollen Hook-Satz.
+    func testVersionProbeUsesRememberedVersionBeforeFirstProbe() {
+        var pending: [@Sendable () -> Void] = []
+        var saved: [String] = []
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, ttl: 600, failureTTL: 30,
+            versionRunner: { ClaudeCLIVersion(components: [2, 1, 320]) },
+            dispatch: { pending.append($0) },
+            store: .init(load: { "2.1.318" }, save: { saved.append($0) }))
+        XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 318], "gemerkte Version gilt sofort")
+        XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(probe.installedVersion()))
+        XCTAssertEqual(pending.count, 1, "der echte Abruf läuft trotzdem gleich an")
+        pending.removeFirst()()
+        XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 320])
+        XCTAssertEqual(saved, ["2.1.320"], "eine gelesene Version wird gemerkt")
+    }
+
+    func testFailedProbeKeepsKnownVersionAndRetriesSoon() {
+        var pending: [@Sendable () -> Void] = []
+        var saved: [String] = []
+        var clock = Date()
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, ttl: 600, failureTTL: 30,
+            versionRunner: { nil }, dispatch: { pending.append($0) }, now: { clock },
+            store: .init(load: { "2.1.318" }, save: { saved.append($0) }))
+        _ = probe.installedVersion()
+        pending.removeFirst()()
+        XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 318],
+                       "ein Fehlschlag fällt nicht auf den vollen Hook-Satz zurück")
+        XCTAssertTrue(pending.isEmpty)
+        XCTAssertTrue(saved.isEmpty, "ein Fehlschlag schreibt nichts")
+        clock = clock.addingTimeInterval(31)
+        _ = probe.installedVersion()
+        XCTAssertEqual(pending.count, 1, "nach der kurzen Frist wird erneut gemessen")
+    }
+
+    func testUnreadableRememberedVersionIsIgnored() {
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, versionRunner: { nil }, dispatch: { _ in },
+            store: .init(load: { "kaputt" }, save: { _ in }))
+        XCTAssertNil(probe.installedVersion())
+    }
+
+    func testVersionStringRoundTrip() {
+        let version = ClaudeCLIVersion(components: [2, 1, 318])
+        XCTAssertEqual(version.string, "2.1.318")
+        XCTAssertEqual(ClaudeCLIVersion(parsing: version.string), version)
+    }
+
+    /// Tests und CLI-Prozesse laufen ohne App-Bundle: Sie dürfen die gemerkte
+    /// Version der App weder lesen noch überschreiben.
+    func testVersionStoreOutsideAppBundleNeitherReadsNorWrites() {
+        let key = PreferenceKeys.claudeCLILastKnownVersion
+        let before = UserDefaults.standard.object(forKey: key)
+        let store = ClaudeCLIVersionProbe.Store.forProcess(isAppBundle: false)
+        store.save("9.9.9")
+        XCTAssertNil(store.load())
+        XCTAssertEqual(UserDefaults.standard.object(forKey: key) as? String, before as? String)
+
+        var saved: [String] = []
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: false, versionRunner: { ClaudeCLIVersion(components: [2, 1, 320]) },
+            dispatch: { $0() }, store: .init(load: { nil }, save: { saved.append($0) }))
+        probe.prewarm()
+        XCTAssertNil(probe.installedVersion())
+        XCTAssertTrue(saved.isEmpty, "ohne Abruf wird nichts gemerkt")
+    }
+
     func testDisabledVersionProbeNeverSpawns() {
         var runs = 0
         let probe = ClaudeCLIVersionProbe(spawnEnabled: false, versionRunner: { runs += 1; return nil },

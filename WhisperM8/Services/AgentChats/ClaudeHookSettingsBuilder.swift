@@ -74,8 +74,11 @@ enum ClaudeHookSettingsBuilder {
 
     /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys
     /// damit die Datei deterministisch wird (gut fuer Tests + Logs).
-    static func serializedSettings(eventFilePath: String) throws -> Data {
-        let dict = makeSettings(eventFilePath: eventFilePath)
+    static func serializedSettings(
+        eventFilePath: String,
+        eventNames: [String] = trackedEventNames
+    ) throws -> Data {
+        let dict = makeSettings(eventFilePath: eventFilePath, eventNames: eventNames)
         return try JSONSerialization.data(
             withJSONObject: dict,
             options: [.prettyPrinted, .sortedKeys]

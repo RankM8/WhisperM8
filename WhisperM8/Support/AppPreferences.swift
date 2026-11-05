@@ -863,9 +863,11 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.agentStopSoundName) }
     }
 
-    /// Master-Schalter für die Claude-Code-Hook-Bridge (Session-Status via
-    /// `--settings`-Injection). Aus → Launch ohne Hook-Args, Status kommt nur
-    /// noch aus dem Transcript-Watcher.
+    /// Master-Schalter für die Claude-Code-Hook-Bridge (`--settings`-Injection).
+    /// Normale Chats bekommen nur noch die Bindungs- und Lebenszyklus-Hooks,
+    /// ihr Status kommt aus Claudes Registry. Aus → Launch ohne Hook-Args: keine
+    /// automatische Bindung an die Claude-Session-ID, Hintergrund-Agenten ohne
+    /// Live-Status, ohne Registry nur noch der Transcript-Watcher.
     var isClaudeHooksEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.claudeHooksEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeHooksEnabled) }
@@ -1057,6 +1059,7 @@ enum PreferenceKeys {
     static let agentStopSoundEnabled = "agentStopSoundEnabled"
     static let agentStopSoundName = "agentStopSoundName"
     static let claudeHooksEnabled = "claudeHooksEnabled"
+    static let claudeCLILastKnownVersion = "claudeCLILastKnownVersion"
     static let agentStopNotificationEnabled = "agentStopNotificationEnabled"
     static let agentAwaitingNotificationEnabled = "agentAwaitingNotificationEnabled"
     static let agentAlertLevel = "agentAlertLevel"

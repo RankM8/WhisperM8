@@ -255,7 +255,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
             SettingsSection("Terminal") {
                 SettingsToggleRow(
                     title: "Allow terminal sounds",
-                    subtitle: "The terminal bell inside chat views — a different event than the completion sound above (TUI bell vs. stop hook).",
+                    subtitle: "The terminal bell inside chat views. It is a different event than the completion sound above: the bell comes from the program in the terminal, the completion sound from the finished turn.",
                     isOn: $isTerminalBellEnabled
                 )
             }
@@ -279,7 +279,7 @@ private struct AgentChatsNotificationsSettingsTab: View {
     private var completionSoundRow: some View {
         SettingsRow(
             title: "Completion sound",
-            subtitle: "Plays on the stop hook when an agent finishes. Question notifications stay silent."
+            subtitle: "Plays when an agent finishes its turn. Question notifications stay silent."
         ) {
             HStack(spacing: 8) {
                 Toggle("", isOn: $stopSoundEnabled)
