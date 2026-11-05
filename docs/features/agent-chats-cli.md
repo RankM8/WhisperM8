@@ -203,53 +203,24 @@ Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
 bekommt die Marker-Zeile `[via whisperm8 chats · von <actor> · HH:MM]`
 vorangestellt (Ein-Hop-Regel im Skill).
 
-### Send-Guard (Wiedervorlage-Schutz, seit 2026-08-17)
+### Zurückgelegter Prompt nach ESC-Abbruch
 
-**Vorfall:** Nach ESC-Abbruch eines per `send` zugestellten Turns legt die
-Claude-CLI den Prompt des abgebrochenen Turns selbst in den Composer zurück
-(Interrupt-Restore; Doppel-ESC-Rewind kann dasselbe) — ein versehentliches
-Enter würde einen zurückgezogenen Auftrag erneut absenden. Die App kann den
-Composer weder lesen noch gefahrlos leeren; abgefangen wird deshalb das
-erneute **Absenden**:
+Nach dem ESC-Abbruch eines per `send` zugestellten Turns legt die Claude-CLI
+den Prompt des abgebrochenen Turns selbst in den Composer zurück
+(Interrupt-Restore; Doppel-ESC-Rewind kann dasselbe). Zwei Wege räumen ihn weg:
 
-- `session.send` und die Queue-Zustellung legen vor dem Paste ein
-  **Zustell-Token** ab (`SendDeliveryTokenStore`, SHA-256 des gepasteten
-  Texts, App Support `send-tokens/`, TTL 30 min). Lookup per Hash-Scan —
-  env-frei, funktioniert auch für Background-Sessions; gleicher Prompt an
-  zwei Ziele = zwei Tokens.
-- Ein zweiter, additiver `UserPromptSubmit`-Hook (`whisperm8 chats
-  _prompt-guard`, absoluter Binary-Pfad in den generierten Settings) prüft
-  jede Submission: kein Marker-Präfix → sofort durch (kein Lookup); Marker +
-  frisches Token → Token konsumieren, durch; Marker ohne Token → **Exit 2 =
-  Block**, klare Meldung mit Ausweg (`chats send` erneut). Jeder
-  Parse-/IO-Fehler ist fail-open — der Guard darf normales Arbeiten nie
-  blockieren. Pure Entscheidung: `ChatsPromptGuard.decide`.
-- **Hashes sind Whitespace-tolerant** (alle Läufe → ein Space): Die TUI
-  materialisiert beim Zurücklegen eines Prompts Soft-Wrap-Umbrüche als
-  `\n  ` mitten im Text (Vorfall #2, Review-Agents: 640 → 665 Zeichen für
-  denselben Prompt) — ein byte-exakter Hash blockte solche Texte fälschlich.
-- **Retry nach Fehl-Turn ist erlaubt** (Vorfall #2, gleicher Tag): „einmal
-  zugestellt" ≠ „einmal erfolgreich ausgeführt". Scheitert der Turn mit
-  einem expliziten Assistant-Fehlertext („Prompt is too long", „API Error",
-  „Credit balance is too low" — `PromptGuardRetryProbe`, Transcript-Tail
-  256 KB via `transcript_path` aus dem Hook-Input), passiert die
-  Wiedervorlage ohne Token; sobald ein Durchlauf gelingt, sperrt der Guard
-  wieder. ESC-Abbrüche hinterlassen keinen Fehlertext → bleiben gesperrt.
-- **Block-Event-Rückkanal**: Bei Block appended der Guard eine
-  `WhisperM8PromptGuardBlock`-Zeile ins Event-File der Hook-Bridge
-  (`--events`-Argument, vom Settings-Builder gesetzt). Die App reagiert
-  doppelt: `turnAborted` (nimmt das „working" des geblockten Submits zurück
-  — sonst Doppelblockade: Composer gesperrt UND `chats send` wegen
-  working-Konflikt gesperrt) und verzögertes Ctrl+C (leert den klebenden
-  Composer-Text; nach einem Block ist das definitionsgemäß der
-  zurückgelegte Marker-Prompt, kein User-Entwurf).
-- Grenzen: wirkt nur für App-gestartete **Claude**-Sessions (Codex hat keine
-  Hooks — Restrisiko bleibt) und erst für nach dem Update gestartete
-  Sessions. Kill-Switch:
-  `defaults write com.whisperm8.app chatsPromptGuardEnabled -bool NO`.
-- Flanke: `chats interrupt <ref> --clear-input` (opt-in) schickt 400 ms nach
-  dem ESC ein Ctrl+C hinterher und leert den Composer — löscht auch einen
-  etwaigen User-Entwurf, deshalb nie Default.
+- Ein programmatischer Versand (`send`, Queue-Zustellung) leert den Composer
+  vorher per Ctrl+C, solange er dort einen zurückgelegten Prompt vermutet und
+  keinen eigenen Entwurf des Users (`TerminalComposerDraftTracker`).
+- `chats interrupt <ref> --clear-input` (opt-in) schickt 400 ms nach dem ESC
+  ein Ctrl+C hinterher und leert den Composer — löscht auch einen etwaigen
+  User-Entwurf, deshalb nie Default.
+
+Der frühere Send-Guard (zweiter `UserPromptSubmit`-Hook `chats _prompt-guard`
+mit Zustell-Tokens, seit 2026-08-17) ist seit 05.11.2026 ausgebaut: Er blockte
+auch legitime Zustellungen, etwa per `enqueue` eingereihte Prompts. Das
+Subcommand antwortet nur noch mit Exit 0, damit vor dem Update gestartete
+Sessions mit alten Settings bis zu ihrem Neustart ohne Fehlermeldung laufen.
 
 ## close (Tab-Management)
 
