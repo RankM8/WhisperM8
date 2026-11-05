@@ -48,13 +48,10 @@ enum QuickActionShortcuts {
     }
 
     /// Vorschlag, der in den Einstellungen angeboten wird, wenn kein
-    /// Kurzbefehl gesetzt ist. Nur für die beiden Schreib-Modi.
+    /// Kurzbefehl gesetzt ist. Nur für Besser formulieren; Korrigieren hat
+    /// seinen Standard und keinen Vorschlag-Knopf (Entscheidung 05.11.2026).
     static func suggestion(for modeID: String) -> KeyboardShortcuts.Shortcut? {
-        switch modeID {
-        case OutputMode.correctID: return correctDefault
-        case OutputMode.rephraseID: return .init(.r, modifiers: [.control, .option])
-        default: return nil
-        }
+        modeID == OutputMode.rephraseID ? .init(.r, modifiers: [.control, .option]) : nil
     }
 
     /// Modi, die einen Kurzbefehl bekommen können: alle mit Nacharbeit.

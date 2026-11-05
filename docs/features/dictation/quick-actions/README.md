@@ -24,9 +24,12 @@ stille Diktat (Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
   gleichnamige Befehle einzelner Apps (Xcode „Clean Build Folder“, VS Code
   „Zeile löschen“). Ist ⇧⌘K beim ersten Start schon anders vergeben
   (Aufnahme-Hotkey, anderer Modus), setzt die App den Standard nicht
-  (`QuickActionShortcuts.resolveCorrectDefault`). Wer ihn entfernt, bekommt ihn nicht ungefragt zurück; dann
-  steht ⇧⌘K als Vorschlag mit „übernehmen“ daneben. Für Besser formulieren
-  wird ⌃⌥R vorgeschlagen, alle anderen Modi sind leer. Belegt ein
+  (`QuickActionShortcuts.resolveCorrectDefault`). Bestehende Nutzer bekommen ⇧⌘K ebenso, solange
+  sie für Korrigieren nichts anderes gespeichert haben. Wer ihn entfernt,
+  bekommt ihn nicht ungefragt zurück; einen Vorschlag-Knopf gibt es für
+  Korrigieren nicht, man nimmt ihn im Recorder neu auf. Besser formulieren und
+  alle anderen Modi sind ab Werk leer; für Besser formulieren steht ⌃⌥R als
+  Vorschlag mit „übernehmen“ daneben. Belegt ein
   Kurzbefehl schon einen anderen WhisperM8-Kurzbefehl, steht eine Warnung
   darunter (der Recorder prüft selbst nur System und Hauptmenü).
 - **Menüleiste:** „Markierung korrigieren“ (Modus Korrigieren), mit dem

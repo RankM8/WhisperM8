@@ -423,13 +423,10 @@ final class QuickActionModesTests: XCTestCase {
     }
 
     func testShortcutsAreOnlyOfferedForPostProcessingModes() {
-        XCTAssertNotNil(QuickActionShortcuts.suggestion(for: OutputMode.correctID))
+        XCTAssertNil(QuickActionShortcuts.suggestion(for: OutputMode.correctID), "Korrigieren hat den Standard, keinen Vorschlag-Knopf")
         XCTAssertNotNil(QuickActionShortcuts.suggestion(for: OutputMode.rephraseID))
         XCTAssertNil(QuickActionShortcuts.suggestion(for: OutputMode.emailID))
-        XCTAssertNotEqual(
-            QuickActionShortcuts.suggestion(for: OutputMode.correctID),
-            QuickActionShortcuts.suggestion(for: OutputMode.rephraseID)
-        )
+        XCTAssertNotEqual(QuickActionShortcuts.suggestion(for: OutputMode.rephraseID), QuickActionShortcuts.correctDefault)
         let eligible = QuickActionShortcuts.eligibleModes(OutputMode.builtInModes).map(\.id)
         XCTAssertFalse(eligible.contains(OutputMode.rawID))
         XCTAssertTrue(eligible.contains(OutputMode.emailID), "auch bestehende Modi bekommen einen Kurzbefehl")
@@ -441,7 +438,6 @@ final class QuickActionModesTests: XCTestCase {
             QuickActionShortcuts.defaultShortcut(for: OutputMode.correctID),
             KeyboardShortcuts.Shortcut(.k, modifiers: [.command, .shift])
         )
-        XCTAssertEqual(QuickActionShortcuts.suggestion(for: OutputMode.correctID), QuickActionShortcuts.correctDefault)
         for mode in OutputMode.builtInModes where mode.id != OutputMode.correctID {
             XCTAssertNil(QuickActionShortcuts.defaultShortcut(for: mode.id), "\(mode.id) bleibt ab Werk leer")
         }

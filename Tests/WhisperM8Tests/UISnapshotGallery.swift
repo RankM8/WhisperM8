@@ -339,7 +339,7 @@ final class UISnapshotGallery: XCTestCase {
                 return AnyView(RecordingPillView(controller: controller).padding(20))
             },
             Fixture(name: "schnellaktion-kurzbefehl", size: CGSize(width: 480, height: 300)) {
-                let mode = OutputMode.builtInModes.first { $0.id == OutputMode.correctID }!
+                let mode = OutputMode.builtInModes.first { $0.id == OutputMode.rephraseID }!
                 return AnyView(
                     AIOutputQuickActionSection(mode: mode, modes: OutputMode.builtInModes)
                         .padding(20)

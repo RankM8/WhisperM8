@@ -112,7 +112,8 @@ mode, so that e.g. *Reply* knows what you are answering (Settings → Context & 
 
 **Rework selected text without dictating:** select text in any app and press the mode's
 "Shortcut without dictation" (set it per mode under Settings → AI Output → Modes; *Correct* uses ⇧⌘K
-by default, all other modes are empty until you record one). The overlay shows "Correcting…", the selection is replaced, Cmd+Z undoes
+by default, all other modes are empty until you record one; the shortcut works system-wide, so it
+takes over ⇧⌘K in other apps, such as Xcode's "Clean Build Folder"). The overlay shows "Correcting…", the selection is replaced, Cmd+Z undoes
 it and Esc cancels. *Correct* only fixes spelling, grammar and punctuation; *Rephrase* makes the text
 clearer with the same message. If the field can't be edited, the result goes to the clipboard. The menu
 bar has the same as "Correct Selection". In the clipboard history (⇧⌘C), "Correct Selection" sits under
