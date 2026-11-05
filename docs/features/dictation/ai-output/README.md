@@ -144,14 +144,25 @@ bei Zeitüberschreitung. Scheitern beide Wege, nennt die Meldung beide Gründe
 (`PostProcessingError.bothEnginesFailed`), danach greift wie bisher der
 Rohtext-Rückfall.
 
-**Diktat-Bericht:** `postProcessing` hält Weg, Dauer, GPT-Konto und den
-Grund eines Rückfalls fest; die Detailansicht zeigt sie als Chips. Log:
+**Diktat-Bericht:** `postProcessing` hält Ergebnis (`succeeded`, `fellBack`,
+`failed`, `cancelled`), geplanten und tatsächlichen Weg, Dauer, GPT-Konto,
+Rückfallgrund und bei Fehlschlag die Meldung fest; die Detailansicht zeigt sie
+als Chips. Auch ein gescheiterter oder abgebrochener Lauf nennt so den Weg,
+den er nehmen sollte. Log:
 `dictation_postprocess engine=… status=… ms=…`,
 `dictation_postprocess_fallback`, `dictation_postprocess_done`.
 
 **Abbruch und Zeitlimit:** Der Knopf im Overlay und ESC brechen beide Wege ab
 (`CodexProcessRegistry` und `GPTBackendRunRegistry`, jeweils nur Läufe des
-Diktats, nie eine Test-Labor-Vorschau); eingefügt wird der Rohtext. Codex-Läufe
+Diktats, nie eine Test-Labor-Vorschau); eingefügt wird der Rohtext. ESC wirkt
+systemweit, auch wenn Slack oder Mail vorne stehen: `GlobalEscapeHotKey`
+meldet die Taste als Carbon-Hotkey nur für die Dauer der Nacharbeit an und
+gibt sie danach sofort frei (so lange verschluckt WhisperM8 ESC für alle
+Apps). Zusätzlich setzt der Abbruch einen Merker je Diktat
+(`PostProcessingCancelToken`). Er greift auch, wenn gerade kein Lauf
+angemeldet ist: in der Vorbereitung der Backend-Anfrage und zwischen
+Backend-Fehler und Codex-Rückfall. Liefert ein Weg nach dem Abbruch trotzdem
+noch Text, gilt der Rohtext. Codex-Läufe
 ohne Projektzugriff enden nach 90 s (vorher 300 s), Task und Modi mit
 Projektzugriff weiter nach 900 s.
 

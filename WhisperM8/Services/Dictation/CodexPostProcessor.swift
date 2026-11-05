@@ -34,6 +34,8 @@ struct CodexPostProcessor: PostProcessing {
         self.timeoutProvider = timeoutProvider
     }
 
+    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine? { .codexCLI }
+
     func processRun(
         rawText: String,
         mode: OutputMode,
@@ -88,6 +90,9 @@ struct CodexPostProcessor: PostProcessing {
         let owner = CodexRunOwner.current
         let timeout = timeoutProvider(mode)
         let registry = registry
+        // Task-Locals erbt Task.detached nicht, deshalb hier prüfen: ein
+        // Abbruch vor dem Prozessstart soll Codex gar nicht erst starten.
+        try PostProcessingCancelToken.checkCurrent()
         return try await withTaskCancellationHandler {
             try await Task.detached(priority: .userInitiated) {
                 try performCodexRun(

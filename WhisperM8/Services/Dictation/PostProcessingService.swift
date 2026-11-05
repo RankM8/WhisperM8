@@ -20,6 +20,11 @@ struct PostProcessingService {
         try await processRun(rawText: rawText, mode: mode, language: language, contextBundle: contextBundle).text
     }
 
+    /// Weg, den die Nacharbeit dieses Modus voraussichtlich nimmt.
+    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine? {
+        mode.usesPostProcessing ? processor.plannedEngine(for: mode) : nil
+    }
+
     /// Wie `process`, nennt aber den Weg der Nacharbeit (Diktat-Bericht).
     func processRun(
         rawText: String,

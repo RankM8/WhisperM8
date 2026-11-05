@@ -130,6 +130,10 @@ final class RecordingCoordinator {
     let busyHotkeyNotifier: @MainActor (_ showNotice: Bool) -> Void
     /// Zeitpunkt der letzten Mitteilung zu einem verworfenen Hotkey-Druck.
     var lastBusyHotkeyNoticeAt: Date?
+    /// ESC systemweit, nur während der Nacharbeit angemeldet.
+    let cleanUpCancelKey: CleanUpCancelKeyGrabbing
+    /// Abbruch-Merker der laufenden Nacharbeit (`cancelPostProcessing`).
+    var activePostProcessingCancelToken: PostProcessingCancelToken?
 
     init(
         appState: AppState,
@@ -162,7 +166,9 @@ final class RecordingCoordinator {
         busyHotkeyNotifier: @escaping @MainActor (_ showNotice: Bool) -> Void = { showNotice in
             guard AppInstance.isAppBundleProcess else { return }
             RecordingCoordinator.playBusySignal(showNotice: showNotice)
-        }
+        },
+        // Unter `swift test` nie einen echten Carbon-Hotkey anmelden.
+        cleanUpCancelKey: CleanUpCancelKeyGrabbing? = nil
     ) {
         self.appState = appState
         let recorder = AudioRecorder()
@@ -184,6 +190,8 @@ final class RecordingCoordinator {
         self.transcriptionPrewarmer = transcriptionPrewarmer
         self.dictationHistoryRecorder = dictationHistoryRecorder
         self.busyHotkeyNotifier = busyHotkeyNotifier
+        self.cleanUpCancelKey = cleanUpCancelKey
+            ?? (AppInstance.isAppBundleProcess ? GlobalEscapeHotKey.shared : InactiveCleanUpCancelKey())
 
         // Recorder beendet die Aufnahme von selbst (Gerät weg, Schreibfehler):
         // Teilaufnahme sichern und sichtbar beenden (LR-DIK-004/006/026).
@@ -543,6 +551,9 @@ final class RecordingCoordinator {
     func cancelPostProcessing() {
         guard let appState, appState.isPostProcessing else { return }
         // Beide Wege: ein laufender Codex-Prozess oder eine Anfrage an das GPT-Backend.
+        // Erst der Merker: er greift auch, wenn gerade kein Lauf angemeldet
+        // ist (Vorbereitung, Wechsel vom Backend zur Codex-CLI).
+        activePostProcessingCancelToken?.cancel()
         _ = CodexProcessRegistry.shared.cancel()
         _ = GPTBackendRunRegistry.shared.cancel(owner: .dictation)
         appState.postProcessingStatusText = String(localized: "Cancelled…")

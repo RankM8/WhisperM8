@@ -214,31 +214,69 @@ extension RecordingCoordinator {
         overlayController.update(appState: appState)
 
         let startedAt = Date()
-        func snapshot(_ run: PostProcessingRun?) -> TranscriptRunReport.PostProcessingSnapshot {
+        let plannedEngine = postProcessingService.plannedEngine(for: mode)
+        func snapshot(
+            _ outcome: TranscriptRunReport.PostProcessingSnapshot.Outcome,
+            run: PostProcessingRun? = nil,
+            error: Error? = nil
+        ) -> TranscriptRunReport.PostProcessingSnapshot {
             TranscriptRunReport.PostProcessingSnapshot(
+                outcome: outcome,
+                plannedEngine: plannedEngine,
                 engine: run?.engine,
                 durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
                 gptProfile: run?.gptProfile,
-                fallbackReason: run?.fallbackReason
+                fallbackReason: run?.fallbackReason,
+                errorMessage: error?.localizedDescription
+            )
+        }
+        func cancelledResult(_ snapshot: TranscriptRunReport.PostProcessingSnapshot) -> PostProcessingRunResult {
+            Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
+            return PostProcessingRunResult(
+                finalText: rawText,
+                renderedPrompt: renderedPrompt,
+                replyIntent: promptPackage?.intent,
+                visualManifest: promptPackage?.visualManifest,
+                fallbackStatus: .rawFallback,
+                effectiveContextBundle: contextBundle,
+                postProcessing: snapshot
             )
         }
 
+        // Abbruch-Merker dieses Diktats und ESC systemweit, solange die
+        // Nacharbeit läuft (beim Diktat steht meist eine fremde App vorne).
+        let cancelToken = PostProcessingCancelToken()
+        activePostProcessingCancelToken = cancelToken
+        cleanUpCancelKey.activate { [weak self] in self?.cancelPostProcessing() }
+        defer {
+            cleanUpCancelKey.deactivate()
+            if activePostProcessingCancelToken === cancelToken { activePostProcessingCancelToken = nil }
+        }
+
         do {
-            let run = try await postProcessingService.processRun(
-                rawText: rawText,
-                mode: mode,
-                language: language,
-                contextBundle: contextBundle
-            )
+            let service = postProcessingService
+            let run = try await PostProcessingCancelToken.$current.withValue(cancelToken) {
+                try await service.processRun(
+                    rawText: rawText,
+                    mode: mode,
+                    language: language,
+                    contextBundle: contextBundle
+                )
+            }
+            appState.isPostProcessing = false
+            appState.postProcessingStatusText = nil
+            overlayController.update(appState: appState)
+            // Abbruch kam, aber ein Weg hat trotzdem noch geliefert: der
+            // Nutzer hat „Abgebrochen“ gesehen, also gilt der Rohtext.
+            if cancelToken.isCancelled {
+                return cancelledResult(snapshot(.cancelled, run: run))
+            }
             let processedText = run.text
-            let postProcessingSnapshot = snapshot(run)
+            let postProcessingSnapshot = snapshot(run.fallbackReason == nil ? .succeeded : .fellBack, run: run)
             Logger.transcription.info(
                 "dictation_postprocess_done mode=\(mode.id, privacy: .public) engine=\(run.engine?.rawValue ?? "unknown", privacy: .public) ms=\(postProcessingSnapshot.durationMs, privacy: .public) fallback=\(run.fallbackReason != nil, privacy: .public)"
             )
             let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
-            appState.isPostProcessing = false
-            appState.postProcessingStatusText = nil
-            overlayController.update(appState: appState)
             return PostProcessingRunResult(
                 finalText: TextNormalizer.normalizeTranscriptionText(processedText),
                 renderedPrompt: renderedPrompt,
@@ -254,19 +292,12 @@ extension RecordingCoordinator {
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
-            let failedSnapshot = snapshot(nil)
 
             if case PostProcessingError.userCancelled = error {
-                Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
-                return PostProcessingRunResult(
-                    finalText: rawText,
-                    renderedPrompt: renderedPrompt,
-                    replyIntent: promptPackage?.intent,
-                    visualManifest: promptPackage?.visualManifest,
-                    fallbackStatus: .rawFallback,
-                    effectiveContextBundle: contextBundle,
-                    postProcessing: failedSnapshot
-                )
+                return cancelledResult(snapshot(.cancelled))
+            }
+            if cancelToken.isCancelled {
+                return cancelledResult(snapshot(.cancelled, error: error))
             }
 
             if AppPreferences.shared.fallbackToRawOnProcessingError {
@@ -286,7 +317,7 @@ extension RecordingCoordinator {
                     fallbackStatus: fallback.status,
                     errorMessage: message,
                     effectiveContextBundle: contextBundle,
-                    postProcessing: failedSnapshot
+                    postProcessing: snapshot(.failed, error: error)
                 )
             }
 

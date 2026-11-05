@@ -223,7 +223,12 @@ Login gleichzeitig.
   per Hand in der main-Config, Zusatzkonten liefen deshalb über WebSocket.
   Jetzt setzt `launchEnvironment(forProfile:)` `CCP_CODEX_TRANSPORT=http` für
   jede selbst gestartete Instanz; ein bewusst in der Login-Shell gesetzter
-  Wert bleibt stehen. Greift ab dem nächsten Start der Instanz.
+  Wert bleibt stehen. Zwei Folgen: Es greift erst beim nächsten Start der
+  Instanz (laufende Instanzen behalten ihren Transport, App-Neustart oder
+  „Proxy stoppen“ hilft). Und die Variable überstimmt im Proxy jeden
+  `transport`-Eintrag in einer `config.json`, auch den Standard `auto` mit
+  HTTP-Rückfall, den der Upstream ab v0.1.48 einführt. Wer `auto` oder
+  WebSocket will, setzt `CCP_CODEX_TRANSPORT` selbst in der Login-Shell.
 
 ## Schlüsseldateien
 

@@ -161,6 +161,9 @@ struct GPTBackendPostProcessor: PostProcessing {
     /// (`read_effort` im Upstream). Alles andere lassen wir weg.
     static let acceptedEfforts: Set<String> = ["low", "medium", "high", "xhigh", "max"]
 
+    /// Obergrenze der Antwort; reicht für lange Prompts aus dem Prompt-Modus.
+    static let maxTokens = 16_000
+
     private let templateStore: PostProcessingTemplateStore
     private let promptPackageBuilder: PromptPackageBuilder
     private let dependencies: GPTBackendPostProcessingDependencies
@@ -181,6 +184,8 @@ struct GPTBackendPostProcessor: PostProcessing {
         self.visualInputModeRaw = visualInputModeRaw
     }
 
+    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine? { .gptBackend }
+
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
         try await processRun(rawText: rawText, mode: mode, language: language, contextBundle: contextBundle).text
     }
@@ -192,6 +197,7 @@ struct GPTBackendPostProcessor: PostProcessing {
         contextBundle: TranscriptContextBundle
     ) async throws -> PostProcessingRun {
         guard dependencies.isBackendEnabled() else { throw GPTBackendPostProcessingError.backendDisabled }
+        try PostProcessingCancelToken.checkCurrent()
         guard let template = templateStore.template(for: mode.templateID) else {
             throw PostProcessingError.missingTemplate
         }
@@ -240,6 +246,10 @@ struct GPTBackendPostProcessor: PostProcessing {
             }
         }
         registry.register(runID: runID, owner: owner) { request.cancel() }
+        // Abbruch in der Vorbereitung (Profil, Port, Bilder): da war der Lauf
+        // noch nicht angemeldet. Dann die Anfrage sofort beenden.
+        let cancelToken = PostProcessingCancelToken.current
+        if cancelToken?.isCancelled == true { request.cancel() }
 
         do {
             let text = try await withTaskCancellationHandler {
@@ -253,7 +263,7 @@ struct GPTBackendPostProcessor: PostProcessing {
             )
             return PostProcessingRun(text: text, engine: .gptBackend, gptProfile: profileLabel)
         } catch {
-            let cancelledByUser = registry.unregister(runID: runID)
+            let cancelledByUser = registry.unregister(runID: runID) || cancelToken?.isCancelled == true
             let mapped = cancelledByUser ? PostProcessingError.userCancelled : Self.map(error)
             Logger.transcription.info(
                 "dictation_postprocess engine=gpt_backend status=failed ms=\(Self.milliseconds(since: startedAt), privacy: .public) profile=\(profileLabel, privacy: .public) model=\(model, privacy: .public) error=\(Self.label(for: mapped), privacy: .public)"
@@ -289,6 +299,10 @@ struct GPTBackendPostProcessor: PostProcessing {
         var body: [String: Any] = [
             "model": model,
             "stream": false,
+            // Für Codex verwirft der Proxy das Feld (Upstream-Test
+            // `max_tokens_is_not_serialized_for_codex`); mitgeschickt, damit
+            // die Anfrage auch für strengere Anthropic-Prüfer vollständig ist.
+            "max_tokens": maxTokens,
             "messages": [["role": "user", "content": content]],
         ]
         if acceptedEfforts.contains(effort) {

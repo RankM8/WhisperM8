@@ -163,8 +163,9 @@ struct AIOutputAccountTab: View {
             }
         }
         .task {
+            // Dieselbe Auflösung wie der echte Lauf: Profil-Kill-Switch aus → main.
             activeGPTAccount = await Task.detached(priority: .utility) {
-                GPTAccountProfiles().activeProfileNameOrNil() ?? GPTAccountProfiles.mainProfileName
+                GPTBackendPostProcessingDependencies.live.activeProfile() ?? GPTAccountProfiles.mainProfileName
             }.value
             catalog = CodexModelCatalogStore.shared.catalog()
             await connectionModel.refresh()

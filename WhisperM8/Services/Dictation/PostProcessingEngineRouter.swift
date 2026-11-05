@@ -39,7 +39,7 @@ struct PostProcessingEngineRouter: PostProcessing {
     }
 
     /// Weg, den ein Modus voraussichtlich nimmt (Einstellungen, Bericht).
-    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine {
+    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine? {
         Self.isBackendEligible(mode) && isBackendPreferred() ? .gptBackend : .codexCLI
     }
 
@@ -68,6 +68,9 @@ struct PostProcessingEngineRouter: PostProcessing {
         }
 
         let reason = backendError.localizedDescription
+        // Kam der Abbruch, während gerade kein Lauf angemeldet war, startet
+        // Codex gar nicht erst.
+        try PostProcessingCancelToken.checkCurrent()
         Logger.transcription.info("dictation_postprocess_fallback from=gpt_backend to=codex_cli")
         do {
             return try await runCodex(rawText: rawText, mode: mode, language: language, contextBundle: contextBundle, fallbackReason: reason)
