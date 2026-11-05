@@ -386,6 +386,10 @@ extension RecordingCoordinator {
         agentProjectPath: String? = nil,
         postProcessing: TranscriptRunReport.PostProcessingSnapshot? = nil
     ) async {
+        // Statistik: zählt nur erfolgreiche Diktate, Wörter erst off-main.
+        StatisticsCollectors.noteDictation(
+            status: status, audioDuration: audioDuration, rawText: rawText, finalText: finalText, modeName: outputMode.name
+        )
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
             sourceBundleIdentifier: contextSourceApp?.bundleIdentifier,
