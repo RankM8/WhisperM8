@@ -39,19 +39,18 @@ final class KeyboardLockPolicyTests: XCTestCase {
     }
 
     func testExtensionAddsOneMinuteAndIsCappedAtTenMinutes() {
-        let start = Date(timeIntervalSince1970: 1_000)
-        let deadline = start.addingTimeInterval(120)
-        XCTAssertEqual(
-            KeyboardLockPolicy.extendedDeadline(current: deadline, lockedAt: start, now: start.addingTimeInterval(30)),
-            start.addingTimeInterval(180)
-        )
-        let nearCap = start.addingTimeInterval(570)
-        XCTAssertEqual(
-            KeyboardLockPolicy.extendedDeadline(current: nearCap, lockedAt: start, now: start),
-            start.addingTimeInterval(600)
-        )
-        XCTAssertTrue(KeyboardLockPolicy.canExtend(current: nearCap, lockedAt: start))
-        XCTAssertFalse(KeyboardLockPolicy.canExtend(current: start.addingTimeInterval(600), lockedAt: start))
+        XCTAssertEqual(KeyboardLockPolicy.extendedDuration(allowed: 120, elapsed: 30), 180)
+        // Abgelaufene Zeit über der Frist (Tick verpasst): ab jetzt eine Minute.
+        XCTAssertEqual(KeyboardLockPolicy.extendedDuration(allowed: 120, elapsed: 130), 190)
+        XCTAssertEqual(KeyboardLockPolicy.extendedDuration(allowed: 570, elapsed: 0), 600)
+        XCTAssertTrue(KeyboardLockPolicy.canExtend(allowed: 570))
+        XCTAssertFalse(KeyboardLockPolicy.canExtend(allowed: 600))
+    }
+
+    func testTapDeliversEventUnlessSwallowed() {
+        XCTAssertTrue(LiveKeyboardEventTap.delivers(.pass))
+        XCTAssertTrue(LiveKeyboardEventTap.delivers(.reenableTap))
+        XCTAssertFalse(LiveKeyboardEventTap.delivers(.swallow))
     }
 }
 
@@ -87,17 +86,44 @@ final class KeyboardLockControllerTests: XCTestCase {
     }
 
     private var clock = Date(timeIntervalSince1970: 10_000)
+    private var uptime: TimeInterval = 500
     private var secureInput = false
+    private var screenLocked = false
+    private let workspaceCenter = NotificationCenter()
+    private let distributedCenter = NotificationCenter()
+    private let appCenter = NotificationCenter()
 
     private func makeController(tap: FakeTap, panel: FakePanel, keysDown: Set<Int64> = []) -> KeyboardLockController {
-        KeyboardLockController(
+        let sources = KeyboardLockController.NotificationSources(
+            workspace: workspaceCenter, distributed: distributedCenter, app: appCenter
+        )
+        return KeyboardLockController(
             tap: tap,
             panel: panel,
             now: { [unowned self] in self.clock },
+            uptime: { [unowned self] in self.uptime },
             secureInputProbe: { [unowned self] in self.secureInput },
             capsLockProbe: { false },
-            keysDownProbe: { keysDown }
+            keysDownProbe: { keysDown },
+            screenLockedProbe: { [unowned self] in self.screenLocked },
+            notificationSources: { sources }
         )
+    }
+
+    private func advance(_ seconds: TimeInterval) {
+        clock = clock.addingTimeInterval(seconds)
+        uptime += seconds
+    }
+
+    private func assertFullyUnlocked(
+        _ controller: KeyboardLockController, tap: FakeTap, panel: FakePanel,
+        reason: KeyboardUnlockReason, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        XCTAssertFalse(controller.isLocked, file: file, line: line)
+        XCTAssertEqual(tap.uninstalls, 1, file: file, line: line)
+        XCTAssertEqual(panel.hidden, 1, file: file, line: line)
+        XCTAssertEqual(controller.lastUnlockReason, reason, file: file, line: line)
+        XCTAssertNil(controller.deadline, file: file, line: line)
     }
 
     func testLockInstallsTapShowsPanelAndSwallowsKeys() {
@@ -107,6 +133,8 @@ final class KeyboardLockControllerTests: XCTestCase {
         XCTAssertEqual(controller.lock(), .locked)
         XCTAssertTrue(controller.isLocked)
         XCTAssertEqual(controller.deadline, clock.addingTimeInterval(120))
+        XCTAssertEqual(controller.remaining, 120)
+        XCTAssertTrue(controller.canExtend)
         XCTAssertEqual(panel.shown, 1)
         XCTAssertEqual(tap.handler?(.keyDown(keyCode: 0), []), .swallow)
         XCTAssertEqual(controller.lock(), .alreadyLocked)
@@ -130,11 +158,7 @@ final class KeyboardLockControllerTests: XCTestCase {
 
         controller.unlock(reason: .user)
 
-        XCTAssertFalse(controller.isLocked)
-        XCTAssertNil(controller.deadline)
-        XCTAssertEqual(tap.uninstalls, 1)
-        XCTAssertEqual(panel.hidden, 1)
-        XCTAssertEqual(controller.lastUnlockReason, .user)
+        assertFullyUnlocked(controller, tap: tap, panel: panel, reason: .user)
         // Doppeltes Entsperren bleibt folgenlos.
         controller.unlock(reason: .timeout)
         XCTAssertEqual(tap.uninstalls, 1)
@@ -146,28 +170,93 @@ final class KeyboardLockControllerTests: XCTestCase {
         let controller = makeController(tap: tap, panel: panel)
         controller.lock()
 
-        clock = clock.addingTimeInterval(119)
+        advance(119)
         controller.tick()
         XCTAssertTrue(controller.isLocked)
+        XCTAssertEqual(tap.uninstalls, 0)
 
-        clock = clock.addingTimeInterval(1)
+        advance(1)
         controller.tick()
-        XCTAssertFalse(controller.isLocked)
-        XCTAssertEqual(controller.lastUnlockReason, .timeout)
+        assertFullyUnlocked(controller, tap: tap, panel: panel, reason: .timeout)
     }
 
-    func testExtendPushesDeadline() {
+    func testDeadlineFollowsUptimeNotWallClock() {
         let tap = FakeTap(), panel = FakePanel()
         let controller = makeController(tap: tap, panel: panel)
-        let start = clock
+        controller.lock()
+
+        // Wanduhr springt eine Stunde vor, Uptime nur 10 s.
+        clock = clock.addingTimeInterval(3_600)
+        uptime += 10
+        controller.tick()
+        XCTAssertTrue(controller.isLocked)
+        XCTAssertEqual(controller.remaining, 110)
+        // Anzeige folgt der neuen Wanduhr.
+        XCTAssertEqual(controller.deadline, clock.addingTimeInterval(110))
+
+        // Wanduhr springt zurück: die Frist läuft trotzdem nach Uptime ab.
+        clock = clock.addingTimeInterval(-7_200)
+        uptime += 110
+        controller.tick()
+        assertFullyUnlocked(controller, tap: tap, panel: panel, reason: .timeout)
+    }
+
+    func testExtendPushesDeadlineUpToCap() {
+        let tap = FakeTap(), panel = FakePanel()
+        let controller = makeController(tap: tap, panel: panel)
         controller.lock()
 
         controller.extend()
-
-        XCTAssertEqual(controller.deadline, start.addingTimeInterval(180))
-        clock = start.addingTimeInterval(150)
+        XCTAssertEqual(controller.remaining, 180)
+        advance(150)
         controller.tick()
         XCTAssertTrue(controller.isLocked)
+
+        for _ in 0..<20 { controller.extend() }
+        XCTAssertEqual(controller.remaining, 600 - 150)
+        XCTAssertFalse(controller.canExtend)
+    }
+
+    func testTickUnlocksWhenScreenIsLockedWithoutNotification() {
+        let tap = FakeTap(), panel = FakePanel()
+        let controller = makeController(tap: tap, panel: panel)
+        controller.lock()
+
+        screenLocked = true
+        controller.tick()
+
+        assertFullyUnlocked(controller, tap: tap, panel: panel, reason: .screenLocked)
+    }
+
+    func testEachSystemSignalUnlocks() {
+        let cases: [(KeyPath<KeyboardLockControllerTests, NotificationCenter>, Notification.Name, KeyboardUnlockReason)] = [
+            (\.workspaceCenter, NSWorkspace.willSleepNotification, .systemSleep),
+            (\.workspaceCenter, NSWorkspace.screensDidSleepNotification, .screensSlept),
+            (\.workspaceCenter, NSWorkspace.sessionDidResignActiveNotification, .sessionResigned),
+            (\.distributedCenter, KeyboardLockController.screenLockedNotification, .screenLocked),
+            (\.appCenter, NSApplication.willTerminateNotification, .appTerminating),
+        ]
+        for (centerPath, name, reason) in cases {
+            let tap = FakeTap(), panel = FakePanel()
+            let controller = makeController(tap: tap, panel: panel)
+            controller.lock()
+
+            self[keyPath: centerPath].post(name: name, object: nil)
+
+            assertFullyUnlocked(controller, tap: tap, panel: panel, reason: reason)
+        }
+    }
+
+    func testSignalsAreIgnoredAfterUnlock() {
+        let tap = FakeTap(), panel = FakePanel()
+        let controller = makeController(tap: tap, panel: panel)
+        controller.lock()
+        controller.unlock(reason: .user)
+
+        workspaceCenter.post(name: NSWorkspace.willSleepNotification, object: nil)
+
+        XCTAssertEqual(controller.lastUnlockReason, .user)
+        XCTAssertEqual(tap.uninstalls, 1)
     }
 
     func testTickTracksSecureInput() {
@@ -202,13 +291,15 @@ final class KeyboardLockControllerTests: XCTestCase {
         XCTAssertEqual(tap.handler?(.flagsChanged(keyCode: 58), []), .swallow)
     }
 
-    func testHandlerPassesEverythingOnceUnlocked() {
+    func testDisabledTapIsReenabledWhileLockedAndPassesOnceUnlocked() {
         let tap = FakeTap(), panel = FakePanel()
         let controller = makeController(tap: tap, panel: panel)
         controller.lock()
         let handler = tap.handler
-        controller.unlock(reason: .user)
 
+        XCTAssertEqual(handler?(.tapDisabled, []), .reenableTap)
+        controller.unlock(reason: .user)
+        XCTAssertEqual(handler?(.tapDisabled, []), .pass)
         XCTAssertEqual(handler?(.keyDown(keyCode: 0), []), .pass)
     }
 }

@@ -29,7 +29,10 @@ final class KeyboardLockPanel: NSPanel {
         isReleasedWhenClosed = false
     }
 
-    override var canBecomeKey: Bool { true }
+    /// Nie Key-Fenster: sonst zöge das Panel den Tastaturfokus aus der App ab,
+    /// in der man gerade arbeitet. Klicks kommen über `acceptsFirstMouse` an.
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
 }
 
 /// Hosting-View, die schon den ersten Klick an den Knopf weitergibt — sonst
@@ -48,7 +51,10 @@ final class KeyboardLockPanelController: KeyboardLockPanelPresenting {
         hosting.frame.size = hosting.fittingSize
         panel.contentView = hosting
         panel.setContentSize(hosting.fittingSize)
-        if let screen = NSScreen.main ?? NSScreen.screens.first {
+        // Bildschirm unter dem Mauszeiger — dort, wo man gerade hinschaut.
+        let mouse = NSEvent.mouseLocation
+        let underMouse = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+        if let screen = underMouse ?? NSScreen.main ?? NSScreen.screens.first {
             let visible = screen.visibleFrame
             let size = panel.frame.size
             panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2))

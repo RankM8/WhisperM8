@@ -63,16 +63,16 @@ struct KeyboardLockPolicy: Equatable {
         }
     }
 
-    /// Neue Frist nach „+1 Minute“, gedeckelt auf `maximumDuration` ab Sperrbeginn.
-    static func extendedDeadline(current: Date, lockedAt: Date, now: Date) -> Date {
-        let base = max(current, now)
-        let extended = base.addingTimeInterval(extensionStep)
-        return min(extended, lockedAt.addingTimeInterval(maximumDuration))
+    /// Erlaubte Sperrdauer nach „+1 Minute“, gemessen ab Sperrbeginn in
+    /// Uptime-Sekunden (nicht an der Wanduhr, die springen kann). Gedeckelt auf
+    /// `maximumDuration`.
+    static func extendedDuration(allowed: TimeInterval, elapsed: TimeInterval) -> TimeInterval {
+        min(max(allowed, elapsed) + extensionStep, maximumDuration)
     }
 
     /// Ob „+1 Minute“ noch etwas bewirkt.
-    static func canExtend(current: Date, lockedAt: Date) -> Bool {
-        current < lockedAt.addingTimeInterval(maximumDuration)
+    static func canExtend(allowed: TimeInterval) -> Bool {
+        allowed < maximumDuration
     }
 }
 
@@ -82,6 +82,7 @@ enum KeyboardUnlockReason: String, Equatable {
     case timeout
     case screenLocked
     case systemSleep
+    case screensSlept
     case sessionResigned
     case appTerminating
     case tapFailed

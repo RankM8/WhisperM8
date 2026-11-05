@@ -18,46 +18,81 @@ final class KeyboardLockController: ObservableObject {
         case missingPermission
     }
 
+    /// Woher die Auslöser fürs Entsperren kommen. Tests geben eigene
+    /// `NotificationCenter` hinein und posten die Namen selbst.
+    struct NotificationSources {
+        var workspace: NotificationCenter
+        /// Systemweite Benachrichtigungen (`com.apple.screenIsLocked`). Ist es ein
+        /// `DistributedNotificationCenter`, wird mit `.deliverImmediately`
+        /// abonniert — sonst hielte AppKit sie zurück, solange die App inaktiv ist.
+        var distributed: NotificationCenter
+        var app: NotificationCenter
+
+        static var live: NotificationSources {
+            NotificationSources(
+                workspace: NSWorkspace.shared.notificationCenter,
+                distributed: DistributedNotificationCenter.default(),
+                app: NotificationCenter.default
+            )
+        }
+    }
+
+    static let screenLockedNotification = Notification.Name("com.apple.screenIsLocked")
+
     @Published private(set) var isLocked = false
-    @Published private(set) var lockedAt: Date?
+    /// Nur für die Anzeige (Countdown); die Frist selbst läuft über die Uptime.
     @Published private(set) var deadline: Date?
     /// Ein Passwortfeld (Secure Event Input) ist aktiv — dann sieht macOS'
     /// Tap keine Tasten, sie kommen durch.
     @Published private(set) var secureInputActive = false
     @Published private(set) var capsLockOn = false
+    @Published private(set) var canExtend = false
     @Published private(set) var lastUnlockReason: KeyboardUnlockReason?
 
     private let tap: KeyboardEventTapping
+    private let panel: KeyboardLockPanelPresenting
     private let now: () -> Date
+    private let uptime: () -> TimeInterval
     private let secureInputProbe: () -> Bool
     private let capsLockProbe: () -> Bool
     private let keysDownProbe: () -> Set<Int64>
-    private let panel: KeyboardLockPanelPresenting
+    private let screenLockedProbe: () -> Bool
+    private let notificationSources: () -> NotificationSources
     private var policy = KeyboardLockPolicy()
+    private var lockedAtUptime: TimeInterval = 0
+    private var allowedDuration: TimeInterval = 0
     private var ticker: Timer?
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private var distributedObservers: [(DistributedNotificationCenter, DistributedObserver)] = []
 
     init(
         tap: KeyboardEventTapping? = nil,
         panel: KeyboardLockPanelPresenting? = nil,
         now: @escaping () -> Date = Date.init,
+        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         secureInputProbe: @escaping () -> Bool = { IsSecureEventInputEnabled() },
         capsLockProbe: @escaping () -> Bool = {
             CGEventSource.flagsState(.combinedSessionState).contains(.maskAlphaShift)
         },
-        keysDownProbe: @escaping () -> Set<Int64> = KeyboardLockController.liveKeysDown
+        keysDownProbe: @escaping () -> Set<Int64> = KeyboardLockController.liveKeysDown,
+        screenLockedProbe: @escaping () -> Bool = KeyboardLockController.liveScreenLocked,
+        notificationSources: (() -> NotificationSources)? = nil
     ) {
         self.tap = tap ?? LiveKeyboardEventTap()
         self.panel = panel ?? KeyboardLockPanelController()
         self.now = now
+        self.uptime = uptime
         self.secureInputProbe = secureInputProbe
         self.capsLockProbe = capsLockProbe
         self.keysDownProbe = keysDownProbe
+        self.screenLockedProbe = screenLockedProbe
+        self.notificationSources = notificationSources ?? { .live }
     }
 
-    var canExtend: Bool {
-        guard let deadline, let lockedAt else { return false }
-        return KeyboardLockPolicy.canExtend(current: deadline, lockedAt: lockedAt)
+    /// Verbleibende Sperrzeit in Sekunden (Uptime-basiert).
+    var remaining: TimeInterval {
+        guard isLocked else { return 0 }
+        return max(0, allowedDuration - (uptime() - lockedAtUptime))
     }
 
     // MARK: - Steuerung
@@ -73,13 +108,13 @@ final class KeyboardLockController: ObservableObject {
             Logger.keyboardLock.notice("keyboard_lock_denied reason=tap_create_failed")
             return .missingPermission
         }
-        let start = now()
-        lockedAt = start
-        deadline = start.addingTimeInterval(duration)
+        lockedAtUptime = uptime()
+        allowedDuration = min(duration, KeyboardLockPolicy.maximumDuration)
         isLocked = true
         lastUnlockReason = nil
         secureInputActive = secureInputProbe()
         capsLockOn = capsLockProbe()
+        refreshDisplay()
         startObserving()
         startTicker()
         panel.show(controller: self)
@@ -93,8 +128,9 @@ final class KeyboardLockController: ObservableObject {
         stopTicker()
         stopObserving()
         isLocked = false
-        lockedAt = nil
         deadline = nil
+        canExtend = false
+        allowedDuration = 0
         lastUnlockReason = reason
         policy = KeyboardLockPolicy()
         panel.hide()
@@ -102,19 +138,43 @@ final class KeyboardLockController: ObservableObject {
     }
 
     func extend() {
-        guard isLocked, let deadline, let lockedAt else { return }
-        self.deadline = KeyboardLockPolicy.extendedDeadline(current: deadline, lockedAt: lockedAt, now: now())
+        guard isLocked else { return }
+        allowedDuration = KeyboardLockPolicy.extendedDuration(
+            allowed: allowedDuration,
+            elapsed: uptime() - lockedAtUptime
+        )
+        refreshDisplay()
     }
 
-    /// Prüft Frist und Passwortfeld; läuft sekündlich, solange gesperrt.
+    /// Prüft Frist, Sperrbildschirm und Passwortfeld; läuft sekündlich, solange gesperrt.
     func tick() {
         guard isLocked else { return }
-        if let deadline, now() >= deadline {
+        if remaining <= 0 {
             unlock(reason: .timeout)
+            return
+        }
+        // Rückfall, falls die Benachrichtigung zur Bildschirmsperre ausbleibt.
+        if screenLockedProbe() {
+            unlock(reason: .screenLocked)
             return
         }
         let secure = secureInputProbe()
         if secure != secureInputActive { secureInputActive = secure }
+        refreshDisplay()
+    }
+
+    /// Countdown-Ziel für die Anzeige aus der Uptime-Restzeit; nur neu setzen,
+    /// wenn es spürbar abweicht (Wanduhr gesprungen), damit nicht jede
+    /// Sekunde ein Publish das Panel neu aufbaut.
+    private func refreshDisplay() {
+        let target = now().addingTimeInterval(remaining)
+        if let deadline, abs(deadline.timeIntervalSince(target)) < 1 {
+            // unverändert
+        } else {
+            deadline = target
+        }
+        let extendable = KeyboardLockPolicy.canExtend(allowed: allowedDuration)
+        if extendable != canExtend { canExtend = extendable }
     }
 
     // MARK: - Ereignisse
@@ -153,20 +213,32 @@ final class KeyboardLockController: ObservableObject {
     /// sofort — auf dem Sperrbildschirm muss das Passwort sicher durchgehen.
     private func startObserving() {
         stopObserving()
-        let workspace = NSWorkspace.shared.notificationCenter
-        let distributed = DistributedNotificationCenter.default()
+        let sources = notificationSources()
         let watch: [(NotificationCenter, Notification.Name, KeyboardUnlockReason)] = [
-            (workspace, NSWorkspace.willSleepNotification, .systemSleep),
-            (workspace, NSWorkspace.screensDidSleepNotification, .systemSleep),
-            (workspace, NSWorkspace.sessionDidResignActiveNotification, .sessionResigned),
-            (distributed, Notification.Name("com.apple.screenIsLocked"), .screenLocked),
-            (NotificationCenter.default, NSApplication.willTerminateNotification, .appTerminating),
+            (sources.workspace, NSWorkspace.willSleepNotification, .systemSleep),
+            (sources.workspace, NSWorkspace.screensDidSleepNotification, .screensSlept),
+            (sources.workspace, NSWorkspace.sessionDidResignActiveNotification, .sessionResigned),
+            (sources.distributed, Self.screenLockedNotification, .screenLocked),
+            (sources.app, NSApplication.willTerminateNotification, .appTerminating),
         ]
-        observers = watch.map { center, name, reason in
-            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.unlock(reason: reason) }
+        for (center, name, reason) in watch {
+            let fire: @MainActor () -> Void = { [weak self] in self?.unlock(reason: reason) }
+            if let distributed = center as? DistributedNotificationCenter {
+                let observer = DistributedObserver(fire: fire)
+                distributed.addObserver(
+                    observer,
+                    selector: #selector(DistributedObserver.received(_:)),
+                    name: name,
+                    object: nil,
+                    suspensionBehavior: .deliverImmediately
+                )
+                distributedObservers.append((distributed, observer))
+            } else {
+                let token = center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                    MainActor.assumeIsolated { fire() }
+                }
+                observers.append((center, token))
             }
-            return (center, token)
         }
     }
 
@@ -174,7 +246,11 @@ final class KeyboardLockController: ObservableObject {
         for (center, token) in observers {
             center.removeObserver(token)
         }
+        for (center, observer) in distributedObservers {
+            center.removeObserver(observer)
+        }
         observers = []
+        distributedObservers = []
     }
 
     /// Tasten, die gerade gedrückt sind (virtuelle Keycodes 0…127).
@@ -184,5 +260,31 @@ final class KeyboardLockController: ObservableObject {
             down.insert(Int64(code))
         }
         return down
+    }
+
+    /// Ob der Bildschirm gerade gesperrt ist (WindowServer-Sitzungsdaten).
+    nonisolated static func liveScreenLocked() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return (session["CGSSessionScreenIsLocked"] as? Bool) ?? false
+    }
+}
+
+/// Ziel für das Selector-API von `DistributedNotificationCenter` (nur dort gibt
+/// es `suspensionBehavior`). Zustellung kommt auf dem Main Thread an.
+private final class DistributedObserver: NSObject {
+    private let fire: @MainActor () -> Void
+
+    init(fire: @escaping @MainActor () -> Void) {
+        self.fire = fire
+    }
+
+    @objc func received(_ notification: Notification) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { fire() }
+        } else {
+            DispatchQueue.main.async { [fire] in
+                MainActor.assumeIsolated { fire() }
+            }
+        }
     }
 }

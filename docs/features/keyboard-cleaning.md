@@ -1,6 +1,6 @@
 ---
 status: aktiv
-stand: 2026-11-04
+stand: 2026-11-05
 ---
 
 # Tastatur reinigen (Tastatursperre)
@@ -14,7 +14,9 @@ irgendwo Text, Kürzel oder Medientasten ankommen. Maus und Trackpad bleiben fre
 - **Menüleiste:** „Tastatur zum Reinigen sperren“ bzw. „Tastatur entsperren“.
 - Während der Sperre liegt ein schwebendes Panel über allen Fenstern und Spaces
   (auch über Vollbild-Apps) mit Countdown, „Tastatur entsperren“ und „+1 Minute“.
-  Das Panel nimmt schon den ersten Klick an und aktiviert die App nicht.
+  Es erscheint auf dem Bildschirm unter dem Mauszeiger, nimmt schon den ersten
+  Klick an, aktiviert die App nicht und wird nie Key-Fenster — der Tastaturfokus
+  bleibt also in der App, in der man gerade war.
 
 ## Was gesperrt wird
 
@@ -34,8 +36,9 @@ sonst hielte das System sie nach dem Entsperren für gedrückt.
 | Auslöser | Mechanik |
 |---|---|
 | Knopf im Panel, in den Einstellungen oder im Menü | `unlock(reason: .user)` |
-| Frist (2 Minuten, „+1 Minute“ bis höchstens 10 Minuten ab Start) | sekündlicher `tick()` |
-| Bildschirmsperre, Ruhezustand, Bildschirm schläft, Benutzerwechsel | `com.apple.screenIsLocked`, `NSWorkspace.willSleep`/`screensDidSleep`/`sessionDidResignActive` |
+| Frist (2 Minuten, „+1 Minute“ bis höchstens 10 Minuten ab Start) | sekündlicher `tick()`, gemessen an `ProcessInfo.systemUptime` — ein Sprung der Wanduhr verschiebt sie nicht; nur der Countdown im Panel rechnet in Uhrzeit um |
+| Bildschirmsperre | `com.apple.screenIsLocked` über das Selector-API mit `.deliverImmediately` (sonst hält AppKit verteilte Benachrichtigungen zurück, solange die App inaktiv ist); zusätzlich fragt `tick()` `CGSSessionScreenIsLocked` aus `CGSessionCopyCurrentDictionary()` ab |
+| Ruhezustand, Bildschirm schläft, Benutzerwechsel | `NSWorkspace.willSleep`/`screensDidSleep`/`sessionDidResignActive` |
 | App wird beendet | `NSApplication.willTerminate` |
 | Absturz | Der Tap gehört zum Prozess und verschwindet mit ihm |
 | Hängender Main Thread | Der Tap läuft auf dem Main-Runloop; macOS schaltet ihn nach Zeitüberschreitung ab |
@@ -66,7 +69,12 @@ Einstellungen zeigen dann den Weg zur Freigabe, das Menü fragt sie an.
 - `WhisperM8/Services/Shared/KeyboardLock/KeyboardLockController.swift` — Zustand, Frist, Auslöser fürs Entsperren, Log (`category == "keyboard.lock"`).
 - `WhisperM8/Windows/KeyboardLockPanel.swift` — schwebendes Entsperr-Panel.
 - `WhisperM8/Views/Settings/Pages/KeyboardCleaningSettingsSection.swift` — Abschnitt in „Allgemein“.
-- Tests: `KeyboardLockTests.swift`; Snapshots `tastatursperre-panel*`.
+- Tests: `KeyboardLockTests.swift` (je Ausstieg ein Test über injizierte `NotificationCenter`, Uptime-Frist, Sperrbildschirm-Rückfall); Snapshots `tastatursperre-panel*`.
+
+## Nur von Hand prüfbar
+
+Caps Lock und `CGEventSource.keyState`, Globe/fn und Helligkeitstasten auf Apple Silicon, Klick
+auf den Knopf im nie-Key-Panel, Panel-Position bei mehreren Bildschirmen.
 
 ## Keywords
 

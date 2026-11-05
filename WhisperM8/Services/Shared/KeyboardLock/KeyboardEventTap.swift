@@ -72,6 +72,12 @@ final class LiveKeyboardEventTap: KeyboardEventTapping {
         handler = nil
     }
 
+    /// Ob das Ereignis weitergereicht wird. Nach `.reenableTap` geht es durch —
+    /// verworfen wird nur bei `.swallow`.
+    nonisolated static func delivers(_ decision: KeyboardLockPolicy.Decision) -> Bool {
+        decision != .swallow
+    }
+
     /// Übersetzt ein `CGEvent` in das Ereignis der reinen Logik.
     fileprivate static func event(type: CGEventType, cgEvent: CGEvent) -> KeyboardLockPolicy.Event {
         switch type {
@@ -108,5 +114,5 @@ private func keyboardLockTapCallback(
         if result == .reenableTap { tap.reenable() }
         return result
     }
-    return decision == .swallow ? nil : Unmanaged.passUnretained(event)
+    return LiveKeyboardEventTap.delivers(decision) ? Unmanaged.passUnretained(event) : nil
 }
