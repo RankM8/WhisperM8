@@ -13,8 +13,9 @@ import Foundation
 ///   `SessionStart` …). Sie erzeugen keine Mitteilung und stören den Status
 ///   nicht, weil der aus Claudes Registry kommt.
 /// - Hooks mit Umgebungs-Wächter (`[ -n "$VAR" ] && …`), deren Variable in
-///   WhisperM8-Chats nicht gesetzt ist. Beispiel: die Superset-Hooks, die nur
-///   mit `SUPERSET_HOME_DIR` etwas tun.
+///   WhisperM8-Chats nicht gesetzt ist und hinter deren Wächter nichts mehr
+///   unbedingt läuft. Beispiel: die Superset-Hooks, die nur mit
+///   `SUPERSET_HOME_DIR` etwas tun.
 enum ExternalClaudeHooksInspector {
     struct Finding: Equatable, Identifiable {
         /// Quelldatei (z. B. "settings.json").
@@ -49,23 +50,34 @@ enum ExternalClaudeHooksInspector {
         environment: [String: String] = LoginShellEnvironment.shared.processEnvironment()
     ) -> [Finding] {
         let claudeDir = home.appendingPathComponent(".claude", isDirectory: true)
-        var findings: [Finding] = []
-        for fileName in ["settings.json", "settings.local.json"] {
-            let url = claudeDir.appendingPathComponent(fileName)
-            guard let data = try? Data(contentsOf: url) else { continue }
-            findings.append(contentsOf: overlappingHooks(
-                settingsData: data,
-                source: fileName,
-                environment: environment
-            ))
+        let files: [(name: String, data: Data)] = ["settings.json", "settings.local.json"].compactMap { name in
+            (try? Data(contentsOf: claudeDir.appendingPathComponent(name))).map { (name, $0) }
         }
-        return findings
+        // Der `env`-Block beider Dateien gilt für alle Hooks, auch für die
+        // der jeweils anderen Datei.
+        var effective = environment
+        for file in files {
+            effective.merge(settingsEnvironment(settingsData: file.data)) { _, fromSettings in fromSettings }
+        }
+        return files.flatMap { file in
+            overlappingHooks(settingsData: file.data, source: file.name, environment: effective)
+        }
+    }
+
+    /// Der `env`-Block einer Settings-Datei (`{ "env": { "VAR": "wert" } }`).
+    static func settingsEnvironment(settingsData: Data) -> [String: String] {
+        guard let root = try? JSONSerialization.jsonObject(with: settingsData) as? [String: Any],
+              let env = root["env"] as? [String: Any] else { return [:] }
+        return env.reduce(into: [:]) { result, pair in
+            result[pair.key] = (pair.value as? String) ?? (pair.value as? NSNumber)?.stringValue ?? "1"
+        }
     }
 
     /// Pure Parser-Logik: extrahiert alle Hook-Einträge, die in einem
     /// WhisperM8-Chat eine eigene Mitteilung auslösen könnten. Struktur laut
     /// Claude-Code-Settings:
     /// `{ "hooks": { "<Event>": [ { "matcher"?: …, "hooks": [ { "command": … } ] } ] } }`
+    /// `environment` ergänzt sich mit dem `env`-Block derselben Datei.
     static func overlappingHooks(
         settingsData: Data,
         source: String,
@@ -75,6 +87,7 @@ enum ExternalClaudeHooksInspector {
               let hooks = root["hooks"] as? [String: Any] else {
             return []
         }
+        let environment = environment.merging(settingsEnvironment(settingsData: settingsData)) { _, new in new }
         var findings: [Finding] = []
         for (eventName, rawEntries) in hooks.sorted(by: { $0.key < $1.key }) {
             guard let entries = rawEntries as? [[String: Any]] else { continue }
@@ -103,21 +116,61 @@ enum ExternalClaudeHooksInspector {
         return questionToolNames.contains { matcher.contains($0) }
     }
 
-    /// Wirkt der Befehl in einem WhisperM8-Chat gar nicht? Erkannt wird nur ein
-    /// führender Wächter `[ -n "$VAR" ] && …` (auch `[[ … ]]` und `test -n`),
-    /// dessen Variable in `environment` fehlt oder leer ist. Alles andere gilt
-    /// als aktiv, im Zweifel wird also gemeldet.
+    /// Wirkt der Befehl in einem WhisperM8-Chat gar nicht? Nur dann, wenn
+    /// - er mit einem Wächter `[ -n "$VAR" ] && …` beginnt (auch `[[ … ]]`,
+    ///   `test -n` und `${VAR}` oder `${VAR:-}`),
+    /// - die Variable in `environment` fehlt oder leer ist, und
+    /// - hinter dem Wächter nichts mehr unbedingt läuft: kein `;`, kein
+    ///   Zeilenumbruch, kein `&` und kein `||` außer einem abschließenden
+    ///   `|| true` oder `|| :`.
+    /// Variablen, die WhisperM8 (`WHISPERM8_*`) oder Claude (`CLAUDE*`) dem
+    /// Hook mitgeben, gelten als gesetzt. Alles andere gilt als aktiv, im
+    /// Zweifel wird also gemeldet.
     static func isInactive(command: String, environment: [String: String]) -> Bool {
-        guard let variable = guardVariable(in: command) else { return false }
-        return (environment[variable] ?? "").isEmpty
+        guard let parsed = parseGuard(in: command) else { return false }
+        if providedByChat(parsed.variable) { return false }
+        guard (environment[parsed.variable] ?? "").isEmpty else { return false }
+        return onlyConditional(parsed.remainder)
     }
 
     static func guardVariable(in command: String) -> String? {
-        let pattern = #"^\s*(?:\[\[?|test)\s+-n\s+"?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"?\s*(?:\]\]?)?\s*&&"#
+        parseGuard(in: command)?.variable
+    }
+
+    /// Variablen, die in jedem WhisperM8-Chat gesetzt sind.
+    static func providedByChat(_ variable: String) -> Bool {
+        variable.hasPrefix("WHISPERM8_") || variable.hasPrefix("CLAUDE")
+    }
+
+    private static func parseGuard(in command: String) -> (variable: String, remainder: Substring)? {
+        let pattern = #"^\s*(?:\[\[?|test)\s+-n\s+"?\$(?:\{([A-Za-z_][A-Za-z0-9_]*)(?::-)?\}|([A-Za-z_][A-Za-z0-9_]*))"?\s*(?:\]\]?)?\s*&&"#
         guard let regex = try? NSRegularExpression(pattern: pattern),
               let match = regex.firstMatch(in: command, range: NSRange(command.startIndex..., in: command)),
-              let range = Range(match.range(at: 1), in: command) else { return nil }
-        return String(command[range])
+              let whole = Range(match.range, in: command) else { return nil }
+        let name = [1, 2].lazy
+            .compactMap { Range(match.range(at: $0), in: command) }
+            .first.map { String(command[$0]) }
+        guard let name else { return nil }
+        return (name, command[whole.upperBound...])
+    }
+
+    /// Hängt alles hinter dem Wächter an dessen `&&`? Ein abschließendes
+    /// `|| true` oder `|| :` ändert daran nichts.
+    private static func onlyConditional(_ remainder: Substring) -> Bool {
+        var body = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let range = body.range(of: #"\|\|\s*(?:true|:)\s*$"#, options: .regularExpression) {
+            body = String(body[..<range.lowerBound])
+        }
+        if body.contains(";") || body.contains("\n") || body.contains("||") { return false }
+        // Ein einzelnes `&` mitten im Befehl schickt den Wächter-Teil in den
+        // Hintergrund und lässt den Rest unbedingt laufen. Bedingt bleiben
+        // `&&`, Umleitungen (`2>&1`, `&>`, `<&`) und ein `&` ganz am Ende,
+        // das die ganze Kette in den Hintergrund schickt.
+        let withoutAllowed = body
+            .replacingOccurrences(of: "&&", with: " ")
+            .replacingOccurrences(of: #"[<>]&|&>"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"&\s*$"#, with: "", options: .regularExpression)
+        return !withoutAllowed.contains("&")
     }
 
     private static func preview(of command: String) -> String {

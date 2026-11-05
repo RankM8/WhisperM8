@@ -12,6 +12,12 @@ import Foundation
 /// Chat. Ausgenommen sind Hintergrund-Agenten (`protectedLocalSessionIDs`):
 /// Sie ueberleben einen App-Neustart und schreiben weiter in ihre Datei.
 ///
+/// Das Aufraeumen laeuft im Hintergrund, waehrend wiederhergestellte Chats
+/// schon starten. Deshalb wird jede Datei erst unmittelbar vor dem Loeschen
+/// geprueft: unter dem Lock von `ClaudeHookFileClaims` (Chats, die dieser
+/// Prozess gestartet hat, bleiben unberuehrt) und mit frisch gelesenem
+/// Aenderungsdatum statt des beim Auflisten gemerkten Werts.
+///
 /// Terminal-Snapshots werden NICHT mehr persistiert (siehe TranscriptReader-
 /// Architektur — geschlossene Sessions werden direkt aus den nativen
 /// Claude/Codex-JSONLs gerendert).
@@ -19,9 +25,29 @@ struct AgentSessionRetentionService {
     static let staleEventAge: TimeInterval = 14 * 24 * 60 * 60
 
     let hookPaths: ClaudeHookPaths
+    let claims: ClaudeHookFileClaims
+    /// Testnaht: laeuft nach dem Auflisten und vor der Pruefung einer Datei,
+    /// damit Tests einen Launch genau dazwischen nachstellen koennen.
+    let beforeRemoval: (URL) -> Void
 
-    init(hookPaths: ClaudeHookPaths = ClaudeHookPaths()) {
+    init(
+        hookPaths: ClaudeHookPaths = ClaudeHookPaths(),
+        claims: ClaudeHookFileClaims = .shared,
+        beforeRemoval: @escaping (URL) -> Void = { _ in }
+    ) {
         self.hookPaths = hookPaths
+        self.claims = claims
+        self.beforeRemoval = beforeRemoval
+    }
+
+    /// Aufruf beim App-Start: alle Chats im Workspace gelten als lebendig,
+    /// Hintergrund-Agenten zusaetzlich als geschuetzt.
+    @discardableResult
+    func pruneAtLaunch(workspace: AgentWorkspace, now: Date = Date()) -> RetentionResult {
+        prune(
+            liveLocalSessionIDs: Set(workspace.sessions.map(\.id)),
+            protectedLocalSessionIDs: Set(workspace.sessions.filter(\.isBackgroundChat).map(\.id)),
+            now: now)
     }
 
     @discardableResult
@@ -67,9 +93,11 @@ struct AgentSessionRetentionService {
             let stem = url.deletingPathExtension().lastPathComponent
             guard let id = UUID(uuidString: stem) else { continue }
             if keeping.contains(id) { continue }
-            if (try? FileManager.default.removeItem(at: url)) != nil {
-                removed += 1
+            beforeRemoval(url)
+            let didRemove = claims.removeUnlessClaimed(id) {
+                (try? FileManager.default.removeItem(at: url)) != nil
             }
+            if didRemove { removed += 1 }
         }
         return removed
     }
@@ -77,7 +105,7 @@ struct AgentSessionRetentionService {
     /// Event-Dateien, die vor `cutoff` zuletzt geschrieben wurden. Die
     /// Settings-Dateien bleiben: Sie sind klein und gehoeren zum Chat.
     private func pruneStaleEvents(protecting protected: Set<UUID>, olderThan cutoff: Date) -> (count: Int, bytes: Int64) {
-        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: hookPaths.eventsDirectory,
             includingPropertiesForKeys: keys
@@ -88,13 +116,23 @@ struct AgentSessionRetentionService {
         var bytes: Int64 = 0
         for url in entries where url.pathExtension == "jsonl" {
             let stem = url.deletingPathExtension().lastPathComponent
+            // Vorauswahl mit dem beim Auflisten gelesenen Datum; entschieden
+            // wird erst unten mit frischem Wert.
             guard let id = UUID(uuidString: stem), !protected.contains(id),
-                  let values = try? url.resourceValues(forKeys: Set(keys)),
-                  let modified = values.contentModificationDate,
-                  modified < cutoff else { continue }
-            if (try? FileManager.default.removeItem(at: url)) != nil {
+                  let listed = try? url.resourceValues(forKeys: Set(keys)).contentModificationDate,
+                  listed < cutoff else { continue }
+            beforeRemoval(url)
+            var size: Int64 = 0
+            let didRemove = claims.removeUnlessClaimed(id) {
+                guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                      let modified = attributes[.modificationDate] as? Date,
+                      modified < cutoff else { return false }
+                size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+                return (try? FileManager.default.removeItem(at: url)) != nil
+            }
+            if didRemove {
                 removed += 1
-                bytes += Int64(values.fileSize ?? 0)
+                bytes += size
             }
         }
         return (removed, bytes)

@@ -47,9 +47,7 @@ struct ClaudeHooksSettingsPage: View {
 
                     DisclosureGroup("Hook settings preview", isExpanded: $isHookPreviewExpanded) {
                         VStack(alignment: .leading, spacing: 8) {
-                            SettingsHelpText(hookPreviewUsesReducedSet
-                                ? "Normal chats get only these four events; their live status comes from Claude's session registry. Background agents and Claude versions without the registry get the full set with eight events."
-                                : "Chats currently get the full set with eight events, because the session registry is off or the installed Claude version does not write it yet.")
+                            hookPreviewExplanation
                             SettingsCodeBlock(text: hookSettingsPreview, minHeight: 220)
                         }
                         .padding(.vertical, 8)
@@ -57,6 +55,19 @@ struct ClaudeHooksSettingsPage: View {
                 }
             }
             .onAppear(perform: refresh)
+        }
+    }
+
+    /// Erklärt, wer den gezeigten Satz bekommt. Bei ausgeschalteten Hooks
+    /// bekommt ihn niemand; die Vorschau zeigt dann, was mit Hooks gälte.
+    @ViewBuilder
+    private var hookPreviewExplanation: some View {
+        if !hooksEnabled {
+            SettingsHelpText("Session hooks are off, so new chats start without any of these hooks. The preview shows the set they would get with hooks on.")
+        } else if hookPreviewUsesReducedSet {
+            SettingsHelpText("Normal chats get only these four events; their live status comes from Claude's session registry. Background agents and Claude versions without the registry get the full set with eight events.")
+        } else {
+            SettingsHelpText("Chats currently get the full set with eight events, because the session registry is off or the installed Claude version does not write it yet.")
         }
     }
 

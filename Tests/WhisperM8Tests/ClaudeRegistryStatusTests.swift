@@ -665,6 +665,25 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(ClaudeCLIVersion(parsing: version.string), version)
     }
 
+    /// Tests und CLI-Prozesse laufen ohne App-Bundle: Sie dürfen die gemerkte
+    /// Version der App weder lesen noch überschreiben.
+    func testVersionStoreOutsideAppBundleNeitherReadsNorWrites() {
+        let key = PreferenceKeys.claudeCLILastKnownVersion
+        let before = UserDefaults.standard.object(forKey: key)
+        let store = ClaudeCLIVersionProbe.Store.forProcess(isAppBundle: false)
+        store.save("9.9.9")
+        XCTAssertNil(store.load())
+        XCTAssertEqual(UserDefaults.standard.object(forKey: key) as? String, before as? String)
+
+        var saved: [String] = []
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: false, versionRunner: { ClaudeCLIVersion(components: [2, 1, 320]) },
+            dispatch: { $0() }, store: .init(load: { nil }, save: { saved.append($0) }))
+        probe.prewarm()
+        XCTAssertNil(probe.installedVersion())
+        XCTAssertTrue(saved.isEmpty, "ohne Abruf wird nichts gemerkt")
+    }
+
     func testDisabledVersionProbeNeverSpawns() {
         var runs = 0
         let probe = ClaudeCLIVersionProbe(spawnEnabled: false, versionRunner: { runs += 1; return nil },

@@ -75,11 +75,17 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
         static let userDefaults = Store(
             load: { UserDefaults.standard.string(forKey: PreferenceKeys.claudeCLILastKnownVersion) },
             save: { UserDefaults.standard.set($0, forKey: PreferenceKeys.claudeCLILastKnownVersion) })
+
+        /// Nur die App selbst merkt sich die Version. Tests und CLI-Prozesse
+        /// lesen und schreiben nichts in die Defaults.
+        static func forProcess(isAppBundle: Bool) -> Store {
+            isAppBundle ? .userDefaults : .none
+        }
     }
 
     static let shared = ClaudeCLIVersionProbe(
         spawnEnabled: AppInstance.isAppBundleProcess,
-        store: AppInstance.isAppBundleProcess ? .userDefaults : .none)
+        store: .forProcess(isAppBundle: AppInstance.isAppBundleProcess))
 
     private let lock = NSLock()
     private var cached: (version: ClaudeCLIVersion?, at: Date)?

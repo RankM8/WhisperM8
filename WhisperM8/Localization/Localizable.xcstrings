@@ -11114,6 +11114,16 @@
         }
       }
     },
+    "Session hooks are off, so new chats start without any of these hooks. The preview shows the set they would get with hooks on.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Sitzungs-Hooks sind aus, neue Chats starten also ohne diese Hooks. Die Vorschau zeigt den Satz, den sie mit eingeschalteten Hooks bekämen."
+          }
+        }
+      }
+    },
     "Session hooks disabled": {
       "localizations": {
         "de": {
