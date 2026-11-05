@@ -194,6 +194,10 @@ struct ClaudeAccountUsageFetcher {
             return .problem(.httpStatus(status))
         }
         writeCache(body, forProfile: name)
+        // Statistik: der Live-Stand landet ohne eigene Abfrage im Limit-Verlauf.
+        StatisticsLimitRecorder.recordClaude(usage, profile: name) {
+            profiles.profile(named: name).planDisplayName
+        }
         return .usage(usage)
     }
 
@@ -251,7 +255,8 @@ struct ClaudeAccountUsageFetcher {
     /// Fallback: letzter Stand aus dem Statusline-Cache (gleiche Datei, die
     /// `statusline-command.sh` und `ccs status` schreiben). Liest zusätzlich
     /// den Alt-Pfad unter literal `/tmp/`, den frühere App-Versionen schrieben.
-    private func cachedUsage(forProfile name: String) -> ClaudeAccountUsage? {
+    /// Intern statt privat: der Statistik-Sammler liest denselben Cache.
+    func cachedUsage(forProfile name: String) -> ClaudeAccountUsage? {
         for path in [cachePath(forProfile: name), legacyCachePath(forProfile: name)] {
             let attributes = try? FileManager.default.attributesOfItem(atPath: path)
             // `/tmp` teilen sich alle Benutzer: eine fremde Datei mit passendem
@@ -259,7 +264,11 @@ struct ClaudeAccountUsageFetcher {
             guard Self.isOwnedByCurrentUser(attributes),
                   let data = FileManager.default.contents(atPath: path) else { continue }
             let mtime = (attributes?[.modificationDate] as? Date) ?? Date()
-            if let usage = Self.parseUsage(data, fetchedAt: mtime, isLive: false) {
+            // Die Statuszeile frischt die Prozentwerte auf, lässt aber das
+            // Änderungsdatum stehen (das steuert ihren eigenen Abruf-Takt) und
+            // vermerkt den Zeitpunkt im Feld `statusline_captured_at`.
+            let fetchedAt = max(mtime, Self.statuslineCapturedAt(data) ?? .distantPast)
+            if let usage = Self.parseUsage(data, fetchedAt: fetchedAt, isLive: false) {
                 return usage
             }
         }
@@ -333,6 +342,15 @@ struct ClaudeAccountUsageFetcher {
             fetchedAt: fetchedAt,
             isLive: isLive
         )
+    }
+
+    /// Zeitpunkt, zu dem die Statuszeile die Werte aus Claudes `rate_limits`
+    /// in den Cache übernommen hat (Epoch-Sekunden), sonst `nil`.
+    static func statuslineCapturedAt(_ data: Data) -> Date? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let epoch = (obj["statusline_captured_at"] as? Double)
+            ?? (obj["statusline_captured_at"] as? Int).map(Double.init)
+        return epoch.map { Date(timeIntervalSince1970: $0) }
     }
 
     static func parseResetDate(_ value: Any?) -> Date? {
