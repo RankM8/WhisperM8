@@ -164,7 +164,8 @@ extension RecordingCoordinator {
             deliveryAttachmentLabels: deliveryAttachments.map(\.label),
             agentProvider: postProcessingResult.agentProvider,
             agentSessionID: postProcessingResult.agentSessionID,
-            agentProjectPath: postProcessingResult.agentProjectPath
+            agentProjectPath: postProcessingResult.agentProjectPath,
+            postProcessing: postProcessingResult.postProcessing
         )
 
         try? FileManager.default.removeItem(at: audioURL)
@@ -212,17 +213,70 @@ extension RecordingCoordinator {
         appState.postProcessingStatusText = promptPackage?.intent.overlayStatusText
         overlayController.update(appState: appState)
 
-        do {
-            let processedText = try await postProcessingService.process(
-                rawText: rawText,
-                mode: mode,
-                language: language,
-                contextBundle: contextBundle
+        let startedAt = Date()
+        let plannedEngine = postProcessingService.plannedEngine(for: mode)
+        func snapshot(
+            _ outcome: TranscriptRunReport.PostProcessingSnapshot.Outcome,
+            run: PostProcessingRun? = nil,
+            error: Error? = nil
+        ) -> TranscriptRunReport.PostProcessingSnapshot {
+            TranscriptRunReport.PostProcessingSnapshot(
+                outcome: outcome,
+                plannedEngine: plannedEngine,
+                engine: run?.engine,
+                durationMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+                gptProfile: run?.gptProfile,
+                fallbackReason: run?.fallbackReason,
+                errorMessage: error?.localizedDescription
             )
-            let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
+        }
+        func cancelledResult(_ snapshot: TranscriptRunReport.PostProcessingSnapshot) -> PostProcessingRunResult {
+            Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
+            return PostProcessingRunResult(
+                finalText: rawText,
+                renderedPrompt: renderedPrompt,
+                replyIntent: promptPackage?.intent,
+                visualManifest: promptPackage?.visualManifest,
+                fallbackStatus: .rawFallback,
+                effectiveContextBundle: contextBundle,
+                postProcessing: snapshot
+            )
+        }
+
+        // Abbruch-Merker dieses Diktats und ESC systemweit, solange die
+        // Nacharbeit läuft (beim Diktat steht meist eine fremde App vorne).
+        let cancelToken = PostProcessingCancelToken()
+        activePostProcessingCancelToken = cancelToken
+        cleanUpCancelKey.activate { [weak self] in self?.cancelPostProcessing() }
+        defer {
+            cleanUpCancelKey.deactivate()
+            if activePostProcessingCancelToken === cancelToken { activePostProcessingCancelToken = nil }
+        }
+
+        do {
+            let service = postProcessingService
+            let run = try await PostProcessingCancelToken.$current.withValue(cancelToken) {
+                try await service.processRun(
+                    rawText: rawText,
+                    mode: mode,
+                    language: language,
+                    contextBundle: contextBundle
+                )
+            }
             appState.isPostProcessing = false
             appState.postProcessingStatusText = nil
             overlayController.update(appState: appState)
+            // Abbruch kam, aber ein Weg hat trotzdem noch geliefert: der
+            // Nutzer hat „Abgebrochen“ gesehen, also gilt der Rohtext.
+            if cancelToken.isCancelled {
+                return cancelledResult(snapshot(.cancelled, run: run))
+            }
+            let processedText = run.text
+            let postProcessingSnapshot = snapshot(run.fallbackReason == nil ? .succeeded : .fellBack, run: run)
+            Logger.transcription.info(
+                "dictation_postprocess_done mode=\(mode.id, privacy: .public) engine=\(run.engine?.rawValue ?? "unknown", privacy: .public) ms=\(postProcessingSnapshot.durationMs, privacy: .public) fallback=\(run.fallbackReason != nil, privacy: .public)"
+            )
+            let agentSession = mode.id == OutputMode.taskID ? latestTaskAgentSession() : nil
             return PostProcessingRunResult(
                 finalText: TextNormalizer.normalizeTranscriptionText(processedText),
                 renderedPrompt: renderedPrompt,
@@ -231,7 +285,8 @@ extension RecordingCoordinator {
                 agentProvider: agentSession?.provider,
                 agentSessionID: agentSession?.externalSessionID,
                 agentProjectPath: agentSession?.projectPath,
-                effectiveContextBundle: contextBundle
+                effectiveContextBundle: contextBundle,
+                postProcessing: postProcessingSnapshot
             )
         } catch {
             appState.isPostProcessing = false
@@ -239,15 +294,10 @@ extension RecordingCoordinator {
             overlayController.update(appState: appState)
 
             if case PostProcessingError.userCancelled = error {
-                Logger.transcription.info("Post-processing cancelled by user; using raw transcript without surfacing an error")
-                return PostProcessingRunResult(
-                    finalText: rawText,
-                    renderedPrompt: renderedPrompt,
-                    replyIntent: promptPackage?.intent,
-                    visualManifest: promptPackage?.visualManifest,
-                    fallbackStatus: .rawFallback,
-                    effectiveContextBundle: contextBundle
-                )
+                return cancelledResult(snapshot(.cancelled))
+            }
+            if cancelToken.isCancelled {
+                return cancelledResult(snapshot(.cancelled, error: error))
             }
 
             if AppPreferences.shared.fallbackToRawOnProcessingError {
@@ -266,7 +316,8 @@ extension RecordingCoordinator {
                     visualManifest: promptPackage?.visualManifest,
                     fallbackStatus: fallback.status,
                     errorMessage: message,
-                    effectiveContextBundle: contextBundle
+                    effectiveContextBundle: contextBundle,
+                    postProcessing: snapshot(.failed, error: error)
                 )
             }
 
@@ -332,7 +383,8 @@ extension RecordingCoordinator {
         deliveryAttachmentLabels: [String] = [],
         agentProvider: AgentProvider? = nil,
         agentSessionID: String? = nil,
-        agentProjectPath: String? = nil
+        agentProjectPath: String? = nil,
+        postProcessing: TranscriptRunReport.PostProcessingSnapshot? = nil
     ) async {
         let draft = TranscriptRunReportDraft(
             sourceAppName: contextSourceApp?.localizedName,
@@ -359,7 +411,8 @@ extension RecordingCoordinator {
             deliveryAttachmentLabels: deliveryAttachmentLabels,
             agentProvider: agentProvider,
             agentSessionID: agentSessionID,
-            agentProjectPath: agentProjectPath
+            agentProjectPath: agentProjectPath,
+            postProcessing: postProcessing
         )
 
         // LR-DIK-017: Attachment-Kopien und Archiv-Cleanup laufen off-main. Der Aufrufer wartet

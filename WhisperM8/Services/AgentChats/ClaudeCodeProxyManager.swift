@@ -221,6 +221,10 @@ final class ClaudeCodeProxyManager {
     /// (Diktat-Anbieter „ChatGPT-Abo"). Ohne sie antwortet die Route mit 404.
     static let transcriptionsAPIEnvironmentKey = "CCP_CODEX_TRANSCRIPTIONS_API"
 
+    /// Transport des Proxys zu chatgpt.com (`http`, `websocket`, ab v0.1.48
+    /// auch `auto`). WhisperM8 setzt `http`, siehe `launchEnvironment`.
+    static let transportEnvironmentKey = "CCP_CODEX_TRANSPORT"
+
     /// Kill-Switch der ChatGPT-Abo-Transkription: aus → selbst gestartete
     /// Instanzen bekommen das Flag nicht (eine geerbte Variable wird entfernt).
     var transcriptionsAPIEnabledResolver: () -> Bool = { AppPreferences.shared.isChatGPTTranscriptionEnabled }
@@ -800,6 +804,16 @@ final class ClaudeCodeProxyManager {
         // Version oder ein alternativer Proxy die Variable auswertet,
         // erzwingt sie ebenfalls loopback statt 0.0.0.0.
         environment["CCP_BIND_ADDRESS"] = "127.0.0.1"
+        // HTTP statt WebSocket für jede Instanz: Der Proxy nimmt bis v0.1.47
+        // WebSocket als Standard, und darüber kamen die 401-Wellen und
+        // Abbrüche nach rund 177 s (Upstream #73/#172). Die Einstellung lag
+        // bisher nur per Hand in der main-Config, Zusatzkonten haben keine
+        // eigene `config.json` und liefen deshalb über WebSocket. Die
+        // Umgebungsvariable gewinnt im Proxy vor der Config-Datei. Ein
+        // bewusst geerbter Wert (Login-Shell) bleibt stehen.
+        if environment[Self.transportEnvironmentKey]?.isEmpty ?? true {
+            environment[Self.transportEnvironmentKey] = "http"
+        }
         // Transkriptions-Route (`/v1/audio/transcriptions`) fuer den Diktat-
         // Anbieter „ChatGPT-Abo". Bei JEDER selbst gestarteten Instanz, nicht
         // nur bei gewaehltem Anbieter — sonst liefert ein spaeterer Wechsel

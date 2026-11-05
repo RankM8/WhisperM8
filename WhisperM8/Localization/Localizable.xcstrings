@@ -1381,6 +1381,16 @@
         }
       }
     },
+    "All modes use the Codex CLI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Modi nutzen die Codex-CLI."
+          }
+        }
+      }
+    },
     "All permissions granted!": {
       "localizations": {
         "de": {
@@ -2261,6 +2271,16 @@
         }
       }
     },
+    "Cancelled…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgebrochen…"
+          }
+        }
+      }
+    },
     "Cancelling takes effect after the current chat — a transcript is never moved halfway.": {
       "localizations": {
         "de": {
@@ -2847,6 +2867,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clean, E-Mail, Slack und weitere Modi brauchen Codex. Wechsle unter „Verhalten“ zu einem Profil mit Anreicherung, um sie freizuschalten."
+          }
+        }
+      }
+    },
+    "Clean, Prompt, Email, Slack, WhatsApp and Notes go straight to the running GPT proxy instead of starting the Codex CLI for every dictation. Faster and far fewer tokens. Task and Ultra-Prompt read your project and always use the Codex CLI.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clean, Prompt, E-Mail, Slack, WhatsApp und Notes gehen direkt an den laufenden GPT-Proxy, statt für jedes Diktat die Codex-CLI zu starten. Schneller und mit viel weniger Token. Task und Ultra-Prompt lesen in deinem Projekt und nutzen immer die Codex-CLI."
           }
         }
       }
@@ -5121,6 +5151,16 @@
         }
       }
     },
+    "GPT Backend": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-Backend"
+          }
+        }
+      }
+    },
     "GPT Coworker Skill": {
       "localizations": {
         "de": {
@@ -7311,6 +7351,16 @@
         }
       }
     },
+    "Network error at the GPT backend: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Netzwerkfehler beim GPT-Backend: %@"
+          }
+        }
+      }
+    },
     "New": {
       "localizations": {
         "de": {
@@ -8147,6 +8197,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nichts zu tun. Server mit je Konto unterschiedlichen Definitionen werden nie kopiert."
+          }
+        }
+      }
+    },
+    "Nothing was recorded. Wait until the text is inserted, then press the hotkey again. Esc cancels the clean-up.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es wurde nichts aufgenommen. Warte, bis der Text eingefügt ist, und drück den Hotkey dann erneut. Esc bricht die Nachbearbeitung ab."
           }
         }
       }
@@ -9080,6 +9140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Port"
+          }
+        }
+      }
+    },
+    "Port of the proxy instance unknown.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Port der Proxy-Instanz unbekannt."
           }
         }
       }
@@ -12144,6 +12214,16 @@
         }
       }
     },
+    "Still working on your last dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das letzte Diktat ist noch in Arbeit"
+          }
+        }
+      }
+    },
     "Stop": {
       "localizations": {
         "de": {
@@ -12744,6 +12824,16 @@
         }
       }
     },
+    "Text modes use the GPT account “%@”, the same one as ChatGPT transcription. If the GPT backend fails, the Codex CLI takes over.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Textmodi nutzen das GPT-Konto „%@“, dasselbe wie die ChatGPT-Transkription. Scheitert das GPT-Backend, übernimmt die Codex-CLI."
+          }
+        }
+      }
+    },
     "Text not inserted": {
       "localizations": {
         "de": {
@@ -12774,12 +12864,92 @@
         }
       }
     },
+    "The GPT backend answered with HTTP %lld: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das GPT-Backend hat mit HTTP %lld geantwortet: %@"
+          }
+        }
+      }
+    },
+    "The GPT backend is not signed in to ChatGPT or the login has expired.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das GPT-Backend ist nicht bei ChatGPT angemeldet, oder die Anmeldung ist abgelaufen."
+          }
+        }
+      }
+    },
+    "The GPT backend is off, so all modes use the Codex CLI. Turn it on under GPT Backend.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das GPT-Backend ist aus, deshalb nutzen alle Modi die Codex-CLI. Einschalten unter GPT-Backend."
+          }
+        }
+      }
+    },
+    "The GPT backend is turned off.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das GPT-Backend ist ausgeschaltet."
+          }
+        }
+      }
+    },
+    "The GPT backend returned no text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das GPT-Backend hat keinen Text geliefert."
+          }
+        }
+      }
+    },
     "The GPT model for the /model picker, for “New GPT chat” and for GPT subagents (agent type “gpt”). Which model a new chat uses is decided by Claude Code itself: choose /model in a chat and save it as the default with Enter — GPT or Claude. Empty, ‘auto’ or unknown = latest model (currently %@). Any backend model of the Codex catalog is allowed (currently: %@); models with a priority tier optionally with ‘-fast’. Older and unknown GPT IDs are clearly rejected by the router. New models also need a claude-code-proxy that knows them.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Das GPT-Modell für den /model-Picker, für „Neuer GPT-Chat“ und für GPT-Subagents (Agent-Typ »gpt«). Welches Modell ein neuer Chat nutzt, entscheidet Claude Code selbst: in einem Chat /model wählen und mit Enter als Standard speichern — GPT oder Claude. Leer, ›auto‹ oder unbekannt = neuestes Modell (derzeit %@). Zulässig ist jedes Backend-Modell des Codex-Katalogs (derzeit: %@); Modelle mit Priority-Tier optional mit ›-fast‹. Ältere und unbekannte GPT-IDs lehnt der Router klar ab. Neue Modelle brauchen zusätzlich einen claude-code-proxy, der sie kennt."
+          }
+        }
+      }
+    },
+    "The GPT proxy doesn't offer the model %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der GPT-Proxy bietet das Modell %@ nicht an."
+          }
+        }
+      }
+    },
+    "The GPT proxy is not reachable: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der GPT-Proxy ist nicht erreichbar: %@"
+          }
+        }
+      }
+    },
+    "The active GPT account “%@” is not signed in.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das aktive GPT-Konto „%@“ ist nicht angemeldet."
           }
         }
       }
@@ -13284,6 +13454,26 @@
         }
       }
     },
+    "The text clean-up didn't answer within %lld seconds and was stopped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachbearbeitung hat nach %lld Sekunden nicht geantwortet und wurde gestoppt."
+          }
+        }
+      }
+    },
+    "The text clean-up failed. GPT backend: %@ Codex CLI: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nachbearbeitung ist gescheitert. GPT-Backend: %@ Codex-CLI: %@"
+          }
+        }
+      }
+    },
     "The text clean-up was cancelled.": {
       "localizations": {
         "de": {
@@ -13300,6 +13490,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die drei Wörter müssen sich voneinander unterscheiden."
+          }
+        }
+      }
+    },
+    "The usage limit of the active GPT account is reached.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Nutzungslimit des aktiven GPT-Kontos ist erreicht."
           }
         }
       }
@@ -14030,6 +14230,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sitzungs-Hooks verwenden"
+          }
+        }
+      }
+    },
+    "Use the GPT backend for text modes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-Backend für Textmodi nutzen"
           }
         }
       }

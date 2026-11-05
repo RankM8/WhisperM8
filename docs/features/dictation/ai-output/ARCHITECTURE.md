@@ -279,7 +279,9 @@ Preview, Copy und Fallback-Anzeige. Es erfasst keinen Laufzeitkontext.
 
 - `WhisperM8/Services/Dictation/PostProcessing.swift` definiert das Processor-Protokoll und die Post-Processing-Fehler.
 - `WhisperM8/Services/Dictation/PostProcessingService.swift` ist die Fassade für Raw-Bypass, Kontextfilter, Prompt-Package und Processor-Aufruf.
-- `WhisperM8/Services/Dictation/CodexPostProcessor.swift` ist der produktive Codex-Processor und startet den `codex exec`-Prozess.
+- `WhisperM8/Services/Dictation/PostProcessingEngineRouter.swift` ist der produktive Default-Processor: GPT-Backend für Modi ohne Projektzugriff, sonst und als Rückfall die Codex-CLI (Details in `README.md`, „Zwei Wege“).
+- `WhisperM8/Services/Dictation/GPTBackendPostProcessor.swift` ist der Backend-Processor (`POST /v1/messages` an die Proxy-Instanz des aktiven GPT-Kontos).
+- `WhisperM8/Services/Dictation/CodexPostProcessor.swift` ist der Codex-Processor und startet den `codex exec`-Prozess.
 - `WhisperM8/Services/Dictation/CodexSupport.swift` enthält Codex-Argumentbau, Prozess-Cancel, Status-Probe und Visual-Input-Auswahl.
 - `WhisperM8/Services/Dictation/CodexStatusCache.swift` cached Codex-Loginstatus für den Diktat-Hot-Path.
 - `WhisperM8/Services/Dictation/CodexErrorSummary.swift` reduziert Codex-Logs auf nutzerlesbare Fehlermeldungen.
@@ -294,6 +296,7 @@ Preview, Copy und Fallback-Anzeige. Es erfasst keinen Laufzeitkontext.
 
 ## Test-Cluster
 
+- `Tests/WhisperM8Tests/GPTBackendPostProcessorTests.swift` und `PostProcessingEngineRouterTests.swift` decken Anfrageform, Fehlerzuordnung, Proxy-Start mit Wiederholung, Abbruch, Wegwahl und Rückfall ab; `RecordingCoordinatorBusyHotkeyTests.swift` den Hinweis bei einem Hotkey während der Nacharbeit.
 - `Tests/WhisperM8Tests/OutputDashboardTests.swift` deckt Built-in-Modes, Modell-/Reasoning-/Service-Tier-Defaults, Template-Rendering, Post-Processing-Fassade, Codex-Argumente, Prompt-Package, Visual-Input und Report-Persistenz ab.
 - `Tests/WhisperM8Tests/AIOutputModelsTests.swift` deckt `CodexConnectionModel`, `OutputModesViewModel` und `TemplateEditorModel` ab.
 - `Tests/WhisperM8Tests/OutputModeCompatTests.swift` deckt Legacy-JSON, Built-in-Normalisierung, Raw/Fast-Migration und retired Chat-Migration ab.

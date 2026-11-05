@@ -74,6 +74,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch?.1, ["serve", "--no-monitor", "--port", "19001"])
         XCTAssertEqual(launch?.2, [
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSPORT": "http",
             "CCP_CODEX_TRANSCRIPTIONS_API": "1",
             "PATH": "/login-shell/bin",
         ])
@@ -632,6 +633,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             "PATH": "/bin",
             "CCP_CONFIG_DIR": "/Users/x/.config/claude-code-proxy",
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSPORT": "http",
             "CCP_CODEX_TRANSCRIPTIONS_API": "1",
         ])
     }
@@ -655,7 +657,24 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch, [
             "PATH": "/bin",
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSPORT": "http",
         ])
+    }
+
+    func testInheritedTransportIsKeptOtherwiseHTTPIsForced() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin", "CCP_CODEX_TRANSPORT": "websocket"] },
+            retryAttempts: 1
+        )
+
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(launch?["CCP_CODEX_TRANSPORT"], "websocket")
     }
 
     func testInstanceOriginForMainDistinguishesSelfStartedExternalAndNotRunning() throws {
@@ -737,6 +756,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
             "PATH": "/bin",
             "CCP_CONFIG_DIR": "/profiles/zweit",
             "CCP_BIND_ADDRESS": "127.0.0.1",
+            "CCP_CODEX_TRANSPORT": "http",
             "CCP_CODEX_TRANSCRIPTIONS_API": "1",
         ])
         XCTAssertEqual(manager.port(forProfile: "zweit"), 18_775)

@@ -129,6 +129,36 @@ struct TranscriptRunReport: Identifiable, Codable, Equatable {
     var agentProvider: AgentProvider?
     var agentSessionID: String?
     var agentProjectPath: String?
+    /// Weg und Dauer der Nacharbeit (seit 05.11.2026; ältere Berichte: `nil`).
+    var postProcessing: PostProcessingSnapshot? = nil
+}
+
+extension TranscriptRunReport {
+    struct PostProcessingSnapshot: Codable, Equatable {
+        enum Outcome: String, Codable, Equatable {
+            /// Der geplante Weg hat geliefert.
+            case succeeded
+            /// Das GPT-Backend ist gescheitert, die Codex-CLI hat geliefert.
+            case fellBack
+            /// Kein Weg hat geliefert; eingefügt wurde der Rohtext.
+            case failed
+            /// Abbruch per Knopf oder ESC; eingefügt wurde der Rohtext.
+            case cancelled
+        }
+
+        var outcome: Outcome
+        /// Weg, den der Modus nehmen sollte (auch bei Fehlschlag und Abbruch).
+        var plannedEngine: PostProcessingEngine?
+        /// Weg, der tatsächlich geliefert hat; `nil` bei Fehlschlag.
+        var engine: PostProcessingEngine?
+        var durationMs: Int
+        /// GPT-Konto, wenn das Backend geliefert hat.
+        var gptProfile: String?
+        /// Warum das GPT-Backend nicht geliefert hat und Codex übernommen hat.
+        var fallbackReason: String?
+        /// Fehlermeldung bei `failed`.
+        var errorMessage: String?
+    }
 }
 
 extension TranscriptRunReport {

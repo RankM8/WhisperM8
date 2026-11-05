@@ -157,6 +157,29 @@ struct TranscriptReportDetailView: View {
                 chips.append(RunSummaryChip("Video Fallback", "Frames sent via --image"))
             }
         }
+        if let postProcessing = report.postProcessing {
+            func engineName(_ engine: PostProcessingEngine?) -> String? {
+                switch engine {
+                case .gptBackend: return "GPT backend"
+                case .codexCLI: return "Codex CLI"
+                case nil: return nil
+                }
+            }
+            let outcome: (String, SettingsStatusTone)
+            switch postProcessing.outcome {
+            case .succeeded: outcome = ("Done", .ok)
+            case .fellBack: outcome = ("Done via fallback", .warn)
+            case .failed: outcome = ("Failed", .error)
+            case .cancelled: outcome = ("Cancelled", .warn)
+            }
+            chips.append(RunSummaryChip("Clean-up", outcome.0, tone: outcome.1))
+            appendChip("Planned Route", engineName(postProcessing.plannedEngine), to: &chips)
+            appendChip("Delivered By", engineName(postProcessing.engine), to: &chips)
+            chips.append(RunSummaryChip("Clean-up Time", String(format: "%.1fs", Double(postProcessing.durationMs) / 1000)))
+            appendChip("GPT Account", postProcessing.gptProfile, to: &chips)
+            appendChip("Fell Back to Codex", postProcessing.fallbackReason, tone: .warn, to: &chips)
+            appendChip("Clean-up Error", postProcessing.errorMessage, tone: .error, to: &chips)
+        }
         if let replyIntent = report.replyIntent {
             chips.append(RunSummaryChip("Router", replyIntent.displayName))
         }

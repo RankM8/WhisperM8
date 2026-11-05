@@ -14,6 +14,8 @@ struct PostProcessingRunResult {
     /// inkl. während der Transkription nachgereichter Kopien). Zustellung, Report und
     /// Cleanup müssen dasselbe Bundle verwenden wie der Prompt; `nil` = kein Post-Processing.
     var effectiveContextBundle: TranscriptContextBundle?
+    /// Weg und Dauer der Nacharbeit für den Diktat-Bericht; `nil` = keine Nacharbeit.
+    var postProcessing: TranscriptRunReport.PostProcessingSnapshot?
 }
 
 /// Eingefrorener Zustand eines fehlgeschlagenen Transkriptions-Laufs.
@@ -122,6 +124,16 @@ final class RecordingCoordinator {
     /// Roh-Transkript bei Nachbearbeitung, Modus, Ziel-App). Nur in der echten
     /// App, nie unter `swift test`.
     let dictationHistoryRecorder: @MainActor (DictationHistoryRecord) -> Void
+    /// Hinweis, wenn der Hotkey gedrückt wird, während das letzte Diktat noch
+    /// transkribiert oder nachgearbeitet wird (Ton, alle 10 s auch eine
+    /// Mitteilung). Vorher ging das zweite Diktat still verloren.
+    let busyHotkeyNotifier: @MainActor (_ showNotice: Bool) -> Void
+    /// Zeitpunkt der letzten Mitteilung zu einem verworfenen Hotkey-Druck.
+    var lastBusyHotkeyNoticeAt: Date?
+    /// ESC systemweit, nur während der Nacharbeit angemeldet.
+    let cleanUpCancelKey: CleanUpCancelKeyGrabbing
+    /// Abbruch-Merker der laufenden Nacharbeit (`cancelPostProcessing`).
+    var activePostProcessingCancelToken: PostProcessingCancelToken?
 
     init(
         appState: AppState,
@@ -150,7 +162,13 @@ final class RecordingCoordinator {
                 text: record.text, original: record.original,
                 modeName: record.mode.name, targetApp: record.targetApp
             )
-        }
+        },
+        busyHotkeyNotifier: @escaping @MainActor (_ showNotice: Bool) -> Void = { showNotice in
+            guard AppInstance.isAppBundleProcess else { return }
+            RecordingCoordinator.playBusySignal(showNotice: showNotice)
+        },
+        // Unter `swift test` nie einen echten Carbon-Hotkey anmelden.
+        cleanUpCancelKey: CleanUpCancelKeyGrabbing? = nil
     ) {
         self.appState = appState
         let recorder = AudioRecorder()
@@ -171,6 +189,9 @@ final class RecordingCoordinator {
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer
         self.dictationHistoryRecorder = dictationHistoryRecorder
+        self.busyHotkeyNotifier = busyHotkeyNotifier
+        self.cleanUpCancelKey = cleanUpCancelKey
+            ?? (AppInstance.isAppBundleProcess ? GlobalEscapeHotKey.shared : InactiveCleanUpCancelKey())
 
         // Recorder beendet die Aufnahme von selbst (Gerät weg, Schreibfehler):
         // Teilaufnahme sichern und sichtbar beenden (LR-DIK-004/006/026).
@@ -183,7 +204,10 @@ final class RecordingCoordinator {
     /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
     /// Vordergrund-App, keine Screenshots.
     func startRecording(captureContext: Bool = true) async {
-        guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing else { return }
+        guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing else {
+            signalBusyHotkeyPressIfNeeded()
+            return
+        }
         // Budget 400 ms für Hotkey → Aufnahme läuft. Beim allerersten Start
         // (Mikrofon-Permission-Dialog) reisst das Budget bewusst — genau das
         // macht die Violation-Logzeile sichtbar.
@@ -526,8 +550,13 @@ final class RecordingCoordinator {
     /// terminiert den Codex-Prozess und der Coordinator fällt kontrolliert auf Raw zurück.
     func cancelPostProcessing() {
         guard let appState, appState.isPostProcessing else { return }
+        // Beide Wege: ein laufender Codex-Prozess oder eine Anfrage an das GPT-Backend.
+        // Erst der Merker: er greift auch, wenn gerade kein Lauf angemeldet
+        // ist (Vorbereitung, Wechsel vom Backend zur Codex-CLI).
+        activePostProcessingCancelToken?.cancel()
         _ = CodexProcessRegistry.shared.cancel()
-        appState.postProcessingStatusText = "Abgebrochen…"
+        _ = GPTBackendRunRegistry.shared.cancel(owner: .dictation)
+        appState.postProcessingStatusText = String(localized: "Cancelled…")
     }
 
     /// Bricht den laufenden Transkriptions-Upload ab (Overlay-Button oder ESC

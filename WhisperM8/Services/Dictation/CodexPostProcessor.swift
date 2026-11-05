@@ -9,12 +9,13 @@ struct CodexPostProcessor: PostProcessing {
     /// Auflösung des codex-Binarys (Closure-DI für Tests mit Fake-Skript).
     private let commandPathResolver: () -> String?
     private let registry: CodexProcessRegistry
-    /// Hartes Zeitlimit je Lauf (LR-DIK-013). Großzügig, weil der Task-Modus mit
-    /// Projektzugriff legitim lange arbeitet; nur ein Hänger soll hier enden.
+    /// Hartes Zeitlimit je Lauf (LR-DIK-013). Großzügig für Task und Modi mit
+    /// Projektzugriff, die legitim lange arbeiten. Reine Textmodi enden nach
+    /// 90 s: ein Hänger blockierte sonst das Diktieren für fünf Minuten.
     private let timeoutProvider: (OutputMode) -> TimeInterval
 
     static func defaultTimeout(for mode: OutputMode) -> TimeInterval {
-        (mode.id == OutputMode.taskID || mode.projectAccess != .off) ? 900 : 300
+        (mode.id == OutputMode.taskID || mode.projectAccess != .off) ? 900 : 90
     }
 
     init(
@@ -31,6 +32,20 @@ struct CodexPostProcessor: PostProcessing {
         self.commandPathResolver = commandPathResolver
         self.registry = registry
         self.timeoutProvider = timeoutProvider
+    }
+
+    func plannedEngine(for mode: OutputMode) -> PostProcessingEngine? { .codexCLI }
+
+    func processRun(
+        rawText: String,
+        mode: OutputMode,
+        language: String,
+        contextBundle: TranscriptContextBundle
+    ) async throws -> PostProcessingRun {
+        PostProcessingRun(
+            text: try await process(rawText: rawText, mode: mode, language: language, contextBundle: contextBundle),
+            engine: .codexCLI
+        )
     }
 
     func process(rawText: String, mode: OutputMode, language: String, contextBundle: TranscriptContextBundle) async throws -> String {
@@ -75,6 +90,9 @@ struct CodexPostProcessor: PostProcessing {
         let owner = CodexRunOwner.current
         let timeout = timeoutProvider(mode)
         let registry = registry
+        // Task-Locals erbt Task.detached nicht, deshalb hier prüfen: ein
+        // Abbruch vor dem Prozessstart soll Codex gar nicht erst starten.
+        try PostProcessingCancelToken.checkCurrent()
         return try await withTaskCancellationHandler {
             try await Task.detached(priority: .userInitiated) {
                 try performCodexRun(
