@@ -7,7 +7,9 @@ import CoreGraphics
 /// Nutzer per Maus entsperrt oder die Frist abläuft. Maus und Trackpad bleiben
 /// frei. Mehrere Wege heben die Sperre auf (siehe docs/features/keyboard-cleaning.md):
 /// Knopf, Frist, Bildschirmsperre/Ruhezustand, App-Ende, Absturz (Tap stirbt
-/// mit dem Prozess), hängender Main Thread (macOS schaltet den Tap ab).
+/// mit dem Prozess). Hängt der Main Thread länger als
+/// `KeyboardLockPolicy.heartbeatTimeout`, lässt der Tap (eigener Thread) alles
+/// durch, bis das Lebenszeichen aus `tick()` zurück ist.
 @MainActor
 final class KeyboardLockController: ObservableObject {
     static let shared = KeyboardLockController()
@@ -58,7 +60,8 @@ final class KeyboardLockController: ObservableObject {
     private let keysDownProbe: () -> Set<Int64>
     private let screenLockedProbe: () -> Bool
     private let notificationSources: () -> NotificationSources
-    private var policy = KeyboardLockPolicy()
+    /// Geteilt mit dem Tap-Thread; entscheidet je Ereignis.
+    private let gate: KeyboardLockGate
     private var lockedAtUptime: TimeInterval = 0
     private var allowedDuration: TimeInterval = 0
     private var ticker: Timer?
@@ -87,6 +90,7 @@ final class KeyboardLockController: ObservableObject {
         self.keysDownProbe = keysDownProbe
         self.screenLockedProbe = screenLockedProbe
         self.notificationSources = notificationSources ?? { .live }
+        self.gate = KeyboardLockGate(clock: uptime)
     }
 
     /// Verbleibende Sperrzeit in Sekunden (Uptime-basiert).
@@ -100,11 +104,20 @@ final class KeyboardLockController: ObservableObject {
     @discardableResult
     func lock(duration: TimeInterval = KeyboardLockPolicy.defaultDuration) -> StartResult {
         guard !isLocked else { return .alreadyLocked }
-        policy = KeyboardLockPolicy(keysDownAtLock: keysDownProbe())
+        // Erst den Zustand, dann den Tap: Das erste Ereignis trifft schon
+        // eine aktive Sperre mit frischem Lebenszeichen.
+        gate.activate(keysDownAtLock: keysDownProbe())
+        let gate = self.gate
         let installed = tap.install { [weak self] event, flags in
-            self?.handle(event, flags: flags) ?? .pass
+            // Läuft auf dem Tap-Thread: nur das Gate, Anzeige asynchron.
+            let decision = gate.decide(event)
+            if case .flagsChanged = event {
+                Self.publishCapsLock(flags.contains(.maskAlphaShift), to: self)
+            }
+            return decision
         }
         guard installed else {
+            gate.deactivate()
             Logger.keyboardLock.notice("keyboard_lock_denied reason=tap_create_failed")
             return .missingPermission
         }
@@ -124,6 +137,9 @@ final class KeyboardLockController: ObservableObject {
 
     func unlock(reason: KeyboardUnlockReason) {
         guard isLocked else { return }
+        // Erst das Gate (alles geht durch, kein Wiedereinschalten mehr), dann
+        // den Tap abbauen.
+        gate.deactivate()
         tap.uninstall()
         stopTicker()
         stopObserving()
@@ -132,7 +148,6 @@ final class KeyboardLockController: ObservableObject {
         canExtend = false
         allowedDuration = 0
         lastUnlockReason = reason
-        policy = KeyboardLockPolicy()
         panel.hide()
         Logger.keyboardLock.info("keyboard_lock_ended reason=\(reason.rawValue, privacy: .public)")
     }
@@ -146,9 +161,11 @@ final class KeyboardLockController: ObservableObject {
         refreshDisplay()
     }
 
-    /// Prüft Frist, Sperrbildschirm und Passwortfeld; läuft sekündlich, solange gesperrt.
+    /// Lebenszeichen für den Tap-Thread, dann Frist, Sperrbildschirm und
+    /// Passwortfeld; läuft sekündlich (`heartbeatInterval`), solange gesperrt.
     func tick() {
         guard isLocked else { return }
+        gate.heartbeat()
         if remaining <= 0 {
             unlock(reason: .timeout)
             return
@@ -179,24 +196,29 @@ final class KeyboardLockController: ObservableObject {
 
     // MARK: - Ereignisse
 
-    func handle(_ event: KeyboardLockPolicy.Event, flags: CGEventFlags) -> KeyboardLockPolicy.Decision {
-        guard isLocked else { return .pass }
-        if case .flagsChanged = event {
-            let caps = flags.contains(.maskAlphaShift)
-            if caps != capsLockOn { capsLockOn = caps }
+    /// Anzeige „Feststelltaste an“ nachführen. Vom Tap-Thread asynchron auf
+    /// den Main Thread; Tests rufen den Handler direkt auf dem Main Thread.
+    nonisolated private static func publishCapsLock(_ on: Bool, to controller: KeyboardLockController?) {
+        guard let controller else { return }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { controller.updateCapsLock(on) }
+        } else {
+            DispatchQueue.main.async { [weak controller] in
+                MainActor.assumeIsolated { controller?.updateCapsLock(on) }
+            }
         }
-        let decision = policy.decide(event)
-        if decision == .reenableTap {
-            Logger.keyboardLock.info("keyboard_lock_tap_reenabled")
-        }
-        return decision
+    }
+
+    private func updateCapsLock(_ on: Bool) {
+        guard isLocked, on != capsLockOn else { return }
+        capsLockOn = on
     }
 
     // MARK: - Laufzeit
 
     private func startTicker() {
         stopTicker()
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: KeyboardLockPolicy.heartbeatInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         timer.tolerance = 0.2
@@ -253,7 +275,8 @@ final class KeyboardLockController: ObservableObject {
         distributedObservers = []
     }
 
-    /// Tasten, die gerade gedrückt sind (virtuelle Keycodes 0…127).
+    /// Tasten, die gerade gedrückt sind (virtuelle Keycodes 0…127). Die
+    /// Feststelltaste filtert `KeyboardLockPolicy.init` heraus.
     nonisolated static func liveKeysDown() -> Set<Int64> {
         var down = Set<Int64>()
         for code in 0..<128 where CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code)) {

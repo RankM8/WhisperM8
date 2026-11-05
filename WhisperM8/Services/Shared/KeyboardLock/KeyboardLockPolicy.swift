@@ -35,32 +35,81 @@ struct KeyboardLockPolicy: Equatable {
         case reenableTap
     }
 
-    /// Tasten, die beim Sperren schon gedrückt waren. Ihr Loslassen geht durch,
-    /// sonst glaubt das System nach dem Entsperren, sie hingen noch.
-    private(set) var keysDownAtLock: Set<Int64>
+    /// Takt des Lebenszeichens vom Main Thread (der sekündliche `tick()`).
+    static let heartbeatInterval: TimeInterval = 1
+    /// Ab diesem Alter des Lebenszeichens gilt der Main Thread als hängend,
+    /// und die Sperre lässt alles durch. Begründung der 5 s: Im Normalbetrieb
+    /// ist das Lebenszeichen höchstens gut 1 s alt (Takt plus 0,2 s
+    /// Timer-Toleranz). Stocker von einigen Sekunden (großer Transcript-Scan,
+    /// AX-Aufruf, Layout) sollen weiter sperren, sonst landen beim Wischen
+    /// Return oder ⌘W in der App vorn. Ein Hänger über 5 s ist für den Nutzer
+    /// schon am Beachball sichtbar; dann braucht er die Tastatur (⌥⌘⎋).
+    static let heartbeatTimeout: TimeInterval = 5
+    /// Feststelltaste: `CGEventSource.keyState` meldet je nach System den
+    /// Schaltzustand statt der gedrückten Taste. Beim Erfassen gehaltener
+    /// Tasten bleibt sie deshalb außen vor, sonst ginge ihr erstes Drücken
+    /// während der Sperre durch.
+    static let capsLockKeyCode: Int64 = 57
 
-    init(keysDownAtLock: Set<Int64> = []) {
-        self.keysDownAtLock = keysDownAtLock
+    /// Tasten, deren Loslassen noch genau einmal durch muss: beim Sperren
+    /// schon gedrückt, oder gedrückt, während das Lebenszeichen ausblieb und
+    /// die Sperre alles durchließ. Sonst glaubt das System nach dem
+    /// Entsperren, sie hingen noch.
+    private(set) var releasesToPass: Set<Int64>
+    /// Uptime des letzten Lebenszeichens vom Main Thread.
+    private(set) var lastHeartbeat: TimeInterval
+
+    init(keysDownAtLock: Set<Int64> = [], startedAt: TimeInterval) {
+        self.releasesToPass = keysDownAtLock.subtracting([Self.capsLockKeyCode])
+        self.lastHeartbeat = startedAt
     }
 
-    mutating func decide(_ event: Event) -> Decision {
+    mutating func heartbeat(at now: TimeInterval) {
+        lastHeartbeat = max(lastHeartbeat, now)
+    }
+
+    /// Ob der Main Thread sich zuletzt rechtzeitig gemeldet hat. Nur solange
+    /// das gilt, wird gesperrt.
+    func isHeartbeatFresh(at now: TimeInterval) -> Bool {
+        now - lastHeartbeat <= Self.heartbeatTimeout
+    }
+
+    mutating func decide(_ event: Event, at now: TimeInterval) -> Decision {
+        if case .tapDisabled = event { return .reenableTap }
+        guard isHeartbeatFresh(at: now) else { return passWhileStale(event) }
         switch event {
         case .keyDown:
             return .swallow
         case let .keyUp(keyCode):
-            return keysDownAtLock.remove(keyCode) == nil ? .swallow : .pass
+            return releasesToPass.remove(keyCode) == nil ? .swallow : .pass
         case let .flagsChanged(keyCode):
             // Modifier melden Drücken und Loslassen gleichermaßen als
             // flagsChanged. Ein vor der Sperre gehaltener Modifier darf genau
             // einmal (sein Loslassen) durch.
-            return keysDownAtLock.remove(keyCode) == nil ? .swallow : .pass
+            return releasesToPass.remove(keyCode) == nil ? .swallow : .pass
         case let .systemDefined(subtype):
             return subtype == Self.auxControlButtonsSubtype ? .swallow : .pass
-        case .tapDisabled:
-            return .reenableTap
-        case .other:
+        case .tapDisabled, .other:
             return .pass
         }
+    }
+
+    /// Main Thread hängt: alles geht durch. Gedrückte Tasten werden gemerkt,
+    /// damit ihr Loslassen auch dann durchkommt, wenn das Lebenszeichen
+    /// inzwischen zurück ist.
+    private mutating func passWhileStale(_ event: Event) -> Decision {
+        switch event {
+        case let .keyDown(keyCode):
+            releasesToPass.insert(keyCode)
+        case let .keyUp(keyCode):
+            releasesToPass.remove(keyCode)
+        case let .flagsChanged(keyCode):
+            // Drücken oder Loslassen ist hier nicht unterscheidbar: abwechselnd.
+            if releasesToPass.remove(keyCode) == nil { releasesToPass.insert(keyCode) }
+        case .systemDefined, .tapDisabled, .other:
+            break
+        }
+        return .pass
     }
 
     /// Erlaubte Sperrdauer nach „+1 Minute“, gemessen ab Sperrbeginn in

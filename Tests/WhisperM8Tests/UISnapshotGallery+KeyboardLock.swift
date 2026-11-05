@@ -6,8 +6,7 @@ import SwiftUI
 extension UISnapshotGallery {
     @MainActor
     private final class SnapshotTap: KeyboardEventTapping {
-        func install(handler: @escaping @MainActor (KeyboardLockPolicy.Event, CGEventFlags) -> KeyboardLockPolicy.Decision) -> Bool { true }
-        func reenable() {}
+        func install(handler: @escaping KeyboardEventTapHandler) -> Bool { true }
         func uninstall() {}
     }
 

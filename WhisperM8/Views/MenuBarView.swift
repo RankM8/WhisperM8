@@ -194,7 +194,12 @@ struct MenuBarView: View {
         } else {
             Button("Lock Keyboard for Cleaning") {
                 if keyboardLock.lock() == .missingPermission {
+                    // Der Systemdialog kommt nur beim ersten Mal (oder gar nicht,
+                    // wenn WhisperM8 deaktiviert in der Liste steht). Die
+                    // Einstellungen zu öffnen, ist die sichtbare Rückmeldung,
+                    // dass die Tastatur NICHT gesperrt ist — wie in den Einstellungen.
                     PermissionService.requestAccessibilityPermission()
+                    PermissionService.openAccessibilityPrivacySettings()
                 }
             }
         }
