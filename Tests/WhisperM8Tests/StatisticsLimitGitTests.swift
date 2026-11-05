@@ -3,7 +3,7 @@ import XCTest
 
 /// Limit- und Git-Sammler der Statistik: Cache-Datei → Snapshot, Kontoschlüssel,
 /// Einhakstellen der Fetcher, Git-/gh-Parsing und Cursor ohne Doppelzählung.
-final class StatisticsCollectorsTests: XCTestCase {
+final class StatisticsLimitGitTests: XCTestCase {
     private var tempDir: URL!
     private let calendar: Calendar = {
         var cal = Calendar(identifier: .gregorian)
