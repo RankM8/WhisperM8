@@ -2501,6 +2501,16 @@
         }
       }
     },
+    "Chats currently get the full set with eight events, because the session registry is off or the installed Claude version does not write it yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats bekommen gerade den vollen Satz mit acht Ereignissen, weil die Sitzungs-Registry aus ist oder die installierte Claude-Version sie noch nicht schreibt."
+          }
+        }
+      }
+    },
     "Chats on “%@” then continue through the main account, and the profile disappears. The main account’s proxy restarts briefly for this.": {
       "localizations": {
         "de": {
@@ -2521,12 +2531,12 @@
         }
       }
     },
-    "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, the double-send protection is off, and background agents lose their live status.": {
+    "Chats start without the hook configuration. Live status still comes from Claude's own session registry, but WhisperM8 can no longer link a chat to its Claude session automatically, and background agents lose their live status.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chats starten ohne die Hook-Konfiguration. Der Live-Status kommt weiterhin aus Claudes eigener Sitzungs-Registry, aber WhisperM8 kann einen Chat nicht mehr automatisch mit seiner Claude-Sitzung verknüpfen, der Schutz vor Doppelsendung ist aus und Hintergrund-Agents verlieren ihren Live-Status."
+            "value": "Chats starten ohne die Hook-Konfiguration. Der Live-Status kommt weiterhin aus Claudes eigener Sitzungs-Registry, aber WhisperM8 kann einen Chat nicht mehr automatisch mit seiner Claude-Sitzung verknüpfen, und Hintergrund-Agents verlieren ihren Live-Status."
           }
         }
       }
@@ -2821,12 +2831,12 @@
         }
       }
     },
-    "Claude chats start with a temporary hook configuration. It links each chat to its Claude session and blocks prompts that were already delivered from being sent twice. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched.": {
+    "Claude chats start with a temporary hook configuration that links each chat to its Claude session. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Claude-Chats starten mit einer temporären Hook-Konfiguration. Sie verknüpft jeden Chat mit seiner Claude-Sitzung und verhindert, dass bereits zugestellte Prompts doppelt gesendet werden. Der Live-Status kommt aus Claudes eigener Sitzungs-Registry; deine globale ~/.claude/settings.json bleibt unberührt."
+            "value": "Claude-Chats starten mit einer temporären Hook-Konfiguration, die jeden Chat mit seiner Claude-Sitzung verknüpft. Der Live-Status kommt aus Claudes eigener Sitzungs-Registry; deine globale ~/.claude/settings.json bleibt unberührt."
           }
         }
       }
@@ -7991,6 +8001,16 @@
         }
       }
     },
+    "Normal chats get only these four events; their live status comes from Claude's session registry. Background agents and Claude versions without the registry get the full set with eight events.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normale Chats bekommen nur diese vier Ereignisse; ihr Live-Status kommt aus Claudes Sitzungs-Registry. Hintergrund-Agents und Claude-Versionen ohne Registry bekommen den vollen Satz mit acht Ereignissen."
+          }
+        }
+      }
+    },
     "Not a Git repository": {
       "localizations": {
         "de": {
@@ -9124,12 +9144,12 @@
         }
       }
     },
-    "Plays on the stop hook when an agent finishes. Question notifications stay silent.": {
+    "Plays when an agent finishes its turn. Question notifications stay silent.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spielt beim Stop-Hook, wenn ein Agent fertig ist. Benachrichtigungen bei Rückfragen bleiben still."
+            "value": "Spielt, wenn ein Agent mit seiner Antwort fertig ist. Benachrichtigungen bei Rückfragen bleiben still."
           }
         }
       }
@@ -11124,12 +11144,12 @@
         }
       }
     },
-    "Session linking and send guard": {
+    "Session linking": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sitzungsverknüpfung und Sendeschutz"
+            "value": "Sitzungsverknüpfung"
           }
         }
       }
@@ -13424,12 +13444,12 @@
         }
       }
     },
-    "The terminal bell inside chat views — a different event than the completion sound above (TUI bell vs. stop hook).": {
+    "The terminal bell inside chat views. It is a different event than the completion sound above: the bell comes from the program in the terminal, the completion sound from the finished turn.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die Terminalglocke in den Chat-Ansichten – ein anderes Ereignis als der Abschlusston oben (TUI-Glocke statt Stop-Hook)."
+            "value": "Die Terminalglocke in den Chat-Ansichten. Sie ist ein anderes Ereignis als der Abschlusston oben: Die Glocke kommt vom Programm im Terminal, der Abschlusston vom Ende einer Antwort."
           }
         }
       }

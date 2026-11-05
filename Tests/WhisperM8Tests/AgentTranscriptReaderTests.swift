@@ -383,4 +383,44 @@ final class AgentTranscriptReaderTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: live).path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: orphan).path))
     }
+
+    /// Hook-Analyse 05.11.2026, Stufe 0: alte Event-Dateien von Chats im
+    /// Workspace räumen, Hintergrund-Agenten und frische Dateien behalten.
+    func testAgentSessionRetentionServicePrunesStaleEventFiles() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8Retention-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let hookPaths = ClaudeHookPaths(rootDirectory: root)
+        try FileManager.default.createDirectory(at: hookPaths.settingsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: hookPaths.eventsDirectory, withIntermediateDirectories: true)
+
+        let now = Date()
+        let old = now.addingTimeInterval(-15 * 24 * 60 * 60)
+        let staleChat = UUID()
+        let freshChat = UUID()
+        let backgroundAgent = UUID()
+        for id in [staleChat, freshChat, backgroundAgent] {
+            try Data("{}\n".utf8).write(to: hookPaths.eventFileURL(localSessionID: id))
+            try Data().write(to: hookPaths.settingsFileURL(localSessionID: id))
+        }
+        for id in [staleChat, backgroundAgent] {
+            try FileManager.default.setAttributes(
+                [.modificationDate: old], ofItemAtPath: hookPaths.eventFileURL(localSessionID: id).path)
+        }
+
+        let result = AgentSessionRetentionService(hookPaths: hookPaths).prune(
+            liveLocalSessionIDs: [staleChat, freshChat, backgroundAgent],
+            protectedLocalSessionIDs: [backgroundAgent],
+            now: now)
+
+        XCTAssertEqual(result.hookEventsRemoved, 0)
+        XCTAssertEqual(result.staleHookEventsRemoved, 1)
+        XCTAssertEqual(result.staleHookEventBytesRemoved, 3)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hookPaths.eventFileURL(localSessionID: staleChat).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.eventFileURL(localSessionID: freshChat).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.eventFileURL(localSessionID: backgroundAgent).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: hookPaths.settingsFileURL(localSessionID: staleChat).path),
+                      "Settings-Dateien bleiben")
+    }
 }

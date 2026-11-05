@@ -183,7 +183,10 @@ Session auf `closed` zurück und entfernt den Archivzeitpunkt. Die externen
 Claude- oder Codex-Transcripts werden dabei nicht gelöscht.
 
 Beim App-Start räumt `AgentSessionRetentionService` verwaiste Hook-Settings
-und Hook-Event-Dateien im App-Support-Verzeichnis auf. Die Retention betrifft
+und Hook-Event-Dateien im App-Support-Verzeichnis auf, außerdem Event-Dateien,
+die seit 14 Tagen nicht geschrieben wurden (jeder Launch legt sie ohnehin neu
+an; Hintergrund-Agenten sind ausgenommen, weil sie den App-Neustart
+überleben). Die Retention betrifft
 nicht die externen CLI-Transcripts. Fehlen Transcripts abgeschlossener,
 manuell angelegter Sessions später auf Disk, markiert die Präsenzprüfung
 diese Sessions konservativ als tote Zeiger, statt sie still zu entfernen.

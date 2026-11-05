@@ -302,12 +302,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             ThemeManager.shared.performInitialClaudeThemeSync()
         }
 
-        // Retention: verwaiste Snapshot- und Hook-Files raeumen. Wird nicht
-        // im UI-Thread blockierend — schreibt nur Logs.
+        // Retention: verwaiste Hook-Files und alte Event-Dateien raeumen. Wird
+        // nicht im UI-Thread blockierend, schreibt nur Logs. Hintergrund-Agenten
+        // laufen ueber den App-Neustart weiter, ihre Event-Dateien bleiben.
         Task.detached(priority: .background) {
             let workspace = AgentSessionStore().loadWorkspace()
             let liveIDs = Set(workspace.sessions.map(\.id))
-            _ = AgentSessionRetentionService().prune(liveLocalSessionIDs: liveIDs)
+            let backgroundIDs = Set(workspace.sessions.filter(\.isBackgroundChat).map(\.id))
+            _ = AgentSessionRetentionService().prune(
+                liveLocalSessionIDs: liveIDs,
+                protectedLocalSessionIDs: backgroundIDs)
         }
 
         // Einmalig: Auto-Memory der Zusatzprofile nach main zusammenführen —

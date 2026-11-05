@@ -27,6 +27,9 @@ struct ClaudeCLIVersion: Comparable, Equatable {
 
     init(components: [Int]) { self.components = components }
 
+    /// `2.1.318`: Form zum Speichern, `init(parsing:)` liest sie zurück.
+    var string: String { components.map(String.init).joined(separator: ".") }
+
     static func < (lhs: ClaudeCLIVersion, rhs: ClaudeCLIVersion) -> Bool {
         let count = max(lhs.components.count, rhs.components.count)
         for index in 0..<count {
@@ -53,8 +56,30 @@ struct ClaudeCLIVersion: Comparable, Equatable {
 /// sofort geliefert und im Hintergrund erneuert; ohne jeden Wert kommt `nil`
 /// (→ voller Hook-Satz, der sichere Weg) und der erste Abruf läuft im
 /// Hintergrund. Ein Fehlschlag (`nil`) wird nur kurz gecacht (LR-AK-035).
+///
+/// Startrennen (Hook-Analyse 05.11.2026, Stufe 0): Chats, die direkt beim
+/// App-Start wieder aufgehen, kamen vor dem ersten Abruf dran und bekamen für
+/// ihre ganze Laufzeit den vollen Hook-Satz. Deshalb merkt sich die Probe die
+/// zuletzt erkannte Version (`store`) und startet mit ihr als abgelaufenem
+/// Wert: Der erste Launch nutzt sie, der Hintergrund-Abruf läuft trotzdem
+/// sofort an. Ein Fehlschlag löscht den gemerkten Wert nicht, er überschreibt
+/// ihn nur mit einer erfolgreich gelesenen Version.
 final class ClaudeCLIVersionProbe: @unchecked Sendable {
-    static let shared = ClaudeCLIVersionProbe(spawnEnabled: AppInstance.isAppBundleProcess)
+    /// Speicher für die zuletzt erkannte Version (`2.1.318`).
+    struct Store {
+        var load: () -> String?
+        var save: (String) -> Void
+
+        static let none = Store(load: { nil }, save: { _ in })
+
+        static let userDefaults = Store(
+            load: { UserDefaults.standard.string(forKey: PreferenceKeys.claudeCLILastKnownVersion) },
+            save: { UserDefaults.standard.set($0, forKey: PreferenceKeys.claudeCLILastKnownVersion) })
+    }
+
+    static let shared = ClaudeCLIVersionProbe(
+        spawnEnabled: AppInstance.isAppBundleProcess,
+        store: AppInstance.isAppBundleProcess ? .userDefaults : .none)
 
     private let lock = NSLock()
     private var cached: (version: ClaudeCLIVersion?, at: Date)?
@@ -66,6 +91,7 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
     private let versionRunner: () -> ClaudeCLIVersion?
     private let dispatch: (@escaping @Sendable () -> Void) -> Void
     private let now: () -> Date
+    private let store: Store
 
     /// - Parameter spawnEnabled: `false` in Tests und CLI-Prozessen — dort wird
     ///   nie `claude --version` gestartet.
@@ -75,8 +101,15 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
         failureTTL: TimeInterval = 30,
         versionRunner: (() -> ClaudeCLIVersion?)? = nil,
         dispatch: ((@escaping @Sendable () -> Void) -> Void)? = nil,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        store: Store = .none
     ) {
+        self.store = store
+        // Gemerkte Version als abgelaufener Wert: sofort nutzbar, aber der
+        // erste Zugriff stößt den echten Abruf an.
+        if let saved = store.load().flatMap(ClaudeCLIVersion.init(parsing:)) {
+            cached = (saved, .distantPast)
+        }
         self.spawnEnabled = spawnEnabled
         self.ttl = ttl
         self.failureTTL = failureTTL
@@ -131,9 +164,19 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
         dispatch { [self] in
             let version = versionRunner()
             lock.lock()
-            cached = (version, now())
+            // Ein Fehlschlag verdrängt eine bekannte Version nicht: Der volle
+            // Hook-Satz wäre nur dann richtig, wenn Claude wirklich zu alt ist,
+            // und das zeigt erst eine gelesene Version.
+            if let version {
+                cached = (version, now())
+            } else if let previous = cached?.version {
+                cached = (previous, now().addingTimeInterval(failureTTL - ttl))
+            } else {
+                cached = (nil, now())
+            }
             refreshInFlight = false
             lock.unlock()
+            if let version { store.save(version.string) }
         }
     }
 
