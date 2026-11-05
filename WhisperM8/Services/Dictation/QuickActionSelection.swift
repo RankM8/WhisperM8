@@ -7,7 +7,8 @@ enum SelectionWritability: Equatable {
     case writable
     /// Das Feld meldet sich als nicht beschreibbar (Webseite, PDF, Label).
     case readOnly
-    /// Die App sagt nichts dazu (kein Accessibility-Element). Dann wird
+    /// Die App sagt nichts Verlässliches dazu (kein Element, oder der Text kam
+    /// über den Cmd+C-Rückfall). Dann wird
     /// eingefügt, und das Ergebnis steht zusätzlich im Zwischenablage-Verlauf.
     case unknown
 
@@ -33,16 +34,21 @@ extension SelectedContextService {
     @MainActor
     func captureForQuickAction(from app: NSRunningApplication?) async -> CapturedSelection? {
         let element = Self.focusedElement(of: app)
-        let writability = element.map(Self.writability(of:)) ?? .unknown
+        // Abgeleitete Elemente erben das Zeitlimit der App nicht (Standard ~6 s).
+        if let element { AXUIElementSetMessagingTimeout(element, 0.5) }
 
+        // Nur wenn das Element selbst die Markierung liefert, ist sein Urteil
+        // über „beschreibbar“ verlässlich. Kommt der Text über Cmd+C (Electron
+        // ohne volle Accessibility: Slack, VS Code, Notion), meldet das
+        // Element oft eine nicht setzbare Gruppe; dann wird eingefügt.
         if let element, let text = Self.selectedText(of: element), !Self.isBlank(text) {
-            return CapturedSelection(text: text, writability: writability)
+            return CapturedSelection(text: text, writability: Self.writability(of: element))
         }
 
         guard PermissionService.hasAccessibilityPermission, let app else { return nil }
         let text = await captureViaClipboard(bundleIdentifier: app.bundleIdentifier) { activator(app) }
         guard let text, !Self.isBlank(text) else { return nil }
-        return CapturedSelection(text: text, writability: writability)
+        return CapturedSelection(text: text, writability: .unknown)
     }
 
     static func writability(of element: AXUIElement) -> SelectionWritability {
@@ -73,7 +79,7 @@ struct QuickActionReplacer {
     var pasteboard: NSPasteboard = .general
     /// Zeit, die die Ziel-App bekommt, um die Zwischenablage nach Cmd+V zu
     /// lesen, bevor der alte Inhalt zurückkommt. Electron-Apps lesen spät.
-    var restoreDelay: Duration = .milliseconds(450)
+    var restoreDelay: Duration = .milliseconds(800)
 
     /// `true`, wenn Cmd+V abgesetzt wurde. Bei `false` liegt nichts oder das
     /// Ergebnis in der Zwischenablage; der Aufrufer legt es sicher dort ab.
@@ -97,6 +103,10 @@ struct QuickActionReplacer {
         guard let snapshot, !snapshot.isConfidential, pasteboard.changeCount == ourChangeCount else {
             return true
         }
+        // Geklammert wie beim Cmd+C-Rückfall: das Zurückschreiben läuft
+        // off-main, der Verlauf darf den Stand vor dem `claim` nicht greifen.
+        ClipboardInternalWrites.begin()
+        defer { ClipboardInternalWrites.end() }
         await snapshot.restoreOffMain(to: pasteboard)
         ClipboardInternalWrites.claim(pasteboard)
         return true

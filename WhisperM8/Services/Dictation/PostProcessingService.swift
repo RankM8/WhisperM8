@@ -48,8 +48,16 @@ struct PostProcessingService {
             contextBundle: allowedContext
         )
         // Gedankenstriche verbietet der Prompt; Modelle setzen sie trotzdem.
-        run.text = DashFilter.apply(run.text)
+        // Ausnahme Schnellaktion: Striche, die schon in der Markierung standen,
+        // gehören dem Nutzer und bleiben („Korrigieren“ ändert nur Fehler).
+        if !Self.keepsDashes(rawText: rawText) {
+            run.text = DashFilter.apply(run.text)
+        }
         return run
+    }
+
+    static func keepsDashes(rawText: String, source: PostProcessingInputSource = .current) -> Bool {
+        source == .selection && (rawText.contains("\u{2014}") || rawText.contains("\u{2013}"))
     }
 
     func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {

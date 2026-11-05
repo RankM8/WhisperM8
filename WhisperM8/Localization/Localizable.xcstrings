@@ -1441,6 +1441,16 @@
         }
       }
     },
+    "Allow Accessibility for WhisperM8 first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst Bedienungshilfen für WhisperM8 erlauben"
+          }
+        }
+      }
+    },
     "Allow screenshots and screen clips as context": {
       "localizations": {
         "de": {

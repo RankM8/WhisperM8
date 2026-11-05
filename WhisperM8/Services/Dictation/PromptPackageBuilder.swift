@@ -332,6 +332,7 @@ struct PromptPackageBuilder {
         - Your output replaces the selection in place. Return only the replacement text, with no preface, quotes, or code fences around it.
         - Do not reply to the text or comment on it unless the mode instruction asks for a reply.
         - Keep the language of the selected text unless the mode instruction or the text itself asks for a different one.
+        - Dashes (— or –) that are already in the selected text belong to the user. Keep them; do not add new ones.
         """
     }
 

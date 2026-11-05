@@ -56,6 +56,9 @@ final class QuickActionRunnerTests: XCTestCase {
         var seenSource: PostProcessingInputSource?
         var seenOwner: CodexRunOwner?
         var sawCancelToken = false
+        var permissionRequests = 0
+        /// War Esc noch angemeldet, als eingefügt wurde?
+        var cancelKeyActiveWhilePasting: Bool?
     }
 
     private let correctMode = OutputMode.builtInModes.first { $0.id == OutputMode.correctID }!
@@ -69,13 +72,17 @@ final class QuickActionRunnerTests: XCTestCase {
         rework: @escaping @MainActor (String, OutputMode) async throws -> PostProcessingRun = { _, _ in PostProcessingRun(text: "Das ist ein Fehler.") },
         replaceSucceeds: Bool = true,
         postProcessingAvailable: Bool = true,
+        accessibilityGranted: Bool = true,
         dictationBusy: Bool = false
     ) -> QuickActionRunner {
         let modes = [correctMode, rawMode]
+        let key = cancelKey ?? SpyCancelKey()
         let environment = QuickActionEnvironment(
             frontmostApp: { nil },
             modeResolver: { id in modes.first { $0.id == id } },
             isPostProcessingAvailable: { postProcessingAvailable },
+            hasAccessibilityPermission: { accessibilityGranted },
+            requestAccessibilityPermission: { log.permissionRequests += 1 },
             captureSelection: { _ in
                 log.captureCalls += 1
                 return selection
@@ -88,6 +95,7 @@ final class QuickActionRunnerTests: XCTestCase {
                 return try await rework(text, mode)
             },
             replaceSelection: { text, _ in
+                log.cancelKeyActiveWhilePasting = key.isActive
                 log.replaced.append(text)
                 return replaceSucceeds
             },
@@ -100,7 +108,7 @@ final class QuickActionRunnerTests: XCTestCase {
         return QuickActionRunner(
             environment: environment,
             presenter: presenter ?? SpyPresenter(),
-            cancelKey: cancelKey ?? SpyCancelKey(),
+            cancelKey: key,
             isDictationBusy: { dictationBusy }
         )
     }
@@ -125,6 +133,24 @@ final class QuickActionRunnerTests: XCTestCase {
         XCTAssertEqual(key.activations, 1, "ESC ist während der Nacharbeit angemeldet")
         XCTAssertFalse(key.isActive, "und danach wieder frei")
         XCTAssertFalse(runner.isRunning)
+    }
+
+    func testEscapeIsReleasedBeforePasting() async {
+        let log = Log()
+        _ = await makeRunner(log: log).run(modeID: OutputMode.correctID)
+        XCTAssertEqual(log.cancelKeyActiveWhilePasting, false, "Esc gehört beim Einfügen wieder allen Apps")
+    }
+
+    func testMissingAccessibilityAsksForPermissionInsteadOfSayingSelectFirst() async {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let outcome = await makeRunner(log: log, presenter: presenter, accessibilityGranted: false)
+            .run(modeID: OutputMode.correctID)
+
+        XCTAssertEqual(outcome, .unavailable)
+        XCTAssertEqual(log.permissionRequests, 1)
+        XCTAssertEqual(log.captureCalls, 0)
+        XCTAssertEqual(presenter.hints, [String(localized: "Allow Accessibility for WhisperM8 first")])
     }
 
     func testReworkRunsUnderSelectionSourceOwnerAndCancelToken() async {
@@ -192,9 +218,11 @@ final class QuickActionRunnerTests: XCTestCase {
         let log = Log()
         let key = SpyCancelKey()
         let presenter = SpyPresenter()
+        var hiddenRightAfterEscape = false
         let runner = makeRunner(log: log, presenter: presenter, cancelKey: key, rework: { _, _ in
             // ESC kommt, während die Nacharbeit läuft; der Weg meldet den Abbruch.
             key.pressEscape()
+            hiddenRightAfterEscape = presenter.hideCount > 0
             try PostProcessingCancelToken.checkCurrent()
             return PostProcessingRun(text: "nie")
         })
@@ -202,6 +230,7 @@ final class QuickActionRunnerTests: XCTestCase {
         let outcome = await runner.run(modeID: OutputMode.correctID)
 
         XCTAssertEqual(outcome, .cancelled)
+        XCTAssertTrue(hiddenRightAfterEscape, "Overlay geht sofort weg, nicht erst nach dem Prozessende")
         XCTAssertEqual(log.engineCancels, 1, "laufender Codex-/Backend-Lauf wird beendet")
         XCTAssertTrue(log.replaced.isEmpty && log.copied.isEmpty && log.history.isEmpty)
         XCTAssertTrue(log.notices.isEmpty, "Abbruch ist kein Fehler")
@@ -373,6 +402,24 @@ final class QuickActionModesTests: XCTestCase {
         XCTAssertEqual(run.text, "Korrigiert.")
         XCTAssertEqual(run.engine, .codexCLI)
         XCTAssertNotNil(run.fallbackReason)
+    }
+
+    func testDashesFromTheSelectionSurviveButModelDashesAreStillRemoved() async throws {
+        let mode = OutputMode.builtInModes.first { $0.id == OutputMode.correctID }!
+        let service = PostProcessingService(processor: MockPostProcessor(output: "Ja — genau so."))
+
+        let kept = try await PostProcessingInputSource.$current.withValue(.selection) {
+            try await service.processRun(rawText: "ja — genau so", mode: mode, language: "", contextBundle: .empty)
+        }
+        XCTAssertEqual(kept.text, "Ja — genau so.", "Striche des Nutzers bleiben")
+
+        let filtered = try await PostProcessingInputSource.$current.withValue(.selection) {
+            try await service.processRun(rawText: "ja genau so", mode: mode, language: "", contextBundle: .empty)
+        }
+        XCTAssertFalse(filtered.text.contains("—"), "neue Striche vom Modell fliegen raus")
+
+        let dictation = try await service.processRun(rawText: "ja — genau so", mode: mode, language: "", contextBundle: .empty)
+        XCTAssertFalse(dictation.text.contains("—"), "beim Diktat gilt der Filter wie bisher")
     }
 
     func testShortcutsAreEmptyByDefaultAndOnlyOfferedForPostProcessingModes() {

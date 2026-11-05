@@ -18,6 +18,8 @@ extension RecordingCoordinator {
             // gehört dem Modus, nicht der Modusauswahl beim Diktat.
             modeResolver: { id in OutputModeStore().modes.first { $0.id == id } },
             isPostProcessingAvailable: { AppPreferences.shared.usageProfile.wantsCodexEnrichment },
+            hasAccessibilityPermission: { PermissionService.hasAccessibilityPermission },
+            requestAccessibilityPermission: { PermissionService.requestAccessibilityPermission() },
             captureSelection: { app in await selectedContextService.captureForQuickAction(from: app) },
             // Leere Sprache = „auto“: Die Markierung behält ihre Sprache,
             // unabhängig von der Diktatsprache. Kein Kontext: die Markierung

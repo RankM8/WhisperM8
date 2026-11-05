@@ -39,7 +39,10 @@ verbessern“ und „Verbessern & einfügen“ je Eintrag) und das stille Diktat
   - Nichts markiert: kurzer Hinweis „Erst Text markieren“ im Overlay.
   - Feld nicht beschreibbar (Webseite, PDF): Ergebnis in die Zwischenablage,
     Hinweis im Overlay.
-  - Esc oder ✕ brechen ab, nichts wird ersetzt.
+  - Esc oder ✕ brechen ab, das Overlay geht sofort weg, nichts wird ersetzt.
+    Esc ist nur während der Nacharbeit belegt, beim Einfügen schon wieder frei.
+  - Ohne Bedienungshilfen-Recht: Systemabfrage und Hinweis „Erst
+    Bedienungshilfen für WhisperM8 erlauben“.
   - Ergebnis gleich der Markierung: Hinweis „Nichts zu ändern“, kein Einfügen.
   - Nach dem Ersetzen liegt wieder der alte Inhalt in der Zwischenablage.
     Ergebnis und Original stehen zusätzlich im Zwischenablage-Verlauf.
@@ -66,8 +69,8 @@ Kurzbefehl / Menüleiste
 | `QuickActionRunner` | Ablauf, Abbruch, Entscheidungen. Alle Systemzugriffe über `QuickActionEnvironment` (Closures), Anzeige über `QuickActionPresenting`. Kennt keine Kurzbefehle; die Menüleiste ruft ihn genauso auf, später das Zwischenablage-Fenster. |
 | `RecordingCoordinator+QuickAction` | Verdrahtet den Runner mit den echten Diensten und dem Overlay. Gemeinsame Sperre mit dem Diktat (`isDictationBusy`, `quickActionRunner.isRunning`). |
 | `SelectedContextService.captureForQuickAction` | Markierung per Accessibility, sonst Cmd+C-Rückfall mit Zurücklegen. Anders als der Diktat-Kontext unabhängig vom Schalter „markierten Text als Kontext“: der Nutzer übergibt die Markierung hier ausdrücklich. Der Text bleibt unverändert. |
-| `SelectionWritability` | `writable`, wenn `AXSelectedText` oder `AXValue` des fokussierten Elements setzbar ist; `readOnly`, wenn das Element existiert und beides nicht setzbar ist; `unknown` ohne Element (etwa Electron ohne Accessibility). Bei `unknown` wird eingefügt. |
-| `QuickActionReplacer` | Snapshot der Zwischenablage (bis 8 MB, off-main), Cmd+V über `PasteService`, nach 450 ms den alten Inhalt zurück. Nicht zurück, wenn inzwischen jemand anderes kopiert hat oder der Inhalt ein Passwort war. |
+| `SelectionWritability` | Nur wenn das fokussierte Element die Markierung selbst liefert, zählt sein Urteil: `writable`, wenn `AXSelectedText` oder `AXValue` setzbar ist, sonst `readOnly`. Kam der Text über den Cmd+C-Rückfall (Electron ohne volle Accessibility: Slack, VS Code, Notion), ist es `unknown`, und es wird eingefügt. Das Element bekommt wie die App 0,5 s Zeitlimit. |
+| `QuickActionReplacer` | Snapshot der Zwischenablage (bis 8 MB, off-main), Cmd+V über `PasteService`, nach 800 ms den alten Inhalt zurück, geklammert mit `ClipboardInternalWrites.begin/end` und `claim`. Nicht zurück, wenn inzwischen jemand anderes kopiert hat oder der Inhalt ein Passwort war. |
 | `QuickActionShortcuts`, `QuickActionHotkeys` | Name je Modus `quickAction.<modeID>`, Vorschläge, Konfliktprüfung; meldet beim Start und bei neuen Modi je einen Handler an. Löschen eines eigenen Modus gibt seinen Kurzbefehl frei. |
 | `OverlayController.showQuickActionWorking/Hint` | Eigene Pill-Ansicht: Kern im Improve-Puls, sichtbarer Text, ✕. Der Hinweis verschwindet nach 2 bis 4 s. |
 
@@ -86,6 +89,10 @@ Der Rückfall auf Codex und die Fehlerregeln kommen unverändert aus
 `PostProcessingEngineRouter` (siehe [AI Output](../ai-output/README.md)).
 Leerzeichen und Zeilenumbrüche am Rand der Markierung setzt
 `QuickActionText.replacement` wieder an, weil Modelle sie abschneiden.
+Gedankenstriche, die schon in der Markierung standen, bleiben: der
+`DashFilter` läuft bei der Schnellaktion nur, wenn die Markierung selbst keine
+hatte (`PostProcessingService.keepsDashes`), und der Prompt sagt dem Modell
+dasselbe. Beim Diktat gilt der Filter wie bisher.
 
 ## Bewusste Grenzen
 

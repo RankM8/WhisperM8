@@ -639,7 +639,8 @@ final class RecordingCoordinator {
     /// Fehler-Alerts.
     func retryPendingTranscription() async {
         guard let appState, let pending = pendingRetry else { return }
-        guard !appState.isRecording, !appState.isTranscribing, !isProcessing else { return }
+        guard !appState.isRecording, !appState.isTranscribing, !isProcessing,
+              !quickActionRunner.isRunning else { return }
 
         isProcessing = true
         appState.lastError = nil

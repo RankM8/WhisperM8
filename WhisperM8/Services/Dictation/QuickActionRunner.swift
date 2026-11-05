@@ -35,6 +35,9 @@ struct QuickActionEnvironment {
     var modeResolver: @MainActor (String) -> OutputMode?
     /// Umfang der App erlaubt Nacharbeit (nicht „Nur Diktat“).
     var isPostProcessingAvailable: @MainActor () -> Bool
+    /// Bedienungshilfen: ohne sie lässt sich weder lesen noch einfügen.
+    var hasAccessibilityPermission: @MainActor () -> Bool
+    var requestAccessibilityPermission: @MainActor () -> Void
     var captureSelection: @MainActor (NSRunningApplication?) async -> CapturedSelection?
     /// Nacharbeit über denselben Weg wie nach dem Diktat (GPT-Backend mit
     /// Rückfall auf Codex). Läuft unter den Task-Locals des Runners.
@@ -95,6 +98,12 @@ final class QuickActionRunner {
             return log(.unavailable, modeID: modeID)
         }
 
+        guard environment.hasAccessibilityPermission() else {
+            environment.requestAccessibilityPermission()
+            presenter?.showQuickActionHint(String(localized: "Allow Accessibility for WhisperM8 first"), duration: 4)
+            return log(.unavailable, modeID: modeID)
+        }
+
         isRunning = true
         defer { isRunning = false }
 
@@ -110,10 +119,16 @@ final class QuickActionRunner {
             self?.cancel()
         }
         cancelKey.activate { [weak self] in self?.cancel() }
-        defer {
+        // Esc nur, solange die Nacharbeit läuft. Danach (Einfügen, Zurücklegen
+        // der Zwischenablage) gehört die Taste wieder allen Apps.
+        var isCancelKeyActive = true
+        func releaseCancelKey() {
+            guard isCancelKeyActive else { return }
+            isCancelKeyActive = false
             cancelKey.deactivate()
             if activeCancelToken === token { activeCancelToken = nil }
         }
+        defer { releaseCancelKey() }
 
         let run: PostProcessingRun
         do {
@@ -126,6 +141,7 @@ final class QuickActionRunner {
                 }
             }
         } catch {
+            releaseCancelKey()
             presenter?.hideQuickAction()
             if token.isCancelled || Self.isCancellation(error) {
                 return log(.cancelled, modeID: modeID)
@@ -134,6 +150,8 @@ final class QuickActionRunner {
             environment.postNotice(String(localized: "Selection not changed"), message)
             return log(.failed(message), modeID: modeID)
         }
+
+        releaseCancelKey()
 
         // Abbruch kam, aber ein Weg hat noch geliefert: der Nutzer hat
         // abgebrochen, also bleibt alles, wie es war.
@@ -176,6 +194,9 @@ final class QuickActionRunner {
     func cancel() {
         guard let token = activeCancelToken else { return }
         token.cancel()
+        // Sofort sichtbar: ein später Lauf wird ohnehin verworfen, und ein
+        // Codex-Prozess braucht bis zu 3 s bis zum Ende.
+        presenter?.hideQuickAction()
         environment.cancelEngines()
     }
 
