@@ -42,8 +42,7 @@ enum ClaudeHookSettingsBuilder {
     /// Mit Registry-Status (Plan claude-status-aus-registry.md, S4): Claude
     /// meldet arbeitet/wartet/frei selbst in `<config>/sessions/<pid>.json`.
     /// Übrig bleiben nur Binding der externen ID und Lebenszyklus — kein
-    /// Shell-Aufruf mehr pro Tool-Aufruf. Der Send-Guard hängt unabhängig
-    /// davon als eigener `UserPromptSubmit`-Eintrag dran.
+    /// Shell-Aufruf mehr pro Tool-Aufruf.
     ///
     /// Dazu `TaskCreated`/`TaskCompleted`: feuern nur beim Anlegen und
     /// Abschließen einer Task und nennen den Teamnamen (= Ordner der
@@ -54,7 +53,6 @@ enum ClaudeHookSettingsBuilder {
 
     static func makeSettings(
         eventFilePath: String,
-        promptGuardCommand: String? = nil,
         eventNames: [String] = trackedEventNames
     ) -> [String: Any] {
         let command = appendCommand(eventFilePath: eventFilePath)
@@ -71,39 +69,7 @@ enum ClaudeHookSettingsBuilder {
         for name in eventNames {
             hooks[name] = [entry]
         }
-        // Send-Guard: zweiter, additiver UserPromptSubmit-Eintrag. Exit 2
-        // blockt die Submission (Wiedervorlage eines [via whisperm8 chats]-
-        // Prompts ohne frisches Zustell-Token — Vorfall 2026-08-17). Läuft
-        // NACH dem Append-Command, damit das Event-Tracking auch für
-        // geblockte Prompts vollständig bleibt.
-        if let promptGuardCommand {
-            var userPromptEntries = hooks["UserPromptSubmit"] as? [[String: Any]] ?? []
-            userPromptEntries.append([
-                "matcher": ".*",
-                "hooks": [
-                    [
-                        "type": "command",
-                        "command": promptGuardCommand
-                    ]
-                ]
-            ])
-            hooks["UserPromptSubmit"] = userPromptEntries
-        }
         return ["hooks": hooks]
-    }
-
-    /// Hook-Command des Send-Guards: absoluter Pfad zum eigenen Binary
-    /// (App und CLI sind dasselbe signierte Executable) + internes
-    /// Subcommand. Kein PATH-/Symlink-Vertrauen — der Symlink-Install
-    /// (`~/.local/bin/whisperm8`) kann fehlen oder veraltet sein.
-    /// `eventFilePath` gibt dem Guard den Rückkanal für Block-Events
-    /// (App leert daraufhin den Composer).
-    static func promptGuardCommand(executablePath: String, eventFilePath: String? = nil) -> String {
-        var command = "\"\(shellEscapeDoubleQuoted(executablePath))\" chats _prompt-guard"
-        if let eventFilePath {
-            command += " --events \"\(shellEscapeDoubleQuoted(eventFilePath))\""
-        }
-        return command
     }
 
     /// Serialisiert die Settings als utf8-JSON-Daten. Sortierung der Keys

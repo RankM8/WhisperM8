@@ -146,10 +146,6 @@ final class AgentSessionStatusCoordinator {
     /// meldet Abbruch und Turn-Ende gleich (`idle`) — ein `idle` kurz nach
     /// dem Abbruch ist kein „fertig“ (keine Meldung, keine Queue-Zustellung).
     private var interruptMarks: [UUID: Date] = [:]
-    /// Marken, die ohne Transcript-Prüfung als Abbruch gelten: ein vom
-    /// Send-Guard geblockter Prompt lief nie, im Transcript steht deshalb kein
-    /// Abbruch-Marker (Review W4b zu LR-AK-034).
-    private var confirmedInterruptMarks: Set<UUID> = []
     nonisolated static let interruptWindowSeconds: TimeInterval = 10
     /// Prozessende je Session — späte Registry-Events danach ignorieren.
     private var terminatedAt: [UUID: Date] = [:]
@@ -438,17 +434,13 @@ final class AgentSessionStatusCoordinator {
            forkExternalIDs[localID]?.contains(eventSessionID) == true {
             return
         }
-        if event.hookEventName == .promptGuardBlock {
-            handlePromptGuardBlock(localID: localID)
-            return
-        }
         if event.hookEventName == .sessionEnd {
             let reason = event.reason ?? "unknown"
             Logger.claudeBinding.info("binding_session_end localID=\(localID.uuidString, privacy: .public) reason=\(reason, privacy: .public)")
         }
         if registryLiveSessions.contains(localID) {
-            // Status kommt aus der Registry; Hooks bleiben nur Binding,
-            // Send-Guard und Detail („Freigabe: Bash …“).
+            // Status kommt aus der Registry; Hooks bleiben nur Binding
+            // und Detail („Freigabe: Bash …“).
             if let signal = AgentSessionSignal(hookEvent: event) {
                 applyShadow(signal, to: localID)
             }
@@ -477,36 +469,6 @@ final class AgentSessionStatusCoordinator {
            states[localID] == .stopped,
            isBackgroundSession(localID) {
             watcher.markTerminated(sessionID: localID)
-        }
-    }
-
-    /// Send-Guard hat eine Wiedervorlage geblockt (Vorfall 2026-08-17 #2):
-    /// 1. Das „working" des geblockten `UserPromptSubmit` zurücknehmen —
-    ///    der Turn ist nie gelaufen; ohne die Rücknahme stünde die Session
-    ///    im working-Stau und wiese `chats send`-Retries mit conflict ab
-    ///    (Doppelblockade: Composer gesperrt UND send gesperrt).
-    /// 2. Den Composer leeren (verzögertes Ctrl+C) — der geblockte Text
-    ///    bleibt sonst kleben und der User kann nicht mehr prompten.
-    ///    Nach einem Block ist der Composer-Inhalt definitionsgemäß der
-    ///    zurückgelegte Marker-Prompt, kein User-Entwurf.
-    private func handlePromptGuardBlock(localID: UUID) {
-        Logger.claudeBinding.notice(
-            "prompt_guard_block localID=\(localID.uuidString, privacy: .public)")
-        // Registry-live: Claude meldet den nie gelaufenen Turn selbst als idle.
-        // Meldet es davor kurz busy, wäre das folgende idle ein „fertig“ (Ton,
-        // Meldung, Queue-Zustellung für einen geblockten Prompt) — der Block
-        // zählt deshalb wie ein beobachteter Abbruch.
-        if registryLiveSessions.contains(localID) {
-            interruptMarks[localID] = now()
-            confirmedInterruptMarks.insert(localID)
-        } else {
-            apply(.turnAborted, to: localID)
-        }
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard let controller = AgentTerminalRegistry.shared.controller(for: localID),
-                  controller.isRunning else { return }
-            controller.sendComposerClear()
         }
     }
 
@@ -726,7 +688,6 @@ final class AgentSessionStatusCoordinator {
             if previous?.status != .busy, let mark = interruptMarks[sessionID],
                mark < (record.statusUpdatedAt ?? .distantFuture) {
                 interruptMarks[sessionID] = nil
-                confirmedInterruptMarks.remove(sessionID)
             }
             return .busy
         case .waiting:
@@ -741,10 +702,8 @@ final class AgentSessionStatusCoordinator {
     }
 
     private func consumeInterruptMark(_ sessionID: UUID) -> Bool {
-        let preConfirmed = confirmedInterruptMarks.remove(sessionID) != nil
         guard let mark = interruptMarks.removeValue(forKey: sessionID),
               now().timeIntervalSince(mark) <= Self.interruptWindowSeconds else { return false }
-        if preConfirmed { return true }
         // Nur ein bestätigter Abbruch schluckt das „fertig“: Ein ESC kurz vor
         // dem echten Turn-Ende (oder eines, das nichts abbrach) verschluckte
         // sonst Meldung und Queue-Zustellung (LR-AK-034). Bestätigung = Claudes
@@ -814,7 +773,6 @@ final class AgentSessionStatusCoordinator {
         registryLiveSessions.remove(sessionID)
         registryRecords[sessionID] = nil
         interruptMarks[sessionID] = nil
-        confirmedInterruptMarks.remove(sessionID)
         shadowStates[sessionID] = nil
         shadowDiffSince[sessionID] = nil
         terminatedAt[sessionID] = nil
@@ -1182,7 +1140,7 @@ final class AgentSessionStatusCoordinator {
              .permissionRequest, .stop:
             pendingExternalIDs[localID] = nil
             setExternalSessionID(localID: localID, newID: pendingID)
-        case .sessionStart, .notification, .promptGuardBlock, .other, .taskCreated, .taskCompleted:
+        case .sessionStart, .notification, .other, .taskCreated, .taskCompleted:
             break
         }
     }

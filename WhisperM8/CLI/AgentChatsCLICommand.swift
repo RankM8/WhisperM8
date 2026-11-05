@@ -99,9 +99,11 @@ enum AgentChatsCLICommand {
         case "workspace":
             return ChatsWorkspaceCommand.run(rest)
         case "_prompt-guard":
-            // Interner UserPromptSubmit-Hook (Send-Guard) — bewusst nicht in
-            // der Hilfe: Vertragsbestandteil der Hook-Bridge, nicht der CLI.
-            return ChatsPromptGuardCommand.run(rest)
+            // Der Send-Guard ist ausgebaut. Claude-Sessions, die vor dem
+            // Update gestartet wurden, rufen den Hook aus ihren alten
+            // Settings noch auf — stilles Exit 0 statt Fehlermeldung bei
+            // jedem Prompt, bis sie neu starten.
+            return ChatsCLIExit.ok
         case "audit":
             return ChatsAuditCommand.run(rest)
         default:

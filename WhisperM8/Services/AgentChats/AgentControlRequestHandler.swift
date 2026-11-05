@@ -215,16 +215,6 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             }
             // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
             let marked = Self.markedPrompt(prompt, actor: markerActor)
-            // Zustell-Token VOR dem Paste: autorisiert genau EINE Submission
-            // dieses Texts beim UserPromptSubmit-Guard (Wiedervorlage-Schutz,
-            // Vorfall 2026-08-17). Auch für --no-submit — der User schickt
-            // den gestagten Text später selbst ab.
-            // Token über den Text, der wirklich in der TUI ankommt (bereinigt),
-            // sonst blockte der Guard die eigene Zustellung (Review W1).
-            guard SendDeliveryTokenStore().stage(promptText: TerminalPasteSanitizer.sanitize(marked)) else {
-                return .failure(.internalError,
-                                "Zustell-Token ließ sich nicht speichern (Datenträger voll oder Rechte?) — nichts gesendet.")
-            }
             controller.sendPrompt(marked, submit: submit)
             return .success(session)
         }
@@ -1712,12 +1702,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: - Audit + Marker
 
+    /// Präfix der Markerzeile — die einzige Quelle dieser Zeile ist die App.
+    static let markerPrefix = "[via whisperm8 chats"
+
     /// Marker-Zeile für gesendete Prompts (Kennzeichnung + Ein-Hop-Regel).
-    /// Das Präfix ist geteilt mit dem Send-Guard (`ChatsPromptGuard`) —
-    /// er erkennt Wiedervorlagen genau an dieser Zeile.
     static func markedPrompt(_ prompt: String, actor: String) -> String {
         let time = markerTimeFormatter.string(from: Date())
-        return "\(ChatsPromptGuard.markerPrefix) · von \(actor) · \(time)]\n\(prompt)"
+        return "\(markerPrefix) · von \(actor) · \(time)]\n\(prompt)"
     }
 
     private func auditActorLabel(_ actor: ChatsControlActor) async -> String {

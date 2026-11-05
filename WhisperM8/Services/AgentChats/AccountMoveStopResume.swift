@@ -92,9 +92,8 @@ struct TerminalComposerDraftTracker: Equatable {
     private(set) var mayHaveUnsentInput = false
     /// Ein Turn wurde abgebrochen (ESC, `chats interrupt`): Die Claude-CLI legt
     /// dessen Prompt in den Composer zurück. Ein programmatischer Versand
-    /// hängte seinen Text daran an — der Send-Guard blockte die Wiedervorlage
-    /// samt neuem Prompt, der verloren ging, obwohl `chats send` „zugestellt“
-    /// meldete (E2E 17.10.2026).
+    /// hängte seinen Text daran an, und der abgebrochene Auftrag liefe mit
+    /// dem neuen Prompt zusammen erneut los (E2E 17.10.2026).
     private(set) var mayHoldRestoredPrompt = false
 
     /// Vor einem programmatischen Versand zuerst leeren? Nur bei vermutetem

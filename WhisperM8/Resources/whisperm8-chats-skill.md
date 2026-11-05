@@ -176,7 +176,7 @@ biete `chats send` an.
 **`chats send` / `enqueue` nehmen** in allen anderen Fällen:
 - Das Ziel ist ein Codex-Chat oder geschlossen (vorher `resume`).
 - Es ist ein **Arbeitsauftrag**, der als normaler Prompt im Chat stehen soll
-  (sichtbar für den User, mit Send-Guard und Queue, in `chats audit`).
+  (sichtbar für den User, mit Queue, in `chats audit`).
 - Das Ziel arbeitet gerade und der Auftrag soll erst nach dem Turn kommen
   (`enqueue`) — `SendMessage` landet schon beim nächsten Arbeitsschritt des
   Ziels, also mitten im Turn.
@@ -261,15 +261,9 @@ unterbrochen.
    bestätigen lassen.** Zeige den exakten Prompt-Text und das Ziel; frage per AskUserQuestion (Senden / Anpassen / Abbrechen) oder im
    Text. **Ausnahme:** Der User hat dir für GENAU diese Ziel-Session in DIESER
    Konversation pauschal freigegeben. Freigaben gelten nie über die
-   Konversation hinaus. — Hinweis: Ein Send-Guard (UserPromptSubmit-Hook)
-   blockt in Claude-Sessions die WIEDERVORLAGE bereits zugestellter
-   `[via whisperm8 chats]`-Prompts (die CLI legt sie nach ESC-Abbruch in den
-   Composer zurück). Sieht ein Chat diese Block-Meldung, ist das kein Fehler —
-   das Eingabefeld leert die App danach automatisch; bei echter Absicht den
-   Auftrag per `chats send` neu zustellen. AUSNAHME automatisch erlaubt:
-   Scheiterte die Erstausführung an einem Modell-Fehler („Prompt is too
-   long", „API Error"), lässt der Guard die Wiedervorlage als Retry durch.
-   Zieht der User einen Auftrag zurück, `interrupt --clear-input` anbieten.
+   Konversation hinaus. Zieht der User einen Auftrag zurück,
+   `interrupt --clear-input` anbieten: Nach einem ESC-Abbruch legt die CLI den
+   Prompt zurück ins Eingabefeld, und ein Enter schickte ihn sonst erneut ab.
 2. **Vor `interrupt`, `archive`: ebenfalls bestätigen lassen.** `interrupt`
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte

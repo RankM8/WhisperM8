@@ -137,7 +137,7 @@ Notch-Statusanzeige: [notch.md](docs/features/notch.md).
 
 **Agent Chats**
 - Status für Claude-Chats kommt aus Claudes Registry (`<config-dir>/sessions/<pid>.json`); Hooks binden nur die
-  Session-ID und tragen den Send-Guard. Ein `SessionStart` übernimmt die externe ID nicht ungeprüft
+  Session-ID. Ein `SessionStart` übernimmt die externe ID nicht ungeprüft
   (`externalIDBindingDecision`).
 - WhisperM8 hostet die echte Claude-/Codex-CLI im PTY — keine Eigen-UI oder SDK-Runtime als Ersatz.
 - Welches Modell ein Claude-Chat nutzt, entscheidet Claude Code; `--model` nur beim ausdrücklichen „Neuer GPT-Chat“.
@@ -168,7 +168,7 @@ Notch-Statusanzeige: [notch.md](docs/features/notch.md).
 Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
 bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
 Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
-`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `chatsPromptGuardEnabled`,
+`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
