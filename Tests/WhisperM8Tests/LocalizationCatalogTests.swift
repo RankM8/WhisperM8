@@ -21,6 +21,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Services/Shared/AgentCLIInstaller.swift",
         "WhisperM8/Views/SidebarStayAwakeButton.swift",
         "WhisperM8/Windows/KeyboardLockPanel.swift",
+        "WhisperM8/Services/Dictation/QuickActionRunner.swift",
     ] + settingsFiles
 
     /// Alle Einstellungsdateien (W6 · LR-ONB-011/LR-AU-030) außer der Entwickler-Vorschau
@@ -57,6 +58,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Models/TemplateEditorModel.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputAccountTab.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputModesTab.swift",
+        "WhisperM8/Views/Settings/Pages/AIOutputQuickActionSection.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputTemplatesTab.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputTestLabTab.swift",

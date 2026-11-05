@@ -71,6 +71,12 @@ extension RecordingCoordinator {
     /// merken. Gedrückt gehaltene Tasten (Aufnahme läuft) und der kurze
     /// Mikrofonstart lösen keinen Hinweis aus.
     func signalBusyHotkeyPressIfNeeded(now: Date = Date()) {
+        // Während einer Schnellaktion: nur der Ton, die Diktat-Mitteilung passt nicht.
+        if quickActionRunner.isRunning {
+            Logger.transcription.info("dictation_hotkey_ignored_busy quickAction=true")
+            busyHotkeyNotifier(false)
+            return
+        }
         guard let appState, !appState.isRecording,
               appState.isTranscribing || appState.isPostProcessing else { return }
         let showNotice = lastBusyHotkeyNoticeAt.map { now.timeIntervalSince($0) >= 10 } ?? true

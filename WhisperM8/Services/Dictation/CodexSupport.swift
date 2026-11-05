@@ -7,6 +7,8 @@ import Foundation
 enum CodexRunOwner: String, Sendable {
     case dictation
     case testLab
+    /// Schnellaktion auf markiertem Text (eigener Abbruch über ESC/Overlay).
+    case quickAction
 
     @TaskLocal static var current: CodexRunOwner = .dictation
 }

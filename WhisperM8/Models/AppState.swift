@@ -137,6 +137,17 @@ final class AppState {
         recordingCoordinator.cancelPostProcessing()
     }
 
+    /// Markierten Text ohne Diktat mit einem Modus umarbeiten (Kurzbefehl,
+    /// Menüleiste).
+    func runQuickAction(modeID: String) async {
+        await recordingCoordinator.quickActionRunner.run(modeID: modeID)
+    }
+
+    /// Menüleiste: Schnellaktionen nur, wenn der Umfang Nacharbeit erlaubt.
+    var usageProfileAllowsPostProcessing: Bool {
+        AppPreferences.shared.usageProfile.wantsCodexEnrichment
+    }
+
     func removeAgentChatFromContext() {
         recordingCoordinator.removeAgentChatFromContext()
     }

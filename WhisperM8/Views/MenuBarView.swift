@@ -117,6 +117,26 @@ struct MenuBarView: View {
                 .foregroundStyle(.secondary)
         }
 
+        // Schnellaktion ohne Diktat auf der Markierung der vorderen App. Das
+        // Menü aktiviert WhisperM8 nicht, die App mit der Markierung bleibt vorn.
+        if appState.usageProfileAllowsPostProcessing {
+            Divider()
+            Button {
+                Task {
+                    // Menü erst zugehen lassen, sonst trifft der Cmd+C-Rückfall es.
+                    try? await Task.sleep(for: .milliseconds(150))
+                    await appState.runQuickAction(modeID: OutputMode.correctID)
+                }
+            } label: {
+                if let shortcut = KeyboardShortcuts.getShortcut(for: QuickActionShortcuts.name(for: OutputMode.correctID)) {
+                    Text("Correct Selection (\(shortcut.description))")
+                } else {
+                    Text("Correct Selection")
+                }
+            }
+            .disabled(appState.isRecording || appState.isTranscribing || appState.isPostProcessing)
+        }
+
         Divider()
 
         // Input Device Picker (inline, not nested Menu)

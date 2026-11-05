@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import Foundation
 import Observation
 
@@ -69,6 +70,8 @@ final class OutputModesViewModel {
         guard let index = selectedModeIndex, modes[index].kind == .custom else { return }
         let removedID = modes[index].id
         modes.remove(at: index)
+        // Der Kurzbefehl ohne Diktat gehört dem Modus: mit ihm freigeben.
+        KeyboardShortcuts.setShortcut(nil, for: QuickActionShortcuts.name(for: removedID))
         if defaultOutputModeID == removedID {
             defaultOutputModeID = OutputMode.rawID
             AppPreferences.shared.defaultOutputModeID = OutputMode.rawID

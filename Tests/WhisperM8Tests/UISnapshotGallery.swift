@@ -325,6 +325,26 @@ final class UISnapshotGallery: XCTestCase {
                 controller.levelModel.level = 0.5
                 return AnyView(RecordingPillView(controller: controller).padding(20))
             },
+            // Schnellaktion ohne Diktat: Arbeit („Korrigiere…“ mit ✕) und kurzer Hinweis.
+            Fixture(name: "pill-schnellaktion-arbeitet", size: CGSize(width: 320, height: 80)) {
+                let controller = OverlayController()
+                controller.isPostProcessing = true
+                controller.quickActionLabel = String(localized: "Correcting…")
+                return AnyView(RecordingPillView(controller: controller).padding(20))
+            },
+            Fixture(name: "pill-schnellaktion-hinweis", size: CGSize(width: 320, height: 80)) {
+                let controller = OverlayController()
+                controller.quickActionLabel = String(localized: "Select text first")
+                controller.isQuickActionHint = true
+                return AnyView(RecordingPillView(controller: controller).padding(20))
+            },
+            Fixture(name: "schnellaktion-kurzbefehl", size: CGSize(width: 480, height: 300)) {
+                let mode = OutputMode.builtInModes.first { $0.id == OutputMode.correctID }!
+                return AnyView(
+                    AIOutputQuickActionSection(mode: mode, modes: OutputMode.builtInModes)
+                        .padding(20)
+                )
+            },
             // CLI-Installation (LR-ONB-003/DIK-015/AU-022): feste Zustände, kein echtes brew.
             Fixture(name: "cli-claude-fehlt-brew", size: CGSize(width: 480, height: 320)) {
                 AnyView(AgentCLIInstallPanel(model: self.cliModel(.claude, command: nil, brew: "/opt/homebrew/bin/brew")).padding(24))

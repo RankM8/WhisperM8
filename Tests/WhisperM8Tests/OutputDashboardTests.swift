@@ -9,9 +9,12 @@ final class OutputDashboardTests: XCTestCase {
 
         // Vertrags-Update 2026-07-07: Chat-Modus ausgebaut (siehe
         // OutputMode.retiredChatID) — die Built-in-Liste ist bewusst ohne ihn gepinnt.
+        // Vertrags-Update 2026-11-05: Korrigieren und Besser formulieren nach Clean.
         XCTAssertEqual(modes.map(\.id), [
             OutputMode.rawID,
             OutputMode.cleanID,
+            OutputMode.correctID,
+            OutputMode.rephraseID,
             OutputMode.promptFastID,
             OutputMode.promptID,
             OutputMode.promptPlusID,

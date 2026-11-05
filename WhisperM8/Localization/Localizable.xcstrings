@@ -2241,6 +2241,16 @@
         }
       }
     },
+    "Can't edit here. The result is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier nicht beschreibbar. Das Ergebnis liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "Cancel": {
       "localizations": {
         "de": {
@@ -2257,6 +2267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontowechsel zu %@ aufheben"
+          }
+        }
+      }
+    },
+    "Cancel. The selection stays as it is (Esc)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen. Die Markierung bleibt, wie sie ist (Esc)"
           }
         }
       }
@@ -3031,6 +3051,16 @@
         }
       }
     },
+    "Clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "de": {
@@ -3661,12 +3691,52 @@
         }
       }
     },
+    "Correct": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigieren"
+          }
+        }
+      }
+    },
+    "Correct Selection": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markierung korrigieren"
+          }
+        }
+      }
+    },
+    "Correct Selection (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markierung korrigieren (%@)"
+          }
+        }
+      }
+    },
     "Correct this if you toggled Codex by hand.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Korrigiere das, wenn du Codex von Hand umgeschaltet hast."
+          }
+        }
+      }
+    },
+    "Correcting…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigiere…"
           }
         }
       }
@@ -4997,6 +5067,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertige Diktate erscheinen hier."
+          }
+        }
+      }
+    },
+    "Fixes spelling, grammar and punctuation only. Wording, tone and language stay as they are. With selected text, the selection is corrected and what you say is an extra instruction.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigiert nur Rechtschreibung, Grammatik und Zeichensetzung. Wortwahl, Ton und Sprache bleiben. Ist Text markiert, wird die Markierung korrigiert, und was du sagst, ist eine Zusatzanweisung."
           }
         }
       }
@@ -6791,6 +6871,16 @@
         }
       }
     },
+    "Makes the text clearer and smoother. Same message, same language. With selected text, the selection is rewritten and what you say is an extra instruction.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Macht den Text klarer und flüssiger. Gleiche Aussage, gleiche Sprache. Ist Text markiert, wird die Markierung umformuliert, und was du sagst, ist eine Zusatzanweisung."
+          }
+        }
+      }
+    },
     "Manage proxy": {
       "localizations": {
         "de": {
@@ -8141,6 +8231,16 @@
         }
       }
     },
+    "Notch display": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch-Anzeige"
+          }
+        }
+      }
+    },
     "Notes": {
       "localizations": {
         "de": {
@@ -8187,6 +8287,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nichts gefunden"
+          }
+        }
+      }
+    },
+    "Nothing is set until you choose it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belegt wird erst, wenn du ihn übernimmst."
+          }
+        }
+      }
+    },
+    "Nothing to change": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts zu ändern"
           }
         }
       }
@@ -9794,6 +9914,16 @@
         }
       }
     },
+    "Recording hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahme-Hotkey"
+          }
+        }
+      }
+    },
     "Recording interrupted": {
       "localizations": {
         "de": {
@@ -10220,6 +10350,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einstellungen reparieren…"
+          }
+        }
+      }
+    },
+    "Rephrase": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besser formulieren"
           }
         }
       }
@@ -11004,6 +11144,26 @@
         }
       }
     },
+    "Select text first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst Text markieren"
+          }
+        }
+      }
+    },
+    "Select text in any app and press this shortcut. WhisperM8 reworks the selection with this mode and replaces it, without recording. Cmd+Z undoes it, Esc cancels.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markiere in einer beliebigen App Text und drücke diesen Kurzbefehl. WhisperM8 arbeitet die Markierung mit diesem Modus um und ersetzt sie, ganz ohne Aufnahme. Cmd+Z macht es rückgängig, Esc bricht ab."
+          }
+        }
+      }
+    },
     "Select to toggle": {
       "localizations": {
         "de": {
@@ -11030,6 +11190,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ausgewählter Text wird als Kontext genutzt, wenn WhisperM8 ihn erfassen kann."
+          }
+        }
+      }
+    },
+    "Selection not changed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markierung nicht geändert"
+          }
+        }
+      }
+    },
+    "Selection not replaced": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markierung nicht ersetzt"
           }
         }
       }
@@ -11300,6 +11480,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kurze Wörter lösen viel häufiger versehentlich aus. Ab vier Buchstaben ist es deutlich sicherer."
+          }
+        }
+      }
+    },
+    "Shortcut": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurzbefehl"
+          }
+        }
+      }
+    },
+    "Shortcut without dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurzbefehl ohne Diktat"
           }
         }
       }
@@ -12384,6 +12584,16 @@
         }
       }
     },
+    "Suggestion: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschlag: %@"
+          }
+        }
+      }
+    },
     "Summarize chats automatically": {
       "localizations": {
         "de": {
@@ -12820,6 +13030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text im Eingabefeld — wechselt nach dem Absenden"
+          }
+        }
+      }
+    },
+    "Text modes are off in “Dictation only”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Textmodi sind bei „Nur Diktat“ aus"
           }
         }
       }
@@ -13474,6 +13694,16 @@
         }
       }
     },
+    "The text clean-up returned no text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Nacharbeit hat keinen Text geliefert."
+          }
+        }
+      }
+    },
     "The text clean-up was cancelled.": {
       "localizations": {
         "de": {
@@ -13690,6 +13920,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diese Session hat noch keine Konversation"
+          }
+        }
+      }
+    },
+    "This shortcut is also set for “%@”. Only one of them will work, so pick another one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Kurzbefehl ist auch für „%@“ belegt. Nur einer von beiden wirkt, wähle bitte einen anderen."
           }
         }
       }
@@ -14150,6 +14390,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutzungsprofil"
+          }
+        }
+      }
+    },
+    "Use %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ übernehmen"
           }
         }
       }
@@ -14700,6 +14950,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperM8 konnte die App, in die du diktiert hast, nicht wieder nach vorn holen. Dein Text liegt in der Zwischenablage – füge ihn mit Cmd+V ein."
+          }
+        }
+      }
+    },
+    "WhisperM8 couldn't insert the text. The result is on the clipboard, paste it with Cmd+V.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 konnte den Text nicht einfügen. Das Ergebnis liegt in der Zwischenablage, füge es mit Cmd+V ein."
           }
         }
       }

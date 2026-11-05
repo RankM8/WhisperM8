@@ -398,6 +398,12 @@ class OverlayController: ObservableObject {
     @Published var contextBundle: TranscriptContextBundle = .empty
     @Published var isScreenClipRecording: Bool = false
     @Published var postProcessingStatusText: String?
+    /// Schnellaktion ohne Diktat: statt Aufnahme-Bedienung nur Kern, dieser
+    /// Text („Korrigiere…“) und ✕. `nil` = normales Diktat.
+    @Published var quickActionLabel: String?
+    /// Kurzer Hinweis der Schnellaktion („Erst Text markieren“), ohne ✕.
+    @Published var isQuickActionHint = false
+    private var quickActionHintWork: DispatchWorkItem?
     /// Wachstumsrichtung der Pill im Panel (Rechts-Anker bzw. Spiegel-Fall).
     @Published var pillAlignment: PillAlignment = .trailing
     /// Mini-Stil: Hover (mit Grace-Period) expandiert zur vollen Pill.
@@ -473,6 +479,11 @@ class OverlayController: ObservableObject {
         self.contextBundle = appState.contextBundle
         self.isScreenClipRecording = appState.isScreenClipRecording
         self.postProcessingStatusText = appState.postProcessingStatusText
+        presentPanel()
+    }
+
+    /// Baut die Pill auf und zeigt sie (Diktat und Schnellaktion).
+    private func presentPanel() {
         self.overlayStyle = OverlayPositionStore.loadStyle()
         self.isHoverExpanded = false
         self.didPreciseCenter = false
@@ -586,6 +597,10 @@ class OverlayController: ObservableObject {
 
     func hide() {
         isConnecting = false
+        quickActionLabel = nil
+        isQuickActionHint = false
+        quickActionHintWork?.cancel()
+        quickActionHintWork = nil
         if let modesObserver {
             NotificationCenter.default.removeObserver(modesObserver)
             self.modesObserver = nil
@@ -613,6 +628,49 @@ class OverlayController: ObservableObject {
         onToggleScreenClip = nil
         onClearContext = nil
         onContextAction = nil
+    }
+
+    /// Schnellaktion läuft: Pill mit Arbeits-Animation, Text und ✕ (bricht ab).
+    func showQuickActionWorking(label: String, onCancel: @escaping () -> Void) {
+        hide()
+        onCancelPostProcessing = onCancel
+        resetForQuickAction()
+        isPostProcessing = true
+        quickActionLabel = label
+        presentPanel()
+    }
+
+    /// Kurzer Hinweis, verschwindet nach `duration` von selbst.
+    func showQuickActionHint(_ text: String, duration: TimeInterval) {
+        hide()
+        resetForQuickAction()
+        quickActionLabel = text
+        isQuickActionHint = true
+        presentPanel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.isQuickActionHint else { return }
+                self.hide()
+            }
+        }
+        quickActionHintWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+    }
+
+    func hideQuickAction() {
+        guard quickActionLabel != nil else { return }
+        hide()
+    }
+
+    private func resetForQuickAction() {
+        levelModel.level = 0
+        clockModel.update(duration: 0)
+        isTranscribing = false
+        isPostProcessing = false
+        selectedContext = .empty
+        contextBundle = .empty
+        isScreenClipRecording = false
+        postProcessingStatusText = nil
     }
 
     func getPreviousApp() -> NSRunningApplication? {
@@ -871,3 +929,5 @@ class OverlayController: ObservableObject {
         }
     }
 }
+
+extension OverlayController: QuickActionPresenting {}

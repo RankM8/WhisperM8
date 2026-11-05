@@ -134,6 +134,8 @@ final class RecordingCoordinator {
     let cleanUpCancelKey: CleanUpCancelKeyGrabbing
     /// Abbruch-Merker der laufenden Nacharbeit (`cancelPostProcessing`).
     var activePostProcessingCancelToken: PostProcessingCancelToken?
+    /// Schnellaktion ohne Diktat (Kurzbefehl je Modus, Menüleiste).
+    lazy var quickActionRunner: QuickActionRunner = makeQuickActionRunner()
 
     init(
         appState: AppState,
@@ -204,7 +206,8 @@ final class RecordingCoordinator {
     /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
     /// Vordergrund-App, keine Screenshots.
     func startRecording(captureContext: Bool = true) async {
-        guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing else {
+        guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing,
+              !quickActionRunner.isRunning else {
             signalBusyHotkeyPressIfNeeded()
             return
         }

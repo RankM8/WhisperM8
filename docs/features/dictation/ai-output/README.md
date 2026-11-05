@@ -26,8 +26,13 @@ Directory bekommt.
 | `builtIn` | Verwendet einen eingebauten Modus mit festem Built-in-Template und optionalem Kontext. |
 | `custom` | User-Modus aus `OutputModes.json`, mit editierbarem Namen, Label, Template, Kontext- und Codex-Einstellungen. |
 
-Die eingebauten Modi sind `Fast`, `Clean`, `Fast Prompt`, `Prompt`,
-`Ultra-Prompt`, `Task`, `Email`, `Slack`, `WhatsApp` und `Notes`. `Fast Prompt`
+Die eingebauten Modi sind `Fast`, `Clean`, `Correct` (Korrigieren), `Rephrase`
+(Besser formulieren), `Fast Prompt`, `Prompt`, `Ultra-Prompt`, `Task`, `Email`,
+`Slack`, `WhatsApp` und `Notes`. `Correct` und `Rephrase` sind vor allem für
+die Schnellaktion auf markiertem Text gedacht
+([Schnellaktionen](../quick-actions/README.md)); beim Diktat mit Markierung
+arbeiten sie die Markierung um und nehmen das Gesprochene als Zusatzanweisung.
+Jeder Modus mit Nacharbeit kann einen eigenen „Kurzbefehl ohne Diktat“ haben. `Fast Prompt`
 ist die Stufe zwischen `Clean` und `Prompt`: er räumt das Gesagte nur auf und
 hängt zu jedem übergebenen Bild eine kurze, sachliche Beschreibung an (was zu
 sehen ist und wie der Sprecher sich darauf bezieht). Er baut kein Playbook,
@@ -123,7 +128,7 @@ eigenen Prompt. Beratung: `docs/plans/beratung-diktat-nacharbeit-gpt-backend.md`
 
 | Modus | Weg |
 |---|---|
-| ohne Projektzugriff (Clean, Fast Prompt, Prompt, Email, Slack, WhatsApp, Notes, eigene Modi) | GPT-Backend, wenn es an ist und der Schalter „GPT-Backend für Textmodi nutzen“ (AI-Output → Konto) an ist; sonst Codex-CLI |
+| ohne Projektzugriff (Clean, Correct, Rephrase, Fast Prompt, Prompt, Email, Slack, WhatsApp, Notes, eigene Modi) | GPT-Backend, wenn es an ist und der Schalter „GPT-Backend für Textmodi nutzen“ (AI-Output → Konto) an ist; sonst Codex-CLI |
 | mit Projektzugriff (Ultra-Prompt, Task) | immer Codex-CLI, denn nur sie kann im Projekt lesen |
 | `whisperm8 transcribe --mode` | immer Codex-CLI (`CLITranscribe` übergibt den `CodexPostProcessor`); ein CLI-Prozess startet keinen Proxy |
 

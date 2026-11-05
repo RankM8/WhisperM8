@@ -145,6 +145,10 @@ struct OutputMode: Identifiable, Codable, Equatable, Hashable {
 extension OutputMode {
     static let rawID = "raw"
     static let cleanID = "clean"
+    /// Nur Rechtschreibung, Grammatik, Zeichensetzung (Schnellaktion ohne Diktat).
+    static let correctID = "correct"
+    /// Klarer und flüssiger, gleiche Aussage (Schnellaktion ohne Diktat).
+    static let rephraseID = "rephrase"
     static let promptFastID = "prompt-fast"
     static let promptID = "prompt"
     static let promptPlusID = "prompt-plus"
@@ -183,6 +187,37 @@ extension OutputMode {
             templateID: PostProcessingTemplate.cleanID,
             isEnabled: true,
             isDefault: false
+        ),
+        // Die beiden Schreib-Modi sind vor allem für die Schnellaktion auf
+        // markiertem Text gedacht, stehen aber auch beim Diktat zur Wahl.
+        // Niedrige Denktiefe: die Ersetzung soll in Sekunden da sein.
+        OutputMode(
+            id: correctID,
+            name: "Correct",
+            shortLabel: "Correct",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.correctID,
+            isEnabled: true,
+            isDefault: false,
+            // Beim Diktat ist eine Markierung der Text, das Gesprochene die
+            // Zusatzanweisung. Screenshots werden nicht mit eingefügt.
+            contextPolicy: .auto,
+            pasteVisualAttachments: false,
+            codexReasoningEffortRawOverride: CodexReasoningEffort.low.rawValue
+        ),
+        OutputMode(
+            id: rephraseID,
+            name: "Rephrase",
+            shortLabel: "Rephrase",
+            kind: .builtIn,
+            templateID: PostProcessingTemplate.rephraseID,
+            isEnabled: true,
+            isDefault: false,
+            // Beim Diktat ist eine Markierung der Text, das Gesprochene die
+            // Zusatzanweisung. Screenshots werden nicht mit eingefügt.
+            contextPolicy: .auto,
+            pasteVisualAttachments: false,
+            codexReasoningEffortRawOverride: CodexReasoningEffort.low.rawValue
         ),
         OutputMode(
             id: promptFastID,
@@ -308,7 +343,7 @@ extension OutputMode {
 
     static func defaultContextPolicy(for id: String) -> ContextCapturePolicy {
         switch id {
-        case promptFastID, promptID, promptPlusID, taskID, emailID, slackID, whatsappID:
+        case promptFastID, promptID, promptPlusID, taskID, emailID, slackID, whatsappID, correctID, rephraseID:
             return .auto
         default:
             return .off

@@ -110,6 +110,16 @@ test lab live under Settings → AI Output.
 **Context:** optionally the selected text and screenshots or a short screen clip are passed to the
 mode, so that e.g. *Reply* knows what you are answering (Settings → Context & Privacy).
 
+**Rework selected text without dictating:** select text in any app and press the mode's
+"Shortcut without dictation" (set it per mode under Settings → AI Output → Modes; empty by default,
+suggested ⌃⌥K for *Correct*). The overlay shows "Correcting…", the selection is replaced, Cmd+Z undoes
+it and Esc cancels. *Correct* only fixes spelling, grammar and punctuation; *Rephrase* makes the text
+clearer with the same message. If the field can't be edited, the result goes to the clipboard. The menu
+bar has the same as "Correct Selection".
+
+**Dictate about selected text:** with *Correct* or *Rephrase* chosen and text selected, the selection is
+the text and what you say is an extra instruction ("and a bit more formal").
+
 **Menu bar:** start/stop recording, switch modes, open Agent Chats and Settings.
 
 ---
