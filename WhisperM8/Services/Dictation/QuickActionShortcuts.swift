@@ -1,19 +1,32 @@
 import AppKit
 import KeyboardShortcuts
 
-/// Kurzbefehle „ohne Diktat“: je Modus einer, ab Werk leer.
+/// Kurzbefehle „ohne Diktat“: je Modus einer. Ab Werk belegt ist nur
+/// Korrigieren mit ⇧⌘K (Entscheidung Giuliano, 05.11.2026); alle anderen
+/// Modi sind leer, bis der Nutzer selbst einen aufnimmt.
 enum QuickActionShortcuts {
     static let namePrefix = "quickAction."
 
+    /// Standard für Korrigieren. Weder macOS noch WhisperM8 belegen ⇧⌘K; als
+    /// globaler Kurzbefehl überdeckt er aber gleichnamige Befehle einzelner
+    /// Apps (etwa Xcode „Clean Build Folder“, VS Code „Zeile löschen“).
+    static let correctDefault = KeyboardShortcuts.Shortcut(.k, modifiers: [.command, .shift])
+
+    /// `default` greift nur, solange der Nutzer nichts gespeichert hat. Wer den
+    /// Kurzbefehl entfernt, behält das (die Bibliothek merkt sich „aus“).
     static func name(for modeID: String) -> KeyboardShortcuts.Name {
-        KeyboardShortcuts.Name(namePrefix + modeID)
+        KeyboardShortcuts.Name(namePrefix + modeID, default: defaultShortcut(for: modeID))
     }
 
-    /// Vorschlag, der in den Einstellungen angeboten, aber nie selbst belegt
-    /// wird. Nur für die beiden Schreib-Modi.
+    static func defaultShortcut(for modeID: String) -> KeyboardShortcuts.Shortcut? {
+        modeID == OutputMode.correctID ? correctDefault : nil
+    }
+
+    /// Vorschlag, der in den Einstellungen angeboten wird, wenn kein
+    /// Kurzbefehl gesetzt ist. Nur für die beiden Schreib-Modi.
     static func suggestion(for modeID: String) -> KeyboardShortcuts.Shortcut? {
         switch modeID {
-        case OutputMode.correctID: return .init(.k, modifiers: [.control, .option])
+        case OutputMode.correctID: return correctDefault
         case OutputMode.rephraseID: return .init(.r, modifiers: [.control, .option])
         default: return nil
         }

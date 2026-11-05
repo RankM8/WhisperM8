@@ -436,6 +436,25 @@ final class QuickActionModesTests: XCTestCase {
         XCTAssertEqual(QuickActionShortcuts.name(for: "x").rawValue, "quickAction.x")
     }
 
+    func testOnlyCorrectHasDefaultShortcut() {
+        XCTAssertEqual(
+            QuickActionShortcuts.defaultShortcut(for: OutputMode.correctID),
+            KeyboardShortcuts.Shortcut(.k, modifiers: [.command, .shift])
+        )
+        XCTAssertEqual(QuickActionShortcuts.suggestion(for: OutputMode.correctID), QuickActionShortcuts.correctDefault)
+        for mode in OutputMode.builtInModes where mode.id != OutputMode.correctID {
+            XCTAssertNil(QuickActionShortcuts.defaultShortcut(for: mode.id), "\(mode.id) bleibt ab Werk leer")
+        }
+        XCTAssertNil(QuickActionShortcuts.defaultShortcut(for: "custom-123"))
+    }
+
+    func testCorrectDefaultDoesNotCollideWithAppShortcuts() {
+        let fixed: [KeyboardShortcuts.Name] = [.toggleRecording, .clipboardHistory, .toggleNotchStatus]
+        for name in fixed {
+            XCTAssertNotEqual(name.defaultShortcut, QuickActionShortcuts.correctDefault, name.rawValue)
+        }
+    }
+
     func testConflictDetectsOtherModesAndAppShortcuts() {
         let combo = KeyboardShortcuts.Shortcut(.k, modifiers: [.control, .option])
         let modes = OutputMode.builtInModes

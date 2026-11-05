@@ -19,9 +19,13 @@ verbessern“ und „Verbessern & einfügen“ je Eintrag) und das stille Diktat
 
 - **Kurzbefehl je Modus:** KI-Ausgabe → Modi → Abschnitt „Kurzbefehl ohne
   Diktat“. Gilt für jeden Modus mit Nacharbeit, auch E-Mail, Slack und eigene
-  Modi; nicht für „Fast“ (der arbeitet nichts nach). Ab Werk ist keiner
-  belegt. Für Korrigieren steht ⌃⌥K als Vorschlag daneben, für Besser
-  formulieren ⌃⌥R, beide erst per Klick auf „übernehmen“. Belegt ein
+  Modi; nicht für „Fast“ (der arbeitet nichts nach). Ab Werk belegt ist nur
+  Korrigieren mit **⇧⌘K** (Entscheidung Giuliano, 05.11.2026). Weder macOS
+  noch WhisperM8 nutzen ⇧⌘K; als globaler Kurzbefehl überdeckt er aber
+  gleichnamige Befehle einzelner Apps (Xcode „Clean Build Folder“, VS Code
+  „Zeile löschen“). Wer ihn entfernt, bekommt ihn nicht ungefragt zurück; dann
+  steht ⇧⌘K als Vorschlag mit „übernehmen“ daneben. Für Besser formulieren
+  wird ⌃⌥R vorgeschlagen, alle anderen Modi sind leer. Belegt ein
   Kurzbefehl schon einen anderen WhisperM8-Kurzbefehl, steht eine Warnung
   darunter (der Recorder prüft selbst nur System und Hauptmenü).
 - **Menüleiste:** „Markierung korrigieren“ (Modus Korrigieren), mit dem
