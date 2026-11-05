@@ -58,6 +58,8 @@ enum PreferenceBedienweg {
         Entry(key: "overlayPositionY", reason: "Letzte Position des Aufnahme-Overlays, wird durch Ziehen gesetzt."),
         Entry(key: "lastSelectedOutputModeID", reason: "Zuletzt gewählter Modus; die Auswahl selbst läuft über Overlay und Menü."),
         Entry(key: "claudeGPTRouterPort", reason: "Interner Port des Mix-Routers, abgeleitet vom Backend-Port; kein Nutzerwert."),
+        Entry(key: "statisticsUsdEurRate", reason: "EZB-Kurs für den API-Gegenwert, einmal am Tag im Hintergrund abgerufen."),
+        Entry(key: "statisticsUsdEurRateDate", reason: "Datum des letzten Kursabrufs der Statistik."),
         Entry(key: "claudeGPTBackendDefaultModel", reason: "Veraltet: das Modell bestimmt Claude Code per /model, nicht die App."),
         Entry(key: "summaryStartupReconciliationEnabled", reason: "Auto-Zusammenfassungen beim Start; Default aus, die Karte erzeugt sie beim Anzeigen."),
         Entry(key: "audioDuckingPendingRestores", reason: "Offene Lautstärke-Rückstellungen des Audio-Duckings, damit nach Absturz oder getrenntem Gerät nichts leise bleibt."),
@@ -70,6 +72,7 @@ enum PreferenceBedienweg {
         Entry(key: "selectedAudioDeviceUID", reason: "Mikrofon-Auswahl auf der Seite Recording und im Menüleisten-Menü über AudioDeviceManager."),
         Entry(key: "appearanceOverride", reason: "Theme-Auswahl auf der Seite General über ThemeManager."),
         Entry(key: "agentTabGroupingEnabled", reason: "Wird im Tab-Menü der Agent-Chats-Ansicht umgeschaltet."),
+        Entry(key: "statisticsSubscriptions", reason: "Abo-Liste auf der Seite Statistik, gespeichert über StatisticsSettings.setSubscriptions."),
     ]
 
     /// Mess- und Entwicklerwerkzeuge: für Untersuchungen und A/B-Vergleiche, kein Bedienweg.
