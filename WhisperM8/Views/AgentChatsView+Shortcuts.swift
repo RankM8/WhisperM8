@@ -50,17 +50,17 @@ extension AgentChatsView {
         }
     }
 
-    /// Reiner BEOBACHTER (konsumiert nie): Ein ESC ohne Modifier, das im
-    /// Terminal einer working-Session landet, ist in der Claude-TUI der
-    /// Turn-Abbruch — der Stop-Hook feuert dabei nicht, und ein Abbruch vor
+    /// Reiner BEOBACHTER (konsumiert nie): Ein ESC ohne Modifier oder ein
+    /// Ctrl+C (Review R2), das im Terminal einer working-Session landet, ist
+    /// in der Claude-TUI der Turn-Abbruch — der Stop-Hook feuert dabei nicht, und ein Abbruch vor
     /// dem ersten Output hinterlässt auch keinen Transcript-Marker; die
     /// Session bliebe im working-Stau (QA-Befund 2026-08-17). Der Coordinator
     /// verifiziert den Verdacht (5 s Hook- UND Transcript-Stille), bevor er
     /// den Status dreht — ein ESC mit anderer TUI-Bedeutung bleibt folgenlos.
     private func observeTerminalInterruptKey(_ event: NSEvent) {
         guard let hostWindow, event.window === hostWindow,
-              event.keyCode == 53, // ESC
-              event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
+              TerminalComposerDraftTracker.isInterruptKey(
+                  keyCode: event.keyCode, modifiers: event.modifierFlags),
               let sessionID = selectedSession?.id,
               AgentSessionStatusCoordinator.shared.statusStore
                   .status(for: sessionID) == .working,

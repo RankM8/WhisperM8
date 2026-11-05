@@ -155,8 +155,8 @@ whisperm8 chats address <ref> --json   # + nativer Name, Konto, Status
 Exit 0 = Adresse auf stdout. Exit 4 = nicht nativ erreichbar (Codex-Chat,
 läuft nicht, noch keine Session-ID) → `chats send`/`enqueue`.
 
-**Achtung:** Natives `SendMessage` läuft an Marker, Zustell-Token, Selbst-Send-
-Schutz und Ein-Hop-Regel von `chats send` vorbei. Festgehalten wird nur die
+**Achtung:** Natives `SendMessage` läuft an Marker, Selbst-Send-Schutz,
+Entwurfs-Schutz und Ein-Hop-Regel von `chats send` vorbei. Festgehalten wird nur die
 Adressabfrage (`chats audit`, Methode `address`, ohne Inhalt) — die Regeln
 (Bestätigung vor Aktionen anderer Chats, nie an sich selbst, nie weiterreichen)
 gelten hier genauso, ohne dass ein Guard sie erzwingt.
@@ -262,8 +262,14 @@ unterbrochen.
    Text. **Ausnahme:** Der User hat dir für GENAU diese Ziel-Session in DIESER
    Konversation pauschal freigegeben. Freigaben gelten nie über die
    Konversation hinaus. Zieht der User einen Auftrag zurück,
-   `interrupt --clear-input` anbieten: Nach einem ESC-Abbruch legt die CLI den
-   Prompt zurück ins Eingabefeld, und ein Enter schickte ihn sonst erneut ab.
+   `interrupt --clear-input` anbieten: Nach einem Abbruch (ESC, Ctrl+C,
+   Doppel-ESC-Rewind) legt die Claude-CLI den alten Prompt zurück ins
+   Eingabefeld. **Ein Enter darauf führt ihn erneut aus** — davor schützt
+   nichts, auch kein Guard. Das nächste `send`/die nächste Queue-Zustellung
+   räumt einen vermuteten Rückleger selbst weg (Antwort `clearedInput: true`),
+   die Schätzung dafür ist aber grob; `--clear-input` ist der sichere Weg.
+   Ein `send` direkt danach ist unbedenklich: Hat bis zum verzögerten Ctrl+C
+   schon etwas ins Feld geschrieben, lässt die App es aus.
 2. **Vor `interrupt`, `archive`: ebenfalls bestätigen lassen.** `interrupt`
    bricht einen laufenden Turn ab — nur nach expliziter User-Freigabe (im
    Auftrag oder per Rückfrage). `rename` benennt immer um (auch manuell gesetzte

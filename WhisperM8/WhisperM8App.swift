@@ -297,6 +297,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Einmalig: Terminal-Snapshots wegräumen — seit der Verlaufsansicht
         // liest sie niemand mehr, geschrieben werden sie auch nicht mehr.
         LegacyDataCleanup.removeObsoleteTerminalSnapshots()
+        // Ebenso einmalig: Zustell-Tokens des ausgebauten Send-Guards.
+        LegacyDataCleanup.removeObsoleteSendTokens()
         // Ereignis-Zähler für die dichten Pfade — no-op, solange
         // `agentPerfDetailEnabled` aus ist (Default).
         PerformanceCounters.shared.startIfEnabled()

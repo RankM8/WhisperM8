@@ -99,11 +99,7 @@ enum AgentChatsCLICommand {
         case "workspace":
             return ChatsWorkspaceCommand.run(rest)
         case "_prompt-guard":
-            // Der Send-Guard ist ausgebaut. Claude-Sessions, die vor dem
-            // Update gestartet wurden, rufen den Hook aus ihren alten
-            // Settings noch auf — stilles Exit 0 statt Fehlermeldung bei
-            // jedem Prompt, bis sie neu starten.
-            return ChatsCLIExit.ok
+            return ChatsPromptGuardStub.run()
         case "audit":
             return ChatsAuditCommand.run(rest)
         default:
@@ -111,6 +107,23 @@ enum AgentChatsCLICommand {
             CLIIO.out(ChatsCLIHelp.text)
             return ChatsCLIExit.usage
         }
+    }
+}
+
+/// `chats _prompt-guard`: Der Send-Guard ist ausgebaut (05.11.2026).
+/// Claude-Sessions, die vor dem Update gestartet wurden, rufen den
+/// `UserPromptSubmit`-Hook aus ihren alten Settings noch auf — stilles Exit 0
+/// statt Fehlermeldung bei jedem Prompt, bis sie neu starten. Das Hook-JSON
+/// auf stdin wird trotzdem ganz gelesen: Ein Prompt über der Pipe-Puffergröße
+/// (~64 KB, etwa ein eingefügtes Log) liefe sonst beim Schreiben der CLI in
+/// ein EPIPE.
+enum ChatsPromptGuardStub {
+    static func run(input: FileHandle = .standardInput) -> Int32 {
+        // Ein Terminal als stdin (Aufruf von Hand) nicht abwarten.
+        if isatty(input.fileDescriptor) == 0 {
+            _ = try? input.readToEnd()
+        }
+        return ChatsCLIExit.ok
     }
 }
 

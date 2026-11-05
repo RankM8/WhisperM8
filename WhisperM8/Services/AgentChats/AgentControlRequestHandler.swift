@@ -49,6 +49,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "Session-Identität nicht belegt (Token fehlt, falsch oder widerrufen) — Befehl aus der laufenden Chat-Session der App ausführen.")
         }
+        // Feature-Methoden zuerst: kein Fall unten kann sie verdecken (+Routing).
+        if let route = Self.featureRoute(for: request.method) {
+            return await featureRequest(request, route: route)
+        }
         switch request.method {
         case "ping":
             return await pingResponse(request)
@@ -97,8 +101,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         case "session.moveAccount":
             return await sessionMoveAccount(request)
         default:
-            // Board, Debug, Ansagen, Zwischenablage: eigene Dateien (+Routing).
-            return await featureRequest(request)
+            return .failure(requestID: request.requestID, code: .unsupported,
+                            message: "Unbekannte Methode: \(request.method)")
         }
     }
 
@@ -177,46 +181,50 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let markerActor = await auditActorLabel(request.actor)
 
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
-        let outcome: SendOutcome = await MainActor.run {
-            let registry = AgentTerminalRegistry.shared
-            let workspace = AgentWorkspaceUIModel.shared.workspace
-            guard let session = workspace.sessions.first(where: { $0.id == targetID }),
-                  session.status != .archived else {
-                return .failure(.notFound, "Session nicht gefunden oder archiviert")
-            }
-            // Selbst-Send-Schutz — nie, auch nicht mit force.
-            if let actorID, actorID == targetID {
-                return .failure(.selfSend, "An sich selbst senden ist nicht erlaubt (Endlosschleife)")
-            }
-            guard let controller = registry.controller(for: targetID), controller.isRunning else {
-                return .failure(.noPty, "Keine laufende PTY — Tab mit `chats open` starten")
-            }
-            // Start-Race: Ein frisch resumter Chat meldet `idle` (launching
-            // bildet bewusst darauf ab), ist aber noch nicht aufnahmebereit.
-            // `sendPrompt` schreibt blind — der Paste ginge verloren oder käme
-            // beim Retry doppelt an. Kein --force-Bypass: hier gibt es nichts
-            // zu erzwingen, nur einen sicheren Weg (`enqueue`).
-            let readiness = ChatsSendReadinessGuard.decide(
-                lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
-            if case .notReady = readiness {
-                return .failure(.notReady,
-                                ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
-            }
-            // Status-Guard (--if-status). --force überstimmt ihn (nie den
-            // Selbst-Send-Schutz).
-            let force = request.params["force"]?.boolValue ?? false
-            let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
-            if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
-                return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
-            }
-            if PromptDeliveryGate.sendBlockedByDraft(
-                mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
-                return .failure(.conflict, PromptDeliveryGate.draftMessage)
-            }
-            // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
-            let marked = Self.markedPrompt(prompt, actor: markerActor)
-            controller.sendPrompt(marked, submit: submit)
-            return .success(session)
+        let (outcome, clearedInput) = await MainActor.run { () -> (SendOutcome, Bool) in
+            var clearedInput = false
+            let outcome: SendOutcome = {
+                let registry = AgentTerminalRegistry.shared
+                let workspace = AgentWorkspaceUIModel.shared.workspace
+                guard let session = workspace.sessions.first(where: { $0.id == targetID }),
+                      session.status != .archived else {
+                    return .failure(.notFound, "Session nicht gefunden oder archiviert")
+                }
+                // Selbst-Send-Schutz — nie, auch nicht mit force.
+                if let actorID, actorID == targetID {
+                    return .failure(.selfSend, "An sich selbst senden ist nicht erlaubt (Endlosschleife)")
+                }
+                guard let controller = registry.controller(for: targetID), controller.isRunning else {
+                    return .failure(.noPty, "Keine laufende PTY — Tab mit `chats open` starten")
+                }
+                // Start-Race: Ein frisch resumter Chat meldet `idle` (launching
+                // bildet bewusst darauf ab), ist aber noch nicht aufnahmebereit.
+                // `sendPrompt` schreibt blind — der Paste ginge verloren oder käme
+                // beim Retry doppelt an. Kein --force-Bypass: hier gibt es nichts
+                // zu erzwingen, nur einen sicheren Weg (`enqueue`).
+                let readiness = ChatsSendReadinessGuard.decide(
+                    lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
+                if case .notReady = readiness {
+                    return .failure(.notReady,
+                                    ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
+                }
+                // Status-Guard (--if-status). --force überstimmt ihn (nie den
+                // Selbst-Send-Schutz).
+                let force = request.params["force"]?.boolValue ?? false
+                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+                if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
+                    return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
+                }
+                if PromptDeliveryGate.sendBlockedByDraft(
+                    mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
+                    return .failure(.conflict, PromptDeliveryGate.draftMessage)
+                }
+                // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
+                let marked = Self.markedPrompt(prompt, actor: markerActor)
+                clearedInput = controller.sendPrompt(marked, submit: submit)
+                return .success(session)
+            }()
+            return (outcome, clearedInput)
         }
 
         switch outcome {
@@ -238,6 +246,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "target": ["id": session.id.uuidString, "title": session.title],
                 "promptChars": prompt.count,
                 "requestID": request.requestID,
+                "clearedInput": clearedInput,
             ]))
         }
     }
@@ -256,6 +265,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
 
+        let clearInput = request.params["clearInput"]?.boolValue ?? false
         let outcome: SendOutcome = await MainActor.run {
             let registry = AgentTerminalRegistry.shared
             let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -277,29 +287,18 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 return .failure(.conflict, "Ziel ist \(runtime.rawValue), nicht working")
             }
             controller.sendInterrupt()
-            if runtime == .working { controller.noteTurnInterrupted() }
+            controller.noteInterruptSent(status: runtime)
             // Abort-Verdacht anmelden: Der Stop-Hook feuert bei
             // ESC-Interrupts nicht — ohne die Verifikation bliebe die
             // Session im working-Stau (QA-Befund 2026-08-17). Der
             // Coordinator bestätigt nur, wenn der Turn binnen 5 s weder
             // Hook- noch Transcript-Aktivität zeigt.
             AgentSessionStatusCoordinator.shared.suspectTurnAborted(targetID)
+            // `--clear-input` (opt-in, löscht auch einen User-Entwurf): leert
+            // den zurückgelegten Prompt verzögert, aber nur, wenn bis dahin
+            // nichts anderes ins Feld geschrieben hat (Review R1).
+            if clearInput { controller.clearComposerAfterInterrupt() }
             return .success(session)
-        }
-
-        // `--clear-input` (opt-in): Nach dem ESC legt die Claude-CLI den
-        // Prompt des abgebrochenen Turns in den Composer zurück — ein
-        // verzögertes Ctrl+C leert ihn (Vorfall 2026-08-17). Opt-in, weil
-        // es auch einen echten User-Entwurf löschen würde. Fire-and-forget:
-        // die Response wartet nicht auf die TUI.
-        let clearInput = request.params["clearInput"]?.boolValue ?? false
-        if clearInput, case .success = outcome {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 400_000_000)
-                guard let controller = AgentTerminalRegistry.shared.controller(for: targetID),
-                      controller.isRunning else { return }
-                controller.sendComposerClear()
-            }
         }
 
         switch outcome {

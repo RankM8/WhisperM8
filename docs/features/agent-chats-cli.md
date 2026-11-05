@@ -153,7 +153,8 @@ arbeitende Chats sofort an. Kill-Switch:
 (dann wieder blockiert wie vorher). Die Entwurfs-Schätzung
 (`TerminalComposerDraftTracker`) ist konservativ: getippte Zeichen, Einfügen,
 Datei-Drop und `send --no-submit` markieren, Return (ohne Shift/Option),
-Ctrl+C und ein zugestellter `send` heben die Markierung auf. Die
+Ctrl+C und ein zugestellter `send` heben die Markierung auf (Details und
+Abbruch-Regeln unter „Zurückgelegter Prompt"). Die
 **aufrufende Session** wird nie angehalten, auch nicht mit `--force`.
 Hintergrund-Agenten, Codex- und Terminal-Chats fasst das Flag nicht an.
 
@@ -197,30 +198,79 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
 `MainActor.run`-Block (kein `await` zwischen Status-Check und Paste):
 ① existiert + nicht archiviert → ② Ziel ≠ Actor (Selbst-Send, nie überstimmbar)
 → ③ laufende PTY → ④ Status ∈ `--if-status` (Default `awaitingInput,idle`;
-`--force` überstimmt) → ⑤ Prompt nicht leer. Danach Bracketed Paste
+`--force` überstimmt) → ⑤ Prompt nicht leer → ⑥ kein vermuteter Entwurf im
+Eingabefeld (`--force` überstimmt; ein alter Rückleger wird stattdessen geleert,
+siehe unten). Danach Bracketed Paste
 (`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
 bekommt die Marker-Zeile `[via whisperm8 chats · von <actor> · HH:MM]`
 vorangestellt (Ein-Hop-Regel im Skill).
 
-### Zurückgelegter Prompt nach ESC-Abbruch
+### Zurückgelegter Prompt nach Abbruch (Send-Schutz)
 
-Nach dem ESC-Abbruch eines per `send` zugestellten Turns legt die Claude-CLI
-den Prompt des abgebrochenen Turns selbst in den Composer zurück
-(Interrupt-Restore; Doppel-ESC-Rewind kann dasselbe). Zwei Wege räumen ihn weg:
+Nach dem Abbruch eines Turns legt die Claude-CLI den Prompt des abgebrochenen
+Turns selbst in den Composer zurück (Interrupt-Restore); die Rewind-Auswahl
+(Doppel-ESC, dann Return) legt eine alte Nachricht dorthin. Ein
+programmatischer Versand, der seinen Text daran anhängt, ließe den
+zurückgezogenen Auftrag mit dem neuen zusammen erneut laufen.
 
-- Ein programmatischer Versand (`send`, Queue-Zustellung) leert den Composer
-  vorher per Ctrl+C, solange er dort einen zurückgelegten Prompt vermutet und
-  keinen eigenen Entwurf des Users (`TerminalComposerDraftTracker`).
-- `chats interrupt <ref> --clear-input` (opt-in) schickt 400 ms nach dem ESC
-  ein Ctrl+C hinterher und leert den Composer — löscht auch einen etwaigen
-  User-Entwurf, deshalb nie Default.
+**Vor jeder Zustellung** (`send` und Queue) prüft die App deshalb, was im
+Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
+
+- **Eigener Entwurf des Users vermutet** (getippt, eingefügt, Datei-Drop,
+  `send --no-submit`, auch ein bearbeiteter Rückleger): nie anhängen. `send`
+  scheitert mit `conflict`/Exit 4 und nennt die Auswege (`enqueue`,
+  `--force`); die Queue lässt den Auftrag stehen („Entwurf im Eingabefeld")
+  und stellt ihn beim nächsten Turn-Ende zu. Eingereihte Aufträge werden nie
+  verworfen.
+- **Nur ein alter Rückleger vermutet:** Das Feld wird vorher per Ctrl+C
+  geleert (nur Claude-Chats im Status `idle`; in einer offenen Rückfrage
+  bräche Ctrl+C den Dialog ab), auch bei `send --no-submit`. Die Antwort von
+  `send` trägt dann `clearedInput: true`, die Queue loggt es
+  (`queue_delivered … clearedInput=true`).
+
+Als Abbruch zählt (Claude-Chats, nicht in Dialogen): ESC oder Ctrl+C,
+während der Chat `working` ist, **und** innerhalb von 5 s nach einem
+programmatischen Absenden unabhängig vom Status — der Registry-Status kommt
+kurz nach dem Return, ein schnelles ESC lief vorher als „nur ESC" durch.
+Ebenso `chats interrupt`. Ein danach eintreffender Turn-Start vergisst den
+Rückleger nicht. Zweimal ESC und dann Return (Rewind-Auswahl) gilt als
+Rückleger, nicht als Absenden. ESC und Ctrl+C im Terminal eines arbeitenden
+Chats melden zugleich dem Status-Koordinator den Abbruch-Verdacht
+(`observeTerminalInterruptKey`): Endet der Turn kurz danach, gibt es kein
+„fertig“ und keine Queue-Zustellung — der nächste Auftrag wartet aufs
+nächste echte Turn-Ende. Leert ein Ctrl+C nur ein volles Eingabefeld und
+endet der Turn zufällig binnen 10 s, wartet die Queue ebenfalls (sichere
+Richtung).
+
+Warum eine Schätzung und kein Lesen des Eingabefelds: Die Claude-TUI zeichnet
+das Feld mit Ink, versteckt den echten Cursor, zeigt im leeren Feld einen
+Platzhaltertext, und Rahmen, Prompt-Zeichen und Lage wechseln mit Version,
+Theme, Mods und Fensterbreite (Codex zeichnet ganz anders). Ein Parser des
+SwiftTerm-Puffers wäre ein stiller Fehlerpfad. Tastendrücke und eigene
+Zustellungen sieht die App dagegen vollständig; die Schätzung irrt in die
+sichere Richtung (Fehlalarm = Wartezeit oder ein Ctrl+C in ein leeres Feld).
+
+**Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
+läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
+hält sie nicht auf. Wer einen Auftrag zurückzieht, nimmt deshalb
+`chats interrupt <ref> --clear-input` (opt-in): Es schickt 400 ms nach dem
+ESC ein Ctrl+C hinterher und leert den Composer — löscht auch einen etwaigen
+User-Entwurf, deshalb nie Default. Hat in diesen 400 ms schon ein `send`,
+die Queue, ein Einfügen oder ein anderes Leeren ins Feld geschrieben, fällt
+das Ctrl+C aus (Log `composer_clear_skipped`): Es träfe sonst den neuen
+Auftrag oder wäre der zweite Ctrl+C-Druck in ein leeres Feld, und Claude
+beendete sich. `interrupt --clear-input` und ein sofort folgendes `send`
+vertragen sich damit.
 
 Der frühere Send-Guard (zweiter `UserPromptSubmit`-Hook `chats _prompt-guard`
 mit Zustell-Tokens, seit 2026-08-17) ist seit 05.11.2026 ausgebaut: Er blockte
 auch legitime Zustellungen, etwa per `enqueue` eingereihte Prompts. Das
-Subcommand antwortet nur noch mit Exit 0, damit vor dem Update gestartete
-Sessions mit alten Settings bis zu ihrem Neustart ohne Fehlermeldung laufen.
+Subcommand antwortet nur noch mit Exit 0 (und liest das Hook-JSON auf stdin
+leer, damit die CLI bei großen Prompts kein EPIPE bekommt), damit vor dem
+Update gestartete Sessions mit alten Settings bis zu ihrem Neustart ohne
+Fehlermeldung laufen. Den alten Token-Ordner `send-tokens/` und den Schalter
+`chatsPromptGuardEnabled` räumt `LegacyDataCleanup` einmalig weg.
 
 ## close (Tab-Management)
 

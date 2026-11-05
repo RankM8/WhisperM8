@@ -749,14 +749,21 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// `submit == true`: Return wird NACH einem kurzen Delay gesendet (die TUI
     /// braucht einen Moment, um den Paste zu verarbeiten — dasselbe Muster wie
     /// die 1,0-s-Grace im `AgentPromptRoutingService`).
-    func sendPrompt(_ text: String, submit: Bool) {
-        guard isRunning else { return }
-        // Nach einem Abbruch steht vermutlich der alte Prompt im Composer
-        // (`TerminalComposerDraftTracker.mayHoldRestoredPrompt`): erst mit
-        // Ctrl+C leeren, sonst hängt der neue Prompt daran und der
-        // abgebrochene Auftrag liefe mit. Kurz warten, bis die TUI das Leeren
-        // verarbeitet hat.
-        if submit, Self.clearsBeforeSubmit(
+    ///
+    /// - Returns: `true`, wenn vorher ein zurückgelegter Prompt aus dem
+    ///   Eingabefeld geräumt wurde (für die Antwort an den Absender).
+    @discardableResult
+    func sendPrompt(_ text: String, submit: Bool) -> Bool {
+        guard isRunning else { return false }
+        // Nach einem Abbruch oder Rewind steht vermutlich ein alter Prompt im
+        // Composer (`TerminalComposerDraftTracker.mayHoldRestoredPrompt`):
+        // erst mit Ctrl+C leeren, sonst hängt der neue Prompt daran und der
+        // abgebrochene Auftrag liefe mit. Einen eigenen Entwurf des Users
+        // fängt vorher `PromptDeliveryGate` ab. Kurz warten, bis die TUI das
+        // Leeren verarbeitet hat.
+        // Auch bei `--no-submit`: sonst stünde der neue Text hinter dem alten
+        // Rückleger, und ein Enter des Users schickte beide ab (Review R3).
+        if Self.clearsBeforeSubmit(
             draft: composerDraft,
             profile: command.keyboardProfile,
             status: AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
@@ -765,9 +772,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 self?.pastePrompt(text, submit: submit)
             }
-            return
+            return true
         }
         pastePrompt(text, submit: submit)
+        return false
     }
 
     /// Pur: Leeren nur bei Claude-Chats im Ruhezustand. Bei offener Rückfrage
@@ -790,7 +798,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             composerDraft.recordTextInserted()
             return
         }
-        composerDraft.recordSubmitted()
+        composerDraft.recordSubmitted(programmaticAt: Date())
         // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
         // Return kommt (best-effort nach erfolgreichem Paste).
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
@@ -812,11 +820,30 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         composerDraft.recordSubmittedByTurnStart()
     }
 
-    /// Ein laufender Turn wurde abgebrochen — die CLI legt seinen Prompt in
-    /// den Composer zurück (siehe `sendPrompt`).
-    func noteTurnInterrupted() {
+    /// `chats interrupt` hat ein ESC geschickt. Zählt als Abbruch, wenn der
+    /// Chat arbeitet oder gerade erst programmatisch abgeschickt wurde — dann
+    /// legt die CLI den Prompt in den Composer zurück (siehe `sendPrompt`).
+    func noteInterruptSent(status: AgentSessionRuntimeStatus?) {
         guard command.keyboardProfile == .claudeCodeChat else { return }
-        composerDraft.recordTurnInterrupted()
+        composerDraft.recordInterruptSignal(status: status, now: Date())
+    }
+
+    /// `chats interrupt --clear-input`: 400 ms nach dem ESC ein Ctrl+C, das den
+    /// zurückgelegten Prompt leert (Vorfall 2026-08-17). Hat bis dahin ein
+    /// `send`, die Queue oder ein anderes Leeren ins Feld geschrieben, fällt
+    /// es aus: Es träfe sonst den neuen Auftrag oder wäre der zweite Ctrl+C-
+    /// Druck in ein leeres Feld — dann beendet sich Claude (Review R1).
+    func clearComposerAfterInterrupt() {
+        let writes = composerDraft.programmaticWrites
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, self.isRunning else { return }
+            guard self.composerDraft.deferredClearIsSafe(sinceWrites: writes) else {
+                Logger.agentStore.notice(
+                    "composer_clear_skipped session=\(self.sessionID.uuidString, privacy: .public) reason=written_meanwhile")
+                return
+            }
+            self.sendComposerClear()
+        }
     }
 
     /// Sendet ein einzelnes Ctrl+C — leert in Claude Code den NICHT-leeren
@@ -895,17 +922,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         )
         keyboardShortcutHandler?.onTerminalKeyDownEvent = { [weak self] event in
             guard let self else { return }
-            // In Dialogen (Freigabe, Frage, Plan) antworten 1/2/y ohne Enter —
-            // das ist kein Entwurf im Eingabefeld (LR-CLI-002).
-            if AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID) != .awaitingInput {
-                self.composerDraft.recordKeyDown(keyCode: event.keyCode, modifiers: event.modifierFlags)
-            }
-            // ESC mitten im Turn bricht ab — die CLI legt den Prompt zurück.
-            if event.keyCode == 53,
-               event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty,
-               AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID) == .working {
-                self.noteTurnInterrupted()
-            }
+            // Entwurf, Abbruch (ESC/Ctrl+C) und Rewind schätzen — Regeln und
+            // Begründung in `TerminalComposerDraftTracker.recordTerminalKey`.
+            self.composerDraft.recordTerminalKey(
+                keyCode: event.keyCode,
+                modifiers: event.modifierFlags,
+                status: AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID),
+                restoresPromptOnInterrupt: self.command.keyboardProfile == .claudeCodeChat,
+                now: Date())
         }
 
         // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.

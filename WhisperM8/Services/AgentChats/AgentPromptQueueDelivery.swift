@@ -77,13 +77,15 @@ final class AgentPromptQueueDelivery {
 
         let marked = AgentControlRequestHandler.markedPrompt(
             reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)")
-        controller.sendPrompt(marked, submit: true)
+        // Ein Entwurf des Users hält die Zustellung oben an (`draftPending`,
+        // bleibt in der Queue); ein vermuteter alter Rückleger wird geräumt.
+        let clearedInput = controller.sendPrompt(marked, submit: true)
         store.markDelivered(id: reserved.id)
 
         ChatsAuditLog.shared.append(Self.deliveryAuditEntry(for: reserved, target: session.title, at: Date()))
 
         Logger.agentStore.notice(
-            "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
+            "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
     }
 
     /// Audit-Eintrag der Zustellung: Absender und Verifikation stammen aus dem

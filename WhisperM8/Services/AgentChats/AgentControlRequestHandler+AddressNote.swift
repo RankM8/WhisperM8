@@ -4,8 +4,8 @@ import Foundation
 
 extension AgentControlRequestHandler {
     /// `whisperm8 chats address` liest nur Claudes Registry — die native
-    /// SendMessage-Brücke danach läuft an `session.send` (Marker, Zustell-Token,
-    /// Audit, Selbst-Send-Schutz) vorbei. Damit wenigstens die Adressvergabe eine
+    /// SendMessage-Brücke danach läuft an `session.send` (Marker, Audit,
+    /// Selbst-Send-Schutz, Schutz vor zurückgelegten Prompts) vorbei. Damit wenigstens die Adressvergabe eine
     /// Spur hinterlässt und der Selbstschutz greift, meldet die CLI jede Abfrage
     /// vor der Ausgabe hierher: Audit-Zeile (Akteur → Ziel, nie Inhalt) und
     /// Ablehnung, wenn ein Chat die eigene Adresse erfragt.
