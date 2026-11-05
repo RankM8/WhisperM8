@@ -283,6 +283,7 @@ struct PromptPackageBuilder {
         let prompt = [
             globalContract(intent: intent, mode: mode),
             inputSourceBlock(PostProcessingInputSource.current),
+            selectionDashesBlock(mode: mode, contextBundle: contextBundle),
             agentChatContextBlock(contextBundle: contextBundle),
             visualContextBlock(contextBundle: contextBundle, visualManifest: visualManifest),
             "## Mode Instruction\n\(modeInstruction)"
@@ -332,6 +333,24 @@ struct PromptPackageBuilder {
         - Your output replaces the selection in place. Return only the replacement text, with no preface, quotes, or code fences around it.
         - Do not reply to the text or comment on it unless the mode instruction asks for a reply.
         - Keep the language of the selected text unless the mode instruction or the text itself asks for a different one.
+        - Dashes (— or –) that are already in the selected text belong to the user. Keep them; do not add new ones.
+        """
+    }
+
+    /// Diktat mit Markierung in Korrigieren/Besser formulieren: Die
+    /// Markierung ist der Text, ihre Striche gehören dem Nutzer (der
+    /// `DashFilter` lässt sie dann auch stehen). Bei der Schnellaktion sagt
+    /// das schon `inputSourceBlock`.
+    func selectionDashesBlock(mode: OutputMode, contextBundle: TranscriptContextBundle) -> String? {
+        guard PostProcessingInputSource.current == .dictation,
+              PostProcessingService.keepsDashes(
+                  rawText: "",
+                  mode: mode,
+                  selectedText: contextBundle.selectedText.text,
+                  source: .dictation
+              ) else { return nil }
+        return """
+        ## Selected Text Dashes
         - Dashes (— or –) that are already in the selected text belong to the user. Keep them; do not add new ones.
         """
     }

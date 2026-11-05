@@ -13254,6 +13254,16 @@
         }
       }
     },
+    "The GPT backend's answer is incomplete (stop reason: %@).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort des GPT-Backends ist unvollständig (Abbruchgrund: %@)."
+          }
+        }
+      }
+    },
     "The GPT model for the /model picker, for “New GPT chat” and for GPT subagents (agent type “gpt”). Which model a new chat uses is decided by Claude Code itself: choose /model in a chat and save it as the default with Enter — GPT or Claude. Empty, ‘auto’ or unknown = latest model (currently %@). Any backend model of the Codex catalog is allowed (currently: %@); models with a priority tier optionally with ‘-fast’. Older and unknown GPT IDs are clearly rejected by the router. New models also need a claude-code-proxy that knows them.": {
       "localizations": {
         "de": {

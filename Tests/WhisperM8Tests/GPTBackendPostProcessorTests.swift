@@ -117,6 +117,34 @@ final class GPTBackendPostProcessorTests: XCTestCase {
         XCTAssertNil(GPTBackendPostProcessor.responseText(from: Data("kein json".utf8)))
     }
 
+    func testOnlyEndTurnCountsAsCompleteAnswer() {
+        func reason(_ json: String) -> String? {
+            GPTBackendPostProcessor.incompleteStopReason(from: Data(json.utf8))
+        }
+        XCTAssertNil(reason(#"{"content":[],"stop_reason":"end_turn"}"#))
+        // Ältere Proxys ohne Feld: nichts unterstellen.
+        XCTAssertNil(reason(#"{"content":[]}"#))
+        XCTAssertNil(reason(#"{"content":[],"stop_reason":null}"#))
+        XCTAssertEqual(reason(#"{"content":[],"stop_reason":"max_tokens"}"#), "max_tokens")
+        XCTAssertEqual(reason(#"{"content":[],"stop_reason":"refusal"}"#), "refusal")
+    }
+
+    /// Abgeschnittene Antwort (Token-Grenze) ist ein Backend-Fehler: Der
+    /// Router weicht dann auf Codex aus, die Schnellaktion lässt die
+    /// Markierung stehen, statt sie durch einen Torso zu ersetzen.
+    func testTruncatedAnswerIsBackendError() async {
+        GPTBackendStubURLProtocol.handler = {
+            Self.status($0, 200, #"{"content":[{"type":"text","text":"Der erste Teil des Abs"}],"stop_reason":"max_tokens"}"#)
+        }
+        do {
+            _ = try await processor(dependencies()).processRun(rawText: "x", mode: cleanMode(), language: "de", contextBundle: .empty)
+            XCTFail("Fehler erwartet")
+        } catch {
+            XCTAssertEqual(error as? GPTBackendPostProcessingError, .incompleteResponse(stopReason: "max_tokens"))
+            XCTAssertEqual((error as? GPTBackendPostProcessingError)?.label, "incomplete_max_tokens")
+        }
+    }
+
     func testHTTPMapping() {
         XCTAssertEqual(GPTBackendPostProcessor.mapHTTP(statusCode: 401, body: Data()), .notAuthenticated)
         XCTAssertEqual(

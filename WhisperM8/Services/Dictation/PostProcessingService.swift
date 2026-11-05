@@ -48,16 +48,40 @@ struct PostProcessingService {
             contextBundle: allowedContext
         )
         // Gedankenstriche verbietet der Prompt; Modelle setzen sie trotzdem.
-        // Ausnahme Schnellaktion: Striche, die schon in der Markierung standen,
-        // gehören dem Nutzer und bleiben („Korrigieren“ ändert nur Fehler).
-        if !Self.keepsDashes(rawText: rawText) {
+        // Ausnahme: Ist eine Markierung der bearbeitete Text und standen dort
+        // schon Striche, gehören sie dem Nutzer und bleiben („Korrigieren“
+        // ändert nur Fehler).
+        if !Self.keepsDashes(rawText: rawText, mode: mode, selectedText: allowedContext.selectedText.text) {
             run.text = DashFilter.apply(run.text)
         }
         return run
     }
 
-    static func keepsDashes(rawText: String, source: PostProcessingInputSource = .current) -> Bool {
-        source == .selection && (rawText.contains("\u{2014}") || rawText.contains("\u{2013}"))
+    /// Ob der `DashFilter` ausbleibt, weil der bearbeitete Text eine
+    /// Markierung des Nutzers mit eigenen Strichen ist:
+    /// - Schnellaktion (`.selection`): die Markierung ist `rawText`.
+    /// - Diktat in einem Modus, der die Markierung selbst umarbeitet
+    ///   (Korrigieren, Besser formulieren): die Markierung steht im Kontext,
+    ///   das Gesprochene ist nur eine Zusatzanweisung.
+    static func keepsDashes(
+        rawText: String,
+        mode: OutputMode? = nil,
+        selectedText: String = "",
+        source: PostProcessingInputSource = .current
+    ) -> Bool {
+        switch source {
+        case .selection:
+            return DashFilter.containsDash(rawText)
+        case .dictation:
+            guard let mode, editsSelection(mode) else { return false }
+            return DashFilter.containsDash(selectedText)
+        }
+    }
+
+    /// Modi, deren Vorlage eine vorhandene Markierung als DEN Text behandelt
+    /// (und nicht nur als Kontext).
+    static func editsSelection(_ mode: OutputMode) -> Bool {
+        mode.templateID == PostProcessingTemplate.correctID || mode.templateID == PostProcessingTemplate.rephraseID
     }
 
     func allowedContextBundle(for mode: OutputMode, capturedContext: TranscriptContextBundle) -> TranscriptContextBundle {

@@ -117,6 +117,21 @@ die Ziel-App ein. Bei Post-Processing-Fehlern liefert die App je nach
 Preference entweder einen Raw- oder vorsichtigen Fallback aus oder wirft den
 Fehler weiter.
 
+**Gedankenstriche:** Der Globalvertrag verbietet sie, `DashFilter` entfernt die
+übrigen danach (`PostProcessingService.processRun`). Aufzählungszeichen werden
+zu „-“, aber nur in einer Liste (Nachbarzeile ist ein Listenpunkt oder die
+Zeile davor endet mit Doppelpunkt); ein Satz, der mit Strich beginnt, verliert
+ihn nur. Zahlenbereiche werden zu „10-12“, ein Strich vor Satzzeichen oder am
+Zeilenende fällt weg, der Rest wird zum Komma. Stehen bleiben: Minus direkt
+vor einer Ziffer ohne Zahl davor („–5 °C“), der Preisstrich („49,–“),
+Tabellenzellen nur aus Strichen („| — |“) und Code (Fences mit ``` oder ~~~,
+eingerückte Codeblöcke nach einer Leerzeile, Inline-Code). Bekannte Grenze:
+„2025 – 30 Prozent“ wird wie ein Bereich zu „2025-30“. Ganz aus bleibt der
+Filter, wenn eine Markierung des Nutzers der bearbeitete Text ist und schon
+Striche enthält (`PostProcessingService.keepsDashes`): bei der Schnellaktion
+und beim Diktat in Korrigieren/Besser formulieren mit Markierung. Im zweiten
+Fall bekommt auch das Prompt den Hinweis „Selected Text Dashes“.
+
 ## Zwei Wege: GPT-Backend und Codex-CLI
 
 Seit 05.11.2026 entscheidet `PostProcessingEngineRouter` je Diktat, wer die
@@ -140,10 +155,14 @@ Denktiefe als `output_config.effort`, die Fast-Stufe als Modellendung `-fast`
 (nur wenn der Katalog sie für das Modell kennt). Kennt der laufende Proxy das
 Modell nicht (`/v1/models`), übernimmt gleich Codex. Läuft die Instanz nicht
 oder kommt „Connection refused“, wird sie einmal gestartet und die Anfrage
-einmal wiederholt. Zeitlimit 90 s.
+einmal wiederholt. Zeitlimit 90 s. Als vollständig gilt nur eine Antwort mit
+`stop_reason: end_turn` (oder ohne das Feld); `max_tokens` und andere Gründe
+werden zu `incompleteResponse`, damit ein abgeschnittener Text nie eine
+Markierung oder ein Diktat ersetzt.
 
 **Rückfall:** Jeder Fehler des Backends (aus, Konto nicht angemeldet, Proxy
-nicht erreichbar, 401, 429, 5xx, leere Antwort, Netzfehler) führt zum selben
+nicht erreichbar, 401, 429, 5xx, leere Antwort, abgeschnittene Antwort,
+Netzfehler) führt zum selben
 Auftrag über die Codex-CLI. Kein Rückfall bei Abbruch durch den Nutzer und
 bei Zeitüberschreitung. Scheitern beide Wege, nennt die Meldung beide Gründe
 (`PostProcessingError.bothEnginesFailed`), danach greift wie bisher der
@@ -257,6 +276,7 @@ Report; wenn noch kein Report geladen oder vorhanden ist, kann
 - `WhisperM8/Services/Dictation/GPTBackendPostProcessor.swift` schickt das Prompt als `/v1/messages`-Anfrage an die Proxy-Instanz des aktiven GPT-Kontos und hält die Abbruch-Registry `GPTBackendRunRegistry`.
 - `WhisperM8/Services/Dictation/CodexPostProcessor.swift` lädt Templates, prüft Codex-Bereitschaft, löst Projektpfade auf und startet den echten `codex exec`-Prozess.
 - `WhisperM8/Services/Dictation/CodexSupport.swift` enthält Process-Cancel-Registry, Codex-Argumentbau, Status-Probe und Visual-Input-Auswahl.
+- `WhisperM8/Support/DashFilter.swift` entfernt Gedankenstriche aus dem Ergebnis (Regeln oben).
 - `WhisperM8/Services/Dictation/PromptPackageBuilder.swift` baut den finalen Prompt aus Globalvertrag, Agent-Chat-Kontext, Captured Context, Visual Manifest und Template.
 - `WhisperM8/Services/Dictation/OutputModeStore.swift` lädt, normalisiert, migriert und speichert Output-Modes in `OutputModes.json`.
 - `WhisperM8/Services/Dictation/PostProcessingTemplateStore.swift` kombiniert Built-in-Templates mit Custom-Templates aus `PostProcessingTemplates.json`.

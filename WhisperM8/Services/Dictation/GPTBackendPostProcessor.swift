@@ -67,6 +67,9 @@ enum GPTBackendPostProcessingError: LocalizedError, Equatable {
     case rateLimited
     case http(statusCode: Int, message: String)
     case emptyResponse
+    /// Antwort endete nicht regulär (`stop_reason` ≠ `end_turn`, etwa
+    /// `max_tokens`): der Text kann abgeschnitten sein.
+    case incompleteResponse(stopReason: String)
     case network(URLError)
 
     var errorDescription: String? {
@@ -87,6 +90,8 @@ enum GPTBackendPostProcessingError: LocalizedError, Equatable {
             return String(localized: "The GPT backend answered with HTTP \(statusCode): \(message)")
         case .emptyResponse:
             return String(localized: "The GPT backend returned no text.")
+        case .incompleteResponse(let stopReason):
+            return String(localized: "The GPT backend's answer is incomplete (stop reason: \(stopReason)).")
         case .network(let error):
             return String(localized: "Network error at the GPT backend: \(error.localizedDescription)")
         }
@@ -103,6 +108,7 @@ enum GPTBackendPostProcessingError: LocalizedError, Equatable {
         case .rateLimited: return "rate_limited"
         case .http(let statusCode, _): return "http_\(statusCode)"
         case .emptyResponse: return "empty_response"
+        case .incompleteResponse(let stopReason): return "incomplete_\(stopReason)"
         case .network(let error): return "network_\(error.code.rawValue)"
         }
     }
@@ -323,6 +329,18 @@ struct GPTBackendPostProcessor: PostProcessing {
         return text.isEmpty ? nil : text
     }
 
+    /// Pur: Grund, warum die Antwort nicht regulär endete, oder `nil`.
+    /// Nur `end_turn` gilt als vollständig; bei `max_tokens` (oder einem
+    /// anderen Abbruch upstream) wäre der Text abgeschnitten und würde sonst
+    /// die ganze Markierung ersetzen. Fehlt das Feld, wird nichts unterstellt.
+    static func incompleteStopReason(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let stopReason = object["stop_reason"] as? String,
+              !stopReason.isEmpty,
+              stopReason != "end_turn" else { return nil }
+        return stopReason
+    }
+
     /// Pur: HTTP-Status und Fehlerkörper des Proxys.
     static func mapHTTP(statusCode: Int, body: Data) -> GPTBackendPostProcessingError {
         let parsed = ChatGPTTranscriptionErrorMapper.ErrorBody.parse(String(decoding: body, as: UTF8.self))
@@ -370,6 +388,9 @@ struct GPTBackendPostProcessor: PostProcessing {
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard statusCode == 200 else {
             throw Self.mapHTTP(statusCode: statusCode, body: data)
+        }
+        if let stopReason = Self.incompleteStopReason(from: data) {
+            throw GPTBackendPostProcessingError.incompleteResponse(stopReason: stopReason)
         }
         guard let text = Self.responseText(from: data) else {
             throw GPTBackendPostProcessingError.emptyResponse

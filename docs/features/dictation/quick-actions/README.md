@@ -100,7 +100,9 @@ Leerzeichen und Zeilenumbrüche am Rand der Markierung setzt
 Gedankenstriche, die schon in der Markierung standen, bleiben: der
 `DashFilter` läuft bei der Schnellaktion nur, wenn die Markierung selbst keine
 hatte (`PostProcessingService.keepsDashes`), und der Prompt sagt dem Modell
-dasselbe. Beim Diktat gilt der Filter wie bisher.
+dasselbe. Beim Diktat gilt dasselbe für Korrigieren und Besser formulieren mit
+Markierung (dort ist die Markierung der Text); in allen anderen Fällen läuft
+der Filter (Regeln: [AI Output](../ai-output/README.md)).
 
 ## Im Zwischenablage-Fenster (⇧⌘C)
 
