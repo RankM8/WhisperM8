@@ -37,6 +37,8 @@ struct StatisticsLogSource: Equatable, Sendable {
 
 /// Eine gefundene Protokolldatei mit ihrem aktuellen `stat`.
 struct StatisticsLogFile: Equatable, Sendable {
+    static let codexKeyPrefix = "codex:"
+
     var path: String
     var kind: StatisticsLogSource.Kind
     var size: Int64
@@ -44,11 +46,53 @@ struct StatisticsLogFile: Equatable, Sendable {
     var inode: UInt64
     /// Schlüssel eines Subagent-Laufs (Pfad relativ zu `projects/`), sonst `nil`.
     var subagentKey: String?
+    /// Schlüssel des Lesestands: der Pfad, bei Codex `codex:<thread-uuid>` —
+    /// so zählt eine verschobene, komprimierte oder entpackte Datei nicht doppelt.
+    var cursorKey: String
+    /// `.jsonl.zst` (von Codex komprimiert): nur über den Entpacker lesbar.
+    var isCompressed: Bool
+
+    init(
+        path: String,
+        kind: StatisticsLogSource.Kind,
+        size: Int64,
+        mtime: Double,
+        inode: UInt64,
+        subagentKey: String? = nil,
+        cursorKey: String? = nil,
+        isCompressed: Bool = false
+    ) {
+        self.path = path
+        self.kind = kind
+        self.size = size
+        self.mtime = mtime
+        self.inode = inode
+        self.subagentKey = subagentKey
+        self.cursorKey = cursorKey ?? path
+        self.isCompressed = isCompressed
+    }
 
     /// Muss die Datei gelesen werden?
     func needsRead(_ cursor: StatisticsFileCursor?) -> Bool {
         guard let cursor else { return true }
+        if let known = cursor.path, known != path { return true }
         return cursor.size != size || cursor.mtime != mtime || cursor.inode != inode
+    }
+
+    /// `rollout-2026-07-30T14-00-47-019fb2af-17f7-73d1-9913-e553175e6b3b.jsonl(.zst)`
+    /// → `019fb2af-17f7-73d1-9913-e553175e6b3b`.
+    static func codexThreadID(fromFileName name: String) -> String? {
+        var stem = Substring(name)
+        if stem.hasSuffix(".zst") { stem = stem.dropLast(4) }
+        guard stem.hasSuffix(".jsonl") else { return nil }
+        stem = stem.dropLast(6)
+        guard stem.count >= 36 else { return nil }
+        let id = stem.suffix(36)
+        let groups = id.split(separator: "-", omittingEmptySubsequences: false)
+        guard groups.map(\.count) == [8, 4, 4, 4, 12],
+              groups.allSatisfy({ $0.allSatisfy(\.isHexDigit) })
+        else { return nil }
+        return id.lowercased()
     }
 }
 
@@ -58,20 +102,39 @@ enum StatisticsLogLister {
     /// Listet alle Protokolle aller Quellen. Claude: `<projekt>/<session>.jsonl`
     /// plus alles unter `<session>/subagents/` — andere Unterordner
     /// (`tool-results` u. a.) werden gar nicht betreten. Codex: alle
-    /// `rollout-*.jsonl` (die komprimierten `.jsonl.zst` im Archiv nicht).
+    /// `rollout-*.jsonl` und die von Codex komprimierten `rollout-*.jsonl.zst`.
+    /// Liegt ein Thread kurz in beiden Formen da (Codex komprimiert gerade),
+    /// zählt nur die lesbare `.jsonl`.
     static func list(_ sources: [StatisticsLogSource]) -> [StatisticsLogFile] {
         var files: [StatisticsLogFile] = []
+        var codex: [String: StatisticsLogFile] = [:]
         for source in sources {
             switch source.kind {
             case .claude:
                 listClaude(source, into: &files)
             case .codex:
                 walk(source.root.path, depthLeft: 4) { name, path in
-                    guard name.hasPrefix("rollout-"), name.hasSuffix(".jsonl") else { return }
-                    if let file = statFile(path: path, kind: source.kind, subagentKey: nil) { files.append(file) }
+                    guard name.hasPrefix("rollout-") else { return }
+                    let compressed = name.hasSuffix(".jsonl.zst")
+                    guard compressed || name.hasSuffix(".jsonl") else { return }
+                    let key = StatisticsLogFile.codexThreadID(fromFileName: name).map { StatisticsLogFile.codexKeyPrefix + $0 }
+                    guard var file = statFile(path: path, kind: source.kind, subagentKey: nil) else { return }
+                    file.isCompressed = compressed
+                    guard let key else {
+                        files.append(file)
+                        return
+                    }
+                    file.cursorKey = key
+                    if let existing = codex[key], !existing.isCompressed || compressed {
+                        // Unkomprimiert gewinnt; bei Gleichstand die zuletzt geänderte.
+                        if existing.isCompressed == compressed, file.mtime > existing.mtime { codex[key] = file }
+                        return
+                    }
+                    codex[key] = file
                 }
             }
         }
+        files.append(contentsOf: codex.values)
         return files
     }
 
@@ -183,6 +246,26 @@ struct StatisticsScanBatch {
         }
     }
 
+    /// Leerer Abschnitt mit demselben Kalender.
+    func emptyCopy() -> StatisticsScanBatch {
+        StatisticsScanBatch(calendar: calendar)
+    }
+
+    /// Nimmt einen anderen Abschnitt auf (z. B. eine fertig entpackte Datei).
+    mutating func merge(_ other: StatisticsScanBatch) {
+        for (key, delta) in other.days {
+            days[key, default: StatsDay()].mergeScanned(delta)
+        }
+        for (week, peak) in other.codexWeeklyPeaks {
+            codexWeeklyPeaks[week] = max(codexWeeklyPeaks[week] ?? 0, peak)
+        }
+        if let snapshot = other.codexLimit, codexLimit.map({ $0.capturedAt <= snapshot.capturedAt }) ?? true {
+            codexLimit = snapshot
+            if let plan = other.codexPlan { codexPlan = plan }
+        }
+        filesRead += other.filesRead
+    }
+
     /// Leert die Zählwerte, behält den Tages-Cache.
     mutating func clear() {
         days.removeAll()
@@ -249,34 +332,71 @@ enum StatisticsLogFileReader {
     /// Größenordnungen kleiner; so lang werden nur eingebettete Bilder.
     static let maxLineLength = 8 << 20
 
+    enum Result: Equatable {
+        /// Gelesen; neuer Lesestand.
+        case read(StatisticsFileCursor)
+        /// Komprimiert, aber kein Entpacker vorhanden.
+        case skipped
+        /// Entpacken fehlgeschlagen, Zeitlimit oder Abbruch: nichts gezählt.
+        case failed
+    }
+
     /// Liest die neuen Bytes einer Datei und gibt den neuen Cursor zurück.
     /// Gelesen wird nur bis zum letzten Zeilenumbruch — eine halbe Zeile am
     /// Ende kommt beim nächsten Lauf vollständig dran.
+    ///
+    /// Muss eine schon bekannte Codex-Datei von vorn gelesen werden (ersetzt,
+    /// verschoben, komprimiert), zählt nur, was über ihren letzten
+    /// Gesamtstand hinausgeht.
     static func process(
         _ file: StatisticsLogFile,
         cursor previous: StatisticsFileCursor?,
         dedup: StatisticsDedupSet,
-        batch: inout StatisticsScanBatch
-    ) -> StatisticsFileCursor {
+        batch: inout StatisticsScanBatch,
+        decompressor: StatisticsDecompressing? = nil,
+        shouldStop: () -> Bool = { false }
+    ) -> Result {
         var cursor = StatisticsFileCursor(size: file.size, mtime: file.mtime, inode: file.inode, offset: 0)
-        if let previous, previous.inode == file.inode, previous.offset <= file.size {
+        var baseline: CodexTokenTotals?
+        if !file.isCompressed, let previous, previous.inode == file.inode, previous.offset <= file.size,
+           previous.path.map({ !$0.hasSuffix(".zst") }) ?? true {
             cursor = previous
             cursor.size = file.size
             cursor.mtime = file.mtime
+        } else if file.kind == .codex {
+            // Neue, ersetzte, geschrumpfte, verschobene oder komprimierte Datei
+            // → von vorn, aber erst über dem alten Gesamtstand zählen.
+            baseline = previous?.codexTotals
         }
-        // Sonst: neue, ersetzte oder geschrumpfte Datei → von vorn, ohne alten Codex-Stand.
+        if file.cursorKey != file.path { cursor.path = file.path }
+
+        if file.isCompressed {
+            guard let decompressor else { return .skipped }
+            // Eigener Abschnitt: Bricht das Entpacken ab, zählt nichts davon.
+            var local = batch.emptyCopy()
+            var handler = LineHandler(file: file, cursor: cursor, dedup: dedup, replayBaseline: baseline)
+            var splitter = StatisticsLineSplitter(start: 0)
+            let ok = decompressor.decompress(path: file.path, shouldStop: shouldStop) { chunk in
+                splitter.feed(chunk) { handler.handle($0, batch: &local) }
+            }
+            guard ok else { return .failed }
+            batch.merge(local)
+            cursor = handler.finishedCursor
+            cursor.offset = splitter.consumed
+            return .read(cursor)
+        }
 
         let fd = open(file.path, O_RDONLY | O_CLOEXEC)
-        guard fd >= 0 else { return cursor }
+        guard fd >= 0 else { return .failed }
         defer { close(fd) }
 
-        var handler = LineHandler(file: file, cursor: cursor, dedup: dedup)
+        var handler = LineHandler(file: file, cursor: cursor, dedup: dedup, replayBaseline: baseline)
         let consumed = forEachLine(fd: fd, from: cursor.offset, to: file.size) { line in
             handler.handle(line, batch: &batch)
         }
-        cursor = handler.cursor
+        cursor = handler.finishedCursor
         cursor.offset = consumed
-        return cursor
+        return .read(cursor)
     }
 
     /// Ruft `body` für jede vollständige Zeile in `[start, end)` und liefert
@@ -286,44 +406,16 @@ enum StatisticsLogFileReader {
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: chunkSize, alignment: 16)
         defer { buffer.deallocate() }
 
-        var carry: [UInt8] = []
-        var skippingLongLine = false
+        var splitter = StatisticsLineSplitter(start: start)
         var position = start
-        var consumed = start
-
         while position < end {
             let want = Int(min(Int64(chunkSize), end - position))
             let got = pread(fd, buffer, want, off_t(position))
             guard got > 0 else { break }
-            let chunkStart = position
             position += Int64(got)
-
-            var lineStart = 0
-            while lineStart < got, let hit = memchr(buffer + lineStart, 0x0A, got - lineStart) {
-                let newline = buffer.distance(to: hit)
-                if skippingLongLine {
-                    skippingLongLine = false
-                } else if carry.isEmpty {
-                    body(UnsafeRawBufferPointer(start: buffer + lineStart, count: newline - lineStart))
-                } else {
-                    carry.append(contentsOf: UnsafeRawBufferPointer(start: buffer + lineStart, count: newline - lineStart))
-                    carry.withUnsafeBytes { body($0) }
-                    // Große Reste nicht dauerhaft festhalten.
-                    if carry.count > chunkSize { carry = [] } else { carry.removeAll(keepingCapacity: true) }
-                }
-                lineStart = newline + 1
-                consumed = chunkStart + Int64(lineStart)
-            }
-
-            if lineStart < got, !skippingLongLine {
-                carry.append(contentsOf: UnsafeRawBufferPointer(start: buffer + lineStart, count: got - lineStart))
-                if carry.count > maxLineLength {
-                    carry = []
-                    skippingLongLine = true
-                }
-            }
+            splitter.feed(UnsafeRawBufferPointer(start: buffer, count: got), body)
         }
-        return consumed
+        return splitter.consumed
     }
 
     /// Zustand beim Lesen einer Datei.
@@ -331,11 +423,22 @@ enum StatisticsLogFileReader {
         let file: StatisticsLogFile
         var cursor: StatisticsFileCursor
         let dedup: StatisticsDedupSet
+        /// Codex: bis hierher ist der Thread schon gezählt.
+        var replayBaseline: CodexTokenTotals?
 
-        init(file: StatisticsLogFile, cursor: StatisticsFileCursor, dedup: StatisticsDedupSet) {
+        init(file: StatisticsLogFile, cursor: StatisticsFileCursor, dedup: StatisticsDedupSet, replayBaseline: CodexTokenTotals? = nil) {
             self.file = file
             self.cursor = cursor
             self.dedup = dedup
+            self.replayBaseline = replayBaseline
+        }
+
+        /// Lesestand nach der Datei. Kam der alte Gesamtstand nicht wieder
+        /// vor, bleibt er die Schwelle für den nächsten Lauf.
+        var finishedCursor: StatisticsFileCursor {
+            var result = cursor
+            if let base = replayBaseline { result.codexTotals = base }
+            return result
         }
 
         mutating func handle(_ line: UnsafeRawBufferPointer, batch: inout StatisticsScanBatch) {
@@ -379,7 +482,20 @@ enum StatisticsLogFileReader {
                 if let project = StatisticsLogParser.projectName(fromCwd: cwd) { cursor.codexProject = project }
             case .tokenCount(let date, let totals, let limits):
                 if let totals {
-                    let previous = cursor.codexTotals ?? CodexTokenTotals()
+                    var previous = cursor.codexTotals ?? CodexTokenTotals()
+                    if let base = replayBaseline {
+                        if totals.input <= base.input, totals.cached <= base.cached, totals.output <= base.output {
+                            // Schon gezählt — Limits dürfen trotzdem durch (die nehmen nur Neueres).
+                            if let limits { batch.recordCodexLimits(limits, at: date) }
+                            return
+                        }
+                        replayBaseline = nil
+                        previous = CodexTokenTotals(
+                            input: min(base.input, totals.input),
+                            cached: min(base.cached, totals.cached),
+                            output: min(base.output, totals.output)
+                        )
+                    }
                     if let delta = StatisticsLogParser.codexDelta(from: previous, to: totals) {
                         batch.addTokens(
                             delta,
@@ -414,5 +530,55 @@ extension StatisticsLogParser {
         guard end < line.count, line[end] == 0x22 else { return nil }
         let text = String(decoding: UnsafeRawBufferPointer(rebasing: line[start..<end]), as: UTF8.self)
         return parseTimestamp(text)
+    }
+}
+
+// MARK: - Zeilen
+
+/// Zerlegt einen Bytestrom (Datei-Stücke oder entpackte Daten) in Zeilen,
+/// ohne ihn ganz im Speicher zu halten. Zeilen über `maxLineLength` werden
+/// übersprungen.
+struct StatisticsLineSplitter {
+    private var carry: [UInt8] = []
+    private var skippingLongLine = false
+    private var position: Int64
+    /// Position hinter dem letzten Zeilenumbruch.
+    private(set) var consumed: Int64
+
+    init(start: Int64) {
+        position = start
+        consumed = start
+    }
+
+    mutating func feed(_ chunk: UnsafeRawBufferPointer, _ body: (UnsafeRawBufferPointer) -> Void) {
+        guard let buffer = chunk.baseAddress, chunk.count > 0 else { return }
+        let got = chunk.count
+        let chunkStart = position
+        position += Int64(got)
+
+        var lineStart = 0
+        while lineStart < got, let hit = memchr(buffer + lineStart, 0x0A, got - lineStart) {
+            let newline = buffer.distance(to: UnsafeRawPointer(hit))
+            if skippingLongLine {
+                skippingLongLine = false
+            } else if carry.isEmpty {
+                body(UnsafeRawBufferPointer(start: buffer + lineStart, count: newline - lineStart))
+            } else {
+                carry.append(contentsOf: UnsafeRawBufferPointer(start: buffer + lineStart, count: newline - lineStart))
+                carry.withUnsafeBytes { body($0) }
+                // Große Reste nicht dauerhaft festhalten.
+                if carry.count > StatisticsLogFileReader.chunkSize { carry = [] } else { carry.removeAll(keepingCapacity: true) }
+            }
+            lineStart = newline + 1
+            consumed = chunkStart + Int64(lineStart)
+        }
+
+        if lineStart < got, !skippingLongLine {
+            carry.append(contentsOf: UnsafeRawBufferPointer(start: buffer + lineStart, count: got - lineStart))
+            if carry.count > StatisticsLogFileReader.maxLineLength {
+                carry = []
+                skippingLongLine = true
+            }
+        }
     }
 }

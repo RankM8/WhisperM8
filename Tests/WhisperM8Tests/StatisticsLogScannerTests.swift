@@ -28,7 +28,7 @@ final class StatisticsLogScannerTests: XCTestCase {
     private var rankProjects: URL { root.appendingPathComponent("claude-rank/projects") }
     private var codexSessions: URL { root.appendingPathComponent("codex/sessions") }
 
-    private func makeScanner() -> StatisticsLogScanner {
+    private func makeDependencies() -> StatisticsLogScanner.Dependencies {
         var deps = StatisticsLogScanner.Dependencies()
         deps.sources = { [mainProjects, rankProjects, codexSessions] in
             [
@@ -38,12 +38,17 @@ final class StatisticsLogScannerTests: XCTestCase {
             ]
         }
         deps.store = store
-        deps.calendar = calendar
+        deps.calendar = { [calendar] in calendar }
         deps.isEnabled = { true }
         deps.shouldYield = { false }
+        deps.decompressor = { nil }
         deps.backfillFileDelay = 0
-        deps.backfillFlushEvery = 2
-        return StatisticsLogScanner(dependencies: deps)
+        deps.backfillFlushInterval = 0
+        return deps
+    }
+
+    private func makeScanner() -> StatisticsLogScanner {
+        StatisticsLogScanner(dependencies: makeDependencies())
     }
 
     private func write(_ lines: [String], to url: URL, trailingNewline: Bool = true) throws {

@@ -214,6 +214,9 @@ struct StatsScanInfo: Codable, Equatable, Sendable {
     var finishedAt: Date
     var filesRead: Int
     var duration: TimeInterval
+    /// Komprimierte Codex-Protokolle (`.jsonl.zst`), die mangels `zstd`
+    /// übersprungen wurden. `nil` = keine (auch in älteren Dateien).
+    var skippedCompressedFiles: Int?
 }
 
 /// Gesamtdatei `statistics/stats.json`.

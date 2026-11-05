@@ -88,6 +88,9 @@ final class StatisticsGitCollector: @unchecked Sendable {
             logger.debug("statistics_git_skipped reason=constrained")
             return
         }
+        // Gilt nur für diese Generation: Ein „Löschen…“ während des Laufs
+        // verwirft Zählungen und Cursor, statt den Ordner neu anzulegen.
+        let generation = store.generation
         let paths = projectPaths()
         guard !paths.isEmpty else { return }
 
@@ -98,15 +101,22 @@ final class StatisticsGitCollector: @unchecked Sendable {
         let delta = scanner.scan(projectPaths: paths, cursor: &cursor)
 
         if !delta.isEmpty {
-            store.update { db in delta.apply(to: &db) }
+            store.update(ifGeneration: generation) { db in delta.apply(to: &db) }
             // Erst die Zählungen sichern, dann den Cursor: stürzt die App
             // dazwischen ab, zählt der nächste Lauf eher doppelt als gar nicht.
             store.flush()
         }
-        do {
-            try cursor.save(to: cursorURL)
-        } catch {
-            logger.error("statistics_git_cursor_write_failed error=\(error.localizedDescription, privacy: .public)")
+        let url = cursorURL
+        let saved = store.performIfCurrent(generation) { [logger, cursor] in
+            do {
+                try cursor.save(to: url)
+            } catch {
+                logger.error("statistics_git_cursor_write_failed error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+        guard saved else {
+            logger.info("statistics_git_aborted reason=reset")
+            return
         }
         let commits = delta.commits.values.reduce(0) { $0 + $1.values.reduce(0, +) }
         let pullRequests = delta.pullRequests.values.reduce(0) { $0 + $1.values.reduce(0, +) }
