@@ -369,7 +369,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 shortcutLabel: { KeyboardShortcuts.getShortcut(for: QuickActionShortcuts.name(for: OutputMode.correctID))?.description }
             )
             ClipboardHistoryController.shared.start()
-            // Statistik: aktive Zeit, Agenten-Zeit, neue Chats, Diktate.
+            // Statistik: Zeit, Chats, Diktate, Protokolle, Limits, Git.
             StatisticsCollectors.start()
         }
         // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der

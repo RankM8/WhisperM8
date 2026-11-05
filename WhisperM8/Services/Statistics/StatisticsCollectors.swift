@@ -46,10 +46,31 @@ enum StatisticsCollectors {
         }
         // Beim Start arbeitet noch kein Chat; den Koordinator hier nicht anfassen.
         if StatisticsSettings.isEnabled() { activate(runningAgents: []) }
+        // Hintergrund-Dienste: Protokolle (Token, Subagents, Codex-Limits),
+        // Limit-Verlauf der Konten und Git. Jeder folgt selbst dem Schalter.
+        StatisticsLogScanner.shared.start()
+        StatisticsLimitCollector.shared.start()
+        StatisticsGitCollector.shared.start()
+        refreshExchangeRateIfEnabled()
+        StatisticsRuntime.onEnabledChanged { enabled in
+            if enabled { refreshExchangeRateIfEnabled() }
+        }
+    }
+
+    /// EZB-Kurs höchstens einmal am Tag, im Hintergrund.
+    private static func refreshExchangeRateIfEnabled() {
+        guard StatisticsSettings.isEnabled() else { return }
+        Task.detached(priority: .background) {
+            await StatisticsExchangeRate.refreshIfNeeded()
+        }
     }
 
     /// Beim App-Ende: offene Zeit buchen und die Datei schreiben.
     static func shutdown() {
+        guard registered else { return }
+        StatisticsLogScanner.shared.stop()
+        StatisticsLimitCollector.shared.stop()
+        StatisticsGitCollector.shared.stop()
         deactivate()
         StatisticsStore.shared.flush()
     }
