@@ -168,7 +168,11 @@ enum ClipboardCLIFormatter {
         ]
         if let name = entry.sourceName { object["sourceApp"] = name }
         if let id = entry.sourceBundleID { object["sourceBundleID"] = id }
-        if let mode = entry.dictationMode { object["dictationMode"] = mode }
+        // Schnellaktionen (⇧⌘K) tragen ihren Modus unter eigenem Namen, damit
+        // ein Agent sie nicht für Diktate hält; ihr Original ist der Text davor.
+        if let mode = entry.dictationMode {
+            object[entry.isQuickActionResult ? "quickActionMode" : "dictationMode"] = mode
+        }
         if entry.dictationOriginal != nil { object["hasOriginal"] = true }
         switch entry.kind {
         case .text:
@@ -201,7 +205,8 @@ enum ClipboardCLIFormatter {
         return rows.map { row in
             let entry = row.entry
             let pin = entry.isPinned ? "*" : " "
-            let app = entry.dictationMode.map { "Diktat \($0)" } ?? entry.sourceName ?? "-"
+            let app = entry.dictationMode.map { entry.isQuickActionResult ? "Aktion \($0)" : "Diktat \($0)" }
+                ?? entry.sourceName ?? "-"
             let text = oneLine(maskedPreview(entry, context))
             return "\(String(row.number).padding(toLength: 4, withPad: " ", startingAt: 0))\(pin) \(entry.kind.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)) \(ageLabel(from: entry.lastCopiedAt, now: context.now).padding(toLength: 4, withPad: " ", startingAt: 0)) \(app.padding(toLength: 14, withPad: " ", startingAt: 0)) \(text)"
         }.joined(separator: "\n")
@@ -226,7 +231,9 @@ enum ClipboardCLIFormatter {
         if original, entry.dictationOriginal == nil {
             notes.append("Kein Roh-Transkript: der Eintrag ist kein nachbearbeitetes Diktat. Ausgabe ist der Eintrag selbst.")
         } else if !original, entry.dictationOriginal != nil {
-            notes.append("Diktat mit Nachbearbeitung. Das Gesagte vor der Umformulierung: --original.")
+            notes.append(entry.isQuickActionResult
+                ? "Ergebnis einer Schnellaktion (markierter Text umgearbeitet, nichts gesprochen). Der Text davor: --original."
+                : "Diktat mit Nachbearbeitung. Das Gesagte vor der Umformulierung: --original.")
         }
         switch entry.kind {
         case .text:
@@ -458,6 +465,9 @@ enum ClipboardCLICommand {
     Diktate: Fertige Diktate stehen mit im Verlauf (Feld `dictationMode`).
     Hat der Modus nachbearbeitet, liefert `get <nr> --original` das
     Roh-Transkript, also das Gesagte vor der Umformulierung (`hasOriginal`).
+    Schnellaktionen (etwa ⇧⌘K „Korrigieren“) haben stattdessen
+    `quickActionMode`; ihr `--original` ist der markierte Text davor, nichts
+    Gesagtes.
 
     Schutz: Typische Geheimnisse (API-Keys, Tokens, JWTs, private Schlüssel,
     Passwörter in Zuweisungen) werden maskiert ([REDACTED:…]). Passwort-

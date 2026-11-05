@@ -123,7 +123,8 @@ final class RecordingCoordinator {
     /// Legt das fertige Diktat in den Zwischenablage-Verlauf (Ergebnis,
     /// Roh-Transkript bei Nachbearbeitung, Modus, Ziel-App). Nur in der echten
     /// App, nie unter `swift test`.
-    let dictationHistoryRecorder: @MainActor (DictationHistoryRecord) -> Void
+    /// `true`, wenn der Eintrag im Zwischenablage-Verlauf gespeichert wurde.
+    let dictationHistoryRecorder: @MainActor (DictationHistoryRecord) -> Bool
     /// Hinweis, wenn der Hotkey gedrückt wird, während das letzte Diktat noch
     /// transkribiert oder nachgearbeitet wird (Ton, alle 10 s auch eine
     /// Mitteilung). Vorher ging das zweite Diktat still verloren.
@@ -158,11 +159,12 @@ final class RecordingCoordinator {
         transcriptionPrewarmer: @escaping (TranscriptionProvider) -> Void = { provider in
             ChatGPTTranscriptionWarmup.prewarmIfNeeded(provider: provider)
         },
-        dictationHistoryRecorder: @escaping @MainActor (DictationHistoryRecord) -> Void = { record in
-            guard AppInstance.isAppBundleProcess else { return }
-            ClipboardHistoryController.shared.recordDictation(
+        dictationHistoryRecorder: @escaping @MainActor (DictationHistoryRecord) -> Bool = { record in
+            guard AppInstance.isAppBundleProcess else { return false }
+            return ClipboardHistoryController.shared.recordDictation(
                 text: record.text, original: record.original,
-                modeName: record.mode.name, targetApp: record.targetApp
+                modeName: record.mode.name, targetApp: record.targetApp,
+                fromQuickAction: record.isQuickAction
             )
         },
         busyHotkeyNotifier: @escaping @MainActor (_ showNotice: Bool) -> Void = { showNotice in
@@ -720,6 +722,9 @@ struct DictationHistoryRecord {
     var original: String?
     var mode: OutputMode
     var targetApp: NSRunningApplication?
+    /// Ergebnis einer Schnellaktion (⇧⌘K, Zwischenablage-Fenster), kein
+    /// Diktat. `original` ist dann der Text vor der Nacharbeit.
+    var isQuickAction = false
 
     /// Rein: welches Roh-Transkript mitgeht. Ohne Nachbearbeitung ist das
     /// Ergebnis das Transkript selbst.

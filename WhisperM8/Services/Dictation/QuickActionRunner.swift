@@ -52,11 +52,19 @@ struct QuickActionEnvironment {
     /// Nacharbeit über denselben Weg wie nach dem Diktat (GPT-Backend mit
     /// Rückfall auf Codex). Läuft unter den Task-Locals des Runners.
     var rework: @MainActor (_ text: String, _ mode: OutputMode) async throws -> PostProcessingRun
-    /// Ersetzt die Markierung; `false`, wenn nicht eingefügt werden konnte.
-    var replaceSelection: @MainActor (_ text: String, _ app: NSRunningApplication?) async -> Bool
+    /// Steht das Ziel noch so da wie beim Lesen? Vor dem Einfügen geprüft:
+    /// Hat der Nutzer inzwischen die App gewechselt oder etwas anderes
+    /// markiert, landete Cmd+V sonst an der falschen Stelle. `original` ist
+    /// bei einem vorgegebenen Text `nil` (dann zählt nur die vordere App).
+    var isTargetUnchanged: @MainActor (_ original: CapturedSelection?, _ app: NSRunningApplication?) async -> Bool
+    /// Ersetzt die Markierung per Cmd+V; `rule` sagt, wann die alte
+    /// Zwischenablage zurückkommen darf.
+    var replaceSelection: @MainActor (_ text: String, _ app: NSRunningApplication?, _ rule: QuickActionRestoreRule) async -> QuickActionPasteResult
     var copyToClipboard: @MainActor (String) -> Void
-    /// Ergebnis samt Original in den Zwischenablage-Verlauf.
-    var recordHistory: @MainActor (_ result: String, _ original: String, _ mode: OutputMode, _ app: NSRunningApplication?) -> Void
+    /// Ergebnis samt Original in den Zwischenablage-Verlauf. `true`, wenn der
+    /// Eintrag gespeichert wurde (Verlauf an, nicht pausiert, App nicht
+    /// ausgeschlossen); dann ist das Ergebnis dort sicher.
+    var recordHistory: @MainActor (_ result: String, _ original: String, _ mode: OutputMode, _ app: NSRunningApplication?) -> Bool
     var postNotice: @MainActor (_ title: String, _ body: String) -> Void
     /// Ton, wenn der Kurzbefehl kommt, während noch etwas läuft.
     var busySignal: @MainActor () -> Void
@@ -79,7 +87,11 @@ final class QuickActionRunner {
     /// Läuft gerade ein Diktat (Aufnahme, Transkription, Nacharbeit)?
     private let isDictationBusy: () -> Bool
 
-    private(set) var isRunning = false
+    /// Sperre gegen ein zweites Auslösen und gegen das Diktat. Nach ✕/Esc
+    /// sofort frei, auch wenn der abgebrochene Weg noch ausläuft: sein spätes
+    /// Ergebnis verwirft das Token.
+    private var activeRunID: UUID?
+    var isRunning: Bool { activeRunID != nil }
     private var activeCancelToken: PostProcessingCancelToken?
 
     init(
@@ -114,8 +126,9 @@ final class QuickActionRunner {
             return log(.unavailable, modeID: modeID)
         }
 
-        isRunning = true
-        defer { isRunning = false }
+        let runID = UUID()
+        activeRunID = runID
+        defer { if activeRunID == runID { activeRunID = nil } }
 
         let app = environment.frontmostApp()
         let selection: CapturedSelection
@@ -142,13 +155,13 @@ final class QuickActionRunner {
         }
         cancelKey.activate { [weak self] in self?.cancel() }
         // Esc nur, solange die Nacharbeit läuft. Danach (Einfügen, Zurücklegen
-        // der Zwischenablage) gehört die Taste wieder allen Apps.
-        var isCancelKeyActive = true
+        // der Zwischenablage) gehört die Taste wieder allen Apps. Nach einem
+        // Abbruch hat `cancel()` sie schon freigegeben; ein neuer Lauf kann
+        // sie dann besitzen und bleibt unberührt.
         func releaseCancelKey() {
-            guard isCancelKeyActive else { return }
-            isCancelKeyActive = false
+            guard activeCancelToken === token else { return }
+            activeCancelToken = nil
             cancelKey.deactivate()
-            if activeCancelToken === token { activeCancelToken = nil }
         }
         defer { releaseCancelKey() }
 
@@ -164,11 +177,17 @@ final class QuickActionRunner {
             }
         } catch {
             releaseCancelKey()
-            presenter?.hideQuickAction()
-            if token.isCancelled || Self.isCancellation(error) {
+            // Abgebrochen: `cancel()` hat Overlay und Sperre schon
+            // freigegeben, vielleicht läuft schon die nächste Aktion.
+            if token.isCancelled { return log(.cancelled, modeID: modeID) }
+            if Self.isCancellation(error) {
+                presenter?.hideQuickAction()
                 return log(.cancelled, modeID: modeID)
             }
             let message = error.localizedDescription
+            // Mitteilungen gehen unter Fokus oder ohne Erlaubnis still
+            // verloren; der Hinweis im Overlay ist immer zu sehen.
+            presenter?.showQuickActionHint(notChangedTitle, duration: 4)
             environment.postNotice(notChangedTitle, message)
             return log(.failed(message), modeID: modeID)
         }
@@ -177,14 +196,11 @@ final class QuickActionRunner {
 
         // Abbruch kam, aber ein Weg hat noch geliefert: der Nutzer hat
         // abgebrochen, also bleibt alles, wie es war.
-        if token.isCancelled {
-            presenter?.hideQuickAction()
-            return log(.cancelled, modeID: modeID)
-        }
+        if token.isCancelled { return log(.cancelled, modeID: modeID) }
 
         let result = QuickActionText.replacement(for: selection.text, modelOutput: run.text)
         if result.isEmpty {
-            presenter?.hideQuickAction()
+            presenter?.showQuickActionHint(notChangedTitle, duration: 4)
             environment.postNotice(notChangedTitle, String(localized: "The text clean-up returned no text."))
             return log(.failed("empty result"), modeID: modeID)
         }
@@ -198,19 +214,42 @@ final class QuickActionRunner {
 
         presenter?.hideQuickAction()
         // Unverändert steht der Text schon im Verlauf, kein zweiter Eintrag.
-        if !unchanged { environment.recordHistory(result, selection.text, mode, app) }
+        let savedInHistory = unchanged ? true : environment.recordHistory(result, selection.text, mode, app)
 
         if selection.writability == .readOnly {
             environment.copyToClipboard(result)
             presenter?.showQuickActionHint(String(localized: "Can't edit here. The result is on the clipboard."), duration: 4)
             return log(.copiedToClipboard, modeID: modeID)
         }
-        if await environment.replaceSelection(result, app) {
+        // Weitergearbeitet, während die Nacharbeit lief (andere App, andere
+        // Markierung): nicht blind dorthin einfügen.
+        guard await environment.isTargetUnchanged(isEntry ? nil : selection, app) else {
+            environment.copyToClipboard(result)
+            presenter?.showQuickActionHint(
+                isEntry ? String(localized: "You switched apps. The result is on the clipboard.")
+                    : String(localized: "The selection changed. The result is on the clipboard."),
+                duration: 4
+            )
+            return log(.copiedToClipboard, modeID: modeID)
+        }
+
+        let rule: QuickActionRestoreRule = selection.writability == .writable
+            ? .afterConfirmation(original: selection.text)
+            : .ifResultSaved(savedInHistory)
+        switch await environment.replaceSelection(result, app, rule) {
+        case .pasted:
             return log(unchanged ? .unchanged : .replaced, modeID: modeID)
+        case .pastedResultKept:
+            presenter?.showQuickActionHint(String(localized: "The result is also on the clipboard."), duration: 3)
+            return log(unchanged ? .unchanged : .replaced, modeID: modeID)
+        case .notPasted:
+            break
         }
         environment.copyToClipboard(result)
+        let notInserted = isEntry ? String(localized: "Text not inserted") : String(localized: "Selection not replaced")
+        presenter?.showQuickActionHint(String(localized: "Not inserted. The result is on the clipboard."), duration: 4)
         environment.postNotice(
-            isEntry ? String(localized: "Text not inserted") : String(localized: "Selection not replaced"),
+            notInserted,
             String(localized: "WhisperM8 couldn't insert the text. The result is on the clipboard, paste it with Cmd+V.")
         )
         return log(.copiedToClipboard, modeID: modeID)
@@ -219,11 +258,15 @@ final class QuickActionRunner {
     /// ESC oder ✕: laufende Nacharbeit abbrechen. Nichts wird ersetzt.
     func cancel() {
         guard let token = activeCancelToken else { return }
+        activeCancelToken = nil
         token.cancel()
-        // Sofort sichtbar: ein später Lauf wird ohnehin verworfen, und ein
-        // Codex-Prozess braucht bis zu 3 s bis zum Ende.
+        cancelKey.deactivate()
+        // Sofort sichtbar und sofort frei: ein später Lauf wird ohnehin
+        // verworfen, und ein Codex-Prozess braucht bis zu 3 s bis zum Ende.
+        // Bis dahin gäbe der Aufnahme-Hotkey sonst nur einen Ton.
         presenter?.hideQuickAction()
         environment.cancelEngines()
+        activeRunID = nil
     }
 
     /// „Korrigiere…“ für Korrigieren, sonst der Modusname mit Auslassung.

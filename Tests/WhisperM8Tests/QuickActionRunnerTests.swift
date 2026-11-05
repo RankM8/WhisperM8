@@ -59,6 +59,8 @@ final class QuickActionRunnerTests: XCTestCase {
         var permissionRequests = 0
         /// War Esc noch angemeldet, als eingefügt wurde?
         var cancelKeyActiveWhilePasting: Bool?
+        var restoreRules: [QuickActionRestoreRule] = []
+        var targetChecks: [CapturedSelection?] = []
     }
 
     private let correctMode = OutputMode.builtInModes.first { $0.id == OutputMode.correctID }!
@@ -71,6 +73,9 @@ final class QuickActionRunnerTests: XCTestCase {
         selection: CapturedSelection? = CapturedSelection(text: "Das ist ein fehler.", writability: .writable),
         rework: @escaping @MainActor (String, OutputMode) async throws -> PostProcessingRun = { _, _ in PostProcessingRun(text: "Das ist ein Fehler.") },
         replaceSucceeds: Bool = true,
+        pasteResult: QuickActionPasteResult? = nil,
+        targetUnchanged: Bool = true,
+        historySaved: Bool = true,
         postProcessingAvailable: Bool = true,
         accessibilityGranted: Bool = true,
         dictationBusy: Bool = false
@@ -94,13 +99,21 @@ final class QuickActionRunnerTests: XCTestCase {
                 log.sawCancelToken = PostProcessingCancelToken.current != nil
                 return try await rework(text, mode)
             },
-            replaceSelection: { text, _ in
+            isTargetUnchanged: { original, _ in
+                log.targetChecks.append(original)
+                return targetUnchanged
+            },
+            replaceSelection: { text, _, rule in
                 log.cancelKeyActiveWhilePasting = key.isActive
                 log.replaced.append(text)
-                return replaceSucceeds
+                log.restoreRules.append(rule)
+                return pasteResult ?? (replaceSucceeds ? .pasted : .notPasted)
             },
             copyToClipboard: { log.copied.append($0) },
-            recordHistory: { result, original, _, _ in log.history.append((result, original)) },
+            recordHistory: { result, original, _, _ in
+                log.history.append((result, original))
+                return historySaved
+            },
             postNotice: { title, _ in log.notices.append(title) },
             busySignal: { log.busySignals += 1 },
             cancelEngines: { log.engineCancels += 1 }
@@ -547,34 +560,122 @@ extension QuickActionRunnerTests {
         XCTAssertEqual(SelectionProbe.unknown.respectingCopyFallback(false), .none, "VS Code, ohne Bedienungshilfen: kein leeres Versprechen")
         XCTAssertEqual(SelectionProbe.selected(preview: "x").respectingCopyFallback(false), .selected(preview: "x"))
     }
+}
 
-    func testCorrectDefaultIsDroppedWhenTheKeyIsAlreadyTaken() {
-        let suite = "QuickActionDefaultTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let modes = OutputMode.builtInModes
-        var disabled: [String] = []
+// MARK: - Review-Befunde (Weiterarbeiten, Rückmeldung, Zurücklegen, Sperre)
 
-        // Aufnahme-Hotkey liegt schon auf ⇧⌘K: Standard nicht setzen.
-        QuickActionShortcuts.resolveCorrectDefault(
-            modes: modes, defaults: defaults,
-            lookup: { $0 == .toggleRecording ? QuickActionShortcuts.correctDefault : nil },
-            disable: { disabled.append("quickAction.correct") }
-        )
-        XCTAssertEqual(disabled, ["quickAction.correct"])
+extension QuickActionRunnerTests {
+    func testChangedTargetPutsResultOnClipboardInsteadOfPasting() async {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let outcome = await makeRunner(log: log, presenter: presenter, targetUnchanged: false)
+            .run(modeID: OutputMode.correctID)
 
-        // Frei: nichts tun, der Standard greift.
-        disabled.removeAll()
-        QuickActionShortcuts.resolveCorrectDefault(modes: modes, defaults: defaults, lookup: { _ in nil }, disable: { disabled.append("quickAction.correct") })
-        XCTAssertTrue(disabled.isEmpty)
+        XCTAssertEqual(outcome, .copiedToClipboard)
+        XCTAssertTrue(log.replaced.isEmpty, "kein Cmd+V an eine andere Stelle")
+        XCTAssertEqual(log.copied, ["Das ist ein Fehler."])
+        XCTAssertEqual(presenter.hints, [String(localized: "The selection changed. The result is on the clipboard.")])
+        XCTAssertEqual(log.history.count, 1, "das Ergebnis steht trotzdem im Verlauf")
+    }
 
-        // Schon etwas gespeichert: die Wahl des Nutzers bleibt, auch bei Konflikt.
-        defaults.set("x", forKey: "KeyboardShortcuts_quickAction.correct")
-        QuickActionShortcuts.resolveCorrectDefault(
-            modes: modes, defaults: defaults,
-            lookup: { $0 == .toggleRecording ? QuickActionShortcuts.correctDefault : nil },
-            disable: { disabled.append("quickAction.correct") }
-        )
-        XCTAssertTrue(disabled.isEmpty)
+    func testTargetCheckGetsSelectionButNotForEntries() async {
+        let log = Log()
+        _ = await makeRunner(log: log).run(modeID: OutputMode.correctID)
+        _ = await makeRunner(log: log, selection: nil).run(modeID: OutputMode.correctID, input: .text("ein fehler"))
+
+        XCTAssertEqual(log.targetChecks.count, 2)
+        XCTAssertEqual(log.targetChecks.first??.text, "Das ist ein fehler.")
+        XCTAssertNil(log.targetChecks.last ?? nil, "beim Verlaufseintrag zählt nur die App")
+    }
+
+    func testRestoreRuleFollowsWritability() async {
+        let writable = Log()
+        _ = await makeRunner(log: writable).run(modeID: OutputMode.correctID)
+        XCTAssertEqual(writable.restoreRules, [.afterConfirmation(original: "Das ist ein fehler.")])
+
+        let unknownSaved = Log()
+        _ = await makeRunner(log: unknownSaved, selection: CapturedSelection(text: "a", writability: .unknown),
+                             rework: { _, _ in PostProcessingRun(text: "A.") }).run(modeID: OutputMode.correctID)
+        XCTAssertEqual(unknownSaved.restoreRules, [.ifResultSaved(true)])
+
+        let unknownLost = Log()
+        _ = await makeRunner(log: unknownLost, selection: CapturedSelection(text: "a", writability: .unknown),
+                             rework: { _, _ in PostProcessingRun(text: "A.") }, historySaved: false)
+            .run(modeID: OutputMode.correctID)
+        XCTAssertEqual(unknownLost.restoreRules, [.ifResultSaved(false)], "Verlauf aus: Ergebnis darf nicht verschwinden")
+    }
+
+    func testUnconfirmedPasteTellsThatResultStaysOnClipboard() async {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let outcome = await makeRunner(log: log, presenter: presenter, pasteResult: .pastedResultKept)
+            .run(modeID: OutputMode.correctID)
+        XCTAssertEqual(outcome, .replaced)
+        XCTAssertEqual(presenter.hints, [String(localized: "The result is also on the clipboard.")])
+        XCTAssertTrue(log.copied.isEmpty, "liegt schon dort")
+    }
+
+    func testFailuresAreShownInTheOverlayToo() async {
+        let failed = Log()
+        let failedPresenter = SpyPresenter()
+        _ = await makeRunner(log: failed, presenter: failedPresenter, rework: { _, _ in
+            throw PostProcessingError.bothEnginesFailed(backend: "down", codex: "not logged in")
+        }).run(modeID: OutputMode.correctID)
+        XCTAssertEqual(failedPresenter.hints, [String(localized: "Selection not changed")], "auch unter Fokus sichtbar")
+        XCTAssertEqual(failed.notices.count, 1)
+
+        let empty = Log()
+        let emptyPresenter = SpyPresenter()
+        _ = await makeRunner(log: empty, presenter: emptyPresenter, rework: { _, _ in PostProcessingRun(text: " ") })
+            .run(modeID: OutputMode.correctID)
+        XCTAssertEqual(emptyPresenter.hints, [String(localized: "Selection not changed")])
+
+        let notPasted = Log()
+        let notPastedPresenter = SpyPresenter()
+        _ = await makeRunner(log: notPasted, presenter: notPastedPresenter, replaceSucceeds: false)
+            .run(modeID: OutputMode.correctID)
+        XCTAssertEqual(notPastedPresenter.hints, [String(localized: "Not inserted. The result is on the clipboard.")])
+    }
+
+    func testCancelReleasesTheLockAtOnceAndTheLateRunStaysOutOfTheWay() async {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let key = SpyCancelKey()
+        var release: CheckedContinuation<Void, Never>?
+        var lockedRightAfterEscape: Bool?
+        var firstCall = true
+        var runner: QuickActionRunner!
+        runner = makeRunner(log: log, presenter: presenter, cancelKey: key, rework: { text, _ in
+            if firstCall {
+                firstCall = false
+                key.pressEscape()
+                lockedRightAfterEscape = runner.isRunning
+                // Der abgebrochene Weg läuft noch (etwa Codex bis zu 3 s).
+                await withCheckedContinuation { release = $0 }
+                return PostProcessingRun(text: "spät")
+            }
+            return PostProcessingRun(text: "Das ist ein Fehler.")
+        })
+
+        let first = Task { await runner.run(modeID: OutputMode.correctID) }
+        while release == nil { await Task.yield() }
+        XCTAssertEqual(lockedRightAfterEscape, false, "Esc gibt die Sperre sofort frei")
+        XCTAssertFalse(runner.isRunning)
+
+        // Direkt danach geht die nächste Aktion (oder ein Diktat) durch.
+        let presenterHidesBefore = presenter.hideCount
+        let second = await runner.run(modeID: OutputMode.correctID)
+        XCTAssertEqual(second, .replaced)
+        XCTAssertEqual(log.busySignals, 0)
+
+        // Der späte erste Lauf endet jetzt: er ersetzt nichts und fasst
+        // weder Overlay noch Esc an.
+        key.activate { }
+        release?.resume()
+        let firstOutcome = await first.value
+        XCTAssertEqual(firstOutcome, .cancelled)
+        XCTAssertEqual(log.replaced, ["Das ist ein Fehler."], "nur der zweite Lauf fügt ein")
+        XCTAssertTrue(key.isActive, "der späte Lauf gibt fremdes Esc nicht frei")
+        XCTAssertEqual(presenter.hideCount, presenterHidesBefore + 1, "nur der zweite Lauf blendet aus")
     }
 }

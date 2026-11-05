@@ -27,7 +27,10 @@ extension RecordingCoordinator {
             rework: { text, mode in
                 try await postProcessingService.processRun(rawText: text, mode: mode, language: "", contextBundle: .empty)
             },
-            replaceSelection: { text, app in
+            isTargetUnchanged: { original, app in
+                await Self.isQuickActionTargetUnchanged(original: original, app: app)
+            },
+            replaceSelection: { text, app, rule in
                 // Wurde das Zwischenablage-Fenster während der Nacharbeit
                 // wieder geöffnet, hält es die Tastatur: Cmd+V landete sonst
                 // in seinem Suchfeld statt in der Ziel-App.
@@ -35,11 +38,13 @@ extension RecordingCoordinator {
                     ClipboardHistoryController.shared.hidePanel()
                     try? await Task.sleep(for: .milliseconds(150))
                 }
-                return await replacer.replaceSelection(with: text, in: app)
+                return await replacer.replaceSelection(with: text, in: app, restore: rule)
             },
             copyToClipboard: { pasteService.copyToClipboard($0) },
             recordHistory: { result, original, mode, app in
-                historyRecorder(DictationHistoryRecord(text: result, original: original, mode: mode, targetApp: app))
+                historyRecorder(DictationHistoryRecord(
+                    text: result, original: original, mode: mode, targetApp: app, isQuickAction: true
+                ))
             },
             postNotice: { DictationNotice.post(title: $0, body: $1) },
             busySignal: { busyNotifier(false) },
@@ -53,6 +58,21 @@ extension RecordingCoordinator {
             presenter: overlayController,
             cancelKey: cleanUpCancelKey,
             isDictationBusy: { [weak self] in self?.isDictationBusy ?? false }
+        )
+    }
+
+    /// Vor dem Einfügen: Ist die App von damals noch vorn, und ist (bei einem
+    /// Feld mit Accessibility) noch derselbe Text markiert? Bei Text aus dem
+    /// Cmd+C-Rückfall lässt sich die Markierung nicht ohne neues Cmd+C lesen,
+    /// dort zählt nur die App.
+    /// Regel in `QuickActionTargetCheck`; eine App, die nicht rechtzeitig
+    /// antwortet, gilt nicht als „geändert“.
+    static func isQuickActionTargetUnchanged(original: CapturedSelection?, app: NSRunningApplication?) async -> Bool {
+        guard let app else { return true }
+        return await QuickActionTargetCheck.isUnchanged(
+            original: original,
+            frontmostMatches: NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier,
+            read: { timeout in await SelectedContextService.selectionReadout(of: app, timeout: timeout) }
         )
     }
 

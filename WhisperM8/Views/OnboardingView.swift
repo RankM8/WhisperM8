@@ -563,6 +563,7 @@ struct HotkeyStep: View {
     @Binding var hotkeySet: Bool
     @State private var shortcutName: String = ""
     @State private var pollingTimer: Timer?
+    @State private var quickActionConflict: String?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -578,11 +579,23 @@ struct HotkeyStep: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            KeyboardShortcuts.Recorder("Recording key:", name: .toggleRecording)
+            KeyboardShortcuts.Recorder("Recording key:", name: .toggleRecording) { shortcut in
+                quickActionConflict = SettingsKeyRecorderRow.quickActionConflict(for: shortcut, name: .toggleRecording)
+            }
                 .padding(.top, 16)
                 .onChange(of: shortcutName) { _, _ in
                     checkHotkey()
                 }
+
+            // ⇧⌘K ist ab Werk „Korrigieren“. Wer es hier als Aufnahme-Taste
+            // nimmt, löste sonst beides zugleich aus.
+            if let quickActionConflict {
+                Label(SettingsKeyRecorderRow.conflictMessage(quickActionConflict), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+            }
 
             if hotkeySet {
                 Label("Hotkey configured!", systemImage: "checkmark.circle.fill")
@@ -597,6 +610,9 @@ struct HotkeyStep: View {
         .padding(40)
         .onAppear {
             checkHotkey()
+            quickActionConflict = SettingsKeyRecorderRow.quickActionConflict(
+                for: KeyboardShortcuts.getShortcut(for: .toggleRecording), name: .toggleRecording
+            )
             // Poll for shortcut changes since Recorder doesn't have a direct callback
             startPolling()
         }

@@ -452,17 +452,17 @@ const syncClipboardTool = async ($: EngineInterface, active: boolean) => {
   await $.tool.register({
     name: 'clipboard',
     description:
-      'Clipboard history of the user (Zwischenablage-Verlauf, WhisperM8 replaces Maccy). Use it whenever the user refers to something they copied instead of asking them to paste it: "what I copied", "the error I copied earlier", "from my clipboard", "the link from before", "the screenshot I copied", "was ich kopiert habe", "aus der Zwischenablage", "den Fehler von vorhin", "der Link von eben". action: list (newest first, number 1 = newest), search (query: words, case-insensitive, searches full text), get (nr = number or ID; text in chunks of 50000 chars, continue with from; images return an absolute PNG path to open with Read, files return paths). Finished dictations are in the history too (dictationMode); for "what I dictated/said earlier" use search or list. If hasOriginal is true, get with original: true returns the raw transcript, what the user actually said before the mode rewrote it. Typical secrets are masked as [REDACTED:…]; do not try to work around that. If the history is off or agent access is blocked, tell the user: WhisperM8 Settings > Clipboard.',
+      'Clipboard history of the user (Zwischenablage-Verlauf, WhisperM8 replaces Maccy). Use it whenever the user refers to something they copied instead of asking them to paste it: "what I copied", "the error I copied earlier", "from my clipboard", "the link from before", "the screenshot I copied", "was ich kopiert habe", "aus der Zwischenablage", "den Fehler von vorhin", "der Link von eben". action: list (newest first, number 1 = newest), search (query: words, case-insensitive, searches full text), get (nr = ID or number; text in chunks of 50000 chars, continue with from; images return an absolute PNG path to open with Read, files return paths). Numbers shift as soon as something new is copied or dictated: for follow-up calls pass the id from list/search; use a number only when the user names one. Finished dictations are in the history too (dictationMode); for "what I dictated/said earlier" use search or list. If hasOriginal is true, get with original: true returns the raw transcript, what the user actually said before the mode rewrote it. Quick actions (e.g. ⇧⌘K Correct on selected text) are not dictations: they carry quickActionMode, and their original is the selected text before the rework. Typical secrets are masked as [REDACTED:…]; do not try to work around that. If the history is off or agent access is blocked, tell the user: WhisperM8 Settings > Clipboard.',
     inputSchema: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['list', 'search', 'get'], description: 'list | search | get' },
         query: { type: 'string', description: 'Search words (search)' },
-        nr: { type: 'string', description: 'Number (1 = newest) or ID (get)' },
+        nr: { type: 'string', description: 'ID from list/search (preferred) or number (1 = newest; shifts with every new copy, only when the user names it) (get)' },
         limit: { type: 'number', description: 'Max entries (list and search, default 20)' },
         from: { type: 'number', description: 'Character offset for long texts (get, default 0; use nextFrom from the previous answer)' },
         maxChars: { type: 'number', description: 'Max characters per answer (get, default 50000)' },
-        original: { type: 'boolean', description: 'Raw transcript of a rewritten dictation instead of the result (get, only when hasOriginal)' },
+        original: { type: 'boolean', description: 'Raw transcript of a rewritten dictation, or the text before a quick action, instead of the result (get, only when hasOriginal)' },
       },
       required: ['action'],
     },

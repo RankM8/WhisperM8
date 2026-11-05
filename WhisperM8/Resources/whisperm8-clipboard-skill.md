@@ -5,9 +5,9 @@ description: Clipboard history of the user (WhisperM8 replaces Maccy), including
 
 # Clipboard history (`whisperm8:clipboard`)
 
-WhisperM8 keeps a searchable clipboard history when the user switches it on
-(Settings > Clipboard). When the user mentions something they copied, read it
-here instead of asking them to paste it.
+WhisperM8 keeps a searchable clipboard history (on by default, agent access
+too; the user can switch either off in Settings > Clipboard). When the user
+mentions something they copied, read it here instead of asking them to paste it.
 
 Inside Claude Code chats started by the WhisperM8 app, the `clipboard` tool
 (`mcp__whisperm8__clipboard`) does the same and is the first choice. Use the
@@ -25,11 +25,19 @@ whisperm8 clipboard copy 2                  # put entry 2 back on the clipboard 
 ```
 
 - Numbers follow the newest-first order of `list` (pinned entries count where
-  they belong in time). An ID or a unique prefix of at least 4 characters works too.
+  they belong in time). They shift as soon as the user copies or dictates
+  something new, so for follow-up calls (`get`, `copy`) use the `id` from
+  `list --json` / `search --json`. A number is only right when the user names one himself.
+  A unique ID prefix of at least 4 characters works too.
 - Finished dictations are in the history too (`dictationMode`, for example
   `Slack`). For "what I dictated earlier" search or list them. When
   `hasOriginal` is true the mode rewrote the text; `get --original` returns
   what the user actually said.
+- Quick actions (for example ⇧⌘K "Correct" on selected text) are not
+  dictations. Their entries carry `quickActionMode` instead of
+  `dictationMode`; `get --original` returns the selected text before the
+  rework, nothing the user said. Leave them out when the user asks for
+  dictations.
 - `get` on an image returns the absolute path of a PNG file: open it with Read.
   On files it returns their paths.
 - Typical secrets (API keys, tokens, JWTs, private keys, passwords in
@@ -50,11 +58,13 @@ and answer right away, without asking back:
 - **Words after it** ("stripe webhook", "der Link von Jonas"): search, then
   show the hits the same way. One clear hit: show its full text right away.
 - **A number** ("3", "nimm 3"): `get` it and show the full text (or open the
-  image with Read).
+  image with Read). The user means the number from the list you showed, so
+  take that entry's `id`.
 - **Dictations** ("diktate", "was hab ich diktiert"): list and keep only
   entries with `dictationMode`. "Original" or "was hab ich gesagt": use
   `get --original` on that entry.
-- **"Kopier 3" / "leg 3 zurück"**: `copy 3`, then say it is on the clipboard.
+- **"Kopier 3" / "leg 3 zurück"**: `copy` with the `id` of that entry, then
+  say it is on the clipboard.
 - **A task with it** ("fix the error I copied", "fass den Link zusammen"):
   fetch the entry and do the task; do not stop at showing it.
 
@@ -68,7 +78,8 @@ stay masked.
 (ISO 8601), `preview` (masked), `sourceApp`, `sourceBundleID` (when known),
 plus `chars` for text, `imagePath`, `width`, `height` for images and `files`
 for file entries. Dictations add `dictationMode` and, when rewritten,
-`hasOriginal`.
+`hasOriginal`. Quick action results add `quickActionMode` and `hasOriginal`
+(the text before the rework).
 
 `get --json` adds for text: `text`, `totalChars`, `from`, `truncated`,
 `nextFrom` (only when truncated), `secretsMasked` and `source`

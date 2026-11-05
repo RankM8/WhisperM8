@@ -31,7 +31,11 @@ stille Diktat (Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
   alle anderen Modi sind ab Werk leer; für Besser formulieren steht ⌃⌥R als
   Vorschlag mit „übernehmen“ daneben. Belegt ein
   Kurzbefehl schon einen anderen WhisperM8-Kurzbefehl, steht eine Warnung
-  darunter (der Recorder prüft selbst nur System und Hauptmenü).
+  darunter (der Recorder prüft selbst nur System und Hauptmenü). Das gilt
+  auch umgekehrt: Die Recorder für Aufnahme-Hotkey, Zwischenablage-Verlauf und
+  Notch (`SettingsKeyRecorderRow`) und der Hotkey-Schritt im Onboarding warnen,
+  wenn eine Schnellaktion dieselbe Taste hat (`QuickActionShortcuts.quickActionUsing`),
+  etwa wer dort ⇧⌘K aufnimmt.
 - **Menüleiste:** „Markierung korrigieren“ (Modus Korrigieren), mit dem
   Kurzbefehl in Klammern, falls einer gesetzt ist.
 - **Zwei neue feste Modi:**
@@ -47,18 +51,43 @@ stille Diktat (Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
   - Nichts markiert: kurzer Hinweis „Erst Text markieren“ im Overlay.
   - Feld nicht beschreibbar (Webseite, PDF): Ergebnis in die Zwischenablage,
     Hinweis im Overlay.
+  - Weitergearbeitet, während die Nacharbeit lief: Ist eine andere App vorn
+    oder (bei Feldern mit Accessibility) etwas anderes markiert, wird nicht
+    eingefügt. Das Ergebnis liegt dann in der Zwischenablage, mit Hinweis im
+    Overlay. Bei Text aus dem Cmd+C-Rückfall lässt sich die Markierung nicht
+    nachlesen, dort zählt nur die vordere App. Antwortet die App beim
+    Nachlesen nicht (Zeitlimit 0,25 s, dann noch einmal 0,5 s), ist das
+    unklar, nicht „geändert“: Sie ist noch vorn, also wird eingefügt. Sonst
+    verlöre der Nutzer bei einer ausgelasteten App (großes Dokument) seine
+    Zwischenablage, ohne etwas angefasst zu haben. Ein anderer Text oder ein
+    Fokus ohne Markierung bleibt „geändert“.
   - Esc oder ✕ brechen ab, das Overlay geht sofort weg, nichts wird ersetzt.
+    Die Sperre gegen Diktat und zweite Schnellaktion ist sofort frei, auch
+    wenn der abgebrochene Weg noch ausläuft (Codex bis 3 s); sein spätes
+    Ergebnis wird verworfen und fasst weder Overlay noch Esc an.
     Esc ist nur während der Nacharbeit belegt, beim Einfügen schon wieder frei.
   - Ohne Bedienungshilfen-Recht: Systemabfrage und Hinweis „Erst
     Bedienungshilfen für WhisperM8 erlauben“.
   - Ergebnis gleich der Markierung: Hinweis „Nichts zu ändern“, kein Einfügen.
-  - Nach dem Ersetzen liegt wieder der alte Inhalt in der Zwischenablage.
-    Ergebnis und Original stehen zusätzlich im Zwischenablage-Verlauf.
-  - Fehler (beide Wege gescheitert): Mitteilung, die Markierung bleibt.
+  - Nach dem Ersetzen kommt der alte Inhalt der Zwischenablage zurück, aber
+    nur, wenn das sicher ist (Abschnitt „Zurücklegen der Zwischenablage“).
+    Sonst bleibt das Ergebnis dort, mit Hinweis „Das Ergebnis liegt auch in
+    der Zwischenablage“. Ergebnis und Original stehen zusätzlich im
+    Zwischenablage-Verlauf, gekennzeichnet als Schnellaktion, nicht als Diktat.
+  - Fehler (beide Wege gescheitert, leeres Ergebnis, nicht eingefügt): Hinweis
+    im Overlay (4 s) und zusätzlich eine Mitteilung mit Details. Die Mitteilung
+    allein ginge unter Fokus oder ohne Erlaubnis still verloren. Die Markierung
+    bleibt.
   - Während ein Diktat läuft, wird eine Schnellaktion mit dem Busy-Ton
     abgewiesen und umgekehrt.
   - Im Umfang „Nur Diktat“ gibt es keine Nacharbeit, also auch keine
-    Schnellaktion (Hinweis im Overlay, kein Menüeintrag).
+    Schnellaktion: Die Kurzbefehle sind dann systemweit abgemeldet (⇧⌘K
+    gehört wieder Slack, Xcode, Finder), gespeichert bleiben sie; beim Wechsel
+    des Umfangs meldet `QuickActionHotkeys.applyScope` sie wieder an. Das
+    läuft nur beim echten Wechsel, nicht bei jeder anderen Einstellung. Einen
+    frisch aufgenommenen Kurzbefehl meldet die Bibliothek sofort an; die App
+    hört auf ihre Meldung (`KeyboardShortcuts_shortcutByNameDidChange`) und
+    meldet bei „Nur Diktat“ genau diesen wieder ab. Kein Menüeintrag.
 
 ## Ablauf
 
@@ -76,11 +105,34 @@ Kurzbefehl / Menüleiste
 |---|---|
 | `QuickActionRunner` | Ablauf, Abbruch, Entscheidungen. Alle Systemzugriffe über `QuickActionEnvironment` (Closures), Anzeige über `QuickActionPresenting`. Kennt keine Kurzbefehle; Menüleiste und Zwischenablage-Fenster rufen ihn genauso auf. Eingang `QuickActionInput`: Markierung oder vorgegebener Text. |
 | `RecordingCoordinator+QuickAction` | Verdrahtet den Runner mit den echten Diensten und dem Overlay. Gemeinsame Sperre mit dem Diktat (`isDictationBusy`, `quickActionRunner.isRunning`). |
-| `SelectedContextService.captureForQuickAction` | Markierung per Accessibility, sonst Cmd+C-Rückfall mit Zurücklegen. Anders als der Diktat-Kontext unabhängig vom Schalter „markierten Text als Kontext“: der Nutzer übergibt die Markierung hier ausdrücklich. Der Text bleibt unverändert. |
-| `SelectionWritability` | Nur wenn das fokussierte Element die Markierung selbst liefert, zählt sein Urteil: `writable`, wenn `AXSelectedText` oder `AXValue` setzbar ist, sonst `readOnly`. Kam der Text über den Cmd+C-Rückfall (Electron ohne volle Accessibility: Slack, VS Code, Notion), ist es `unknown`, und es wird eingefügt. Das Element bekommt wie die App 0,5 s Zeitlimit. |
-| `QuickActionReplacer` | Snapshot der Zwischenablage (bis 8 MB, off-main), Cmd+V über `PasteService`, nach 800 ms den alten Inhalt zurück, geklammert mit `ClipboardInternalWrites.begin/end` und `claim`. Nicht zurück, wenn inzwischen jemand anderes kopiert hat oder der Inhalt ein Passwort war. |
-| `QuickActionShortcuts`, `QuickActionHotkeys` | Name je Modus `quickAction.<modeID>`, Vorschläge, Konfliktprüfung; meldet beim Start und bei neuen Modi je einen Handler an. Löschen eines eigenen Modus gibt seinen Kurzbefehl frei. |
+| `SelectedContextService.captureForQuickAction` | Markierung per Accessibility, sonst Cmd+C-Rückfall mit Zurücklegen. Vor dem Cmd+C wartet sie bis 0,5 s, bis ⇧, ⌘, ⌥ und ⌃ des Kurzbefehls losgelassen sind (`waitForModifierRelease`), sonst käme womöglich ⇧⌘C an. Ist WhisperM8 selbst vorn, liest sie das `NSTextView` direkt (`ownTextSelection`): eine AX-Anfrage an sich selbst müsste der wartende Main Thread beantworten und lief ins Zeitlimit. Anders als der Diktat-Kontext unabhängig vom Schalter „markierten Text als Kontext“: der Nutzer übergibt die Markierung hier ausdrücklich. Der Text bleibt unverändert. |
+| `SelectionWritability` | Nur wenn das fokussierte Element die Markierung selbst liefert, zählt sein Urteil: `writable`, wenn `AXSelectedText` oder `AXValue` setzbar ist, sonst `readOnly`. Kam der Text über den Cmd+C-Rückfall (Electron ohne volle Accessibility: Slack, Notion), ist es `unknown`, und es wird eingefügt. Das Element bekommt wie die App 0,5 s Zeitlimit. |
+| `QuickActionTargetCheck` (über `RecordingCoordinator.isQuickActionTargetUnchanged`) | Vor dem Einfügen: vordere App noch dieselbe, bei `writable` dieselbe Markierung (fremde Apps abseits des Main Threads gefragt, 0,25 s, ohne Antwort noch einmal 0,5 s; `SelectionReadout` trennt „keine Antwort“ von „nichts markierbar“). |
+| `QuickActionReplacer` | Snapshot der Zwischenablage (bis 8 MB, off-main), Cmd+V über `PasteService`, dann den alten Inhalt zurück nach `QuickActionRestoreRule`, geklammert mit `ClipboardInternalWrites.begin/end` und `claim`. Nie zurück, wenn inzwischen jemand anderes kopiert hat oder der Inhalt ein Passwort war. Ergebnis `QuickActionPasteResult`: `pasted`, `pastedResultKept`, `notPasted`. |
+| `QuickActionShortcuts`, `QuickActionHotkeys` | Name je Modus `quickAction.<modeID>`, Vorschläge, Konfliktprüfung in beide Richtungen; meldet beim Start und bei neuen Modi je einen Handler an und folgt dem Umfang (`applyScope`). Löschen eines eigenen Modus gibt seinen Kurzbefehl frei. |
 | `OverlayController.showQuickActionWorking/Hint` | Eigene Pill-Ansicht: Kern im Improve-Puls, sichtbarer Text, ✕. Der Hinweis verschwindet nach 2 bis 4 s. |
+
+## Zurücklegen der Zwischenablage
+
+Cmd+V legt das Ergebnis in die Zwischenablage. Ob die Ziel-App es gelesen
+hat, sagt einem niemand. Liest sie spät (Remote Desktop, VM, ausgelastetes
+Electron) und der alte Inhalt ist schon zurück, landet er statt des
+Ergebnisses in der Markierung. Darum kommt der alte Inhalt nur zurück, wenn
+das sicher ist (`QuickActionRestoreRule`):
+
+- **Feld mit Accessibility (`writable`):** WhisperM8 liest die Markierung bis
+  zu 2 s lang alle 100 ms nach. Ist sie nicht mehr der ursprüngliche Text, hat
+  die App eingefügt und die Zwischenablage gelesen: zurücklegen. Bleibt sie
+  gleich oder unlesbar, bleibt das Ergebnis in der Zwischenablage.
+- **Text aus dem Cmd+C-Rückfall (`unknown`) und „Korrigieren & einfügen“:**
+  nicht prüfbar. Nach 800 ms zurücklegen nur, wenn das Ergebnis im Verlauf
+  steht (Verlauf an, nicht pausiert, App nicht ausgeschlossen); dann sind
+  Ergebnis und Original dort sicher. Sonst bleibt das Ergebnis in der
+  Zwischenablage und geht nicht verloren, falls Cmd+V ins Leere ging.
+
+Bleibt das Ergebnis in der Zwischenablage, zeigt das Overlay „Das Ergebnis
+liegt auch in der Zwischenablage“. Die vorherige Kopie steht dann (bei
+eingeschaltetem Verlauf) im Verlauf.
 
 ## Prompt
 
@@ -122,6 +174,8 @@ kein Modus-Menü) und erscheint nur, wenn der Umfang Nacharbeit erlaubt.
   - `none` (App meldet ausdrücklich: nichts markiert): keine Kopfzeile.
   - Ist WhisperM8 selbst die App davor, liest das Fenster die Markierung des
     Textfelds direkt, bevor es Key wird; im Chat-Terminal gibt es keine Kopfzeile.
+    Auch der Klick (und ⇧⌘K in WhisperM8) liest dann direkt aus dem Textfeld,
+    ohne Accessibility-Anfrage an den eigenen Prozess.
 
   Der Knopf schließt das Fenster und startet nach 150 ms denselben Ablauf wie
   ⇧⌘K. Auch ⇧⌘K bei offenem Fenster schließt es erst
@@ -147,6 +201,31 @@ Verdrahtung: `ClipboardHistoryController.quickActions` (gesetzt in
 - Modi mit „Kontext erforderlich“ scheitern bei der Schnellaktion mit einer
   Meldung, weil sie ohne Kontextbündel laufen.
 - Bei `unknown` und einem Feld, das Cmd+V still ignoriert, sieht man keine
-  Änderung; das Ergebnis steht dann im Zwischenablage-Verlauf (⇧⌘C).
+  Änderung; das Ergebnis steht dann im Zwischenablage-Verlauf (⇧⌘C) oder, bei
+  ausgeschaltetem Verlauf, in der Zwischenablage.
+- Editoren, in denen Cmd+C ohne Auswahl die ganze Zeile kopiert (VS Code,
+  Cursor, Windsurf, JetBrains, Sublime, Zed; `ClipboardCopyFallbackPolicy`),
+  haben keinen Cmd+C-Rückfall. Dort klappt die Schnellaktion nur, wenn die App
+  die Markierung per Accessibility herausgibt, sonst kommt „Erst Text
+  markieren“. In VS Code verdeckt ⇧⌘K außerdem „Zeile löschen“.
+- Ob ein gehaltenes ⇧ ein Cmd+C wirklich zu ⇧⌘C macht, ist nicht bewiesen;
+  das Warten auf losgelassene Tasten ist Vorsorge (Handtest unten).
 
-Tests: `QuickActionRunnerTests`, `QuickActionModesTests`, `ClipboardQuickActionTests`.
+## Handtests
+
+- Slack oder Notion: Text markieren, ⇧⌘K etwas länger gedrückt halten. Erwartet:
+  die Markierung wird korrigiert, der Zwischenablage-Verlauf öffnet sich nicht.
+- Mail: Absatz markieren, ⇧⌘K, während „Korrigiere…“ einen anderen Satz
+  markieren. Erwartet: nichts wird ersetzt, Hinweis „Die Markierung hat sich
+  geändert“, Ergebnis mit Cmd+V einfügbar.
+- Umfang „Nur Diktat“: ⇧⌘K in Slack öffnet wieder „Alle Direktnachrichten“.
+  Zurück auf „Mit KI“: ⇧⌘K korrigiert wieder.
+- ⇧⌘K, sofort Esc, direkt danach diktieren: Aufnahme startet ohne Busy-Ton.
+- Verlauf aus, Text in Slack markieren, ⇧⌘K: danach liegt das Ergebnis in der
+  Zwischenablage (Hinweis im Overlay).
+- In VS Code: ⇧⌘K auf markiertem Text prüfen (AX-Markierung oder „Erst Text
+  markieren“), und dass „Zeile löschen“ dort verdeckt ist.
+
+Tests: `QuickActionRunnerTests`, `QuickActionModesTests`, `ClipboardQuickActionTests`,
+`QuickActionReplacerTests`, `QuickActionHotkeyReviewTests`, `QuickActionModifierWaitTests`, `QuickActionTargetCheckTests`,
+`ClipboardQuickActionEntryTests`.

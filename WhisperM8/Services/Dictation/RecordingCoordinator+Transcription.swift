@@ -93,7 +93,7 @@ extension RecordingCoordinator {
         pasteService.copyToClipboard(finalText)
         // Einmal in den Verlauf, mit Modus und Ziel-App. Die Schreibvorgänge
         // des Einfügens selbst (Anhänge, Zurücklegen) übergeht der Monitor.
-        dictationHistoryRecorder(.make(
+        _ = dictationHistoryRecorder(.make(
             finalText: finalText, rawText: normalizedRawText,
             mode: outputMode, targetApp: overlayController.getPreviousApp()
         ))

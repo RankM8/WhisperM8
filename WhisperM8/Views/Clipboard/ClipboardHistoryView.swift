@@ -257,8 +257,9 @@ struct ClipboardHistoryView: View {
     @ViewBuilder
     private func leadingIcon(_ entry: ClipboardEntry) -> some View {
         if entry.dictationMode != nil {
-            // Diktat-Ergebnisse erkennt man am Mikrofon, nicht am Ziel-App-Icon.
-            Image(systemName: "mic.fill")
+            // Diktat-Ergebnisse erkennt man am Mikrofon, Schnellaktionen am
+            // Zauberstab, nicht am Ziel-App-Icon.
+            Image(systemName: entry.isQuickActionResult ? "wand.and.stars" : "mic.fill")
                 .font(.system(size: 12))
                 .foregroundStyle(AppTheme.accent)
                 .frame(width: 22, height: 22)
@@ -297,7 +298,11 @@ struct ClipboardHistoryView: View {
     private func subtitle(for entry: ClipboardEntry) -> String {
         let time = ClipboardRelativeTime.string(from: entry.lastCopiedAt, now: now)
         var parts: [String] = []
-        if let mode = entry.dictationMode { parts.append(String(localized: "Dictation (\(mode))")) }
+        if let mode = entry.dictationMode {
+            parts.append(entry.isQuickActionResult
+                ? String(localized: "Quick action (\(mode))")
+                : String(localized: "Dictation (\(mode))"))
+        }
         if let name = entry.sourceName, !name.isEmpty { parts.append(name) }
         parts.append(time)
         return parts.joined(separator: " · ")
@@ -353,7 +358,7 @@ struct ClipboardHistoryView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if let original = entry.dictationOriginal {
-                        originalSection(original)
+                        originalSection(original, isQuickAction: entry.isQuickActionResult)
                     }
                 }
                 actionRow(entry)
@@ -417,10 +422,11 @@ struct ClipboardHistoryView: View {
     }
 
     /// Roh-Transkript eines nachbearbeiteten Diktats, unter dem Ergebnis.
-    private func originalSection(_ original: String) -> some View {
+    private func originalSection(_ original: String, isQuickAction: Bool) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Divider().overlay(AppTheme.border)
-            Text("Original transcript")
+            // Bei einer Schnellaktion ist das Original der markierte Text, nichts Gesagtes.
+            Text(isQuickAction ? String(localized: "Before") : String(localized: "Original transcript"))
                 .font(.system(size: 11, weight: .semibold))
                 .textCase(.uppercase)
                 .foregroundStyle(AppTheme.textTertiary)
@@ -458,7 +464,9 @@ struct ClipboardHistoryView: View {
             if entry.dictationOriginal != nil {
                 Button("Paste original") { model.actions.pasteOriginal(entry) }
                     .buttonStyle(SettingsButtonStyle.standard)
-                    .help(String(localized: "Paste what you said, before the mode rewrote it"))
+                    .help(entry.isQuickActionResult
+                        ? String(localized: "Paste the text as it was before the quick action")
+                        : String(localized: "Paste what you said, before the mode rewrote it"))
             }
             Button { model.actions.togglePin(entry) } label: {
                 if entry.isPinned { Text("Unpin") } else { Text("Pin") }

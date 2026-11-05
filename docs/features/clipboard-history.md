@@ -129,6 +129,19 @@ Ergebnis („Original transcript“), „Paste original“ fügt es als reinen T
 ein. Die Suche findet auch Wörter, die nur im Original stehen. CLI:
 `hasOriginal` in `list`, `get <nr> --original`; Plugin-Tool: `original: true`.
 
+**Schnellaktionen sind keine Diktate:** Das Ergebnis einer
+[Schnellaktion](dictation/quick-actions/README.md) (⇧⌘K, Kopfzeile oder
+„Correct & Paste“ im Fenster) läuft über denselben Weg, trägt aber
+`fromQuickAction` am Eintrag (`ClipboardEntry.isQuickActionResult`). Das
+Original ist dann der markierte Text vor der Nacharbeit, nichts Gesagtes.
+Das Fenster zeigt einen Zauberstab statt des Mikrofons, „Quick action
+(Correct)“ statt „Dictation (…)“ und „Before“ statt „Original transcript“;
+der Filter ⌘D lässt solche Einträge weg. Die CLI nennt den Modus
+`quickActionMode` statt `dictationMode` (Textliste „Aktion Correct“),
+`hasOriginal` und `--original` bleiben. Ältere Indexdateien ohne das Feld
+laden unverändert; ihre Einträge gelten als Diktate. Diktiert man denselben
+Text später, wird der Eintrag beim Zusammenführen wieder ein Diktat.
+
 ## Datenschutz-Regeln
 
 1. **Nie gespeichert:** Inhalte mit `org.nspasteboard.ConcealedType`,

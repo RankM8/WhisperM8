@@ -217,7 +217,8 @@ final class ClipboardHistoryViewModel: ObservableObject {
     nonisolated static func filtered(_ entries: [ClipboardEntry], by filter: Filter) -> [ClipboardEntry] {
         switch filter {
         case .all: return entries
-        case .dictations: return entries.filter { $0.dictationMode != nil }
+        // Schnellaktions-Ergebnisse tragen auch einen Modus, sind aber keine Diktate.
+        case .dictations: return entries.filter(\.isDictation)
         }
     }
 

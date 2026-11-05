@@ -397,6 +397,7 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         )
         entry.dictationMode = capture.dictationMode
         entry.dictationOriginal = capture.dictationOriginal
+        entry.fromQuickAction = capture.fromQuickAction ? true : nil
 
         // Dateien vor Text vor Bild: Finder liefert beim Kopieren einer Datei
         // auch ihren Namen als Text und ein Symbolbild. Ein Bild neben Text wird

@@ -79,6 +79,7 @@ enum ClipboardHistoryCore {
             if entry.dictationMode != nil {
                 existing.dictationMode = entry.dictationMode
                 existing.dictationOriginal = entry.dictationOriginal ?? existing.dictationOriginal
+                existing.fromQuickAction = entry.fromQuickAction
             }
             let oldBlobs = existing.blobFiles
             existing.text = entry.text
@@ -266,7 +267,8 @@ extension ClipboardHistoryCore {
         targetBundleID: String?,
         targetName: String?,
         settings: ClipboardSettings,
-        date: Date = Date()
+        date: Date = Date(),
+        fromQuickAction: Bool = false
     ) -> ClipboardCapture? {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let decision = decide(
@@ -279,7 +281,8 @@ extension ClipboardHistoryCore {
             types: dictationTypes, text: text,
             sourceBundleID: targetBundleID, sourceName: targetName,
             date: date, dictationMode: modeName,
-            dictationOriginal: keptOriginal(original, text: text)
+            dictationOriginal: keptOriginal(original, text: text),
+            fromQuickAction: fromQuickAction
         )
     }
 

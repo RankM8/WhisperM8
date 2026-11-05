@@ -2061,6 +2061,16 @@
         }
       }
     },
+    "Before": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorher"
+          }
+        }
+      }
+    },
     "Behaviour": {
       "localizations": {
         "de": {
@@ -8191,6 +8201,16 @@
         }
       }
     },
+    "Not inserted. The result is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht eingefügt. Das Ergebnis liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "Not installed": {
       "localizations": {
         "de": {
@@ -9054,6 +9074,16 @@
         }
       }
     },
+    "Paste the text as it was before the quick action": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Text so einfügen, wie er vor der Schnellaktion war"
+          }
+        }
+      }
+    },
     "Paste what you said, before the mode rewrote it": {
       "localizations": {
         "de": {
@@ -9670,6 +9700,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Frage: %@"
+          }
+        }
+      }
+    },
+    "Quick action (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellaktion (%@)"
           }
         }
       }
@@ -13734,12 +13774,32 @@
         }
       }
     },
+    "The result is also on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Ergebnis liegt auch in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The same states shown in the Agent Chats sidebar.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Dieselben Zustände wie in der Seitenleiste der Agent Chats."
+          }
+        }
+      }
+    },
+    "The selection changed. The result is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Markierung hat sich geändert. Das Ergebnis liegt in der Zwischenablage."
           }
         }
       }
@@ -14060,6 +14120,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dieser Kurzbefehl ist auch für „%@“ belegt. Nur einer von beiden wirkt, wähle bitte einen anderen."
+          }
+        }
+      }
+    },
+    "This shortcut is also the quick action “%@” (AI Output → Modes). Only one of them will work, so pick another one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Kurzbefehl ist auch die Schnellaktion „%@“ (KI-Ausgabe → Modi). Nur einer von beiden wirkt, wähle bitte einen anderen."
           }
         }
       }
@@ -15350,6 +15420,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Du hast das Diktat noch nicht getestet. Du kannst jetzt abschließen, wir empfehlen aber vorher einen kurzen Test."
+          }
+        }
+      }
+    },
+    "You switched apps. The result is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du hast die App gewechselt. Das Ergebnis liegt in der Zwischenablage."
           }
         }
       }

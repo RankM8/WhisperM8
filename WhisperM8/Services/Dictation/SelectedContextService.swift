@@ -44,6 +44,9 @@ struct SelectedContextService {
     let maxSnapshotBytes: Int
     let snapshotTimeout: TimeInterval
     let outcome: ClipboardCaptureOutcome
+    /// Hält der Nutzer gerade ⇧, ⌘, ⌥ oder ⌃? Die Schnellaktion wartet vor
+    /// ihrem Cmd+C, bis der Kurzbefehl losgelassen ist (Test-Seam).
+    let modifierKeysHeld: () -> Bool
 
     init(
         pasteboard: NSPasteboard = .general,
@@ -56,7 +59,11 @@ struct SelectedContextService {
         activator: @escaping (NSRunningApplication) -> Void = { $0.activate() },
         maxSnapshotBytes: Int = 8 * 1024 * 1024,
         snapshotTimeout: TimeInterval = 1.0,
-        outcome: ClipboardCaptureOutcome = ClipboardCaptureOutcome()
+        outcome: ClipboardCaptureOutcome = ClipboardCaptureOutcome(),
+        modifierKeysHeld: @escaping () -> Bool = {
+            !CGEventSource.flagsState(.hidSystemState)
+                .intersection([.maskShift, .maskCommand, .maskAlternate, .maskControl]).isEmpty
+        }
     ) {
         self.pasteboard = pasteboard
         self.copyPoster = copyPoster
@@ -64,6 +71,7 @@ struct SelectedContextService {
         self.maxSnapshotBytes = maxSnapshotBytes
         self.snapshotTimeout = snapshotTimeout
         self.outcome = outcome
+        self.modifierKeysHeld = modifierKeysHeld
     }
 
     @MainActor

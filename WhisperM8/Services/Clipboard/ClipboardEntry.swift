@@ -50,9 +50,19 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     /// Ergebnis unterscheidet. So kommt man an das Gesagte zurück, falls ein
     /// Modus schlecht umformuliert hat.
     var dictationOriginal: String? = nil
+    /// Ergebnis einer Schnellaktion (⇧⌘K, Kopfzeile oder „Korrigieren &
+    /// einfügen“ im Verlaufsfenster), kein Diktat: `dictationMode` ist dann
+    /// der Modus, `dictationOriginal` der Text vor der Nacharbeit. Fehlt bei
+    /// normalen Kopien, Diktaten und in älteren Indexdateien.
+    var fromQuickAction: Bool? = nil
     /// Platz der Dateien dieses Eintrags auf der Platte (Bild, Archiv, langer
     /// Text, RTF, HTML). Fehlt bei älteren Einträgen; dann zählt `imageBytes`.
     var blobBytes: Int? = nil
+
+    /// Schnellaktions-Ergebnis (siehe `fromQuickAction`).
+    var isQuickActionResult: Bool { fromQuickAction == true }
+    /// Echtes Diktat: mit Modus, aber nicht aus einer Schnellaktion.
+    var isDictation: Bool { dictationMode != nil && !isQuickActionResult }
 
     /// Für das Platz-Budget des Verlaufs.
     var diskBytes: Int { blobBytes ?? imageBytes ?? 0 }
@@ -133,6 +143,8 @@ struct ClipboardCapture: Sendable {
     var dictationMode: String?
     /// Siehe `ClipboardEntry.dictationOriginal`.
     var dictationOriginal: String?
+    /// Siehe `ClipboardEntry.fromQuickAction`.
+    var fromQuickAction = false
 
     init(
         types: [String] = [],
@@ -147,7 +159,8 @@ struct ClipboardCapture: Sendable {
         sourceName: String? = nil,
         date: Date = Date(),
         dictationMode: String? = nil,
-        dictationOriginal: String? = nil
+        dictationOriginal: String? = nil,
+        fromQuickAction: Bool = false
     ) {
         self.types = types
         self.text = text
@@ -162,5 +175,6 @@ struct ClipboardCapture: Sendable {
         self.date = date
         self.dictationMode = dictationMode
         self.dictationOriginal = dictationOriginal
+        self.fromQuickAction = fromQuickAction
     }
 }

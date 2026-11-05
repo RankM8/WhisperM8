@@ -42,6 +42,10 @@ extension UISnapshotGallery {
         dictation.dictationOriginal = "jo klar ich schau mir den PR heute abend an und meld mich danach bei dir"
         var dictation2 = entry("dict2", "Termin mit Jonas am Donnerstag um 14 Uhr, bitte Agenda vorher schicken.", ago: 5_400, app: "Mail")
         dictation2.dictationMode = "Email"
+        var corrected = entry("quick", "Hallo Team, ich habe die Dateien gestern hochgeladen und den Link im Ticket ergänzt.", ago: 900, app: "Mail")
+        corrected.dictationMode = "Correct"
+        corrected.dictationOriginal = "Hallo Team, ich habe die Datein gestern hochgeladen und den link im Ticket ergänzt"
+        corrected.fromQuickAction = true
 
         let entries: [ClipboardEntry] = [
             entry("pin1", "ssh deploy@staging.example.com -p 2222", ago: 90_000, app: "Terminal", pinned: true),
@@ -50,6 +54,7 @@ extension UISnapshotGallery {
             entry("err", "TypeError: Cannot read properties of undefined (reading 'map')\n    at renderList (app.js:128:22)\n    at App (app.js:40:9)", ago: 60, app: "Safari"),
             image,
             files,
+            corrected,
             entry("url", "https://github.com/rankm8/whisperm8/pull/42", ago: 1_500, app: "Safari"),
             entry("code", "func paste(_ entry: ClipboardEntry, plain: Bool) async", ago: 3_600, app: "Xcode"),
             entry("team", "Das Team trifft sich um 10 Uhr zum Meeting, Agenda folgt.", ago: 7_200, app: "Slack"),
@@ -83,6 +88,9 @@ extension UISnapshotGallery {
             },
             Fixture(name: "clipboard-verlauf-diktat", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "dict"), now: now))
+            },
+            Fixture(name: "clipboard-verlauf-schnellaktion", size: size) {
+                AnyView(ClipboardHistoryView(model: model(selected: "quick"), now: now))
             },
             Fixture(name: "clipboard-verlauf-nur-diktate", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "dict2", filter: .dictations), now: now))
