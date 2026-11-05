@@ -46,4 +46,15 @@ enum ClipboardKeyCommand: Equatable {
         if let digit = Int(characters), (1...9).contains(digit) { return .quickSelect(digit) }
         return nil
     }
+
+    /// Tasten in der großen Bildansicht. `nil` heißt: Taste wird geschluckt,
+    /// nichts geht ans Suchfeld. Leertaste schließt wie im Finder; der
+    /// Diktat-Filter (⌘D) ist gesperrt, weil er die Liste unter dem Bild tauscht.
+    static func resolveWhileZoomed(keyCode: UInt16, characters: String?, modifiers: NSEvent.ModifierFlags) -> ClipboardKeyCommand? {
+        let flags = modifiers.intersection([.command, .option, .control, .shift])
+        if keyCode == 49, flags.isEmpty { return .toggleZoom }
+        guard let command = resolve(keyCode: keyCode, characters: characters, modifiers: modifiers) else { return nil }
+        return command == .toggleDictationFilter ? nil : command
+    }
 }
+

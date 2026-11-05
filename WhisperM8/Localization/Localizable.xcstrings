@@ -5491,12 +5491,12 @@
         }
       }
     },
-    "Hides the chat status at the notch. Turn it back on in Settings, the menu bar or with the hotkey.": {
+    "Hides the chat status at the notch. Turn it back on in Settings or the menu bar.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Blendet den Chat-Status an der Notch aus. Wieder einschalten in den Einstellungen, in der Menüleiste oder per Hotkey."
+            "value": "Blendet den Chat-Status an der Notch aus. Wieder einschalten in den Einstellungen oder in der Menüleiste."
           }
         }
       }
@@ -5687,6 +5687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bild"
+          }
+        }
+      }
+    },
+    "Image %lld × %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild %lld × %lld"
           }
         }
       }

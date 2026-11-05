@@ -64,7 +64,8 @@ Ohne Notch ist es eine Pille unter der Menüleiste, die hell und dunkel mitgeht.
 
 **Ausschalten direkt in der Notch:** Unten links in der aufgeklappten Liste
 steht „Turn off notch“. Das setzt denselben Schalter wie die Einstellungen
-(`notchStatusEnabled`). Wieder an über Einstellungen, Menüleiste oder Hotkey.
+(`notchStatusEnabled`). Wieder an über Einstellungen oder Menüleiste (oder
+einen selbst belegten Hotkey; ab Werk hat er keine Belegung).
 
 ## Einstellungen
 

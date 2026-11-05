@@ -50,6 +50,12 @@ struct ClipboardEntry: Codable, Identifiable, Equatable, Sendable {
     /// Ergebnis unterscheidet. So kommt man an das Gesagte zurück, falls ein
     /// Modus schlecht umformuliert hat.
     var dictationOriginal: String? = nil
+    /// Platz der Dateien dieses Eintrags auf der Platte (Bild, Archiv, langer
+    /// Text, RTF, HTML). Fehlt bei älteren Einträgen; dann zählt `imageBytes`.
+    var blobBytes: Int? = nil
+
+    /// Für das Platz-Budget des Verlaufs.
+    var diskBytes: Int { blobBytes ?? imageBytes ?? 0 }
 
     /// Dateien dieses Eintrags im Verlaufsordner.
     var blobFiles: [String] {

@@ -46,7 +46,12 @@ enum ClipboardSecretMasker {
         // .env-Zeilen: OPENAI_API_KEY=…, DB_PASSWORD="…", export GITHUB_TOKEN=…
         rule("env-secret", #"(?m)^[ \t]*(?:export[ \t]+)?[A-Za-z0-9_]*(?i:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?)[A-Za-z0-9_]*[ \t]*=[ \t]*["']?([^\s"'#]{4,})"#, group: 1, validate: isSecretValue),
         // password=…, token: …, api_key = …, "client_secret": "…" (Wert ab sechs Zeichen).
-        rule("secret", #"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1, validate: isSecretValue),
+        rule("secret", #"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:password|passwd|passphrase|passwort|kennwort|secret|token|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1, validate: isSecretValue),
+        // Gesprochen oder geschrieben: „das Passwort ist Sommer2024“, „Kennwort lautet …“,
+        // „meine PIN ist 4711“, „the password is …“. Auch reine Zahlen (PIN) zählen.
+        rule("spoken-secret", #"(?i)\b(?:passwort|kennwort|password|passcode|passphrase|pin|pin-code|pincode|geheimzahl|zugangscode)\b[ \t]*(?:ist|lautet|wäre|heißt|is)[ \t]+(?:(?:der|die|das|einfach|nur|just)[ \t]+)?["„'‚]?([^\s"“'‘,;]{3,})"#, group: 1, validate: { value in
+            !isPlaceholderValue(value.trimmingCharacters(in: CharacterSet(charactersIn: ".!?")))
+        }),
         // Lange Base64-/URL-safe-Ketten mit Ziffer, Groß- und Kleinbuchstabe.
         // Reine Hex-Ketten (Git-Hashes, SHA-256, MD5) bleiben bewusst stehen:
         // ohne Zusammenhang sind sie fast immer Prüfsummen, keine Geheimnisse.

@@ -404,7 +404,7 @@ struct NotchChatList: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(palette.secondary)
-                .help(String(localized: "Hides the chat status at the notch. Turn it back on in Settings, the menu bar or with the hotkey."))
+                .help(String(localized: "Hides the chat status at the notch. Turn it back on in Settings or the menu bar."))
                 Spacer()
                 Text("Esc closes")
             }

@@ -73,6 +73,12 @@ enum ClipboardHistoryCore {
                 existing.sourceBundleID = entry.sourceBundleID
                 existing.sourceName = entry.sourceName
             }
+            // Wurde ein schon kopierter Text diktiert, ist er jetzt ein Diktat:
+            // Modus und Roh-Transkript des neuen Eintrags gehen mit.
+            if entry.dictationMode != nil {
+                existing.dictationMode = entry.dictationMode
+                existing.dictationOriginal = entry.dictationOriginal ?? existing.dictationOriginal
+            }
             list.insert(existing, at: 0)
             // Blob-Dateien des neuen Eintrags wären Dubletten der vorhandenen.
             return (list, true, entry.blobFiles.filter { !existing.blobFiles.contains($0) })
@@ -85,17 +91,26 @@ enum ClipboardHistoryCore {
 
     /// Hält höchstens `maxUnpinned` nicht angepinnte Einträge (die neuesten).
     /// Angepinnte zählen nicht mit und bleiben immer.
+    /// `maxUnpinnedBytes` begrenzt zusätzlich den Platz der Dateien (Bilder,
+    /// Archive): Wird er überschritten, fallen die ältesten nicht angepinnten
+    /// Einträge weg. Der neueste Eintrag bleibt immer.
     static func trim(
         _ entries: [ClipboardEntry],
-        maxUnpinned: Int
+        maxUnpinned: Int,
+        maxUnpinnedBytes: Int = .max
     ) -> (kept: [ClipboardEntry], removed: [ClipboardEntry]) {
         let limit = max(1, maxUnpinned)
         let newestFirst = entries.sorted { $0.lastCopiedAt > $1.lastCopiedAt }
         var seenUnpinned = 0
+        var bytes = 0
         var removedIDs = Set<String>()
         for entry in newestFirst where !entry.isPinned {
             seenUnpinned += 1
-            if seenUnpinned > limit { removedIDs.insert(entry.id) }
+            bytes += entry.diskBytes
+            if seenUnpinned > limit || (seenUnpinned > 1 && bytes > maxUnpinnedBytes) {
+                removedIDs.insert(entry.id)
+                bytes -= entry.diskBytes
+            }
         }
         let kept = entries.filter { !removedIDs.contains($0.id) }
         let removed = entries.filter { removedIDs.contains($0.id) }

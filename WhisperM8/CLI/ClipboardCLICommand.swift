@@ -137,6 +137,15 @@ enum ClipboardCLIFormatter {
         return (result.text, result.maskedCount)
     }
 
+    /// Vorschau für Agents: erst maskieren, dann kürzen. Die gespeicherte
+    /// Vorschau ist schon nach 240 Zeichen abgeschnitten und könnte ein
+    /// Geheimnis halbieren, das die Maskierung dann nicht mehr erkennt.
+    static func maskedPreview(_ entry: ClipboardEntry, _ context: Context) -> String {
+        guard context.settings.maskSecrets, entry.kind == .text else { return entry.preview }
+        let source = context.fullText(entry) ?? entry.preview
+        return ClipboardEntry.makePreview(from: masked(String(source.prefix(4_000)), context).text)
+    }
+
     private static func oneLine(_ text: String, limit: Int = 100) -> String {
         let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
         return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
@@ -155,7 +164,7 @@ enum ClipboardCLIFormatter {
             "kind": entry.kind.rawValue,
             "pinned": entry.isPinned,
             "copiedAt": isoString(entry.lastCopiedAt),
-            "preview": masked(entry.preview, context).text,
+            "preview": maskedPreview(entry, context),
         ]
         if let name = entry.sourceName { object["sourceApp"] = name }
         if let id = entry.sourceBundleID { object["sourceBundleID"] = id }
@@ -193,7 +202,7 @@ enum ClipboardCLIFormatter {
             let entry = row.entry
             let pin = entry.isPinned ? "*" : " "
             let app = entry.dictationMode.map { "Diktat \($0)" } ?? entry.sourceName ?? "-"
-            let text = oneLine(masked(entry.preview, context).text)
+            let text = oneLine(maskedPreview(entry, context))
             return "\(String(row.number).padding(toLength: 4, withPad: " ", startingAt: 0))\(pin) \(entry.kind.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)) \(ageLabel(from: entry.lastCopiedAt, now: context.now).padding(toLength: 4, withPad: " ", startingAt: 0)) \(app.padding(toLength: 14, withPad: " ", startingAt: 0)) \(text)"
         }.joined(separator: "\n")
     }
@@ -352,10 +361,20 @@ enum ClipboardCLIRunner {
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.listing(rows, json: json, context: context))
         case .search(let query, let limit, let json):
             // Gesucht wird im maskierten Text: die Suche verrät kein Geheimnis Zeichen für Zeichen.
-            let found = ClipboardHistoryCore.search(entries, query: query) { entry in
-                var text = env.fullText(entry) ?? entry.preview
-                if let original = entry.dictationOriginal { text += "\n" + original }
-                return settings.maskSecrets ? ClipboardSecretMasker.mask(text).text : text
+            // Suchtext komplett aus maskiertem Text (Inhalt, Original, Herkunft),
+            // sonst ließe sich ein Geheimnis per Suche Zeichen für Zeichen erraten.
+            let found = ClipboardHistoryCore.search(entries, query: query) { (entry: ClipboardEntry) -> [UInt8] in
+                var parts: [String] = []
+                switch entry.kind {
+                case .text: parts.append(env.fullText(entry) ?? entry.preview)
+                case .image: parts.append(entry.preview)
+                case .files: parts.append(contentsOf: entry.filePaths ?? []); parts.append(entry.preview)
+                }
+                if let original = entry.dictationOriginal { parts.append(original) }
+                if let name = entry.sourceName { parts.append(name) }
+                let text = parts.joined(separator: "\n")
+                let searchable = settings.maskSecrets ? ClipboardSecretMasker.mask(text).text : text
+                return Array(ClipboardSearchIndex.fold(searchable).utf8)
             }
             let rows = found.prefix(limit).map { (number: numbers[$0.id] ?? 0, entry: $0) }
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.listing(rows, json: json, context: context))

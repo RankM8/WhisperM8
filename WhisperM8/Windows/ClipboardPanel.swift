@@ -5,6 +5,8 @@ import SwiftUI
 /// zu holen. Die vorherige App bleibt aktiv, Einfügen geht also dorthin zurück.
 final class ClipboardPanel: NSPanel {
     var onCommand: ((ClipboardKeyCommand) -> Bool)?
+    /// Große Bildansicht offen: Tasten gehen nicht ans Suchfeld.
+    var isImageZoomed: () -> Bool = { false }
     var onResignKey: (() -> Void)?
 
     init(contentView: NSView) {
@@ -32,6 +34,18 @@ final class ClipboardPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func sendEvent(_ event: NSEvent) {
+        // In der großen Ansicht darf Tippen die Suche nicht ändern: sonst
+        // springt die Auswahl und Enter fügt etwas anderes ein, als zu sehen ist.
+        if event.type == .keyDown, isImageZoomed() {
+            if let command = ClipboardKeyCommand.resolveWhileZoomed(
+                keyCode: event.keyCode,
+                characters: event.charactersIgnoringModifiers?.lowercased(),
+                modifiers: event.modifierFlags
+            ) {
+                _ = onCommand?(command)
+            }
+            return
+        }
         if event.type == .keyDown,
            let command = ClipboardKeyCommand.resolve(
                keyCode: event.keyCode,

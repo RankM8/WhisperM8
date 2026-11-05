@@ -135,6 +135,7 @@ final class ClipboardHistoryController {
             self?.model.handle(command)
             return true
         }
+        panel.isImageZoomed = { [weak self] in self?.model.isZoomed ?? false }
         panel.onResignKey = { [weak self] in
             // Klick daneben: schließen. Beim Einfügen schließt `paste` selbst.
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.hidePanelIfNotKey() } }

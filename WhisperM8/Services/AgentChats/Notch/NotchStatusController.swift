@@ -105,6 +105,7 @@ final class NotchStatusController {
     private let now: () -> Date
     private let appIsActive: @MainActor () -> Bool
     private let focusSession: @MainActor (UUID) -> Void
+    private let prefs: AppPreferences
 
     private let viewModel = NotchViewModel()
     private var panel: NotchPanel?
@@ -146,8 +147,10 @@ final class NotchStatusController {
         workspaceProvider: @escaping @MainActor () -> AgentWorkspace = { AgentWorkspaceUIModel.shared.workspace },
         now: @escaping () -> Date = Date.init,
         appIsActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
-        focusSession: @escaping @MainActor (UUID) -> Void = { WindowRequestCenter.shared.requestSessionFocus(sessionID: $0) }
+        focusSession: @escaping @MainActor (UUID) -> Void = { WindowRequestCenter.shared.requestSessionFocus(sessionID: $0) },
+        prefs: AppPreferences = .shared
     ) {
+        self.prefs = prefs
         self.statusStore = statusStore ?? AgentSessionStatusCoordinator.shared.statusStore
         self.activityStore = activityStore ?? AgentSessionStatusCoordinator.shared.activityStore
         self.workspaceProvider = workspaceProvider
@@ -180,20 +183,19 @@ final class NotchStatusController {
     /// Knopf in der Liste: Anzeige ausschalten (wie der Schalter in den
     /// Einstellungen). Wieder an über Einstellungen, Menüleiste oder Hotkey.
     func turnOff() {
-        AppPreferences.shared.isNotchStatusEnabled = false
+        prefs.isNotchStatusEnabled = false
         applyConfigIfChanged()
     }
 
     /// Hotkey und Menüleiste: Anzeige ein- oder ausschalten.
     func toggleFeature() {
-        let prefs = AppPreferences.shared
         guard prefs.isNotchStatusFeatureEnabled else { return }
         prefs.isNotchStatusEnabled.toggle()
         applyConfigIfChanged()
     }
 
     private func applyConfigIfChanged(force: Bool = false) {
-        let new = NotchConfig.current()
+        let new = NotchConfig.current(prefs)
         guard force || new != config else { return }
         let wasActive = config.isActive
         config = new

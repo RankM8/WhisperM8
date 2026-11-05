@@ -32,6 +32,8 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         var maxTextChars = 2_000_000
         var maxImageBytes = 12 * 1024 * 1024
         var maxRichBytes = 4 * 1024 * 1024
+        /// Platz für Dateien nicht angepinnter Einträge (Bilder, Archive, lange Texte).
+        var maxUnpinnedBlobBytes = 512 * 1024 * 1024
         var search = ClipboardSearchIndex.Limits()
     }
 
@@ -124,10 +126,11 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     func add(_ capture: ClipboardCapture, maxItems: Int, completion: (@Sendable (ClipboardHistoryCore.SkipReason?) -> Void)? = nil) {
         queue.async { [self] in
             loadIfNeeded()
-            guard let made = makeEntry(from: capture) else {
+            guard var made = makeEntry(from: capture) else {
                 completion?(.empty)
                 return
             }
+            made.entry.blobBytes = blobBytes(of: made.entry)
             let inserted = ClipboardHistoryCore.insert(made.entry, into: entries)
             entries = inserted.entries
             for file in inserted.discardedBlobs { removeBlob(file) }
@@ -137,7 +140,9 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             } else {
                 search.set(made.entry, fullText: made.fullText)
             }
-            let trimmed = ClipboardHistoryCore.trim(entries, maxUnpinned: maxItems)
+            let trimmed = ClipboardHistoryCore.trim(
+                entries, maxUnpinned: maxItems, maxUnpinnedBytes: limits.maxUnpinnedBlobBytes
+            )
             entries = trimmed.kept
             for removed in trimmed.removed {
                 removeBlobs(of: removed)
@@ -285,6 +290,15 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         } catch {
             try? FileManager.default.removeItem(at: temp)
             return false
+        }
+    }
+
+    /// Größe der Dateien eines Eintrags (läuft auf der Store-Queue).
+    private func blobBytes(of entry: ClipboardEntry) -> Int {
+        entry.blobFiles.reduce(0) { total, file in
+            let path = directory.appendingPathComponent(file).path
+            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.intValue ?? 0
+            return total + size
         }
     }
 

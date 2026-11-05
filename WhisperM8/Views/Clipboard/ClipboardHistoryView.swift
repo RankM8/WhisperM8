@@ -159,7 +159,7 @@ struct ClipboardHistoryView: View {
         return HStack(spacing: 8) {
             leadingIcon(entry)
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: entry.preview.isEmpty ? " " : entry.preview)
+                Text(verbatim: Self.title(for: entry))
                     .font(.system(size: 14))
                     .lineLimit(1)
                     .foregroundStyle(AppTheme.textPrimary)
@@ -229,6 +229,16 @@ struct ClipboardHistoryView: View {
         case .image: return "photo"
         case .files: return "doc"
         }
+    }
+
+    /// Zeilentitel. Bilder heißen im Index „Image B × H“ (auch für Suche und
+    /// CLI); angezeigt wird der Titel in der Sprache der App.
+    static func title(for entry: ClipboardEntry) -> String {
+        if entry.kind == .image {
+            if let w = entry.imageWidth, let h = entry.imageHeight { return String(localized: "Image \(w) × \(h)") }
+            return String(localized: "Image")
+        }
+        return entry.preview.isEmpty ? " " : entry.preview
     }
 
     private func subtitle(for entry: ClipboardEntry) -> String {
@@ -308,7 +318,7 @@ struct ClipboardHistoryView: View {
     private func zoomOverlay(_ entry: ClipboardEntry) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text(verbatim: entry.preview)
+                Text(verbatim: Self.title(for: entry))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -335,7 +345,7 @@ struct ClipboardHistoryView: View {
             .padding(.vertical, 12)
 
             Group {
-                if let image = model.zoomImage {
+                if let image = model.zoomImageForSelection {
                     Image(nsImage: image)
                         .resizable()
                         .interpolation(.high)
@@ -362,7 +372,7 @@ struct ClipboardHistoryView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(AppTheme.textTertiary)
             ScrollView {
-                Text(verbatim: original)
+                Text(verbatim: String(original.prefix(ClipboardHistoryViewModel.previewCharacterLimit)))
                     .font(.system(size: 13))
                     .lineSpacing(2)
                     .foregroundStyle(AppTheme.textSecondary)

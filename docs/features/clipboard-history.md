@@ -27,7 +27,7 @@ nichts vom Verlauf, pollt nicht und belegt keinen Hotkey.
 | Schnellwahl | ⌘1 bis ⌘9, genau wie die Liste nummeriert ist |
 | Anpinnen und lösen | ⌘P oder die Pin-Schaltfläche am Eintrag |
 | Löschen | ⌘⌫ oder Schaltfläche in der Vorschau |
-| Bild groß ansehen | Klick aufs Vorschaubild, „View Large“ oder ⌘Y. Das Bild füllt das Fenster, Enter fügt ein, ↑/↓ blättern, Esc oder ⌘Y geht zurück |
+| Bild groß ansehen | Klick aufs Vorschaubild, „View Large“ oder ⌘Y. Das Bild füllt das Fenster, Enter fügt genau dieses Bild ein, ↑/↓ blättern, Leertaste, Esc oder ⌘Y gehen zurück. Tippen geht in dieser Ansicht nicht an die Suche |
 | Nur Diktate zeigen | ⌘D oder Umschalter „All / Dictations“ neben dem Suchfeld (kombinierbar mit der Suche) |
 | Original eines Diktats einfügen | Schaltfläche „Paste original“ in der Vorschau |
 | Verlauf leeren | Fußzeile „Clear History…“, mit Rückfrage in der Fußzeile; Angepinnte bleiben |
@@ -150,6 +150,12 @@ ein. Die Suche findet auch Wörter, die nur im Original stehen. CLI:
    `index.json` öffnet. Wer das ausschließen will, schaltet den Verlauf aus.
 6. Der Verlauf liegt nur lokal. Optional „Clear when WhisperM8 quits“ (Pins
    bleiben). Logs enthalten nie Inhalte, nur Ereignisse.
+   Die Maskierung kennt auch gesprochene Angaben aus Diktaten („das Passwort
+   ist …“, „Kennwort lautet …“, „meine PIN ist …“). Die Vorschau in `list`
+   und `search` entsteht aus dem maskierten Text und wird erst danach gekürzt.
+   **Keine Sicherheitsgrenze:** Maskierung und Agent-Sperre wirken nur auf
+   CLI und Tool. Ein Agent mit Shell kann die Zwischenablage (`pbpaste`) oder
+   `index.json` direkt lesen; beides gehört demselben Benutzer.
 
 ## Speicherort
 
@@ -181,6 +187,10 @@ Robustheit:
   entfernt der Store beim Laden.
 - Löschen eines Eintrags löscht alle seine Dateien. „Clear history…“ leert den
   ganzen Ordner, auch Reste und einen beiseitegelegten Index.
+
+Platz: Dateien nicht angepinnter Einträge (Bilder, Archive, lange Texte)
+dürfen zusammen höchstens 512 MB belegen (`Limits.maxUnpinnedBlobBytes`); darüber
+fallen die ältesten weg, der neueste bleibt immer.
 
 Aufbewahrung: Standard 200 Einträge (20 bis 2000). Angepinnte zählen nicht
 mit und werden nie gekürzt.

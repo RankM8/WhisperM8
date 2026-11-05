@@ -75,8 +75,14 @@ final class ClipboardHistoryViewModel: ObservableObject {
     @Published var isConfirmingClear = false
     /// Bild füllt das ganze Fenster (Klick aufs Vorschaubild oder ⌘Y).
     @Published private(set) var isZoomed = false
-    @Published private(set) var zoomImage: NSImage?
+    /// Großes Bild samt der ID, zu der es gehört. Die Ansicht zeigt es nur,
+    /// wenn die ID zur Auswahl passt; so steht nie ein fremdes Bild da.
+    @Published private(set) var zoomImage: (id: String, image: NSImage)?
     private var zoomTask: Task<Void, Never>?
+    private var zoomDecode: Task<NSImage?, Never>?
+    /// Zuletzt groß geladene Vorschaubilder; mehr hält der Speicher nicht vor.
+    nonisolated static let previewImageCacheLimit = 12
+    private var previewImageOrder: [String] = []
     @Published private(set) var thumbnails: [String: NSImage] = [:]
     @Published private(set) var previewText = ""
     @Published private(set) var previewImage: NSImage?
@@ -84,6 +90,15 @@ final class ClipboardHistoryViewModel: ObservableObject {
     /// Nur bei offenem Fenster werden Bilder geladen.
     var isPresented = false {
         didSet {
+            if !isPresented, oldValue {
+                // Fenster zu: große Bilder freigeben, Miniaturen bleiben.
+                closeZoom()
+                previewTask?.cancel()
+                previewImages.removeAll()
+                previewImageOrder.removeAll()
+                previewImage = nil
+                return
+            }
             guard isPresented, !oldValue else { return }
             // App-Symbole vor dem ersten Zeichnen holen, nicht erst im Body.
             for bundleID in Set(entries.compactMap(\.sourceBundleID)) { _ = loaders.appIcon(bundleID) }
@@ -129,6 +144,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
             thumbnails = thumbnails.filter { ids.contains($0.key) }
         }
         previewImages = previewImages.filter { ids.contains($0.key) }
+        previewImageOrder.removeAll { !ids.contains($0) }
         recomputeVisible()
         selectFirstIfNeeded(force: false)
         if isPresented { loadThumbnails() }
@@ -191,6 +207,9 @@ final class ClipboardHistoryViewModel: ObservableObject {
             selectedID = visible.first?.id
             loadPreview()
         }
+        // Große Ansicht folgt der Auswahl (Suche, Filter, Eintrag verschwunden):
+        // anderes Bild nachladen, bei Text oder leerer Liste schließen.
+        if isZoomed { refreshZoom() }
     }
 
     /// Miniaturen der neuesten Bild-Einträge, verkleinert und abseits des Main Threads.
@@ -246,7 +265,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
             previewTask = Task { [weak self] in
                 let image = await Task.detached(priority: .userInitiated) { loader(entry, Self.previewPixels) }.value
                 guard !Task.isCancelled, let image, let self else { return }
-                self.previewImages[entry.id] = image
+                self.rememberPreviewImage(image, for: entry.id)
                 if self.selectedID == entry.id { self.previewImage = image }
             }
         case .files:
@@ -261,6 +280,25 @@ final class ClipboardHistoryViewModel: ObservableObject {
         selectedID = id
         loadPreview()
         if isZoomed { refreshZoom() }
+    }
+
+    /// Hält höchstens `previewImageCacheLimit` große Vorschaubilder, die
+    /// ältesten fliegen zuerst raus.
+    func rememberPreviewImage(_ image: NSImage, for id: String) {
+        previewImages[id] = image
+        previewImageOrder.removeAll { $0 == id }
+        previewImageOrder.append(id)
+        while previewImageOrder.count > Self.previewImageCacheLimit {
+            previewImages[previewImageOrder.removeFirst()] = nil
+        }
+    }
+
+    var cachedPreviewImageCount: Int { previewImages.count }
+
+    /// Bild der großen Ansicht, nur wenn es zum gewählten Eintrag gehört.
+    var zoomImageForSelection: NSImage? {
+        guard let zoomImage, zoomImage.id == selectedID else { return nil }
+        return zoomImage.image
     }
 
     // MARK: Große Bildansicht
@@ -278,23 +316,40 @@ final class ClipboardHistoryViewModel: ObservableObject {
 
     func closeZoom() {
         zoomTask?.cancel()
+        zoomDecode?.cancel()
+        zoomTask = nil
+        zoomDecode = nil
         isZoomed = false
         zoomImage = nil
     }
 
     /// Lädt das gewählte Bild in großer Auflösung, bis dahin steht die Vorschau.
+    /// Beim schnellen Blättern startet die Dekodierung erst nach kurzer Pause;
+    /// ein überholter Auftrag wird abgebrochen und sein Ergebnis verworfen.
     private func refreshZoom() {
-        zoomTask?.cancel()
         guard let entry = selectedEntry, entry.kind == .image else {
             closeZoom()
             return
         }
-        zoomImage = previewImages[entry.id] ?? thumbnails[entry.id]
+        if zoomImage?.id == entry.id, zoomTask != nil { return }
+        zoomTask?.cancel()
+        zoomDecode?.cancel()
+        if let quick = previewImages[entry.id] ?? thumbnails[entry.id] {
+            zoomImage = (entry.id, quick)
+        } else {
+            zoomImage = nil
+        }
         let loader = loaders.image
+        let decode = Task.detached(priority: .userInitiated) { () -> NSImage? in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return nil }
+            return loader(entry, Self.zoomPixels)
+        }
+        zoomDecode = decode
         zoomTask = Task { [weak self] in
-            let image = await Task.detached(priority: .userInitiated) { loader(entry, Self.zoomPixels) }.value
-            guard !Task.isCancelled, let image, let self, self.selectedID == entry.id, self.isZoomed else { return }
-            self.zoomImage = image
+            let image = await decode.value
+            guard !Task.isCancelled, let image, let self, self.isZoomed, self.selectedID == entry.id else { return }
+            self.zoomImage = (entry.id, image)
         }
     }
 
