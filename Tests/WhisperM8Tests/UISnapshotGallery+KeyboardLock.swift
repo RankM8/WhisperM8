@@ -25,7 +25,11 @@ extension UISnapshotGallery {
                 panel: SnapshotPanel(),
                 secureInputProbe: { secureInput },
                 capsLockProbe: { capsLock },
-                keysDownProbe: { [] }
+                keysDownProbe: { [] },
+                screenLockedProbe: { false },
+                notificationSources: {
+                    .init(workspace: NotificationCenter(), distributed: NotificationCenter(), app: NotificationCenter())
+                }
             )
             controller.lock()
             return controller
