@@ -64,7 +64,7 @@ struct ClipboardSettingsPage: View {
             SettingsSection("History") {
                 SettingsToggleRow(
                     title: "Keep a clipboard history",
-                    subtitle: "Remembers text, images and files you copy. Off by default. Passwords from password managers are never stored.",
+                    subtitle: "Remembers text, images and files you copy. On by default. Passwords from password managers are never stored.",
                     isOn: $enabled
                 )
                 SettingsToggleRow(
@@ -177,7 +177,7 @@ struct ClipboardSettingsPage: View {
                 )
                 SettingsToggleRow(
                     title: "Mask secrets for agents",
-                    subtitle: "API keys, tokens, JWTs and private keys are replaced by a placeholder in what agents see.",
+                    subtitle: "API keys, tokens, JWTs and private keys are replaced by a placeholder in what agents see. Images are not masked.",
                     isOn: $maskSecrets
                 )
                 .disabled(!agentAccess)

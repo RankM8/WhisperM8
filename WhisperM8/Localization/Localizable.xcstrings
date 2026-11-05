@@ -821,12 +821,12 @@
         }
       }
     },
-    "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. Off by default.": {
+    "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. On by default.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ein schmaler Streifen an der Notch (ohne Notch eine Pille oben am Bildschirm) zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, ein weiterer springt zum Chat. Standardmäßig aus."
+            "value": "Ein schmaler Streifen an der Notch (ohne Notch eine Pille oben am Bildschirm) zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, ein weiterer springt zum Chat. Standardmäßig an."
           }
         }
       }
@@ -891,12 +891,12 @@
         }
       }
     },
-    "API keys, tokens, JWTs and private keys are replaced by a placeholder in what agents see.": {
+    "API keys, tokens, JWTs and private keys are replaced by a placeholder in what agents see. Images are not masked.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Keys, Tokens, JWTs und private Schlüssel werden in dem, was Agents sehen, durch einen Platzhalter ersetzt."
+            "value": "API-Keys, Tokens, JWTs und private Schlüssel werden in dem, was Agents sehen, durch einen Platzhalter ersetzt. Bilder werden nicht maskiert."
           }
         }
       }
@@ -6221,12 +6221,12 @@
         }
       }
     },
-    "Keeps chat titles out of recordings and shared screens.": {
+    "Asks macOS to keep the strip out of screenshots and screen sharing. Some recording and meeting apps may still show it.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hält Chat-Titel aus Aufnahmen und geteilten Bildschirmen heraus."
+            "value": "Bittet macOS, den Streifen aus Bildschirmfotos und Bildschirmfreigaben herauszuhalten. Manche Aufnahme- und Meeting-Apps zeigen ihn trotzdem."
           }
         }
       }
@@ -10094,12 +10094,12 @@
         }
       }
     },
-    "Remembers text, images and files you copy. Off by default. Passwords from password managers are never stored.": {
+    "Remembers text, images and files you copy. On by default. Passwords from password managers are never stored.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Merkt sich kopierten Text, Bilder und Dateien. Standardmäßig aus. Passwörter aus Passwort-Managern werden nie gespeichert."
+            "value": "Merkt sich kopierten Text, Bilder und Dateien. Standardmäßig an. Passwörter aus Passwort-Managern werden nie gespeichert."
           }
         }
       }

@@ -6,7 +6,7 @@ description: Zwischenablage-Verlauf (Maccy-Ersatz) mit Hotkey-Fenster, Datenschu
 
 # Zwischenablage-Verlauf
 
-WhisperM8 führt auf Wunsch einen durchsuchbaren Verlauf dessen, was der User
+WhisperM8 führt ab Werk einen durchsuchbaren Verlauf dessen, was der User
 kopiert, und ersetzt damit Maccy. Claude kann den Verlauf lesen
 (`whisperm8 clipboard`, Tool `clipboard`), damit „der Fehler, den ich vorhin
 kopiert hatte“ ohne erneutes Einfügen funktioniert.
@@ -32,7 +32,7 @@ nichts vom Verlauf, pollt nicht und belegt keinen Hotkey.
 | Bild groß ansehen | Klick aufs Vorschaubild, „View Large“ oder ⌘Y. Das Bild füllt das Fenster, Enter fügt genau dieses Bild ein, ↑/↓ blättern, Leertaste, Esc oder ⌘Y gehen zurück. Tippen geht in dieser Ansicht nicht an die Suche |
 | Nur Diktate zeigen | ⌘D oder Umschalter „All / Dictations“ neben dem Suchfeld (kombinierbar mit der Suche) |
 | Original eines Diktats einfügen | Schaltfläche „Paste original“ in der Vorschau |
-| Verlauf leeren | Fußzeile „Clear History…“, mit Rückfrage in der Fußzeile; Angepinnte bleiben |
+| Verlauf leeren | Fußzeile „Clear History…“, mit Rückfrage in der Fußzeile; Angepinnte und ihre Dateien bleiben. Alles samt Pins löscht nur „Clear history…“ in den Einstellungen (siehe [Speicherort](#speicherort)) |
 | Einstellungen | Fußzeile „Settings…“ öffnet die Seite Clipboard |
 | Schließen | Esc oder Klick daneben (Esc bricht zuerst eine offene Rückfrage ab) |
 | Pausieren | Menüleiste „Pause clipboard history“ oder Einstellungen |
@@ -145,7 +145,9 @@ ein. Die Suche findet auch Wörter, die nur im Original stehen. CLI:
    stehen. Die Suche der CLI läuft über den maskierten Text, damit niemand ein
    Geheimnis per Suche Zeichen für Zeichen erraten kann; `get` maskiert vor dem
    Zerteilen in Stücke. Die Oberfläche der App zeigt die Originale (das ist die
-   eigene Zwischenablage des Users).
+   eigene Zwischenablage des Users). **Bilder werden nicht maskiert:** `get`
+   auf ein Bild liefert den PNG-Pfad, und der Agent sieht das ganze Bild, auch
+   einen Schlüssel auf einem Screenshot. Der Untertitel des Schalters sagt das.
 5. **Grenze:** Schalter und Maskierung wirken auf CLI und Tool. Die Dateien
    selbst gehören dem User (0600) und sind für jeden Prozess unter seinem Konto
    lesbar, also auch für einen Agent mit Shell-Zugriff, der gezielt
@@ -187,8 +189,13 @@ Robustheit:
   solange er da liegt, räumt die App keine Dateien weg.
 - Dateien ohne Eintrag (Absturz zwischen Datei und Index) und Temp-Reste
   entfernt der Store beim Laden.
-- Löschen eines Eintrags löscht alle seine Dateien. „Clear history…“ leert den
-  ganzen Ordner, auch Reste und einen beiseitegelegten Index.
+- Löschen eines Eintrags löscht alle seine Dateien.
+- Zwei Knöpfe zum Leeren mit verschiedener Wirkung: „Clear history…“ in den
+  **Einstellungen** löscht alles samt Pins und leert den ganzen Ordner, auch
+  Reste und einen beiseitegelegten Index (`clear(keepPinned: false)`).
+  „Clear History…“ in der **Fußzeile des Fensters** (und „Clear when WhisperM8
+  quits“) löscht nur nicht angepinnte Einträge; Pins, ihre Dateien, Reste und
+  ein beiseitegelegter Index bleiben (`clear(keepPinned: true)`).
 
 Platz: Dateien nicht angepinnter Einträge (Bilder, Archive, lange Texte)
 dürfen zusammen höchstens 512 MB belegen (`Limits.maxUnpinnedBlobBytes`); darüber
@@ -203,7 +210,7 @@ mit und werden nie gekürzt.
 whisperm8 clipboard status [--json]
 whisperm8 clipboard list [--limit N] [--json]
 whisperm8 clipboard search <text> [--limit N] [--json]
-whisperm8 clipboard get <nr|id> [--json] [--max-chars N] [--from N]
+whisperm8 clipboard get <nr|id> [--json] [--max-chars N] [--from N] [--original]
 whisperm8 clipboard copy <nr|id>
 ```
 

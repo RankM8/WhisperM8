@@ -13,7 +13,7 @@ struct NotchSettingsSection: View {
             SettingsSection("Notch Status") {
                 SettingsToggleRow(
                     title: "Show chat status at the notch",
-                    subtitle: "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. Off by default.",
+                    subtitle: "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. On by default.",
                     isOn: $isEnabled
                 )
 
@@ -28,7 +28,7 @@ struct NotchSettingsSection: View {
 
                 SettingsToggleRow(
                     title: "Hide from screenshots and screen sharing",
-                    subtitle: "Keeps chat titles out of recordings and shared screens.",
+                    subtitle: "Asks macOS to keep the strip out of screenshots and screen sharing. Some recording and meeting apps may still show it.",
                     isOn: $hideFromCapture
                 )
 

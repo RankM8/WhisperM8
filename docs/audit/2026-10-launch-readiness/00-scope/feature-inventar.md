@@ -57,7 +57,7 @@ gültig und werden in Spalte „Juli-Ref" verknüpft.
 | F-AC-07 | Chat-Titel aus nativem Titel; Zusammenfassungen | — | an | **Kern** — Kosten/Datenfluss der Zusammenfassungen in A prüfen | AC-10 |
 | F-AC-08 | Verlaufsansicht (ein NSTextView, TextKit 2) | — | — | **Kern** | neu seit 08/2026 |
 | F-AC-09 | Wiederaufnahme laufender Chats nach Absturz | — | an | **Kern** | neu seit 09/2026 |
-| F-AC-10 | Send-Guard gegen doppelt zugestellte Prompts | Claude-Hooks | an | **Kern** (unsichtbar) | |
+| F-AC-10 | Send-Guard gegen doppelt zugestellte Prompts | Claude-Hooks | an | **Kern** (unsichtbar) | ausgebaut 05.11.2026 (9601c506); Ersatz: Prüfung des Eingabefelds vor der Zustellung |
 | F-AC-11 | Background-Agents (`claude --bg`, attach, Resume→Attach) | Claude-Supervisor | — | **Erweitert** | AC-31…33 |
 | F-AC-12 | Codex-Subagent-Jobs (`whisperm8 agent`), Takeover, Retention | Codex-CLI, git | an | **Erweitert** | AC-34…38 |
 

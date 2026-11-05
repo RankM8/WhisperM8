@@ -286,7 +286,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // das ist Opt-in, siehe AppPreferences.
         TerminalMetalWarmup.warmUpIfNeeded()
 
-        // Statusanzeige an der Notch (Standard aus): hängt nur einen
+        // Statusanzeige an der Notch (Standard an): hängt nur einen
         // Preference-Beobachter ein, solange sie nicht eingeschaltet ist.
         NotchStatusController.shared.start()
 

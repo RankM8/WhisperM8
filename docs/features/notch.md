@@ -89,8 +89,14 @@ Hauptbildschirm. Hauptbildschirm heißt der mit der Menüleiste
 folgt Bildschirmwechseln (`NSApplication.didChangeScreenParametersNotification`),
 die Wahl wird bis dahin zwischengespeichert.
 
-Das Aufnahme-Verbergen setzt `NSWindow.sharingType = .none`: Titel erscheinen
-weder in Screenshots noch in Screen-Sharing.
+Das Aufnahme-Verbergen setzt `NSWindow.sharingType = .none`. Das bittet macOS,
+das Fenster aus Screenshots und Bildschirmfreigaben herauszuhalten. Klassische
+Aufnahmen (`CGWindowList`, Bildschirmfoto) halten sich daran. Ob Apps auf
+ScreenCaptureKit-Basis (Zoom, Teams, Meet, QuickTime) es unter macOS 15 und
+neuer in jedem Fall tun, ist nicht belegt; Berichte sagen, nicht immer.
+Untertitel und Doku versprechen deshalb nichts Absolutes. Handtest offen:
+Bildschirm in Zoom oder Meet teilen, einen Chat auf „wartet“ bringen und auf
+der Gegenseite prüfen, ob Streifen oder Titel sichtbar sind.
 
 ### Kill-Switch
 
@@ -231,6 +237,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Bildschirmmitte (Notch-Breite mal 24 pt, beim Alarm kurz 340 pt breit).
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort
   bei offener Liste); die Anzeige beobachtet den Workspace nicht.
+- „In Screenshots und Bildschirmfreigabe ausblenden“ ist kein sicherer Schutz:
+  manche Aufnahme- und Meeting-Apps können den Streifen trotzdem zeigen (siehe
+  oben, Handtest offen).
 - „Esc closes" wirkt nur, wenn die Liste per Klick geöffnet wurde. Beim
   Öffnen per Darüberfahren nimmt sie keinen Tastaturfokus.
 
