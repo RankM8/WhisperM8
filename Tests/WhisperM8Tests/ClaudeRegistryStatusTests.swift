@@ -340,21 +340,6 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         try XCTUnwrap(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }).externalSessionID
     }
 
-    func testPromptGuardBlockIsNoTurnEnd() throws {
-        let f = try makeFixture()
-        // Wie in Produktion: das Transcript zeigt keinen Abbruch-Marker (der
-        // geblockte Prompt lief nie) — der Block gilt trotzdem (Review W4b).
-        f.coordinator.interruptConfirmationOverride = { _ in false }
-        f.coordinator.sessionLaunched(sessionID: f.sessionID)
-        f.coordinator.handleRegistryRecord(record("idle", updatedAt: Date().addingTimeInterval(-10)))
-        f.coordinator.handleRegistryRecord(record("busy", updatedAt: Date().addingTimeInterval(-1)))
-        f.coordinator.handleHookEvent(localID: f.sessionID, event: hook(.promptGuardBlock))
-        f.coordinator.handleRegistryRecord(record("idle", updatedAt: Date()))
-        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle)
-        XCTAssertTrue(f.poster.posted.isEmpty, "geblockter Prompt ist kein „fertig“")
-        XCTAssertTrue(f.sounds.isEmpty)
-    }
-
     func testRecordWithoutOwnTerminalIsIgnored() throws {
         // Dieselbe Session läuft in einem fremden Terminal (`claude --resume`).
         let f = try makeFixture()
@@ -385,15 +370,13 @@ final class ClaudeRegistryStatusTests: XCTestCase {
 
     // MARK: S4 — Hook-Satz
 
-    func testReducedHookSetKeepsBindingAndGuardOnly() throws {
+    func testReducedHookSetKeepsBindingOnly() throws {
         let settings = ClaudeHookSettingsBuilder.makeSettings(
-            eventFilePath: "/tmp/events.jsonl", promptGuardCommand: "guard",
+            eventFilePath: "/tmp/events.jsonl",
             eventNames: ClaudeHookSettingsBuilder.registryModeEventNames)
         let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
         // TaskCreated/TaskCompleted: selten, nur für den Ordner der Task-Liste.
-        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "SessionEnd", "TaskCreated", "TaskCompleted", "UserPromptSubmit"])
-        let guardEntries = try XCTUnwrap(hooks["UserPromptSubmit"] as? [[String: Any]])
-        XCTAssertEqual(guardEntries.count, 1, "nur der Send-Guard, kein Status-Append")
+        XCTAssertEqual(Set(hooks.keys), ["SessionStart", "SessionEnd", "TaskCreated", "TaskCompleted"])
         XCTAssertTrue(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: true, isBackground: false))
         XCTAssertFalse(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: true, isBackground: true))
         XCTAssertFalse(AgentSessionStatusCoordinator.usesReducedHooks(registryEnabled: false, isBackground: false))
@@ -407,6 +390,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         let hooks = try XCTUnwrap(json["hooks"] as? [String: Any])
         XCTAssertNil(hooks["PreToolUse"])
         XCTAssertNil(hooks["Stop"])
+        XCTAssertNil(hooks["UserPromptSubmit"], "kein Prompt-Hook mehr im reduzierten Satz")
         XCTAssertNotNil(hooks["SessionStart"])
         XCTAssertTrue(f.coordinator.reducedHookSessions.contains(f.sessionID))
 

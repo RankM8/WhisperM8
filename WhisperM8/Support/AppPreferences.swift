@@ -495,17 +495,6 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.gridAutoCompactEnabled) }
     }
 
-    /// Send-Guard der Hook-Bridge: `UserPromptSubmit`-Hook blockt die
-    /// Wiedervorlage zugestellter `[via whisperm8 chats]`-Prompts (die CLI
-    /// legt sie nach ESC-Abbruch selbst in den Composer zurück — Vorfall
-    /// 2026-08-17). Aus = Settings ohne Guard-Eintrag; wirkt für NEU
-    /// gestartete Sessions.
-    /// `defaults write com.whisperm8.app chatsPromptGuardEnabled -bool NO`
-    var isChatsPromptGuardEnabled: Bool {
-        get { boolWithDefault(true, forKey: Keys.chatsPromptGuardEnabled) }
-        nonmutating set { defaults.set(newValue, forKey: Keys.chatsPromptGuardEnabled) }
-    }
-
     /// Claude-Chat-Status aus Claudes eigener Registry
     /// (`<config>/sessions/<pid>.json`) statt aus Hooks + Transcript-Heuristik
     /// (Plan claude-status-aus-registry.md). Aus = alter Weg: voller Hook-Satz
@@ -1029,7 +1018,6 @@ enum PreferenceKeys {
     static let agentTabGroupingEnabled = "agentTabGroupingEnabled"
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
-    static let chatsPromptGuardEnabled = "chatsPromptGuardEnabled"
     static let claudeRegistryStatusEnabled = "claudeRegistryStatusEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"

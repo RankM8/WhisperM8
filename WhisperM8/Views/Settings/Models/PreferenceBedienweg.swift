@@ -28,7 +28,6 @@ enum PreferenceBedienweg {
     /// sie nicht aus Versehen kippen, der Support nennt den `defaults write`-Befehl.
     static let killSwitches: [Entry] = [
         Entry(key: "agentEventDrivenWatchEnabled", reason: "Notbremse: zurück zum reinen 1,5-s-Polling des Transcript-Watchers."),
-        Entry(key: "chatsPromptGuardEnabled", reason: "Notbremse: nimmt den Send-Guard (UserPromptSubmit-Hook) aus neuen Claude-Sessions."),
         Entry(key: "claudeRegistryStatusEnabled", reason: "Notbremse: Claude-Status wieder aus Hooks und Transcript statt aus Claudes Registry."),
         Entry(key: "claudeSharedMemoryEnabled", reason: "Notbremse: jedes Claude-Profil nutzt wieder sein eigenes Auto-Memory."),
         Entry(key: "accountSwitchAfterTurnEnabled", reason: "Notbremse: Kontowechsel überspringt laufende Chats wieder, statt nach dem Turn zu wechseln."),

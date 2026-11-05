@@ -753,8 +753,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         guard isRunning else { return }
         // Nach einem Abbruch steht vermutlich der alte Prompt im Composer
         // (`TerminalComposerDraftTracker.mayHoldRestoredPrompt`): erst mit
-        // Ctrl+C leeren, sonst hängt der neue Prompt daran und der Send-Guard
-        // blockt beide. Kurz warten, bis die TUI das Leeren verarbeitet hat.
+        // Ctrl+C leeren, sonst hängt der neue Prompt daran und der
+        // abgebrochene Auftrag liefe mit. Kurz warten, bis die TUI das Leeren
+        // verarbeitet hat.
         if submit, Self.clearsBeforeSubmit(
             draft: composerDraft,
             profile: command.keyboardProfile,
