@@ -369,6 +369,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 shortcutLabel: { KeyboardShortcuts.getShortcut(for: QuickActionShortcuts.name(for: OutputMode.correctID))?.description }
             )
             ClipboardHistoryController.shared.start()
+            // Statistik: aktive Zeit, Agenten-Zeit, neue Chats, Diktate.
+            StatisticsCollectors.start()
         }
         // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der
         // Zustellung stand, ist von unbekanntem Ausgang — als `unknown`
@@ -545,6 +547,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         MainActor.assumeIsolated {
             AgentWindowStore.shared.flush()
             ClipboardHistoryController.shared.shutdown()
+            StatisticsCollectors.shutdown()
         }
     }
 
