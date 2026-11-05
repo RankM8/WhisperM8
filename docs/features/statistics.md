@@ -43,7 +43,11 @@ Token-Angaben werden vor dem Dekodieren aussortiert.
 - **GPT über den Proxy** steht in den Claude-Protokollen, wird aber unter dem
   Konto `gpt-proxy` geführt (ChatGPT-Abo, nicht Claude).
 - **Codex** meldet Gesamtstände. Gezählt wird die Differenz zum letzten Stand
-  je Datei; `input_tokens` enthält dort den Cache und wird bereinigt.
+  je Thread (UUID im Dateinamen, nicht der Pfad: Codex verschiebt und
+  komprimiert ältere Rollouts); `input_tokens` enthält dort den Cache und wird
+  bereinigt. Komprimierte `rollout-*.jsonl.zst` liest der Leser gestreamt mit
+  `zstd -dc` (Homebrew). Fehlt `zstd`, werden sie übersprungen und die Seite
+  sagt das. Auf dem Entwickler-Mac lagen zwei Drittel der Codex-Historie so vor.
 - **Fast-Modus** bekommt die Endung `-fast` und den doppelten Preis.
 - **Preise:** `ModelPricing` (USD je Million Token, Quellen im Code).
   Gesucht wird die exakte Modell-ID (ohne Datum, `[1m]` und Proxy-Präfix),
@@ -59,19 +63,24 @@ Der Gegenwert ist ausdrücklich nicht das, was der Nutzer zahlt.
 ### Einlesen der Historie
 
 Beim ersten Lauf ohne Lese-Positionen liest der Leser alle Protokolle: neueste
-Dateien zuerst, auf `.background`, mit Pausen zwischen den Dateien. Er wartet
-während eines Diktats, im Stromsparmodus und bei hoher Temperatur; der Nutzer
-kann ihn auf der Seite pausieren. Fortschritt steht in `db.backfill`.
+Dateien zuerst, auf `.background`, mit Pausen zwischen den Dateien. Während
+eines Diktats, im Stromsparmodus, bei hoher Temperatur oder wenn der Nutzer auf
+der Seite pausiert, bricht er das Einlesen ab und plant es neu (nach 60 s bzw.
+beim Fortsetzen); er blockiert dabei nichts. Neue Zeilen bekannter Dateien
+liest jeder Lauf trotzdem, die laufenden Tage stimmen also auch während einer
+Pause. Fortschritt steht in `db.backfill`.
 
-Gemessen (Debug-Build, ohne Drossel, 9.120 Claude- und 472 Codex-Dateien, 18,8
-GB): Volllauf 92 s bei höchstens 58 MB Speicher, danach ein Lauf ohne
-Änderungen 0,56 s. Lese-Positionen 2,6 MB, Doppel-Erkennung 2,9 MB.
+Gemessen (Debug-Build, ohne Drossel, 18,8 GB Claude- und 4,1 GB
+Codex-Protokolle): Claude-Volllauf 92 s bei höchstens 58 MB Speicher, die 1.015
+komprimierten Codex-Dateien 210 s bei höchstens 102 MB; danach ein Lauf ohne
+Änderungen unter 0,6 s.
 
 ### Ablauf
 
 Erster Lauf 30 s nach dem App-Start, dann alle 15 Minuten und beim Öffnen der
 Seite (frühestens 60 s nach dem letzten Lauf). Messpunkt `statistics.scan`
-(Budget 1,5 s, Signposter `perf.statistics`).
+(Budget 1,5 s, Signposter `perf.statistics`). Im Stromsparmodus läuft der
+Timer nur stündlich.
 
 ## Limits
 
@@ -85,11 +94,22 @@ bleibt. Konto-Schlüssel: Profilname, `chatgpt:<profil>` für GPT-Profile,
 
 ## Speicher und Leistung
 
-- Daten: `~/Library/Application Support/WhisperM8/statistics/` (`stats.json`
-  mit Tageswerten, dazu Lese-Positionen, Doppel-Erkennung und Git-Cursor).
+- Daten: `~/Library/Application Support/WhisperM8/statistics/`: Tagesdateien
+  für den laufenden Monat, Monatsdateien für vergangene, Metadaten getrennt;
+  dazu Lese-Positionen (Datei plus anhängendes Journal), Doppel-Erkennung
+  (anhängende Binärdatei mit 64-bit-Hashes, ~8 Byte je Antwort, wird bewusst
+  nicht nach Alter gekürzt) und Git-Cursor. Eine alte `stats.json` wird beim
+  ersten Laden übernommen.
 - `StatisticsStore` hält alles auf einer eigenen Utility-Queue, schreibt
-  gebündelt höchstens einmal pro Minute und benachrichtigt die Seite höchstens
-  alle 2 Sekunden. Kaputte Dateien werden beiseitegelegt, nicht überschrieben.
+  gebündelt höchstens einmal pro Minute und nur geänderte Tage, und
+  benachrichtigt die Seite höchstens alle 2 Sekunden. Geschätzte Schreiblast im
+  Dauerbetrieb: rund 10 MB am Tag. Kaputte Dateien werden beiseitegelegt, nicht
+  überschrieben.
+- Absturzsicherheit: Zahlen werden vor den Lese-Positionen gesichert. Stürzt
+  die App genau dazwischen ab, kann ein Abschnitt doppelt zählen; verloren geht
+  nichts.
+- „Löschen…“ erhöht eine Generationsnummer im Store. Läufe, die vorher
+  begonnen haben, sichern danach nichts mehr und legen den Ordner nicht neu an.
 - Die Zähler-Einhakstellen sind O(1) und schreiben nie auf dem Main-Thread.
 - Die Seite rechnet nichts in `body`: Schnappschuss holen, `StatisticsReport`
   im Hintergrund bauen, Ergebnis anzeigen.

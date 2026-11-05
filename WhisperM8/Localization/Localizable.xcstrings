@@ -421,6 +421,16 @@
         }
       }
     },
+    "%lld compressed Codex logs were skipped because zstd is not installed. Install it with Homebrew (brew install zstd) to count them.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld komprimierte Codex-Protokolle wurden übersprungen, weil zstd fehlt. Mit Homebrew installieren (brew install zstd), dann werden sie mitgezählt."
+          }
+        }
+      }
+    },
     "%lld config(s) contain a different status line command. Replacing switches both entries to the WhisperM8 status lines.": {
       "localizations": {
         "de": {

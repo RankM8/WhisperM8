@@ -371,6 +371,12 @@ struct StatisticsSettingsPage: View {
                     .monospacedDigit()
                     .foregroundStyle(AppTheme.textSecondary)
             }
+            if let skipped = data?.lastScan?.skippedCompressedFiles, skipped > 0 {
+                SettingsHelpText(
+                    String(localized: "\(skipped) compressed Codex logs were skipped because zstd is not installed. Install it with Homebrew (brew install zstd) to count them."),
+                    tone: .warning
+                )
+            }
             SettingsButtonRow(
                 title: "Stored",
                 subtitle: "Daily values under Application Support/WhisperM8/statistics/"
