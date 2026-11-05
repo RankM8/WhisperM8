@@ -428,7 +428,8 @@ final class NotchStatusController {
                 safeAreaTop: safeAreaTop,
                 windows: Self.onScreenWindows(),
                 ownPID: ownPID,
-                systemReportsFullScreen: systemFullScreen)
+                systemReportsFullScreen: systemFullScreen,
+                windowIsFullScreen: Self.accessibilityReportsFullScreen)
             await MainActor.run { [weak self] in
                 guard let self, self.fullscreenGeneration == generation,
                       hidden != self.isFullscreenHidden else { return }
@@ -436,6 +437,46 @@ final class NotchStatusController {
                 self.render()
             }
         }
+    }
+
+    /// Fragt die Besitzer-App per Accessibility, ob ein Fenster mit genau
+    /// diesen Maßen im Vollbild ist. Läuft abseits des Main Threads, nur für
+    /// Fenster mit den Maßen „Vollbild unter der Kamera“. Ohne Recht: nein.
+    nonisolated private static func accessibilityReportsFullScreen(_ window: NotchWindowSample) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        let app = AXUIElementCreateApplication(window.ownerPID)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        var list: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &list) == .success,
+              let windows = list as? [AXUIElement] else { return false }
+        for element in windows {
+            // Abgeleitete Elemente erben das Zeitlimit der App nicht (Standard ~6 s).
+            AXUIElementSetMessagingTimeout(element, 0.25)
+            var flag: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, "AXFullScreen" as CFString, &flag) == .success,
+                  (flag as? Bool) == true else { continue }
+            // Dieselben Koordinaten wie die Fensterliste (oben links am Hauptbildschirm).
+            guard let frame = axFrame(of: element) else { return true }
+            if abs(frame.minX - window.bounds.minX) <= 2, abs(frame.minY - window.bounds.minY) <= 2,
+               abs(frame.width - window.bounds.width) <= 2, abs(frame.height - window.bounds.height) <= 2 {
+                return true
+            }
+        }
+        return false
+    }
+
+    nonisolated private static func axFrame(of element: AXUIElement) -> CGRect? {
+        var positionValue: CFTypeRef?
+        var sizeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
+              let positionValue, let sizeValue,
+              CFGetTypeID(positionValue) == AXValueGetTypeID(), CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return nil }
+        var position = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return nil }
+        return CGRect(origin: position, size: size)
     }
 
     nonisolated private static func onScreenWindows() -> [NotchWindowSample] {
@@ -453,7 +494,22 @@ final class NotchStatusController {
     // MARK: Aufklappen
 
     func toggleExpanded() {
-        if isExpanded { collapse() } else { expand(byHover: false) }
+        switch NotchStatusModel.clickAction(isExpanded: isExpanded, expandedByHover: expandedByHover) {
+        case .expand: expand(byHover: false)
+        case .collapse: collapse()
+        case .pin: pinHoverList()
+        }
+    }
+
+    /// Klick auf eine per Darüberfahren geöffnete Liste: Sie bleibt offen wie
+    /// nach einem Klick (Wegfahren klappt nicht mehr zu, Esc kommt an).
+    private func pinHoverList() {
+        hoverTask?.cancel(); hoverTask = nil
+        expandedByHover = false
+        if let panel {
+            panel.allowsKey = true
+            panel.makeKey()
+        }
     }
 
     func hoverChanged(_ hovering: Bool) {

@@ -216,7 +216,10 @@ enum NotchFullscreenDetector {
     ///   Kamera: das Fenster beginnt an der Unterkante der Notch. Dieselben
     ///   Maße hat ein maximiertes Fenster bei ausgeblendetem Dock, deshalb
     ///   zählt das nur, wenn das System gerade Vollbild meldet
-    ///   (`NSApp.currentSystemPresentationOptions` enthält `.fullScreen`).
+    ///   (`NSApp.currentSystemPresentationOptions` enthält `.fullScreen`) oder
+    ///   das Fenster selbst (`windowIsFullScreen`, per Accessibility). Das
+    ///   System meldet nur die aktive App; mit zwei Bildschirmen ist das oft
+    ///   eine andere als die Vollbild-App unter der Kamera.
     ///
     /// Ein bloß maximiertes Fenster lässt die Menüleiste frei und zählt nicht.
     static func isFullscreen(
@@ -225,6 +228,7 @@ enum NotchFullscreenDetector {
         windows: [NotchWindowSample],
         ownPID: Int32,
         systemReportsFullScreen: Bool = false,
+        windowIsFullScreen: (NotchWindowSample) -> Bool = { _ in false },
         tolerance: CGFloat = 1
     ) -> Bool {
         func close(_ a: CGFloat, _ b: CGFloat) -> Bool { abs(a - b) <= tolerance }
@@ -234,8 +238,9 @@ enum NotchFullscreenDetector {
                   close(window.bounds.width, screenFrameQuartz.width),
                   close(window.bounds.maxY, screenFrameQuartz.maxY) else { return false }
             if close(window.bounds.minY, screenFrameQuartz.minY) { return true }
-            return systemReportsFullScreen && safeAreaTop > 0
-                && close(window.bounds.minY, screenFrameQuartz.minY + safeAreaTop)
+            guard safeAreaTop > 0, close(window.bounds.minY, screenFrameQuartz.minY + safeAreaTop) else { return false }
+            // Nur Kandidaten mit genau diesen Maßen fragen (Accessibility kostet).
+            return systemReportsFullScreen || windowIsFullScreen(window)
         }
     }
 

@@ -143,6 +143,20 @@ enum NotchStatusModel {
         isExpanded || alert != nil || summary.hasActivity
     }
 
+    enum ClickAction: Equatable {
+        case expand
+        case collapse
+        /// Per Darüberfahren offene Liste festhalten statt zuklappen.
+        case pin
+    }
+
+    /// Klick auf den Kopf. Hat das Darüberfahren die Liste gerade geöffnet,
+    /// meint der Klick fast immer „aufmachen“: dann bleibt sie offen.
+    static func clickAction(isExpanded: Bool, expandedByHover: Bool) -> ClickAction {
+        guard isExpanded else { return .expand }
+        return expandedByHover ? .pin : .collapse
+    }
+
     /// Darstellungsart: aufgeklappt vor Alarm vor Ruhe.
     static func panelMode(isExpanded: Bool, alert: NotchAlert?, rows: [NotchRow], sections: [NotchSection]) -> NotchPanelMode {
         if isExpanded { return .expanded(rowCount: rows.count, sectionCount: sections.count) }

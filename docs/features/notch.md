@@ -33,7 +33,9 @@ Standardmäßig **an** (seit 05.11.2026, vorher aus).
   Klick auf eine Benachrichtigung).
 - Zuklappen: Esc, Klick daneben (auch in anderen Apps), Klick auf den Kopf,
   Fenster verliert den Fokus. Alles ist auch ohne Hover erreichbar; Hover
-  öffnet höchstens zusätzlich.
+  öffnet höchstens zusätzlich. Ein Klick auf eine per Darüberfahren geöffnete
+  Liste klappt sie nicht zu, sondern hält sie fest wie nach einem Klick
+  (Wegfahren schließt dann nicht mehr, Esc wirkt); der nächste Klick schließt.
 - „Amber bleibt": Der Zähler für wartende Chats steht, bis der Chat wieder
   arbeitet. Nur die Verbreiterung ist einmalig.
 - Frisch fertig gilt 15 Minuten (`AttentionModelBuilder.freshDoneWindow`,
@@ -181,9 +183,17 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Notch-Bildschirmen legt macOS Vollbild-Apps meist unter die Kamera; ein
   Fenster, das an der Unterkante der Notch beginnt und bis unten reicht, zählt
   deshalb auch, aber nur wenn `NSApp.currentSystemPresentationOptions`
-  `.fullScreen` meldet (sonst wäre es ein maximiertes Fenster bei
-  ausgeblendetem Dock). Geprüft bei Space- und App-Wechsel und 0,9 s danach,
-  nie in einer Schleife; die Fensterliste wird abseits des Main Threads gelesen.
+  `.fullScreen` meldet oder das Fenster selbst per Accessibility
+  (`AXFullScreen`, gleiche Maße) im Vollbild ist; sonst wäre es ein
+  maximiertes Fenster bei ausgeblendetem Dock. Das System meldet nur die
+  aktive App: Läuft das Video im Vollbild auf dem MacBook und man arbeitet am
+  externen Bildschirm, entscheidet die Accessibility-Abfrage. Gefragt wird
+  nur für Fenster mit genau diesen Maßen, mit 0,25 s Zeitlimit je
+  Accessibility-Abfrage (an der App und an jedem ihrer Fenster gesetzt,
+  abgeleitete Elemente erben es nicht); ohne
+  Bedienungshilfen-Recht bleibt es beim Systemsignal. Geprüft bei Space- und
+  App-Wechsel und 0,9 s danach, nie in einer Schleife; Fensterliste und
+  Accessibility laufen abseits des Main Threads.
 - Klick daneben: ein globaler und ein lokaler Monitor auf Mausklicks, nur
   solange die Liste offen ist. Beide schlucken nichts (der globale kann es
   nicht, der lokale gibt das Ereignis immer zurück).
@@ -219,7 +229,10 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - `NotchGeometryTests`, `NotchFullscreenDetectorTests`: Notch mit und ohne,
   Bildschirmwahl, Rahmen je Zustand, Menüleiste neben der Notch bleibt in
   jedem Zustand und auf mehreren Bildschirmgrößen frei, Vollbild-Erkennung
-  inklusive Vollbild unter der Kamera.
+  inklusive Vollbild unter der Kamera (auch wenn nur das Fenster selbst
+  Vollbild meldet).
+- `NotchStatusModelTests.testClickOnHoverOpenedListPinsItInsteadOfClosing`:
+  Klick auf den Kopf je nach Zustand auf, zu oder festhalten.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille, hell
@@ -240,8 +253,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - „In Screenshots und Bildschirmfreigabe ausblenden“ ist kein sicherer Schutz:
   manche Aufnahme- und Meeting-Apps können den Streifen trotzdem zeigen (siehe
   oben, Handtest offen).
-- „Esc closes" wirkt nur, wenn die Liste per Klick geöffnet wurde. Beim
-  Öffnen per Darüberfahren nimmt sie keinen Tastaturfokus.
+- „Esc closes" wirkt nur, wenn die Liste per Klick geöffnet oder nach dem
+  Darüberfahren per Klick festgehalten wurde. Beim bloßen Öffnen per
+  Darüberfahren nimmt sie keinen Tastaturfokus.
 
 ## Keywords
 

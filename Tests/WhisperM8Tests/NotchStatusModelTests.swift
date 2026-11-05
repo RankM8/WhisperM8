@@ -161,6 +161,14 @@ final class NotchStatusModelTests: XCTestCase {
             working.lastTurnAt)
     }
 
+    /// Klick auf den Kopf: zu → auf; per Klick offen → zu; per Darüberfahren
+    /// offen → festhalten statt zuklappen.
+    func testClickOnHoverOpenedListPinsItInsteadOfClosing() {
+        XCTAssertEqual(NotchStatusModel.clickAction(isExpanded: false, expandedByHover: false), .expand)
+        XCTAssertEqual(NotchStatusModel.clickAction(isExpanded: true, expandedByHover: false), .collapse)
+        XCTAssertEqual(NotchStatusModel.clickAction(isExpanded: true, expandedByHover: true), .pin)
+    }
+
     func testPanelModePrefersExpandedThenAlert() {
         let rows = NotchStatusModel.rows(from: [
             input("w", .working, since: 1), input("a", .awaitingInput, since: 2),
@@ -632,6 +640,34 @@ final class NotchFullscreenDetectorTests: XCTestCase {
         // Ohne Notch gibt es den Fall nicht.
         XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
             screenFrameQuartz: screen, safeAreaTop: 0, windows: belowNotch, ownPID: 1, systemReportsFullScreen: true))
+    }
+
+    /// Zwei Bildschirme: Die aktive App ist eine andere, das System meldet kein
+    /// Vollbild. Das Fenster selbst ist aber im Vollbild (Accessibility).
+    func testFullscreenBelowTheNotchCountsWhenTheWindowItselfReportsIt() {
+        let belowNotch = [NotchWindowSample(layer: 0, bounds: CGRect(x: 0, y: 38, width: 1512, height: 944), ownerPID: 500)]
+        var asked: [Int32] = []
+        XCTAssertTrue(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: belowNotch, ownPID: 1,
+            systemReportsFullScreen: false, windowIsFullScreen: { asked.append($0.ownerPID); return true }))
+        XCTAssertEqual(asked, [500])
+        // Maximiertes Fenster bei ausgeblendetem Dock: gleiche Maße, aber kein Vollbild.
+        XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: belowNotch, ownPID: 1,
+            systemReportsFullScreen: false, windowIsFullScreen: { _ in false }))
+    }
+
+    /// Accessibility wird nur für Fenster mit den Maßen „unter der Kamera“ gefragt.
+    func testWindowCheckIsOnlyAskedForCandidates() {
+        let windows = [
+            NotchWindowSample(layer: 0, bounds: CGRect(x: 100, y: 100, width: 800, height: 600), ownerPID: 500),
+            NotchWindowSample(layer: 0, bounds: CGRect(x: 0, y: 25, width: 1512, height: 957), ownerPID: 501),
+        ]
+        var asked = 0
+        XCTAssertFalse(NotchFullscreenDetector.isFullscreen(
+            screenFrameQuartz: screen, safeAreaTop: 38, windows: windows, ownPID: 1,
+            windowIsFullScreen: { _ in asked += 1; return true }))
+        XCTAssertEqual(asked, 0)
     }
 
     func testFullscreenOnAnotherScreenDoesNotHideThisOne() {
