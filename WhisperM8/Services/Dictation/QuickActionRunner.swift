@@ -252,4 +252,10 @@ extension OutputMode {
         guard kind != .custom else { return name }
         return String(localized: String.LocalizationValue(name))
     }
+
+    /// Kurzname im Overlay-Chip, wie `displayName` übersetzt.
+    var displayShortLabel: String {
+        guard kind != .custom else { return shortLabel }
+        return String(localized: String.LocalizationValue(shortLabel))
+    }
 }

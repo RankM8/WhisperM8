@@ -404,16 +404,16 @@ private struct PillOutputModeChip: View {
                     action(mode)
                 } label: {
                     if mode.id == selectedMode.id {
-                        Label(mode.name, systemImage: "checkmark")
+                        Label(mode.displayName, systemImage: "checkmark")
                     } else {
-                        Text(mode.name)
+                        Text(mode.displayName)
                     }
                 }
                 .disabled(!mode.isEnabled)
             }
         } label: {
             HStack(spacing: 4) {
-                Text(selectedMode.shortLabel)
+                Text(selectedMode.displayShortLabel)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -435,7 +435,7 @@ private struct PillOutputModeChip: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .help("Output mode")
-        .accessibilityLabel("Output mode \(selectedMode.name)")
+        .accessibilityLabel("Output mode \(selectedMode.displayName)")
     }
 }
 
