@@ -39,13 +39,13 @@ final class StatisticsCollectorsTests: XCTestCase {
             now: { clock.now },
             idleSeconds: { clock.idle },
             isAppActive: { appActive },
-            calendar: calendar,
+            calendar: { [calendar] in calendar },
             tickInterval: nil
         ))
     }
 
     private func agentTracker(store: StatisticsStore, clock: Clock) -> StatisticsAgentTracker {
-        StatisticsAgentTracker(store: store, environment: .init(now: { clock.now }, calendar: calendar, flushInterval: nil))
+        StatisticsAgentTracker(store: store, environment: .init(now: { clock.now }, calendar: { [calendar] in calendar }, flushInterval: nil))
     }
 
     // MARK: - Aktive Zeit
@@ -332,5 +332,53 @@ final class StatisticsCollectorsTests: XCTestCase {
         StatisticsCollectors.noteAgentStatus(.working, for: UUID())
         StatisticsCollectors.start()
         XCTAssertFalse(StatisticsCollectors.gate.isOpen)
+    }
+
+    // MARK: - Schalter und Notbremse
+
+    func testRuntimeForwardsOnlyRealChanges() {
+        StatisticsRuntime.resetForTesting()
+        defer { StatisticsRuntime.resetForTesting() }
+        var received: [Bool] = []
+        StatisticsRuntime.onEnabledChanged { received.append($0) }
+        StatisticsRuntime.setInitialEnabled(true)
+
+        StatisticsRuntime.notifyEnabledChanged(true)   // kein Wechsel
+        StatisticsRuntime.notifyEnabledChanged(false)  // Beobachter
+        StatisticsRuntime.notifyEnabledChanged(false)  // Seitenschalter, doppelt
+        StatisticsRuntime.notifyEnabledChanged(true)
+        XCTAssertEqual(received, [false, true])
+    }
+
+    /// `defaults write … statisticsEnabled -bool NO` wirkt ohne Neustart.
+    func testDefaultsObserverReportsSwitchOnceAfterDebounce() throws {
+        let suite = "statistics-enabled-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var received: [Bool] = []
+        let off = expectation(description: "aus")
+        let observer = StatisticsEnabledObserver(defaults: defaults, debounce: 0.05) { value in
+            received.append(value)
+            if value == false { off.fulfill() }
+        }
+        observer.start()
+        defer { observer.stop() }
+
+        // Mehrfaches Setzen kurz hintereinander: eine Meldung.
+        defaults.set(true, forKey: StatisticsPreferenceKeys.enabled)
+        defaults.set(false, forKey: StatisticsPreferenceKeys.enabled)
+        defaults.set(false, forKey: StatisticsPreferenceKeys.enabled)
+        wait(for: [off], timeout: 2)
+        XCTAssertEqual(received, [false])
+
+        let on = expectation(description: "an")
+        let observer2 = StatisticsEnabledObserver(defaults: defaults, debounce: 0.05) { value in
+            if value { on.fulfill() }
+        }
+        observer2.start()
+        defer { observer2.stop() }
+        defaults.set(true, forKey: StatisticsPreferenceKeys.enabled)
+        wait(for: [on], timeout: 2)
+        XCTAssertEqual(received, [false, true])
     }
 }

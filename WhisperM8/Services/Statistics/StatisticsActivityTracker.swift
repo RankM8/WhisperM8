@@ -79,7 +79,9 @@ final class StatisticsActivityTracker {
         /// Sekunden seit der letzten Eingabe (Tastatur, Maus, Trackpad).
         var idleSeconds: () -> TimeInterval
         var isAppActive: () -> Bool
-        var calendar: Calendar
+        /// Bei jeder Buchung frisch geholt: wechselt die Zeitzone (Reise,
+        /// Systemeinstellung), landen spätere Buchungen am richtigen Tag.
+        var calendar: () -> Calendar
         /// `nil`: kein Timer (Tests rufen `tick()` selbst).
         var tickInterval: TimeInterval?
 
@@ -92,7 +94,7 @@ final class StatisticsActivityTracker {
                     return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyEvent)
                 },
                 isAppActive: { NSApp?.isActive ?? false },
-                calendar: .current,
+                calendar: { Calendar.current },
                 tickInterval: 60
             )
         }
@@ -168,7 +170,7 @@ final class StatisticsActivityTracker {
         }
         let booking = StatisticsActivityMath.booking(from: since, to: now, idleSeconds: env.idleSeconds())
         countingSince = now
-        let calendar = env.calendar
+        let calendar = env.calendar()
         store.update { db in StatisticsActivityMath.apply(booking, to: &db, calendar: calendar) }
     }
 

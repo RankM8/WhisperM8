@@ -14,6 +14,11 @@ struct ClaudeAccountUsage: Equatable {
     /// Anzeigename des gescopten Modells (`scope.model.display_name`).
     var modelWeeklyLabel: String?
     var fetchedAt: Date
+    /// Stand des modellbezogenen Limits, falls älter als `fetchedAt`. Die
+    /// Statuszeile frischt nur 5h und Woche auf (Claudes `rate_limits`); das
+    /// `limits`-Array kommt allein vom oauth/usage-Abruf und ist so alt wie
+    /// die Datei. `nil` = so frisch wie `fetchedAt`.
+    var modelWeeklyFetchedAt: Date?
     /// `true` = frisch vom Endpoint, `false` = aus dem Statusline-Cache.
     var isLive: Bool
     /// Warum der Live-Abruf scheiterte (`nil` = live). Damit kann die UI
@@ -268,7 +273,13 @@ struct ClaudeAccountUsageFetcher {
             // Änderungsdatum stehen (das steuert ihren eigenen Abruf-Takt) und
             // vermerkt den Zeitpunkt im Feld `statusline_captured_at`.
             let fetchedAt = max(mtime, Self.statuslineCapturedAt(data) ?? .distantPast)
-            if let usage = Self.parseUsage(data, fetchedAt: fetchedAt, isLive: false) {
+            if var usage = Self.parseUsage(data, fetchedAt: fetchedAt, isLive: false) {
+                // `statusline_captured_at` gilt nur für die Felder, die die
+                // Statuszeile liefert. Das modellbezogene Limit ist so alt wie
+                // der letzte Abruf, also wie das Änderungsdatum.
+                if usage.modelWeeklyPercent != nil, mtime < fetchedAt {
+                    usage.modelWeeklyFetchedAt = mtime
+                }
                 return usage
             }
         }

@@ -97,12 +97,13 @@ struct StatisticsConcurrencyIntegrator: Equatable {
 final class StatisticsAgentTracker {
     struct Environment {
         var now: () -> Date
-        var calendar: Calendar
+        /// Bei jeder Buchung frisch geholt (Zeitzonenwechsel).
+        var calendar: () -> Calendar
         /// `nil`: kein Timer (Tests rufen `flush()` selbst).
         var flushInterval: TimeInterval?
 
         static var live: Environment {
-            Environment(now: Date.init, calendar: .current, flushInterval: 60)
+            Environment(now: Date.init, calendar: { Calendar.current }, flushInterval: 60)
         }
     }
 
@@ -169,7 +170,7 @@ final class StatisticsAgentTracker {
 
     private func write(_ segments: [StatisticsConcurrencyIntegrator.Segment]) {
         guard !segments.isEmpty else { return }
-        let calendar = env.calendar
+        let calendar = env.calendar()
         store.update { db in StatisticsConcurrencyIntegrator.apply(segments, to: &db, calendar: calendar) }
     }
 

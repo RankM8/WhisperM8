@@ -17,6 +17,76 @@ final class StatisticsCollectionGate: @unchecked Sendable {
     }
 }
 
+/// Beobachtet den Schalter `statisticsEnabled` in den UserDefaults, auch
+/// Änderungen von außen (`defaults write … statisticsEnabled -bool NO`), die
+/// KVO auf `UserDefaults` prozessübergreifend meldet. Mehrere Meldungen kurz
+/// hintereinander fasst er zusammen und gibt nur einen echten Wechsel weiter.
+final class StatisticsEnabledObserver: NSObject {
+    private let defaults: UserDefaults
+    private let debounce: TimeInterval
+    private let onChange: @MainActor (Bool) -> Void
+    private var observing = false
+    /// Nur auf dem Main-Thread benutzt.
+    private var pending: DispatchWorkItem?
+    private var lastValue: Bool
+
+    init(
+        defaults: UserDefaults = .standard,
+        debounce: TimeInterval = 0.3,
+        onChange: @escaping @MainActor (Bool) -> Void
+    ) {
+        self.defaults = defaults
+        self.debounce = debounce
+        self.onChange = onChange
+        self.lastValue = StatisticsSettings.isEnabled(defaults)
+        super.init()
+    }
+
+    func start() {
+        guard !observing else { return }
+        observing = true
+        defaults.addObserver(self, forKeyPath: StatisticsPreferenceKeys.enabled, options: [], context: nil)
+    }
+
+    func stop() {
+        guard observing else { return }
+        observing = false
+        defaults.removeObserver(self, forKeyPath: StatisticsPreferenceKeys.enabled)
+        DispatchQueue.main.async { [weak self] in self?.pending?.cancel() }
+    }
+
+    deinit {
+        if observing { defaults.removeObserver(self, forKeyPath: StatisticsPreferenceKeys.enabled) }
+    }
+
+    override func observeValue(
+        forKeyPath keyPath: String?,
+        of object: Any?,
+        change: [NSKeyValueChangeKey: Any]?,
+        context: UnsafeMutableRawPointer?
+    ) {
+        guard keyPath == StatisticsPreferenceKeys.enabled else { return }
+        // KVO meldet auf dem Thread der Änderung; gesammelt wird auf Main.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pending?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                MainActor.assumeIsolated { self?.deliver() }
+            }
+            self.pending = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + self.debounce, execute: item)
+        }
+    }
+
+    @MainActor
+    private func deliver() {
+        let value = StatisticsSettings.isEnabled(defaults)
+        guard value != lastValue else { return }
+        lastValue = value
+        onChange(value)
+    }
+}
+
 /// Fassade für die Zähler von Zeit, Chats und Diktaten. Startet beim App-Start,
 /// folgt dem Schalter „Statistik erfassen“ und bucht beim App-Ende ab.
 ///
@@ -32,6 +102,7 @@ enum StatisticsCollectors {
     private static var activity: StatisticsActivityTracker?
     private static var agents: StatisticsAgentTracker?
     private static var systemEvents: StatisticsSystemEventObserver?
+    private static var enabledObserver: StatisticsEnabledObserver?
 
     /// Beim App-Start. Läuft nicht in Test-Instanzen und Unit-Tests.
     static func start() {
@@ -55,6 +126,12 @@ enum StatisticsCollectors {
         StatisticsRuntime.onEnabledChanged { enabled in
             if enabled { refreshExchangeRateIfEnabled() }
         }
+        // Notbremse ohne Neustart: `defaults write` wirkt sofort, nicht erst
+        // beim nächsten Start oder wenn die Seite offen ist.
+        StatisticsRuntime.setInitialEnabled(StatisticsSettings.isEnabled())
+        let observer = StatisticsEnabledObserver { StatisticsRuntime.notifyEnabledChanged($0) }
+        observer.start()
+        enabledObserver = observer
     }
 
     /// EZB-Kurs höchstens einmal am Tag, im Hintergrund.
@@ -68,6 +145,8 @@ enum StatisticsCollectors {
     /// Beim App-Ende: offene Zeit buchen und die Datei schreiben.
     static func shutdown() {
         guard registered else { return }
+        enabledObserver?.stop()
+        enabledObserver = nil
         StatisticsLogScanner.shared.stop()
         StatisticsLimitCollector.shared.stop()
         StatisticsGitCollector.shared.stop()

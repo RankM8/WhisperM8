@@ -47,6 +47,57 @@ final class StatisticsCoreTests: XCTestCase {
         XCTAssertNil(ModelPricing.price(for: "<synthetic>"))
     }
 
+    /// Modelle aus den echten Protokollen (Stand 5.11.2026) gegen die offiziellen
+    /// Listen: keine Präfix-Treffer bei verwandten Modellen mehr.
+    func testPricingMatchesOfficialListsForLoggedModels() throws {
+        // Opus 4.5–4.8 und Opus 5 kosten 5/25 $, nur Opus 4.0/4.1 15/75 $.
+        for id in ["claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-5"] {
+            let price = try XCTUnwrap(ModelPricing.price(for: id), id)
+            XCTAssertEqual(price.input, 5, id)
+            XCTAssertEqual(price.cacheRead, 0.50, id)
+            XCTAssertEqual(price.output, 25, id)
+        }
+        XCTAssertEqual(ModelPricing.price(for: "claude-opus-4-20250514")?.output, 75)
+        XCTAssertEqual(ModelPricing.price(for: "claude-opus-4-8-fast")?.output, 50)
+        // Fable 5 liest den Cache zu 1 $, Fable 5.1 zu 0,25 $.
+        XCTAssertEqual(ModelPricing.price(for: "claude-fable-5")?.cacheRead, 1)
+        XCTAssertEqual(ModelPricing.price(for: "claude-fable-5-1")?.cacheRead, 0.25)
+        XCTAssertEqual(ModelPricing.price(for: "claude-fable-5-1[1m]")?.output, 50)
+        XCTAssertEqual(ModelPricing.price(for: "claude-sonnet-5")?.cacheRead, 0.20)
+        XCTAssertEqual(ModelPricing.price(for: "claude-sonnet-5-5")?.cacheRead, 0.10)
+        XCTAssertEqual(ModelPricing.price(for: "claude-haiku-5-5")?.output, 0.50)
+        XCTAssertEqual(ModelPricing.price(for: "claude-haiku-4-5-20251001")?.output, 5)
+        // GPT
+        let astra = try XCTUnwrap(ModelPricing.price(for: "gpt-6-astra"))
+        XCTAssertEqual(astra.input, 10)
+        XCTAssertEqual(astra.cacheRead, 1)
+        XCTAssertEqual(astra.output, 50)
+        XCTAssertEqual(ModelPricing.price(for: "gpt-6-astra-fast")?.output, 100)
+        XCTAssertEqual(ModelPricing.price(for: "gpt-5.6-sol-fast")?.output, 40)
+        XCTAssertEqual(ModelPricing.price(for: "gpt-5.4-mini")?.output, 4.50)
+        XCTAssertEqual(ModelPricing.price(for: "gpt-5-2025-08-07")?.output, 10)
+        XCTAssertEqual(ModelPricing.price(for: "gpt-5.5-fast")?.output, 75)
+    }
+
+    func testUnknownModelsStayWithoutPrice() {
+        // Kein offizieller Preis → kein Gegenwert, auch nicht über ein Präfix.
+        for id in ["claude-opus-4-9", "claude-haiku-5", "gpt-5.7", "gpt-5.4-pro-fast", "claude-sonnet-5-fast",
+                   "opus", "z-ai/glm-5.3-flash", "<synthetic>", ""] {
+            XCTAssertNil(ModelPricing.price(for: id), id)
+        }
+    }
+
+    func testReportCountsTokensWithoutPrice() {
+        var db = StatsDatabase()
+        db.updateDay("2026-11-05") { day in
+            day.tokens["claude-opus-5-5"] = ["main": TokenUsage(messages: 1, input: 100, output: 50)]
+            day.tokens["unbekannt-1"] = ["main": TokenUsage(messages: 2, input: 300, output: 20)]
+        }
+        let report = StatisticsReport.build(database: db, period: .all, now: date(2026, 11, 5, 20), calendar: calendar)
+        XCTAssertEqual(report.unpricedTokens, 320)
+        XCTAssertEqual(report.totalTokens, 470)
+    }
+
     func testCostOfOneMillionOutputTokens() {
         let usage = TokenUsage(messages: 1, output: 1_000_000)
         XCTAssertEqual(ModelPricing.costUSD(model: "claude-sonnet-5-5", usage: usage) ?? 0, 10, accuracy: 0.0001)

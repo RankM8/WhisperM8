@@ -108,7 +108,7 @@ struct StatisticsSettingsPage: View {
     var body: some View {
         SettingsPageContainer(
             title: "Statistics",
-            subtitle: "How much you work with WhisperM8. Everything is calculated locally on this Mac, in the background and without network access."
+            subtitle: "How much you work with WhisperM8. Everything is calculated locally on this Mac, in the background. Only the daily exchange rate and, if gh is signed in, your GitHub pull requests are fetched."
         ) {
             if enabled {
                 enabledContent
