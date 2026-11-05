@@ -220,6 +220,62 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
     ) &
 fi
 
+# Claude Code reicht der Statuszeile den Limit-Stand selbst mit (`rate_limits`
+# mit `five_hour`/`seven_day`: `used_percentage`, `resets_at` in Epoch-Sekunden;
+# fehlt bei API-Key-Logins). Den übernehmen wir in den Cache — ohne eigene
+# Netzwerkabfrage bleibt die Anzeige so frisch, und die WhisperM8-Statistik
+# bekommt einen dichten Limit-Verlauf. Regeln:
+# - Format wie die oauth/usage-Antwort (`utilization`, `resets_at` als ISO),
+#   übrige Felder (z. B. das modellbezogene `limits`-Array) bleiben erhalten.
+# - Geschrieben wird nur bei geänderten Werten oder spätestens alle 5 Minuten.
+# - Das Änderungsdatum der Datei bleibt stehen: es steuert den 30-Minuten-Takt
+#   des Abrufs oben. Den Zeitpunkt trägt `statusline_captured_at`.
+# - GPT-Modelle überspringen: deren Limits gehören nicht zum Claude-Konto.
+if [ "$is_supported_gpt" -eq 0 ]; then
+    rate_limits_json=$(printf '%s\n' "$input" | jq -c '
+        if (.rate_limits | type) == "object"
+           and ((.rate_limits.five_hour.used_percentage | type) == "number"
+                or (.rate_limits.seven_day.used_percentage | type) == "number")
+        then .rate_limits else empty end' 2>/dev/null)
+    if [ -n "$rate_limits_json" ]; then
+        existing_cache='{}'
+        if [ -f "$usage_cache" ]; then
+            existing_cache=$(cat "$usage_cache" 2>/dev/null)
+        fi
+        # -Rs + fromjson: eine kaputte Cache-Datei wird ersetzt statt blockiert.
+        merged_cache=$(printf '%s' "$existing_cache" | jq -Rsc \
+            --argjson rl "$rate_limits_json" \
+            --argjson now "$(date +%s)" '
+            def win($w):
+                if ($w | type) == "object" and ($w.used_percentage | type) == "number" then
+                    { utilization: $w.used_percentage,
+                      resets_at: (if ($w.resets_at | type) == "number"
+                                  then ($w.resets_at | floor | todate)
+                                  else $w.resets_at end) }
+                else null end;
+            (try fromjson catch {}) as $parsed
+            | (if ($parsed | type) == "object" then $parsed else {} end) as $old
+            | ($old
+               + (if win($rl.five_hour) then { five_hour: (($old.five_hour // {}) + win($rl.five_hour)) } else {} end)
+               + (if win($rl.seven_day) then { seven_day: (($old.seven_day // {}) + win($rl.seven_day)) } else {} end)) as $new
+            | if ($new.five_hour.utilization == $old.five_hour.utilization)
+                 and ($new.seven_day.utilization == $old.seven_day.utilization)
+                 and ($new.five_hour.resets_at == $old.five_hour.resets_at)
+                 and ($new.seven_day.resets_at == $old.seven_day.resets_at)
+                 and (($now - ($old.statusline_captured_at // 0)) < 300)
+              then empty
+              else $new + { statusline_captured_at: $now } end' 2>/dev/null)
+        if [ -n "$merged_cache" ]; then
+            cache_tmp=$(mktemp "${tmp_base}claude-usage-cache-${ccs_profile}.XXXXXX" 2>/dev/null)
+            if [ -n "$cache_tmp" ]; then
+                printf '%s\n' "$merged_cache" > "$cache_tmp"
+                [ -f "$usage_cache" ] && touch -r "$usage_cache" "$cache_tmp" 2>/dev/null
+                mv -f "$cache_tmp" "$usage_cache" 2>/dev/null || rm -f "$cache_tmp"
+            fi
+        fi
+    fi
+fi
+
 # Immer vom Cache lesen (non-blocking)
 if [ -f "$usage_cache" ]; then
     usage_response=$(cat "$usage_cache")

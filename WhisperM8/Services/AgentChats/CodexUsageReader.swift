@@ -172,6 +172,8 @@ struct CodexUsageFetcher {
     /// Proxy-Store-Fetcher: kein JSONL-Fallback — der beschriebe das
     /// Codex-CLI-Konto, nicht das des Proxy-Grants.
     private var usesProxyStore = false
+    /// `auth.json` des Proxy-Stores, nur für den Kontoschlüssel der Statistik.
+    private var proxyAuthFile: URL?
 
     init(
         codexHome: URL? = nil,
@@ -197,6 +199,7 @@ struct CodexUsageFetcher {
         self.init(codexHome: codexHome, httpBody: httpBody)
         self.credentialsResolver = { Self.proxyStoreCredentials(at: proxyAuthFile) }
         self.usesProxyStore = true
+        self.proxyAuthFile = proxyAuthFile
     }
 
     func fetchUsage() async -> CodexUsage? {
@@ -204,9 +207,20 @@ struct CodexUsageFetcher {
             return live
         }
         guard !usesProxyStore else { return nil }
-        return CodexUsageReader(
+        let snapshot = CodexUsageReader(
             sessionsRoot: codexHome.appendingPathComponent("sessions", isDirectory: true)
         ).latestUsage()
+        if let snapshot {
+            StatisticsLimitRecorder.recordCodex(snapshot, account: statisticsAccount)
+        }
+        return snapshot
+    }
+
+    /// Kontoschlüssel im Limit-Verlauf der Statistik: `chatgpt:<profil>` für
+    /// Proxy-Konten, `codex` für die Codex-CLI.
+    var statisticsAccount: String {
+        guard let proxyAuthFile else { return StatisticsLimitMapping.codexCLIAccount }
+        return StatisticsLimitMapping.gptAccountKey(proxyAuthFile: proxyAuthFile)
     }
 
     /// Nur der Live-Abruf, ohne JSONL-Fallback — fuer Proxy-Konten, deren
@@ -222,8 +236,11 @@ struct CodexUsageFetcher {
             request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-ID")
         }
 
-        guard let body = await httpBody(request) else { return nil }
-        return Self.parseWhamUsage(body, fetchedAt: Date())
+        guard let body = await httpBody(request),
+              let usage = Self.parseWhamUsage(body, fetchedAt: Date()) else { return nil }
+        // Statistik: Live-Stand ohne eigene Abfrage mitschreiben.
+        StatisticsLimitRecorder.recordCodex(usage, account: statisticsAccount)
+        return usage
     }
 
     /// `~/.codex/auth.json`: `tokens.access_token` + `tokens.account_id`.
