@@ -310,15 +310,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             ThemeManager.shared.performInitialClaudeThemeSync()
         }
 
-        // Retention: verwaiste Hook-Files und alte Event-Dateien raeumen. Wird
-        // nicht im UI-Thread blockierend, schreibt nur Logs. Hintergrund-Agenten
-        // laufen ueber den App-Neustart weiter, ihre Event-Dateien bleiben.
-        // Chats, die parallel schon starten, schuetzt `ClaudeHookFileClaims`.
-        Task.detached(priority: .background) {
-            AgentSessionRetentionService().pruneAtLaunch(
-                workspace: AgentSessionStore().loadWorkspace())
-        }
-
         // Einmalig: Auto-Memory der Zusatzprofile nach main zusammenführen —
         // seit dem gemeinsamen Memory lesen alle Konten dort (mit Backup,
         // ohne zu überschreiben; die Profil-Ordner bleiben stehen).
@@ -379,7 +370,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AgentPromptQueueStore.shared.reconcileOnLaunch()
         // Nach einem Absturz die damals laufenden Chats wieder hochfahren
         // (Resume beim Anzeigen des Tabs); Details in AgentCrashRecovery.
-        MainActor.assumeIsolated { AgentCrashRecoveryCoordinator.start() }
+        let resumingSessionIDs = MainActor.assumeIsolated { AgentCrashRecoveryCoordinator.start() }
+        // Retention: verwaiste Hook-Files und alte Event-Dateien raeumen. Wird
+        // nicht im UI-Thread blockierend, schreibt nur Logs. Hintergrund-Agenten
+        // laufen ueber den App-Neustart weiter, ihre Event-Dateien bleiben;
+        // ebenso die der Chats, die gleich fortgesetzt werden (deshalb erst
+        // nach der Absturz-Wiederaufnahme). Chats, die parallel schon starten,
+        // schuetzt `ClaudeHookFileClaims`.
+        Task.detached(priority: .background) {
+            AgentSessionRetentionService().pruneAtLaunch(
+                workspace: AgentSessionStore().loadWorkspace(),
+                resumingSessionIDs: Set(resumingSessionIDs))
+        }
         // P2: FSEvents auf ~/.claude/projects + ~/.codex/sessions — extern
         // gestartete Sessions tauchen damit nach Sekunden auf statt erst beim
         // nächsten Foreground-Scan.

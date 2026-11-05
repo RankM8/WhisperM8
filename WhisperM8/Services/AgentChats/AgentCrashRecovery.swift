@@ -138,23 +138,26 @@ enum AgentCrashRecoveryPlanner {
 /// unsauberen Ende die damals laufenden Chats zum Resume vormerken.
 @MainActor
 enum AgentCrashRecoveryCoordinator {
+    /// - Returns: die zum Fortsetzen vorgemerkten Sessions (für den Schutz
+    ///   ihrer Event-Dateien beim Aufräumen, `pruneAtLaunch`).
+    @discardableResult
     static func start(
         marker: AgentCrashRecoveryMarker = .shared,
         registry: AgentTerminalRegistry? = nil,
         windowStore: AgentWindowStore? = nil,
         store: AgentSessionStore = AgentSessionStore(),
         isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled
-    ) {
+    ) -> [UUID] {
         let registry = registry ?? .shared
         let windowStore = windowStore ?? .shared
         let previouslyRunning = marker.beginRun()
         registry.onRunningSetChanged = { marker.record(runningSessionIDs: $0) }
         marker.record(runningSessionIDs: registry.activeSessionIDs)
 
-        guard !previouslyRunning.isEmpty else { return }
+        guard !previouslyRunning.isEmpty else { return [] }
         guard isEnabled else {
             Logger.agentStore.notice("crash_recovery_skipped reason=disabled previous=\(previouslyRunning.count)")
-            return
+            return []
         }
         let resumeIDs = AgentCrashRecoveryPlanner.sessionsToResume(
             previouslyRunning: previouslyRunning,
@@ -171,5 +174,6 @@ enum AgentCrashRecoveryCoordinator {
         Logger.agentStore.notice(
             "crash_recovery_resumed count=\(resumeIDs.count) previous=\(previouslyRunning.count)"
         )
+        return resumeIDs
     }
 }

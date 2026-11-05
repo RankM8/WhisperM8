@@ -198,4 +198,56 @@ final class ExternalClaudeHooksInspectorTests: XCTestCase {
         XCTAssertEqual(findings.count, 2)
         XCTAssertEqual(Set(findings.map(\.source)), ["settings.json", "settings.local.json"])
     }
+
+    /// Review H2: Chats mit `CLAUDE_CONFIG_DIR` lesen die Settings ihres
+    /// Profils. Eigene Hooks und `env` der Profile zählen mit, per Symlink
+    /// geteilte Dateien erscheinen nur einmal.
+    func testInspectUserSettingsReadsAccountProfiles() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hooks-inspector-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let fm = FileManager.default
+        let main = home.appendingPathComponent(".claude", isDirectory: true)
+        let work = home.appendingPathComponent(".claude-profiles/Work", isDirectory: true)
+        let shared = home.appendingPathComponent(".claude-profiles/Shared", isDirectory: true)
+        for dir in [main, work, shared] { try fm.createDirectory(at: dir, withIntermediateDirectories: true) }
+
+        let guarded = #"[ -n \"$MY_NOTIFY\" ] && notify.sh"#
+        try Data("""
+        { "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "\(guarded)" } ] } ] } }
+        """.utf8).write(to: main.appendingPathComponent("settings.json"))
+        // Gleiche Datei per Symlink: kein zweiter Fund (und hier ohnehin wirkungslos).
+        try fm.createSymbolicLink(at: shared.appendingPathComponent("settings.json"),
+                                  withDestinationURL: main.appendingPathComponent("settings.json"))
+        // Eigener Hook nur im Profil, dazu ein env-Block, der den Wächter scharf macht.
+        try Data("""
+        { "env": {"MY_NOTIFY": "1"},
+          "hooks": { "Notification": [ { "hooks": [ { "type": "command", "command": "say hi" } ] } ] } }
+        """.utf8).write(to: work.appendingPathComponent("settings.json"))
+        try fm.createSymbolicLink(at: work.appendingPathComponent("settings.local.json"),
+                                  withDestinationURL: main.appendingPathComponent("settings.json"))
+
+        let findings = ExternalClaudeHooksInspector.inspectUserSettings(home: home, environment: [:])
+
+        XCTAssertEqual(findings.map(\.source).sorted(), ["Work/settings.json", "Work/settings.local.json"])
+        XCTAssertEqual(Set(findings.map(\.eventName)), ["Notification", "Stop"],
+                       "der Stop-Hook ist nur im Profil Work scharf (env-Block)")
+    }
+
+    func testIdenticalSymlinkedProfileSettingsAreReportedOnce() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hooks-inspector-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let main = home.appendingPathComponent(".claude", isDirectory: true)
+        let other = home.appendingPathComponent(".claude-profiles/Other", isDirectory: true)
+        for dir in [main, other] { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        try settingsJSON(#"{"Stop": [{"hooks": [{"type": "command", "command": "a"}]}]}"#)
+            .write(to: main.appendingPathComponent("settings.json"))
+        try FileManager.default.createSymbolicLink(at: other.appendingPathComponent("settings.json"),
+                                                   withDestinationURL: main.appendingPathComponent("settings.json"))
+
+        let findings = ExternalClaudeHooksInspector.inspectUserSettings(home: home, environment: [:])
+
+        XCTAssertEqual(findings.map(\.source), ["settings.json"])
+    }
 }

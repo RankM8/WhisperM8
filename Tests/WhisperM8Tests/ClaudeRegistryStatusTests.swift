@@ -617,6 +617,13 @@ final class ClaudeRegistryStatusTests: XCTestCase {
 
     /// Startrennen (Hook-Analyse 05.11.2026): Chats, die beim App-Start wieder
     /// aufgehen, bekamen ohne bekannte Version den vollen Hook-Satz.
+    /// Gemerkter Wert für `/bin/claude` mit Fingerabdruck `fp1`.
+    private func remembered(_ components: [Int], fingerprint: String = "fp1") -> String {
+        ClaudeCLIVersionProbe.Remembered(
+            version: ClaudeCLIVersion(components: components), binaryPath: "/bin/claude",
+            fingerprint: fingerprint).encoded
+    }
+
     func testVersionProbeUsesRememberedVersionBeforeFirstProbe() {
         var pending: [@Sendable () -> Void] = []
         var saved: [String] = []
@@ -624,13 +631,59 @@ final class ClaudeRegistryStatusTests: XCTestCase {
             spawnEnabled: true, ttl: 600, failureTTL: 30,
             versionRunner: { ClaudeCLIVersion(components: [2, 1, 320]) },
             dispatch: { pending.append($0) },
-            store: .init(load: { "2.1.318" }, save: { saved.append($0) }))
+            store: .init(load: { self.remembered([2, 1, 318]) }, save: { saved.append($0) }),
+            binaryPath: { "/bin/claude" }, fingerprint: { _ in "fp1" })
         XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 318], "gemerkte Version gilt sofort")
         XCTAssertTrue(ClaudeCLIVersion.supportsRegistry(probe.installedVersion()))
         XCTAssertEqual(pending.count, 1, "der echte Abruf läuft trotzdem gleich an")
         pending.removeFirst()()
         XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 320])
-        XCTAssertEqual(saved, ["2.1.320"], "eine gelesene Version wird gemerkt")
+        XCTAssertEqual(saved, [remembered([2, 1, 320])], "eine gelesene Version wird samt Binary gemerkt")
+    }
+
+    /// Review H4: Downgrade oder Austausch der Binary — der gemerkte Wert
+    /// gehört zu einer anderen Datei und gilt nicht.
+    func testRememberedVersionIsIgnoredWhenTheBinaryChanged() {
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, versionRunner: { nil }, dispatch: { _ in },
+            store: .init(load: { self.remembered([2, 1, 318]) }, save: { _ in }),
+            binaryPath: { "/bin/claude" }, fingerprint: { _ in "fp2" })
+        XCTAssertNil(probe.installedVersion(), "voller Hook-Satz bis zum echten Abruf")
+    }
+
+    func testLegacyRememberedVersionWithoutBinaryIsIgnored() {
+        let probe = ClaudeCLIVersionProbe(
+            spawnEnabled: true, versionRunner: { nil }, dispatch: { _ in },
+            store: .init(load: { "2.1.318" }, save: { _ in }),
+            binaryPath: { "/bin/claude" }, fingerprint: { _ in "fp1" })
+        XCTAssertNil(probe.installedVersion())
+    }
+
+    func testBinaryFingerprintFollowsSymlinkAndChangesWithTheFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("claude-bin-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let v1 = dir.appendingPathComponent("2.1.318")
+        let v2 = dir.appendingPathComponent("2.1.200")
+        try Data("neu".utf8).write(to: v1)
+        try Data("alt!".utf8).write(to: v2)
+        let link = dir.appendingPathComponent("claude")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: v1)
+
+        let before = try XCTUnwrap(ClaudeCLIVersionProbe.binaryFingerprint(path: link.path))
+        XCTAssertEqual(ClaudeCLIVersionProbe.binaryFingerprint(path: link.path), before, "stabil")
+        XCTAssertTrue(before.hasPrefix(v1.resolvingSymlinksInPath().path))
+        try FileManager.default.removeItem(at: link)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: v2)   // Downgrade
+        XCTAssertNotEqual(ClaudeCLIVersionProbe.binaryFingerprint(path: link.path), before)
+        XCTAssertNil(ClaudeCLIVersionProbe.binaryFingerprint(path: dir.appendingPathComponent("fehlt").path))
+    }
+
+    func testRememberedEncodingRoundTrip() {
+        let value = ClaudeCLIVersionProbe.Remembered(
+            version: ClaudeCLIVersion(components: [2, 1, 318]), binaryPath: "/a b/claude", fingerprint: "/x|1.5|42")
+        XCTAssertEqual(ClaudeCLIVersionProbe.Remembered(encoded: value.encoded), value)
+        XCTAssertNil(ClaudeCLIVersionProbe.Remembered(encoded: "2.1.318"))
     }
 
     func testFailedProbeKeepsKnownVersionAndRetriesSoon() {
@@ -640,7 +693,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         let probe = ClaudeCLIVersionProbe(
             spawnEnabled: true, ttl: 600, failureTTL: 30,
             versionRunner: { nil }, dispatch: { pending.append($0) }, now: { clock },
-            store: .init(load: { "2.1.318" }, save: { saved.append($0) }))
+            store: .init(load: { self.remembered([2, 1, 318]) }, save: { saved.append($0) }),
+            binaryPath: { "/bin/claude" }, fingerprint: { _ in "fp1" })
         _ = probe.installedVersion()
         pending.removeFirst()()
         XCTAssertEqual(probe.installedVersion()?.components, [2, 1, 318],
@@ -678,7 +732,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         var saved: [String] = []
         let probe = ClaudeCLIVersionProbe(
             spawnEnabled: false, versionRunner: { ClaudeCLIVersion(components: [2, 1, 320]) },
-            dispatch: { $0() }, store: .init(load: { nil }, save: { saved.append($0) }))
+            dispatch: { $0() }, store: .init(load: { nil }, save: { saved.append($0) }),
+            binaryPath: { "/bin/claude" }, fingerprint: { _ in "fp1" })
         probe.prewarm()
         XCTAssertNil(probe.installedVersion())
         XCTAssertTrue(saved.isEmpty, "ohne Abruf wird nichts gemerkt")

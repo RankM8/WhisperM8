@@ -40,13 +40,25 @@ struct AgentSessionRetentionService {
         self.beforeRemoval = beforeRemoval
     }
 
-    /// Aufruf beim App-Start: alle Chats im Workspace gelten als lebendig,
-    /// Hintergrund-Agenten zusaetzlich als geschuetzt.
+    /// Aufruf beim App-Start: alle Chats im Workspace gelten als lebendig.
+    /// Geschuetzt sind Hintergrund-Agenten und Chats, die gleich fortgesetzt
+    /// werden (Absturz-Marker → `resumingSessionIDs`, vorgemerktes
+    /// `shouldLaunchOnOpen`): Ein Chat ohne gebundene ID findet seine Session
+    /// beim Fortsetzen nur ueber das Event-File (`unboundResumeResolver`). Mit
+    /// dem reduzierten Hook-Satz schreibt er dort fast nur beim Start — nach
+    /// 14 Tagen Laufzeit waere die Datei sonst „alt" und weg (Review H1).
     @discardableResult
-    func pruneAtLaunch(workspace: AgentWorkspace, now: Date = Date()) -> RetentionResult {
-        prune(
+    func pruneAtLaunch(
+        workspace: AgentWorkspace,
+        resumingSessionIDs: Set<UUID> = [],
+        now: Date = Date()
+    ) -> RetentionResult {
+        let protected = workspace.sessions
+            .filter { $0.isBackgroundChat || $0.shouldLaunchOnOpen == true }
+            .map(\.id)
+        return prune(
             liveLocalSessionIDs: Set(workspace.sessions.map(\.id)),
-            protectedLocalSessionIDs: Set(workspace.sessions.filter(\.isBackgroundChat).map(\.id)),
+            protectedLocalSessionIDs: Set(protected).union(resumingSessionIDs),
             now: now)
     }
 

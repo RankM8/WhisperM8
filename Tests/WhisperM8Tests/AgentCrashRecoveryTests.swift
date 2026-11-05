@@ -137,13 +137,14 @@ final class AgentCrashRecoveryCoordinatorTests: XCTestCase {
         _ = crashed.beginRun()
         crashed.record(runningSessionIDs: [openTab.id, closedTab.id, archived.id])
 
-        AgentCrashRecoveryCoordinator.start(
+        let resumed = AgentCrashRecoveryCoordinator.start(
             marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
             registry: AgentTerminalRegistry(),
             windowStore: windowStore,
             store: persistence,
             isEnabled: true
         )
+        XCTAssertEqual(Set(resumed), [openTab.id, closedTab.id], "für den Retention-Schutz (H1)")
 
         let sessions = Dictionary(uniqueKeysWithValues: persistence.loadWorkspace().sessions.map { ($0.id, $0) })
         XCTAssertEqual(sessions[openTab.id]?.shouldLaunchOnOpen, true)

@@ -522,6 +522,32 @@ final class AgentTranscriptReaderTests: XCTestCase {
         XCTAssertFalse(fixture.eventExists(chat.id))
         XCTAssertTrue(fixture.eventExists(background.id))
     }
+
+    /// Review H1: Chats, die gleich fortgesetzt werden (Absturz-Marker oder
+    /// vorgemerkter Start), behalten ihr altes Event-File — ein Chat ohne
+    /// gebundene ID findet seine Session nur darüber.
+    func testPruneAtLaunchProtectsChatsAboutToResume() throws {
+        let fixture = try RetentionFixture()
+        defer { fixture.cleanUp() }
+        let projectID = UUID()
+        let crashed = AgentChatSession(provider: .claude, projectID: projectID, title: "Absturz")
+        var marked = AgentChatSession(provider: .claude, projectID: projectID, title: "Vorgemerkt")
+        marked.shouldLaunchOnOpen = true
+        let idle = AgentChatSession(provider: .claude, projectID: projectID, title: "Ruhig")
+        for id in [crashed.id, marked.id, idle.id] {
+            try fixture.writeEvent(id)
+            try fixture.age(id, by: 20)
+        }
+
+        let result = fixture.service().pruneAtLaunch(
+            workspace: AgentWorkspace(projects: [], sessions: [crashed, marked, idle]),
+            resumingSessionIDs: [crashed.id], now: fixture.now)
+
+        XCTAssertEqual(result.staleHookEventsRemoved, 1)
+        XCTAssertTrue(fixture.eventExists(crashed.id))
+        XCTAssertTrue(fixture.eventExists(marked.id))
+        XCTAssertFalse(fixture.eventExists(idle.id))
+    }
 }
 
 /// Temporärer Hook-Ordner für die Retention-Tests.

@@ -39,7 +39,9 @@ mtime als Aktivitätsquelle dient.
 
 Globale Claude-Hook-Settings unter `~/.claude/settings.json` und
 `~/.claude/settings.local.json` werden von `ExternalClaudeHooksInspector` nur
-gelesen. Die von WhisperM8 generierten Hook-Settings liegen im App-Support und
+gelesen, ebenso die beiden Dateien jedes Konto-Profils unter
+`~/.claude-profiles/<name>/` (ein Chat mit `CLAUDE_CONFIG_DIR` liest nur die
+seines Profils). Per Symlink geteilte Dateien erscheinen nur einmal. Die von WhisperM8 generierten Hook-Settings liegen im App-Support und
 werden per `--settings <path>` an Claude übergeben. Abgegrenzt davon schreibt
 `ClaudeThemeWriter` den `theme`-Key in `~/.claude/settings.json`, wenn die
 Theme-Synchronisation aktiv ist.
@@ -182,7 +184,7 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `claude --bg` ist ein einmaliger Spawn-Subprozess; der laufende Agent wird vom externen Claude-Supervisor gehostet.
 - Hook-Settings müssen bereits beim `--bg`-Spawn injiziert werden, weil die Background-Session die Settings vom Supervisor erbt.
 - Die Hook-Bridge ist event-driven über `DispatchSource`; es gibt keinen Fallback-Polling-Loop für Hook-Dateien.
-- `stopTracking` löscht Hook-Dateien nicht sofort; verwaiste Dateien werden beim App-Start durch `AgentSessionRetentionService.prune` gegen das Live-Session-Set entfernt, alte Event-Dateien (14 Tage ohne Schreiben) auch bei Chats im Workspace, außer bei Hintergrund-Agenten.
+- `stopTracking` löscht Hook-Dateien nicht sofort; verwaiste Dateien werden beim App-Start durch `AgentSessionRetentionService.prune` gegen das Live-Session-Set entfernt, alte Event-Dateien (14 Tage ohne Schreiben) auch bei Chats im Workspace, außer bei Hintergrund-Agenten und bei Chats, die gleich fortgesetzt werden (Absturz-Marker, `shouldLaunchOnOpen`). Ein Chat ohne gebundene ID findet seine Session beim Fortsetzen nur über dieses Event-File, und mit dem reduzierten Hook-Satz schreibt er dort fast nur beim Start. Deshalb läuft das Aufräumen erst nach der Absturz-Wiederaufnahme an.
 - Hooks können deaktiviert sein oder stumm bleiben; nach fünf Sekunden ohne erstes Hook-Event loggt die Bridge einmalig `binding_hook_silent`, die Session läuft aber weiter und Status sowie Rückfragen sind gröber.
 - `Notification` ist nicht Teil der registrierten Hook-Events, weil es auch Idle-Notifications erzeugen kann.
 - `PermissionRequest`, `AskUserQuestion` und `ExitPlanMode` sind die expliziten Quellen für `awaitingInput`.
@@ -191,7 +193,7 @@ Key in `~/.claude/settings.json` synchronisiert.
 - `SessionEnd` mit `clear`, `resume` oder `compact` wird als In-Place-Wechsel behandelt, nicht als Prozessende.
 - Der Supervisor-State unter `~/.claude/jobs/` ist ein externes, defensiv geparstes Claude-Implementation-Detail.
 - Reine TUI-Navigation in `claude agents` ist nicht detektierbar; der aktive Background-Job wird über JSONL-Schreibaktivität angenähert.
-- `ExternalClaudeHooksInspector` meldet nur fremde Hooks, die doppelte Mitteilungen erzeugen könnten (`Stop`, `Notification`, `PermissionRequest`, `PreToolUse` mit Matcher auf `AskUserQuestion`/`ExitPlanMode`). Hooks mit führendem Umgebungs-Wächter (`[ -n "$VAR" ] && …`), deren Variable in WhisperM8-Chats fehlt, zählen nicht, etwa die Superset-Hooks. User-Settings verändert er nie.
+- `ExternalClaudeHooksInspector` meldet nur fremde Hooks, die doppelte Mitteilungen erzeugen könnten (`Stop`, `Notification`, `PermissionRequest`, `PreToolUse` mit Matcher auf `AskUserQuestion`/`ExitPlanMode`). Hooks mit führendem Umgebungs-Wächter (`[ -n "$VAR" ] && …`), deren Variable in WhisperM8-Chats fehlt, zählen nicht, etwa die Superset-Hooks — aber nur, wenn hinter dem Wächter nichts mehr unbedingt läuft (kein `;`, kein Zeilenumbruch, kein freies `&`, kein `||` außer einem abschließenden `|| true` oder `|| :`). Variablen mit `WHISPERM8_*`/`CLAUDE*` und alles aus dem `env`-Block der Settings des jeweiligen Kontos gelten als gesetzt; solche Hooks werden also gemeldet. Im Zweifel meldet der Prüfer lieber zu viel. User-Settings verändert er nie.
 - `ClaudeThemeWriter` ist nur eine Abgrenzung zur Background-Agent-Persistenz; Details der globalen Theme-Synchronisation gehören nicht in diesen Feature-Bereich.
 
 ## Schlüsseldateien

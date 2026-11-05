@@ -41,17 +41,45 @@ enum ExternalClaudeHooksInspector {
     /// Hook auf jedem Tool-Aufruf ist Aktivität, keine Mitteilung.
     static let questionToolNames = ["AskUserQuestion", "ExitPlanMode"]
 
-    /// Beide User-Settings-Dateien inspizieren (`settings.json` +
-    /// `settings.local.json`). Fehlende/inkompatible Dateien → keine Funde.
-    /// `environment` ist die Umgebung, mit der WhisperM8 Claude startet; die
-    /// Hooks laufen mit genau dieser Umgebung.
+    /// Die User-Settings aller Claude-Konten inspizieren (`settings.json` +
+    /// `settings.local.json`): `~/.claude` und jedes Profil unter
+    /// `~/.claude-profiles/<name>`. Ein Chat liest mit `CLAUDE_CONFIG_DIR`
+    /// nur die Settings seines Profils — ein fremder Hook oder ein
+    /// Wächter-Wert, der nur dort steht, fiel sonst durch (Review H2).
+    /// Nur gelesen, nie geschrieben. Ist eine Profil-Datei per Symlink
+    /// dieselbe wie in `~/.claude`, erscheint ein Fund nur einmal.
+    /// Fehlende/inkompatible Dateien → keine Funde. `environment` ist die
+    /// Umgebung, mit der WhisperM8 Claude startet; dazu kommt der `env`-Block
+    /// des jeweiligen Kontos.
     static func inspectUserSettings(
         home: URL = AppInstance.home,
-        environment: [String: String] = LoginShellEnvironment.shared.processEnvironment()
+        environment: [String: String] = LoginShellEnvironment.shared.processEnvironment(),
+        profileNames: [String]? = nil
     ) -> [Finding] {
-        let claudeDir = home.appendingPathComponent(".claude", isDirectory: true)
-        let files: [(name: String, data: Data)] = ["settings.json", "settings.local.json"].compactMap { name in
-            (try? Data(contentsOf: claudeDir.appendingPathComponent(name))).map { (name, $0) }
+        let profiles = ClaudeAccountProfiles(homeDirectory: home)
+        var seen = Set<String>()
+        var findings: [Finding] = []
+        for name in profileNames ?? profiles.profileNames() {
+            let prefix = name == ClaudeAccountProfiles.mainProfileName ? "" : "\(name)/"
+            for (resolvedPath, finding) in inspectConfigDir(
+                profiles.configDir(forProfile: name), sourcePrefix: prefix, environment: environment)
+            where seen.insert("\(resolvedPath)|\(finding.eventName)|\(finding.matcher ?? "")|\(finding.commandPreview)").inserted {
+                findings.append(finding)
+            }
+        }
+        return findings
+    }
+
+    /// Ein Konto-Ordner: beide Settings-Dateien mit gemeinsamem `env`-Block.
+    /// Liefert je Fund den aufgelösten Dateipfad (für das Entdoppeln).
+    private static func inspectConfigDir(
+        _ configDir: URL,
+        sourcePrefix: String,
+        environment: [String: String]
+    ) -> [(resolvedPath: String, finding: Finding)] {
+        let files: [(name: String, url: URL, data: Data)] = ["settings.json", "settings.local.json"].compactMap { name in
+            let url = configDir.appendingPathComponent(name)
+            return (try? Data(contentsOf: url)).map { (name, url, $0) }
         }
         // Der `env`-Block beider Dateien gilt für alle Hooks, auch für die
         // der jeweils anderen Datei.
@@ -60,7 +88,9 @@ enum ExternalClaudeHooksInspector {
             effective.merge(settingsEnvironment(settingsData: file.data)) { _, fromSettings in fromSettings }
         }
         return files.flatMap { file in
-            overlappingHooks(settingsData: file.data, source: file.name, environment: effective)
+            let resolved = file.url.resolvingSymlinksInPath().path
+            return overlappingHooks(settingsData: file.data, source: sourcePrefix + file.name, environment: effective)
+                .map { (resolved, $0) }
         }
     }
 

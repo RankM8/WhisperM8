@@ -64,13 +64,59 @@ struct ClaudeCLIVersion: Comparable, Equatable {
 /// Wert: Der erste Launch nutzt sie, der Hintergrund-Abruf läuft trotzdem
 /// sofort an. Ein Fehlschlag löscht den gemerkten Wert nicht, er überschreibt
 /// ihn nur mit einer erfolgreich gelesenen Version.
+///
+/// Downgrade oder Austausch der Binary (Review H4): Gemerkt wird die Version
+/// zusammen mit Pfad und Fingerabdruck der Binary (`Remembered`). Beim Start
+/// gilt sie nur, wenn die Datei unter dem Pfad noch dieselbe ist — sonst
+/// bekämen die ersten Chats den reduzierten Satz samt Event-Namen, die eine
+/// ältere CLI nicht kennt, und keinen Registry-Status. Zeigt der `PATH`
+/// inzwischen auf eine ganz andere Binary, merkt das erst der Abruf (den
+/// `PATH` aufzulösen kann eine Login-Shell starten — nicht beim Start auf dem
+/// Main Thread).
 final class ClaudeCLIVersionProbe: @unchecked Sendable {
-    /// Speicher für die zuletzt erkannte Version (`2.1.318`).
+    /// Gemerkter Wert: Version plus Binary, von der sie gelesen wurde.
+    struct Remembered: Equatable {
+        var version: ClaudeCLIVersion
+        var binaryPath: String
+        var fingerprint: String
+
+        /// Drei Zeilen: Version, Pfad, Fingerabdruck.
+        var encoded: String { [version.string, binaryPath, fingerprint].joined(separator: "\n") }
+
+        init(version: ClaudeCLIVersion, binaryPath: String, fingerprint: String) {
+            self.version = version
+            self.binaryPath = binaryPath
+            self.fingerprint = fingerprint
+        }
+
+        /// Alte Werte (nur `2.1.318`) haben keine Binary und gelten nicht.
+        init?(encoded: String) {
+            let parts = encoded.split(separator: "\n", maxSplits: 2, omittingEmptySubsequences: false)
+            guard parts.count == 3, !parts[1].isEmpty, !parts[2].isEmpty,
+                  let version = ClaudeCLIVersion(parsing: String(parts[0])) else { return nil }
+            self.init(version: version, binaryPath: String(parts[1]), fingerprint: String(parts[2]))
+        }
+    }
+
+    /// Aufgelöster Pfad, Änderungsdatum und Größe der Datei hinter `path`.
+    /// Ein Update, Downgrade oder Umbiegen des Symlinks ändert ihn. Nur
+    /// `stat`-Aufrufe, also auch beim Start auf dem Main Thread billig.
+    static func binaryFingerprint(path: String) -> String? {
+        let resolved = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: resolved),
+              let modified = attributes[.modificationDate] as? Date,
+              let size = (attributes[.size] as? NSNumber)?.int64Value else { return nil }
+        return "\(resolved)|\(modified.timeIntervalSince1970)|\(size)"
+    }
+
+    /// Speicher für den zuletzt erkannten Wert (`Remembered.encoded`).
     struct Store {
         var load: () -> String?
         var save: (String) -> Void
+        /// `false`: nichts zu merken — dann wird auch die Binary nicht gesucht.
+        var persists = true
 
-        static let none = Store(load: { nil }, save: { _ in })
+        static let none = Store(load: { nil }, save: { _ in }, persists: false)
 
         static let userDefaults = Store(
             load: { UserDefaults.standard.string(forKey: PreferenceKeys.claudeCLILastKnownVersion) },
@@ -98,9 +144,13 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
     private let dispatch: (@escaping @Sendable () -> Void) -> Void
     private let now: () -> Date
     private let store: Store
+    private let binaryPath: () -> String?
+    private let fingerprint: (String) -> String?
 
     /// - Parameter spawnEnabled: `false` in Tests und CLI-Prozessen — dort wird
     ///   nie `claude --version` gestartet.
+    /// - Parameter binaryPath: Pfad der `claude`-Binary; nur im Hintergrund
+    ///   nach einem Abruf gefragt (zum Merken).
     init(
         spawnEnabled: Bool,
         ttl: TimeInterval = 600,
@@ -108,13 +158,23 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
         versionRunner: (() -> ClaudeCLIVersion?)? = nil,
         dispatch: ((@escaping @Sendable () -> Void) -> Void)? = nil,
         now: @escaping () -> Date = Date.init,
-        store: Store = .none
+        store: Store = .none,
+        binaryPath: @escaping () -> String? = { AgentCommandBuilder.commandPath("claude") },
+        fingerprint: @escaping (String) -> String? = ClaudeCLIVersionProbe.binaryFingerprint(path:)
     ) {
         self.store = store
+        self.binaryPath = binaryPath
+        self.fingerprint = fingerprint
         // Gemerkte Version als abgelaufener Wert: sofort nutzbar, aber der
-        // erste Zugriff stößt den echten Abruf an.
-        if let saved = store.load().flatMap(ClaudeCLIVersion.init(parsing:)) {
-            cached = (saved, .distantPast)
+        // erste Zugriff stößt den echten Abruf an. Nur, wenn die Binary
+        // dieselbe ist wie beim Merken.
+        if let saved = store.load().flatMap(Remembered.init(encoded:)) {
+            if fingerprint(saved.binaryPath) == saved.fingerprint {
+                cached = (saved.version, .distantPast)
+            } else {
+                Logger.claudeBinding.notice(
+                    "claude_version_remembered_ignored reason=binary_changed version=\(saved.version.string, privacy: .public)")
+            }
         }
         self.spawnEnabled = spawnEnabled
         self.ttl = ttl
@@ -182,7 +242,9 @@ final class ClaudeCLIVersionProbe: @unchecked Sendable {
             }
             refreshInFlight = false
             lock.unlock()
-            if let version { store.save(version.string) }
+            if let version, store.persists, let path = binaryPath(), let print = fingerprint(path) {
+                store.save(Remembered(version: version, binaryPath: path, fingerprint: print).encoded)
+            }
         }
     }
 
