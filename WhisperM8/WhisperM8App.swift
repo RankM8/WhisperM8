@@ -359,7 +359,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AgentControlServer.shared.start(handler: AgentControlRequestHandler())
         // Zwischenablage-Verlauf (Maccy-Ersatz): wirkt nur bei eingeschaltetem
         // Schalter, sonst weder Monitor noch Hotkey.
-        MainActor.assumeIsolated { ClipboardHistoryController.shared.start() }
+        MainActor.assumeIsolated {
+            // Kopfzeile „Markierung korrigieren“ und „Korrigieren & einfügen“
+            // laufen über dieselbe Schnellaktion wie ⇧⌘K.
+            ClipboardHistoryController.shared.quickActions = .init(
+                isAvailable: { AppState.shared.usageProfileAllowsPostProcessing },
+                run: { modeID, input in await AppState.shared.runQuickAction(modeID: modeID, input: input) },
+                shortcutLabel: { KeyboardShortcuts.getShortcut(for: QuickActionShortcuts.name(for: OutputMode.correctID))?.description }
+            )
+            ClipboardHistoryController.shared.start()
+        }
         // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der
         // Zustellung stand, ist von unbekanntem Ausgang — als `unknown`
         // markieren statt blind erneut zu senden (höchstens-einmal-Garantie).

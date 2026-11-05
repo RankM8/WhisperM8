@@ -18,6 +18,16 @@ enum QuickActionOutcome: Equatable {
     case busy
 }
 
+/// Woher der Text kommt.
+enum QuickActionInput: Equatable {
+    /// Markierung der vorderen App lesen und an Ort und Stelle ersetzen
+    /// (Kurzbefehl, Menüleiste, Kopfzeile im Zwischenablage-Fenster).
+    case selection
+    /// Vorgegebener Text, etwa ein Eintrag aus dem Zwischenablage-Verlauf:
+    /// umarbeiten und an der Schreibmarke der vorderen App einfügen.
+    case text(String)
+}
+
 /// Anzeige der Schnellaktion. Live ist das das Aufnahme-Overlay.
 @MainActor
 protocol QuickActionPresenting: AnyObject {
@@ -60,7 +70,7 @@ struct QuickActionEnvironment {
 /// brechen ab, dann bleibt alles, wie es war) → Ergebnis ersetzt die
 /// Markierung. Ist das Feld nicht beschreibbar, landet das Ergebnis mit
 /// Hinweis in der Zwischenablage. Der Baustein kennt keine Kurzbefehle; die
-/// Menüleiste und später das Zwischenablage-Fenster rufen ihn genauso auf.
+/// Menüleiste und das Zwischenablage-Fenster rufen ihn genauso auf.
 @MainActor
 final class QuickActionRunner {
     private let environment: QuickActionEnvironment
@@ -85,7 +95,7 @@ final class QuickActionRunner {
     }
 
     @discardableResult
-    func run(modeID: String) async -> QuickActionOutcome {
+    func run(modeID: String, input: QuickActionInput = .selection) async -> QuickActionOutcome {
         guard !isRunning, !isDictationBusy() else {
             environment.busySignal()
             return log(.busy, modeID: modeID)
@@ -108,10 +118,22 @@ final class QuickActionRunner {
         defer { isRunning = false }
 
         let app = environment.frontmostApp()
-        guard let selection = await environment.captureSelection(app) else {
-            presenter?.showQuickActionHint(String(localized: "Select text first"), duration: 2)
-            return log(.noSelection, modeID: modeID)
+        let selection: CapturedSelection
+        switch input {
+        case .selection:
+            guard let captured = await environment.captureSelection(app) else {
+                presenter?.showQuickActionHint(String(localized: "Select text first"), duration: 2)
+                return log(.noSelection, modeID: modeID)
+            }
+            selection = captured
+        case .text(let text):
+            guard !SelectedContextService.isBlank(text) else { return log(.noSelection, modeID: modeID) }
+            // Ob die Schreibmarke Text annimmt, weiß hier niemand: einfügen,
+            // bei Fehlschlag liegt das Ergebnis in der Zwischenablage.
+            selection = CapturedSelection(text: text, writability: .unknown)
         }
+        let isEntry = input != .selection
+        let notChangedTitle = isEntry ? String(localized: "Text not corrected") : String(localized: "Selection not changed")
 
         let token = PostProcessingCancelToken()
         activeCancelToken = token
@@ -147,7 +169,7 @@ final class QuickActionRunner {
                 return log(.cancelled, modeID: modeID)
             }
             let message = error.localizedDescription
-            environment.postNotice(String(localized: "Selection not changed"), message)
+            environment.postNotice(notChangedTitle, message)
             return log(.failed(message), modeID: modeID)
         }
 
@@ -163,16 +185,20 @@ final class QuickActionRunner {
         let result = QuickActionText.replacement(for: selection.text, modelOutput: run.text)
         if result.isEmpty {
             presenter?.hideQuickAction()
-            environment.postNotice(String(localized: "Selection not changed"), String(localized: "The text clean-up returned no text."))
+            environment.postNotice(notChangedTitle, String(localized: "The text clean-up returned no text."))
             return log(.failed("empty result"), modeID: modeID)
         }
-        if result == selection.text {
+        let unchanged = result == selection.text
+        // Eine Markierung, die schon stimmt, bleibt unangetastet. Ein Eintrag
+        // aus dem Verlauf soll trotzdem eingefügt werden: darum ging es.
+        if unchanged, !isEntry {
             presenter?.showQuickActionHint(String(localized: "Nothing to change"), duration: 2)
             return log(.unchanged, modeID: modeID)
         }
 
         presenter?.hideQuickAction()
-        environment.recordHistory(result, selection.text, mode, app)
+        // Unverändert steht der Text schon im Verlauf, kein zweiter Eintrag.
+        if !unchanged { environment.recordHistory(result, selection.text, mode, app) }
 
         if selection.writability == .readOnly {
             environment.copyToClipboard(result)
@@ -180,11 +206,11 @@ final class QuickActionRunner {
             return log(.copiedToClipboard, modeID: modeID)
         }
         if await environment.replaceSelection(result, app) {
-            return log(.replaced, modeID: modeID)
+            return log(unchanged ? .unchanged : .replaced, modeID: modeID)
         }
         environment.copyToClipboard(result)
         environment.postNotice(
-            String(localized: "Selection not replaced"),
+            isEntry ? String(localized: "Text not inserted") : String(localized: "Selection not replaced"),
             String(localized: "WhisperM8 couldn't insert the text. The result is on the clipboard, paste it with Cmd+V.")
         )
         return log(.copiedToClipboard, modeID: modeID)

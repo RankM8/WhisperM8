@@ -139,8 +139,15 @@ final class AppState {
 
     /// Markierten Text ohne Diktat mit einem Modus umarbeiten (Kurzbefehl,
     /// Menüleiste).
-    func runQuickAction(modeID: String) async {
-        await recordingCoordinator.quickActionRunner.run(modeID: modeID)
+    func runQuickAction(modeID: String, input: QuickActionInput = .selection) async {
+        // Kurzbefehl bei offenem Zwischenablage-Fenster: erst schließen, damit
+        // die Markierung der App davor gemeint ist und der Cmd+C-Rückfall sie
+        // erreicht (wie die Kopfzeile „Markierung korrigieren“).
+        if input == .selection, ClipboardHistoryController.shared.isPanelVisible {
+            ClipboardHistoryController.shared.hidePanel()
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        await recordingCoordinator.quickActionRunner.run(modeID: modeID, input: input)
     }
 
     /// Menüleiste: Schnellaktionen nur, wenn der Umfang Nacharbeit erlaubt.

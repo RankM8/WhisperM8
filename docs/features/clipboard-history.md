@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-04
+updated: 2026-11-05
 description: Zwischenablage-Verlauf (Maccy-Ersatz) mit Hotkey-Fenster, Datenschutz-Regeln, CLI und Plugin-Tool für Claude.
 ---
 
@@ -24,6 +24,8 @@ nichts vom Verlauf, pollt nicht und belegt keinen Hotkey.
 | Wählen | ↑ und ↓ |
 | Einfügen | Enter, in die App davor (Cmd+V simuliert, braucht Bedienungshilfen), auch in WhisperM8 selbst |
 | Als reinen Text einfügen | ⌥Enter |
+| Korrigieren & einfügen | ⌘Enter oder Schaltfläche in der Vorschau (nur Text): Rechtschreibung und Grammatik korrigieren, dann einfügen |
+| Markierung korrigieren | Kopfzeile unter dem Suchfeld, wenn in der App davor Text markiert ist (auch ⇧⌘K); Details in [Schnellaktionen](dictation/quick-actions/README.md#im-zwischenablage-fenster-c) |
 | Schnellwahl | ⌘1 bis ⌘9, genau wie die Liste nummeriert ist |
 | Anpinnen und lösen | ⌘P oder die Pin-Schaltfläche am Eintrag |
 | Löschen | ⌘⌫ oder Schaltfläche in der Vorschau |

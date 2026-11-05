@@ -95,6 +95,21 @@ extension UISnapshotGallery {
                 zoomed.openZoom()
                 return AnyView(ClipboardHistoryView(model: zoomed, now: now))
             },
+            Fixture(name: "clipboard-verlauf-markierung", size: size) {
+                let marked = model(selected: "err")
+                marked.quickActionsAvailable = true
+                marked.correctShortcutLabel = "⇧⌘K"
+                marked.selectionAppName = "Mail"
+                marked.selectionProbe = .selected(preview: "Hallo Team, ich habe die Datein gestern hochgeladen und den Link im Ticket ergänzt, bitte schaut nochmal drüber")
+                return AnyView(ClipboardHistoryView(model: marked, now: now))
+            },
+            Fixture(name: "clipboard-verlauf-markierung-unklar", size: size) {
+                let marked = model(selected: "dict")
+                marked.quickActionsAvailable = true
+                marked.selectionAppName = "Slack"
+                marked.selectionProbe = .unknown
+                return AnyView(ClipboardHistoryView(model: marked, now: now))
+            },
             Fixture(name: "clipboard-verlauf-bild", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "img"), now: now))
             },

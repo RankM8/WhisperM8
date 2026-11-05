@@ -112,3 +112,49 @@ struct QuickActionReplacer {
         return true
     }
 }
+
+/// Was das Zwischenablage-Fenster beim Öffnen über die Markierung der App
+/// davor weiß. Danach richtet sich die Kopfzeile „Markierung korrigieren“.
+enum SelectionProbe: Equatable {
+    /// Markierung gelesen; die Kopfzeile zeigt ihren Anfang.
+    case selected(preview: String)
+    /// Die App meldet ausdrücklich: nichts markiert. Keine Kopfzeile.
+    case none
+    /// Die App sagt nichts Verlässliches (Electron ohne volle
+    /// Accessibility, kein Fokus-Element). Die Kopfzeile erscheint ohne
+    /// Vorschau; ein Klick liest dann per Cmd+C-Rückfall.
+    case unknown
+
+    static let previewLimit = 300
+
+    /// Pur, damit die Regel ohne fremde App testbar ist.
+    static func resolve(hasFocusedElement: Bool, selectedText: String?) -> SelectionProbe {
+        guard hasFocusedElement, let selectedText else { return .unknown }
+        let trimmed = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .none }
+        let oneLine = trimmed.split(whereSeparator: \.isNewline).joined(separator: " ")
+        return .selected(preview: String(oneLine.prefix(previewLimit)))
+    }
+}
+
+extension SelectedContextService {
+    /// Nur lesen über Accessibility, nie Cmd+C: das Fenster ist offen, die
+    /// Zwischenablage bleibt unberührt. Für einen Hintergrund-Thread gedacht
+    /// (auch WhisperM8 selbst kann die App davor sein, deren AX-Anfragen
+    /// beantwortet der Main Thread); das kurze Zeitlimit hält eine hängende
+    /// App vom Fenster fern.
+    nonisolated static func probeSelection(pid: pid_t) -> SelectionProbe {
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, 0.25)
+        var focusedValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
+              let focusedValue, CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+            return .resolve(hasFocusedElement: false, selectedText: nil)
+        }
+        let element = unsafeBitCast(focusedValue, to: AXUIElement.self)
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        var textValue: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &textValue)
+        return .resolve(hasFocusedElement: true, selectedText: status == .success ? (textValue as? String) ?? "" : nil)
+    }
+}

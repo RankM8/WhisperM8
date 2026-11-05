@@ -72,7 +72,8 @@ final class ClipboardSettingsAndKeysTests: XCTestCase {
         XCTAssertNil(resolve(126, nil, .shift))       // Shift+Pfeil: Textauswahl
         XCTAssertNil(resolve(18, "1"))                // Ziffer ohne ⌘ ist Text
         XCTAssertNil(resolve(35, "p", [.command, .shift]))
-        XCTAssertNil(resolve(36, nil, .command))
+        // ⌘↩ ist seit 05.11.2026 „Korrigieren & einfügen“; ⇧⌘↩ bleibt frei.
+        XCTAssertNil(resolve(36, nil, [.command, .shift]))
     }
 
     // MARK: Fensterposition

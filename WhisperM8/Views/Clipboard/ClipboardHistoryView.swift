@@ -20,6 +20,10 @@ struct ClipboardHistoryView: View {
         VStack(spacing: 0) {
             searchBar(count: list.count)
             Divider().overlay(AppTheme.border)
+            if model.showsSelectionHeader {
+                selectionHeader
+                Divider().overlay(AppTheme.border)
+            }
             HStack(spacing: 0) {
                 listColumn(list)
                     .frame(width: Self.listWidth)
@@ -90,6 +94,55 @@ struct ClipboardHistoryView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: Markierung
+
+    /// Kopfzeile, wenn in der App davor Text markiert ist (oder die App es
+    /// nicht verrät): ein Klick korrigiert die Markierung dort, wie ⇧⌘K.
+    private var selectionHeader: some View {
+        let app = model.selectionAppName ?? String(localized: "the app")
+        return HStack(spacing: 10) {
+            Image(systemName: "text.cursor")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                if case .selected(let preview) = model.selectionProbe {
+                    Text("Selected in \(app)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text(verbatim: "“\(preview)”")
+                        .font(.system(size: 12))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(AppTheme.textSecondary)
+                } else {
+                    Text("Text selected in \(app)?")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppTheme.textPrimary)
+                    Text("WhisperM8 can't see it from here. Click and it gets copied and corrected.")
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(AppTheme.textTertiary)
+                }
+            }
+            Spacer(minLength: 8)
+            Button("Correct Selection") { model.actions.correctSelection() }
+                .buttonStyle(SettingsButtonStyle.primary)
+                .fixedSize()
+                .help(correctSelectionHelp)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(AppTheme.accentTint)
+    }
+
+    private var correctSelectionHelp: String {
+        if let shortcut = model.correctShortcutLabel {
+            return String(localized: "Fix spelling and grammar of the selection and replace it (\(shortcut))")
+        }
+        return String(localized: "Fix spelling and grammar of the selection and replace it")
     }
 
     // MARK: Liste
@@ -387,6 +440,11 @@ struct ClipboardHistoryView: View {
         HStack(spacing: 6) {
             Button("Paste") { model.actions.paste(entry, false) }
                 .buttonStyle(SettingsButtonStyle.primary)
+            if model.canCorrect(entry) {
+                Button("Correct & Paste") { model.actions.correctAndPaste(entry) }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .help(String(localized: "Fix spelling and grammar, then paste (⌘↩)"))
+            }
             // Diktate sind ohnehin reiner Text; dort steht stattdessen "Original einfügen".
             if entry.kind == .text, entry.dictationMode == nil {
                 Button("Paste as plain text") { model.actions.paste(entry, true) }
@@ -454,6 +512,7 @@ struct ClipboardHistoryView: View {
                 hint("↑↓", "Select")
                 hint("↩", "Paste")
                 hint("⌥↩", "Plain text")
+                if model.quickActionsAvailable { hint("⌘↩", "Correct") }
                 hint("⌘1-9", "Quick paste")
                 hint("⌘D", "Dictations")
                 hint("esc", "Close")

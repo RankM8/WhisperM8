@@ -115,7 +115,9 @@ mode, so that e.g. *Reply* knows what you are answering (Settings → Context & 
 by default, all other modes are empty until you record one). The overlay shows "Correcting…", the selection is replaced, Cmd+Z undoes
 it and Esc cancels. *Correct* only fixes spelling, grammar and punctuation; *Rephrase* makes the text
 clearer with the same message. If the field can't be edited, the result goes to the clipboard. The menu
-bar has the same as "Correct Selection".
+bar has the same as "Correct Selection". In the clipboard history (⇧⌘C), "Correct Selection" sits under
+the search field when text is selected in the app behind it, and "Correct & Paste" (⌘↩) corrects an
+entry and pastes it.
 
 **Dictate about selected text:** with *Correct* or *Rephrase* chosen and text selected, the selection is
 the text and what you say is an extra instruction ("and a bit more formal").

@@ -11,6 +11,20 @@ import SwiftUI
 final class ClipboardHistoryController {
     static let shared = ClipboardHistoryController()
 
+    /// Anbindung an die Schnellaktion „Korrigieren“ (gesetzt von der App;
+    /// ohne sie zeigt das Fenster weder Kopfzeile noch Knöpfe).
+    struct QuickActionHooks {
+        var isAvailable: @MainActor () -> Bool
+        var run: @MainActor (_ modeID: String, _ input: QuickActionInput) async -> Void
+        var shortcutLabel: @MainActor () -> String?
+    }
+
+    var quickActions: QuickActionHooks?
+    /// Zählt Öffnungen, damit eine späte Markierungs-Prüfung kein neues Fenster trifft.
+    private var presentation = 0
+    /// Zeit, bis die App davor nach dem Schließen wieder Tastatur annimmt.
+    private let refocusDelay: Duration = .milliseconds(150)
+
     nonisolated let store: ClipboardHistoryStore
     private let monitor: ClipboardMonitor
     private let pasteService = PasteService()
@@ -35,7 +49,9 @@ final class ClipboardHistoryController {
             delete: { [weak self] entry in self?.delete(entry) },
             clearUnpinned: { [weak self] in self?.store.clear(keepPinned: true) },
             openSettings: { [weak self] in self?.openSettings() },
-            close: { [weak self] in self?.hidePanel() }
+            close: { [weak self] in self?.hidePanel() },
+            correctSelection: { [weak self] in self?.correctSelection() },
+            correctAndPaste: { [weak self] entry in self?.correctAndPaste(entry) }
         )
     }
 
@@ -129,6 +145,7 @@ final class ClipboardHistoryController {
 
         model.reset()
         model.isPresented = true
+        prepareQuickActions()
         let hosting = NSHostingView(rootView: ClipboardHistoryView(model: model))
         let panel = ClipboardPanel(contentView: hosting)
         panel.onCommand = { [weak self] command in
@@ -151,6 +168,27 @@ final class ClipboardHistoryController {
         panel.focusSearchField()
     }
 
+    var isPanelVisible: Bool { panel?.isVisible == true }
+
+    /// Knöpfe freischalten und die Markierung der App davor prüfen, abseits
+    /// des Main Threads (nur Accessibility, nie Cmd+C).
+    private func prepareQuickActions() {
+        presentation += 1
+        let available = quickActions?.isAvailable() ?? false
+        model.quickActionsAvailable = available
+        model.correctShortcutLabel = available ? quickActions?.shortcutLabel() : nil
+        model.selectionAppName = previousApp?.localizedName
+        guard available, let pid = previousApp?.processIdentifier else { return }
+        let current = presentation
+        Task { @MainActor [weak self] in
+            let probe = await Task.detached(priority: .userInitiated) {
+                SelectedContextService.probeSelection(pid: pid)
+            }.value
+            guard let self, self.presentation == current, self.isPanelVisible else { return }
+            self.model.selectionProbe = probe
+        }
+    }
+
     private func hidePanelIfNotKey() {
         if let panel, !panel.isKeyWindow { hidePanel() }
     }
@@ -163,6 +201,39 @@ final class ClipboardHistoryController {
     }
 
     // MARK: Aktionen
+
+    /// Kopfzeile: Fenster zu, dann die Markierung der App davor korrigieren
+    /// (derselbe Ablauf wie ⇧⌘K).
+    private func correctSelection() {
+        guard let quickActions else { return }
+        hidePanel()
+        let delay = refocusDelay
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            await quickActions.run(OutputMode.correctID, .selection)
+        }
+    }
+
+    /// „Korrigieren & einfügen“: Fenster zu, vollen Text laden (lange Texte
+    /// liegen in einer Datei), korrigieren und an der Schreibmarke einfügen.
+    private func correctAndPaste(_ entry: ClipboardEntry) {
+        guard let quickActions, entry.kind == .text else { return }
+        hidePanel()
+        let directory = store.directory
+        let delay = refocusDelay
+        Task { @MainActor [weak self] in
+            let text = await Task.detached(priority: .userInitiated) {
+                ClipboardHistoryStore.fullText(of: entry, directory: directory)
+            }.value
+            try? await Task.sleep(for: delay)
+            guard let text else {
+                NSSound.beep()
+                return
+            }
+            self?.store.bump(id: entry.id)
+            await quickActions.run(OutputMode.correctID, .text(text))
+        }
+    }
 
     private func togglePin(_ entry: ClipboardEntry) {
         store.setPinned(id: entry.id, pinned: !entry.isPinned)

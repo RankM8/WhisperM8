@@ -10,10 +10,9 @@ arbeitet die Markierung mit einem Modus um und ersetzt sie, ohne Aufnahme.
 ⌘Z in der Ziel-App macht es rückgängig, weil das Ersetzen ein normales Cmd+V
 ist.
 
-Entschieden von Giuliano am 05.11.2026. Später, als eigene Schritte geplant:
-Anbindung an das Zwischenablage-Fenster (⇧⌘C: Kopfzeile „Markierung
-verbessern“ und „Verbessern & einfügen“ je Eintrag) und das stille Diktat
-(Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
+Entschieden von Giuliano am 05.11.2026. Das Zwischenablage-Fenster (⇧⌘C)
+nutzt denselben Ablauf (Abschnitt unten). Noch offen als eigener Schritt: das
+stille Diktat (Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
 
 ## Für Nutzer
 
@@ -70,7 +69,7 @@ Kurzbefehl / Menüleiste
 
 | Baustein | Aufgabe |
 |---|---|
-| `QuickActionRunner` | Ablauf, Abbruch, Entscheidungen. Alle Systemzugriffe über `QuickActionEnvironment` (Closures), Anzeige über `QuickActionPresenting`. Kennt keine Kurzbefehle; die Menüleiste ruft ihn genauso auf, später das Zwischenablage-Fenster. |
+| `QuickActionRunner` | Ablauf, Abbruch, Entscheidungen. Alle Systemzugriffe über `QuickActionEnvironment` (Closures), Anzeige über `QuickActionPresenting`. Kennt keine Kurzbefehle; Menüleiste und Zwischenablage-Fenster rufen ihn genauso auf. Eingang `QuickActionInput`: Markierung oder vorgegebener Text. |
 | `RecordingCoordinator+QuickAction` | Verdrahtet den Runner mit den echten Diensten und dem Overlay. Gemeinsame Sperre mit dem Diktat (`isDictationBusy`, `quickActionRunner.isRunning`). |
 | `SelectedContextService.captureForQuickAction` | Markierung per Accessibility, sonst Cmd+C-Rückfall mit Zurücklegen. Anders als der Diktat-Kontext unabhängig vom Schalter „markierten Text als Kontext“: der Nutzer übergibt die Markierung hier ausdrücklich. Der Text bleibt unverändert. |
 | `SelectionWritability` | Nur wenn das fokussierte Element die Markierung selbst liefert, zählt sein Urteil: `writable`, wenn `AXSelectedText` oder `AXValue` setzbar ist, sonst `readOnly`. Kam der Text über den Cmd+C-Rückfall (Electron ohne volle Accessibility: Slack, VS Code, Notion), ist es `unknown`, und es wird eingefügt. Das Element bekommt wie die App 0,5 s Zeitlimit. |
@@ -98,6 +97,36 @@ Gedankenstriche, die schon in der Markierung standen, bleiben: der
 hatte (`PostProcessingService.keepsDashes`), und der Prompt sagt dem Modell
 dasselbe. Beim Diktat gilt der Filter wie bisher.
 
+## Im Zwischenablage-Fenster (⇧⌘C)
+
+Beides nutzt immer den Modus Korrigieren (Entscheidung Giuliano, 05.11.2026:
+kein Modus-Menü) und erscheint nur, wenn der Umfang Nacharbeit erlaubt.
+
+- **Kopfzeile „Markierung korrigieren“** unter dem Suchfeld. Beim Öffnen
+  fragt das Fenster die App davor per Accessibility nach ihrer Markierung
+  (`SelectedContextService.probeSelection`, abseits des Main Threads, 0,25 s
+  Zeitlimit, nie Cmd+C). Ergebnis `SelectionProbe`:
+  - `selected`: Kopfzeile mit dem Anfang der Markierung („Markiert in Mail“).
+  - `unknown` (Electron ohne volle Accessibility, kein Fokus-Element): Kopfzeile
+    ohne Vorschau („Text markiert in Slack?“). Ein Klick liest dann per
+    Cmd+C-Rückfall.
+  - `none` (App meldet ausdrücklich: nichts markiert): keine Kopfzeile.
+
+  Der Knopf schließt das Fenster und startet nach 150 ms denselben Ablauf wie
+  ⇧⌘K. Auch ⇧⌘K bei offenem Fenster schließt es erst
+  (`AppState.runQuickAction`).
+- **„Korrigieren & einfügen“** am gewählten Text-Eintrag (Knopf in der
+  Vorschau oder ⌘↩): Fenster zu, vollen Text laden (lange Texte liegen in einer
+  Datei), korrigieren und an der Schreibmarke der App davor einfügen
+  (`QuickActionInput.text`). Anders als bei einer Markierung wird auch ein
+  schon richtiger Text eingefügt, dann ohne zweiten Verlaufseintrag. Klappt das
+  Einfügen nicht, liegt das Ergebnis in der Zwischenablage. Bilder und Dateien
+  haben den Knopf nicht.
+
+Verdrahtung: `ClipboardHistoryController.quickActions` (gesetzt in
+`WhisperM8App`), Zustand im `ClipboardHistoryViewModel`
+(`quickActionsAvailable`, `selectionProbe`, `canCorrect`).
+
 ## Bewusste Grenzen
 
 - Kein Diktat-Bericht (Run-Report) für Schnellaktionen, nur die Logzeile
@@ -107,4 +136,4 @@ dasselbe. Beim Diktat gilt der Filter wie bisher.
 - Bei `unknown` und einem Feld, das Cmd+V still ignoriert, sieht man keine
   Änderung; das Ergebnis steht dann im Zwischenablage-Verlauf (⇧⌘C).
 
-Tests: `QuickActionRunnerTests`, `QuickActionModesTests`.
+Tests: `QuickActionRunnerTests`, `QuickActionModesTests`, `ClipboardQuickActionTests`.

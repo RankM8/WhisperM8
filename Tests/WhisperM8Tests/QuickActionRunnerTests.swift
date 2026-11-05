@@ -422,7 +422,7 @@ final class QuickActionModesTests: XCTestCase {
         XCTAssertFalse(dictation.text.contains("—"), "beim Diktat gilt der Filter wie bisher")
     }
 
-    func testShortcutsAreEmptyByDefaultAndOnlyOfferedForPostProcessingModes() {
+    func testShortcutsAreOnlyOfferedForPostProcessingModes() {
         XCTAssertNotNil(QuickActionShortcuts.suggestion(for: OutputMode.correctID))
         XCTAssertNotNil(QuickActionShortcuts.suggestion(for: OutputMode.rephraseID))
         XCTAssertNil(QuickActionShortcuts.suggestion(for: OutputMode.emailID))
@@ -475,5 +475,72 @@ final class QuickActionModesTests: XCTestCase {
         }
         XCTAssertNotNil(recording)
         XCTAssertNil(QuickActionShortcuts.conflict(for: nil, excluding: OutputMode.correctID, modes: modes))
+    }
+}
+
+// MARK: - Zwischenablage-Fenster: vorgegebener Text
+
+extension QuickActionRunnerTests {
+    func testEntryTextIsCorrectedAndPastedWithoutReadingTheSelection() async {
+        let log = Log()
+        let runner = makeRunner(log: log, selection: nil)
+
+        let outcome = await runner.run(modeID: OutputMode.correctID, input: .text("Das ist ein fehler."))
+
+        XCTAssertEqual(outcome, .replaced)
+        XCTAssertEqual(log.captureCalls, 0, "der Text kommt aus dem Eintrag, keine Markierung lesen")
+        XCTAssertEqual(log.reworkInputs.map(\.text), ["Das ist ein fehler."])
+        XCTAssertEqual(log.replaced, ["Das ist ein Fehler."])
+        XCTAssertEqual(log.history.first?.original, "Das ist ein fehler.")
+        XCTAssertEqual(log.seenSource, .selection)
+    }
+
+    func testUnchangedEntryIsStillPastedButNotRecordedTwice() async {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let runner = makeRunner(log: log, presenter: presenter, rework: { _, _ in PostProcessingRun(text: "Alles richtig.") })
+
+        let outcome = await runner.run(modeID: OutputMode.correctID, input: .text("Alles richtig."))
+
+        XCTAssertEqual(outcome, .unchanged)
+        XCTAssertEqual(log.replaced, ["Alles richtig."], "„Korrigieren & einfügen“ fügt auch einen schon richtigen Text ein")
+        XCTAssertTrue(log.history.isEmpty, "der Text steht schon im Verlauf")
+        XCTAssertFalse(presenter.hints.contains("Nothing to change"))
+    }
+
+    func testBlankEntryDoesNothing() async {
+        let log = Log()
+        let outcome = await makeRunner(log: log).run(modeID: OutputMode.correctID, input: .text("  \n"))
+        XCTAssertEqual(outcome, .noSelection)
+        XCTAssertTrue(log.reworkInputs.isEmpty)
+    }
+
+    func testFailedEntryPasteLeavesResultOnClipboard() async {
+        let log = Log()
+        let outcome = await makeRunner(log: log, replaceSucceeds: false)
+            .run(modeID: OutputMode.correctID, input: .text("Das ist ein fehler."))
+        XCTAssertEqual(outcome, .copiedToClipboard)
+        XCTAssertEqual(log.copied, ["Das ist ein Fehler."])
+        XCTAssertEqual(log.notices, [String(localized: "Text not inserted")])
+    }
+
+    func testEntryFailureUsesEntryWording() async {
+        struct Boom: LocalizedError { var errorDescription: String? { "kaputt" } }
+        let log = Log()
+        _ = await makeRunner(log: log, rework: { _, _ in throw Boom() })
+            .run(modeID: OutputMode.correctID, input: .text("Text"))
+        XCTAssertEqual(log.notices, [String(localized: "Text not corrected")])
+    }
+
+    func testSelectionProbeRule() {
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: false, selectedText: nil), .unknown)
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: true, selectedText: nil), .unknown, "Attribut nicht lesbar (Electron)")
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: true, selectedText: " \n"), .none)
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: true, selectedText: "  Hallo\nWelt "), .selected(preview: "Hallo Welt"))
+        let long = String(repeating: "a", count: 1_000)
+        guard case .selected(let preview) = SelectionProbe.resolve(hasFocusedElement: true, selectedText: long) else {
+            return XCTFail("erwartet: selected")
+        }
+        XCTAssertEqual(preview.count, SelectionProbe.previewLimit)
     }
 }

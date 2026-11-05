@@ -39,6 +39,10 @@ final class ClipboardHistoryViewModel: ObservableObject {
         var clearUnpinned: () -> Void = {}
         var openSettings: () -> Void = {}
         var close: () -> Void = {}
+        /// Markierung der App davor mit „Korrigieren“ umarbeiten und ersetzen.
+        var correctSelection: () -> Void = {}
+        /// Eintrag mit „Korrigieren“ umarbeiten und einfügen.
+        var correctAndPaste: (ClipboardEntry) -> Void = { _ in }
     }
 
     /// Was die Liste zeigt: alles oder nur Diktate.
@@ -87,6 +91,16 @@ final class ClipboardHistoryViewModel: ObservableObject {
     @Published private(set) var previewText = ""
     @Published private(set) var previewImage: NSImage?
 
+    /// Schnellaktion „Korrigieren“ verfügbar (Umfang erlaubt Nacharbeit).
+    @Published var quickActionsAvailable = false
+    /// Was die App davor über ihre Markierung sagt; `nil`, solange noch
+    /// geprüft wird. Steuert die Kopfzeile „Markierung korrigieren“.
+    @Published var selectionProbe: SelectionProbe?
+    /// Name der App davor, für die Kopfzeile.
+    @Published var selectionAppName: String?
+    /// Kurzbefehl von Korrigieren (etwa „⇧⌘K“), für den Hinweis am Knopf.
+    @Published var correctShortcutLabel: String?
+
     /// Nur bei offenem Fenster werden Bilder geladen.
     var isPresented = false {
         didSet {
@@ -133,6 +147,19 @@ final class ClipboardHistoryViewModel: ObservableObject {
     /// in beiden Fällen genau so, wie die Liste es zeigt.
     var showsPinnedGroup: Bool { !isSearching && visible.contains(where: \.isPinned) }
 
+    /// Kopfzeile „Markierung korrigieren“: bei gelesener Markierung mit
+    /// Vorschau, bei unklarer Lage ohne. Meldet die App ausdrücklich „nichts
+    /// markiert“, bleibt sie weg.
+    var showsSelectionHeader: Bool {
+        guard quickActionsAvailable, let selectionProbe else { return false }
+        return selectionProbe != .none
+    }
+
+    /// „Korrigieren & einfügen“ gibt es nur für Text.
+    func canCorrect(_ entry: ClipboardEntry) -> Bool {
+        quickActionsAvailable && entry.kind == .text
+    }
+
     // MARK: Laden
 
     /// Einträge samt fertigem Suchindex aus dem Store.
@@ -168,6 +195,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
     func appIcon(for entry: ClipboardEntry) -> NSImage? { loaders.appIcon(entry.sourceBundleID) }
 
     func reset() {
+        selectionProbe = nil
         query = ""
         filter = .all
         isConfirmingClear = false
@@ -373,6 +401,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
         case .moveDown: move(1)
         case .paste: if let entry = selectedEntry { actions.paste(entry, false) }
         case .pastePlain: if let entry = selectedEntry { actions.paste(entry, true) }
+        case .correctAndPaste: if let entry = selectedEntry, canCorrect(entry) { actions.correctAndPaste(entry) }
         case .quickSelect(let number): if let entry = entry(forQuickSelect: number) { actions.paste(entry, false) }
         case .togglePin: if let entry = selectedEntry { actions.togglePin(entry) }
         case .delete: if let entry = selectedEntry { deleteEntry(entry) }

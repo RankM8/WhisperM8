@@ -3721,6 +3721,16 @@
         }
       }
     },
+    "Correct & Paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigieren & einfügen"
+          }
+        }
+      }
+    },
     "Correct Selection": {
       "localizations": {
         "de": {
@@ -5087,6 +5097,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertige Diktate erscheinen hier."
+          }
+        }
+      }
+    },
+    "Fix spelling and grammar of the selection and replace it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechtschreibung und Grammatik der Markierung korrigieren und sie ersetzen"
+          }
+        }
+      }
+    },
+    "Fix spelling and grammar of the selection and replace it (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechtschreibung und Grammatik der Markierung korrigieren und sie ersetzen (%@)"
+          }
+        }
+      }
+    },
+    "Fix spelling and grammar, then paste (⌘↩)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechtschreibung und Grammatik korrigieren, dann einfügen (⌘↩)"
           }
         }
       }
@@ -11224,6 +11264,16 @@
         }
       }
     },
+    "Selected in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markiert in %@"
+          }
+        }
+      }
+    },
     "Selected text is used as context when WhisperM8 can capture it.": {
       "localizations": {
         "de": {
@@ -13104,12 +13154,32 @@
         }
       }
     },
+    "Text not corrected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text nicht korrigiert"
+          }
+        }
+      }
+    },
     "Text not inserted": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Text nicht eingefügt"
+          }
+        }
+      }
+    },
+    "Text selected in %@?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text markiert in %@?"
           }
         }
       }
@@ -14984,6 +15054,16 @@
         }
       }
     },
+    "WhisperM8 can't see it from here. Click and it gets copied and corrected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 sieht sie von hier aus nicht. Ein Klick kopiert und korrigiert sie."
+          }
+        }
+      }
+    },
     "WhisperM8 cannot show agent notifications until macOS allows them.": {
       "localizations": {
         "de": {
@@ -15980,6 +16060,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ziel hat bereits ein Transcript mit dieser ID"
+          }
+        }
+      }
+    },
+    "the app": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "der App"
           }
         }
       }

@@ -16,6 +16,8 @@ enum ClipboardKeyCommand: Equatable {
     case moveDown
     case paste
     case pastePlain
+    /// ⌘↩: Eintrag mit „Korrigieren“ umarbeiten und einfügen.
+    case correctAndPaste
     case quickSelect(Int)
     case togglePin
     case delete
@@ -35,6 +37,7 @@ enum ClipboardKeyCommand: Equatable {
         case 36, 76:
             if flags.isEmpty { return .paste }
             if flags == .option { return .pastePlain }
+            if flags == .command { return .correctAndPaste }
             return nil
         case 51 where flags == .command: return .delete
         default: break
