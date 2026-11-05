@@ -74,6 +74,42 @@ struct ClipboardSearchIndex: Sendable, Equatable {
         return String(decoding: utf8[..<headEnd], as: UTF8.self) + "\n" + String(decoding: utf8[tailStart...], as: UTF8.self)
     }
 
+    /// Wie `excerpt`, aber die Schnitte landen an einem Trennzeichen (Leerraum,
+    /// Anführungszeichen, Komma …). Für Text, der danach maskiert wird (CLI-Suche):
+    /// Ein mitten im Schlüssel abgeschnittenes Stück erkennt der Maskierer oft nicht
+    /// mehr. Gesucht wird höchstens `searchWindow` Bytes weit; ohne Trennzeichen
+    /// (lange Base64-Kette) bleibt der harte Schnitt, die Token-Regel fängt solche
+    /// Ketten auch als Bruchstück.
+    static func wordBoundaryExcerpt(_ text: String, head: Int, tail: Int, searchWindow: Int = 1024) -> String {
+        let utf8 = text.utf8
+        guard utf8.count > head + tail else { return text }
+        func isSeparator(_ byte: UInt8) -> Bool {
+            switch byte {
+            case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x80...0xFF: return false
+            case UInt8(ascii: "_"), UInt8(ascii: "-"), UInt8(ascii: "+"), UInt8(ascii: "="),
+                 UInt8(ascii: "/"), UInt8(ascii: "."), UInt8(ascii: "~"): return false
+            default: return true
+            }
+        }
+        let hardHeadEnd = utf8.index(utf8.startIndex, offsetBy: head)
+        var headEnd = hardHeadEnd
+        var steps = 0
+        while steps < searchWindow, headEnd > utf8.startIndex, !isSeparator(utf8[utf8.index(before: headEnd)]) {
+            headEnd = utf8.index(before: headEnd)
+            steps += 1
+        }
+        if steps == searchWindow { headEnd = hardHeadEnd }
+        let hardTailStart = utf8.index(utf8.endIndex, offsetBy: -tail)
+        var tailStart = hardTailStart
+        steps = 0
+        while steps < searchWindow, tailStart < utf8.endIndex, !isSeparator(utf8[tailStart]) {
+            tailStart = utf8.index(after: tailStart)
+            steps += 1
+        }
+        if steps == searchWindow { tailStart = hardTailStart }
+        return String(decoding: utf8[..<headEnd], as: UTF8.self) + "\n" + String(decoding: utf8[tailStart...], as: UTF8.self)
+    }
+
     /// Gefalteter Suchtext eines Eintrags: Inhalt plus Name der Herkunfts-App.
     static func haystack(for entry: ClipboardEntry, fullText: String?, limits: Limits = Limits()) -> [UInt8] {
         var parts: [String] = []

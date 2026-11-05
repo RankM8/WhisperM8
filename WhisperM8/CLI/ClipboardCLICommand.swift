@@ -360,17 +360,24 @@ enum ClipboardCLIRunner {
             let rows = ordered.prefix(limit).enumerated().map { (number: $0 + 1, entry: $1) }
             return Output(exitCode: ChatsCLIExit.ok, stdout: ClipboardCLIFormatter.listing(rows, json: json, context: context))
         case .search(let query, let limit, let json):
-            // Gesucht wird im maskierten Text: die Suche verrät kein Geheimnis Zeichen für Zeichen.
             // Suchtext komplett aus maskiertem Text (Inhalt, Original, Herkunft),
             // sonst ließe sich ein Geheimnis per Suche Zeichen für Zeichen erraten.
+            // Lange Texte zählen wie im Fenster nur mit Anfang und Ende: Die Maskierung
+            // läuft sonst bei jedem Aufruf über jedes Megabyte-Log (Zeitlimit im Plugin).
+            let limits = ClipboardSearchIndex.Limits()
             let found = ClipboardHistoryCore.search(entries, query: query) { (entry: ClipboardEntry) -> [UInt8] in
                 var parts: [String] = []
                 switch entry.kind {
-                case .text: parts.append(env.fullText(entry) ?? entry.preview)
+                case .text:
+                    parts.append(ClipboardSearchIndex.wordBoundaryExcerpt(
+                        env.fullText(entry) ?? entry.preview, head: limits.headBytes, tail: limits.tailBytes))
                 case .image: parts.append(entry.preview)
                 case .files: parts.append(contentsOf: entry.filePaths ?? []); parts.append(entry.preview)
                 }
-                if let original = entry.dictationOriginal { parts.append(original) }
+                if let original = entry.dictationOriginal {
+                    parts.append(ClipboardSearchIndex.wordBoundaryExcerpt(
+                        original, head: limits.headBytes, tail: limits.tailBytes))
+                }
                 if let name = entry.sourceName { parts.append(name) }
                 let text = parts.joined(separator: "\n")
                 let searchable = settings.maskSecrets ? ClipboardSecretMasker.mask(text).text : text

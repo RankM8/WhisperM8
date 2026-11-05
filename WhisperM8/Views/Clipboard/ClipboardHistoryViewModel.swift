@@ -274,6 +274,9 @@ final class ClipboardHistoryViewModel: ObservableObject {
                 previewText = text
             } else {
                 previewText = entry.preview
+                // Lange Texte liegen in einer Datei: nur bei offenem Fenster lesen,
+                // nicht bei jeder neuen Kopie im Hintergrund (Öffnen lädt neu).
+                guard isPresented else { return }
                 let loader = loaders.fullText
                 previewTask = Task { [weak self] in
                     let full = await Task.detached(priority: .userInitiated) { loader(entry) }.value

@@ -51,6 +51,8 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     private var search: ClipboardSearchIndex
     private var loaded = false
     private var flushPending = false
+    /// Dateien, die erst nach dem nächsten Schreiben des Index weg dürfen.
+    private var pendingBlobRemovals: [String] = []
     private var onChange: (@Sendable (ClipboardHistoryState) -> Void)?
 
     init(directory: URL = ClipboardHistoryStore.defaultDirectory(), limits: Limits = Limits(), debounceSeconds: Double = 0.6) {
@@ -106,6 +108,18 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         }
     }
 
+    /// Anzahl der Einträge nach allen wartenden Änderungen, ohne den Aufrufer
+    /// zu blockieren. Lädt den Verlauf, falls nötig: nur aufrufen, wenn er
+    /// ohnehin geladen ist (sonst `loadIndex(directory:)` zählen).
+    func loadedCount() async -> Int {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                loadIfNeeded()
+                continuation.resume(returning: entries.count)
+            }
+        }
+    }
+
     /// Wartet auf die Queue: nur für Tests und Werkzeuge, nie auf dem Main Thread der App.
     func snapshot() -> [ClipboardEntry] {
         queue.sync {
@@ -133,9 +147,13 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             made.entry.blobBytes = blobBytes(of: made.entry)
             let inserted = ClipboardHistoryCore.insert(made.entry, into: entries)
             entries = inserted.entries
-            for file in inserted.discardedBlobs { removeBlob(file) }
+            // Alte Dateien eines Duplikats nennt der Index auf der Platte noch,
+            // bis er neu geschrieben ist: erst danach löschen. Sonst fände die CLI
+            // in der Zwischenzeit nichts, und nach einem Absturz räumte das Laden
+            // die neuen Dateien als Waisen weg.
+            pendingBlobRemovals.append(contentsOf: inserted.discardedBlobs)
             if inserted.merged {
-                // Herkunfts-App kann sich geändert haben; der Inhalt nicht.
+                // Herkunfts-App und Dateien (lange Texte) können sich geändert haben.
                 if let existing = entries.first { search.set(existing, fullText: fullText(of: existing)) }
             } else {
                 search.set(made.entry, fullText: made.fullText)
@@ -269,7 +287,10 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         encoder.outputFormatting = [.sortedKeys]
         guard let data = try? encoder.encode(IndexFile(schema: Self.schema, entries: entries)) else { return }
         let url = directory.appendingPathComponent(Self.indexFileName)
-        writeFile(data, to: url)
+        guard writeFile(data, to: url), !pendingBlobRemovals.isEmpty else { return }
+        let referenced = Set(entries.flatMap(\.blobFiles))
+        for file in pendingBlobRemovals where !referenced.contains(file) { removeBlob(file) }
+        pendingBlobRemovals.removeAll()
     }
 
     /// Atomar (Temp-Datei + rename) und mit 0600 von Anfang an.
@@ -350,14 +371,18 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         "NSStringPboardType", ClipboardInternalMarker.typeName,
     ]
 
-    static func needsArchive(_ archive: ClipboardArchive?) -> Bool {
+    /// `keepsImage`: Ein Text-Eintrag kann ein Bild nur über das Archiv
+    /// zurückbringen; liegt neben dem Text ein Bild, braucht es deshalb immer eins.
+    static func needsArchive(_ archive: ClipboardArchive?, keepsImage: Bool = false) -> Bool {
         guard let archive else { return false }
         if archive.items.count > 1 { return true }
-        return archive.items.first?.contains { !basicTypes.contains($0.type) } ?? false
+        let types = archive.items.first ?? []
+        if keepsImage, types.contains(where: { $0.type == "public.png" || $0.type == "public.tiff" }) { return true }
+        return types.contains { !basicTypes.contains($0.type) }
     }
 
-    private func storeArchive(_ capture: ClipboardCapture, id: String, into entry: inout ClipboardEntry) {
-        guard Self.needsArchive(capture.archive), let data = capture.archive?.encoded() else { return }
+    private func storeArchive(_ capture: ClipboardCapture, id: String, into entry: inout ClipboardEntry, keepsImage: Bool = false) {
+        guard Self.needsArchive(capture.archive, keepsImage: keepsImage), let data = capture.archive?.encoded() else { return }
         ensureDirectory()
         let file = "\(id).pasteboard"
         if writeFile(data, to: directory.appendingPathComponent(file)) { entry.archiveFile = file }
@@ -373,8 +398,9 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         entry.dictationMode = capture.dictationMode
         entry.dictationOriginal = capture.dictationOriginal
 
-        // Dateien vor Bild vor Text: Finder liefert beim Kopieren einer Datei
-        // auch ihren Namen als Text und ein Symbolbild.
+        // Dateien vor Text vor Bild: Finder liefert beim Kopieren einer Datei
+        // auch ihren Namen als Text und ein Symbolbild. Ein Bild neben Text wird
+        // ein Text-Eintrag; das Bild bleibt im Archiv und kommt beim Einfügen mit.
         if !capture.filePaths.isEmpty {
             entry.kind = .files
             entry.filePaths = capture.filePaths
@@ -419,7 +445,7 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             entry.textFile = file
         }
         // Mit Archiv (Tabelle mit Bild, App-Formate) liegt RTF und HTML schon darin.
-        storeArchive(capture, id: id, into: &entry)
+        storeArchive(capture, id: id, into: &entry, keepsImage: capture.imageData != nil)
         if entry.archiveFile == nil {
             if let rtf = capture.rtf, rtf.count <= limits.maxRichBytes {
                 ensureDirectory()

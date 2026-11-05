@@ -60,10 +60,23 @@ die Zwischenablage.
   vollständig zurück, ⌥Enter nur den Text.
 - Bilder (PNG; TIFF wird nach PNG gewandelt, Limit 12 MB als PNG). Beim
   Einfügen ohne Archiv kommen PNG und TIFF in die Zwischenablage.
+- Vorrang: Dateien vor Text vor Bild. Liegt neben dem Text ein Bild (etwa
+  Dateiname oder Alt-Text plus PNG), wird es ein Text-Eintrag, der immer ein
+  Archiv bekommt; so kommt das Bild beim Einfügen mit.
 - Datei-URLs (nur die Pfade, die Dateien selbst werden nicht kopiert).
 - Herkunfts-App (`frontmostApplication` beim Kopieren), Zeitpunkt, Kopierzähler,
-  Zeichenzahl.
+  Zeichenzahl. Ausnahme: Kopiert das Verlaufsfenster selbst (⌘C oder „Copy“
+  in der Vorschau), zählt genau dieser Stand als WhisperM8; das Fenster
+  aktiviert die App nicht, vorn bliebe sonst die App davor. Erkannt wird das
+  am `changeCount`, der sich während eines Tasten- oder Klick-Ereignisses im
+  Panel ändert. Was andere Apps schreiben, während das Fenster offen ist
+  (Hintergrund-Apps, Universal Clipboard), behält die vordere App als
+  Herkunft, die Ausschlussliste greift also weiter.
 - Duplikate: derselbe Inhalt erneut kopiert wandert nach oben, Pin und ID bleiben.
+  Erkannt wird am reinen Text; RTF, HTML und Archiv kommen von der neuesten
+  Kopie. Die alten Dateien werden erst gelöscht, wenn der Index ohne sie auf
+  der Platte steht (die CLI liest bis dahin noch den alten Index; ein Absturz
+  davor ließe sonst nur die Vorschau übrig).
 
 Gelesen wird die Zwischenablage im Hintergrund mit Zeitlimit von 3 s
 (`ClipboardPasteboardReader`), weil große Bilder und lazy gelieferte Formate
@@ -87,6 +100,11 @@ kein Dateizugriff und kein Falten langer Texte.
 - Gesamtbudget 64 MB: wird es überschritten, bekommen die ältesten langen
   Einträge nur noch Anfang und Ende je 32 KB.
 - Gesucht wird auch im Namen der Herkunfts-App und in Dateipfaden.
+- Die CLI-Suche (`whisperm8 clipboard search`) nimmt dieselben Grenzen
+  (Anfang und Ende je 256 KB), geschnitten an einem Trennzeichen, damit kein
+  halber Schlüssel an der Schnittkante der Maskierung entgeht. Erst danach
+  wird maskiert; vorher lief die Maskierung bei jedem Aufruf über jeden vollen
+  Text und konnte das Zeitlimit des Plugins (15 s) reißen.
 
 ## Diktate im Verlauf
 
@@ -279,6 +297,11 @@ Passwort-Manager als aufklappbare Zeile, eigene einzeln mit Entfernen,
 Hinzufügen per Bundle-ID oder aus laufenden Apps, Zurücksetzen), Agents-Zugriff,
 Geheimnisse maskieren, Hinweis zu Maccy.
 
+Die Zahl gespeicherter Einträge zählt die Seite abseits des Main Threads:
+bei laufendem Verlauf über die Store-Queue (nach allen wartenden Änderungen),
+bei abgeschaltetem nur den Index auf der Platte. Der Verlauf wird dafür nicht
+in den Speicher geladen.
+
 Die Schlüssel stehen in `ClipboardPreferenceKeys` (nicht in `PreferenceKeys`):
 `clipboardHistoryEnabled`, `…Paused`, `…MaxItems`, `…AutoPaste`,
 `…WindowPosition`, `…ExcludedApps` (JSON-Liste), `…AgentAccess`,
@@ -304,8 +327,8 @@ Leerlauf ein Zahlenvergleich. Bei einer Änderung prüft der Main Thread nur
 Typen und Herkunft; Lesen, Bildumwandlung, Hashen, Suchindex und Schreiben
 laufen im Hintergrund bzw. auf der Store-Queue. Das Fenster liest keine
 Dateien in Bodys: Miniaturen (verkleinert auf 96 px über `CGImageSource`) und
-Vorschau (1200 px) lädt das ViewModel abseits des Main Threads und nur bei
-offenem Fenster; die Liste wird nur bei geänderter Suche oder geänderten
+Vorschau (1200 px, bei langen Texten der Anfang aus der Datei) lädt das
+ViewModel abseits des Main Threads und nur bei offenem Fenster; die Liste wird nur bei geänderter Suche oder geänderten
 Einträgen neu berechnet. Keine Dauerbewegung, kein Hover-only-UI.
 
 ## Zentrale Dateien

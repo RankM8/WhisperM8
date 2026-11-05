@@ -46,7 +46,11 @@ enum ClipboardSecretMasker {
         // .env-Zeilen: OPENAI_API_KEY=…, DB_PASSWORD="…", export GITHUB_TOKEN=…
         rule("env-secret", #"(?m)^[ \t]*(?:export[ \t]+)?[A-Za-z0-9_]*(?i:PASSWORD|PASSWD|PASSPHRASE|SECRET|TOKEN|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIALS?)[A-Za-z0-9_]*[ \t]*=[ \t]*["']?([^\s"'#]{4,})"#, group: 1, validate: isSecretValue),
         // password=…, token: …, api_key = …, "client_secret": "…" (Wert ab sechs Zeichen).
-        rule("secret", #"(?i)(?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:password|passwd|passphrase|passwort|kennwort|secret|token|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1, validate: isSecretValue),
+        // Angesetzt wird nur am Anfang einer Bezeichner-Kette, mit höchstens 64 Zeichen
+        // vor dem Schlüsselwort. Vorher setzte die Regel nach jedem `_` oder `-` neu an
+        // und lief bis zum Ende der Kette: quadratisch, Sekunden bis Minuten bei langen
+        // Ketten. Längere Präfixe in `.env`-Zeilen fängt `env-secret`.
+        rule("secret", #"(?i)(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{0,64}(?:password|passwd|passphrase|passwort|kennwort|secret|token|api[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?([^\s"',;]{6,})"#, group: 1, validate: isSecretValue),
         // Gesprochen oder geschrieben: „das Passwort ist Sommer2024“, „Kennwort lautet …“,
         // „meine PIN ist 4711“, „the password is …“. Auch reine Zahlen (PIN) zählen.
         rule("spoken-secret", #"(?i)\b(?:passwort|kennwort|password|passcode|passphrase|pin|pin-code|pincode|geheimzahl|zugangscode)\b[ \t]*(?:ist|lautet|wäre|heißt|is)[ \t]+(?:(?:der|die|das|einfach|nur|just)[ \t]+)?["„'‚]?([^\s"“'‘,;]{3,})"#, group: 1, validate: { value in

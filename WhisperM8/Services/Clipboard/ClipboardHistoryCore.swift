@@ -57,9 +57,10 @@ enum ClipboardHistoryCore {
 
     /// Fügt `entry` oben ein. Gibt es den Inhalt schon, wandert der alte
     /// Eintrag nach oben (Pin, ID und erste Kopierzeit bleiben, die Zähler
-    /// laufen weiter) und `entry` wird verworfen.
-    /// `replacedBlobs` nennt Dateien des verworfenen neuen Eintrags, die nicht
-    /// gebraucht werden.
+    /// laufen weiter). Die Dateien (RTF, HTML, Archiv, Bild) kommen vom neuen
+    /// Eintrag: Gleich ist nur der reine Text, die Formatierung kann sich
+    /// unterscheiden, und eingefügt werden soll, was zuletzt kopiert wurde.
+    /// `discardedBlobs` nennt die alten Dateien, die nicht mehr gebraucht werden.
     static func insert(
         _ entry: ClipboardEntry,
         into entries: [ClipboardEntry]
@@ -79,9 +80,22 @@ enum ClipboardHistoryCore {
                 existing.dictationMode = entry.dictationMode
                 existing.dictationOriginal = entry.dictationOriginal ?? existing.dictationOriginal
             }
+            let oldBlobs = existing.blobFiles
+            existing.text = entry.text
+            existing.textFile = entry.textFile
+            existing.rtfFile = entry.rtfFile
+            existing.htmlFile = entry.htmlFile
+            existing.imageFile = entry.imageFile
+            existing.archiveFile = entry.archiveFile
+            existing.charCount = entry.charCount
+            existing.imageWidth = entry.imageWidth
+            existing.imageHeight = entry.imageHeight
+            existing.imageBytes = entry.imageBytes
+            existing.blobBytes = entry.blobBytes
+            existing.preview = entry.preview
+            if entry.filePaths != nil { existing.filePaths = entry.filePaths }
             list.insert(existing, at: 0)
-            // Blob-Dateien des neuen Eintrags wären Dubletten der vorhandenen.
-            return (list, true, entry.blobFiles.filter { !existing.blobFiles.contains($0) })
+            return (list, true, oldBlobs.filter { !existing.blobFiles.contains($0) })
         }
         list.insert(entry, at: 0)
         return (list, false, [])

@@ -186,6 +186,14 @@ final class ClipboardMonitor {
     /// Wie oft eine Änderung übergangen wurde (Tests, Diagnose).
     private(set) var skippedCount = 0
 
+    /// Herkunft für einen Stand (`changeCount`), den ein eigenes Fenster selbst
+    /// geschrieben hat, das die App davor vorn lässt (Verlaufsfenster, nicht
+    /// aktivierend). Sonst gälte ⌘C in der Vorschau als Kopie aus der App davor,
+    /// und wäre die ausgeschlossen, fiele die Kopie ganz weg. Nur für genau diesen
+    /// Stand: was andere Apps schreiben, während das Fenster offen ist, behält
+    /// die vordere App als Herkunft (Ausschlussliste greift). `nil`: die vordere App.
+    var ownWindowSource: (@MainActor (_ changeCount: Int) -> (bundleID: String?, name: String?)?)?
+
     init(
         store: ClipboardHistoryStore,
         pasteboard: NSPasteboard = .general,
@@ -240,7 +248,7 @@ final class ClipboardMonitor {
         }
         let current = settings()
         let types = pasteboard.types?.map(\.rawValue) ?? []
-        let source = frontmostApp()
+        let source = ownWindowSource?(count) ?? frontmostApp()
         let decision = ClipboardHistoryCore.decide(
             enabled: current.enabled, paused: current.paused, isInternalWrite: false,
             types: types, sourceBundleID: source.bundleID,

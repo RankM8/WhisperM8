@@ -8,6 +8,9 @@ final class ClipboardPanel: NSPanel {
     /// Große Bildansicht offen: Tasten gehen nicht ans Suchfeld.
     var isImageZoomed: () -> Bool = { false }
     var onResignKey: (() -> Void)?
+    /// Die Zwischenablage hat sich geändert, während das Panel ein Ereignis
+    /// abgearbeitet hat (⌘C, „Copy“ im Kontextmenü): das Panel hat selbst kopiert.
+    var onPasteboardWritten: ((Int) -> Void)?
 
     init(contentView: NSView) {
         super.init(
@@ -55,8 +58,17 @@ final class ClipboardPanel: NSPanel {
            onCommand?(command) == true {
             return
         }
+        // Kopieren läuft synchron im Ereignis (auch das Kontextmenü, das seine
+        // eigene Schleife innerhalb des Mausklicks dreht). Nur Tasten und Klicks
+        // prüfen, nicht jede Mausbewegung.
+        guard Self.mayCopy.contains(event.type) else { return super.sendEvent(event) }
+        let before = NSPasteboard.general.changeCount
         super.sendEvent(event)
+        let after = NSPasteboard.general.changeCount
+        if after != before { onPasteboardWritten?(after) }
     }
+
+    private static let mayCopy: Set<NSEvent.EventType> = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
 
     /// Fokus ins Suchfeld, auch wenn `@FocusState` beim ersten Zeigen zu früh
     /// kam (das Panel war da noch nicht Key-Fenster).

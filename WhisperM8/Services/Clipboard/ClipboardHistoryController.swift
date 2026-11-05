@@ -30,6 +30,9 @@ final class ClipboardHistoryController {
     private let pasteService = PasteService()
     private let model = ClipboardHistoryViewModel()
     private var panel: ClipboardPanel?
+    /// Stand der Zwischenablage, den das Verlaufsfenster selbst geschrieben hat
+    /// (⌘C oder „Copy“ in der Vorschau). Nur dieser zählt als Kopie aus WhisperM8.
+    private var panelCopiedChangeCount: Int?
     private var previousApp: NSRunningApplication?
     /// Letzter Stand des Stores auf dem Main Thread; Fenster, Einstellungen und
     /// Control-Socket lesen hier, ohne auf die Store-Queue zu warten.
@@ -53,6 +56,11 @@ final class ClipboardHistoryController {
             correctSelection: { [weak self] in self?.correctSelection() },
             correctAndPaste: { [weak self] entry in self?.correctAndPaste(entry) }
         )
+        monitor.ownWindowSource = { [weak self] count in
+            guard let self, self.panelCopiedChangeCount == count else { return nil }
+            let app = NSRunningApplication.current
+            return (app.bundleIdentifier, app.localizedName)
+        }
     }
 
     // MARK: Lebenszyklus
@@ -85,6 +93,20 @@ final class ClipboardHistoryController {
                 }
             }
         }
+    }
+
+    /// Anzahl gespeicherter Einträge für die Einstellungen. Ist der Verlauf
+    /// geladen, zählt der Store nach allen wartenden Änderungen (der Stand auf
+    /// dem Main Thread kann direkt nach dem Laden noch leer sein). Sonst (Schalter
+    /// aus) nur den Index von der Platte zählen: kein Laden in den Speicher,
+    /// kein Suchindex, der bis zum Beenden bliebe.
+    func storedEntryCount() async -> Int {
+        let store = store
+        if observing { return await store.loadedCount() }
+        let directory = store.directory
+        return await Task.detached(priority: .utility) {
+            ClipboardHistoryStore.loadIndex(directory: directory).count
+        }.value
     }
 
     /// Fertiges Diktat in den Verlauf. Der Monitor übergeht den Schreibvorgang
@@ -153,6 +175,7 @@ final class ClipboardHistoryController {
             return true
         }
         panel.isImageZoomed = { [weak self] in self?.model.isZoomed ?? false }
+        panel.onPasteboardWritten = { [weak self] count in self?.panelCopiedChangeCount = count }
         panel.onResignKey = { [weak self] in
             // Klick daneben: schließen. Beim Einfügen schließt `paste` selbst.
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.hidePanelIfNotKey() } }

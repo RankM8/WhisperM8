@@ -83,7 +83,9 @@ final class ClipboardHistoryCoreTests: XCTestCase {
         XCTAssertEqual(merged.createdAt, Date(timeIntervalSince1970: 10))
         XCTAssertEqual(merged.lastCopiedAt, Date(timeIntervalSince1970: 30))
         XCTAssertEqual(merged.sourceName, "Xcode")
-        XCTAssertEqual(result.discardedBlobs, ["n.rtf"])
+        // Formatierung kommt von der neuesten Kopie; der alte Eintrag hatte keine Dateien.
+        XCTAssertEqual(merged.rtfFile, "n.rtf")
+        XCTAssertEqual(result.discardedBlobs, [])
     }
 
     func testSameHashButOtherKindIsNotADuplicate() {

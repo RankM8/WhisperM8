@@ -124,14 +124,14 @@ extension UISnapshotGallery {
                 storage: [ClipboardPreferenceKeys.enabled: true]
             ) {
                 AnyView(ClipboardSettingsPage(dependencies: ClipboardSettingsDependencies(
-                    entryCount: { 137 },
+                    entryCount: { $0(137) },
                     clearHistory: {},
                     runningApps: { [ClipboardRunningApp(bundleID: "com.apple.Safari", name: "Safari")] }
                 )))
             },
             Fixture(name: "clipboard-einstellungen-aus", size: CGSize(width: 700, height: 1000)) {
                 AnyView(ClipboardSettingsPage(dependencies: ClipboardSettingsDependencies(
-                    entryCount: { 0 }, clearHistory: {}, runningApps: { [] }
+                    entryCount: { $0(0) }, clearHistory: {}, runningApps: { [] }
                 )))
             },
         ]

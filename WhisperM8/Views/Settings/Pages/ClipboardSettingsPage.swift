@@ -4,15 +4,16 @@ import SwiftUI
 /// Was die Seite von außen braucht: Anzahl, Leeren, laufende Apps. Snapshots
 /// und Tests setzen eigene Werte; `.live` greift auf Store und Workspace zu.
 struct ClipboardSettingsDependencies {
-    var entryCount: @MainActor () -> Int
+    /// Liefert die Anzahl über `deliver`, sobald sie feststeht (live: abseits
+    /// des Main Threads gezählt; Snapshots liefern sofort).
+    var entryCount: @MainActor (_ deliver: @escaping @MainActor (Int) -> Void) -> Void
     var clearHistory: @MainActor () -> Void
     var runningApps: () -> [ClipboardRunningApp]
 
-    /// Anzahl aus dem Stand des Controllers: kein Warten auf die Store-Queue.
+    /// Zählt, ohne den Verlauf bei abgeschaltetem Schalter zu laden.
     static let live = ClipboardSettingsDependencies(
-        entryCount: {
-            ClipboardHistoryController.shared.ensureLoaded()
-            return ClipboardHistoryController.shared.entries.count
+        entryCount: { deliver in
+            Task { @MainActor in deliver(await ClipboardHistoryController.shared.storedEntryCount()) }
         },
         clearHistory: { ClipboardHistoryController.shared.store.clear(keepPinned: false) },
         runningApps: {
@@ -184,7 +185,7 @@ struct ClipboardSettingsPage: View {
             }
         }
         .onAppear {
-            entryCount = dependencies.entryCount()
+            dependencies.entryCount { entryCount = $0 }
             runningApps = dependencies.runningApps()
         }
         .confirmationDialog("Clear the clipboard history?", isPresented: $confirmClear) {
