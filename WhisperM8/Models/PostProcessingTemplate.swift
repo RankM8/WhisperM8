@@ -154,6 +154,8 @@ extension PostProcessingTemplate {
 
     static let cleanID = "template.clean"
     static let techCleanID = "template.tech-clean"
+    static let correctID = "template.correct"
+    static let rephraseID = "template.rephrase"
     static let promptFastID = "template.prompt-fast"
     static let promptID = "template.prompt"
     static let promptPlusID = "template.prompt-plus"
@@ -242,6 +244,67 @@ extension PostProcessingTemplate {
 
                 Visual context:
                 {visualContextSummary}
+
+                Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: correctID,
+                name: "Correct",
+                description: "Fixes spelling, grammar and punctuation only. Wording, tone and language stay as they are. With selected text, the selection is corrected and what you say is an extra instruction.",
+                instruction: """
+                Proofread a text.
+
+                Which text:
+                - If "Selected text" below is not empty, that is the text to correct. The "Transcript" is then what the user said about it: an extra instruction to follow (for example "and make it a bit more formal"). If the transcript is empty or only filler, just correct the selected text.
+                - If "Selected text" is empty, correct the "Transcript" itself.
+
+                Rules:
+                - Output only the corrected text, nothing else.
+                - Do not explain your changes.
+                - Fix spelling, grammar, punctuation, and capitalization. Change nothing else unless the user's extra instruction asks for it.
+                - Keep the wording, word order, tone, and level of formality. Do not rephrase sentences that are already correct.
+                - Keep the language of the text. Never translate unless asked. Keep German, English, and Denglisch mixed as they are.
+                - Keep line breaks, paragraphs, lists, Markdown, links, code, names, and emojis.
+                - If the text is already correct, return it unchanged.
+
+                Selected text:
+                {selectedContext}
+
+                Transcript:
+                {rawTranscript}
+                """,
+                createdAt: referenceDate,
+                updatedAt: referenceDate,
+                isBuiltIn: true
+            ),
+            PostProcessingTemplate(
+                id: rephraseID,
+                name: "Rephrase",
+                description: "Makes the text clearer and smoother. Same message, same language. With selected text, the selection is rewritten and what you say is an extra instruction.",
+                instruction: """
+                Rewrite a text so it reads clearer and more fluently.
+
+                Which text:
+                - If "Selected text" below is not empty, that is the text to rewrite. The "Transcript" is then what the user said about it: an extra instruction to follow (for example "shorter" or "friendlier"). If the transcript is empty or only filler, just rewrite the selected text.
+                - If "Selected text" is empty, rewrite the "Transcript" itself.
+
+                Rules:
+                - Output only the rewritten text, nothing else.
+                - Do not explain your changes.
+                - Keep the message, every fact, and the intent. Do not add, drop, or invent content.
+                - Keep the language of the text. Never translate unless asked. Keep technical terms and Denglisch where they are natural.
+                - Keep the tone and the form of address (du or Sie) unless the user's extra instruction asks otherwise.
+                - Keep roughly the same length. Shorten only filler and repetition.
+                - Fix spelling, grammar, and punctuation along the way.
+                - Keep paragraphs, lists, Markdown, links, code, and names.
+
+                Selected text:
+                {selectedContext}
 
                 Transcript:
                 {rawTranscript}

@@ -236,6 +236,18 @@ struct VisualManifestBuilder {
     }
 }
 
+/// Woher der Text der Nacharbeit kommt. Die Schnellaktion setzt `.selection`
+/// als Task-Local, damit beide Wege (GPT-Backend und Codex-CLI) denselben
+/// Hinweis im Prompt bekommen, ohne dass sich die Schnittstelle ändert.
+enum PostProcessingInputSource: String, Equatable, Sendable {
+    /// Gesprochenes Diktat (Transkript).
+    case dictation
+    /// In einer App markierter Text, per Kurzbefehl ohne Diktat umgearbeitet.
+    case selection
+
+    @TaskLocal static var current: PostProcessingInputSource = .dictation
+}
+
 struct PromptPackage {
     var prompt: String
     var intent: ReplyIntentKind
@@ -270,6 +282,7 @@ struct PromptPackageBuilder {
 
         let prompt = [
             globalContract(intent: intent, mode: mode),
+            inputSourceBlock(PostProcessingInputSource.current),
             agentChatContextBlock(contextBundle: contextBundle),
             visualContextBlock(contextBundle: contextBundle, visualManifest: visualManifest),
             "## Mode Instruction\n\(modeInstruction)"
@@ -306,6 +319,21 @@ struct PromptPackageBuilder {
             lines.append(tail)
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Nur bei der Schnellaktion: Das „Transkript“ ist markierter, getippter
+    /// Text, und das Ergebnis ersetzt die Markierung.
+    func inputSourceBlock(_ source: PostProcessingInputSource) -> String? {
+        guard source == .selection else { return nil }
+        return """
+        ## Input Source
+        - The user selected this text in another app and pressed a shortcut. Nothing was dictated.
+        - The selected text is passed where the mode instruction says "transcript", "user instruction", or "spoken". Treat it as the text to work on. Any "Selected text" or context field stays empty in this case.
+        - Your output replaces the selection in place. Return only the replacement text, with no preface, quotes, or code fences around it.
+        - Do not reply to the text or comment on it unless the mode instruction asks for a reply.
+        - Keep the language of the selected text unless the mode instruction or the text itself asks for a different one.
+        - Dashes (— or –) that are already in the selected text belong to the user. Keep them; do not add new ones.
+        """
     }
 
     private func globalContract(intent: ReplyIntentKind, mode: OutputMode) -> String {

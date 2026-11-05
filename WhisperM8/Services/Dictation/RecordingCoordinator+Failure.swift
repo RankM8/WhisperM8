@@ -132,7 +132,8 @@ extension RecordingCoordinator {
     /// aktuellen Einstellungen — so hilft der Retry auch nach einer
     /// korrigierten API-Key-Eingabe.
     func retryLastPreservedRecording() async {
-        guard let appState, !appState.isRecording, !appState.isTranscribing else { return }
+        guard let appState, !appState.isRecording, !appState.isTranscribing,
+              !quickActionRunner.isRunning else { return }
 
         if let pending = pendingRetry,
            FileManager.default.fileExists(atPath: pending.recording.audioURL.path) {

@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-07-09
+updated: 2026-11-05
 ---
 
 # Dictation — Landkarte der Diktat-Säule
@@ -60,6 +60,13 @@ schlägt man nach, wenn ein Rohtranskript transformiert, mit Kontext angereicher
 oder im Task-Modus die jüngste Codex-Session gesucht und ihre Zuordnung im
 Run-Report gespeichert wird; die Schichten und Spawn-Verträge stehen in der
 [AI-Output-Architektur](ai-output/ARCHITECTURE.md).
+
+### [Schnellaktionen](quick-actions/)
+
+Schnellaktionen arbeiten markierten Text ohne Aufnahme um: Kurzbefehl je
+Modus oder „Markierung korrigieren“ in der Menüleiste, Ersetzen per Cmd+V
+(⌘Z macht es rückgängig), Esc bricht ab. Sie nutzen denselben Weg der
+Nacharbeit wie das Diktat und teilen sich mit ihm Overlay und Sperre.
 
 ### [Visual Context](visual-context/)
 

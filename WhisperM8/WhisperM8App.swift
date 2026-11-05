@@ -114,6 +114,11 @@ struct WhisperM8App: App {
                 await AppState.shared.stopRecording()
             }
         }
+
+        // Schnellaktion ohne Diktat: je Modus ein eigener Kurzbefehl, ab Werk leer.
+        QuickActionHotkeys.shared.start { modeID in
+            Task { await AppState.shared.runQuickAction(modeID: modeID) }
+        }
     }
 }
 

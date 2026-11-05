@@ -104,6 +104,13 @@ struct SelectedContextService {
     }
 
     private func captureViaAccessibility(from app: NSRunningApplication?) -> String? {
+        guard let focusedAXElement = Self.focusedElement(of: app) else { return nil }
+        return Self.selectedText(of: focusedAXElement)
+    }
+
+    /// Fokussiertes Element der App per Accessibility, `nil` ohne Recht oder
+    /// wenn die App keins meldet.
+    static func focusedElement(of app: NSRunningApplication?) -> AXUIElement? {
         guard let pid = app?.processIdentifier else { return nil }
 
         let appElement = AXUIElementCreateApplication(pid)
@@ -124,11 +131,13 @@ struct SelectedContextService {
               CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
             return nil
         }
+        return unsafeBitCast(focusedElement, to: AXUIElement.self)
+    }
 
-        let focusedAXElement = unsafeBitCast(focusedElement, to: AXUIElement.self)
+    static func selectedText(of element: AXUIElement) -> String? {
         var selectedTextValue: CFTypeRef?
         let selectedTextStatus = AXUIElementCopyAttributeValue(
-            focusedAXElement,
+            element,
             kAXSelectedTextAttribute as CFString,
             &selectedTextValue
         )

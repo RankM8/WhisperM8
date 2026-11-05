@@ -48,18 +48,27 @@ struct RecordingPillView: View {
         //   Zuständen identisch — nichts rutscht beim Expandieren unter der
         //   Maus weg (z. B. der Mode-Chip, den man gerade anklicken wollte).
         HStack(spacing: 0) {
-            if isFullStyle {
-                fullLayout
+            if let quickActionLabel = controller.quickActionLabel {
+                PillQuickActionContent(
+                    label: quickActionLabel,
+                    isHint: controller.isQuickActionHint,
+                    controller: controller,
+                    reduceMotion: reduceMotion
+                )
             } else {
-                miniLayout
-            }
+                if isFullStyle {
+                    fullLayout
+                } else {
+                    miniLayout
+                }
 
-            if phase == .recording && controller.showConfirmButton {
-                PillConfirmButton(action: controller.stopAndTranscribe)
-                    .transition(.opacity)
-            }
+                if phase == .recording && controller.showConfirmButton {
+                    PillConfirmButton(action: controller.stopAndTranscribe)
+                        .transition(.opacity)
+                }
 
-            PillCancelButton(phase: phase, controller: controller)
+                PillCancelButton(phase: phase, controller: controller)
+            }
         }
         .padding(.horizontal, PillMetrics.horizontalPadding)
         .frame(height: PillMetrics.height)
@@ -395,16 +404,16 @@ private struct PillOutputModeChip: View {
                     action(mode)
                 } label: {
                     if mode.id == selectedMode.id {
-                        Label(mode.name, systemImage: "checkmark")
+                        Label(mode.displayName, systemImage: "checkmark")
                     } else {
-                        Text(mode.name)
+                        Text(mode.displayName)
                     }
                 }
                 .disabled(!mode.isEnabled)
             }
         } label: {
             HStack(spacing: 4) {
-                Text(selectedMode.shortLabel)
+                Text(selectedMode.displayShortLabel)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
@@ -426,7 +435,7 @@ private struct PillOutputModeChip: View {
         .buttonStyle(.plain)
         .disabled(isDisabled)
         .help("Output mode")
-        .accessibilityLabel("Output mode \(selectedMode.name)")
+        .accessibilityLabel("Output mode \(selectedMode.displayName)")
     }
 }
 
@@ -658,5 +667,50 @@ private struct PillCancelButton: View {
         .buttonStyle(.plain)
         .help(phase.cancelHelp)
         .accessibilityLabel(phase.cancelAccessibilityLabel)
+    }
+}
+
+// MARK: - Schnellaktion
+
+/// Schnellaktion ohne Diktat: Kern im Improve-Puls, sichtbarer Text
+/// („Korrigiere…“) und ✕. Als Hinweis („Erst Text markieren“) ein ruhiges
+/// Symbol statt Kern und kein ✕. Hier steht der Text bewusst sichtbar: es gibt
+/// keinen Timer und keinen Modus-Chip, die den Zustand sonst tragen.
+private struct PillQuickActionContent: View {
+    let label: String
+    let isHint: Bool
+    @ObservedObject var controller: OverlayController
+    let reduceMotion: Bool
+
+    var body: some View {
+        if isHint {
+            Image(systemName: "text.cursor")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
+                .padding(.leading, 4)
+        } else {
+            PillCoreView(
+                levelModel: controller.levelModel,
+                phase: .improving,
+                isClipping: false,
+                reduceMotion: reduceMotion
+            )
+            .padding(.leading, 2)
+        }
+
+        Text(verbatim: label)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.leading, 8)
+            .padding(.trailing, isHint ? 12 : 6)
+            .accessibilityLabel(Text(verbatim: label))
+
+        if !isHint {
+            PillCancelButton(phase: .improving, controller: controller)
+                .help(String(localized: "Cancel. The selection stays as it is (Esc)"))
+        }
     }
 }

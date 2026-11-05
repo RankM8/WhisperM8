@@ -189,6 +189,9 @@ struct AIOutputModesTab: View {
                 }
 
                 if mode.usesPostProcessing {
+                    AIOutputQuickActionSection(mode: mode, modes: model.modes)
+                        .id(mode.id)
+
                     SettingsSection("Codex Overrides") {
                         SettingsToggleRow(
                             title: "Use global Codex model",
