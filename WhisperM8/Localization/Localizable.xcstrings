@@ -6261,12 +6261,12 @@
         }
       }
     },
-    "How much you work with WhisperM8. Everything is calculated locally on this Mac, in the background and without network access.": {
+    "How much you work with WhisperM8. Everything is calculated locally on this Mac, in the background. Only the daily exchange rate and, if gh is signed in, your GitHub pull requests are fetched.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wie viel du mit WhisperM8 arbeitest. Alles wird lokal auf diesem Mac gerechnet, im Hintergrund und ohne Netzwerk."
+            "value": "Wie viel du mit WhisperM8 arbeitest. Alles wird lokal auf diesem Mac gerechnet, im Hintergrund. Abgerufen werden nur der tägliche Wechselkurs und, wenn gh angemeldet ist, deine Pull Requests auf GitHub."
           }
         }
       }
@@ -17780,6 +17780,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release %@ in den PATH."
+          }
+        }
+      }
+    },
+    "%@ tokens from models without a known API price are not included in the value.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Token von Modellen ohne bekannten API-Preis sind im Gegenwert nicht enthalten."
           }
         }
       }

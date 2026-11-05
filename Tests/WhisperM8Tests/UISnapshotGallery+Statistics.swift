@@ -22,6 +22,8 @@ extension UISnapshotGallery {
             ("claude-sonnet-5-5", "RankM8", TokenUsage(messages: 141, output: 240_000, cacheWrite5m: 700_000, cacheRead: 28_100_000)),
             ("gpt-6.1-sol", "main", TokenUsage(messages: 1_201, input: 5_470_000, output: 380_000, cacheRead: 161_500_000)),
             ("gpt-5.6-sol", "codex", TokenUsage(messages: 82, input: 400_000, output: 50_000, cacheRead: 2_500_000)),
+            // Ohne offiziellen Preis: zeigt den Hinweis unter der Tabelle.
+            ("z-ai/glm-5.3-flash", "main", TokenUsage(messages: 8, input: 1_200_000, output: 90_000)),
         ]
         func quarter(_ usage: TokenUsage) -> TokenUsage {
             TokenUsage(messages: usage.messages / 4, input: usage.input / 4, output: usage.output / 4,

@@ -11,8 +11,9 @@ WhisperM8 gearbeitet wird: pro Tag, Woche, Monat und insgesamt. Anlass war,
 dass die macOS-Bildschirmzeit WhisperM8 nicht als eigene App aufführt (die Zeit
 landet dort vermutlich unter „Andere“, weil die App ohne Team-ID signiert ist).
 
-Alles wird lokal gerechnet. Die einzige Netzwerkabfrage ist der EZB-Kurs,
-höchstens einmal am Tag. Standardmäßig an; Schalter „Statistik erfassen“ auf
+Alles wird lokal gerechnet. Ins Netz gehen nur zwei Abfragen: der EZB-Kurs,
+höchstens einmal am Tag, und stündlich `gh pr list` für die eigenen Pull
+Requests, sofern `gh` installiert und angemeldet ist. Standardmäßig an; Schalter „Statistik erfassen“ auf
 der Seite, zugleich Notbremse `statisticsEnabled`.
 
 ## Was gezählt wird
@@ -27,7 +28,7 @@ der Seite, zugleich Notbremse `statisticsEnabled`.
 | Token je Modell, Konto, Projekt | Protokolle `~/.claude*/projects` und `~/.codex/sessions` (nur lesen) | siehe unten |
 | Subagents | Claude-Protokolle | jede neue `subagents/agent-*.jsonl` |
 | Limits | Statuszeile, vorhandene Abfragen, Codex-Protokolle | letzter Stand und Wochen-Höchstwert je Konto |
-| Commits, PRs | `git log`, `gh pr list` | stündlich, nur Projektordner der Chats, nur eigene Commits (`user.email` des Repos) |
+| Commits, PRs | `git log`, `gh pr list` | stündlich, nur Projektordner der Chats, nur eigene Commits (`user.email` des Repos), Tag nach Autor-Zeit; umgeschriebene Commits (Rebase, Amend, Cherry-Pick) zählen über Autor-Zeit und Betreff nur einmal |
 
 ## Token und API-Gegenwert
 
@@ -45,7 +46,10 @@ Token-Angaben werden vor dem Dekodieren aussortiert.
   je Datei; `input_tokens` enthält dort den Cache und wird bereinigt.
 - **Fast-Modus** bekommt die Endung `-fast` und den doppelten Preis.
 - **Preise:** `ModelPricing` (USD je Million Token, Quellen im Code).
-  Unbekannte Modelle erscheinen ohne Gegenwert statt mit einem geratenen.
+  Gesucht wird die exakte Modell-ID (ohne Datum, `[1m]` und Proxy-Präfix),
+  kein Präfix: `claude-opus-4-8` landet nicht beim Opus-4.0-Preis. Unbekannte
+  Modelle erscheinen ohne Gegenwert statt mit einem geratenen; unter der
+  Tabelle steht, wie viele Token das betrifft.
 - **Euro:** EZB-Referenzkurs (`StatisticsExchangeRate`), Rückfall 0,92.
 - **Hebel:** API-Gegenwert geteilt durch die Abo-Kosten des Zeitraums
   (Monatsbetrag × 12 / 365 × Tage). Die Abos stehen auf der Seite.

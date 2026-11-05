@@ -64,7 +64,12 @@ struct StatisticsProcessRunner: StatisticsCommandRunning {
 struct StatisticsGitCursor: Codable, Equatable, Sendable {
     struct Repo: Codable, Equatable, Sendable {
         var lastRunAt: Date
-        /// Hash → Commit-Zeit (Epoch) der Commits im Überlappungsfenster.
+        /// Schon gezählte Commits im Überlappungsfenster: Identität → Autor-Zeit
+        /// (Epoch). Identität ist `StatisticsGitParsing.Commit.identity`
+        /// (Autor-Zeit + Betreff), damit Rebase, Amend und Cherry-Pick nicht
+        /// erneut zählen. Ältere Cursor enthalten hier noch Hashes mit
+        /// Commit-Zeit; der Scanner prüft beide, die Hashes laufen nach dem
+        /// Fenster von selbst aus. Das Format bleibt `[String: Double]`.
         var recentCommits: [String: Double] = [:]
         /// Bereits gezählte PR-Nummern.
         var pullRequests: Set<Int> = []
@@ -139,7 +144,28 @@ struct StatisticsGitDelta: Equatable, Sendable {
 enum StatisticsGitParsing {
     struct Commit: Equatable {
         var hash: String
+        /// Commit-Zeit (`%ct`). Ändert sich bei Rebase, Amend und Cherry-Pick.
         var date: Date
+        /// Autor-Zeit (`%at`). Bleibt beim Umschreiben erhalten; danach zählt
+        /// der Tag. Fehlt sie in der Ausgabe, gilt die Commit-Zeit.
+        var authorDate: Date
+        /// Betreff (`%s`), `nil` beim alten Zwei-Spalten-Format.
+        var subject: String?
+
+        init(hash: String, date: Date, authorDate: Date? = nil, subject: String? = nil) {
+            self.hash = hash
+            self.date = date
+            self.authorDate = authorDate ?? date
+            self.subject = subject
+        }
+
+        /// Gleichsetzung über Autor-Zeit und Betreff statt Hash: ein
+        /// umgeschriebener Commit (neuer Hash, neue Commit-Zeit) ist derselbe.
+        /// Ohne Betreff bleibt nur der Hash.
+        var identity: String {
+            guard let subject else { return hash }
+            return "id:\(Int(authorDate.timeIntervalSince1970)):\(StatisticsGitParsing.stableHash(subject))"
+        }
     }
 
     struct PullRequest: Equatable {
@@ -147,17 +173,40 @@ enum StatisticsGitParsing {
         var createdAt: Date
     }
 
-    /// Zeilen aus `--format=%H%x09%ct`. Unlesbare Zeilen fallen weg.
+    /// Format für `git log`: Hash, Commit-Zeit, Autor-Zeit, Betreff.
+    static let logFormat = "%H%x09%ct%x09%at%x09%s"
+
+    /// Zeilen aus `logFormat`; das alte `%H%x09%ct` wird weiter gelesen.
+    /// Der Betreff darf Tabs enthalten. Unlesbare Zeilen fallen weg.
     static func parseLog(_ text: String) -> [Commit] {
         text.split(whereSeparator: \.isNewline).compactMap { line in
-            let parts = line.split(separator: "\t")
-            guard parts.count == 2,
+            let parts = line.split(separator: "\t", maxSplits: 3, omittingEmptySubsequences: false)
+            guard parts.count >= 2,
                   parts[0].count >= 7,
                   parts[0].allSatisfy(\.isHexDigit),
                   let epoch = Double(parts[1].trimmingCharacters(in: .whitespaces))
             else { return nil }
-            return Commit(hash: String(parts[0]), date: Date(timeIntervalSince1970: epoch))
+            let date = Date(timeIntervalSince1970: epoch)
+            guard parts.count >= 3 else { return Commit(hash: String(parts[0]), date: date) }
+            guard let authorEpoch = Double(parts[2].trimmingCharacters(in: .whitespaces)) else { return nil }
+            return Commit(
+                hash: String(parts[0]),
+                date: date,
+                authorDate: Date(timeIntervalSince1970: authorEpoch),
+                subject: parts.count > 3 ? String(parts[3]) : ""
+            )
         }
+    }
+
+    /// FNV-1a (64 Bit) als Hex — stabil über Prozesse hinweg, anders als
+    /// `hashValue`. Hält den Cursor klein, auch bei langen Betreffzeilen.
+    static func stableHash(_ text: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 16)
     }
 
     /// `gh pr list --json number,createdAt`. `nil` bei unlesbarer Ausgabe.
@@ -232,15 +281,27 @@ struct StatisticsGitScanner {
                     "-C", path, "log", "--all", "--no-merges", "--fixed-strings",
                     "--author=\(email)",
                     "--since=@\(Int(since.timeIntervalSince1970))",
-                    "--format=%H%x09%ct",
+                    "--format=\(StatisticsGitParsing.logFormat)",
                 ], in: path)
                 guard let log else {
                     reportProblem("git_log_failed")
                     continue // Cursor bleibt stehen, nächster Lauf versucht es erneut.
                 }
-                for commit in StatisticsGitParsing.parseLog(log) where repo.recentCommits[commit.hash] == nil {
-                    repo.recentCommits[commit.hash] = commit.date.timeIntervalSince1970
-                    let day = StatisticsTime.dayKey(for: commit.date, calendar: calendar)
+                // Was vor diesem Zeitpunkt verfasst wurde, hat der letzte Lauf
+                // schon gesehen und danach aus dem Cursor geräumt. Taucht so ein
+                // Commit mit neuer Commit-Zeit wieder auf (Rebase, Cherry-Pick
+                // eines alten Commits), ist er umgeschrieben, nicht neu.
+                let countFrom = isFirstRun
+                    ? historyStart
+                    : repo.lastRunAt.addingTimeInterval(-overlap - 24 * 3600)
+                for commit in StatisticsGitParsing.parseLog(log) {
+                    let identity = commit.identity
+                    guard commit.authorDate >= countFrom,
+                          repo.recentCommits[identity] == nil,
+                          repo.recentCommits[commit.hash] == nil // Cursor im alten Format
+                    else { continue }
+                    repo.recentCommits[identity] = commit.authorDate.timeIntervalSince1970
+                    let day = StatisticsTime.dayKey(for: commit.authorDate, calendar: calendar)
                     delta.commits[day, default: [:]][project, default: 0] += 1
                 }
                 // Nur das Überlappungsfenster (plus einen Tag Puffer) merken.

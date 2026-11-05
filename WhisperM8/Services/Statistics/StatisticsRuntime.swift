@@ -21,8 +21,27 @@ enum StatisticsRuntime {
         enabledHandlers.append(handler)
     }
 
-    /// Ruft die Seite nach dem Umlegen des Schalters auf.
+    /// Zuletzt gemeldeter Stand. Seite und Defaults-Beobachter melden
+    /// denselben Wechsel beide; gemeldet wird nur ein echter Wechsel.
+    private(set) static var lastEnabled: Bool?
+
+    /// Stand beim Start, damit die erste Meldung nur bei echtem Wechsel läuft.
+    static func setInitialEnabled(_ enabled: Bool) {
+        lastEnabled = enabled
+    }
+
+    /// Ruft die Seite nach dem Umlegen des Schalters auf, ebenso der
+    /// Beobachter für `defaults write … statisticsEnabled`. Doppelte Meldungen
+    /// desselben Stands sind harmlos.
     static func notifyEnabledChanged(_ enabled: Bool) {
+        guard enabled != lastEnabled else { return }
+        lastEnabled = enabled
         for handler in enabledHandlers { handler(enabled) }
+    }
+
+    /// Nur für Tests: Handler und Stand zurücksetzen.
+    static func resetForTesting() {
+        enabledHandlers = []
+        lastEnabled = nil
     }
 }

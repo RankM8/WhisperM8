@@ -29,6 +29,12 @@ extension StatisticsSettingsPage {
                         ScrollView(.horizontal) { modelTable(data).padding(.bottom, 8) }
                     }
                     .padding(.top, 4)
+                    if report.unpricedTokens > 0 {
+                        Text(String(localized: "\(StatisticsFormat.tokens(report.unpricedTokens, locale: locale)) tokens from models without a known API price are not included in the value."))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(AppTheme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Text(String(localized: "“Value” is what the same tokens would cost through the API, using the Anthropic and OpenAI price lists, converted at the ECB daily rate (1 $ = \(StatisticsFormat.decimal(report.usdEurRate, digits: 2, locale: locale)) €). With a subscription you do not pay it. GPT through the proxy runs on your ChatGPT plan and is not counted in the Claude accounts. Each response counts once, even if it ends up in two accounts after an account switch."))
                     .font(.system(size: 11.5))

@@ -81,6 +81,27 @@ final class StatisticsLimitGitTests: XCTestCase {
         XCTAssertEqual(usage.fetchedAt.timeIntervalSince1970, captured.timeIntervalSince1970, accuracy: 1)
     }
 
+    /// `statusline_captured_at` gilt nicht für das modellbezogene Limit: das
+    /// liefert nur der Abruf, es ist so alt wie die Datei.
+    func testModelScopedLimitKeepsFileAgeWhenStatuslineRefreshed() throws {
+        let profile = uniqueProfile()
+        let cache = tempDir.appendingPathComponent("claude-usage-cache-\(profile).json")
+        let captured = date(2026, 11, 5, 18)
+        let fileTime = date(2026, 11, 5, 17)
+        try Data("""
+        {"five_hour":{"utilization":10},"limits":[{"kind":"weekly_scoped","percent":30}],"statusline_captured_at":\(Int(captured.timeIntervalSince1970))}
+        """.utf8).write(to: cache)
+        try FileManager.default.setAttributes([.modificationDate: fileTime], ofItemAtPath: cache.path)
+
+        let usage = try XCTUnwrap(makeFetcher().cachedUsage(forProfile: profile))
+        XCTAssertEqual(usage.fetchedAt.timeIntervalSince1970, captured.timeIntervalSince1970, accuracy: 1)
+        XCTAssertEqual(usage.modelWeeklyFetchedAt?.timeIntervalSince1970 ?? 0, fileTime.timeIntervalSince1970, accuracy: 1)
+
+        // Frisch abgerufen (ohne Statuszeilen-Stempel): kein eigener Zeitpunkt.
+        try Data(#"{"five_hour":{"utilization":10},"limits":[{"kind":"weekly_scoped","percent":30}]}"#.utf8).write(to: cache)
+        XCTAssertNil(try XCTUnwrap(makeFetcher().cachedUsage(forProfile: profile)).modelWeeklyFetchedAt)
+    }
+
     func testBrokenOrMissingCacheYieldsNoSnapshot() throws {
         let broken = uniqueProfile()
         try Data("{nicht json".utf8).write(to: tempDir.appendingPathComponent("claude-usage-cache-\(broken).json"))
@@ -334,6 +355,84 @@ final class StatisticsLimitGitTests: XCTestCase {
         spy.logOutput = "aaaaaaa1\t\(Int(date(2026, 3, 1).timeIntervalSince1970))\n"
         let delta = makeScanner(spy, gh: false, now: date(2026, 11, 6, 18)).scan(projectPaths: ["/repos/app"], cursor: &cursor)
         XCTAssertEqual(delta.commits["2026-03-01"]?["app"], 1)
+    }
+
+    func testParseLogReadsAuthorTimeAndSubjectWithTabs() throws {
+        let text = "abc1234def\t1793900000\t1793800000\tfix: Tab\tim Betreff\nfeedbeef00\t1793900000\tkaputt\tx\n"
+        let commits = StatisticsGitParsing.parseLog(text)
+        XCTAssertEqual(commits.count, 1)
+        let commit = try XCTUnwrap(commits.first)
+        XCTAssertEqual(commit.authorDate, Date(timeIntervalSince1970: 1_793_800_000))
+        XCTAssertEqual(commit.subject, "fix: Tab\tim Betreff")
+        XCTAssertTrue(commit.identity.hasPrefix("id:1793800000:"))
+        // Stabil über Prozesse: fester FNV-1a-Wert.
+        XCTAssertEqual(StatisticsGitParsing.stableHash(""), "cbf29ce484222325")
+    }
+
+    /// Rebase, Amend und Cherry-Pick: neuer Hash, neue Commit-Zeit, gleiche
+    /// Autor-Zeit und gleicher Betreff → zählt nicht erneut.
+    func testRewrittenCommitsCountOnce() {
+        let now = date(2026, 11, 5, 18)
+        let authored = Int(date(2026, 11, 3, 10).timeIntervalSince1970)
+        let committed = Int(date(2026, 11, 3, 10).timeIntervalSince1970)
+        let spy = SpyRunner()
+        // Erster Lauf: Commit plus Cherry-Pick auf einem zweiten Branch.
+        let picked = Int(date(2026, 11, 4, 9).timeIntervalSince1970)
+        spy.logOutput = "aaaaaaa1\t\(committed)\t\(authored)\tfeat: Statistik\n"
+            + "bbbbbbb2\t\(picked)\t\(authored)\tfeat: Statistik\n"
+        var cursor = StatisticsGitCursor()
+        let first = makeScanner(spy, gh: false, now: now).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertEqual(first.commits, ["2026-11-03": ["app": 1]], "Tag nach Autor-Zeit, Cherry-Pick zählt nicht")
+
+        // Rebase: wieder neuer Hash und neue Commit-Zeit, dazu ein echter neuer Commit.
+        let rebased = Int(date(2026, 11, 5, 19).timeIntervalSince1970)
+        let fresh = Int(date(2026, 11, 5, 19).timeIntervalSince1970)
+        spy.logOutput = "ccccccc3\t\(rebased)\t\(authored)\tfeat: Statistik\n"
+            + "ddddddd4\t\(fresh)\t\(fresh)\tfix: neu\n"
+        let second = makeScanner(spy, gh: false, now: date(2026, 11, 5, 20)).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertEqual(second.commits, ["2026-11-05": ["app": 1]])
+    }
+
+    /// Ein alter Commit, der nach einem Rebase mit neuer Commit-Zeit
+    /// auftaucht, ist umgeschrieben: seine Identität ist längst aus dem Cursor
+    /// geräumt, gezählt wird er trotzdem nicht.
+    func testOldCommitRewrittenAfterWindowIsNotCountedAgain() {
+        let spy = SpyRunner()
+        let authored = Int(date(2026, 10, 1, 10).timeIntervalSince1970)
+        spy.logOutput = "aaaaaaa1\t\(authored)\t\(authored)\tfeat: alt\n"
+        var cursor = StatisticsGitCursor()
+        let first = makeScanner(spy, gh: false, now: date(2026, 10, 1, 18)).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertEqual(first.commits, ["2026-10-01": ["app": 1]])
+
+        // Stündliche Läufe bis zum 5.11. räumen den Eintrag aus dem Fenster.
+        _ = makeScanner(spy, gh: false, now: date(2026, 11, 5, 17)).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertTrue(cursor.repos.values.allSatisfy { $0.recentCommits.isEmpty })
+
+        let rebased = Int(date(2026, 11, 5, 17).addingTimeInterval(1800).timeIntervalSince1970)
+        spy.logOutput = "bbbbbbb2\t\(rebased)\t\(authored)\tfeat: alt\n"
+        let again = makeScanner(spy, gh: false, now: date(2026, 11, 5, 18)).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertTrue(again.commits.isEmpty)
+    }
+
+    /// Cursor aus der Vorversion (Hash → Commit-Zeit) bleibt gültig: was
+    /// darin steht, zählt nach dem Update nicht noch einmal.
+    func testLegacyHashCursorPreventsDoubleCountAfterUpdate() throws {
+        let now = date(2026, 11, 5, 18)
+        let commitTime = Int(date(2026, 11, 5, 9).timeIntervalSince1970)
+        let lastRun = ISO8601DateFormatter().string(from: now.addingTimeInterval(-3600))
+        let legacy = """
+        {"repos":{"/repos/app/.git":{"lastRunAt":"\(lastRun)","recentCommits":{"aaaaaaa1":\(commitTime)},"pullRequests":[]}}}
+        """
+        let url = tempDir.appendingPathComponent("legacy-cursor.json")
+        try Data(legacy.utf8).write(to: url)
+        var cursor = StatisticsGitCursor.load(from: url)
+        XCTAssertEqual(cursor.repos["/repos/app/.git"]?.recentCommits["aaaaaaa1"], Double(commitTime))
+
+        let spy = SpyRunner()
+        spy.logOutput = "aaaaaaa1\t\(commitTime)\t\(commitTime)\tfeat: schon gezählt\n"
+            + "bbbbbbb2\t\(commitTime + 60)\t\(commitTime + 60)\tfeat: neu\n"
+        let delta = makeScanner(spy, gh: false, now: now).scan(projectPaths: ["/repos/app"], cursor: &cursor)
+        XCTAssertEqual(delta.commits, ["2026-11-05": ["app": 1]])
     }
 
     func testDeltaAppliesToDays() {

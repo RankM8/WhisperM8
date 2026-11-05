@@ -4,12 +4,20 @@ import Foundation
 /// was dieselben Token über die API gekostet hätten. Mit Abo zahlt der Nutzer
 /// das nicht.
 ///
-/// Quellen (Stand November 2026):
-/// - https://platform.claude.com/docs/en/about-claude/pricing
-/// - https://developers.openai.com/api/docs/pricing
+/// Quellen (abgerufen am 5. November 2026, Standard-Stufe, kurzer Kontext):
+/// - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
+///   („Model pricing“ und „Fast mode pricing“)
+/// - OpenAI: https://developers.openai.com/api/docs/pricing
+///   („Standard“ und „Fast tier“)
+///
+/// Nur Modelle mit offiziellem Preis stehen in der Tabelle. Alles andere
+/// bleibt ohne Gegenwert, statt über ein Präfix bei einem verwandten Modell zu
+/// landen (früher fiel `claude-opus-4-8` auf den Opus-4.0-Preis und
+/// `gpt-5.4-mini` auf den von `gpt-5`).
 ///
 /// Bewusst nicht abgebildet: Aufschläge für Prompts über 272k (OpenAI) bzw.
-/// 100k (Haiku 5.5) und der US-Inference-Aufschlag. Der Gegenwert ist eine
+/// 100k (Haiku 5.5), bezahltes Cache-Schreiben bei gpt-6/gpt-5.6, der
+/// US-Inference-Aufschlag und Aktionspreise. Der Gegenwert ist eine
 /// Größenordnung, keine Rechnung.
 struct ModelPrice: Equatable, Sendable {
     var input: Double
@@ -54,34 +62,74 @@ enum ModelPricing {
     /// im Fast-Modus lief (`usage.speed == "fast"`).
     static let fastSuffix = "-fast"
 
-    /// Präfix → Preis. Längere Präfixe zuerst, damit `claude-opus-4-1` nicht
-    /// beim Präfix `claude-opus-4` landet.
-    private static let table: [(prefix: String, price: ModelPrice)] = [
-        // Claude 5
-        ("claude-fable-5", .anthropic(input: 10, cacheRead: 0.25, output: 50)),
-        ("claude-opus-5", .anthropic(input: 4, cacheRead: 0.20, output: 20)),
-        ("claude-sonnet-5", .anthropic(input: 2, cacheRead: 0.10, output: 10)),
-        ("claude-haiku-5", .anthropic(input: 0.10, cacheRead: 0.01, output: 0.50)),
-        // Claude 4.x
-        ("claude-opus-4-5", .anthropic(input: 5, cacheRead: 0.50, output: 25)),
-        ("claude-opus-4-1", .anthropic(input: 15, cacheRead: 1.50, output: 75)),
-        ("claude-opus-4", .anthropic(input: 15, cacheRead: 1.50, output: 75)),
-        ("claude-sonnet-4", .anthropic(input: 3, cacheRead: 0.30, output: 15)),
-        ("claude-haiku-4", .anthropic(input: 1, cacheRead: 0.10, output: 5)),
-        ("claude-3-5-haiku", .anthropic(input: 0.80, cacheRead: 0.08, output: 4)),
-        // OpenAI / Codex
-        ("gpt-6.1-terra", .openAI(input: 1, cachedInput: 0.05, output: 5)),
-        ("gpt-6.1-sol", .openAI(input: 2, cachedInput: 0.10, output: 10)),
-        ("gpt-6.1", .openAI(input: 2, cachedInput: 0.10, output: 10)),
-        ("gpt-5.6-sol", .openAI(input: 4, cachedInput: 0.40, output: 20)),
-        ("gpt-5.6", .openAI(input: 4, cachedInput: 0.40, output: 20)),
-        ("gpt-5", .openAI(input: 1.25, cachedInput: 0.125, output: 10)),
-    ].sorted { $0.prefix.count > $1.prefix.count }
+    /// Modell-ID (ohne Datum, Fast-Endung, Proxy-Präfix und `[1m]`) → Preis.
+    /// Exakte Treffer statt Präfixen: `claude-opus-5` darf nicht für
+    /// `claude-opus-5-5` gelten, `gpt-5` nicht für `gpt-5.4-mini`.
+    private static let table: [String: ModelPrice] = {
+        var table: [String: ModelPrice] = [:]
+        func add(_ ids: [String], _ price: ModelPrice) {
+            for id in ids { table[id] = price }
+        }
+        // Anthropic. Cache-Lesen laut Tabelle: 0,025× bei Fable 5.1, 0,05× bei
+        // Opus/Sonnet 5.5, sonst 0,1×.
+        add(["claude-fable-5-1", "claude-mythos-5-1"], .anthropic(input: 10, cacheRead: 0.25, output: 50))
+        add(["claude-fable-5", "claude-mythos-5"], .anthropic(input: 10, cacheRead: 1, output: 50))
+        add(["claude-opus-5-5"], .anthropic(input: 4, cacheRead: 0.20, output: 20))
+        add(["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5"],
+            .anthropic(input: 5, cacheRead: 0.50, output: 25))
+        add(["claude-opus-4-1", "claude-opus-4", "claude-opus-4-0"], .anthropic(input: 15, cacheRead: 1.50, output: 75))
+        add(["claude-sonnet-5-5"], .anthropic(input: 2, cacheRead: 0.10, output: 10))
+        add(["claude-sonnet-5"], .anthropic(input: 2, cacheRead: 0.20, output: 10))
+        add(["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4", "claude-sonnet-4-0"],
+            .anthropic(input: 3, cacheRead: 0.30, output: 15))
+        add(["claude-haiku-5-5"], .anthropic(input: 0.10, cacheRead: 0.01, output: 0.50))
+        add(["claude-haiku-4-5"], .anthropic(input: 1, cacheRead: 0.10, output: 5))
+        add(["claude-3-5-haiku"], .anthropic(input: 0.80, cacheRead: 0.08, output: 4))
+        // OpenAI
+        add(["gpt-6-astra", "gpt-6-astra-law"], .openAI(input: 10, cachedInput: 1, output: 50))
+        add(["gpt-6.1-sol"], .openAI(input: 2, cachedInput: 0.10, output: 10))
+        add(["gpt-6.1-terra"], .openAI(input: 1, cachedInput: 0.05, output: 5))
+        add(["gpt-6-sol"], .openAI(input: 2, cachedInput: 0.20, output: 10))
+        add(["gpt-6-luna"], .openAI(input: 0.10, cachedInput: 0.01, output: 0.50))
+        add(["gpt-5.6-sol"], .openAI(input: 4, cachedInput: 0.40, output: 20))
+        add(["gpt-5.6-terra"], .openAI(input: 2, cachedInput: 0.20, output: 12))
+        add(["gpt-5.6-luna"], .openAI(input: 0.20, cachedInput: 0.02, output: 1.20))
+        add(["gpt-5.5"], .openAI(input: 5, cachedInput: 0.50, output: 30))
+        add(["gpt-5.4"], .openAI(input: 2.50, cachedInput: 0.25, output: 15))
+        add(["gpt-5.4-mini"], .openAI(input: 0.75, cachedInput: 0.075, output: 4.50))
+        add(["gpt-5.4-nano"], .openAI(input: 0.20, cachedInput: 0.02, output: 1.25))
+        add(["gpt-5.3-codex", "gpt-5.2"], .openAI(input: 1.75, cachedInput: 0.175, output: 14))
+        add(["gpt-5.1", "gpt-5"], .openAI(input: 1.25, cachedInput: 0.125, output: 10))
+        add(["gpt-5-mini"], .openAI(input: 0.25, cachedInput: 0.025, output: 2))
+        add(["gpt-5-nano"], .openAI(input: 0.05, cachedInput: 0.005, output: 0.40))
+        add(["o3"], .openAI(input: 2, cachedInput: 0.50, output: 8))
+        return table
+    }()
 
-    /// Preis für ein Modell, `nil` für unbekannte Modelle (die Seite zeigt sie
-    /// dann ohne Gegenwert an, statt zu raten).
-    static func price(for model: String) -> ModelPrice? {
-        var name = model.lowercased()
+    /// Fast-Modus als Faktor auf den Standardpreis, nur wo die Listen ihn
+    /// führen; sonst bleibt ein `-fast`-Modell ohne Preis. Anthropic: Opus 5.5
+    /// 8 $/40 $, Opus 5 und 4.8 10 $/50 $. OpenAI „Fast tier“ (früher Priority):
+    /// meist das Doppelte, gpt-5.5 12,50 $/75 $, gpt-5-mini 0,45 $/3,60 $,
+    /// o3 3,50 $/14 $.
+    private static let fastFactor: [String: Double] = {
+        var factors: [String: Double] = [:]
+        for id in [
+            "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8",
+            "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna",
+            "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.4", "gpt-5.4-mini",
+            "gpt-5.3-codex", "gpt-5.2", "gpt-5.1", "gpt-5",
+        ] { factors[id] = 2 }
+        factors["gpt-5.5"] = 2.5
+        factors["gpt-5-mini"] = 1.8
+        factors["o3"] = 1.75
+        return factors
+    }()
+
+    /// Kanonische Modell-ID für die Preistabelle: klein, ohne Proxy-Präfix,
+    /// ohne Kontext-Markierung (`[1m]`) und ohne Datums-Snapshot
+    /// (`-20251001`, `-2025-08-07`). Liefert auch, ob es der Fast-Modus war.
+    static func canonicalID(for model: String) -> (id: String, fast: Bool) {
+        var name = model.lowercased().trimmingCharacters(in: .whitespaces)
         var fast = false
         if name.hasSuffix(fastSuffix) {
             fast = true
@@ -91,9 +139,30 @@ enum ModelPricing {
         if let slash = name.lastIndex(of: "/") {
             name = String(name[name.index(after: slash)...])
         }
-        guard let entry = table.first(where: { name.hasPrefix($0.prefix) }) else { return nil }
-        // Fast-Modus: bei Opus 5.5 doppelter Preis (8 $ / 40 $).
-        return fast ? entry.price.scaled(2) : entry.price
+        if let bracket = name.firstIndex(of: "[") {
+            name = String(name[..<bracket])
+        }
+        var parts = name.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        // Anthropic: `-20251001`.
+        if let last = parts.last, last.count == 8, last.allSatisfy(\.isNumber) {
+            parts.removeLast()
+        } else if parts.count >= 4,
+                  parts[parts.count - 3].count == 4, parts[parts.count - 3].allSatisfy(\.isNumber),
+                  parts[parts.count - 2].count == 2, parts[parts.count - 2].allSatisfy(\.isNumber),
+                  parts[parts.count - 1].count == 2, parts[parts.count - 1].allSatisfy(\.isNumber) {
+            // OpenAI: `-2025-08-07`.
+            parts.removeLast(3)
+        }
+        return (parts.joined(separator: "-"), fast)
+    }
+
+    /// Preis für ein Modell, `nil` für unbekannte Modelle (die Seite zeigt sie
+    /// dann ohne Gegenwert an, statt zu raten).
+    static func price(for model: String) -> ModelPrice? {
+        let (id, fast) = canonicalID(for: model)
+        guard let price = table[id] else { return nil }
+        guard fast else { return price }
+        return fastFactor[id].map { price.scaled($0) }
     }
 
     static func costUSD(model: String, usage: TokenUsage) -> Double? {

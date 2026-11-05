@@ -981,6 +981,24 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertEqual(usage.sevenDayPercent, 71)
     }
 
+    func testMainStatuslineCreatesCacheFromRateLimitsWithoutExistingFile() throws {
+        let cache = try usageCacheURL()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cache.path))
+        _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput())
+        let usage = try XCTUnwrap(ClaudeAccountUsageFetcher.parseUsage(Data(contentsOf: cache), fetchedAt: Date(), isLive: false))
+        XCTAssertEqual(usage.fiveHourPercent, 42.5)
+        XCTAssertNil(usage.modelWeeklyPercent)
+    }
+
+    /// Ein jq für Prüfen und Mischen, atomare Schreibvorgänge auf den Cache.
+    func testMainStatuslineMergesInOneJqAndWritesCacheAtomically() throws {
+        let script = try makeInstaller().bundledScript()
+        XCTAssertFalse(script.contains("rate_limits_json="), "rate_limits wird nicht mehr separat abgefragt")
+        XCTAssertTrue(script.contains("--rawfile cache"))
+        XCTAssertFalse(script.contains(#"echo "$resp" > "$usage_cache""#), "Abruf schreibt über temp + mv")
+        XCTAssertFalse(script.contains(#"> "$usage_cache""#), "kein direktes Schreiben in den Cache")
+    }
+
     func testMainStatuslineSkipsRateLimitsForGPTAndWithoutData() throws {
         let cache = try usageCacheURL()
         _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput(model: "gpt-5.6-sol"))

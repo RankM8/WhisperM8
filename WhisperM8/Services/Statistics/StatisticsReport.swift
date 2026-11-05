@@ -113,6 +113,8 @@ struct StatisticsReport: Equatable, Sendable {
     var limits: [LimitRow]
 
     var totalTokens: Int { models.reduce(0) { $0 + $1.usage.totalTokens } }
+    /// Token von Modellen ohne bekannten Preis; sie fehlen im Gegenwert.
+    var unpricedTokens: Int { models.filter { $0.usd == nil }.reduce(0) { $0 + $1.usage.totalTokens } }
 
     static func == (lhs: StatisticsReport, rhs: StatisticsReport) -> Bool {
         lhs.period == rhs.period && lhs.rangeStart == rhs.rangeStart && lhs.rangeEnd == rhs.rangeEnd
