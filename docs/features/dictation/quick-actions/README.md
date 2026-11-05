@@ -22,7 +22,9 @@ stille Diktat (Diktat starten, nichts sagen, ✓ korrigiert die Markierung).
   Korrigieren mit **⇧⌘K** (Entscheidung Giuliano, 05.11.2026). Weder macOS
   noch WhisperM8 nutzen ⇧⌘K; als globaler Kurzbefehl überdeckt er aber
   gleichnamige Befehle einzelner Apps (Xcode „Clean Build Folder“, VS Code
-  „Zeile löschen“). Wer ihn entfernt, bekommt ihn nicht ungefragt zurück; dann
+  „Zeile löschen“). Ist ⇧⌘K beim ersten Start schon anders vergeben
+  (Aufnahme-Hotkey, anderer Modus), setzt die App den Standard nicht
+  (`QuickActionShortcuts.resolveCorrectDefault`). Wer ihn entfernt, bekommt ihn nicht ungefragt zurück; dann
   steht ⇧⌘K als Vorschlag mit „übernehmen“ daneben. Für Besser formulieren
   wird ⌃⌥R vorgeschlagen, alle anderen Modi sind leer. Belegt ein
   Kurzbefehl schon einen anderen WhisperM8-Kurzbefehl, steht eine Warnung
@@ -109,8 +111,12 @@ kein Modus-Menü) und erscheint nur, wenn der Umfang Nacharbeit erlaubt.
   - `selected`: Kopfzeile mit dem Anfang der Markierung („Markiert in Mail“).
   - `unknown` (Electron ohne volle Accessibility, kein Fokus-Element): Kopfzeile
     ohne Vorschau („Text markiert in Slack?“). Ein Klick liest dann per
-    Cmd+C-Rückfall.
+    Cmd+C-Rückfall. Nur, wenn der Rückfall dort auch geht (Bedienungshilfen
+    erlaubt, kein Editor aus `ClipboardCopyFallbackPolicy`), und nicht bei
+    Listen und Dateiansichten wie dem Finder (`textLikeRoles`).
   - `none` (App meldet ausdrücklich: nichts markiert): keine Kopfzeile.
+  - Ist WhisperM8 selbst die App davor, liest das Fenster die Markierung des
+    Textfelds direkt, bevor es Key wird; im Chat-Terminal gibt es keine Kopfzeile.
 
   Der Knopf schließt das Fenster und startet nach 150 ms denselben Ablauf wie
   ⇧⌘K. Auch ⇧⌘K bei offenem Fenster schließt es erst
@@ -122,6 +128,8 @@ kein Modus-Menü) und erscheint nur, wenn der Umfang Nacharbeit erlaubt.
   schon richtiger Text eingefügt, dann ohne zweiten Verlaufseintrag. Klappt das
   Einfügen nicht, liegt das Ergebnis in der Zwischenablage. Bilder und Dateien
   haben den Knopf nicht.
+- Wird das Fenster während der Nacharbeit wieder geöffnet, schließt die App es
+  vor dem Einfügen, sonst landete Cmd+V in seinem Suchfeld.
 
 Verdrahtung: `ClipboardHistoryController.quickActions` (gesetzt in
 `WhisperM8App`), Zustand im `ClipboardHistoryViewModel`

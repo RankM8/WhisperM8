@@ -1,9 +1,10 @@
 import KeyboardShortcuts
 import SwiftUI
 
-/// „Kurzbefehl ohne Diktat“ eines Modus (KI-Ausgabe → Modi). Ab Werk leer;
-/// für Korrigieren und Besser formulieren steht ein Vorschlag daneben, der
-/// erst per Klick belegt wird.
+/// „Kurzbefehl ohne Diktat“ eines Modus (KI-Ausgabe → Modi). Ab Werk ist nur
+/// Korrigieren belegt (⇧⌘K). Ist kein Kurzbefehl gesetzt, steht für
+/// Korrigieren und Besser formulieren ein Vorschlag daneben, der erst per
+/// Klick belegt wird.
 struct AIOutputQuickActionSection: View {
     let mode: OutputMode
     let modes: [OutputMode]

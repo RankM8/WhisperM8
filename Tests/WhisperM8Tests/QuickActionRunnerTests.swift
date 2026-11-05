@@ -542,5 +542,43 @@ extension QuickActionRunnerTests {
             return XCTFail("erwartet: selected")
         }
         XCTAssertEqual(preview.count, SelectionProbe.previewLimit)
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: true, selectedText: nil, role: "AXOutline"), .none, "Finder-Liste: keine Kopfzeile")
+        XCTAssertEqual(SelectionProbe.resolve(hasFocusedElement: true, selectedText: nil, role: "AXWebArea"), .unknown)
+    }
+
+    func testUnknownProbeNeedsAWorkingCopyFallback() {
+        XCTAssertEqual(SelectionProbe.unknown.respectingCopyFallback(true), .unknown)
+        XCTAssertEqual(SelectionProbe.unknown.respectingCopyFallback(false), .none, "VS Code, ohne Bedienungshilfen: kein leeres Versprechen")
+        XCTAssertEqual(SelectionProbe.selected(preview: "x").respectingCopyFallback(false), .selected(preview: "x"))
+    }
+
+    func testCorrectDefaultIsDroppedWhenTheKeyIsAlreadyTaken() {
+        let suite = "QuickActionDefaultTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let modes = OutputMode.builtInModes
+        var disabled: [String] = []
+
+        // Aufnahme-Hotkey liegt schon auf ⇧⌘K: Standard nicht setzen.
+        QuickActionShortcuts.resolveCorrectDefault(
+            modes: modes, defaults: defaults,
+            lookup: { $0 == .toggleRecording ? QuickActionShortcuts.correctDefault : nil },
+            disable: { disabled.append("quickAction.correct") }
+        )
+        XCTAssertEqual(disabled, ["quickAction.correct"])
+
+        // Frei: nichts tun, der Standard greift.
+        disabled.removeAll()
+        QuickActionShortcuts.resolveCorrectDefault(modes: modes, defaults: defaults, lookup: { _ in nil }, disable: { disabled.append("quickAction.correct") })
+        XCTAssertTrue(disabled.isEmpty)
+
+        // Schon etwas gespeichert: die Wahl des Nutzers bleibt, auch bei Konflikt.
+        defaults.set("x", forKey: "KeyboardShortcuts_quickAction.correct")
+        QuickActionShortcuts.resolveCorrectDefault(
+            modes: modes, defaults: defaults,
+            lookup: { $0 == .toggleRecording ? QuickActionShortcuts.correctDefault : nil },
+            disable: { disabled.append("quickAction.correct") }
+        )
+        XCTAssertTrue(disabled.isEmpty)
     }
 }

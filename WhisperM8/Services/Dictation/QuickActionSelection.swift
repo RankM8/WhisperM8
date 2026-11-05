@@ -127,9 +127,28 @@ enum SelectionProbe: Equatable {
 
     static let previewLimit = 300
 
-    /// Pur, damit die Regel ohne fremde App testbar ist.
-    static func resolve(hasFocusedElement: Bool, selectedText: String?) -> SelectionProbe {
-        guard hasFocusedElement, let selectedText else { return .unknown }
+    /// `unknown` verspricht „ein Klick kopiert die Markierung“. Geht das
+    /// nicht (keine Bedienungshilfen, Editor ohne Cmd+C-Rückfall), lieber
+    /// keine Kopfzeile als eine, die danach „Erst Text markieren“ meldet.
+    func respectingCopyFallback(_ canCopy: Bool) -> SelectionProbe {
+        self == .unknown && !canCopy ? .none : self
+    }
+
+    /// Rollen, in denen Text stehen kann, auch wenn die App die Markierung
+    /// nicht herausgibt (Electron, Web-Inhalte). Listen, Tabellen und
+    /// Dateiansichten (Finder) gehören nicht dazu.
+    static let textLikeRoles: Set<String> = [
+        "AXTextArea", "AXTextField", "AXComboBox", "AXWebArea", "AXGroup", "AXScrollArea", "AXStaticText",
+    ]
+
+    /// Pur, damit die Regel ohne fremde App testbar ist. `role` ist die Rolle
+    /// des Fokus-Elements, falls bekannt.
+    static func resolve(hasFocusedElement: Bool, selectedText: String?, role: String? = nil) -> SelectionProbe {
+        guard hasFocusedElement else { return .unknown }
+        guard let selectedText else {
+            if let role, !textLikeRoles.contains(role) { return .none }
+            return .unknown
+        }
         let trimmed = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .none }
         let oneLine = trimmed.split(whereSeparator: \.isNewline).joined(separator: " ")
@@ -155,6 +174,9 @@ extension SelectedContextService {
         AXUIElementSetMessagingTimeout(element, 0.25)
         var textValue: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &textValue)
-        return .resolve(hasFocusedElement: true, selectedText: status == .success ? (textValue as? String) ?? "" : nil)
+        var roleValue: CFTypeRef?
+        let role = status == .success ? nil
+            : (AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success ? roleValue as? String : nil)
+        return .resolve(hasFocusedElement: true, selectedText: status == .success ? (textValue as? String) ?? "" : nil, role: role)
     }
 }

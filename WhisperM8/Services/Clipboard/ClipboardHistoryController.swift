@@ -178,15 +178,33 @@ final class ClipboardHistoryController {
         model.quickActionsAvailable = available
         model.correctShortcutLabel = available ? quickActions?.shortcutLabel() : nil
         model.selectionAppName = previousApp?.localizedName
-        guard available, let pid = previousApp?.processIdentifier else { return }
+        guard available, let app = previousApp else { return }
+        let canCopy = PermissionService.hasAccessibilityPermission
+            && ClipboardCopyFallbackPolicy.allowsFallback(bundleIdentifier: app.bundleIdentifier)
+        // WhisperM8 selbst (Chat-Prompt): jetzt lesen, solange das Fenster noch
+        // nicht Key ist. Danach fände die Prüfung nur das eigene Suchfeld.
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            model.selectionProbe = Self.ownSelectionProbe()
+            return
+        }
+        let pid = app.processIdentifier
         let current = presentation
         Task { @MainActor [weak self] in
             let probe = await Task.detached(priority: .userInitiated) {
                 SelectedContextService.probeSelection(pid: pid)
             }.value
             guard let self, self.presentation == current, self.isPanelVisible else { return }
-            self.model.selectionProbe = probe
+            self.model.selectionProbe = probe.respectingCopyFallback(canCopy)
         }
+    }
+
+    /// Markierung im eigenen Fenster: nur Textfelder, die AppKit kennt. Im
+    /// Terminal eines Chats gibt es keine Kopfzeile.
+    private static func ownSelectionProbe() -> SelectionProbe {
+        guard let textView = NSApp.keyWindow?.firstResponder as? NSTextView else { return .none }
+        let range = textView.selectedRange()
+        guard range.length > 0, let text = textView.string as NSString? else { return .none }
+        return .resolve(hasFocusedElement: true, selectedText: text.substring(with: range))
     }
 
     private func hidePanelIfNotKey() {
@@ -221,7 +239,7 @@ final class ClipboardHistoryController {
         hidePanel()
         let directory = store.directory
         let delay = refocusDelay
-        Task { @MainActor [weak self] in
+        Task { @MainActor in
             let text = await Task.detached(priority: .userInitiated) {
                 ClipboardHistoryStore.fullText(of: entry, directory: directory)
             }.value
@@ -230,7 +248,8 @@ final class ClipboardHistoryController {
                 NSSound.beep()
                 return
             }
-            self?.store.bump(id: entry.id)
+            // Kein `bump`: die Zwischenablage hält danach wieder den alten
+            // Inhalt, und das Ergebnis kommt ohnehin als eigener Eintrag.
             await quickActions.run(OutputMode.correctID, .text(text))
         }
     }

@@ -27,7 +27,16 @@ extension RecordingCoordinator {
             rework: { text, mode in
                 try await postProcessingService.processRun(rawText: text, mode: mode, language: "", contextBundle: .empty)
             },
-            replaceSelection: { text, app in await replacer.replaceSelection(with: text, in: app) },
+            replaceSelection: { text, app in
+                // Wurde das Zwischenablage-Fenster während der Nacharbeit
+                // wieder geöffnet, hält es die Tastatur: Cmd+V landete sonst
+                // in seinem Suchfeld statt in der Ziel-App.
+                if ClipboardHistoryController.shared.isPanelVisible {
+                    ClipboardHistoryController.shared.hidePanel()
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+                return await replacer.replaceSelection(with: text, in: app)
+            },
             copyToClipboard: { pasteService.copyToClipboard($0) },
             recordHistory: { result, original, mode, app in
                 historyRecorder(DictationHistoryRecord(text: result, original: original, mode: mode, targetApp: app))

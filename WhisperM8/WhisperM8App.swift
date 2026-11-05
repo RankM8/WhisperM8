@@ -115,7 +115,8 @@ struct WhisperM8App: App {
             }
         }
 
-        // Schnellaktion ohne Diktat: je Modus ein eigener Kurzbefehl, ab Werk leer.
+        // Schnellaktion ohne Diktat: je Modus ein eigener Kurzbefehl; ab Werk
+        // nur Korrigieren mit ⇧⌘K, sofern die Taste nicht schon vergeben ist.
         QuickActionHotkeys.shared.start { modeID in
             Task { await AppState.shared.runQuickAction(modeID: modeID) }
         }

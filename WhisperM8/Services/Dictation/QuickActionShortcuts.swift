@@ -22,6 +22,31 @@ enum QuickActionShortcuts {
         modeID == OutputMode.correctID ? correctDefault : nil
     }
 
+    /// Nur zum Nachschlagen: derselbe Schlüssel, aber ohne `default`. Das
+    /// Bauen eines Namens mit `default` schreibt den Standard in die
+    /// Defaults, das soll beim bloßen Prüfen nicht passieren.
+    static func lookupName(for modeID: String) -> KeyboardShortcuts.Name {
+        KeyboardShortcuts.Name(namePrefix + modeID)
+    }
+
+    /// Hat der Nutzer für Korrigieren noch nie etwas gespeichert, ⇧⌘K aber
+    /// schon anders vergeben (Aufnahme-Hotkey, anderer Modus), wird der
+    /// Standard nicht gesetzt, sondern als „aus“ gespeichert. Sonst lösten
+    /// beide auf denselben Tastendruck aus. Läuft beim Start vor der Anmeldung.
+    static func resolveCorrectDefault(
+        modes: [OutputMode],
+        defaults: UserDefaults = .standard,
+        lookup: (KeyboardShortcuts.Name) -> KeyboardShortcuts.Shortcut? = { KeyboardShortcuts.getShortcut(for: $0) },
+        disable: () -> Void = { KeyboardShortcuts.setShortcut(nil, for: name(for: OutputMode.correctID)) }
+    ) {
+        let key = "KeyboardShortcuts_" + namePrefix + OutputMode.correctID
+        guard defaults.object(forKey: key) == nil,
+              conflict(for: correctDefault, excluding: OutputMode.correctID, modes: modes, lookup: lookup) != nil else { return }
+        // Über den Namen mit `default`: so speichert die Bibliothek „aus“,
+        // und der Standard kommt beim nächsten Start nicht wieder.
+        disable()
+    }
+
     /// Vorschlag, der in den Einstellungen angeboten wird, wenn kein
     /// Kurzbefehl gesetzt ist. Nur für die beiden Schreib-Modi.
     static func suggestion(for modeID: String) -> KeyboardShortcuts.Shortcut? {
@@ -55,7 +80,7 @@ enum QuickActionShortcuts {
         for (name, label) in fixed where lookup(name) == shortcut {
             return label
         }
-        for mode in eligibleModes(modes) where mode.id != modeID && lookup(name(for: mode.id)) == shortcut {
+        for mode in eligibleModes(modes) where mode.id != modeID && lookup(lookupName(for: mode.id)) == shortcut {
             return mode.displayName
         }
         return nil
@@ -74,6 +99,7 @@ final class QuickActionHotkeys {
 
     func start(onTrigger: @escaping @MainActor (String) -> Void) {
         guard modesObserver == nil else { return }
+        QuickActionShortcuts.resolveCorrectDefault(modes: OutputModeStore().modes)
         register(onTrigger: onTrigger)
         modesObserver = NotificationCenter.default.addObserver(
             forName: OutputModeStore.modesDidChangeNotification, object: nil, queue: .main
