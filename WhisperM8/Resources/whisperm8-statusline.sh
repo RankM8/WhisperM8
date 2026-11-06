@@ -206,7 +206,12 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
                 -H "anthropic-version: 2023-06-01" \
                 -H "anthropic-beta: oauth-2025-04-20" 2>/dev/null)
             if echo "$resp" | jq -e '.five_hour or .seven_day' >/dev/null 2>&1; then
-                echo "$resp" > "$usage_cache"
+                # Atomar über temp + mv: die Anzeige und das Mischen unten lesen
+                # die Datei jederzeit und sähen sonst eine halbe Antwort.
+                fetch_tmp=$(mktemp "${tmp_base}claude-usage-cache-${ccs_profile}.XXXXXX" 2>/dev/null)
+                if [ -n "$fetch_tmp" ]; then
+                    printf '%s\n' "$resp" > "$fetch_tmp" && mv -f "$fetch_tmp" "$usage_cache" 2>/dev/null || rm -f "$fetch_tmp"
+                fi
                 rm -f "$usage_cooldown"
             else
                 # Rate-Limited: Cooldown setzen
@@ -218,6 +223,71 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
             touch "$usage_cooldown"
         fi
     ) &
+fi
+
+# Claude Code reicht der Statuszeile den Limit-Stand selbst mit (`rate_limits`
+# mit `five_hour`/`seven_day`: `used_percentage`, `resets_at` in Epoch-Sekunden;
+# fehlt bei API-Key-Logins). Den übernehmen wir in den Cache — ohne eigene
+# Netzwerkabfrage bleibt die Anzeige so frisch, und die WhisperM8-Statistik
+# bekommt einen dichten Limit-Verlauf. Regeln:
+# - Format wie die oauth/usage-Antwort (`utilization`, `resets_at` als ISO),
+#   übrige Felder (z. B. das modellbezogene `limits`-Array) bleiben erhalten.
+# - Geschrieben wird nur bei geänderten Werten oder spätestens alle 5 Minuten.
+# - Das Änderungsdatum der Datei bleibt stehen: es steuert den 30-Minuten-Takt
+#   des Abrufs oben. Den Zeitpunkt trägt `statusline_captured_at`.
+# - GPT-Modelle überspringen: deren Limits gehören nicht zum Claude-Konto.
+# - Ein einziger jq-Aufruf prüft `rate_limits` und mischt in den Cache.
+# - Hat der Hintergrund-Abruf die Datei inzwischen ersetzt (neues
+#   Änderungsdatum), wird nicht geschrieben: sonst überschriebe der alte
+#   Inhalt die frische Antwort samt modellbezogenem Limit.
+if [ "$is_supported_gpt" -eq 0 ]; then
+    cache_src="$usage_cache"
+    cache_mtime_before=""
+    if [ -f "$usage_cache" ]; then
+        cache_mtime_before=$(stat -f %m "$usage_cache" 2>/dev/null)
+    else
+        cache_src=/dev/null
+    fi
+    # --rawfile + fromjson: eine kaputte Cache-Datei wird ersetzt statt blockiert.
+    merged_cache=$(printf '%s\n' "$input" | jq -c \
+        --rawfile cache "$cache_src" \
+        --argjson now "$(date +%s)" '
+        def win($w):
+            if ($w | type) == "object" and ($w.used_percentage | type) == "number" then
+                { utilization: $w.used_percentage,
+                  resets_at: (if ($w.resets_at | type) == "number"
+                              then ($w.resets_at | floor | todate)
+                              else $w.resets_at end) }
+            else null end;
+        .rate_limits as $rl
+        | if ($rl | type) == "object" and (win($rl.five_hour) or win($rl.seven_day)) then
+            ($cache | try fromjson catch {}) as $parsed
+            | (if ($parsed | type) == "object" then $parsed else {} end) as $old
+            | ($old
+               + (if win($rl.five_hour) then { five_hour: (($old.five_hour // {}) + win($rl.five_hour)) } else {} end)
+               + (if win($rl.seven_day) then { seven_day: (($old.seven_day // {}) + win($rl.seven_day)) } else {} end)) as $new
+            | if ($new.five_hour.utilization == $old.five_hour.utilization)
+                 and ($new.seven_day.utilization == $old.seven_day.utilization)
+                 and ($new.five_hour.resets_at == $old.five_hour.resets_at)
+                 and ($new.seven_day.resets_at == $old.seven_day.resets_at)
+                 and (($now - ($old.statusline_captured_at // 0)) < 300)
+              then empty
+              else $new + { statusline_captured_at: $now } end
+          else empty end' 2>/dev/null)
+    if [ -n "$merged_cache" ]; then
+        cache_tmp=$(mktemp "${tmp_base}claude-usage-cache-${ccs_profile}.XXXXXX" 2>/dev/null)
+        if [ -n "$cache_tmp" ]; then
+            printf '%s\n' "$merged_cache" > "$cache_tmp"
+            [ -f "$usage_cache" ] && touch -r "$usage_cache" "$cache_tmp" 2>/dev/null
+            cache_mtime_now=""
+            [ -f "$usage_cache" ] && cache_mtime_now=$(stat -f %m "$usage_cache" 2>/dev/null)
+            if [ "$cache_mtime_now" = "$cache_mtime_before" ]; then
+                mv -f "$cache_tmp" "$usage_cache" 2>/dev/null || rm -f "$cache_tmp"
+            else
+                rm -f "$cache_tmp"
+            fi
+        fi
+    fi
 fi
 
 # Immer vom Cache lesen (non-blocking)

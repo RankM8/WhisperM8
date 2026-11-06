@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistik-Seite Entwurf</title>
+<style>
+/* Doku-Rahmen (wie einstellungen-claude-code.html) */
+:root {
+  --paper: oklch(0.97 0.008 85); --ink: oklch(0.24 0.015 60);
+  --ink-soft: oklch(0.42 0.015 60); --ink-mute: oklch(0.58 0.012 60);
+  --accent: oklch(0.62 0.19 40); --line: oklch(0.88 0.01 80); --card: oklch(0.995 0.004 90);
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--paper); color:var(--ink); font-size:16px; line-height:1.55; }
+.wrap { max-width:1240px; margin:0 auto; padding:0 24px; }
+.hero { padding:40px 0 18px; }
+.kicker { font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
+.hero h1 { font-family:Charter,Georgia,serif; font-size:34px; line-height:1.15; font-weight:600; }
+.hero h1 em { font-style:italic; color:var(--accent); }
+.lede { max-width:860px; margin-top:12px; font-size:16px; color:var(--ink-soft); }
+.bar { position:sticky; top:0; z-index:40; background:oklch(0.97 0.008 85 / .93); backdrop-filter:blur(10px); border-block:1px solid var(--line); padding:9px 0; }
+.bar .wrap { display:flex; flex-wrap:wrap; align-items:center; gap:10px 22px; }
+.bar .grp { display:flex; align-items:center; gap:8px; }
+.bar .lab { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-mute); }
+.sw { display:inline-flex; background:oklch(0.93 0.01 85); border:1px solid var(--line); border-radius:7px; padding:2px; gap:2px; flex-wrap:wrap; }
+.sw button { border:none; background:transparent; font:inherit; font-size:12.5px; padding:4px 13px; border-radius:5px; cursor:pointer; color:var(--ink-soft); }
+.sw button.on { background:var(--ink); color:var(--paper); }
+.stage { padding:22px 0 10px; }
+section.doc { padding:30px 0 0; }
+section.doc h2 { font-family:Charter,Georgia,serif; font-size:25px; font-weight:600; margin-bottom:8px; }
+section.doc h3 { font-size:16px; margin:16px 0 4px; }
+section.doc p, section.doc li { max-width:860px; color:var(--ink-soft); }
+section.doc ul, section.doc ol { margin:8px 0 0 20px; }
+section.doc li { margin:4px 0; }
+section.doc b { color:var(--ink); }
+section.doc code { font-family:var(--mono); font-size:13px; background:oklch(0.93 0.01 85); padding:1px 5px; border-radius:4px; }
+.dt { width:100%; max-width:1000px; border-collapse:collapse; margin-top:10px; font-size:14px; }
+.dt th, .dt td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--ink-soft); }
+.dt th { font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-mute); font-weight:500; }
+.dt td b { color:var(--ink); }
+footer { border-top:1px solid var(--line); margin-top:40px; padding:20px 0 40px; color:var(--ink-mute); font-size:13px; }
+
+/* App-Tokens (Werte aus AppTheme.swift) + Diagrammfarben (validierte Referenzpalette, Slots 1-4) */
+.s-frame {
+  --t-bg:#0f0f10; --t-side:#131415; --t-surface:#171719; --t-panel:#1b1c1d; --t-control:#242526; --t-seg:#3c3d3f;
+  --t-line:rgba(255,255,255,.06); --t-line-strong:rgba(255,255,255,.10);
+  --t-text:rgba(255,255,255,.92); --t-text2:rgba(255,255,255,.55); --t-text3:rgba(255,255,255,.40);
+  --t-accent:#7c84e8; --t-accent-strong:#5e6ad2; --t-tint:rgba(124,132,232,.16); --t-tint-soft:rgba(124,132,232,.08);
+  --t-ok:#4cc38a; --t-warn:#e9b949; --t-err:#e5594f;
+  --t-shadow:0 26px 70px rgba(0,0,0,.55); --t-knob:#fff; --t-menu:#232426;
+  --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c-grid:rgba(255,255,255,.07);
+}
+.s-frame[data-theme="light"] {
+  --t-bg:#ffffff; --t-side:#eeeef0; --t-surface:#ffffff; --t-panel:#f7f7f8; --t-control:#ebebed; --t-seg:#ffffff;
+  --t-line:rgba(0,0,0,.08); --t-line-strong:rgba(0,0,0,.13);
+  --t-text:rgba(0,0,0,.90); --t-text2:rgba(0,0,0,.58); --t-text3:rgba(0,0,0,.45);
+  --t-accent:#5e6ad2; --t-accent-strong:#4b56c0; --t-tint:rgba(94,106,210,.13); --t-tint-soft:rgba(94,106,210,.06);
+  --t-ok:#3fa873; --t-warn:#b8861f; --t-err:#d6473d;
+  --t-shadow:0 22px 60px rgba(0,0,0,.18); --t-menu:#ffffff;
+  --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c-grid:rgba(0,0,0,.07);
+}
+.s-frame { border-radius:11px; overflow:hidden; background:var(--t-bg); border:1px solid rgba(0,0,0,.55); box-shadow:var(--t-shadow); font-size:13px; color:var(--t-text); -webkit-font-smoothing:antialiased; position:relative; }
+.s-frame[data-theme="light"] { border-color:rgba(0,0,0,.14); }
+.s-title { display:flex; align-items:center; height:40px; background:var(--t-side); border-bottom:1px solid var(--t-line-strong); padding:0 14px; position:relative; }
+.s-dots { display:flex; gap:8px; }
+.s-dots span { width:12px; height:12px; border-radius:50%; }
+.s-dots span:nth-child(1){background:#ff5f57;} .s-dots span:nth-child(2){background:#febc2e;} .s-dots span:nth-child(3){background:#28c840;}
+.s-title .t { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; color:var(--t-text2); pointer-events:none; }
+.s-body { display:grid; grid-template-columns:220px 1fr; height:900px; }
+.s-side { background:var(--t-side); border-right:1px solid var(--t-line); padding:12px 9px 16px; overflow-y:auto; }
+.s-side .g { font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--t-text3); padding:0 11px 5px; }
+.s-side .grp { margin-bottom:13px; }
+.s-item { display:flex; align-items:center; gap:8px; padding:5.5px 10px; border-radius:7px; font-size:13px; color:var(--t-text); user-select:none; }
+.s-item .ic { width:16px; height:16px; flex-shrink:0; stroke:var(--t-text2); fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.s-item.sel { background:var(--t-tint); color:var(--t-accent); font-weight:600; }
+.s-item.sel .ic { stroke:var(--t-accent); }
+.s-item .new { margin-left:auto; font-size:9.5px; font-weight:700; color:var(--t-accent); background:var(--t-tint); border-radius:4px; padding:0 5px; }
+.s-main { overflow-y:auto; position:relative; }
+.s-inner { padding:26px 36px 44px; max-width:940px; }
+.ph { display:flex; align-items:flex-start; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+.ph h1 { font-size:22px; font-weight:700; letter-spacing:-.01em; }
+.ph .psub { color:var(--t-text2); font-size:13px; margin-top:3px; max-width:520px; }
+.ph .acts { margin-left:auto; display:flex; gap:8px; flex-shrink:0; align-items:center; }
+
+/* Bausteine */
+.c-btn { background:var(--t-control); border:1px solid var(--t-line); border-radius:6px; padding:4px 11px; color:var(--t-text); cursor:pointer; white-space:nowrap; font:inherit; font-size:12.5px; }
+.c-btn:hover { border-color:var(--t-line-strong); }
+.c-btn.primary { background:var(--t-accent-strong); border-color:transparent; color:#fff; }
+.c-btn.danger { color:var(--t-err); }
+.c-tgl { width:38px; height:22px; border-radius:11px; background:var(--t-control); position:relative; cursor:pointer; flex-shrink:0; border:1px solid var(--t-line); display:inline-block; }
+.c-tgl::after { content:""; position:absolute; top:1.5px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--t-knob); transition:left .15s; box-shadow:0 1px 3px rgba(0,0,0,.35); }
+.c-tgl.on { background:var(--t-accent-strong); border-color:transparent; }
+.c-tgl.on::after { left:17px; }
+.c-seg { display:inline-flex; background:var(--t-control); border-radius:7px; padding:2px; gap:2px; }
+.c-seg span { padding:3.5px 11px; border-radius:5px; color:var(--t-text2); font-size:12.5px; cursor:pointer; font-weight:500; user-select:none; }
+.c-seg span.on { background:var(--t-seg); color:var(--t-text); box-shadow:0 1px 3px rgba(0,0,0,.25); }
+.c-sel { appearance:none; -webkit-appearance:none; background:var(--t-control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center; border:1px solid var(--t-line); border-radius:6px; padding:3.5px 26px 3.5px 10px; color:var(--t-text); font:inherit; font-size:12.5px; cursor:pointer; }
+.c-num { width:74px; text-align:right; font:inherit; font-size:12.5px; font-variant-numeric:tabular-nums; background:var(--t-surface); border:1px solid var(--t-line-strong); border-radius:6px; padding:3px 8px; color:var(--t-text); outline:none; }
+.c-num:focus { border-color:var(--t-accent); }
+.tag { font-size:10px; font-weight:650; border-radius:4px; padding:1px 6px; background:var(--t-control); color:var(--t-text2); white-space:nowrap; }
+.tag.acc { color:var(--t-accent); background:var(--t-tint); }
+.st { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--t-text2); white-space:nowrap; }
+.st::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--t-ok); }
+.st.off::before { background:var(--t-text3); }
+.num { font-variant-numeric:tabular-nums; }
+
+/* Abschnitte */
+.sect { margin-bottom:28px; }
+.shead { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.shead .sl { font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--t-text3); }
+.shead .sr { margin-left:auto; display:flex; align-items:center; gap:6px; }
+.note { font-size:11.5px; color:var(--t-text3); margin-top:8px; line-height:1.5; }
+.row { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:10px 2px; border-bottom:1px solid var(--t-line); min-height:44px; }
+.row:last-child { border-bottom:none; }
+.row .l { font-size:13.5px; min-width:0; }
+.row .l small { display:block; color:var(--t-text3); font-size:11.5px; margin-top:2px; max-width:520px; line-height:1.5; }
+.row .r { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.card { border:1px solid var(--t-line-strong); border-radius:10px; padding:14px 16px; }
+
+/* Kennzahlen */
+.kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:26px; }
+.kpi { border:1px solid var(--t-line-strong); border-radius:10px; padding:12px 14px 11px; background:var(--t-panel); }
+.kpi .k { font-size:11.5px; color:var(--t-text2); }
+.kpi .v { font-size:24px; font-weight:700; letter-spacing:-.01em; margin-top:2px; font-variant-numeric:tabular-nums; }
+.kpi .v small { font-size:13px; font-weight:600; color:var(--t-text2); margin-left:2px; }
+.kpi .d { font-size:11.5px; color:var(--t-text3); margin-top:2px; }
+.kpi .d b { font-weight:600; color:var(--t-text2); }
+
+/* Diagramme */
+.charts2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.chart h4 { font-size:12.5px; font-weight:600; margin-bottom:2px; }
+.chart .cs { font-size:11.5px; color:var(--t-text3); margin-bottom:8px; }
+.chart svg { display:block; width:100%; height:auto; overflow:visible; }
+.chart svg text { font-family:-apple-system,BlinkMacSystemFont,sans-serif; font-size:10.5px; fill:var(--t-text3); }
+.chart .bar-hit { fill:transparent; cursor:default; }
+.chart .bar-hit:hover + .bar, .chart g:hover .bar { opacity:.8; }
+.tip { position:fixed; z-index:100; pointer-events:none; background:var(--t-menu); color:var(--t-text); border:1px solid var(--t-line-strong); border-radius:7px; padding:6px 10px; font-size:12px; box-shadow:0 8px 24px rgba(0,0,0,.3); opacity:0; transition:opacity .08s; white-space:nowrap; }
+.tip.on { opacity:1; }
+.tip b { font-variant-numeric:tabular-nums; }
+.tip small { display:block; color:var(--t-text3); font-size:11px; }
+
+/* Modelltabelle */
+.mt { width:100%; border-collapse:collapse; font-size:12.5px; }
+.mt th { text-align:right; font-size:10.5px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--t-text3); padding:0 8px 7px; border-bottom:1px solid var(--t-line); white-space:nowrap; }
+.mt th:first-child, .mt td:first-child { text-align:left; padding-left:2px; }
+.mt td { text-align:right; padding:9px 8px; border-bottom:1px solid var(--t-line); font-variant-numeric:tabular-nums; color:var(--t-text2); white-space:nowrap; }
+.mt td.m { color:var(--t-text); font-weight:600; }
+.mt td.m small { display:block; font-weight:400; font-size:11px; color:var(--t-text3); }
+.mt td.eur { color:var(--t-text); font-weight:650; }
+.mt tr:last-child td { border-bottom:none; }
+.mt tfoot td { border-top:1px solid var(--t-line-strong); color:var(--t-text); font-weight:650; }
+.sw-dot { display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:7px; vertical-align:0; }
+.share { display:flex; height:10px; border-radius:4px; overflow:hidden; gap:2px; margin:4px 0 6px; }
+.share i { display:block; height:100%; }
+.legend { display:flex; flex-wrap:wrap; gap:4px 16px; font-size:11.5px; color:var(--t-text2); }
+.legend span { display:inline-flex; align-items:center; }
+.legend b { color:var(--t-text); font-weight:600; margin-left:5px; font-variant-numeric:tabular-nums; }
+
+/* Geld */
+.lever { display:grid; grid-template-columns:1.1fr 1fr; gap:14px; align-items:start; }
+.lever .big { font-size:34px; font-weight:750; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.lever .big small { font-size:15px; color:var(--t-text2); font-weight:600; }
+.abo { display:grid; grid-template-columns:1fr 56px 74px 18px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--t-line); font-size:12.5px; }
+.abo:last-of-type { border-bottom:none; }
+.abo .x { color:var(--t-text3); text-align:right; }
+.abo .rm { color:var(--t-text3); cursor:pointer; text-align:center; }
+
+/* Limits */
+.lt { border:1px solid var(--t-line-strong); border-radius:10px; }
+.lt .lr { display:grid; grid-template-columns:minmax(130px,1fr) 150px 150px 150px; gap:16px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--t-line); }
+.lt .lr:last-child { border-bottom:none; }
+.lt .hd { font-size:10.5px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; color:var(--t-text3); padding-top:8px; padding-bottom:8px; }
+.lt .n { font-weight:650; font-size:13px; }
+.lt .n small { display:block; font-weight:400; font-size:11px; color:var(--t-text3); }
+.lm .top { display:flex; align-items:baseline; justify-content:space-between; }
+.lm .pc { font-size:12.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+.lm .rs { font-size:11px; color:var(--t-text3); }
+.lm i { display:block; height:5px; border-radius:3px; background:var(--t-control); margin-top:4px; position:relative; overflow:hidden; }
+.lm i b { position:absolute; inset:0 auto 0 0; border-radius:3px; background:var(--t-accent); }
+.lm.w .pc { color:var(--t-warn); }
+.lm.w i b { background:var(--t-warn); }
+.spark { display:flex; align-items:flex-end; gap:3px; height:28px; }
+.spark i { flex:1; background:var(--t-accent); border-radius:2px 2px 0 0; opacity:.85; min-height:2px; }
+.spark i.full { background:var(--t-warn); opacity:1; }
+.spk-l { font-size:11px; color:var(--t-text3); margin-top:3px; }
+
+/* Chats, Diktate */
+.mini { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.mini .m { padding:10px 12px; border:1px solid var(--t-line); border-radius:9px; }
+.mini .m .k { font-size:11.5px; color:var(--t-text2); }
+.mini .m .v { font-size:18px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:1px; }
+.mini .m .d { font-size:11px; color:var(--t-text3); }
+.pt { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:12px; }
+.pt td { padding:7px 6px; border-bottom:1px solid var(--t-line); color:var(--t-text2); font-variant-numeric:tabular-nums; }
+.pt td:first-child { color:var(--t-text); font-weight:600; padding-left:2px; }
+.pt td.r { text-align:right; }
+.pt tr:last-child td { border-bottom:none; }
+.pt .pb { width:180px; }
+.pt .pb i { display:block; height:6px; border-radius:3px; background:var(--t-accent); opacity:.85; }
+
+.later { border:1px dashed var(--t-line-strong); border-radius:10px; padding:14px 16px; color:var(--t-text2); font-size:12.5px; }
+.later b { color:var(--t-text); }
+
+/* Banner Ersteinlesen */
+.banner { display:flex; align-items:center; gap:12px; border:1px solid color-mix(in srgb, var(--t-accent) 40%, transparent); background:var(--t-tint-soft); border-radius:10px; padding:10px 14px; margin-bottom:18px; font-size:12.5px; }
+.banner .l { flex:1; }
+.banner .l small { display:block; color:var(--t-text3); font-size:11.5px; margin-top:2px; }
+.prog { height:5px; border-radius:3px; background:var(--t-control); margin-top:7px; overflow:hidden; }
+.prog b { display:block; height:100%; background:var(--t-accent); border-radius:3px; }
+.partial { color:var(--t-text3); font-size:11px; font-weight:500; }
+
+/* Leer-Zustand */
+.empty { border:1px dashed var(--t-line-strong); border-radius:12px; padding:34px 30px; text-align:center; max-width:560px; margin:40px auto; }
+.empty h2 { font-size:17px; margin-bottom:6px; }
+.empty p { color:var(--t-text2); font-size:13px; margin-bottom:14px; line-height:1.55; }
+.empty ul { text-align:left; color:var(--t-text2); font-size:12.5px; margin:0 auto 18px; max-width:400px; padding-left:18px; line-height:1.7; }
+
+/* Teilen-Dialog */
+.sheet-bg { position:absolute; inset:40px 0 0 0; background:rgba(0,0,0,.45); display:none; align-items:flex-start; justify-content:center; padding-top:60px; z-index:20; }
+.sheet-bg.on { display:flex; }
+.sheet { width:620px; max-width:94%; background:var(--t-panel); border:1px solid var(--t-line-strong); border-radius:12px; box-shadow:0 30px 80px rgba(0,0,0,.5); padding:18px 20px 16px; }
+.sheet h3 { font-size:15px; margin-bottom:2px; }
+.sheet .ss { font-size:12px; color:var(--t-text3); margin-bottom:14px; }
+.sheet .cols { display:grid; grid-template-columns:1fr 250px; gap:18px; }
+.share-card { border-radius:12px; padding:16px 18px; background:linear-gradient(150deg, #1d2050, #121327 70%); color:#fff; font-size:12px; }
+.share-card .h { font-size:11px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; }
+.share-card .t { font-size:15px; font-weight:700; margin:2px 0 12px; }
+.share-card .g { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+.share-card .g div span { display:block; font-size:10.5px; opacity:.6; }
+.share-card .g div b { font-size:17px; font-variant-numeric:tabular-nums; }
+.share-card .f { margin-top:12px; font-size:10.5px; opacity:.5; }
+.chk { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid var(--t-line); font-size:12.5px; }
+.chk:last-child { border-bottom:none; }
+.sheet .foot { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+
+.hidden { display:none !important; }
+
+@media (max-width:900px){
+  .s-body { grid-template-columns:1fr; height:auto; }
+  .s-side { max-height:200px; border-right:none; border-bottom:1px solid var(--t-line); }
+  .s-inner { padding:18px 16px 30px; }
+  .kpis { grid-template-columns:1fr 1fr; }
+  .charts2, .lever, .sheet .cols { grid-template-columns:1fr; }
+  .mini { grid-template-columns:1fr 1fr; }
+  .lt .lr { grid-template-columns:1fr 1fr; }
+  .lt .hd { display:none; }
+  .mt-wrap { overflow-x:auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <div class="kicker">Entwurf · Einstellungen · feat/statistik</div>
+  <h1>Eine Seite <em>Statistik</em>: Zeit, Token, Geld, Limits, Chats</h1>
+  <p class="lede">Klickbarer Entwurf der neuen Einstellungsseite. Die Zahlen sind Beispielwerte, angelehnt an deine echten Werte der letzten 7 Tage (Opus 5.5: 25.822 Antworten, rund 3.200 $ API-Gegenwert). Oben umschalten: Theme, Zustand der Seite und Zeitraum. „Teilen…“ auf der Seite öffnet den Export.</p>
+</header>
+
+<div class="bar">
+  <div class="wrap">
+    <div class="grp"><span class="lab">Theme</span>
+      <div class="sw" id="sw-theme"><button data-v="dark" class="on">Dunkel</button><button data-v="light">Hell</button></div>
+    </div>
+    <div class="grp"><span class="lab">Zustand</span>
+      <div class="sw" id="sw-state"><button data-v="normal" class="on">Normal</button><button data-v="backfill">Historie wird eingelesen</button><button data-v="empty">Noch aus</button></div>
+    </div>
+  </div>
+</div>
+
+<main class="wrap stage">
+  <div class="s-frame" id="frame" data-theme="dark">
+    <div class="s-title"><div class="s-dots"><span></span><span></span><span></span></div><div class="t">Statistik</div></div>
+    <div class="s-body">
+      <nav class="s-side">
+        <div class="grp"><div class="g">Diktat</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Aufnahme</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg>Transkription</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>KI-Ausgabe</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Kontext &amp; Datenschutz</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/></svg>Ausgabe</div>
+        </div>
+        <div class="grp"><div class="g">Agent Chats</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>Agent Chats</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M5 8l4 4-4 4M12 17h7"/></svg>CLI &amp; Skills</div>
+        </div>
+        <div class="grp"><div class="g">App</div>
+          <div class="s-item sel"><svg class="ic" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6"/></svg>Statistik<span class="new">NEU</span></div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4h6v3H9z"/></svg>Zwischenablage</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Allgemein</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>Berechtigungen</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Über</div>
+        </div>
+        <div class="grp"><div class="g">Erweitert</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M16 4.5a3.5 3.5 0 0 1 0 7M21 20c0-3-1.8-5.3-4.5-5.9"/></svg>Konten</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M9 7a3 3 0 1 0-3 3v7a3 3 0 1 0 3-3h6"/></svg>Hooks</div>
+        </div>
+        <div class="grp"><div class="g">Labs</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>GPT-Backend</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><path d="M4 12h2l2-5 3 10 3-7 2 2h4"/></svg>Codex Voice Agent</div>
+          <div class="s-item"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Jarvis &amp; Ansagen</div>
+        </div>
+      </nav>
+
+      <div class="s-main" id="main">
+        <div class="s-inner">
+          <div class="ph">
+            <div>
+              <h1>Statistik</h1>
+              <div class="psub">Wie viel du mit WhisperM8 arbeitest. Alles wird lokal auf diesem Mac gerechnet, im Hintergrund und ohne Netzwerk.</div>
+            </div>
+            <div class="acts" id="acts">
+              <div class="c-seg" id="seg-period"><span data-v="day">Heute</span><span data-v="week" class="on">Woche</span><span data-v="month">Monat</span><span data-v="all">Gesamt</span></div>
+              <button class="c-btn" id="btn-share">Teilen…</button>
+            </div>
+          </div>
+
+          <!-- Leer-Zustand -->
+          <div id="v-empty" class="hidden">
+            <div class="empty">
+              <h2>Statistik einschalten?</h2>
+              <p>WhisperM8 zählt dann mit, wie lange du aktiv arbeitest, was deine Chats an Token verbrauchen und was das zu API-Preisen wert wäre.</p>
+              <ul>
+                <li>Alles bleibt auf diesem Mac. Nichts wird hochgeladen.</li>
+                <li>Gelesen werden nur die Protokolle von Claude Code und Codex, geschrieben wird dort nichts.</li>
+                <li>Deine bisherigen Chats werden einmalig im Hintergrund eingelesen, gedrosselt, über einige Minuten.</li>
+              </ul>
+              <button class="c-btn primary" id="btn-enable">Statistik einschalten</button>
+            </div>
+          </div>
+
+          <div id="v-data">
+            <!-- Banner Ersteinlesen -->
+            <div class="banner hidden" id="banner">
+              <div class="l">
+                <b>Deine bisherigen Chats werden eingelesen</b> · <span class="num">3.460</span> von <span class="num">9.120</span> Dateien
+                <small>Läuft gedrosselt im Hintergrund und pausiert während eines Diktats. Werte vor Juli sind noch unvollständig.</small>
+                <div class="prog"><b style="width:38%"></b></div>
+              </div>
+              <button class="c-btn">Pausieren</button>
+            </div>
+
+            <!-- Kennzahlen -->
+            <div class="kpis" id="kpis"></div>
+
+            <!-- Zeit -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Zeit</span></div>
+              <div class="charts2">
+                <div class="chart card"><h4>Deine aktive Zeit</h4><div class="cs" id="cs-active"></div><div id="ch-active"></div></div>
+                <div class="chart card"><h4>Agenten haben gearbeitet</h4><div class="cs" id="cs-agent"></div><div id="ch-agent"></div></div>
+              </div>
+              <div class="note">Aktive Zeit: ein WhisperM8-Fenster ist vorne und du hast in den letzten 5 Minuten getippt oder geklickt. Reine Vordergrund-Zeit: <b class="num" id="fg-time"></b>. Agenten-Zeit zählt jede Minute, in der mindestens ein Chat arbeitet, auch wenn du woanders bist.</div>
+            </div>
+
+            <!-- Modelle & Token -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Modelle &amp; Token</span>
+                <div class="sr"><select class="c-sel" id="sel-account"><option>Alle Konten</option><option>main</option><option>RankM8</option><option>PowerUser</option><option>PowerUser2</option><option>Claude2</option><option>ai</option><option>ai2</option><option>Codex (CLI)</option></select></div>
+              </div>
+              <div class="share" id="share"></div>
+              <div class="legend" id="legend"></div>
+              <div class="mt-wrap" style="margin-top:12px">
+                <table class="mt" id="mt"></table>
+              </div>
+              <div class="note">„Gegenwert“ ist der Betrag, den dieselben Token über die API kosten würden, nach Anthropic- und OpenAI-Preisliste, umgerechnet zum EZB-Tageskurs (1 $ = 0,92 €). Mit Abo zahlst du ihn nicht. GPT über den Proxy läuft über dein ChatGPT-Abo und zählt deshalb nicht zu den Claude-Konten. Jede Antwort zählt einmal, auch wenn sie nach einem Kontowechsel in zwei Konten liegt.</div>
+            </div>
+
+            <!-- Geld -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Geld</span></div>
+              <div class="lever card">
+                <div>
+                  <div style="font-size:12px;color:var(--t-text2)">Hebel deiner Abos <span id="lever-period"></span></div>
+                  <div class="big" id="lever">0×</div>
+                  <div class="note" style="margin-top:4px" id="lever-text"></div>
+                </div>
+                <div>
+                  <div style="font-size:12px;color:var(--t-text2);margin-bottom:4px">Was du monatlich zahlst</div>
+                  <div id="abos"></div>
+                  <button class="c-btn" style="margin-top:8px" id="abo-add">Abo hinzufügen</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Limits -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Limits</span><div class="sr"><span class="st">Aus der Statuszeile, ohne Netzwerkabfrage</span></div></div>
+              <div class="lt" id="lt"></div>
+              <div class="note">Der Verlauf zeigt die höchste Auslastung pro Woche (8 Wochen). Gelb: Limit erreicht. So siehst du, welches Konto regelmäßig am Anschlag ist und wo Puffer bleibt.</div>
+            </div>
+
+            <!-- Chats -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Chats</span></div>
+              <div class="mini" id="mini-chats"></div>
+              <div style="margin-top:14px">
+                <div style="font-size:12px;color:var(--t-text2)">Womit gearbeitet wurde</div>
+                <div class="share" id="share-chats"></div>
+                <div class="legend" id="legend-chats"></div>
+              </div>
+              <table class="pt" id="pt"></table>
+            </div>
+
+            <!-- Diktate -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Diktate</span></div>
+              <div class="mini" id="mini-dict"></div>
+            </div>
+
+            <!-- Git -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Git</span><span class="tag">Stufe 3</span></div>
+              <div class="later"><b>Commits und Pull Requests pro Projekt</b> kommen in Stufe 3. Gezählt werden deine Commits in den Projektordnern deiner Chats (lokales <code>git log</code>, einmal pro Stunde) und, wenn <code>gh</code> angemeldet ist, deine PRs.</div>
+            </div>
+
+            <!-- Daten & Leistung -->
+            <div class="sect">
+              <div class="shead"><span class="sl">Daten</span></div>
+              <div class="row"><div class="l">Statistik erfassen<small>Aus: nichts wird mehr gezählt oder eingelesen. Bisherige Werte bleiben, bis du sie löschst.</small></div><div class="r"><span class="c-tgl on" id="tgl-on"></span></div></div>
+              <div class="row"><div class="l">Letzte Auswertung<small>Alle 15 Minuten und beim Öffnen dieser Seite. Gelesen werden nur neue Zeilen geänderter Dateien.</small></div><div class="r"><span class="st num" id="last-run">vor 3 Min · 12 Dateien · 0,4 s</span></div></div>
+              <div class="row"><div class="l">Gespeichert<small>Tageswerte unter Application Support/WhisperM8/statistics/</small></div><div class="r"><span class="num" style="color:var(--t-text2)">1,4 MB</span><button class="c-btn">Neu einlesen</button><button class="c-btn danger">Löschen…</button></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Teilen -->
+        <div class="sheet-bg" id="sheet">
+          <div class="sheet">
+            <h3>Statistik teilen</h3>
+            <div class="ss">Erzeugt ein Bild oder einen Markdown-Text, den du in Slack oder einer Mail weitergeben kannst.</div>
+            <div class="cols">
+              <div class="share-card" id="card"></div>
+              <div>
+                <div class="chk">Zeiten<span class="c-tgl on" data-k="time"></span></div>
+                <div class="chk">Token &amp; Modelle<span class="c-tgl on" data-k="tok"></span></div>
+                <div class="chk">Euro-Beträge<span class="c-tgl on" data-k="eur"></span></div>
+                <div class="chk">Projektnamen<span class="c-tgl" data-k="proj"></span></div>
+                <div class="note">Projektnamen sind standardmäßig aus, damit nichts über Kunden nach außen geht.</div>
+              </div>
+            </div>
+            <div class="foot">
+              <button class="c-btn" id="sheet-close">Abbrechen</button>
+              <button class="c-btn">Als Markdown kopieren</button>
+              <button class="c-btn primary">Bild kopieren</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tip" id="tip"></div>
+</main>
+
+<section class="doc wrap">
+  <h2>Was die Seite zeigt und woher die Zahlen kommen</h2>
+  <table class="dt">
+    <tr><th>Bereich</th><th>Quelle</th><th>Wie gezählt wird</th></tr>
+    <tr><td><b>Aktive Zeit</b></td><td>App-Ereignisse</td><td>Fenster aktiv/inaktiv, Ruhezustand, Bildschirmsperre. Solange WhisperM8 vorne ist, prüft die App einmal pro Minute die Zeit seit der letzten Eingabe. Kein Dauer-Timer.</td></tr>
+    <tr><td><b>Agenten-Zeit</b>, gleichzeitige Chats</td><td>Status-Koordinator</td><td>Jeder Wechsel „arbeitet“/„wartet“ läuft schon durch eine Funktion (<code>AgentSessionStatusCoordinator.apply</code>). Dort wird nur bei Änderungen mitgerechnet: Minuten mit mindestens einem arbeitenden Chat, zeitgewichteter Durchschnitt, Tagesspitze.</td></tr>
+    <tr><td><b>Neue Chats</b>, Mix</td><td><code>createSession</code></td><td>Ein Zähler an der einzigen Stelle, an der Chats entstehen. Für die Zeit davor aus <code>createdAt</code> der gespeicherten Chats.</td></tr>
+    <tr><td><b>Token, Modelle, Gegenwert</b></td><td>Protokolle unter <code>~/.claude*/projects</code> und <code>~/.codex/sessions</code></td><td>Nur lesen. Je Datei wird gemerkt, bis wohin gelesen wurde. Zeilen ohne Token-Angaben werden übersprungen, ohne sie zu zerlegen. Doppelte Antworten (gleiche Nachrichten- und Anfrage-ID) zählen einmal.</td></tr>
+    <tr><td><b>Limits</b></td><td>Statuszeile, Codex-Protokolle</td><td>Claude Code gibt der Statuszeile bei jedem Update den Limit-Stand mit. Das Skript schreibt ihn zusätzlich in eine kleine Datei der App. Codex schreibt ihn selbst ins Protokoll.</td></tr>
+    <tr><td><b>Diktate</b></td><td><code>saveRunReport</code></td><td>Anzahl, Audiominuten, Wörter und Modus am Ende jedes Diktats.</td></tr>
+    <tr><td><b>Git</b> (Stufe 3)</td><td><code>git log</code>, <code>gh</code></td><td>Einmal pro Stunde im Hintergrund, nur Projektordner deiner Chats.</td></tr>
+  </table>
+
+  <h2 style="margin-top:34px">Warum die App davon nichts merkt</h2>
+  <ul>
+    <li><b>Ein eigener Hintergrund-Dienst</b> mit niedriger Priorität rechnet alles. Die Seite liest nur die fertigen Tageswerte, eine Datei von wenigen hundert KB.</li>
+    <li><b>Kein Dauerbeobachten</b> der 18,8 GB Protokolle. Alle 15 Minuten und beim Öffnen der Seite werden geänderte Dateien ab der gemerkten Stelle gelesen. Gemessen: alle Konten komplett 19 s, die letzten 7 Tage 2,4 s; ab dann täglich nur rund 56 geänderte Dateien.</li>
+    <li><b>Historie einmalig und gedrosselt</b>: Datei für Datei mit Pausen dazwischen. Pausiert während eines Diktats, im Stromsparmodus und bei hoher Temperatur.</li>
+    <li><b>Kein Schreiben auf dem Haupt-Thread</b>: Zähler sammeln im Speicher und schreiben höchstens einmal pro Minute.</li>
+    <li><b>Messpunkte mit Budget</b> wie im Rest der App; Überschreitungen landen im Log. Dazu der Schalter „Statistik erfassen“.</li>
+  </ul>
+
+  <h2 style="margin-top:34px">Entschieden</h2>
+  <ul>
+    <li>Gezählt wird <b>aktive Zeit</b>, die reine Vordergrund-Zeit steht klein daneben.</li>
+    <li>Die <b>ganze Historie</b> wird einmalig eingelesen.</li>
+    <li><b>Teilen</b> zuerst als Bild oder Markdown. Ein gemeinsames Team-Board kommt später und braucht einen Server.</li>
+    <li>Die Seite steht vorerst in der Gruppe <b>App</b>. Bei der Neuordnung der Einstellungen wandert sie neben die Übersicht.</li>
+  </ul>
+
+  <h2 style="margin-top:34px">Offen</h2>
+  <ul>
+    <li><b>Abo-Beträge</b> für den Hebel: im Entwurf sind Beispielwerte eingetragen (3 × Claude Max für 180 €, 1 × ChatGPT Pro für 200 €). Auf der Seite selbst änderbar.</li>
+    <li>Soll der Zeitraum <b>„Gesamt“</b> nach Monaten gruppieren (wie im Entwurf) oder nach Wochen?</li>
+    <li>Brauchst du die Aufteilung <b>pro Projekt</b> nach Euro oder nach Zeit? Im Entwurf: nach Euro, dazu Chats.</li>
+  </ul>
+</section>
+
+<footer class="wrap">Entwurf vom 5. November 2026 · Beispielwerte, keine echten Messungen außer den Wochenwerten der Modelle</footer>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const frame = $('#frame');
+  const fmtInt = n => Math.round(n).toLocaleString('de-DE');
+  const fmtEur = n => n >= 100 ? fmtInt(n) + ' €' : n.toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+  const fmtTok = n => n >= 1e9 ? (n/1e9).toLocaleString('de-DE',{maximumFractionDigits:2}) + ' Mrd.' : n >= 1e6 ? (n/1e6).toLocaleString('de-DE',{maximumFractionDigits:1}) + ' Mio.' : n >= 1e3 ? fmtInt(n/1e3) + ' Tsd.' : n > 0 ? fmtInt(n) : '–';
+  const fmtH = min => { if (min >= 6000) return Math.round(min/60).toLocaleString('de-DE') + ' h'; const h = Math.floor(min/60), m = Math.round(min%60); return h ? `${h}h ${String(m).padStart(2,'0')}min` : `${m}min`; };
+  const fmtHshort = min => { const h = min/60; return h >= 10 ? fmtInt(h) + ' h' : h.toLocaleString('de-DE',{maximumFractionDigits:1}) + ' h'; };
+
+  // Pseudozufall mit festem Startwert, damit der Entwurf stabil aussieht
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  // Wochenwerte (echt, 7 Tage) als Basis; andere Zeiträume skaliert
+  const MODELS = [
+    { id:'opus',  name:'Opus 5.5',     sub:'Claude Code',            c:'--c1', ans:25822, inp:0.12e6, out:21.4e6, cw:228.2e6, cr:7640e6, usd:3200 },
+    { id:'sonnet',name:'Sonnet 5.5',   sub:'Claude Code',            c:'--c2', ans:141,   inp:0,      out:0.24e6, cw:0.7e6,   cr:28.1e6, usd:7 },
+    { id:'gpt61', name:'GPT 6.1 Sol',  sub:'über Proxy, ChatGPT-Abo',c:'--c3', ans:1201,  inp:5.47e6, out:0.38e6, cw:0,       cr:161.5e6,usd:31 },
+    { id:'gpt56', name:'GPT 5.6 Sol',  sub:'Codex CLI',              c:'--c4', ans:82,    inp:0.4e6,  out:0.05e6, cw:0,       cr:2.5e6,  usd:4.2 },
+  ];
+  const RATE = 0.92;
+  const PERIODS = {
+    day:   { f: 0.17, label:'heute',        prev:'gestern',        weeks: 1/7 },
+    week:  { f: 1,    label:'diese Woche',  prev:'Vorwoche',       weeks: 1 },
+    month: { f: 4.2,  label:'im November',  prev:'Oktober',        weeks: 4.35 },
+    all:   { f: 31,   label:'seit Mai 2026',prev:null,             weeks: 27 },
+  };
+  let period = 'week';
+
+  function seriesFor(p) {
+    seed = p === 'day' ? 11 : p === 'week' ? 7 : p === 'month' ? 5 : 3;
+    if (p === 'day') {
+      // Stundenwerte, ähnlich dem Bildschirmzeit-Muster: 9-19 Uhr
+      const labels = [], a = [], g = [];
+      for (let h = 0; h < 24; h++) {
+        labels.push(h % 6 === 0 ? `${h} Uhr` : '');
+        const on = h >= 9 && h <= 19 && h !== 13;
+        a.push(on ? 28 + rnd()*30 : (h === 0 ? 6 : 0));
+        g.push(on || (h > 19 && h < 23) ? 30 + rnd()*30 : 0);
+      }
+      return { labels, full: [...Array(24)].map((_,h)=>`${h}–${h+1} Uhr`), a, g, unit:'min' };
+    }
+    if (p === 'week') {
+      const labels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+      const full = ['Montag, 2. Nov.','Dienstag, 3. Nov.','Mittwoch, 4. Nov.','Donnerstag, 5. Nov.','Freitag, 6. Nov.','Samstag, 7. Nov.','Sonntag, 8. Nov.'];
+      const a = [402, 371, 428, 334, 0, 0, 0];
+      const g = [690, 655, 742, 610, 0, 0, 0];
+      return { labels, full, a, g, unit:'min', future: 4 };
+    }
+    if (p === 'month') {
+      const labels = [], full = [], a = [], g = [];
+      for (let d = 1; d <= 30; d++) {
+        labels.push(d === 1 || d % 5 === 0 ? String(d) : '');
+        full.push(`${d}. November`);
+        const wd = (d + 6) % 7; // 0 = Montag (1. Nov. 2026 ist ein Sonntag)
+        const weekend = wd >= 5;
+        if (d > 5) { a.push(0); g.push(0); continue; }
+        a.push(weekend ? 60 + rnd()*90 : 300 + rnd()*140);
+        g.push(weekend ? 120 + rnd()*120 : 560 + rnd()*220);
+      }
+      return { labels, full, a, g, unit:'min', future: 5 };
+    }
+    const labels = ['Mai','Jun','Jul','Aug','Sep','Okt','Nov'];
+    const full = ['Mai 2026','Juni 2026','Juli 2026','August 2026','September 2026','Oktober 2026','November 2026 (bis heute)'];
+    const a = [3900, 5200, 6900, 7400, 7100, 8200, 1535].map(x=>x);
+    const g = [4100, 7600, 11800, 13900, 13600, 15800, 2697];
+    return { labels, full, a, g, unit:'min' };
+  }
+
+  // Balkendiagramm (eine Serie, Akzentfarbe), Hover-Tooltip je Balken
+  function barChart(el, labels, full, vals, future, fmtV) {
+    const W = 400, H = 150, padL = 34, padB = 20, padT = 6;
+    const n = vals.length, max = Math.max(...vals, 1);
+    const stepH = max > 600 ? (max > 6000 ? 3000 : 120) : max > 60 ? 60 : 15;
+    const top = Math.ceil(max / stepH) * stepH;
+    const plotW = W - padL, plotH = H - padB - padT;
+    const bw = plotW / n, gap = Math.max(2, bw * 0.28);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img">`;
+    for (let v = 0; v <= top; v += stepH) {
+      const y = padT + plotH - v/top*plotH;
+      s += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--c-grid)"/>`;
+      s += `<text x="${padL-6}" y="${y+3.5}" text-anchor="end">${stepH >= 60 ? (v/60)+'h' : v+'m'}</text>`;
+    }
+    vals.forEach((v, i) => {
+      const x = padL + i*bw + gap/2, w = bw - gap, h = v/top*plotH, y = padT + plotH - h;
+      const isFut = future !== undefined && i > future;
+      const r = Math.min(4, w/2, h);
+      if (h > 0) s += `<g><path class="bar" d="M${x},${y+h} V${y+r} Q${x},${y} ${x+r},${y} H${x+w-r} Q${x+w},${y} ${x+w},${y+r} V${y+h} Z" fill="var(--t-accent)"/>`;
+      else s += `<g>`;
+      s += `<rect class="bar-hit" x="${padL+i*bw}" y="${padT}" width="${bw}" height="${plotH}" data-tip="${full[i]}|${isFut ? 'noch keine Daten' : fmtV(v)}"/></g>`;
+      if (labels[i]) s += `<text x="${x+w/2}" y="${H-5}" text-anchor="middle">${labels[i]}</text>`;
+    });
+    s += `</svg>`;
+    el.innerHTML = s;
+  }
+
+  const tip = $('#tip');
+  document.addEventListener('mousemove', e => {
+    const t = e.target.closest('[data-tip]');
+    if (!t) { tip.classList.remove('on'); return; }
+    const [a, b] = t.dataset.tip.split('|');
+    tip.innerHTML = `<small>${a}</small><b>${b}</b>`;
+    tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 12) + 'px';
+    tip.classList.add('on');
+  });
+
+  // Abos
+  let abos = [ { n:'Claude Max', k:3, p:180 }, { n:'ChatGPT Pro', k:1, p:200 } ];
+  function renderAbos() {
+    $('#abos').innerHTML = abos.map((a,i) => `<div class="abo"><span>${a.n}</span><span class="x"><input class="c-num" style="width:46px" data-i="${i}" data-f="k" value="${a.k}">×</span><input class="c-num" data-i="${i}" data-f="p" value="${a.p} €"><span class="rm" data-rm="${i}" title="Entfernen">×</span></div>`).join('');
+  }
+  $('#abos').addEventListener('change', e => {
+    const i = +e.target.dataset.i, f = e.target.dataset.f; if (isNaN(i)) return;
+    abos[i][f] = parseFloat(e.target.value.replace(',', '.')) || 0; render();
+  });
+  $('#abos').addEventListener('click', e => { if (e.target.dataset.rm !== undefined) { abos.splice(+e.target.dataset.rm, 1); render(); } });
+  $('#abo-add').onclick = () => { abos.push({ n:'Neues Abo', k:1, p:20 }); render(); };
+
+  function render() {
+    const P = PERIODS[period];
+    const S = seriesFor(period);
+    const act = S.a.reduce((x,y)=>x+y,0), ag = S.g.reduce((x,y)=>x+y,0);
+    const days = period === 'day' ? 1 : period === 'week' ? 4 : period === 'month' ? 5 : 189;
+    const models = MODELS.map(m => ({ ...m, k: P.f }));
+    const eurTotal = models.reduce((s,m)=>s + m.usd*m.k*RATE, 0);
+    const aboMonth = abos.reduce((s,a)=>s + a.k*a.p, 0);
+    const aboPeriod = aboMonth * 12/52 * P.weeks;
+    const lever = aboPeriod ? eurTotal / aboPeriod : 0;
+    const chats = Math.round(14.5 * days), dict = Math.round(38 * days);
+
+    const backfill = $('#sw-state .on').dataset.v === 'backfill';
+    const part = backfill && period === 'all' ? ' <span class="partial">· unvollständig</span>' : '';
+    $('#kpis').innerHTML = [
+      ['Aktive Zeit', fmtH(act), period==='day' ? 'gestern <b>6h 12min</b>' : period==='week' ? 'Ø <b>'+fmtH(act/days)+'</b> pro Arbeitstag' : 'Ø <b>'+fmtH(act/days)+'</b> pro Tag'],
+      ['Agenten-Zeit', fmtH(ag), '<b>'+(ag/act).toLocaleString('de-DE',{maximumFractionDigits:1})+'×</b> deine aktive Zeit'],
+      ['API-Gegenwert', fmtEur(eurTotal) + part, 'davon <b>'+Math.round(models[0].usd*models[0].k*RATE/eurTotal*100)+' %</b> Opus 5.5'],
+      ['Hebel', lever.toLocaleString('de-DE',{maximumFractionDigits:1}) + '<small>×</small>', 'Gegenwert ÷ Abo-Kosten'],
+      ['Neue Chats', fmtInt(chats), 'Ø <b>'+(chats/days).toLocaleString('de-DE',{maximumFractionDigits:1})+'</b> pro Tag · Spitze <b>7</b> gleichzeitig'],
+      ['Diktate', fmtInt(dict), '<b>'+fmtInt(dict*0.6)+'</b> Min. gesprochen'],
+    ].map(([k,v,d]) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+
+    const unitFmt = v => fmtH(v);
+    $('#cs-active').textContent = period === 'day' ? 'pro Stunde, heute' : period === 'all' ? 'pro Monat' : 'pro Tag, ' + P.label;
+    $('#cs-agent').textContent = (period === 'day' ? 'pro Stunde' : period === 'all' ? 'pro Monat' : 'pro Tag') + ' · Ø 2,4 Chats gleichzeitig';
+    barChart($('#ch-active'), S.labels, S.full, S.a, S.future, unitFmt);
+    barChart($('#ch-agent'), S.labels, S.full, S.g, S.future, unitFmt);
+    $('#fg-time').textContent = fmtH(act * 1.18);
+
+    // Modelle
+    $('#share').innerHTML = models.map(m => `<i style="flex:${Math.max(m.usd, 18)};background:var(${m.c})" data-tip="${m.name}|${fmtEur(m.usd*m.k*RATE)}"></i>`).join('');
+    $('#legend').innerHTML = models.map(m => `<span><i class="sw-dot" style="background:var(${m.c})"></i>${m.name}<b>${(m.usd/models.reduce((s,x)=>s+x.usd,0)*100).toLocaleString('de-DE',{maximumFractionDigits:1})} %</b></span>`).join('');
+    const tot = k => models.reduce((s,m)=>s + m[k]*m.k, 0);
+    $('#mt').innerHTML = `<thead><tr><th>Modell</th><th>Antworten</th><th>Eingabe</th><th>Ausgabe</th><th>Cache schreiben</th><th>Cache lesen</th><th>Gegenwert</th></tr></thead><tbody>` +
+      models.map(m => `<tr><td class="m"><i class="sw-dot" style="background:var(${m.c})"></i>${m.name}<small>${m.sub}</small></td><td>${fmtInt(m.ans*m.k)}</td><td>${fmtTok(m.inp*m.k)}</td><td>${fmtTok(m.out*m.k)}</td><td>${fmtTok(m.cw*m.k)}</td><td>${fmtTok(m.cr*m.k)}</td><td class="eur">${fmtEur(m.usd*m.k*RATE)}</td></tr>`).join('') +
+      `</tbody><tfoot><tr><td>Summe</td><td>${fmtInt(tot('ans'))}</td><td>${fmtTok(tot('inp'))}</td><td>${fmtTok(tot('out'))}</td><td>${fmtTok(tot('cw'))}</td><td>${fmtTok(tot('cr'))}</td><td>${fmtEur(eurTotal)}</td></tr></tfoot>`;
+
+    // Geld
+    renderAbos();
+    $('#lever').innerHTML = lever.toLocaleString('de-DE',{maximumFractionDigits:1}) + '<small>×</small>';
+    $('#lever-period').textContent = P.label;
+    $('#lever-text').innerHTML = `${fmtEur(eurTotal)} API-Gegenwert stehen ${fmtEur(aboPeriod)} Abo-Kosten gegenüber (${fmtInt(aboMonth)} € im Monat, anteilig für den Zeitraum).`;
+
+    // Limits
+    const LIM = [
+      ['main','Claude Max', 34,'in 2h 10min', 71,'Mo 09:00', [62,88,100,94,70,100,81,71]],
+      ['RankM8','Claude Max', 58,'in 41min', 92,'Fr 14:00', [40,77,100,100,98,100,100,92]],
+      ['PowerUser','Claude Max', 4,'in 4h 52min', 37,'So 22:00', [12,30,55,41,28,60,47,37]],
+      ['ChatGPT (GPT-Proxy)','Pro', null,null, 11,'Mi 08:00', [8,14,22,19,9,15,13,11]],
+    ];
+    const lm = (p, r) => p === null ? `<div class="lm"><div class="top"><span class="pc" style="color:var(--t-text3)">–</span></div><div class="spk-l">kein 5-Stunden-Fenster</div></div>` :
+      `<div class="lm ${p>=80?'w':''}"><div class="top"><span class="pc">${p} %</span><span class="rs">${r}</span></div><i><b style="width:${p}%"></b></i></div>`;
+    $('#lt').innerHTML = `<div class="lr hd"><span>Konto</span><span>5 Stunden</span><span>Woche</span><span>Verlauf</span></div>` +
+      LIM.map(([n,s,p5,r5,pw,rw,h]) => `<div class="lr"><div class="n">${n}<small>${s} · ${h.filter(x=>x>=100).length} von 8 Wochen am Limit</small></div>${lm(p5,r5)}${lm(pw,'Reset '+rw)}<div><div class="spark">${h.map((x,i)=>`<i class="${x>=100?'full':''}" style="height:${Math.max(x,4)}%" data-tip="${8-i===1?'diese Woche':'vor '+(8-i-1)+' Wo.'}|${x} % Spitze"></i>`).join('')}</div></div></div>`).join('');
+
+    // Chats
+    $('#mini-chats').innerHTML = [
+      ['Neue Chats', fmtInt(chats), 'Ø '+(chats/days).toLocaleString('de-DE',{maximumFractionDigits:1})+' pro Tag'],
+      ['Gleichzeitig arbeitend', '2,4', 'Ø, Spitze 7'],
+      ['Hintergrund-Agenten', fmtInt(chats*0.18), 'claude --bg'],
+      ['Subagents', fmtInt(chats*6.3), 'aus Chats gestartet'],
+    ].map(([k,v,d]) => `<div class="m"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+    const mix = [['Claude','--c1',78],['GPT in Claude Code','--c3',14],['Codex','--c4',8]];
+    $('#share-chats').innerHTML = mix.map(([n,c,p]) => `<i style="flex:${p};background:var(${c})" data-tip="${n}|${p} % der Chats"></i>`).join('');
+    $('#legend-chats').innerHTML = mix.map(([n,c,p]) => `<span><i class="sw-dot" style="background:var(${c})"></i>${n}<b>${p} %</b></span>`).join('');
+    const proj = [['whisperm8',0.46,31],['listm8',0.24,17],['outreach',0.13,9],['wolanin-aesthetics',0.09,6],['Sonstige',0.08,8]];
+    $('#pt').innerHTML = `<tr><td colspan="4" style="font-size:10.5px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;color:var(--t-text3)">Projekte nach Gegenwert</td></tr>` +
+      proj.map(([n,s,c]) => `<tr><td>${n}</td><td class="pb"><i style="width:${s/0.46*100}%"></i></td><td class="r">${fmtEur(eurTotal*s)}</td><td class="r">${Math.round(c*days/4)} Chats</td></tr>`).join('');
+
+    // Diktate
+    $('#mini-dict').innerHTML = [
+      ['Diktate', fmtInt(dict), 'Ø '+Math.round(dict/days)+' pro Tag'],
+      ['Gesprochen', fmtInt(dict*0.6)+' Min.', 'Ø 36 s pro Diktat'],
+      ['Wörter', fmtInt(dict*74), '≈ '+fmtH(dict*74/40)+' Tippen gespart'],
+      ['Häufigster Modus', 'Agent Chat', '52 % · danach Umschreiben 21 %'],
+    ].map(([k,v,d]) => `<div class="m"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join('');
+
+    // Teilen-Karte
+    const on = k => document.querySelector(`.sheet [data-k="${k}"]`).classList.contains('on');
+    $('#card').innerHTML = `<div class="h">WhisperM8 · ${P.label}</div><div class="t">Giuliano · Entwickler-Statistik</div><div class="g">` +
+      (on('time') ? `<div><span>Aktive Zeit</span><b>${fmtHshort(act)}</b></div><div><span>Agenten-Zeit</span><b>${fmtHshort(ag)}</b></div>` : '') +
+      (on('tok') ? `<div><span>Token</span><b>${fmtTok(tot('inp')+tot('out')+tot('cw')+tot('cr'))}</b></div><div><span>Top-Modell</span><b>Opus 5.5</b></div>` : '') +
+      (on('eur') ? `<div><span>API-Gegenwert</span><b>${fmtEur(eurTotal)}</b></div><div><span>Hebel</span><b>${lever.toLocaleString('de-DE',{maximumFractionDigits:1})}×</b></div>` : '') +
+      `<div><span>Neue Chats</span><b>${fmtInt(chats)}</b></div><div><span>Diktate</span><b>${fmtInt(dict)}</b></div></div>` +
+      (on('proj') ? `<div class="f">Top-Projekte: whisperm8, listm8, outreach</div>` : `<div class="f">Projekte ausgeblendet</div>`);
+  }
+
+  // Bedienung
+  $('#seg-period').addEventListener('click', e => {
+    const v = e.target.dataset.v; if (!v) return;
+    period = v; [...e.currentTarget.children].forEach(c => c.classList.toggle('on', c === e.target)); render();
+  });
+  const sw = (id, fn) => $(id).addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') return;
+    [...e.currentTarget.children].forEach(c => c.classList.toggle('on', c === e.target)); fn(e.target.dataset.v);
+  });
+  sw('#sw-theme', v => frame.dataset.theme = v);
+  function setState(v) {
+    $('#v-empty').classList.toggle('hidden', v !== 'empty');
+    $('#v-data').classList.toggle('hidden', v === 'empty');
+    $('#acts').classList.toggle('hidden', v === 'empty');
+    $('#banner').classList.toggle('hidden', v !== 'backfill');
+    $('#last-run').textContent = v === 'backfill' ? 'Ersteinlesen läuft · 38 %' : 'vor 3 Min · 12 Dateien · 0,4 s';
+    render();
+  }
+  sw('#sw-state', setState);
+  $('#btn-enable').onclick = () => { document.querySelector('#sw-state [data-v="backfill"]').click(); };
+  $('#tgl-on').onclick = e => e.currentTarget.classList.toggle('on');
+  $('#btn-share').onclick = () => $('#sheet').classList.add('on');
+  $('#sheet-close').onclick = () => $('#sheet').classList.remove('on');
+  $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') e.currentTarget.classList.remove('on'); });
+  document.querySelectorAll('.sheet .c-tgl').forEach(t => t.onclick = () => { t.classList.toggle('on'); render(); });
+
+  render();
+})();
+</script>
+</body>
+</html>

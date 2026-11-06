@@ -220,6 +220,7 @@ pages sit behind *Show Agent Chats settings*.
 | **Output** | Your dictation results: the latest run and the full archive of reports |
 | **Agent Chats** | Default chat type and project folder, automatic titles, tab swipe, *Advanced agent features*, summaries, notifications, terminal |
 | **CLI & Skills** | The `whisperm8` command-line tool and agent skills |
+| **Statistics** | Active time, agent time, tokens per model with their API value, leverage of your subscriptions, limits, chats, dictations; calculated locally (only the exchange rate and, with gh signed in, your pull requests are fetched), sharable as image or Markdown |
 | **General** | Usage profile, start at login, appearance, automatic update check |
 | **Permissions** | Status of microphone, accessibility and screen recording, with links to System Settings |
 | **About** | Version and update |

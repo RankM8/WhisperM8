@@ -199,6 +199,12 @@ private struct ClaudeUsagePopoverView: View {
                             Text("Cache · \(Self.age(usage.fetchedAt))")
                                 .font(.system(size: 11))
                                 .foregroundStyle(AppTheme.textTertiary)
+                            // Das Modell-Limit frischt die Statuszeile nicht auf.
+                            if let modelAge = Self.olderModelAge(usage) {
+                                Text(verbatim: modelAge)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(AppTheme.textTertiary)
+                            }
                         }
                         if let problem = usage.liveFetchProblem {
                             Text(Self.problemText(problem))
@@ -222,6 +228,13 @@ private struct ClaudeUsagePopoverView: View {
         let minutes = Int(Date().timeIntervalSince(date) / 60)
         if minutes < 60 { return String(localized: "\(minutes) min old") }
         return String(localized: "\(minutes / 60) h old")
+    }
+
+    /// „Fable · 25 min old“, wenn das Modell-Limit merklich älter ist als 5h/Woche.
+    private static func olderModelAge(_ usage: ClaudeAccountUsage) -> String? {
+        guard usage.modelWeeklyPercent != nil, let modelDate = usage.modelWeeklyFetchedAt,
+              usage.fetchedAt.timeIntervalSince(modelDate) >= 60 else { return nil }
+        return (usage.modelWeeklyLabel ?? "model") + " · " + age(modelDate)
     }
 
     private static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {

@@ -31,6 +31,7 @@ final class PreferenceBedienwegGuardTests: XCTestCase {
     /// Schlüssel-Enums außerhalb von `PreferenceKeys`: Datei und Enum-Name.
     private static let featureKeyEnums: [(file: String, name: String)] = [
         ("WhisperM8/Services/Clipboard/ClipboardSettings.swift", "ClipboardPreferenceKeys"),
+        ("WhisperM8/Services/Statistics/StatisticsPreferences.swift", "StatisticsPreferenceKeys"),
     ]
 
     /// `static let x = "y"` innerhalb von `enum <name> { … }` (bis zur ersten

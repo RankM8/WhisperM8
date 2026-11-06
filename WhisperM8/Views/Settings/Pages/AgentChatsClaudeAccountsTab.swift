@@ -272,6 +272,13 @@ struct AgentChatsClaudeAccountsTab: View {
                     Text(settingsLocalized: cacheAgeText(usage.fetchedAt))
                         .font(.system(size: 9.5, weight: .regular))
                         .foregroundStyle(AppTheme.textTertiary)
+                    // Das Modell-Limit frischt die Statuszeile nicht auf.
+                    if usage.modelWeeklyPercent != nil, let modelDate = usage.modelWeeklyFetchedAt,
+                       usage.fetchedAt.timeIntervalSince(modelDate) >= 60 {
+                        Text(verbatim: (usage.modelWeeklyLabel ?? "model") + " · " + cacheAgeText(modelDate))
+                            .font(.system(size: 9.5, weight: .regular))
+                            .foregroundStyle(AppTheme.textTertiary)
+                    }
                 }
                 if let problem = usage.liveFetchProblem {
                     Text(settingsLocalized: Self.problemText(problem))

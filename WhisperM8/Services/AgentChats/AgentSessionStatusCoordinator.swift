@@ -872,6 +872,8 @@ final class AgentSessionStatusCoordinator {
         } else {
             activityStore.clearStatusSince(for: sessionID)
         }
+        // Statistik: Agenten-Zeit und gleichzeitige Chats (O(1), nur ein Set).
+        StatisticsCollectors.noteAgentStatus(status, for: sessionID)
     }
 
     /// Warte-Art aus dem Lifecycle-Zustand in die Stand-Zeile spiegeln. Bei

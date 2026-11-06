@@ -925,6 +925,91 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertFalse(future.hasSuffix("m\u{001B}[0m"), future)
     }
 
+    // MARK: Limit-Stand aus rate_limits
+
+    private func usageCacheURL(profile: String = "main") throws -> URL {
+        let tmp = tempHome.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        // Cooldown-Datei: verhindert den echten Hintergrund-Abruf im Test.
+        FileManager.default.createFile(atPath: tmp.appendingPathComponent("claude-usage-cooldown-\(profile)").path, contents: nil)
+        return tmp.appendingPathComponent("claude-usage-cache-\(profile).json")
+    }
+
+    private func rateLimitInput(model: String = "Opus") -> [String: Any] {
+        [
+            "model": ["display_name": model],
+            "cost": ["total_cost_usd": 0],
+            "context_window": ["current_usage": NSNull()],
+            "mcp_servers": [],
+            "rate_limits": [
+                "five_hour": ["used_percentage": 42.5, "resets_at": 1_793_900_000],
+                "seven_day": ["used_percentage": 71, "resets_at": 1_794_400_000],
+            ],
+        ]
+    }
+
+    func testMainStatuslineMergesRateLimitsIntoCacheAndKeepsMtime() throws {
+        let cache = try usageCacheURL()
+        try Data(#"{"five_hour":{"utilization":10,"resets_at":"2026-11-05T10:00:00Z"},"limits":[{"kind":"weekly_scoped","percent":5}]}"#.utf8)
+            .write(to: cache)
+        let oldMtime = Date(timeIntervalSince1970: 1_793_800_000)
+        try FileManager.default.setAttributes([.modificationDate: oldMtime], ofItemAtPath: cache.path)
+
+        let output = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput())
+        XCTAssertTrue(String(decoding: output, as: UTF8.self).contains("42%/5h"))
+
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: cache)) as? [String: Any])
+        XCTAssertEqual((object["five_hour"] as? [String: Any])?["utilization"] as? Double, 42.5)
+        XCTAssertEqual((object["seven_day"] as? [String: Any])?["utilization"] as? Double, 71)
+        XCTAssertNotNil(object["limits"], "modellbezogene Limits bleiben erhalten")
+        XCTAssertNotNil(object["statusline_captured_at"])
+
+        // Kompatibel zum App-Parser, Änderungsdatum unverändert.
+        let usage = try XCTUnwrap(ClaudeAccountUsageFetcher.parseUsage(Data(contentsOf: cache), fetchedAt: Date(), isLive: false))
+        XCTAssertEqual(usage.fiveHourPercent, 42.5)
+        XCTAssertEqual(usage.sevenDayResetsAt, Date(timeIntervalSince1970: 1_794_400_000))
+        XCTAssertEqual(usage.modelWeeklyPercent, 5)
+        let mtime = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: cache.path)[.modificationDate] as? Date)
+        XCTAssertEqual(mtime.timeIntervalSince1970, oldMtime.timeIntervalSince1970, accuracy: 1)
+    }
+
+    func testMainStatuslineReplacesBrokenCacheWithRateLimits() throws {
+        let cache = try usageCacheURL()
+        try Data("{kaputt".utf8).write(to: cache)
+        _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput())
+        let usage = try XCTUnwrap(ClaudeAccountUsageFetcher.parseUsage(Data(contentsOf: cache), fetchedAt: Date(), isLive: false))
+        XCTAssertEqual(usage.sevenDayPercent, 71)
+    }
+
+    func testMainStatuslineCreatesCacheFromRateLimitsWithoutExistingFile() throws {
+        let cache = try usageCacheURL()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cache.path))
+        _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput())
+        let usage = try XCTUnwrap(ClaudeAccountUsageFetcher.parseUsage(Data(contentsOf: cache), fetchedAt: Date(), isLive: false))
+        XCTAssertEqual(usage.fiveHourPercent, 42.5)
+        XCTAssertNil(usage.modelWeeklyPercent)
+    }
+
+    /// Ein jq für Prüfen und Mischen, atomare Schreibvorgänge auf den Cache.
+    func testMainStatuslineMergesInOneJqAndWritesCacheAtomically() throws {
+        let script = try makeInstaller().bundledScript()
+        XCTAssertFalse(script.contains("rate_limits_json="), "rate_limits wird nicht mehr separat abgefragt")
+        XCTAssertTrue(script.contains("--rawfile cache"))
+        XCTAssertFalse(script.contains(#"echo "$resp" > "$usage_cache""#), "Abruf schreibt über temp + mv")
+        XCTAssertFalse(script.contains(#"> "$usage_cache""#), "kein direktes Schreiben in den Cache")
+    }
+
+    func testMainStatuslineSkipsRateLimitsForGPTAndWithoutData() throws {
+        let cache = try usageCacheURL()
+        _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: rateLimitInput(model: "gpt-5.6-sol"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cache.path))
+
+        var input = rateLimitInput()
+        input["rate_limits"] = NSNull()
+        _ = try runStatuslineScript(try makeInstaller().bundledScript(), named: "rl.sh", input: input)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cache.path))
+    }
+
     // MARK: Terminal-Steuerzeichen
 
     func testMainStatuslineSanitizesExternalTerminalSequences() throws {

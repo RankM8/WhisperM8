@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-10-19
+updated: 2026-11-05
 description: Performance-Messung in WhisperM8 — Signposts, Budgets, Messstufen, Stall-Monitor und Watchdog, Messskripte.
 ---
 
@@ -39,3 +39,14 @@ die App steht, gestaffelt bei Verdopplung der Dauer (1 s, 2 s, 4 s …), damit
 das Log nicht überläuft. Messläufe: `scripts/perf-load.sh` (Last mit
 definierter Rate, im Chat-Terminal starten) und `scripts/perf-report.sh`
 (Log → Tabelle). Befunde: `docs/plans/workspace-performance/`.
+
+## Statistik-Protokollleser
+
+Kategorie `perf.statistics`, Budget `statistics.scan` (1,5 s): ein
+inkrementeller Lauf des `StatisticsLogScanner` — alle Claude- und
+Codex-Protokolle auflisten und `stat`en, neue Bytes lesen, einmal in den
+Store schreiben. Er läuft auf einer eigenen Queue (`.utility`), die Zahl ist
+also Hintergrundzeit, keine Main-Thread-Zeit. Das erste Einlesen der Historie
+(Backfill) wird nicht gemessen, es ist gewollt gedrosselt (`.background`,
+Pause zwischen Dateien, wartet bei Diktat, Stromsparmodus und Hitze). Läufe,
+die wegen eines Diktats gewartet haben, werden verworfen statt bewertet.

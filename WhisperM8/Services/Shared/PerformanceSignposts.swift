@@ -12,6 +12,7 @@ enum PerfSignposts {
     static let store = OSSignposter(subsystem: subsystem, category: "perf.store")
     static let sidebar = OSSignposter(subsystem: subsystem, category: "perf.sidebar")
     static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
+    static let statistics = OSSignposter(subsystem: subsystem, category: "perf.statistics")
 }
 
 /// Wie dicht ein Messpunkt sitzt — und damit, ob er im Normalbetrieb mitläuft.
@@ -285,4 +286,12 @@ enum PerfBudgets {
     static let gridDividerTick = PerformanceBudget(name: "grid.dividerTick", budget: 0.016, signposter: PerfSignposts.grid)
     /// Ein Streaming-Flush einer Pane (Parser + Render-Scheduling, keine GPU-Zeit).
     static let gridStreamingFrame = PerformanceBudget(name: "grid.streamingFrame", budget: 0.0167, signposter: PerfSignposts.grid)
+
+    // Statistik
+    /// Ein inkrementeller Lauf des Protokoll-Lesers (`StatisticsLogScanner`):
+    /// alle Protokolle auflisten und `stat`en, neue Bytes lesen, einmal in den
+    /// Store schreiben. Läuft auf eigener Queue, ist also Hintergrund-, keine
+    /// Main-Thread-Zeit. Der Backfill (erstes Einlesen der Historie) wird nicht
+    /// gemessen, er ist gewollt langsam. Läufe mit Diktat-Pause zählen nicht.
+    static let statisticsScan = PerformanceBudget(name: "statistics.scan", budget: 1.500, signposter: PerfSignposts.statistics)
 }
