@@ -218,7 +218,12 @@ final class QuickActionRunner {
 
     /// ESC oder ✕: laufende Nacharbeit abbrechen. Nichts wird ersetzt.
     func cancel() {
-        guard let token = activeCancelToken else { return }
+        // Nichts mehr abzubrechen (Nacharbeit schon fertig, Einfügen läuft):
+        // ✕ schließt die Pill trotzdem, sie darf nicht tot stehen bleiben.
+        guard let token = activeCancelToken else {
+            presenter?.hideQuickAction()
+            return
+        }
         token.cancel()
         // Sofort sichtbar: ein später Lauf wird ohnehin verworfen, und ein
         // Codex-Prozess braucht bis zu 3 s bis zum Ende.
