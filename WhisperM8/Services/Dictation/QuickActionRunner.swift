@@ -257,7 +257,12 @@ final class QuickActionRunner {
 
     /// ESC oder ✕: laufende Nacharbeit abbrechen. Nichts wird ersetzt.
     func cancel() {
-        guard let token = activeCancelToken else { return }
+        // Nichts mehr abzubrechen (Nacharbeit schon fertig, Einfügen läuft):
+        // ✕ schließt die Pill trotzdem, sie darf nicht tot stehen bleiben.
+        guard let token = activeCancelToken else {
+            presenter?.hideQuickAction()
+            return
+        }
         activeCancelToken = nil
         token.cancel()
         cancelKey.deactivate()

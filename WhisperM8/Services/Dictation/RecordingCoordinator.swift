@@ -381,17 +381,22 @@ final class RecordingCoordinator {
 
     /// Zeigt das Recording-Overlay mit dem vollständigen Callback-Wiring.
     /// Geteilt zwischen `startRecording()` und `retryPendingTranscription()`.
-    private func presentOverlay(appState: AppState) {
+    /// ✕ schließt die Pill in jedem Zustand: Gibt es nichts mehr abzubrechen,
+    /// blendet sie aus, statt als totes Fenster stehen zu bleiben.
+    func presentOverlay(appState: AppState) {
         overlayController.show(
             appState: appState,
             onCancel: { [weak self] in
-                self?.cancelRecording()
+                guard let self, !self.cancelRecording() else { return }
+                self.overlayController.hide()
             },
             onCancelTranscription: { [weak self] in
-                self?.cancelTranscription()
+                guard let self, !self.cancelTranscription() else { return }
+                self.overlayController.hide()
             },
             onCancelPostProcessing: { [weak self] in
-                self?.cancelPostProcessing()
+                guard let self, !self.cancelPostProcessing() else { return }
+                self.overlayController.hide()
             },
             onStopAndTranscribe: { [weak self] in
                 // Exakt der Hotkey-Stop-Pfad — inklusive Tap-Schutz und
@@ -553,8 +558,10 @@ final class RecordingCoordinator {
     /// Bricht das laufende Codex-Post-Processing ab. Aufgerufen vom Cancel-Button im Overlay,
     /// wenn `isPostProcessing == true`. Der `performCodexRun`-Pfad erkennt das Cancel-Flag,
     /// terminiert den Codex-Prozess und der Coordinator fällt kontrolliert auf Raw zurück.
-    func cancelPostProcessing() {
-        guard let appState, appState.isPostProcessing else { return }
+    /// Gibt `false` zurück, wenn keine Nacharbeit lief.
+    @discardableResult
+    func cancelPostProcessing() -> Bool {
+        guard let appState, appState.isPostProcessing else { return false }
         // Beide Wege: ein laufender Codex-Prozess oder eine Anfrage an das GPT-Backend.
         // Erst der Merker: er greift auch, wenn gerade kein Lauf angemeldet
         // ist (Vorbereitung, Wechsel vom Backend zur Codex-CLI).
@@ -562,6 +569,7 @@ final class RecordingCoordinator {
         _ = CodexProcessRegistry.shared.cancel()
         _ = GPTBackendRunRegistry.shared.cancel(owner: .dictation)
         appState.postProcessingStatusText = String(localized: "Cancelled…")
+        return true
     }
 
     /// Bricht den laufenden Transkriptions-Upload ab (Overlay-Button oder ESC
@@ -569,10 +577,14 @@ final class RecordingCoordinator {
     /// der Abbruch-Pfad sichert sie in den FailedRecordings-Ordner.
     /// Sobald die Response da ist (`isDeliveringTranscription`), ist der
     /// Abbruch ein No-Op: Die Delivery darf nicht mehr gestört werden.
-    func cancelTranscription() {
-        guard let appState, appState.isTranscribing, !isDeliveringTranscription else { return }
+    /// Gibt `false` zurück, wenn kein Upload mehr abzubrechen war.
+    @discardableResult
+    func cancelTranscription() -> Bool {
+        guard let appState, appState.isTranscribing, !isDeliveringTranscription,
+              let transcriptionTask else { return false }
         Logger.transcription.info("Cancelling in-flight transcription")
-        transcriptionTask?.cancel()
+        transcriptionTask.cancel()
+        return true
     }
 
     /// Führt `transcribeAndDeliver` als cancelbaren Task aus und übersetzt das
@@ -666,13 +678,15 @@ final class RecordingCoordinator {
         isProcessing = false
     }
 
-    func cancelRecording() {
+    /// Gibt `false` zurück, wenn weder eine Aufnahme lief noch das Mikrofon verband.
+    @discardableResult
+    func cancelRecording() -> Bool {
         if isStartingRecording {
             startCancelledWhileConnecting = true
             overlayController.hide()
-            return
+            return true
         }
-        guard let appState, appState.isRecording else { return }
+        guard let appState, appState.isRecording else { return false }
 
         recordingTimer.stop()
         removeEscKeyMonitor()
@@ -703,6 +717,7 @@ final class RecordingCoordinator {
         overlayController.hide()
 
         Logger.paste.info("Recording cancelled by user")
+        return true
     }
 
     var hasAccessibilityPermission: Bool {

@@ -251,6 +251,19 @@ final class QuickActionRunnerTests: XCTestCase {
         XCTAssertFalse(key.isActive)
     }
 
+    /// ✕ nach dem Ende der Nacharbeit (nichts mehr abzubrechen) schließt die
+    /// Pill trotzdem, statt sie tot stehen zu lassen.
+    func testCancelWithoutRunningActionStillHidesPill() {
+        let log = Log()
+        let presenter = SpyPresenter()
+        let runner = makeRunner(log: log, presenter: presenter)
+
+        runner.cancel()
+
+        XCTAssertEqual(presenter.hideCount, 1)
+        XCTAssertEqual(log.engineCancels, 0, "Ohne Lauf wird nichts abgebrochen")
+    }
+
     func testCancelViaOverlayWinsEvenIfEngineStillDelivers() async {
         let log = Log()
         let presenter = SpyPresenter()

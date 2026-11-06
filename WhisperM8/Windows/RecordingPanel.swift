@@ -384,6 +384,19 @@ class OverlayController: ObservableObject {
     let levelModel = OverlayLevelModel()
     let clockModel = OverlayClockModel()
 
+    /// Nur die echte App öffnet ein Fenster. Unter `swift test` treiben Tests
+    /// den echten Coordinator an; ein Pill-Fenster aus dem Testprozess blieb
+    /// stehen, sobald dessen Main Thread hing (Vorfall 05.11.2026: tote Pill
+    /// aus einem hängenden `xctest`, ✕ ohne Wirkung).
+    let presentsWindow: Bool
+    /// Pill gilt als gezeigt (zwischen `presentPanel` und `hide`), auch ohne
+    /// Fenster. Für Tests und als Wahrheit, ob ✕ noch etwas zu schließen hat.
+    private(set) var isPresented = false
+
+    init(presentsWindow: Bool = AppInstance.isAppBundleProcess) {
+        self.presentsWindow = presentsWindow
+    }
+
     /// Hotkey gedrückt, Mikrofon noch nicht bereit — setzt der Coordinator
     /// nach `show`; `hide` setzt zurück.
     @Published var isConnecting: Bool = false
@@ -484,6 +497,8 @@ class OverlayController: ObservableObject {
 
     /// Baut die Pill auf und zeigt sie (Diktat und Schnellaktion).
     private func presentPanel() {
+        isPresented = true
+        guard presentsWindow else { return }
         self.overlayStyle = OverlayPositionStore.loadStyle()
         self.isHoverExpanded = false
         self.didPreciseCenter = false
@@ -596,6 +611,7 @@ class OverlayController: ObservableObject {
     }
 
     func hide() {
+        isPresented = false
         isConnecting = false
         quickActionLabel = nil
         isQuickActionHint = false
@@ -677,19 +693,26 @@ class OverlayController: ObservableObject {
         return previousApp
     }
 
+    // ✕ schließt die Pill in jedem Zustand: Ohne Abbruch-Weg (nach `hide`
+    // oder nie verdrahtet) geht sie direkt zu. Ist der Weg verdrahtet, aber
+    // nichts mehr abzubrechen, blendet der Coordinator sie aus.
+
     func cancelRecording() {
         notePillAction()
-        onCancel?()
+        guard let onCancel else { return hide() }
+        onCancel()
     }
 
     func cancelTranscription() {
         notePillAction()
-        onCancelTranscription?()
+        guard let onCancelTranscription else { return hide() }
+        onCancelTranscription()
     }
 
     func cancelPostProcessing() {
         notePillAction()
-        onCancelPostProcessing?()
+        guard let onCancelPostProcessing else { return hide() }
+        onCancelPostProcessing()
     }
 
     /// ✓: Aufnahme beenden & transkribieren (nur in der Recording-Phase sichtbar).
