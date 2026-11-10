@@ -5021,6 +5021,16 @@
         }
       }
     },
+    "Empty chat, no message was sent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerer Chat, es wurde keine Nachricht gesendet"
+          }
+        }
+      }
+    },
     "Empty slot": {
       "localizations": {
         "de": {

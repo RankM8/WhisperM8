@@ -456,7 +456,8 @@ struct AgentSessionStore {
 
     /// Schreibt fortlaufende `sortIndex`-Werte für die Sessions in einem
     /// Projekt anhand der gegebenen Reihenfolge. Andere Projekte bleiben
-    /// unangetastet.
+    /// unangetastet. `lastActivityAt` bleibt stehen: Umsortieren ist keine
+    /// Aktivität, sonst gilt nach einem Drag das halbe Projekt als frisch (04.11.2026).
     func reorderSessions(in projectID: UUID, orderedIDs: [UUID]) throws {
         try mutateWorkspace { workspace in
             for (newIndex, sessionID) in orderedIDs.enumerated() {
@@ -466,7 +467,6 @@ struct AgentSessionStore {
                 }
                 guard workspace.sessions[idx].sortIndex != newIndex else { continue }
                 workspace.sessions[idx].sortIndex = newIndex
-                workspace.sessions[idx].lastActivityAt = Date()
             }
         }
     }
@@ -526,7 +526,6 @@ struct AgentSessionStore {
             for (index, session) in reordered.enumerated() {
                 if let workspaceIndex = workspace.sessions.firstIndex(where: { $0.id == session.id }) {
                     workspace.sessions[workspaceIndex].sortIndex = index
-                    workspace.sessions[workspaceIndex].lastActivityAt = Date()
                 }
             }
         }

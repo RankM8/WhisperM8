@@ -765,9 +765,10 @@ struct SessionListButton: View {
     /// `claude -p`-Subprocess laufen hat. UI zeigt Sparkles-Pulse statt
     /// des normalen Status-Dots.
     let isAutoRenaming: Bool
-    /// `true` wenn das Transkript dieser (abgeschlossenen) Session nicht mehr
-    /// auf der Platte liegt — „toter Zeiger" (z.B. von Claudes 30-Tage-Cleanup
-    /// gelöscht). Row wird ausgegraut + bekommt einen Hinweis; nicht resumebar.
+    /// `true` wenn zu dieser (abgeschlossenen) Session kein Transkript auf der
+    /// Platte liegt: entweder gelöscht (z.B. von Claudes Cleanup) oder nie
+    /// entstanden, weil keine Nachricht gesendet wurde. Row wird ausgegraut;
+    /// welcher Fall es ist, entscheidet `MissingTranscriptBadge`.
     var isMissingTranscript: Bool = false
     /// Icon + Tooltip der Hover-Aktion rechts. Default = Archivieren; der
     /// Archiv-Modus der Sidebar nutzt dieselbe Row mit „Wiederherstellen".
@@ -913,11 +914,7 @@ struct SessionListButton: View {
             .accessibilityLabel(closeHelp)
             .help(closeHelp)
         } else if isMissingTranscript {
-            Image(systemName: "questionmark.circle")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .help("History deleted, can't be continued")
-                .accessibilityLabel(Text("History deleted, can't be continued"))
+            MissingTranscriptBadge(session: session)
         } else {
             statusIndicator
         }
@@ -1078,7 +1075,7 @@ struct PinnedSessionRow: View {
                     .foregroundStyle(isMissingTranscript ? AgentTheme.textTertiary : AgentTheme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .help(isMissingTranscript ? String(localized: "History deleted, can't be continued") : session.title)
+                    .help(isMissingTranscript ? MissingTranscriptBadge.hint(for: session) : session.title)
 
                 if childCount > 0 {
                     SubagentChildrenChip(
@@ -1144,11 +1141,7 @@ struct PinnedSessionRow: View {
             .accessibilityLabel(resolvedCloseHelp)
             .help(resolvedCloseHelp)
         } else if isMissingTranscript {
-            Image(systemName: "questionmark.circle")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .help("History deleted, can't be continued")
-                .accessibilityLabel(Text("History deleted, can't be continued"))
+            MissingTranscriptBadge(session: session)
         } else {
             switch resolvedStatus {
             case .working, .awaitingInput, .idle, .errored:
