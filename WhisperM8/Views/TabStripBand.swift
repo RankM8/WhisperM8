@@ -3,7 +3,7 @@ import Foundation
 /// Zustandsloser Hit-Test für das Tab-Strip-Band — pur und getestet.
 ///
 /// Hintergrund (Vorfall 2026-08-23): Der fensterweite `scrollWheel`-Monitor
-/// wurde allein über das `onHover`-Flag `isHoveringTabStrip` gegated. SwiftUI
+/// wurde allein über ein `onHover`-Flag des Tab-Strips gegated. SwiftUI
 /// verliert das `onHover(false)` aber, wenn z. B. ein Kontextmenü oder ein
 /// Drag über der Leiste dazwischenkommt — das Flag blieb auf `true` hängen
 /// und der Monitor konsumierte JEDES Mausrad-Event im Fenster: Scrollen war

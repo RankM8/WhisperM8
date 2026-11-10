@@ -58,7 +58,9 @@ struct ProjectDetailPanel: View {
                         .lineLimit(1)
                 }
             }
+            // Freie Kopffläche: Griff zum Fenster-Verschieben (Titelband).
             Spacer()
+                .windowDragArea(depth: TabStripBand.height)
             headerButton("arrow.clockwise", help: "Reload") { refreshToken += 1 }
             headerButton("arrow.up.left.and.arrow.down.right", help: "Expand all") {
                 collapsedIDs = []

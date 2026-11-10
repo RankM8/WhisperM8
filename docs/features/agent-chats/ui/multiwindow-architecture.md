@@ -162,26 +162,43 @@ zuletzt debounced Zustand fest.
 ## 7. Window-Dragging
 
 Die Tabs sitzen browserähnlich in der Titelzone (`hiddenTitleBar` +
-`fullSizeContentView`). Damit ein Tab-Drag den Tab bewegt statt das Fenster:
+`fullSizeContentView`). macOS zieht dort das Fenster, sobald sich die Maus
+beim Klick auch nur ein Pixel bewegt — ein Tab-Drag bewegte so das Fenster,
+und ein Klick auf einen Knopf kam oft gar nicht an. Deshalb gilt im Titelband
+(oberste 34 pt, `TabStripBand.height`):
 
-- **Hover-Gate (primärer Mechanismus)**: `.onChange(of: isHoveringTabStrip)` setzt
-  `hostWindow?.isMovable = !hovering` — schwebt die Maus über dem Tab-Strip, ist
-  Window-Drag AUS (Klick/Drag reordert den Tab), auf freien Flächen AN (natives
-  Fenster-Verschieben). Entscheidend: gesetzt schon beim **Hover**, nicht erst beim
-  `mouseDown` — das umgeht das frühere Timing-Problem, bei dem ein Tab-Drag doch
-  das Fenster zog.
+- **Verschiebbar ist nur, was als Grifffläche ausgewiesen ist**
+  (`.windowDragArea(depth:)`): die freie Fläche im Sidebar-Kopf samt Ampel, der
+  freie Rest der Tab-Zeile, der Ampel-Platz bei ausgeblendeter Sidebar und die
+  freie Kopffläche des Projektkontext-Panels. Über Tabs, Knöpfen und den
+  Resize-Rändern ist `isMovable` aus. Ein neuer Knopf im Titelband ist damit von
+  selbst geschützt; eine neue freie Fläche braucht den Modifier.
+- **`TitleBandPointerTracker`** (AppKit-Tracking-Area nur über dem Band) ruft bei
+  jeder Mausbewegung `refreshWindowMovability(atWindowPoint:)`. Entscheidend:
+  `isMovable` steht **vor** dem Klick — erst beim `mouseDown` umzuschalten ist zu
+  spät. Die Entscheidung ist zustandslos (`WindowMovability.isMovable`, pur und
+  getestet); verlässt der Zeiger das Band, ist das Fenster wieder verschiebbar.
+- Gegencheck im `leftMouseDown`-Monitor und Rücksetzen beim Verlust des
+  Key-Status: sollte der Tracker einmal nichts geliefert haben, stimmt der
+  Zustand spätestens beim nächsten Klick.
+- Ohne gemessene Griffflächen (vor dem ersten Layout) gilt das frühere
+  Verhalten: alles außer Tab-Strip und Rändern ist verschiebbar. Ein Messfehler
+  kann das Fenster so nie unverschiebbar machen.
 - `WindowDragExclusionView` (`NSView.mouseDownCanMoveWindow = false`) hinter dem
   Strip als Zusatz-Sicherung gegen Fenster-Drag direkt auf Tabs.
 - `isMovableByWindowBackground = false` (`AgentChatsWindowAccessor`) verhindert
   Drag über den Content-Hintergrund.
-- Event-Monitor (`titleBarZoomMonitor`) macht nur noch **Doppelklick-Zoom** im
-  freien Band (`clickCount == 2`, x ≥ 80, nicht über Tabs).
+- Event-Monitor (`titleBarZoomMonitor`) macht **Doppelklick-Zoom** nur auf einer
+  Grifffläche (`clickCount == 2`, x ≥ 80, nicht über Tabs) — ein schneller
+  Doppelklick auf einen Knopf zoomt nicht mehr.
 
 > **Verworfene Zwischenstände** (NICHT im Code, nicht wieder einführen): ein
 > dauerhaftes `isMovable = false` + `WindowDragHandle`/`performDrag`-Flächen
 > (performDrag war bei `isMovable = false` unzuverlässig → Fenster gar nicht mehr
-> verschiebbar) sowie ein `isMovable`-Toggle erst im `leftMouseDown`-Monitor
-> (Timing-anfällig). Final gilt ausschließlich das Hover-Gate oben.
+> verschiebbar), ein `isMovable`-Toggle erst im `leftMouseDown`-Monitor
+> (Timing-anfällig) und SwiftUI-`onHover`-Flags als einzige Quelle (bis
+> 10.11.2026: `onHover(false)` geht verloren, geschützt war nur der Tab-Strip,
+> und jedes Hover wertete den ganzen Fenster-Body neu aus).
 
 ## 8. Edge-Cases
 

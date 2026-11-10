@@ -42,7 +42,10 @@ struct AgentResourceSummaryButton: View {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(isActive ? AgentTheme.border : Color.clear, lineWidth: 1)
             )
+            // Trefferfläche über die ganze Kopfzeile (28 pt), Layout unverändert.
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
+            .padding(.vertical, -4)
         }
         .buttonStyle(.plain)
         .help("Show session resources")

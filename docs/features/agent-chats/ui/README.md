@@ -20,10 +20,17 @@ Fenster- und Tab-Zustand liegt nicht lokal in der View, sondern in
 `selectedSessionID`, `selectedProjectID`, `pinnedSessionIDs`,
 `expandedProjectIDs` und die ephemere Multi-Auswahl als Bridges.
 
-Das Fenster nutzt eine versteckte Titelzeile mit eigener Chrome-Zone. Freie
-Header-Flächen dürfen das Fenster bewegen, der Tab-Strip und das Terminal
-schalten `mouseDownCanMoveWindow` beziehungsweise `NSWindow.isMovable` gezielt
-aus, damit Tab-Drag und Textselektion nicht als Fenster-Drag enden.
+Das Fenster nutzt eine versteckte Titelzeile mit eigener Chrome-Zone. Im
+Titelband bewegen nur ausgewiesene Griffflächen (`windowDragArea`) das Fenster;
+über Tabs, Knöpfen und Resize-Rändern ist `NSWindow.isMovable` aus, damit
+Klicks ankommen und Tab-Drag oder Textselektion nicht als Fenster-Drag enden
+(`WindowMovability`, `TitleBandPointerTracker`).
+
+Die Sidebar-Spalte ist hart begrenzt (`frame(width:alignment:)` + `clipped()`),
+und keine Zeile darf ihr eine Mindestbreite aufzwingen. Die Fußzeile
+(`SidebarFooterBar`) lässt deshalb die Beschriftung „Einstellungen" weg, wenn
+der Platz nicht reicht. Vorher wuchs die Sidebar mit der Fußzeile über ihre
+Spalte hinaus und verdeckte Tab-Leiste und Terminal.
 `AgentChatsWindowAccessor` bindet das `NSWindow`, setzt das Close-Tracking und
 deaktiviert System-Restoration; Restore und Tab-Verteilung gehören zum
 persistierten Store.

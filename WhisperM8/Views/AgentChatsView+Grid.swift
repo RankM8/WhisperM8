@@ -890,7 +890,7 @@ extension AgentChatsView {
                 )
             }
         )
-        // Hover-Flag fürs Klick-Routing (Muster `isHoveringTabStrip`): der
+        // Hover-Flag fürs Klick-Routing: der
         // leftMouseDown-Monitor setzt die Selektion auf die gehoverte Pane,
         // ohne das Event zu schlucken — der Klick erreicht das Terminal.
         // Das Flag allein reicht nicht (kann hängen bleiben) — der Monitor

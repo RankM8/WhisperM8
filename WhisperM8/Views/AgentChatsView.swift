@@ -41,6 +41,8 @@ struct AgentChatsView: View {
     /// Benannter Coordinate-Space am Body-Root (window-relativ) — der
     /// Tab-Strip misst seine Frame darin fürs Mausrad-Hit-Test-Gating.
     static let windowCoordinateSpaceName = "agentChatsWindow"
+    /// Höhe der Sidebar-Kopfzeile (Ampel + Ressourcen-Anzeige).
+    static let sidebarHeaderHeight: CGFloat = 28
     /// Inhalts-Koordinatenraum der Tab-Leiste — Frame-Messung UND Drop-Location
     /// liegen darin (scroll-sicher, kein `.global`/`.local`-Mismatch).
     private static let tabStripContentSpace = "tabStripContent"
@@ -181,8 +183,8 @@ struct AgentChatsView: View {
     /// Tear-off: die Detach-Drop-Zone (Content) ist gerade Drop-Ziel.
     @State private var detachZoneTargeted = false
     /// Grid-Ansicht: Pane, über der die Maus gerade schwebt — Klick-Routing
-    /// für den Fokus-Wechsel (Muster `isHoveringTabStrip`, kein Koordinaten-
-    /// Hit-Test). internal, da Monitor (+Shortcuts) und +Grid es nutzen.
+    /// für den Fokus-Wechsel (Hover-Flag, kein Koordinaten-Hit-Test).
+    /// internal, da Monitor (+Shortcuts) und +Grid es nutzen.
     @State var hoveredGridPaneID: UUID?
     /// Maus über einer Jarvis-Notiz-Karte: Klick fokussiert die Kachel nicht.
     @State var hoveredNoteCardID: UUID?
@@ -367,16 +369,10 @@ struct AgentChatsView: View {
     /// Bump-Trigger: erhöht sich pro Mausrad-Rasterung, der ScrollViewReader
     /// scrollt daraufhin zu `stripWheelAnchorID`.
     @State var stripWheelTick: Int = 0
-    /// `true` während die Maus über dem Tab-Strip schwebt. Seit dem Vorfall
-    /// 2026-08-23 NUR noch fürs `isMovable`-Toggle im Einsatz: SwiftUI kann
-    /// das `onHover(false)` verlieren (Kontextmenü/Drag über der Leiste), das
-    /// Flag hing dann auf `true` — und der Scroll-Monitor, der allein daran
-    /// gated war, konsumierte JEDES Mausrad-Event im Fenster (Scrollen
-    /// app-weit tot). Die Event-Monitore gaten deshalb zustandslos per
-    /// Koordinaten-Hit-Test (`isPointerInTabStripBand`/`TabStripBand`); ein
-    /// hängendes Flag kostet höchstens das Fenster-Verschieben bis zum
-    /// nächsten Hover, kapert aber nie wieder Events.
-    @State var isHoveringTabStrip = false
+    /// Griffflächen des Titelbands (`windowDragArea`). Nur dort darf ein Drag
+    /// das Fenster ziehen; der `TitleBandPointerTracker` hält `isMovable`
+    /// danach aktuell. Klasse im @State: Messungen lösen keinen Neuaufbau aus.
+    @State var windowDragAreaCache = WindowDragAreaCache()
     /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
     @State private var stripViewportWidth: CGFloat = 0
@@ -435,6 +431,7 @@ struct AgentChatsView: View {
     @State var newChatHighlightedProjectID: UUID?
     /// Fokus des Suchfelds im „Neuer Chat"-Picker — für Autofokus beim Öffnen.
     @FocusState private var newChatSearchFocused: Bool
+    @FocusState private var sidebarFilterFocused: Bool
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State var subAgentLibrarySheet: SubAgentLibraryPresentation?
     /// Live-Tracker fuer die aktive Sub-Session innerhalb eines
@@ -752,18 +749,19 @@ struct AgentChatsView: View {
             HStack(spacing: 0) {
                 if isSidebarVisible {
                     hashboardSidebar
-                        .frame(width: currentSidebarWidth(windowWidth: geo.size.width))
+                        // Die Spalte ist hart begrenzt: Inhalt, der breiter ist
+                        // als sie, wird links verankert und abgeschnitten —
+                        // nie wieder zentriert über den Content gelegt
+                        // (Fußzeilen-Überlauf, siehe `SidebarFooterBar`).
+                        .frame(width: currentSidebarWidth(windowWidth: geo.size.width), alignment: .leading)
+                        .clipped()
                         .overlay(alignment: .trailing) {
                             SidebarResizeHandle(
                                 onDragChanged: { translation in
                                     handleSidebarDrag(translation: translation, windowWidth: geo.size.width)
                                 },
                                 onDragEnded: commitSidebarDrag,
-                                onDoubleClick: resetSidebarWidth,
-                                // Fenster-Drag waehrend des Hovers aus — wie
-                                // beim Tab-Strip (`isHoveringTabStrip`), sonst
-                                // zieht ein Drag im Titelzonen-Band das Fenster.
-                                onHoverChanged: { hovering in hostWindow?.isMovable = !hovering }
+                                onDoubleClick: resetSidebarWidth
                             )
                             // Haelftig ueber den Content ragen (9pt-Zone, 4.5
                             // je Seite), ohne das Layout zu verschieben.
@@ -790,8 +788,7 @@ struct AgentChatsView: View {
                                 handleInspectorDrag(translation: translation, windowWidth: geo.size.width)
                             },
                             onDragEnded: commitInspectorDrag,
-                            onDoubleClick: resetInspectorWidth,
-                            onHoverChanged: { hovering in hostWindow?.isMovable = !hovering }
+                            onDoubleClick: resetInspectorWidth
                         )
                         .offset(x: -4.5)
                     }
@@ -826,6 +823,21 @@ struct AgentChatsView: View {
                 hostWindow?.isMovable = true
             }
         ))
+        // Hält `isMovable` im Titelband aktuell, bevor geklickt wird.
+        .background(TitleBandPointerTracker(
+            bandHeight: TabStripBand.height,
+            onPointerMoved: { refreshWindowMovability(atWindowPoint: $0) },
+            onPointerExited: { setWindowMovable(true) }
+        ))
+        .onPreferenceChange(WindowDragAreasKey.self) { areas in
+            windowDragAreaCache.areas = areas
+            // Layout hat sich unter dem ruhenden Zeiger verschoben (Sidebar
+            // ein/aus, Fenstergröße): gleich neu entscheiden.
+            if let window = hostWindow, let bounds = window.contentView?.bounds,
+               bounds.contains(window.mouseLocationOutsideOfEventStream) {
+                refreshWindowMovability(atWindowPoint: window.mouseLocationOutsideOfEventStream)
+            }
+        }
         .coordinateSpace(.named(Self.windowCoordinateSpaceName))
         .ignoresSafeArea(.all, edges: .top)
         .sheet(isPresented: Binding(
@@ -1113,13 +1125,6 @@ struct AgentChatsView: View {
                   let window = note.object as? NSWindow,
                   window === hostWindow else { return }
             cancelTabSwitcher()
-        }
-        .onChange(of: isHoveringTabStrip) { _, hovering in
-            // Window-Drag hover-gesteuert: über dem Tab-Strip AUS (Klick/Drag
-            // bewegt den Tab, nicht das Fenster), auf freien Flächen AN. Setzen
-            // schon beim Hover — nicht erst beim mouseDown — umgeht das frühere
-            // Timing-Problem, bei dem ein Tab-Drag doch das Fenster zog.
-            hostWindow?.isMovable = !hovering
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentScanCoordinator.scanRunningChangedNotification)) { note in
             guard let running = note.userInfo?["running"] as? Bool else { return }
@@ -1480,16 +1485,18 @@ struct AgentChatsView: View {
 
         return VStack(spacing: 0) {
             HStack(spacing: 6) {
-                // Reservierter Bereich für die macOS-Window-Controls (rot/gelb/grün
-                // floaten transparent über der Sidebar bei x ≈ 8–78).
-                Spacer().frame(width: 70)
-                Spacer(minLength: 4)
+                // Freie Fläche über den macOS-Window-Controls (rot/gelb/grün
+                // floaten darüber, auf macOS 26 bis x = 69) und daneben —
+                // zugleich der Griff zum Fenster-Verschieben.
+                Color.clear
+                    .frame(minWidth: 80, maxWidth: .infinity)
+                    .windowDragArea(depth: Self.sidebarHeaderHeight)
                 AgentResourceSummaryButton(
                     descriptors: runningResourceDescriptors(projectByID: projectByID)
                 )
             }
             .padding(.trailing, 8)
-            .frame(height: 28)
+            .frame(height: Self.sidebarHeaderHeight)
             // Live-Sync der offenen Projekt-Views: feuert bei jeder Änderung
             // der Aktiv-Mengen (Chat startet/Tab zu/Archiv), bei jeder
             // SLOT-Änderung einer aktiven Projekt-View (Selbstheilung gegen
@@ -1980,35 +1987,7 @@ struct AgentChatsView: View {
     }
 
     private var sidebarFooter: some View {
-        // Kein eigenes horizontales Padding links: `SidebarRowButtonStyle`
-        // bringt die 8 pt Außenkante bereits mit — das frühere Doppel-Padding
-        // (8 außen + 8 Style + 10 innen) schob die Settings-Pill 8–10 pt
-        // rechts vom Raster der oberen Sidebar-Elemente (Projekt-Header und
-        // Filter-Feld starten bei 8 pt, Inhalt bei 16–17 pt).
-        HStack(spacing: 4) {
-            Button {
-                WindowRequestCenter.shared.request(.settings)
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: 16)
-                    // Einzeilig: seit dem Glocken-Knopf ist der Footer so voll,
-                    // dass „Settings" sonst in „Setting / s" umbricht.
-                    Text("Settings")
-                        .font(.system(size: 12, weight: .medium))
-                        .lineLimit(1)
-                        .fixedSize()
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(AgentTheme.textSecondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 7)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(SidebarRowButtonStyle())
-            .help("Open settings")
-
+        SidebarFooterBar(onOpenSettings: { WindowRequestCenter.shared.request(.settings) }) {
             SidebarUpdateBadge()
 
             Button {
@@ -2036,8 +2015,6 @@ struct AgentChatsView: View {
             // Usage-Limits der verbundenen Claude-/ChatGPT-Accounts
             SidebarUsageButtons()
         }
-        .padding(.trailing, 8)
-        .padding(.vertical, 7)
     }
 
     private var defaultAgentProvider: AgentProvider {
@@ -2072,6 +2049,7 @@ struct AgentChatsView: View {
                 TextField("Filter…", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11.5))
+                    .focused($sidebarFilterFocused)
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -2086,6 +2064,10 @@ struct AgentChatsView: View {
             .padding(.horizontal, 9)
             .frame(maxWidth: .infinity, minHeight: 30, maxHeight: 30)
             .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
+            // Die ganze Pille nimmt den Klick: das Textfeld selbst ist nur eine
+            // Zeile hoch, Lupe und Rand darum fokussierten vorher nichts.
+            .contentShape(Rectangle())
+            .onTapGesture { sidebarFilterFocused = true }
             .padding(.horizontal, 8)
             .padding(.bottom, 2)
         }
@@ -2477,6 +2459,12 @@ struct AgentChatsView: View {
                     Text(actionLabel)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(AgentTheme.textSecondary)
+                        // Trefferfläche größer als der Text, Layout unverändert.
+                        .padding(.vertical, 5)
+                        .padding(.leading, 10)
+                        .contentShape(Rectangle())
+                        .padding(.vertical, -5)
+                        .padding(.leading, -10)
                 }
                 .buttonStyle(.plain)
                 .help("Clear filter — show all chats")
@@ -2769,16 +2757,16 @@ struct AgentChatsView: View {
 
     private var projectChatStrip: some View {
         VStack(spacing: 0) {
-            // Tabs sitzen in der Titelzone (oberste ~28px), browserähnlich neben
-            // den Ampel-Buttons. Window-Drag wird hover-gesteuert ausgeschaltet,
-            // sobald die Maus über dem Tab-Strip schwebt (siehe
-            // `.onChange(of: isHoveringTabStrip)` am Body) — so zieht ein Klick/
-            // Drag auf einem Tab nie das Fenster, während freie Flächen (links/
-            // Lücken) das Fenster weiterhin verschieben.
+            // Tabs sitzen in der Titelzone, browserähnlich neben den Ampel-
+            // Buttons. Das Fenster zieht dort nur auf ausgewiesenen
+            // Griffflächen (`windowDragArea`) — über Tabs und Knöpfen ist
+            // `isMovable` aus (`TitleBandPointerTracker`), sonst zöge ein Klick
+            // mit etwas Mausbewegung das Fenster, statt anzukommen.
             HStack(spacing: 5) {
                 if !isSidebarVisible {
                     // Platz für die Ampel-Buttons, wenn die Sidebar aus ist.
                     Spacer().frame(width: 70)
+                        .windowDragArea(depth: TabStripBand.height)
                 }
 
                 TitlebarIconButton(systemImage: "sidebar.left", help: isSidebarVisible ? String(localized: "Hide sidebar") : String(localized: "Show sidebar"), isActive: isSidebarVisible) {
@@ -2930,11 +2918,6 @@ struct AgentChatsView: View {
                             stripFrameInWindow = frame
                             stripViewportWidth = frame.width
                         }
-                        // Hover-Flag nur noch fürs `isMovable`-Toggle — die
-                        // Scroll-Monitore gaten zustandslos über
-                        // `isPointerInTabStripBand` (Vorfall 2026-08-23:
-                        // hängendes Flag machte Scrollen app-weit tot).
-                        .onHover { isHoveringTabStrip = $0 }
                         // Bei Tab-Wechsel (⌘⌥←/→, ⌘1–⌘9, Sidebar) den aktiven Tab
                         // in Sicht scrollen, falls die Bar überläuft. Hält außerdem
                         // den Mausrad-Anker an der Selektion, damit das Rad danach
@@ -3011,6 +2994,7 @@ struct AgentChatsView: View {
                 .help("Create new chat")
 
                 Spacer(minLength: 8)
+                    .windowDragArea(depth: TabStripBand.height)
 
                 // Branch-Badge entfernt — die Branch steht ohnehin schon in
                 // der Sidebar-Projekt-Zeile und im Project-Inspector, und

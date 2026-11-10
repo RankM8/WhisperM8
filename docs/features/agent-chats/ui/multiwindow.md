@@ -84,8 +84,10 @@ Durch `AgentUIState.normalizedWindows` grundsätzlich erzwungen:
 - Die Top-Level-Felder (`openTabIDs`, `selectedSessionID`, `selectedProjectID`)
   sind nur noch **Kompatibilitäts-Spiegel** des Primärfensters und sollen
   perspektivisch entfallen, sobald keine v2-Leser mehr existieren.
-- **Window-Dragging** lebt von einem hover-gesteuerten `isMovable`-Toggle (kein
+- **Window-Dragging** lebt von einem positionsgesteuerten `isMovable`-Toggle:
+  im Titelband zieht das Fenster nur auf ausgewiesenen Griffflächen (kein
   natives `WindowDragGesture` — das ist macOS 15+, Projekt-Target ist macOS 14).
+  Details: `multiwindow-architecture.md`, Abschnitt 7.
 - Die Tab-Strip-**Event-Monitore** (Mausrad-Scroll, Cmd-W-Schliessen,
   Doppelklick-Zoom) sind weitgehend **vorbestehend** und nicht Teil des
   Multi-Window-Umbaus; seit dem Phase-1-Refactor liegen sie als `extension`

@@ -555,9 +555,12 @@ extension AgentChatsView {
     func installTitleBarZoomHandlerIfNeeded() {
         guard titleBarZoomMonitor == nil else { return }
         titleBarZoomMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
-            // Verschiebbarkeit zustandslos aus der Zeigerposition (LR-AU-008):
-            // die Hover-Flags (Tab-Strip, Resize-Ränder) können hängen bleiben.
-            refreshWindowMovability(for: event)
+            // Gegencheck zum `TitleBandPointerTracker` (LR-AU-008): sollte der
+            // einmal keine Bewegung geliefert haben, stimmt der Zustand
+            // spätestens für den nächsten Klick wieder.
+            if event.window === hostWindow {
+                refreshWindowMovability(atWindowPoint: event.locationInWindow)
+            }
             // Grid-Ansicht: Klick in eine nicht-fokussierte Pane verschiebt
             // die Selektion dorthin (Dictation-Routing folgt). Beobachtend —
             // das Event läuft danach unverändert weiter (Terminal-Klick,
@@ -567,12 +570,12 @@ extension AgentChatsView {
         }
     }
 
-    /// Setzt `window.isMovable` VOR der Zustellung des Klicks neu: aus über dem
-    /// Tab-Strip und den Resize-Rändern von Sidebar/Inspector, sonst an. Die
-    /// Hover-Toggles bleiben als frühe Näherung, dieser Gegencheck gewinnt.
-    func refreshWindowMovability(for event: NSEvent) {
+    /// Setzt `window.isMovable` für die Zeigerposition (AppKit-Fenster-
+    /// koordinaten): im Titelband nur auf einer Grifffläche an, über Tab-Strip,
+    /// Knöpfen und den Resize-Rändern von Sidebar/Inspector aus. Aufgerufen bei
+    /// jeder Mausbewegung im Titelband — also bevor geklickt wird.
+    func refreshWindowMovability(atWindowPoint point: CGPoint) {
         guard let window = hostWindow,
-              event.window === window,
               let contentView = window.contentView else { return }
         let windowWidth = contentView.bounds.width
         let ranges = WindowMovability.resizeHandleRanges(
@@ -580,12 +583,20 @@ extension AgentChatsView {
             inspectorWidth: isInspectorVisible ? currentInspectorWidth(windowWidth: windowWidth) : nil,
             windowWidth: windowWidth
         )
-        window.isMovable = WindowMovability.isMovable(
-            pointInWindow: event.locationInWindow,
+        setWindowMovable(WindowMovability.isMovable(
+            pointInWindow: point,
             contentViewHeight: contentView.bounds.height,
             stripFrame: stripFrameInWindow,
-            resizeHandleRanges: ranges
-        )
+            resizeHandleRanges: ranges,
+            dragAreas: windowDragAreaCache.areas
+        ))
+    }
+
+    /// Schreibt nur bei einer Änderung — der Setter lässt AppKit die Zieh-
+    /// Flächen des Fensters neu melden, und das hier läuft pro Mausbewegung.
+    func setWindowMovable(_ movable: Bool) {
+        guard let window = hostWindow, window.isMovable != movable else { return }
+        window.isMovable = movable
     }
 
     func removeTitleBarZoomHandler() {
@@ -600,11 +611,10 @@ extension AgentChatsView {
     /// den Tab-Strip ersetzen und macOS den Doppelklick dort nicht mehr selbst
     /// auswertet.
     ///
-    /// Das Fenster-Dragging läuft NICHT hier, sondern über ein hover-gesteuertes
-    /// `isMovable`-Toggle (siehe `.onChange(of: isHoveringTabStrip)` am Body):
-    /// über dem Tab-Strip AUS (Tab-Drag/Reorder), auf freien Flächen AN (natives
-    /// Fenster-Verschieben). Schon beim Hover gesetzt — nicht erst beim mouseDown,
-    /// was vorher zu „Tab-Drag zieht doch das Fenster" führte.
+    /// Das Fenster-Dragging läuft NICHT hier, sondern nativ über `isMovable`,
+    /// das der `TitleBandPointerTracker` schon bei der Mausbewegung setzt: auf
+    /// Griffflächen AN, über Tab-Strip und Knöpfen AUS. Erst beim mouseDown
+    /// umzuschalten käme zu spät („Tab-Drag zieht doch das Fenster").
     private func handleTitleBarMouse(_ event: NSEvent) -> NSEvent? {
         guard event.clickCount == 2,
               let window = hostWindow,
@@ -617,8 +627,16 @@ extension AgentChatsView {
         let inTopBand = location.y >= contentView.bounds.height - TabStripBand.height
 
         // Nur im freien Band: nicht über den Tabs (zustandsloser Hit-Test,
-        // Vorfall 2026-08-23), nicht über den Ampel-Buttons.
-        if inTopBand, location.x >= trafficLightWidth, !isPointerInTabStripBand(event) {
+        // Vorfall 2026-08-23), nicht über den Ampel-Buttons — und nur auf einer
+        // Grifffläche. Sonst schluckte ein schneller Doppelklick auf einen
+        // Knopf im Titelband (Sidebar ein/aus) den zweiten Klick und zoomte.
+        let areas = windowDragAreaCache.areas
+        let onFreeArea = areas.isEmpty || WindowMovability.isOverDragArea(
+            pointInWindow: location,
+            contentViewHeight: contentView.bounds.height,
+            dragAreas: areas
+        )
+        if inTopBand, location.x >= trafficLightWidth, onFreeArea, !isPointerInTabStripBand(event) {
             TitleBarZoom.performSystemDoubleClickAction(on: window)
             return nil
         }
@@ -652,8 +670,8 @@ extension AgentChatsView {
     /// Gating für die Scroll-Monitore und den Doppelklick-Zoom — bewusst KEIN
     /// `isHoveringTabStrip` mehr (Vorfall 2026-08-23: das Hover-Flag blieb
     /// hängen, der Monitor schluckte jedes Mausrad-Event im Fenster, Scrollen
-    /// war app-weit tot; Details in `TabStripBand`). Das Flag bleibt nur noch
-    /// fürs `isMovable`-Toggle im Einsatz, wo ein Hänger kein Event kapert.
+    /// war app-weit tot; Details in `TabStripBand`). Das Flag gibt es seit
+    /// 10.11.2026 nicht mehr — auch `isMovable` entscheidet jetzt zustandslos.
     func isPointerInTabStripBand(_ event: NSEvent) -> Bool {
         guard let window = hostWindow,
               let contentView = window.contentView else { return false }

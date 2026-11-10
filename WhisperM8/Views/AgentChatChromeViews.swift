@@ -478,7 +478,10 @@ struct TitlebarIconButton: View {
                 .foregroundStyle(foreground)
                 .frame(width: 24, height: 22)
                 .background(background, in: RoundedRectangle(cornerRadius: 4))
+                // Trefferfläche über die ganze Leistenhöhe, Layout unverändert.
+                .padding(.vertical, 5)
                 .contentShape(Rectangle())
+                .padding(.vertical, -5)
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
