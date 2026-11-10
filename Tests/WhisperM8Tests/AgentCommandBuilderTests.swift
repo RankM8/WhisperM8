@@ -595,6 +595,7 @@ extension AgentCommandBuilderTests {
         // Leerer Picker + leerer Default = `auto` = Frontier laut Katalog.
         XCTAssertEqual(builder.gptRouterCoreEnvironment(), [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
@@ -815,6 +816,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19002",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
@@ -863,6 +865,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.environmentOverrides, [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:19001",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-6-astra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),
@@ -942,6 +945,7 @@ extension AgentCommandBuilderTests {
         XCTAssertEqual(command.arguments, ["--verbose", "--resume", "resume-1"])
         XCTAssertEqual(command.environmentOverrides, [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-sol",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-sol",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: false, contextWindow: 272_000),
@@ -1578,6 +1582,7 @@ extension AgentCommandBuilderTests {
         let expectedRouterEnvironment = [
             "CLAUDE_CONFIG_DIR": "/profiles/firma",
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:18766",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": "gpt-5.6-terra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": "gpt-5.6-terra-fast",
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": AgentCommandBuilder.gptPickerDescription(fast: true, contextWindow: 272_000),

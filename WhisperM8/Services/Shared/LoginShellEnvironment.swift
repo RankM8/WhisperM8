@@ -227,6 +227,10 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // expliziten per-Launch-Overrides (AgentCommandBuilder / ProxyManager).
         env.removeValue(forKey: "ANTHROPIC_CUSTOM_HEADERS")
         env.removeValue(forKey: "CCP_CONFIG_DIR")
+        // Gehört zum Router-Env (AgentCommandBuilder) und gilt nur zusammen
+        // mit dessen `ANTHROPIC_BASE_URL`. Der Präfix-Filter oben erfasst ihn
+        // wegen des führenden Unterstrichs nicht.
+        env.removeValue(forKey: "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
 
         env["PATH"] = path
 

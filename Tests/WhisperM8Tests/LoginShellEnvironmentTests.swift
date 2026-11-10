@@ -166,10 +166,12 @@ final class LoginShellEnvironmentTests: XCTestCase {
         let envDict = env.processEnvironment(base: [
             "ANTHROPIC_CUSTOM_HEADERS": "X-WhisperM8-GPT-Profile: ai",
             "CCP_CONFIG_DIR": "/Users/test/.gpt-profiles/ai",
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "HOME": "/Users/test"
         ])
         XCTAssertNil(envDict["ANTHROPIC_CUSTOM_HEADERS"])
         XCTAssertNil(envDict["CCP_CONFIG_DIR"])
+        XCTAssertNil(envDict["_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL"])
         XCTAssertEqual(envDict["HOME"], "/Users/test")
     }
 }

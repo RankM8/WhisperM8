@@ -321,6 +321,15 @@ struct AgentCommandBuilder {
         let gptContextWindow = String(contextWindow)
         var environment = [
             "ANTHROPIC_BASE_URL": "http://127.0.0.1:\(gptRouterPortResolver())",
+            // Der Router reicht alles, was nicht GPT ist, unverändert an
+            // Anthropic durch. Ohne diesen Hinweis hält Claude Code die lokale
+            // Adresse für ein fremdes Gateway und schaltet die Modellliste vom
+            // Server ab (`[servedCatalog] off (not_first_party)`). Der Picker
+            // zeigte dann nur noch die alte Bootstrap-Option „Fable 5.1“ statt
+            // Fable 5.2 (Diagnose 10.11.2026, CLI 2.1.322). Interne CLI-Variable:
+            // fällt sie in einer späteren Version weg, gilt wieder das alte
+            // Verhalten, sonst ändert sich nichts.
+            "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL": "1",
             "ANTHROPIC_CUSTOM_MODEL_OPTION": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME": effectivePickerModel,
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION": pickerDescription,
