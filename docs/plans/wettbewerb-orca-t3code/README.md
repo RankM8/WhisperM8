@@ -7,6 +7,7 @@
 
 | Seite | Inhalt |
 |---|---|
+| [auswahl.md](auswahl.md) | Was für Giuliano zählt, Entscheidungen vom 11.11.2026, Einschätzung zu „Chats überleben den Neustart“ und „Cockpit für alle Abos“ |
 | [kernfeatures.md](kernfeatures.md) | 13 Features, die wir nachziehen oder besser machen sollten, mit Nutzen, Aufwand und Reihenfolge; dazu, was wir nicht bauen |
 | [vergleich.md](vergleich.md) | Funktion für Funktion: Orca, T3 Code, WhisperM8; was nur wir haben; was uns fehlt |
 | [architektur.md](architektur.md) | Swift nativ gegen Electron mit Dienst oder Server; was wir am Fundament ändern sollten |
