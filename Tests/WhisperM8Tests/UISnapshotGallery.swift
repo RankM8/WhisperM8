@@ -358,7 +358,7 @@ final class UISnapshotGallery: XCTestCase {
                     loginHint: Text("The first time you start a chat, Claude Code opens right inside WhisperM8 and walks you through signing in with your Claude account.")
                 ).padding(24))
             },
-        ] + Self.notchFixtures + Self.clipboardFixtures() + Self.keyboardLockFixtures() + Self.statisticsFixtures()
+        ] + Self.notchFixtures + Self.clipboardFixtures() + Self.keyboardLockFixtures() + Self.statisticsFixtures() + Self.claudeLoginFixtures()
     }
 
     // MARK: - Lauf

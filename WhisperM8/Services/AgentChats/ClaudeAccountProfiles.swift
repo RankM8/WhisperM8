@@ -384,7 +384,15 @@ struct ClaudeAccountProfiles {
     /// 2026-07-12) gegen zwei unabhaengige Profile.
     func keychainService(forProfile name: String) -> String {
         guard name != Self.mainProfileName else { return "Claude Code-credentials" }
-        let digest = SHA256.hash(data: Data(configDir(forProfile: name).path.utf8))
+        return Self.keychainService(forConfigDirPath: configDir(forProfile: name).path)
+    }
+
+    /// Service-Name für ein beliebiges `CLAUDE_CONFIG_DIR`. Claude hasht den
+    /// Wert der Variable Zeichen für Zeichen, ohne den Pfad aufzulösen — auch
+    /// Leerzeichen, Umlaute und ein Schrägstrich am Ende zählen mit
+    /// (nachgemessen an v2.1.322 über die `security`-Aufrufe der CLI).
+    static func keychainService(forConfigDirPath path: String) -> String {
+        let digest = SHA256.hash(data: Data(path.utf8))
         let suffix = digest.map { String(format: "%02x", $0) }.joined().prefix(8)
         return "Claude Code-credentials-\(suffix)"
     }

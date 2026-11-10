@@ -364,6 +364,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             ClipboardHistoryController.shared.start()
             // Statistik: Zeit, Chats, Diktate, Protokolle, Limits, Git.
             StatisticsCollectors.start()
+            // Login-Fristen der Claude-Konten: liest einmal jetzt und danach
+            // stündlich den Keychain (ein kurzer `security`-Aufruf je Konto).
+            ClaudeLoginExpiryStore.shared.start()
+            // Zwischenordner eines Logins, den ein Absturz offen ließ: jetzt
+            // gehört kein laufender Login mehr dazu.
+            Task.detached(priority: .utility) {
+                ClaudeLoginRenewer().removeStaleStaging(olderThan: 0)
+            }
         }
         // Folgeauftrags-Warteschlange: Was beim letzten Beenden mitten in der
         // Zustellung stand, ist von unbekanntem Ausgang — als `unknown`
@@ -552,6 +560,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             AgentWindowStore.shared.flush()
             ClipboardHistoryController.shared.shutdown()
             StatisticsCollectors.shutdown()
+            // Einen offenen Claude-Login nicht ohne die App weiterlaufen lassen.
+            ClaudeLoginRenewalSession.stopActive()
         }
     }
 
@@ -590,6 +600,12 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
            let sessionID = UUID(uuidString: raw) {
             Task { @MainActor in
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: sessionID)
+            }
+        } else if let raw = userInfo[ClaudeLoginExpiryStore.windowRequestUserInfoKey] as? String,
+                  let request = WindowRequest(rawValue: raw) {
+            // Vorwarnung zum Login-Ende: Klick öffnet die Konten-Seite.
+            Task { @MainActor in
+                WindowRequestCenter.shared.request(request)
             }
         }
         completionHandler()
