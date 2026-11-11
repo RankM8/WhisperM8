@@ -957,6 +957,40 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
 5. Einzelansicht: L2 bleibt die Chat-Auswahl.
 6. Tastatur unverändert (Ctrl+Tab zeigt im Raster die Chats).
 
+**Befunde aus einem unabhängigen Review von 0bb54fb5** (umgesetzt):
+
+1. **Steuerkreuz schickte Pfeile in jeden lebenden Chat** (kritisch, im Alltag passiert: links im
+   leeren Eingabefeld schickt Claude in den Hintergrund; hoch holt den letzten Prompt zurück, Kreuz
+   schickt ihn erneut; in einer Shell liefe der letzte Befehl nochmal). Jetzt Pfeile nur bei
+   `awaitingInput` (`ControllerBindingResolver.arrowsAllowed`), sonst wirkt das Steuerkreuz wie der
+   linke Stick (`navigate`): hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im
+   Raster Kachel zu Kachel. Nicht am Entwurfs-Verdacht festgemacht (die Rücktaste setzt ihn nie
+   zurück). Während der Aufnahme bleibt es der Ausgabemodus (eigener Zusammenhang `recording`).
+   Absicherung im Controller-Weg `AgentTerminalController.sendKey` über
+   `TerminalControlKey.controllerAllows` (die Tastatur läuft dort nicht durch). Legende: „Pfeiltasten“
+   nur bei Rückfragen, sonst steht das Steuerkreuz beim Bewegen neben dem Stick. Mitgeändert: Stick
+   rechts in der Einzelansicht liefert jetzt ausdrücklich keine Aktion (vorher eine wirkungslose).
+2. **Menü-Eingaben an den falschen Chat**: „Weiter“, „Modus wechseln“ und Befehle nehmen jetzt
+   `setup.sessionID` wie Konten und Umbenennen; weicht die Auswahl inzwischen ab, „geht nicht“ und das
+   Menü ist zu.
+3. **Kreuz bestätigte Freigaben zu früh**: Bei `working`/`unknown` Enter nur, wenn in den letzten 30 s
+   per Controller getippt, gelöscht oder diktiert wurde (`lastControllerDraftInputAt` am
+   Terminal-Controller, gesetzt von Rücktaste, Text ohne Senden und Diktat ohne Senden, gelöscht beim
+   Senden). 30 s reichen, einen diktierten Entwurf zu überfliegen; ältere Eingaben halten Kreuz nicht
+   scharf. Restrisiko: Erscheint der Dialog innerhalb dieser 30 s, gilt die Lücke weiter. Tippen auf der
+   Tastatur zählt bewusst nicht.
+5. **Ausschalten ließ Handler stehen**: `unwire` nimmt jetzt alle Handler ab, die `wire` setzt (eine
+   gemeinsame Tastenliste, dazu Trigger, Steuerkreuz, Sticks), auch an Controllern, die
+   `controllers()` nicht mehr nennt.
+
+**Später** (aus demselben Review, bewusst nicht umgesetzt):
+
+- 4: Die Tastatur-Brücke postet ihre Ereignisse an den First Responder — ist das ein Terminal,
+  landen sie dort (`ControllerLiveAdapters`, `postBridgeKey`).
+- 6: `ControllerConnectHint` ruft `GCController.controllers()` auch bei ausgeschaltetem Schalter.
+- 7: Zwei Schnappschüsse je Geste (Manager und Ausführer).
+- 8: Stick-Drift hält die Sperre gegen App Nap (die Pumpe gilt als „gedrückt“).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
