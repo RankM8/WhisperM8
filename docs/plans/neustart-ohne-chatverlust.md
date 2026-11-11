@@ -1,6 +1,6 @@
 # Plan: `make dev` ohne Chat-Abbruch
 
-**Stand:** 11.11.2026 · **Status:** Beratung mit Empfehlung, Vorversuch und Freigabe offen, kein App-Code geändert
+**Stand:** 11.11.2026 · **Status:** Vorversuch läuft (Zwischenstand unten), kein App-Code geändert
 **Herkunft:** Wunsch vom 11.11.2026 nach der Wettbewerbsanalyse (Punkt 5 der Auswahl, Branch `docs/wettbewerb-orca-t3code`)
 
 ## Ziel
@@ -88,6 +88,86 @@ Dazu kleiner: Was im Speicher eines Chats liegt und den Neustart nicht übersteh
 4. **Feldtest** mit echtem `make dev` und arbeitenden Chats (Claude, GPT, Codex, Terminal), danach Entscheidung über den Standard.
 
 Eigener Branch, eigener Arbeitsordner, eigener Chat.
+
+## Ergebnis des Vorversuchs
+
+**Zwischenstand vom 11.11.2026, 19:50.** Frage 0 und 2 sind fertig, Frage 1 zum größten Teil, Frage 3 steht noch aus. Alle Prototypen liegen außerhalb des Repositorys, am App-Code ist nichts geändert.
+
+### Kurzfassung
+
+Die Übergabe der Terminal-Leitungen funktioniert, und das Bild lässt sich verlustfrei wiederherstellen. Der Haken sitzt woanders: **Reißt der Router mitten in einer laufenden Antwort ab, wiederholt Claude Code die Anfrage nicht, der Turn endet mit einem Fehler.** Der Plan in seiner jetzigen Form würde also bei jedem Chat, der beim Neustart gerade schreibt, genau den Turn verlieren, den er retten soll. Das ist lösbar, ändert aber den Ablauf (siehe Folgerung unten).
+
+### Frage 0: Die Mechanik selbst — belegt
+
+**Aufbau:** Python-Prototyp mit drei Rollen. Ein Halter startet ein Kind per `forkpty` wie heute die App, gibt die Leitung per `SCM_RIGHTS` an einen abgekoppelten Aufbewahrer ab und beendet sich ohne `close` und ohne Signal. Ein dritter Prozess übernimmt die Leitung vom Aufbewahrer. Das Kind ist ein Shell-Skript, das jede Sekunde tickt und SIGHUP und SIGWINCH protokolliert.
+
+| Messung | Ergebnis |
+|---|---|
+| Kontrolle: Halter endet ohne Übergabe | Kind bekommt SIGHUP 70 ms später und endet |
+| Mit Übergabe | kein SIGHUP; Kind läuft weiter, Elternprozess wird `launchd` (PID 1), 6 s Lücke nur mit Aufbewahrer |
+| Übernahme durch dritten Prozess | Größe setzen wirkt (Kind meldet SIGWINCH mit 100×30), Schreiben kommt an, Lesen läuft weiter |
+| Ausgabe über alle drei Prozesse | lückenlos (Tick 1 bis 15 ohne Sprung), Puffer des Aufbewahrers bytegleich übergeben |
+| Ende eines fremden Kindes | `waitpid` geht nicht (ECHILD), aber `kqueue` mit `NOTE_EXIT \| NOTE_EXITSTATUS` liefert Ende **und Exit-Code** (gemessen: Status 7) |
+
+Der letzte Punkt vereinfacht den Plan: In der Tabelle „Was dafür geändert werden muss“ steht, die neue App bekomme den Exit-Code nicht. Sie bekommt ihn über `kqueue`.
+
+**Lesepause (niemand liest die Leitung 30 s lang):** Aufbau mit einem eigenen PTY-Host auf Basis von SwiftTerm ohne Fenster (Claude Code 2.1.322 und Codex 0.160.1 echt, mit Giulianos Login, in Scratchpad-Ordnern).
+
+| Fall | Ergebnis |
+|---|---|
+| Claude, Folge von 14 Bash-Schritten | arbeitet in der Pause normal weiter (4 Schritte in 30 s, Takt 6–10 s wie vorher), Turn endet sauber |
+| Claude, lange gestreamte Antwort (260 Zeilen) | Antwort reißt nicht ab; bei Pausenbeginn war Zeile 136 gelesen, beim Weiterlesen lagen 27,5 KB bis Zeile 227 an, am Ende alle 260 Zeilen vollständig und in Reihenfolge |
+| Codex, Folge von 12 Shell-Schritten | arbeitet in der Pause normal weiter (6 Schritte im gewohnten Takt von 4–6 s) |
+
+Claude blockiert also nicht, wenn niemand liest, sondern sammelt im eigenen Speicher. Der Aufbewahrer muss deshalb nicht zwingend mitlesen, damit nichts hängt. Er sollte es trotzdem tun (wie im Plan), damit kein Chat unbegrenzt Speicher aufbaut und die Ausgabe der Lücke vollständig bei der neuen App ankommt.
+
+### Frage 2: Das Bild nach der Übernahme — belegt, mit einer Bedingung
+
+**Aufbau:** Im selben PTY-Host hängen mehrere SwiftTerm-Terminals am selben Chat: A sieht alles (wie eine App, die nie neu gestartet wäre), B bekommt ein gesichertes Bild von A und danach die weitere Ausgabe, D ist ein frisches Terminal ohne Bild. Verglichen wird Zelle für Zelle: Zeichen, Farben, Stile, dazu die Schalter, die die TUI gesetzt hat (Bracketed Paste, Fokus-Meldungen, Kitty-Tastaturprotokoll, Maus, Cursor). Das Sichern ist ein kleines Serialisieren des SwiftTerm-Puffers in einen ANSI-Strom (Text, Farben, Zeilenumbrüche, Alt-Screen, Cursor, Schalter).
+
+| Messung | Claude | Codex |
+|---|---|---|
+| Gesichertes Bild in frischem Terminal | 341 Zeilen, 37.510 Zellen, **0 Abweichungen**, Schalter gleich; 30 KB, Sichern 26 ms, Einspielen 130 ms (Debug-Build) | 0 Abweichungen, Schalter gleich, 3 KB |
+| Nur Text ohne Farben | 0 Zeichenfehler, 1.332 Zellen mit anderer Farbe | – |
+| Größenänderung ohne gesichertes Bild (D) | Claude zeichnet nur den sichtbaren Bereich neu (5 KB); Schirm stimmt, **Verlauf fehlt** (292 von 352 Zeilen) und die Schalter fehlen | Codex zeichnet den ganzen Schirm neu (Alt-Screen); Schirm stimmt, **Schalter fehlen** |
+| Mit gesichertem Bild weiterarbeiten (B) | nach zwei Größenänderungen und einem weiteren Turn mit Tabelle und Codeblock 0 Abweichungen (372 Zeilen) | 0 Abweichungen |
+| Übernahme mitten in einer laufenden Antwort | 190 Zeitpunkte während einer Antwort: 190 von 190 identisch | 70 Zeitpunkte: 70 von 70 identisch |
+
+**Die Bedingung:** Ohne gesichertes Bild fehlen nicht nur Verlauf und Farben, sondern auch die Schalter, die Claude und Codex nur beim Start setzen. Claude setzt das Kitty-Tastaturprotokoll (Stufe 5), Codex Stufe 7 und Mausmeldungen. Fehlen die, kommen Tasten wie Shift+Enter oder Mausklicks falsch an. Das Bild muss deshalb immer mit Schaltern gesichert werden, auch in einer ersten Stufe „nur Text“.
+
+**Der Übergabepunkt:** 54 von 1.087 gelesenen Blöcken endeten mitten in einer Steuersequenz, 5 mitten in einem UTF-8-Zeichen. Das Bild muss genau an der Stelle gesichert werden, ab der der Aufbewahrer liest. Das ergibt sich von selbst, wenn die alte App erst aufhört zu lesen, dann den Rest verarbeitet, dann sichert und abgibt. In allen 260 Messpunkten war das Ergebnis dann identisch.
+
+Nicht gemessen: das Zeichnen im echten Fenster (`MacLocalTerminalView`). Der Puffer ist derselbe, die Darstellung kann ich ohne Fenster nicht vergleichen.
+
+### Frage 1: Die Lücke im Router — Ergebnis kippt den Ablauf
+
+**Aufbau:** Test-Instanz mit eingeschaltetem GPT-Backend (Router auf Port 28766, Proxy auf 28765; das Proxy-Programm aus der Arbeits-App kopiert, kein Login kopiert). Ein Claude-Chat läuft außerhalb der App im PTY-Host mit derselben Umgebung, die die App setzen würde (`ANTHROPIC_BASE_URL` auf den Router, `_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL`, Profil-Header). Nachgewiesen per `lsof`, dass die Anfragen über Port 28766 laufen. Die Test-Instanz wird mitten im Turn mit `scripts/test-instance.sh stop` beendet (SIGTERM, wie `make dev`) und nach 5, 15 oder 30 s neu gestartet. Ein Beobachter protokolliert, wann der Port zu und wieder offen ist. Dazu ein eigener Durchreich-Router, der eine Antwort gezielt nach 25 Textstücken kappt.
+
+| Fall | Lücke | Ergebnis |
+|---|---|---|
+| Router weg, während Antworttext fließt | 5 s, 15 s | **Turn verloren.** Kein Wiederholen. Claude zeigt „API Error: Connection lost mid-response. The response above may be incomplete.“, der bis dahin gestreamte Text ist weg, der Chat steht wieder am Eingabefeld |
+| dasselbe mit eigenem Durchreich-Router (harter Abbruch nach 36 KB) | 8 s | gleiches Bild, Turn verloren |
+| nach dem Abbruch „mach genau dort weiter“ geschickt | – | Claude fängt von vorn an (Zeile 1 bis 150), setzt nicht fort |
+| Router weg, während ein Tool läuft; die nächste Anfrage trifft den toten Port | 5 s | **läuft durch.** Claude meldet „Connection refused · Retrying in 1s · attempt 2/10“, nach dem Neustart geht es weiter, Turn endet sauber |
+| Router weg kurz nach dem Absenden, bevor Text fließt (erste Messreihe) | bis 30 s | läuft durch; bei 30 s Lücke stand Claude bei „Retrying in 33s · attempt 7/10“ und kam danach durch |
+
+Claude Code wiederholt also Anfragen, die keine Verbindung bekommen oder vor der Antwort abreißen, mit wachsenden Wartezeiten bis zu 10 Versuchen. Eine Antwort, die schon fließt, wiederholt es nicht.
+
+**Der Proxy für GPT-Chats** stirbt mit der App: Nach jedem Beenden der Test-Instanz lief ein neuer Proxy-Prozess (Startzeit gleich dem Neustart der App). Ursache laut Code: SIGTERM wird seit dem SIGTERM-Handler zu einem regulären Beenden, dabei räumt `ClaudeCodeProxyManager` bei `willTerminate` den selbst gestarteten Proxy ab. Der Kommentar im `ClaudeCodeProxyOrphanGuard` (Proxy überlebt als Waise) beschreibt einen älteren Stand. Für GPT-Chats gilt damit dieselbe Lücke wie für den Router, zusätzlich verschwindet der Proxy-Prozess selbst. Den GPT-Weg mit echter Antwort konnte ich nicht prüfen, weil die Test-Instanz kein GPT-Login hat und Logins nicht kopiert werden dürfen.
+
+**Noch offen in Frage 1:** Lücke von 15 und 30 s zwischen zwei Anfragen, Lücke ganz innerhalb eines Tool-Laufs, ein Ausfall von 5 Minuten, und mit dem Durchreich-Router die Fragen, ob Claude bei einem Abriss in der Denkphase, bei einem Fehlerereignis „overloaded“ im Strom oder bei einem Abriss während eines Tool-Aufrufs wiederholt.
+
+### Folgerung bis hierher
+
+Wie geplant gebaut, verlöre jeder Chat, der beim Neustart gerade eine Antwort streamt, diesen Turn. Bei aktivem GPT-Backend betrifft das alle Claude-Chats, ohne GPT-Backend keinen (dann spricht Claude direkt mit Anthropic). Drei Wege, die sich andeuten:
+
+1. **Warten auf einen ruhigen Moment.** Der Router weiß, welche Antworten gerade fließen. Die Übergabe wartet, bis keine mehr offen ist (mit Obergrenze), und neue Anfragen in der Lücke laufen ins belegte Wiederholen. Klein, aber bei vielen arbeitenden Chats kann das Warten dauern.
+2. **Router und Proxy aus dem App-Prozess lösen.** Ein kleiner eigener Prozess, den der Neustart nicht berührt. Löst das Problem grundsätzlich, ist aber der größere Umbau.
+3. **Lauschenden Socket mitgeben.** Der Aufbewahrer hält auch den Port des Routers, Verbindungen warten dann statt abgelehnt zu werden. Hilft nur bei neuen Anfragen, nicht bei laufenden Antworten, und ist damit allein keine Lösung.
+
+Die Empfehlung folgt nach Abschluss von Frage 1 und 3.
+
+### Frage 3: Zugriffsrechte — noch offen
 
 ## Offene Entscheidungen
 
