@@ -713,6 +713,18 @@ Abnahme: alles grün, Abschnitt 7 vollständig, keine offenen Befunde aus der Du
    Ein negativer Befund gilt nicht für die echte App.
 5. Test-Instanz stoppen.
 
+**Ergebnis (11.11.2026, macOS 26.6, DualSense über Bluetooth):** Die Test-Instanz (nie aktiv, Menüleisten-
+Betrieb) erkannte den Controller als „DualSense Wireless Controller“, Akku nicht gemeldet, Hintergrund-
+Flag hielt (`waiting`). Mit dem Browser vorne löste R2 eine echte Aufnahme aus und beendete sie beim
+zweiten Druck — **Tasten kommen im Hintergrund an.** Die Transkription scheiterte in der Test-Instanz
+mangels Zugang; der modale Fehlerdialog (`NSAlert.runModal`, bestehendes Verhalten) blockierte sie, sodass
+die Zähler nicht mehr auslesbar waren und sie hart beendet werden musste. Offen bleibt deshalb der
+Einzelnachweis für Touchpad, Create und den leichten R2-Druck mit echter Hardware (künstlich belegt:
+0,2 löst nicht aus) — Handtest nach `make dev`.
+
+Lehre für künftige Läufe: Echte Tastendrücke wirken in der Test-Instanz echt (nur künstliche Eingaben
+sind Trockenläufe). Hinweis-Läufe mit Hardware also ohne R2 oder mit einem Zugang in der Test-Instanz.
+
 ### 6.2 Handtest nach `make dev`
 
 Vorher: Einstellungen › Controller › Controller-Steuerung an. Für den Hintergrund zusätzlich „Auch wenn
@@ -843,7 +855,7 @@ künstliche Eingaben über `whisperm8 debug controller … --window <id> --front
 | 1 Entwurf im HTML-Zwilling | erledigt | 307e04b9 | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
 | 2 Aktions-Katalog | erledigt | 42424701 | `AgentChatsCommandCenter` mit Token-Anmeldung und Routing nur zum Key-Fenster, `ChatSelectionHistory`, `AgentChatsView+Commands.swift`; drei Rümpfe aus `+Shortcuts.swift` als gemeinsame Funktionen; 159 Tests rund um Tabs, Umschalter und Katalog grün; `AgentChatsView.swift` bei 3.821 von 3.842 Zeilen |
 | 3 Controller-Kern | erledigt | 31751bc0 | Elf Dateien unter `Services/Controller/Core/`, nur Foundation; 98 neue Tests (Erkenner, Sticks, Belegung, Matrix, Zusammenhang, Legende, Listen- und Menü-Modell, Import-Wächter). Abweichung: Viereck ist Tippen-oder-Halten (0,6 s), damit „halten löscht“ im Verlauf ohne Gedächtnis in der Belegung geht; `reset` meldet `holdCancelled`, damit eine Trennung die Chat-Auswahl ohne Wechsel schließt |
-| 4 Hardware, Schalter, Debug-Kanal | erledigt | 38ab966f | `GameControllerInputSource` (Trigger als Analogwert), `ControllerGesturePump` (eigene Queue, strikter Zeitgeber nur bei Druck, Aktivität gegen App Nap), `ControllerManager` (Schalter, Pause, Hintergrund mit zurückgelesenem Systemwert, Zähler je Taste); Schalter samt Notbremse; erste Seite „Controller“ in Labs; `whisperm8 debug controller state|press|sequence` mit Trockenlauf als Standard, `--execute` nur in der Test-Instanz. Test des virtuellen Gamepads (`GCController.withExtendedGamepad`) grün. Hinweis-Lauf mit Hardware: Abschnitt 6.1, Ergebnis unten in der Notiz |
+| 4 Hardware, Schalter, Debug-Kanal | erledigt | 38ab966f | `GameControllerInputSource` (Trigger als Analogwert), `ControllerGesturePump` (eigene Queue, strikter Zeitgeber nur bei Druck, Aktivität gegen App Nap), `ControllerManager` (Schalter, Pause, Hintergrund mit zurückgelesenem Systemwert, Zähler je Taste); Schalter samt Notbremse; erste Seite „Controller“ in Labs; `whisperm8 debug controller state|press|sequence` mit Trockenlauf als Standard, `--execute` nur in der Test-Instanz. Test des virtuellen Gamepads (`GCController.withExtendedGamepad`) grün. Hinweis-Lauf mit Hardware (Abschnitt 6.1): Tasten kommen im Hintergrund an |
 | 5 Navigation im Inhalt | erledigt | 526d413e | `sendKey` (Pfeile nach Cursor-Modus, Tracker und Abbruch-Verdacht wie bei der Tastatur), `scrollHistory` (auch Alternate-Puffer), `ControllerActionDispatcher` mit Schnappschuss je Eingabe; 45 Ausführer-Tests mit Attrappen. Nachweis zusätzlich in der Test-Instanz (Abschnitt 6.3) |
 | 6 Listen-Navigation | erledigt | d661cecc | `AgentChatsListRowsBuilder` (pur, Reihenfolge wie die Seitenleiste), Markierung als eigenes View-Stück je Zeile, Mitscrollen über `ScrollViewReader`; Kreuz öffnet Chat, Workspace oder Projekt als Workspace. Grenze: Was eine Projektgruppe per „N weitere“ aufgeklappt hat, erreicht die Navigation nicht |
 | 7 Legende | erledigt | d661cecc | `ControllerLegendBar` + Host, sechs Zustände als Fixture gerendert und angesehen; bei schmalen Fenstern gekürzt (`ViewThatFits`); Halte-Ring als endliche Animation |
