@@ -499,7 +499,13 @@ struct AgentUIState: Codable, Equatable {
     /// Tabs in der UI hinterlassen. Kappt bewusst NICHT die Anzahl offener
     /// Tabs — ein Tab verschwindet nur, wenn der User ihn schließt oder die
     /// Session archiviert/gelöscht ist (siehe `maxOpenTabs`).
-    mutating func prune(workspace: AgentWorkspace) {
+    ///
+    /// `compactingGridWorkspaces`: Workspaces, die hier einen Chat verlieren
+    /// (archiviert/gelöscht), rücken nach und wählen die kleinste passende
+    /// Stufe — wie beim ⊖ (Schalter „Close gaps…"). Aus: der Platz wird nur
+    /// leer. Der Laden-Pfad bleibt bewusst ohne, der App-Pfad
+    /// (`AgentWindowStore.prune/flush`) folgt dem Schalter.
+    mutating func prune(workspace: AgentWorkspace, compactingGridWorkspaces: Bool = false) {
         let liveProjectIDs = Set(workspace.projects.map(\.id))
         // ALLE UI-Referenzen (Tabs, Pins, Unread, Selektionen, Slots) zeigen
         // nur auf existierende, NICHT-archivierte Sessions — `.closed` ist
@@ -523,6 +529,7 @@ struct AgentUIState: Codable, Equatable {
             focusAnchors[window.id] = (workspaceID, index)
         }
 
+        var shrunkWorkspaceIDs = Set<UUID>()
         gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces).compactMap { entity in
             // Projekt-Views (verstecktes Entity, ⊞ am Projekt-Header) toter
             // Projekte KOMPLETT entfernen — sie sind reine Ableitung plus
@@ -533,12 +540,13 @@ struct AgentUIState: Codable, Equatable {
                 return nil
             }
             var copy = entity
-            // Indexstabil: toter Verweis wird am eigenen Index nil — nie
-            // kompaktieren, nie schrumpfen.
+            // Toter Verweis wird am eigenen Index nil; verdichtet wird
+            // (optional) erst nach der Fokus-Reparatur unten.
             copy.slots = copy.slots.map { slot in
                 guard let slot, liveSessionIDs.contains(slot) else { return nil }
                 return slot
             }
+            if copy.slots != entity.slots { shrunkWorkspaceIDs.insert(copy.id) }
             return copy
         }
 
@@ -572,6 +580,15 @@ struct AgentUIState: Codable, Equatable {
             windows[index].gridFocusSessionID = fallback
             if windows[index].showsGrid {
                 windows[index].selectedSessionID = fallback
+            }
+        }
+
+        // Erst JETZT verdichten: die Fokus-Nachfolger oben sind auf den
+        // unverdichteten Plätzen bestimmt (nächster Slot nach der Lücke), das
+        // Nachrücken ändert nur Positionen, nicht wer den Fokus hat.
+        if compactingGridWorkspaces, !shrunkWorkspaceIDs.isEmpty {
+            gridWorkspaces = gridWorkspaces.map { entity in
+                shrunkWorkspaceIDs.contains(entity.id) ? WorkspaceSlotOps.compacted(entity) : entity
             }
         }
 

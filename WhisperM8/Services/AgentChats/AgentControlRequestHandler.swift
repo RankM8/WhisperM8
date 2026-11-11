@@ -953,8 +953,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             }
             let store = AgentWindowStore.shared
             let workspaceID = store.createGridWorkspace(
-                name: name, colorHex: color, slots: members.map { Optional($0) }
-            )
+                name: name, colorHex: color, capacity: AgentGridWorkspace.fittingCapacity(occupied: members.count),
+                slots: members.map { Optional($0) })
             let entity = store.gridWorkspace(id: workspaceID)
             return .ok(id: workspaceID, name: entity?.name ?? name,
                        capacity: entity?.capacity ?? 2,

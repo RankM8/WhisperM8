@@ -115,7 +115,12 @@ extension AgentChatsView {
             if wasSelected { selectedSessionID = visualOrder.first }
             return
         }
+        // Fokussierte Pane im sichtbaren Raster: Der Store nimmt den Chat aus
+        // dem Workspace und gibt den Fokus an die nächste Pane — dabei bleiben,
+        // statt per Nachbar-Tab in die Einzelansicht zu springen.
+        let wasGridPane = isGridActive && activeGridWorkspaceEntity?.slotIndex(of: session.id) != nil
         openTabIDs.remove(at: persistedIndex)
+        if wasGridPane, isGridActive, selectedSessionID != nil { return }
         if wasSelected {
             // Nachbar in der tatsächlich sichtbaren Gruppen-Reihenfolge, nicht
             // in der eventuell auseinandergezogenen Persistenz-Reihenfolge.

@@ -1,13 +1,13 @@
 import Foundation
 
 /// Automatisch gewähltes Grid-Layout — abgeleitet aus der Workspace-
-/// Kapazität (2 = 1×2 · 3 = „2 oben + 1 breit" · 4 = 2×2; die Stufen 6/9
-/// kommen mit Paket 3). Die frühere Tab-Anzahl-Ableitung samt
+/// Kapazität (1 = volle Fläche · 2 = 1×2 · 3 = „2 oben + 1 breit" · 4 = 2×2
+/// … 9 = 3×3). Die frühere Tab-Anzahl-Ableitung samt
 /// Mitgliedschafts-/Verdrängungs-Logik (`AgentGridLayout`) ist mit den
 /// Workspace-Entities (Schema v4) ersatzlos entfallen — Slots sind jetzt
 /// explizit und positionsstabil (`AgentGridWorkspace` + `WorkspaceSlotOps`).
 enum AgentGridAutoLayout: Equatable {
-    /// 1 Pane: Einzelansicht (Grid zeigt dasselbe wie maximiert).
+    /// Kapazität 1: ein Chat auf der vollen Fläche.
     case single
     /// Kapazität 2: zwei Spalten.
     case cols2
@@ -36,10 +36,11 @@ enum AgentGridAutoLayout: Equatable {
         }
     }
 
-    /// Layout aus der Workspace-Kapazität (erlaubte Stufen 2/3/4/6/9).
+    /// Layout aus der Workspace-Kapazität (erlaubte Stufen 1–9).
     static func forCapacity(_ capacity: Int) -> AgentGridAutoLayout {
         switch capacity {
-        case ...2: .cols2
+        case ...1: .single
+        case 2: .cols2
         case 3: .twoPlusOne
         case 4: .grid2x2
         case 5: .threePlusTwo

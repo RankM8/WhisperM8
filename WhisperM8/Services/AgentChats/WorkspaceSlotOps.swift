@@ -6,11 +6,12 @@ import Foundation
 /// testbare Wertfunktionen. Persistenz, Session-Validierung und
 /// Fenster-Kopplung übernimmt der `AgentWindowStore`.
 ///
-/// Grundsätze (Plan-Abschnitt 03): stabile Positionen (nil statt
-/// Nachrücken), „ein Drop blockiert nie — bis 3×3", nie automatisches
-/// Schrumpfen. Einzige Ausnahme von der Positionsstabilität ist das
-/// ausdrücklich angeforderte Verkleinern (`planCapacityChange`): dort rücken
-/// die Belegten nach vorn, damit Löcher keine Chats kosten.
+/// Grundsätze: „ein Drop blockiert nie — bis 3×3"; fällt ein Chat weg,
+/// rücken die übrigen standardmäßig nach und die Stufe passt sich an
+/// (`compacted`, Schalter `gridAutoCompactEnabled`). Mit ausgeschaltetem
+/// Schalter bzw. `--keep-slot` gelten stabile Positionen (nil statt
+/// Nachrücken). Ausdrückliches Verkleinern (`planCapacityChange`) verdichtet
+/// immer, damit Löcher keine Chats kosten.
 enum WorkspaceSlotOps {
     /// Benannter Ablehnungsgrund eines Adds — die CLI muss unterscheiden
     /// können, WARUM nichts passiert ist (Jarvis-Befund 2026-08-17: „Session
@@ -108,20 +109,43 @@ enum WorkspaceSlotOps {
         return slots
     }
 
+    /// Belegung und Stufe einer Projekt-View nach dem Abgleich mit der
+    /// Aktiv-Menge. Mit `compacting` (Standard, Schalter
+    /// `gridAutoCompactEnabled`) rücken die übrigen Chats nach und die Stufe
+    /// passt sich der Anzahl an: 4 aktiv, einer fällt weg → 2+1 statt 2×2
+    /// mit Loch (Nutzerbefund 11.11.2026). Ohne `compacting` bleibt das
+    /// alte Verhalten: nur leere Kacheln am Ende fallen weg.
+    static func projectViewLayout(
+        current: [UUID?],
+        activeOrdered: [UUID],
+        compacting: Bool
+    ) -> (slots: [UUID?], capacity: Int) {
+        let synced = syncedProjectSlots(current: current, activeOrdered: activeOrdered)
+        return compacting ? compactedSlots(synced) : trimmedProjectTail(synced)
+    }
+
     /// Projekt-Views atmen auch nach unten: LEERE Tail-Slots werden bis zur
     /// kleinsten erlaubten Stufe gekappt, die den höchsten belegten Index
-    /// noch trägt — kein Besitzer rückt, Lücken in der Mitte bleiben
-    /// (Positionsstabilität). Ohne diese Kappung behielte `normalize()` die
-    /// einmal erreichte Stufe für immer: nach Chat-Schwund zeigte jedes
-    /// Öffnen dauerhaft leere Panes, die sich in Projekt-Views (kein
-    /// Kapazitäts-Picker) nicht mal manuell entfernen ließen
-    /// (Nutzerbefund 2026-08-12).
+    /// noch trägt — kein Besitzer rückt, Lücken in der Mitte bleiben. Gilt
+    /// nur noch bei ausgeschaltetem Verdichten; ohne diese Kappung behielte
+    /// `normalize()` die einmal erreichte Stufe für immer (Nutzerbefund
+    /// 2026-08-12).
     static func trimmedProjectTail(_ slots: [UUID?]) -> (slots: [UUID?], capacity: Int) {
         let highestOccupied = slots.indices.reversed().first { slots[$0] != nil }
-        let capacity = AgentGridWorkspace.smallestCapacity(
-            fitting: highestOccupied.map { $0 + 1 } ?? 0
+        let capacity = AgentGridWorkspace.fittingCapacity(
+            occupied: highestOccupied.map { $0 + 1 } ?? 0
         )
         return (Array(slots.prefix(capacity)), capacity)
+    }
+
+    /// Belegte Slots nach vorn, Rest `nil` bis zur kleinsten passenden Stufe.
+    /// Die Reihenfolge bleibt — es wird nur zusammengeschoben.
+    static func compactedSlots(_ slots: [UUID?]) -> (slots: [UUID?], capacity: Int) {
+        let belegt = slots.compactMap { $0 }
+        let stufe = AgentGridWorkspace.fittingCapacity(occupied: belegt.count)
+        let padded = belegt.map { Optional($0) }
+            + Array(repeating: nil, count: max(stufe - belegt.count, 0))
+        return (padded, stufe)
     }
 
     // MARK: - Hinzufügen / Platzieren
@@ -223,19 +247,19 @@ enum WorkspaceSlotOps {
     /// umsortiert. Sonst waere jedes Entfernen eine Ueberraschung: Der Blick
     /// sucht die Chats dort, wo sie vorher relativ zueinander standen.
     ///
-    /// Ein leerer Workspace behaelt die kleinste Stufe, statt auf null zu
-    /// fallen — sonst gaebe es keine Drop-Ziele mehr, um ihn wieder zu
-    /// fuellen.
+    /// Ein leerer Workspace behaelt zwei Ablageflaechen
+    /// (`AgentGridWorkspace.emptyCapacity`), statt auf null zu fallen —
+    /// sonst gaebe es keine Drop-Ziele mehr, um ihn wieder zu fuellen. Ein
+    /// einzelner Chat bekommt die volle Flaeche (Stufe 1).
     static func compacted(_ workspace: AgentGridWorkspace) -> AgentGridWorkspace {
-        let belegt = workspace.slots.compactMap { $0 }
-        let stufe = AgentGridWorkspace.smallestCapacity(fitting: max(belegt.count, 1))
-        guard stufe != workspace.capacity || belegt.count != workspace.slots.count else {
-            // Nichts zu tun: volle Flaeche in passender Stufe.
+        let (slots, stufe) = compactedSlots(workspace.slots)
+        guard stufe != workspace.capacity || slots != workspace.slots else {
+            // Nichts zu tun: lueckenlos in passender Stufe.
             return workspace
         }
         var copy = workspace
         copy.capacity = stufe
-        copy.slots = belegt + Array(repeating: nil, count: max(stufe - belegt.count, 0))
+        copy.slots = slots
         // Die Gewichte passen nach einem Stufenwechsel nicht mehr zur
         // Spalten-/Zeilenzahl; die Entity repariert das achsenweise.
         copy.normalize()

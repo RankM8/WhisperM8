@@ -361,6 +361,16 @@
         }
       }
     },
+    "%lld active · live view of the project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aktiv · Live-Ansicht des Projekts"
+          }
+        }
+      }
+    },
     "%lld apps, built in: %@": {
       "localizations": {
         "de": {
@@ -757,6 +767,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeitet: %lld"
+          }
+        }
+      }
+    },
+    "%lld/%lld occupied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld/%lld belegt"
           }
         }
       }
@@ -3811,12 +3831,12 @@
         }
       }
     },
-    "Close tab — the chat leaves the project view (if it is still running, it stays as an active member)": {
+    "Close tab — the chat leaves the project view (a running chat keeps running)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tab schließen — der Chat verlässt die Projekt-Ansicht (läuft er noch, bleibt er als aktives Mitglied)"
+            "value": "Tab schließen — der Chat verlässt die Projekt-Ansicht (ein laufender Chat läuft weiter)"
           }
         }
       }
@@ -12474,6 +12494,16 @@
         }
       }
     },
+    "Remove from workspace (tab stays open, the other chats move up)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus dem Workspace nehmen (Tab bleibt offen, die anderen Chats rücken nach)"
+          }
+        }
+      }
+    },
     "Remove from workspace “%@”": {
       "localizations": {
         "de": {
@@ -14670,6 +14700,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Überspringt alle Permission-Prompts (vorher einmal interaktiv aktivieren)."
+          }
+        }
+      }
+    },
+    "Slot %lld (free)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slot %lld (frei)"
+          }
+        }
+      }
+    },
+    "Slot %lld — replaces “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slot %lld — ersetzt „%@“"
           }
         }
       }
@@ -19260,6 +19310,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "nicht angemeldet"
+          }
+        }
+      }
+    },
+    "occupied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belegt"
           }
         }
       }

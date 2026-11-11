@@ -775,6 +775,7 @@ struct AgentChatsView: View {
                 }
 
                 mainWorkspace
+                    .background { projectViewSyncWithoutSidebar }
                     .safeAreaInset(edge: .bottom, spacing: 0) { ControllerLegendHost(windowID: windowID) }
                     .overlay(alignment: .bottom) { ControllerMenuHost(windowID: windowID) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1453,9 +1454,9 @@ struct AgentChatsView: View {
         let erroredSubagentIDs = Set(jobRuntimeModel.snapshotsBySessionID
             .filter { $0.value.state == .failed }
             .keys)
-        let runningSessionIDs = terminalActiveSessionIDs
-            .union(jobRuntimeModel.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
-            .union(jobRuntimeModel.activeSubagentSessionIDs)
+        let runningSessionIDs = Self.runningSessionIDs(
+            terminalActive: terminalActiveSessionIDs, jobRuntime: jobRuntimeModel
+        )
         let snapshot: AgentSidebarSnapshot?
         let projectByID: [UUID: AgentProject]
         if archiveModeActive {
@@ -1515,7 +1516,8 @@ struct AgentChatsView: View {
             // beim Verlassen holt der id-Wechsel nil→Map alles nach.
             .task(id: ProjectViewSyncTrigger(
                 activeByProject: snapshot?.activeSessionIDsByProject,
-                slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint
+                slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint,
+                dismissed: windowStore.dismissedProjectViewSessionIDs
             )) {
                 guard let active = snapshot?.activeSessionIDsByProject else { return }
                 windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
