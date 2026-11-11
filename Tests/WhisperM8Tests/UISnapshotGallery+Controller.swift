@@ -66,7 +66,58 @@ extension UISnapshotGallery {
                 }.padding(20))
             },
         ]
-        return legendFixtures + [
+        // Liste links mit Controller-Markierung (Etappe 6). Die Markierung liest
+        // das geteilte `ControllerUIModel` — für den Snapshot gesetzt.
+        func listWithMarker() -> AnyView {
+            let windowID = UUID()
+            let workspace = UUID(), chat1 = UUID(), chat2 = UUID(), chat3 = UUID(), project = UUID()
+            let model = ControllerUIModel.shared
+            model.area = .list
+            model.listWindowID = windowID
+            model.markedRow = .workspaceChat(session: chat2, workspace: workspace)
+            func row(_ title: String, indent: Bool, bold: Bool = false, dot: Color? = nil) -> some View {
+                HStack(spacing: 8) {
+                    if let dot { Circle().fill(dot).frame(width: 7, height: 7) }
+                    Text(verbatim: title)
+                        .font(.system(size: 12.5, weight: bold ? .semibold : .regular))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, indent ? 26 : 10)
+                .padding(.trailing, 10)
+                .frame(height: 26)
+            }
+            return AnyView(VStack(alignment: .leading, spacing: 2) {
+                row("DealSupply: Expertenfunktionen", indent: false, bold: true)
+                    .controllerListRow(.workspace(workspace))
+                row("1 Moe · Doku: auf den neuesten Stand", indent: true, dot: AppTheme.statusWorking)
+                    .controllerListRow(.workspaceChat(session: chat1, workspace: workspace))
+                row("2 Lux · Integrationen: Einrichtung", indent: true, dot: AppTheme.statusAwaiting)
+                    .controllerListRow(.workspaceChat(session: chat2, workspace: workspace))
+                row("whisperm8", indent: false, bold: true)
+                    .controllerListRow(.project(project))
+                row("WhisperM8 PS5-Controller-Steuerung", indent: true, dot: AppTheme.textTertiary)
+                    .controllerListRow(.chat(chat3))
+            }
+            .padding(.vertical, 8)
+            .frame(width: 300, alignment: .leading)
+            .background(AppTheme.sidebar)
+            .environment(\.agentChatsWindowID, windowID))
+        }
+        // Aufnahme-Pill bei einer Aufnahme per Controller: Ziel und Modus ohne Hover.
+        func pillWithTarget() -> AnyView {
+            let controller = OverlayController(presentsWindow: false)
+            controller.overlayStyle = .mini
+            controller.levelModel.level = 0.5
+            controller.controllerTargetLabel = "WhisperM8 PS5-Controller-Steuerung"
+            return AnyView(RecordingPillView(controller: controller).padding(20))
+        }
+        let extraFixtures: [Fixture] = [
+            Fixture(name: "controller-liste-markierung", size: CGSize(width: 340, height: 180)) { listWithMarker() },
+            Fixture(name: "controller-pill-ziel", size: CGSize(width: 520, height: 80)) { pillWithTarget() },
+        ]
+        return legendFixtures + extraFixtures + [
             Fixture(name: "controller-einstellungen-aus", size: size) {
                 page(status(connected: false))
             },
