@@ -43,6 +43,8 @@ struct ClaudeSessionRecord: Equatable, Sendable {
     /// sein Team `session-<neue ID>` an, wenige Sekunden davor; darüber findet
     /// `AgentChatTaskDirectory.liveDirectory` den Task-Ordner.
     var startedAt: Date? = nil
+    /// `jobId` eines Hintergrund-Agents (`kind: "bg"`) — Ziel fuer `claude attach`.
+    var jobID: String? = nil
 
     /// Adresse für `SendMessage({to: …})` über alle Konten.
     var messagingAddress: String? {
@@ -107,7 +109,8 @@ enum ClaudeSessionRegistry {
             version: object["version"] as? String,
             startedAt: (object["startedAt"] as? NSNumber).map {
                 Date(timeIntervalSince1970: $0.doubleValue / 1000)
-            }
+            },
+            jobID: object["jobId"] as? String
         )
     }
 

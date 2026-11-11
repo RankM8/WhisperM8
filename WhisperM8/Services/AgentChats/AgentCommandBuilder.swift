@@ -201,22 +201,11 @@ struct AgentCommandBuilder {
         )?.sessionID
     }
 
-    /// `false` = Resume→Attach-Fallback aus. Nur für den einmaligen Rückweg,
-    /// nachdem ein `claude attach` gescheitert ist: Der zweite Start nimmt dann
-    /// das normale `--resume` und kann nie wieder in einen Attach münden.
+    /// `false` = Resume→Attach-Fallback aus. Nur für den Rückweg, nachdem ein
+    /// `claude attach` gescheitert ist und der Worker im Roster fehlt
+    /// (`AgentAttachRecovery`): Der Start nimmt dann das normale `--resume`
+    /// und kann nie wieder in einen Attach münden.
     var backgroundAttachAllowed = true
-
-    /// Rückweg nach einem gescheiterten Attach (Agent beendet, Claude lehnt
-    /// ab): nur bei einem Attach-Fallback-Start, nur bei Exit ≠ 0 und nur,
-    /// wenn der Prozess von selbst endete (`nil` = Signal/Abbruch durch uns).
-    /// Der Rückweg-Start ist nie selbst ein Attach — so entsteht keine Schleife.
-    static func shouldResumeAfterAttachExit(
-        isBackgroundAttachFallback: Bool,
-        exitCode: Int32?
-    ) -> Bool {
-        guard isBackgroundAttachFallback, let exitCode else { return false }
-        return exitCode != 0
-    }
 
     /// Darf ein Auslöser (`chats resume`, Grid-Fokus) den Tab starten? Ja,
     /// solange kein Prozess läuft — auch wenn ein beendeter Controller noch
@@ -239,7 +228,7 @@ struct AgentCommandBuilder {
     /// (externalSessionID, profileName) → Short-ID. Default liest das
     /// Daemon-Roster des passenden Account-Profils; im Test ueberschreibbar.
     var backgroundWorkerShortIDResolver: (String, String?) -> String? = { sessionID, profileName in
-        SupervisorRosterReader.activeWorkerShortID(
+        SupervisorRosterReader.attachTarget(
             forSessionID: sessionID,
             configDir: ClaudeAccountProfiles().configDir(
                 forProfile: profileName ?? ClaudeAccountProfiles.mainProfileName

@@ -53,8 +53,7 @@ final class SupervisorRosterReaderTests: XCTestCase {
         let found = SupervisorRosterReader.activeWorkerShortID(
             forSessionID: "607D545A-01FA-4569-A4A7-72FE6072A1B7",
             configDir: configDir,
-            isProcessAlive: { _ in true },
-            hasLiveBackgroundRecord: { _ in true }
+            isProcessAlive: { _ in true }
         )
         XCTAssertEqual(found, "607d545a")
 
@@ -62,8 +61,7 @@ final class SupervisorRosterReaderTests: XCTestCase {
         let stale = SupervisorRosterReader.activeWorkerShortID(
             forSessionID: "607d545a-01fa-4569-a4a7-72fe6072a1b7",
             configDir: configDir,
-            isProcessAlive: { _ in false },
-            hasLiveBackgroundRecord: { _ in true }
+            isProcessAlive: { _ in false }
         )
         XCTAssertNil(stale)
 
@@ -75,33 +73,38 @@ final class SupervisorRosterReaderTests: XCTestCase {
         XCTAssertNil(unknown)
     }
 
-    /// `claude stop` loescht Claudes Registry-Eintrag sofort, Roster und
-    /// Worker-Prozess leben noch kurz — dann kein Attach.
-    func testActiveWorkerShortIDRequiresLiveBackgroundRegistryRecord() throws {
+    /// Review-Befund 11.11.2026: Lebt der Worker im Roster, wird angehaengt,
+    /// auch ohne Registry-Eintrag. Fehlt der Roster-Eintrag, zaehlt ein
+    /// lebender Registry-Eintrag mit `kind: "bg"` ueber seinen `jobId`.
+    func testAttachTargetPrefersRosterAndFallsBackToRegistryJob() throws {
         let configDir = try makeConfigDir(rosterJSON: rosterJSON)
         defer { try? FileManager.default.removeItem(at: configDir) }
-        let sessionID = "607d545a-01fa-4569-a4a7-72fe6072a1b7"
+        let rostered = "607d545a-01fa-4569-a4a7-72fe6072a1b7"
+        let onlyInRegistry = "1f353dce-783f-407c-a2d4-402c5e884d59"
 
-        // Kein Registry-Eintrag (gestoppt) → nil.
-        XCTAssertNil(SupervisorRosterReader.activeWorkerShortID(
-            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }))
+        // Roster lebt, Registry fehlt → trotzdem attach.
+        XCTAssertEqual(SupervisorRosterReader.attachTarget(
+            forSessionID: rostered, configDir: configDir, isProcessAlive: { _ in true },
+            registryJobID: { _ in nil }), "607d545a")
 
-        // Interaktiver Eintrag zaehlt nicht als Hintergrund-Agent.
+        // Kein Roster-Eintrag, keine Registry → nil (= --resume frei).
+        XCTAssertNil(SupervisorRosterReader.attachTarget(
+            forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true }))
+
+        // Registry-Eintrag: interaktiv zaehlt nicht, bg mit jobId schon.
         let sessions = configDir.appendingPathComponent("sessions", isDirectory: true)
         try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
         let pid = ProcessInfo.processInfo.processIdentifier
         func writeRecord(kind: String) throws {
-            let json = #"{"pid":\#(pid),"sessionId":"\#(sessionID)","kind":"\#(kind)","status":"idle"}"#
+            let json = #"{"pid":\#(pid),"sessionId":"\#(onlyInRegistry)","kind":"\#(kind)","jobId":"1f353dce","status":"idle"}"#
             try Data(json.utf8).write(to: sessions.appendingPathComponent("\(pid).json"))
         }
         try writeRecord(kind: "interactive")
-        XCTAssertNil(SupervisorRosterReader.activeWorkerShortID(
-            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }))
-
-        // Lebender bg-Eintrag → Attach.
+        XCTAssertNil(SupervisorRosterReader.attachTarget(
+            forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true }))
         try writeRecord(kind: "bg")
-        XCTAssertEqual(SupervisorRosterReader.activeWorkerShortID(
-            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }), "607d545a")
+        XCTAssertEqual(SupervisorRosterReader.attachTarget(
+            forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true }), "1f353dce")
     }
 
     func testActiveWorkerShortIDReturnsNilWithoutRosterFile() throws {

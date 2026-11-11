@@ -77,17 +77,6 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
 
     // MARK: - Rückweg nach gescheitertem Attach
 
-    func testFailedAttachFallsBackToResumeOnce() {
-        // Gescheitertes Attach (Agent beendet, Claude lehnt ab) → Rückweg.
-        XCTAssertTrue(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: 1))
-        // Sauberes Ende des Attach (User verlässt die Ansicht) → kein Neustart.
-        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: 0))
-        // Von uns beendet/Signal → kein Neustart.
-        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: nil))
-        // Normales `--resume` scheitert → nie ein zweiter Rückweg (keine Schleife).
-        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: false, exitCode: 1))
-    }
-
     func testResumeFallbackStartNeverAttachesAgain() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = makeBuilder()

@@ -384,7 +384,7 @@ struct AgentSessionDetailView: View {
     /// gespeicherte Claude-Resume-ID repariert werden muss, läuft auch der
     /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
     /// dem MainActor frei von blockierendem Datei-I/O.
-    private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true) {
+    private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
         let commandName: String? = session.isTerminal
             ? nil
             : (session.provider == .claude ? "claude" : "codex")
@@ -464,7 +464,10 @@ struct AgentSessionDetailView: View {
                 prepareCommand(
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult,
-                    allowsBackgroundAttach: allowsBackgroundAttach
+                    allowsBackgroundAttach: allowsBackgroundAttach,
+                    // Rückweg: den gespeicherten Stand nehmen, nicht den
+                    // Snapshot aus der Closure des beendeten Laufs.
+                    storedSession: useStoredSession ? currentSession : nil
                 )
             }
         }
@@ -473,12 +476,17 @@ struct AgentSessionDetailView: View {
     private func prepareCommand(
         resumeRepairPreparation: ResumeRepairPreparation,
         launchGuardResult: ClaudeGPTLaunchGuardResult,
-        allowsBackgroundAttach: Bool = true
+        allowsBackgroundAttach: Bool = true,
+        storedSession: AgentChatSession? = nil
     ) {
         do {
-            let launchSession = try repairedSessionForLaunch(
+            var launchSession = try repairedSessionForLaunch(
                 resumeRepairPreparation: resumeRepairPreparation
             )
+            if let storedSession, storedSession.id == launchSession.id {
+                launchSession.externalSessionID = storedSession.externalSessionID
+                launchSession.claudeProfileName = storedSession.claudeProfileName
+            }
             let hasGPTModelStamp = !(launchSession.claudeBackendModel?
                 .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             let hasGPTSubagentModel = !AppPreferences.shared.claudeGPTSubagentModel
@@ -701,19 +709,14 @@ struct AgentSessionDetailView: View {
     private func markTerminated(exitCode: Int32?) {
         // Steht der beendete Controller noch in der Registry, endete der
         // Prozess von selbst (ein `terminate()` durch uns entfernt ihn vorher).
-        let endedCommand = terminalRegistry.controller(for: session.id)?.command
-        let resumesAfterFailedAttach = AgentCommandBuilder.shouldResumeAfterAttachExit(
-            isBackgroundAttachFallback: endedCommand?.isBackgroundAttachFallback ?? false,
-            exitCode: exitCode
+        let ended = terminalRegistry.controller(for: session.id)
+        let quickFailedAttach = AgentAttachRecovery.isQuickFailedAttach(
+            isBackgroundAttachFallback: ended?.command.isBackgroundAttachFallback ?? false,
+            end: AgentAttachRecovery.decode(waitStatus: exitCode),
+            runDuration: ended?.startedAt.map { Date().timeIntervalSince($0) }
         )
         defer {
-            if resumesAfterFailedAttach {
-                // Einmaliger Rückweg: normales `--resume`, nie wieder Attach.
-                Logger.agentStore.notice(
-                    "attach_failed_resume_fallback session=\(session.id.uuidString, privacy: .public) exit=\(exitCode ?? -1, privacy: .public)"
-                )
-                launchAfterCacheWarmup(allowsBackgroundAttach: false)
-            }
+            if quickFailedAttach { recoverFromFailedAttach(rawExitStatus: exitCode) }
         }
         do {
             try store.updateSession(id: session.id) { updated in
@@ -725,6 +728,51 @@ struct AgentSessionDetailView: View {
             onStateChanged()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Rückweg nach einem schnell gescheiterten `claude attach`. Fragt den
+    /// Roster abseits des Main Threads neu: Steht der Worker noch drin, wird
+    /// nach kurzer Pause EINMAL erneut angehängt; fehlt er ganz, startet der
+    /// Tab mit normalem `--resume`. Nur für offene Tabs und mit dem
+    /// gespeicherten Stand der Session.
+    private func recoverFromFailedAttach(rawExitStatus: Int32?) {
+        let sessionID = session.id
+        focusLaunchInFlight = true
+        Task { @MainActor in
+            guard let fresh = store.loadWorkspace().sessions.first(where: { $0.id == sessionID }),
+                  fresh.status != .archived,
+                  AgentAttachRecovery.isOpen(sessionID, in: AgentWindowStore.shared.state),
+                  let externalID = fresh.externalSessionID, !externalID.isEmpty else {
+                Logger.agentStore.notice("attach_failed_no_recovery session=\(sessionID.uuidString, privacy: .public) — Tab zu, archiviert oder ohne ID")
+                focusLaunchInFlight = false
+                return
+            }
+            let profile = fresh.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName
+            let listed = await Task.detached(priority: .userInitiated) {
+                SupervisorRosterReader.activeWorkerShortID(
+                    forSessionID: externalID,
+                    configDir: ClaudeAccountProfiles().configDir(forProfile: profile)
+                ) != nil
+            }.value
+            let step = AgentAttachRecovery.nextStep(
+                workerStillListed: listed,
+                reattachAlreadyTried: AgentAttachRecovery.reattachAlreadyTried(sessionID)
+            )
+            Logger.agentStore.notice(
+                "attach_failed_recovery session=\(sessionID.uuidString, privacy: .public) status=\(rawExitStatus ?? -1, privacy: .public) step=\(String(describing: step), privacy: .public)"
+            )
+            switch step {
+            case .reattach:
+                AgentAttachRecovery.noteReattach(sessionID)
+                try? await Task.sleep(for: .seconds(AgentAttachRecovery.reattachDelay))
+                guard controller?.isRunning != true else { focusLaunchInFlight = false; return }
+                launchAfterCacheWarmup(useStoredSession: true)
+            case .resume:
+                launchAfterCacheWarmup(allowsBackgroundAttach: false, useStoredSession: true)
+            case .giveUp:
+                focusLaunchInFlight = false
+            }
         }
     }
 

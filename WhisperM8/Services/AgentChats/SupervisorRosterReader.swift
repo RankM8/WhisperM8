@@ -33,47 +33,56 @@ enum SupervisorRosterReader {
 
     /// Short-ID des lebendigen Workers, der `sessionID` gerade hostet —
     /// `nil` wenn die Session nicht (mehr) als Background-Agent laeuft.
-    ///
-    /// Zwei Belege muessen zusammenkommen: der Roster-Eintrag mit lebendem
-    /// Worker-PID UND Claudes eigener Registry-Eintrag (`sessions/<pid>.json`,
-    /// `kind: "bg"`, Besitzer lebt). `claude stop` loescht den Registry-
-    /// Eintrag sofort, Roster und Prozess leben aber noch kurz (Befund
-    /// 11.11.2026) — ein Attach in dieses Fenster liefe ins Leere.
+    /// Lebt der Worker im Roster, wird angehaengt — auch wenn Claudes
+    /// Registry-Eintrag (noch) fehlt (direkt nach `/background`, beim
+    /// Respawn). Ein `--resume` wuerde Claude dann ablehnen (Review-Befund
+    /// 11.11.2026).
     static func activeWorkerShortID(
         forSessionID sessionID: String,
         configDir: URL,
-        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive,
-        hasLiveBackgroundRecord: ((String) -> Bool)? = nil
+        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive
     ) -> String? {
         guard let data = try? Data(contentsOf: rosterURL(configDir: configDir)) else {
             return nil
         }
-        guard let worker = workers(fromRosterData: data).first(where: {
+        return workers(fromRosterData: data).first(where: {
             $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
                 && isProcessAlive($0.pid)
-        }) else { return nil }
-        // Registry erst nach einem Roster-Treffer lesen: normale Starts zahlen
-        // nichts extra.
-        let confirms = hasLiveBackgroundRecord ?? { id in
-            liveBackgroundRecordExists(forSessionID: id, configDir: configDir)
-        }
-        return confirms(worker.sessionID) ? worker.shortID : nil
+        })?.shortID
     }
 
-    /// Lebt in `<configDir>/sessions/` ein Hintergrund-Eintrag (`kind: "bg"`)
-    /// fuer diese Session?
-    static func liveBackgroundRecordExists(
+    /// Ziel fuer `claude attach`: erst der Roster; fehlt dort der Worker, der
+    /// `jobId` eines lebenden Registry-Eintrags mit `kind: "bg"`. Nur wenn
+    /// BEIDE nichts kennen, gibt der Builder `--resume` frei.
+    static func attachTarget(
+        forSessionID sessionID: String,
+        configDir: URL,
+        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive,
+        registryJobID: ((String) -> String?)? = nil
+    ) -> String? {
+        if let shortID = activeWorkerShortID(
+            forSessionID: sessionID, configDir: configDir, isProcessAlive: isProcessAlive
+        ) {
+            return shortID
+        }
+        let lookup = registryJobID ?? { id in liveBackgroundJobID(forSessionID: id, configDir: configDir) }
+        return lookup(sessionID)
+    }
+
+    /// `jobId` eines lebenden Hintergrund-Eintrags (`kind: "bg"`) in
+    /// `<configDir>/sessions/` fuer diese Session.
+    static func liveBackgroundJobID(
         forSessionID sessionID: String,
         configDir: URL,
         isAlive: ClaudeSessionRegistry.LivenessCheck = ClaudeSessionRegistry.isProcessAlive
-    ) -> Bool {
+    ) -> String? {
         let root = ClaudeSessionRegistry.Root(
             profileName: "",
             url: configDir.appendingPathComponent("sessions", isDirectory: true)
         )
-        return ClaudeSessionRegistry.scan(roots: [root], isAlive: isAlive).contains {
+        return ClaudeSessionRegistry.scan(roots: [root], isAlive: isAlive).first {
             $0.isBackground && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
-        }
+        }?.jobID.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// Pure Decode — testbar ohne Filesystem. Unbekannte Felder werden

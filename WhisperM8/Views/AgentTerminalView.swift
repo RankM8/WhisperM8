@@ -712,6 +712,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     @Published private(set) var isRunning = false
     @Published private(set) var hasStarted = false
     @Published private(set) var exitCode: Int32?
+    /// Startzeit des Prozesses — unterscheidet einen sofort gescheiterten
+    /// `claude attach` von einem Agent, der nach langer Zeit endete.
+    private(set) var startedAt: Date?
     /// Steht im Composer vielleicht ungesendeter Text? Schutz fuer
     /// `chats move-account --stop-and-resume`, das die TUI beendet.
     private(set) var composerDraft = TerminalComposerDraftTracker()
@@ -976,6 +979,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         guard !hasStarted else { return }
         hasStarted = true
         isRunning = true
+        startedAt = Date()
         // Korrigierter PATH (siehe LoginShellEnvironment) verhindert, dass
         // Claude/Codex in einem Subprocess landen, der `git`, `npm`, `mise`-shims
         // nicht findet, weil macOS' launchd uns mit minimalem ENV gestartet hat.
