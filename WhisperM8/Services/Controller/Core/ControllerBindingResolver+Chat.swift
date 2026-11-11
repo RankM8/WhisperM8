@@ -117,7 +117,16 @@ extension ControllerBindingResolver {
     /// Bei Claude bleibt das Steuerkreuz sonst Navigation.
     static func arrowsAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys else { return false }
-        return state.status == .awaitingInput || state.choiceListOpen || state.profile == .codex
+        return state.status == .awaitingInput || choiceListActive(state) || state.profile == .codex
+    }
+
+    /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der
+    /// Chat ruht. Arbeitet er (auch ein Turn, den Claude selbst beginnt),
+    /// gingen Pfeile und Kreuz sonst in den arbeitenden Chat, und Kreuz
+    /// bestätigte in der Lücke vor „wartet“ einen Freigabe-Dialog.
+    static func choiceListActive(_ state: ControllerChatState) -> Bool {
+        guard state.choiceListOpen else { return false }
+        return state.profile != .claude || state.status == .idle
     }
 
     /// Enter: im Ruhezustand immer, in einer Rückfrage nach den ersten 0,5 s
@@ -136,7 +145,7 @@ extension ControllerBindingResolver {
         case .idle:
             return true
         case .working, .unknown:
-            return state.recentDraftInput || state.choiceListOpen
+            return state.recentDraftInput || choiceListActive(state)
         case .ended:
             return false
         }
@@ -150,7 +159,7 @@ extension ControllerBindingResolver {
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys, !state.escapeSentRecently else { return false }
         guard state.status == .idle || state.status == .awaitingInput else { return false }
-        return !state.recentlySubmitted || state.choiceListOpen
+        return !state.recentlySubmitted || choiceListActive(state)
     }
 
     /// Unterbrechen (Kreis halten) nur, wenn der Chat arbeitet, sein Zustand

@@ -219,7 +219,7 @@ enum ControllerLegend {
 
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {
         let awaiting = state.status == .awaitingInput
-        let choosing = awaiting || state.choiceListOpen
+        let choosing = awaiting || ControllerBindingResolver.choiceListActive(state)
         let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (choosing ? .confirm : .send)
         // Im Raster zeigt die Legende die Workspace-Auswahl auf L2. Die
         // Chat-Auswahl der Einzelansicht steht wie bisher nur in der Übersicht

@@ -50,8 +50,11 @@ final class ControllerBindingResolverTests: XCTestCase {
         for status in [ControllerChatState.Status.idle, .working, .unknown] {
             XCTAssertEqual(action(left, chat(status)), .moveInContent(.left), "Claude \(status)")
             XCTAssertEqual(action(up, chat(status)), .enterList(step: -1), "Claude \(status)")
-            XCTAssertEqual(action(left, chat(status) { $0.choiceListOpen = true }), .chatKey(.left),
+            // Nachreview: Bei Claude zählt der Merker nur im Ruhezustand.
+            XCTAssertEqual(action(left, chat(status) { $0.choiceListOpen = true }),
+                           status == .idle ? .chatKey(.left) : .moveInContent(.left),
                            "Claude \(status), Auswahl offen")
+            XCTAssertEqual(action(left, chat(status, profile: .codex) { $0.choiceListOpen = true }), .chatKey(.left))
             XCTAssertEqual(action(left, chat(status, profile: .codex)), .chatKey(.left), "Codex \(status)")
             XCTAssertEqual(action(up, chat(status, profile: .codex)), .chatKey(.up), "Codex \(status)")
             XCTAssertEqual(action(left, chat(status, profile: .shell)), .moveInContent(.left), "Shell \(status)")
@@ -65,10 +68,17 @@ final class ControllerBindingResolverTests: XCTestCase {
     /// arbeitendem Chat, und Kreis schließt die Liste auch direkt nach dem
     /// Befehl, der sie geöffnet hat.
     func testChoiceListAllowsConfirmAndEscape() {
-        for status in [ControllerChatState.Status.idle, .working, .unknown] {
-            XCTAssertEqual(action(.press(.cross), chat(status) { $0.choiceListOpen = true }), .chatKey(.enter),
-                           "\(status)")
+        XCTAssertEqual(action(.press(.cross), chat(.idle) { $0.choiceListOpen = true }), .chatKey(.enter))
+        // Nachreview: arbeitet Claude (oder ist der Status unklar), hält der
+        // Merker Kreuz nicht scharf — sonst bestätigte es in der Lücke vor
+        // „wartet“ einen Freigabe-Dialog. Codex wie gebaut.
+        for status in [ControllerChatState.Status.working, .unknown] {
+            XCTAssertNil(action(.press(.cross), chat(status) { $0.choiceListOpen = true }), "Claude \(status)")
+            XCTAssertEqual(action(.press(.cross), chat(status, profile: .codex) { $0.choiceListOpen = true }),
+                           .chatKey(.enter), "Codex \(status)")
         }
+        XCTAssertNil(action(.tap(.circle), chat(.awaitingInput) {
+            $0.choiceListOpen = true; $0.recentlySubmitted = true }), "Rückfrage: Merker zählt nicht")
         XCTAssertNil(action(.tap(.circle), chat(.idle) { $0.recentlySubmitted = true }))
         XCTAssertEqual(action(.tap(.circle), chat(.idle) { $0.recentlySubmitted = true; $0.choiceListOpen = true }),
                        .chatKey(.escape))
@@ -248,8 +258,10 @@ final class ControllerBindingResolverTests: XCTestCase {
             for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
                 XCTAssertFalse(allows(key, status), "\(key) \(status)")
                 XCTAssertFalse(allows(key, status, .plainShell), "Shell \(key) \(status)")
-                // Befund 1 nach Runde 3: offene Auswahl des Menüs, Codex immer.
-                XCTAssertTrue(allows(key, status, list: true), "Auswahl offen \(key) \(status)")
+                // Befund 1 nach Runde 3: offene Auswahl des Menüs (bei Claude
+                // nur im Ruhezustand, Nachreview), Codex immer.
+                XCTAssertEqual(allows(key, status, list: true), status == .idle, "Auswahl offen \(key) \(status)")
+                XCTAssertTrue(allows(key, status, .codexChat, list: true))
                 XCTAssertTrue(allows(key, status, .codexChat), "Codex \(key) \(status)")
             }
             XCTAssertFalse(allows(key, nil))

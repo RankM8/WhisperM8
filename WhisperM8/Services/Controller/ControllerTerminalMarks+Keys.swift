@@ -15,7 +15,7 @@ extension ControllerTerminalMarks {
     /// Enter zählt als Absenden (auch in einer Rückfrage: Danach hält eine
     /// ältere Eingabe Kreuz nicht mehr scharf) und schließt eine Auswahl;
     /// Escape und alles, was das Feld ändert, schließen sie ebenso. Pfeile und
-    /// Leerzeichen bewegen sich darin und halten sie offen.
+    /// Leerzeichen bewegen sich darin; verlängert wird die Liste nicht.
     mutating func recordControllerKey(
         _ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, isCodex: Bool, at now: Date
     ) {
@@ -28,14 +28,12 @@ extension ControllerTerminalMarks {
             lastEscapeAt = now
             choiceListClosed()
         case .up, .down, .left, .right:
-            choiceListUsed(at: now)
             // Codex meldet keine Rückfragen: Wer per Steuerkreuz in einer
             // Freigabe wählt, darf sie danach mit Kreuz bestätigen, auch wenn
             // der Chat als „arbeitet“ gilt.
             if isCodex { recordDraftInput(submitted: false, at: now) }
         case .space:
-            // In `/config` schaltet Leerzeichen den Eintrag um.
-            choiceListUsed(at: now)
+            // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)
         case .backspace, .deleteWord:
             choiceListClosed()
@@ -46,13 +44,35 @@ extension ControllerTerminalMarks {
     }
 
     /// Taste der echten Tastatur an das Terminal: Return ohne Shift/Option ist
-    /// ein Absenden, Escape schließt eine Auswahl.
+    /// ein Absenden; jede Taste außer Pfeilen und Leerzeichen (ohne Cmd/Ctrl)
+    /// schließt eine Auswahl.
     mutating func recordKeyboard(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, at now: Date) {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
         let isReturn = keyCode == 36 || keyCode == 76
+        let movesInList = Self.listKeyCodes.contains(keyCode)
+            && !flags.contains(.command) && !flags.contains(.control)
         recordKeyboard(
             submit: isReturn && !flags.contains(.shift) && !flags.contains(.option),
-            escape: keyCode == 53 && flags.isEmpty,
+            keepsChoiceList: movesInList,
             at: now)
+    }
+
+    /// Pfeile (123–126) und Leerzeichen (49): bewegen bzw. schalten in einer Liste.
+    private static let listKeyCodes: Set<UInt16> = [49, 123, 124, 125, 126]
+
+    /// Gilt die Auswahl beim Lesen noch? Bei Claude nur, solange der Chat
+    /// ruht: Arbeitet er (auch ein Turn, den Claude selbst beginnt) oder fragt
+    /// er, ist die Liste zu, und Pfeile oder Kreuz gingen sonst in einen
+    /// arbeitenden Chat — Kreuz bestätigte in der Lücke vor „wartet“ eine
+    /// Freigabe. Ein ungültiger Merker wird dabei gelöscht, damit er nach der
+    /// Rückkehr zu „ruht“ nicht wieder auflebt. Codex meldet keine Rückfragen;
+    /// dort bleibt der Merker an die Zeit gebunden.
+    mutating func checkedChoiceListOpen(at now: Date, status: AgentSessionRuntimeStatus?, isClaude: Bool) -> Bool {
+        guard isChoiceListOpen(at: now) else { return false }
+        if isClaude, status != .idle {
+            choiceListClosed()
+            return false
+        }
+        return true
     }
 }

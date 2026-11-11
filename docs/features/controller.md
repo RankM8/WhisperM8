@@ -125,10 +125,13 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - „Auswahl offen“ (`ControllerTerminalMarks`, je Chat am Terminal): gesetzt, wenn das Menü einen
   Befehl schickt, nach dem die CLI eine Liste zeigt — Claude „/“, `/model`, `/config`, `/resume`,
   `/permissions`, `/mcp`, `/agents`, `/memory`; Codex „/“, `/model`, `/approvals`. Solange er steht,
-  gehen Pfeile ins Terminal, Kreuz schickt Enter auch bei „arbeitet“, und Kreis schließt die Liste
-  auch direkt nach dem Befehl. Er fällt mit Enter und Escape (Controller und Tastatur), mit Rücktaste,
-  Wort löschen, Leeren, Tab/Shift+Tab, mit jedem Text in den Chat und nach 2 min ohne Pfeil oder
-  Leerzeichen darin. Ein Chatwechsel lässt ihn stehen: Die Liste im Terminal bleibt ja offen. Grenze:
+  gehen Pfeile ins Terminal, Kreuz schickt Enter, und Kreis schließt die Liste auch direkt nach dem
+  Befehl. Bei Claude gilt er nur, solange der Chat ruht: Er wird nicht gesetzt, wenn der Chat beim
+  Senden nicht ruht, und fällt, sobald er arbeitet oder fragt (auch bei einem Turn, den Claude selbst
+  beginnt). Er fällt außerdem mit Enter und Escape vom Controller, Rücktaste, Wort löschen, Leeren,
+  Tab/Shift+Tab, mit jedem Text in den Chat, mit jeder Taste der Tastatur außer Pfeilen und
+  Leerzeichen und spätestens 2 min nach dem Öffnen (keine Verlängerung). Ein Chatwechsel lässt ihn
+  stehen: Die Liste im Terminal bleibt ja offen. Grenze:
   Öffnet Enter in einer Liste eine weitere (Untermenü in `/config`, `/mcp`, `/agents`), ist der
   Merker trotzdem weg — dann den Befehl erneut über das Menü öffnen oder die Tastatur nehmen.
 - Codex meldet keine Rückfragen (keine Hooks); seine Freigaben erscheinen, während der Status

@@ -29,7 +29,7 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             lastEnterAt: controller.lastSubmitAt,
             lastEscapeAt: controller.controllerMarks.lastEscapeAt,
             lastDraftInputAt: controller.controllerMarks.lastDraftInputAt,
-            choiceListOpen: controller.controllerChoiceListOpen()
+            choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID))
         )
     }
 
@@ -53,7 +53,8 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
     }
 
     func noteChoiceListOpened(in sessionID: UUID) {
-        controller(for: sessionID)?.controllerMarks.choiceListOpened(at: Date())
+        controller(for: sessionID)?.noteControllerChoiceListOpened(
+            status: AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID))
     }
 }
 

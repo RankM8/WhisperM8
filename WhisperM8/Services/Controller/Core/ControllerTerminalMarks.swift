@@ -5,9 +5,9 @@ import Foundation
 /// Uhr; gehalten vom `AgentTerminalController` (ein Wert je Chat, er lebt so
 /// lange wie das Terminal).
 struct ControllerTerminalMarks: Equatable, Sendable {
-    /// So lange nach der letzten Bewegung gilt eine Auswahlliste als offen.
-    /// Wer zwei Minuten nichts darin tut, hat sie meist anders geschlossen
-    /// (Maus, anderes Programm) — dann soll das Steuerkreuz wieder navigieren.
+    /// Höchstdauer einer Auswahlliste ab dem Öffnen, ohne Verlängerung: Wer
+    /// länger braucht, hat sie meist anders geschlossen (Maus, anderes
+    /// Programm) — dann soll das Steuerkreuz wieder navigieren.
     static let choiceListTimeout: TimeInterval = 120
 
     /// Enter vom Controller, auch in einer Rückfrage.
@@ -20,9 +20,8 @@ struct ControllerTerminalMarks: Equatable, Sendable {
     /// Enter (ohne Shift/Option) auf der Tastatur des Nutzers.
     var lastKeyboardSubmitAt: Date?
     /// „Auswahl offen“: gesetzt, wenn das Controller-Menü einen Befehl
-    /// geschickt hat, der eine Liste öffnet; aufgefrischt von jeder Bewegung
-    /// darin. `nil` = keine Liste.
-    private(set) var choiceListTouchedAt: Date?
+    /// geschickt hat, der eine Liste öffnet. `nil` = keine Liste.
+    private(set) var choiceListOpenedAt: Date?
 
     /// Zuletzt abgeschickt, auf jedem Weg: Enter vom Controller oder von der
     /// Tastatur und jeder programmatische Versand (`chats send`, Diktat mit
@@ -32,32 +31,25 @@ struct ControllerTerminalMarks: Equatable, Sendable {
     }
 
     func isChoiceListOpen(at now: Date) -> Bool {
-        guard let touched = choiceListTouchedAt else { return false }
-        return now.timeIntervalSince(touched) < Self.choiceListTimeout
+        guard let opened = choiceListOpenedAt else { return false }
+        return now.timeIntervalSince(opened) < Self.choiceListTimeout
     }
 
     mutating func choiceListOpened(at now: Date) {
-        choiceListTouchedAt = now
-    }
-
-    /// Bewegung in der Liste (Pfeil, Leerzeichen): verlängert nur eine noch
-    /// offene Liste, öffnet nie eine verfallene wieder.
-    mutating func choiceListUsed(at now: Date) {
-        if isChoiceListOpen(at: now) { choiceListTouchedAt = now }
+        choiceListOpenedAt = now
     }
 
     mutating func choiceListClosed() {
-        choiceListTouchedAt = nil
+        choiceListOpenedAt = nil
     }
 
-    /// Taste auf der Tastatur des Nutzers: Enter zählt als Absenden und
-    /// schließt eine Liste, Escape schließt sie.
-    mutating func recordKeyboard(submit: Bool, escape: Bool, at now: Date) {
-        if submit {
-            lastKeyboardSubmitAt = now
-            choiceListClosed()
-        }
-        if escape { choiceListClosed() }
+    /// Taste auf der Tastatur des Nutzers: Enter zählt als Absenden. Jede
+    /// Taste außer Pfeilen und Leerzeichen schließt eine Liste — auch die
+    /// Rücktaste, die ein „/“ aus dem Menü wieder löscht (danach wäre das Feld
+    /// leer, und links schickte Claude in den Hintergrund).
+    mutating func recordKeyboard(submit: Bool, keepsChoiceList: Bool, at now: Date) {
+        if submit { lastKeyboardSubmitAt = now }
+        if !keepsChoiceList { choiceListClosed() }
     }
 
     /// Kreuz darf bei arbeitendem Chat Enter schicken, wenn per Controller
