@@ -283,6 +283,34 @@ describe('Wecken', () => {
   })
 })
 
+// Befund D (11.11.2026): Hintergrund-Agents erben WHISPERM8_SESSION_ID des
+// Chats, der Claudes Daemon gestartet hat. Die CLI prüft gegen Claudes Registry
+// und liefert den echten Besitzer; die Mod folgt ihm statt der Umgebung.
+describe('Identität', () => {
+  const boardReads = (calls: Calls) => calls.argv.filter(a => a.includes('board') && a.length <= 4).length
+  const run = async ($: Parameters<Parameters<typeof test>[1]>[0], on: On, eventOwner: string) => {
+    const clock = mock.clock(on, { now: NOW })
+    const inherited = 'F1F1F1F1-0000-0000-0000-000000000099'
+    const change = { kind: 'board', owner: eventOwner, schema: 'wm8.changes/1' }
+    const calls = world(on, { sid: inherited, watch: [{ event: 'started', cursor: '1:10' }, change] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    return boardReads(calls)
+  }
+
+  test('Änderungen am Board des geprüften Besitzers lösen ein Neulesen aus', async ($, on) => {
+    // Grundlast ohne Ereignis: 3 Lesungen (Start, watch-Start, Takt) — das
+    // Ereignis des echten Besitzers bringt genau eine dazu.
+    expect(await run($, on, SID)).toBe(4)
+  })
+
+  test('Änderungen am Board des geerbten Chats lassen die Mod kalt', async ($, on) => {
+    expect(await run($, on, 'F1F1F1F1-0000-0000-0000-000000000099')).toBe(3)
+  })
+})
+
 // LR-PJ-004: Der Titel kommt aus einem fremden Chat — im Weck-Prompt nur als
 // Daten, ohne Steuerzeichen und ohne Möglichkeit, die Anführung zu schließen.
 describe('Wecken mit präpariertem Titel', () => {

@@ -190,6 +190,22 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
   aus dieser PTY stammt (Selbst-Send-Schutz, „(du)"-Markierung, Audit). Ehrlich:
   Rechenschaft + Versehens-Schutz, keine Boundary gegen einen absichtlich
   bösartigen Prozess desselben Users.
+- **Hintergrund-Agents (seit 11.11.2026):** Claudes Daemon und alle Worker,
+  die er startet, erben die Umgebung des Chats, der den Daemon zuerst gestartet
+  hat — samt `WHISPERM8_SESSION_ID`/`_TOKEN`. Die Umgebung ist bei ihnen deshalb
+  kein Beleg. `AgentCallerIdentityCheck` sucht den nächsten Claude-Prozess in
+  der Prozesskette in Claudes Registry. Ist er ein Hintergrund-Agent
+  (`kind: "bg"`), gehört der Aufruf dem Chat, dessen `externalSessionID` seine
+  `sessionId` ist, sonst keinem.
+  - Der Server prüft das über die Prozess-ID des Socket-Partners
+    (`LOCAL_PEERPID`). Bei einem Widerspruch nimmt er den richtigen Chat mit
+    dessen aktuellem Token, wenn sein Tab läuft. Sonst behandelt er den Agent
+    als externen Aufrufer. Log: `control_caller_identity_corrected`.
+  - Die CLI korrigiert `@self` und „(du)“ auf dieselbe Weise
+    (`ChatsCallerIdentity.checked`). Die Sitzungsliste lädt sie nur, wenn ein
+    Hintergrund-Agent dahintersteht.
+  - Die Board-Mod in `register.tsx` übernimmt den Besitzer, den
+    `chats board --json` liefert.
 - **Kill-Switch:** `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
 
 ## Send-Pipeline (TOCTOU-frei)

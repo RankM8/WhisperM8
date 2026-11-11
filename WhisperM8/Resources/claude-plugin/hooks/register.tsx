@@ -104,6 +104,10 @@ const refresh = async ($: EngineInterface) => {
   if (!ran.ok) return
   const next = parseBoard(ran.stdout)
   if (next === null) return
+  // Die CLI prüft die Identität gegen Claudes Registry: Ein Hintergrund-Agent
+  // erbt die Umgebung des Chats, der den Daemon gestartet hat. Ihr Besitzer
+  // gilt, nicht WHISPERM8_SESSION_ID (Befund 11.11.2026).
+  if (sessionID !== null && !sameID(next.owner, sessionID)) sessionID = next.owner
   await update($, board, () => next)
   const at = await $.clock.now()
   await update($, now, () => at)

@@ -37,6 +37,15 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
         return expected == token
     }
 
+    /// Aktuelles Token einer Session (laufende PTY), sonst `nil`. Für den
+    /// Server, der die Identität eines Hintergrund-Agents aus Claudes Registry
+    /// bestimmt statt aus dessen geerbter Umgebung.
+    func currentToken(for sessionID: UUID) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return tokensBySession[sessionID]
+    }
+
     func revoke(sessionID: UUID) {
         lock.lock()
         tokensBySession.removeValue(forKey: sessionID)

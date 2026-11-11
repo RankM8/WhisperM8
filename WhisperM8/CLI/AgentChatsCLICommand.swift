@@ -377,9 +377,10 @@ struct ChatsCommandContext {
     var now: Date
 
     static func load(now: Date = Date()) -> ChatsCommandContext {
-        ChatsCommandContext(
-            view: ChatsWorkspaceReader().load(),
-            caller: .fromEnvironment(),
+        let view = ChatsWorkspaceReader().load()
+        return ChatsCommandContext(
+            view: view,
+            caller: .checked(sessions: { view.workspace.sessions }),
             now: now
         )
     }
@@ -392,7 +393,7 @@ struct ChatsCommandContext {
                 workspace: .empty, uiState: nil, entries: [], projects: [],
                 openTabIDs: [], pinnedSessionIDs: []
             ),
-            caller: .fromEnvironment(),
+            caller: .checked(sessions: { ChatsWorkspaceReader().load().workspace.sessions }),
             now: now
         )
     }
