@@ -209,17 +209,51 @@ final class GridLayoutAdaptationTests: XCTestCase {
         XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[1], s[2]])
     }
 
-    /// Wiederöffnen (⌘⇧T) macht das Schließen rückgängig: Tab und Kachel.
-    func testReopeningClosedTabReturnsItToTheWorkspace() throws {
+    /// Wiederöffnen (⌘⇧T) macht das Schließen rückgängig: Tab und Kachel,
+    /// und zwar an der ALTEN Stelle, nicht am Ende.
+    func testReopeningClosedTabReturnsItToItsOldPlace() throws {
         let (store, persistence) = makeStore()
         let w = store.primaryWindowID
         let s = try seed(persistence, count: 3)
         let id = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
 
         store.closeTab(s[1], in: w)
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[2]])
         XCTAssertEqual(store.reopenLastClosedTab()?.sessionID, s[1])
-        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[2], s[1]])
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[1], s[2]])
+        XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 3)
         XCTAssertTrue(store.openTabIDs(in: w).contains(s[1]))
+    }
+
+    /// Erster Platz bleibt erster Platz — auch nach dem Wachsen der Stufe.
+    func testReopeningFirstChatGoesBackToSlotOne() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 2)
+        let id = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
+
+        store.closeTab(s[0], in: w)
+        XCTAssertEqual(store.gridWorkspace(id: id)?.capacity, 1)
+        store.reopenLastClosedTab()
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[1]])
+    }
+
+    /// Workspace inzwischen voll: Der Tab geht trotzdem auf, der Workspace
+    /// bleibt unverändert (Grund im Log), nichts wird still verdrängt.
+    func testReopeningIntoFullWorkspaceStillOpensTab() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 10)
+        let id = store.createGridWorkspace(name: "G", capacity: 9, slots: s.prefix(9).map { $0 }, activateIn: w)
+
+        store.closeTab(s[4], in: w)
+        XCTAssertEqual(store.addSession(s[9], toGridWorkspace: id), .added(slotIndex: 8, grewTo: 9))
+        let full = try XCTUnwrap(store.gridWorkspace(id: id))
+        XCTAssertEqual(full.occupiedSessionIDs.count, 9)
+
+        XCTAssertEqual(store.reopenLastClosedTab()?.sessionID, s[4])
+        XCTAssertTrue(store.openTabIDs(in: w).contains(s[4]), "Tab geht trotzdem auf")
+        XCTAssertEqual(store.gridWorkspace(id: id), full, "Workspace unverändert")
     }
 
     /// Auch wenn der Workspace gerade nur Rücksprungziel ist (Einzelansicht).
@@ -249,8 +283,9 @@ final class GridLayoutAdaptationTests: XCTestCase {
         XCTAssertEqual(entity.capacity, AgentGridWorkspace.emptyCapacity)
     }
 
-    /// Schalter aus: Tab schließen nimmt den Chat raus, der Platz bleibt leer.
-    func testClosingTabLeavesHoleWhenClosingGapsIsOff() throws {
+    /// Schalter aus: altes Verhalten — der Chat bleibt Mitglied, die Kachel
+    /// zeigt „Tab was closed · Reopen".
+    func testClosingTabKeepsMembershipWhenClosingGapsIsOff() throws {
         let (store, persistence) = makeStore()
         store.isGridAutoCompactEnabled = { false }
         let w = store.primaryWindowID
@@ -258,7 +293,24 @@ final class GridLayoutAdaptationTests: XCTestCase {
         let id = store.createGridWorkspace(name: "G", slots: s.map { $0 }, activateIn: w)
 
         store.closeTab(s[1], in: w)
-        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], nil, s[2]])
+        XCTAssertEqual(store.gridWorkspace(id: id)?.slots, [s[0], s[1], s[2]])
+        XCTAssertFalse(store.openTabIDs(in: w).contains(s[1]))
+        XCTAssertNil(store.windowID(containingTab: s[1]), "Kachel wird zum Platzhalter")
+    }
+
+    /// Schalter aus, Projekt-Ansicht: ein laufender Chat mit geschlossenem
+    /// Tab bleibt Mitglied (alter Platzhalter), es wird nichts gemerkt.
+    func testProjectViewRunningChatStaysWhenClosingGapsIsOff() throws {
+        let (store, persistence) = makeStore()
+        store.isGridAutoCompactEnabled = { false }
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 3)
+        let view = try openProjectView(store, active: s)
+
+        store.closeTab(s[1], in: w)
+        store.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: [view.projectID: Set(s)])
+        XCTAssertEqual(store.gridWorkspace(id: view.entityID)?.slots, [s[0], s[1], s[2]])
+        XCTAssertEqual(store.dismissedProjectViewSessionIDs, [:])
     }
 
     /// Bleibt: Tab in ein anderes Fenster ziehen nimmt den Chat NICHT aus

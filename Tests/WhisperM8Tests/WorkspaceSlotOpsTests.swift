@@ -615,4 +615,25 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         XCTAssertEqual(trimmed.slots, [a, nil, c, d])
         XCTAssertEqual(trimmed.capacity, 4)
     }
+
+    func testReinsertPutsChatBackAtItsOrderAndGrows() {
+        let a = UUID(); let b = UUID(); let c = UUID()
+        let workspace = AgentGridWorkspace(slots: [a, c], capacity: 2)
+        let (back, result) = WorkspaceSlotOps.reinsert(b, into: workspace, atOrder: 1)
+        XCTAssertEqual(back.slots, [a, b, c])
+        XCTAssertEqual(back.capacity, 3)
+        XCTAssertEqual(result, .added(slotIndex: 1, grewTo: 3))
+        // Stelle jenseits des Endes: hinten an.
+        XCTAssertEqual(WorkspaceSlotOps.reinsert(b, into: workspace, atOrder: 7).workspace.slots, [a, c, b])
+        // Schon Mitglied: nichts tun.
+        XCTAssertEqual(WorkspaceSlotOps.reinsert(a, into: workspace, atOrder: 1).result, .alreadyMember(slotIndex: 0))
+    }
+
+    func testReinsertIntoFullWorkspaceIsRejectedWithoutChange() {
+        let owners = (0 ..< 9).map { _ in UUID() }
+        let workspace = AgentGridWorkspace(slots: owners, capacity: 9)
+        let (same, result) = WorkspaceSlotOps.reinsert(UUID(), into: workspace, atOrder: 0)
+        XCTAssertEqual(result, .full)
+        XCTAssertEqual(same, workspace)
+    }
 }

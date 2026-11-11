@@ -58,19 +58,28 @@ kleinste passende Stufe. Das gilt für alle Wege:
 | Weg | Eigener Workspace | Projekt-Ansicht |
 |---|---|---|
 | ⊖ an der Kachel | Chat raus, Tab bleibt offen | schließt den Tab (siehe unten) |
-| Tab schließen (✕, ⌘W, Sammel-Schließen, `chats close`) | Chat raus aus jedem Workspace, der gerade in einem Fenster offen ist; ⌘⇧T holt Tab und Kachel zurück | Chat verlässt die Ansicht, auch wenn er weiterläuft; mit seinem Tab kommt er zurück, ⊞ zeigt wieder alle |
+| Tab schließen (✕, ⌘W, Sammel-Schließen, `chats close`) | Chat raus aus jedem Workspace, der gerade in einem Fenster offen ist; ⇧⌘T bzw. `chats reopen` setzt Tab und Kachel an die alte Stelle zurück | Chat verlässt die Ansicht, auch wenn er weiterläuft; mit seinem Tab kommt er zurück, ⊞ zeigt wieder alle |
 | Archivieren, Löschen | Chat raus | Chat raus |
 | Chat beendet sich, Tab war schon zu | — | Chat raus |
 
 Beispiel: Projekt-Ansicht mit 4 Chats (2×2), der zweite wird geschlossen →
 2+1. Bleibt nur einer übrig, bekommt er die volle Fläche.
 
-Ist der Schalter aus, bleibt der Platz leer stehen und die Stufe bleibt; in
-der Projekt-Ansicht fallen nur leere Kacheln am Ende weg. `chats workspace
-remove --keep-slot` erzwingt dieses Verhalten für einen einzelnen Aufruf.
+Ist der Wiederherstellungs-Workspace inzwischen voll (3×3) oder gelöscht,
+geht beim Wiederöffnen nur der Tab auf; der Grund steht im Log
+(`reopen_not_back_in_workspace`, Kategorie `agent.store`).
+
+Ist der Schalter aus, gilt das alte Verhalten: Bei ⊖, Archivieren und
+Löschen bleibt der Platz leer stehen und die Stufe bleibt; in der
+Projekt-Ansicht fallen nur leere Kacheln am Ende weg. Tab schließen nimmt
+den Chat dann aus keinem Workspace — die Kachel zeigt „Tab was closed ·
+Reopen", in der Projekt-Ansicht bleibt ein weiterlaufender Chat so stehen.
+`chats workspace remove --keep-slot` erzwingt stabile Plätze für einen
+einzelnen Aufruf.
 
 Fokus: Hatte die weggefallene Kachel den Fokus, geht er an die nächste
-Kachel dahinter, sonst an die davor. Das Raster bleibt sichtbar.
+Kachel dahinter, sonst an die davor. Das Raster bleibt sichtbar, auch wenn
+keine Kachel mehr übrig ist.
 
 **Bleibt bewusst unverändert:**
 

@@ -201,8 +201,16 @@ final class AgentWindowStore {
         var sessionID: UUID
         var windowID: UUID
         /// Eigene Workspaces, die der Chat beim Schließen verlassen hat
-        /// (offen in einem Fenster) — Wiederöffnen nimmt ihn dort wieder auf.
-        var releasedFromWorkspaceIDs: [UUID] = []
+        /// (offen in einem Fenster), samt seiner Stelle — Wiederöffnen setzt
+        /// ihn genau dorthin zurück.
+        var releasedFrom: [ReleasedSlot] = []
+    }
+
+    /// Wo ein geschlossener Chat im Workspace stand: `order` = Anzahl der
+    /// belegten Plätze vor ihm.
+    struct ReleasedSlot: Equatable {
+        var workspaceID: UUID
+        var order: Int
     }
 
     /// Zuletzt geschlossene Tabs (LIFO, Cap 20). Bewusst NICHT persistiert —
@@ -217,14 +225,14 @@ final class AgentWindowStore {
     private func recordClosedTabs(
         _ sessionIDs: [UUID],
         windowID: UUID,
-        releasedFrom: [UUID: [UUID]] = [:]
+        releasedFrom: [UUID: [ReleasedSlot]] = [:]
     ) {
         guard !sessionIDs.isEmpty else { return }
         for id in sessionIDs {
             recentlyClosedTabs.removeAll { $0.sessionID == id }
             recentlyClosedTabs.append(ClosedTabRecord(
                 sessionID: id, windowID: windowID,
-                releasedFromWorkspaceIDs: releasedFrom[id] ?? []
+                releasedFrom: releasedFrom[id] ?? []
             ))
         }
         if recentlyClosedTabs.count > Self.reopenHistoryCap {
@@ -244,11 +252,21 @@ final class AgentWindowStore {
                   windowID(containingTab: entry.sessionID) == nil else { continue }
             let target = hasWindow(entry.windowID) ? entry.windowID : state.primaryWindowID
             openTab(entry.sessionID, in: target)
-            // Zurück in die Workspaces, die der Chat beim Schließen verlassen
-            // hat (erster freier Platz bzw. Wachsen) — Wiederöffnen macht das
-            // Schließen vollständig rückgängig.
-            for workspaceID in entry.releasedFromWorkspaceIDs {
-                _ = addSession(entry.sessionID, toGridWorkspace: workspaceID, focusIfActive: false)
+            // Zurück an die alte Stelle in den Workspaces, die der Chat beim
+            // Schließen verlassen hat. Klappt das nicht (voll, gelöscht),
+            // bleibt es beim offenen Tab — und der Grund steht im Log.
+            for released in entry.releasedFrom {
+                let result = reinsertSession(
+                    entry.sessionID, intoGridWorkspace: released.workspaceID, atOrder: released.order
+                )
+                switch result {
+                case .added, .alreadyMember:
+                    break
+                default:
+                    Logger.agentStore.notice(
+                        "reopen_not_back_in_workspace session=\(entry.sessionID.uuidString, privacy: .public) workspace=\(released.workspaceID.uuidString, privacy: .public) result=\(String(describing: result), privacy: .public)"
+                    )
+                }
             }
             return ClosedTabRecord(sessionID: entry.sessionID, windowID: target)
         }
@@ -257,8 +275,10 @@ final class AgentWindowStore {
 
     /// Schließt den Tab der Session in dem Fenster, das ihn hält (eine Session
     /// lebt in genau einem Fenster — `--window`-Optionen braucht deshalb
-    /// niemand). Reine UI-Mutation: Session, PTY, Pin und Grid-Mitgliedschaft
-    /// bleiben unangetastet; die Selektion rückt über `closeTab` auf den
+    /// niemand). Reine UI-Mutation: Session, PTY und Pin bleiben
+    /// unangetastet. Wie jedes Tab-Schließen nimmt es den Chat aus Workspaces,
+    /// die gerade in einem Fenster offen sind (`releaseClosedTabsFromOpenGrids`,
+    /// nur mit „Close gaps…"); die Selektion rückt über `closeTab` auf den
     /// Nachbar-Tab. Räumt die Session zusätzlich aus der ephemeren
     /// Multi-Auswahl des Fensters (wie der View-Close, der geschlossene Tab
     /// darf in keiner Gruppen-Aktion zurückbleiben). Gibt die Fenster-ID

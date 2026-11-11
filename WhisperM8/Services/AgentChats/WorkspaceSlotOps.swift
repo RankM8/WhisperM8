@@ -216,6 +216,34 @@ enum WorkspaceSlotOps {
         return (copy, .added(slotIndex: targetSlot, grewTo: grewTo))
     }
 
+    /// Wiederöffnen (⇧⌘T, `chats reopen`): Der Chat kommt an seine alte
+    /// Stelle in der Reihenfolge zurück — `order` = wie viele belegte Plätze
+    /// beim Schließen vor ihm lagen. Die anderen rücken dafür eins weiter,
+    /// die Stufe wächst bei Bedarf. Bei 9 belegten Plätzen `.full` ohne
+    /// Änderung; schon Mitglied → `.alreadyMember`.
+    static func reinsert(
+        _ sessionID: UUID,
+        into workspace: AgentGridWorkspace,
+        atOrder order: Int
+    ) -> (workspace: AgentGridWorkspace, result: AddResult) {
+        if let existing = workspace.slotIndex(of: sessionID) {
+            return (workspace, .alreadyMember(slotIndex: existing))
+        }
+        var occupied = workspace.occupiedSessionIDs
+        guard occupied.count < AgentGridWorkspace.allowedCapacities.last! else {
+            return (workspace, .full)
+        }
+        let position = min(max(order, 0), occupied.count)
+        occupied.insert(sessionID, at: position)
+        var copy = workspace
+        let (slots, stufe) = compactedSlots(occupied.map { Optional($0) })
+        copy.slots = slots
+        copy.capacity = stufe
+        copy.normalize()
+        let grewTo = copy.capacity > workspace.capacity ? copy.capacity : nil
+        return (copy, .added(slotIndex: position, grewTo: grewTo))
+    }
+
     // MARK: - Entfernen / Verschieben / Tauschen
 
     /// Setzt den Slot der Session auf `nil`. Mit `compacting` ruecken die
