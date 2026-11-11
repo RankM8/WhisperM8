@@ -28,7 +28,8 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
     /// Rückfrage, in einer Auswahlliste, die das Controller-Menü geöffnet hat
-    /// (`choiceListOpen`), und bei Codex (meldet keine Rückfragen) — sonst
+    /// (`choiceListOpen`, bei Claude nur im Ruhezustand), und bei Codex
+    /// (meldet keine Rückfragen) — sonst
     /// holt hoch den letzten Prompt zurück und links schickt Claude im leeren
     /// Eingabefeld in den Hintergrund. Tab und Shift+Tab nie in einer
     /// Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle Änderungen
@@ -44,7 +45,9 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         let isAgentChat = profile == .claudeCodeChat || profile == .codexChat
         switch key {
         case .up, .down, .left, .right:
-            return status == .awaitingInput || choiceListOpen || profile == .codexChat
+            // Ein Merker zählt bei Claude nur, solange der Chat ruht.
+            let listCounts = choiceListOpen && (profile != .claudeCodeChat || status == .idle)
+            return status == .awaitingInput || listCounts || profile == .codexChat
         case .tab, .backTab: return status != .awaitingInput
         case .enter, .escape, .backspace: return true
         case .space, .deleteWord: return isAgentChat

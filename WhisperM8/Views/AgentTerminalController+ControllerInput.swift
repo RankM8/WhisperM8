@@ -12,13 +12,21 @@ extension AgentTerminalController {
     func controllerAllows(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) -> Bool {
         TerminalControlKey.controllerAllows(
             key, status: status, profile: command.keyboardProfile,
-            choiceListOpen: controllerChoiceListOpen(at: now))
+            choiceListOpen: controllerChoiceListOpen(status: status, at: now))
     }
 
     /// Ist eine Auswahlliste, die das Controller-Menü geöffnet hat, vermutlich
-    /// noch offen?
-    func controllerChoiceListOpen(at now: Date = Date()) -> Bool {
-        controllerMarks.isChoiceListOpen(at: now)
+    /// noch offen? Bei Claude nur im Ruhezustand; sonst wird der Merker
+    /// gelöscht (`ControllerTerminalMarks.checkedChoiceListOpen`).
+    func controllerChoiceListOpen(status: AgentSessionRuntimeStatus?, at now: Date = Date()) -> Bool {
+        controllerMarks.checkedChoiceListOpen(
+            at: now, status: status, isClaude: command.keyboardProfile == .claudeCodeChat)
+    }
+
+    /// Merker „Auswahl offen“ setzen — bei Claude nur, wenn der Chat ruht.
+    func noteControllerChoiceListOpened(status: AgentSessionRuntimeStatus?, at now: Date = Date()) {
+        guard command.keyboardProfile != .claudeCodeChat || status == .idle else { return }
+        controllerMarks.choiceListOpened(at: now)
     }
 
     /// Controller hat etwas ins Eingabefeld geschrieben oder daraus gelöscht

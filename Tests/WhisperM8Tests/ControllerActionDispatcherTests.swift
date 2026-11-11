@@ -1002,6 +1002,27 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(terminals.choiceListsOpened.count, 2, "/clear öffnet keine Liste")
     }
 
+    /// Nachreview: An einen arbeitenden Claude-Chat gesendet, setzt `/model`
+    /// den Merker nicht; bei Codex schon.
+    func testListOpeningCommandToWorkingClaudeSetsNoMarker() {
+        func sendModel() {
+            perform(.menuToggle)
+            ui.menu?.select(.commands)
+            perform(.menuActivate)
+            perform(.menuMove(step: 1))
+            perform(.menuActivate)
+        }
+        setTerminal(status: .working)
+        sendModel()
+        XCTAssertEqual(terminals.texts.last?.text, "/model")
+        XCTAssertEqual(terminals.choiceListsOpened, [])
+
+        setTerminal(status: .working, profile: .codex)
+        sendModel()
+        XCTAssertEqual(terminals.texts.last?.text, "/model")
+        XCTAssertEqual(terminals.choiceListsOpened, [window.selected!])
+    }
+
     func testCommandsRejectedWithDraft() {
         setTerminal(status: .idle, draft: true)
         perform(.menuToggle)

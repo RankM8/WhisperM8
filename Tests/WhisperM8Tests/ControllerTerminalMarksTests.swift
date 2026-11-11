@@ -11,18 +11,63 @@ final class ControllerTerminalMarksTests: XCTestCase {
 
     // MARK: - Auswahl offen (Befund 1a)
 
-    func testChoiceListStaysOpenWhileUsedAndExpiresAfterTwoMinutesOfRest() {
+    /// Feste Höchstdauer ab dem Öffnen: Pfeile und Leerzeichen halten die
+    /// Liste offen, verlängern sie aber nicht (Nachreview).
+    func testChoiceListHasFixedLifetimeFromOpening() {
         var marks = ControllerTerminalMarks()
         XCTAssertFalse(marks.isChoiceListOpen(at: t0))
         marks.choiceListOpened(at: t0)
         XCTAssertTrue(marks.isChoiceListOpen(at: at(119)))
-        XCTAssertFalse(marks.isChoiceListOpen(at: at(120)), "zwei Minuten Ruhe")
+        XCTAssertFalse(marks.isChoiceListOpen(at: at(120)), "zwei Minuten")
 
         marks.choiceListOpened(at: t0)
         marks.recordControllerKey(.down, status: .idle, isCodex: false, at: at(100))
-        XCTAssertTrue(marks.isChoiceListOpen(at: at(200)), "Bewegung verlängert")
-        marks.recordControllerKey(.space, status: .idle, isCodex: false, at: at(210))
-        XCTAssertTrue(marks.isChoiceListOpen(at: at(320)), "Leerzeichen (/config) verlängert")
+        marks.recordControllerKey(.space, status: .idle, isCodex: false, at: at(110))
+        XCTAssertTrue(marks.isChoiceListOpen(at: at(111)), "Pfeil und Leerzeichen schließen nicht")
+        XCTAssertFalse(marks.isChoiceListOpen(at: at(121)), "und verlängern nicht")
+    }
+
+    /// Nachreview, Lücke 2: „/“ aus dem Menü, dann mit der Rücktaste der
+    /// Tastatur gelöscht — das Feld ist leer, der Merker muss weg. Jede
+    /// Tastatur-Taste außer Pfeilen und Leerzeichen schließt die Liste.
+    func testEveryKeyboardKeyExceptArrowsAndSpaceClosesTheList() {
+        for keyCode: UInt16 in [123, 124, 125, 126, 49] {
+            var marks = ControllerTerminalMarks()
+            marks.choiceListOpened(at: t0)
+            marks.recordKeyboard(keyCode: keyCode, modifiers: [], at: at(1))
+            XCTAssertTrue(marks.isChoiceListOpen(at: at(1)), "\(keyCode) bewegt nur")
+        }
+        // Rücktaste, Buchstabe, Tab, Return, Escape, Ctrl+U, Cmd+Pfeil.
+        let closing: [(UInt16, NSEvent.ModifierFlags)] = [
+            (51, []), (0, []), (48, []), (36, []), (53, []), (32, .control), (123, .command),
+        ]
+        for (keyCode, modifiers) in closing {
+            var marks = ControllerTerminalMarks()
+            marks.choiceListOpened(at: t0)
+            marks.recordKeyboard(keyCode: keyCode, modifiers: modifiers, at: at(1))
+            XCTAssertFalse(marks.isChoiceListOpen(at: at(1)), "\(keyCode) \(modifiers)")
+        }
+    }
+
+    /// Nachreview, Lücke 1: Bei Claude gilt der Merker nur im Ruhezustand.
+    /// Arbeitet oder fragt der Chat, wird er beim Lesen gelöscht und lebt
+    /// bei der Rückkehr zu „ruht“ nicht wieder auf. Codex bleibt zeitgebunden.
+    func testClaudeChoiceListOnlyCountsWhileIdle() {
+        var marks = ControllerTerminalMarks()
+        marks.choiceListOpened(at: t0)
+        XCTAssertTrue(marks.checkedChoiceListOpen(at: at(1), status: .idle, isClaude: true))
+        for status in [AgentSessionRuntimeStatus.working, .awaitingInput] {
+            var copy = marks
+            XCTAssertFalse(copy.checkedChoiceListOpen(at: at(2), status: status, isClaude: true), "\(status)")
+            XCTAssertFalse(copy.checkedChoiceListOpen(at: at(3), status: .idle, isClaude: true), "gelöscht")
+        }
+        var unknown = marks
+        XCTAssertFalse(unknown.checkedChoiceListOpen(at: at(2), status: nil, isClaude: true))
+
+        var codex = ControllerTerminalMarks()
+        codex.choiceListOpened(at: t0)
+        XCTAssertTrue(codex.checkedChoiceListOpen(at: at(2), status: .working, isClaude: false))
+        XCTAssertFalse(codex.checkedChoiceListOpen(at: at(120), status: .idle, isClaude: false))
     }
 
     /// Ein Pfeil (etwa in einer Rückfrage) öffnet eine verfallene Liste nie wieder.
@@ -43,19 +88,6 @@ final class ControllerTerminalMarksTests: XCTestCase {
             marks.recordControllerKey(key, status: .idle, isCodex: false, at: at(1))
             XCTAssertFalse(marks.isChoiceListOpen(at: at(1)), "\(key)")
         }
-    }
-
-    func testKeyboardEnterAndEscapeCloseTheList() {
-        var marks = ControllerTerminalMarks()
-        marks.choiceListOpened(at: t0)
-        marks.recordKeyboard(keyCode: 125, modifiers: [], at: at(1))
-        XCTAssertTrue(marks.isChoiceListOpen(at: at(1)), "Pfeil der Tastatur bewegt nur")
-        marks.recordKeyboard(keyCode: 53, modifiers: [], at: at(2))
-        XCTAssertFalse(marks.isChoiceListOpen(at: at(2)))
-
-        marks.choiceListOpened(at: at(3))
-        marks.recordKeyboard(keyCode: 36, modifiers: [], at: at(4))
-        XCTAssertFalse(marks.isChoiceListOpen(at: at(4)))
     }
 
     // MARK: - Absenden auf jedem Weg (Befund 5)

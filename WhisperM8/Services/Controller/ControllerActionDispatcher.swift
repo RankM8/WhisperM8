@@ -624,14 +624,18 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// die Liste der CLI öffnet; feste Befehle werden gesendet (so öffnet
     /// `/model` gleich die Modellwahl). Nie an einen Entwurf hängen.
     private func sendCommand(_ command: ControllerSlashCommand, setup: ControllerMenuSetup) {
-        guard let sessionID = inputTarget(of: setup),
-              terminals.state(of: sessionID)?.draftSuspected != true else {
+        guard let sessionID = inputTarget(of: setup), let state = terminals.state(of: sessionID),
+              !state.draftSuspected else {
             return playHaptic(.rejected)
         }
         terminals.sendText(command.text, submit: command.submits, to: sessionID)
         // Öffnet der Befehl eine Liste (`/model`, „/“ …), gehen Steuerkreuz und
-        // Kreuz hinein, bis Enter, Escape oder zwei Minuten Ruhe sie schließen.
-        if ControllerSlashCommands.opensChoiceList(command, profile: setup.profile) {
+        // Kreuz hinein, bis Enter, Escape, eine andere Taste oder zwei Minuten
+        // sie schließen. Bei Claude nur aus dem Ruhezustand: An einen
+        // arbeitenden Chat gesendet, öffnet sich die Liste nicht sicher, und
+        // Pfeile oder Kreuz gingen in den laufenden Turn.
+        let listCanOpen = setup.profile != .claude || state.status == .idle
+        if listCanOpen, ControllerSlashCommands.opensChoiceList(command, profile: setup.profile) {
             terminals.noteChoiceListOpened(in: sessionID)
             refreshContext()   // Legende zeigt gleich „Pfeiltasten“
         }

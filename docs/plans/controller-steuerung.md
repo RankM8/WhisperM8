@@ -1080,6 +1080,27 @@ Nebenbei: `sendKey` steht jetzt kürzer in `AgentTerminalView.swift` (Merker und
 - 8: `wiredControllers` beim Trennen eines Controllers bereinigen.
 - 9: `AgentTerminalView.swift` steht bei 1.459 von 1.500 Zeilen; Neues dort nur über Extensions.
 
+**Nachreview der Fixes** (umgesetzt):
+
+1. **Merker nur bei ruhendem Claude-Chat.** Ein `/model` an einen arbeitenden Chat setzte den Merker;
+   danach gingen 2 min lang links und Kreuz ins arbeitende Terminal, und Kreuz konnte in der Lücke vor
+   „wartet“ eine Freigabe bestätigen (ebenso bei einem Turn, den Claude selbst beginnt). Jetzt zählt
+   der Merker bei Claude nur bei `idle` — in der Belegung (`choiceListActive`) und in
+   `controllerAllows`. Gesetzt wird er nur, wenn der Chat beim Senden ruht. Weg vom Ruhezustand wird
+   er beim Lesen gelöscht (`checkedChoiceListOpen`, gelesen nur im Ereignis-Pfad: Schnappschuss des
+   Controllers und `sendKey`, nie in einem Body) und lebt danach nicht wieder auf. Codex unverändert.
+2. **Tastatur und Höchstdauer.** Jede Taste der Tastatur außer Pfeilen und Leerzeichen löscht den
+   Merker (vorher nur Enter und Escape: „/“ aus dem Menü, mit der Rücktaste gelöscht, ließ ihn stehen,
+   links schickte Claude dann in den Hintergrund). Pfeile verlängern nicht mehr; es gelten feste
+   2 min ab dem Setzen.
+
+**Später** (aus dem Nachreview):
+
+- 4: Codex: ↑ zählt als frische Eingabe und macht Kreuz scharf; ↑ + Kreuz schickt dann den letzten
+  Prompt erneut. Abhilfe: ↑ nicht als Eingabe zählen oder Kreuz bei arbeitendem Codex nur per Halten.
+- 5: Enter löscht den Merker auch bei verschachtelten Listen wie `/config` (Untermenüs dann wieder über
+  das Menü öffnen).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
