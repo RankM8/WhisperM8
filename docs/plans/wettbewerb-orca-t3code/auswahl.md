@@ -1,6 +1,6 @@
 # Auswahl: was für Giuliano zählt und was entschieden ist
 
-**Stand:** 11.11.2026 · **Status:** Auswahl getroffen, zwei Punkte noch zu klären, kein App-Code geändert
+**Stand:** 11.11.2026 · **Status:** Auswahl getroffen, Punkte 4 und 8 noch offen, als Erstes kommt `make dev` ohne Chat-Abbruch; kein App-Code geändert
 **Gehört zu:** [README.md](README.md) · Grundlage: [kernfeatures.md](kernfeatures.md)
 
 ## Blickwinkel
@@ -99,15 +99,20 @@ Offene Frage: Soll der Kontowechsel bei erreichtem Limit **nachfragen** (ein Kli
 
 Aufwand: mittel. Entwurf des Hinweises zuerst im HTML-Zwilling.
 
-## Vorgeschlagene Reihenfolge nach dieser Auswahl
+### Nachtrag vom 11.11.2026: `make dev` zuerst
+
+Giuliano will Punkt 5 zuerst, und zwar für den Fall, der am häufigsten stört: `make dev` beendet alle laufenden Chats. Die Prüfung im Code ergab einen kleineren Weg als den Halter je Chat: Die App gibt ihre Terminal-Leitungen vor dem Beenden an einen Aufbewahrer ab und holt sie nach dem Start zurück. Der Normalbetrieb bleibt unverändert, jeder Fehler fällt auf den heutigen Stand zurück, und die Teile lassen sich später für Weg B wiederverwenden. Plan mit Ablauf, betroffenen Stellen und den drei offenen Belegen: [`../neustart-ohne-chatverlust.md`](../neustart-ohne-chatverlust.md).
+
+## Reihenfolge nach dieser Auswahl
 
 | Schritt | Inhalt | Warum hier |
 |---|---|---|
-| 1 | Punkt 6, Cockpit für alle Abos | am schnellsten spürbar, baut auf Vorhandenem auf |
-| 2 | Punkt 1, eigene Umgebung je Chat, mit dem Start-Dialog | Voraussetzung für sicheres paralleles Arbeiten und für „Chat aus Ticket“ |
-| 3 | Vorversuch zu Punkt 3, dann Browser | der Vorversuch entscheidet den Weg |
-| 4 | Jira, je nach Antwort zu Punkt 4 als Board | braucht den Start-Dialog aus Schritt 2 |
-| parallel | Punkt 5, Weg B | eigenes Vorhaben: erst Impact-Analyse und Plan, dann Bau hinter Schalter |
+| 1 | Punkt 5 als Übergabe bei `make dev`, beginnend mit dem Vorversuch | Wunsch vom 11.11.2026; stört täglich |
+| 2 | Punkt 6, Cockpit für alle Abos | schnell spürbar, baut auf Vorhandenem auf |
+| 3 | Punkt 1, eigene Umgebung je Chat, mit dem Start-Dialog | Voraussetzung für sicheres paralleles Arbeiten und für „Chat aus Ticket“ |
+| 4 | Vorversuch zu Punkt 3, dann Browser | der Vorversuch entscheidet den Weg |
+| 5 | Jira, je nach Antwort zu Punkt 4 als Board | braucht den Start-Dialog aus Schritt 3 |
+| später | Punkt 5, Weg B (auch Abstürze abdecken) | baut auf der Übergabe auf |
 
 ## Zum Open-Source-Trichter
 
