@@ -124,12 +124,15 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
   (`StatuslineInstaller`: Skripte + `statusLine` in `settings.json`, nutzerausgelöst); geteilte Einträge der
   Profil-Ordner (`ClaudeAccountProfiles+SharedConfig`, Symlinks); lose Skills nach `~/.claude/skills`
   („Install for Terminal…“, nutzerausgelöst) und das Wegsichern alter Kopien nach `skills/.whisperm8-backup/`;
-  `claude mcp add-json` beim MCP-Angleich (schreibt die CLI selbst); „Zum Hauptkonto machen“ (Keychain,
+  `claude mcp add-json` beim MCP-Angleich (schreibt die CLI selbst); die Login-Erneuerung (ersetzt `claudeAiOauth` im Keychain-Eintrag des Kontos durch den geprüften neuen Login,
+  nutzerausgelöst); „Zum Hauptkonto machen“ (Keychain,
   `oauthAccount` in `~/.claude.json`, Mischen von `projects/` und `file-history/`); die einmalige
   Memory-Migration (kopiert nach main, mit Backup); Subagent-Retention verschiebt Rollouts aus
   `~/.codex/sessions` ins Archiv. Ein neuer Write kommt in diese Liste. Hook-Settings (`claude-hooks/<id>.json`)
   liegen in Application Support, nicht unter `~/.claude`.
 - Logins werden zwischen Konten **verschoben, nie kopiert** (gleiche Refresh-Familie entwertet sich sonst).
+- Ein Login wird nie direkt im Profil erneuert, immer über den Zwischenordner mit Konto-Abgleich (`ClaudeLoginRenewer`) —
+  der Browser kennt nur eine claude.ai-Sitzung, ein falsches Konto überschriebe sonst einen gültigen Login.
 - Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
   `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, `clipboard-history/` (Index plus Bilder, 0700/0600), `statistics/`, Reports, FailedRecordings).
 - Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.

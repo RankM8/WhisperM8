@@ -64,8 +64,11 @@ dokumentiertes Verhalten + Beobachtung der real geschriebenen Dateien.
   `<id>.jsonl`-DATEI.
 - **Resume-Scope:** `claude --resume <id>` sucht **nur im aktuellen cwd + dessen Git-Worktrees**
   (laut Doku). Falscher cwd → „No conversation found".
-- **Cleanup:** `cleanupPeriodDays` (Default **30 Tage**) löscht alte Transkripte. Bei uns nicht
-  gesetzt → nicht ursächlich für frische Verluste.
+- **Cleanup:** `cleanupPeriodDays` (Default **30 Tage**) löscht alte Transkripte. Bis Anfang
+  Oktober 2026 war der Wert hier nicht gesetzt; der Default hat deshalb alle Verläufe von vor
+  September 2026 entfernt (Hauptkonto bis 1.9., Profile bis 11.9.). Seitdem steht er in der
+  gemeinsamen `settings.json` auf 365. Ein Konto mit eigener `settings.json` ohne den Wert
+  räumt wieder nach 30 Tagen auf.
 
 ## 3. Relevante Flags (Doku-Auszug)
 | Flag | Bedeutung | Relevanz |

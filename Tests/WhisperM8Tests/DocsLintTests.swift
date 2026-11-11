@@ -117,7 +117,7 @@ final class DocsLintTests: XCTestCase {
         // Bekannte Schreiber unter ~/.claude* — ein neuer gehört hier und in die Liste.
         for writer in ["ClaudeThemeWriter", "ClaudeGPTAgentDefinition", "StatuslineInstaller",
                        "ClaudeAccountProfiles+SharedConfig", "claude mcp add-json", "Zum Hauptkonto machen",
-                       "Memory-Migration", ".whisperm8-backup", "Subagent-Retention"] {
+                       "Memory-Migration", ".whisperm8-backup", "Subagent-Retention", "Login-Erneuerung"] {
             XCTAssertTrue(rules.contains(writer), "CLAUDE.md: Ausnahmeliste nennt „\(writer)“ nicht")
         }
     }

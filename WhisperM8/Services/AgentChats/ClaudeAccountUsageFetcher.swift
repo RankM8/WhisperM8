@@ -85,6 +85,13 @@ final class ClaudeTokenRefreshThrottle: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         entries[profile] = Entry(nextAllowedAt: nextAllowedAt, problem: problem)
     }
+
+    /// Vergisst den letzten Versuch — nach einer Login-Erneuerung soll der
+    /// nächste Abruf sofort wieder live gehen.
+    func clear(profile: String) {
+        lock.lock(); defer { lock.unlock() }
+        entries[profile] = nil
+    }
 }
 
 /// Fragt die 5h-/Wochen-Limits eines Account-Profils ab: OAuth-Token aus dem

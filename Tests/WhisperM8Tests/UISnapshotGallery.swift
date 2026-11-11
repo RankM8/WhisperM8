@@ -359,7 +359,8 @@ final class UISnapshotGallery: XCTestCase {
                 ).padding(24))
             },
         ] + Self.notchFixtures + Self.clipboardFixtures() + Self.keyboardLockFixtures() + Self.statisticsFixtures()
-            + Self.sidebarFooterFixtures() + Self.controllerFixtures()
+            + Self.sidebarFooterFixtures() + Self.claudeLoginFixtures() + Self.missingTranscriptFixtures()
+            + Self.controllerFixtures()
     }
 
     // MARK: - Lauf

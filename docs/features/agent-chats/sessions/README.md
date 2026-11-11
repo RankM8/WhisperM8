@@ -190,6 +190,15 @@ an; Hintergrund-Agenten sind ausgenommen, weil sie den App-Neustart
 nicht die externen CLI-Transcripts. Fehlen Transcripts abgeschlossener,
 manuell angelegter Sessions später auf Disk, markiert die Präsenzprüfung
 diese Sessions konservativ als tote Zeiger, statt sie still zu entfernen.
+Die Sidebar unterscheidet dabei zwei Fälle (`AgentTranscriptPresence.hadHistory`):
+Hatte der Chat schon Verlauf (beendeter Turn, Zusammenfassung, aus dem Verlauf
+erzeugter Titel oder übernommene Session), zeigt die Zeile „Verlauf gelöscht“.
+Ohne solchen Beleg wurde nie eine Nachricht gesendet; dann gab es nie eine
+Datei, und die Zeile heißt „Leerer Chat“.
+
+Umsortieren (Drag-and-drop, Hoch/Runter) ändert `lastActivityAt` nicht. Sonst
+gelten nach einem Drag alle verschobenen Chats als frisch und tauchen in der
+„Zuletzt“-Ansicht wieder auf.
 
 ## Schlüsseldateien
 

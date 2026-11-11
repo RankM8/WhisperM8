@@ -66,6 +66,7 @@ enum PreferenceBedienweg {
         Entry(key: "summaryStartupReconciliationEnabled", reason: "Auto-Zusammenfassungen beim Start; Default aus, die Karte erzeugt sie beim Anzeigen."),
         Entry(key: "audioDuckingPendingRestores", reason: "Offene Lautstärke-Rückstellungen des Audio-Duckings, damit nach Absturz oder getrenntem Gerät nichts leise bleibt."),
         Entry(key: "claudeCLILastKnownVersion", reason: "Zuletzt erkannte Claude-Version samt Binary, damit Chats direkt beim App-Start den passenden Hook-Satz bekommen."),
+        Entry(key: "claudeLoginExpiryNotifiedMarkers", reason: "Merker, für welche Login-Fristen schon gewarnt wurde."),
     ]
 
     /// Der UI-Weg existiert, läuft aber über einen Manager oder eine Ansicht außerhalb der
