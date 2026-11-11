@@ -13,6 +13,8 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Dateien, deren sichtbare Texte vollständig über den Katalog laufen.
     /// Neue oder umgestellte Ansichten hier eintragen.
     static let localizedFiles: [String] = [
+        "WhisperM8/Views/Controller/ControllerLabels.swift",
+        "WhisperM8/Views/Settings/Pages/ControllerSettingsPage.swift",
         "WhisperM8/Views/Transcript/TranscriptEmptyStateView.swift",
         "WhisperM8/Views/OnboardingView.swift",
         "WhisperM8/Views/AgentCLIInstallPanel.swift",

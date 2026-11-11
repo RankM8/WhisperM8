@@ -41,6 +41,7 @@ enum PreferenceBedienweg {
         Entry(key: "gptAccountProfilesEnabled", reason: "Notbremse: ein Proxy, ein Konto — ignoriert die GPT-Konto-Profile."),
         Entry(key: "chatGPTTranscriptionEnabled", reason: "Notbremse: blendet den Anbieter ChatGPT-Abo aus allen Pickern aus (gespeicherter Wert bleibt)."),
         Entry(key: "claudePluginEnabled", reason: "Notbremse: kein Claude-Code-Plugin, Skills wieder lose in ~/.claude/skills (die Seite CLI & Skills zeigt den Modus nur an)."),
+        Entry(key: "controllerFeatureEnabled", reason: "Notbremse: nimmt die Controller-Steuerung komplett aus dem Betrieb, ohne Zugriff auf das GameController-Framework (der Schalter in den Einstellungen wirkt dann nicht)."),
         Entry(key: "notchStatusFeatureEnabled", reason: "Notbremse: nimmt die Statusanzeige an der Notch komplett aus dem Betrieb (der Schalter in den Einstellungen wirkt dann nicht)."),
         Entry(key: "agentStatusSoftPulseEnabled", reason: "Notbremse: schaltet den sanften Status-Puls ab (Render-Last)."),
     ]

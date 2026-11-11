@@ -604,6 +604,47 @@ struct AppPreferences {
         nonmutating set { setOptionalString(newValue, forKey: Keys.speechCalloutVoiceIdentifier) }
     }
 
+    // MARK: Controller
+
+    /// Notbremse für die Controller-Steuerung: Aus = kein Zugriff auf das
+    /// GameController-Framework, der Nutzer-Schalter wirkt nicht.
+    /// `defaults write com.whisperm8.app controllerFeatureEnabled -bool NO`
+    var isControllerFeatureEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerFeatureEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerFeatureEnabled) }
+    }
+
+    /// Nutzer-Schalter (Einstellungen › Controller). Standard: aus — ein
+    /// Gamepad, das zum Spielen verbunden ist, soll die App nicht ungefragt
+    /// steuern.
+    var isControllerEnabled: Bool {
+        get { defaults.bool(forKey: Keys.controllerEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerEnabled) }
+    }
+
+    /// Diktat und Zwischenablage-Verlauf auch, wenn ein anderes Programm vorne
+    /// ist. Standard: aus (in fast jedem Spiel ist R2 Gas oder Schuss).
+    var isControllerBackgroundEnabled: Bool {
+        get { defaults.bool(forKey: Keys.controllerBackgroundEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerBackgroundEnabled) }
+    }
+
+    var isControllerHapticsEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerHapticsEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerHapticsEnabled) }
+    }
+
+    var isControllerLightEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerLightEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerLightEnabled) }
+    }
+
+    /// Legende am unteren Rand des Agent-Chats-Fensters. Standard: an.
+    var isControllerLegendEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerLegendEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
+    }
+
     // MARK: Notch-Status
 
     /// Notbremse für die Statusanzeige an der Notch: Aus = kein Fenster, keine
@@ -1033,6 +1074,12 @@ enum PreferenceKeys {
     static let speechCalloutsEnabled = "speechCalloutsEnabled"
     static let speechCalloutsMuted = "speechCalloutsMuted"
     static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"
+    static let controllerFeatureEnabled = "controllerFeatureEnabled"
+    static let controllerEnabled = "controllerEnabled"
+    static let controllerBackgroundEnabled = "controllerBackgroundEnabled"
+    static let controllerHapticsEnabled = "controllerHapticsEnabled"
+    static let controllerLightEnabled = "controllerLightEnabled"
+    static let controllerLegendEnabled = "controllerLegendEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"
