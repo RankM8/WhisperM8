@@ -9,12 +9,15 @@ import Foundation
 /// holt zuerst fällige Entscheidungen nach.
 ///
 /// Verhalten je Taste (fest, ohne Kontext):
-/// - **sofort** (`.press` beim Drücken): Kreuz, Dreieck, L3, R3, Create,
+/// - **sofort** (`.press` beim Drücken): Kreuz, Dreieck, L3, Create,
 ///   Options, Touchpad, R2.
-/// - **Tippen oder Halten**: L2 (0,3 s), Kreis (0,4 s), Viereck (0,6 s).
-///   Viereck wiederholt danach wie eine gehaltene Taste (`.holdRepeat`, erst
-///   alle 60 ms, nach 1 s alle 25 ms); im Chat ist das die Rücktaste, im
-///   Zwischenablage-Verlauf löscht nur `.holdBegan` einen Eintrag.
+/// - **Tippen oder Halten**: L2 (0,3 s), Kreis (0,4 s), Viereck (0,6 s),
+///   R3 (0,6 s). Viereck wiederholt danach wie eine gehaltene Taste
+///   (`.holdRepeat` alle 60 ms, nach 1 s `.holdRepeatLong` alle 150 ms — im
+///   Chat erst Zeichen, dann Wörter, wie beim iPhone); im
+///   Zwischenablage-Verlauf löscht nur `.holdBegan` einen Eintrag. Bewegt
+///   sich der rechte Stick, während R3 noch nicht als gehalten gilt, verfällt
+///   der Druck ohne `.tap` (R3 wird beim Scrollen leicht mitgedrückt).
 /// - **L1/R1**: einzeln `.press`, aber erst nach dem Akkord-Fenster oder beim
 ///   früheren Loslassen. Beide zusammen ergeben den Pause-Akkord.
 /// - **Steuerkreuz und linker Stick**: `.move` mit Wiederholung.
@@ -25,12 +28,16 @@ struct ControllerGestureRecognizer: Sendable {
         var l2HoldThreshold: TimeInterval = 0.3
         var circleHoldThreshold: TimeInterval = 0.4
         var squareHoldThreshold: TimeInterval = 0.6
+        var r3HoldThreshold: TimeInterval = 0.6
         /// Tasten, die nach Beginn des Haltens wiederholen (`.holdRepeat`).
         var holdRepeatButtons: Set<ControllerButton> = [.square]
         var holdRepeatInterval: TimeInterval = 0.06
-        /// So lange nach Beginn des Haltens wird schneller wiederholt.
-        var holdRepeatAccelerateAfter: TimeInterval = 1.0
-        var holdRepeatFastInterval: TimeInterval = 0.025
+        /// So lange nach Beginn des Haltens kommt `.holdRepeatLong` statt
+        /// `.holdRepeat`, im langsameren Takt.
+        var holdRepeatLongAfter: TimeInterval = 1.0
+        var holdRepeatLongInterval: TimeInterval = 0.15
+        /// Tasten, deren Druck verfällt, sobald der rechte Stick scrollt.
+        var scrollCancelsHold: Set<ControllerButton> = [.r3]
         /// So knapp nacheinander müssen L1 und R1 kommen, damit es ein Akkord ist.
         var chordWindow: TimeInterval = 0.15
         /// So lange müssen beide gemeinsam gehalten werden.
@@ -58,6 +65,7 @@ struct ControllerGestureRecognizer: Sendable {
             case .l2: return l2HoldThreshold
             case .circle: return circleHoldThreshold
             case .square: return squareHoldThreshold
+            case .r3: return r3HoldThreshold
             default: return nil
             }
         }
@@ -132,6 +140,7 @@ struct ControllerGestureRecognizer: Sendable {
             gestures += leftStick(x: x, y: y, at: time)
         case let .stick(.right, _, y):
             rightStick(y: y, at: time)
+            gestures += cancelHoldsWhileScrolling()
         }
         return gestures
     }
@@ -247,6 +256,8 @@ struct ControllerGestureRecognizer: Sendable {
                 return bumperDown(button, at: time)
             }
             if let threshold = config.holdThreshold(for: button) {
+                // Wer gerade scrollt, drückt R3 eher aus Versehen.
+                if config.scrollCancelsHold.contains(button), scroll != nil { return [] }
                 holds[button] = HoldState(pressedAt: time)
                 return [.holdPending(button, duration: threshold)]
             }
@@ -266,6 +277,19 @@ struct ControllerGestureRecognizer: Sendable {
             return hold.began ? [.holdEnded(button)] : [.holdCancelled(button), .tap(button)]
         }
         return []
+    }
+
+    /// Scrollt der rechte Stick, verfallen Drücke auf R3, die noch nicht als
+    /// gehalten gelten: kein Halten, beim Loslassen auch kein Tippen.
+    mutating func cancelHoldsWhileScrolling() -> [ControllerGesture] {
+        guard scroll != nil else { return [] }
+        var gestures: [ControllerGesture] = []
+        for button in config.scrollCancelsHold.sorted(by: { $0.rawValue < $1.rawValue }) {
+            guard let hold = holds[button], !hold.began else { continue }
+            holds[button] = nil
+            gestures.append(.holdCancelled(button))
+        }
+        return gestures
     }
 
     // MARK: - L1 / R1 und der Pause-Akkord

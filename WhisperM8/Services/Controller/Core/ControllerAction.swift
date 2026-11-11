@@ -3,6 +3,10 @@ import Foundation
 /// Tasten, die als Bytes ins Terminal des Ziel-Chats gehen.
 enum ControllerChatKey: String, CaseIterable, Sendable {
     case enter, escape, up, down, left, right, backspace
+    /// Dreieck: ein Leerzeichen.
+    case space
+    /// Viereck lange gehalten: ganze Wörter löschen.
+    case deleteWord
 
     init(_ direction: ControllerDirection) {
         switch direction {
@@ -55,7 +59,8 @@ enum ControllerAction: Equatable, Sendable {
     case chatInterrupt
     /// Gestoppten Chat wieder starten — wie der Knopf „Starten“ im Kopf.
     case chatResume
-    case nextWaitingChat
+    /// R3 halten: ganze Eingabe leeren (nicht in einer Rückfrage).
+    case chatClearInput
     case lastChat
     /// Im Raster von Kachel zu Kachel; am linken Rand macht der Ausführer
     /// daraus den Wechsel in die Liste.

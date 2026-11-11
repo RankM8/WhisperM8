@@ -64,8 +64,6 @@ extension AgentChatsView {
             return changingSelection { selectAdjacentTab(-1) }
         case .nextTab:
             return changingSelection { selectAdjacentTab(+1) }
-        case .nextWaitingChat:
-            return selectNextWaitingChat()
         case .lastChat:
             let sessions = workspace.sessions
             guard let target = commandState.history.lastChat(isAvailable: { id in

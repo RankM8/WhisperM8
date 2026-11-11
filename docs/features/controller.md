@@ -26,7 +26,7 @@ während die Steuerung aus ist, erscheint einmal eine Mitteilung.
 |---|---|---|
 | Controller-Steuerung | aus | liest Gamepads, zeigt Legende und Markierung |
 | Legende am unteren Rand | an | Leiste mit Ziel und Tastenbelegung |
-| Vibration | an | Impulse bei Aufnahme und wartenden Chats |
+| Vibration | an | Impulse bei Aufnahme, wartenden Chats und geleerter Eingabe |
 | Lichtleiste | an | Farbe nach Zustand |
 | Auch wenn ein anderes Programm vorne ist | aus | Diktat und Verlauf überall; in Spielen ist R2 meist Gas oder Schuss |
 
@@ -46,7 +46,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein — ein Chat unter einem Workspace, der nicht sichtbar ist, öffnet diesen Workspace mit dem Chat als Kachel-Fokus; im Chat Enter; gestoppter Chat: starten |
 | Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
-| Dreieck | nächster Chat, der wartet (wie ⌃⌥Tab); aus anderen Fenstern: Agent Chats nach vorn |
+| Dreieck | im Chat ein Leerzeichen (jeder lebende Chat, kein Wiederholen beim Halten); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
 | L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
 | Steuerkreuz | Pfeiltasten in den Chat nur, solange der Agent eine Rückfrage stellt; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im Raster Kachel zu Kachel); in der Liste wie der Stick |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
@@ -55,11 +55,11 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 
 | Taste | Wirkung |
 |---|---|
-| Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie eine gehaltene Taste (nach 0,6 s alle 60 ms, nach 1 s alle 25 ms); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
+| Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
 | Touchpad-Klick | Zwischenablage-Verlauf auf und zu |
 | L3 | Kachel groß / zurück zum Raster |
-| R3 | gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste); sonst ohne Wirkung, auch ohne Vibration |
+| R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — nicht während einer Rückfrage |
 | Options | das eine Menü, siehe unten |
 | L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt. Im Raster öffnet halten die Workspace-Auswahl, siehe unten |
 | L2 halten, dann R2 | zum markierten Chat wechseln und diktieren |
@@ -137,9 +137,18 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Auswahl, Menü und Liste.
   Ein per Tastatur geöffneter Ctrl+Tab-Umschalter schließt erst, wenn der Controller wirklich etwas
   ausführt.
-- Viereck schickt nur die Rücktaste (0x7F), nie Ctrl+C — Ctrl+C hätte eine laufende Antwort abgebrochen.
+- Viereck schickt nur die Rücktaste (0x7F) bzw. Ctrl+W, nie Ctrl+C — Ctrl+C hätte eine laufende
+  Antwort abgebrochen. Wort löschen ist bewusst Ctrl+W und nicht Option+Rücktaste (ESC DEL): Ein
+  einzelnes ESC bricht einen arbeitenden Chat ab. Belegt: Claude Code („Delete back to previous
+  whitespace“, also ganze Pfade auf einmal), Codex (`delete_backward_word` in
+  `codex-rs/tui/src/keymap.rs`), zsh und bash (`backward-kill-word`).
+- Eingabe leeren (R3 halten) schickt Ctrl+E und dann 128 × Ctrl+U in Stößen alle 15 ms, nie Ctrl+C
+  oder ESC. Ctrl+U löscht bis zum Zeilenanfang und am Zeilenanfang den Umbruch davor (Claude Code:
+  „Repeat to clear across lines“; Codex: `kill_line_start`) — reicht für 64 Zeilen. Text unter einer
+  Zeile, in die der Cursor per Tastatur bewegt wurde, bleibt stehen. In einer Rückfrage wird nicht
+  geleert: Dort wählt man aus. Scrollt der rechte Stick, verfällt ein R3-Druck ganz.
 - Befehle und „Weiter“ aus dem Menü werden nie an einen vermuteten Entwurf gehängt.
-- R3 auf einem lebenden Chat tut nichts (er wird beim Scrollen leicht gedrückt).
+- R3 getippt auf einem lebenden Chat tut nichts (er wird beim Scrollen leicht gedrückt).
 - Schließen und Archivieren laufen über dieselben Funktionen wie die Seitenleiste, mit ihren Rückfragen.
 - Return geht nie an fremde Programme: Kreuz während der Aufnahme sendet nur bei einem Chat als Ziel.
 - Leeres Diktat in einen Chat: nichts wird kopiert, geschrieben oder gesendet.

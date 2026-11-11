@@ -9,8 +9,6 @@ enum AgentChatsCommand: Equatable {
     /// Benachbarter Tab in der sichtbaren Reihenfolge, mit Umlauf (wie ⌘⌥←/→).
     case previousTab
     case nextTab
-    /// Chat, der am längsten auf Eingabe wartet (wie ⌃⌥Tab).
-    case nextWaitingChat
     /// Zurück zum zuvor ausgewählten Chat.
     case lastChat
     /// Kachel-Fokus im sichtbaren Raster (wie ⌃⌘-Pfeile).

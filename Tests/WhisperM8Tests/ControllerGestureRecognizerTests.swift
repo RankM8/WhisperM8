@@ -26,7 +26,8 @@ final class ControllerGestureRecognizerTests: XCTestCase {
     // MARK: - Sofort-Tasten
 
     func testImmediateButtonsFireOnPressOnly() {
-        for button in [ControllerButton.cross, .triangle, .l3, .r3, .create, .options, .touchpad] {
+        // R3 ist seit Runde 3 Tippen-oder-Halten (testR3IsTapOrHold).
+        for button in [ControllerButton.cross, .triangle, .l3, .create, .options, .touchpad] {
             XCTAssertEqual(down(button, at: 1), [.press(button)], "\(button)")
             XCTAssertEqual(up(button, at: 1.1), [], "\(button)")
         }
@@ -111,20 +112,22 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertEqual(recognizer.tick(at: 1.6), [.holdBegan(.square)])
     }
 
-    /// Runde 2: Viereck gehalten wiederholt wie eine Taste — erst alle 60 ms,
-    /// nach 1 s Halten alle 25 ms; Loslassen beendet die Wiederholung.
-    func testSquareHoldRepeatsAndAccelerates() {
+    /// Viereck gehalten wiederholt wie eine Taste — erst `.holdRepeat` alle
+    /// 60 ms, nach 1 s Halten `.holdRepeatLong` alle 150 ms (Runde 3: im Chat
+    /// dann ganze Wörter); Loslassen beendet die Wiederholung.
+    func testSquareHoldRepeatsThenSwitchesToLongRepeat() {
         _ = down(.square, at: 0)
         XCTAssertEqual(recognizer.tick(at: 0.6), [.holdBegan(.square)])
         XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.66, accuracy: 1e-9)
         XCTAssertEqual(recognizer.tick(at: 0.65), [])
         XCTAssertEqual(recognizer.tick(at: 0.66), [.holdRepeat(.square)])
         XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.72, accuracy: 1e-9)
-        // Nach 1 s Halten (ab 1,6 s) der schnelle Takt.
-        _ = recognizer.tick(at: 1.62)
-        XCTAssertEqual(recognizer.nextDeadline ?? -1, 1.645, accuracy: 1e-9)
-        XCTAssertEqual(recognizer.tick(at: 1.645), [.holdRepeat(.square)])
-        XCTAssertEqual(up(.square, at: 1.66), [.holdEnded(.square)])
+        // Nach 1 s Halten (ab 1,6 s) der lange Takt.
+        XCTAssertEqual(recognizer.tick(at: 1.62), [.holdRepeatLong(.square)])
+        XCTAssertEqual(recognizer.nextDeadline ?? -1, 1.77, accuracy: 1e-9)
+        XCTAssertEqual(recognizer.tick(at: 1.7), [])
+        XCTAssertEqual(recognizer.tick(at: 1.77), [.holdRepeatLong(.square)])
+        XCTAssertEqual(up(.square, at: 1.8), [.holdEnded(.square)])
         XCTAssertEqual(recognizer.tick(at: 2), [])
         XCTAssertNil(recognizer.nextDeadline)
     }
@@ -132,7 +135,31 @@ final class ControllerGestureRecognizerTests: XCTestCase {
     func testSquareRepeatLateTickRepeatsOnlyOnce() {
         _ = down(.square, at: 0)
         _ = recognizer.tick(at: 0.6)
-        XCTAssertEqual(recognizer.tick(at: 3), [.holdRepeat(.square)], "kein Schwall nachgeholter Zeichen")
+        XCTAssertEqual(recognizer.tick(at: 3), [.holdRepeatLong(.square)], "kein Schwall nachgeholter Wörter")
+    }
+
+    /// Runde 3: R3 ist Tippen-oder-Halten (0,6 s), ohne Wiederholung.
+    func testR3IsTapOrHold() {
+        XCTAssertEqual(down(.r3, at: 0), [.holdPending(.r3, duration: 0.6)])
+        XCTAssertEqual(up(.r3, at: 0.2), [.holdCancelled(.r3), .tap(.r3)])
+        _ = down(.r3, at: 1)
+        XCTAssertEqual(recognizer.tick(at: 1.6), [.holdBegan(.r3)])
+        XCTAssertEqual(recognizer.tick(at: 2.5), [], "keine Wiederholung")
+        XCTAssertEqual(up(.r3, at: 3), [.holdEnded(.r3)])
+    }
+
+    /// Runde 3: Scrollt der rechte Stick, verfällt ein R3-Druck — kein Leeren,
+    /// beim Loslassen auch kein Tippen. Ein schon begonnenes Halten bleibt.
+    func testScrollingCancelsPendingR3() {
+        _ = down(.r3, at: 0)
+        XCTAssertEqual(recognizer.handle(.stick(.right, x: 0, y: 0.9), at: 0.1), [.holdCancelled(.r3)])
+        XCTAssertEqual(recognizer.tick(at: 0.7).filter { if case .scroll = $0 { return false }; return true }, [])
+        XCTAssertEqual(up(.r3, at: 0.8), [])
+        _ = recognizer.handle(.stick(.right, x: 0, y: 0), at: 0.9)
+        // Während des Scrollens gedrückt: verfällt sofort.
+        _ = recognizer.handle(.stick(.right, x: 0, y: 0.9), at: 1)
+        XCTAssertEqual(down(.r3, at: 1.1), [])
+        XCTAssertEqual(up(.r3, at: 1.2), [])
     }
 
     /// Nur Viereck wiederholt; Kreis und L2 bleiben einfache Halte-Tasten.

@@ -36,6 +36,10 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller(for: sessionID)?.sendKey(key) ?? false
     }
 
+    func clearInput(in sessionID: UUID) -> Bool {
+        controller(for: sessionID)?.clearInputFromController() ?? false
+    }
+
     func scroll(lines: Int, in sessionID: UUID) {
         controller(for: sessionID)?.scrollHistory(lines: lines)
     }

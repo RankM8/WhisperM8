@@ -108,28 +108,34 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.holdRepeat(.square), chat(.idle) { $0.hasTerminal = false }))
     }
 
-    /// Ende zu Ende: Viereck halten löscht fortlaufend, schneller nach 1 s,
-    /// und hört beim Loslassen auf.
+    /// Ende zu Ende: Viereck halten löscht erst Zeichen, nach 1 s ganze
+    /// Wörter (wie beim iPhone), und hört beim Loslassen auf.
     func testSquareHoldKeepsDeletingThroughRecognizer() {
         var recognizer = ControllerGestureRecognizer()
         let context = chat(.working)
-        var deletes = 0
+        var chars = 0, words = 0
         func count(_ gestures: [ControllerGesture]) {
-            deletes += gestures.compactMap { action($0, context) }.filter { $0 == .chatKey(.backspace) }.count
+            for action in gestures.compactMap({ action($0, context) }) {
+                if action == .chatKey(.backspace) { chars += 1 }
+                if action == .chatKey(.deleteWord) { words += 1 }
+            }
         }
         count(recognizer.handle(.button(.square, pressed: true), at: 0))
         var time = 0.0
-        while time < 2.0 {
+        while time < 2.5 {
             time += 0.005
             count(recognizer.tick(at: time))
         }
-        // 0,6 s Schwelle, dann 1 s lang alle 60 ms (17), danach alle 25 ms (~16).
-        XCTAssertGreaterThan(deletes, 25)
-        XCTAssertLessThan(deletes, 40)
-        count(recognizer.handle(.button(.square, pressed: false), at: 2.0))
-        let afterRelease = deletes
-        count(recognizer.tick(at: 2.5))
-        XCTAssertEqual(deletes, afterRelease, "nach dem Loslassen kein Zeichen mehr")
+        // 0,6 s Schwelle (1 Zeichen), 1 s lang alle 60 ms (~17 Zeichen),
+        // danach alle 150 ms ein Wort (~6 in 0,9 s).
+        XCTAssertGreaterThan(chars, 14)
+        XCTAssertLessThan(chars, 20)
+        XCTAssertGreaterThan(words, 4)
+        XCTAssertLessThan(words, 8)
+        count(recognizer.handle(.button(.square, pressed: false), at: 2.5))
+        let afterRelease = chars + words
+        count(recognizer.tick(at: 3))
+        XCTAssertEqual(chars + words, afterRelease, "nach dem Loslassen nichts mehr")
     }
 
     // MARK: - Steuerkreuz (Review-Befund 1)
@@ -189,7 +195,7 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1),
                            "Steuerkreuz navigiert wie der Stick, keine Pfeile")
             XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), context), .moveInContent(.left))
-            XCTAssertEqual(action(.press(.triangle), context), .nextWaitingChat)
+            XCTAssertNil(action(.press(.triangle), context), "kein Leerzeichen in einen gestoppten Chat")
             XCTAssertEqual(action(.press(.r1), context), .adjacentChat(step: 1))
             XCTAssertEqual(action(.tap(.l2), context), .lastChat)
             XCTAssertEqual(action(.press(.touchpad), context), .clipboardToggle)
@@ -216,17 +222,58 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.holdEnded(.l2), context))
         XCTAssertEqual(action(.press(.r2), context), .dictationToggle)
         XCTAssertEqual(action(.scroll(lines: -2), context), .scroll(lines: -2))
-        XCTAssertNil(action(.press(.r3), context), "R3 auf einem lebenden Chat: nichts, auch keine Vibration")
+        XCTAssertNil(action(.tap(.r3), context), "R3 auf einem lebenden Chat: nichts, auch keine Vibration")
     }
 
-    /// Runde 2: R3 startet einen gestoppten Chat, in der Liste die markierte Zeile.
+    /// Runde 2: R3 (getippt) startet einen gestoppten Chat, in der Liste die
+    /// markierte Zeile.
     func testR3StartsStoppedChat() {
-        XCTAssertEqual(action(.press(.r3), chat(.ended)), .chatResume)
-        XCTAssertEqual(action(.press(.r3), chat(.idle) { $0.hasTerminal = false }), .chatResume)
+        XCTAssertEqual(action(.tap(.r3), chat(.ended)), .chatResume)
+        XCTAssertEqual(action(.tap(.r3), chat(.idle) { $0.hasTerminal = false }), .chatResume)
         for status in [ControllerChatState.Status.idle, .working, .awaitingInput, .unknown] {
-            XCTAssertNil(action(.press(.r3), chat(status)), "\(status)")
+            XCTAssertNil(action(.tap(.r3), chat(status)), "\(status)")
         }
-        XCTAssertEqual(action(.press(.r3), .list), .listStartRow)
+        XCTAssertEqual(action(.tap(.r3), .list), .listStartRow)
+        XCTAssertNil(action(.holdBegan(.r3), .list), "in der Liste leert R3 nichts")
+    }
+
+    // MARK: - Schreibtasten (Runde 3)
+
+    /// Dreieck = Leerzeichen in jedem lebenden Chat, auch in Rückfragen (wie
+    /// die Rücktaste); gestoppt nichts. Kein Wiederholen beim Halten.
+    func testTriangleTypesSpaceInEveryLiveChat() {
+        for status in [ControllerChatState.Status.idle, .awaitingInput, .working, .unknown] {
+            XCTAssertEqual(action(.press(.triangle), chat(status)), .chatKey(.space), "\(status)")
+        }
+        XCTAssertNil(action(.press(.triangle), chat(.ended)))
+        XCTAssertNil(action(.press(.triangle), chat(.idle) { $0.hasTerminal = false }))
+        XCTAssertEqual(action(.press(.triangle), .clipboardPanel(ControllerClipboardState(canCorrect: true))),
+                       .clipboard(.correctAndPaste), "im Verlauf unverändert")
+    }
+
+    /// Viereck lange gehalten löscht ganze Wörter (Ctrl+W).
+    func testSquareLongHoldDeletesWords() {
+        for status in [ControllerChatState.Status.idle, .awaitingInput, .working] {
+            XCTAssertEqual(action(.holdRepeatLong(.square), chat(status)), .chatKey(.deleteWord), "\(status)")
+        }
+        XCTAssertNil(action(.holdRepeatLong(.square), chat(.ended)))
+        XCTAssertNil(action(.holdRepeatLong(.square), .list))
+        XCTAssertNil(action(.holdRepeatLong(.square), .clipboardPanel(ControllerClipboardState())))
+    }
+
+    /// R3 halten leert die Eingabe — in lebenden Chats, nicht bei einer
+    /// Rückfrage (dort wählt man aus), nicht bei gestopptem Chat.
+    func testR3HoldClearsInputOutsideQuestions() {
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertEqual(action(.holdBegan(.r3), chat(status)), .chatClearInput, "\(status)")
+            XCTAssertEqual(action(.holdPending(.r3, duration: 0.6), chat(status)), .holdProgress(.r3, duration: 0.6))
+            XCTAssertEqual(action(.holdCancelled(.r3), chat(status)), .holdProgressCancelled(.r3))
+        }
+        for context in [chat(.awaitingInput), chat(.ended), chat(.idle) { $0.hasTerminal = false }] {
+            XCTAssertNil(action(.holdBegan(.r3), context), "\(context)")
+            XCTAssertNil(action(.holdPending(.r3, duration: 0.6), context), "kein Ring ohne Wirkung")
+        }
+        XCTAssertNil(action(.holdBegan(.r3), .recording(phase: .recording, targetIsChat: true)))
     }
 
     /// Runde 2: Viereck halten in der Liste schließt die Zeile wie ihr „−“/„×“.
@@ -365,7 +412,7 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.press(.r1), context), .bridgeKey(.tab))
             XCTAssertEqual(action(.press(.r2), context), .dictationToggle)
         }
-        XCTAssertEqual(action(.press(.triangle), .otherWindow), .nextWaitingChat)
+        XCTAssertEqual(action(.press(.triangle), .otherWindow), .bringAppToFront)
         XCTAssertNil(action(.press(.triangle), .modal), "unter einem Dialog nicht wegspringen")
         // Runde 2: Im Dialog (Projekt-Auswahl) bewegt auch der linke Stick
         // hoch/runter, mit Wiederholung; in anderen Fenstern nicht.
@@ -394,7 +441,7 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.press(.l1), .list), .listFilter(step: -1))
         XCTAssertEqual(action(.press(.r1), .list), .listFilter(step: 1))
         XCTAssertEqual(action(.press(.create), .list), .newChat)
-        XCTAssertEqual(action(.press(.triangle), .list), .nextWaitingChat)
+        XCTAssertNil(action(.press(.triangle), .list), "Runde 3: kein Sprung zum wartenden Chat mehr")
         XCTAssertEqual(action(.press(.r2), .list), .dictationToggle)
         XCTAssertEqual(action(.press(.touchpad), .list), .clipboardToggle)
         XCTAssertEqual(action(.press(.options), .list), .menuToggle)

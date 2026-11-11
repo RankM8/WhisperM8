@@ -841,7 +841,7 @@ künstliche Eingaben über `whisperm8 debug controller … --window <id> --front
 | Aufnahme läuft schon (Tastatur) | `ControllerActionDispatcherTests.testSecondToggleStopsWithoutSending`; zweite Aufnahme verhindert der Start-Guard des Coordinators |
 | Schnellaktion läuft | `ControllerBindingResolverTests.testQuickAction` |
 | Viereck ohne erkannten Entwurf | `ControllerBindingResolverTests.testSquareClearsOnlyClaudeIdleDraft` |
-| Kein wartender Chat bei Dreieck | `ControllerActionDispatcherTests.testFailedJumpGivesRejectFeedback` |
+| Kein wartender Chat bei Dreieck | entfallen in Runde 3 (Dreieck = Leerzeichen) |
 | Chat beendet oder nur Verlauf | `ControllerBindingResolverTests.testEndedChatKeepsNavigationButNoTerminalKeys`, `ControllerActionDispatcherTests.testChatWithoutTerminalCountsAsEnded` |
 | Kein Chat offen | `ControllerContextResolverTests.testContentWithoutChatFallsBackToList`, `ControllerBindingResolverTests.testList` |
 | Zwei Controller | `GameControllerInputSource.deliver` löst beim Quellenwechsel alles Gehaltene — Handtest |
@@ -956,6 +956,35 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
    über `activateWorkspaceFromSidebar` wie beim Kopf der Seitenleiste.
 5. Einzelansicht: L2 bleibt die Chat-Auswahl.
 6. Tastatur unverändert (Ctrl+Tab zeigt im Raster die Chats).
+
+**Zusatz: Schreibtasten im Chat** (vom Nutzer bestätigt, alle fünf Punkte):
+
+1. **Dreieck = Leerzeichen** (0x20, `TerminalControlKey.space`, Tastencode 49) in jedem lebenden Chat,
+   auch in Rückfragen (wie die Rücktaste); Halten wiederholt nicht. Der Entwurfs-Tracker wertet es als
+   Text, und es zählt als Eingabe per Controller (Kreuz bei arbeitendem Chat, Befund 3). Hinweis: In
+   einer Rückfrage mit Mehrfachauswahl schaltet Leerzeichen in Claude Code die markierte Option um.
+2. **„Nächster wartender Chat“ entfällt** am Controller samt Aktion, Legende, Einstellungsseite und
+   `AgentChatsCommand.nextWaitingChat` (die Tastatur ⌃⌥Tab ruft `selectNextWaitingChat` direkt). Aus
+   anderen Fenstern holt Dreieck Agent Chats weiter nach vorn (jetzt direkt `bringAppToFront`).
+3. Im Zwischenablage-Verlauf bleibt Dreieck „Korrigieren und einfügen“.
+4. **Viereck halten wie beim iPhone:** ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde
+   `ControllerGesture.holdRepeatLong` alle 150 ms = Wort löschen mit Ctrl+W (0x17). Belegt in Claude
+   Code (interactive mode: „Delete back to previous whitespace“ — löscht also bis zum Leerzeichen, ein
+   Pfad fällt auf einmal) und Codex (Standard-Belegung von `delete_backward_word` in
+   `codex-rs/tui/src/keymap.rs`, dort auch Alt+Backspace). Option+Rücktaste (ESC DEL) bewusst nicht:
+   ESC-Präfix, und bei Claude braucht es „Option als Meta“. Kein Fallback nötig; in Shell-Chats ist
+   Ctrl+W `backward-kill-word`. Die alte Beschleunigung auf 25 ms entfällt.
+5. **R3 halten (0,6 s) leert die ganze Eingabe** mit kurzer Vibration (`inputCleared`). R3 ist dafür
+   Tippen-oder-Halten geworden; Tippen startet weiter einen gestoppten Chat. Sequenz: Ctrl+E (ans
+   Zeilenende, beide CLIs) und 128 × Ctrl+U in acht Stößen alle 15 ms über den Main-Run-Loop (nichts
+   blockiert). Ctrl+U ist in Claude Code „Delete from cursor to line start … Repeat to clear across
+   lines in multiline input“, in Codex `kill_line_start`, das am Zeilenanfang den Umbruch davor
+   entfernt — zwei Drücke je Zeile, also 64 Zeilen. Ctrl+S (Stash) wäre ein Schritt, holt aber bei
+   leerem Feld den alten Stash zurück; Doppel-ESC und Ctrl+C sind ausgeschlossen. Nicht bei
+   `awaitingInput` (die Auswahl einer Rückfrage bleibt), nicht bei gestopptem Chat. Weil R3 beim
+   Scrollen leicht mitgedrückt wird, verfällt ein R3-Druck, sobald der rechte Stick scrollt (kein
+   Leeren, auch kein Tippen). Grenze: Steht der Cursor (per Tastatur bewegt) weiter oben in einem
+   mehrzeiligen Entwurf, bleibt der Text darunter stehen.
 
 **Befunde aus einem unabhängigen Review von 0bb54fb5** (umgesetzt):
 

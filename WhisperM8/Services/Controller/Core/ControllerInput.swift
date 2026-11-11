@@ -64,6 +64,9 @@ enum ControllerGesture: Hashable, Sendable {
     /// Taste wird weiter gehalten: Wiederholung wie bei einer gehaltenen
     /// Tastatur-Taste (nur Tasten aus `Config.holdRepeatButtons`).
     case holdRepeat(ControllerButton)
+    /// Lange gehalten (nach `Config.holdRepeatLongAfter`): Wiederholung im
+    /// zweiten, langsameren Takt — im Chat löscht Viereck dann ganze Wörter.
+    case holdRepeatLong(ControllerButton)
     case holdEnded(ControllerButton)
     /// Vor Ablauf der Halte-Zeit losgelassen (zusammen mit `.tap`) oder durch `reset` gelöst.
     case holdCancelled(ControllerButton)

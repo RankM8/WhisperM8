@@ -10,6 +10,20 @@ import AppKit
 /// `chats send` bleiben die einzigen Wege von außen.
 enum TerminalControlKey: String, CaseIterable, Sendable {
     case enter, escape, up, down, left, right, tab, backTab, backspace
+    /// Leerzeichen (Dreieck am Controller).
+    case space
+    /// Wort zurück löschen: Ctrl+W. Belegt in Claude Code („Delete back to
+    /// previous whitespace“, interactive mode) und Codex (Standard für
+    /// `delete_backward_word`, `codex-rs/tui/src/keymap.rs`); in zsh und bash
+    /// `backward-kill-word`. Bewusst nicht Meta+Rücktaste (ESC DEL): Ein
+    /// einzelnes ESC bricht einen arbeitenden Chat ab.
+    case deleteWord
+    /// Zeile bis zum Cursor löschen: Ctrl+U. Claude Code: „Delete from cursor to
+    /// line start … Repeat to clear across lines in multiline input“; Codex:
+    /// `kill_line_start`, am Zeilenanfang wird der Umbruch davor entfernt.
+    case killLineStart
+    /// Ans Zeilenende: Ctrl+E (Claude Code und Codex, „move line end“).
+    case lineEnd
 
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
@@ -21,7 +35,10 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         switch key {
         case .up, .down, .left, .right: return status == .awaitingInput
         case .tab, .backTab: return status != .awaitingInput
-        case .enter, .escape, .backspace: return true
+        case .enter, .escape, .backspace, .space, .deleteWord: return true
+        // Leeren nie in einer Rückfrage: Dort wählt man aus, das Eingabefeld
+        // ist nicht gemeint.
+        case .killLineStart, .lineEnd: return status != .awaitingInput
         }
     }
 
@@ -44,6 +61,10 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .tab: return [0x09]
         case .backTab: return [0x1B, 0x5B, 0x5A]              // ESC [ Z
         case .backspace: return [0x7F]                        // DEL, wie die Rücktaste
+        case .space: return [0x20]
+        case .deleteWord: return [0x17]                       // Ctrl+W
+        case .killLineStart: return [0x15]                    // Ctrl+U
+        case .lineEnd: return [0x05]                          // Ctrl+E
         }
     }
 
@@ -59,12 +80,33 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .right: return 124
         case .tab, .backTab: return 48
         case .backspace: return 51
+        case .space: return 49
+        case .deleteWord: return 13                           // W
+        case .killLineStart: return 32                        // U
+        case .lineEnd: return 14                              // E
         }
     }
 
     var modifiers: NSEvent.ModifierFlags {
-        self == .backTab ? .shift : []
+        switch self {
+        case .backTab: return .shift
+        case .deleteWord, .killLineStart, .lineEnd: return .control
+        default: return []
+        }
     }
+
+    /// Ganze Eingabe leeren (R3 halten): einmal ans Zeilenende, dann Ctrl+U in
+    /// Stößen. Jedes Ctrl+U löscht eine Zeile bis zum Anfang oder, am
+    /// Zeilenanfang, den Umbruch davor — zwei je Zeile. 8 × 16 = 128 reichen
+    /// für 64 Zeilen; mehr hat ein diktierter oder getippter Entwurf kaum.
+    /// Überzählige Drücke im leeren Feld tun nichts (in Claudes Shell-Modus
+    /// verlassen sie ihn, wie Rücktaste im leeren Feld). Text unterhalb einer
+    /// Zeile, in die der Cursor bewegt wurde, bleibt stehen — per Controller
+    /// steht der Cursor nach Tippen und Diktat immer am Ende.
+    static let clearInputBursts: [[TerminalControlKey]] =
+        [[.lineEnd] + Array(repeating: .killLineStart, count: 16)]
+        + Array(repeating: Array(repeating: .killLineStart, count: 16), count: 7)
+
 }
 
 /// Scroll-Schritte für den Verlauf eines Terminals, unabhängig vom Puffer.

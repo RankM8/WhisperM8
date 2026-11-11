@@ -125,7 +125,7 @@ final class ControllerManagerTests: XCTestCase {
         enable()
         manager.isDryRun = true
         let resolutions = await send([.button(.triangle, pressed: true)], expecting: 1)
-        XCTAssertEqual(resolutions.first?.action, .nextWaitingChat)
+        XCTAssertEqual(resolutions.first?.action, .chatKey(.space), "Runde 3: Dreieck = Leerzeichen")
         XCTAssertEqual(resolutions.first?.executed, false)
         XCTAssertEqual(performer.performed, [])
     }

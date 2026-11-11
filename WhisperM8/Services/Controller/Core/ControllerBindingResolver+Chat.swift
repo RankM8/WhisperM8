@@ -16,14 +16,19 @@ extension ControllerBindingResolver {
         // L1/R1 folgen der Liste links, nicht den Tabs (die Tastatur bleibt bei den Tabs).
         case .press(.l1): return .adjacentChat(step: -1)
         case .press(.r1): return .adjacentChat(step: 1)
-        case .press(.triangle): return .nextWaitingChat
+        // Dreieck: Leerzeichen (Runde 3; „nächster wartender Chat“ entfällt).
+        case .press(.triangle): return state.acceptsKeys ? .chatKey(.space) : nil
         // Der Ausführer entscheidet: Kachel groß oder zurück zum Raster.
         case .press(.l3): return .toggleMaximize
         case .press(.create): return .newChat
         case .press(.options): return .menuToggle
-        // R3 startet einen gestoppten Chat. Auf einem lebenden nichts, auch
-        // keine Vibration: beim Scrollen drückt man ihn leicht aus Versehen.
-        case .press(.r3): return state.acceptsKeys ? nil : .chatResume
+        // R3 tippen startet einen gestoppten Chat. Auf einem lebenden nichts,
+        // auch keine Vibration: beim Scrollen drückt man ihn leicht aus
+        // Versehen. R3 halten leert die ganze Eingabe (nicht in Rückfragen).
+        case .tap(.r3): return state.acceptsKeys ? nil : .chatResume
+        case .holdBegan(.r3): return clearAllowed(state) ? .chatClearInput : nil
+        case let .holdPending(.r3, duration): return clearAllowed(state) ? .holdProgress(.r3, duration: duration) : nil
+        case .holdCancelled(.r3): return clearAllowed(state) ? .holdProgressCancelled(.r3) : nil
         case .press(.touchpad): return .clipboardToggle
         case .press(.r2): return .dictationToggle
         case .tap(.l2): return .lastChat
@@ -59,13 +64,22 @@ extension ControllerBindingResolver {
         case .holdCancelled(.circle):
             return interruptAllowed(state) ? .holdProgressCancelled(.circle) : nil
         // Rücktaste: tippen löscht ein Zeichen, halten löscht weiter wie eine
-        // gehaltene Taste. Harmlos in jedem lebenden Zustand.
+        // gehaltene Taste, nach 1 s ganze Wörter (wie beim iPhone). Harmlos in
+        // jedem lebenden Zustand.
         case .tap(.square), .holdBegan(.square), .holdRepeat(.square):
             return state.acceptsKeys ? .chatKey(.backspace) : nil
+        case .holdRepeatLong(.square):
+            return state.acceptsKeys ? .chatKey(.deleteWord) : nil
 
         default:
             return nil
         }
+    }
+
+    /// Ganze Eingabe leeren: lebender Chat, keine Rückfrage — dort wählt man
+    /// aus, und Leeren könnte die Auswahl zerstören.
+    static func clearAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.status != .awaitingInput
     }
 
     /// Pfeiltasten ins Terminal nur bei offener Rückfrage eines lebenden Chats.

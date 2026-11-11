@@ -184,7 +184,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .chatKey(key): sendKey(key.terminalKey)
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
-        case .nextWaitingChat: nextWaitingChat(in: context)
+        case .chatClearInput:
+            withSelectedSession { sessionID in
+                if terminals.clearInput(in: sessionID) { playHaptic(.inputCleared) } else { playHaptic(.rejected) }
+            }
         case .lastChat: command(.lastChat, orReject: true)
         case let .moveInContent(direction): moveInContent(direction)
         case let .adjacentChat(step): moveToAdjacentChat(step)
@@ -288,16 +291,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         guard let windowID = targetWindowID, chats.snapshot(of: windowID)?.hasMultiSelection == true else { return }
         chats.perform(.clearMultiSelection, in: windowID)
-    }
-
-    private func nextWaitingChat(in context: ControllerContext) {
-        // Aus einem anderen Fenster oder ohne Fenster: erst das
-        // Agent-Chats-Fenster nach vorn holen.
-        if targetWindowID == nil {
-            environment.bringAgentChatsToFront()
-            return
-        }
-        if command(.nextWaitingChat, orReject: true) { ui.leaveList() }
     }
 
     /// Linker Stick im Inhalt: im Raster von Kachel zu Kachel; nach links am
@@ -637,6 +630,8 @@ private extension ControllerChatKey {
         case .left: return .left
         case .right: return .right
         case .backspace: return .backspace
+        case .space: return .space
+        case .deleteWord: return .deleteWord
         }
     }
 }

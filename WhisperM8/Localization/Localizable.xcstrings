@@ -5091,12 +5091,12 @@
         }
       }
     },
-    "Delete (hold: keep deleting)": {
+    "Delete (hold: characters, after a second whole words)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Löschen (halten: weiter löschen)"
+            "value": "Löschen (halten: Zeichen, nach einer Sekunde ganze Wörter)"
           }
         }
       }
@@ -6931,6 +6931,26 @@
         }
       }
     },
+    "Hold: clear input": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Eingabe leeren"
+          }
+        }
+      }
+    },
+    "Hold: clear the whole input (not while the agent asks a question)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: ganze Eingabe leeren (nicht während einer Rückfrage des Agenten)"
+          }
+        }
+      }
+    },
     "Hold: close": {
       "localizations": {
         "de": {
@@ -7547,16 +7567,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job wurde interaktiv übernommen — Senden deaktiviert."
-          }
-        }
-      }
-    },
-    "Jump to the next chat that is waiting for you": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Zum nächsten Chat, der auf dich wartet"
           }
         }
       }
@@ -9537,16 +9547,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Beim nächsten Chat öffnet sich Claude Code hier und führt dich durch die Anmeldung."
-          }
-        }
-      }
-    },
-    "Next waiting chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nächster wartender"
           }
         }
       }
@@ -14764,6 +14764,16 @@
         }
       }
     },
+    "Space": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerzeichen"
+          }
+        }
+      }
+    },
     "Spawning this background agent was interrupted, so no short ID was saved. Close the tab from the context menu and start a new background agent if needed.": {
       "localizations": {
         "de": {
@@ -17360,6 +17370,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gib /login ein und melde dich mit dem Konto an, das zum Hauptkonto werden soll. Es ersetzt den aktuellen Hauptkonto-Login."
+          }
+        }
+      }
+    },
+    "Type a space in the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerzeichen in den Chat schreiben"
           }
         }
       }

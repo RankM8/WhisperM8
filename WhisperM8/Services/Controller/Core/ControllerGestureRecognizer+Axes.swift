@@ -97,18 +97,19 @@ extension ControllerGestureRecognizer {
         return gestures
     }
 
-    /// Gehaltene Tasten mit Wiederholung (Viereck): erst im normalen Takt,
-    /// nach `holdRepeatAccelerateAfter` schneller. Wie oben höchstens eine
+    /// Gehaltene Tasten mit Wiederholung (Viereck): erst `.holdRepeat` im
+    /// normalen Takt, nach `holdRepeatLongAfter` `.holdRepeatLong` im
+    /// langsameren. Wie oben höchstens eine
     /// Wiederholung je Tick und Taste, kein Nachholen.
     mutating func holdRepeats(at time: TimeInterval) -> [ControllerGesture] {
         var gestures: [ControllerGesture] = []
         for button in ControllerButton.allCases {
             guard var hold = holds[button], hold.began, let nextAt = hold.nextRepeatAt,
                   Self.isDue(nextAt, at: time), let threshold = config.holdThreshold(for: button) else { continue }
-            gestures.append(.holdRepeat(button))
             let heldFor = time - (hold.pressedAt + threshold)
-            let interval = heldFor + Self.epsilon >= config.holdRepeatAccelerateAfter
-                ? config.holdRepeatFastInterval : config.holdRepeatInterval
+            let isLong = heldFor + Self.epsilon >= config.holdRepeatLongAfter
+            gestures.append(isLong ? .holdRepeatLong(button) : .holdRepeat(button))
+            let interval = isLong ? config.holdRepeatLongInterval : config.holdRepeatInterval
             let next = nextAt + interval
             hold.nextRepeatAt = Self.isDue(next, at: time) ? time + interval : next
             holds[button] = hold

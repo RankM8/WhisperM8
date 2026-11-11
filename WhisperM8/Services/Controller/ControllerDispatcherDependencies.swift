@@ -27,6 +27,9 @@ protocol ControllerTerminalControlling: AnyObject {
     func state(of sessionID: UUID) -> ControllerTerminalState?
     @discardableResult func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool
     func scroll(lines: Int, in sessionID: UUID)
+    /// Ganze Eingabe leeren (R3 halten); `false` bei offener Rückfrage oder
+    /// ohne laufenden Prozess.
+    @discardableResult func clearInput(in sessionID: UUID) -> Bool
     /// Text als ein Block ins Eingabefeld, wahlweise mit Senden.
     @discardableResult func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool
 }

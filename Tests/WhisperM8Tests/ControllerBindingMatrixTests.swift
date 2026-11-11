@@ -12,16 +12,19 @@ final class ControllerBindingMatrixTests: XCTestCase {
     // MARK: - Alle Gesten
 
     private static let immediateButtons: [ControllerButton] = [
-        .cross, .triangle, .l1, .r1, .r2, .l3, .r3, .create, .options, .touchpad,
+        .cross, .triangle, .l1, .r1, .r2, .l3, .create, .options, .touchpad,
     ]
-    private static let holdButtons: [(ControllerButton, TimeInterval)] = [(.l2, 0.3), (.circle, 0.4), (.square, 0.6)]
+    private static let holdButtons: [(ControllerButton, TimeInterval)] = [
+        (.l2, 0.3), (.circle, 0.4), (.square, 0.6), (.r3, 0.6),
+    ]
 
     static let allGestures: [ControllerGesture] = {
         var gestures: [ControllerGesture] = immediateButtons.map { .press($0) }
         for (button, duration) in holdButtons {
             gestures += [
                 .tap(button), .holdPending(button, duration: duration),
-                .holdBegan(button), .holdRepeat(button), .holdEnded(button), .holdCancelled(button),
+                .holdBegan(button), .holdRepeat(button), .holdRepeatLong(button), .holdEnded(button),
+                .holdCancelled(button),
             ]
         }
         gestures += [.chordPending(duration: 1), .chordCompleted, .chordCancelled]
@@ -78,7 +81,6 @@ final class ControllerBindingMatrixTests: XCTestCase {
         var table: Table = [
             .press(.l1): .adjacentChat(step: -1),
             .press(.r1): .adjacentChat(step: 1),
-            .press(.triangle): .nextWaitingChat,
             .press(.l3): .toggleMaximize,
             .press(.create): .newChat,
             .press(.options): .menuToggle,
@@ -110,11 +112,21 @@ final class ControllerBindingMatrixTests: XCTestCase {
         return table
     }()
 
-    /// Viereck als Rücktaste (Runde 2): tippen und halten mit Wiederholung.
+    /// Schreibtasten in jedem lebenden Chat: Viereck als Rücktaste (Runde 2),
+    /// lange gehalten ganze Wörter, Dreieck als Leerzeichen (Runde 3).
     private static let backspace: Table = [
         .tap(.square): .chatKey(.backspace),
         .holdBegan(.square): .chatKey(.backspace),
         .holdRepeat(.square): .chatKey(.backspace),
+        .holdRepeatLong(.square): .chatKey(.deleteWord),
+        .press(.triangle): .chatKey(.space),
+    ]
+
+    /// R3 halten leert die Eingabe — lebender Chat ohne Rückfrage (Runde 3).
+    private static let clearInput: Table = [
+        .holdPending(.r3, duration: 0.6): .holdProgress(.r3, duration: 0.6),
+        .holdBegan(.r3): .chatClearInput,
+        .holdCancelled(.r3): .holdProgressCancelled(.r3),
     ]
 
     /// Verlauf ohne Menü und Rückfrage: was in jedem Zustand gilt.
@@ -263,7 +275,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .move(.down, source: .leftStick, isRepeat: true): .bridgeKey(.down),
         ])),
         ("anderes Fenster", .otherWindow, merge(bridge, [
-            .press(.triangle): .nextWaitingChat,
+            .press(.triangle): .bringAppToFront,
             .press(.touchpad): .clipboardToggle,
         ])),
         ("kein Fenster", .noWindow, merge([
@@ -281,40 +293,39 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
             .holdBegan(.square): .listCloseRow,
             .holdCancelled(.square): .holdProgressCancelled(.square),
-            .press(.r3): .listStartRow,
+            .tap(.r3): .listStartRow,
             .press(.create): .newChat,
-            .press(.triangle): .nextWaitingChat,
             .press(.r2): .dictationToggle,
             .press(.touchpad): .clipboardToggle,
             .press(.options): .menuToggle,
         ], pauseChord)),
-        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, dpadNavigation, backspace, [
+        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, dpadNavigation, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
         ("Chat ruht, Codex", .chat(ControllerChatState(status: .idle, profile: .codex, draftSuspected: true)),
-         merge(chatNavigation, dpadNavigation, backspace, [
+         merge(chatNavigation, dpadNavigation, backspace, clearInput, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
-        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, gridDpadNavigation, backspace, [
+        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, gridDpadNavigation, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
         // Review-Befund 3: Kreuz nur nach einer frischen Eingabe per Controller.
-        ("Chat arbeitet", chatState(.working), merge(chatNavigation, dpadNavigation, backspace, [
+        ("Chat arbeitet", chatState(.working), merge(chatNavigation, dpadNavigation, backspace, clearInput, [
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
         ("Chat arbeitet, Entwurf per Controller", chatState(.working) { $0.recentDraftInput = true },
-         merge(chatNavigation, dpadNavigation, backspace, [
+         merge(chatNavigation, dpadNavigation, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
-        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, dpadNavigation, backspace, [
+        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, dpadNavigation, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
@@ -328,9 +339,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
         ("Rückfrage neu", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 0.1 },
          merge(chatNavigation, chatArrows, backspace, [.tap(.circle): .chatKey(.escape)])),
         ("Chat beendet", chatState(.ended) { $0.draftSuspected = true },
-         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
+         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .tap(.r3): .chatResume])),
         ("nur Verlauf", chatState(.working) { $0.hasTerminal = false },
-         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
+         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .tap(.r3): .chatResume])),
     ]
 
     // MARK: - Prüfung

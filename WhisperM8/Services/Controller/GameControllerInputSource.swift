@@ -258,6 +258,8 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
             return [pulse(at: 0, duration: 0.08, intensity: 0.8), pulse(at: 0.16, duration: 0.08, intensity: 0.8)]
         case .rejected:
             return [0, 0.07, 0.14].map { pulse(at: $0, duration: 0.03, intensity: 0.5) }
+        case .inputCleared:
+            return [pulse(at: 0, duration: 0.04, intensity: 0.6)]
         }
     }
 }

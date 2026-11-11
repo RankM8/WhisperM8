@@ -12,6 +12,12 @@ private final class TerminalSpy: ControllerTerminalControlling {
     func state(of sessionID: UUID) -> ControllerTerminalState? { states[sessionID] }
     func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool { keys.append(key); return true }
     func scroll(lines: Int, in sessionID: UUID) { scrolled.append(lines) }
+    var clearResult = true
+    private(set) var clearedSessions: [UUID] = []
+    func clearInput(in sessionID: UUID) -> Bool {
+        clearedSessions.append(sessionID)
+        return clearResult
+    }
     func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool {
         texts.append((text, submit))
         return true
@@ -303,15 +309,19 @@ final class ControllerActionDispatcherTests: XCTestCase {
     }
 
     func testFailedJumpGivesRejectFeedback() {
-        window.failing = [String(describing: AgentChatsCommand.nextWaitingChat)]
-        perform(.nextWaitingChat)
+        window.failing = [String(describing: AgentChatsCommand.lastChat)]
+        perform(.lastChat)
         XCTAssertEqual(haptics, [.rejected])
     }
 
-    func testNextWaitingFromOtherWindowBringsAgentChatsToFront() {
+    /// Runde 3: Dreieck aus einem anderen Fenster holt Agent Chats nach vorn
+    /// (vorher über „nächster wartender Chat“).
+    func testTriangleFromOtherWindowBringsAgentChatsToFront() {
         keyWindowID = nil
         environment.hasOtherKeyWindow = true
-        perform(.nextWaitingChat)
+        let current = context
+        XCTAssertEqual(current, .otherWindow)
+        perform(ControllerBindingResolver.action(for: .press(.triangle), in: current)!)
         XCTAssertEqual(environment.broughtToFront, 1)
         XCTAssertEqual(window.commands, [])
     }
@@ -536,6 +546,20 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.listStartRow)
         XCTAssertEqual(window.commands.last, .startChat(ids.a))
         XCTAssertEqual(haptics, [], "laufender Chat: keine Vibration")
+    }
+
+    // MARK: - Eingabe leeren (Runde 3)
+
+    func testClearInputGoesToSelectedChatWithConfirmation() {
+        perform(.chatClearInput)
+        XCTAssertEqual(terminals.clearedSessions, [window.selected!])
+        XCTAssertEqual(haptics, [.inputCleared])
+    }
+
+    func testClearInputThatFailsIsRejected() {
+        terminals.clearResult = false
+        perform(.chatClearInput)
+        XCTAssertEqual(haptics, [.rejected])
     }
 
     func testLeaveListClearsMarker() {

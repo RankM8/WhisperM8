@@ -96,7 +96,7 @@ enum ControllerBindingResolver {
     /// dazu Diktat, Verlauf und Dreieck (holt das Agent-Chats-Fenster nach vorn).
     private static func otherWindow(_ gesture: ControllerGesture) -> ControllerAction? {
         switch gesture {
-        case .press(.triangle): return .nextWaitingChat
+        case .press(.triangle): return .bringAppToFront
         case .press(.touchpad): return .clipboardToggle
         default: return bridge(gesture)
         }
@@ -276,11 +276,10 @@ enum ControllerBindingResolver {
         case .holdBegan(.square): return .listCloseRow
         case .holdCancelled(.square): return .holdProgressCancelled(.square)
         case .press(.create): return .newChat
-        case .press(.triangle): return .nextWaitingChat
         case .press(.r2): return .dictationToggle
         case .press(.touchpad): return .clipboardToggle
         case .press(.options): return .menuToggle
-        case .press(.r3): return .listStartRow
+        case .tap(.r3): return .listStartRow
         default: return nil
         }
     }

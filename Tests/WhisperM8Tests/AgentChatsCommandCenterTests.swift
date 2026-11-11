@@ -68,7 +68,7 @@ final class AgentChatsCommandCenterTests: XCTestCase {
         _ = center.register(windowID: window.id, handler: window.handler)
         keyWindowID = nil
 
-        XCTAssertFalse(center.perform(.nextWaitingChat))
+        XCTAssertFalse(center.perform(.lastChat))
         XCTAssertEqual(window.received, [])
         XCTAssertNil(center.activeWindowID)
         XCTAssertNil(center.snapshot())
@@ -136,8 +136,8 @@ final class AgentChatsCommandCenterTests: XCTestCase {
         _ = center.register(windowID: window.id, handler: window.handler)
         keyWindowID = window.id
 
-        XCTAssertFalse(center.perform(.nextWaitingChat))
-        XCTAssertEqual(window.received, [.nextWaitingChat])
+        XCTAssertFalse(center.perform(.lastChat))
+        XCTAssertEqual(window.received, [.lastChat])
     }
 
     // MARK: - Anmeldung

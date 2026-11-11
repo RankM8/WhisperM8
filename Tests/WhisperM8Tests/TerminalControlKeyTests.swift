@@ -85,6 +85,48 @@ final class TerminalControlKeyTests: XCTestCase {
             tracker(after: [.enter], status: .awaitingInput, startingWithDraft: true).mayHaveUnsentInput)
     }
 
+    // MARK: - Schreibtasten (Runde 3)
+
+    /// Dreieck: Leerzeichen, Tastencode 49 — der Tracker wertet es als Text.
+    func testSpaceIsTypedText() {
+        XCTAssertEqual(TerminalControlKey.space.bytes(applicationCursor: false), [0x20])
+        XCTAssertEqual(TerminalControlKey.space.keyCode, 49)
+        XCTAssertEqual(TerminalControlKey.space.modifiers, [])
+        XCTAssertTrue(tracker(after: [.space], startingWithDraft: false).mayHaveUnsentInput)
+    }
+
+    /// Wort löschen und Leeren: Ctrl+W, Ctrl+U, Ctrl+E — nie ein ESC-Präfix
+    /// (ein einzelnes ESC bricht einen arbeitenden Chat ab).
+    func testDeleteWordAndClearKeysAreControlBytesWithoutEscape() {
+        XCTAssertEqual(TerminalControlKey.deleteWord.bytes(applicationCursor: false), [0x17])
+        XCTAssertEqual(TerminalControlKey.killLineStart.bytes(applicationCursor: true), [0x15])
+        XCTAssertEqual(TerminalControlKey.lineEnd.bytes(applicationCursor: false), [0x05])
+        for key in [TerminalControlKey.deleteWord, .killLineStart, .lineEnd] {
+            XCTAssertEqual(key.modifiers, .control)
+            XCTAssertTrue(tracker(after: [key], startingWithDraft: true).mayHaveUnsentInput, "kein Absenden")
+            XCTAssertFalse(tracker(after: [key], startingWithDraft: false).mayHaveUnsentInput, "kein Text")
+        }
+        let all = TerminalControlKey.clearInputBursts.flatMap { $0 }.flatMap { $0.bytes(applicationCursor: false) }
+        XCTAssertFalse(all.contains(0x1B))
+        XCTAssertFalse(all.contains(0x03), "nie Ctrl+C")
+    }
+
+    /// Leeren: zuerst ans Zeilenende, dann genug Ctrl+U für 64 Zeilen, in Stößen.
+    func testClearInputBursts() {
+        let bursts = TerminalControlKey.clearInputBursts
+        XCTAssertEqual(bursts.first?.first, .lineEnd)
+        XCTAssertEqual(bursts.flatMap { $0 }.filter { $0 == .killLineStart }.count, 128)
+        XCTAssertTrue(bursts.allSatisfy { $0.count <= 17 })
+    }
+
+    /// Absicherung: Leeren nie in einer Rückfrage; Leerzeichen und Wort löschen überall.
+    func testControllerGuardForWritingKeys() {
+        XCTAssertFalse(TerminalControlKey.controllerAllows(.killLineStart, status: .awaitingInput))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.killLineStart, status: .working))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.space, status: .awaitingInput))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.deleteWord, status: nil))
+    }
+
     func testEscapeWhileWorkingMarksRestoredPrompt() {
         XCTAssertTrue(
             tracker(after: [.escape], status: .working, startingWithDraft: false).mayHoldRestoredPrompt)

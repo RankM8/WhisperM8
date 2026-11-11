@@ -28,6 +28,8 @@ enum ControllerHapticPattern: String, CaseIterable, Sendable {
     case chatWaiting
     /// „Geht hier nicht“: drei kleine Ticks.
     case rejected
+    /// Eingabe geleert (R3 halten): ein kurzer, leichter Impuls.
+    case inputCleared
 }
 
 /// Quelle für Controller-Eingaben. Die Live-Fassung spricht mit dem

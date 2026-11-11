@@ -15,7 +15,7 @@ enum ControllerLegendInput: Hashable, Sendable {
 enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case send, confirm, back, reject, cancel, interruptHold, start
     case dictate, stopDictation, stopAndSend, discard, outputMode
-    case nextWaiting, previousNextChat, filter, move, arrows, scroll
+    case space, previousNextChat, filter, move, arrows, scroll, clearInputHold
     case backspace, newChat, clipboard, maximize, menu
     case lastChat, pickChatHold, pickAndDictate, switchOnRelease, switchWorkspaceHold
     case open, select, paste, pin, deleteHold, close, closeHold
@@ -73,7 +73,7 @@ enum ControllerLegend {
                 entry(.button(.circle), .back),
                 entry(.button(.circle), .interruptHold),
                 entry(.button(.r2), .dictate),
-                entry(.button(.triangle), .nextWaiting),
+                entry(.button(.triangle), .space),
                 entry(.bumpers, .previousNextChat),
                 entry(.dpad, .arrows),
                 entry(.rightStick, .scroll),
@@ -86,6 +86,7 @@ enum ControllerLegend {
                 entry(.button(.l3), .maximize),
                 entry(.button(.options), .menu),
                 entry(.button(.r3), .startChat),
+                entry(.button(.r3), .clearInputHold),
                 entry(.button(.l2), .lastChat),
                 entry(.button(.l2), .pickChatHold),
                 entry(.button(.l2), .switchWorkspaceHold),
@@ -102,7 +103,8 @@ enum ControllerLegend {
         case let .button(button):
             return [
                 .press(button), .tap(button), .holdPending(button, duration: 1),
-                .holdBegan(button), .holdRepeat(button), .holdEnded(button), .holdCancelled(button),
+                .holdBegan(button), .holdRepeat(button), .holdRepeatLong(button), .holdEnded(button),
+                .holdCancelled(button),
             ]
         case .leftStick:
             return ControllerDirection.allCases.flatMap { direction in
@@ -194,7 +196,7 @@ enum ControllerLegend {
                 candidate(.dpad, .arrows, gestures(for: .dpad)),
                 candidate(.button(.cross), .confirm, [.press(.cross)]),
                 candidate(.button(.circle), .back, [.tap(.circle)]),
-                candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
+                candidate(.button(.triangle), .bringToFront, [.press(.triangle)]),
                 candidate(.button(.r2), .dictate, [.press(.r2)]),
             ]
         case .list:
@@ -208,7 +210,6 @@ enum ControllerLegend {
                 candidate(.bumpers, .filter, [.press(.l1), .press(.r1)]),
                 candidate(.button(.square), .closeHold, [.holdBegan(.square)]),
                 candidate(.button(.create), .newChat, [.press(.create)]),
-                candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
                 candidate(.button(.r2), .dictate, [.press(.r2)]),
             ]
         case let .chat(state):
@@ -239,12 +240,13 @@ enum ControllerLegend {
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
+            candidate(.button(.triangle), .space, [.press(.triangle)]),
             candidate(.button(.r2), .dictate, [.press(.r2)]),
-            candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
             candidate(.bumpers, .previousNextChat, [.press(.l1), .press(.r1)]),
         ] + workspaceHold + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
-            candidate(.button(.r3), .startChat, [.press(.r3)]),
+            candidate(.button(.r3), .startChat, [.tap(.r3)]),
+            candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),
         ]
     }
 

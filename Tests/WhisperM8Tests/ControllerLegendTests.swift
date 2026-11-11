@@ -55,7 +55,7 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(chat(.idle)).contains(.start))
         XCTAssertTrue(shown.contains(.leftStick))
         XCTAssertTrue(shown.contains(.rightStick))
-        XCTAssertTrue(shown.contains(.button(.triangle)))
+        XCTAssertFalse(shown.contains(.button(.triangle)), "Runde 3: kein Leerzeichen in einen gestoppten Chat")
     }
 
     func testCrossLabelFollowsChatState() {
@@ -98,6 +98,17 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(inputs(.quickAction).contains(.leftStick))
     }
 
+    /// Runde 3: Dreieck = Leerzeichen, R3 halten = Eingabe leeren (nicht bei
+    /// Rückfragen); „nächster wartender Chat“ gibt es nicht mehr.
+    func testWritingKeysInChatLegend() {
+        let idle = labels(chat(.idle))
+        XCTAssertTrue(idle.contains(.space))
+        XCTAssertTrue(idle.contains(.clearInputHold))
+        XCTAssertFalse(labels(chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }).contains(.clearInputHold))
+        XCTAssertFalse(labels(chat(.ended)).contains(.space))
+        XCTAssertFalse(ControllerLegendLabel.allCases.map(\.rawValue).contains("nextWaiting"))
+    }
+
     func testRecordingLegend() {
         XCTAssertEqual(labels(.recording(phase: .recording, targetIsChat: true)),
                        [.stopDictation, .stopAndSend, .discard, .outputMode, .scroll])
@@ -114,11 +125,11 @@ final class ControllerLegendTests: XCTestCase {
     }
 
     func testListAndModal() {
-        XCTAssertEqual(labels(.list), [.move, .open, .back, .filter, .closeHold, .newChat, .nextWaiting, .dictate])
+        XCTAssertEqual(labels(.list), [.move, .open, .back, .filter, .closeHold, .newChat, .dictate])
         XCTAssertEqual(labels(.modal), [.arrows, .confirm, .back, .dictate], "Dreieck wirkt unter Dialogen nicht")
         XCTAssertEqual(ControllerLegend.entries(for: .modal).first?.inputs, [.dpad, .leftStick])
         XCTAssertEqual(ControllerLegend.entries(for: .otherWindow).first?.inputs, [.dpad])
-        XCTAssertTrue(labels(.otherWindow).contains(.nextWaiting))
+        XCTAssertTrue(labels(.otherWindow).contains(.bringToFront))
     }
 
     /// Runde 3: Im Raster zeigt die Legende L2 als Workspace-Auswahl, in der
@@ -161,7 +172,7 @@ final class ControllerLegendTests: XCTestCase {
         let sections = ControllerLegend.allBindings()
         XCTAssertEqual(sections.map(\.kind), [.core, .extra])
         XCTAssertEqual(sections[0].entries.count, 9)
-        XCTAssertEqual(sections[1].entries.count, 12, "Runde 3: L2 halten im Raster = Workspace-Auswahl")
+        XCTAssertEqual(sections[1].entries.count, 13, "Runde 3: L2 halten im Raster, R3 halten leert")
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         XCTAssertTrue(sections[1].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]
