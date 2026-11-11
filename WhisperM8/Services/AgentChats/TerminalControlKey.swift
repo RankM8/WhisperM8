@@ -3,12 +3,13 @@ import AppKit
 /// Einzelne Tasten, die die App selbst an eine laufende TUI schicken darf —
 /// für die Bedienung ohne Tastatur (Controller). Bewusst eine feste, kurze
 /// Liste und kein allgemeines Send-Keys: Rückfragen beantworten (Pfeile,
-/// Enter, Escape) und den Modus wechseln (Shift+Tab), mehr nicht.
+/// Enter, Escape), den Modus wechseln (Shift+Tab) und Zeichen löschen
+/// (Rücktaste), mehr nicht.
 ///
 /// Über den Control-Socket ist das nicht erreichbar; `chats interrupt` und
 /// `chats send` bleiben die einzigen Wege von außen.
 enum TerminalControlKey: String, CaseIterable, Sendable {
-    case enter, escape, up, down, left, right, tab, backTab
+    case enter, escape, up, down, left, right, tab, backTab, backspace
 
     /// Bytes für das PTY. Pfeile richten sich nach dem Cursor-Modus des
     /// Terminals (DECCKM): normal `ESC [ A`, im Application-Modus `ESC O A`.
@@ -28,6 +29,7 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .left: return [0x1B, introducer, 0x44]
         case .tab: return [0x09]
         case .backTab: return [0x1B, 0x5B, 0x5A]              // ESC [ Z
+        case .backspace: return [0x7F]                        // DEL, wie die Rücktaste
         }
     }
 
@@ -42,6 +44,7 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .left: return 123
         case .right: return 124
         case .tab, .backTab: return 48
+        case .backspace: return 51
         }
     }
 

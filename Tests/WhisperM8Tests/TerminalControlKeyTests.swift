@@ -33,6 +33,15 @@ final class TerminalControlKeyTests: XCTestCase {
         XCTAssertEqual(TerminalControlKey.backTab.bytes(applicationCursor: true), Array("\u{1b}[Z".utf8))
     }
 
+    /// Runde 2: Rücktaste für Viereck — DEL wie die echte Taste, Tastencode 51.
+    func testBackspaceIsDelete() {
+        for applicationCursor in [false, true] {
+            XCTAssertEqual(TerminalControlKey.backspace.bytes(applicationCursor: applicationCursor), [0x7F])
+        }
+        XCTAssertEqual(TerminalControlKey.backspace.keyCode, 51)
+        XCTAssertEqual(TerminalControlKey.backspace.modifiers, [])
+    }
+
     func testWheelSequencesForAlternateBuffer() {
         XCTAssertEqual(TerminalScrollStep.wheelSequence(up: true), "\u{1b}[<64;1;1M")
         XCTAssertEqual(TerminalScrollStep.wheelSequence(up: false), "\u{1b}[<65;1;1M")
@@ -59,7 +68,7 @@ final class TerminalControlKeyTests: XCTestCase {
     }
 
     func testArrowsTabAndEscapeKeepADraft() {
-        for key in [TerminalControlKey.up, .down, .left, .right, .tab, .backTab, .escape] {
+        for key in [TerminalControlKey.up, .down, .left, .right, .tab, .backTab, .escape, .backspace] {
             XCTAssertTrue(
                 tracker(after: [key], startingWithDraft: true).mayHaveUnsentInput,
                 "\(key) darf einen Entwurf nicht als gesendet melden")

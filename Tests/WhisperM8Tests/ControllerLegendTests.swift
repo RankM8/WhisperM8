@@ -35,18 +35,23 @@ final class ControllerLegendTests: XCTestCase {
         }
     }
 
-    func testSquareOnlyWithDraft() {
-        XCTAssertTrue(labels(chat(.idle) { $0.draftSuspected = true }).contains(.clearInput))
-        XCTAssertFalse(labels(chat(.idle)).contains(.clearInput))
-        XCTAssertFalse(inputs(chat(.idle)).contains(.button(.square)))
-        XCTAssertFalse(inputs(chat(.working) { $0.draftSuspected = true }).contains(.button(.square)))
+    /// Runde 2: Viereck ist die Rücktaste, in jedem lebenden Zustand.
+    func testSquareIsBackspaceWhileChatLives() {
+        for status in [ControllerChatState.Status.idle, .working, .awaitingInput, .unknown] {
+            XCTAssertTrue(labels(chat(status)).contains(.backspace), "\(status)")
+        }
+        XCTAssertFalse(inputs(chat(.ended)).contains(.button(.square)))
     }
 
-    func testEndedChatShowsNoTerminalKeys() {
+    /// Runde 2: Bei gestopptem Chat zeigt Kreuz „Start“.
+    func testEndedChatShowsStartButNoTerminalKeys() {
         let shown = inputs(chat(.ended) { $0.draftSuspected = true })
-        for input in [ControllerLegendInput.button(.cross), .button(.circle), .button(.square), .dpad] {
+        for input in [ControllerLegendInput.button(.circle), .button(.square), .dpad] {
             XCTAssertFalse(shown.contains(input), "\(input)")
         }
+        XCTAssertTrue(labels(chat(.ended)).contains(.start))
+        XCTAssertTrue(labels(chat(.working) { $0.hasTerminal = false }).contains(.start))
+        XCTAssertFalse(labels(chat(.idle)).contains(.start))
         XCTAssertTrue(shown.contains(.leftStick))
         XCTAssertTrue(shown.contains(.rightStick))
         XCTAssertTrue(shown.contains(.button(.triangle)))
@@ -71,10 +76,10 @@ final class ControllerLegendTests: XCTestCase {
 
     func testRecordingLegend() {
         XCTAssertEqual(labels(.recording(phase: .recording, targetIsChat: true)),
-                       [.stopDictation, .stopAndSend, .discard, .outputMode])
+                       [.stopDictation, .stopAndSend, .discard, .outputMode, .scroll])
         XCTAssertEqual(labels(.recording(phase: .recording, targetIsChat: false)),
-                       [.stopDictation, .discard, .outputMode])
-        XCTAssertEqual(labels(.recording(phase: .transcribing, targetIsChat: true)), [.cancel])
+                       [.stopDictation, .discard, .outputMode, .scroll])
+        XCTAssertEqual(labels(.recording(phase: .transcribing, targetIsChat: true)), [.cancel, .scroll])
     }
 
     func testPausedAndOutsideApp() {
@@ -85,20 +90,47 @@ final class ControllerLegendTests: XCTestCase {
     }
 
     func testListAndModal() {
-        XCTAssertEqual(labels(.list), [.move, .open, .back, .filter, .newChat, .nextWaiting, .dictate])
+        XCTAssertEqual(labels(.list), [.move, .open, .back, .filter, .closeHold, .newChat, .nextWaiting, .dictate])
         XCTAssertEqual(labels(.modal), [.arrows, .confirm, .back, .dictate], "Dreieck wirkt unter Dialogen nicht")
+        XCTAssertEqual(ControllerLegend.entries(for: .modal).first?.inputs, [.dpad, .leftStick])
+        XCTAssertEqual(ControllerLegend.entries(for: .otherWindow).first?.inputs, [.dpad])
         XCTAssertTrue(labels(.otherWindow).contains(.nextWaiting))
     }
 
-    func testClipboardShowsDeleteHold() {
-        XCTAssertEqual(labels(.clipboardPanel), [.move, .paste, .pin, .deleteHold, .close])
+    func testChatPickerShowsCrossSwitch() {
+        XCTAssertEqual(labels(.chatPicker), [.move, .select, .switchOnRelease, .pickAndDictate, .cancel])
+    }
+
+    /// Runde 2: Die Fußzeile des Verlaufs kommt aus dieser Tabelle. „Geht
+    /// nicht“ (Korrigieren ohne Text, Bild groß ohne Bild) zeigt sie nicht.
+    func testClipboardEntriesFollowState() {
+        XCTAssertEqual(labels(.clipboardPanel(ControllerClipboardState())),
+                       [.move, .paste, .deleteHold, .clipboardFilter, .menu, .close])
+        XCTAssertEqual(labels(.clipboardPanel(ControllerClipboardState(canCorrect: true, selectedIsImage: true))),
+                       [.move, .paste, .correctAndPaste, .deleteHold, .clipboardFilter, .zoomImage, .menu, .close])
+        XCTAssertEqual(labels(.clipboardPanel(ControllerClipboardState(isZoomed: true, selectedIsImage: true))),
+                       [.move, .paste, .deleteHold, .zoomImage, .menu, .back])
+        XCTAssertEqual(labels(.clipboardPanel(ControllerClipboardState(isConfirmingClear: true))), [.clearHistory, .cancel])
+        XCTAssertEqual(labels(.clipboardPanel(ControllerClipboardState(menuOpen: true))), [.move, .select, .close])
+    }
+
+    func testMenuLegend() {
+        XCTAssertEqual(labels(.menu(dialogOpen: false)), [.move, .select, .back, .close])
+    }
+
+    /// Runde 2: R3 erscheint nur bei gestopptem Chat.
+    func testR3OnlyForStoppedChat() {
+        XCTAssertTrue(labels(chat(.ended)).contains(.startChat))
+        XCTAssertFalse(labels(chat(.idle)).contains(.startChat))
+        XCTAssertFalse(labels(.list).contains(.startChat))
     }
 
     func testAllBindingsHasCoreAndExtra() {
         let sections = ControllerLegend.allBindings()
         XCTAssertEqual(sections.map(\.kind), [.core, .extra])
         XCTAssertEqual(sections[0].entries.count, 9)
-        XCTAssertEqual(sections[1].entries.count, 9)
+        XCTAssertEqual(sections[1].entries.count, 11)
+        XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         XCTAssertTrue(sections[1].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]
         })
@@ -106,7 +138,7 @@ final class ControllerLegendTests: XCTestCase {
 
     /// Jede Zeile der Einstellungsseite wirkt in mindestens einem Zusammenhang.
     func testAllBindingsAreBacked() {
-        let contexts = representativeContexts + [.chatPicker, chat(.idle) { $0.draftSuspected = true }]
+        let contexts = representativeContexts + [.chatPicker, chat(.idle) { $0.draftSuspected = true }, chat(.ended)]
         for section in ControllerLegend.allBindings() {
             for entry in section.entries {
                 let backed = contexts.contains { context in

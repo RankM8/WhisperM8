@@ -61,6 +61,9 @@ enum ControllerGesture: Hashable, Sendable {
     /// Tippen-oder-Halten-Taste gedrückt, die Halte-Zeit läuft (für die Fortschrittsanzeige).
     case holdPending(ControllerButton, duration: TimeInterval)
     case holdBegan(ControllerButton)
+    /// Taste wird weiter gehalten: Wiederholung wie bei einer gehaltenen
+    /// Tastatur-Taste (nur Tasten aus `Config.holdRepeatButtons`).
+    case holdRepeat(ControllerButton)
     case holdEnded(ControllerButton)
     /// Vor Ablauf der Halte-Zeit losgelassen (zusammen mit `.tap`) oder durch `reset` gelöst.
     case holdCancelled(ControllerButton)

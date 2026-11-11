@@ -17,12 +17,36 @@ enum AgentChatsCommand: Equatable {
     case gridFocus(GridFocusDirection)
     /// Kachel groß bzw. zurück zum Raster.
     case toggleMaximize
-    /// Tab des ausgewählten Chats schließen (wie ⌘W).
-    case closeSelectedTab
+    /// Zeile der Liste schließen wie ihr „−“/„×“. Chat-Zeilen folgen dem
+    /// Filter (im Filter „Aktiv“ Tab zu und Chat beenden, sonst archivieren),
+    /// Workspace-Zeilen beenden und nehmen den Chat aus dem Workspace. Läuft
+    /// ein Terminal, fragt der Dialog der Seitenleiste nach. Für den
+    /// ausgewählten Chat: `.chat(id)`.
+    case closeListRow(SidebarNavigationRow)
+    /// Aktionen am Chat (Options-Menü des Controllers) — dieselben Wege wie
+    /// das Kontextmenü eines Chats.
+    case togglePin(UUID)
+    /// Umbenennen-Sheet öffnen.
+    case renameChat(UUID)
+    case forkChat(UUID)
+    /// „GPT-Konto“: gilt ab dem nächsten Start des Chats.
+    case setGPTAccount(UUID, profileName: String)
+    /// Archivieren, mit der Rückfrage der Seitenleiste bei laufendem Terminal.
+    case archiveChat(UUID)
+    /// „Zu Account verschieben“: öffnet das Umzugs-Sheet mit Vorschau.
+    case moveChatToAccount(UUID, profileName: String)
     /// Neuer Chat im aktuellen Kontext-Projekt, mit dem Standard-Agenten.
     case newChatInCurrentProject
     /// Neuer Chat in einem bestimmten Projekt.
     case newChat(projectID: UUID)
+    /// Projekt-Auswahl „Neuer Chat“ öffnen (wie ⌘N). Blendet die Seitenleiste
+    /// ein (die Auswahl hängt an ihrem Knopf); `preferredProjectID` ist
+    /// vorausgewählt, ohne Angabe das aktuelle Projekt.
+    case showNewChatPicker(preferredProjectID: UUID?)
+    /// Gestoppten Chat wieder starten — derselbe Weg wie der Knopf „Starten“
+    /// im Kopf. Nicht für archivierte und laufende Chats. Ist er nicht
+    /// ausgewählt, wird er zuerst ausgewählt.
+    case startChat(UUID)
     /// Chat auswählen — derselbe Weg wie ein Klick in der Seitenleiste.
     case selectSession(UUID)
     /// Workspace als Raster öffnen.
@@ -56,6 +80,15 @@ struct AgentChatsWindowSnapshot: Equatable {
     var isSidebarVisible: Bool
     var hasMultiSelection: Bool
     var isArchiveMode: Bool
+    /// Projekt-Auswahl „Neuer Chat“ offen (Popover an der Seitenleiste).
+    /// Eingaben gehören dann ihr, wie bei einem Sheet.
+    var isNewChatPickerOpen: Bool = false
+    /// Rückfrage „Chat beenden?“ bzw. „Chat archivieren?“ offen.
+    var isConfirmationOpen: Bool = false
+
+    /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
+    /// und ist womöglich selbst Key geworden.
+    var ownsKeyOverlay: Bool { isNewChatPickerOpen || isConfirmationOpen }
 }
 
 /// Eine Zeile der Liste links, so wie die Navigation sie braucht.
@@ -85,6 +118,9 @@ final class AgentChatsCommandCenter {
         /// Sichtbare Zeilen der Liste links in Anzeige-Reihenfolge, für die
         /// Navigation ohne Maus. Im Ereignis-Pfad berechnet, nie im Body.
         var listRows: () -> [AgentChatsListRow] = { [] }
+        /// Angaben für das Menü „Aktionen am Chat“; `nil`, wenn es den Chat
+        /// nicht gibt.
+        var chatActionInfo: (UUID) -> ControllerChatActionInfo? = { _ in nil }
     }
 
     struct Token: Equatable {
@@ -116,9 +152,14 @@ final class AgentChatsCommandCenter {
     /// Key-Fenster, sofern es angemeldet ist. Bewusst NICHT das Diktat-Fenster
     /// — das bleibt auch dann gesetzt, wenn die App im Hintergrund ist oder
     /// die Einstellungen vorne liegen, und Navigation dort wäre unsichtbar.
+    ///
+    /// Ausnahme: Die Projekt-Auswahl „Neuer Chat“ (Popover mit Suchfeld) und
+    /// die Rückfragen zum Beenden oder Archivieren werden womöglich selbst
+    /// Key; das Fenster meldet dann `resignKey`. Es bleibt trotzdem Ziel,
+    /// sonst landete der Controller im Zusammenhang „anderes Fenster“.
     var activeWindowID: UUID? {
-        guard let id = keyWindowID(), handlers[id] != nil else { return nil }
-        return id
+        if let id = keyWindowID(), handlers[id] != nil { return id }
+        return handlers.first { $0.value.handler.snapshot().ownsKeyOverlay }?.key
     }
 
     /// Schnappschuss eines Fensters; ohne `windowID` der des aktiven Fensters.
@@ -131,6 +172,12 @@ final class AgentChatsCommandCenter {
     func listRows(of windowID: UUID? = nil) -> [AgentChatsListRow] {
         guard let id = windowID ?? activeWindowID else { return [] }
         return handlers[id]?.handler.listRows() ?? []
+    }
+
+    /// Angaben für „Aktionen am Chat“; ohne `windowID` aus dem aktiven Fenster.
+    func chatActionInfo(_ sessionID: UUID, in windowID: UUID? = nil) -> ControllerChatActionInfo? {
+        guard let id = windowID ?? activeWindowID else { return nil }
+        return handlers[id]?.handler.chatActionInfo(sessionID)
     }
 
     /// Führt einen Befehl aus. Ohne `windowID` nur im aktiven Fenster, und nur

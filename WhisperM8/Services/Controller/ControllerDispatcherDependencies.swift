@@ -23,7 +23,6 @@ protocol ControllerTerminalControlling: AnyObject {
     /// `nil`: Für diesen Chat gibt es kein Terminal (reiner Verlauf).
     func state(of sessionID: UUID) -> ControllerTerminalState?
     @discardableResult func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool
-    func clearComposer(of sessionID: UUID)
     func scroll(lines: Int, in sessionID: UUID)
     /// Text als ein Block ins Eingabefeld, wahlweise mit Senden.
     @discardableResult func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool
@@ -55,6 +54,8 @@ protocol ControllerAppEnvironment: AnyObject {
     /// Menü oder ein Textfeld mit Fokus.
     var isModalOpen: Bool { get }
     var isClipboardPanelOpen: Bool { get }
+    /// Zustand des offenen Verlaufs (große Bildansicht, Rückfrage, Menü …).
+    var clipboardState: ControllerClipboardState { get }
     func toggleClipboardPanel()
     func clipboard(_ command: ControllerClipboardCommand)
     func bringAgentChatsToFront()

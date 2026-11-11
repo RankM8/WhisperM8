@@ -26,7 +26,13 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.press(.cross), chat(status)), .chatKey(.enter), "\(status)")
         }
         XCTAssertEqual(action(.press(.cross), chat(.idle) { $0.recentlySubmitted = true }), .chatKey(.enter))
-        XCTAssertNil(action(.press(.cross), chat(.ended)))
+    }
+
+    /// Runde 2: Kreuz auf einem gestoppten Chat startet ihn wieder.
+    func testCrossStartsStoppedChat() {
+        XCTAssertEqual(action(.press(.cross), chat(.ended)), .chatResume)
+        XCTAssertEqual(action(.press(.cross), chat(.working) { $0.hasTerminal = false }), .chatResume)
+        XCTAssertEqual(action(.press(.cross), chat(.ended) { $0.gridActive = true }), .chatResume)
     }
 
     func testCrossIsLockedRightAfterNewQuestion() {
@@ -72,29 +78,59 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.holdCancelled(.circle), chat(.idle)))
     }
 
-    func testSquareClearsOnlyClaudeIdleDraft() {
-        let draft: (inout ControllerChatState) -> Void = { $0.draftSuspected = true }
-        XCTAssertEqual(action(.tap(.square), chat(.idle, configure: draft)), .chatClearComposer)
-        XCTAssertNil(action(.tap(.square), chat(.idle)), "ohne Entwurf")
-        XCTAssertNil(action(.tap(.square), chat(.idle, profile: .codex, configure: draft)))
-        XCTAssertNil(action(.tap(.square), chat(.working, configure: draft)))
-        XCTAssertNil(action(.tap(.square), chat(.awaitingInput, configure: draft)))
-        XCTAssertNil(action(.tap(.square), chat(.idle) { $0.draftSuspected = true; $0.recentlySubmitted = true }))
-        XCTAssertNil(action(.tap(.square), chat(.ended, configure: draft)))
-        XCTAssertNil(action(.holdBegan(.square), chat(.idle, configure: draft)), "Halten löscht nur im Verlauf")
+    /// Runde 2: Viereck ist die Rücktaste — tippen ein Zeichen, halten
+    /// fortlaufend, in jedem lebenden Zustand und bei jedem Profil. Kein
+    /// Ctrl+C mehr (das hätte eine laufende Antwort abgebrochen).
+    func testSquareIsBackspaceInEveryLiveState() {
+        for status in [ControllerChatState.Status.idle, .awaitingInput, .working, .unknown] {
+            for profile in [ControllerChatState.Profile.claude, .codex, .shell] {
+                let context = chat(status, profile: profile)
+                XCTAssertEqual(action(.tap(.square), context), .chatKey(.backspace), "\(status) \(profile)")
+                XCTAssertEqual(action(.holdBegan(.square), context), .chatKey(.backspace))
+                XCTAssertEqual(action(.holdRepeat(.square), context), .chatKey(.backspace))
+            }
+        }
+        XCTAssertNil(action(.holdPending(.square, duration: 0.6), chat(.idle)), "kein Ring, wie bei einer Taste")
+        XCTAssertNil(action(.holdEnded(.square), chat(.idle)))
+        XCTAssertNil(action(.tap(.square), chat(.ended)))
+        XCTAssertNil(action(.holdRepeat(.square), chat(.idle) { $0.hasTerminal = false }))
+    }
+
+    /// Ende zu Ende: Viereck halten löscht fortlaufend, schneller nach 1 s,
+    /// und hört beim Loslassen auf.
+    func testSquareHoldKeepsDeletingThroughRecognizer() {
+        var recognizer = ControllerGestureRecognizer()
+        let context = chat(.working)
+        var deletes = 0
+        func count(_ gestures: [ControllerGesture]) {
+            deletes += gestures.compactMap { action($0, context) }.filter { $0 == .chatKey(.backspace) }.count
+        }
+        count(recognizer.handle(.button(.square, pressed: true), at: 0))
+        var time = 0.0
+        while time < 2.0 {
+            time += 0.005
+            count(recognizer.tick(at: time))
+        }
+        // 0,6 s Schwelle, dann 1 s lang alle 60 ms (17), danach alle 25 ms (~16).
+        XCTAssertGreaterThan(deletes, 25)
+        XCTAssertLessThan(deletes, 40)
+        count(recognizer.handle(.button(.square, pressed: false), at: 2.0))
+        let afterRelease = deletes
+        count(recognizer.tick(at: 2.5))
+        XCTAssertEqual(deletes, afterRelease, "nach dem Loslassen kein Zeichen mehr")
     }
 
     // MARK: - Beendeter Chat und reiner Verlauf
 
     func testEndedChatKeepsNavigationButNoTerminalKeys() {
         for context in [chat(.ended), chat(.idle) { $0.hasTerminal = false }] {
-            XCTAssertNil(action(.press(.cross), context))
+            XCTAssertEqual(action(.press(.cross), context), .chatResume)
             XCTAssertNil(action(.tap(.circle), context))
             XCTAssertNil(action(.holdBegan(.circle), context))
             XCTAssertNil(action(.move(.up, source: .dpad, isRepeat: false), context))
             XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), context), .moveInContent(.left))
             XCTAssertEqual(action(.press(.triangle), context), .nextWaitingChat)
-            XCTAssertEqual(action(.press(.r1), context), .tab(step: 1))
+            XCTAssertEqual(action(.press(.r1), context), .adjacentChat(step: 1))
             XCTAssertEqual(action(.tap(.l2), context), .lastChat)
             XCTAssertEqual(action(.press(.touchpad), context), .clipboardToggle)
             XCTAssertEqual(action(.press(.options), context), .menuToggle)
@@ -110,14 +146,50 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), context), .moveInContent(.right))
         XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: true), context), "ein Druck, ein Schritt")
         XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .chatKey(.down))
-        XCTAssertEqual(action(.press(.l1), context), .tab(step: -1))
+        XCTAssertEqual(action(.press(.l1), context), .adjacentChat(step: -1), "L1/R1 folgen der Liste links")
+        XCTAssertEqual(action(.press(.r1), chat(.idle) { $0.gridActive = true }), .adjacentChat(step: 1), "auch im Raster")
         XCTAssertEqual(action(.press(.l3), context), .toggleMaximize)
         XCTAssertEqual(action(.press(.l3), chat(.working) { $0.gridActive = true }), .toggleMaximize)
         XCTAssertEqual(action(.holdBegan(.l2), context), .pickerBegin)
         XCTAssertNil(action(.holdEnded(.l2), context))
         XCTAssertEqual(action(.press(.r2), context), .dictationToggle)
         XCTAssertEqual(action(.scroll(lines: -2), context), .scroll(lines: -2))
-        XCTAssertNil(action(.press(.r3), context))
+        XCTAssertNil(action(.press(.r3), context), "R3 auf einem lebenden Chat: nichts, auch keine Vibration")
+    }
+
+    /// Runde 2: R3 startet einen gestoppten Chat, in der Liste die markierte Zeile.
+    func testR3StartsStoppedChat() {
+        XCTAssertEqual(action(.press(.r3), chat(.ended)), .chatResume)
+        XCTAssertEqual(action(.press(.r3), chat(.idle) { $0.hasTerminal = false }), .chatResume)
+        for status in [ControllerChatState.Status.idle, .working, .awaitingInput, .unknown] {
+            XCTAssertNil(action(.press(.r3), chat(status)), "\(status)")
+        }
+        XCTAssertEqual(action(.press(.r3), .list), .listStartRow)
+    }
+
+    /// Runde 2: Viereck halten in der Liste schließt die Zeile wie ihr „−“/„×“.
+    func testSquareHoldInListClosesRow() {
+        XCTAssertEqual(action(.holdBegan(.square), .list), .listCloseRow)
+        XCTAssertEqual(action(.holdPending(.square, duration: 0.6), .list), .holdProgress(.square, duration: 0.6))
+        XCTAssertEqual(action(.holdCancelled(.square), .list), .holdProgressCancelled(.square))
+        XCTAssertNil(action(.tap(.square), .list), "tippen: nichts")
+        XCTAssertNil(action(.holdRepeat(.square), .list), "kein Wiederholen")
+    }
+
+    /// Runde 2: In der Einzelansicht wechseln hoch/runter den Chat (mit
+    /// Wiederholung), im Raster bleibt es der Kachel-Fokus (ohne).
+    func testLeftStickUpDownSwitchesChatsInSingleView() {
+        let single = chat(.idle)
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), single), .adjacentChat(step: -1))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: true), single), .adjacentChat(step: 1))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: false), chat(.ended)), .adjacentChat(step: 1))
+        XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), single), .moveInContent(.left))
+        XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: true), single))
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .chatKey(.up), "Steuerkreuz bleibt Pfeil")
+
+        let grid = chat(.idle) { $0.gridActive = true }
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), grid), .moveInContent(.up))
+        XCTAssertNil(action(.move(.down, source: .leftStick, isRepeat: true), grid))
     }
 
     // MARK: - Diktat
@@ -132,11 +204,32 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), toChat), .outputMode(step: -1))
         XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), toChat), .outputMode(step: 1))
         XCTAssertNil(action(.move(.right, source: .dpad, isRepeat: true), toChat))
-        XCTAssertNil(action(.move(.up, source: .dpad, isRepeat: false), toChat))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), toChat))
         for gesture in [ControllerGesture.press(.triangle), .press(.l1), .press(.touchpad), .press(.options),
-                        .tap(.l2), .holdBegan(.l2), .holdBegan(.circle), .scroll(lines: 1), .chordCompleted] {
+                        .tap(.l2), .holdBegan(.l2), .holdBegan(.circle), .tap(.square), .chordCompleted] {
             XCTAssertNil(action(gesture, toChat), "\(gesture)")
+        }
+    }
+
+    /// Runde 2: Steuerkreuz hoch/runter wechselt den Modus ebenfalls, beim
+    /// Halten wiederholt; links/rechts bleibt ein Schritt pro Druck.
+    func testDpadUpDownStepsOutputModeWhileRecording() {
+        let context = ControllerContext.recording(phase: .recording, targetIsChat: false)
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .outputMode(step: -1))
+        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: false), context), .outputMode(step: 1))
+        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .outputMode(step: 1))
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: true), context), .outputMode(step: -1))
+        XCTAssertNil(action(.move(.up, source: .leftStick, isRepeat: false), context))
+    }
+
+    /// Runde 2: Der rechte Stick scrollt auch während Aufnahme,
+    /// Transkription und Nacharbeit.
+    func testScrollWorksInEveryRecordingPhase() {
+        for phase in ControllerRecordingPhase.allCases {
+            for targetIsChat in [true, false] {
+                let context = ControllerContext.recording(phase: phase, targetIsChat: targetIsChat)
+                XCTAssertEqual(action(.scroll(lines: -2), context), .scroll(lines: -2), "\(phase)")
+            }
         }
     }
 
@@ -185,6 +278,12 @@ final class ControllerBindingResolverTests: XCTestCase {
         }
         XCTAssertEqual(action(.press(.triangle), .otherWindow), .nextWaitingChat)
         XCTAssertNil(action(.press(.triangle), .modal), "unter einem Dialog nicht wegspringen")
+        // Runde 2: Im Dialog (Projekt-Auswahl) bewegt auch der linke Stick
+        // hoch/runter, mit Wiederholung; in anderen Fenstern nicht.
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), .modal), .bridgeKey(.up))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: true), .modal), .bridgeKey(.down))
+        XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), .modal))
+        XCTAssertNil(action(.move(.up, source: .leftStick, isRepeat: false), .otherWindow))
     }
 
     func testNoWindow() {
@@ -217,18 +316,17 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .menuMove(step: 1))
         XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), context), .menuMove(step: -1))
         XCTAssertEqual(action(.press(.cross), context), .menuActivate)
-        XCTAssertEqual(action(.tap(.circle), context), .menuToggle)
+        XCTAssertEqual(action(.tap(.circle), context), .menuBack, "Runde 2: Kreis geht eine Ebene zurück")
         XCTAssertEqual(action(.press(.options), context), .menuToggle)
         XCTAssertNil(action(.press(.r2), context))
     }
 
     func testClipboardPanelDeleteNeedsHolding() {
-        let context = ControllerContext.clipboardPanel
+        let context = ControllerContext.clipboardPanel(ControllerClipboardState())
         XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), context), .clipboard(.up))
         XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .clipboard(.down))
         XCTAssertEqual(action(.press(.cross), context), .clipboard(.paste))
         XCTAssertEqual(action(.tap(.circle), context), .clipboard(.close))
-        XCTAssertEqual(action(.press(.triangle), context), .clipboard(.pin))
         XCTAssertEqual(action(.press(.touchpad), context), .clipboardToggle)
         // Viereck: Tippen tut nichts, Halten zeigt den Fortschritt und löscht nach 0,6 s.
         XCTAssertNil(action(.tap(.square), context))
@@ -242,7 +340,7 @@ final class ControllerBindingResolverTests: XCTestCase {
     func testClipboardDeleteThroughRecognizer() {
         var recognizer = ControllerGestureRecognizer()
         func actions(_ gestures: [ControllerGesture]) -> [ControllerAction] {
-            gestures.compactMap { action($0, .clipboardPanel) }
+            gestures.compactMap { action($0, .clipboardPanel(ControllerClipboardState())) }
         }
         XCTAssertEqual(actions(recognizer.handle(.button(.square, pressed: true), at: 0)),
                        [.holdProgress(.square, duration: 0.6)])
@@ -253,6 +351,41 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(actions(recognizer.handle(.button(.square, pressed: false), at: 2)), [])
     }
 
+    /// Runde 2: Verlauf vollständig per Controller.
+    func testClipboardPanelFullControl() {
+        var state = ControllerClipboardState()
+        func act(_ gesture: ControllerGesture) -> ControllerAction? { action(gesture, .clipboardPanel(state)) }
+        XCTAssertEqual(act(.press(.triangle)), .rejected, "Korrigieren nicht verfügbar")
+        XCTAssertEqual(act(.press(.l3)), .rejected, "kein Bild")
+        XCTAssertEqual(act(.press(.l1)), .clipboard(.filterAll))
+        XCTAssertEqual(act(.press(.r1)), .clipboard(.filterDictations))
+        XCTAssertEqual(act(.press(.options)), .clipboard(.menuToggle))
+        XCTAssertEqual(act(.press(.r2)), .rejected, "kein Diktat ins nicht aktivierende Fenster")
+        state.canCorrect = true
+        state.selectedIsImage = true
+        XCTAssertEqual(act(.press(.triangle)), .clipboard(.correctAndPaste))
+        XCTAssertEqual(act(.press(.l3)), .clipboard(.zoom))
+
+        state.isZoomed = true
+        XCTAssertNil(act(.press(.l1)), "Filter in der großen Bildansicht gesperrt (wie ⌘D)")
+        XCTAssertNil(act(.press(.r1)))
+        XCTAssertEqual(act(.tap(.circle)), .clipboard(.close), "Kreis: zurück aus der Bildansicht")
+
+        state = ControllerClipboardState(isConfirmingClear: true)
+        XCTAssertEqual(act(.press(.cross)), .clipboard(.confirmClear))
+        XCTAssertEqual(act(.tap(.circle)), .clipboard(.close))
+        XCTAssertNil(act(.move(.down, source: .dpad, isRepeat: false)))
+        XCTAssertNil(act(.holdBegan(.square)))
+
+        state = ControllerClipboardState(menuOpen: true)
+        XCTAssertEqual(act(.move(.up, source: .dpad, isRepeat: false)), .clipboard(.menuUp))
+        XCTAssertEqual(act(.move(.down, source: .leftStick, isRepeat: true)), .clipboard(.menuDown))
+        XCTAssertEqual(act(.press(.cross)), .clipboard(.menuActivate))
+        XCTAssertEqual(act(.tap(.circle)), .clipboard(.menuToggle))
+        XCTAssertEqual(act(.press(.options)), .clipboard(.menuToggle))
+        XCTAssertEqual(act(.press(.touchpad)), .clipboardToggle)
+    }
+
     func testChatPicker() {
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), .chatPicker), .pickerMove(.left))
         XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), .chatPicker), .pickerMove(.down))
@@ -260,7 +393,11 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.tap(.circle), .chatPicker), .pickerCancel)
         XCTAssertEqual(action(.press(.r2), .chatPicker), .pickerCommitAndDictate)
         XCTAssertEqual(action(.holdCancelled(.l2), .chatPicker), .pickerCancel, "Zurücksetzen schließt ohne Wechsel")
-        XCTAssertNil(action(.press(.cross), .chatPicker))
+        // Runde 2: Kreuz wechselt sofort; das spätere Loslassen von L2 trifft
+        // dann den Chat und tut dort nichts.
+        XCTAssertEqual(action(.press(.cross), .chatPicker), .pickerCommit)
+        XCTAssertNil(action(.holdEnded(.l2), chat(.idle)))
+        XCTAssertNil(action(.holdEnded(.l2), .list))
         XCTAssertNil(action(.chordCompleted, .chatPicker))
     }
 
@@ -274,7 +411,7 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.press(.r2), .paused))
         XCTAssertNil(action(.press(.l1), .paused))
 
-        for context in [chat(.working), .list, .clipboardPanel, .menu(dialogOpen: false), .modal,
+        for context in [chat(.working), .list, .clipboardPanel(ControllerClipboardState()), .menu(dialogOpen: false), .modal,
                         .otherWindow, .noWindow, .quickAction, .outsideApp(backgroundEnabled: true)] {
             XCTAssertEqual(action(.chordCompleted, context), .pauseToggle, "\(context)")
         }

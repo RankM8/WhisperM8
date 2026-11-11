@@ -69,6 +69,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         snapshot.recordingTargetIsChat = submitAllowed(to: dictation.targetSessionID)
         snapshot.quickActionRunning = dictation.isQuickActionRunning
         snapshot.clipboardPanelOpen = environment.isClipboardPanelOpen
+        if snapshot.clipboardPanelOpen { snapshot.clipboard = environment.clipboardState }
 
         guard let windowID = targetWindowID, var window = chats.snapshot(of: windowID) else {
             snapshot.window = environment.hasOtherKeyWindow ? .other : .none
@@ -80,7 +81,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
         snapshot.chatPickerOpen = window.isSwitcherOpen && pickerOpenedByController
         snapshot.controllerMenuOpen = ui.menu != nil
-        snapshot.modalOpen = window.hasSheet || environment.isModalOpen
+        snapshot.modalOpen = window.hasSheet || window.ownsKeyOverlay || environment.isModalOpen
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
@@ -129,7 +130,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let dialogOpen = snapshot.chat?.status == .awaitingInput
         if ui.menu != nil, ui.menuDialogOpen != dialogOpen {
             ui.menuDialogOpen = dialogOpen
-            ui.menu?.normalize(dialogOpen: dialogOpen)
+            ui.menu?.update(dialogOpen: dialogOpen)
         }
     }
 
@@ -173,11 +174,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         // Chat
         case let .chatKey(key): sendKey(key.terminalKey)
         case .chatInterrupt: sendKey(.escape)
-        case .chatClearComposer: withSelectedSession { terminals.clearComposer(of: $0) }
+        case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .nextWaitingChat: nextWaitingChat(in: context)
         case .lastChat: command(.lastChat, orReject: true)
-        case let .tab(step): command(step < 0 ? .previousTab : .nextTab, orReject: false)
         case let .moveInContent(direction): moveInContent(direction)
+        case let .adjacentChat(step): moveToAdjacentChat(step)
         case .newChat: newChat()
         case .toggleMaximize: command(.toggleMaximize, orReject: true)
         case let .scroll(lines): withSelectedSession { terminals.scroll(lines: lines, in: $0) }
@@ -188,6 +189,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .listMove(step): moveInList(step)
         case .listActivate: activateMarkedRow()
         case let .listFilter(step): filterList(step)
+        case .listCloseRow: closeMarkedRow()
+        case .listStartRow:
+            // Nur gestoppte Chats; sonst still (R3 wird beim Scrollen leicht gedrückt).
+            if let sessionID = ui.markedRow?.sessionID { command(.startChat(sessionID), orReject: false) }
 
         // Zwischenablage-Verlauf
         case .clipboardToggle: environment.toggleClipboardPanel()
@@ -195,8 +200,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
         // Menü
         case .menuToggle: toggleMenu(in: context)
-        case let .menuMove(step): ui.menu?.move(step, dialogOpen: ui.menuDialogOpen)
+        case let .menuMove(step): ui.menu?.move(step)
         case .menuActivate: activateMenuItem()
+        case .menuBack:
+            if ui.menu?.back() != true { ui.menu = nil }
 
         // Chat-Auswahl
         case .pickerBegin: beginPicker()
@@ -286,14 +293,36 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if direction == .left { enterList() }
     }
 
+    /// Create: Projekt-Auswahl „Neuer Chat“ öffnen. In der Liste ist das
+    /// Projekt der markierten Zeile vorausgewählt, sonst das aktuelle — so
+    /// startet „Create, Kreuz“ einen Chat im selben Projekt.
     private func newChat() {
-        if ui.area == .list, let marked = ui.markedRow,
-           let projectID = currentListRows().first(where: { $0.row == marked })?.projectID {
-            command(.newChat(projectID: projectID), orReject: true)
-        } else {
-            command(.newChatInCurrentProject, orReject: true)
+        var projectID: UUID?
+        if ui.area == .list, let marked = ui.markedRow {
+            projectID = currentListRows().first(where: { $0.row == marked })?.projectID
         }
+        command(.showNewChatPicker(preferredProjectID: projectID), orReject: true)
         ui.leaveList()
+    }
+
+    /// L1/R1 und (Einzelansicht) Stick hoch/runter: voriger bzw. nächster
+    /// Chat in der Reihenfolge der Liste links, ohne die Liste zu betreten.
+    /// Im sichtbaren Workspace setzt die Auswahl den Kachel-Fokus. Am Rand
+    /// gibt es „geht nicht“.
+    private func moveToAdjacentChat(_ step: Int) {
+        let selected = selectedSessionID
+        // Beim Halten kommen zehn Schritte pro Sekunde: ein kurz
+        // zurückliegender Stand der Zeilen genügt, solange der aktuelle Chat
+        // darin steht.
+        var rows = currentListRows(allowCached: true).map(\.row)
+        if let selected, !rows.contains(where: { $0.sessionID == selected }) {
+            rows = currentListRows().map(\.row)
+        }
+        guard let target = SidebarChatOrder.neighbor(of: selected, step: step, in: rows),
+              command(.selectSession(target), orReject: false) else {
+            playHaptic(.rejected)
+            return
+        }
     }
 
     // MARK: - Liste links
@@ -346,6 +375,27 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             done = command(.openProjectAsWorkspace(projectID, activeSessionIDs: row.activeSessionIDs), orReject: true)
         }
         if done { ui.leaveList() }
+    }
+
+    /// Viereck halten in der Liste: „−“/„×“ der markierten Zeile. Kopfzeilen
+    /// haben keins. Die Markierung bleibt in der Liste und rückt auf den
+    /// Nachbarn, sobald die Zeile verschwindet (bei einer Rückfrage erst nach
+    /// dem Bestätigen, spätestens beim nächsten Schritt).
+    private func closeMarkedRow() {
+        guard let marked = ui.markedRow, marked.sessionID != nil else {
+            playHaptic(.rejected)
+            return
+        }
+        guard command(.closeListRow(marked), orReject: true) else { return }
+        refreshListMarker()
+        // Die Seitenleiste baut ihre Zeilen erst nach dem Zustandswechsel neu.
+        DispatchQueue.main.async { [weak self] in self?.refreshListMarker() }
+    }
+
+    private func refreshListMarker() {
+        guard ui.area == .list else { return }
+        ui.listModel.setRows(currentListRows().map(\.row))
+        if ui.markedRow != ui.listModel.marked { ui.markedRow = ui.listModel.marked }
     }
 
     private func filterList(_ step: Int) {
@@ -412,50 +462,98 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     // MARK: - Menü (Options)
 
+    /// Öffnet das eine Menü des Controllers. Eingaben gehen in den
+    /// ausgewählten Chat, Aktionen am Chat wirken in der Liste auf die
+    /// markierte Chat-Zeile, sonst auf den ausgewählten Chat.
     private func toggleMenu(in context: ControllerContext) {
         if ui.menu != nil {
             ui.menu = nil
             return
         }
-        var menu = ControllerMenuModel()
-        var dialogOpen = false
-        if case let .chat(state) = context { dialogOpen = state.status == .awaitingInput }
-        menu.normalize(dialogOpen: dialogOpen)
-        ui.menuDialogOpen = dialogOpen
-        ui.menu = menu
+        let selected = selectedSessionID
+        var target: SidebarNavigationRow? = selected.map { .chat($0) }
+        if case .list = context, let marked = ui.markedRow, marked.sessionID != nil { target = marked }
+        var setup = ControllerMenuSetup()
+        setup.sessionID = target?.sessionID
+        setup.target = target
+        setup.chat = setup.sessionID.flatMap { chats.chatActionInfo($0, in: targetWindowID) }
+        if let selected, setup.sessionID == selected, let terminal = terminals.state(of: selected), terminal.isRunning {
+            setup.acceptsInput = true
+            setup.profile = terminal.profile
+            setup.dialogOpen = terminal.status == .awaitingInput
+        }
+        ui.menuDialogOpen = setup.dialogOpen
+        ui.menu = ControllerMenuModel(setup: setup)
     }
 
     private func activateMenuItem() {
-        guard let menu = ui.menu else { return }
-        let item = menu.selected
-        guard ControllerMenuModel.isEnabled(item, dialogOpen: ui.menuDialogOpen) else {
-            playHaptic(.rejected)
-            return
+        guard var menu = ui.menu else { return }
+        switch menu.submenu {
+        case .commands(let list):
+            guard let text = list.selectedEnabled else { return playHaptic(.rejected) }
+            ui.menu = nil
+            sendCommand(ControllerSlashCommand(text: text))
+        case .accounts(let list):
+            guard let id = list.selectedEnabled, let sessionID = menu.setup.sessionID,
+                  let account = menu.setup.chat?.accounts.first(where: { $0.id == id }) else {
+                return playHaptic(.rejected)
+            }
+            ui.menu = nil
+            switch account.kind {
+            case .claude: command(.moveChatToAccount(sessionID, profileName: account.name), orReject: true)
+            case .gpt: command(.setGPTAccount(sessionID, profileName: account.name), orReject: true)
+            }
+        case nil:
+            guard let item = menu.top.selectedEnabled else { return playHaptic(.rejected) }
+            if item.opensSubmenu {
+                if menu.openSubmenu() { ui.menu = menu } else { playHaptic(.rejected) }
+                return
+            }
+            ui.menu = nil
+            perform(item, setup: menu.setup)
         }
-        ui.menu = nil
+    }
+
+    private func perform(_ item: ControllerMenuItem, setup: ControllerMenuSetup) {
         switch item {
         case .continueWork:
             // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
             // und beides gesendet.
             guard let sessionID = selectedSessionID,
                   terminals.state(of: sessionID)?.draftSuspected != true else {
-                playHaptic(.rejected)
-                return
+                return playHaptic(.rejected)
             }
             terminals.sendText(ControllerMenuText.continueWork, submit: true, to: sessionID)
-        case .slashCommands:
-            withSelectedSession { terminals.sendText("/", submit: false, to: $0) }
         case .cycleMode:
             sendKey(.backTab)
-        case .compact:
-            withSelectedSession { terminals.sendText("/compact", submit: false, to: $0) }
-        case .closeTab:
-            command(.closeSelectedTab, orReject: true)
+        case .commands, .switchAccount:
+            break
+        case .rename, .fork, .pin, .archive, .closeChat:
+            guard let sessionID = setup.sessionID else { return playHaptic(.rejected) }
+            switch item {
+            case .rename: command(.renameChat(sessionID), orReject: true)
+            case .fork: command(.forkChat(sessionID), orReject: true)
+            case .pin: command(.togglePin(sessionID), orReject: true)
+            case .archive: command(.archiveChat(sessionID), orReject: true)
+            default:
+                if command(.closeListRow(setup.target ?? .chat(sessionID)), orReject: true) { refreshListMarker() }
+            }
         case .showBindings:
             environment.openControllerSettings()
         case .pause:
             togglePause()
         }
+    }
+
+    /// Befehl aus der zweiten Ebene: „/“ bleibt ungesendet stehen, damit sich
+    /// die Liste der CLI öffnet; feste Befehle werden gesendet (so öffnet
+    /// `/model` gleich die Modellwahl). Nie an einen Entwurf hängen.
+    private func sendCommand(_ command: ControllerSlashCommand) {
+        guard let sessionID = selectedSessionID,
+              terminals.state(of: sessionID)?.draftSuspected != true else {
+            return playHaptic(.rejected)
+        }
+        terminals.sendText(command.text, submit: command.submits, to: sessionID)
     }
 }
 
@@ -474,6 +572,7 @@ private extension ControllerChatKey {
         case .down: return .down
         case .left: return .left
         case .right: return .right
+        case .backspace: return .backspace
         }
     }
 }

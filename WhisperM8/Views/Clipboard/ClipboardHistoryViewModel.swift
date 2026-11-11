@@ -77,6 +77,8 @@ final class ClipboardHistoryViewModel: ObservableObject {
     }
     /// Die Fußzeile fragt nach, bevor sie den Verlauf leert.
     @Published var isConfirmingClear = false
+    /// Menü des Controllers (Options) im Verlauf; `nil` = zu.
+    @Published var controllerMenu: ControllerListMenu<ClipboardControllerMenuItem>?
     /// Bild füllt das ganze Fenster (Klick aufs Vorschaubild oder ⌘Y).
     @Published private(set) var isZoomed = false
     /// Großes Bild samt der ID, zu der es gehört. Die Ansicht zeigt es nur,
@@ -106,6 +108,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
         didSet {
             if !isPresented, oldValue {
                 // Fenster zu: große Bilder freigeben, Miniaturen bleiben.
+                controllerMenu = nil
                 closeZoom()
                 previewTask?.cancel()
                 previewImages.removeAll()
@@ -199,6 +202,7 @@ final class ClipboardHistoryViewModel: ObservableObject {
         query = ""
         filter = .all
         isConfirmingClear = false
+        controllerMenu = nil
         closeZoom()
         recomputeVisible()
         selectedID = visible.first?.id

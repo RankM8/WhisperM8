@@ -1,6 +1,6 @@
 import Foundation
 
-/// Blättert während der Aufnahme durch die Ausgabemodi (Steuerkreuz links/rechts).
+/// Blättert während der Aufnahme durch die Ausgabemodi (Steuerkreuz).
 enum OutputModeCycler {
     /// Nächster Modus mit Umlauf. Leere Liste → `nil`; ist `current` unbekannt
     /// oder `nil`, beginnt es beim ersten Modus.

@@ -2,7 +2,7 @@ import Foundation
 
 /// Tasten, die als Bytes ins Terminal des Ziel-Chats gehen.
 enum ControllerChatKey: String, CaseIterable, Sendable {
-    case enter, escape, up, down, left, right
+    case enter, escape, up, down, left, right, backspace
 
     init(_ direction: ControllerDirection) {
         switch direction {
@@ -14,9 +14,18 @@ enum ControllerChatKey: String, CaseIterable, Sendable {
     }
 }
 
-/// Befehle an den Zwischenablage-Verlauf (angebunden an `ClipboardKeyCommand`).
+/// Befehle an den Zwischenablage-Verlauf (angebunden an `ClipboardKeyCommand`
+/// und das Menü im Verlauf).
 enum ControllerClipboardCommand: String, CaseIterable, Sendable {
     case up, down, paste, pin, delete, close
+    case correctAndPaste
+    /// Filter „Alle“ bzw. „Diktate“ (L1 / R1).
+    case filterAll, filterDictations
+    /// Bild groß ansehen und zurück.
+    case zoom
+    /// Rückfrage „Verlauf leeren?“ bestätigen.
+    case confirmClear
+    case menuToggle, menuUp, menuDown, menuActivate
 }
 
 /// Tasten der Tastatur-Brücke für Dialoge und andere Fenster (Plan 3.6).
@@ -44,13 +53,18 @@ enum ControllerAction: Equatable, Sendable {
     // Chat
     case chatKey(ControllerChatKey)
     case chatInterrupt
-    case chatClearComposer
+    /// Gestoppten Chat wieder starten — wie der Knopf „Starten“ im Kopf.
+    case chatResume
     case nextWaitingChat
     case lastChat
-    case tab(step: Int)
     /// Im Raster von Kachel zu Kachel; am linken Rand macht der Ausführer
     /// daraus den Wechsel in die Liste.
     case moveInContent(ControllerDirection)
+    /// Voriger bzw. nächster Chat in der Reihenfolge der Liste links, ohne die
+    /// Liste zu betreten (L1/R1, in der Einzelansicht auch Stick hoch/runter).
+    case adjacentChat(step: Int)
+    /// Projekt-Auswahl „Neuer Chat“ öffnen (wie ⌘N), das aktuelle bzw.
+    /// markierte Projekt vorausgewählt.
     case newChat
     case toggleMaximize
     case scroll(lines: Int)
@@ -61,6 +75,10 @@ enum ControllerAction: Equatable, Sendable {
     case listMove(step: Int)
     case listActivate
     case listFilter(step: Int)
+    /// Viereck halten auf einer Chat-Zeile: dasselbe wie „−“/„×“ der Zeile.
+    case listCloseRow
+    /// R3 auf einer Chat-Zeile: gestoppten Chat starten, sonst nichts.
+    case listStartRow
 
     // Zwischenablage-Verlauf
     case clipboardToggle
@@ -70,6 +88,8 @@ enum ControllerAction: Equatable, Sendable {
     case menuToggle
     case menuMove(step: Int)
     case menuActivate
+    /// Kreis: eine Ebene zurück, auf der ersten Ebene schließen.
+    case menuBack
 
     // Chat-Auswahl (L2)
     case pickerBegin

@@ -1011,6 +1011,16 @@
         }
       }
     },
+    "Agents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agenten"
+          }
+        }
+      }
+    },
     "AI Output": {
       "localizations": {
         "de": {
@@ -1037,6 +1047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "KI-Modi (Bereinigen, E-Mail, Slack …) nutzen die Codex-CLI mit deinem ChatGPT-Login. Das ist optional – du kannst es jetzt überspringen und später in den Einstellungen verbinden."
+          }
+        }
+      }
+    },
+    "All / Dictations": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle / Diktate"
           }
         }
       }
@@ -1961,6 +1981,16 @@
         }
       }
     },
+    "Approvals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigaben"
+          }
+        }
+      }
+    },
     "Archive": {
       "localizations": {
         "de": {
@@ -2677,6 +2707,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kreis"
+          }
+        }
+      }
+    },
+    "Clear conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch leeren"
           }
         }
       }
@@ -3621,6 +3661,16 @@
         }
       }
     },
+    "Close chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat schließen"
+          }
+        }
+      }
+    },
     "Close gaps when a chat leaves the grid": {
       "localizations": {
         "de": {
@@ -3991,6 +4041,16 @@
         }
       }
     },
+    "Commands": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehle"
+          }
+        }
+      }
+    },
     "Commands …": {
       "localizations": {
         "de": {
@@ -4177,6 +4237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kontext & Vorlage"
+          }
+        }
+      }
+    },
+    "Context usage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontext-Auslastung"
           }
         }
       }
@@ -4397,6 +4467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Korrigieren & einfügen"
+          }
+        }
+      }
+    },
+    "Correct and paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigieren und einfügen"
           }
         }
       }
@@ -4661,6 +4741,16 @@
         }
       }
     },
+    "current": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktuell"
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "de": {
@@ -4757,6 +4847,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ablehnen"
+          }
+        }
+      }
+    },
+    "Delete (hold: keep deleting)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen (halten: weiter löschen)"
           }
         }
       }
@@ -6461,6 +6561,16 @@
         }
       }
     },
+    "Help": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hilfe"
+          }
+        }
+      }
+    },
     "Here": {
       "localizations": {
         "de": {
@@ -6677,6 +6787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Halten zum Sprechen oder tippen, um die Aufnahme ein-/auszuschalten. Kurze Tipper unter 0,3 s werden ignoriert, um versehentliches Stoppen zu verhindern."
+          }
+        }
+      }
+    },
+    "Hold: close": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: schließen"
           }
         }
       }
@@ -6927,6 +7047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
+          }
+        }
+      }
+    },
+    "In the list, hold: close the chat (like its − or ×)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Liste halten: Chat schließen (wie sein − oder ×)"
           }
         }
       }
@@ -7387,6 +7517,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sprache"
+          }
+        }
+      }
+    },
+    "Large image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild groß"
           }
         }
       }
@@ -8281,12 +8421,32 @@
         }
       }
     },
+    "MCP servers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCP-Server"
+          }
+        }
+      }
+    },
     "Medium": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Mittel"
+          }
+        }
+      }
+    },
+    "Memory": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gedächtnis"
           }
         }
       }
@@ -8307,6 +8467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Menü mit Kurzantworten und Aktionen zum Chat"
+          }
+        }
+      }
+    },
+    "Menu: input for the chat, chat actions, controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menü: Eingaben in den Chat, Aktionen am Chat, Steuerung"
           }
         }
       }
@@ -8661,6 +8831,16 @@
         }
       }
     },
+    "Move: through the list, into the chat, from tile to tile; up and down switch chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewegen: durch die Liste, in den Chat, von Kachel zu Kachel; hoch und runter wechseln den Chat"
+          }
+        }
+      }
+    },
     "Moved (%lld)": {
       "localizations": {
         "de": {
@@ -8787,6 +8967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neuer Chat im aktuellen Projekt"
+          }
+        }
+      }
+    },
+    "New conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Gespräch"
           }
         }
       }
@@ -10364,6 +10554,16 @@
         }
       }
     },
+    "opens the list of the CLI": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "öffnet die Liste der CLI"
+          }
+        }
+      }
+    },
     "Opt-in via Codex subscription/OAuth (1M rollout of the Codex backend): 900k raw profile, auto-compact expected around %lldk. Applies to the 1M class according to the Codex catalog (currently: %@); direct measurements 2026-08-18 and 2026-09-06: 903k–913k accepted, ~924k rejected. In this profile other models drop out of the picker, so fresh starts fall back to the latest model. May use up ChatGPT credits faster — switch back to Standard on upstream overflow.": {
       "localizations": {
         "de": {
@@ -10454,6 +10654,16 @@
         }
       }
     },
+    "Output mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgabemodus"
+          }
+        }
+      }
+    },
     "Output — processed preview": {
       "localizations": {
         "de": {
@@ -10524,6 +10734,16 @@
         }
       }
     },
+    "Pick a project for a new chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt für einen neuen Chat wählen"
+          }
+        }
+      }
+    },
     "PINNED": {
       "localizations": {
         "de": {
@@ -10534,12 +10754,42 @@
         }
       }
     },
+    "Plan usage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzung des Abos"
+          }
+        }
+      }
+    },
     "Press a button on the controller.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Drück eine Taste am Controller."
+          }
+        }
+      }
+    },
+    "Previous / next chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriger / nächster Chat"
+          }
+        }
+      }
+    },
+    "Previous / next chat in the order of the list; in the list: Active / Recent / All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriger / nächster Chat in der Reihenfolge der Liste; in der Liste: Aktiv / Zuletzt / Alle"
           }
         }
       }
@@ -12624,6 +12874,16 @@
         }
       }
     },
+    "Resume a conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch fortsetzen"
+          }
+        }
+      }
+    },
     "Retry now": {
       "localizations": {
         "de": {
@@ -12824,6 +13084,16 @@
         }
       }
     },
+    "Select, confirm, send; start a stopped chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen, bestätigen, senden; gestoppten Chat starten"
+          }
+        }
+      }
+    },
     "Send": {
       "localizations": {
         "de": {
@@ -12890,6 +13160,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Viereck"
+          }
+        }
+      }
+    },
+    "Start a stopped chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppten Chat starten"
+          }
+        }
+      }
+    },
+    "Start chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat starten"
           }
         }
       }
@@ -14714,6 +15004,16 @@
         }
       }
     },
+    "Summarize conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch zusammenfassen"
+          }
+        }
+      }
+    },
     "Supervisor launch failed: %@": {
       "localizations": {
         "de": {
@@ -14734,6 +15034,16 @@
         }
       }
     },
+    "Switch account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto wechseln"
+          }
+        }
+      }
+    },
     "Switch and dictate": {
       "localizations": {
         "de": {
@@ -14750,6 +15060,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modus wechseln"
+          }
+        }
+      }
+    },
+    "Switch model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell wechseln"
           }
         }
       }
@@ -16590,6 +16910,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Türkis"
+          }
+        }
+      }
+    },
+    "Type /": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "/ eintippen"
           }
         }
       }

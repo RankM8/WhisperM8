@@ -11,14 +11,19 @@ extension ControllerBindingResolver {
     static func chat(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         switch gesture {
         // Navigation: wirkt auch bei beendetem Chat oder reinem Verlauf.
-        case let .move(direction, .leftStick, false): return .moveInContent(direction)
-        case .press(.l1): return .tab(step: -1)
-        case .press(.r1): return .tab(step: 1)
+        case let .move(direction, .leftStick, isRepeat):
+            return leftStick(direction, isRepeat: isRepeat, gridActive: state.gridActive)
+        // L1/R1 folgen der Liste links, nicht den Tabs (die Tastatur bleibt bei den Tabs).
+        case .press(.l1): return .adjacentChat(step: -1)
+        case .press(.r1): return .adjacentChat(step: 1)
         case .press(.triangle): return .nextWaitingChat
         // Der Ausführer entscheidet: Kachel groß oder zurück zum Raster.
         case .press(.l3): return .toggleMaximize
         case .press(.create): return .newChat
         case .press(.options): return .menuToggle
+        // R3 startet einen gestoppten Chat. Auf einem lebenden nichts, auch
+        // keine Vibration: beim Scrollen drückt man ihn leicht aus Versehen.
+        case .press(.r3): return state.acceptsKeys ? nil : .chatResume
         case .press(.touchpad): return .clipboardToggle
         case .press(.r2): return .dictationToggle
         case .tap(.l2): return .lastChat
@@ -31,6 +36,8 @@ extension ControllerBindingResolver {
         case let .move(direction, .dpad, _):
             return state.acceptsKeys ? .chatKey(ControllerChatKey(direction)) : nil
         case .press(.cross):
+            // Gestoppter Chat: Kreuz startet ihn wieder (wie „Starten“ im Kopf).
+            guard state.acceptsKeys else { return .chatResume }
             return confirmAllowed(state) ? .chatKey(.enter) : nil
         case .tap(.circle):
             return escapeAllowed(state) ? .chatKey(.escape) : nil
@@ -40,8 +47,10 @@ extension ControllerBindingResolver {
             return interruptAllowed(state) ? .holdProgress(.circle, duration: duration) : nil
         case .holdCancelled(.circle):
             return interruptAllowed(state) ? .holdProgressCancelled(.circle) : nil
-        case .tap(.square):
-            return clearComposerAllowed(state) ? .chatClearComposer : nil
+        // Rücktaste: tippen löscht ein Zeichen, halten löscht weiter wie eine
+        // gehaltene Taste. Harmlos in jedem lebenden Zustand.
+        case .tap(.square), .holdBegan(.square), .holdRepeat(.square):
+            return state.acceptsKeys ? .chatKey(.backspace) : nil
 
         default:
             return nil
@@ -76,10 +85,18 @@ extension ControllerBindingResolver {
         return state.status == .working || state.status == .unknown || state.recentlySubmitted
     }
 
-    /// Viereck sendet Ctrl+C und ist deshalb nur bei Claude, ruhendem Chat und
-    /// erkanntem Entwurf aktiv.
-    static func clearComposerAllowed(_ state: ControllerChatState) -> Bool {
-        state.acceptsKeys && state.profile == .claude && state.status == .idle
-            && state.draftSuspected && !state.recentlySubmitted
+    /// Linker Stick im Inhalt. Im Raster bewegt er den Kachel-Fokus (ein
+    /// Druck, ein Schritt). In der Einzelansicht gehen hoch und runter zum
+    /// vorigen bzw. nächsten Chat der Liste und wiederholen beim Halten;
+    /// links führt in die Liste.
+    static func leftStick(_ direction: ControllerDirection, isRepeat: Bool, gridActive: Bool) -> ControllerAction? {
+        if !gridActive {
+            switch direction {
+            case .up: return .adjacentChat(step: -1)
+            case .down: return .adjacentChat(step: 1)
+            case .left, .right: break
+            }
+        }
+        return isRepeat ? nil : .moveInContent(direction)
     }
 }

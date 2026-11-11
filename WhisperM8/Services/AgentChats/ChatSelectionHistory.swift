@@ -35,4 +35,13 @@ final class AgentChatsCommandState {
     /// Der laufende Umschalter wurde ohne Ctrl geöffnet (Controller). Das
     /// Loslassen von Ctrl darf ihn dann nicht bestätigen.
     var switcherOpenedWithoutModifier = false
+    /// Projekt, das die Projekt-Auswahl „Neuer Chat“ beim nächsten Öffnen
+    /// vorauswählt (Controller: Create). Wird beim Öffnen verbraucht, damit
+    /// ⌘N danach wieder beim ersten Projekt beginnt.
+    var preferredNewChatProjectID: UUID?
+
+    func takePreferredNewChatProjectID() -> UUID? {
+        defer { preferredNewChatProjectID = nil }
+        return preferredNewChatProjectID
+    }
 }

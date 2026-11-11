@@ -111,6 +111,47 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertEqual(recognizer.tick(at: 1.6), [.holdBegan(.square)])
     }
 
+    /// Runde 2: Viereck gehalten wiederholt wie eine Taste — erst alle 60 ms,
+    /// nach 1 s Halten alle 25 ms; Loslassen beendet die Wiederholung.
+    func testSquareHoldRepeatsAndAccelerates() {
+        _ = down(.square, at: 0)
+        XCTAssertEqual(recognizer.tick(at: 0.6), [.holdBegan(.square)])
+        XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.66, accuracy: 1e-9)
+        XCTAssertEqual(recognizer.tick(at: 0.65), [])
+        XCTAssertEqual(recognizer.tick(at: 0.66), [.holdRepeat(.square)])
+        XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.72, accuracy: 1e-9)
+        // Nach 1 s Halten (ab 1,6 s) der schnelle Takt.
+        _ = recognizer.tick(at: 1.62)
+        XCTAssertEqual(recognizer.nextDeadline ?? -1, 1.645, accuracy: 1e-9)
+        XCTAssertEqual(recognizer.tick(at: 1.645), [.holdRepeat(.square)])
+        XCTAssertEqual(up(.square, at: 1.66), [.holdEnded(.square)])
+        XCTAssertEqual(recognizer.tick(at: 2), [])
+        XCTAssertNil(recognizer.nextDeadline)
+    }
+
+    func testSquareRepeatLateTickRepeatsOnlyOnce() {
+        _ = down(.square, at: 0)
+        _ = recognizer.tick(at: 0.6)
+        XCTAssertEqual(recognizer.tick(at: 3), [.holdRepeat(.square)], "kein Schwall nachgeholter Zeichen")
+    }
+
+    /// Nur Viereck wiederholt; Kreis und L2 bleiben einfache Halte-Tasten.
+    func testOtherHoldButtonsDoNotRepeat() {
+        _ = down(.circle, at: 0)
+        XCTAssertEqual(recognizer.tick(at: 0.4), [.holdBegan(.circle)])
+        XCTAssertNil(recognizer.nextDeadline)
+        XCTAssertEqual(recognizer.tick(at: 2), [])
+    }
+
+    func testResetStopsSquareRepeat() {
+        _ = down(.square, at: 0)
+        _ = recognizer.tick(at: 0.7)
+        XCTAssertEqual(recognizer.reset(at: 0.8), [.holdCancelled(.square)])
+        XCTAssertNil(recognizer.nextDeadline)
+        XCTAssertEqual(recognizer.tick(at: 1), [])
+        XCTAssertEqual(up(.square, at: 1.1), [])
+    }
+
     // MARK: - Trigger
 
     func testTriggerHysteresis() {

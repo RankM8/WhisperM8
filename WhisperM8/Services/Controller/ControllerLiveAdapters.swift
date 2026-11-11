@@ -35,10 +35,6 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller(for: sessionID)?.sendKey(key) ?? false
     }
 
-    func clearComposer(of sessionID: UUID) {
-        controller(for: sessionID)?.sendComposerClear()
-    }
-
     func scroll(lines: Int, in sessionID: UUID) {
         controller(for: sessionID)?.scrollHistory(lines: lines)
     }
@@ -154,21 +150,14 @@ final class LiveControllerEnvironment: ControllerAppEnvironment {
 
     var isClipboardPanelOpen: Bool { ClipboardHistoryController.shared.isPanelVisible }
 
+    var clipboardState: ControllerClipboardState { ClipboardHistoryController.shared.controllerState }
+
     func toggleClipboardPanel() {
         ClipboardHistoryController.shared.togglePanel()
     }
 
     func clipboard(_ command: ControllerClipboardCommand) {
-        let keyCommand: ClipboardKeyCommand
-        switch command {
-        case .up: keyCommand = .moveUp
-        case .down: keyCommand = .moveDown
-        case .paste: keyCommand = .paste
-        case .pin: keyCommand = .togglePin
-        case .delete: keyCommand = .delete
-        case .close: keyCommand = .close
-        }
-        ClipboardHistoryController.shared.perform(keyCommand)
+        ClipboardHistoryController.shared.perform(controller: command)
     }
 
     func bringAgentChatsToFront() {

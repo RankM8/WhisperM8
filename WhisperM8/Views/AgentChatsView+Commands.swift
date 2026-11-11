@@ -17,7 +17,8 @@ extension AgentChatsView {
             handler: AgentChatsCommandCenter.Handler(
                 perform: { performCommand($0) },
                 snapshot: { commandSnapshot() },
-                listRows: { controllerListRows() }
+                listRows: { controllerListRows() },
+                chatActionInfo: { controllerChatActionInfo(for: $0) }
             )
         )
     }
@@ -43,7 +44,9 @@ extension AgentChatsView {
             hasSheet: hostWindow?.attachedSheet != nil,
             isSidebarVisible: isSidebarVisible,
             hasMultiSelection: !multiSelection.isEmpty,
-            isArchiveMode: archiveModeActive
+            isArchiveMode: archiveModeActive,
+            isNewChatPickerOpen: showNewChatProjectPicker,
+            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil
         )
     }
 
@@ -81,9 +84,37 @@ extension AgentChatsView {
             guard !showsGrid, activeGridWorkspaceEntity != nil else { return false }
             returnToWorkspace()
             return true
-        case .closeSelectedTab:
-            guard let session = selectedSession else { return false }
-            closeTabByUser(session)
+        case .closeListRow(let row):
+            return closeListRowFromCommand(row)
+        case .renameChat(let sessionID):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else { return false }
+            beginRename(session)
+            return true
+        case .forkChat(let sessionID):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+                  session.isForkable else { return false }
+            forkSession(session)
+            return true
+        case .setGPTAccount(let sessionID, let profileName):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+                  canSwitchGPTAccount(session),
+                  let profile = AccountMenuData.gptProfiles.value.first(where: { $0.name == profileName }),
+                  profile.isLoggedIn else { return false }
+            setGPTAccount([session], toProfile: profile)
+            return true
+        case .togglePin(let sessionID):
+            guard workspace.sessions.contains(where: { $0.id == sessionID }) else { return false }
+            togglePin(sessionID)
+            return true
+        case .archiveChat(let sessionID):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+                  session.status != .archived else { return false }
+            requestArchive([session])
+            return true
+        case .moveChatToAccount(let sessionID, let profileName):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+                  canMoveToAccount(session) else { return false }
+            requestAccountMove([session], toProfileNamed: profileName)
             return true
         case .newChatInCurrentProject:
             guard selectedProject != nil else { return false }
@@ -93,6 +124,10 @@ extension AgentChatsView {
             guard let project = workspace.projects.first(where: { $0.id == projectID }) else { return false }
             startNewChat(in: project)
             return true
+        case .showNewChatPicker(let preferredProjectID):
+            return showNewChatPickerFromCommand(preferredProjectID: preferredProjectID)
+        case .startChat(let sessionID):
+            return startChatFromCommand(sessionID)
         case .selectSession(let sessionID):
             guard workspace.sessions.contains(where: { $0.id == sessionID }) else { return false }
             selectedSessionID = sessionID
@@ -136,6 +171,47 @@ extension AgentChatsView {
             guard !multiSelection.isEmpty else { return false }
             multiSelection = []
             return true
+        }
+    }
+
+    /// Öffnet die Projekt-Auswahl „Neuer Chat“ wie ⌘N, mit dem gewünschten
+    /// Projekt vorausgewählt (`onAppear` der Auswahl liest es). Die Auswahl
+    /// hängt als Popover am Knopf der Seitenleiste: Ist die Seitenleiste zu,
+    /// wird sie erst eingeblendet und die Auswahl kurz danach geöffnet, wenn
+    /// der Knopf im Fenster steht. Im Archiv gibt es den Knopf nicht.
+    private func showNewChatPickerFromCommand(preferredProjectID: UUID?) -> Bool {
+        guard !archiveModeActive, !showNewChatProjectPicker else { return false }
+        commandState.preferredNewChatProjectID = preferredProjectID ?? selectedProjectID
+        // Ein alter Suchbegriff könnte das vorausgewählte Projekt ausblenden.
+        newChatProjectQuery = ""
+        guard isSidebarVisible else {
+            isSidebarVisible = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                showNewChatProjectPicker = true
+            }
+            return true
+        }
+        showNewChatProjectPicker = true
+        return true
+    }
+
+    /// „−“/„×“ einer Zeile der Liste, mit denselben Funktionen wie die
+    /// Seitenleiste: Chat-Zeilen über `performSidebarCloseAction` (Filter
+    /// entscheidet), Workspace-Zeilen beenden und nehmen den Chat aus genau
+    /// diesem Workspace. Kopfzeilen haben kein „−“/„×“.
+    private func closeListRowFromCommand(_ row: SidebarNavigationRow) -> Bool {
+        switch row {
+        case .chat(let sessionID):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else { return false }
+            performSidebarCloseAction([session])
+            return true
+        case .workspaceChat(let sessionID, let workspaceID):
+            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+                  let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+            requestEndSession([session], removingFrom: entity)
+            return true
+        case .workspace, .project:
+            return false
         }
     }
 

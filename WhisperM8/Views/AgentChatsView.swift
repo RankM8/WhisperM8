@@ -936,6 +936,7 @@ struct AgentChatsView: View {
                 commitArchive(sessions)
                 sessionsPendingArchive = nil
             }
+            .keyboardShortcut(.defaultAction) // Return bestätigt (auch Kreuz am Controller)
             Button("Cancel", role: .cancel) {}
         } message: { sessions in
             Text(verbatim: archiveMessage(for: sessions))
@@ -952,6 +953,7 @@ struct AgentChatsView: View {
                 commitEndSession(pending.sessions, removingFromWorkspaceID: pending.removeFromWorkspace?.id)
                 sessionsPendingEnd = nil
             }
+            .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}
         } message: { pending in
             Text(verbatim: endMessage(for: pending))
@@ -2285,7 +2287,8 @@ struct AgentChatsView: View {
         }
         .onAppear {
             newChatSearchFocused = true
-            newChatHighlightedProjectID = projectIDs.first
+            // Vorauswahl vom Controller (Create), sonst das erste Projekt.
+            newChatHighlightedProjectID = ProjectPickerKeyboard.normalize(commandState.takePreferredNewChatProjectID(), in: projectIDs)
         }
     }
 

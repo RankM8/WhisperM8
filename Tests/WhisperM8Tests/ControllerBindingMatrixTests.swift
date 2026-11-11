@@ -21,7 +21,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for (button, duration) in holdButtons {
             gestures += [
                 .tap(button), .holdPending(button, duration: duration),
-                .holdBegan(button), .holdEnded(button), .holdCancelled(button),
+                .holdBegan(button), .holdRepeat(button), .holdEnded(button), .holdCancelled(button),
             ]
         }
         gestures += [.chordPending(duration: 1), .chordCompleted, .chordCancelled]
@@ -71,11 +71,12 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
     }
 
-    /// Navigation im Chat, die auch bei beendetem Chat bleibt.
+    /// Navigation im Chat, die auch bei beendetem Chat bleibt. Einzelansicht:
+    /// Stick hoch/runter wechselt den Chat der Liste (mit Wiederholung, Runde 2).
     private static let chatNavigation: Table = {
         var table: Table = [
-            .press(.l1): .tab(step: -1),
-            .press(.r1): .tab(step: 1),
+            .press(.l1): .adjacentChat(step: -1),
+            .press(.r1): .adjacentChat(step: 1),
             .press(.triangle): .nextWaitingChat,
             .press(.l3): .toggleMaximize,
             .press(.create): .newChat,
@@ -89,11 +90,48 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .scroll(lines: 3): .scroll(lines: 3),
             .scroll(lines: -3): .scroll(lines: -3),
         ]
-        for direction in ControllerDirection.allCases {
-            table[.move(direction, source: .leftStick, isRepeat: false)] = .moveInContent(direction)
+        for isRepeat in [false, true] {
+            table[.move(.up, source: .leftStick, isRepeat: isRepeat)] = .adjacentChat(step: -1)
+            table[.move(.down, source: .leftStick, isRepeat: isRepeat)] = .adjacentChat(step: 1)
         }
+        table[.move(.left, source: .leftStick, isRepeat: false)] = .moveInContent(.left)
+        table[.move(.right, source: .leftStick, isRepeat: false)] = .moveInContent(.right)
         return merge(table, pauseChord)
     }()
+
+    /// Im Raster bewegt der Stick den Kachel-Fokus, ein Druck ein Schritt.
+    private static let gridNavigation: Table = {
+        var table = chatNavigation
+        for direction in ControllerDirection.allCases {
+            table[.move(direction, source: .leftStick, isRepeat: false)] = .moveInContent(direction)
+            table[.move(direction, source: .leftStick, isRepeat: true)] = nil
+        }
+        return table
+    }()
+
+    /// Viereck als Rücktaste (Runde 2): tippen und halten mit Wiederholung.
+    private static let backspace: Table = [
+        .tap(.square): .chatKey(.backspace),
+        .holdBegan(.square): .chatKey(.backspace),
+        .holdRepeat(.square): .chatKey(.backspace),
+    ]
+
+    /// Verlauf ohne Menü und Rückfrage: was in jedem Zustand gilt.
+    private static let clipboardBase: Table = merge(moves(.up, .clipboard(.up)), moves(.down, .clipboard(.down)), [
+        .press(.cross): .clipboard(.paste),
+        .tap(.circle): .clipboard(.close),
+        .press(.touchpad): .clipboardToggle,
+        .press(.options): .clipboard(.menuToggle),
+        .press(.r2): .rejected,
+        .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
+        .holdBegan(.square): .clipboard(.delete),
+        .holdCancelled(.square): .holdProgressCancelled(.square),
+    ], pauseChord)
+
+    private static let scrollWhileRecording: Table = [
+        .scroll(lines: 3): .scroll(lines: 3),
+        .scroll(lines: -3): .scroll(lines: -3),
+    ]
 
     private static let chatArrows = dpad { .chatKey(ControllerChatKey($0)) }
 
@@ -123,48 +161,85 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.triangle): .bringAppToFront,
         ], pauseChord)),
         ("outsideApp aus", .outsideApp(backgroundEnabled: false), [:]),
-        ("Aufnahme in Chat", .recording(phase: .recording, targetIsChat: true), [
+        ("Aufnahme in Chat", .recording(phase: .recording, targetIsChat: true), merge([
             .press(.r2): .dictationToggle,
             .press(.cross): .dictationStopAndSubmit,
             .tap(.circle): .dictationCancel,
             .move(.left, source: .dpad, isRepeat: false): .outputMode(step: -1),
             .move(.right, source: .dpad, isRepeat: false): .outputMode(step: 1),
-        ]),
-        ("Aufnahme in App", .recording(phase: .recording, targetIsChat: false), [
+            .move(.up, source: .dpad, isRepeat: false): .outputMode(step: -1),
+            .move(.up, source: .dpad, isRepeat: true): .outputMode(step: -1),
+            .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
+            .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
+        ], scrollWhileRecording)),
+        ("Aufnahme in App", .recording(phase: .recording, targetIsChat: false), merge([
             .press(.r2): .dictationToggle,
             .tap(.circle): .dictationCancel,
             .move(.left, source: .dpad, isRepeat: false): .outputMode(step: -1),
             .move(.right, source: .dpad, isRepeat: false): .outputMode(step: 1),
-        ]),
-        ("Transkription", .recording(phase: .transcribing, targetIsChat: true), [.tap(.circle): .dictationCancel]),
-        ("Nacharbeit", .recording(phase: .postProcessing, targetIsChat: false), [.tap(.circle): .dictationCancel]),
+            .move(.up, source: .dpad, isRepeat: false): .outputMode(step: -1),
+            .move(.up, source: .dpad, isRepeat: true): .outputMode(step: -1),
+            .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
+            .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
+        ], scrollWhileRecording)),
+        ("Transkription", .recording(phase: .transcribing, targetIsChat: true),
+         merge([.tap(.circle): .dictationCancel], scrollWhileRecording)),
+        ("Nacharbeit", .recording(phase: .postProcessing, targetIsChat: false),
+         merge([.tap(.circle): .dictationCancel], scrollWhileRecording)),
         ("Schnellaktion", .quickAction, merge([
             .tap(.circle): .dictationCancel,
             .press(.r2): .rejected,
         ], pauseChord)),
-        ("Verlauf", .clipboardPanel, merge(moves(.up, .clipboard(.up)), moves(.down, .clipboard(.down)), [
-            .press(.cross): .clipboard(.paste),
+        ("Verlauf", .clipboardPanel(ControllerClipboardState()), merge(clipboardBase, [
+            .press(.triangle): .rejected,
+            .press(.l3): .rejected,
+            .press(.l1): .clipboard(.filterAll),
+            .press(.r1): .clipboard(.filterDictations),
+        ])),
+        ("Verlauf, Bild mit Korrektur", .clipboardPanel(ControllerClipboardState(canCorrect: true, selectedIsImage: true)),
+         merge(clipboardBase, [
+             .press(.triangle): .clipboard(.correctAndPaste),
+             .press(.l3): .clipboard(.zoom),
+             .press(.l1): .clipboard(.filterAll),
+             .press(.r1): .clipboard(.filterDictations),
+         ])),
+        ("Verlauf, große Bildansicht",
+         .clipboardPanel(ControllerClipboardState(isZoomed: true, selectedIsImage: true)), merge(clipboardBase, [
+             .press(.triangle): .rejected,
+             .press(.l3): .clipboard(.zoom),
+         ])),
+        ("Verlauf, Rückfrage Leeren", .clipboardPanel(ControllerClipboardState(isConfirmingClear: true)), merge([
+            .press(.cross): .clipboard(.confirmClear),
             .tap(.circle): .clipboard(.close),
-            .press(.triangle): .clipboard(.pin),
             .press(.touchpad): .clipboardToggle,
-            .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
-            .holdBegan(.square): .clipboard(.delete),
-            .holdCancelled(.square): .holdProgressCancelled(.square),
         ], pauseChord)),
+        ("Verlauf, Menü", .clipboardPanel(ControllerClipboardState(menuOpen: true)),
+         merge(moves(.up, .clipboard(.menuUp)), moves(.down, .clipboard(.menuDown)), [
+             .press(.cross): .clipboard(.menuActivate),
+             .tap(.circle): .clipboard(.menuToggle),
+             .press(.options): .clipboard(.menuToggle),
+             .press(.touchpad): .clipboardToggle,
+         ], pauseChord)),
         ("Menü", .menu(dialogOpen: false), merge(moves(.up, .menuMove(step: -1)), moves(.down, .menuMove(step: 1)), [
             .press(.cross): .menuActivate,
-            .tap(.circle): .menuToggle,
+            .tap(.circle): .menuBack,
             .press(.options): .menuToggle,
         ], pauseChord)),
         ("Chat-Auswahl", .chatPicker, merge(
             moves(.up, .pickerMove(.up)), moves(.down, .pickerMove(.down)),
             moves(.left, .pickerMove(.left)), moves(.right, .pickerMove(.right)), [
                 .holdEnded(.l2): .pickerCommit,
+                .press(.cross): .pickerCommit,
                 .holdCancelled(.l2): .pickerCancel,
                 .tap(.circle): .pickerCancel,
                 .press(.r2): .pickerCommitAndDictate,
             ])),
-        ("Dialog", .modal, bridge),
+        ("Dialog", .modal, merge(bridge, [
+            .move(.up, source: .leftStick, isRepeat: false): .bridgeKey(.up),
+            .move(.up, source: .leftStick, isRepeat: true): .bridgeKey(.up),
+            .move(.down, source: .leftStick, isRepeat: false): .bridgeKey(.down),
+            .move(.down, source: .leftStick, isRepeat: true): .bridgeKey(.down),
+        ])),
         ("anderes Fenster", .otherWindow, merge(bridge, [
             .press(.triangle): .nextWaitingChat,
             .press(.touchpad): .clipboardToggle,
@@ -181,43 +256,52 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.cross): .listActivate,
             .press(.l1): .listFilter(step: -1),
             .press(.r1): .listFilter(step: 1),
+            .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
+            .holdBegan(.square): .listCloseRow,
+            .holdCancelled(.square): .holdProgressCancelled(.square),
+            .press(.r3): .listStartRow,
             .press(.create): .newChat,
             .press(.triangle): .nextWaitingChat,
             .press(.r2): .dictationToggle,
             .press(.touchpad): .clipboardToggle,
             .press(.options): .menuToggle,
         ], pauseChord)),
-        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, chatArrows, [
+        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, chatArrows, backspace, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
-            .tap(.square): .chatClearComposer,
         ])),
         ("Chat ruht, Codex", .chat(ControllerChatState(status: .idle, profile: .codex, draftSuspected: true)),
-         merge(chatNavigation, chatArrows, [
+         merge(chatNavigation, chatArrows, backspace, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
-        ("Chat arbeitet", chatState(.working), merge(chatNavigation, chatArrows, [
+        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, chatArrows, backspace, [
+            .press(.cross): .chatKey(.enter),
+            .tap(.circle): .chatKey(.escape),
+        ])),
+        ("Chat arbeitet", chatState(.working), merge(chatNavigation, chatArrows, backspace, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
-        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, chatArrows, [
+        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, chatArrows, backspace, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
         ("Rückfrage alt", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 2 },
-         merge(chatNavigation, chatArrows, [
+         merge(chatNavigation, chatArrows, backspace, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
         ("Rückfrage neu", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 0.1 },
-         merge(chatNavigation, chatArrows, [.tap(.circle): .chatKey(.escape)])),
-        ("Chat beendet", chatState(.ended) { $0.draftSuspected = true }, chatNavigation),
-        ("nur Verlauf", chatState(.working) { $0.hasTerminal = false }, chatNavigation),
+         merge(chatNavigation, chatArrows, backspace, [.tap(.circle): .chatKey(.escape)])),
+        ("Chat beendet", chatState(.ended) { $0.draftSuspected = true },
+         merge(chatNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
+        ("nur Verlauf", chatState(.working) { $0.hasTerminal = false },
+         merge(chatNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
     ]
 
     // MARK: - Prüfung

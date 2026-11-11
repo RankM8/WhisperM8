@@ -52,18 +52,45 @@ extension UISnapshotGallery {
                 state.status = .working
                 return legend(.chat(state), title: "1 Moe · Doku: auf den neuesten Stand", hold: .circle)
             },
+            Fixture(name: "controller-legende-gestoppt", size: legendSize) {
+                var state = chat
+                state.status = .ended
+                state.hasTerminal = false
+                return legend(.chat(state), title: "3 Kit · Release-Notizen")
+            },
             Fixture(name: "controller-legende-liste", size: legendSize) { legend(.list) },
             Fixture(name: "controller-legende-aufnahme", size: legendSize) {
                 legend(.recording(phase: .recording, targetIsChat: true))
             },
             Fixture(name: "controller-legende-pause", size: legendSize) { legend(.paused) },
-            Fixture(name: "controller-menue", size: CGSize(width: 680, height: 340)) {
-                AnyView(HStack(alignment: .top, spacing: 24) {
-                    ControllerMenuPanel(heading: "2 Lux · Integrationen", menu: ControllerMenuModel(), dialogOpen: false)
-                    ControllerMenuPanel(
-                        heading: "2 Lux · Integrationen",
-                        menu: ControllerMenuModel(selected: .cycleMode), dialogOpen: true)
-                }.padding(20))
+            Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {
+                let session = UUID()
+                var chat = ControllerChatActionInfo(title: "2 Lux · Integrationen", isPinned: true, canFork: true)
+                chat.accounts = [
+                    ControllerAccountChoice(kind: .claude, name: "main", label: "main (giuliano@example.com)",
+                                            isCurrent: true, isLoggedIn: true),
+                    ControllerAccountChoice(kind: .claude, name: "work", label: "work (team@example.com)",
+                                            isCurrent: false, isLoggedIn: true),
+                    ControllerAccountChoice(kind: .claude, name: "old", label: "old (not signed in)",
+                                            isCurrent: false, isLoggedIn: false),
+                    ControllerAccountChoice(kind: .gpt, name: "main", label: "main · gpt@example.com",
+                                            isCurrent: true, isLoggedIn: true),
+                ]
+                let setup = ControllerMenuSetup(
+                    acceptsInput: true, profile: .claude, sessionID: session, target: .chat(session), chat: chat)
+                var question = setup
+                question.dialogOpen = true
+                var commands = ControllerMenuModel(setup: setup, selected: .commands)
+                _ = commands.openSubmenu()
+                commands.move(1)
+                var accounts = ControllerMenuModel(setup: setup, selected: .switchAccount)
+                _ = accounts.openSubmenu()
+                return AnyView(HStack(alignment: .top, spacing: 20) {
+                    ControllerMenuPanel(menu: ControllerMenuModel(setup: setup))
+                    ControllerMenuPanel(menu: ControllerMenuModel(setup: question))
+                    ControllerMenuPanel(menu: commands)
+                    ControllerMenuPanel(menu: accounts)
+                }.padding(20).frame(maxHeight: .infinity, alignment: .top))
             },
         ]
         // Liste links mit Controller-Markierung (Etappe 6). Die Markierung liest
@@ -113,7 +140,23 @@ extension UISnapshotGallery {
             controller.controllerTargetLabel = "WhisperM8 PS5-Controller-Steuerung"
             return AnyView(RecordingPillView(controller: controller).padding(20))
         }
+        // Liste der Ausgabemodi über der Pill (Moduswechsel per Steuerkreuz).
+        func pillWithModeList() -> AnyView {
+            let controller = OverlayController(presentsWindow: false)
+            controller.overlayStyle = .mini
+            controller.levelModel.level = 0.5
+            controller.controllerTargetLabel = "WhisperM8 PS5-Controller-Steuerung"
+            let modes = Array(OutputMode.builtInModes.prefix(6))
+            controller.selectedOutputMode = modes[2]
+            return AnyView(VStack(spacing: 8) {
+                OutputModeListView(modes: modes, selectedID: modes[2].id)
+                RecordingPillView(controller: controller)
+            }
+            .padding(20)
+            .environment(\.colorScheme, .dark))
+        }
         let extraFixtures: [Fixture] = [
+            Fixture(name: "controller-pill-modusliste", size: CGSize(width: 520, height: 330)) { pillWithModeList() },
             Fixture(name: "controller-liste-markierung", size: CGSize(width: 340, height: 180)) { listWithMarker() },
             Fixture(name: "controller-pill-ziel", size: CGSize(width: 520, height: 80)) { pillWithTarget() },
         ]

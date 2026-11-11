@@ -13,12 +13,13 @@ enum ControllerLegendInput: Hashable, Sendable {
 /// Fachliche Bezeichnung eines Legenden-Eintrags. Die sichtbaren Texte
 /// (englisch, mit deutscher Übersetzung) entstehen erst in der UI.
 enum ControllerLegendLabel: String, CaseIterable, Sendable {
-    case send, confirm, back, reject, cancel, interruptHold
+    case send, confirm, back, reject, cancel, interruptHold, start
     case dictate, stopDictation, stopAndSend, discard, outputMode
-    case nextWaiting, tabs, filter, move, arrows, scroll
-    case clearInput, newChat, clipboard, maximize, menu
+    case nextWaiting, previousNextChat, filter, move, arrows, scroll
+    case backspace, newChat, clipboard, maximize, menu
     case lastChat, pickChatHold, pickAndDictate, switchOnRelease
-    case open, select, paste, pin, deleteHold, close
+    case open, select, paste, pin, deleteHold, close, closeHold
+    case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
 }
 
@@ -44,8 +45,8 @@ struct ControllerLegendSection: Equatable, Sendable {
 ///
 /// Jeder Kandidat nennt die Gesten, für die er steht. Gezeigt wird er nur,
 /// wenn der `ControllerBindingResolver` im selben Zusammenhang für eine davon
-/// eine Aktion liefert. So kann die Legende keine Taste ohne Wirkung zeigen,
-/// etwa Viereck ohne erkannten Entwurf oder Kreuz bei beendetem Chat.
+/// eine Aktion liefert, die etwas tut („geht nicht“ zählt nicht). So kann die Legende keine Taste ohne Wirkung zeigen,
+/// etwa Kreuz in den ersten 0,5 s einer Rückfrage oder Viereck bei beendetem Chat.
 enum ControllerLegend {
     struct Candidate {
         var entry: ControllerLegendEntry
@@ -55,7 +56,10 @@ enum ControllerLegend {
     static func entries(for context: ControllerContext) -> [ControllerLegendEntry] {
         candidates(for: context)
             .filter { candidate in
-                candidate.probes.contains { ControllerBindingResolver.action(for: $0, in: context) != nil }
+                candidate.probes.contains { probe in
+                    guard let action = ControllerBindingResolver.action(for: probe, in: context) else { return false }
+                    return action != .rejected
+                }
             }
             .map(\.entry)
     }
@@ -70,16 +74,18 @@ enum ControllerLegend {
                 entry(.button(.circle), .interruptHold),
                 entry(.button(.r2), .dictate),
                 entry(.button(.triangle), .nextWaiting),
-                entry(.bumpers, .tabs),
+                entry(.bumpers, .previousNextChat),
                 entry(.dpad, .arrows),
                 entry(.rightStick, .scroll),
             ]),
             ControllerLegendSection(kind: .extra, entries: [
-                entry(.button(.square), .clearInput),
+                entry(.button(.square), .backspace),
+                entry(.button(.square), .closeHold),
                 entry(.button(.create), .newChat),
                 entry(.button(.touchpad), .clipboard),
                 entry(.button(.l3), .maximize),
                 entry(.button(.options), .menu),
+                entry(.button(.r3), .startChat),
                 entry(.button(.l2), .lastChat),
                 entry(.button(.l2), .pickChatHold),
                 ControllerLegendEntry(inputs: [.button(.l2), .button(.r2)], label: .pickAndDictate, isCombination: true),
@@ -95,7 +101,7 @@ enum ControllerLegend {
         case let .button(button):
             return [
                 .press(button), .tap(button), .holdPending(button, duration: 1),
-                .holdBegan(button), .holdEnded(button), .holdCancelled(button),
+                .holdBegan(button), .holdRepeat(button), .holdEnded(button), .holdCancelled(button),
             ]
         case .leftStick:
             return ControllerDirection.allCases.flatMap { direction in
@@ -129,24 +135,18 @@ enum ControllerLegend {
                 candidate(.button(.r2), .stopDictation, [.press(.r2)]),
                 candidate(.button(.cross), .stopAndSend, [.press(.cross)]),
                 candidate(.button(.circle), .discard, [.tap(.circle)]),
-                candidate(.dpad, .outputMode, [
-                    .move(.left, source: .dpad, isRepeat: false),
-                    .move(.right, source: .dpad, isRepeat: false),
-                ]),
+                candidate(.dpad, .outputMode, gestures(for: .dpad)),
+                candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             ]
-        case .recording, .quickAction:
-            return [candidate(.button(.circle), .cancel, [.tap(.circle)])]
-        case .clipboardPanel:
+        case .recording:
             return [
-                ControllerLegend.Candidate(
-                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
-                    probes: verticalMoves
-                ),
-                candidate(.button(.cross), .paste, [.press(.cross)]),
-                candidate(.button(.triangle), .pin, [.press(.triangle)]),
-                candidate(.button(.square), .deleteHold, [.holdBegan(.square)]),
-                candidate(.button(.circle), .close, [.tap(.circle)]),
+                candidate(.button(.circle), .cancel, [.tap(.circle)]),
+                candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             ]
+        case .quickAction:
+            return [candidate(.button(.circle), .cancel, [.tap(.circle)])]
+        case let .clipboardPanel(state):
+            return clipboardCandidates(state)
         case .menu:
             return [
                 ControllerLegend.Candidate(
@@ -154,7 +154,8 @@ enum ControllerLegend {
                     probes: verticalMoves
                 ),
                 candidate(.button(.cross), .select, [.press(.cross)]),
-                candidate(.button(.circle), .close, [.tap(.circle)]),
+                candidate(.button(.circle), .back, [.tap(.circle)]),
+                candidate(.button(.options), .close, [.press(.options)]),
             ]
         case .chatPicker:
             return [
@@ -162,11 +163,22 @@ enum ControllerLegend {
                     entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
                     probes: gestures(for: .leftStick) + gestures(for: .dpad)
                 ),
+                candidate(.button(.cross), .select, [.press(.cross)]),
                 candidate(.button(.l2), .switchOnRelease, [.holdEnded(.l2)]),
                 candidate(.button(.r2), .pickAndDictate, [.press(.r2)]),
                 candidate(.button(.circle), .cancel, [.tap(.circle)]),
             ]
-        case .modal, .otherWindow:
+        case .modal:
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.dpad, .leftStick], label: .arrows),
+                    probes: gestures(for: .dpad)
+                ),
+                candidate(.button(.cross), .confirm, [.press(.cross)]),
+                candidate(.button(.circle), .back, [.tap(.circle)]),
+                candidate(.button(.r2), .dictate, [.press(.r2)]),
+            ]
+        case .otherWindow:
             return [
                 candidate(.dpad, .arrows, gestures(for: .dpad)),
                 candidate(.button(.cross), .confirm, [.press(.cross)]),
@@ -183,6 +195,7 @@ enum ControllerLegend {
                 candidate(.button(.cross), .open, [.press(.cross)]),
                 candidate(.button(.circle), .back, [.tap(.circle)]),
                 candidate(.bumpers, .filter, [.press(.l1), .press(.r1)]),
+                candidate(.button(.square), .closeHold, [.holdBegan(.square)]),
                 candidate(.button(.create), .newChat, [.press(.create)]),
                 candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
                 candidate(.button(.r2), .dictate, [.press(.r2)]),
@@ -194,19 +207,53 @@ enum ControllerLegend {
 
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {
         let awaiting = state.status == .awaitingInput
+        let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (awaiting ? .confirm : .send)
         return [
             candidate(.leftStick, .move, ControllerDirection.allCases.map {
                 .move($0, source: .leftStick, isRepeat: false)
             }),
-            candidate(.button(.cross), awaiting ? .confirm : .send, [.press(.cross)]),
+            candidate(.button(.cross), crossLabel, [.press(.cross)]),
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
-            candidate(.button(.square), .clearInput, [.tap(.square)]),
+            candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
-            candidate(.bumpers, .tabs, [.press(.l1), .press(.r1)]),
+            candidate(.bumpers, .previousNextChat, [.press(.l1), .press(.r1)]),
             candidate(.dpad, .arrows, gestures(for: .dpad)),
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
+            candidate(.button(.r3), .startChat, [.press(.r3)]),
+        ]
+    }
+
+    /// Verlauf: dieselbe Tabelle liefert die Fußzeile des Verlauf-Fensters,
+    /// wenn ein Controller verbunden ist.
+    private static func clipboardCandidates(_ state: ControllerClipboardState) -> [Candidate] {
+        let move = ControllerLegend.Candidate(
+            entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
+            probes: verticalMoves
+        )
+        if state.menuOpen {
+            return [
+                move,
+                candidate(.button(.cross), .select, [.press(.cross)]),
+                candidate(.button(.circle), .close, [.tap(.circle)]),
+            ]
+        }
+        if state.isConfirmingClear {
+            return [
+                candidate(.button(.cross), .clearHistory, [.press(.cross)]),
+                candidate(.button(.circle), .cancel, [.tap(.circle)]),
+            ]
+        }
+        return [
+            move,
+            candidate(.button(.cross), .paste, [.press(.cross)]),
+            candidate(.button(.triangle), .correctAndPaste, [.press(.triangle)]),
+            candidate(.button(.square), .deleteHold, [.holdBegan(.square)]),
+            candidate(.bumpers, .clipboardFilter, [.press(.l1), .press(.r1)]),
+            candidate(.button(.l3), .zoomImage, [.press(.l3)]),
+            candidate(.button(.options), .menu, [.press(.options)]),
+            candidate(.button(.circle), state.isZoomed ? .back : .close, [.tap(.circle)]),
         ]
     }
 

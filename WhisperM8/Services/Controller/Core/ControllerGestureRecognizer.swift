@@ -11,8 +11,10 @@ import Foundation
 /// Verhalten je Taste (fest, ohne Kontext):
 /// - **sofort** (`.press` beim Drücken): Kreuz, Dreieck, L3, R3, Create,
 ///   Options, Touchpad, R2.
-/// - **Tippen oder Halten**: L2 (0,3 s), Kreis (0,4 s), Viereck (0,6 s, nur
-///   der Zwischenablage-Verlauf nutzt das Halten zum Löschen).
+/// - **Tippen oder Halten**: L2 (0,3 s), Kreis (0,4 s), Viereck (0,6 s).
+///   Viereck wiederholt danach wie eine gehaltene Taste (`.holdRepeat`, erst
+///   alle 60 ms, nach 1 s alle 25 ms); im Chat ist das die Rücktaste, im
+///   Zwischenablage-Verlauf löscht nur `.holdBegan` einen Eintrag.
 /// - **L1/R1**: einzeln `.press`, aber erst nach dem Akkord-Fenster oder beim
 ///   früheren Loslassen. Beide zusammen ergeben den Pause-Akkord.
 /// - **Steuerkreuz und linker Stick**: `.move` mit Wiederholung.
@@ -23,6 +25,12 @@ struct ControllerGestureRecognizer: Sendable {
         var l2HoldThreshold: TimeInterval = 0.3
         var circleHoldThreshold: TimeInterval = 0.4
         var squareHoldThreshold: TimeInterval = 0.6
+        /// Tasten, die nach Beginn des Haltens wiederholen (`.holdRepeat`).
+        var holdRepeatButtons: Set<ControllerButton> = [.square]
+        var holdRepeatInterval: TimeInterval = 0.06
+        /// So lange nach Beginn des Haltens wird schneller wiederholt.
+        var holdRepeatAccelerateAfter: TimeInterval = 1.0
+        var holdRepeatFastInterval: TimeInterval = 0.025
         /// So knapp nacheinander müssen L1 und R1 kommen, damit es ein Akkord ist.
         var chordWindow: TimeInterval = 0.15
         /// So lange müssen beide gemeinsam gehalten werden.
@@ -58,6 +66,9 @@ struct ControllerGestureRecognizer: Sendable {
     struct HoldState: Equatable, Sendable {
         var pressedAt: TimeInterval
         var began = false
+        /// Nächste Wiederholung, nur bei Tasten mit Wiederholung und erst ab
+        /// Beginn des Haltens.
+        var nextRepeatAt: TimeInterval?
     }
 
     struct PendingBumper: Equatable, Sendable {
@@ -132,10 +143,11 @@ struct ControllerGestureRecognizer: Sendable {
     /// Wann der Zeitgeber das nächste Mal feuern soll; `nil`, wenn nichts läuft.
     var nextDeadline: TimeInterval? {
         var deadlines: [TimeInterval] = []
-        for (button, hold) in holds where !hold.began {
-            if let threshold = config.holdThreshold(for: button) {
+        for (button, hold) in holds {
+            if !hold.began, let threshold = config.holdThreshold(for: button) {
                 deadlines.append(hold.pressedAt + threshold)
             }
+            if let nextRepeatAt = hold.nextRepeatAt { deadlines.append(nextRepeatAt) }
         }
         if let pendingBumper {
             deadlines.append(pendingBumper.pressedAt + config.chordWindow)
@@ -195,6 +207,9 @@ struct ControllerGestureRecognizer: Sendable {
                   let threshold = config.holdThreshold(for: button),
                   Self.isDue(hold.pressedAt + threshold, at: time) else { continue }
             hold.began = true
+            if config.holdRepeatButtons.contains(button) {
+                hold.nextRepeatAt = hold.pressedAt + threshold + config.holdRepeatInterval
+            }
             holds[button] = hold
             gestures.append(.holdBegan(button))
         }

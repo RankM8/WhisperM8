@@ -35,13 +35,26 @@ struct ControllerChatState: Equatable, Sendable {
     var acceptsKeys: Bool { status != .ended && hasTerminal }
 }
 
+/// Was der Controller über den offenen Zwischenablage-Verlauf wissen muss.
+struct ControllerClipboardState: Equatable, Sendable {
+    /// Bild füllt das Fenster (große Ansicht).
+    var isZoomed = false
+    /// Rückfrage „Verlauf leeren?“ in der Fußzeile.
+    var isConfirmingClear = false
+    /// „Korrigieren und einfügen“ geht für den gewählten Eintrag.
+    var canCorrect = false
+    var selectedIsImage = false
+    /// Menü (Options) im Verlauf offen.
+    var menuOpen = false
+}
+
 /// Zusammenhang, in dem eine Geste ausgewertet wird (Plan 3.1).
 enum ControllerContext: Equatable, Sendable {
     case paused
     case outsideApp(backgroundEnabled: Bool)
     case recording(phase: ControllerRecordingPhase, targetIsChat: Bool)
     case quickAction
-    case clipboardPanel
+    case clipboardPanel(ControllerClipboardState)
     case menu(dialogOpen: Bool)
     case chatPicker
     case modal
@@ -69,6 +82,7 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var recordingTargetIsChat: Bool = false
     var quickActionRunning: Bool = false
     var clipboardPanelOpen: Bool = false
+    var clipboard = ControllerClipboardState()
     var controllerMenuOpen: Bool = false
     var chatPickerOpen: Bool = false
     var window: ControllerWindowKind = .agentChats
@@ -91,7 +105,7 @@ enum ControllerContextResolver {
             return .recording(phase: phase, targetIsChat: snapshot.recordingTargetIsChat)
         }
         if snapshot.quickActionRunning { return .quickAction }
-        if snapshot.clipboardPanelOpen { return .clipboardPanel }
+        if snapshot.clipboardPanelOpen { return .clipboardPanel(snapshot.clipboard) }
         if !snapshot.appIsActive { return .outsideApp(backgroundEnabled: snapshot.backgroundEnabled) }
         switch snapshot.window {
         case .none: return .noWindow

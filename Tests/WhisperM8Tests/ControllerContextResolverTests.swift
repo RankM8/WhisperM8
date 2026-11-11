@@ -47,7 +47,7 @@ final class ControllerContextResolverTests: XCTestCase {
         XCTAssertEqual(context {
             $0.clipboardPanelOpen = true
             $0.appIsActive = false
-        }, .clipboardPanel)
+        }, .clipboardPanel(ControllerClipboardState()))
     }
 
     func testOutsideAppCarriesBackgroundFlag() {

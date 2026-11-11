@@ -11,6 +11,7 @@ final class AgentChatsCommandCenterTests: XCTestCase {
     private final class WindowSpy {
         let id = UUID()
         var isKey = true
+        var isNewChatPickerOpen = false
         var result = true
         private(set) var received: [AgentChatsCommand] = []
 
@@ -31,7 +32,8 @@ final class AgentChatsCommandCenterTests: XCTestCase {
                         hasSheet: false,
                         isSidebarVisible: true,
                         hasMultiSelection: false,
-                        isArchiveMode: false
+                        isArchiveMode: false,
+                        isNewChatPickerOpen: isNewChatPickerOpen
                     )
                 }
             )
@@ -83,6 +85,27 @@ final class AgentChatsCommandCenterTests: XCTestCase {
 
         XCTAssertFalse(center.perform(.previousTab))
         XCTAssertEqual(window.received, [])
+    }
+
+    /// Runde 2: Die Projekt-Auswahl „Neuer Chat“ ist ein Popover, das selbst
+    /// Key wird. Das Fenster mit offener Auswahl bleibt Ziel des Controllers.
+    func testWindowWithOpenNewChatPickerStaysActive() {
+        let center = makeCenter()
+        let other = WindowSpy()
+        let window = WindowSpy()
+        window.isNewChatPickerOpen = true
+        window.isKey = false
+        _ = center.register(windowID: other.id, handler: other.handler)
+        _ = center.register(windowID: window.id, handler: window.handler)
+        keyWindowID = nil
+
+        XCTAssertEqual(center.activeWindowID, window.id)
+        XCTAssertEqual(center.snapshot()?.isNewChatPickerOpen, true)
+        // Befehle ohne Ziel gehen trotzdem nur an ein Fenster, das Key ist.
+        XCTAssertFalse(center.perform(.nextTab))
+
+        window.isNewChatPickerOpen = false
+        XCTAssertNil(center.activeWindowID)
     }
 
     func testKeyWindowWithoutHandlerIsNotActive() {

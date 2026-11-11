@@ -1,7 +1,8 @@
 import Foundation
 
 // Analoge Eingaben des Erkenners: Trigger, linker Stick (Richtungen mit
-// Wiederholung), rechter Stick (Scrollen) und die Wiederholung des Steuerkreuzes.
+// Wiederholung), rechter Stick (Scrollen), die Wiederholung des Steuerkreuzes
+// und gehaltener Tasten (Viereck).
 
 extension ControllerGestureRecognizer {
     // MARK: - Trigger
@@ -91,6 +92,26 @@ extension ControllerGestureRecognizer {
         if let direction = leftDirection, let nextAt = leftRepeatAt, Self.isDue(nextAt, at: time) {
             gestures.append(.move(direction, source: .leftStick, isRepeat: true))
             leftRepeatAt = nextRepeat(after: nextAt, now: time)
+        }
+        gestures += holdRepeats(at: time)
+        return gestures
+    }
+
+    /// Gehaltene Tasten mit Wiederholung (Viereck): erst im normalen Takt,
+    /// nach `holdRepeatAccelerateAfter` schneller. Wie oben höchstens eine
+    /// Wiederholung je Tick und Taste, kein Nachholen.
+    mutating func holdRepeats(at time: TimeInterval) -> [ControllerGesture] {
+        var gestures: [ControllerGesture] = []
+        for button in ControllerButton.allCases {
+            guard var hold = holds[button], hold.began, let nextAt = hold.nextRepeatAt,
+                  Self.isDue(nextAt, at: time), let threshold = config.holdThreshold(for: button) else { continue }
+            gestures.append(.holdRepeat(button))
+            let heldFor = time - (hold.pressedAt + threshold)
+            let interval = heldFor + Self.epsilon >= config.holdRepeatAccelerateAfter
+                ? config.holdRepeatFastInterval : config.holdRepeatInterval
+            let next = nextAt + interval
+            hold.nextRepeatAt = Self.isDue(next, at: time) ? time + interval : next
+            holds[button] = hold
         }
         return gestures
     }
