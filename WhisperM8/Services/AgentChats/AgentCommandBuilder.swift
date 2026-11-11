@@ -201,6 +201,15 @@ struct AgentCommandBuilder {
         )?.sessionID
     }
 
+    /// Argumente für `claude attach`: nur die Short-ID, nie Startoptionen.
+    /// `claude attach <id|name>` kennt keine Optionen (CLI 2.1.322) und bricht
+    /// bei Extras wie `--dangerously-skip-permissions` mit seinem Usage-Text
+    /// ab — der Tab blieb dann tot stehen, obwohl der Agent weiterlief. Die
+    /// Optionen des Chats trägt der Worker ohnehin selbst (`respawnFlags`).
+    static func attachArguments(shortID: String) -> [String] {
+        ["attach", shortID]
+    }
+
     /// Liefert die Short-ID des Supervisor-Workers, der die Session gerade
     /// als Background-Agent hostet — `nil` wenn keiner laeuft.
     /// (externalSessionID, profileName) → Short-ID. Default liest das
@@ -588,10 +597,7 @@ struct AgentCommandBuilder {
             guard let shortID = session.backgroundShortID, !shortID.isEmpty else {
                 throw AgentCommandError.missingBackgroundShortID(session.title)
             }
-            var arguments: [String] = ["attach"]
-            // User-defined extras zuerst, falls jemand z. B. `--verbose` will.
-            arguments.append(contentsOf: extraArgumentsResolver(.claude))
-            arguments.append(shortID)
+            let arguments = Self.attachArguments(shortID: shortID)
             var attachEnvironment = applyRouterEnvironment(profileEnvironment)
             // Der Attach-Prozess kennt das reale Worker-Fenster nicht: Claude
             // Code 2.1.216 persistiert die drei Kontextwerte nicht garantiert
@@ -738,9 +744,7 @@ struct AgentCommandBuilder {
             Logger.agentStore.info(
                 "resume_attach_fallback session=\(resumeSessionID, privacy: .public) worker=\(workerShortID, privacy: .public) — Session laeuft als Background-Agent, attach statt --resume"
             )
-            var attachArguments: [String] = ["attach"]
-            attachArguments.append(contentsOf: userArguments)
-            attachArguments.append(workerShortID)
+            let attachArguments = Self.attachArguments(shortID: workerShortID)
             var attachEnvironment = applyRouterEnvironment(effectiveProfileEnvironment)
             // Gleicher Grund wie im Background-Chat-Attach oben: der Attach-
             // Prozess kennt das reale Worker-Kontextfenster nicht — keine
