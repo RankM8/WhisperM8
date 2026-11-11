@@ -33,20 +33,47 @@ enum SupervisorRosterReader {
 
     /// Short-ID des lebendigen Workers, der `sessionID` gerade hostet —
     /// `nil` wenn die Session nicht (mehr) als Background-Agent laeuft.
+    ///
+    /// Zwei Belege muessen zusammenkommen: der Roster-Eintrag mit lebendem
+    /// Worker-PID UND Claudes eigener Registry-Eintrag (`sessions/<pid>.json`,
+    /// `kind: "bg"`, Besitzer lebt). `claude stop` loescht den Registry-
+    /// Eintrag sofort, Roster und Prozess leben aber noch kurz (Befund
+    /// 11.11.2026) — ein Attach in dieses Fenster liefe ins Leere.
     static func activeWorkerShortID(
         forSessionID sessionID: String,
         configDir: URL,
-        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive
+        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive,
+        hasLiveBackgroundRecord: ((String) -> Bool)? = nil
     ) -> String? {
         guard let data = try? Data(contentsOf: rosterURL(configDir: configDir)) else {
             return nil
         }
-        return workers(fromRosterData: data)
-            .first {
-                $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
-                    && isProcessAlive($0.pid)
-            }?
-            .shortID
+        guard let worker = workers(fromRosterData: data).first(where: {
+            $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
+                && isProcessAlive($0.pid)
+        }) else { return nil }
+        // Registry erst nach einem Roster-Treffer lesen: normale Starts zahlen
+        // nichts extra.
+        let confirms = hasLiveBackgroundRecord ?? { id in
+            liveBackgroundRecordExists(forSessionID: id, configDir: configDir)
+        }
+        return confirms(worker.sessionID) ? worker.shortID : nil
+    }
+
+    /// Lebt in `<configDir>/sessions/` ein Hintergrund-Eintrag (`kind: "bg"`)
+    /// fuer diese Session?
+    static func liveBackgroundRecordExists(
+        forSessionID sessionID: String,
+        configDir: URL,
+        isAlive: ClaudeSessionRegistry.LivenessCheck = ClaudeSessionRegistry.isProcessAlive
+    ) -> Bool {
+        let root = ClaudeSessionRegistry.Root(
+            profileName: "",
+            url: configDir.appendingPathComponent("sessions", isDirectory: true)
+        )
+        return ClaudeSessionRegistry.scan(roots: [root], isAlive: isAlive).contains {
+            $0.isBackground && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
+        }
     }
 
     /// Pure Decode — testbar ohne Filesystem. Unbekannte Felder werden

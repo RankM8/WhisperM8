@@ -53,7 +53,8 @@ final class SupervisorRosterReaderTests: XCTestCase {
         let found = SupervisorRosterReader.activeWorkerShortID(
             forSessionID: "607D545A-01FA-4569-A4A7-72FE6072A1B7",
             configDir: configDir,
-            isProcessAlive: { _ in true }
+            isProcessAlive: { _ in true },
+            hasLiveBackgroundRecord: { _ in true }
         )
         XCTAssertEqual(found, "607d545a")
 
@@ -61,7 +62,8 @@ final class SupervisorRosterReaderTests: XCTestCase {
         let stale = SupervisorRosterReader.activeWorkerShortID(
             forSessionID: "607d545a-01fa-4569-a4a7-72fe6072a1b7",
             configDir: configDir,
-            isProcessAlive: { _ in false }
+            isProcessAlive: { _ in false },
+            hasLiveBackgroundRecord: { _ in true }
         )
         XCTAssertNil(stale)
 
@@ -71,6 +73,35 @@ final class SupervisorRosterReaderTests: XCTestCase {
             isProcessAlive: { _ in true }
         )
         XCTAssertNil(unknown)
+    }
+
+    /// `claude stop` loescht Claudes Registry-Eintrag sofort, Roster und
+    /// Worker-Prozess leben noch kurz — dann kein Attach.
+    func testActiveWorkerShortIDRequiresLiveBackgroundRegistryRecord() throws {
+        let configDir = try makeConfigDir(rosterJSON: rosterJSON)
+        defer { try? FileManager.default.removeItem(at: configDir) }
+        let sessionID = "607d545a-01fa-4569-a4a7-72fe6072a1b7"
+
+        // Kein Registry-Eintrag (gestoppt) → nil.
+        XCTAssertNil(SupervisorRosterReader.activeWorkerShortID(
+            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }))
+
+        // Interaktiver Eintrag zaehlt nicht als Hintergrund-Agent.
+        let sessions = configDir.appendingPathComponent("sessions", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
+        let pid = ProcessInfo.processInfo.processIdentifier
+        func writeRecord(kind: String) throws {
+            let json = #"{"pid":\#(pid),"sessionId":"\#(sessionID)","kind":"\#(kind)","status":"idle"}"#
+            try Data(json.utf8).write(to: sessions.appendingPathComponent("\(pid).json"))
+        }
+        try writeRecord(kind: "interactive")
+        XCTAssertNil(SupervisorRosterReader.activeWorkerShortID(
+            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }))
+
+        // Lebender bg-Eintrag → Attach.
+        try writeRecord(kind: "bg")
+        XCTAssertEqual(SupervisorRosterReader.activeWorkerShortID(
+            forSessionID: sessionID, configDir: configDir, isProcessAlive: { _ in true }), "607d545a")
     }
 
     func testActiveWorkerShortIDReturnsNilWithoutRosterFile() throws {
