@@ -56,7 +56,7 @@ extension ControllerLegendLabel {
     /// Ausführlicher Text für die Belegungs-Übersicht in den Einstellungen.
     var explanation: String {
         switch self {
-        case .move: return String(localized: "Move: through the list, into the chat, from tile to tile; up and down switch chats")
+        case .move: return String(localized: "Move: through the list, into the chat, from tile to tile; in a single chat, up and down mark another chat in the list")
         case .confirm: return String(localized: "Select, confirm, send; start a stopped chat")
         case .back: return String(localized: "Back, cancel")
         case .interruptHold: return String(localized: "Hold: interrupt a working chat")

@@ -85,6 +85,7 @@ private final class WindowFake {
                 case .setSidebarVisible(let visible): isSidebarVisible = visible
                 case .clearMultiSelection: hasMultiSelection = false
                 case .selectSession(let id): selected = id
+                case .selectWorkspaceChat(let id, _): selected = id
                 case .showNewChatPicker: isNewChatPickerOpen = true
                 default: break
                 }
@@ -525,6 +526,119 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.leaveList)
         XCTAssertEqual(ui.area, .content)
         XCTAssertNil(ui.markedRow)
+    }
+
+    // MARK: - Einzelansicht: Stick hoch/runter markiert in der Liste (Runde 3)
+
+    /// Startpunkt ist der aktuelle Chat, die Markierung rückt sofort einen
+    /// Schritt; der offene Chat bleibt, nichts wird ausgewählt.
+    func testEnterListWithStepMarksNeighborWithoutSwitching() {
+        let ids = makeChatRows()
+        window.selected = ids.c
+        perform(.enterList(step: -1))
+        XCTAssertEqual(ui.area, .list)
+        XCTAssertEqual(ui.markedRow, .chat(ids.b))
+        XCTAssertEqual(window.selected, ids.c, "der offene Chat bleibt")
+        XCTAssertFalse(window.commands.contains { if case .selectSession = $0 { return true }; return false })
+        XCTAssertEqual(haptics, [])
+    }
+
+    /// Steht der Chat in einem Workspace, beginnt die Markierung dort (Runde 2).
+    func testEnterListWithStepStartsAtWorkspaceRow() {
+        let ids = makeChatRows()
+        window.selected = ids.a
+        perform(.enterList(step: 1))
+        XCTAssertEqual(ui.markedRow, .workspaceChat(session: ids.b, workspace: ids.workspace))
+        XCTAssertEqual(window.selected, ids.a)
+    }
+
+    /// Am Rand bleibt die Markierung stehen, ohne „geht nicht“.
+    func testEnterListWithStepStaysAtEdge() {
+        let ids = makeChatRows()
+        window.selected = ids.c
+        perform(.enterList(step: 1))
+        XCTAssertEqual(ui.markedRow, .chat(ids.c))
+        XCTAssertEqual(haptics, [])
+    }
+
+    /// Steht der aktuelle Chat nicht in der Liste (Filter), bleibt die
+    /// Markierung auf der ersten Zeile statt von dort weiterzurücken.
+    func testEnterListWithStepFromMissingChatMarksFirstRow() {
+        let ids = makeChatRows()
+        window.selected = UUID()
+        perform(.enterList(step: 1))
+        XCTAssertEqual(ui.markedRow, .workspace(ids.workspace))
+    }
+
+    func testEnterListWithStepAndEmptyListIsRejected() {
+        perform(.enterList(step: 1))
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertEqual(ui.area, .content)
+    }
+
+    /// Ganze Kette über die Belegung: Stick runter im Chat betritt die Liste,
+    /// gehaltene Wiederholungen kommen dort als `listMove` an, Kreis führt
+    /// ohne Wechsel zurück in den bisherigen Chat.
+    func testStickDownInSingleChatThenHoldThenCircleKeepsChat() {
+        let ids = makeChatRows()
+        window.selected = ids.a
+        setTerminal(status: .idle)
+        let resolve = { [unowned self] (gesture: ControllerGesture) in
+            let current = context
+            if let action = ControllerBindingResolver.action(for: gesture, in: current) {
+                dispatcher.perform(action, in: current)
+            }
+        }
+        resolve(.move(.down, source: .leftStick, isRepeat: false))
+        XCTAssertEqual(context, .list)
+        XCTAssertEqual(ui.markedRow, .workspaceChat(session: ids.b, workspace: ids.workspace))
+        resolve(.move(.down, source: .leftStick, isRepeat: true))
+        XCTAssertEqual(ui.markedRow, .project(ids.project ?? UUID()))
+        resolve(.tap(.circle))
+        XCTAssertEqual(ui.area, .content)
+        XCTAssertNil(ui.markedRow)
+        XCTAssertEqual(window.selected, ids.a, "Kreis wechselt nicht")
+        XCTAssertFalse(window.commands.contains { command in
+            switch command {
+            case .selectSession, .selectWorkspaceChat, .activateWorkspace, .openProjectAsWorkspace: return true
+            default: return false
+            }
+        })
+    }
+
+    /// Stick rechts in der Liste: ebenfalls zurück ohne Wechsel.
+    func testStickRightLeavesListWithoutSwitching() {
+        let ids = makeChatRows()
+        window.selected = ids.c
+        perform(.enterList(step: -1))
+        let action = ControllerBindingResolver.action(for: .move(.right, source: .leftStick, isRepeat: false), in: context)
+        XCTAssertEqual(action, .leaveList)
+        perform(.leaveList)
+        XCTAssertEqual(window.selected, ids.c)
+        XCTAssertEqual(ui.area, .content)
+    }
+
+    /// Kreuz auf einer Workspace-Chat-Zeile öffnet sie wie ihr Klick: Der
+    /// Befehl nennt den Workspace der Zeile, damit das Fenster hineinwechselt.
+    func testActivatingWorkspaceChatRowNamesItsWorkspace() {
+        let ids = makeChatRows()
+        window.selected = ids.c
+        perform(.enterList(step: -5))
+        XCTAssertEqual(ui.markedRow, .workspaceChat(session: ids.a, workspace: ids.workspace))
+        perform(.listActivate)
+        XCTAssertEqual(window.commands.last, .selectWorkspaceChat(ids.a, workspaceID: ids.workspace))
+        XCTAssertEqual(window.selected, ids.a)
+        XCTAssertEqual(ui.area, .content, "Kreuz geht sofort in den Inhalt")
+    }
+
+    func testActivatingWorkspaceChatRowThatFailsIsRejected() {
+        let ids = makeChatRows()
+        window.selected = ids.a
+        perform(.enterList(step: 0))
+        window.failing = [String(describing: AgentChatsCommand.selectWorkspaceChat(ids.a, workspaceID: ids.workspace))]
+        perform(.listActivate)
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertEqual(ui.area, .list, "bleibt in der Liste")
     }
 
     // MARK: - Chat-Auswahl

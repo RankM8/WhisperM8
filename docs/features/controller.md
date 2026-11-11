@@ -42,9 +42,9 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 
 | Taste | Wirkung |
 |---|---|
-| Linker Stick | Liste hoch/runter; nach rechts in den Inhalt, nach links zurück in die Liste; in der Einzelansicht hoch/runter = voriger/nächster Chat der Liste (vorläufig, Entscheidung offen); im Raster von Kachel zu Kachel |
-| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein; im Chat Enter; gestoppter Chat: starten |
-| Kreis | zurück; im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
+| Linker Stick | Liste hoch/runter; nach rechts in den Inhalt, nach links zurück in die Liste; in der Einzelansicht springt die Markierung mit hoch/runter in die Liste (Start beim aktuellen Chat, sofort ein Schritt, der offene Chat bleibt); im Raster von Kachel zu Kachel; während Aufnahme, Transkription und Nacharbeit ohne Wirkung |
+| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein — ein Chat unter einem Workspace, der nicht sichtbar ist, öffnet diesen Workspace mit dem Chat als Kachel-Fokus; im Chat Enter; gestoppter Chat: starten |
+| Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | nächster Chat, der wartet (wie ⌃⌥Tab); aus anderen Fenstern: Agent Chats nach vorn |
 | L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
@@ -81,7 +81,8 @@ Chat als Ziel), Kreis verwirft bzw. bricht Transkription oder Nacharbeit ab, Ste
 Ausgabemodus nur für diese Aufnahme (links/rechts ein Schritt pro Druck, hoch/runter mit Wiederholung).
 Bei jedem Wechsel steht über der Pill kurz die Liste aller Modi, der aktuelle markiert (eigenes kleines
 Panel, `OutputModeListPresenter`; weg 1,5 s nach dem letzten Wechsel und sofort mit dem Ende der
-Aufnahme). Der rechte Stick scrollt weiter. Die Pill zeigt Ziel und Modus ohne Hover.
+Aufnahme). Der rechte Stick scrollt weiter; der linke ruht, ohne Vibration — ein Stoß beim Greifen nach R2
+oder Kreis soll die Ansicht nicht verschieben. Die Pill zeigt Ziel und Modus ohne Hover.
 
 **Zwischenablage-Verlauf:** Stick/Steuerkreuz wählt, Kreuz fügt ein, Dreieck korrigiert und fügt ein
 (nur wenn verfügbar), Viereck halten (0,6 s) löscht, L1/R1 Filter Alle/Diktate (nicht in der großen

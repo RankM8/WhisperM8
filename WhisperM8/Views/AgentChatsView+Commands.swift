@@ -133,6 +133,10 @@ extension AgentChatsView {
             selectedSessionID = sessionID
             multiSelection = []
             return true
+        case .selectWorkspaceChat(let sessionID, let workspaceID):
+            guard workspace.sessions.contains(where: { $0.id == sessionID }),
+                  let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+            return openWorkspaceChat(sessionID, in: entity)
         case .activateWorkspace(let workspaceID):
             guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
             activateWorkspaceFromSidebar(entity)

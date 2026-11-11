@@ -61,7 +61,7 @@ enum ControllerAction: Equatable, Sendable {
     /// daraus den Wechsel in die Liste.
     case moveInContent(ControllerDirection)
     /// Voriger bzw. nächster Chat in der Reihenfolge der Liste links, ohne die
-    /// Liste zu betreten (L1/R1, in der Einzelansicht auch Stick hoch/runter).
+    /// Liste zu betreten (L1/R1).
     case adjacentChat(step: Int)
     /// Projekt-Auswahl „Neuer Chat“ öffnen (wie ⌘N), das aktuelle bzw.
     /// markierte Projekt vorausgewählt.
@@ -70,7 +70,10 @@ enum ControllerAction: Equatable, Sendable {
     case scroll(lines: Int)
 
     // Liste links
-    case enterList
+    /// Liste betreten, Markierung auf dem aktuellen Chat, dann `step`
+    /// Schritte weiter (Einzelansicht: Stick hoch/runter, Runde 3). Der
+    /// offene Chat bleibt; gewechselt wird erst mit Kreuz.
+    case enterList(step: Int)
     case leaveList
     case listMove(step: Int)
     case listActivate

@@ -887,6 +887,43 @@ final class AgentWindowStore {
         }
     }
 
+    /// Klick (oder Kreuz am Controller) auf einen Chat im WORKSPACES-Abschnitt
+    /// der Seitenleiste: Die Zeile gehört zu genau diesem Workspace. Ist er
+    /// in diesem Fenster sichtbar, gilt die normale Klickregel (Pane-Fokus).
+    /// Sonst wechselt das Fenster in diesen Workspace (Grid sichtbar) mit dem
+    /// Chat als Pane-Fokus — vorher blieb die alte Workspace-Referenz stehen,
+    /// und „Zurück zum Workspace“ (L3) führte in den falschen Workspace.
+    ///
+    /// Konflikte meldet die Aktivierung als Wert, ohne Mutation
+    /// (`.alreadyActive`, `.blockedByWindowOwnership`). `.rejected`, wenn der
+    /// Chat nicht (mehr) in diesem Workspace liegt.
+    @discardableResult
+    func navigateToWorkspaceChat(
+        _ sessionID: UUID,
+        workspaceID: UUID,
+        in windowID: UUID
+    ) -> GridActivationResult {
+        guard let entity = gridWorkspace(id: workspaceID),
+              entity.slotIndex(of: sessionID) != nil,
+              hasWindow(windowID) else { return .rejected }
+        let current = window(for: windowID)
+        if current.activeWorkspaceID == workspaceID, current.showsGrid {
+            navigateToSession(sessionID, in: windowID)
+            return .alreadyActiveHere
+        }
+        let result = activateGridWorkspace(workspaceID, in: windowID)
+        switch result {
+        case .activated, .alreadyActiveHere:
+            // Grid ist jetzt sichtbar: die Klickregel fokussiert die Pane
+            // (materialisiert den Tab, falls er fehlt; fremd gehaltene Tabs
+            // bleiben Platzhalter).
+            navigateToSession(sessionID, in: windowID)
+        case .alreadyActive, .blockedByWindowOwnership, .rejected:
+            break
+        }
+        return result
+    }
+
     /// „Zurück zum Workspace ‹Name›": Grid wieder sichtbar machen. Läuft
     /// über die Aktivierung (inkl. Konflikt-Prüfung, Tab-Materialisierung,
     /// Fokus-Reparatur).

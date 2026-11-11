@@ -176,13 +176,18 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.holdRepeat(.square), .list), "kein Wiederholen")
     }
 
-    /// Runde 2: In der Einzelansicht wechseln hoch/runter den Chat (mit
-    /// Wiederholung), im Raster bleibt es der Kachel-Fokus (ohne).
-    func testLeftStickUpDownSwitchesChatsInSingleView() {
+    /// Runde 3: In der Einzelansicht springen hoch/runter mit der Markierung
+    /// in die Liste (ein Schritt, kein Chat-Wechsel). Wiederholungen kommen
+    /// danach im Zusammenhang `list` an; im Chat selbst bleiben sie ohne
+    /// Wirkung. Im Raster bleibt es der Kachel-Fokus.
+    func testLeftStickUpDownMarksInListInSingleView() {
         let single = chat(.idle)
-        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), single), .adjacentChat(step: -1))
-        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: true), single), .adjacentChat(step: 1))
-        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: false), chat(.ended)), .adjacentChat(step: 1))
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), single), .enterList(step: -1))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: false), single), .enterList(step: 1))
+        XCTAssertNil(action(.move(.down, source: .leftStick, isRepeat: true), single))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: true), .list), .listMove(step: 1))
+        XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: false), chat(.ended)), .enterList(step: 1))
+        XCTAssertEqual(action(.press(.l1), single), .adjacentChat(step: -1), "L1/R1 wechseln weiter direkt")
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), single), .moveInContent(.left))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: true), single))
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .chatKey(.up), "Steuerkreuz bleibt Pfeil")
@@ -209,6 +214,27 @@ final class ControllerBindingResolverTests: XCTestCase {
                         .tap(.l2), .holdBegan(.l2), .holdBegan(.circle), .tap(.square), .chordCompleted] {
             XCTAssertNil(action(gesture, toChat), "\(gesture)")
         }
+    }
+
+    /// Runde 3: Während Aufnahme, Transkription, Nacharbeit und Schnellaktion
+    /// tut der linke Stick nichts — keine Liste, keine Kachel, keine
+    /// Vibration. Der rechte Stick scrollt weiter.
+    func testLeftStickRestsWhileDictationRuns() {
+        var contexts: [ControllerContext] = [.quickAction]
+        for phase in ControllerRecordingPhase.allCases {
+            for targetIsChat in [true, false] {
+                contexts.append(.recording(phase: phase, targetIsChat: targetIsChat))
+            }
+        }
+        for context in contexts {
+            for direction in ControllerDirection.allCases {
+                for isRepeat in [false, true] {
+                    XCTAssertNil(action(.move(direction, source: .leftStick, isRepeat: isRepeat), context),
+                                 "\(context) \(direction)")
+                }
+            }
+        }
+        XCTAssertEqual(action(.scroll(lines: 2), .recording(phase: .transcribing, targetIsChat: true)), .scroll(lines: 2))
     }
 
     /// Runde 2: Steuerkreuz hoch/runter wechselt den Modus ebenfalls, beim

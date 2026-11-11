@@ -86,17 +86,21 @@ extension ControllerBindingResolver {
     }
 
     /// Linker Stick im Inhalt. Im Raster bewegt er den Kachel-Fokus (ein
-    /// Druck, ein Schritt). In der Einzelansicht gehen hoch und runter zum
-    /// vorigen bzw. nächsten Chat der Liste und wiederholen beim Halten;
-    /// links führt in die Liste.
+    /// Druck, ein Schritt). In der Einzelansicht springen hoch und runter mit
+    /// der Markierung in die Liste links — Start beim aktuellen Chat, sofort
+    /// ein Schritt in die gedrückte Richtung; der offene Chat bleibt
+    /// (Runde 3). Hält man weiter, kommen die Wiederholungen schon im
+    /// Zusammenhang `list` an und bewegen dort die Markierung. Links führt in
+    /// die Liste.
     static func leftStick(_ direction: ControllerDirection, isRepeat: Bool, gridActive: Bool) -> ControllerAction? {
+        guard !isRepeat else { return nil }
         if !gridActive {
             switch direction {
-            case .up: return .adjacentChat(step: -1)
-            case .down: return .adjacentChat(step: 1)
+            case .up: return .enterList(step: -1)
+            case .down: return .enterList(step: 1)
             case .left, .right: break
             }
         }
-        return isRepeat ? nil : .moveInContent(direction)
+        return .moveInContent(direction)
     }
 }

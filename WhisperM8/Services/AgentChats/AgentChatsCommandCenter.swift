@@ -49,6 +49,10 @@ enum AgentChatsCommand: Equatable {
     case startChat(UUID)
     /// Chat auswählen — derselbe Weg wie ein Klick in der Seitenleiste.
     case selectSession(UUID)
+    /// Chat-Zeile im WORKSPACES-Abschnitt öffnen — derselbe Weg wie ihr
+    /// Klick: im sichtbaren Workspace Pane-Fokus, sonst wechselt das Fenster
+    /// in diesen Workspace mit dem Chat als Pane-Fokus.
+    case selectWorkspaceChat(UUID, workspaceID: UUID)
     /// Workspace als Raster öffnen.
     case activateWorkspace(UUID)
     /// Projekt als Workspace seiner aktiven Chats öffnen.

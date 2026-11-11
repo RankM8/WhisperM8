@@ -135,7 +135,8 @@ Markierung aus.
 
 ### Im Inhalt
 
-- **Einzelchat:** Stick links geht in die Liste. Steuerkreuz, Kreuz, Kreis und R2 wirken auf den Chat.
+- **Einzelchat:** Stick links geht in die Liste; hoch/runter springen mit der Markierung in die Liste
+  (Start beim aktuellen Chat, ein Schritt, Runde 3). Steuerkreuz, Kreuz, Kreis und R2 wirken auf den Chat.
 - **Raster:** Der Stick bewegt den Rahmen von Kachel zu Kachel (dieselbe Logik wie ⌃⌘-Pfeile). Am
   linken Rand führt Stick links in die Liste. Die Kachel mit dem Rahmen ist das Ziel für alles.
 - **Dreieck:** erst wartende Kacheln, dann wartende Chats außerhalb (Reihenfolge wie ⌃⌥Tab). Aus jedem
@@ -858,9 +859,9 @@ Nach dem ersten Lauf mit echter Hardware entschieden und umgesetzt:
 2. **Kreuz in der Chat-Auswahl (L2 gehalten) wechselt sofort**; das spätere Loslassen von L2 fällt in
    den Chat und tut dort nichts.
 3. **Rechter Stick scrollt auch während Aufnahme, Transkription und Nacharbeit.**
-4. **Einzelansicht: Stick hoch/runter = voriger/nächster Chat der Liste** (mit Wiederholung, kein
-   Umlauf). Vorläufig: Der Nutzer entscheidet noch, ob der Stick stattdessen die Markierung in der
-   Liste bewegt.
+4. ~~**Einzelansicht: Stick hoch/runter = voriger/nächster Chat der Liste** (mit Wiederholung, kein
+   Umlauf).~~ Ersetzt in Runde 3 (6.6, Punkt 1): Der Stick bewegt die Markierung in der Liste,
+   gewechselt wird erst mit Kreuz.
 5. **Viereck = Rücktaste** (0x7F, Tastencode 51 für den Entwurfs-Tracker) in jedem lebenden Zustand;
    halten löscht weiter wie eine gehaltene Taste (`ControllerGesture.holdRepeat`, nach 0,6 s alle
    60 ms, nach 1 s alle 25 ms). Kein Ctrl+C mehr: Im Handtest wollte der Nutzer Text löschen, während
@@ -901,6 +902,39 @@ Nach dem ersten Lauf mit echter Hardware entschieden und umgesetzt:
 Handtest nach dem nächsten `make dev`: siehe Bericht der Runde (Brücke im Popover, Return in den
 Rückfragen, Umbenennen-Sheet mit Diktat, Modusliste an der Pill, Fußzeile und Menü im Verlauf,
 Start über R3 auf einer nicht ausgewählten Zeile).
+
+### 6.6 Runde 3 (11.11.2026)
+
+Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
+
+1. **Einzelansicht: Stick hoch/runter markiert in der Liste** statt den Chat zu wechseln (ersetzt
+   6.5 Punkt 4). Die Markierung springt in die Liste (Bereich `list`, wie mit Stick links), Start ist
+   der aktuelle Chat (bei Workspace-Mitgliedschaft dessen Workspace-Zeile), und sie rückt sofort einen
+   Schritt in die gedrückte Richtung (`ControllerAction.enterList(step:)`). Der offene Chat bleibt.
+   Hält man den Stick, kommen die Wiederholungen schon im Zusammenhang `list` an (`listMove`); im Chat
+   selbst sind Wiederholungen ohne Wirkung. Am Rand bleibt die Markierung stehen. Steht der Chat nicht
+   in der Liste (Filter), bleibt sie auf der ersten Zeile.
+2. **Kreuz auf der Markierung** öffnet und geht in den Inhalt (unverändert).
+3. **Kreis oder Stick rechts in der Liste**: Markierung weg, zurück in den bisherigen Chat — `leaveList`
+   wählt nichts aus (Test über die ganze Kette Stick → Wiederholung → Kreis).
+4. **Raster unverändert**: Kachel zu Kachel, in die Liste über den linken Rand.
+5. **Linker Stick ruht während Aufnahme, Transkription, Nacharbeit und Schnellaktion.** Das galt im
+   Resolver schon (der Zusammenhang `recording` kennt nur das Steuerkreuz); jetzt steht es dort
+   ausdrücklich und ist für alle Phasen getestet. Bewusst ohne „geht nicht“-Vibration: Ein Stoß beim
+   Greifen nach R2 oder Kreis ist kein Wunsch, und eine Vibration mitten im Sprechen irritiert.
+6. **L1/R1** wechseln weiter direkt zum vorigen/nächsten Chat der Liste (`adjacentChat`).
+7. **Kreuz auf einem Chat unter einem nicht sichtbaren Workspace** wechselt das Fenster in diesen
+   Workspace (Raster sichtbar) mit genau diesem Chat als Kachel-Fokus
+   (`AgentChatsCommand.selectWorkspaceChat` → `openWorkspaceChat` →
+   `AgentWindowStore.navigateToWorkspaceChat`). Ist der Workspace sichtbar, wie bisher Kachel-Fokus.
+   Danach führt L3 aus der maximierten Einzelansicht zurück in genau diesen Workspace. Konflikte wie
+   beim Workspace-Kopf (`alreadyActive` → Besitzerfenster nach vorn, `blockedByWindowOwnership` →
+   Hinweis); lebt der Chat als Tab in einem anderen Fenster, wird er dort geöffnet.
+8. **Derselbe Weg für den Mausklick** auf eine Chat-Zeile im WORKSPACES-Abschnitt. Cmd-/Shift-Klick
+   bleibt Mehrfachauswahl (`handleSidebarRowClick` unverändert, nur der normale Klick ruft
+   `openWorkspaceChat`). Klickregel in `docs/features/agent-chats/ui/README.md` (Abschnitt Sidebar).
+   Folge, die der Nutzer kennen sollte: Auch eine Zeile des Workspace, der nur das verborgene
+   Rücksprungziel einer Einzelansicht ist, zeigt das Raster wieder.
 
 ## 7. Fortschritt
 

@@ -184,7 +184,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .scroll(lines): withSelectedSession { terminals.scroll(lines: lines, in: $0) }
 
         // Liste links
-        case .enterList: enterList()
+        case let .enterList(step): enterList(step: step)
         case .leaveList: ui.leaveList()
         case let .listMove(step): moveInList(step)
         case .listActivate: activateMarkedRow()
@@ -305,8 +305,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         ui.leaveList()
     }
 
-    /// L1/R1 und (Einzelansicht) Stick hoch/runter: voriger bzw. nächster
-    /// Chat in der Reihenfolge der Liste links, ohne die Liste zu betreten.
+    /// L1/R1: voriger bzw. nächster Chat in der Reihenfolge der Liste links,
+    /// ohne die Liste zu betreten.
     /// Im sichtbaren Workspace setzt die Auswahl den Kachel-Fokus. Am Rand
     /// gibt es „geht nicht“.
     private func moveToAdjacentChat(_ step: Int) {
@@ -341,7 +341,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         return rows
     }
 
-    private func enterList() {
+    /// Liste betreten: Markierung auf dem aktuellen Chat (bei Workspace-
+    /// Mitgliedschaft dort), dann `step` Schritte weiter. Am Rand bleibt die
+    /// Markierung stehen. Nichts wird ausgewählt — erst Kreuz öffnet.
+    private func enterList(step: Int = 0) {
         guard let windowID = targetWindowID else { return }
         command(.setSidebarVisible(true), orReject: false)
         let rows = currentListRows().map(\.row)
@@ -349,8 +352,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             playHaptic(.rejected)
             return
         }
+        let selected = chats.snapshot(of: windowID)?.selectedSessionID
         ui.listModel = SidebarNavigationModel(rows: rows)
-        ui.listModel.start(at: chats.snapshot(of: windowID)?.selectedSessionID)
+        ui.listModel.start(at: selected)
+        // Nur vom aktuellen Chat aus weiterrücken. Steht er nicht in der
+        // Liste (Filter), bleibt die Markierung auf der ersten Zeile.
+        if step != 0, let selected, SidebarNavigationModel.preferredRow(of: selected, in: rows) != nil {
+            ui.listModel.move(step)
+        }
         ui.listWindowID = windowID
         ui.markedRow = ui.listModel.marked
         ui.area = .list
@@ -367,8 +376,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
               let row = currentListRows().first(where: { $0.row == marked }) else { return }
         let done: Bool
         switch row.row {
-        case let .chat(sessionID), let .workspaceChat(sessionID, _):
+        case let .chat(sessionID):
             done = command(.selectSession(sessionID), orReject: true)
+        case let .workspaceChat(sessionID, workspaceID):
+            // Wie der Klick auf die Zeile: Ist der Workspace hier nicht
+            // sichtbar, wechselt das Fenster hinein (Runde 3).
+            done = command(.selectWorkspaceChat(sessionID, workspaceID: workspaceID), orReject: true)
         case let .workspace(workspaceID):
             done = command(.activateWorkspace(workspaceID), orReject: true)
         case let .project(projectID):

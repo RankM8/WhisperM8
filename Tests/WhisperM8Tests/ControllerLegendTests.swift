@@ -74,6 +74,17 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(chat(.working)).contains(.back))
     }
 
+    /// Runde 3: Der linke Stick steht in der Einzelansicht und im Raster als
+    /// „Bewegen“ in der Legende, solange ein Diktat läuft aber nicht.
+    func testLeftStickShownInChatButNotWhileDictating() {
+        XCTAssertTrue(inputs(chat(.idle)).contains(.leftStick))
+        XCTAssertTrue(inputs(chat(.idle) { $0.gridActive = true }).contains(.leftStick))
+        for phase in ControllerRecordingPhase.allCases {
+            XCTAssertFalse(inputs(.recording(phase: phase, targetIsChat: true)).contains(.leftStick), "\(phase)")
+        }
+        XCTAssertFalse(inputs(.quickAction).contains(.leftStick))
+    }
+
     func testRecordingLegend() {
         XCTAssertEqual(labels(.recording(phase: .recording, targetIsChat: true)),
                        [.stopDictation, .stopAndSend, .discard, .outputMode, .scroll])

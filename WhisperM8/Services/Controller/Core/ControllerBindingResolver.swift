@@ -5,8 +5,10 @@ import Foundation
 ///
 /// Grundsätze, die hier überall gelten:
 /// - Wiederholungen des linken Sticks bewegen nur Markierungen in Listen
-///   (Liste links, Menü, Verlauf, Chat-Auswahl, in der Einzelansicht die
-///   Chats der Liste), nie Kacheln oder Bereiche: ein Druck, ein Schritt.
+///   (Liste links, Menü, Verlauf, Chat-Auswahl), nie Kacheln oder Bereiche:
+///   ein Druck, ein Schritt.
+/// - Während Aufnahme, Transkription, Nacharbeit und Schnellaktion tut der
+///   linke Stick nichts — auch keine „geht nicht“-Vibration.
 /// - Halte-Fortschritt (`holdProgress`) erscheint nur, wo das Halten im
 ///   Zusammenhang eine Wirkung hätte.
 /// - Der Pause-Akkord L1 + R1 gilt überall außer während der Aufnahme und in
@@ -130,6 +132,12 @@ enum ControllerBindingResolver {
     ) -> ControllerAction? {
         // Scrollen geht in jeder Phase: Man liest im Chat weiter, während man spricht.
         if case let .scroll(lines) = gesture { return .scroll(lines: lines) }
+        // Der linke Stick ruht (Runde 3): Ein Stoß beim Greifen nach R2 oder
+        // Kreis darf weder die Liste betreten noch die Kachel wechseln — das
+        // Ziel der Aufnahme bliebe zwar, aber die Ansicht spränge weg. Bewusst
+        // ohne „geht nicht“-Vibration: Ein Stoß ist meist kein Wunsch, und
+        // eine Vibration mitten im Sprechen irritiert mehr, als sie hilft.
+        if case .move(_, .leftStick, _) = gesture { return nil }
         guard phase == .recording else {
             // Transkription oder Nacharbeit: sonst nur abbrechen.
             return gesture == .tap(.circle) ? .dictationCancel : nil

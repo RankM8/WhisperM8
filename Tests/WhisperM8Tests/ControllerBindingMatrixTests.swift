@@ -72,7 +72,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
     }
 
     /// Navigation im Chat, die auch bei beendetem Chat bleibt. Einzelansicht:
-    /// Stick hoch/runter wechselt den Chat der Liste (mit Wiederholung, Runde 2).
+    /// Stick hoch/runter springt mit der Markierung in die Liste, ein Schritt
+    /// (Runde 3; Wiederholungen kommen dann im Zusammenhang `list` an).
     private static let chatNavigation: Table = {
         var table: Table = [
             .press(.l1): .adjacentChat(step: -1),
@@ -90,10 +91,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .scroll(lines: 3): .scroll(lines: 3),
             .scroll(lines: -3): .scroll(lines: -3),
         ]
-        for isRepeat in [false, true] {
-            table[.move(.up, source: .leftStick, isRepeat: isRepeat)] = .adjacentChat(step: -1)
-            table[.move(.down, source: .leftStick, isRepeat: isRepeat)] = .adjacentChat(step: 1)
-        }
+        table[.move(.up, source: .leftStick, isRepeat: false)] = .enterList(step: -1)
+        table[.move(.down, source: .leftStick, isRepeat: false)] = .enterList(step: 1)
         table[.move(.left, source: .leftStick, isRepeat: false)] = .moveInContent(.left)
         table[.move(.right, source: .leftStick, isRepeat: false)] = .moveInContent(.right)
         return merge(table, pauseChord)

@@ -9021,12 +9021,12 @@
         }
       }
     },
-    "Move: through the list, into the chat, from tile to tile; up and down switch chats": {
+    "Move: through the list, into the chat, from tile to tile; in a single chat, up and down mark another chat in the list": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bewegen: durch die Liste, in den Chat, von Kachel zu Kachel; hoch und runter wechseln den Chat"
+            "value": "Bewegen: durch die Liste, in den Chat, von Kachel zu Kachel; im einzelnen Chat markieren hoch und runter einen anderen Chat in der Liste"
           }
         }
       }
