@@ -716,7 +716,26 @@ Abnahme: alles grün, Abschnitt 7 vollständig, keine offenen Befunde aus der Du
 
 Wird in Etappe 13 vervollständigt. Feste Punkte:
 
-- Tastaturkürzel aus Etappe 2 (Regression).
+**Tastaturkürzel (Regression aus Etappe 2).** Jedes Kürzel einmal im Einzelchat und einmal im Raster,
+jeweils mit dem Fokus im Terminal:
+
+| Kürzel | Erwartung |
+|---|---|
+| ⌘1 bis ⌘9 | springt auf den n-ten Tab |
+| ⌘⌥← / ⌘⌥→ und ⌘⇧← / ⌘⇧→ | vorheriger / nächster Tab, mit Umlauf; im Filterfeld der Liste markiert ⌘⇧← Text |
+| ⌃Tab, ⌃⇧Tab | Umschalter öffnet mit dem Nachbarn markiert; Ctrl loslassen wechselt |
+| ⌃Tab, dann Pfeile | im Raster wandert die Markierung über die Kacheln, in der Einzelansicht eines Workspace über die Mini-Map, sonst durch die Liste |
+| ⌃Tab, dann Esc | schließt ohne Wechsel, die laufende Antwort im Chat wird nicht abgebrochen |
+| ⌃Tab, dann Return | wechselt sofort |
+| ⌃Tab, dann Klick in die Seitenleiste | Umschalter schließt, der geklickte Chat bleibt gewählt |
+| ⌃⌥Tab | springt zum Chat, der am längsten wartet; ohne wartenden Chat passiert nichts |
+| ⌃⌘-Pfeile | Kachel-Fokus im Raster |
+| ⌘N | Projekt-Auswahl für einen neuen Chat |
+| ⌥⌘N | Notizen im Raster auf und zu |
+| ⌘W | schließt den Tab; ohne Tab schließt das Fenster |
+
+**Controller:**
+
 - Jede Taste des Kerns und des Zusatzes in Einzelchat, Raster und Liste.
 - Diktat: in einen Chat, mit Senden, in ein anderes Programm (Hintergrund an), bei offener Rückfrage.
 - Tasten im Hintergrund in beiden Profilen (Dock und Menüleiste), auch nach Ruhezustand.
@@ -729,8 +748,8 @@ Wird in Etappe 13 vervollständigt. Feste Punkte:
 | Etappe | Stand | Commit | Notiz |
 |---|---|---|---|
 | 0 Vorbereitung | erledigt | 13847432 | Arbeitsordner, Branch, Ausgangswert 4.039 Tests grün, Plan und README-Eintrag committet |
-| 1 Entwurf im HTML-Zwilling | erledigt | (dieser Commit) | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
-| 2 Aktions-Katalog | offen | | |
+| 1 Entwurf im HTML-Zwilling | erledigt | 307e04b9 | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
+| 2 Aktions-Katalog | erledigt | (dieser Commit) | `AgentChatsCommandCenter` mit Token-Anmeldung und Routing nur zum Key-Fenster, `ChatSelectionHistory`, `AgentChatsView+Commands.swift`; drei Rümpfe aus `+Shortcuts.swift` als gemeinsame Funktionen; 159 Tests rund um Tabs, Umschalter und Katalog grün; `AgentChatsView.swift` bei 3.821 von 3.842 Zeilen |
 | 3 Controller-Kern | offen | | |
 | 4 Hardware, Schalter, Debug-Kanal | offen | | |
 | 5 Navigation im Inhalt | offen | | |

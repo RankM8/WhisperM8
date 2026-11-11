@@ -33,6 +33,19 @@ final class TabSwitcherModelTests: XCTestCase {
         XCTAssertEqual(model?.highlightedID, b)
     }
 
+    /// Richtung 0 (Controller: erst halten, dann bewegen): Die Markierung
+    /// bleibt auf dem aktuellen Chat, Loslassen ohne Bewegung wechselt nicht.
+    func testBeginWithDirectionZeroKeepsCurrent() {
+        let model = TabSwitcherModel.begin(order: [a, b, c], current: b, direction: 0)
+        XCTAssertEqual(model?.highlightedID, b)
+        XCTAssertEqual(model?.commitTarget(order: [a, b, c]), b)
+    }
+
+    func testBeginWithDirectionZeroAndNoCurrentStartsAtFirst() {
+        let model = TabSwitcherModel.begin(order: [a, b, c], current: nil, direction: 0)
+        XCTAssertEqual(model?.highlightedID, a)
+    }
+
     // MARK: - Durchlauf
 
     func testAdvanceMovesForwardWithWrap() {

@@ -255,7 +255,7 @@ struct AgentChatsView: View {
     /// Welche Chats die Sidebar zeigt (Aktiv·Zuletzt·Alle). Default `.active`
     /// hält die Liste klein; `@AppStorage` persistiert fensterweit ohne
     /// Schema-Migration. Die Suche überstimmt den Scope (siehe `effectiveScope`).
-    @AppStorage("agentSidebarScope") private var sidebarScope: SidebarScope = .active
+    @AppStorage("agentSidebarScope") var sidebarScope: SidebarScope = .active
     /// Anordnung der Chat-Liste (gruppiert nach Projekt vs. flach/zeitlich).
     @AppStorage("agentSidebarLayout") private var sidebarLayout: SidebarLayout = .grouped
     /// Persistierter "Wunschwert" der Sidebar-Breite — global ueber alle
@@ -312,6 +312,7 @@ struct AgentChatsView: View {
     /// ausschließlich der `TabSwitcherOverlayHost` — ein Schritt invalidiert
     /// so nicht den ganzen Body samt Sidebar.
     @State var tabSwitcherRun = TabSwitcherRunState()
+    @State var commandState = AgentChatsCommandState()
     /// Pure Durchlauf-Maschine (nil = inaktiv). Zugriff für die Handler in
     /// +Shortcuts; nicht beobachtet (`@ObservationIgnored`), ein Lesen im
     /// Body registriert also keine Abhängigkeit.
@@ -808,7 +809,7 @@ struct AgentChatsView: View {
             // Tabs) → Fenster + Tabs aus dem Store, sonst stellt der
             // Launch-Restore es beim naechsten Start wieder her. Quit/
             // Profilwechsel sind via suspendCloseTracking ausgenommen.
-            onWillClose: { windowStore.handleWindowWillClose(windowID) },
+            onWillClose: { unregisterCommandHandler(); windowStore.handleWindowWillClose(windowID) },
             // Dictation routet ausschliesslich ueber das Key-Fenster —
             // Selektionen in Nicht-Key-Fenstern aendern das Ziel nie
             // (Multi-Window-Politik, Plan-Abschnitt 03).
@@ -1022,6 +1023,7 @@ struct AgentChatsView: View {
             installTabStripScrollMonitorIfNeeded()
             installTabDragEndMonitorIfNeeded()
             installTabSwitcherFlagsMonitorIfNeeded()
+            registerCommandHandler()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -1046,6 +1048,7 @@ struct AgentChatsView: View {
             removeTabStripScrollMonitor()
             removeTabDragEndMonitor()
             removeTabSwitcherFlagsMonitor()
+            unregisterCommandHandler()
             // Window zu → Routing nur räumen, wenn ES das Ziel besass: das
             // Verschwinden eines NICHT-besitzenden Fensters darf das
             // Dictation-Ziel des aktiv genutzten Fensters nicht löschen
@@ -1070,6 +1073,7 @@ struct AgentChatsView: View {
             // Der eigene Commit räumt den Switcher VOR dem Selektieren
             // (siehe commitTabSwitcher) und ist hier deshalb ein No-op.
             if tabSwitcher != nil { cancelTabSwitcher() }
+            commandState.history.record(newValue)
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
