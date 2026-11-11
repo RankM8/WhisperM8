@@ -27,8 +27,9 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             statusSince: coordinator.activityStore.statusSince(for: sessionID),
             draftSuspected: controller.composerDraft.mayHaveUnsentInput,
             lastEnterAt: controller.lastSubmitAt,
-            lastEscapeAt: controller.lastControlEscapeAt,
-            lastDraftInputAt: controller.lastControllerDraftInputAt
+            lastEscapeAt: controller.controllerMarks.lastEscapeAt,
+            lastDraftInputAt: controller.controllerMarks.lastDraftInputAt,
+            choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID))
         )
     }
 
@@ -49,6 +50,11 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller.sendPrompt(text, submit: submit)
         controller.noteControllerDraftInput(submitted: submit)
         return true
+    }
+
+    func noteChoiceListOpened(in sessionID: UUID) {
+        controller(for: sessionID)?.noteControllerChoiceListOpened(
+            status: AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID))
     }
 }
 

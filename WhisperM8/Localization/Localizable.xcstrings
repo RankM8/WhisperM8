@@ -4961,12 +4961,12 @@
         }
       }
     },
-    "D-pad: arrow keys only while the agent asks a question; otherwise it moves like the left stick": {
+    "D-pad: arrow keys while the agent asks a question, in a list opened from the menu and always in Codex; otherwise it moves like the left stick": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steuerkreuz: Pfeiltasten nur, solange der Agent eine Rückfrage stellt; sonst bewegt es wie der linke Stick"
+            "value": "Steuerkreuz: Pfeiltasten während einer Rückfrage, in einer Liste aus dem Menü und in Codex immer; sonst bewegt es wie der linke Stick"
           }
         }
       }
@@ -5111,12 +5111,12 @@
         }
       }
     },
-    "Delete (hold: characters, after a second whole words)": {
+    "Delete (hold: characters, after a second whole words; in a shell only characters)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Löschen (halten: Zeichen, nach einer Sekunde ganze Wörter)"
+            "value": "Löschen (halten: Zeichen, nach einer Sekunde ganze Wörter; in einer Shell nur Zeichen)"
           }
         }
       }
@@ -6961,12 +6961,12 @@
         }
       }
     },
-    "Hold: clear the whole input (not while the agent asks a question)": {
+    "Hold: clear the whole input (Claude and Codex, not while the agent asks a question)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Halten: ganze Eingabe leeren (nicht während einer Rückfrage des Agenten)"
+            "value": "Halten: ganze Eingabe leeren (Claude und Codex, nicht während einer Rückfrage)"
           }
         }
       }
@@ -17424,12 +17424,12 @@
         }
       }
     },
-    "Type a space in the chat": {
+    "Type a space in the chat (Claude and Codex)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Leerzeichen in den Chat schreiben"
+            "value": "Leerzeichen in den Chat schreiben (Claude und Codex)"
           }
         }
       }

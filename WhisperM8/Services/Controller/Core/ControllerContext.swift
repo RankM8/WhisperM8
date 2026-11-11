@@ -30,6 +30,10 @@ struct ControllerChatState: Equatable, Sendable {
     /// Kurz vorher per Controller getippt, gelöscht oder diktiert (ohne zu
     /// senden): Ein Entwurf zum Abschicken ist plausibel.
     var recentDraftInput: Bool = false
+    /// Das Controller-Menü hat eine Auswahlliste der CLI geöffnet (`/model`,
+    /// `/config`, „/“ …), und sie ist vermutlich noch offen
+    /// (`ControllerTerminalMarks`): Pfeile und Kreuz gehen dann ins Terminal.
+    var choiceListOpen: Bool = false
     var gridActive: Bool = false
     /// Ein lebendes Terminal ist da (nicht nur der Verlauf).
     var hasTerminal: Bool = true

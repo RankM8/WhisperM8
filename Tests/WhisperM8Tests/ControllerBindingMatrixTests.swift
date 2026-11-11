@@ -148,6 +148,17 @@ final class ControllerBindingMatrixTests: XCTestCase {
 
     private static let chatArrows = dpad { .chatKey(ControllerChatKey($0)) }
 
+    /// Shell (Review nach Runde 3, Befund 4): Rücktaste bleibt, auch gehalten —
+    /// dort aber nur Zeichen, kein Ctrl+W. Leerzeichen und Leeren „geht nicht“.
+    private static let shellKeys: Table = [
+        .tap(.square): .chatKey(.backspace),
+        .holdBegan(.square): .chatKey(.backspace),
+        .holdRepeat(.square): .chatKey(.backspace),
+        .holdRepeatLong(.square): .chatKey(.backspace),
+        .press(.triangle): .rejected,
+        .holdBegan(.r3): .rejected,
+    ]
+
     /// Steuerkreuz außerhalb einer Rückfrage (Review-Befund 1): wie der linke
     /// Stick, ohne Wiederholung; rechts ohne Wirkung.
     private static let dpadNavigation: Table = [
@@ -303,8 +314,37 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
+        // Befund 1b nach Runde 3: Codex meldet keine Rückfragen — Pfeile immer.
         ("Chat ruht, Codex", .chat(ControllerChatState(status: .idle, profile: .codex, draftSuspected: true)),
-         merge(chatNavigation, dpadNavigation, backspace, clearInput, [
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .press(.cross): .chatKey(.enter),
+             .tap(.circle): .chatKey(.escape),
+         ])),
+        ("Codex arbeitet", .chat(ControllerChatState(status: .working, profile: .codex)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
+        ("Codex arbeitet, Pfeil per Controller",
+         .chat(ControllerChatState(status: .working, profile: .codex, recentDraftInput: true)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .press(.cross): .chatKey(.enter),
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
+        // Befund 1a: Liste aus dem Menü offen (Chat ruht, gerade gesendet).
+        ("Claude, Auswahl offen", chatState(.idle) { $0.choiceListOpen = true; $0.recentlySubmitted = true },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .press(.cross): .chatKey(.enter),
+             .tap(.circle): .chatKey(.escape),
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
+        ("Shell ruht", .chat(ControllerChatState(status: .idle, profile: .shell)),
+         merge(chatNavigation, dpadNavigation, shellKeys, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),

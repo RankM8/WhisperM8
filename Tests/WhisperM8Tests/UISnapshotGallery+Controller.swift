@@ -58,6 +58,16 @@ extension UISnapshotGallery {
                 state.hasTerminal = false
                 return legend(.chat(state), title: "3 Kit · Release-Notizen")
             },
+            // Review nach Runde 3: Liste aus dem Menü offen (Pfeiltasten, Kreuz
+            // bestätigt) und Shell (ohne Leerzeichen und Leeren).
+            Fixture(name: "controller-legende-auswahl", size: CGSize(width: 1340, height: 60)) {
+                var state = chat
+                state.choiceListOpen = true
+                return legend(.chat(state), title: "2 Lux · Integrationen")
+            },
+            Fixture(name: "controller-legende-shell", size: legendSize) {
+                legend(.chat(ControllerChatState(status: .idle, profile: .shell)), title: "zsh")
+            },
             Fixture(name: "controller-legende-liste", size: legendSize) { legend(.list) },
             Fixture(name: "controller-legende-aufnahme", size: legendSize) {
                 legend(.recording(phase: .recording, targetIsChat: true))

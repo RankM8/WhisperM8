@@ -119,12 +119,29 @@ final class TerminalControlKeyTests: XCTestCase {
         XCTAssertTrue(bursts.allSatisfy { $0.count <= 17 })
     }
 
-    /// Absicherung: Leeren nie in einer Rückfrage; Leerzeichen und Wort löschen überall.
+    /// Absicherung: Leeren nie in einer Rückfrage; Leerzeichen und Wort löschen
+    /// in jedem Zustand — aber nur bei Claude und Codex (Befund 4 nach Runde 3).
     func testControllerGuardForWritingKeys() {
-        XCTAssertFalse(TerminalControlKey.controllerAllows(.killLineStart, status: .awaitingInput))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.killLineStart, status: .working))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.space, status: .awaitingInput))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.deleteWord, status: nil))
+        func allows(_ key: TerminalControlKey, _ status: AgentSessionRuntimeStatus?,
+                    _ profile: TerminalKeyboardProfile = .claudeCodeChat) -> Bool {
+            TerminalControlKey.controllerAllows(key, status: status, profile: profile, choiceListOpen: false)
+        }
+        XCTAssertFalse(allows(.killLineStart, .awaitingInput))
+        XCTAssertTrue(allows(.killLineStart, .working))
+        XCTAssertTrue(allows(.space, .awaitingInput))
+        XCTAssertTrue(allows(.deleteWord, nil))
+        for profile in [TerminalKeyboardProfile.claudeCodeChat, .codexChat] {
+            for key in [TerminalControlKey.space, .deleteWord, .killLineStart, .lineEnd] {
+                XCTAssertTrue(allows(key, .idle, profile), "\(key) \(profile)")
+            }
+        }
+        for profile in [TerminalKeyboardProfile.plainShell, .claudeAgentsView] {
+            for key in [TerminalControlKey.space, .deleteWord, .killLineStart, .lineEnd] {
+                XCTAssertFalse(allows(key, .idle, profile), "\(key) \(profile)")
+            }
+            XCTAssertTrue(allows(.backspace, .idle, profile), "Rücktaste bleibt in \(profile)")
+            XCTAssertTrue(allows(.enter, .idle, profile))
+        }
     }
 
     func testEscapeWhileWorkingMarksRestoredPrompt() {

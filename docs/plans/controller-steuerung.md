@@ -930,7 +930,8 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
    Danach führt L3 aus der maximierten Einzelansicht zurück in genau diesen Workspace. Konflikte wie
    beim Workspace-Kopf (`alreadyActive` → Besitzerfenster nach vorn, `blockedByWindowOwnership` →
    Hinweis); lebt der Chat als Tab in einem anderen Fenster, wird er dort geöffnet.
-8. **Derselbe Weg für den Mausklick** auf eine Chat-Zeile im WORKSPACES-Abschnitt. Cmd-/Shift-Klick
+8. ~~**Derselbe Weg für den Mausklick** auf eine Chat-Zeile im WORKSPACES-Abschnitt.~~ Zurückgenommen
+   nach dem Review (6.7, Punkt 3): Der Mausklick folgt wieder der Klickregel, nur Kreuz wechselt. Cmd-/Shift-Klick
    bleibt Mehrfachauswahl (`handleSidebarRowClick` unverändert, nur der normale Klick ruft
    `openWorkspaceChat`). Klickregel in `docs/features/agent-chats/ui/README.md` (Abschnitt Sidebar).
    Folge, die der Nutzer kennen sollte: Auch eine Zeile des Workspace, der nur das verborgene
@@ -1020,6 +1021,86 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
 - 7: Zwei Schnappschüsse je Geste (Manager und Ausführer).
 - 8: Stick-Drift hält die Sperre gegen App Nap (die Pumpe gilt als „gedrückt“).
 
+### 6.7 Review-Fixes nach Runde 3 (12.11.2026)
+
+Befunde eines Reviews von 0bb54fb5..ef7a5a98, umgesetzt:
+
+1. **Steuerkreuz in Auswahllisten und bei Codex.** Die Regel „Pfeile nur in Rückfragen“ machte die
+   Listen unbedienbar, die das Menü selbst öffnet (`/model`, `/config`, `/resume`, `/permissions`,
+   `/mcp`, `/agents`, „/“) — der Chat ruht dabei —, und Codex meldet nie „wartet“.
+   - (a) **Merker „Auswahl offen“** je Chat (`ControllerTerminalMarks`, gehalten vom
+     `AgentTerminalController`, damit Ausführer und Absicherung im Terminal dieselbe Quelle haben).
+     Gesetzt vom Menü nach Befehlen, die eine Liste zeigen (`ControllerSlashCommands.opensChoiceList`:
+     Claude zusätzlich `/memory`, Codex „/“, `/model`, `/approvals`). Solange er steht: Pfeile ins
+     Terminal, Kreuz = Enter auch bei „arbeitet“, Kreis = Escape auch direkt nach dem Befehl (der zählt
+     als „gerade gesendet“). Er fällt mit Enter und Escape (Controller und Tastatur), Rücktaste, Wort
+     löschen, Leeren, Tab/Shift+Tab, jedem Text über `sendPrompt` (`chats send`, Diktat, Menü) und nach
+     2 min ohne Pfeil oder Leerzeichen. Entscheidungen: Ein Chatwechsel weg und zurück lässt ihn stehen
+     (die Liste im Terminal bleibt offen; der Merker hängt am Terminal, nicht an der Auswahl). Enter
+     löscht ihn immer, auch wenn die CLI danach eine weitere Liste zeigt — sicher vor Gefälligkeit:
+     Steht der Merker fälschlich, schickte links Claude im leeren Feld in den Hintergrund. Eine
+     verfallene Liste öffnet kein Pfeil wieder (auch nicht in einer Rückfrage).
+   - (b) **Codex: Pfeile immer** (jeder lebende Zustand). Belegt: Der Status von Codex kommt aus dem
+     Transkript (`AgentTranscriptStatusDecider`); während einer Freigabe ist der letzte Eintrag der
+     Tool-Aufruf, also „arbeitet“, nach 2 min ohne Schreiben „ruht“. Eine Freigabe-Erkennung fehlt —
+     „Pfeile nur, solange Codex nicht arbeitet“ hätte genau die Freigaben ausgeschlossen. Links im
+     leeren Feld ist bei Codex harmlos (das Hintergrund-Verhalten ist Claude-eigen); hoch holt den
+     letzten Prompt sichtbar ins Feld. Damit eine Freigabe bei „arbeitet“ auch bestätigt werden kann,
+     zählt ein Pfeil per Controller bei Codex als Eingabe für die 30-s-Regel: erst wählen, dann Kreuz;
+     ohne Pfeil bleibt Kreuz ohne Wirkung (Schutz vor dem Reflex-Druck).
+   - Claude bleibt unverändert sicher: außerhalb von „wartet“ und „Auswahl offen“ ist das Steuerkreuz
+     Navigation. Die Absicherung `TerminalControlKey.controllerAllows` kennt jetzt Profil und Merker.
+2. **Mehrere Fenster:** `openWorkspaceChat` fällt bei `.alreadyActive`, `.blockedByWindowOwnership`
+   und `.rejected` auf die Klickregel zurück (`selectedSessionID = id`) statt nur das Besitzerfenster
+   nach vorn zu holen bzw. einen Hinweis zu zeigen. Regel pur in `WorkspaceChatRowRoute.fallsBackToSelect`.
+3. **Mausklick wieder wie vor Runde 3** (Entscheidung des Nutzers): Klick auf eine Chat-Zeile im
+   WORKSPACES-Abschnitt = `handleSidebarRowClick` + `selectedSessionID = id`. Nur Kreuz am Controller
+   wechselt den Workspace (`WorkspaceChatRowRoute.route(for:)`). L3 zurück und die Workspace-Auswahl auf
+   L2 bleiben. Klickregel in `docs/features/agent-chats/ui/README.md` zurückgeschrieben.
+4. **Schreibtasten nur bei Claude und Codex:** Leerzeichen, Wort löschen und Eingabe leeren in Shells
+   „geht nicht“ (Resolver) und gesperrt in der Absicherung (nano: Ctrl+U fügt ein, Ctrl+W sucht; vim und
+   emacs anders). Entscheidung zur Rücktaste: bleibt in Shells, getippt und gehalten — 0x7F ist die
+   echte Rücktaste, in jedem Programm das Erwartete. Nach 1 s Halten kommt dort aber kein Ctrl+W,
+   sondern weiter Zeichen.
+5. **Kreuz bei arbeitendem Chat:** `recentDraftInput` nur, wenn die Eingabe nach dem letzten Absenden
+   liegt (`ControllerTerminalMarks.hasFreshDraftInput`). „Absenden“ ist jeder Weg: Kreuz/Enter vom
+   Controller auch in Rückfragen, Enter der Tastatur (`noteKeyboardKeyForController`), `chats send`,
+   Diktat mit Senden und Menü-Befehle (über `composerDraft.lastProgrammaticSubmitAt`). Nebenwirkung:
+   Auch nach einem Enter der Tastatur gilt der Chat 3 s als „gerade gesendet“.
+6. **Eingabe leeren** bindet sein Ziel beim Haltebeginn (`holdProgress(.r3)`); ist beim Auslösen ein
+   anderer Chat ausgewählt, wird nichts geleert („geht nicht“), wie bei den Menü-Eingaben.
+
+Nebenbei: `sendKey` steht jetzt kürzer in `AgentTerminalView.swift` (Merker und Tastenregeln in
+`AgentTerminalController+ControllerInput.swift` und `ControllerTerminalMarks+Keys.swift`).
+
+**Später** (aus demselben Review, bewusst nicht umgesetzt):
+
+- 7: Leerzeichen in `/config` (schaltet um) und in Rückfragen mit Mehrfachauswahl am echten Gerät
+  prüfen.
+- 8: `wiredControllers` beim Trennen eines Controllers bereinigen.
+- 9: `AgentTerminalView.swift` steht bei 1.459 von 1.500 Zeilen; Neues dort nur über Extensions.
+
+**Nachreview der Fixes** (umgesetzt):
+
+1. **Merker nur bei ruhendem Claude-Chat.** Ein `/model` an einen arbeitenden Chat setzte den Merker;
+   danach gingen 2 min lang links und Kreuz ins arbeitende Terminal, und Kreuz konnte in der Lücke vor
+   „wartet“ eine Freigabe bestätigen (ebenso bei einem Turn, den Claude selbst beginnt). Jetzt zählt
+   der Merker bei Claude nur bei `idle` — in der Belegung (`choiceListActive`) und in
+   `controllerAllows`. Gesetzt wird er nur, wenn der Chat beim Senden ruht. Weg vom Ruhezustand wird
+   er beim Lesen gelöscht (`checkedChoiceListOpen`, gelesen nur im Ereignis-Pfad: Schnappschuss des
+   Controllers und `sendKey`, nie in einem Body) und lebt danach nicht wieder auf. Codex unverändert.
+2. **Tastatur und Höchstdauer.** Jede Taste der Tastatur außer Pfeilen und Leerzeichen löscht den
+   Merker (vorher nur Enter und Escape: „/“ aus dem Menü, mit der Rücktaste gelöscht, ließ ihn stehen,
+   links schickte Claude dann in den Hintergrund). Pfeile verlängern nicht mehr; es gelten feste
+   2 min ab dem Setzen.
+
+**Später** (aus dem Nachreview):
+
+- 4: Codex: ↑ zählt als frische Eingabe und macht Kreuz scharf; ↑ + Kreuz schickt dann den letzten
+  Prompt erneut. Abhilfe: ↑ nicht als Eingabe zählen oder Kreuz bei arbeitendem Codex nur per Halten.
+- 5: Enter löscht den Merker auch bei verschachtelten Listen wie `/config` (Untermenüs dann wieder über
+  das Menü öffnen).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
@@ -1039,3 +1120,4 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
 | 12 Einstellungsseite | erledigt | 38ab966f, ea5cfc40 | Ein/Aus, Verbindung, Akku oder „nicht gemeldet“, Tasten-Test, vier Schalter, Hintergrund-Zustand, Belegung aus `ControllerLegend.allBindings`, Koppeln; einmaliger Hinweis bei erkanntem Controller. Drei Fixtures hell/dunkel angesehen |
 | 13 Doku und Übergabe | erledigt | (dieser Commit) | `docs/features/controller.md`, Verweis und Notbremse in `CLAUDE.md`, Test-Instanz in 6.3, Sonderfälle in 6.4, Handtest-Liste in 6.2; unabhängige Durchsicht des gesamten Diffs (Opus): keine Regression ohne Controller, 3 hohe/mittlere und 8 kleinere Befunde, alle eingearbeitet (5d3d0f1a); volle Suite danach 4.285 Tests grün |
 | Runde 3 | erledigt | cde3b413, bfa95c4d, 375913ff, 87f388b4, 8877fed0, fddecdd0, 01becb6d | Stick markiert in der Liste, Workspace-Zeilen wechseln den Workspace (Klick und Kreuz), Workspace-Auswahl auf L2 im Raster, Review-Befunde 1/2/3/5, Schreibtasten (Leerzeichen, Wörter, Eingabe leeren); Abschnitt 6.6. Handtest nach dem nächsten Neustart aus main |
+| Review-Fixes nach Runde 3 | erledigt | e9bab93c, 4c4c04d2 | 4.457 Tests grün; Auswahl offen, Codex-Pfeile, Konflikt-Rückfall bei mehreren Fenstern, Mausklick wie vor Runde 3, Schreibtasten nur Claude/Codex, Absenden auf jedem Weg, Leeren an den Haltebeginn gebunden; Abschnitt 6.7. Handtest nach dem nächsten Neustart |
