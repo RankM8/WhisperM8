@@ -83,9 +83,14 @@ final class LiveControllerDictation: ControllerDictationControlling {
             let appState = AppState.shared
             // Kommt das Stoppen, während das Mikrofon noch verbindet, gilt es,
             // sobald die Aufnahme läuft (höchstens 5 s warten).
+            var waited = false
             for _ in 0..<100 where appState.isStartingRecording {
+                waited = true
                 try? await Task.sleep(for: .milliseconds(50))
             }
+            // Ein Stoppen in den ersten 0,3 s einer Aufnahme verwirft der
+            // Coordinator (Tipp-Regel des Hotkeys) — dann kurz abwarten.
+            if waited { try? await Task.sleep(for: .milliseconds(350)) }
             await appState.stopRecording(submit: submit)
         }
     }

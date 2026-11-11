@@ -1,5 +1,5 @@
 ---
-status: in Arbeit
+status: umgesetzt, Handtest nach make dev offen
 stand: 2026-11-11
 feature: Controller-Steuerung (PS5 DualSense und andere Gamepads)
 branch: feat/controller-steuerung
@@ -715,7 +715,8 @@ Abnahme: alles grün, Abschnitt 7 vollständig, keine offenen Befunde aus der Du
 
 ### 6.2 Handtest nach `make dev`
 
-Wird in Etappe 13 vervollständigt. Feste Punkte:
+Vorher: Einstellungen › Controller › Controller-Steuerung an. Für den Hintergrund zusätzlich „Auch wenn
+ein anderes Programm vorne ist“.
 
 **Tastaturkürzel (Regression aus Etappe 2).** Jedes Kürzel einmal im Einzelchat und einmal im Raster,
 jeweils mit dem Fokus im Terminal:
@@ -735,16 +736,82 @@ jeweils mit dem Fokus im Terminal:
 | ⌥⌘N | Notizen im Raster auf und zu |
 | ⌘W | schließt den Tab; ohne Tab schließt das Fenster |
 
-**Controller:**
+**Diktat per Hotkey (Regression):** in ein anderes Programm diktieren (Text wird eingefügt), in einen
+Chat diktieren (wie bisher per Cmd+V), Abbrechen mit Esc, „Erneut versuchen“ nach einem Fehler.
 
-- Jede Taste des Kerns und des Zusatzes in Einzelchat, Raster und Liste.
-- Diktat: in einen Chat, mit Senden, in ein anderes Programm (Hintergrund an), bei offener Rückfrage.
-- Tasten im Hintergrund in beiden Profilen (Dock und Menüleiste), auch nach Ruhezustand.
-- Lichtleiste, Vibration, Akkuanzeige.
-- Trennen und Neuverbinden, Bildschirmsperre, Pause.
-- PlayStation-Taste und Create (einfach, doppelt).
+**Controller im Einzelchat und im Raster:**
 
-### 6.3 Sonderfälle und wo sie geprüft sind
+| Schritt | Erwartung |
+|---|---|
+| Controller verbinden | Einstellungsseite zeigt „Verbunden“, Legende erscheint unten, Lichtleiste gedimmt weiß |
+| Tasten-Test auf der Einstellungsseite | jede Taste erscheint mit Namen |
+| L1 / R1 | Tab zurück / vor |
+| Linker Stick im Raster | Rahmen wandert von Kachel zu Kachel; am linken Rand in die Liste |
+| Stick nach links in der Einzelansicht | Liste mit Markierung auf dem aktuellen Chat; ausgeblendete Seitenleiste erscheint |
+| In der Liste hoch/runter, Kreuz | Chat öffnet; auf Workspace-Zeile: Raster; auf Projekt-Zeile: Projekt als Workspace |
+| In der Liste L1/R1 | Filter Aktiv / Zuletzt / Alle |
+| Maus- oder Tastendruck in der Liste | Markierung verschwindet |
+| Dreieck | nächster wartender Chat; ohne wartenden: drei kurze Ticks |
+| L2 tippen | zurück zum vorigen Chat |
+| L2 halten, Stick, loslassen | Umschalter, wechselt beim Loslassen; Kreis bricht ab |
+| L3 | Kachel groß / zurück zum Raster |
+| Rechter Stick | Verlauf scrollt; in einer TUI im Vollbild (Alternate-Puffer) scrollt die TUI |
+| Create | neuer Chat im Projekt |
+| Options | Menü; „Weiter“ sendet; „Befehle …“ legt „/“ ins Feld; Kreis schließt |
+| Touchpad | Zwischenablage-Verlauf; Stick wählt, Kreuz fügt ein, Viereck halten löscht |
+
+**Rückfragen von Claude:** Einen Chat eine Freigabe stellen lassen.
+
+| Schritt | Erwartung |
+|---|---|
+| Steuerkreuz hoch/runter, Kreuz | Option wird gewählt und bestätigt |
+| Kreuz sofort nach Erscheinen der Rückfrage | wirkt erst nach einer halben Sekunde |
+| Kreis | lehnt ab; ein zweites Kreis innerhalb 1 s tut nichts |
+| Options | „Weiter“, „Befehle …“, „Modus wechseln“, „Zusammenfassen“ sind grau |
+| R2, sprechen, R2 | Text kommt NICHT in den Chat, Mitteilung „Text nicht eingefügt“, Text liegt in der Zwischenablage |
+
+**Diktat per Controller:**
+
+| Schritt | Erwartung |
+|---|---|
+| R2, sprechen, R2 | Pill zeigt „→ Titel“ und den Modus; Text steht im Eingabefeld, nicht gesendet; Lichtleiste rot während der Aufnahme, Impuls bei Start und Stopp |
+| R2, sprechen, Kreuz | Text wird gesendet |
+| R2 sofort nach dem ersten R2 (AirPods verbinden noch) | Aufnahme beendet sich, sobald sie läuft |
+| Steuerkreuz links/rechts während der Aufnahme | Modus wechselt in der Pill; die nächste Aufnahme startet wieder mit dem Standardmodus |
+| Kreis während der Aufnahme | verworfen |
+| L2 halten, Chat markieren, R2 | wechselt in den Chat und nimmt auf |
+| R2 im Shell-Tab, dann Kreuz | Aufnahme endet, nichts wird ausgeführt |
+| R2 in einem anderen Programm (Hintergrund an) | Text landet dort; Kreuz sendet dort nie |
+
+**Gerät und System:**
+
+- Tasten im Hintergrund in beiden Profilen (Dock und nur Menüleiste), auch nach dem Ruhezustand. Die
+  Einstellungsseite zeigt „Funktioniert“, sobald eine Taste im Hintergrund ankam.
+- Lichtleiste: grün wenn der Chat arbeitet, gelb bei Rückfrage, rot bei Aufnahme.
+- Doppelimpuls, wenn ein anderer Chat zu warten beginnt.
+- L1 + R1 eine Sekunde halten: „Controller pausiert“, Lichtleiste bleibt, wie sie war; noch einmal setzt fort.
+- Bildschirm sperren und entsperren: währenddessen keine Wirkung.
+- Trennen bei offenem Menü oder offener Auswahl: beides schließt.
+- Akku: Anzeige oder „nicht gemeldet“.
+- PlayStation-Taste und Create (einfach, doppelt): Verhalten von macOS notieren.
+- Ein Spiel oder Steam vorne (Hintergrund an): Controller pausiert automatisch.
+- Steuerung aus, Controller neu verbinden: einmalige Mitteilung „Controller verbunden“.
+
+### 6.3 Nachweis in der Test-Instanz (11.11.2026)
+
+Test-Instanz mit dem Stand nach Etappe 12, Controller und Hintergrund in ihrer Defaults-Domain an,
+künstliche Eingaben über `whisperm8 debug controller … --window <id> --frontmost --execute`, Belege per
+`debug snapshot`:
+
+- R1 wechselt sichtbar den Tab („Review Login Flow“ → „Docs Update Guide“).
+- Stick links aus der Einzelansicht führt in die Liste, die Markierung steht sichtbar auf der Zeile; Kreuz
+  auf der Projektzeile öffnet das Projekt als Workspace mit beiden Chats im Raster.
+- L2 halten, Stick rechts, loslassen wechselt im Raster auf die rechte Kachel; Stick links vom linken Rand
+  führt in die Liste, Markierung auf dem aktuellen Chat.
+- R2 mit Wert 0,2 löst nichts aus, voller Hub genau einmal.
+- Trockenläufe lösen auf, ohne auszuführen; Dreieck außerhalb der App wird zu „WhisperM8 nach vorn“.
+
+### 6.4 Sonderfälle und wo sie geprüft sind
 
 | Fall (Abschnitt 2) | Prüfung |
 |---|---|
@@ -776,13 +843,13 @@ jeweils mit dem Fokus im Terminal:
 | 1 Entwurf im HTML-Zwilling | erledigt | 307e04b9 | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
 | 2 Aktions-Katalog | erledigt | 42424701 | `AgentChatsCommandCenter` mit Token-Anmeldung und Routing nur zum Key-Fenster, `ChatSelectionHistory`, `AgentChatsView+Commands.swift`; drei Rümpfe aus `+Shortcuts.swift` als gemeinsame Funktionen; 159 Tests rund um Tabs, Umschalter und Katalog grün; `AgentChatsView.swift` bei 3.821 von 3.842 Zeilen |
 | 3 Controller-Kern | erledigt | 31751bc0 | Elf Dateien unter `Services/Controller/Core/`, nur Foundation; 98 neue Tests (Erkenner, Sticks, Belegung, Matrix, Zusammenhang, Legende, Listen- und Menü-Modell, Import-Wächter). Abweichung: Viereck ist Tippen-oder-Halten (0,6 s), damit „halten löscht“ im Verlauf ohne Gedächtnis in der Belegung geht; `reset` meldet `holdCancelled`, damit eine Trennung die Chat-Auswahl ohne Wechsel schließt |
-| 4 Hardware, Schalter, Debug-Kanal | erledigt | 38ab966f | `GameControllerInputSource` (Trigger als Analogwert), `ControllerGesturePump` (eigene Queue, strikter Zeitgeber nur bei Druck, Aktivität gegen App Nap), `ControllerManager` (Schalter, Pause, Hintergrund mit zurückgelesenem Systemwert, Zähler je Taste); Schalter samt Notbremse; erste Seite „Controller“ in Labs; `whisperm8 debug controller state|press|sequence` mit Trockenlauf als Standard, `--execute` nur in der Test-Instanz. Test des virtuellen Gamepads (`GCController.withExtendedGamepad`) grün. Hinweis-Lauf mit Hardware: siehe Notiz unten |
-| 5 Navigation im Inhalt | erledigt | 526d413e | `sendKey` (Pfeile nach Cursor-Modus, Tracker und Abbruch-Verdacht wie bei der Tastatur), `scrollHistory` (auch Alternate-Puffer), `ControllerActionDispatcher` mit Schnappschuss je Eingabe; 45 Ausführer-Tests mit Attrappen. Abweichung: Nachweis über den Befehls-Katalog mit Fenster-Attrappen statt in der Test-Instanz (siehe Notiz) |
+| 4 Hardware, Schalter, Debug-Kanal | erledigt | 38ab966f | `GameControllerInputSource` (Trigger als Analogwert), `ControllerGesturePump` (eigene Queue, strikter Zeitgeber nur bei Druck, Aktivität gegen App Nap), `ControllerManager` (Schalter, Pause, Hintergrund mit zurückgelesenem Systemwert, Zähler je Taste); Schalter samt Notbremse; erste Seite „Controller“ in Labs; `whisperm8 debug controller state|press|sequence` mit Trockenlauf als Standard, `--execute` nur in der Test-Instanz. Test des virtuellen Gamepads (`GCController.withExtendedGamepad`) grün. Hinweis-Lauf mit Hardware: Abschnitt 6.1, Ergebnis unten in der Notiz |
+| 5 Navigation im Inhalt | erledigt | 526d413e | `sendKey` (Pfeile nach Cursor-Modus, Tracker und Abbruch-Verdacht wie bei der Tastatur), `scrollHistory` (auch Alternate-Puffer), `ControllerActionDispatcher` mit Schnappschuss je Eingabe; 45 Ausführer-Tests mit Attrappen. Nachweis zusätzlich in der Test-Instanz (Abschnitt 6.3) |
 | 6 Listen-Navigation | erledigt | d661cecc | `AgentChatsListRowsBuilder` (pur, Reihenfolge wie die Seitenleiste), Markierung als eigenes View-Stück je Zeile, Mitscrollen über `ScrollViewReader`; Kreuz öffnet Chat, Workspace oder Projekt als Workspace. Grenze: Was eine Projektgruppe per „N weitere“ aufgeklappt hat, erreicht die Navigation nicht |
 | 7 Legende | erledigt | d661cecc | `ControllerLegendBar` + Host, sechs Zustände als Fixture gerendert und angesehen; bei schmalen Fenstern gekürzt (`ViewThatFits`); Halte-Ring als endliche Animation |
 | 8 Diktat | erledigt | 1531673e, 526d413e, ea5cfc40 | Zustellung direkt ins Chat-Terminal (Router pur, Ausführer injizierbar), Hotkey-Weg durch vorher geschriebene Tests festgehalten; R2 als Umschalter, Kreuz = fertig und senden nur bei Chat-Ziel; Ausgabemodus per Steuerkreuz; Pill zeigt Ziel und Modus ohne Hover. Abweichungen: kein `PromptDeliveryGate` beim Senden (der Nutzer diktiert bewusst in den sichtbaren Chat); Kontext der Nacharbeit aus der Ziel-Session nicht umgesetzt (Ziel ist immer der ausgewählte Chat, dessen Kontext die App ohnehin nimmt) |
 | 9 Verlauf, Brücke, Menü | erledigt | 526d413e, d661cecc | Verlauf über `ClipboardHistoryController.perform`; Tastatur-Brücke mit markierten Ereignissen nur in die eigene App; Menü mit Fixture. Dialoge der App: Bestätigen/Abbrechen über Return/Escape sind Standard der vorhandenen Dialoge — Handtest |
-| 10 Chat-Auswahl mit L2 | erledigt | 42424701, 526d413e | Umschalter ohne Ctrl öffnen (Markierung bleibt auf dem aktuellen Chat), Bewegen, Loslassen, Kreis, R2 = wechseln und diktieren; Tastatur-Umschalter wird von der ersten Controller-Eingabe geschlossen. Nachweis in `ControllerActionDispatcherTests` (Test-Instanz siehe Notiz) |
+| 10 Chat-Auswahl mit L2 | erledigt | 42424701, 526d413e | Umschalter ohne Ctrl öffnen (Markierung bleibt auf dem aktuellen Chat), Bewegen, Loslassen, Kreis, R2 = wechseln und diktieren; Tastatur-Umschalter wird von der ersten Controller-Eingabe geschlossen. Nachweis in `ControllerActionDispatcherTests` und in der Test-Instanz (Abschnitt 6.3) |
 | 11 Rückmeldung und Schutz | erledigt | ea5cfc40, 3e596f3c | Lichtleiste aus `ControllerLightPolicy`, Warte-Signal mit `ControllerWaitingTracker`, automatische Pause (Sperre, Schoner, Ruhezustand, Spiele), Maus/Tastatur geben Liste und Menü ab, Trennung schließt beides. Licht und Haptik selbst: Handtest |
 | 12 Einstellungsseite | erledigt | 38ab966f, ea5cfc40 | Ein/Aus, Verbindung, Akku oder „nicht gemeldet“, Tasten-Test, vier Schalter, Hintergrund-Zustand, Belegung aus `ControllerLegend.allBindings`, Koppeln; einmaliger Hinweis bei erkanntem Controller. Drei Fixtures hell/dunkel angesehen |
-| 13 Doku und Übergabe | offen | | |
+| 13 Doku und Übergabe | erledigt | (dieser Commit) | `docs/features/controller.md`, Verweis und Notbremse in `CLAUDE.md`, Test-Instanz in 6.3, Sonderfälle in 6.4, Handtest-Liste in 6.2; unabhängige Durchsicht des gesamten Diffs (Opus): keine Regression ohne Controller, 3 hohe/mittlere und 8 kleinere Befunde, alle eingearbeitet (5d3d0f1a); volle Suite danach 4.285 Tests grün |

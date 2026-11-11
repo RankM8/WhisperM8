@@ -81,11 +81,19 @@ Fokus.
 ## Schutzregeln
 
 - In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
-  des Menüs, die Text senden, sind aus.
+  des Menüs, die etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in
+  Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- „Weiter“ aus dem Menü wird nicht an einen vorhandenen Entwurf gehängt.
+- Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
+- Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
-- Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach Enter vom
-  Controller) und unbekannter Status zählen als arbeitend.
+- Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
+  programmatischen Versand: Enter vom Controller, Diktat mit Senden, `chats send`) und unbekannter Status
+  zählen als arbeitend.
+- Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Auswahl, Menü und Liste.
+  Ein per Tastatur geöffneter Ctrl+Tab-Umschalter schließt erst, wenn der Controller wirklich etwas
+  ausführt.
 - Viereck nur bei Claude, ruhendem Chat und erkanntem Entwurf (ein zweites Ctrl+C beendet Claude).
 - Return geht nie an fremde Programme: Kreuz während der Aufnahme sendet nur bei einem Chat als Ziel.
 - Leeres Diktat in einen Chat: nichts wird kopiert, geschrieben oder gesendet.
@@ -130,7 +138,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Hintergrund), zuletzt aufgelöste Gesten.
 - `whisperm8 debug controller press <taste>` und `sequence "<schritte>"` — künstliche Eingaben durch
   dieselbe Kette; ohne `--execute` ein Trockenlauf. Ausführen geht nur in der Test-Instanz, mit
-  `--window <id>` und `--frontmost` (die Test-Instanz hat nie ein aktives Fenster).
+  `--window <id>` und `--frontmost` (die Test-Instanz hat nie ein aktives Fenster). Ein Skript muss
+  alles wieder loslassen; Läufe schließen sich aus, und die Kette wird vor dem Ende geleert — so wirkt
+  nach einem Trockenlauf nichts nach.
 
 ## Grenzen
 
