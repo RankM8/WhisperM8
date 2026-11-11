@@ -23,6 +23,21 @@ enum SupervisorRosterReader {
         var sessionID: String
         var pid: Int32
         var cwd: String?
+        /// Hat der Daemon den Worker als Abzweig eines anderen Verlaufs neu
+        /// gestartet (`dispatch.source = "respawn"`, `launch.fork = true`),
+        /// steht hier die Session-ID des Ursprungs. Der Worker läuft dann
+        /// unter einer NEUEN ID weiter (Befund 11.11.2026: Jarvis 64306879 →
+        /// Kopie 84ca7666).
+        var forkedFromSessionID: String? = nil
+        var startedAt: Date? = nil
+    }
+
+    /// Ziel für `claude attach`: Short-ID und die Session-ID, unter der der
+    /// Agent die Unterhaltung gerade führt (bei einem Abzweig ≠ der
+    /// angefragten ID — der Chat wird dann umgebunden).
+    struct WorkerMatch: Equatable {
+        var shortID: String
+        var sessionID: String
     }
 
     static func rosterURL(configDir: URL) -> URL {
@@ -51,22 +66,74 @@ enum SupervisorRosterReader {
         })?.shortID
     }
 
-    /// Ziel fuer `claude attach`: erst der Roster; fehlt dort der Worker, der
-    /// `jobId` eines lebenden Registry-Eintrags mit `kind: "bg"`. Nur wenn
-    /// BEIDE nichts kennen, gibt der Builder `--resume` frei.
+    /// Ziel fuer `claude attach`: erst der Roster (die Session selbst, sonst
+    /// der juengste Daemon-Abzweig von ihr); fehlt dort beides, der `jobId`
+    /// eines lebenden Registry-Eintrags mit `kind: "bg"`. Nur wenn alles
+    /// nichts kennt, gibt der Builder `--resume` frei.
     static func attachTarget(
         forSessionID sessionID: String,
         configDir: URL,
         isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive,
         registryJobID: ((String) -> String?)? = nil
-    ) -> String? {
-        if let shortID = activeWorkerShortID(
-            forSessionID: sessionID, configDir: configDir, isProcessAlive: isProcessAlive
-        ) {
-            return shortID
+    ) -> WorkerMatch? {
+        if let data = try? Data(contentsOf: rosterURL(configDir: configDir)),
+           let found = match(forSessionID: sessionID, workers: workers(fromRosterData: data), isProcessAlive: isProcessAlive) {
+            return found
         }
         let lookup = registryJobID ?? { id in liveBackgroundJobID(forSessionID: id, configDir: configDir) }
-        return lookup(sessionID)
+        return lookup(sessionID).map { WorkerMatch(shortID: $0, sessionID: sessionID) }
+    }
+
+    /// Pure Auswahl im Roster: erst der Worker der Session selbst, sonst der
+    /// juengste lebende Abzweig GENAU dieser Session.
+    static func match(
+        forSessionID sessionID: String,
+        workers: [Worker],
+        isProcessAlive: (Int32) -> Bool
+    ) -> WorkerMatch? {
+        func same(_ lhs: String?) -> Bool { lhs?.caseInsensitiveCompare(sessionID) == .orderedSame }
+        if let direct = workers.first(where: { same($0.sessionID) && isProcessAlive($0.pid) }) {
+            return WorkerMatch(shortID: direct.shortID, sessionID: direct.sessionID)
+        }
+        return workers
+            .filter { same($0.forkedFromSessionID) && isProcessAlive($0.pid) }
+            .max { ($0.startedAt ?? .distantPast) < ($1.startedAt ?? .distantPast) }
+            .map { WorkerMatch(shortID: $0.shortID, sessionID: $0.sessionID) }
+    }
+
+    /// Ursprung eines Daemon-Abzweigs aus dem `dispatch`-Block. `launch.sessionId`
+    /// ist ein Transcript-Pfad (`…/<id>.jsonl`) oder eine nackte ID. Nur ein
+    /// Neustart DURCH DEN DAEMON (`source == "respawn"`) zählt — ein gewollter
+    /// Abzweig (`claude --bg --resume A --fork-session`) ist ein eigener Chat
+    /// und darf A nicht umbinden (Review-Befund 11.11.2026).
+    static func forkOrigin(fromDispatch dispatch: Any?) -> String? {
+        guard let dispatch = dispatch as? [String: Any],
+              (dispatch["source"] as? String) == "respawn",
+              let launch = dispatch["launch"] as? [String: Any],
+              (launch["fork"] as? Bool) == true,
+              let raw = launch["sessionId"] as? String, !raw.isEmpty else { return nil }
+        var name = (raw as NSString).lastPathComponent
+        if name.hasSuffix(".jsonl") { name = String(name.dropLast(6)) }
+        return name.isEmpty ? nil : name
+    }
+
+    /// Alle lebenden Abzweige aller Konten: neue Session-ID → Ursprung (beides
+    /// klein geschrieben). Fuer den Index-Merge, der Kopien nicht als neue
+    /// Chats anlegen soll.
+    static func liveForkOrigins(
+        configDirs: [URL],
+        isProcessAlive: (Int32) -> Bool = defaultIsProcessAlive
+    ) -> [String: String] {
+        var result: [String: String] = [:]
+        for configDir in configDirs {
+            guard let data = try? Data(contentsOf: rosterURL(configDir: configDir)) else { continue }
+            for worker in workers(fromRosterData: data) where isProcessAlive(worker.pid) {
+                if let origin = worker.forkedFromSessionID {
+                    result[worker.sessionID.lowercased()] = origin.lowercased()
+                }
+            }
+        }
+        return result
     }
 
     /// `jobId` eines lebenden Hintergrund-Eintrags (`kind: "bg"`) in
@@ -101,7 +168,11 @@ enum SupervisorRosterReader {
                 shortID: shortID,
                 sessionID: sessionID,
                 pid: pid.int32Value,
-                cwd: value["cwd"] as? String
+                cwd: value["cwd"] as? String,
+                forkedFromSessionID: forkOrigin(fromDispatch: value["dispatch"]),
+                startedAt: (value["startedAt"] as? NSNumber).map {
+                    Date(timeIntervalSince1970: $0.doubleValue / 1000)
+                }
             )
         }
     }

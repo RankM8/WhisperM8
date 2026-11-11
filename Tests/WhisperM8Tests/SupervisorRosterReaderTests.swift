@@ -85,7 +85,7 @@ final class SupervisorRosterReaderTests: XCTestCase {
         // Roster lebt, Registry fehlt → trotzdem attach.
         XCTAssertEqual(SupervisorRosterReader.attachTarget(
             forSessionID: rostered, configDir: configDir, isProcessAlive: { _ in true },
-            registryJobID: { _ in nil }), "607d545a")
+            registryJobID: { _ in nil })?.shortID, "607d545a")
 
         // Kein Roster-Eintrag, keine Registry → nil (= --resume frei).
         XCTAssertNil(SupervisorRosterReader.attachTarget(
@@ -104,7 +104,7 @@ final class SupervisorRosterReaderTests: XCTestCase {
             forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true }))
         try writeRecord(kind: "bg")
         XCTAssertEqual(SupervisorRosterReader.attachTarget(
-            forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true }), "1f353dce")
+            forSessionID: onlyInRegistry, configDir: configDir, isProcessAlive: { _ in true })?.shortID, "1f353dce")
     }
 
     func testActiveWorkerShortIDReturnsNilWithoutRosterFile() throws {

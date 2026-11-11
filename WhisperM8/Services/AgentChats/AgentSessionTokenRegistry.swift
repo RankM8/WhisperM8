@@ -16,6 +16,12 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
 
     private let lock = NSLock()
     private var tokensBySession: [UUID: String] = [:]
+    /// PID des PTY-Prozesses je Session. Ein Token gilt nur für Aufrufer, in
+    /// deren Prozesskette diese PID steht (Review-Befund 11.11.2026): Claudes
+    /// Daemon erbt Umgebung samt Token, ist aber kein Nachfahre der PTY.
+    private var processIDsBySession: [UUID: Int32] = [:]
+    /// Sessions, in deren PTY nur ein `claude attach`-Client läuft.
+    private var attachSessions = Set<UUID>()
 
     private init() {}
 
@@ -37,9 +43,33 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
         return expected == token
     }
 
+    /// Nach dem Spawn: PID der PTY und ob dort nur ein Attach-Client läuft.
+    func bindProcess(sessionID: UUID, pid: Int32, isAttach: Bool) {
+        lock.lock()
+        processIDsBySession[sessionID] = pid
+        if isAttach { attachSessions.insert(sessionID) } else { attachSessions.remove(sessionID) }
+        lock.unlock()
+    }
+
+    /// PID der laufenden PTY einer Session, sonst `nil`.
+    func processID(for sessionID: UUID) -> Int32? {
+        lock.lock()
+        defer { lock.unlock() }
+        return processIDsBySession[sessionID]
+    }
+
+    /// Sessions, deren Tab gerade nur an einen Hintergrund-Agent angedockt ist.
+    func attachSessionIDs() -> Set<UUID> {
+        lock.lock()
+        defer { lock.unlock() }
+        return attachSessions
+    }
+
     func revoke(sessionID: UUID) {
         lock.lock()
         tokensBySession.removeValue(forKey: sessionID)
+        processIDsBySession.removeValue(forKey: sessionID)
+        attachSessions.remove(sessionID)
         lock.unlock()
     }
 
@@ -48,7 +78,11 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
     /// frisches Token, das ein spätes `processTerminated` nicht treffen darf.
     func revoke(sessionID: UUID, ifToken token: String) {
         lock.lock()
-        if tokensBySession[sessionID] == token { tokensBySession.removeValue(forKey: sessionID) }
+        if tokensBySession[sessionID] == token {
+            tokensBySession.removeValue(forKey: sessionID)
+            processIDsBySession.removeValue(forKey: sessionID)
+            attachSessions.remove(sessionID)
+        }
         lock.unlock()
     }
 

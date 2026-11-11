@@ -94,6 +94,8 @@ enum AgentChatsCLICommand {
             return ChatsMutationCommand.run(rest, kind: .archive)
         case "archived":
             return ChatsArchivedCommand.run(rest)
+        case "duplicates":
+            return ChatsDuplicatesCommand.run(rest)
         case "unarchive":
             return ChatsUnarchiveCommand.run(rest)
         case "workspace":
@@ -375,9 +377,10 @@ struct ChatsCommandContext {
     var now: Date
 
     static func load(now: Date = Date()) -> ChatsCommandContext {
-        ChatsCommandContext(
-            view: ChatsWorkspaceReader().load(),
-            caller: .fromEnvironment(),
+        let view = ChatsWorkspaceReader().load()
+        return ChatsCommandContext(
+            view: view,
+            caller: .checked(sessions: { view.workspace.sessions }),
             now: now
         )
     }
@@ -390,7 +393,7 @@ struct ChatsCommandContext {
                 workspace: .empty, uiState: nil, entries: [], projects: [],
                 openTabIDs: [], pinnedSessionIDs: []
             ),
-            caller: .fromEnvironment(),
+            caller: .checked(sessions: { ChatsWorkspaceReader().load().workspace.sessions }),
             now: now
         )
     }
@@ -887,6 +890,9 @@ enum ChatsCLIHelp {
       whisperm8 chats archived [query] [--project P] [--group G] [--provider claude|codex]
                                [--since D] [--until D] [--content "text"] [--limit N] [--json]
                                Archiv durchsuchen (D: yyyy-MM-dd oder 14d/8w)
+      whisperm8 chats duplicates [--json]
+                               Chats mit derselben externen Sitzung; nennt, welcher
+                               bleibt, und schlägt die übrigen zum Archivieren vor
 
     HANDELN (App muss laufen — sonst Exit 5)
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]

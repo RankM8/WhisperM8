@@ -466,7 +466,8 @@ struct AgentSessionDetailView: View {
                     launchGuardResult: launchGuardResult,
                     allowsBackgroundAttach: allowsBackgroundAttach,
                     // Rückweg: den gespeicherten Stand nehmen, nicht den
-                    // Snapshot aus der Closure des beendeten Laufs.
+                    // Snapshot aus der Closure des beendeten Laufs (ein Attach
+                    // an einen Daemon-Abzweig hat den Chat vorher umgebunden).
                     storedSession: useStoredSession ? currentSession : nil
                 )
             }
@@ -528,6 +529,15 @@ struct AgentSessionDetailView: View {
                 builder.extraLaunchArguments = launchPreparation.settingsArguments
             }
             let command = try builder.command(for: launchSession, project: project)
+            if let reboundID = command.reboundExternalSessionID {
+                // Daemon-Abzweig: Chat auf die neue ID umbinden, BEVOR der
+                // Prozess startet (kein neuer Sidebar-Eintrag, Rückweg nimmt
+                // diese ID).
+                try store.rebindToRespawnFork(localSessionID: launchSession.id, newID: reboundID)
+                Logger.claudeBinding.notice(
+                    "respawn_fork_rebound localID=\(launchSession.id.uuidString, privacy: .public) from=\(launchSession.externalSessionID ?? "-", privacy: .public) to=\(reboundID, privacy: .public)"
+                )
+            }
             let launchedController = terminalRegistry.startController(
                 sessionID: launchSession.id,
                 command: command,
@@ -750,7 +760,9 @@ struct AgentSessionDetailView: View {
             }
             let profile = fresh.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName
             let listed = await Task.detached(priority: .userInitiated) {
-                SupervisorRosterReader.activeWorkerShortID(
+                // Auch ein Daemon-Abzweig zählt: dann hängt der erneute Start an
+                // ihn an und bindet um, statt `--resume` auf dem alten Stand.
+                SupervisorRosterReader.attachTarget(
                     forSessionID: externalID,
                     configDir: ClaudeAccountProfiles().configDir(forProfile: profile)
                 ) != nil

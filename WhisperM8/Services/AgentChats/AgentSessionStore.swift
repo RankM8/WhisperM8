@@ -1002,6 +1002,7 @@ struct AgentSessionStore {
         // blockierendes I/O machen — gleiches Hoisting wie branchByPath oben.
         let fallbackModelRaw = AppPreferences.shared.resolvedCodexDefaultModelRaw()
         let fallbackEffortRaw = AppPreferences.shared.codexReasoningEffortRaw
+        let respawnForkOrigins = Self.respawnForkOriginsProvider()  // Roster-I/O vor dem Lock
         var stats = AgentSessionMergeStats()
 
         try PerfBudgets.indexMerge.withInterval {
@@ -1023,9 +1024,9 @@ struct AgentSessionStore {
                     }
                 }
 
-                // Alle globalen Lookups einmalig aufbauen. Bei beschädigten
-                // Duplikaten bleibt jeweils der erste Workspace-Eintrag maßgeblich
-                // — exakt wie zuvor bei `first(where:)`/`firstIndex(where:)`.
+                let skippedExternalIDs = Self.applyRespawnForksAndReservations(to: &workspace, indexedSessions: indexedSessions, forkOrigins: respawnForkOrigins, activeSessionIDs: activeSessionIDs, didChange: &didChange)
+                // Alle globalen Lookups einmalig aufbauen. Bei Duplikaten führt der von
+                // Hand angelegte Chat, sonst der erste Eintrag (`prefersAsExternalHolder`).
                 var projectIndexByPath: [String: Int] = [:]
                 for index in workspace.projects.indices {
                     let path = workspace.projects[index].path
@@ -1042,8 +1043,8 @@ struct AgentSessionStore {
                             provider: session.provider,
                             externalSessionID: externalSessionID
                         )
-                        if sessionIndexByExternalKey[key] == nil {
-                            sessionIndexByExternalKey[key] = index
+                        if sessionIndexByExternalKey[key].map({ Self.prefersAsExternalHolder(session, over: workspace.sessions[$0]) }) ?? true {
+                            sessionIndexByExternalKey[key] = index  // E2: der von Hand angelegte Chat führt
                         }
                     } else if session.effectiveKind != .terminal,
                               session.hasLaunchedInitialPrompt {
@@ -1115,8 +1116,8 @@ struct AgentSessionStore {
                     return indexed
                 }
                 for indexed in dedupedSessions {
-                    guard !Self.isClaudeWorktreePath(indexed.cwd) else { continue }
-                    guard !subagentThreadIDs.contains(indexed.externalSessionID) else { continue }
+                    guard !Self.isClaudeWorktreePath(indexed.cwd), !subagentThreadIDs.contains(indexed.externalSessionID),
+                          !skippedExternalIDs.contains(indexed.externalSessionID.lowercased()) else { continue }
                     let projectPath = Self.canonicalProjectPath(indexed.cwd)
                     let project: AgentProject
                     if let projectIndex = projectIndexByPath[projectPath] {
@@ -1577,7 +1578,7 @@ struct AgentSessionStore {
     /// P1: Beide Primitive laufen über den serialisierten In-Memory-Kern.
     /// Persistiert wird Equatable-diff-gated — das frühere `changed`-Flag
     /// von `mutateWorkspaceIfChanged` ist damit nur noch advisory.
-    private func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
+    func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
         try PerfBudgets.storeMutate.withInterval {
             try workspaceStore.mutate(mutate)
         }

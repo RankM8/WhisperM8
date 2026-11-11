@@ -91,4 +91,23 @@ struct ChatsCallerIdentity: Equatable {
             token: env["WHISPERM8_SESSION_TOKEN"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
+
+    /// Wie `fromEnvironment`, aber gegen Claudes Registry geprüft: Läuft die
+    /// CLI unter einem Hintergrund-Agent, der die Umgebung eines fremden
+    /// Chats geerbt hat, gilt der Chat dieses Agents (oder keiner). Die
+    /// Sitzungsliste wird nur in diesem Fall geladen.
+    static func checked(
+        _ env: [String: String] = ProcessInfo.processInfo.environment,
+        sessions: () -> [AgentChatSession]
+    ) -> ChatsCallerIdentity {
+        let claimed = fromEnvironment(env)
+        switch AgentCallerIdentityCheck.checkCurrentProcess(claimed: claimed.sessionID, sessions: sessions) {
+        case .keep:
+            return claimed
+        case .replace(let owner):
+            // Das Token des fremden Chats gehört nicht zu uns; den Wire-Actor
+            // korrigiert der Server über die Prozess-ID.
+            return ChatsCallerIdentity(sessionID: owner, token: nil)
+        }
+    }
 }
