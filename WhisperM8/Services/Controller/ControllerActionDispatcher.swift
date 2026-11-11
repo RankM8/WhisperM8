@@ -81,6 +81,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
         snapshot.chatPickerOpen = window.isSwitcherOpen && pickerOpenedByController
         snapshot.controllerMenuOpen = ui.menu != nil
+        snapshot.workspacePickerOpen = ui.workspacePicker != nil
         snapshot.modalOpen = window.hasSheet || window.ownsKeyOverlay || environment.isModalOpen
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
@@ -148,6 +149,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         pickerOpenedByController = false
         ui.menu = nil
+        ui.workspacePicker = nil
         ui.leaveList()
         ui.holdProgress = nil
     }
@@ -213,6 +215,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .pickerCommitAndDictate:
             finishPicker(.switcherCommit)
             startDictation(target: chatTarget() ?? .frontApp)
+
+        // Workspace-Auswahl
+        case .workspacePickerBegin: beginWorkspacePicker()
+        case let .workspacePickerMove(step): ui.workspacePicker?.move(step)
+        case .workspacePickerCommit: commitWorkspacePicker()
+        case .workspacePickerCancel: ui.workspacePicker = nil
 
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)
@@ -426,6 +434,30 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func finishPicker(_ command: AgentChatsCommand) {
         self.command(command, orReject: false)
         pickerOpenedByController = false
+    }
+
+    // MARK: - Workspace-Auswahl (L2 halten im Raster)
+
+    /// Öffnet die Auswahl der angelegten Workspaces, Markierung auf dem
+    /// aktuellen. Ohne Workspaces „geht nicht“.
+    private func beginWorkspacePicker() {
+        let choices = targetWindowID.map { chats.workspaceChoices(of: $0) } ?? []
+        guard !choices.isEmpty else {
+            playHaptic(.rejected)
+            return
+        }
+        ui.leaveList()
+        ui.workspacePicker = ControllerWorkspacePickerModel(choices: choices)
+    }
+
+    /// Wechselt in den markierten Workspace — derselbe Weg wie der Klick auf
+    /// seinen Kopf in der Seitenleiste (Konflikte inklusive). Der aktuelle
+    /// Workspace: nur schließen.
+    private func commitWorkspacePicker() {
+        guard let picker = ui.workspacePicker else { return }
+        ui.workspacePicker = nil
+        guard let target = picker.selected, !target.isCurrent else { return }
+        command(.activateWorkspace(target.id), orReject: true)
     }
 
     // MARK: - Diktat

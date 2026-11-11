@@ -17,7 +17,7 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case dictate, stopDictation, stopAndSend, discard, outputMode
     case nextWaiting, previousNextChat, filter, move, arrows, scroll
     case backspace, newChat, clipboard, maximize, menu
-    case lastChat, pickChatHold, pickAndDictate, switchOnRelease
+    case lastChat, pickChatHold, pickAndDictate, switchOnRelease, switchWorkspaceHold
     case open, select, paste, pin, deleteHold, close, closeHold
     case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
@@ -88,6 +88,7 @@ enum ControllerLegend {
                 entry(.button(.r3), .startChat),
                 entry(.button(.l2), .lastChat),
                 entry(.button(.l2), .pickChatHold),
+                entry(.button(.l2), .switchWorkspaceHold),
                 ControllerLegendEntry(inputs: [.button(.l2), .button(.r2)], label: .pickAndDictate, isCombination: true),
                 entry(.bumpers, .pauseHold),
             ]),
@@ -168,6 +169,16 @@ enum ControllerLegend {
                 candidate(.button(.r2), .pickAndDictate, [.press(.r2)]),
                 candidate(.button(.circle), .cancel, [.tap(.circle)]),
             ]
+        case .workspacePicker:
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
+                    probes: verticalMoves
+                ),
+                candidate(.button(.cross), .select, [.press(.cross)]),
+                candidate(.button(.l2), .switchOnRelease, [.holdEnded(.l2)]),
+                candidate(.button(.circle), .cancel, [.tap(.circle)]),
+            ]
         case .modal:
             return [
                 ControllerLegend.Candidate(
@@ -208,6 +219,11 @@ enum ControllerLegend {
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {
         let awaiting = state.status == .awaitingInput
         let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (awaiting ? .confirm : .send)
+        // Im Raster zeigt die Legende die Workspace-Auswahl auf L2. Die
+        // Chat-Auswahl der Einzelansicht steht wie bisher nur in der Übersicht
+        // der Einstellungen.
+        let workspaceHold: [Candidate] = state.gridActive
+            ? [candidate(.button(.l2), .switchWorkspaceHold, [.holdBegan(.l2)])] : []
         return [
             candidate(.leftStick, .move, ControllerDirection.allCases.map {
                 .move($0, source: .leftStick, isRepeat: false)
@@ -219,6 +235,7 @@ enum ControllerLegend {
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
             candidate(.bumpers, .previousNextChat, [.press(.l1), .press(.r1)]),
+        ] + workspaceHold + [
             candidate(.dpad, .arrows, gestures(for: .dpad)),
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.press(.r3)]),

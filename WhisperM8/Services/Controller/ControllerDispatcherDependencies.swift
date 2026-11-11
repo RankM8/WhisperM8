@@ -87,6 +87,8 @@ final class ControllerUIModel {
     var markedRow: SidebarNavigationRow?
     /// Offenes Menü (Options); `nil` = zu.
     var menu: ControllerMenuModel?
+    /// Offene Workspace-Auswahl (L2 halten im Raster); `nil` = zu.
+    var workspacePicker: ControllerWorkspacePickerModel?
     /// Im Ziel-Chat ist eine Rückfrage offen: Einträge, die Text senden, sind aus.
     var menuDialogOpen = false
     var holdProgress: ControllerHoldProgress?

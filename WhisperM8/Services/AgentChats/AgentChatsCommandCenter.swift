@@ -125,6 +125,9 @@ final class AgentChatsCommandCenter {
         /// Angaben für das Menü „Aktionen am Chat“; `nil`, wenn es den Chat
         /// nicht gibt.
         var chatActionInfo: (UUID) -> ControllerChatActionInfo? = { _ in nil }
+        /// Angelegte Workspaces für die Workspace-Auswahl des Controllers, in
+        /// der Reihenfolge der Seitenleiste. Im Ereignis-Pfad berechnet.
+        var workspaceChoices: () -> [ControllerWorkspaceChoice] = { [] }
     }
 
     struct Token: Equatable {
@@ -182,6 +185,12 @@ final class AgentChatsCommandCenter {
     func chatActionInfo(_ sessionID: UUID, in windowID: UUID? = nil) -> ControllerChatActionInfo? {
         guard let id = windowID ?? activeWindowID else { return nil }
         return handlers[id]?.handler.chatActionInfo(sessionID)
+    }
+
+    /// Workspaces für die Workspace-Auswahl; ohne `windowID` aus dem aktiven Fenster.
+    func workspaceChoices(of windowID: UUID? = nil) -> [ControllerWorkspaceChoice] {
+        guard let id = windowID ?? activeWindowID else { return [] }
+        return handlers[id]?.handler.workspaceChoices() ?? []
     }
 
     /// Führt einen Befehl aus. Ohne `windowID` nur im aktiven Fenster, und nur

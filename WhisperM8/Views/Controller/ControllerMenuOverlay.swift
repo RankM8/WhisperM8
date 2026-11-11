@@ -142,15 +142,7 @@ struct ControllerMenuPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: heading)
-                .font(.system(size: 11, weight: .semibold))
-                .textCase(.uppercase)
-                .tracking(0.6)
-                .foregroundStyle(AppTheme.textTertiary)
-                .lineLimit(1)
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .padding(.bottom, 4)
+            ControllerPanelHeading(text: heading)
             ForEach(rows) { row in
                 if row.startsGroup {
                     Rectangle().fill(AppTheme.border).frame(height: 1).padding(.horizontal, 8).padding(.vertical, 4)
@@ -158,13 +150,7 @@ struct ControllerMenuPanel: View {
                 self.row(row, marked: row.id == selectedID)
             }
         }
-        .padding(6)
-        .frame(width: 300)
-        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(AppTheme.borderStrong, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
+        .controllerPanelChrome()
     }
 
     private func row(_ row: ControllerMenuRow, marked: Bool) -> some View {
@@ -182,7 +168,42 @@ struct ControllerMenuPanel: View {
         }
         .padding(.horizontal, 10)
         .frame(height: 30)
-        .background {
+        .controllerRowMarking(marked)
+    }
+}
+
+/// Überschrift eines Controller-Panels (Menü, Workspace-Auswahl).
+struct ControllerPanelHeading: View {
+    let text: String
+
+    var body: some View {
+        Text(verbatim: text)
+            .font(.system(size: 11, weight: .semibold))
+            .textCase(.uppercase)
+            .tracking(0.6)
+            .foregroundStyle(AppTheme.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
+    }
+}
+
+extension View {
+    /// Rahmen der Controller-Panels: Fläche, Kante, Schatten.
+    func controllerPanelChrome(width: CGFloat = 300) -> some View {
+        padding(6)
+            .frame(width: width)
+            .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(AppTheme.borderStrong, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
+    }
+
+    /// Markierung einer Zeile im Controller-Panel.
+    func controllerRowMarking(_ marked: Bool) -> some View {
+        background {
             if marked {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(AppTheme.accentTint)
@@ -194,18 +215,25 @@ struct ControllerMenuPanel: View {
     }
 }
 
-/// Zeigt das Options-Menü im aktiven Agent-Chats-Fenster. Eigene kleine
-/// View, damit nur sie das `ControllerUIModel` beobachtet.
+/// Zeigt das Options-Menü bzw. die Workspace-Auswahl im aktiven
+/// Agent-Chats-Fenster. Eigene kleine View, damit nur sie das
+/// `ControllerUIModel` beobachtet.
 struct ControllerMenuHost: View {
     let windowID: UUID
     @State private var model = ControllerUIModel.shared
     @State private var windows = AgentWindowStore.shared
 
     var body: some View {
-        if let menu = model.menu, windows.keyAgentChatWindowID == windowID {
-            ControllerMenuPanel(menu: menu, fallbackHeading: model.targetTitle)
-                .padding(.bottom, ControllerLegendBar.height + 12)
-                .transition(.opacity)
+        if windows.keyAgentChatWindowID == windowID {
+            if let menu = model.menu {
+                ControllerMenuPanel(menu: menu, fallbackHeading: model.targetTitle)
+                    .padding(.bottom, ControllerLegendBar.height + 12)
+                    .transition(.opacity)
+            } else if let picker = model.workspacePicker {
+                ControllerWorkspacePickerPanel(picker: picker)
+                    .padding(.bottom, ControllerLegendBar.height + 12)
+                    .transition(.opacity)
+            }
         }
     }
 }

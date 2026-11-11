@@ -35,6 +35,7 @@ extension ControllerLegendLabel {
         case .pickChatHold: return String(localized: "Hold: pick a chat")
         case .pickAndDictate: return String(localized: "Switch and dictate")
         case .switchOnRelease: return String(localized: "Release: switch")
+        case .switchWorkspaceHold: return String(localized: "Hold: switch workspace")
         case .open: return String(localized: "Open")
         case .select: return String(localized: "Select")
         case .paste: return String(localized: "Paste")
@@ -74,6 +75,7 @@ extension ControllerLegendLabel {
         case .startChat: return String(localized: "Start a stopped chat")
         case .lastChat: return String(localized: "Tap: back to the previous chat")
         case .pickChatHold: return String(localized: "Hold: pick a chat, release to switch")
+        case .switchWorkspaceHold: return String(localized: "In the grid, hold: pick a workspace, release to switch")
         case .pickAndDictate: return String(localized: "Hold L2, then R2: switch to that chat and dictate")
         case .pauseHold: return String(localized: "Hold both: pause and resume the controller")
         default: return title

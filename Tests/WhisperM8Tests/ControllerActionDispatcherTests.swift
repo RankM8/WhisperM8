@@ -71,6 +71,7 @@ private final class WindowFake {
     var isNewChatPickerOpen = false
     var chatInfo: ControllerChatActionInfo? = ControllerChatActionInfo(title: "Chat")
     var rows: [AgentChatsListRow] = []
+    var workspaces: [ControllerWorkspaceChoice] = []
     /// Befehle, die „ging nicht“ melden sollen.
     var failing: Set<String> = []
     private(set) var commands: [AgentChatsCommand] = []
@@ -100,7 +101,8 @@ private final class WindowFake {
                     isArchiveMode: false, isNewChatPickerOpen: isNewChatPickerOpen)
             },
             listRows: { [unowned self] in rows },
-            chatActionInfo: { [unowned self] _ in chatInfo }
+            chatActionInfo: { [unowned self] _ in chatInfo },
+            workspaceChoices: { [unowned self] in workspaces }
         )
     }
 }
@@ -639,6 +641,91 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.listActivate)
         XCTAssertEqual(haptics, [.rejected])
         XCTAssertEqual(ui.area, .list, "bleibt in der Liste")
+    }
+
+    // MARK: - Workspace-Auswahl (Runde 3)
+
+    private func makeWorkspaces() -> [UUID] {
+        let ids = [UUID(), UUID(), UUID()]
+        window.workspaces = ids.enumerated().map { index, id in
+            ControllerWorkspaceChoice(id: id, name: "W\(index)", colorHex: "#888888", chatCount: index,
+                                      hasWaitingChat: index == 2, isCurrent: index == 1)
+        }
+        return ids
+    }
+
+    private func resolveAndPerform(_ gesture: ControllerGesture) {
+        let current = context
+        if let action = ControllerBindingResolver.action(for: gesture, in: current) {
+            dispatcher.perform(action, in: current)
+        }
+    }
+
+    /// Ganze Kette: L2 halten im Raster öffnet die Auswahl auf dem aktuellen
+    /// Workspace, Stick bewegt, Loslassen wechselt über denselben Befehl wie
+    /// der Klick auf den Kopf in der Seitenleiste.
+    func testWorkspacePickerOpensMovesAndSwitchesOnRelease() {
+        let ids = makeWorkspaces()
+        window.isGridActive = true
+        resolveAndPerform(.holdBegan(.l2))
+        XCTAssertEqual(context, .workspacePicker)
+        XCTAssertEqual(ui.workspacePicker?.selectedID, ids[1], "Start beim aktuellen Workspace")
+        resolveAndPerform(.move(.down, source: .leftStick, isRepeat: false))
+        resolveAndPerform(.move(.down, source: .dpad, isRepeat: true))
+        XCTAssertEqual(ui.workspacePicker?.selectedID, ids[2], "am Rand bleibt die Markierung")
+        resolveAndPerform(.press(.r2))
+        XCTAssertTrue(dictation.started.isEmpty, "R2 tut in der Auswahl nichts")
+        resolveAndPerform(.holdEnded(.l2))
+        XCTAssertNil(ui.workspacePicker)
+        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[2]))
+        XCTAssertFalse(window.commands.contains(.switcherBegin), "keine Chat-Auswahl im Raster")
+    }
+
+    func testWorkspacePickerCrossSwitchesAndCircleCancels() {
+        let ids = makeWorkspaces()
+        window.isGridActive = true
+        perform(.workspacePickerBegin)
+        perform(.workspacePickerMove(step: -1))
+        perform(.workspacePickerCommit)
+        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[0]))
+
+        perform(.workspacePickerBegin)
+        perform(.workspacePickerMove(step: 1))
+        perform(.workspacePickerCancel)
+        XCTAssertNil(ui.workspacePicker)
+        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[0]), "Kreis wechselt nicht")
+    }
+
+    /// Den aktuellen Workspace zu wählen, schließt nur.
+    func testWorkspacePickerCommitOnCurrentOnlyCloses() {
+        _ = makeWorkspaces()
+        perform(.workspacePickerBegin)
+        perform(.workspacePickerCommit)
+        XCTAssertNil(ui.workspacePicker)
+        XCTAssertFalse(window.commands.contains { if case .activateWorkspace = $0 { return true }; return false })
+        XCTAssertEqual(haptics, [])
+    }
+
+    func testWorkspacePickerWithoutWorkspacesIsRejected() {
+        perform(.workspacePickerBegin)
+        XCTAssertNil(ui.workspacePicker)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    func testWorkspacePickerSwitchConflictIsRejected() {
+        let ids = makeWorkspaces()
+        window.failing = [String(describing: AgentChatsCommand.activateWorkspace(ids[0]))]
+        perform(.workspacePickerBegin)
+        perform(.workspacePickerMove(step: -1))
+        perform(.workspacePickerCommit)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    func testCloseControllerUIClosesWorkspacePicker() {
+        _ = makeWorkspaces()
+        perform(.workspacePickerBegin)
+        dispatcher.closeControllerUI()
+        XCTAssertNil(ui.workspacePicker)
     }
 
     // MARK: - Chat-Auswahl

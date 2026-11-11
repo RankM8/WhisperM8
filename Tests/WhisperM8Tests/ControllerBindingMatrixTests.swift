@@ -101,6 +101,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
     /// Im Raster bewegt der Stick den Kachel-Fokus, ein Druck ein Schritt.
     private static let gridNavigation: Table = {
         var table = chatNavigation
+        // Runde 3: L2 halten öffnet im Raster die Workspace-Auswahl.
+        table[.holdBegan(.l2)] = .workspacePickerBegin
         for direction in ControllerDirection.allCases {
             table[.move(direction, source: .leftStick, isRepeat: false)] = .moveInContent(direction)
             table[.move(direction, source: .leftStick, isRepeat: true)] = nil
@@ -233,6 +235,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
                 .tap(.circle): .pickerCancel,
                 .press(.r2): .pickerCommitAndDictate,
             ])),
+        // Runde 3: senkrechte Liste, R2 ohne Wirkung, kein Pause-Akkord (L2 gehalten).
+        ("Workspace-Auswahl", .workspacePicker, merge(
+            moves(.up, .workspacePickerMove(step: -1)), moves(.down, .workspacePickerMove(step: 1)), [
+                .holdEnded(.l2): .workspacePickerCommit,
+                .press(.cross): .workspacePickerCommit,
+                .holdCancelled(.l2): .workspacePickerCancel,
+                .tap(.circle): .workspacePickerCancel,
+            ])),
         ("Dialog", .modal, merge(bridge, [
             .move(.up, source: .leftStick, isRepeat: false): .bridgeKey(.up),
             .move(.up, source: .leftStick, isRepeat: true): .bridgeKey(.up),
@@ -336,6 +346,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             case .clipboardPanel: seen.insert("clipboardPanel")
             case .menu: seen.insert("menu")
             case .chatPicker: seen.insert("chatPicker")
+            case .workspacePicker: seen.insert("workspacePicker")
             case .modal: seen.insert("modal")
             case .list: seen.insert("list")
             case .chat: seen.insert("chat")
@@ -343,6 +354,6 @@ final class ControllerBindingMatrixTests: XCTestCase {
             case .noWindow: seen.insert("noWindow")
             }
         }
-        XCTAssertEqual(seen.count, 12)
+        XCTAssertEqual(seen.count, 13)
     }
 }

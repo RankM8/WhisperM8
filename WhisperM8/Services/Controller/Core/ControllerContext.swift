@@ -57,6 +57,8 @@ enum ControllerContext: Equatable, Sendable {
     case clipboardPanel(ControllerClipboardState)
     case menu(dialogOpen: Bool)
     case chatPicker
+    /// Workspace-Auswahl (L2 halten im Raster, Runde 3).
+    case workspacePicker
     case modal
     case list
     case chat(ControllerChatState)
@@ -85,6 +87,7 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var clipboard = ControllerClipboardState()
     var controllerMenuOpen: Bool = false
     var chatPickerOpen: Bool = false
+    var workspacePickerOpen: Bool = false
     var window: ControllerWindowKind = .agentChats
     var modalOpen: Bool = false
     var area: ControllerFocusArea = .content
@@ -94,7 +97,7 @@ struct ControllerAppSnapshot: Equatable, Sendable {
 enum ControllerContextResolver {
     /// Vorrang: pausiert → Aufnahme → Schnellaktion → Zwischenablage-Verlauf →
     /// andere App vorn → kein Fenster → anderes Fenster → Menü → Chat-Auswahl →
-    /// Dialog → Liste → Chat. Aufnahme und Verlauf gehen vor „andere App“,
+    /// Workspace-Auswahl → Dialog → Liste → Chat. Aufnahme und Verlauf gehen vor „andere App“,
     /// weil sie auch dann bedienbar sein müssen.
     ///
     /// Ohne Chat im Inhalt gilt die Liste: Dort funktionieren Navigation und
@@ -116,6 +119,7 @@ enum ControllerContextResolver {
             return .menu(dialogOpen: snapshot.chat?.status == .awaitingInput)
         }
         if snapshot.chatPickerOpen { return .chatPicker }
+        if snapshot.workspacePickerOpen { return .workspacePicker }
         if snapshot.modalOpen { return .modal }
         guard snapshot.area == .content, let chat = snapshot.chat else { return .list }
         return .chat(chat)

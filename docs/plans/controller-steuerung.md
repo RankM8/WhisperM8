@@ -936,6 +936,27 @@ Nach dem zweiten Handtest vom Nutzer einzeln bestätigt:
    Folge, die der Nutzer kennen sollte: Auch eine Zeile des Workspace, der nur das verborgene
    Rücksprungziel einer Einzelansicht ist, zeigt das Raster wieder.
 
+**Zusatz: Workspace-Auswahl auf L2 im Raster** (vom Nutzer bestätigt, alle sechs Punkte):
+
+1. Im Raster öffnet L2 halten statt der Chat-Auswahl eine Workspace-Auswahl (Zusammenhang
+   `workspacePicker`, Aktionen `workspacePicker…`). Stick und Steuerkreuz bewegen, Loslassen oder Kreuz
+   wechselt, Kreis bricht ab, R2 tut nichts. Kein Pause-Akkord, solange L2 gehalten ist.
+2. Nur angelegte Workspaces (`sourceProjectID == nil`) in der Reihenfolge der Seitenleiste
+   (`ControllerWorkspaceChoice.choices`).
+3. Je Zeile Name, belegte Slots und der Punkt „wartet“ aus dem Status `awaitingInput` des
+   `AgentSessionRuntimeStatusStore` — dieselbe Quelle wie die Status-Punkte und ⌃⌥Tab. Die Einträge
+   entstehen beim Öffnen im Ereignis-Pfad, nie in einem Body; das Panel (`ControllerWorkspacePickerPanel`)
+   hängt im vorhandenen `ControllerMenuHost`, der als einziger das `ControllerUIModel` beobachtet. Der
+   aktuelle Workspace trägt „current“ und ist der Startpunkt.
+4. Nach dem Wechsel die zuletzt benutzte Kachel des Ziels: `gridFocusSessionID` gilt pro Fenster und
+   hätte beim Wechsel A → B → A die Kachel von A nicht gekannt. `activateGridWorkspace` merkt sich deshalb
+   beim Verlassen die Kachel je Workspace (flüchtig, `@ObservationIgnored`, damit ein Fokuswechsel weder
+   die Seitenleiste neu zeichnet noch die Workspace-Datei schreibt) und gibt sie `repairGridFocus` als
+   zweite Wahl nach dem ausgewählten Chat mit. Gilt für jeden Workspace-Wechsel, auch per Maus. Konflikte
+   über `activateWorkspaceFromSidebar` wie beim Kopf der Seitenleiste.
+5. Einzelansicht: L2 bleibt die Chat-Auswahl.
+6. Tastatur unverändert (Ctrl+Tab zeigt im Raster die Chats).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |

@@ -412,6 +412,27 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(act(.press(.touchpad)), .clipboardToggle)
     }
 
+    /// Runde 3: L2 halten öffnet im Raster die Workspace-Auswahl, in der
+    /// Einzelansicht weiter die Chat-Auswahl. Tippen bleibt „letzter Chat“.
+    func testL2HoldOpensWorkspacePickerOnlyInGrid() {
+        XCTAssertEqual(action(.holdBegan(.l2), chat(.idle) { $0.gridActive = true }), .workspacePickerBegin)
+        XCTAssertEqual(action(.holdBegan(.l2), chat(.idle)), .pickerBegin)
+        XCTAssertEqual(action(.tap(.l2), chat(.idle) { $0.gridActive = true }), .lastChat)
+    }
+
+    func testWorkspacePicker() {
+        let context = ControllerContext.workspacePicker
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), context), .workspacePickerMove(step: -1))
+        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .workspacePickerMove(step: 1))
+        XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), context))
+        XCTAssertEqual(action(.holdEnded(.l2), context), .workspacePickerCommit)
+        XCTAssertEqual(action(.press(.cross), context), .workspacePickerCommit)
+        XCTAssertEqual(action(.tap(.circle), context), .workspacePickerCancel)
+        XCTAssertEqual(action(.holdCancelled(.l2), context), .workspacePickerCancel)
+        XCTAssertNil(action(.press(.r2), context), "R2 tut in der Workspace-Auswahl nichts")
+        XCTAssertNil(action(.chordCompleted, context), "kein Pause-Akkord bei gehaltenem L2")
+    }
+
     func testChatPicker() {
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), .chatPicker), .pickerMove(.left))
         XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), .chatPicker), .pickerMove(.down))

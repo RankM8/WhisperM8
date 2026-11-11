@@ -63,6 +63,27 @@ extension UISnapshotGallery {
                 legend(.recording(phase: .recording, targetIsChat: true))
             },
             Fixture(name: "controller-legende-pause", size: legendSize) { legend(.paused) },
+            // Runde 3: Raster mit L2 = Workspace-Auswahl, dazu die offene Auswahl.
+            Fixture(name: "controller-legende-raster", size: CGSize(width: 1340, height: 60)) {
+                var state = chat
+                state.gridActive = true
+                return legend(.chat(state), title: "2 Lux · Integrationen")
+            },
+            Fixture(name: "controller-workspace-auswahl", size: CGSize(width: 400, height: 240)) {
+                let choices = [
+                    ControllerWorkspaceChoice(id: UUID(), name: "WhisperM8", colorHex: "#5B8DEF", chatCount: 4,
+                                              hasWaitingChat: false, isCurrent: true),
+                    ControllerWorkspaceChoice(id: UUID(), name: "DealSupply", colorHex: "#E5484D", chatCount: 3,
+                                              hasWaitingChat: true, isCurrent: false),
+                    ControllerWorkspaceChoice(id: UUID(), name: "Website-Relaunch mit sehr langem Namen",
+                                              colorHex: "#30A46C", chatCount: 1,
+                                              hasWaitingChat: false, isCurrent: false),
+                ]
+                var picker = ControllerWorkspacePickerModel(choices: choices)
+                picker.move(1)
+                return AnyView(ControllerWorkspacePickerPanel(picker: picker)
+                    .padding(20).frame(maxHeight: .infinity, alignment: .top))
+            },
             Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {
                 let session = UUID()
                 var chat = ControllerChatActionInfo(title: "2 Lux · Integrationen", isPinned: true, canFork: true)

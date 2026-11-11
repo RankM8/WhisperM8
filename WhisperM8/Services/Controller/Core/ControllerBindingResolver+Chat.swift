@@ -27,7 +27,9 @@ extension ControllerBindingResolver {
         case .press(.touchpad): return .clipboardToggle
         case .press(.r2): return .dictationToggle
         case .tap(.l2): return .lastChat
-        case .holdBegan(.l2): return .pickerBegin
+        // Im Raster öffnet L2 halten die Workspace-Auswahl (Runde 3), in der
+        // Einzelansicht die Chat-Auswahl. Die Tastatur (Ctrl+Tab) bleibt bei den Chats.
+        case .holdBegan(.l2): return state.gridActive ? .workspacePickerBegin : .pickerBegin
         case let .holdPending(.l2, duration): return .holdProgress(.l2, duration: duration)
         case .holdCancelled(.l2): return .holdProgressCancelled(.l2)
         case let .scroll(lines): return .scroll(lines: lines)

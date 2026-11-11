@@ -807,14 +807,29 @@ final class AgentWindowStore {
 
         let current = window(for: windowID)
         let alreadyHere = current.activeWorkspaceID == workspaceID
+        // Beim Wechsel die Kachel des verlassenen Workspace merken und die
+        // zuletzt im Ziel benutzte zurückholen (Workspace-Auswahl, Runde 3).
+        if let previous = current.activeWorkspaceID, !alreadyHere,
+           let focus = current.gridFocusSessionID {
+            gridFocusByWorkspace[previous] = focus
+        }
+        let remembered = alreadyHere ? nil : gridFocusByWorkspace[workspaceID].flatMap {
+            entity.slotIndex(of: $0) != nil && !foreignHosted.contains($0) ? $0 : nil
+        }
         updateWindow(windowID) { window in
             window.activeWorkspaceID = workspaceID
             window.showsGrid = true
             Self.materializeSlotTabs(&window, entity: entity, skipping: foreignHosted)
-            Self.repairGridFocus(&window, entity: entity)
+            Self.repairGridFocus(&window, entity: entity, lastFocusInWorkspace: remembered)
         }
         return alreadyHere ? .alreadyActiveHere : .activated
     }
+
+    /// Letzte Kachel je Workspace, gemerkt beim Verlassen. Flüchtig (nur für
+    /// diesen App-Start) und nicht beobachtet: Ein Fokuswechsel soll weder die
+    /// Seitenleiste neu zeichnen noch die Workspace-Datei schreiben. Ungültige
+    /// Einträge (Chat nicht mehr im Workspace) fallen bei der Aktivierung weg.
+    @ObservationIgnored private var gridFocusByWorkspace: [UUID: UUID] = [:]
 
     /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
     /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt
@@ -1019,11 +1034,17 @@ final class AgentWindowStore {
     /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
     /// Slot; leerer Workspace → `nil`.
     private static func repairGridFocus(
-        _ window: inout AgentChatWindowState, entity: AgentGridWorkspace
+        _ window: inout AgentChatWindowState, entity: AgentGridWorkspace,
+        lastFocusInWorkspace: UUID? = nil
     ) {
         if let selected = window.selectedSessionID,
            entity.slotIndex(of: selected) != nil {
             window.gridFocusSessionID = selected
+            return
+        }
+        if let lastFocusInWorkspace {
+            window.selectedSessionID = lastFocusInWorkspace
+            window.gridFocusSessionID = lastFocusInWorkspace
             return
         }
         if let remembered = window.gridFocusSessionID,

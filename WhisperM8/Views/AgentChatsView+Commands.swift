@@ -18,7 +18,8 @@ extension AgentChatsView {
                 perform: { performCommand($0) },
                 snapshot: { commandSnapshot() },
                 listRows: { controllerListRows() },
-                chatActionInfo: { controllerChatActionInfo(for: $0) }
+                chatActionInfo: { controllerChatActionInfo(for: $0) },
+                workspaceChoices: { controllerWorkspaceChoices() }
             )
         )
     }

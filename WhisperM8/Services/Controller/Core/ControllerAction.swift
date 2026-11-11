@@ -101,6 +101,12 @@ enum ControllerAction: Equatable, Sendable {
     case pickerCancel
     case pickerCommitAndDictate
 
+    // Workspace-Auswahl (L2 halten im Raster)
+    case workspacePickerBegin
+    case workspacePickerMove(step: Int)
+    case workspacePickerCommit
+    case workspacePickerCancel
+
     // Sonstiges
     case bridgeKey(ControllerBridgeKey)
     case pauseToggle

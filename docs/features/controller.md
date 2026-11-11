@@ -61,7 +61,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste); sonst ohne Wirkung, auch ohne Vibration |
 | Options | das eine Menü, siehe unten |
-| L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt |
+| L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt. Im Raster öffnet halten die Workspace-Auswahl, siehe unten |
 | L2 halten, dann R2 | zum markierten Chat wechseln und diktieren |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen |
 
@@ -75,6 +75,16 @@ Kontextmenü: „Konto wechseln ›“ (Claude-Konten wie „Zu Account verschie
 GPT-Konten), „Umbenennen…“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“
 in der Seitenleiste). Dazu „Belegung anzeigen“ und „Controller pausieren“. In der Liste wirken die
 Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options schließt alles.
+
+**Workspace-Auswahl (L2 halten im Raster):** kleines Panel im Stil des Menüs mit den angelegten
+Workspaces (ohne versteckte Projekt-Ansichten) in der Reihenfolge der Seitenleiste. Je Zeile Farbe,
+Name, Zahl der Chats und der Status-Punkt „wartet“, wenn dort ein Chat auf dich wartet (derselbe Status
+wie in der Seitenleiste); der aktuelle Workspace trägt „current“ und ist der Startpunkt. Stick oder
+Steuerkreuz bewegt (kein Umlauf), Loslassen von L2 oder Kreuz wechselt — derselbe Weg wie der Klick auf
+den Kopf in der Seitenleiste, Konflikte inklusive —, Kreis bricht ab, R2 tut nichts. Nach dem Wechsel hat
+die Kachel den Fokus, auf der du in diesem Workspace zuletzt warst, sonst die erste. Gemerkt wird das
+beim Verlassen eines Workspace, nur für den laufenden App-Start. In der Einzelansicht bleibt L2 die
+Chat-Auswahl; Ctrl+Tab zeigt auch im Raster weiter die Chats.
 
 **Während der Aufnahme:** R2 beendet (Text ins Eingabefeld), Kreuz beendet und sendet (nur bei einem
 Chat als Ziel), Kreis verwirft bzw. bricht Transkription oder Nacharbeit ab, Steuerkreuz wechselt den
@@ -159,8 +169,8 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 ## Prüfen
 
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in sieben Zuständen, Menü mit beiden
-  Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=clipboard-verlauf-controller` die Fußzeile und das
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in acht Zuständen (mit Raster),
+  Menü mit beiden Ebenen, Workspace-Auswahl, Liste der Ausgabemodi an der Pill; `ONLY=clipboard-verlauf-controller` die Fußzeile und das
   Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.

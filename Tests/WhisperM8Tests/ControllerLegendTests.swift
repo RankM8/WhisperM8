@@ -108,6 +108,14 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertTrue(labels(.otherWindow).contains(.nextWaiting))
     }
 
+    /// Runde 3: Im Raster zeigt die Legende L2 als Workspace-Auswahl, in der
+    /// Einzelansicht nicht.
+    func testGridLegendShowsWorkspaceHold() {
+        XCTAssertTrue(labels(chat(.idle) { $0.gridActive = true }).contains(.switchWorkspaceHold))
+        XCTAssertFalse(labels(chat(.idle)).contains(.switchWorkspaceHold))
+        XCTAssertEqual(labels(.workspacePicker), [.move, .select, .switchOnRelease, .cancel])
+    }
+
     func testChatPickerShowsCrossSwitch() {
         XCTAssertEqual(labels(.chatPicker), [.move, .select, .switchOnRelease, .pickAndDictate, .cancel])
     }
@@ -140,7 +148,7 @@ final class ControllerLegendTests: XCTestCase {
         let sections = ControllerLegend.allBindings()
         XCTAssertEqual(sections.map(\.kind), [.core, .extra])
         XCTAssertEqual(sections[0].entries.count, 9)
-        XCTAssertEqual(sections[1].entries.count, 11)
+        XCTAssertEqual(sections[1].entries.count, 12, "Runde 3: L2 halten im Raster = Workspace-Auswahl")
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         XCTAssertTrue(sections[1].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]

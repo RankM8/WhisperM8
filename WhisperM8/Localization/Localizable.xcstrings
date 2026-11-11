@@ -7011,6 +7011,16 @@
         }
       }
     },
+    "Hold: switch workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Workspace wechseln"
+          }
+        }
+      }
+    },
     "Homebrew is not installed on this Mac. Install Homebrew first, or follow the official instructions for %@.": {
       "localizations": {
         "de": {
@@ -7187,6 +7197,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
+          }
+        }
+      }
+    },
+    "In the grid, hold: pick a workspace, release to switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Raster halten: Workspace wählen, loslassen wechselt"
           }
         }
       }
@@ -11240,6 +11260,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
+          }
+        }
+      }
+    },
+    "Pick a workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace wählen"
           }
         }
       }
@@ -15420,6 +15450,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wechsle in ein anderes Programm und drück eine Taste, um es zu prüfen."
+          }
+        }
+      }
+    },
+    "Switch workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace wechseln"
           }
         }
       }

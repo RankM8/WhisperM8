@@ -36,6 +36,8 @@ enum ControllerBindingResolver {
             return menu(gesture)
         case .chatPicker:
             return chatPicker(gesture)
+        case .workspacePicker:
+            return workspacePicker(gesture)
         case .modal:
             return modal(gesture)
         case .otherWindow:
@@ -53,7 +55,7 @@ enum ControllerBindingResolver {
 
     static func chordAllowed(in context: ControllerContext) -> Bool {
         switch context {
-        case .recording, .chatPicker, .outsideApp(backgroundEnabled: false):
+        case .recording, .chatPicker, .workspacePicker, .outsideApp(backgroundEnabled: false):
             return false
         default:
             return true
@@ -239,6 +241,20 @@ enum ControllerBindingResolver {
         case .holdCancelled(.l2): return .pickerCancel
         case .tap(.circle): return .pickerCancel
         case .press(.r2): return .pickerCommitAndDictate
+        default: return nil
+        }
+    }
+
+    /// Workspace-Auswahl (L2 halten im Raster, Runde 3): wie die
+    /// Chat-Auswahl, aber eine senkrechte Liste. Loslassen oder Kreuz
+    /// wechselt, Kreis bricht ab. R2 tut hier nichts — „wechseln und
+    /// diktieren“ gibt es nur für einen Chat als Ziel.
+    private static func workspacePicker(_ gesture: ControllerGesture) -> ControllerAction? {
+        switch gesture {
+        case .move(.up, _, _): return .workspacePickerMove(step: -1)
+        case .move(.down, _, _): return .workspacePickerMove(step: 1)
+        case .holdEnded(.l2), .press(.cross): return .workspacePickerCommit
+        case .holdCancelled(.l2), .tap(.circle): return .workspacePickerCancel
         default: return nil
         }
     }

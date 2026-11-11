@@ -77,6 +77,7 @@ final class ControllerFeedback {
         manager.setSystemPaused(false)
         dispatcher.ui.leaveList()
         dispatcher.ui.menu = nil
+        dispatcher.ui.workspacePicker = nil
     }
 
     // MARK: - Zustand nachführen
@@ -212,10 +213,11 @@ final class ControllerFeedback {
         let ui = dispatcher.ui
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
-                guard ui.area == .list || ui.menu != nil else { return }
+                guard ui.area == .list || ui.menu != nil || ui.workspacePicker != nil else { return }
                 if event.type == .keyDown, ControllerKeyboardBridge.isBridgeEvent(event) { return }
                 ui.leaveList()
                 ui.menu = nil
+                ui.workspacePicker = nil
             }
             return event
         }

@@ -98,6 +98,19 @@ final class ControllerContextResolverTests: XCTestCase {
         XCTAssertEqual(context { $0.area = .list }, .list)
     }
 
+    /// Runde 3: Die Workspace-Auswahl gilt vor Dialog und Liste.
+    func testWorkspacePickerBeatsModalAndList() {
+        XCTAssertEqual(context {
+            $0.workspacePickerOpen = true
+            $0.modalOpen = true
+            $0.area = .list
+        }, .workspacePicker)
+        XCTAssertEqual(context {
+            $0.controllerMenuOpen = true
+            $0.workspacePickerOpen = true
+        }, .menu(dialogOpen: false))
+    }
+
     func testContentWithoutChatFallsBackToList() {
         XCTAssertEqual(context { $0.chat = nil }, .list)
     }
