@@ -105,12 +105,14 @@ final class AppState {
         self.recordingCoordinator = RecordingCoordinator(appState: self)
     }
 
-    func startRecording() async {
-        await recordingCoordinator.startRecording()
+    /// `target`: Ziel des Diktats; der Hotkey liefert wie bisher ins vordere Programm.
+    func startRecording(target: DictationDeliveryTarget = .frontApp) async {
+        await recordingCoordinator.startRecording(target: target)
     }
 
-    func stopRecording() async {
-        await recordingCoordinator.stopRecording()
+    /// `submit`: nach dem Schreiben in einen Chat auch senden.
+    func stopRecording(submit: Bool = false) async {
+        await recordingCoordinator.stopRecording(submit: submit)
     }
 
     /// `whisperm8 debug record`: echter Hotkey-Start ohne Kontext-Capture.
@@ -135,6 +137,11 @@ final class AppState {
 
     func cancelPostProcessing() {
         recordingCoordinator.cancelPostProcessing()
+    }
+
+    /// Bricht den laufenden Transkriptions-Upload ab; die Aufnahme wird gesichert.
+    func cancelTranscription() {
+        recordingCoordinator.cancelTranscription()
     }
 
     /// Markierten Text ohne Diktat mit einem Modus umarbeiten (Kurzbefehl,

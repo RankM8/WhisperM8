@@ -26,6 +26,9 @@ struct PendingTranscriptionRetry {
     var audioDuration: TimeInterval
     var outputMode: OutputMode
     var contextBundle: TranscriptContextBundle
+    /// Ziel des ursprünglichen Laufs. `submit` setzt der Retry auf `false`:
+    /// Nachträglich wird nie blind gesendet.
+    var delivery: DictationDelivery = .frontApp
 }
 
 /// Der gerade laufende Transkriptions-Upload — damit die Quit-Vorbereitung
@@ -35,6 +38,7 @@ struct InFlightTranscription {
     var audioDuration: TimeInterval
     var outputMode: OutputMode
     var contextBundle: TranscriptContextBundle
+    var delivery: DictationDelivery = .frontApp
 }
 
 /// Seam für den Audiostopp (Tests setzen einen Spy ein, ohne AVAudioEngine).
@@ -137,9 +141,19 @@ final class RecordingCoordinator {
     var activePostProcessingCancelToken: PostProcessingCancelToken?
     /// Schnellaktion ohne Diktat (Kurzbefehl je Modus, Menüleiste).
     lazy var quickActionRunner: QuickActionRunner = makeQuickActionRunner()
+    /// Ziel der laufenden Aufnahme, gemerkt beim Start. Wird beim
+    /// angenommenen Stopp eingefroren und dann wieder auf `.frontApp` gesetzt.
+    var pendingDeliveryTarget: DictationDeliveryTarget = .frontApp
+    /// Schreibt Diktate direkt in das Terminal eines Agent-Chats.
+    let chatWriter: DictationChatWriting
+    /// Hinweis, wenn ein Diktat für einen Chat nur in der Zwischenablage
+    /// gelandet ist (Titel, Text).
+    let dictationNoticePoster: @MainActor (_ title: String, _ body: String) -> Void
 
     init(
         appState: AppState,
+        // `nil` = echter PasteService (MainActor-Init geht nicht als Default-Wert).
+        pasteService: PasteService? = nil,
         postProcessingService: PostProcessingService = PostProcessingService(),
         selectedContextService: SelectedContextService = SelectedContextService(),
         visualContextCaptureService: VisualContextCaptureService? = nil,
@@ -172,14 +186,20 @@ final class RecordingCoordinator {
             RecordingCoordinator.playBusySignal(showNotice: showNotice)
         },
         // Unter `swift test` nie einen echten Carbon-Hotkey anmelden.
-        cleanUpCancelKey: CleanUpCancelKeyGrabbing? = nil
+        cleanUpCancelKey: CleanUpCancelKeyGrabbing? = nil,
+        // `nil` = echte Terminal-Registry; Tests reichen einen Spy ein.
+        chatWriter: DictationChatWriting? = nil,
+        dictationNoticePoster: @escaping @MainActor (_ title: String, _ body: String) -> Void = { title, body in
+            guard AppInstance.isAppBundleProcess else { return }
+            DictationNotice.post(title: title, body: body)
+        }
     ) {
         self.appState = appState
         let recorder = AudioRecorder()
         self.audioRecorder = recorder
         self.audioStopper = recorder
         self.overlayController = OverlayController()
-        self.pasteService = PasteService()
+        self.pasteService = pasteService ?? PasteService()
         self.recordingTimer = RecordingTimer()
         self.postProcessingService = postProcessingService
         self.selectedContextService = selectedContextService
@@ -196,6 +216,8 @@ final class RecordingCoordinator {
         self.busyHotkeyNotifier = busyHotkeyNotifier
         self.cleanUpCancelKey = cleanUpCancelKey
             ?? (AppInstance.isAppBundleProcess ? GlobalEscapeHotKey.shared : InactiveCleanUpCancelKey())
+        self.chatWriter = chatWriter ?? LiveDictationChatWriter()
+        self.dictationNoticePoster = dictationNoticePoster
 
         // Recorder beendet die Aufnahme von selbst (Gerät weg, Schreibfehler):
         // Teilaufnahme sichern und sichtbar beenden (LR-DIK-004/006/026).
@@ -207,12 +229,16 @@ final class RecordingCoordinator {
 
     /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
     /// Vordergrund-App, keine Screenshots.
-    func startRecording(captureContext: Bool = true) async {
+    /// `target`: wohin das Diktat am Ende geht; der Hotkey bleibt bei `.frontApp`.
+    func startRecording(captureContext: Bool = true, target: DictationDeliveryTarget = .frontApp) async {
         guard let appState, !appState.isRecording, !appState.isTranscribing, !isProcessing,
               !quickActionRunner.isRunning else {
             signalBusyHotkeyPressIfNeeded()
             return
         }
+        // Erst nach dem Guard: Ein abgewiesener Start darf das Ziel eines
+        // laufenden Diktats nicht überschreiben.
+        pendingDeliveryTarget = target
         // Budget 400 ms für Hotkey → Aufnahme läuft. Beim allerersten Start
         // (Mikrofon-Permission-Dialog) reisst das Budget bewusst — genau das
         // macht die Violation-Logzeile sichtbar.
@@ -304,6 +330,7 @@ final class RecordingCoordinator {
             overlayController.hide()
             // Hörbar statt still: der Druck kam an, das Mikrofon nicht.
             if !startCancelledWhileConnecting { NSSound.beep() }
+            pendingDeliveryTarget = .frontApp
             isProcessing = false
             return
         }
@@ -323,6 +350,7 @@ final class RecordingCoordinator {
             }
             AudioDuckingManager.shared.endCapture()
             overlayController.hide()
+            pendingDeliveryTarget = .frontApp
             isProcessing = false
             Logger.paste.info("Recording cancelled while microphone was connecting")
             return
@@ -433,7 +461,9 @@ final class RecordingCoordinator {
         )
     }
 
-    func stopRecording() async {
+    /// `submit`: nach dem Schreiben in einen Chat auch senden. Zählt nur beim
+    /// angenommenen Stopp; ins vordere Programm geht nie ein Return.
+    func stopRecording(submit: Bool = false) async {
         guard let appState, appState.isRecording, !appState.isTranscribing, !isProcessing else {
             if let appState {
                 Logger.debug("stopRecording guard failed: isRecording=\(appState.isRecording), isTranscribing=\(appState.isTranscribing), isProcessing=\(isProcessing)")
@@ -506,6 +536,9 @@ final class RecordingCoordinator {
 
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
+        let frozenDelivery = DictationDelivery(target: pendingDeliveryTarget, submit: submit)
+        // Ab hier gehört das Ziel diesem Lauf; das nächste Diktat beginnt wieder beim vorderen Programm.
+        pendingDeliveryTarget = .frontApp
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")
         // Letzte Wahrheit vor dem Transcription-Call: was geht jetzt wirklich
         // raus? Inkludiert User-Edits aus dem Overlay (z. B. Pill entfernt).
@@ -540,7 +573,8 @@ final class RecordingCoordinator {
             audioURL: audioURL,
             audioDuration: audioDuration,
             outputMode: frozenOutputMode,
-            contextBundle: frozenContextBundle
+            contextBundle: frozenContextBundle,
+            delivery: frozenDelivery
         )
         removeEscKeyMonitor()
         stopClipboardScreenshotMonitor()
@@ -596,21 +630,24 @@ final class RecordingCoordinator {
         audioURL: URL,
         audioDuration: TimeInterval,
         outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle
+        contextBundle: TranscriptContextBundle,
+        delivery: DictationDelivery = .frontApp
     ) async {
         isDeliveringTranscription = false
         inFlightTranscription = InFlightTranscription(
             audioURL: audioURL,
             audioDuration: audioDuration,
             outputMode: outputMode,
-            contextBundle: contextBundle
+            contextBundle: contextBundle,
+            delivery: delivery
         )
         let task = Task {
             try await self.transcribeAndDeliver(
                 audioURL: audioURL,
                 audioDuration: audioDuration,
                 outputMode: outputMode,
-                contextBundle: contextBundle
+                contextBundle: contextBundle,
+                delivery: delivery
             )
         }
         transcriptionTask = task
@@ -633,17 +670,17 @@ final class RecordingCoordinator {
                 refreshPreservedRecordingFlag()
             }
         case .failure(is CancellationError):
-            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)
+            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery)
         case .failure(let urlError as URLError) where urlError.code == .cancelled:
-            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle)
+            handleTranscriptionCancelled(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery)
         case .failure(let urlError as URLError):
-            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery, message: networkErrorMessage(for: urlError), logPrefix: "URL ERROR: \(urlError.code.rawValue)")
         case .failure(let chatGPTError as ChatGPTTranscriptionError):
-            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: chatGPTError.errorDescription ?? "Unknown error", logPrefix: "CHATGPT TRANSCRIPTION ERROR")
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery, message: chatGPTError.errorDescription ?? "Unknown error", logPrefix: "CHATGPT TRANSCRIPTION ERROR")
         case .failure(let transcriptionError as TranscriptionError):
-            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: transcriptionError.errorDescription ?? "Unknown error", logPrefix: "TRANSCRIPTION ERROR")
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery, message: transcriptionError.errorDescription ?? "Unknown error", logPrefix: "TRANSCRIPTION ERROR")
         case .failure(let error):
-            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, message: error.localizedDescription, logPrefix: "UNKNOWN ERROR: \(type(of: error))")
+            handleTranscriptionFailure(audioURL: audioURL, audioDuration: audioDuration, outputMode: outputMode, contextBundle: contextBundle, delivery: delivery, message: error.localizedDescription, logPrefix: "UNKNOWN ERROR: \(type(of: error))")
         }
     }
 
@@ -664,11 +701,17 @@ final class RecordingCoordinator {
         overlayController.update(appState: appState)
         setupEscKeyMonitor()
 
+        // Gleiches Ziel wie beim ersten Versuch, aber nie nachträglich senden:
+        // Der Chat kann inzwischen weitergearbeitet haben.
+        var delivery = pending.delivery
+        delivery.submit = false
+
         await runCancelableTranscription(
             audioURL: pending.recording.audioURL,
             audioDuration: pending.audioDuration,
             outputMode: pending.outputMode,
-            contextBundle: pending.contextBundle
+            contextBundle: pending.contextBundle,
+            delivery: delivery
         )
         removeEscKeyMonitor()
 
@@ -709,6 +752,7 @@ final class RecordingCoordinator {
         appState.contextBundle = .empty
         appState.isScreenClipRecording = false
         recordingStartTime = nil
+        pendingDeliveryTarget = .frontApp
 
         Task {
             await visualContextCaptureService.cancelActiveClip()
