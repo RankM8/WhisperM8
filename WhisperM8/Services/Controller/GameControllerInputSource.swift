@@ -21,6 +21,9 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
     private var lastSource: ObjectIdentifier?
     /// Haptik-Engine je Controller. Nur auf dem Main Thread.
     private var hapticEngines: [ObjectIdentifier: CHHapticEngine] = [:]
+    /// Alle Controller, an denen Handler hängen — auch solche, die
+    /// `GCController.controllers()` nicht (mehr) nennt. Nur auf dem Main Thread.
+    private var wiredControllers: [ObjectIdentifier: GCController] = [:]
 
     // MARK: - Start und Stopp
 
@@ -57,8 +60,10 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         for controller in GCController.controllers() {
-            unwire(controller)
+            wiredControllers[ObjectIdentifier(controller)] = controller
         }
+        wiredControllers.values.forEach(unwire)
+        wiredControllers = [:]
         hapticEngines = [:]
         if let queue {
             queue.async { [weak self] in
@@ -84,32 +89,12 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         // Erst die Queue, dann die Handler (Vorgabe des Frameworks).
         controller.handlerQueue = queue
         let id = ObjectIdentifier(controller)
+        wiredControllers[id] = controller
 
-        func button(_ input: GCControllerButtonInput?, _ button: ControllerButton) {
-            input?.pressedChangedHandler = { [weak self] _, _, pressed in
+        for (input, button) in Self.buttons(of: pad) {
+            input.pressedChangedHandler = { [weak self] _, _, pressed in
                 self?.deliver(.button(button, pressed: pressed), from: id)
             }
-        }
-        button(pad.buttonA, .cross)
-        button(pad.buttonB, .circle)
-        button(pad.buttonX, .square)
-        button(pad.buttonY, .triangle)
-        button(pad.dpad.up, .dpadUp)
-        button(pad.dpad.down, .dpadDown)
-        button(pad.dpad.left, .dpadLeft)
-        button(pad.dpad.right, .dpadRight)
-        button(pad.leftShoulder, .l1)
-        button(pad.rightShoulder, .r1)
-        button(pad.leftThumbstickButton, .l3)
-        button(pad.rightThumbstickButton, .r3)
-        // Beim DualSense ist Create die „Options“-Taste des Frameworks und
-        // Options die „Menu“-Taste (gemessen 11.11.2026).
-        button(pad.buttonOptions, .create)
-        button(pad.buttonMenu, .options)
-        if let dualSense = pad as? GCDualSenseGamepad {
-            button(dualSense.touchpadButton, .touchpad)
-        } else if let dualShock = pad as? GCDualShockGamepad {
-            button(dualShock.touchpadButton, .touchpad)
         }
 
         // Trigger als Analogwert: `isPressed` meldet schon bei 0,02 gedrückt,
@@ -128,11 +113,43 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         }
     }
 
+    /// Alle Tasten, die `wire` belegt. Beim DualSense ist Create die
+    /// „Options“-Taste des Frameworks und Options die „Menu“-Taste (gemessen
+    /// 11.11.2026).
+    private static func buttons(of pad: GCExtendedGamepad) -> [(GCControllerButtonInput, ControllerButton)] {
+        var list: [(GCControllerButtonInput?, ControllerButton)] = [
+            (pad.buttonA, .cross), (pad.buttonB, .circle), (pad.buttonX, .square), (pad.buttonY, .triangle),
+            (pad.dpad.up, .dpadUp), (pad.dpad.down, .dpadDown), (pad.dpad.left, .dpadLeft), (pad.dpad.right, .dpadRight),
+            (pad.leftShoulder, .l1), (pad.rightShoulder, .r1),
+            (pad.leftThumbstickButton, .l3), (pad.rightThumbstickButton, .r3),
+            (pad.buttonOptions, .create), (pad.buttonMenu, .options),
+        ]
+        if let dualSense = pad as? GCDualSenseGamepad {
+            list.append((dualSense.touchpadButton, .touchpad))
+        } else if let dualShock = pad as? GCDualShockGamepad {
+            list.append((dualShock.touchpadButton, .touchpad))
+        }
+        return list.compactMap { input, button in input.map { ($0, button) } }
+    }
+
+    /// Baut jeden Handler ab, den `wire` gesetzt hat — auch Steuerkreuz,
+    /// Trigger und Touchpad, die nicht alle in `allButtons` stehen. Sonst
+    /// liefen nach dem Ausschalten weiter Ereignisse in die Pumpe.
     private func unwire(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
+        for (input, _) in Self.buttons(of: pad) {
+            input.pressedChangedHandler = nil
+            input.valueChangedHandler = nil
+        }
         for input in pad.allButtons { input.pressedChangedHandler = nil; input.valueChangedHandler = nil }
+        for trigger in [pad.leftTrigger, pad.rightTrigger] {
+            trigger.pressedChangedHandler = nil
+            trigger.valueChangedHandler = nil
+        }
+        pad.dpad.valueChangedHandler = nil
         pad.leftThumbstick.valueChangedHandler = nil
         pad.rightThumbstick.valueChangedHandler = nil
+        pad.valueChangedHandler = nil
     }
 
     /// Auf `queue`. Wechselt die Quelle (zweiter Controller), gilt vorher alles

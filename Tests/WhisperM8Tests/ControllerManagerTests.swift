@@ -271,6 +271,30 @@ final class GameControllerInputSourceTests: XCTestCase {
         XCTAssertTrue(seen.contains(.button(.create, pressed: true)), "Create ist die „Options“-Taste des Frameworks")
     }
 
+    /// Review-Befund 5: Nach `stop` hängt an keinem Eingang mehr ein Handler —
+    /// auch nicht an Steuerkreuz, Triggern und Sticks.
+    func testStopRemovesEveryHandler() throws {
+        let virtual = GCController.withExtendedGamepad()
+        let pad = try XCTUnwrap(virtual.extendedGamepad)
+        let source = GameControllerInputSource()
+        source.start(queue: DispatchQueue(label: "controller-source-stop-test"))
+        NotificationCenter.default.post(name: .GCControllerDidConnect, object: virtual)
+        XCTAssertNotNil(pad.dpad.up.pressedChangedHandler)
+        XCTAssertNotNil(pad.leftTrigger.valueChangedHandler)
+
+        source.stop()
+        for button in [pad.buttonA, pad.buttonB, pad.dpad.up, pad.dpad.down, pad.dpad.left, pad.dpad.right,
+                       pad.leftShoulder, pad.rightShoulder] {
+            XCTAssertNil(button.pressedChangedHandler)
+        }
+        XCTAssertNil(pad.buttonOptions?.pressedChangedHandler)
+        XCTAssertNil(pad.leftTrigger.valueChangedHandler)
+        XCTAssertNil(pad.rightTrigger.valueChangedHandler)
+        XCTAssertNil(pad.leftThumbstick.valueChangedHandler)
+        XCTAssertNil(pad.rightThumbstick.valueChangedHandler)
+        XCTAssertNil(pad.dpad.valueChangedHandler)
+    }
+
     func testHapticPatternsAreShortAndNeverEmpty() {
         for pattern in ControllerHapticPattern.allCases {
             let events = GameControllerInputSource.events(for: pattern)
