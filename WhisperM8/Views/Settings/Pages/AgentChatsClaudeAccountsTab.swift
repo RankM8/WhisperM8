@@ -18,6 +18,11 @@ struct AgentChatsClaudeAccountsTab: View {
     @State private var newProfileName = ""
     @State private var feedback: String?
     @State private var feedbackTone: SettingsHelpText.Tone = .secondary
+    @State private var renewalSession: ClaudeLoginRenewalSession?
+    @AppStorage(PreferenceKeys.claudeLoginExpiryWarningEnabled) private var expiryWarningEnabled = true
+
+    /// Login-Fristen kommen fertig aus dem Store — kein Keychain-Zugriff im Body.
+    private var expiryStore: ClaudeLoginExpiryStore { .shared }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -29,10 +34,29 @@ struct AgentChatsClaudeAccountsTab: View {
                 SettingsHelpText("The active account applies to newly started Claude chats. Running sessions keep the account they were started with, and every chat resumes under its original account automatically. Background agents (claude --bg) currently always use the main account.")
             }
 
+            SettingsSection("Login Renewal") {
+                SettingsButtonRow(
+                    title: "Renew logins",
+                    subtitle: "Every Claude login ends 30 days after sign-in. Renew all accounts in one go so they share the same date — one confirmation in the browser per account."
+                ) {
+                    Button("Renew…") {
+                        openRenewal(preselected: nil)
+                    }
+                    .buttonStyle(SettingsButtonStyle.primary)
+                    .disabled(!profiles.contains(where: \.isLoggedIn))
+                }
+
+                SettingsToggleRow(
+                    title: "Warn before a login ends",
+                    subtitle: "Notification and a marker on the Claude icon in the sidebar when a login ends within 3 days or has ended.",
+                    isOn: $expiryWarningEnabled
+                )
+            }
+
             SettingsSection("Add Account") {
                 SettingsRow(
                     title: "New account profile",
-                    subtitle: "Creates a separate Claude login (own CLAUDE_CONFIG_DIR) that stays signed in permanently. Settings, plugins, and commands are shared with the main account."
+                    subtitle: "Creates a separate Claude login (own CLAUDE_CONFIG_DIR). Settings, plugins, and commands are shared with the main account."
                 ) {
                     HStack(spacing: 8) {
                         TextField("e.g. power-user2", text: $newProfileName)
@@ -50,7 +74,7 @@ struct AgentChatsClaudeAccountsTab: View {
                     }
                 }
 
-                SettingsHelpText("A Terminal window opens with the new profile — complete the one-time browser login there (Claude asks for it automatically), then come back and refresh. No re-login is ever needed afterwards.")
+                SettingsHelpText("A Terminal window opens with the new profile — complete the browser login there (Claude asks for it automatically), then come back. Afterwards the login is renewed from this page.")
             }
 
             ClaudeMCPSyncSection()
@@ -71,6 +95,17 @@ struct AgentChatsClaudeAccountsTab: View {
             }
         }
         .onAppear { reload() }
+        // Verschwindet die Seite (andere Einstellungsseite, Fenster zu), endet
+        // auch ein laufender Login — ohne Dialog gäbe es keinen Stop-Knopf mehr.
+        .onDisappear { renewalSession?.stop() }
+        .sheet(isPresented: Binding(
+            get: { renewalSession != nil },
+            set: { if !$0 { closeRenewal() } }
+        )) {
+            if let renewalSession {
+                ClaudeLoginRenewalSheet(session: renewalSession)
+            }
+        }
     }
 
     // MARK: - Rows
@@ -179,11 +214,36 @@ struct AgentChatsClaudeAccountsTab: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+
+                loginExpiryLine(for: profile)
             } else {
                 Text("Not logged in")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             }
+        }
+    }
+
+    /// Wann der Login endet — dauerhaft sichtbar, farbig sobald es knapp wird.
+    @ViewBuilder
+    private func loginExpiryLine(for profile: ClaudeAccountProfile) -> some View {
+        if let expiry = expiryStore.entries[profile.name] {
+            let now = Date()
+            let text = expiry.summary(now: now)
+            if !text.isEmpty {
+                Text(verbatim: text)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Self.expiryColor(expiry.urgency(now: now)))
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    static func expiryColor(_ urgency: ClaudeLoginExpiry.Urgency) -> Color {
+        switch urgency {
+        case .none: return AppTheme.textTertiary
+        case .soon, .urgent: return AppTheme.statusAwaiting
+        case .ended: return AppTheme.statusError
         }
     }
 
@@ -223,7 +283,13 @@ struct AgentChatsClaudeAccountsTab: View {
                 } label: {
                     profile.isLoggedIn ? Text("Log in with another account…") : Text("Log in…")
                 }
+                if profile.isLoggedIn {
+                    Button("Renew login…") { openRenewal(preselected: [profile.name]) }
+                }
             } else {
+                if profile.isLoggedIn {
+                    Button("Renew login…") { openRenewal(preselected: [profile.name]) }
+                }
                 if !profile.isLoggedIn || needsRelogin(profile) {
                     Button("Log in…") { openLoginTerminal(for: profile) }
                 }
@@ -350,9 +416,9 @@ struct AgentChatsClaudeAccountsTab: View {
     static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
         switch problem {
         case .noCredentials:
-            return "no login token in Keychain — log in again (⋯ menu)"
+            return "no login token in Keychain — renew via ⋯ → Renew login…"
         case .loginExpired:
-            return "login expired — re-login via ⋯ → Log in…"
+            return "login expired — renew via ⋯ → Renew login…"
         case .refreshBlockedBySession:
             return "token expired — the running session refreshes it, retry shortly"
         case .tokenExpired:
@@ -386,6 +452,38 @@ struct AgentChatsClaudeAccountsTab: View {
             profileService.writeKeychainServiceMarker(forProfile: profile.name)
         }
         fetchUsageForAllProfiles()
+        Task { await expiryStore.refresh() }
+    }
+
+    // MARK: - Login-Erneuerung
+
+    /// Öffnet den Erneuerungs-Dialog. `preselected == nil` wählt alle Konten
+    /// vor, die nicht gerade erst erneuert wurden.
+    private func openRenewal(preselected: Set<String>?) {
+        let session = ClaudeLoginRenewalSession(rows: ClaudeLoginRenewalSession.makeRows(
+            profiles: profiles,
+            expiries: expiryStore.entries,
+            preselected: preselected,
+            now: Date()
+        ))
+        session.onRenewed = { name in
+            // Ein alter „Login abgelaufen“-Vermerk würde die frischen Limits verdecken.
+            ClaudeTokenRefreshThrottle.shared.clear(profile: name)
+            Task { await ClaudeLoginExpiryStore.shared.refresh() }
+        }
+        renewalSession = session
+    }
+
+    private func closeRenewal() {
+        renewalSession?.stop()
+        let renewed = renewalSession?.renewedCount ?? 0
+        renewalSession = nil
+        reload()
+        if renewed == 1 {
+            showFeedback("1 login renewed.", tone: .secondary)
+        } else if renewed > 1 {
+            showFeedback(String(localized: "\(renewed) logins renewed."), tone: .secondary)
+        }
     }
 
     /// Holt die Limits ALLER eingeloggten Accounts parallel — live vom
@@ -442,7 +540,7 @@ struct AgentChatsClaudeAccountsTab: View {
             parts.append(String(localized: "Renewed via CLI ping: \(summary.renewed.joined(separator: ", "))."))
         }
         if !summary.loginRequired.isEmpty {
-            parts.append(String(localized: "Login expired (re-login via ⋯ menu): \(summary.loginRequired.joined(separator: ", "))."))
+            parts.append(String(localized: "Login expired (use “Renew…” above): \(summary.loginRequired.joined(separator: ", "))."))
         }
         if !summary.failed.isEmpty {
             parts.append(String(localized: "Ping failed: \(summary.failed.joined(separator: ", "))."))
@@ -497,7 +595,7 @@ struct AgentChatsClaudeAccountsTab: View {
             : "export CLAUDE_CONFIG_DIR=\"\(profile.configDir.path)\""
         let hint = profile.isMain && profile.isLoggedIn
             ? String(localized: "Type /login and sign in with the account that should become main — it replaces the current main login.")
-            : String(localized: "Log in once (/login) — afterwards this profile stays signed in permanently.")
+            : String(localized: "Log in once (/login) — afterwards WhisperM8 renews this login from the Accounts page.")
         let banner = String(localized: "WhisperM8 · Claude account profile “\(profile.name)”")
         let script = """
         #!/bin/zsh

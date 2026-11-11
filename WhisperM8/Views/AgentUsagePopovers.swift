@@ -7,6 +7,13 @@ import SwiftUI
 struct SidebarUsageButtons: View {
     @State private var showClaudePopover = false
     @State private var showCodexPopover = false
+    @AppStorage(PreferenceKeys.claudeLoginExpiryWarningEnabled) private var expiryWarningEnabled = true
+
+    /// Konten, deren Login in drei Tagen endet oder beendet ist. Kommt fertig
+    /// aus dem Store, der stündlich nachprüft — kein Keychain-Zugriff hier.
+    private var expiringLogins: [String] {
+        expiryWarningEnabled ? ClaudeLoginExpiryStore.shared.attentionNames : []
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -21,10 +28,20 @@ struct SidebarUsageButtons: View {
                     tint: showClaudePopover ? AgentTheme.accent : AgentTheme.textSecondary
                 )
                 .frame(width: 26, height: 28)
+                .overlay(alignment: .topTrailing) {
+                    // Dauerhaft sichtbare Markierung: ein Login braucht Erneuerung.
+                    if !expiringLogins.isEmpty {
+                        Circle()
+                            .fill(AppTheme.statusAwaiting)
+                            .frame(width: 6, height: 6)
+                            .offset(x: -4, y: 6)
+                    }
+                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Claude accounts: usage limits")
+            .help(claudeButtonHelp)
+            .accessibilityLabel(Text(verbatim: claudeButtonHelp))
             .popover(isPresented: $showClaudePopover, arrowEdge: .bottom) {
                 ClaudeUsagePopoverView()
             }
@@ -46,6 +63,12 @@ struct SidebarUsageButtons: View {
                 CodexUsagePopoverView()
             }
         }
+    }
+
+    private var claudeButtonHelp: String {
+        let names = expiringLogins
+        guard !names.isEmpty else { return String(localized: "Claude accounts: usage limits") }
+        return String(localized: "Claude accounts: usage limits — login needs renewal: \(names.joined(separator: ", "))")
     }
 }
 
@@ -216,7 +239,21 @@ private struct ClaudeUsagePopoverView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(AppTheme.textTertiary)
                     }
+
+                    if let expiryText = expiryWarning(for: profile.name) {
+                        Text(verbatim: expiryText.text)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AgentChatsClaudeAccountsTab.expiryColor(expiryText.urgency))
+                    }
                 }
+            }
+
+            if needsRenewal {
+                Button("Renew logins…") {
+                    WindowRequestCenter.shared.request(.settingsClaudeAccounts)
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 11.5, weight: .medium))
             }
         }
         .padding(14)
@@ -228,6 +265,20 @@ private struct ClaudeUsagePopoverView: View {
         let minutes = Int(Date().timeIntervalSince(date) / 60)
         if minutes < 60 { return String(localized: "\(minutes) min old") }
         return String(localized: "\(minutes / 60) h old")
+    }
+
+    /// Ablaufzeile nur, wenn es etwas zu tun gibt (endet in sieben Tagen oder
+    /// ist beendet) — sonst bleibt das Popover bei den Limits.
+    private func expiryWarning(for name: String) -> (text: String, urgency: ClaudeLoginExpiry.Urgency)? {
+        guard let expiry = ClaudeLoginExpiryStore.shared.entries[name] else { return nil }
+        let now = Date()
+        let urgency = expiry.urgency(now: now)
+        guard urgency >= .soon else { return nil }
+        return (expiry.summary(now: now), urgency)
+    }
+
+    private var needsRenewal: Bool {
+        ClaudeLoginExpiryStore.shared.urgencies.values.contains { $0 >= .soon }
     }
 
     /// „Fable · 25 min old“, wenn das Modell-Limit merklich älter ist als 5h/Woche.

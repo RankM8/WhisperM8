@@ -221,6 +221,16 @@
         }
       }
     },
+    "%@ tokens from models without a known API price are not included in the value.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Token von Modellen ohne bekannten API-Preis sind im Gegenwert nicht enthalten."
+          }
+        }
+      }
+    },
     "%@ turns off the agent's permission prompts for every chat. Remove it unless you know exactly why you need it.": {
       "localizations": {
         "de": {
@@ -581,6 +591,26 @@
         }
       }
     },
+    "%lld logins renewed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Logins erneuert"
+          }
+        }
+      }
+    },
+    "%lld logins renewed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Logins erneuert."
+          }
+        }
+      }
+    },
     "%lld min old": {
       "localizations": {
         "de": {
@@ -831,6 +861,26 @@
         }
       }
     },
+    "1 login renewed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Login erneuert"
+          }
+        }
+      }
+    },
+    "1 login renewed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Login erneuert."
+          }
+        }
+      }
+    },
     "1 missing entry — added with Claude's own “claude mcp add-json -s user”. Never removes anything; servers that sign in with OAuth need a one-time /mcp login per account.": {
       "localizations": {
         "de": {
@@ -861,12 +911,12 @@
         }
       }
     },
-    "A Terminal window opens with the new profile — complete the one-time browser login there (Claude asks for it automatically), then come back and refresh. No re-login is ever needed afterwards.": {
+    "A Terminal window opens with the new profile — complete the browser login there (Claude asks for it automatically), then come back. Afterwards the login is renewed from this page.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ein Terminal-Fenster öffnet sich mit dem neuen Profil. Schließe dort die einmalige Anmeldung im Browser ab (Claude fragt automatisch danach), komm dann zurück und aktualisiere. Danach ist nie wieder eine Anmeldung nötig."
+            "value": "Ein Terminal-Fenster öffnet sich mit dem neuen Profil. Schließe dort die Anmeldung im Browser ab (Claude fragt automatisch danach) und komm dann zurück. Später erneuerst du den Login auf dieser Seite."
           }
         }
       }
@@ -1751,6 +1801,16 @@
         }
       }
     },
+    "Already ended: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereits beendet: %@."
+          }
+        }
+      }
+    },
     "Also available as the Notes toggle in the workspace bar (⌥⌘N).": {
       "localizations": {
         "de": {
@@ -1817,6 +1877,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ansagen werden angenommen, aber nicht gesprochen. Derselbe Schalter wie in der Menüleiste."
+          }
+        }
+      }
+    },
+    "Another Claude process overwrote the new login. Renew this account again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderer Claude-Prozess hat den neuen Login überschrieben. Erneuere dieses Konto noch einmal."
           }
         }
       }
@@ -1957,6 +2027,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scharf: %1$lld× umgeschaltet, %2$lld× übersprungen"
+          }
+        }
+      }
+    },
+    "Asks macOS to keep the strip out of screenshots and screen sharing. Some recording and meeting apps may still show it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bittet macOS, den Streifen aus Bildschirmfotos und Bildschirmfreigaben herauszuhalten. Manche Aufnahme- und Meeting-Apps zeigen ihn trotzdem."
           }
         }
       }
@@ -3181,12 +3261,32 @@
         }
       }
     },
+    "Claude accounts: usage limits — login needs renewal: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Accounts: Usage-Limits. Login muss erneuert werden: %@"
+          }
+        }
+      }
+    },
     "Claude chats start with a temporary hook configuration that links each chat to its Claude session. Live status comes from Claude's own session registry; your global ~/.claude/settings.json stays untouched.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Claude-Chats starten mit einer temporären Hook-Konfiguration, die jeden Chat mit seiner Claude-Sitzung verknüpft. Der Live-Status kommt aus Claudes eigener Sitzungs-Registry; deine globale ~/.claude/settings.json bleibt unberührt."
+          }
+        }
+      }
+    },
+    "Claude logins need renewal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Logins müssen erneuert werden"
           }
         }
       }
@@ -3537,6 +3637,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Das Schließen eines Tabs beendet den Chat nicht. Er arbeitet im Hintergrund weiter. Zum Beenden in der Seitenleiste „Beenden“ oder „Archivieren“ nutzen."
+          }
+        }
+      }
+    },
+    "Code from the browser, if it shows one": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code aus dem Browser, falls er einen anzeigt"
           }
         }
       }
@@ -3951,6 +4061,16 @@
         }
       }
     },
+    "Continue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weiter"
+          }
+        }
+      }
+    },
     "Continue Setup…": {
       "localizations": {
         "de": {
@@ -4201,6 +4321,16 @@
         }
       }
     },
+    "Could not save the new login to the Keychain (status %lld).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der neue Login ließ sich nicht im Schlüsselbund speichern (Status %lld)."
+          }
+        }
+      }
+    },
     "Could not switch account: %@": {
       "localizations": {
         "de": {
@@ -4321,12 +4451,12 @@
         }
       }
     },
-    "Creates a separate Claude login (own CLAUDE_CONFIG_DIR) that stays signed in permanently. Settings, plugins, and commands are shared with the main account.": {
+    "Creates a separate Claude login (own CLAUDE_CONFIG_DIR). Settings, plugins, and commands are shared with the main account.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Legt einen eigenen Claude-Login an (eigenes CLAUDE_CONFIG_DIR), der dauerhaft angemeldet bleibt. Einstellungen, Plugins und Befehle werden mit dem Hauptkonto geteilt."
+            "value": "Legt einen eigenen Claude-Login an (eigenes CLAUDE_CONFIG_DIR). Einstellungen, Plugins und Befehle werden mit dem Hauptkonto geteilt."
           }
         }
       }
@@ -5131,6 +5261,16 @@
         }
       }
     },
+    "Ending within 3 days: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endet in den nächsten 3 Tagen: %@."
+          }
+        }
+      }
+    },
     "Ends at %@, or earlier on low battery or when the Mac gets hot.": {
       "localizations": {
         "de": {
@@ -5207,6 +5347,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jeder Claude-Chat mit offenen Tasks bekommt eine Notiz-Karte mit seinen Tasks und klickbaren Links. Funktioniert auch ohne Jarvis."
+          }
+        }
+      }
+    },
+    "Every Claude login ends 30 days after sign-in, no matter how much you use it. For each account your browser opens the Claude sign-in with the email filled in — confirm the link from the email and approve. An account only changes once the right one is signed in.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeder Claude-Login endet 30 Tage nach der Anmeldung, egal wie viel du ihn nutzt. Für jedes Konto öffnet dein Browser die Claude-Anmeldung mit eingetragener E-Mail-Adresse. Bestätige den Link aus der Mail und gib die Freigabe. Ein Konto wird erst geändert, wenn das richtige angemeldet ist."
+          }
+        }
+      }
+    },
+    "Every Claude login ends 30 days after sign-in. Renew all accounts in one go so they share the same date — one confirmation in the browser per account.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeder Claude-Login endet 30 Tage nach der Anmeldung. Erneuere alle Konten in einem Durchgang, dann haben sie denselben Stichtag. Je Konto bestätigst du einmal im Browser."
           }
         }
       }
@@ -6801,16 +6961,6 @@
         }
       }
     },
-    "Asks macOS to keep the strip out of screenshots and screen sharing. Some recording and meeting apps may still show it.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bittet macOS, den Streifen aus Bildschirmfotos und Bildschirmfreigaben herauszuhalten. Manche Aufnahme- und Meeting-Apps zeigen ihn trotzdem."
-          }
-        }
-      }
-    },
     "Keyboard Cleaning": {
       "localizations": {
         "de": {
@@ -7361,12 +7511,12 @@
         }
       }
     },
-    "Log in once (/login) — afterwards this profile stays signed in permanently.": {
+    "Log in once (/login) — afterwards WhisperM8 renews this login from the Accounts page.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Melde dich einmal an (/login). Danach bleibt dieses Profil dauerhaft angemeldet."
+            "value": "Melde dich einmal an (/login). Danach erneuert WhisperM8 diesen Login über die Seite „Accounts“."
           }
         }
       }
@@ -7411,12 +7561,62 @@
         }
       }
     },
-    "Login expired (re-login via ⋯ menu): %@.": {
+    "Login Renewal": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Login abgelaufen (erneut anmelden über das ⋯-Menü): %@."
+            "value": "Login-Erneuerung"
+          }
+        }
+      }
+    },
+    "Login ended — renew it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login beendet. Bitte erneuern"
+          }
+        }
+      }
+    },
+    "Login ends in %lld days (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login endet in %lld Tagen (%@)"
+          }
+        }
+      }
+    },
+    "Login ends in 1 day (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login endet in 1 Tag (%@)"
+          }
+        }
+      }
+    },
+    "Login ends within 24 hours (%@, %@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login endet in weniger als 24 Stunden (%@, %@)"
+          }
+        }
+      }
+    },
+    "Login expired (use “Renew…” above): %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login abgelaufen (oben „Erneuern…“ nutzen): %@."
           }
         }
       }
@@ -7467,6 +7667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Login läuft…"
+          }
+        }
+      }
+    },
+    "Login valid until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login gültig bis %@"
           }
         }
       }
@@ -8551,6 +8761,16 @@
         }
       }
     },
+    "No account data — log in once via the ⋯ menu.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Kontodaten. Melde dich einmal über das ⋯-Menü an."
+          }
+        }
+      }
+    },
     "No active chats": {
       "localizations": {
         "de": {
@@ -8647,6 +8867,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noch kein Verlauf"
+          }
+        }
+      }
+    },
+    "No confirmation within 10 minutes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Bestätigung innerhalb von 10 Minuten"
           }
         }
       }
@@ -9191,6 +9421,16 @@
         }
       }
     },
+    "Notification and a marker on the Claude icon in the sidebar when a login ends within 3 days or has ended.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilung und Markierung am Claude-Symbol in der Seitenleiste, wenn ein Login in den nächsten 3 Tagen endet oder beendet ist."
+          }
+        }
+      }
+    },
     "Notification failed: %@": {
       "localizations": {
         "de": {
@@ -9550,6 +9790,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Open sign-in page again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anmeldeseite erneut öffnen"
           }
         }
       }
@@ -11334,12 +11584,102 @@
         }
       }
     },
+    "Renew %lld logins": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Logins erneuern"
+          }
+        }
+      }
+    },
+    "Renew 1 login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Login erneuern"
+          }
+        }
+      }
+    },
+    "Renew Claude logins": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude-Logins erneuern"
+          }
+        }
+      }
+    },
+    "Renew logins": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logins erneuern"
+          }
+        }
+      }
+    },
+    "Renew logins…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logins erneuern…"
+          }
+        }
+      }
+    },
+    "Renew login…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login erneuern…"
+          }
+        }
+      }
+    },
+    "Renewed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneuert"
+          }
+        }
+      }
+    },
     "Renewed via CLI ping: %@.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Per CLI-Ping erneuert: %@."
+          }
+        }
+      }
+    },
+    "Renewed — valid until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneuert, gültig bis %@"
+          }
+        }
+      }
+    },
+    "Renew…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneuern…"
           }
         }
       }
@@ -13034,6 +13374,16 @@
         }
       }
     },
+    "Sign out on claude.ai": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf claude.ai abmelden"
+          }
+        }
+      }
+    },
     "Sign out…": {
       "localizations": {
         "de": {
@@ -13100,6 +13450,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skill · %@"
+          }
+        }
+      }
+    },
+    "Skip this account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Konto überspringen"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungen"
           }
         }
       }
@@ -13734,6 +14104,16 @@
         }
       }
     },
+    "Submit code": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code übernehmen"
+          }
+        }
+      }
+    },
     "Succeeded": {
       "localizations": {
         "de": {
@@ -14264,6 +14644,16 @@
         }
       }
     },
+    "The Claude CLI ended the login (exit %lld).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Claude-CLI hat den Login beendet (Exit %lld)."
+          }
+        }
+      }
+    },
     "The GPT backend answered with HTTP %lld: %@": {
       "localizations": {
         "de": {
@@ -14350,6 +14740,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der GPT-Proxy ist nicht erreichbar: %@"
+          }
+        }
+      }
+    },
+    "The account of this profile changed during the login. Nothing was changed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Konto dieses Profils hat sich während des Logins geändert. Es wurde nichts geändert."
           }
         }
       }
@@ -14510,6 +14910,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Gesprächsverlauf zieht vollständig mit. Checkpoints und Datei-Historie (Rewind) bleiben im bisherigen Konto zurück."
+          }
+        }
+      }
+    },
+    "The current Keychain entry of this account could not be read. Nothing was changed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der bestehende Schlüsselbund-Eintrag dieses Kontos ließ sich nicht lesen. Es wurde nichts geändert."
           }
         }
       }
@@ -14704,6 +15114,26 @@
         }
       }
     },
+    "The login finished, but its credentials were not found.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login ist durchgelaufen, aber seine Zugangsdaten wurden nicht gefunden."
+          }
+        }
+      }
+    },
+    "The login finished, but the account could not be verified.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login ist durchgelaufen, aber das Konto ließ sich nicht prüfen."
+          }
+        }
+      }
+    },
     "The login is kept — the Keychain entry moves to the new name automatically. All chats of this profile keep working.": {
       "localizations": {
         "de": {
@@ -14740,6 +15170,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Das Mikrofon ist nicht mehr verfügbar, die Aufnahme wurde beendet."
+          }
+        }
+      }
+    },
+    "The new login has an unexpected format.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der neue Login hat ein unerwartetes Format."
           }
         }
       }
@@ -16144,6 +16584,26 @@
         }
       }
     },
+    "Waiting for your browser — confirm the sign-in there": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf deinen Browser. Bestätige dort die Anmeldung"
+          }
+        }
+      }
+    },
+    "Warn before a login ends": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vor dem Ende eines Logins warnen"
+          }
+        }
+      }
+    },
     "Warning: this ChatGPT account is already connected as “%@”. The browser was probably signed in to the other account — for a second account, repeat the login in an incognito window (⋯ → Sign in again…).": {
       "localizations": {
         "de": {
@@ -16674,6 +17134,26 @@
         }
       }
     },
+    "Your browser was signed in as %@. Sign out there, then continue.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Browser war %@ angemeldet. Melde dich dort ab und mach dann weiter."
+          }
+        }
+      }
+    },
+    "Your browser was signed in with another account. Sign out there, then continue.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Browser war ein anderes Konto angemeldet. Melde dich dort ab und mach dann weiter."
+          }
+        }
+      }
+    },
     "Your changes could not be saved yet. Trying again automatically.": {
       "localizations": {
         "de": {
@@ -17134,12 +17614,12 @@
         }
       }
     },
-    "login expired — re-login via ⋯ → Log in…": {
+    "login expired — renew via ⋯ → Renew login…": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Login abgelaufen. Melde dich über ⋯ → Anmelden… erneut an"
+            "value": "Login abgelaufen. Erneuere ihn über ⋯ → Login erneuern…"
           }
         }
       }
@@ -17254,12 +17734,12 @@
         }
       }
     },
-    "no login token in Keychain — log in again (⋯ menu)": {
+    "no login token in Keychain — renew via ⋯ → Renew login…": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kein Login-Token im Schlüsselbund. Melde dich erneut an (⋯-Menü)"
+            "value": "Kein Login-Token im Schlüsselbund. Erneuere ihn über ⋯ → Login erneuern…"
           }
         }
       }
@@ -17890,16 +18370,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "„Jetzt komplett einrichten“ lädt es automatisch; alternativ manuell aus dem GitHub-Release %@ in den PATH."
-          }
-        }
-      }
-    },
-    "%@ tokens from models without a known API price are not included in the value.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ Token von Modellen ohne bekannten API-Preis sind im Gegenwert nicht enthalten."
           }
         }
       }

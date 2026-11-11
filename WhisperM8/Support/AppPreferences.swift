@@ -531,6 +531,21 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.mcpSyncExcludedServers) }
     }
 
+    /// Vorwarnung, bevor der Login eines Claude-Kontos sein festes Enddatum
+    /// erreicht: Mitteilung und Markierung am Claude-Symbol der Seitenleiste.
+    /// Schalter auf der Seite „Accounts“.
+    var isClaudeLoginExpiryWarningEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeLoginExpiryWarningEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeLoginExpiryWarningEnabled) }
+    }
+
+    /// Wofür schon gewarnt wurde: Profil → „<Enddatum>:<Stufe>“. Verhindert,
+    /// dass dieselbe Frist bei jedem Prüflauf erneut gemeldet wird.
+    var claudeLoginExpiryNotifiedMarkers: [String: String] {
+        get { defaults.dictionary(forKey: Keys.claudeLoginExpiryNotifiedMarkers) as? [String: String] ?? [:] }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeLoginExpiryNotifiedMarkers) }
+    }
+
     /// Kontowechsel ohne Stoppen: laufende Chats wechseln selbst — ruhende
     /// sofort (anhalten, umziehen, im Tab neu starten), arbeitende nach dem
     /// Turn (Plan claude-account-switch-ohne-stopp.md, Slice 2). Aus = laufende
@@ -1026,6 +1041,8 @@ enum PreferenceKeys {
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
+    static let claudeLoginExpiryWarningEnabled = "claudeLoginExpiryWarningEnabled"
+    static let claudeLoginExpiryNotifiedMarkers = "claudeLoginExpiryNotifiedMarkers"
     static let jarvisBoardEnabled = "jarvisBoardEnabled"
     static let jarvisNotesEnabled = "jarvisNotesEnabled"
     static let jarvisNotesDefaultOpen = "jarvisNotesDefaultOpen"

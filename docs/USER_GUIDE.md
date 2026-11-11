@@ -201,6 +201,11 @@ in progress.
 Several Claude accounts can be set up under Settings → Accounts; each chat runs in one of them and can
 be moved to another via its context menu. A chat that is working is moved after its turn.
 
+Every Claude login ends 30 days after sign-in; that limit is set by Anthropic. The Accounts page shows
+until when each login is valid, and WhisperM8 warns a few days ahead. *Renew…* goes through your accounts
+one after another: the browser opens the Claude sign-in with the email filled in, you confirm the link
+from the email. Renewing all accounts together puts them on the same date.
+
 ---
 
 ## Settings
@@ -224,7 +229,7 @@ pages sit behind *Show Agent Chats settings*.
 | **General** | Usage profile, start at login, appearance, automatic update check |
 | **Permissions** | Status of microphone, accessibility and screen recording, with links to System Settings |
 | **About** | Version and update |
-| **Accounts** | *Advanced:* several Claude accounts, MCP servers across accounts |
+| **Accounts** | *Advanced:* several Claude accounts, login renewal, MCP servers across accounts |
 | **Hooks** | *Advanced:* how chats report their state to WhisperM8 |
 | **GPT-Backend** | *Labs:* GPT models inside Claude Code via a local proxy, ChatGPT accounts |
 | **Codex Voice Agent** | *Labs:* mute and unmute a Codex voice session with a spoken code word |

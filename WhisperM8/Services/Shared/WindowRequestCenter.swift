@@ -6,6 +6,8 @@ enum WindowRequest: String, Equatable {
     /// Öffnet das Settings-Fenster direkt in der Output-Sektion (Overview mit
     /// Default Output, Codex-Status und History-Einstieg).
     case settingsOutput = "settings-output"
+    /// Öffnet die Einstellungen auf der Seite „Accounts“ (Claude-Konten).
+    case settingsClaudeAccounts = "settings-claude-accounts"
     case onboarding
     case agentChats = "agent-chats"
 
@@ -13,7 +15,7 @@ enum WindowRequest: String, Equatable {
 
     var targetWindowID: String {
         switch self {
-        case .settings, .settingsOutput:
+        case .settings, .settingsOutput, .settingsClaudeAccounts:
             return "settings"
         case .agentChats:
             // Primaerfenster ist eine Single-`Window`-Scene (nicht die
@@ -34,6 +36,8 @@ enum WindowRequest: String, Equatable {
             return "recording"
         case .settingsOutput:
             return "outputOverview"
+        case .settingsClaudeAccounts:
+            return "claude-accounts"
         case .agentChats, .onboarding:
             return nil
         }
