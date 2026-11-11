@@ -185,8 +185,6 @@ extension AgentChatsView {
     private func showNewChatPickerFromCommand(preferredProjectID: UUID?) -> Bool {
         guard !archiveModeActive, !showNewChatProjectPicker else { return false }
         commandState.preferredNewChatProjectID = preferredProjectID ?? selectedProjectID
-        // Ein alter Suchbegriff könnte das vorausgewählte Projekt ausblenden.
-        newChatProjectQuery = ""
         guard isSidebarVisible else {
             isSidebarVisible = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

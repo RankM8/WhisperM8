@@ -22,6 +22,9 @@ struct AgentLaunchCommand: Equatable {
     /// Hook-Bridge-Tracking — die `--settings`-Argumente der Bridge wurden
     /// im Attach-Argv nicht angehaengt.
     var isBackgroundAttachFallback: Bool = false
+    /// Gesetzt, wenn der Attach einem Daemon-Abzweig gilt: die neue
+    /// Session-ID, auf die der Chat VOR dem Start umgebunden wird.
+    var reboundExternalSessionID: String? = nil
 
     /// Läuft im PTY nur ein `claude attach`-Client (Resume-Fallback ODER
     /// Background-Chat)? Dann gehört der Verlauf dem Worker beim Daemon:
@@ -238,11 +241,11 @@ struct AgentCommandBuilder {
         ["attach", shortID]
     }
 
-    /// Liefert die Short-ID des Supervisor-Workers, der die Session gerade
-    /// als Background-Agent hostet — `nil` wenn keiner laeuft.
-    /// (externalSessionID, profileName) → Short-ID. Default liest das
+    /// Liefert den Supervisor-Worker, der die Session gerade als Background-
+    /// Agent hostet, auch als Daemon-Abzweig unter neuer ID; `nil` wenn keiner
+    /// laeuft. (externalSessionID, profileName) → Treffer. Default liest das
     /// Daemon-Roster des passenden Account-Profils; im Test ueberschreibbar.
-    var backgroundWorkerShortIDResolver: (String, String?) -> String? = { sessionID, profileName in
+    var backgroundWorkerResolver: (String, String?) -> SupervisorRosterReader.WorkerMatch? = { sessionID, profileName in
         SupervisorRosterReader.attachTarget(
             forSessionID: sessionID,
             configDir: ClaudeAccountProfiles().configDir(
@@ -768,9 +771,16 @@ struct AgentCommandBuilder {
         // `--resume --fork-session` ist auch fuer bg-Sessions erlaubt und
         // laesst das Original bewusst weiterlaufen.
         if backgroundAttachAllowed, !isFork, let resumeSessionID,
-           let workerShortID = backgroundWorkerShortIDResolver(resumeSessionID, effectiveProfileName) {
+           let worker = backgroundWorkerResolver(resumeSessionID, effectiveProfileName) {
+            let workerShortID = worker.shortID
+            // Daemon-Abzweig: der Worker führt die Unterhaltung unter neuer ID
+            // weiter — der Chat wird vor dem Start darauf umgebunden, damit
+            // auch der Rückweg (A) diese ID nimmt und nie einen zweiten Prozess
+            // auf dem alten Stand startet.
+            let reboundID = worker.sessionID.caseInsensitiveCompare(resumeSessionID) == .orderedSame
+                ? nil : worker.sessionID
             Logger.agentStore.info(
-                "resume_attach_fallback session=\(resumeSessionID, privacy: .public) worker=\(workerShortID, privacy: .public) — Session laeuft als Background-Agent, attach statt --resume"
+                "resume_attach_fallback session=\(resumeSessionID, privacy: .public) worker=\(workerShortID, privacy: .public) rebound=\(reboundID ?? "-", privacy: .public) — Session laeuft als Background-Agent, attach statt --resume"
             )
             let attachArguments = Self.attachArguments(shortID: workerShortID)
             var attachEnvironment = applyRouterEnvironment(effectiveProfileEnvironment)
@@ -787,7 +797,8 @@ struct AgentCommandBuilder {
                 keyboardProfile: .claudeCodeChat,
                 environmentOverrides: attachEnvironment,
                 environmentRemovals: Set(Self.gptContextEnvironmentKeys),
-                isBackgroundAttachFallback: true
+                isBackgroundAttachFallback: true,
+                reboundExternalSessionID: reboundID
             )
         }
 

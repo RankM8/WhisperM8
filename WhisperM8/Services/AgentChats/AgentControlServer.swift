@@ -394,9 +394,10 @@ final class AgentControlServer: @unchecked Sendable {
             return
         }
 
-        let request: ChatsControlRequest
+        var request: ChatsControlRequest
         do {
             request = try ChatsControlCodec.decode(ChatsControlRequest.self, from: line)
+            request = Self.correctingCallerIdentity(request, socket: fd)
         } catch {
             respond(fd, .failure(requestID: "", code: .invalid, message: "Kaputtes Request-JSON"))
             return

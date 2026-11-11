@@ -101,9 +101,22 @@ const parseBoard = (stdout: string): BoardView | null => {
 
 const refresh = async ($: EngineInterface) => {
   const ran = await cli($, ['chats', 'board', '--json'])
-  if (!ran.ok) return
+  if (!ran.ok) {
+    // Kein geprüfter Besitzer (Hintergrund-Agent ohne eigenen Chat): kein
+    // Board, auch nicht das des Chats, dessen Umgebung geerbt wurde.
+    if (ran.message.includes('@self')) {
+      sessionID = null
+      stopWatch()
+      await update($, board, () => null)
+    }
+    return
+  }
   const next = parseBoard(ran.stdout)
   if (next === null) return
+  // Die CLI prüft die Identität gegen Claudes Registry: Ein Hintergrund-Agent
+  // erbt die Umgebung des Chats, der den Daemon gestartet hat. Ihr Besitzer
+  // gilt, nicht WHISPERM8_SESSION_ID (Befund 11.11.2026).
+  if (sessionID !== null && !sameID(next.owner, sessionID)) sessionID = next.owner
   await update($, board, () => next)
   const at = await $.clock.now()
   await update($, now, () => at)

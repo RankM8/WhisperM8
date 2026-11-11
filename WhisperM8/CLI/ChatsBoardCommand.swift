@@ -414,7 +414,7 @@ enum ChatsBoardCommand {
             CLIIO.err("Fehler: \(JarvisBoardSettings.disabledMessage)")
             return ChatsCLIExit.usage
         }
-        let caller = ChatsCallerIdentity.fromEnvironment()
+        let caller = ChatsCallerIdentity.checked(sessions: { ChatsWorkspaceReader().load().workspace.sessions })
         guard let owner = caller.sessionID else {
             CLIIO.err("Fehler: Board-Befehle gehen nur aus einer WhisperM8-Session (WHISPERM8_SESSION_ID fehlt) — das Board gehört dem aufrufenden Chat.")
             return ChatsCLIExit.usage

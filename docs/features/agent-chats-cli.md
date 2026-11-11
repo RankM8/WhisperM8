@@ -30,7 +30,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 
 | Befehl | Klasse | Pfad |
 |---|---|---|
-| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
+| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `duplicates`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
 | `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 ### Claude-Account-Profil neuer Chats
@@ -190,6 +190,30 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
   aus dieser PTY stammt (Selbst-Send-Schutz, „(du)"-Markierung, Audit). Ehrlich:
   Rechenschaft + Versehens-Schutz, keine Boundary gegen einen absichtlich
   bösartigen Prozess desselben Users.
+- **Hintergrund-Agents (seit 11.11.2026):** Claudes Daemon und alle Worker,
+  die er startet, erben die Umgebung des Chats, der den Daemon zuerst gestartet
+  hat — samt `WHISPERM8_SESSION_ID`/`_TOKEN`. Die Umgebung ist bei ihnen deshalb
+  kein Beleg. `AgentCallerIdentityCheck` sucht den nächsten Claude-Prozess in
+  der Prozesskette in Claudes Registry. Ist er ein Hintergrund-Agent
+  (`kind: "bg"`), gehört der Aufruf dem Chat, dessen `externalSessionID` seine
+  `sessionId` ist, sonst keinem.
+  - Der Server lässt eine behauptete Identität samt Token nur gelten, wenn die
+    PTY dieses Chats in der Prozesskette des Aufrufers steht: Prozess-ID des
+    Socket-Partners (`LOCAL_PEERPID`), Eltern per `sysctl`, PTY-PID aus
+    `AgentSessionTokenRegistry`. Daemon und Worker sind keine Nachfahren der
+    PTY, deshalb fällt geerbte Identität heraus, auch ohne Registry-Eintrag.
+    Der Aufrufer gilt dann als extern. Log: `control_caller_identity_dropped`.
+    Nebenwirkung: Aus einer PTY abgekoppelte Prozesse (`nohup … &`, die bei
+    launchd landen) gelten ebenfalls als extern.
+  - Die CLI korrigiert `@self` und „(du)“ auf dieselbe Weise
+    (`ChatsCallerIdentity.checked`). Die Sitzungsliste lädt sie nur, wenn ein
+    Hintergrund-Agent dahintersteht.
+  - Die Board-Mod in `register.tsx` übernimmt den Besitzer, den
+    `chats board --json` liefert. Meldet die CLI keinen Besitzer, zeigt die Mod
+    kein Board, auch nicht das des geerbten Chats.
+  - Grenze: Die CLI prüft lokal nur über Claudes Registry. Ein Hintergrund-
+    Prozess ohne Registry-Eintrag sieht lokal weiter die geerbte Identität,
+    bei der App kommt er damit aber nicht durch.
 - **Kill-Switch:** `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
 
 ## Send-Pipeline (TOCTOU-frei)
@@ -404,6 +428,11 @@ Strikte Aktions-Trennung (Produktsemantik, nie stillschweigend vermischt):
   passiert bei `--resume` GAR NICHTS (auch kein Unarchive). Nicht archivierte
   Ziele sind idempotenter Erfolg (`alreadyActive`); ein angefordertes
   `--resume`/`--open` läuft dann trotzdem. Kein Pfad löscht Daten.
+- **`duplicates [--json]`** (seit 11.11.2026, nur lesend) listet Chats, die
+  dieselbe externe Sitzung tragen. Behalten wird der von Hand angelegte Chat
+  (sonst der älteste), für die übrigen steht ein `chats archive <ref>`-Vorschlag
+  da. Archiviert oder gelöscht wird nichts automatisch. Der Index-Merge
+  aktualisiert ohnehin nur noch den behaltenen Chat.
 
 ### Backlog Tab-/Session-Management (Gap-Analyse 2026-07-19)
 
