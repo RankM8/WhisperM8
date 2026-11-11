@@ -47,6 +47,29 @@ final class AgentDragDropPlannerTests: XCTestCase {
         XCTAssertEqual(otherSnapshot?.projectID, p2.id)
     }
 
+    /// Vorfall 04.11.2026: Ein Drag stempelte jeden verschobenen Chat mit
+    /// „jetzt“ und holte so 129 alte Chats in die „Zuletzt“-Liste zurück.
+    func testReorderSessionsKeepsLastActivity() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let project = try store.upsertProject(path: NSTemporaryDirectory() + "keep-activity", name: "A", createdManually: true)
+        let old = Date(timeIntervalSince1970: 1_000)
+        var ids: [UUID] = []
+        for title in ["S1", "S2", "S3"] {
+            let session = try store.createSession(provider: .claude, projectPath: project.path, title: title)
+            try store.updateSession(id: session.id) { $0.lastActivityAt = old }
+            ids.append(session.id)
+        }
+
+        try store.reorderSessions(in: project.id, orderedIDs: ids.reversed())
+        try store.moveSession(id: ids[0], direction: .up)
+
+        let sessions = store.loadWorkspace().sessions.filter { $0.projectID == project.id }
+        XCTAssertEqual(AgentSessionStore.sortedSessions(sessions).map(\.id), [ids[2], ids[0], ids[1]])
+        XCTAssertEqual(sessions.map(\.lastActivityAt), [old, old, old], "Umsortieren ist keine Aktivität")
+    }
+
     func testReorderSessionsWithSameOrderIsNoOpAfterSortIndicesExist() throws {
         let url = makeTempStoreURL()
         defer { try? FileManager.default.removeItem(at: url) }

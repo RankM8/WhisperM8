@@ -69,11 +69,11 @@ struct TranscriptEmptyStateView: View {
     ///
     /// Die externe ID allein beweist das nicht: Sie wird schon bei `SessionStart`
     /// gebunden, das Transcript entsteht erst mit dem ersten Prompt. Darum zusätzlich
-    /// ein nachweisbarer Turn (`lastTurnAt`) bzw. eine übernommene (nicht manuell
-    /// angelegte) Session, deren Verlauf von außen kam.
+    /// ein Beleg für früheren Verlauf — dieselbe Regel wie in der Sidebar
+    /// (`AgentTranscriptPresence.hadHistory`).
     static func isTranscriptDeleted(transcript: AgentChatTranscript?, session: AgentChatSession) -> Bool {
         guard transcript == nil, !(session.externalSessionID ?? "").isEmpty, !session.isBackgroundChat else { return false }
-        return session.lastTurnAt != nil || session.createdManually != true
+        return AgentTranscriptPresence.hadHistory(session)
     }
 
     private var isTranscriptDeleted: Bool {
