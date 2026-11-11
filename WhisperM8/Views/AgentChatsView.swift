@@ -426,12 +426,6 @@ struct AgentChatsView: View {
     @State var hasRunStartupHealthCheck = false
     /// Popover des „Neuer Chat"-Split-Buttons (▾): Ziel-Projekt wählen/suchen.
     @State var showNewChatProjectPicker = false
-    @State var newChatProjectQuery = ""
-    /// Per Tastatur hervorgehobenes Ergebnis im „Neuer Chat"-Picker (aktive
-    /// Auswahl). `nil` = kein Highlight (leere Ergebnisliste → `Enter` = No-op).
-    @State var newChatHighlightedProjectID: UUID?
-    /// Fokus des Suchfelds im „Neuer Chat"-Picker — für Autofokus beim Öffnen.
-    @FocusState private var newChatSearchFocused: Bool
     @FocusState private var sidebarFilterFocused: Bool
     /// `true` solange das Sub-Agent-Library-Sheet sichtbar ist.
     @State var subAgentLibrarySheet: SubAgentLibraryPresentation?
@@ -2170,126 +2164,22 @@ struct AgentChatsView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// Durchsuchbares Dropdown des Split-Buttons: alle Projekte (Badge + Name +
-    /// Branch), das aktuelle Ziel markiert, plus „Projekt hinzufügen…".
+    /// Durchsuchbares Dropdown des Split-Buttons (eigene View, siehe
+    /// `NewChatProjectPicker`).
     private var newChatProjectPicker: some View {
-        let query = newChatProjectQuery.trimmingCharacters(in: .whitespaces)
-        let projects = query.isEmpty
-            ? manualProjects
-            : manualProjects.filter { $0.name.localizedCaseInsensitiveContains(query) }
-        let projectIDs = projects.map(\.id)
-        return VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textTertiary)
-                TextField("Search projects…", text: $newChatProjectQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .focused($newChatSearchFocused)
-                    .accessibilityLabel("Search projects")
-                    .onSubmit { confirmHighlightedNewChatProject(projects) }
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 36)
-
-            Divider()
-
-            ScrollView {
-                VStack(spacing: 1) {
-                    ForEach(projects) { project in
-                        Button {
-                            startNewChat(in: project)
-                        } label: {
-                            HStack(spacing: 8) {
-                                ProjectAvatar(project: project, size: 16)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(project.name)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundStyle(AgentTheme.textPrimary)
-                                        .lineLimit(1)
-                                    Text(project.lastBranch ?? project.path)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(AgentTheme.textTertiary)
-                                        .lineLimit(1)
-                                        .truncationMode(.middle)
-                                }
-                                Spacer(minLength: 0)
-                                if project.id == selectedProjectID {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(AgentTheme.accent)
-                                }
-                            }
-                            .padding(.horizontal, 11)
-                            .frame(height: 36)
-                            .background(project.id == newChatHighlightedProjectID ? AgentTheme.hover : Color.clear)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(PopoverRowButtonStyle())
-                        .accessibilityAddTraits(project.id == newChatHighlightedProjectID ? .isSelected : [])
-                        .onHover { if $0 { newChatHighlightedProjectID = project.id } }
-                    }
-                    if projects.isEmpty {
-                        (query.isEmpty ? Text("No projects yet") : Text("No project found"))
-                            .font(.system(size: 11))
-                            .foregroundStyle(AgentTheme.textTertiary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .frame(maxHeight: 260)
-
-            Divider()
-
-            Button {
+        NewChatProjectPicker(
+            projects: manualProjects,
+            selectedProjectID: selectedProjectID,
+            takePreferredProjectID: { commandState.takePreferredNewChatProjectID() },
+            onPick: { startNewChat(in: $0) },
+            onAddProject: {
                 showNewChatProjectPicker = false
                 if let project = addProject() {
                     startNewChat(in: project)
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 12))
-                        .frame(width: 16)
-                    Text("Add project…")
-                        .font(.system(size: 12, weight: .medium))
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(AgentTheme.textSecondary)
-                .padding(.horizontal, 11)
-                .frame(height: 38)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(PopoverRowButtonStyle())
-        }
-        .frame(width: 270)
-        .background(AgentTheme.panel)
-        // Pfeiltasten bubblen aus dem fokussierten (einzeiligen) Suchfeld hoch:
-        // Up/Down navigieren die Ergebnisse, Left/Right bleiben Cursor im Feld.
-        .onKeyPress(.downArrow) {
-            newChatHighlightedProjectID = ProjectPickerKeyboard.move(from: newChatHighlightedProjectID, in: projectIDs, direction: 1)
-            return .handled
-        }
-        .onKeyPress(.upArrow) {
-            newChatHighlightedProjectID = ProjectPickerKeyboard.move(from: newChatHighlightedProjectID, in: projectIDs, direction: -1)
-            return .handled
-        }
-        .onKeyPress(.escape) {
-            showNewChatProjectPicker = false
-            return .handled
-        }
-        // Filterwechsel: Highlight auf gültige Auswahl bzw. erstes Ergebnis setzen.
-        .onChange(of: newChatProjectQuery) {
-            newChatHighlightedProjectID = ProjectPickerKeyboard.normalize(newChatHighlightedProjectID, in: projectIDs)
-        }
-        .onAppear {
-            newChatSearchFocused = true
-            // Vorauswahl vom Controller (Create), sonst das erste Projekt.
-            newChatHighlightedProjectID = ProjectPickerKeyboard.normalize(commandState.takePreferredNewChatProjectID(), in: projectIDs)
-        }
+            },
+            onDismiss: { showNewChatProjectPicker = false }
+        )
     }
 
     /// Effektiver Scope: die Suche überstimmt den Scope-Filter — tippt der
