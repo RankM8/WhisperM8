@@ -180,9 +180,12 @@ struct AgentSessionDetailView: View {
         // Guards wie beim Grid-Fokus-Nachholen (kein Controller, keine
         // laufende Vorbereitung, nicht unterdrückt).
         .onChange(of: session.shouldLaunchOnOpen) { wasSet, isSet in
+            // Ein beendeter Prozess (z. B. gescheitertes `claude attach`)
+            // hinterlässt einen nicht laufenden Controller — `resume` muss
+            // auch diesen Tab neu starten (Befund 11.11.2026).
             guard isSet == true, wasSet != true,
                   !suppressesAutoActivation,
-                  controller == nil,
+                  AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
                   !focusLaunchInFlight else { return }
             focusLaunchInFlight = true
             launchAfterCacheWarmup()
@@ -199,7 +202,7 @@ struct AgentSessionDetailView: View {
         .onChange(of: suppressesAutoActivation) { wasSuppressed, isSuppressed in
             guard wasSuppressed, !isSuppressed else { return }
             if session.shouldLaunchOnOpen == true,
-               controller == nil,
+               AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
                !focusLaunchInFlight {
                 focusLaunchInFlight = true
                 launchAfterCacheWarmup()
@@ -381,7 +384,7 @@ struct AgentSessionDetailView: View {
     /// gespeicherte Claude-Resume-ID repariert werden muss, läuft auch der
     /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
     /// dem MainActor frei von blockierendem Datei-I/O.
-    private func launchAfterCacheWarmup() {
+    private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true) {
         let commandName: String? = session.isTerminal
             ? nil
             : (session.provider == .claude ? "claude" : "codex")
@@ -460,7 +463,8 @@ struct AgentSessionDetailView: View {
                 }
                 prepareCommand(
                     resumeRepairPreparation: resumeRepairPreparation,
-                    launchGuardResult: launchGuardResult
+                    launchGuardResult: launchGuardResult,
+                    allowsBackgroundAttach: allowsBackgroundAttach
                 )
             }
         }
@@ -468,7 +472,8 @@ struct AgentSessionDetailView: View {
 
     private func prepareCommand(
         resumeRepairPreparation: ResumeRepairPreparation,
-        launchGuardResult: ClaudeGPTLaunchGuardResult
+        launchGuardResult: ClaudeGPTLaunchGuardResult,
+        allowsBackgroundAttach: Bool = true
     ) {
         do {
             let launchSession = try repairedSessionForLaunch(
@@ -490,6 +495,7 @@ struct AgentSessionDetailView: View {
             // erzeugen und `--settings <path>` als extra-Argument liefern.
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
+            builder.backgroundAttachAllowed = allowsBackgroundAttach
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den
             // bisherigen Direktbetrieb ohne Router-Env.
@@ -659,6 +665,11 @@ struct AgentSessionDetailView: View {
     }
 
     private func markLaunched() {
+        // Neustart über einem beendeten Controller: die Registry hatte schon
+        // vorher einen Eintrag, der Freigabe-Pfad über `controller != nil`
+        // feuert dann nicht — hier freigeben, sonst sperrt der nächste
+        // `resume`-Auslöser.
+        focusLaunchInFlight = false
         do {
             try store.updateSession(id: session.id) { updated in
                 updated.status = .running
@@ -688,6 +699,22 @@ struct AgentSessionDetailView: View {
     }
 
     private func markTerminated(exitCode: Int32?) {
+        // Steht der beendete Controller noch in der Registry, endete der
+        // Prozess von selbst (ein `terminate()` durch uns entfernt ihn vorher).
+        let endedCommand = terminalRegistry.controller(for: session.id)?.command
+        let resumesAfterFailedAttach = AgentCommandBuilder.shouldResumeAfterAttachExit(
+            isBackgroundAttachFallback: endedCommand?.isBackgroundAttachFallback ?? false,
+            exitCode: exitCode
+        )
+        defer {
+            if resumesAfterFailedAttach {
+                // Einmaliger Rückweg: normales `--resume`, nie wieder Attach.
+                Logger.agentStore.notice(
+                    "attach_failed_resume_fallback session=\(session.id.uuidString, privacy: .public) exit=\(exitCode ?? -1, privacy: .public)"
+                )
+                launchAfterCacheWarmup(allowsBackgroundAttach: false)
+            }
+        }
         do {
             try store.updateSession(id: session.id) { updated in
                 if updated.status == .running {

@@ -201,6 +201,30 @@ struct AgentCommandBuilder {
         )?.sessionID
     }
 
+    /// `false` = Resume→Attach-Fallback aus. Nur für den einmaligen Rückweg,
+    /// nachdem ein `claude attach` gescheitert ist: Der zweite Start nimmt dann
+    /// das normale `--resume` und kann nie wieder in einen Attach münden.
+    var backgroundAttachAllowed = true
+
+    /// Rückweg nach einem gescheiterten Attach (Agent beendet, Claude lehnt
+    /// ab): nur bei einem Attach-Fallback-Start, nur bei Exit ≠ 0 und nur,
+    /// wenn der Prozess von selbst endete (`nil` = Signal/Abbruch durch uns).
+    /// Der Rückweg-Start ist nie selbst ein Attach — so entsteht keine Schleife.
+    static func shouldResumeAfterAttachExit(
+        isBackgroundAttachFallback: Bool,
+        exitCode: Int32?
+    ) -> Bool {
+        guard isBackgroundAttachFallback, let exitCode else { return false }
+        return exitCode != 0
+    }
+
+    /// Darf ein Auslöser (`chats resume`, Grid-Fokus) den Tab starten? Ja,
+    /// solange kein Prozess läuft — auch wenn ein beendeter Controller noch
+    /// den letzten Terminal-Stand zeigt.
+    static func allowsTriggeredLaunch(controllerIsRunning: Bool?) -> Bool {
+        controllerIsRunning != true
+    }
+
     /// Argumente für `claude attach`: nur die Short-ID, nie Startoptionen.
     /// `claude attach <id|name>` kennt keine Optionen (CLI 2.1.322) und bricht
     /// bei Extras wie `--dangerously-skip-permissions` mit seinem Usage-Text
@@ -739,7 +763,7 @@ struct AgentCommandBuilder {
         // laeuft dann normal interaktiv im Tab weiter. Forks bleiben Forks:
         // `--resume --fork-session` ist auch fuer bg-Sessions erlaubt und
         // laesst das Original bewusst weiterlaufen.
-        if !isFork, let resumeSessionID,
+        if backgroundAttachAllowed, !isFork, let resumeSessionID,
            let workerShortID = backgroundWorkerShortIDResolver(resumeSessionID, effectiveProfileName) {
             Logger.agentStore.info(
                 "resume_attach_fallback session=\(resumeSessionID, privacy: .public) worker=\(workerShortID, privacy: .public) — Session laeuft als Background-Agent, attach statt --resume"

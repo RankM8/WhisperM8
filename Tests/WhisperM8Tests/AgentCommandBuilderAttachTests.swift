@@ -74,4 +74,49 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         XCTAssertEqual(command.arguments, userExtras + ["--resume", "claude-session"])
         XCTAssertFalse(command.isBackgroundAttachFallback)
     }
+
+    // MARK: - Rückweg nach gescheitertem Attach
+
+    func testFailedAttachFallsBackToResumeOnce() {
+        // Gescheitertes Attach (Agent beendet, Claude lehnt ab) → Rückweg.
+        XCTAssertTrue(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: 1))
+        // Sauberes Ende des Attach (User verlässt die Ansicht) → kein Neustart.
+        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: 0))
+        // Von uns beendet/Signal → kein Neustart.
+        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: true, exitCode: nil))
+        // Normales `--resume` scheitert → nie ein zweiter Rückweg (keine Schleife).
+        XCTAssertFalse(AgentCommandBuilder.shouldResumeAfterAttachExit(isBackgroundAttachFallback: false, exitCode: 1))
+    }
+
+    func testResumeFallbackStartNeverAttachesAgain() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = makeBuilder()
+        var resolverCalled = false
+        builder.backgroundWorkerShortIDResolver = { _, _ in
+            resolverCalled = true
+            return "1f353dce"
+        }
+        builder.backgroundAttachAllowed = false
+        let session = AgentChatSession(
+            provider: .claude,
+            projectID: project.id,
+            externalSessionID: "1f353dce-783f-407c-a2d4-402c5e884d59",
+            title: "Rückweg",
+            hasLaunchedInitialPrompt: true
+        )
+
+        let command = try builder.command(for: session, project: project)
+
+        XCTAssertEqual(command.arguments, userExtras + ["--resume", "1f353dce-783f-407c-a2d4-402c5e884d59"])
+        XCTAssertFalse(command.isBackgroundAttachFallback)
+        XCTAssertFalse(resolverCalled, "Rückweg-Start fragt den Worker gar nicht erst ab")
+    }
+
+    // MARK: - Auslöser starten auch beendete Tabs
+
+    func testTriggeredLaunchAllowedWithoutRunningProcess() {
+        XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: nil), "kein Controller")
+        XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: false), "beendeter Controller (toter Tab)")
+        XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: true), "laufender Prozess bleibt")
+    }
 }
