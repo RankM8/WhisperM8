@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Controller-Steuerung – Entwurf</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Farben aus AppTheme.swift, je Thema einmal. */
+  .light {
+    --bg:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --panel:#ffffff; --control:#ebebed;
+    --hover:rgba(0,0,0,.045); --selection:rgba(0,0,0,.075); --border:rgba(0,0,0,.08); --border-strong:rgba(0,0,0,.13);
+    --text:rgba(0,0,0,.90); --text2:rgba(0,0,0,.58); --text3:rgba(0,0,0,.42);
+    --accent:#5e6ad2; --accent-tint:rgba(94,106,210,.13);
+    --working:#3fa873; --awaiting:#c9962a; --error:#d6473d;
+  }
+  .dark {
+    --bg:#0f0f10; --sidebar:#131415; --header:#121213; --panel:#1b1c1d; --control:#242426;
+    --hover:rgba(255,255,255,.04); --selection:rgba(255,255,255,.07); --border:rgba(255,255,255,.06); --border-strong:rgba(255,255,255,.10);
+    --text:rgba(255,255,255,.92); --text2:rgba(255,255,255,.55); --text3:rgba(255,255,255,.38);
+    --accent:#7c84e8; --accent-tint:rgba(124,132,232,.16);
+    --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.4 -apple-system, "SF Pro Text", system-ui, sans-serif; background:#d9d9de; color:#111; }
+  h1 { font-size:20px; margin:24px 28px 4px; }
+  p.lead { margin:0 28px 18px; color:#444; max-width:70ch; }
+  .theme { padding:22px 28px 30px; background:var(--bg); color:var(--text); }
+  .theme + .theme { border-top:1px solid #000; }
+  .theme h2 { font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--text3); margin:26px 0 8px; font-weight:600; }
+  .theme h2:first-child { margin-top:0; }
+  .note { color:var(--text2); font-size:12px; margin:6px 0 0; max-width:80ch; }
+
+  /* ── Legende ─────────────────────────────────────────────── */
+  .legend { display:flex; align-items:center; gap:14px; height:30px; padding:0 12px; background:var(--header);
+            border:1px solid var(--border); border-radius:6px; font-size:12px; white-space:nowrap; overflow:hidden; }
+  .legend + .legend { margin-top:6px; }
+  .target { display:flex; align-items:center; gap:7px; min-width:0; flex:0 1 300px; }
+  .target .title { font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+  .target .title.fixed { flex:none; }
+  .target .state { color:var(--text2); overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--text3); }
+  .dot.working { background:var(--working); } .dot.awaiting { background:var(--awaiting); } .dot.rec { background:var(--error); }
+  .sep { width:1px; align-self:stretch; margin:6px 0; background:var(--border-strong); flex:none; }
+  .keys { display:flex; align-items:center; gap:14px; margin-left:auto; }
+  .key { display:flex; align-items:center; gap:5px; color:var(--text2); }
+  .key b { color:var(--text); font-weight:500; }
+  .g { display:inline-flex; align-items:center; justify-content:center; height:18px; min-width:18px; padding:0 4px;
+       border-radius:9px; border:1px solid var(--border-strong); background:var(--panel); color:var(--text);
+       font-size:11px; font-weight:600; line-height:1; }
+  .g.sq { border-radius:4px; }           /* L1 R1 L2 R2, Options */
+  .g.wide { padding:0 6px; }
+  .ring { position:relative; }
+  .ring::after { content:""; position:absolute; inset:-4px; border-radius:50%;
+                 background:conic-gradient(var(--accent) 62%, transparent 0); -webkit-mask:radial-gradient(circle, transparent 9px, #000 10px);
+                 mask:radial-gradient(circle, transparent 9px, #000 10px); }
+
+  /* ── Liste mit Markierung ────────────────────────────────── */
+  .sidebar { width:300px; background:var(--sidebar); border:1px solid var(--border); border-radius:8px; padding:8px 6px; }
+  .sec { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); padding:8px 8px 4px; font-weight:600; }
+  .row { display:flex; align-items:center; gap:8px; height:26px; padding:0 8px; border-radius:6px; position:relative; }
+  .row.child { padding-left:26px; }
+  .row .name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .row.group .name { font-weight:600; }
+  .row.selected { background:var(--selection); }
+  .row.marked { box-shadow:inset 0 0 0 2px var(--accent); background:var(--accent-tint); }
+  .row .meta { color:var(--text3); font-size:11px; }
+  .hint { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--text2); }
+
+  /* ── Menü ────────────────────────────────────────────────── */
+  .menu { width:300px; background:var(--panel); border:1px solid var(--border-strong); border-radius:10px; padding:6px;
+          box-shadow:0 12px 32px rgba(0,0,0,.28); }
+  .menu .head { font-size:11px; color:var(--text3); padding:6px 10px 4px; letter-spacing:.05em; text-transform:uppercase; font-weight:600; }
+  .mi { display:flex; align-items:center; height:30px; padding:0 10px; border-radius:6px; gap:8px; }
+  .mi.marked { background:var(--accent-tint); box-shadow:inset 0 0 0 2px var(--accent); }
+  .mi.off { color:var(--text3); }
+  .mi .sub { margin-left:auto; color:var(--text3); font-size:11px; }
+  .mdiv { height:1px; background:var(--border); margin:5px 8px; }
+
+  /* ── Einstellungsseite ───────────────────────────────────── */
+  .page { width:640px; }
+  .page h3 { font-size:17px; margin:0 0 2px; } .page .subtitle { color:var(--text2); margin:0 0 14px; }
+  .card { border:1px solid var(--border); border-radius:10px; background:var(--panel); margin-bottom:12px; }
+  .card .ttl { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--text3); font-weight:600; padding:10px 14px 2px; }
+  .srow { display:flex; align-items:center; gap:12px; padding:9px 14px; border-top:1px solid var(--border); }
+  .srow:first-of-type { border-top:0; }
+  .srow .l { flex:1; } .srow .l small { display:block; color:var(--text2); font-size:12px; }
+  .toggle { width:34px; height:20px; border-radius:10px; background:var(--control); position:relative; flex:none; }
+  .toggle::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.3); }
+  .toggle.on { background:var(--accent); } .toggle.on::after { left:16px; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:9px; background:var(--control); color:var(--text2); }
+  .badge.ok { background:rgba(63,168,115,.16); color:var(--working); }
+  table.bind { width:100%; border-collapse:collapse; }
+  table.bind td { padding:6px 14px; border-top:1px solid var(--border); vertical-align:middle; }
+  table.bind td:first-child { width:150px; white-space:nowrap; }
+  .grid2 { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start; }
+</style>
+</head>
+<body>
+<h1>Controller-Steuerung – Entwurf</h1>
+<p class="lead">Vorlage für die Swift-Umsetzung: Legende am unteren Fensterrand, Markierung in der Liste, Menü auf Options,
+Halte-Fortschritt und die Einstellungsseite. Schrift überall mindestens 11 pt. Plan: docs/plans/controller-steuerung.md.</p>
+
+<!-- Der Inhalt steht einmal und wird unten für das dunkle Thema geklont. -->
+<section class="theme light" id="light">
+
+  <h2>Legende – je Zusammenhang eine Zeile, 30 pt hoch, unter dem Inhalt</h2>
+
+  <div class="legend">
+    <div class="target"><span class="dot"></span><span class="title">WhisperMate PS5-Controller-Steuerung</span><span class="state">· bereit</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g">✕</span><b>Senden</b></span>
+      <span class="key"><span class="g">○</span><b>Zurück</b></span>
+      <span class="key"><span class="g sq">R2</span><b>Diktat</b></span>
+      <span class="key"><span class="g">△</span><b>Nächster wartender</b></span>
+      <span class="key"><span class="g sq">L1</span><span class="g sq">R1</span><b>Tabs</b></span>
+      <span class="key"><span class="g sq wide">Options</span><b>Menü</b></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="target"><span class="dot awaiting"></span><span class="title">2 Lux · Integrationen</span><span class="state">· Rückfrage</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g">✛</span><b>Auswählen</b></span>
+      <span class="key"><span class="g">✕</span><b>Bestätigen</b></span>
+      <span class="key"><span class="g">○</span><b>Ablehnen</b></span>
+      <span class="key"><span class="g">△</span><b>Nächster wartender</b></span>
+      <span class="key"><span class="g sq">L1</span><span class="g sq">R1</span><b>Tabs</b></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="target"><span class="dot working"></span><span class="title">1 Moe · Doku: auf den neuesten Stand</span><span class="state">· arbeitet</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g ring">○</span><b>Halten: unterbrechen</b></span>
+      <span class="key"><span class="g sq">R2</span><b>Diktat</b></span>
+      <span class="key"><span class="g">△</span><b>Nächster wartender</b></span>
+      <span class="key"><span class="g sq">L1</span><span class="g sq">R1</span><b>Tabs</b></span>
+      <span class="key"><span class="g sq wide">Options</span><b>Menü</b></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="target"><span class="dot"></span><span class="title">Liste</span><span class="state">· Aktiv</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g">L</span><b>Bewegen</b></span>
+      <span class="key"><span class="g">✕</span><b>Öffnen</b></span>
+      <span class="key"><span class="g">○</span><b>Zurück zum Chat</b></span>
+      <span class="key"><span class="g sq">L1</span><span class="g sq">R1</span><b>Aktiv / Zuletzt / Alle</b></span>
+      <span class="key"><span class="g sq wide">Create</span><b>Neuer Chat</b></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="target"><span class="dot rec"></span><span class="title fixed">Aufnahme</span><span class="state">→ WhisperMate PS5-Controller-Steuerung</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g sq">R2</span><b>Fertig</b></span>
+      <span class="key"><span class="g">✕</span><b>Fertig und senden</b></span>
+      <span class="key"><span class="g">○</span><b>Verwerfen</b></span>
+      <span class="key"><span class="g">◀</span><span class="g">▶</span><b>Modus</b></span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="target"><span class="dot"></span><span class="title">Controller pausiert</span></div>
+    <span class="sep"></span>
+    <div class="keys">
+      <span class="key"><span class="g sq">L1</span>+<span class="g sq">R1</span><b>Halten: fortsetzen</b></span>
+    </div>
+  </div>
+
+  <p class="note">Links steht immer das Ziel mit Zustand, rechts stehen nur Tasten, die jetzt etwas tun. Tasten ohne Wirkung
+  erscheinen nicht. Der Ring um die Kreis-Taste füllt sich einmal über die Halte-Zeit (eine endliche Animation).</p>
+
+  <h2>Liste links mit Markierung · Menü auf Options</h2>
+  <div class="grid2">
+    <div class="sidebar">
+      <div class="sec">Workspaces</div>
+      <div class="row group"><span class="name">DealSupply: Expertenfunktionen</span><span class="meta">4/4</span></div>
+      <div class="row child"><span class="dot working"></span><span class="name">1 Moe · Doku: auf den neuesten Stand</span><span class="meta">S1</span></div>
+      <div class="row child marked"><span class="dot awaiting"></span><span class="name">2 Lux · Integrationen: Einrichtung</span><span class="meta">S2</span></div>
+      <div class="row child"><span class="dot working"></span><span class="name">3 Kit · Kurs: Übersicht mit Live-Calls</span><span class="meta">S3</span></div>
+      <div class="sec">Chats</div>
+      <div class="row group"><span class="name">whisperm8</span><span class="meta">5</span></div>
+      <div class="row child selected"><span class="dot working"></span><span class="name">WhisperMate PS5-Controller-Steuerung</span></div>
+      <div class="row child"><span class="dot"></span><span class="name">WhisperM8 Vergleich mit t3code und Orca</span></div>
+      <div class="row group"><span class="name">buchhaltung</span><span class="meta">4</span></div>
+      <div class="row child"><span class="dot"></span><span class="name">MacBook Pro M5 Max Kaufentscheidung</span></div>
+    </div>
+
+    <div class="menu">
+      <div class="head">2 Lux · Integrationen</div>
+      <div class="mi marked">„Weiter“ senden</div>
+      <div class="mi">Befehle …<span class="sub">/</span></div>
+      <div class="mi">Modus wechseln<span class="sub">⇧⇥</span></div>
+      <div class="mi">Zusammenfassen<span class="sub">/compact</span></div>
+      <div class="mdiv"></div>
+      <div class="mi">Tab schließen</div>
+      <div class="mi">Belegung anzeigen</div>
+      <div class="mi">Controller pausieren</div>
+    </div>
+
+    <div class="menu">
+      <div class="head">2 Lux · Rückfrage offen</div>
+      <div class="mi off">„Weiter“ senden</div>
+      <div class="mi off">Befehle …<span class="sub">/</span></div>
+      <div class="mi marked">Modus wechseln<span class="sub">⇧⇥</span></div>
+      <div class="mi off">Zusammenfassen<span class="sub">/compact</span></div>
+      <div class="mdiv"></div>
+      <div class="mi">Tab schließen</div>
+      <div class="mi">Belegung anzeigen</div>
+      <div class="mi">Controller pausieren</div>
+    </div>
+  </div>
+  <p class="note">Markierung: Akzentrahmen 2 pt plus zarte Füllung, getrennt von der Auswahl (graue Fläche). Im Menü sind
+  Einträge, die Text senden, bei offener Rückfrage ausgegraut und werden beim Bewegen übersprungen.</p>
+
+  <h2>Einstellungen · Controller</h2>
+  <div class="page">
+    <h3>Controller</h3>
+    <p class="subtitle">WhisperM8 mit einem Gamepad bedienen.</p>
+
+    <div class="card">
+      <div class="srow"><div class="l">Controller-Steuerung<small>Ein verbundenes Gamepad steuert Agent Chats und Diktat.</small></div><div class="toggle on"></div></div>
+      <div class="srow"><div class="l">DualSense Wireless Controller<small>Akku: nicht gemeldet</small></div><span class="badge ok">Verbunden</span></div>
+      <div class="srow"><div class="l">Tasten-Test<small>Drück eine Taste am Controller.</small></div><span class="g">✕</span><span class="badge">Kreuz</span></div>
+    </div>
+
+    <div class="card">
+      <div class="ttl">Verhalten</div>
+      <div class="srow"><div class="l">Legende am unteren Rand<small>Zeigt, was jede Taste gerade tut.</small></div><div class="toggle on"></div></div>
+      <div class="srow"><div class="l">Vibration</div><div class="toggle on"></div></div>
+      <div class="srow"><div class="l">Lichtleiste<small>Rot bei Aufnahme, Grün wenn der Chat arbeitet, Gelb bei Rückfrage.</small></div><div class="toggle on"></div></div>
+      <div class="srow"><div class="l">Auch wenn ein anderes Programm vorne ist<small>Diktat und Zwischenablage-Verlauf überall. Beim Spielen ausschalten oder mit L1 + R1 pausieren.</small></div><span class="badge">Noch nichts empfangen</span><div class="toggle"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="ttl">Belegung · Kern</div>
+      <table class="bind">
+        <tr><td><span class="g">L</span> Linker Stick</td><td>Bewegen: Liste, Chat, Kacheln</td></tr>
+        <tr><td><span class="g">✕</span> Kreuz</td><td>Auswählen, bestätigen, senden</td></tr>
+        <tr><td><span class="g">○</span> Kreis</td><td>Zurück, abbrechen · halten: unterbrechen</td></tr>
+        <tr><td><span class="g sq">R2</span></td><td>Diktat an und aus</td></tr>
+        <tr><td><span class="g">△</span> Dreieck</td><td>Nächster Chat, der auf dich wartet</td></tr>
+        <tr><td><span class="g sq">L1</span> <span class="g sq">R1</span></td><td>Reiter blättern</td></tr>
+        <tr><td><span class="g">✛</span> Steuerkreuz</td><td>Pfeiltasten im Chat</td></tr>
+        <tr><td><span class="g">R</span> Rechter Stick</td><td>Verlauf scrollen</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="ttl">Koppeln</div>
+      <div class="srow"><div class="l">PS5-Controller verbinden<small>Controller ausschalten. Create (links am Touchpad) und die PlayStation-Taste zusammen halten, bis die Lichtleiste schnell blinkt. Dann in den Systemeinstellungen unter Bluetooth verbinden.</small></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="theme dark" id="dark"></section>
+<script>
+  // Dunkles Thema: derselbe Inhalt, andere Variablen.
+  document.getElementById('dark').innerHTML = document.getElementById('light').innerHTML;
+</script>
+</body>
+</html>

@@ -728,8 +728,8 @@ Wird in Etappe 13 vervollständigt. Feste Punkte:
 
 | Etappe | Stand | Commit | Notiz |
 |---|---|---|---|
-| 0 Vorbereitung | läuft | | Arbeitsordner, Branch und Ausgangswert (4.039 Tests grün) stehen |
-| 1 Entwurf im HTML-Zwilling | offen | | |
+| 0 Vorbereitung | erledigt | 13847432 | Arbeitsordner, Branch, Ausgangswert 4.039 Tests grün, Plan und README-Eintrag committet |
+| 1 Entwurf im HTML-Zwilling | erledigt | (dieser Commit) | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
 | 2 Aktions-Katalog | offen | | |
 | 3 Controller-Kern | offen | | |
 | 4 Hardware, Schalter, Debug-Kanal | offen | | |
