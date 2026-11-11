@@ -800,27 +800,9 @@ extension AgentChatsView {
         .background(AgentTheme.background)
     }
 
-    /// Sichtbar leerer Slot — stabile Position, Drop-Ziel (Paket 2e).
+    /// Sichtbar leerer Slot — Drop-Ziel (Paket 2e).
     private func gridEmptySlot(_ index: Int) -> some View {
-        VStack(spacing: 3) {
-            Text("Slot \(index + 1)")
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(AgentTheme.textSecondary)
-            Text("Drop chat here")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    AgentTheme.border,
-                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
-                )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AgentTheme.background)
+        GridEmptySlotView(index: index)
     }
 
     private func gridPane(
@@ -1204,5 +1186,33 @@ extension AgentChatsView {
                 onNewChatInProject: { startNewChat(in: project) }
             )
         }
+    }
+}
+
+/// Leerer Slot im Raster: Nummer + „Drop chat here" in gestrichelter Fläche.
+/// Eigene Struct, damit die Snapshot-Galerie das echte Aussehen rendert.
+struct GridEmptySlotView: View {
+    let index: Int
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text("Slot \(index + 1)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Drop chat here")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    AgentTheme.border,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AgentTheme.background)
     }
 }
