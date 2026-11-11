@@ -28,6 +28,10 @@ struct NewChatProjectPicker: View {
     /// dem ruhenden Mauszeiger weiter, meldet SwiftUI ein Hover auf der Zeile
     /// darunter — das darf die Markierung nicht zurückziehen.
     @State private var lastKeyMove = Date.distantPast
+    /// Zählt Pfeil-Schritte und Filterwechsel. Nur sie scrollen die Liste —
+    /// ein Hover darf sie nicht bewegen, sonst kriecht sie unter einem
+    /// ruhenden Mauszeiger an der Randzeile weiter.
+    @State private var scrollRequest = 0
     @FocusState private var searchFocused: Bool
 
     private var filteredProjects: [AgentProject] {
@@ -74,15 +78,19 @@ struct NewChatProjectPicker: View {
                     .padding(.vertical, 4)
                 }
                 .frame(maxHeight: 260)
-                // Die Markierung bleibt immer sichtbar: nur so weit scrollen,
-                // wie nötig (Anker nil), ohne Animation, damit gehaltene
-                // Pfeile nicht hinterherlaufen.
-                .onChange(of: highlightedID) { _, id in
-                    guard let id else { return }
-                    proxy.scrollTo(id)
+                // Die Markierung bleibt nach Pfeil-Schritten sichtbar: nur so
+                // weit scrollen, wie nötig (Anker nil), ohne Animation, damit
+                // gehaltene Pfeile nicht hinterherlaufen.
+                .onChange(of: scrollRequest) {
+                    guard let highlightedID else { return }
+                    proxy.scrollTo(highlightedID)
                 }
                 .onAppear {
                     searchFocused = true
+                    // Schutzzeit wie nach einem Pfeil-Schritt: Ein Mauszeiger,
+                    // der beim Öffnen schon über der Liste steht, übernimmt die
+                    // Vorauswahl nicht.
+                    lastKeyMove = Date()
                     // Vorauswahl vom Controller (Create), sonst das erste Projekt.
                     highlightedID = ProjectPickerKeyboard.normalize(takePreferredProjectID(), in: ids)
                     if let highlightedID {
@@ -131,6 +139,7 @@ struct NewChatProjectPicker: View {
         // Filterwechsel: Markierung auf gültige Auswahl bzw. erstes Ergebnis setzen.
         .onChange(of: query) {
             highlightedID = ProjectPickerKeyboard.normalize(highlightedID, in: filteredProjects.map(\.id))
+            scrollRequest += 1
         }
     }
 
@@ -175,6 +184,7 @@ struct NewChatProjectPicker: View {
     private func step(_ direction: Int, in ids: [UUID]) {
         lastKeyMove = Date()
         highlightedID = ProjectPickerKeyboard.move(from: highlightedID, in: ids, direction: direction)
+        scrollRequest += 1
     }
 
     /// Enter im Suchfeld: öffnet das markierte Projekt. Tut bei leerer
