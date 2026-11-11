@@ -34,6 +34,8 @@ protocol ControllerDictationControlling: AnyObject {
     /// Läuft gerade eine Aufnahme, Transkription oder Nacharbeit?
     var phase: ControllerRecordingPhase? { get }
     var isQuickActionRunning: Bool { get }
+    /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
+    var targetSessionID: UUID? { get }
     /// `label`: Ziel, das die Pill zeigt („Titel des Chats“, „Programm vorne“).
     func start(target: DictationDeliveryTarget, label: String?)
     func stop(submit: Bool)

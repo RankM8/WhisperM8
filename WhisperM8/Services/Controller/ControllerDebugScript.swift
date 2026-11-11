@@ -67,7 +67,33 @@ enum ControllerDebugScript {
         guard totalWait <= maxTotalWaitMilliseconds else {
             throw ParseError.invalid("Zusammen höchstens \(maxTotalWaitMilliseconds) ms warten (Zeitlimit des Sockets)")
         }
+        try requireNeutralEnd(steps)
         return steps
+    }
+
+    /// Ein Skript muss alles wieder loslassen: Sonst liefe nach dem Ende des
+    /// Laufs ein Halten, eine Wiederholung oder ein Scrollen weiter — und
+    /// träfe die App, nachdem der Trockenlauf schon vorbei ist.
+    static func requireNeutralEnd(_ steps: [Step]) throws {
+        var pressed = Set<ControllerButton>()
+        var triggers: [ControllerButton: Float] = [:]
+        var sticks: [ControllerStickSide: Bool] = [:]
+        for case let .event(event) in steps {
+            switch event {
+            case let .button(button, isDown):
+                if isDown { pressed.insert(button) } else { pressed.remove(button) }
+            case let .trigger(button, value):
+                triggers[button] = value
+            case let .stick(side, x, y):
+                sticks[side] = x != 0 || y != 0
+            }
+        }
+        var open = pressed.map { "up:\($0.rawValue)" }.sorted()
+        open += triggers.filter { $0.value != 0 }.map { "trigger:\($0.key.rawValue):0" }.sorted()
+        open += sticks.filter(\.value).map { "stick:\($0.key.rawValue):0:0" }.sorted()
+        guard open.isEmpty else {
+            throw ParseError.invalid("Das Skript muss alles wieder loslassen — es fehlt am Ende: \(open.joined(separator: ", "))")
+        }
     }
 
     /// Skript für einen einzelnen Tastendruck, wahlweise gehalten.

@@ -26,7 +26,7 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             status: coordinator.statusStore.status(for: sessionID),
             statusSince: coordinator.activityStore.statusSince(for: sessionID),
             draftSuspected: controller.composerDraft.mayHaveUnsentInput,
-            lastEnterAt: controller.lastControlEnterAt,
+            lastEnterAt: controller.lastSubmitAt,
             lastEscapeAt: controller.lastControlEscapeAt
         )
     }
@@ -54,6 +54,9 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
 @MainActor
 final class LiveControllerDictation: ControllerDictationControlling {
     var phase: ControllerRecordingPhase? {
+        // Während das Mikrofon verbindet, zählt das schon als Aufnahme: R2
+        // beendet, Kreis verwirft — nichts davon darf in den Chat gehen.
+        if AppState.shared.isStartingRecording { return .recording }
         switch AppState.shared.recordingPhase {
         case .idle: return nil
         case .recording: return .recording
@@ -63,6 +66,8 @@ final class LiveControllerDictation: ControllerDictationControlling {
     }
 
     var isQuickActionRunning: Bool { AppState.shared.isQuickActionRunning }
+
+    var targetSessionID: UUID? { AppState.shared.dictationTargetSessionID }
 
     func start(target: DictationDeliveryTarget, label: String?) {
         Task { @MainActor in
@@ -74,13 +79,25 @@ final class LiveControllerDictation: ControllerDictationControlling {
     }
 
     func stop(submit: Bool) {
-        Task { @MainActor in await AppState.shared.stopRecording(submit: submit) }
+        Task { @MainActor in
+            let appState = AppState.shared
+            // Kommt das Stoppen, während das Mikrofon noch verbindet, gilt es,
+            // sobald die Aufnahme läuft (höchstens 5 s warten).
+            for _ in 0..<100 where appState.isStartingRecording {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            await appState.stopRecording(submit: submit)
+        }
     }
 
     func cancel() {
         let appState = AppState.shared
         if appState.isQuickActionRunning {
             appState.cancelQuickAction()
+            return
+        }
+        if appState.isStartingRecording {
+            appState.cancelRecording()
             return
         }
         switch appState.recordingPhase {
@@ -248,21 +265,43 @@ final class ControllerRuntime {
             }
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)
-            manager.onStateChange = { [weak feedback, weak manager] in
-                // Getrennt oder ausgeschaltet: Menü und Liste schließen ohne Wirkung.
-                if manager?.status.device == nil || manager?.status.isRunning == false {
-                    ControllerUIModel.shared.menu = nil
-                    ControllerUIModel.shared.leaveList()
-                    ControllerUIModel.shared.holdProgress = nil
+            manager.onStateChange = { [weak feedback, weak manager, weak dispatcher] in
+                // Getrennt, ausgeschaltet oder pausiert: Auswahl, Menü und
+                // Liste schließen ohne Wirkung.
+                if let manager, manager.status.device == nil || !manager.status.isRunning || manager.isPaused {
+                    dispatcher?.closeControllerUI()
                 }
                 feedback?.sync()
                 feedback?.refresh()
             }
-            manager.onResolution = { [weak feedback] _ in feedback?.refresh() }
+            manager.onResolution = { [weak feedback] resolution in
+                // Endet ein Halten ohne Aktion, bliebe der Ring sonst stehen.
+                if resolution.gesture.endsHold, !resolution.startsHoldProgress {
+                    ControllerUIModel.shared.holdProgress = nil
+                }
+                feedback?.refresh()
+            }
             self.dispatcher = dispatcher
             self.feedback = feedback
         }
         manager.applyPreferences()
         ControllerConnectHint.shared.sync()
+    }
+}
+
+private extension ControllerGesture {
+    /// Ein Halten ist zu Ende (ausgelöst, losgelassen, abgebrochen).
+    var endsHold: Bool {
+        switch self {
+        case .holdBegan, .holdEnded, .holdCancelled, .chordCompleted, .chordCancelled: return true
+        default: return false
+        }
+    }
+}
+
+private extension ControllerResolution {
+    var startsHoldProgress: Bool {
+        if case .holdProgress = action { return true }
+        return false
     }
 }

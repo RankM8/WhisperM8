@@ -121,7 +121,7 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(model.items(dialogOpen: false).map(\.item), ControllerMenuItem.allCases)
         XCTAssertTrue(model.items(dialogOpen: false).allSatisfy(\.enabled))
         let disabled = model.items(dialogOpen: true).filter { !$0.enabled }.map(\.item)
-        XCTAssertEqual(disabled, [.continueWork, .slashCommands, .compact])
+        XCTAssertEqual(disabled, [.continueWork, .slashCommands, .cycleMode, .compact])
     }
 
     func testMoveWrapsAround() {
@@ -135,20 +135,27 @@ final class ControllerMenuModelTests: XCTestCase {
     }
 
     func testMoveSkipsDisabledItems() {
-        var model = ControllerMenuModel(selected: .cycleMode)
+        var model = ControllerMenuModel(selected: .closeTab)
         model.move(1, dialogOpen: true)
-        XCTAssertEqual(model.selected, .closeTab, "überspringt /compact")
+        XCTAssertEqual(model.selected, .showBindings)
         model.move(-1, dialogOpen: true)
-        XCTAssertEqual(model.selected, .cycleMode)
+        XCTAssertEqual(model.selected, .closeTab)
         model.move(-1, dialogOpen: true)
-        XCTAssertEqual(model.selected, .pause, "überspringt Weiter und Befehlsliste, mit Umlauf")
+        XCTAssertEqual(model.selected, .pause, "überspringt alles, was in den Chat schreibt, mit Umlauf")
     }
 
     func testNormalizeLeavesDisabledSelection() {
         var model = ControllerMenuModel()
         model.normalize(dialogOpen: true)
-        XCTAssertEqual(model.selected, .cycleMode)
+        XCTAssertEqual(model.selected, .closeTab)
         model.normalize(dialogOpen: true)
-        XCTAssertEqual(model.selected, .cycleMode)
+        XCTAssertEqual(model.selected, .closeTab)
+    }
+
+    /// Shift+Tab bestätigt in Claudes Freigabe-Dialog „alle Änderungen
+    /// erlauben“ — bei offener Rückfrage nie aus dem Menü.
+    func testCycleModeIsBlockedDuringQuestion() {
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.cycleMode, dialogOpen: true))
+        XCTAssertTrue(ControllerMenuModel.isEnabled(.cycleMode, dialogOpen: false))
     }
 }

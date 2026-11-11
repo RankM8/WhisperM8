@@ -720,6 +720,12 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     private(set) var lastControlEnterAt: Date?
     private(set) var lastControlEscapeAt: Date?
 
+    /// Zuletzt abgeschickt, egal auf welchem programmatischen Weg (Enter vom
+    /// Controller, Diktat mit Senden, `chats send`, Menü „Weiter“).
+    var lastSubmitAt: Date? {
+        [lastControlEnterAt, composerDraft.lastProgrammaticSubmitAt].compactMap { $0 }.max()
+    }
+
     var processID: Int32? {
         let pid = terminal.process.shellPid
         return pid > 0 ? pid : nil
@@ -827,6 +833,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendKey(_ key: TerminalControlKey, now: Date = Date()) -> Bool {
         guard isRunning else { return false }
         let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
+        // Shift+Tab ist in Claudes Freigabe-Dialog „alle Änderungen erlauben“.
+        if key == .tab || key == .backTab, status == .awaitingInput { return false }
         let isClaude = command.keyboardProfile == .claudeCodeChat
         if key == .escape, isClaude, composerDraft.countsAsInterrupt(status: status, now: now) {
             AgentSessionStatusCoordinator.shared.suspectTurnAborted(sessionID)

@@ -24,6 +24,7 @@ private final class TerminalSpy: ControllerTerminalControlling {
 private final class DictationSpy: ControllerDictationControlling {
     var phase: ControllerRecordingPhase?
     var isQuickActionRunning = false
+    var targetSessionID: UUID?
     private(set) var started: [DictationDeliveryTarget] = []
     private(set) var stopped: [Bool] = []
     private(set) var cancelCount = 0
@@ -32,8 +33,9 @@ private final class DictationSpy: ControllerDictationControlling {
     private(set) var labels: [String?] = []
     func start(target: DictationDeliveryTarget, label: String?) {
         started.append(target); labels.append(label); phase = .recording
+        if case let .agentChat(id) = target { targetSessionID = id }
     }
-    func stop(submit: Bool) { stopped.append(submit); phase = .transcribing }
+    func stop(submit: Bool) { stopped.append(submit); phase = .transcribing; targetSessionID = nil }
     func cancel() { cancelCount += 1; phase = nil }
     func stepOutputMode(_ step: Int) { modeSteps.append(step) }
 }
@@ -355,6 +357,8 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.listMove(step: 2))
         XCTAssertEqual(ui.markedRow, .chat(ids.chat))
         window.rows.removeLast()
+        // Beim Bewegen gilt ein kurz zurückliegender Stand der Zeilen.
+        clock = clock.addingTimeInterval(2)
         perform(.listMove(step: 0))
         XCTAssertEqual(ui.markedRow, .project(ids.project))
     }
@@ -405,7 +409,9 @@ final class ControllerActionDispatcherTests: XCTestCase {
     func testKeyboardSwitcherIsCancelledByControllerInput() {
         window.isSwitcherOpen = true
         guard case .chat = context else { return XCTFail("chat erwartet") }
-        XCTAssertEqual(window.commands, [.switcherCancel])
+        XCTAssertEqual(window.commands, [], "Der Schnappschuss allein schließt nichts")
+        perform(.tab(step: 1))
+        XCTAssertEqual(window.commands, [.switcherCancel, .nextTab])
     }
 
     func testRefreshLeavesKeyboardSwitcherAlone() {
@@ -508,11 +514,51 @@ final class ControllerActionDispatcherTests: XCTestCase {
     func testMenuSkipsTextItemsWhileQuestionIsOpen() {
         setTerminal(status: .awaitingInput, statusSince: clock.addingTimeInterval(-5))
         perform(.menuToggle)
-        XCTAssertEqual(ui.menu?.selected, .cycleMode)
+        XCTAssertEqual(ui.menu?.selected, .closeTab, "nichts, was in die Rückfrage schreibt")
         XCTAssertTrue(ui.menuDialogOpen)
+        ui.menu?.selected = .cycleMode
         perform(.menuActivate)
-        XCTAssertEqual(terminals.keys, [.backTab])
+        XCTAssertEqual(terminals.keys, [], "Shift+Tab nie in eine Rückfrage")
         XCTAssertEqual(terminals.texts.count, 0)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// „Weiter“ würde an einen Entwurf angehängt und beides gesendet.
+    func testContinueIsRejectedWithDraft() {
+        setTerminal(status: .idle, draft: true)
+        perform(.menuToggle)
+        perform(.menuActivate)
+        XCTAssertEqual(terminals.texts.count, 0)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// In einer Shell wäre der diktierte Text ein Befehl: Kreuz beendet dort
+    /// nur, sendet nie.
+    func testStopAndSubmitOnlyForClaudeAndCodex() {
+        setTerminal(status: .idle, profile: .shell)
+        perform(.dictationToggle)
+        XCTAssertEqual(context, .recording(phase: .recording, targetIsChat: false))
+        dispatcher.perform(.dictationStopAndSubmit, in: context)
+        XCTAssertEqual(dictation.stopped, [false])
+    }
+
+    func testCloseControllerUIClosesPickerMenuListAndRing() {
+        window.rows = [AgentChatsListRow(row: .chat(window.selected!))]
+        perform(.pickerBegin)
+        perform(.menuToggle)
+        perform(.holdProgress(.circle, duration: 0.4))
+        dispatcher.closeControllerUI()
+        XCTAssertEqual(window.commands.last, .switcherCancel)
+        XCTAssertNil(ui.menu)
+        XCTAssertNil(ui.holdProgress)
+        XCTAssertEqual(ui.area, .content)
+    }
+
+    /// Ein Tastatur-Umschalter bleibt offen, solange der Controller nichts ausführt.
+    func testCloseControllerUILeavesKeyboardSwitcher() {
+        window.isSwitcherOpen = true
+        dispatcher.closeControllerUI()
+        XCTAssertEqual(window.commands, [])
     }
 
     func testMenuCloseTabAndSettingsAndPause() {

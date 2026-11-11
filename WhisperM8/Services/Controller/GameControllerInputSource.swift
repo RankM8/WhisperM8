@@ -184,8 +184,16 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         do {
             let engine = try hapticEngine(for: id, haptics: haptics)
             let player = try engine.makePlayer(with: CHHapticPattern(events: Self.events(for: pattern), parameters: []))
-            try engine.start()
-            try player.start(atTime: CHHapticTimeImmediate)
+            // Asynchron starten: Das Hochfahren der Engine soll den Main
+            // Thread nicht aufhalten.
+            engine.start { [weak self] error in
+                if let error {
+                    DispatchQueue.main.async { self?.hapticEngines[id] = nil }
+                    Logger.controller.info("controller_haptics_failed error=\(error.localizedDescription, privacy: .public)")
+                    return
+                }
+                try? player.start(atTime: CHHapticTimeImmediate)
+            }
         } catch {
             // Engine nach Ruhezustand oder Trennung oft unbrauchbar: verwerfen,
             // der nächste Impuls baut sie neu.

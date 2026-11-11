@@ -35,8 +35,11 @@ struct ControllerMenuModel: Equatable, Sendable {
         ControllerMenuItem.allCases.map { ($0, Self.isEnabled($0, dialogOpen: dialogOpen)) }
     }
 
+    /// Bei offener Rückfrage sind alle Einträge aus, die etwas in den Chat
+    /// schicken: Text ohnehin, und auch Shift+Tab — das ist in Claudes
+    /// Freigabe-Dialog das Kürzel für „alle Änderungen erlauben“.
     static func isEnabled(_ item: ControllerMenuItem, dialogOpen: Bool) -> Bool {
-        !(dialogOpen && item.writesText)
+        !(dialogOpen && (item.writesText || item == .cycleMode))
     }
 
     /// Bewegt die Auswahl um `step` aktive Einträge, mit Umlauf. Ausgegraute

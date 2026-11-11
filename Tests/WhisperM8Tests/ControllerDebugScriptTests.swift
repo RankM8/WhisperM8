@@ -8,14 +8,25 @@ final class ControllerDebugScriptTests: XCTestCase {
     // MARK: - Skript
 
     func testParsesEveryStepKind() throws {
-        let steps = try ControllerDebugScript.parse("down:cross, wait:120, up:cross,trigger:r2:0.8,stick:left:-1:0.5")
+        let steps = try ControllerDebugScript.parse(
+            "down:cross, wait:120, up:cross,trigger:r2:0.8,stick:left:-1:0.5,trigger:r2:0,stick:left:0:0")
         XCTAssertEqual(steps, [
             .event(.button(.cross, pressed: true)),
             .wait(milliseconds: 120),
             .event(.button(.cross, pressed: false)),
             .event(.trigger(.r2, value: 0.8)),
             .event(.stick(.left, x: -1, y: 0.5)),
+            .event(.trigger(.r2, value: 0)),
+            .event(.stick(.left, x: 0, y: 0)),
         ])
+    }
+
+    /// Ohne Loslassen liefe ein Halten nach dem Trockenlauf weiter.
+    func testScriptMustEndNeutral() {
+        for script in ["down:circle", "trigger:l2:1", "stick:right:0:-1", "down:cross,up:cross,down:square"] {
+            XCTAssertThrowsError(try ControllerDebugScript.parse(script), "„\(script)“ endet nicht neutral")
+        }
+        XCTAssertNoThrow(try ControllerDebugScript.parse("down:circle,wait:500,up:circle"))
     }
 
     func testRejectsUnknownAndMalformedSteps() {

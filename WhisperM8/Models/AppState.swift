@@ -162,6 +162,15 @@ final class AppState {
         recordingCoordinator.overlayController.controllerTargetLabel = label
     }
 
+    /// Die Aufnahme startet noch (Mikrofon verbindet).
+    var isStartingRecording: Bool { recordingCoordinator.isStartingRecording }
+
+    /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
+    var dictationTargetSessionID: UUID? {
+        if case let .agentChat(sessionID) = recordingCoordinator.pendingDeliveryTarget { return sessionID }
+        return nil
+    }
+
     /// Läuft gerade eine Schnellaktion?
     var isQuickActionRunning: Bool { recordingCoordinator.quickActionRunner.isRunning }
 

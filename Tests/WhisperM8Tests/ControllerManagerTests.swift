@@ -193,6 +193,26 @@ final class ControllerManagerTests: XCTestCase {
         XCTAssertEqual(manager.counters.snapshot.counts[.triangle]?.downInactive, 1)
     }
 
+    // MARK: - Debug-Kanal
+
+    /// Ein Trockenlauf führt auch nachlaufende Gesten nicht aus, und ein
+    /// zweiter Lauf wartet nicht still, sondern wird abgewiesen.
+    func testDebugRunIsDryUntilDrainedAndExclusive() async {
+        enable()
+        var secondRan: Bool?
+        let ran = await manager.runDebug(dryRun: true, override: ControllerDebugOverride()) {
+            manager.inject(.button(.circle, pressed: true))
+            try? await Task.sleep(for: .milliseconds(500))
+            secondRan = await manager.runDebug(dryRun: false, override: ControllerDebugOverride()) {}
+            manager.inject(.button(.circle, pressed: false))
+        }
+        XCTAssertTrue(ran)
+        XCTAssertEqual(secondRan, false)
+        XCTAssertEqual(performer.performed, [], "nichts ausgeführt")
+        XCTAssertFalse(manager.isDryRun, "danach wieder echt")
+        XCTAssertFalse(manager.recentResolutions.isEmpty, "aufgelöst wurde trotzdem")
+    }
+
     // MARK: - Rückmeldung am Gerät
 
     func testFeedbackRespectsSwitchesAndPause() {

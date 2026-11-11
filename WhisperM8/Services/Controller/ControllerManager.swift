@@ -264,6 +264,8 @@ final class ControllerManager {
     // MARK: - Gesten
 
     private func handle(_ gestures: [ControllerGesture]) {
+        // Nach dem Ausschalten können noch Gesten unterwegs sein.
+        guard status.isRunning || isDebugRunActive else { return }
         for gesture in gestures {
             noteButton(of: gesture)
             let resolution = resolve(gesture)
@@ -332,9 +334,46 @@ final class ControllerManager {
 
     // MARK: - Debug-Kanal
 
+    /// Läuft gerade ein Lauf des Debug-Kanals? Läufe schließen sich aus,
+    /// sonst stellte einer den Trockenlauf des anderen zurück.
+    private(set) var isDebugRunActive = false
+
     /// Speist künstliche Roh-Ereignisse in dieselbe Kette wie echte Hardware.
     func inject(_ event: ControllerInputEvent) {
         pump.ingest(event)
+    }
+
+    /// Klammert einen Lauf des Debug-Kanals: setzt Trockenlauf und Angaben,
+    /// führt die Schritte aus, löst danach alles Gehaltene, wartet, bis die
+    /// Eingabe-Kette leer ist, und stellt erst dann zurück.
+    /// - Returns: `false`, wenn schon ein Lauf aktiv ist.
+    func runDebug(
+        dryRun: Bool, override: ControllerDebugOverride, steps: () async -> Void
+    ) async -> Bool {
+        guard !isDebugRunActive else { return false }
+        isDebugRunActive = true
+        let previousDryRun = isDryRun
+        isDryRun = dryRun
+        debugOverride = override
+        clearRecentResolutions()
+        await steps()
+        pump.reset()
+        await drainInput()
+        isDryRun = previousDryRun
+        debugOverride = nil
+        isDebugRunActive = false
+        return true
+    }
+
+    /// Wartet, bis alles, was die Eingabe-Queue schon hat, auf dem Main Thread
+    /// angekommen und aufgelöst ist.
+    private func drainInput() async {
+        let queue = pump.queue
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async { continuation.resume() }
+        }
+        // Gesten springen per Task auf den Main Thread; einmal durchlassen.
+        try? await Task.sleep(for: .milliseconds(150))
     }
 
     func clearRecentResolutions() {

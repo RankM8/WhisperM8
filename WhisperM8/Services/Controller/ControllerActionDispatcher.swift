@@ -23,9 +23,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Titel eines Chats für Legende und Menü.
     var titleForSession: (UUID) -> String? = { _ in nil }
 
-    /// Die laufende Aufnahme geht in einen Chat (dann darf Kreuz „fertig und
-    /// senden“ sein).
-    private var recordingTargetIsChat = false
     /// Der offene Umschalter wurde vom Controller geöffnet.
     private var pickerOpenedByController = false
 
@@ -63,22 +60,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// zum Key-Fenster und prüft, ob es wirklich Key ist.
     private var explicitWindowID: UUID? { debugOverride()?.windowID }
 
-    /// Zustand im Moment einer Controller-Eingabe.
+    /// Zustand im Moment einer Controller-Eingabe. Ohne Nebenwirkung — auch
+    /// Trockenläufe und eine pausierte Steuerung ziehen ihn.
     func snapshot() -> ControllerAppSnapshot {
-        makeSnapshot(forInput: true)
-    }
-
-    /// Zusammenhang neu bestimmen, ohne dass eine Eingabe kam (Legende nach
-    /// Statuswechsel, Auswahl per Maus). Lässt einen Tastatur-Umschalter in Ruhe.
-    func refreshContext() {
-        _ = makeSnapshot(forInput: false)
-    }
-
-    private func makeSnapshot(forInput: Bool) -> ControllerAppSnapshot {
         var snapshot = ControllerAppSnapshot()
         snapshot.appIsActive = debugOverride()?.assumeFrontmost == true || environment.isAppActive
         snapshot.recordingPhase = dictation.phase
-        snapshot.recordingTargetIsChat = recordingTargetIsChat
+        snapshot.recordingTargetIsChat = submitAllowed(to: dictation.targetSessionID)
         snapshot.quickActionRunning = dictation.isQuickActionRunning
         snapshot.clipboardPanelOpen = environment.isClipboardPanelOpen
 
@@ -88,13 +76,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             return snapshot
         }
         snapshot.window = .agentChats
-
-        // Ein per Tastatur geöffneter Umschalter gehört der Tastatur: Die erste
-        // Controller-Eingabe schließt ihn.
-        if forInput, window.isSwitcherOpen, !pickerOpenedByController {
-            chats.perform(.switcherCancel, in: windowID)
-            window.isSwitcherOpen = false
-        }
         if !window.isSwitcherOpen { pickerOpenedByController = false }
 
         snapshot.chatPickerOpen = window.isSwitcherOpen && pickerOpenedByController
@@ -152,9 +133,35 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
     }
 
+    /// Zusammenhang neu bestimmen, ohne dass eine Eingabe kam (Legende nach
+    /// Statuswechsel).
+    func refreshContext() {
+        _ = snapshot()
+    }
+
+    /// Schließt, was der Controller offen hat: eigene Chat-Auswahl, Menü,
+    /// Liste, Halte-Ring. Bei Pause, Trennung und Ausschalten.
+    func closeControllerUI() {
+        if pickerOpenedByController, let windowID = targetWindowID {
+            chats.perform(.switcherCancel, in: windowID)
+        }
+        pickerOpenedByController = false
+        ui.menu = nil
+        ui.leaveList()
+        ui.holdProgress = nil
+    }
+
+    /// Darf eine Aufnahme in diesen Chat mit Kreuz auch gesendet werden? Nur
+    /// bei Claude und Codex — in einer Shell wäre der Text ein Befehl.
+    private func submitAllowed(to sessionID: UUID?) -> Bool {
+        guard let sessionID, let state = terminals.state(of: sessionID) else { return false }
+        return state.profile == .claude || state.profile == .codex
+    }
+
     // MARK: - Ausführen
 
     func perform(_ action: ControllerAction, in context: ControllerContext) {
+        closeKeyboardSwitcherIfNeeded()
         clearMultiSelectionIfNeeded(before: action)
         switch action {
         // Diktat
@@ -238,6 +245,16 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         withSelectedSession { terminals.sendKey(key, to: $0) }
     }
 
+    /// Ein per Tastatur geöffneter Umschalter gehört der Tastatur: Die erste
+    /// ausgeführte Controller-Aktion schließt ihn. Erst hier, nicht im
+    /// Schnappschuss — sonst beendete schon eine pausierte Steuerung oder
+    /// leichtes Stick-Rauschen den Ctrl+Tab-Durchlauf.
+    private func closeKeyboardSwitcherIfNeeded() {
+        guard !pickerOpenedByController, let windowID = targetWindowID,
+              chats.snapshot(of: windowID)?.isSwitcherOpen == true else { return }
+        chats.perform(.switcherCancel, in: windowID)
+    }
+
     /// Jede Controller-Aktion im Fenster hebt eine Mehrfachauswahl zuerst auf.
     private func clearMultiSelectionIfNeeded(before action: ControllerAction) {
         switch action {
@@ -281,8 +298,18 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     // MARK: - Liste links
 
-    private func currentListRows() -> [AgentChatsListRow] {
-        targetWindowID.map { chats.listRows(of: $0) } ?? []
+    /// Zeilen der Liste. Beim Bewegen genügt ein kurz zurückliegender Stand:
+    /// Das Modell der Seitenleiste zu bauen kostet, und bei gehaltenem Stick
+    /// kommen zehn Schritte pro Sekunde.
+    private var listRowsCache: (rows: [AgentChatsListRow], at: Date)?
+
+    private func currentListRows(allowCached: Bool = false) -> [AgentChatsListRow] {
+        if allowCached, let cache = listRowsCache, now().timeIntervalSince(cache.at) < 1.5 {
+            return cache.rows
+        }
+        let rows = targetWindowID.map { chats.listRows(of: $0) } ?? []
+        listRowsCache = (rows, now())
+        return rows
     }
 
     private func enterList() {
@@ -301,7 +328,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     }
 
     private func moveInList(_ step: Int) {
-        ui.listModel.setRows(currentListRows().map(\.row))
+        ui.listModel.setRows(currentListRows(allowCached: true).map(\.row))
         ui.listModel.move(step)
         if ui.markedRow != ui.listModel.marked { ui.markedRow = ui.listModel.marked }
     }
@@ -368,7 +395,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     private func startDictation(target: DictationDeliveryTarget) {
         guard dictation.phase == nil else { return }
-        recordingTargetIsChat = target != .frontApp
         let label: String
         if case let .agentChat(sessionID) = target {
             label = titleForSession(sessionID) ?? String(localized: "Chat")
@@ -380,7 +406,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     }
 
     private func stopDictation(submit: Bool) {
-        dictation.stop(submit: submit && recordingTargetIsChat)
+        dictation.stop(submit: submit && submitAllowed(to: dictation.targetSessionID))
         playHaptic(.recordingStopped)
     }
 
@@ -409,7 +435,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         ui.menu = nil
         switch item {
         case .continueWork:
-            withSelectedSession { terminals.sendText(ControllerMenuText.continueWork, submit: true, to: $0) }
+            // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
+            // und beides gesendet.
+            guard let sessionID = selectedSessionID,
+                  terminals.state(of: sessionID)?.draftSuspected != true else {
+                playHaptic(.rejected)
+                return
+            }
+            terminals.sendText(ControllerMenuText.continueWork, submit: true, to: sessionID)
         case .slashCommands:
             withSelectedSession { terminals.sendText("/", submit: false, to: $0) }
         case .cycleMode:

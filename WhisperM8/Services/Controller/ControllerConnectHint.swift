@@ -31,7 +31,14 @@ final class ControllerConnectHint {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.show(preferences: preferences) }
         }
-        if !GCController.controllers().isEmpty { show(preferences: preferences) }
+        // Schon verbundene Controller erst etwas später abfragen: nicht auf dem
+        // Startpfad, und die Steuerung ist für die meisten ohnehin aus.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.observer != nil, !GCController.controllers().isEmpty else { return }
+                self.show(preferences: preferences)
+            }
+        }
     }
 
     private func show(preferences: AppPreferences) {

@@ -44,39 +44,38 @@ extension AgentControlRequestHandler {
         let windowRef = request.params["window"]?.stringValue?.lowercased()
         let frontmost = request.params["frontmost"]?.boolValue ?? false
 
-        let result = await Task { @MainActor () -> [String: Any]? in
+        enum RunOutcome { case done([String: Any]), noWindow, busy }
+        let outcome = await Task { @MainActor () -> RunOutcome in
             let manager = ControllerManager.shared
             var override = ControllerDebugOverride(assumeFrontmost: frontmost)
             if let windowRef {
                 let matches = Self.agentChatWindowIDs
                     .filter { $0.uuidString.lowercased().hasPrefix(windowRef) }
-                guard matches.count == 1 else { return nil }
+                guard matches.count == 1 else { return .noWindow }
                 override.windowID = matches[0]
             }
-            let previousDryRun = manager.isDryRun
-            manager.isDryRun = !execute
-            manager.debugOverride = override
-            manager.clearRecentResolutions()
-            defer {
-                manager.isDryRun = previousDryRun
-                manager.debugOverride = nil
-            }
-            for step in steps {
-                switch step {
-                case .event(let event):
-                    manager.inject(event)
-                case .wait(let milliseconds):
-                    try? await Task.sleep(for: .milliseconds(milliseconds))
+            let ran = await manager.runDebug(dryRun: !execute, override: override) {
+                for step in steps {
+                    switch step {
+                    case .event(let event):
+                        manager.inject(event)
+                    case .wait(let milliseconds):
+                        try? await Task.sleep(for: .milliseconds(milliseconds))
+                    }
                 }
             }
-            // Die Kette läuft über die Eingabe-Queue zurück zum Main Thread.
-            try? await Task.sleep(for: .milliseconds(200))
+            guard ran else { return .busy }
             var state = Self.controllerState(recentLimit: 64)
             state["executed"] = execute
-            return state
+            return .done(state)
         }.value
-        guard let result else {
+        let result: [String: Any]
+        switch outcome {
+        case .done(let state): result = state
+        case .noWindow:
             return .failure(requestID: request.requestID, code: .notFound, message: "Kein eindeutiges Fenster für --window")
+        case .busy:
+            return .failure(requestID: request.requestID, code: .conflict, message: "Es läuft schon ein Lauf des Debug-Kanals")
         }
         return .success(requestID: request.requestID, result: .object(result))
     }
