@@ -27,18 +27,30 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
 
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
-    /// Rückfrage — sonst holt hoch den letzten Prompt zurück und links schickt
-    /// Claude im leeren Eingabefeld in den Hintergrund. Tab und Shift+Tab nie
-    /// in einer Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle
-    /// Änderungen erlauben“.
-    static func controllerAllows(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?) -> Bool {
+    /// Rückfrage, in einer Auswahlliste, die das Controller-Menü geöffnet hat
+    /// (`choiceListOpen`), und bei Codex (meldet keine Rückfragen) — sonst
+    /// holt hoch den letzten Prompt zurück und links schickt Claude im leeren
+    /// Eingabefeld in den Hintergrund. Tab und Shift+Tab nie in einer
+    /// Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle Änderungen
+    /// erlauben“. Schreibtasten (Leerzeichen, Wort löschen, Leeren) nur bei
+    /// Claude und Codex: In einer Shell läuft oft nano, vim oder emacs, dort
+    /// bedeuten Ctrl+U, Ctrl+W und Ctrl+E etwas anderes.
+    static func controllerAllows(
+        _ key: TerminalControlKey,
+        status: AgentSessionRuntimeStatus?,
+        profile: TerminalKeyboardProfile,
+        choiceListOpen: Bool
+    ) -> Bool {
+        let isAgentChat = profile == .claudeCodeChat || profile == .codexChat
         switch key {
-        case .up, .down, .left, .right: return status == .awaitingInput
+        case .up, .down, .left, .right:
+            return status == .awaitingInput || choiceListOpen || profile == .codexChat
         case .tab, .backTab: return status != .awaitingInput
-        case .enter, .escape, .backspace, .space, .deleteWord: return true
+        case .enter, .escape, .backspace: return true
+        case .space, .deleteWord: return isAgentChat
         // Leeren nie in einer Rückfrage: Dort wählt man aus, das Eingabefeld
         // ist nicht gemeint.
-        case .killLineStart, .lineEnd: return status != .awaitingInput
+        case .killLineStart, .lineEnd: return isAgentChat && status != .awaitingInput
         }
     }
 

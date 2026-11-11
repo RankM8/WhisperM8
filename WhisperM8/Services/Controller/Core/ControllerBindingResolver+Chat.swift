@@ -17,16 +17,20 @@ extension ControllerBindingResolver {
         case .press(.l1): return .adjacentChat(step: -1)
         case .press(.r1): return .adjacentChat(step: 1)
         // Dreieck: Leerzeichen (Runde 3; „nächster wartender Chat“ entfällt).
-        case .press(.triangle): return state.acceptsKeys ? .chatKey(.space) : nil
+        // Nur bei Claude und Codex, in Shells „geht nicht“.
+        case .press(.triangle): return writingKeysAllowed(state) ? .chatKey(.space) : writingKeyRejected(state)
         // Der Ausführer entscheidet: Kachel groß oder zurück zum Raster.
         case .press(.l3): return .toggleMaximize
         case .press(.create): return .newChat
         case .press(.options): return .menuToggle
         // R3 tippen startet einen gestoppten Chat. Auf einem lebenden nichts,
         // auch keine Vibration: beim Scrollen drückt man ihn leicht aus
-        // Versehen. R3 halten leert die ganze Eingabe (nicht in Rückfragen).
+        // Versehen. R3 halten leert die ganze Eingabe (nicht in Rückfragen,
+        // nicht in Shells).
         case .tap(.r3): return state.acceptsKeys ? nil : .chatResume
-        case .holdBegan(.r3): return clearAllowed(state) ? .chatClearInput : nil
+        case .holdBegan(.r3):
+            if clearAllowed(state) { return .chatClearInput }
+            return writingKeysAllowed(state) ? nil : writingKeyRejected(state)
         case let .holdPending(.r3, duration): return clearAllowed(state) ? .holdProgress(.r3, duration: duration) : nil
         case .holdCancelled(.r3): return clearAllowed(state) ? .holdProgressCancelled(.r3) : nil
         case .press(.touchpad): return .clipboardToggle
@@ -39,11 +43,11 @@ extension ControllerBindingResolver {
         case .holdCancelled(.l2): return .holdProgressCancelled(.l2)
         case let .scroll(lines): return .scroll(lines: lines)
 
-        // Steuerkreuz: Pfeile ins Terminal nur in einer Rückfrage. Sonst
-        // richten sie Schaden an — links im leeren Eingabefeld schickt Claude
-        // in den Hintergrund, hoch holt den letzten Prompt zurück (Kreuz
-        // schickte ihn erneut), in einer Shell den letzten Befehl. Außerhalb
-        // einer Rückfrage wirkt das Steuerkreuz deshalb wie der linke Stick.
+        // Steuerkreuz: Pfeile ins Terminal nur, wo eine Auswahl offen ist
+        // (`arrowsAllowed`). Sonst richten sie Schaden an — links im leeren
+        // Eingabefeld schickt Claude in den Hintergrund, hoch holt den letzten
+        // Prompt zurück (Kreuz schickte ihn erneut), in einer Shell den
+        // letzten Befehl. Dann wirkt das Steuerkreuz wie der linke Stick.
         // Bewusst nicht am Entwurfs-Verdacht festgemacht: Die Rücktaste setzt
         // ihn nie zurück.
         case let .move(direction, .dpad, isRepeat):
@@ -65,34 +69,64 @@ extension ControllerBindingResolver {
             return interruptAllowed(state) ? .holdProgressCancelled(.circle) : nil
         // Rücktaste: tippen löscht ein Zeichen, halten löscht weiter wie eine
         // gehaltene Taste, nach 1 s ganze Wörter (wie beim iPhone). Harmlos in
-        // jedem lebenden Zustand.
+        // jedem lebenden Zustand, auch in Shells — dort wie die echte
+        // Rücktaste. Ganze Wörter (Ctrl+W) nur bei Claude und Codex: In nano
+        // heißt Ctrl+W „Suchen“, in emacs „Ausschneiden“; Shells löschen
+        // gehalten weiter Zeichen.
         case .tap(.square), .holdBegan(.square), .holdRepeat(.square):
             return state.acceptsKeys ? .chatKey(.backspace) : nil
         case .holdRepeatLong(.square):
-            return state.acceptsKeys ? .chatKey(.deleteWord) : nil
+            guard state.acceptsKeys else { return nil }
+            return writingKeysAllowed(state) ? .chatKey(.deleteWord) : .chatKey(.backspace)
 
         default:
             return nil
         }
     }
 
-    /// Ganze Eingabe leeren: lebender Chat, keine Rückfrage — dort wählt man
-    /// aus, und Leeren könnte die Auswahl zerstören.
-    static func clearAllowed(_ state: ControllerChatState) -> Bool {
-        state.acceptsKeys && state.status != .awaitingInput
+    /// Schreibtasten (Leerzeichen, Wort löschen, Eingabe leeren) nur in den
+    /// Eingabefeldern von Claude und Codex. In einer Shell läuft oft ein
+    /// Programm mit eigener Belegung: nano fügt mit Ctrl+U ein, vim und emacs
+    /// deuten Ctrl+W und Ctrl+E anders.
+    static func writingKeysAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && (state.profile == .claude || state.profile == .codex)
     }
 
-    /// Pfeiltasten ins Terminal nur bei offener Rückfrage eines lebenden Chats.
+    /// „Geht nicht“ für eine Schreibtaste in einem lebenden Chat ohne
+    /// Eingabefeld (Shell); bei beendetem Chat still.
+    private static func writingKeyRejected(_ state: ControllerChatState) -> ControllerAction? {
+        state.acceptsKeys ? .rejected : nil
+    }
+
+    /// Ganze Eingabe leeren: Claude oder Codex, keine Rückfrage — dort wählt
+    /// man aus, und Leeren könnte die Auswahl zerstören.
+    static func clearAllowed(_ state: ControllerChatState) -> Bool {
+        writingKeysAllowed(state) && state.status != .awaitingInput
+    }
+
+    /// Pfeiltasten ins Terminal eines lebenden Chats:
+    /// - bei offener Rückfrage;
+    /// - solange eine Auswahlliste offen ist, die das Controller-Menü geöffnet
+    ///   hat (`/model`, `/config`, „/“ …) — der Chat ruht dabei;
+    /// - bei Codex immer. Codex meldet nie „wartet“ (keine Hooks), und seine
+    ///   Freigaben erscheinen, während das Transkript „arbeitet“ sagt (letzter
+    ///   Eintrag ist der Tool-Aufruf; nach 2 min ohne Schreiben „ruht“). Eine
+    ///   Erkennung gibt es nicht, also bleibt nur: immer. Links im leeren Feld
+    ///   schickt Codex nicht in den Hintergrund, das ist Claude-eigen; hoch
+    ///   holt den letzten Prompt, sichtbar im Feld.
+    /// Bei Claude bleibt das Steuerkreuz sonst Navigation.
     static func arrowsAllowed(_ state: ControllerChatState) -> Bool {
-        state.acceptsKeys && state.status == .awaitingInput
+        guard state.acceptsKeys else { return false }
+        return state.status == .awaitingInput || state.choiceListOpen || state.profile == .codex
     }
 
     /// Enter: im Ruhezustand immer, in einer Rückfrage nach den ersten 0,5 s
     /// (unbekannter Beginn gilt als alt). Arbeitet der Chat oder ist sein
     /// Zustand unklar, nur wenn kurz vorher per Controller getippt, gelöscht
-    /// oder diktiert wurde: Zwischen dem Erscheinen eines Freigabe-Dialogs und
-    /// dem Status „wartet“ liegt eine Lücke, in der Enter sonst die
-    /// Vorauswahl bestätigte.
+    /// oder diktiert (bei Codex: ein Pfeil gedrückt) und seither nichts
+    /// abgeschickt wurde, oder wenn eine Auswahl des Menüs offen ist: Zwischen
+    /// dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt eine
+    /// Lücke, in der Enter sonst die Vorauswahl bestätigte.
     static func confirmAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys else { return false }
         switch state.status {
@@ -102,7 +136,7 @@ extension ControllerBindingResolver {
         case .idle:
             return true
         case .working, .unknown:
-            return state.recentDraftInput
+            return state.recentDraftInput || state.choiceListOpen
         case .ended:
             return false
         }
@@ -110,10 +144,13 @@ extension ControllerBindingResolver {
 
     /// Escape (tippen) nur, wenn der Chat ruht oder fragt und nicht gerade
     /// etwas gesendet wurde. Ein zweites Escape innerhalb 1 s wird
-    /// verschluckt, sonst öffnet Claude das Zurückspulen.
+    /// verschluckt, sonst öffnet Claude das Zurückspulen. Eine offene Auswahl
+    /// des Menüs schließt Escape auch direkt nach dem Befehl, der sie geöffnet
+    /// hat (der zählt als „gerade gesendet“).
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
-        guard state.acceptsKeys, !state.recentlySubmitted, !state.escapeSentRecently else { return false }
-        return state.status == .idle || state.status == .awaitingInput
+        guard state.acceptsKeys, !state.escapeSentRecently else { return false }
+        guard state.status == .idle || state.status == .awaitingInput else { return false }
+        return !state.recentlySubmitted || state.choiceListOpen
     }
 
     /// Unterbrechen (Kreis halten) nur, wenn der Chat arbeitet, sein Zustand

@@ -13,12 +13,18 @@ struct ControllerTerminalState: Equatable {
     /// Seit wann der aktuelle Status gilt.
     var statusSince: Date?
     var draftSuspected: Bool
-    /// Wann zuletzt Enter bzw. Escape vom Controller rausging.
+    /// Wann zuletzt abgeschickt wurde, auf jedem Weg (Enter vom Controller
+    /// oder von der Tastatur, `chats send`, Diktat und Menü mit Senden).
     var lastEnterAt: Date?
+    /// Wann zuletzt Escape vom Controller rausging.
     var lastEscapeAt: Date?
     /// Zuletzt per Controller ins Eingabefeld geschrieben oder gelöscht
-    /// (Rücktaste, Text oder Diktat ohne Senden); `nil` nach dem Senden.
+    /// (Rücktaste, Text oder Diktat ohne Senden). Zählt nur, wenn es nach dem
+    /// letzten Absenden (`lastEnterAt`) liegt.
     var lastDraftInputAt: Date? = nil
+    /// Eine Auswahlliste, die das Controller-Menü geöffnet hat, ist vermutlich
+    /// noch offen (`ControllerTerminalMarks.isChoiceListOpen`).
+    var choiceListOpen: Bool = false
 }
 
 @MainActor
@@ -32,6 +38,8 @@ protocol ControllerTerminalControlling: AnyObject {
     @discardableResult func clearInput(in sessionID: UUID) -> Bool
     /// Text als ein Block ins Eingabefeld, wahlweise mit Senden.
     @discardableResult func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool
+    /// Der eben gesendete Menü-Befehl öffnet eine Auswahlliste der CLI.
+    func noteChoiceListOpened(in sessionID: UUID)
 }
 
 @MainActor

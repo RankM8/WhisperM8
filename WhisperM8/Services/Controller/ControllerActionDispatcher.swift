@@ -25,6 +25,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     /// Der offene Umschalter wurde vom Controller geöffnet.
     private var pickerOpenedByController = false
+    /// Chat, dessen Eingabe R3 halten leert — gebunden beim Haltebeginn, damit
+    /// ein Chatwechsel während des Haltens nicht den falschen Chat leert.
+    private var clearInputTarget: UUID?
 
     /// So lange nach einem Enter vom Controller gilt der Chat als „gerade
     /// gesendet“: Der Status meldet „arbeitet“ erst mit Verzögerung.
@@ -123,7 +126,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             secondsSinceAwaitingBegan: status == .awaitingInput
                 ? terminal.statusSince.map { moment.timeIntervalSince($0) } : nil,
             escapeSentRecently: within(Self.escapeRepeatWindow, of: terminal.lastEscapeAt),
-            recentDraftInput: within(Self.draftInputWindow, of: terminal.lastDraftInputAt),
+            recentDraftInput: ControllerTerminalMarks.hasFreshDraftInput(
+                draftAt: terminal.lastDraftInputAt, lastSubmitAt: terminal.lastEnterAt,
+                window: Self.draftInputWindow, now: moment),
+            choiceListOpen: terminal.choiceListOpen,
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning
         )
@@ -155,6 +161,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             chats.perform(.switcherCancel, in: windowID)
         }
         pickerOpenedByController = false
+        clearInputTarget = nil
         ui.menu = nil
         ui.workspacePicker = nil
         ui.leaveList()
@@ -184,10 +191,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .chatKey(key): sendKey(key.terminalKey)
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
-        case .chatClearInput:
-            withSelectedSession { sessionID in
-                if terminals.clearInput(in: sessionID) { playHaptic(.inputCleared) } else { playHaptic(.rejected) }
-            }
+        case .chatClearInput: clearInput()
         case .lastChat: command(.lastChat, orReject: true)
         case let .moveInContent(direction): moveInContent(direction)
         case let .adjacentChat(step): moveToAdjacentChat(step)
@@ -238,8 +242,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .bringAppToFront: environment.bringAgentChatsToFront()
         case .rejected: playHaptic(.rejected)
         case let .holdProgress(button, duration):
+            if button == .r3 { clearInputTarget = selectedSessionID }
             ui.holdProgress = ControllerHoldProgress(button: button, startedAt: now(), duration: duration)
-        case .holdProgressCancelled:
+        case let .holdProgressCancelled(button):
+            if button == .r3 { clearInputTarget = nil }
             ui.holdProgress = nil
         }
         // Ein beendetes Halten braucht keinen Ring mehr.
@@ -268,6 +274,18 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     private func sendKey(_ key: TerminalControlKey) {
         withSelectedSession { terminals.sendKey(key, to: $0) }
+    }
+
+    /// R3 halten: Eingabe des Chats leeren, der beim Haltebeginn ausgewählt
+    /// war. Ist inzwischen ein anderer ausgewählt (L1/R1, Maus,
+    /// Benachrichtigung), wird nichts geleert — wie bei den Menü-Eingaben.
+    private func clearInput() {
+        let target = clearInputTarget
+        clearInputTarget = nil
+        guard let target, target == selectedSessionID, terminals.clearInput(in: target) else {
+            return playHaptic(.rejected)
+        }
+        playHaptic(.inputCleared)
     }
 
     /// Ein per Tastatur geöffneter Umschalter gehört der Tastatur: Die erste
@@ -611,6 +629,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             return playHaptic(.rejected)
         }
         terminals.sendText(command.text, submit: command.submits, to: sessionID)
+        // Öffnet der Befehl eine Liste (`/model`, „/“ …), gehen Steuerkreuz und
+        // Kreuz hinein, bis Enter, Escape oder zwei Minuten Ruhe sie schließen.
+        if ControllerSlashCommands.opensChoiceList(command, profile: setup.profile) {
+            terminals.noteChoiceListOpened(in: sessionID)
+            refreshContext()   // Legende zeigt gleich „Pfeiltasten“
+        }
     }
 }
 

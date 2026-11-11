@@ -22,6 +22,8 @@ private final class TerminalSpy: ControllerTerminalControlling {
         texts.append((text, submit))
         return true
     }
+    private(set) var choiceListsOpened: [UUID] = []
+    func noteChoiceListOpened(in sessionID: UUID) { choiceListsOpened.append(sessionID) }
 }
 
 @MainActor
@@ -149,13 +151,13 @@ final class ControllerActionDispatcherTests: XCTestCase {
         status: AgentSessionRuntimeStatus?, running: Bool = true,
         profile: ControllerChatState.Profile = .claude, draft: Bool = false,
         statusSince: Date? = nil, lastEnter: Date? = nil, lastEscape: Date? = nil,
-        lastDraftInput: Date? = nil
+        lastDraftInput: Date? = nil, choiceListOpen: Bool = false
     ) {
         guard let selected = window.selected else { return }
         terminals.states[selected] = ControllerTerminalState(
             isRunning: running, profile: profile, status: status, statusSince: statusSince,
             draftSuspected: draft, lastEnterAt: lastEnter, lastEscapeAt: lastEscape,
-            lastDraftInputAt: lastDraftInput)
+            lastDraftInputAt: lastDraftInput, choiceListOpen: choiceListOpen)
     }
 
     private var context: ControllerContext {
@@ -202,6 +204,29 @@ final class ControllerActionDispatcherTests: XCTestCase {
         guard case let .chat(later) = context else { return XCTFail("chat erwartet") }
         XCTAssertFalse(later.recentDraftInput)
         XCTAssertNil(ControllerBindingResolver.action(for: .press(.cross), in: context))
+    }
+
+    /// Befund 5 nach Runde 3: Eine Eingabe zählt nur, wenn danach nichts
+    /// abgeschickt wurde — auf welchem Weg auch immer (`lastEnterAt` ist das
+    /// letzte Absenden: Kreuz auch in Rückfragen, Tastatur, `chats send`,
+    /// Diktat, Menü).
+    func testDraftInputOlderThanLastSubmitDoesNotArmCross() {
+        setTerminal(status: .working, lastEnter: clock.addingTimeInterval(-5), lastDraftInput: clock.addingTimeInterval(-10))
+        guard case let .chat(state) = context else { return XCTFail("chat erwartet") }
+        XCTAssertFalse(state.recentDraftInput)
+        XCTAssertNil(ControllerBindingResolver.action(for: .press(.cross), in: context))
+
+        setTerminal(status: .working, lastEnter: clock.addingTimeInterval(-10), lastDraftInput: clock.addingTimeInterval(-5))
+        guard case let .chat(newer) = context else { return XCTFail("chat erwartet") }
+        XCTAssertTrue(newer.recentDraftInput)
+    }
+
+    func testChoiceListOpenReachesChatState() {
+        setTerminal(status: .idle, choiceListOpen: true)
+        guard case let .chat(state) = context else { return XCTFail("chat erwartet") }
+        XCTAssertTrue(state.choiceListOpen)
+        XCTAssertEqual(ControllerBindingResolver.action(for: .move(.left, source: .dpad, isRepeat: false), in: context),
+                       .chatKey(.left))
     }
 
     func testRecentEnterAndEscapeAreTimeLimited() {
@@ -551,6 +576,7 @@ final class ControllerActionDispatcherTests: XCTestCase {
     // MARK: - Eingabe leeren (Runde 3)
 
     func testClearInputGoesToSelectedChatWithConfirmation() {
+        perform(.holdProgress(.r3, duration: 0.6))
         perform(.chatClearInput)
         XCTAssertEqual(terminals.clearedSessions, [window.selected!])
         XCTAssertEqual(haptics, [.inputCleared])
@@ -558,8 +584,38 @@ final class ControllerActionDispatcherTests: XCTestCase {
 
     func testClearInputThatFailsIsRejected() {
         terminals.clearResult = false
+        perform(.holdProgress(.r3, duration: 0.6))
         perform(.chatClearInput)
         XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Befund 6 nach Runde 3: Das Ziel steht beim Haltebeginn fest. Wechselt
+    /// der Chat während des Haltens, wird nichts geleert.
+    func testClearInputIsBoundToChatAtHoldBegin() {
+        let first = window.selected!
+        perform(.holdProgress(.r3, duration: 0.6))
+        window.selected = UUID()
+        setTerminal(status: .idle)
+        perform(.chatClearInput)
+        XCTAssertEqual(terminals.clearedSessions, [], "weder der alte noch der neue Chat")
+        XCTAssertEqual(haptics, [.rejected])
+
+        // Zurück auf dem ersten Chat und neu gehalten: geleert wird er.
+        window.selected = first
+        haptics = []
+        perform(.holdProgress(.r3, duration: 0.6))
+        perform(.chatClearInput)
+        XCTAssertEqual(terminals.clearedSessions, [first])
+        XCTAssertEqual(haptics, [.inputCleared])
+    }
+
+    func testClearInputWithoutHoldBeginOrAfterCancelIsRejected() {
+        perform(.chatClearInput)
+        perform(.holdProgress(.r3, duration: 0.6))
+        perform(.holdProgressCancelled(.r3))
+        perform(.chatClearInput)
+        XCTAssertEqual(terminals.clearedSessions, [])
+        XCTAssertEqual(haptics, [.rejected, .rejected])
     }
 
     func testLeaveListClearsMarker() {
@@ -921,6 +977,29 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.menuActivate)
         XCTAssertEqual(terminals.texts.last?.text, "/model")
         XCTAssertEqual(terminals.texts.last?.submit, true)
+    }
+
+    /// Befund 1a nach Runde 3: Befehle, die eine Liste öffnen („/“, `/model`
+    /// …), setzen den Merker „Auswahl offen“ am Chat des Menüs; andere nicht.
+    func testListOpeningCommandsMarkTheChoiceList() {
+        let chatID = window.selected!
+        func send(commandAt index: Int) {
+            perform(.menuToggle)
+            ui.menu?.select(.commands)
+            perform(.menuActivate)
+            perform(.menuMove(step: index))
+            perform(.menuActivate)
+        }
+        send(commandAt: 0)
+        XCTAssertEqual(terminals.texts.last?.text, "/")
+        XCTAssertEqual(terminals.choiceListsOpened, [chatID])
+        send(commandAt: 1)
+        XCTAssertEqual(terminals.texts.last?.text, "/model")
+        XCTAssertEqual(terminals.choiceListsOpened, [chatID, chatID])
+        let clearIndex = ControllerSlashCommands.claude.firstIndex(of: "/clear")!
+        send(commandAt: clearIndex)
+        XCTAssertEqual(terminals.texts.last?.text, "/clear")
+        XCTAssertEqual(terminals.choiceListsOpened.count, 2, "/clear öffnet keine Liste")
     }
 
     func testCommandsRejectedWithDraft() {

@@ -219,13 +219,15 @@ enum ControllerLegend {
 
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {
         let awaiting = state.status == .awaitingInput
-        let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (awaiting ? .confirm : .send)
+        let choosing = awaiting || state.choiceListOpen
+        let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (choosing ? .confirm : .send)
         // Im Raster zeigt die Legende die Workspace-Auswahl auf L2. Die
         // Chat-Auswahl der Einzelansicht steht wie bisher nur in der Übersicht
         // der Einstellungen.
         let workspaceHold: [Candidate] = state.gridActive
             ? [candidate(.button(.l2), .switchWorkspaceHold, [.holdBegan(.l2)])] : []
-        // Das Steuerkreuz gibt nur in Rückfragen Pfeile; sonst bewegt es wie der Stick.
+        // Das Steuerkreuz gibt Pfeile nur, wo eine Auswahl offen ist (Rückfrage,
+        // Liste aus dem Menü, Codex); sonst bewegt es wie der Stick.
         let arrows = ControllerBindingResolver.arrowsAllowed(state)
         let moveInputs: [ControllerLegendInput] = arrows ? [.leftStick] : [.leftStick, .dpad]
         let moveProbes: [ControllerGesture] = moveInputs.flatMap { input in

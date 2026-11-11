@@ -25,6 +25,23 @@ enum ControllerSlashCommands {
     /// stehen nur die verbreiteten festen Befehle.
     static let codex: [String] = ["/", "/model", "/approvals", "/new", "/compact"]
 
+    /// Befehle, nach denen die CLI eine Auswahlliste zeigt. Solange sie offen
+    /// ist, gehen Steuerkreuz und Kreuz ins Terminal (`ControllerTerminalMarks`).
+    /// „/“ zeigt die Befehlsliste, `/memory` die Auswahl der Memory-Dateien.
+    static let claudeChoiceLists: Set<String> = [
+        "/", "/model", "/config", "/resume", "/permissions", "/mcp", "/agents", "/memory",
+    ]
+    static let codexChoiceLists: Set<String> = ["/", "/model", "/approvals"]
+
+    /// Öffnet `command` in einem Chat mit diesem Profil eine Auswahlliste?
+    static func opensChoiceList(_ command: ControllerSlashCommand, profile: ControllerChatState.Profile?) -> Bool {
+        switch profile {
+        case .claude: return claudeChoiceLists.contains(command.text)
+        case .codex: return codexChoiceLists.contains(command.text)
+        case .shell, .other, nil: return false
+        }
+    }
+
     /// Befehle für ein Profil. Shell und andere: keine (Eintrag „Befehle“ ist aus).
     static func list(for profile: ControllerChatState.Profile?) -> [ControllerSlashCommand] {
         let texts: [String]
