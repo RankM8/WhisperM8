@@ -110,8 +110,8 @@ struct AgentChatsView: View {
         get { windowStore.pinnedSessionIDs }
         nonmutating set { windowStore.setPinnedSessionIDs(newValue) }
     }
-    @State private var searchText = ""
-    @State private var flatVisibleSessionLimit = 50
+    @State var searchText = ""
+    @State var flatVisibleSessionLimit = 50
     @State var errorMessage: String?
     /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
     @State var missingCLIPrompt: MissingCLIPrompt?
@@ -166,10 +166,10 @@ struct AgentChatsView: View {
     @State private var collapsedTabGroups: Set<AgentTabGroupingKey> = []
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
-    @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
+    @AppStorage("agentPinnedSectionCollapsed") var pinnedSectionCollapsed = false
     /// Chats-Sektion (alle Projekt-Gruppen bzw. die flache Liste) ein-/
     /// ausgeklappt — Muster GEPINNT; eine aktive Suche überstimmt.
-    @AppStorage("agentChatsSectionCollapsed") private var chatsSectionCollapsed = false
+    @AppStorage("agentChatsSectionCollapsed") var chatsSectionCollapsed = false
     /// Workspaces-Sektion ein-/ausgeklappt (persistiert, Muster GEPINNT).
     /// internal, da die Sektion in +Workspaces lebt.
     @AppStorage("agentWorkspacesSectionCollapsed") var workspacesSectionCollapsed = false
@@ -257,7 +257,7 @@ struct AgentChatsView: View {
     /// Schema-Migration. Die Suche überstimmt den Scope (siehe `effectiveScope`).
     @AppStorage("agentSidebarScope") var sidebarScope: SidebarScope = .active
     /// Anordnung der Chat-Liste (gruppiert nach Projekt vs. flach/zeitlich).
-    @AppStorage("agentSidebarLayout") private var sidebarLayout: SidebarLayout = .grouped
+    @AppStorage("agentSidebarLayout") var sidebarLayout: SidebarLayout = .grouped
     /// Persistierter "Wunschwert" der Sidebar-Breite — global ueber alle
     /// Fenster (wie Scope/Layout), bewusst NICHT @SceneStorage: dessen
     /// Persistenz haengt an der macOS-State-Restoration, die wir mit
@@ -775,6 +775,8 @@ struct AgentChatsView: View {
                 }
 
                 mainWorkspace
+                    .safeAreaInset(edge: .bottom, spacing: 0) { ControllerLegendHost(windowID: windowID) }
+                    .overlay(alignment: .bottom) { ControllerMenuHost(windowID: windowID) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if isInspectorVisible {
@@ -1541,6 +1543,7 @@ struct AgentChatsView: View {
 
             sidebarScopeBar(counts: snapshot.scopeCounts)
 
+            ScrollViewReader { listProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     if !snapshot.hasManualProjects {
@@ -1569,7 +1572,7 @@ struct AgentChatsView: View {
                                     project: snapshot.projectByID[session.projectID],
                                     order: snapshot.pinnedOrderIDs,
                                     split: split
-                                )
+                                ).controllerListRow(.chat(session.id))
                                 if let split {
                                     subagentChildrenRows(
                                         parent: session,
@@ -1619,7 +1622,7 @@ struct AgentChatsView: View {
                                 project: snapshot.projectByID[session.projectID],
                                 order: snapshot.visibleFlatOrderIDs,
                                 split: split
-                            )
+                            ).controllerListRow(.chat(session.id))
                             if let split {
                                 subagentChildrenRows(
                                     parent: session,
@@ -1725,10 +1728,12 @@ struct AgentChatsView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                .background(ControllerListScrollFollower(proxy: listProxy))
                 // Mit angeschlossener Maus rendert macOS sonst einen 15 pt
                 // breiten Legacy-Scroller mit hellem Track in die dunkle
                 // Sidebar — Overlay-Stil erzwingen (Views/OverlayScrollers).
                 .overlayScrollers()
+            }
             }
             }
 
@@ -1737,6 +1742,7 @@ struct AgentChatsView: View {
             sidebarFooter
         }
         .background(AgentTheme.sidebar)
+        .environment(\.agentChatsWindowID, windowID)
         .onAppear { refreshMissingTranscripts() }
         .onChange(of: workspace.sessions.count) { _, _ in refreshMissingTranscripts() }
         .onChange(of: sidebarScope) { _, _ in flatVisibleSessionLimit = 50 }
@@ -2300,7 +2306,7 @@ struct AgentChatsView: View {
     }
 
     /// Baut den auswertbaren Filter aus dem effektiven Scope + Live-Inputs.
-    private func makeScopeFilter(openTabIDs: Set<UUID>, runningSessionIDs: Set<UUID>) -> SidebarScopeFilter {
+    func makeScopeFilter(openTabIDs: Set<UUID>, runningSessionIDs: Set<UUID>) -> SidebarScopeFilter {
         SidebarScopeFilter(
             scope: effectiveScope,
             runningSessionIDs: runningSessionIDs,

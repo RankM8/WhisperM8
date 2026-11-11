@@ -108,6 +108,7 @@ extension AgentChatsView {
         let isCollapsed = windowStore.isGridWorkspaceCollapsed(entity.id)
         VStack(alignment: .leading, spacing: 1) {
             workspaceGroupHeader(entity, isActiveHere: isActiveHere, isCollapsed: isCollapsed)
+                .controllerListRow(.workspace(entity.id))
             if !isCollapsed {
                 ForEach(Array(entity.slots.enumerated()), id: \.offset) { index, slot in
                     if let sessionID = slot,
@@ -123,6 +124,7 @@ extension AgentChatsView {
                             selectedID: selectedSessionID
                         )
                         workspaceRow(session, entity: entity, slotIndex: index, split: split)
+                            .controllerListRow(.workspaceChat(session: session.id, workspace: entity.id))
                         if let split {
                             subagentChildrenRows(
                                 parent: session,

@@ -121,6 +121,7 @@ struct ProjectChatGroup: View {
         let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.projectGroup")
         VStack(alignment: .leading, spacing: 0) {
             groupHeader
+                .controllerListRow(.project(project.id))
 
             if isExpanded && !sessions.isEmpty {
                 let slice = Self.visibleSlice(of: sessions, limit: visibleSessionLimit, mustIncludeID: revealTargetID)
@@ -137,6 +138,7 @@ struct ProjectChatGroup: View {
                             selectedID: selectedSessionID
                         )
                         sessionRow(session, split: split)
+                            .controllerListRow(.chat(session.id))
                         // Variante D (revidiert 2026-07-09): das Chip-Chevron
                         // klappt ALLE Kinder zu — auch laufende. Zugeklappt
                         // bleibt nur der Chip; dass noch etwas arbeitet, zeigt

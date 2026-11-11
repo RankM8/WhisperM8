@@ -16,7 +16,8 @@ extension AgentChatsView {
             windowID: windowID,
             handler: AgentChatsCommandCenter.Handler(
                 perform: { performCommand($0) },
-                snapshot: { commandSnapshot() }
+                snapshot: { commandSnapshot() },
+                listRows: { controllerListRows() }
             )
         )
     }
