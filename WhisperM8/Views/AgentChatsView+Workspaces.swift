@@ -260,10 +260,10 @@ extension AgentChatsView {
             onToggleChildren: { windowStore.toggleSubagentChildren(session.id) },
             onSelect: {
                 handleSidebarRowClick(session.id, order: rowOrder) {
-                    // Die Zeile gehört zu diesem Workspace: im sichtbaren
-                    // Workspace Pane-Fokus, sonst wechselt das Fenster in
-                    // diesen Workspace (Cmd/Shift-Klick bleibt Mehrfachauswahl).
-                    openWorkspaceChat(session.id, in: entity)
+                    // Quellenunabhängige Klickregel via Bridge: im sichtbaren
+                    // Workspace → Pane-Fokus, sonst Einzelansicht. Den
+                    // Workspace wechselt nur Kreuz am Controller.
+                    openWorkspaceChatRow(session.id, in: entity, source: .mouse)
                 }
             },
             onClose: { requestEndSession([session], removingFrom: entity) }
@@ -364,15 +364,32 @@ extension AgentChatsView {
         }
     }
 
-    /// Chat-Zeile im WORKSPACES-Abschnitt (normaler Klick oder Kreuz am
-    /// Controller): Ist der Workspace hier sichtbar, Pane-Fokus wie bisher;
-    /// sonst öffnet das Fenster diesen Workspace mit dem Chat als Pane-Fokus
+    /// Chat-Zeile im WORKSPACES-Abschnitt (`WorkspaceChatRowRoute`): Der
+    /// Mausklick folgt der Klickregel, Kreuz am Controller wechselt in den
+    /// Workspace der Zeile.
+    @discardableResult
+    func openWorkspaceChatRow(
+        _ sessionID: UUID, in entity: AgentGridWorkspace, source: WorkspaceChatRowRoute.Source
+    ) -> Bool {
+        switch WorkspaceChatRowRoute.route(for: source) {
+        case .select:
+            selectedSessionID = sessionID
+            return true
+        case .enterWorkspace:
+            return openWorkspaceChat(sessionID, in: entity)
+        }
+    }
+
+    /// Kreuz am Controller auf einer Chat-Zeile im WORKSPACES-Abschnitt: Ist
+    /// der Workspace hier sichtbar, Pane-Fokus wie bisher; sonst öffnet das
+    /// Fenster diesen Workspace mit dem Chat als Pane-Fokus
     /// (`AgentWindowStore.navigateToWorkspaceChat`). So führt „Zurück zum
     /// Workspace“ danach in genau diesen Workspace.
     ///
-    /// Lebt der Chat als Tab in einem anderen Fenster, bleibt es beim
-    /// bisherigen Weg (dort fokussieren, nichts stehlen). Konflikte wie beim
-    /// Header: Besitzerfenster nach vorn bzw. Hinweis.
+    /// Lebt der Chat als Tab in einem anderen Fenster, bei einem Konflikt
+    /// (anderes Fenster besitzt den Workspace, Chats des Workspace sind Tabs
+    /// anderer Fenster) und bei einer veralteten Zeile gilt die Klickregel:
+    /// Der Chat wird gewählt, statt nur ein anderes Fenster nach vorn zu holen.
     /// - Returns: `true`, wenn sich etwas getan hat.
     @discardableResult
     func openWorkspaceChat(_ sessionID: UUID, in entity: AgentGridWorkspace) -> Bool {
@@ -383,26 +400,14 @@ extension AgentChatsView {
         }
         let wasVisibleHere = isGridActive
             && windowStore.window(for: windowID).activeWorkspaceID == entity.id
-        switch windowStore.navigateToWorkspaceChat(sessionID, workspaceID: entity.id, in: windowID) {
-        case .activated, .alreadyActiveHere:
-            if !wasVisibleHere {
-                beginGridBuildMeasurement(for: entity)
-            }
-            multiSelection = []
-            return true
-        case .alreadyActive(let owner):
-            focusWindow(owner)
-            return true
-        case .blockedByWindowOwnership(let conflicts):
-            errorMessage = String(localized: "Workspace “\(entity.name)” cannot open here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
-            return false
-        case .rejected:
-            // Chat steht nicht mehr im Workspace (veraltete Zeile): normale
-            // Klickregel.
+        let result = windowStore.navigateToWorkspaceChat(sessionID, workspaceID: entity.id, in: windowID)
+        if WorkspaceChatRowRoute.fallsBackToSelect(after: result) {
             selectedSessionID = sessionID
-            multiSelection = []
-            return true
+        } else if !wasVisibleHere {
+            beginGridBuildMeasurement(for: entity)
         }
+        multiSelection = []
+        return true
     }
 
     /// ＋ im Sektions-Header: leeren Workspace anlegen und sofort öffnen —
