@@ -282,9 +282,10 @@ GameController (Hardware)                 debug.controller (künstliche Eingaben
 - `ControllerInputEvent`: `.button(_, pressed:)`, `.trigger(_, value:)`, `.stick(side, x, y)`. Die Zeit
   wird beim Empfang selbst gemessen (`ProcessInfo.systemUptime`), nicht vom Framework übernommen.
 - `ControllerGestureRecognizer`: Zustandsmaschine ohne Uhr und ohne App-Zustand. Verhalten je Taste fest:
-  - `immediate`: löst beim Drücken aus (Kreuz, Dreieck, Viereck, L1, R1, L3, Create, Options, Touchpad, R2).
+  - `immediate`: löst beim Drücken aus (Kreuz, Dreieck, L3, Create, Options, Touchpad, R2). L1 und R1
+    lösen nach dem Akkord-Fenster von 150 ms aus, oder beim Loslassen, wenn das früher kommt.
   - `tapOrHold`: Tippen beim Loslassen vor der Schwelle, sonst `holdBegan` / `holdEnded` (L2 mit 0,3 s,
-    Kreis mit 0,4 s). Tippen oder Halten wird aus den Zeitstempeln entschieden, nicht daraus, ob der
+    Kreis mit 0,4 s, Viereck mit 0,6 s für „halten löscht“ im Verlauf). Tippen oder Halten wird aus den Zeitstempeln entschieden, nicht daraus, ob der
     Zeitgeber gefeuert hat.
   - Akkord L1 + R1: beide innerhalb 150 ms gedrückt und 1 s gehalten; dann kein Tab-Wechsel.
   - Steuerkreuz und Stick-Richtungen mit Wiederholung nach `NSEvent.keyRepeatDelay` und
@@ -749,8 +750,8 @@ jeweils mit dem Fokus im Terminal:
 |---|---|---|---|
 | 0 Vorbereitung | erledigt | 13847432 | Arbeitsordner, Branch, Ausgangswert 4.039 Tests grün, Plan und README-Eintrag committet |
 | 1 Entwurf im HTML-Zwilling | erledigt | 307e04b9 | `docs/design/controller-steuerung.html`: sechs Zustände der Legende, Listen-Markierung, Menü (normal und bei Rückfrage), Einstellungsseite; hell und dunkel gerendert und angesehen |
-| 2 Aktions-Katalog | erledigt | (dieser Commit) | `AgentChatsCommandCenter` mit Token-Anmeldung und Routing nur zum Key-Fenster, `ChatSelectionHistory`, `AgentChatsView+Commands.swift`; drei Rümpfe aus `+Shortcuts.swift` als gemeinsame Funktionen; 159 Tests rund um Tabs, Umschalter und Katalog grün; `AgentChatsView.swift` bei 3.821 von 3.842 Zeilen |
-| 3 Controller-Kern | offen | | |
+| 2 Aktions-Katalog | erledigt | 42424701 | `AgentChatsCommandCenter` mit Token-Anmeldung und Routing nur zum Key-Fenster, `ChatSelectionHistory`, `AgentChatsView+Commands.swift`; drei Rümpfe aus `+Shortcuts.swift` als gemeinsame Funktionen; 159 Tests rund um Tabs, Umschalter und Katalog grün; `AgentChatsView.swift` bei 3.821 von 3.842 Zeilen |
+| 3 Controller-Kern | erledigt | (dieser Commit) | Elf Dateien unter `Services/Controller/Core/`, nur Foundation; 98 neue Tests (Erkenner, Sticks, Belegung, Matrix, Zusammenhang, Legende, Listen- und Menü-Modell, Import-Wächter). Abweichung: Viereck ist Tippen-oder-Halten (0,6 s), damit „halten löscht“ im Verlauf ohne Gedächtnis in der Belegung geht; `reset` meldet `holdCancelled`, damit eine Trennung die Chat-Auswahl ohne Wechsel schließt |
 | 4 Hardware, Schalter, Debug-Kanal | offen | | |
 | 5 Navigation im Inhalt | offen | | |
 | 6 Listen-Navigation | offen | | |
