@@ -204,15 +204,14 @@ struct AgentSidebarModelBuilder {
             recentWindow: scope.recentWindow
         )
         // Aktiv-Menge der Projekt-Views: Tabs über ALLE Fenster (die
-        // fensterlokalen scope.openTabIDs speisen nur die Sidebar-Listen),
-        // mit derselben Parent-Expansion für Subagent-Kinder wie oben.
-        let globalTabs = globalOpenTabIDs ?? scope.openTabIDs
-        var effectiveGlobalActiveIDs = effectiveRunningSessionIDs.union(globalTabs)
-        for childID in globalTabs {
-            if let parentID = parentIDByChildID[childID] {
-                effectiveGlobalActiveIDs.insert(parentID)
-            }
-        }
+        // fensterlokalen scope.openTabIDs speisen nur die Sidebar-Listen).
+        // Dieselbe Funktion nutzt der Live-Sync bei ausgeblendeter Sidebar.
+        let activeSessionIDsByProject = Self.activeSessionIDsByProject(
+            sessions: workspace.sessions,
+            runningSessionIDs: scope.runningSessionIDs,
+            globalOpenTabIDs: globalOpenTabIDs ?? scope.openTabIDs,
+            parentIDByChildID: parentIDByChildID
+        )
         let pinnedIDSet = Set(pinnedSessionIDs)
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let recentThreshold = effectiveScope.now.addingTimeInterval(-effectiveScope.recentWindow)
@@ -220,7 +219,6 @@ struct AgentSidebarModelBuilder {
         var activeCount = 0
         var recentCount = 0
         var allCount = 0
-        var activeSessionIDsByProject: [UUID: Set<UUID>] = [:]
         var grouped: [UUID: [AgentChatSession]] = [:]
         var flat: [AgentChatSession] = []
         var sessionByID: [UUID: AgentChatSession] = [:]
@@ -235,14 +233,6 @@ struct AgentSidebarModelBuilder {
                   !subagentChildIDs.contains(session.id)
             else { continue }
 
-            // Projekt-View-Aktivmenge VOR dem Pin-Filter: gepinnte aktive
-            // Chats gehören ins Live-Grid (Aktiv-Definition = laufend ∪
-            // offener Tab, sonst hätte ein Projekt aus lauter gepinnten
-            // aktiven Chats einen toten ⊞) — nur die Sidebar-Listen und
-            // Scope-Zähler bleiben pin-bereinigt.
-            if effectiveGlobalActiveIDs.contains(session.id) {
-                activeSessionIDsByProject[session.projectID, default: []].insert(session.id)
-            }
             guard !pinnedIDSet.contains(session.id) else { continue }
 
             allCount += 1
@@ -403,6 +393,50 @@ struct AgentSidebarModelBuilder {
             grouped[session.projectID, default: []].append(session)
         }
         return grouped.mapValues { AgentSessionStore.sortedSessions($0) }
+    }
+
+    /// Aktive Root-Chats pro Projekt — die Mitglieder der Projekt-Views (⊞).
+    /// Aktiv = läuft ∪ offener Tab in IRGENDEINEM Fenster; ein laufendes oder
+    /// offenes Subagent-Kind macht seinen Parent aktiv. Gepinnte Chats zählen
+    /// mit (sonst hätte ein Projekt aus lauter gepinnten aktiven Chats einen
+    /// toten ⊞). Nur manuell angelegte, nicht archivierte Root-Chats.
+    static func activeSessionIDsByProject(
+        sessions: [AgentChatSession],
+        runningSessionIDs: Set<UUID>,
+        globalOpenTabIDs: Set<UUID>
+    ) -> [UUID: Set<UUID>] {
+        var parentIDByChildID: [UUID: UUID] = [:]
+        for (parentID, children) in subagentChildren(workspaceSessions: sessions).byParentLocalID {
+            for child in children { parentIDByChildID[child.id] = parentID }
+        }
+        return activeSessionIDsByProject(
+            sessions: sessions,
+            runningSessionIDs: runningSessionIDs,
+            globalOpenTabIDs: globalOpenTabIDs,
+            parentIDByChildID: parentIDByChildID
+        )
+    }
+
+    static func activeSessionIDsByProject(
+        sessions: [AgentChatSession],
+        runningSessionIDs: Set<UUID>,
+        globalOpenTabIDs: Set<UUID>,
+        parentIDByChildID: [UUID: UUID]
+    ) -> [UUID: Set<UUID>] {
+        let direct = runningSessionIDs.union(globalOpenTabIDs)
+        var active = direct
+        for childID in direct {
+            if let parentID = parentIDByChildID[childID] { active.insert(parentID) }
+        }
+        var result: [UUID: Set<UUID>] = [:]
+        for session in sessions
+        where active.contains(session.id)
+            && session.status != .archived
+            && session.isManuallyCreated
+            && parentIDByChildID[session.id] == nil {
+            result[session.projectID, default: []].insert(session.id)
+        }
+        return result
     }
 
     /// Gruppiert `.subagentJob`-Sessions unter ihre Parent-Session (Match:

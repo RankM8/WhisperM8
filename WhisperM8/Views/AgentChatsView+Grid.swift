@@ -1,15 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Grid-Workspaces (docs/plans/grid-workspace-plan.html): Das Fenster
+/// Grid-Workspaces (Doku: docs/features/agent-chats/ui/grid.md): Das Fenster
 /// referenziert einen globalen `AgentGridWorkspace` (`activeWorkspaceID`);
-/// `showsGrid` zeigt dessen SLOTS als bündige Panes — feste Positionen,
-/// leere Slots bleiben sichtbar, nichts rückt nach, keine Verdrängungs-
-/// Automatik. Layout aus der Kapazität (2 = 1×2 · 3 = 2+1 · 4 = 2×2),
-/// Splits am Entity persistiert. Fokus-Pane = `selectedSessionID`
-/// (2-px-Inset-Akzent); nur sie bekommt Auto-Launch/Auto-Fokus. Klick auf
-/// einen Chat außerhalb des Workspace öffnet die Einzelansicht — „Zurück
-/// zum Workspace ‹Name›" stellt das Grid exakt wieder her.
+/// `showsGrid` zeigt dessen SLOTS als bündige Panes. Layout aus der
+/// Kapazität (1 = volle Fläche · 2 = 1×2 · 3 = 2+1 · 4 = 2×2 … 9 = 3×3),
+/// Splits am Entity persistiert. Fällt ein Chat weg (⊖, Tab schließen,
+/// Archivieren, Projekt-View), rücken die übrigen nach und die Stufe passt
+/// sich an — abschaltbar über „Close gaps…" (`gridAutoCompactEnabled`).
+/// Fokus-Pane = `selectedSessionID` (2-px-Inset-Akzent); nur sie bekommt
+/// Auto-Launch/Auto-Fokus. Klick auf einen Chat außerhalb des Workspace
+/// öffnet die Einzelansicht — „Zurück zum Workspace ‹Name›" stellt das Grid
+/// wieder her.
 extension AgentChatsView {
     var showsGrid: Bool {
         get { windowStore.showsGrid(in: windowID) }
@@ -45,8 +47,9 @@ extension AgentChatsView {
         }
     }
 
-    /// ⊖ im Pane-Header / Kontextmenü: leert NUR den Slot — Tab und Prozess
-    /// bleiben, nichts rückt nach (Fokus-Fallback macht der Store).
+    /// ⊖ im Pane-Header / Kontextmenü: nimmt den Chat aus dem Workspace —
+    /// Tab und Prozess bleiben; die übrigen rücken nach, sofern „Close
+    /// gaps…" an ist (Fokus-Fallback macht der Store).
     func removeSessionFromWorkspace(_ sessionID: UUID, workspaceID: UUID) {
         windowStore.removeSession(sessionID, fromGridWorkspace: workspaceID)
     }
@@ -135,9 +138,12 @@ extension AgentChatsView {
     }
 
     private func slotPlacementLabel(entity: AgentGridWorkspace, index: Int) -> String {
-        guard let occupantID = entity.slots[index] else { return "Slot \(index + 1) (frei)" }
-        let occupantName = workspace.sessions.first { $0.id == occupantID }?.title ?? "belegt"
-        return "Slot \(index + 1) — ersetzt „\(occupantName)“"
+        guard let occupantID = entity.slots[index] else {
+            return String(localized: "Slot \(index + 1) (free)")
+        }
+        let occupantName = workspace.sessions.first { $0.id == occupantID }?.title
+            ?? String(localized: "occupied")
+        return String(localized: "Slot \(index + 1) — replaces “\(occupantName)”")
     }
 
     // MARK: - Maximize / Zurück zum Workspace
@@ -371,11 +377,11 @@ extension AgentChatsView {
                 .lineLimit(1)
                 .truncationMode(.tail)
             if entity.sourceProjectID != nil {
-                Text("\(entity.occupiedSessionIDs.count) aktiv · Live-Ansicht des Projekts")
+                Text("\(entity.occupiedSessionIDs.count) active · live view of the project")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
             } else {
-                Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity) belegt")
+                Text("\(entity.occupiedSessionIDs.count)/\(entity.capacity) occupied")
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(AgentTheme.textTertiary)
             }
@@ -408,7 +414,7 @@ extension AgentChatsView {
 
     // MARK: - Kapazitäts-Picker (F10)
 
-    /// Kompakter Stufen-Picker im Grid-Chrome (2 · 3 · 4 · 6 · 9). Stufen,
+    /// Kompakter Stufen-Picker im Grid-Chrome (1 bis 9). Stufen,
     /// die nicht in die übergebene GRID-Fläche passen (~240 pt je Spalte,
     /// ~200 pt je Zeile, inkl. 1-px-Divider), werden ausgeblendet — die
     /// aktuelle Stufe bleibt immer sichtbar.
@@ -537,6 +543,7 @@ extension AgentChatsView {
 
     static func capacityLabel(_ capacity: Int) -> String {
         switch capacity {
+        case 1: return "1×1"
         case 2: return "1×2"
         case 3: return "2+1"
         case 4: return "2×2"
@@ -800,27 +807,9 @@ extension AgentChatsView {
         .background(AgentTheme.background)
     }
 
-    /// Sichtbar leerer Slot — stabile Position, Drop-Ziel (Paket 2e).
+    /// Sichtbar leerer Slot — Drop-Ziel (Paket 2e).
     private func gridEmptySlot(_ index: Int) -> some View {
-        VStack(spacing: 3) {
-            Text("Slot \(index + 1)")
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(AgentTheme.textSecondary)
-            Text("Drop chat here")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(
-                    AgentTheme.border,
-                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
-                )
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AgentTheme.background)
+        GridEmptySlotView(index: index)
     }
 
     private func gridPane(
@@ -1028,11 +1017,11 @@ extension AgentChatsView {
             .accessibilityLabel("Maximize \(session.title)")
             // Projekt-View: „aus dem Workspace nehmen" gibt es nicht (der
             // Live-Sync brächte den aktiven Chat sofort zurück) — ⊖ schließt
-            // hier den TAB. Nicht mehr aktiv = raus aus der Ansicht; läuft
-            // der Chat noch, bleibt er per Definition Mitglied (Platzhalter
-            // bis zur Wieder-Öffnung). Kuratierte Workspaces: ⊖ leert nur
-            // den Slot; Tabs schließt man in der Tab-Leiste (✕, ⌘W).
+            // hier den TAB, und der Chat verlässt die Ansicht; ein laufender
+            // läuft weiter und kommt mit seinem Tab zurück. Kuratierte
+            // Workspaces: ⊖ nimmt nur aus dem Workspace, der Tab bleibt.
             let isProjectView = windowStore.gridWorkspace(id: workspaceID)?.sourceProjectID != nil
+            let closesGaps = AppPreferences.shared.isGridAutoCompactEnabled
             Button {
                 if isProjectView {
                     closeTabByUser(session)
@@ -1049,8 +1038,10 @@ extension AgentChatsView {
             }
             .buttonStyle(.plain)
             .help(isProjectView
-                ? String(localized: "Close tab — the chat leaves the project view (if it is still running, it stays as an active member)")
-                : String(localized: "Remove from workspace (slot stays free, tab stays open)"))
+                ? String(localized: "Close tab — the chat leaves the project view (a running chat keeps running)")
+                : (closesGaps
+                    ? String(localized: "Remove from workspace (tab stays open, the other chats move up)")
+                    : String(localized: "Remove from workspace (slot stays free, tab stays open)")))
             .accessibilityLabel(isProjectView
                 ? String(localized: "Close tab of \(session.title)")
                 : String(localized: "Remove \(session.title) from the workspace"))
@@ -1204,5 +1195,33 @@ extension AgentChatsView {
                 onNewChatInProject: { startNewChat(in: project) }
             )
         }
+    }
+}
+
+/// Leerer Slot im Raster: Nummer + „Drop chat here" in gestrichelter Fläche.
+/// Eigene Struct, damit die Snapshot-Galerie das echte Aussehen rendert.
+struct GridEmptySlotView: View {
+    let index: Int
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text("Slot \(index + 1)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+            Text("Drop chat here")
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textTertiary)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(
+                    AgentTheme.border,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AgentTheme.background)
     }
 }

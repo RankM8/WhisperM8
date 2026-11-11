@@ -37,8 +37,9 @@ persistierten Store.
 
 Details zu mehreren Fenstern, Tab-Detach und Cross-Window-Moves stehen in
 [`multiwindow.md`](multiwindow.md) und
-[`multiwindow-architecture.md`](multiwindow-architecture.md). Diese README
-beschreibt nur die UI-Landkarte.
+[`multiwindow-architecture.md`](multiwindow-architecture.md); das Raster
+(Workspaces, Projekt-Ansicht, Stufen, wie es sich anpasst) in
+[`grid.md`](grid.md). Diese README beschreibt nur die UI-Landkarte.
 
 ## Sidebar
 

@@ -53,6 +53,23 @@ final class AgentWindowStore {
     /// Tab-Wechsel/Reorders zu einem Schreibvorgang.
     @ObservationIgnored var saveDebounce: Duration = .milliseconds(400)
 
+    /// „Close gaps when a chat leaves the grid" (Einstellungen › Agent
+    /// Chats › Grid). Als Closure, damit Tests beide Stellungen prüfen
+    /// können, ohne die echten Preferences anzufassen.
+    @ObservationIgnored var isGridAutoCompactEnabled: () -> Bool = {
+        AppPreferences.shared.isGridAutoCompactEnabled
+    }
+
+    /// Projekt-View → laufende Chats, deren Tab der User geschlossen hat.
+    /// Aktiv = „läuft ∪ offener Tab"; ohne diese Liste käme ein laufender
+    /// Chat nach dem Schließen sofort als Platzhalter-Kachel zurück. Ein
+    /// Eintrag fällt weg, sobald der Chat wieder einen Tab hat oder ⊞ die
+    /// Ansicht neu öffnet. Ephemer: nach einem Neustart laufen die Chats
+    /// ohnehin nicht mehr (Hintergrund-Agents ausgenommen — die zeigt ⊞
+    /// dann wieder).
+    /// Geschrieben nur von `AgentWindowStore+GridTabClose`.
+    var dismissedProjectViewSessionIDs: [UUID: Set<UUID>] = [:]
+
     /// Offene Tabs ALLER Fenster zum App-Start — Snapshot BEVOR Restore/
     /// User-Interaktion den State verändern. Basis des Summary-Start-Abgleichs
     /// („nur zuvor aktive Tabs prüfen, nie die Historie").
@@ -145,14 +162,19 @@ final class AgentWindowStore {
     /// (X-Button, ⌘W, Bulk) laufen genau ueber diese Bridge.
     func setOpenTabIDs(_ ids: [UUID], in windowID: UUID) {
         let removed = openTabIDs(in: windowID).filter { !ids.contains($0) }
+        let focusBefore = gridFocusBeforeClosing(in: windowID)
         updateWindow(windowID) { $0.openTabIDs = ids }
-        recordClosedTabs(removed, windowID: windowID)
+        let released = releaseClosedTabsFromOpenGrids(
+            removed, closingWindowID: windowID, focusBefore: focusBefore
+        )
+        recordClosedTabs(removed, windowID: windowID, releasedFrom: released)
     }
 
     /// Schliesst einen Tab. Selektion rueckt auf den vorherigen Tab (sonst den
     /// neuen letzten), nie ins Leere, solange noch Tabs da sind.
     func closeTab(_ sessionID: UUID, in windowID: UUID) {
         let wasOpen = openTabIDs(in: windowID).contains(sessionID)
+        let focusBefore = gridFocusBeforeClosing(in: windowID)
         updateWindow(windowID) { window in
             guard let index = window.openTabIDs.firstIndex(of: sessionID) else { return }
             window.openTabIDs.remove(at: index)
@@ -163,7 +185,12 @@ final class AgentWindowStore {
                     : window.openTabIDs.first
             }
         }
-        if wasOpen { recordClosedTabs([sessionID], windowID: windowID) }
+        if wasOpen {
+            let released = releaseClosedTabsFromOpenGrids(
+                [sessionID], closingWindowID: windowID, focusBefore: focusBefore
+            )
+            recordClosedTabs([sessionID], windowID: windowID, releasedFrom: released)
+        }
     }
 
     // MARK: - Reopen-History (ephemer)
@@ -173,6 +200,17 @@ final class AgentWindowStore {
     struct ClosedTabRecord: Equatable {
         var sessionID: UUID
         var windowID: UUID
+        /// Eigene Workspaces, die der Chat beim Schließen verlassen hat
+        /// (offen in einem Fenster), samt seiner Stelle — Wiederöffnen setzt
+        /// ihn genau dorthin zurück.
+        var releasedFrom: [ReleasedSlot] = []
+    }
+
+    /// Wo ein geschlossener Chat im Workspace stand: `order` = Anzahl der
+    /// belegten Plätze vor ihm.
+    struct ReleasedSlot: Equatable {
+        var workspaceID: UUID
+        var order: Int
     }
 
     /// Zuletzt geschlossene Tabs (LIFO, Cap 20). Bewusst NICHT persistiert —
@@ -184,11 +222,18 @@ final class AgentWindowStore {
     @ObservationIgnored private(set) var recentlyClosedTabs: [ClosedTabRecord] = []
     private static let reopenHistoryCap = 20
 
-    private func recordClosedTabs(_ sessionIDs: [UUID], windowID: UUID) {
+    private func recordClosedTabs(
+        _ sessionIDs: [UUID],
+        windowID: UUID,
+        releasedFrom: [UUID: [ReleasedSlot]] = [:]
+    ) {
         guard !sessionIDs.isEmpty else { return }
         for id in sessionIDs {
             recentlyClosedTabs.removeAll { $0.sessionID == id }
-            recentlyClosedTabs.append(ClosedTabRecord(sessionID: id, windowID: windowID))
+            recentlyClosedTabs.append(ClosedTabRecord(
+                sessionID: id, windowID: windowID,
+                releasedFrom: releasedFrom[id] ?? []
+            ))
         }
         if recentlyClosedTabs.count > Self.reopenHistoryCap {
             recentlyClosedTabs.removeFirst(recentlyClosedTabs.count - Self.reopenHistoryCap)
@@ -207,6 +252,22 @@ final class AgentWindowStore {
                   windowID(containingTab: entry.sessionID) == nil else { continue }
             let target = hasWindow(entry.windowID) ? entry.windowID : state.primaryWindowID
             openTab(entry.sessionID, in: target)
+            // Zurück an die alte Stelle in den Workspaces, die der Chat beim
+            // Schließen verlassen hat. Klappt das nicht (voll, gelöscht),
+            // bleibt es beim offenen Tab — und der Grund steht im Log.
+            for released in entry.releasedFrom {
+                let result = reinsertSession(
+                    entry.sessionID, intoGridWorkspace: released.workspaceID, atOrder: released.order
+                )
+                switch result {
+                case .added, .alreadyMember:
+                    break
+                default:
+                    Logger.agentStore.notice(
+                        "reopen_not_back_in_workspace session=\(entry.sessionID.uuidString, privacy: .public) workspace=\(released.workspaceID.uuidString, privacy: .public) result=\(String(describing: result), privacy: .public)"
+                    )
+                }
+            }
             return ClosedTabRecord(sessionID: entry.sessionID, windowID: target)
         }
         return nil
@@ -214,8 +275,10 @@ final class AgentWindowStore {
 
     /// Schließt den Tab der Session in dem Fenster, das ihn hält (eine Session
     /// lebt in genau einem Fenster — `--window`-Optionen braucht deshalb
-    /// niemand). Reine UI-Mutation: Session, PTY, Pin und Grid-Mitgliedschaft
-    /// bleiben unangetastet; die Selektion rückt über `closeTab` auf den
+    /// niemand). Reine UI-Mutation: Session, PTY und Pin bleiben
+    /// unangetastet. Wie jedes Tab-Schließen nimmt es den Chat aus Workspaces,
+    /// die gerade in einem Fenster offen sind (`releaseClosedTabsFromOpenGrids`,
+    /// nur mit „Close gaps…"); die Selektion rückt über `closeTab` auf den
     /// Nachbar-Tab. Räumt die Session zusätzlich aus der ephemeren
     /// Multi-Auswahl des Fensters (wie der View-Close, der geschlossene Tab
     /// darf in keiner Gruppen-Aktion zurückbleiben). Gibt die Fenster-ID
@@ -415,6 +478,9 @@ final class AgentWindowStore {
                 name: name, colorHex: colorHex, sourceProjectID: projectID
             )
         }
+        // ⊞ heißt „zeig mir alle aktiven Chats" — auch die, deren Tab vorher
+        // in dieser Ansicht geschlossen wurde.
+        dismissedProjectViewSessionIDs[entityID] = nil
         syncProjectGridWorkspace(
             entityID, name: name, colorHex: colorHex, activeSessionIDs: activeSessionIDs
         )
@@ -454,22 +520,23 @@ final class AgentWindowStore {
         // Validierung + Ordnung gegen den Domain-Workspace (In-Memory-Read,
         // kein Subprozess — Store-Lock-Regel).
         let domain = persistence.loadWorkspace()
+        let dismissed = dismissedProjectViewSessionIDs[workspaceID] ?? []
         let ordered = AgentSessionStore.sortedSessions(
             domain.sessions.filter {
                 activeSessionIDs.contains($0.id) && $0.status != .archived
+                    && !dismissed.contains($0.id)
             }
         ).map(\.id)
 
         var updated = entity
-        let synced = WorkspaceSlotOps.syncedProjectSlots(
-            current: entity.slots, activeOrdered: ordered
+        // Wer geht, macht Platz: die übrigen rücken nach, die Stufe folgt der
+        // Anzahl (Schalter aus: nur leere Kacheln am Ende fallen weg).
+        let layout = WorkspaceSlotOps.projectViewLayout(
+            current: entity.slots, activeOrdered: ordered,
+            compacting: isGridAutoCompactEnabled()
         )
-        // Nach unten atmen: leere Tail-Slots kappen, Kapazität folgt der
-        // kleinsten passenden Stufe (kein Besitzer rückt — normalize()
-        // allein behielte die einmal erreichte Stufe für immer).
-        let trimmed = WorkspaceSlotOps.trimmedProjectTail(synced)
-        updated.slots = trimmed.slots
-        updated.capacity = trimmed.capacity
+        updated.slots = layout.slots
+        updated.capacity = layout.capacity
         if let name { updated.name = name }
         if let colorHex { updated.colorHex = colorHex }
         updated.normalize()
@@ -660,7 +727,7 @@ final class AgentWindowStore {
               let removedIndex = entity.slotIndex(of: sessionID) else { return false }
         let (updated, removed) = WorkspaceSlotOps.remove(
             sessionID, from: entity,
-            compacting: compacting ?? AppPreferences.shared.isGridAutoCompactEnabled
+            compacting: compacting ?? isGridAutoCompactEnabled()
         )
         guard removed else { return false }
         mutate { state in
@@ -1224,7 +1291,7 @@ final class AgentWindowStore {
     /// Workspace-Tick alle Fenster re-rendern und leere Saves schedulen.
     func prune(workspace: AgentWorkspace) {
         var pruned = state
-        pruned.prune(workspace: workspace)
+        pruned.prune(workspace: workspace, compactingGridWorkspaces: isGridAutoCompactEnabled())
         guard pruned != state else { return }
         state = pruned
         dirtyRevision += 1
@@ -1239,7 +1306,10 @@ final class AgentWindowStore {
     /// nicht verschluckt.
     func flush() {
         var pruned = state
-        pruned.prune(workspace: persistence.loadWorkspace())
+        pruned.prune(
+            workspace: persistence.loadWorkspace(),
+            compactingGridWorkspaces: isGridAutoCompactEnabled()
+        )
         if pruned != state {
             state = pruned
             dirtyRevision += 1
@@ -1277,13 +1347,17 @@ final class AgentWindowStore {
     /// (= kein Cross-Window-Re-Render) noch Revision/Save. Der Block mutiert
     /// eine Kopie; `state` wird nur bei echter Differenz genau einmal
     /// geschrieben.
-    private func mutate(_ block: (inout AgentUIState) -> Void) {
+    ///
+    /// Intern statt privat, weil Store-Erweiterungen in eigenen Dateien
+    /// (`AgentWindowStore+GridTabClose`) darüber mutieren.
+    func mutate(_ block: (inout AgentUIState) -> Void) {
         var updated = state
         block(&updated)
         guard updated != state else { return }
         state = updated
         dirtyRevision += 1
         scheduleSave()
+        clearDismissalsOfReopenedTabs()
     }
 
     /// Dirty-Tracking (Spez 14d92786): `savedRevision` folgt `dirtyRevision`

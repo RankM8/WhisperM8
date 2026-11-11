@@ -9,13 +9,14 @@ import Foundation
 /// `id` — doppelte Namen sind erlaubt.
 ///
 /// Slots referenzieren Sessions (nicht Tabs). Positionsstabilität ist
-/// KONFIGURIERBAR: standardmäßig kompaktiert Entfernen/Archivieren die
-/// Belegung (übrige rücken nach vorn, Stufe fällt auf die kleinste
-/// passende — `WorkspaceSlotOps.remove(compacting:)`); mit
-/// `gridAutoCompactEnabled = NO` bzw. CLI `remove --keep-slot` wird der
+/// KONFIGURIERBAR: standardmäßig verdichtet jedes Wegfallen eines Chats die
+/// Belegung — Entfernen, Archivieren/Löschen, Tab schließen in einem
+/// offenen Workspace, Wegfallen aus der Projekt-Ansicht (übrige rücken nach
+/// vorn, Stufe fällt auf die kleinste passende — `WorkspaceSlotOps.compacted`).
+/// Mit `gridAutoCompactEnabled = NO` bzw. CLI `remove --keep-slot` wird der
 /// Index nur `nil` und nichts rückt nach. Dieselbe Session darf in
 /// mehreren Workspaces liegen (Referenzen, wie Playlists), aber nie
-/// doppelt IM SELBEN Workspace.
+/// doppelt IM SELBEN Workspace. Doku: docs/features/agent-chats/ui/grid.md.
 struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
     var id: UUID
     var name: String
@@ -39,23 +40,33 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
 
     static let defaultName = "Workspace"
     static let defaultColorHex = "#6E6ADE"
-    /// Erlaubte Kapazitäts-Stufen (Auto-Wachsen 2→3→4→6→9).
+    /// Erlaubte Kapazitäts-Stufen (Auto-Wachsen 1→2→…→9).
     /// Jede Anzahl bekommt ihr eigenes Layout — 5 Chats sollen nicht in einer
-    /// 6er-Stufe mit leerem Platz landen (Nutzerbefund 02.08.2026).
-    static let allowedCapacities = [2, 3, 4, 5, 6, 7, 8, 9]
+    /// 6er-Stufe mit leerem Platz landen (Nutzerbefund 02.08.2026), und ein
+    /// einzelner Chat nimmt die volle Fläche statt 1×2 mit leerer Kachel
+    /// (Nutzerbefund 11.11.2026).
+    static let allowedCapacities = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    /// Stufe eines LEEREN Rasters: zwei sichtbare Ablageflächen, damit ein
+    /// frischer oder leergeräumter Workspace sofort Drop-Ziele hat.
+    static let emptyCapacity = 2
 
     // MARK: - Layout-Geometrie
 
-    /// Spalten/Zeilen je Stufe: 2 = 1×2 · 3 = „2 oben + 1 breit" (Slot 2
-    /// spannt die untere Zeile) · 4 = 2×2 · 6 = 3×2 · 9 = 3×3.
+    /// Spalten/Zeilen je Stufe: 1 = volle Fläche · 2 = 1×2 · 3 = „2 oben +
+    /// 1 breit" (Slot 2 spannt die untere Zeile) · 4 = 2×2 · 6 = 3×2 · 9 = 3×3.
     static func columns(forCapacity capacity: Int) -> Int {
-        capacity >= 5 ? 3 : 2
+        switch capacity {
+        case ...1: return 1
+        case 5...: return 3
+        default: return 2
+        }
     }
 
     static func rows(forCapacity capacity: Int) -> Int {
         switch capacity {
         case 7, 8, 9: return 3
-        case 2: return 1
+        case ...2: return 1
         default: return 2
         }
     }
@@ -64,6 +75,12 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
     /// mindestens 2, höchstens 9 (darüber wird deterministisch gekappt).
     static func smallestCapacity(fitting count: Int) -> Int {
         allowedCapacities.first { $0 >= count } ?? allowedCapacities.last!
+    }
+
+    /// Stufe für `occupied` belegte Chats ohne Lücken: kleinste passende,
+    /// ein leeres Raster behält `emptyCapacity` Ablageflächen.
+    static func fittingCapacity(occupied count: Int) -> Int {
+        count <= 0 ? emptyCapacity : smallestCapacity(fitting: count)
     }
 
     /// Nächste Stufe fürs Auto-Wachsen (`nil` auf der Endstufe 9).
@@ -163,7 +180,7 @@ struct AgentGridWorkspace: Identifiable, Codable, Equatable, Hashable {
             highestOccupied.map { $0 + 1 } ?? 0,
             Self.allowedCapacities.contains(capacity) ? capacity : 0
         )
-        capacity = Self.smallestCapacity(fitting: requiredCount)
+        capacity = Self.fittingCapacity(occupied: requiredCount)
 
         // Slot-Anzahl == Kapazität: Tail mit nil polstern bzw. deterministisch
         // kappen (Belegung jenseits von Index 8 wird verworfen — Endstufe 9).

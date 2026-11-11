@@ -11,7 +11,7 @@ import SwiftUI
 /// genau einmal beim Loslassen über die Commit-Closures.
 ///
 /// Seit Paket 3 (F10) arbeitet der Container mit GEWICHTS-VEKTOREN pro Achse
-/// (2–3 Spuren, Kapazitäten 2/3/4/6/9): Divider `i` verschiebt Anteil nur
+/// (1–3 Spuren, Kapazitäten 1–9): Divider `i` verschiebt Anteil nur
 /// zwischen den Spuren `i` und `i+1` (`GridSplitResolver.fractionsDuringDrag`).
 struct AgentGridSplitContainer<Pane: View>: View {
     let layout: AgentGridAutoLayout

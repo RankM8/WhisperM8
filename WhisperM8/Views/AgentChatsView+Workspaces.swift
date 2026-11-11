@@ -10,6 +10,40 @@ import SwiftUI
 struct ProjectViewSyncTrigger: Equatable {
     var activeByProject: [UUID: Set<UUID>]?
     var slotsFingerprint: [UUID: [UUID?]]
+    /// Weggeschlossene laufende Chats je Projekt-View — öffnet der User ihren
+    /// Tab wieder, schrumpft die Liste und der Sync nimmt sie zurück.
+    var dismissed: [UUID: Set<UUID>] = [:]
+}
+
+/// Live-Sync der Projekt-Views, wenn die Sidebar ihn nicht liefern kann
+/// (ausgeblendet oder im Archiv-Modus — dann gibt es keinen Snapshot).
+/// Eigene kleine View: Sie beobachtet Terminal-Registry und Job-Modell
+/// selbst, damit deren Ticks nur diesen Winzling neu auswerten und nicht den
+/// Fensterbody. Kein I/O — nur Mengen aus dem Speicher.
+struct ProjectViewLiveSync: View {
+    @ObservedObject var terminalRegistry: AgentTerminalRegistry
+    let jobRuntimeModel: AgentJobRuntimeModel
+    let windowStore: AgentWindowStore
+    let sessions: [AgentChatSession]
+
+    var body: some View {
+        let active = AgentSidebarModelBuilder.activeSessionIDsByProject(
+            sessions: sessions,
+            runningSessionIDs: AgentChatsView.runningSessionIDs(
+                terminalActive: terminalRegistry.activeSessionIDs, jobRuntime: jobRuntimeModel
+            ),
+            globalOpenTabIDs: windowStore.allWindowOpenTabIDs
+        )
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task(id: ProjectViewSyncTrigger(
+                activeByProject: active,
+                slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint,
+                dismissed: windowStore.dismissedProjectViewSessionIDs
+            )) {
+                windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
+            }
+    }
 }
 
 /// Sidebar-Abschnitt WORKSPACES (Plan F5): einklappbare Sektion unter
@@ -20,6 +54,32 @@ struct ProjectViewSyncTrigger: Equatable {
 /// quellenunabhängigen Klickregel (Bridge im `selectedSessionID`-Setter).
 /// Unsichtbar bei null Workspaces.
 extension AgentChatsView {
+    /// Laufende Chats für Sidebar und Projekt-View-Sync: Terminal läuft,
+    /// Codex-Kinder laufen unter dem Parent, aktive Subagent-Jobs.
+    static func runningSessionIDs(
+        terminalActive: Set<UUID>,
+        jobRuntime: AgentJobRuntimeModel
+    ) -> Set<UUID> {
+        terminalActive
+            .union(jobRuntime.runningCountByParentSessionID.filter { $0.value > 0 }.keys)
+            .union(jobRuntime.activeSubagentSessionIDs)
+    }
+
+    /// Sync-Ersatz für Fenster ohne Sidebar-Snapshot: nur nötig, wenn
+    /// irgendwo eine Projekt-View offen ist — sonst kostet er nichts.
+    @ViewBuilder
+    var projectViewSyncWithoutSidebar: some View {
+        if !isSidebarVisible || archiveModeActive,
+           !windowStore.activeProjectViewSlotsFingerprint.isEmpty {
+            ProjectViewLiveSync(
+                terminalRegistry: terminalRegistry,
+                jobRuntimeModel: jobRuntimeModel,
+                windowStore: windowStore,
+                sessions: workspace.sessions
+            )
+        }
+    }
+
     // MARK: - Sektion
 
     @ViewBuilder

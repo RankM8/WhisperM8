@@ -303,9 +303,12 @@ bewusst schwache Schwester von `archive`. Contract:
 
 - **Nur UI:** `AgentWindowStore.closeTabInHostingWindow` entfernt den Tab aus
   dem Fenster, das ihn hält (eine Session lebt in genau einem Fenster, daher
-  keine `--window`-Optionen). Session-Status, PTY-Prozess, Pin, Grid-Slot-
-  Mitgliedschaft und Transcript bleiben unangetastet; erneutes Öffnen attached
-  an denselben Terminal-Controller inkl. Scrollback.
+  keine `--window`-Optionen). Session-Status, PTY-Prozess, Pin und
+  Transcript bleiben unangetastet; erneutes Öffnen attached an denselben
+  Terminal-Controller inkl. Scrollback. Wie in der App verlässt der Chat
+  dabei jeden Workspace, der gerade in einem Fenster offen ist (Raster rückt
+  nach; Workspaces ohne Fenster behalten ihn) — Details in
+  [`agent-chats/ui/grid.md`](agent-chats/ui/grid.md).
 - **Ohne `--stop` kein Guard:** auch working/awaitingInput-Ziele dürfen
   geschlossen werden — es geht nur die Ansicht zu. Die Response meldet
   `ptyRunning`/`runtimeStatus`/`isPinned` zur Information.
@@ -383,7 +386,8 @@ bewusst schwache Schwester von `archive`. Contract:
     außerhalb → Exit 1.
 - **`workspace create "<name>" [--color #RRGGBB] [<ref> …]`** legt einen
   Grid-Workspace an (`gridWorkspace.create`); weitere Refs füllen die Slots in
-  Reihenfolge, die Kapazität wächst passend mit (max. 9). Mitglieder werden
+  Reihenfolge, die Kapazität ist die kleinste passende Stufe (1 bis 9; ohne
+  Refs zwei leere Plätze). Mitglieder werden
   hart validiert (unbekannt → Exit 3, archiviert → Exit 4) — kein stilles
   Loch. Antwort enthält `workspace.id` für Folgebefehle.
 - **`workspace delete <name|id> [--force]`** löscht die kuratierte Gruppe
