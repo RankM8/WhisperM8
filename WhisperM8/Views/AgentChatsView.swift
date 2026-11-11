@@ -110,8 +110,8 @@ struct AgentChatsView: View {
         get { windowStore.pinnedSessionIDs }
         nonmutating set { windowStore.setPinnedSessionIDs(newValue) }
     }
-    @State private var searchText = ""
-    @State private var flatVisibleSessionLimit = 50
+    @State var searchText = ""
+    @State var flatVisibleSessionLimit = 50
     @State var errorMessage: String?
     /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
     @State var missingCLIPrompt: MissingCLIPrompt?
@@ -166,10 +166,10 @@ struct AgentChatsView: View {
     @State private var collapsedTabGroups: Set<AgentTabGroupingKey> = []
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
-    @AppStorage("agentPinnedSectionCollapsed") private var pinnedSectionCollapsed = false
+    @AppStorage("agentPinnedSectionCollapsed") var pinnedSectionCollapsed = false
     /// Chats-Sektion (alle Projekt-Gruppen bzw. die flache Liste) ein-/
     /// ausgeklappt — Muster GEPINNT; eine aktive Suche überstimmt.
-    @AppStorage("agentChatsSectionCollapsed") private var chatsSectionCollapsed = false
+    @AppStorage("agentChatsSectionCollapsed") var chatsSectionCollapsed = false
     /// Workspaces-Sektion ein-/ausgeklappt (persistiert, Muster GEPINNT).
     /// internal, da die Sektion in +Workspaces lebt.
     @AppStorage("agentWorkspacesSectionCollapsed") var workspacesSectionCollapsed = false
@@ -255,9 +255,9 @@ struct AgentChatsView: View {
     /// Welche Chats die Sidebar zeigt (Aktiv·Zuletzt·Alle). Default `.active`
     /// hält die Liste klein; `@AppStorage` persistiert fensterweit ohne
     /// Schema-Migration. Die Suche überstimmt den Scope (siehe `effectiveScope`).
-    @AppStorage("agentSidebarScope") private var sidebarScope: SidebarScope = .active
+    @AppStorage("agentSidebarScope") var sidebarScope: SidebarScope = .active
     /// Anordnung der Chat-Liste (gruppiert nach Projekt vs. flach/zeitlich).
-    @AppStorage("agentSidebarLayout") private var sidebarLayout: SidebarLayout = .grouped
+    @AppStorage("agentSidebarLayout") var sidebarLayout: SidebarLayout = .grouped
     /// Persistierter "Wunschwert" der Sidebar-Breite — global ueber alle
     /// Fenster (wie Scope/Layout), bewusst NICHT @SceneStorage: dessen
     /// Persistenz haengt an der macOS-State-Restoration, die wir mit
@@ -312,6 +312,7 @@ struct AgentChatsView: View {
     /// ausschließlich der `TabSwitcherOverlayHost` — ein Schritt invalidiert
     /// so nicht den ganzen Body samt Sidebar.
     @State var tabSwitcherRun = TabSwitcherRunState()
+    @State var commandState = AgentChatsCommandState()
     /// Pure Durchlauf-Maschine (nil = inaktiv). Zugriff für die Handler in
     /// +Shortcuts; nicht beobachtet (`@ObservationIgnored`), ein Lesen im
     /// Body registriert also keine Abhängigkeit.
@@ -774,6 +775,8 @@ struct AgentChatsView: View {
                 }
 
                 mainWorkspace
+                    .safeAreaInset(edge: .bottom, spacing: 0) { ControllerLegendHost(windowID: windowID) }
+                    .overlay(alignment: .bottom) { ControllerMenuHost(windowID: windowID) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if isInspectorVisible {
@@ -808,7 +811,7 @@ struct AgentChatsView: View {
             // Tabs) → Fenster + Tabs aus dem Store, sonst stellt der
             // Launch-Restore es beim naechsten Start wieder her. Quit/
             // Profilwechsel sind via suspendCloseTracking ausgenommen.
-            onWillClose: { windowStore.handleWindowWillClose(windowID) },
+            onWillClose: { unregisterCommandHandler(); windowStore.handleWindowWillClose(windowID) },
             // Dictation routet ausschliesslich ueber das Key-Fenster —
             // Selektionen in Nicht-Key-Fenstern aendern das Ziel nie
             // (Multi-Window-Politik, Plan-Abschnitt 03).
@@ -933,6 +936,7 @@ struct AgentChatsView: View {
                 commitArchive(sessions)
                 sessionsPendingArchive = nil
             }
+            .keyboardShortcut(.defaultAction) // Return bestätigt (auch Kreuz am Controller)
             Button("Cancel", role: .cancel) {}
         } message: { sessions in
             Text(verbatim: archiveMessage(for: sessions))
@@ -949,6 +953,7 @@ struct AgentChatsView: View {
                 commitEndSession(pending.sessions, removingFromWorkspaceID: pending.removeFromWorkspace?.id)
                 sessionsPendingEnd = nil
             }
+            .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {}
         } message: { pending in
             Text(verbatim: endMessage(for: pending))
@@ -1022,6 +1027,7 @@ struct AgentChatsView: View {
             installTabStripScrollMonitorIfNeeded()
             installTabDragEndMonitorIfNeeded()
             installTabSwitcherFlagsMonitorIfNeeded()
+            registerCommandHandler()
         }
         .onReceive(NotificationCenter.default.publisher(for: AgentChatsView.ambiguousRebindNotification)) { note in
             guard let request = note.userInfo?["request"] as? AmbiguousRebindRequest else { return }
@@ -1046,6 +1052,7 @@ struct AgentChatsView: View {
             removeTabStripScrollMonitor()
             removeTabDragEndMonitor()
             removeTabSwitcherFlagsMonitor()
+            unregisterCommandHandler()
             // Window zu → Routing nur räumen, wenn ES das Ziel besass: das
             // Verschwinden eines NICHT-besitzenden Fensters darf das
             // Dictation-Ziel des aktiv genutzten Fensters nicht löschen
@@ -1070,6 +1077,7 @@ struct AgentChatsView: View {
             // Der eigene Commit räumt den Switcher VOR dem Selektieren
             // (siehe commitTabSwitcher) und ist hier deshalb ein No-op.
             if tabSwitcher != nil { cancelTabSwitcher() }
+            commandState.history.record(newValue)
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
@@ -1537,6 +1545,7 @@ struct AgentChatsView: View {
 
             sidebarScopeBar(counts: snapshot.scopeCounts)
 
+            ScrollViewReader { listProxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     if !snapshot.hasManualProjects {
@@ -1565,7 +1574,7 @@ struct AgentChatsView: View {
                                     project: snapshot.projectByID[session.projectID],
                                     order: snapshot.pinnedOrderIDs,
                                     split: split
-                                )
+                                ).controllerListRow(.chat(session.id))
                                 if let split {
                                     subagentChildrenRows(
                                         parent: session,
@@ -1615,7 +1624,7 @@ struct AgentChatsView: View {
                                 project: snapshot.projectByID[session.projectID],
                                 order: snapshot.visibleFlatOrderIDs,
                                 split: split
-                            )
+                            ).controllerListRow(.chat(session.id))
                             if let split {
                                 subagentChildrenRows(
                                     parent: session,
@@ -1721,10 +1730,12 @@ struct AgentChatsView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                .background(ControllerListScrollFollower(proxy: listProxy))
                 // Mit angeschlossener Maus rendert macOS sonst einen 15 pt
                 // breiten Legacy-Scroller mit hellem Track in die dunkle
                 // Sidebar — Overlay-Stil erzwingen (Views/OverlayScrollers).
                 .overlayScrollers()
+            }
             }
             }
 
@@ -1733,6 +1744,7 @@ struct AgentChatsView: View {
             sidebarFooter
         }
         .background(AgentTheme.sidebar)
+        .environment(\.agentChatsWindowID, windowID)
         .onAppear { refreshMissingTranscripts() }
         .onChange(of: workspace.sessions.count) { _, _ in refreshMissingTranscripts() }
         .onChange(of: sidebarScope) { _, _ in flatVisibleSessionLimit = 50 }
@@ -2275,7 +2287,8 @@ struct AgentChatsView: View {
         }
         .onAppear {
             newChatSearchFocused = true
-            newChatHighlightedProjectID = projectIDs.first
+            // Vorauswahl vom Controller (Create), sonst das erste Projekt.
+            newChatHighlightedProjectID = ProjectPickerKeyboard.normalize(commandState.takePreferredNewChatProjectID(), in: projectIDs)
         }
     }
 
@@ -2296,7 +2309,7 @@ struct AgentChatsView: View {
     }
 
     /// Baut den auswertbaren Filter aus dem effektiven Scope + Live-Inputs.
-    private func makeScopeFilter(openTabIDs: Set<UUID>, runningSessionIDs: Set<UUID>) -> SidebarScopeFilter {
+    func makeScopeFilter(openTabIDs: Set<UUID>, runningSessionIDs: Set<UUID>) -> SidebarScopeFilter {
         SidebarScopeFilter(
             scope: effectiveScope,
             runningSessionIDs: runningSessionIDs,

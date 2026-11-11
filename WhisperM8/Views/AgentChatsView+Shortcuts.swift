@@ -11,7 +11,7 @@ extension AgentChatsView {
     /// `headerTabs` (sichtbare, nicht-archivierte Tabs in Anzeige-Reihenfolge) —
     /// konsistent mit den ⌘1–⌘9-Sprüngen. Das Setzen von `selectedSessionID`
     /// triggert die bestehende UIState-Persistenz via `onChange`.
-    private func selectAdjacentTab(_ direction: Int) {
+    func selectAdjacentTab(_ direction: Int) {
         let order = visualTabOrderIDs
         if let next = adjacentTabID(in: order, current: selectedSessionID, direction: direction) {
             selectedSessionID = next
@@ -191,6 +191,15 @@ extension AgentChatsView {
               TabSwitcherShortcut.isNextWaitingChat(
                   keyCode: event.keyCode, modifiers: event.modifierFlags
               ) else { return event }
+        selectNextWaitingChat()
+        return nil
+    }
+
+    /// Springt zum nächsten wartenden Chat. Gemeinsamer Weg für ⌃⌥Tab und den
+    /// Befehls-Katalog.
+    /// - Returns: `false`, wenn kein Chat wartet.
+    @discardableResult
+    func selectNextWaitingChat() -> Bool {
         let activityStore = tabSwitcherActivityStore
         // Über die (wenigen) wartenden Einträge des Status-Stores statt über
         // alle Sessions — siehe `NextWaitingChatResolver.candidates`.
@@ -201,10 +210,10 @@ extension AgentChatsView {
         )
         guard let target = NextWaitingChatResolver.next(
             candidates: candidates, current: selectedSessionID
-        ) else { return nil }
+        ) else { return false }
         selectedSessionID = target
         multiSelection = []
-        return nil
+        return true
     }
 
     // MARK: - Ctrl+Tab-Switcher (Alt-Tab-artige Tab-Auswahl)
@@ -236,16 +245,7 @@ extension AgentChatsView {
             // Aktivierung braucht ≥ 2 Tabs — `begin` liefert sonst nil. Das
             // Event wird trotzdem konsumiert (No-op), damit kein Tab-Byte im
             // Terminal landet.
-            // Umfang (Grid / Workspace / Projekt) statt aller offenen Tabs —
-            // siehe `TabSwitcherScope`.
-            tabSwitcherRun.lastModifiers = event.modifierFlags
-            tabSwitcher = TabSwitcherModel.begin(
-                order: refreshTabSwitcherScope(),
-                current: selectedSession?.id,
-                direction: direction
-            )
-            if tabSwitcher == nil { tabSwitcherSessions = [] }
-            syncTabSwitcherGridMarking()
+            beginTabSwitcher(direction: direction, modifiers: event.modifierFlags)
             return nil
         }
 
@@ -257,19 +257,8 @@ extension AgentChatsView {
             // anderes Fenster).
             tabSwitcher?.advance(step, order: refreshTabSwitcherScope())
         case .arrow(let arrow):
-            if isGridActive {
-                // Grid sichtbar (Situation A): geometrisch wie ⌃⌘-Pfeile.
-                moveTabSwitcherHighlightInGrid(arrow)
-                return nil
-            } else if tabSwitcherMiniMapWorkspace != nil {
-                // Mini-Map (Situation B): räumlich wie ⌃⌘-Pfeile im Grid.
-                moveTabSwitcherInMiniMap(arrow)
-                return nil
-            }
-            // Projekt-Liste (Situation C): jede Pfeiltaste = ein Schritt in
-            // der Liste, Wrap-around inklusive.
-            let step = (arrow == .left || arrow == .up) ? -1 : +1
-            tabSwitcher?.advance(step, order: refreshTabSwitcherScope())
+            moveTabSwitcher(arrow)
+            return nil
         case .commit:
             commitTabSwitcher()
         case .cancel:
@@ -282,6 +271,49 @@ extension AgentChatsView {
         }
         syncTabSwitcherGridMarking()
         return nil
+    }
+
+    /// Öffnet den Umschalter. Gemeinsamer Weg für Ctrl+Tab und den
+    /// Befehls-Katalog. `direction` 0 lässt die Markierung auf dem aktuellen
+    /// Chat (Controller: erst halten, dann bewegen); ±1 markiert sofort den
+    /// Nachbarn (Ctrl+Tab). Braucht mindestens zwei Ziele, sonst bleibt der
+    /// Umschalter zu.
+    /// - Returns: `true`, wenn er jetzt offen ist.
+    @discardableResult
+    func beginTabSwitcher(direction: Int, modifiers: NSEvent.ModifierFlags) -> Bool {
+        // Umfang (Grid / Workspace / Projekt) statt aller offenen Tabs —
+        // siehe `TabSwitcherScope`.
+        tabSwitcherRun.lastModifiers = modifiers
+        commandState.switcherOpenedWithoutModifier = !modifiers.contains(.control)
+        tabSwitcher = TabSwitcherModel.begin(
+            order: refreshTabSwitcherScope(),
+            current: selectedSession?.id,
+            direction: direction
+        )
+        if tabSwitcher == nil {
+            tabSwitcherSessions = []
+            commandState.switcherOpenedWithoutModifier = false
+        }
+        syncTabSwitcherGridMarking()
+        return tabSwitcher != nil
+    }
+
+    /// Ein Pfeil-Schritt im laufenden Umschalter. Gemeinsamer Weg für die
+    /// Pfeiltasten bei gehaltenem Ctrl und den Befehls-Katalog.
+    func moveTabSwitcher(_ arrow: GridFocusDirection) {
+        if isGridActive {
+            // Grid sichtbar (Situation A): geometrisch wie ⌃⌘-Pfeile.
+            moveTabSwitcherHighlightInGrid(arrow)
+        } else if tabSwitcherMiniMapWorkspace != nil {
+            // Mini-Map (Situation B): räumlich wie ⌃⌘-Pfeile im Grid.
+            moveTabSwitcherInMiniMap(arrow)
+        } else {
+            // Projekt-Liste (Situation C): jede Pfeiltaste = ein Schritt in
+            // der Liste, Wrap-around inklusive.
+            let step = (arrow == .left || arrow == .up) ? -1 : +1
+            tabSwitcher?.advance(step, order: refreshTabSwitcherScope())
+            syncTabSwitcherGridMarking()
+        }
     }
 
     /// Pfeiltaste bei gehaltenem Ctrl im sichtbaren Grid: Highlight springt
@@ -338,6 +370,13 @@ extension AgentChatsView {
                     current: event.modifierFlags
                 )
                 tabSwitcherRun.lastModifiers = event.modifierFlags
+                if commandState.switcherOpenedWithoutModifier {
+                    // Ohne Ctrl geöffnet (Controller): Es gibt kein Loslassen,
+                    // das bestätigen könnte. Jede Modifier-Änderung zählt als
+                    // Griff zur Tastatur und bricht ab.
+                    if action != .none { cancelTabSwitcher() }
+                    return event
+                }
                 switch action {
                 case .none: break
                 // Echtes Loslassen von Control (egal ob Shift o. ä. noch
@@ -387,6 +426,7 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
+        commandState.switcherOpenedWithoutModifier = false
         guard let target = switcher.commitTarget(order: order) else { return }
         selectTabSwitcherTarget(target)
     }
@@ -402,6 +442,7 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
+        commandState.switcherOpenedWithoutModifier = false
         guard order.contains(sessionID) else { return }
         selectTabSwitcherTarget(sessionID)
     }
@@ -443,6 +484,7 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
+        commandState.switcherOpenedWithoutModifier = false
     }
 
     /// Löst den Switcher-Umfang frisch auf (`TabSwitcherScope`) und legt die

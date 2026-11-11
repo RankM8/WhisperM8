@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-10-10
+updated: 2026-11-11
 ---
 
 # UI — Fenster, Sidebar, Tabs, Terminal, Timeline
@@ -60,6 +60,21 @@ Projektkopf, Session-Rows, Drop-Zonen und einem Row-Limit mit
 „weitere anzeigen". Gepinnte Sessions stehen in einer eigenen Sektion und
 fallen aus den Projektlisten heraus. Archivierte Sessions sind nicht Teil der
 normalen Liste, sondern werden über den Archiv-Modus gezeigt.
+
+Der Abschnitt WORKSPACES zeigt die angelegten Workspaces mit ihren Chats.
+Der Klick auf den Kopf öffnet das Raster. Ein einfacher Klick auf eine
+Chat-Zeile darunter gehört zu genau diesem Workspace: Ist er im Fenster
+sichtbar, bekommt die Kachel des Chats den Fokus; sonst wechselt das Fenster
+in diesen Workspace (Raster sichtbar) mit dem Chat als Kachel-Fokus
+(`AgentWindowStore.navigateToWorkspaceChat`) — auch dann, wenn der Workspace
+nur das verborgene Rücksprungziel einer Einzelansicht ist. „Zurück zum
+Workspace“ führt danach in genau diesen Workspace. Konflikte wie beim Kopf:
+Besitzt ein anderes Fenster den Workspace, kommt es nach vorn; lebt der Chat
+als Tab in einem anderen Fenster, wird er dort geöffnet. Cmd- und Shift-Klick
+bleiben Mehrfachauswahl. Chat-Zeilen unter einem Projekt folgen weiter der
+allgemeinen Klickregel (im sichtbaren Workspace Kachel-Fokus, sonst
+Einzelansicht mit unveränderter Workspace-Referenz). Kreuz am Controller auf
+einer Workspace-Zeile nimmt denselben Weg (`selectWorkspaceChat`).
 
 Sidebar-Drops laufen über den puren `AgentDragDropPlanner`. Er unterscheidet
 beim Reorder innerhalb eines Projekts die Drag-Richtung, plant Moves in ein

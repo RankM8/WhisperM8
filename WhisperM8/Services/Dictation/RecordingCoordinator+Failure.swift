@@ -13,6 +13,7 @@ extension RecordingCoordinator {
         audioDuration: TimeInterval,
         outputMode: OutputMode,
         contextBundle: TranscriptContextBundle,
+        delivery: DictationDelivery = .frontApp,
         message: String,
         logPrefix: String,
         alertTitle: String = String(localized: "Transcription failed")
@@ -26,6 +27,7 @@ extension RecordingCoordinator {
             audioDuration: audioDuration,
             outputMode: outputMode,
             contextBundle: contextBundle,
+            delivery: delivery,
             errorMessage: message
         )
 
@@ -47,7 +49,8 @@ extension RecordingCoordinator {
         audioURL: URL,
         audioDuration: TimeInterval,
         outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle
+        contextBundle: TranscriptContextBundle,
+        delivery: DictationDelivery = .frontApp
     ) {
         Logger.transcription.info("Transcription aborted by user; preserving recording")
         appState?.lastError = nil
@@ -57,6 +60,7 @@ extension RecordingCoordinator {
             audioDuration: audioDuration,
             outputMode: outputMode,
             contextBundle: contextBundle,
+            delivery: delivery,
             errorMessage: "Vom Benutzer abgebrochen"
         )
     }
@@ -70,6 +74,7 @@ extension RecordingCoordinator {
         audioDuration: TimeInterval,
         outputMode: OutputMode,
         contextBundle: TranscriptContextBundle,
+        delivery: DictationDelivery = .frontApp,
         errorMessage: String
     ) -> Bool {
         do {
@@ -84,7 +89,8 @@ extension RecordingCoordinator {
                 recording: recording,
                 audioDuration: audioDuration,
                 outputMode: outputMode,
-                contextBundle: contextBundle
+                contextBundle: contextBundle,
+                delivery: delivery
             )
             Logger.transcription.info("Recording preserved at \(recording.audioURL.path, privacy: .public)")
             refreshPreservedRecordingFlag()
@@ -193,6 +199,7 @@ extension RecordingCoordinator {
                 audioDuration: flight.audioDuration,
                 outputMode: flight.outputMode,
                 contextBundle: flight.contextBundle,
+                delivery: flight.delivery,
                 errorMessage: message
             )
         }

@@ -13,6 +13,8 @@ enum DebugCLIArguments: Equatable {
     case status(ref: String, status: String)
     case context
     case record(seconds: Double?)
+    case controllerState
+    case controllerRun(script: String, execute: Bool, window: String?, frontmost: Bool)
 
     static let defaultDictateTimeout = 300
 
@@ -87,6 +89,49 @@ enum DebugCLIArguments: Equatable {
                 throw ParseError.usage("record: Sekunden zwischen 0 und 5")
             }
             return .record(seconds: seconds)
+        case "controller":
+            guard let sub = rest.first else { throw ParseError.usage("controller braucht state, press oder sequence") }
+            rest.removeFirst()
+            func takeFlag(_ name: String) -> Bool {
+                guard let index = rest.firstIndex(of: name) else { return false }
+                rest.remove(at: index)
+                return true
+            }
+            switch sub {
+            case "state":
+                try noRest()
+                return .controllerState
+            case "press", "sequence":
+                let execute = takeFlag("--execute")
+                let frontmost = takeFlag("--frontmost")
+                let window = try takeOption(["--window", "-w"])
+                let holdRaw = try takeOption(["--hold"])
+                guard rest.count == 1 else {
+                    throw ParseError.usage(sub == "press" ? "controller press <taste>" : "controller sequence \"<schritte>\"")
+                }
+                var script = rest[0]
+                if sub == "press" {
+                    guard let button = ControllerButton(rawValue: rest[0]) else {
+                        throw ParseError.usage("Unbekannte Taste — erlaubt: \(ControllerDebugScript.buttonNames)")
+                    }
+                    var hold = 60
+                    if let holdRaw {
+                        guard let value = Int(holdRaw), value >= 0 else { throw ParseError.usage("--hold braucht Millisekunden") }
+                        hold = value
+                    }
+                    script = ControllerDebugScript.pressScript(button: button, holdMilliseconds: hold)
+                } else if holdRaw != nil {
+                    throw ParseError.usage("--hold gibt es nur bei press")
+                }
+                do {
+                    _ = try ControllerDebugScript.parse(script)
+                } catch ControllerDebugScript.ParseError.invalid(let message) {
+                    throw ParseError.usage(message)
+                }
+                return .controllerRun(script: script, execute: execute, window: window, frontmost: frontmost)
+            default:
+                throw ParseError.usage("Unbekannter controller-Befehl: \(sub)")
+            }
         default:
             throw ParseError.usage("Unbekannter debug-Befehl: \(command)")
         }
@@ -118,6 +163,16 @@ enum DebugCLICommand {
                                     Zwischenablage, kein Tastendruck) — Tastencodes für Cmd+C/V
       record [<sekunden>]           Echten Aufnahmestart wie per Hotkey messen (Default 1 s,
                                     max. 5), danach Abbruch ohne Transkript und ohne Kontext
+      controller state              Controller-Steuerung: Verbindung, Schalter, Zähler je Taste
+                                    (App vorne / im Hintergrund), letzte aufgelöste Gesten
+      controller press <taste>      Künstlicher Tastendruck durch die echte Kette. Ohne
+                 [--hold <ms>]      --execute ein Trockenlauf (Geste, Zusammenhang, Aktion);
+                 [--execute]        Ausführen geht nur in der Test-Instanz.
+                 [--window <id>]    --window: dieses Fenster gilt als aktives Agent-Chats-Fenster,
+                 [--frontmost]      --frontmost: die App gilt als vorne
+      controller sequence "<…>"     Folge aus down:<taste>, up:<taste>, trigger:<l2|r2>:<0…1>,
+                                    stick:<left|right>:<x>:<y>, wait:<ms> — durch Kommas getrennt,
+                                    zusammen höchstens 8 s Wartezeit; Optionen wie bei press
 
     Ausgabe: JSON auf stdout. Exit: 0 ok, 1 Aufruf/Parameter, 3 nicht gefunden,
     4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.
@@ -156,6 +211,12 @@ enum DebugCLICommand {
             return call("debug.context", [:])
         case .record(let seconds):
             return call("debug.record", seconds.map { ["seconds": $0] } ?? [:])
+        case .controllerState:
+            return call("debug.controller", ["op": "state"])
+        case .controllerRun(let script, let execute, let window, let frontmost):
+            var params: [String: Any] = ["op": "run", "script": script, "execute": execute, "frontmost": frontmost]
+            if let window { params["window"] = window }
+            return call("debug.controller", params)
         case .dictate(let audioPath, let provider, let language, let timeout):
             var params: [String: Any] = ["audioPath": audioPath]
             if let provider { params["provider"] = provider }

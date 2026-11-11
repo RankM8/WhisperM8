@@ -199,6 +199,22 @@ final class ClipboardHistoryController {
 
     var isPanelVisible: Bool { panel?.isVisible == true }
 
+    /// Führt einen Befehl im offenen Verlauf aus, als wäre die Taste gedrückt
+    /// worden (Controller-Bedienung). Ohne offenes Fenster passiert nichts.
+    func perform(_ command: ClipboardKeyCommand) {
+        guard isPanelVisible else { return }
+        model.handle(command)
+    }
+
+    /// Zustand des Verlaufs für den Controller (große Bildansicht, Rückfrage, Menü).
+    var controllerState: ControllerClipboardState { model.controllerState }
+
+    /// Controller-Befehl im offenen Verlauf (Tasten, Filter, Menü).
+    func perform(controller command: ControllerClipboardCommand) {
+        guard isPanelVisible else { return }
+        model.perform(controller: command)
+    }
+
     /// Knöpfe freischalten und die Markierung der App davor prüfen, abseits
     /// des Main Threads (nur Accessibility, nie Cmd+C).
     private func prepareQuickActions() {

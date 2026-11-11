@@ -14,6 +14,8 @@ struct ClipboardHistoryView: View {
     @ObservedObject var model: ClipboardHistoryViewModel
     @FocusState private var searchFocused: Bool
     var now: Date = Date()
+    /// Nur für Snapshots: Zustand des Controllers statt des echten.
+    var controllerStatus: ControllerStatus?
 
     var body: some View {
         let list = model.visible
@@ -36,6 +38,18 @@ struct ClipboardHistoryView: View {
         .overlay {
             if model.isZoomed, let entry = model.selectedEntry {
                 zoomOverlay(entry)
+            }
+        }
+        // Menü des Controllers (Options), über der Fußzeile.
+        .overlay(alignment: .bottomTrailing) {
+            if let menu = model.controllerMenu {
+                ControllerMenuPanel(
+                    heading: String(localized: "Clipboard"),
+                    rows: model.controllerMenuRows(for: menu),
+                    selectedID: menu.selected?.rawValue
+                )
+                .padding(.trailing, 16)
+                .padding(.bottom, 52)
             }
         }
         .frame(width: Self.size.width, height: Self.size.height)
@@ -512,18 +526,23 @@ struct ClipboardHistoryView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(AppTheme.textPrimary)
                 Spacer(minLength: 0)
+                ClipboardControllerHints(state: model.controllerState, status: controllerStatus) { EmptyView() }
                 Button("Cancel") { model.isConfirmingClear = false }
                     .buttonStyle(SettingsButtonStyle.standard)
                 Button("Clear History") { model.confirmClear() }
                     .buttonStyle(SettingsButtonStyle.destructive)
             } else {
-                hint("↑↓", "Select")
-                hint("↩", "Paste")
-                hint("⌥↩", "Plain text")
-                if model.quickActionsAvailable { hint("⌘↩", "Correct") }
-                hint("⌘1-9", "Quick paste")
-                hint("⌘D", "Dictations")
-                hint("esc", "Close")
+                ClipboardControllerHints(state: model.controllerState, status: controllerStatus) {
+                    HStack(spacing: 12) {
+                        hint("↑↓", "Select")
+                        hint("↩", "Paste")
+                        hint("⌥↩", "Plain text")
+                        if model.quickActionsAvailable { hint("⌘↩", "Correct") }
+                        hint("⌘1-9", "Quick paste")
+                        hint("⌘D", "Dictations")
+                        hint("esc", "Close")
+                    }
+                }
                 Spacer(minLength: 0)
                 footerButton("Clear History…", systemImage: "trash") { model.isConfirmingClear = true }
                 footerButton("Settings…", systemImage: "gearshape") { model.actions.openSettings() }

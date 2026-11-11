@@ -921,6 +921,16 @@
         }
       }
     },
+    "A button press has arrived while another app was in front.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Tastendruck ist angekommen, während ein anderes Programm vorne war."
+          }
+        }
+      }
+    },
     "A chat can read a short announcement aloud when it finishes or needs you. Never during a dictation recording. Mute from the menu bar.": {
       "localizations": {
         "de": {
@@ -937,6 +947,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein Chat arbeitet noch"
+          }
+        }
+      }
+    },
+    "A connected gamepad drives Agent Chats and dictation: move through the list, open chats, answer questions and dictate.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein verbundenes Gamepad steuert Agent Chats und Diktat: durch die Liste gehen, Chats öffnen, Rückfragen beantworten und diktieren."
           }
         }
       }
@@ -1007,6 +1027,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein schmaler Streifen an der Notch (ohne Notch eine Pille oben am Bildschirm) zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, ein weiterer springt zum Chat. Standardmäßig an."
+          }
+        }
+      }
+    },
+    "A strip at the bottom of the Agent Chats window shows what each button does right now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Leiste am unteren Rand des Agent-Chats-Fensters zeigt, was jede Taste gerade tut."
           }
         }
       }
@@ -1197,6 +1227,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktiv"
+          }
+        }
+      }
+    },
+    "Active / Recent / All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv / Zuletzt / Alle"
           }
         }
       }
@@ -1601,6 +1641,16 @@
         }
       }
     },
+    "Agents": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agenten"
+          }
+        }
+      }
+    },
     "Agents worked": {
       "localizations": {
         "de": {
@@ -1617,6 +1667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alle"
+          }
+        }
+      }
+    },
+    "All / Dictations": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle / Diktate"
           }
         }
       }
@@ -1851,6 +1911,16 @@
         }
       }
     },
+    "Also when another app is in front": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auch wenn ein anderes Programm vorne ist"
+          }
+        }
+      }
+    },
     "Always awake, also on battery and with the lid closed": {
       "localizations": {
         "de": {
@@ -1891,6 +1961,16 @@
         }
       }
     },
+    "Another window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderes Fenster"
+          }
+        }
+      }
+    },
     "Any status": {
       "localizations": {
         "de": {
@@ -1917,6 +1997,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "App-Berechtigungen"
+          }
+        }
+      }
+    },
+    "App in front": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programm vorne"
           }
         }
       }
@@ -1957,6 +2047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Freigabe: %@"
+          }
+        }
+      }
+    },
+    "Approvals": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigaben"
           }
         }
       }
@@ -2027,6 +2127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scharf: %1$lld× umgeschaltet, %2$lld× übersprungen"
+          }
+        }
+      }
+    },
+    "Arrow keys": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pfeiltasten"
           }
         }
       }
@@ -2301,6 +2411,16 @@
         }
       }
     },
+    "Back, cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück, abbrechen"
+          }
+        }
+      }
+    },
     "Background agent": {
       "localizations": {
         "de": {
@@ -2411,12 +2531,42 @@
         }
       }
     },
+    "Battery: %lld %": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akku: %lld %"
+          }
+        }
+      }
+    },
+    "Battery: not reported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akku: nicht gemeldet"
+          }
+        }
+      }
+    },
     "Before": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Vorher"
+          }
+        }
+      }
+    },
+    "Behavior": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verhalten"
           }
         }
       }
@@ -2577,6 +2727,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Integrierter Modus"
+          }
+        }
+      }
+    },
+    "Button test": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten-Test"
+          }
+        }
+      }
+    },
+    "Buttons in the background": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten im Hintergrund"
           }
         }
       }
@@ -2777,6 +2947,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Änderungen gelten ab der nächsten Aufnahme. Bluetooth-Geräte können auf den Systemstandard zurückfallen."
+          }
+        }
+      }
+    },
+    "Chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         }
       }
@@ -3121,6 +3301,16 @@
         }
       }
     },
+    "Circle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kreis"
+          }
+        }
+      }
+    },
     "Claude Agents": {
       "localizations": {
         "de": {
@@ -3371,6 +3561,16 @@
         }
       }
     },
+    "Clear conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch leeren"
+          }
+        }
+      }
+    },
     "Clear filter — show all chats": {
       "localizations": {
         "de": {
@@ -3401,12 +3601,32 @@
         }
       }
     },
+    "Clear input": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingabe leeren"
+          }
+        }
+      }
+    },
     "Clear the clipboard history?": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Zwischenablage-Verlauf leeren?"
+          }
+        }
+      }
+    },
+    "Clear the input field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingabefeld leeren"
           }
         }
       }
@@ -3527,6 +3747,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld Terminals schließen"
+          }
+        }
+      }
+    },
+    "Close chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat schließen"
           }
         }
       }
@@ -3911,6 +4141,26 @@
         }
       }
     },
+    "Commands": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehle"
+          }
+        }
+      }
+    },
+    "Commands …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehle …"
+          }
+        }
+      }
+    },
     "Commits": {
       "localizations": {
         "de": {
@@ -3981,6 +4231,16 @@
         }
       }
     },
+    "Confirm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestätigen"
+          }
+        }
+      }
+    },
     "Connect ChatGPT account": {
       "localizations": {
         "de": {
@@ -4017,6 +4277,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codex verbinden und Nachbearbeitungs-Modi, Vorlagen und Testläufe verwalten."
+          }
+        }
+      }
+    },
+    "Connect a gamepad over Bluetooth or USB. See “Pairing” below.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbinde ein Gamepad über Bluetooth oder USB. Siehe „Koppeln“ unten."
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
           }
         }
       }
@@ -4061,6 +4341,16 @@
         }
       }
     },
+    "Context usage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontext-Auslastung"
+          }
+        }
+      }
+    },
     "Continue": {
       "localizations": {
         "de": {
@@ -4087,6 +4377,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job dauerhaft als interaktiven Codex-Chat fortsetzen (exklusiv — `agent send` ist danach deaktiviert)"
+          }
+        }
+      }
+    },
+    "Controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller"
+          }
+        }
+      }
+    },
+    "Controller connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller verbunden"
+          }
+        }
+      }
+    },
+    "Controller paused": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller pausiert"
+          }
+        }
+      }
+    },
+    "Controller support": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller-Steuerung"
           }
         }
       }
@@ -4211,6 +4541,16 @@
         }
       }
     },
+    "Core buttons": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kern"
+          }
+        }
+      }
+    },
     "Correct": {
       "localizations": {
         "de": {
@@ -4247,6 +4587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Markierung korrigieren (%@)"
+          }
+        }
+      }
+    },
+    "Correct and paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrigieren und einfügen"
           }
         }
       }
@@ -4491,6 +4841,16 @@
         }
       }
     },
+    "Cross": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kreuz"
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "de": {
@@ -4541,6 +4901,56 @@
         }
       }
     },
+    "D-pad down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz runter"
+          }
+        }
+      }
+    },
+    "D-pad left": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz links"
+          }
+        }
+      }
+    },
+    "D-pad right": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz rechts"
+          }
+        }
+      }
+    },
+    "D-pad up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz hoch"
+          }
+        }
+      }
+    },
+    "D-pad: arrow keys only while the agent asks a question; otherwise it moves like the left stick": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz: Pfeiltasten nur, solange der Agent eine Rückfrage stellt; sonst bewegt es wie der linke Stick"
+          }
+        }
+      }
+    },
     "DONE": {
       "localizations": {
         "de": {
@@ -4587,6 +4997,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Daten"
+          }
+        }
+      }
+    },
+    "Decline": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ablehnen"
           }
         }
       }
@@ -4667,6 +5087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Löschen"
+          }
+        }
+      }
+    },
+    "Delete (hold: characters, after a second whole words)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen (halten: Zeichen, nach einer Sekunde ganze Wörter)"
           }
         }
       }
@@ -4951,6 +5381,26 @@
         }
       }
     },
+    "Dialog": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dialog"
+          }
+        }
+      }
+    },
+    "Dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat"
+          }
+        }
+      }
+    },
     "Dictation": {
       "localizations": {
         "de": {
@@ -4981,6 +5431,26 @@
         }
       }
     },
+    "Dictation and clipboard history work everywhere. Turn this off for gaming, or pause the controller with L1 + R1.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat und Zwischenablage-Verlauf funktionieren überall. Beim Spielen ausschalten oder den Controller mit L1 + R1 pausieren."
+          }
+        }
+      }
+    },
+    "Dictation on and off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat an und aus"
+          }
+        }
+      }
+    },
     "Dictation only": {
       "localizations": {
         "de": {
@@ -4997,6 +5467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diktate"
+          }
+        }
+      }
+    },
+    "Discard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwerfen"
           }
         }
       }
@@ -5027,6 +5507,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertig"
+          }
+        }
+      }
+    },
+    "Done and send": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig und senden"
           }
         }
       }
@@ -5277,6 +5767,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Endet um %@, früher bei wenig Akku oder wenn der Mac zu heiß wird."
+          }
+        }
+      }
+    },
+    "Enlarge the tile, or go back to the grid": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kachel groß machen oder zurück zum Raster"
+          }
+        }
+      }
+    },
+    "Enlarge tile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kachel groß"
           }
         }
       }
@@ -5791,6 +6301,16 @@
         }
       }
     },
+    "Flip through tabs; in the list: Active / Recent / All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiter blättern; in der Liste: Aktiv / Zuletzt / Alle"
+          }
+        }
+      }
+    },
     "Folder saved": {
       "localizations": {
         "de": {
@@ -6181,6 +6701,16 @@
         }
       }
     },
+    "Help": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hilfe"
+          }
+        }
+      }
+    },
     "Here": {
       "localizations": {
         "de": {
@@ -6371,12 +6901,142 @@
         }
       }
     },
+    "Hold L2, then R2: switch to that chat and dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann R2: zu diesem Chat wechseln und diktieren"
+          }
+        }
+      }
+    },
+    "Hold both: pause and resume the controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beide halten: Controller pausieren und fortsetzen"
+          }
+        }
+      }
+    },
     "Hold to talk, or tap to toggle recording on/off. Short taps under 0.3 s are ignored to prevent accidental stops.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Halten zum Sprechen oder tippen, um die Aufnahme ein-/auszuschalten. Kurze Tipper unter 0,3 s werden ignoriert, um versehentliches Stoppen zu verhindern."
+          }
+        }
+      }
+    },
+    "Hold: clear input": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Eingabe leeren"
+          }
+        }
+      }
+    },
+    "Hold: clear the whole input (not while the agent asks a question)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: ganze Eingabe leeren (nicht während einer Rückfrage des Agenten)"
+          }
+        }
+      }
+    },
+    "Hold: close": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: schließen"
+          }
+        }
+      }
+    },
+    "Hold: delete": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: löschen"
+          }
+        }
+      }
+    },
+    "Hold: interrupt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: unterbrechen"
+          }
+        }
+      }
+    },
+    "Hold: interrupt a working chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: arbeitenden Chat unterbrechen"
+          }
+        }
+      }
+    },
+    "Hold: pause": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: pausieren"
+          }
+        }
+      }
+    },
+    "Hold: pick a chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Chat wählen"
+          }
+        }
+      }
+    },
+    "Hold: pick a chat, release to switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Chat wählen, loslassen wechselt"
+          }
+        }
+      }
+    },
+    "Hold: resume": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: fortsetzen"
+          }
+        }
+      }
+    },
+    "Hold: switch workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Workspace wechseln"
           }
         }
       }
@@ -6557,6 +7217,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
+          }
+        }
+      }
+    },
+    "In the grid, hold: pick a workspace, release to switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Raster halten: Workspace wählen, loslassen wechselt"
+          }
+        }
+      }
+    },
+    "In the list, hold: close the chat (like its − or ×)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Liste halten: Chat schließen (wie sein − oder ×)"
           }
         }
       }
@@ -7001,6 +7681,16 @@
         }
       }
     },
+    "Large image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild groß"
+          }
+        }
+      }
+    },
     "Last analysis": {
       "localizations": {
         "de": {
@@ -7017,6 +7707,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zuletzt %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Last chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzter Chat"
           }
         }
       }
@@ -7151,6 +7851,16 @@
         }
       }
     },
+    "Left stick click": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linker Stick gedrückt"
+          }
+        }
+      }
+    },
     "Let agents read the history": {
       "localizations": {
         "de": {
@@ -7211,6 +7921,16 @@
         }
       }
     },
+    "Light bar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lichtleiste"
+          }
+        }
+      }
+    },
     "Limits": {
       "localizations": {
         "de": {
@@ -7267,6 +7987,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Link zeigt auf eine andere App-Kopie"
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste"
           }
         }
       }
@@ -7711,6 +8441,16 @@
         }
       }
     },
+    "MCP servers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCP-Server"
+          }
+        }
+      }
+    },
     "Mac sleeps as usual": {
       "localizations": {
         "de": {
@@ -7921,6 +8661,46 @@
         }
       }
     },
+    "Memory": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gedächtnis"
+          }
+        }
+      }
+    },
+    "Menu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menü"
+          }
+        }
+      }
+    },
+    "Menu with quick replies and chat actions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menü mit Kurzantworten und Aktionen zum Chat"
+          }
+        }
+      }
+    },
+    "Menu: input for the chat, chat actions, controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menü: Eingaben in den Chat, Aktionen am Chat, Steuerung"
+          }
+        }
+      }
+    },
     "Microphone": {
       "localizations": {
         "de": {
@@ -8121,6 +8901,16 @@
         }
       }
     },
+    "More buttons": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusatz"
+          }
+        }
+      }
+    },
     "Most used mode": {
       "localizations": {
         "de": {
@@ -8181,6 +8971,16 @@
         }
       }
     },
+    "Move around": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewegen"
+          }
+        }
+      }
+    },
     "Move chat to another account?": {
       "localizations": {
         "de": {
@@ -8237,6 +9037,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "In neues Fenster verschieben"
+          }
+        }
+      }
+    },
+    "Move: through the list, into the chat, from tile to tile": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewegen: durch die Liste, in den Chat, von Kachel zu Kachel"
+          }
+        }
+      }
+    },
+    "Move: through the list, into the chat, from tile to tile; in a single chat, up and down mark another chat in the list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bewegen: durch die Liste, in den Chat, von Kachel zu Kachel; im einzelnen Chat markieren hoch und runter einen anderen Chat in der Liste"
           }
         }
       }
@@ -8531,6 +9351,16 @@
         }
       }
     },
+    "New and still evolving. Built for the PS5 DualSense; other gamepads work through the generic profile. Off by default.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu und noch in Entwicklung. Gebaut für den PS5 DualSense; andere Gamepads laufen über das allgemeine Profil. Ab Werk aus."
+          }
+        }
+      }
+    },
     "New background agent": {
       "localizations": {
         "de": {
@@ -8571,6 +9401,16 @@
         }
       }
     },
+    "New chat in the current project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Chat im aktuellen Projekt"
+          }
+        }
+      }
+    },
     "New chat starts with": {
       "localizations": {
         "de": {
@@ -8597,6 +9437,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neue Chats starten in diesem Ordner. Projektaktionen aktualisieren den Pfad weiterhin, wenn du ein Projekt öffnest oder auswählst."
+          }
+        }
+      }
+    },
+    "New conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neues Gespräch"
           }
         }
       }
@@ -8881,6 +9731,16 @@
         }
       }
     },
+    "No controller connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Controller verbunden"
+          }
+        }
+      }
+    },
     "No data": {
       "localizations": {
         "de": {
@@ -9161,6 +10021,26 @@
         }
       }
     },
+    "Not available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verfügbar"
+          }
+        }
+      }
+    },
+    "Not connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht verbunden"
+          }
+        }
+      }
+    },
     "Not granted": {
       "localizations": {
         "de": {
@@ -9387,6 +10267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belegt wird erst, wenn du ihn übernimmst."
+          }
+        }
+      }
+    },
+    "Nothing received yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nichts empfangen"
           }
         }
       }
@@ -9634,6 +10524,16 @@
         }
       }
     },
+    "Open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnen"
+          }
+        }
+      }
+    },
     "Open %@ in %@": {
       "localizations": {
         "de": {
@@ -9674,12 +10574,32 @@
         }
       }
     },
+    "Open WhisperM8": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 öffnen"
+          }
+        }
+      }
+    },
     "Open a new %@ chat in %@": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Neuen %1$@-Chat in %2$@ öffnen"
+          }
+        }
+      }
+    },
+    "Open and close the clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf auf und zu"
           }
         }
       }
@@ -9974,6 +10894,16 @@
         }
       }
     },
+    "Output mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgabemodus"
+          }
+        }
+      }
+    },
     "Output — processed preview": {
       "localizations": {
         "de": {
@@ -10040,6 +10970,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "PROJEKT"
+          }
+        }
+      }
+    },
+    "PS5 controller: switch it off, then hold Create (left of the touchpad) and the PlayStation button together until the light bar flashes quickly. Then connect it under Bluetooth in System Settings. A USB-C cable works without pairing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PS5-Controller: ausschalten, dann Create (links am Touchpad) und die PlayStation-Taste zusammen halten, bis die Lichtleiste schnell blinkt. Danach in den Systemeinstellungen unter Bluetooth verbinden. Mit einem USB-C-Kabel geht es ohne Koppeln."
+          }
+        }
+      }
+    },
+    "Pairing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koppeln"
           }
         }
       }
@@ -10164,6 +11114,16 @@
         }
       }
     },
+    "Pause controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller pausieren"
+          }
+        }
+      }
+    },
     "Paused — WhisperM8 is recording a dictation right now.": {
       "localizations": {
         "de": {
@@ -10274,12 +11234,42 @@
         }
       }
     },
+    "Pick a chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wählen"
+          }
+        }
+      }
+    },
+    "Pick a project for a new chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt für einen neuen Chat wählen"
+          }
+        }
+      }
+    },
     "Pick a running app or type a bundle identifier.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
+          }
+        }
+      }
+    },
+    "Pick a workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace wählen"
           }
         }
       }
@@ -10414,6 +11404,16 @@
         }
       }
     },
+    "Plan usage": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzung des Abos"
+          }
+        }
+      }
+    },
     "Play a sound on trigger": {
       "localizations": {
         "de": {
@@ -10514,6 +11514,16 @@
         }
       }
     },
+    "Press a button on the controller.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drück eine Taste am Controller."
+          }
+        }
+      }
+    },
     "Press hotkey to start/stop recording": {
       "localizations": {
         "de": {
@@ -10550,6 +11560,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vorschau-Aktionen"
+          }
+        }
+      }
+    },
+    "Previous / next chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriger / nächster Chat"
+          }
+        }
+      }
+    },
+    "Previous / next chat in the order of the list; in the list: Active / Recent / All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriger / nächster Chat in der Reihenfolge der Liste; in der Liste: Aktiv / Zuletzt / Alle"
           }
         }
       }
@@ -10860,6 +11890,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schnellaktion (%@)"
+          }
+        }
+      }
+    },
+    "Quick action running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellaktion läuft"
           }
         }
       }
@@ -11224,6 +12264,16 @@
         }
       }
     },
+    "Red while recording, green while the chat works, amber when it asks a question.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rot bei Aufnahme, Grün wenn der Chat arbeitet, Gelb bei einer Rückfrage."
+          }
+        }
+      }
+    },
     "Reduce system volume while recording": {
       "localizations": {
         "de": {
@@ -11260,6 +12310,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loslassen für neues Fenster"
+          }
+        }
+      }
+    },
+    "Release: switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loslassen: wechseln"
           }
         }
       }
@@ -12134,6 +13194,16 @@
         }
       }
     },
+    "Resume a conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch fortsetzen"
+          }
+        }
+      }
+    },
     "Retry now": {
       "localizations": {
         "de": {
@@ -12154,6 +13224,16 @@
         }
       }
     },
+    "Rewriting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nacharbeit"
+          }
+        }
+      }
+    },
     "Right now: keeping the Mac awake.": {
       "localizations": {
         "de": {
@@ -12170,6 +13250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gerade: Kein Chat arbeitet, oder der Mac hängt nicht am Strom."
+          }
+        }
+      }
+    },
+    "Right stick click": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechter Stick gedrückt"
           }
         }
       }
@@ -12464,6 +13554,26 @@
         }
       }
     },
+    "Scroll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scrollen"
+          }
+        }
+      }
+    },
+    "Scroll the conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf scrollen"
+          }
+        }
+      }
+    },
     "Search archive…": {
       "localizations": {
         "de": {
@@ -12584,6 +13694,26 @@
         }
       }
     },
+    "Select, confirm, send": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen, bestätigen, senden"
+          }
+        }
+      }
+    },
+    "Select, confirm, send; start a stopped chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen, bestätigen, senden; gestoppten Chat starten"
+          }
+        }
+      }
+    },
     "Selected context": {
       "localizations": {
         "de": {
@@ -12634,6 +13764,16 @@
         }
       }
     },
+    "Send": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senden"
+          }
+        }
+      }
+    },
     "Send a test notification or allow notifications when macOS asks.": {
       "localizations": {
         "de": {
@@ -12650,6 +13790,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Testbenachrichtigung senden"
+          }
+        }
+      }
+    },
+    "Send “Continue”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Weiter“ senden"
           }
         }
       }
@@ -12924,6 +14074,16 @@
         }
       }
     },
+    "Short pulses when a recording starts or stops and when another chat needs a decision.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurze Impulse, wenn eine Aufnahme beginnt oder endet und wenn ein anderer Chat eine Entscheidung braucht."
+          }
+        }
+      }
+    },
     "Short words trigger far more often by accident. Four letters or more is much safer.": {
       "localizations": {
         "de": {
@@ -13010,6 +14170,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alle Chats zeigen"
+          }
+        }
+      }
+    },
+    "Show button layout": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belegung anzeigen"
           }
         }
       }
@@ -13220,6 +14390,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sub-Agent-Bibliothek anzeigen…"
+          }
+        }
+      }
+    },
+    "Show the legend at the bottom edge": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legende am unteren Rand zeigen"
           }
         }
       }
@@ -13584,6 +14764,16 @@
         }
       }
     },
+    "Space": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerzeichen"
+          }
+        }
+      }
+    },
     "Spawning this background agent was interrupted, so no short ID was saved. Close the tab from the context menu and start a new background agent if needed.": {
       "localizations": {
         "de": {
@@ -13650,6 +14840,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gesprochene Sprache"
+          }
+        }
+      }
+    },
+    "Square": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viereck"
           }
         }
       }
@@ -13754,6 +14954,16 @@
         }
       }
     },
+    "Start a stopped chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppten Chat starten"
+          }
+        }
+      }
+    },
     "Start at Login": {
       "localizations": {
         "de": {
@@ -13770,6 +14980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hintergrund-Agent starten"
+          }
+        }
+      }
+    },
+    "Start chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat starten"
           }
         }
       }
@@ -14134,12 +15354,32 @@
         }
       }
     },
+    "Summarize": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenfassen"
+          }
+        }
+      }
+    },
     "Summarize chats automatically": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Chats automatisch zusammenfassen"
+          }
+        }
+      }
+    },
+    "Summarize conversation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespräch zusammenfassen"
           }
         }
       }
@@ -14164,12 +15404,72 @@
         }
       }
     },
+    "Switch account": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto wechseln"
+          }
+        }
+      }
+    },
+    "Switch and dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechseln und diktieren"
+          }
+        }
+      }
+    },
+    "Switch mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus wechseln"
+          }
+        }
+      }
+    },
+    "Switch model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell wechseln"
+          }
+        }
+      }
+    },
     "Switch tabs with a two-finger swipe": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Tabs per Zwei-Finger-Wischen wechseln"
+          }
+        }
+      }
+    },
+    "Switch to another app and press a button to check.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wechsle in ein anderes Programm und drück eine Taste, um es zu prüfen."
+          }
+        }
+      }
+    },
+    "Switch workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace wechseln"
           }
         }
       }
@@ -14314,6 +15614,16 @@
         }
       }
     },
+    "Tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tabs"
+          }
+        }
+      }
+    },
     "Take over interactively": {
       "localizations": {
         "de": {
@@ -14360,6 +15670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wirkt beim nächsten Start des Chats"
+          }
+        }
+      }
+    },
+    "Tap: back to the previous chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippen: zurück zum letzten Chat"
           }
         }
       }
@@ -14784,6 +16104,16 @@
         }
       }
     },
+    "The agent is waiting for your answer, so the dictation wasn't added to the chat. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Agent wartet auf deine Antwort, deshalb kam das Diktat nicht in den Chat. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The auto-mode classifier decides per tool.": {
       "localizations": {
         "de": {
@@ -14894,6 +16224,26 @@
         }
       }
     },
+    "The chat is still starting, so the dictation wasn't added. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat startet noch, deshalb wurde das Diktat nicht eingefügt. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
+    "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat läuft nicht mehr, deshalb wurde das Diktat nicht eingefügt. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The chat starts with the default Claude model. Details in Settings > GPT Backend.": {
       "localizations": {
         "de": {
@@ -14940,6 +16290,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Standardmodus bleibt sichtbar. Wähle erst einen anderen Standard, bevor du ihn ausblendest."
+          }
+        }
+      }
+    },
+    "The dictation couldn't be written to the chat. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Diktat ließ sich nicht in den Chat schreiben. Dein Text liegt in der Zwischenablage."
           }
         }
       }
@@ -15494,6 +16854,16 @@
         }
       }
     },
+    "This macOS version does not deliver controller input to apps in the background.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese macOS-Version liefert Controller-Eingaben nicht an Programme im Hintergrund."
+          }
+        }
+      }
+    },
     "This mode appears in the recording overlay and Test Lab.": {
       "localizations": {
         "de": {
@@ -15754,6 +17124,16 @@
         }
       }
     },
+    "Transcribing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription"
+          }
+        }
+      }
+    },
     "Transcribing...": {
       "localizations": {
         "de": {
@@ -15814,6 +17194,16 @@
         }
       }
     },
+    "Triangle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dreieck"
+          }
+        }
+      }
+    },
     "Troubleshooting": {
       "localizations": {
         "de": {
@@ -15860,6 +17250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notch ausschalten"
+          }
+        }
+      }
+    },
+    "Turn on controller support to use a connected gamepad.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte die Controller-Steuerung ein, um ein verbundenes Gamepad zu nutzen."
           }
         }
       }
@@ -15954,12 +17354,32 @@
         }
       }
     },
+    "Type /": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "/ eintippen"
+          }
+        }
+      }
+    },
     "Type /login and sign in with the account that should become main — it replaces the current main login.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Gib /login ein und melde dich mit dem Konto an, das zum Hauptkonto werden soll. Es ersetzt den aktuellen Hauptkonto-Login."
+          }
+        }
+      }
+    },
+    "Type a space in the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerzeichen in den Chat schreiben"
           }
         }
       }
@@ -16200,6 +17620,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutze Sichern, um den vollständigen Skill-Ordner zu exportieren."
+          }
+        }
+      }
+    },
+    "Use WhisperM8 with a gamepad.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 mit einem Gamepad bedienen."
           }
         }
       }
@@ -16450,6 +17880,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version, Updates, Danksagung."
+          }
+        }
+      }
+    },
+    "Vibration": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vibration"
           }
         }
       }
@@ -16774,6 +18214,16 @@
         }
       }
     },
+    "WhisperM8 can be used with this gamepad. Turn it on under Settings › Controller.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 lässt sich mit diesem Gamepad bedienen. Einschalten unter Einstellungen › Controller."
+          }
+        }
+      }
+    },
     "WhisperM8 can replace Maccy. Turn Maccy off afterwards: both use the shortcut ⇧⌘C by default, so only one of them should be running.": {
       "localizations": {
         "de": {
@@ -17000,6 +18450,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeitet …"
+          }
+        }
+      }
+    },
+    "Works": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktioniert"
           }
         }
       }
@@ -17344,6 +18804,16 @@
         }
       }
     },
+    "current": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktuell"
+          }
+        }
+      }
+    },
     "different definitions per account — not copied": {
       "localizations": {
         "de": {
@@ -17420,6 +18890,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "eingebetteter Ersatzkatalog"
+          }
+        }
+      }
+    },
+    "ended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beendet"
           }
         }
       }
@@ -17814,6 +19294,16 @@
         }
       }
     },
+    "opens the list of the CLI": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "öffnet die Liste der CLI"
+          }
+        }
+      }
+    },
     "own session — cannot stop itself": {
       "localizations": {
         "de": {
@@ -17834,12 +19324,32 @@
         }
       }
     },
+    "question": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückfrage"
+          }
+        }
+      }
+    },
     "rate-limited by Anthropic — try again in a few minutes": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Von Anthropic gedrosselt. Versuche es in ein paar Minuten erneut"
+          }
+        }
+      }
+    },
+    "ready": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bereit"
           }
         }
       }
@@ -18400,6 +19910,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "› schreibt Antwort"
+          }
+        }
+      }
+    },
+    "→ app in front": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Programm vorne"
           }
         }
       }

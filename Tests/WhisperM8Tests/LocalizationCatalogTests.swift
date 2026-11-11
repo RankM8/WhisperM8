@@ -13,6 +13,10 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Dateien, deren sichtbare Texte vollständig über den Katalog laufen.
     /// Neue oder umgestellte Ansichten hier eintragen.
     static let localizedFiles: [String] = [
+        "WhisperM8/Views/Controller/ControllerLabels.swift",
+        "WhisperM8/Views/Controller/ControllerLegendBar.swift",
+        "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
+        "WhisperM8/Views/Settings/Pages/ControllerSettingsPage.swift",
         "WhisperM8/Views/Transcript/TranscriptEmptyStateView.swift",
         "WhisperM8/Views/OnboardingView.swift",
         "WhisperM8/Views/AgentCLIInstallPanel.swift",
@@ -191,6 +195,10 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Deutsch im Katalog). Zusätzlich muss jedes Literal der UI-Aufrufe ein
     /// Katalogschlüssel sein.
     static let chatsLocalizedFiles: [String] = [
+        "WhisperM8/Views/Controller/ControllerLegendBar.swift",
+        "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
+        "WhisperM8/Views/Controller/ControllerLabels.swift",
+        "WhisperM8/Views/Controller/ControllerListMarker.swift",
         "WhisperM8/Views/AgentChatChromeViews.swift",
         "WhisperM8/Views/AgentChatsSidebarViews.swift",
         "WhisperM8/Views/AgentChatsView.swift",
