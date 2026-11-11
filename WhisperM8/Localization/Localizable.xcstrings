@@ -1051,6 +1051,16 @@
         }
       }
     },
+    "Another window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderes Fenster"
+          }
+        }
+      }
+    },
     "API Key": {
       "localizations": {
         "de": {
@@ -1891,6 +1901,16 @@
         }
       }
     },
+    "App in front": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programm vorne"
+          }
+        }
+      }
+    },
     "App Permissions": {
       "localizations": {
         "de": {
@@ -2627,6 +2647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tasten im Hintergrund"
+          }
+        }
+      }
+    },
+    "Chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         }
       }
@@ -3961,6 +3991,16 @@
         }
       }
     },
+    "Commands …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehle …"
+          }
+        }
+      }
+    },
     "Commits": {
       "localizations": {
         "de": {
@@ -4177,6 +4217,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Controller"
+          }
+        }
+      }
+    },
+    "Controller connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller verbunden"
+          }
+        }
+      }
+    },
+    "Controller paused": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller pausiert"
           }
         }
       }
@@ -4697,6 +4757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ablehnen"
+          }
+        }
+      }
+    },
+    "Dialog": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dialog"
           }
         }
       }
@@ -5297,6 +5367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nur Dauer, Abschnitte und Kostenschätzung, keine API-Aufrufe"
+          }
+        }
+      }
+    },
+    "ended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "beendet"
           }
         }
       }
@@ -7607,6 +7687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Link zeigt auf eine andere App-Kopie"
+          }
+        }
+      }
+    },
+    "List": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste"
           }
         }
       }
@@ -10414,6 +10504,26 @@
         }
       }
     },
+    "Pause controller": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controller pausieren"
+          }
+        }
+      }
+    },
+    "Pick a chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wählen"
+          }
+        }
+      }
+    },
     "PINNED": {
       "localizations": {
         "de": {
@@ -11264,6 +11374,16 @@
         }
       }
     },
+    "question": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückfrage"
+          }
+        }
+      }
+    },
     "Question: %@": {
       "localizations": {
         "de": {
@@ -11280,6 +11400,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schnellaktion (%@)"
+          }
+        }
+      }
+    },
+    "Quick action running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellaktion läuft"
           }
         }
       }
@@ -11450,6 +11580,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bereit"
+          }
+        }
+      }
+    },
+    "ready": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bereit"
           }
         }
       }
@@ -12504,6 +12644,16 @@
         }
       }
     },
+    "Rewriting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nacharbeit"
+          }
+        }
+      }
+    },
     "Right now: keeping the Mac awake.": {
       "localizations": {
         "de": {
@@ -12684,12 +12834,32 @@
         }
       }
     },
+    "Send “Continue”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Weiter“ senden"
+          }
+        }
+      }
+    },
     "Short pulses when a recording starts or stops and when another chat needs a decision.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Kurze Impulse, wenn eine Aufnahme beginnt oder endet und wenn ein anderer Chat eine Entscheidung braucht."
+          }
+        }
+      }
+    },
+    "Show button layout": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belegung anzeigen"
           }
         }
       }
@@ -14524,6 +14694,16 @@
         }
       }
     },
+    "Summarize": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusammenfassen"
+          }
+        }
+      }
+    },
     "Summarize chats automatically": {
       "localizations": {
         "de": {
@@ -14560,6 +14740,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wechseln und diktieren"
+          }
+        }
+      }
+    },
+    "Switch mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modus wechseln"
           }
         }
       }
@@ -16174,6 +16364,16 @@
         }
       }
     },
+    "Transcribing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription"
+          }
+        }
+      }
+    },
     "Transcribing...": {
       "localizations": {
         "de": {
@@ -17000,6 +17200,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stimme"
+          }
+        }
+      }
+    },
+    "WhisperM8 can be used with this gamepad. Turn it on under Settings › Controller.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 lässt sich mit diesem Gamepad bedienen. Einschalten unter Einstellungen › Controller."
           }
         }
       }
@@ -18840,6 +19050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "› schreibt Antwort"
+          }
+        }
+      }
+    },
+    "→ app in front": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Programm vorne"
           }
         }
       }

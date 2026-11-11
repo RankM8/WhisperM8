@@ -645,6 +645,12 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
     }
 
+    /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
+    var controllerConnectHintShown: Bool {
+        get { defaults.bool(forKey: Keys.controllerConnectHintShown) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerConnectHintShown) }
+    }
+
     // MARK: Notch-Status
 
     /// Notbremse für die Statusanzeige an der Notch: Aus = kein Fenster, keine
@@ -1080,6 +1086,7 @@ enum PreferenceKeys {
     static let controllerHapticsEnabled = "controllerHapticsEnabled"
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
+    static let controllerConnectHintShown = "controllerConnectHintShown"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"

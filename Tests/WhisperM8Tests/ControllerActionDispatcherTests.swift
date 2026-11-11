@@ -29,7 +29,10 @@ private final class DictationSpy: ControllerDictationControlling {
     private(set) var cancelCount = 0
     private(set) var modeSteps: [Int] = []
 
-    func start(target: DictationDeliveryTarget) { started.append(target); phase = .recording }
+    private(set) var labels: [String?] = []
+    func start(target: DictationDeliveryTarget, label: String?) {
+        started.append(target); labels.append(label); phase = .recording
+    }
     func stop(submit: Bool) { stopped.append(submit); phase = .transcribing }
     func cancel() { cancelCount += 1; phase = nil }
     func stepOutputMode(_ step: Int) { modeSteps.append(step) }
@@ -422,7 +425,9 @@ final class ControllerActionDispatcherTests: XCTestCase {
     // MARK: - Diktat
 
     func testDictationInChatTargetsSelectedChat() {
+        dispatcher.titleForSession = { _ in "Mein Chat" }
         perform(.dictationToggle)
+        XCTAssertEqual(dictation.labels, ["Mein Chat"], "Die Pill zeigt das Ziel")
         XCTAssertEqual(dictation.started, [.agentChat(sessionID: window.selected!)])
         XCTAssertEqual(haptics, [.recordingStarted])
         XCTAssertEqual(context, .recording(phase: .recording, targetIsChat: true))

@@ -54,6 +54,7 @@ enum PreferenceBedienweg {
         Entry(key: "claudeSharedMemoryMigrationDone", reason: "Einmal-Merker der Memory-Zusammenführung."),
         Entry(key: "claudePluginSkillMigrationDone", reason: "Einmal-Merker der Skill-Migration ins Plugin."),
         Entry(key: "subagentJobRetentionInitialPurgeDone", reason: "Einmal-Merker der Alt-Last-Bereinigung."),
+        Entry(key: "controllerConnectHintShown", reason: "Merker, dass der Hinweis „Controller erkannt“ einmal gezeigt wurde."),
         Entry(key: "tabCloseRunningNoticeShown", reason: "Merker, dass der Hinweis beim Schließen laufender Tabs gezeigt wurde."),
         Entry(key: "overlayPositionX", reason: "Letzte Position des Aufnahme-Overlays, wird durch Ziehen gesetzt."),
         Entry(key: "overlayPositionY", reason: "Letzte Position des Aufnahme-Overlays, wird durch Ziehen gesetzt."),

@@ -406,6 +406,9 @@ class OverlayController: ObservableObject {
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
     @Published var outputModes: [OutputMode] = OutputMode.availableBuiltInModes()
     @Published var showModePickerInMiniOverlay: Bool = true
+    /// Ziel einer Aufnahme per Controller („→ Titel des Chats“). Steht dann
+    /// sichtbar in der Pill, samt Modus-Chip — ohne Hover. `nil` sonst.
+    @Published var controllerTargetLabel: String?
     @Published var showConfirmButton: Bool = true
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
@@ -612,6 +615,7 @@ class OverlayController: ObservableObject {
 
     func hide() {
         isPresented = false
+        controllerTargetLabel = nil
         isConnecting = false
         quickActionLabel = nil
         isQuickActionHint = false

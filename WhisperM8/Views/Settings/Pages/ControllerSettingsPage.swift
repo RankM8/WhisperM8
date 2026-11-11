@@ -10,7 +10,10 @@ struct ControllerSettingsDependencies {
 
     static let live = ControllerSettingsDependencies(
         status: { ControllerManager.shared.status },
-        applyPreferences: { ControllerManager.shared.applyPreferences() }
+        applyPreferences: {
+            ControllerManager.shared.applyPreferences()
+            ControllerConnectHint.shared.sync()
+        }
     )
 }
 

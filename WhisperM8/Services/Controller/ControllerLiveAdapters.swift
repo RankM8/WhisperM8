@@ -64,8 +64,13 @@ final class LiveControllerDictation: ControllerDictationControlling {
 
     var isQuickActionRunning: Bool { AppState.shared.isQuickActionRunning }
 
-    func start(target: DictationDeliveryTarget) {
-        Task { @MainActor in await AppState.shared.startRecording(target: target) }
+    func start(target: DictationDeliveryTarget, label: String?) {
+        Task { @MainActor in
+            let appState = AppState.shared
+            await appState.startRecording(target: target)
+            // Erst nach dem Start: Der Start blendet die Pill zuvor einmal aus.
+            if appState.isRecording { appState.showControllerDictationTarget(label) }
+        }
     }
 
     func stop(submit: Bool) {
@@ -221,6 +226,7 @@ final class ControllerRuntime {
     static let shared = ControllerRuntime()
 
     private(set) var dispatcher: ControllerActionDispatcher?
+    private(set) var feedback: ControllerFeedback?
 
     /// Beim App-Start: Ausführer anschließen und den Lauf mit den Schaltern
     /// abgleichen. Idempotent.
@@ -237,9 +243,20 @@ final class ControllerRuntime {
             dispatcher.playHaptic = { [weak manager] in manager?.play($0) }
             dispatcher.togglePause = { [weak manager] in manager?.togglePause() }
             dispatcher.debugOverride = { [weak manager] in manager?.debugOverride }
+            dispatcher.titleForSession = { id in
+                AgentWorkspaceUIModel.shared.workspace.sessions.first { $0.id == id }?.title
+            }
             manager.performer = dispatcher
+            let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)
+            manager.onStateChange = { [weak feedback] in
+                feedback?.sync()
+                feedback?.refresh()
+            }
+            manager.onResolution = { [weak feedback] _ in feedback?.refresh() }
             self.dispatcher = dispatcher
+            self.feedback = feedback
         }
         manager.applyPreferences()
+        ControllerConnectHint.shared.sync()
     }
 }

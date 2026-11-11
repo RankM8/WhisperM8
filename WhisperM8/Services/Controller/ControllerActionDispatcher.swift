@@ -20,6 +20,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var togglePause: () -> Void = {}
     /// Angaben des Debug-Kanals (Test-Instanz ohne aktives Fenster).
     var debugOverride: () -> ControllerDebugOverride? = { nil }
+    /// Titel eines Chats für Legende und Menü.
+    var titleForSession: (UUID) -> String? = { _ in nil }
 
     /// Die laufende Aufnahme geht in einen Chat (dann darf Kreuz „fertig und
     /// senden“ sein).
@@ -101,6 +103,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
+        let title = window.selectedSessionID.flatMap(titleForSession)
+        if ui.targetTitle != title { ui.targetTitle = title }
         publish(snapshot)
         return snapshot
     }
@@ -365,7 +369,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func startDictation(target: DictationDeliveryTarget) {
         guard dictation.phase == nil else { return }
         recordingTargetIsChat = target != .frontApp
-        dictation.start(target: target)
+        let label: String
+        if case let .agentChat(sessionID) = target {
+            label = titleForSession(sessionID) ?? String(localized: "Chat")
+        } else {
+            label = String(localized: "App in front")
+        }
+        dictation.start(target: target, label: label)
         playHaptic(.recordingStarted)
     }
 

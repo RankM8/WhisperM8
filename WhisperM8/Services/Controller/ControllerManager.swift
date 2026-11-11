@@ -124,6 +124,8 @@ final class ControllerManager {
     private(set) var recentResolutions: [ControllerResolution] = []
     /// Wird nach jeder aufgelösten Geste aufgerufen (Rückmeldung, Legende).
     var onResolution: ((ControllerResolution) -> Void)?
+    /// Lauf, Verbindung oder Pause haben sich geändert.
+    var onStateChange: (() -> Void)?
 
     private let source: ControllerInputSource
     private let pump: ControllerGesturePump
@@ -183,6 +185,7 @@ final class ControllerManager {
         ]
         source.start(queue: pump.queue)
         Logger.controller.info("controller_started")
+        onStateChange?()
     }
 
     private func stop() {
@@ -194,6 +197,7 @@ final class ControllerManager {
         status.device = nil
         status.background = .off
         Logger.controller.info("controller_stopped")
+        onStateChange?()
     }
 
     /// Hintergrund-Empfang erst nach dem ersten Verbinden setzen: Ältere
@@ -215,6 +219,7 @@ final class ControllerManager {
     private func deviceChanged(_ info: ControllerDeviceInfo?) {
         guard status.isRunning else { return }
         status.device = info
+        defer { onStateChange?() }
         if info == nil {
             // Alles Gehaltene gilt als losgelassen; die Quelle hat die Pumpe
             // bereits zurückgesetzt.
@@ -252,6 +257,7 @@ final class ControllerManager {
 
     private func pauseChanged() {
         status.isPaused = isPaused
+        onStateChange?()
         Logger.controller.info("controller_pause user=\(self.userPaused, privacy: .public) system=\(self.systemPaused, privacy: .public)")
     }
 

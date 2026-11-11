@@ -127,6 +127,10 @@ struct RecordingPillView: View {
 
         PillClockView(clockModel: controller.clockModel)
 
+        if let label = controller.controllerTargetLabel {
+            PillTargetLabel(text: label)
+        }
+
         modeChip
             .padding(.trailing, 5)
 
@@ -167,9 +171,16 @@ struct RecordingPillView: View {
         // und er hält den Block über alle Zustände formstabil.
         PillClockView(clockModel: controller.clockModel)
 
+        // Aufnahme per Controller: Ziel und Modus immer sichtbar (ohne Maus
+        // gibt es kein Hover).
+        if let label = controller.controllerTargetLabel {
+            PillTargetLabel(text: label)
+                .transition(.opacity)
+        }
+
         // Pref an: Chip permanent (busy disabled) — stabil. Pref aus: nur
         // im Hover; er ERSCHEINT dann links neben ✓/✕, nichts rutscht weg.
-        if controller.showModePickerInMiniOverlay || isExpanded {
+        if controller.showModePickerInMiniOverlay || isExpanded || controller.controllerTargetLabel != nil {
             modeChip
                 .padding(.trailing, 5)
                 .transition(.opacity)
@@ -386,6 +397,24 @@ private struct PillClockView: View {
             .padding(.leading, 9)
             .padding(.trailing, 10)
             .accessibilityLabel("Recording duration \(clockModel.timeText)")
+    }
+}
+
+// MARK: - Ziel (Controller)
+
+/// „→ Titel des Chats“ bei einer Aufnahme per Controller.
+private struct PillTargetLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(verbatim: "→ \(text)")
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .frame(maxWidth: 170, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.trailing, 8)
     }
 }
 

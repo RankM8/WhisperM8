@@ -34,7 +34,8 @@ protocol ControllerDictationControlling: AnyObject {
     /// Läuft gerade eine Aufnahme, Transkription oder Nacharbeit?
     var phase: ControllerRecordingPhase? { get }
     var isQuickActionRunning: Bool { get }
-    func start(target: DictationDeliveryTarget)
+    /// `label`: Ziel, das die Pill zeigt („Titel des Chats“, „Programm vorne“).
+    func start(target: DictationDeliveryTarget, label: String?)
     func stop(submit: Bool)
     /// Bricht ab, was gerade läuft: Aufnahme, Transkription, Nacharbeit oder
     /// Schnellaktion.

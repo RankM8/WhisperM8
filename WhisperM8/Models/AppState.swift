@@ -157,6 +157,11 @@ final class AppState {
         await recordingCoordinator.quickActionRunner.run(modeID: modeID, input: input)
     }
 
+    /// Ziel einer Aufnahme per Controller in der Pill anzeigen.
+    func showControllerDictationTarget(_ label: String?) {
+        recordingCoordinator.overlayController.controllerTargetLabel = label
+    }
+
     /// Läuft gerade eine Schnellaktion?
     var isQuickActionRunning: Bool { recordingCoordinator.quickActionRunner.isRunning }
 
