@@ -47,6 +47,10 @@ Panel (`ClipboardPanel`): es nimmt Tastatur an, die App davor bleibt aktiv.
 Schließen beim Klick daneben läuft über `resignKey`, nicht über globale
 Event-Monitore.
 
+Mit einem Gamepad (Controller-Steuerung an und verbunden) ist der Verlauf ganz
+ohne Tastatur bedienbar; die Fußzeile zeigt dann die Controller-Tasten statt der
+Tastenkürzel. Belegung: [controller.md](controller.md#belegung).
+
 Position: nahe dem Mauszeiger (Standard, auf dem Bildschirm unter dem Zeiger)
 oder Bildschirmmitte. „Paste automatically“ aus: Enter legt den Eintrag nur in
 die Zwischenablage.

@@ -847,6 +847,61 @@ künstliche Eingaben über `whisperm8 debug controller … --window <id> --front
 | Diktat ohne erkannten Text | `DictationDeliveryRouterTests` (leerer Text → `nothing`), `RecordingCoordinatorDeliveryTests` |
 | Create zweimal schnell | Vermerk in `docs/features/controller.md` (Systemgeste von macOS) |
 
+### 6.5 Runde 2 nach dem Handtest (11.11.2026)
+
+Nach dem ersten Lauf mit echter Hardware entschieden und umgesetzt:
+
+1. **Kreuz auf einem gestoppten Chat startet ihn** — derselbe Weg wie „▶ Starten“ im Kopf
+   (`AgentChatsCommand.startChat`, `sessionActionRequest`). Archivierte Chats nicht; sonst „geht nicht“.
+   Legende „Start“. **R3** macht dasselbe (auch auf der markierten Zeile der Liste); auf einem lebenden
+   Chat tut R3 nichts, nicht einmal eine Vibration.
+2. **Kreuz in der Chat-Auswahl (L2 gehalten) wechselt sofort**; das spätere Loslassen von L2 fällt in
+   den Chat und tut dort nichts.
+3. **Rechter Stick scrollt auch während Aufnahme, Transkription und Nacharbeit.**
+4. **Einzelansicht: Stick hoch/runter = voriger/nächster Chat der Liste** (mit Wiederholung, kein
+   Umlauf). Vorläufig: Der Nutzer entscheidet noch, ob der Stick stattdessen die Markierung in der
+   Liste bewegt.
+5. **Viereck = Rücktaste** (0x7F, Tastencode 51 für den Entwurfs-Tracker) in jedem lebenden Zustand;
+   halten löscht weiter wie eine gehaltene Taste (`ControllerGesture.holdRepeat`, nach 0,6 s alle
+   60 ms, nach 1 s alle 25 ms). Kein Ctrl+C mehr: Im Handtest wollte der Nutzer Text löschen, während
+   Claude arbeitete — Ctrl+C hätte die Antwort abgebrochen und war deshalb gesperrt.
+6. **Create öffnet die Projekt-Auswahl „Neuer Chat“** (wie ⌘N, Seitenleiste wird vorher eingeblendet),
+   aktuelles bzw. markiertes Projekt vorausgewählt. Solange sie offen ist, gilt `modal` (Feld
+   `isNewChatPickerOpen` im Schnappschuss; das Fenster bleibt Ziel, auch wenn das Popover Key wird):
+   Pfeile, Kreuz = Return, Kreis = Escape, R2 diktiert ins Suchfeld, der linke Stick hoch/runter gibt
+   ebenfalls Pfeile.
+7. **Listen-Startpunkt:** Steht der Chat auch in einem Workspace, beginnt die Markierung dort.
+8. Dieselbe Bevorzugung gilt als Reihenfolge für 4 und 14: Jeder Chat zählt einmal, an seiner ersten
+   Stelle (`SidebarChatOrder`).
+9. **Ausgabemodus während der Aufnahme:** Steuerkreuz hoch/runter wechselt ebenfalls (mit
+   Wiederholung). Jeder Wechsel zeigt über der Pill die Liste aller Modi, der aktuelle markiert; weg
+   1,5 s nach dem letzten Wechsel und mit dem Ende der Aufnahme. Ein eigenes kleines Panel statt einer
+   größeren Pill: Am festen Pill-Panel hängen Trefferfläche, Position und Speicherung des Ankers.
+10. **Schließen per Controller wie in der Seitenleiste:** Viereck halten in der Liste = „−“/„×“ der
+    Zeile (`performSidebarCloseAction` bzw. bei Workspace-Zeilen `requestEndSession(…, removingFrom:)`),
+    Kopfzeilen „geht nicht“. Die Rückfragen „Chat beenden?“/„Chat archivieren?“ zählen als `modal`
+    (`isConfirmationOpen`); Return bestätigt dort jetzt (`.keyboardShortcut(.defaultAction)`), auch mit
+    der Tastatur.
+11. **Zwischenablage-Verlauf vollständig per Controller** (Dreieck korrigieren und einfügen, L1/R1
+    Filter, L3 Bild groß, Options-Menü im Verlauf, Kreuz bestätigt „Verlauf leeren?“), Fußzeile mit
+    Controller-Tasten aus der Legende, wenn ein Controller verbunden ist. R2 diktiert dort nicht.
+12. **Ein Menü auf Options** mit drei Gruppen: Eingaben in den Chat („Weiter“, „Befehle ›“, Modus
+    wechseln), Aktionen am Chat aus seinem Kontextmenü („Konto wechseln ›“, Umbenennen, Forken,
+    Anheften, Archivieren, Chat schließen), Belegung und Pause. Zwei Ebenen, Kreis geht zurück. Ein
+    eigenes R3-Menü war kurz gebaut und ist in dieses Menü aufgegangen.
+13. (Kreuz in der Liste bleibt in der Liste — zurückgenommen. Kreuz öffnet und geht hinein wie in
+    Runde 1.)
+14. **L1/R1 = voriger/nächster Chat in der Reihenfolge der Liste**, auch im Raster, ohne Umlauf. Die
+    Tastatur bleibt bei den Tabs.
+15. **„Befehle ›“** als zweite Ebene mit den festen Befehlen der CLI (`ControllerSlashCommands`).
+    „/ eintippen“ bleibt ungesendet, alle anderen werden gesendet; nie an einen Entwurf, nie bei
+    offener Rückfrage. Codex: Im Repo ist keine Befehlsliste belegt, eingetragen sind `/model`,
+    `/approvals`, `/new`, `/compact`.
+
+Handtest nach dem nächsten `make dev`: siehe Bericht der Runde (Brücke im Popover, Return in den
+Rückfragen, Umbenennen-Sheet mit Diktat, Modusliste an der Pill, Fußzeile und Menü im Verlauf,
+Start über R3 auf einer nicht ausgewählten Zeile).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |

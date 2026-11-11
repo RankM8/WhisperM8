@@ -42,41 +42,63 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 
 | Taste | Wirkung |
 |---|---|
-| Linker Stick | Liste hoch/runter, nach rechts in den Inhalt, nach links zurück in die Liste, im Raster von Kachel zu Kachel |
-| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace); im Chat Enter |
+| Linker Stick | Liste hoch/runter; nach rechts in den Inhalt, nach links zurück in die Liste; in der Einzelansicht hoch/runter = voriger/nächster Chat der Liste (vorläufig, Entscheidung offen); im Raster von Kachel zu Kachel |
+| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein; im Chat Enter; gestoppter Chat: starten |
 | Kreis | zurück; im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | nächster Chat, der wartet (wie ⌃⌥Tab); aus anderen Fenstern: Agent Chats nach vorn |
-| L1 / R1 | Tabs; in der Liste der Filter Aktiv / Zuletzt / Alle |
+| L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
 | Steuerkreuz | Pfeiltasten in den Chat (Rückfragen); in der Liste wie der Stick |
-| Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI) |
+| Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
 **Zusatz**
 
 | Taste | Wirkung |
 |---|---|
-| Viereck | Eingabefeld leeren — nur Claude, Chat ruht, Entwurf erkannt (Ctrl+C) |
-| Create | neuer Chat im aktuellen bzw. markierten Projekt |
+| Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie eine gehaltene Taste (nach 0,6 s alle 60 ms, nach 1 s alle 25 ms); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
+| Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
 | Touchpad-Klick | Zwischenablage-Verlauf auf und zu |
 | L3 | Kachel groß / zurück zum Raster |
-| Options | Menü: „Weiter“, Befehle (`/`), Modus wechseln, `/compact`, Tab schließen, Belegung, Pause |
-| L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter), loslassen wechselt |
+| R3 | gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste); sonst ohne Wirkung, auch ohne Vibration |
+| Options | das eine Menü, siehe unten |
+| L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt |
 | L2 halten, dann R2 | zum markierten Chat wechseln und diktieren |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen |
 
-Nicht belegt: PlayStation-Taste (gehört macOS), R3, Create doppelt oder lang (macOS: Screenshot bzw.
+Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
 Bildschirmaufnahme). Zwei schnelle Create-Drücke ergeben deshalb einen Screenshot.
 
-**Während der Aufnahme:** R2 beendet (Text ins Eingabefeld), Kreuz beendet und sendet (nur bei einem
-Chat als Ziel), Kreis verwirft bzw. bricht Transkription oder Nacharbeit ab, Steuerkreuz links/rechts
-wechselt den Ausgabemodus nur für diese Aufnahme. Die Pill zeigt Ziel und Modus ohne Hover.
+**Menü (Options):** drei Gruppen. Eingaben in den Chat: „Weiter“, „Befehle ›“ (zweite Ebene mit den
+festen Befehlen der CLI, Tabelle `ControllerSlashCommands`; „/ eintippen“ bleibt ungesendet, alle
+anderen werden gesendet), „Modus wechseln“ (Shift+Tab). Aktionen am Chat, dieselben Wege wie sein
+Kontextmenü: „Konto wechseln ›“ (Claude-Konten wie „Zu Account verschieben“, bei GPT-Chats auch die
+GPT-Konten), „Umbenennen…“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“
+in der Seitenleiste). Dazu „Belegung anzeigen“ und „Controller pausieren“. In der Liste wirken die
+Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options schließt alles.
 
-**Zwischenablage-Verlauf:** Stick/Steuerkreuz wählt, Kreuz fügt ein, Kreis schließt, Dreieck heftet
-an, Viereck halten (0,6 s) löscht.
+**Während der Aufnahme:** R2 beendet (Text ins Eingabefeld), Kreuz beendet und sendet (nur bei einem
+Chat als Ziel), Kreis verwirft bzw. bricht Transkription oder Nacharbeit ab, Steuerkreuz wechselt den
+Ausgabemodus nur für diese Aufnahme (links/rechts ein Schritt pro Druck, hoch/runter mit Wiederholung).
+Bei jedem Wechsel steht über der Pill kurz die Liste aller Modi, der aktuelle markiert (eigenes kleines
+Panel, `OutputModeListPresenter`; weg 1,5 s nach dem letzten Wechsel und sofort mit dem Ende der
+Aufnahme). Der rechte Stick scrollt weiter. Die Pill zeigt Ziel und Modus ohne Hover.
+
+**Zwischenablage-Verlauf:** Stick/Steuerkreuz wählt, Kreuz fügt ein, Dreieck korrigiert und fügt ein
+(nur wenn verfügbar), Viereck halten (0,6 s) löscht, L1/R1 Filter Alle/Diktate (nicht in der großen
+Bildansicht), L3 Bild groß und zurück, Kreis schließt (in der Bildansicht und bei der Rückfrage
+„Verlauf leeren?“ erst dort zurück), Options öffnet ein Menü im Verlauf (Anheften/Lösen, Als reinen
+Text einfügen, Markierung korrigieren, Verlauf leeren…, Einstellungen…). Bei „Verlauf leeren?“
+bestätigt Kreuz. R2 diktiert hier nicht: Das Fenster ist nicht aktivierend, und der Hotkey-Weg legte
+über Zwischenablage und ⌘V einen neuen Eintrag in genau diesen Verlauf. Ist ein Controller verbunden,
+zeigt die Fußzeile seine Tasten statt der Tastenkürzel (aus derselben Tabelle wie die Legende).
+Eingaben kommen nur an, wenn WhisperM8 vorne ist oder „Auch wenn ein anderes Programm vorne ist“ an ist.
 
 **Dialoge, Sheets, Popover, Textfelder, andere WhisperM8-Fenster:** Tastatur-Brücke — Steuerkreuz =
 Pfeile, Kreuz = Return, Kreis = Escape, L1/R1 = Shift+Tab/Tab. R2 diktiert dort in das Feld mit dem
-Fokus.
+Fokus. In Dialogen des Agent-Chats-Fensters bewegt auch der linke Stick hoch/runter. Die Projekt-Auswahl
+„Neuer Chat“ und die Rückfragen „Chat beenden?“/„Chat archivieren?“ melden sich im Schnappschuss
+(`isNewChatPickerOpen`, `isConfirmationOpen`); das Fenster bleibt Ziel, auch wenn das Popover selbst Key
+wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 
 ## Schutzregeln
 
@@ -94,7 +116,10 @@ Fokus.
 - Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Auswahl, Menü und Liste.
   Ein per Tastatur geöffneter Ctrl+Tab-Umschalter schließt erst, wenn der Controller wirklich etwas
   ausführt.
-- Viereck nur bei Claude, ruhendem Chat und erkanntem Entwurf (ein zweites Ctrl+C beendet Claude).
+- Viereck schickt nur die Rücktaste (0x7F), nie Ctrl+C — Ctrl+C hätte eine laufende Antwort abgebrochen.
+- Befehle und „Weiter“ aus dem Menü werden nie an einen vermuteten Entwurf gehängt.
+- R3 auf einem lebenden Chat tut nichts (er wird beim Scrollen leicht gedrückt).
+- Schließen und Archivieren laufen über dieselben Funktionen wie die Seitenleiste, mit ihren Rückfragen.
 - Return geht nie an fremde Programme: Kreuz während der Aufnahme sendet nur bei einem Chat als Ziel.
 - Leeres Diktat in einen Chat: nichts wird kopiert, geschrieben oder gesendet.
 - R2 löst erst ab halbem Hub aus (ein bei 0,5, frei bei 0,3); das Framework meldet schon ab 0,02.
@@ -133,7 +158,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 ## Prüfen
 
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in sechs Zuständen, Menü.
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in sieben Zuständen, Menü mit beiden
+  Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=clipboard-verlauf-controller` die Fußzeile und das
+  Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.
 - `whisperm8 debug controller press <taste>` und `sequence "<schritte>"` — künstliche Eingaben durch
