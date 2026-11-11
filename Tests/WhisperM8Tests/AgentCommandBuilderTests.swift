@@ -218,7 +218,7 @@ final class AgentCommandBuilderTests: XCTestCase {
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
-        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        builder.backgroundWorkerResolver = { _, _ in nil }
         let session = AgentChatSession(
             provider: .claude, projectID: project.id, externalSessionID: nil,
             title: "Ohne Bindung", hasLaunchedInitialPrompt: true)
@@ -239,9 +239,10 @@ final class AgentCommandBuilderTests: XCTestCase {
         builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         var resolvedQueries: [String] = []
-        builder.backgroundWorkerShortIDResolver = { sessionID, _ in
+        builder.backgroundWorkerResolver = { sessionID, _ in
             resolvedQueries.append(sessionID)
-            return sessionID == "607d545a-01fa-4569-a4a7-72fe6072a1b7" ? "607d545a" : nil
+            return sessionID == "607d545a-01fa-4569-a4a7-72fe6072a1b7"
+                ? .init(shortID: "607d545a", sessionID: sessionID) : nil
         }
         let session = AgentChatSession(
             provider: .claude,
@@ -269,7 +270,7 @@ final class AgentCommandBuilderTests: XCTestCase {
         var builder = AgentCommandBuilder(commandResolver: { command in "/usr/local/bin/\(command)" })
         builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
-        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        builder.backgroundWorkerResolver = { _, _ in nil }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -290,9 +291,9 @@ final class AgentCommandBuilderTests: XCTestCase {
         builder.gptFastModeEnabledResolver = { false }
         builder.extraArgumentsResolver = { _ in [] }
         var resolverCalled = false
-        builder.backgroundWorkerShortIDResolver = { _, _ in
+        builder.backgroundWorkerResolver = { _, _ in
             resolverCalled = true
-            return "deadbeef"
+            return .init(shortID: "deadbeef", sessionID: "SOURCE-1111")
         }
         // Fork von einer bg-laufenden Quelle ist erlaubt und laesst das
         // Original bewusst weiterlaufen — kein Attach-Umweg.

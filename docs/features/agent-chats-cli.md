@@ -30,7 +30,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 
 | Befehl | Klasse | Pfad |
 |---|---|---|
-| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
+| `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `duplicates`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
 | `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 ### Claude-Account-Profil neuer Chats
@@ -400,6 +400,11 @@ Strikte Aktions-Trennung (Produktsemantik, nie stillschweigend vermischt):
   passiert bei `--resume` GAR NICHTS (auch kein Unarchive). Nicht archivierte
   Ziele sind idempotenter Erfolg (`alreadyActive`); ein angefordertes
   `--resume`/`--open` läuft dann trotzdem. Kein Pfad löscht Daten.
+- **`duplicates [--json]`** (seit 11.11.2026, nur lesend) listet Chats, die
+  dieselbe externe Sitzung tragen. Behalten wird der von Hand angelegte Chat
+  (sonst der älteste), für die übrigen steht ein `chats archive <ref>`-Vorschlag
+  da. Archiviert oder gelöscht wird nichts automatisch. Der Index-Merge
+  aktualisiert ohnehin nur noch den behaltenen Chat.
 
 ### Backlog Tab-/Session-Management (Gap-Analyse 2026-07-19)
 

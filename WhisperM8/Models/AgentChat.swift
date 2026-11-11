@@ -284,6 +284,11 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// den Stand der Quelle und zweigt in eine NEUE Session-ID ab (die der
     /// SessionStart-Hook bindet). `nil` für normale Sessions.
     var forkSourceSessionID: String?
+    /// Frühere `externalSessionID`s, die dieser Chat abgelöst hat — etwa wenn
+    /// Claudes Daemon den Hintergrund-Agent als Abzweig unter neuer ID
+    /// weiterführt und der Chat mitgewandert ist. Der Index-Merge legt für
+    /// diese Verläufe keinen eigenen Chat mehr an. `nil` = keine.
+    var supersededExternalSessionIDs: [String]?
     /// Short-ID des Subagent-Jobs (= Directory-Name unter agent-jobs/).
     /// Nur fuer `.subagentJob`; wird nach `agent rm` genil-t, damit der
     /// Indexer die Codex-Session danach normal adoptieren darf.
@@ -339,6 +344,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case backgroundSubAgent
         case backgroundPermissionMode
         case forkSourceSessionID
+        case supersededExternalSessionIDs
         case subagentJobShortID
         case subagentParentSessionID
         case subagentCwd
@@ -450,6 +456,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         backgroundSubAgent = try container.decodeIfPresent(String.self, forKey: .backgroundSubAgent)
         backgroundPermissionMode = try container.decodeIfPresent(String.self, forKey: .backgroundPermissionMode)
         forkSourceSessionID = try container.decodeIfPresent(String.self, forKey: .forkSourceSessionID)
+        supersededExternalSessionIDs = try container.decodeIfPresent([String].self, forKey: .supersededExternalSessionIDs)
         subagentJobShortID = try container.decodeIfPresent(String.self, forKey: .subagentJobShortID)
         subagentParentSessionID = try container.decodeIfPresent(String.self, forKey: .subagentParentSessionID)
         subagentCwd = try container.decodeIfPresent(String.self, forKey: .subagentCwd)

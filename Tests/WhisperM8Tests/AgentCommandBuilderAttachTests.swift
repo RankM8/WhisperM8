@@ -24,8 +24,9 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = makeBuilder()
         builder.extraLaunchArguments = ["--settings", "/tmp/hooks.json"]
-        builder.backgroundWorkerShortIDResolver = { sessionID, _ in
-            sessionID == "1f353dce-783f-407c-a2d4-402c5e884d59" ? "1f353dce" : nil
+        builder.backgroundWorkerResolver = { sessionID, _ in
+            sessionID == "1f353dce-783f-407c-a2d4-402c5e884d59"
+                ? .init(shortID: "1f353dce", sessionID: sessionID) : nil
         }
         let session = AgentChatSession(
             provider: .claude,
@@ -60,7 +61,7 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
     func testNormalResumeKeepsUserArgumentsWhenNoWorkerRuns() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = makeBuilder()
-        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        builder.backgroundWorkerResolver = { _, _ in nil }
         let session = AgentChatSession(
             provider: .claude,
             projectID: project.id,
@@ -81,9 +82,9 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = makeBuilder()
         var resolverCalled = false
-        builder.backgroundWorkerShortIDResolver = { _, _ in
+        builder.backgroundWorkerResolver = { _, _ in
             resolverCalled = true
-            return "1f353dce"
+            return .init(shortID: "1f353dce", sessionID: "1f353dce-783f-407c-a2d4-402c5e884d59")
         }
         builder.backgroundAttachAllowed = false
         let session = AgentChatSession(
@@ -117,7 +118,7 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
     func testAttachClientsGetNoInterruptOnStop() throws {
         let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
         var builder = makeBuilder()
-        builder.backgroundWorkerShortIDResolver = { _, _ in "1f353dce" }
+        builder.backgroundWorkerResolver = { sessionID, _ in .init(shortID: "1f353dce", sessionID: sessionID) }
         let resumeTarget = AgentChatSession(
             provider: .claude, projectID: project.id,
             externalSessionID: "1f353dce-783f-407c-a2d4-402c5e884d59",
@@ -132,7 +133,7 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         let attach = try builder.command(for: backgroundChat, project: project)
         XCTAssertFalse(attach.sendsInterruptOnStop)
 
-        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        builder.backgroundWorkerResolver = { _, _ in nil }
         let resume = try builder.command(for: resumeTarget, project: project)
         XCTAssertFalse(resume.isClaudeAttach)
         XCTAssertTrue(resume.sendsInterruptOnStop, "normale TUI: Ctrl+C für Resume-Hinweis und JSONL-Flush")
