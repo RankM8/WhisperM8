@@ -22,6 +22,21 @@ struct AgentLaunchCommand: Equatable {
     /// Hook-Bridge-Tracking — die `--settings`-Argumente der Bridge wurden
     /// im Attach-Argv nicht angehaengt.
     var isBackgroundAttachFallback: Bool = false
+
+    /// Läuft im PTY nur ein `claude attach`-Client (Resume-Fallback ODER
+    /// Background-Chat)? Dann gehört der Verlauf dem Worker beim Daemon:
+    /// Beim Beenden des Tabs oder der App bekommt er KEIN Ctrl+C — der
+    /// Client könnte es an den Worker weiterreichen und dessen Turn abbrechen.
+    var isClaudeAttach: Bool {
+        arguments.first == "attach"
+    }
+
+    /// Bekommt dieser Prozess beim Stoppen (Tab zu, App-Quit, Kontowechsel)
+    /// das höfliche 2× Ctrl+C? Nur echte TUIs, die damit Resume-Hinweis und
+    /// letzten JSONL-Flush schreiben.
+    var sendsInterruptOnStop: Bool {
+        !isClaudeAttach
+    }
 }
 
 enum AgentCommandError: LocalizedError, Equatable {

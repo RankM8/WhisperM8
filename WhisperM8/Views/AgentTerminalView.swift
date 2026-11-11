@@ -472,10 +472,15 @@ final class AgentTerminalRegistry: ObservableObject {
     func captureAllSnapshotsForAppQuit() {
         let running = runningControllers
         guard !running.isEmpty else { return }
-        for controller in running { controller.sendInterruptForAppQuit() }
-        sleep(80_000)
-        for controller in running { controller.sendInterruptForAppQuit() }
-        sleep(180_000)
+        // Angedockte Hintergrund-Tabs (`claude attach`) bekommen kein Ctrl+C:
+        // ihr Agent soll den Neustart ueberleben, und den Verlauf schreibt
+        // der Worker selbst. Nur ihr Snapshot wird gesichert.
+        if running.contains(where: \.command.sendsInterruptOnStop) {
+            for controller in running { controller.sendInterruptForAppQuit() }
+            sleep(80_000)
+            for controller in running { controller.sendInterruptForAppQuit() }
+            sleep(180_000)
+        }
         for controller in running { controller.captureSnapshotForAppQuit() }
     }
 }
@@ -1025,7 +1030,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Graceful Claude/Codex-Quit: zwei Ctrl+C senden + kurze Wartezeit,
         // damit die TUI ihre eigene Exit-Routine durchlaeuft (Resume-Hinweis,
         // letzter JSONL-Flush) bevor wir den Subprocess hart killen.
-        if isRunning {
+        // Ein `claude attach`-Client wird ohne Ctrl+C beendet — der Worker
+        // beim Daemon laeuft weiter (Tab schliessen ≠ Agent stoppen).
+        if isRunning, command.sendsInterruptOnStop {
             terminal.send([0x03])
             usleep(80_000)
             terminal.send([0x03])
@@ -1063,7 +1070,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// liegen bewusst in der Registry — EINE gemeinsame Pause fuer alle
     /// Chats statt 260 ms pro Chat wie im Einzel-terminate().
     func sendInterruptForAppQuit() {
-        guard isRunning else { return }
+        guard isRunning, command.sendsInterruptOnStop else { return }
         terminal.send([0x03])
     }
 

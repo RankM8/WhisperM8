@@ -108,4 +108,33 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: false), "beendeter Controller (toter Tab)")
         XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: true), "laufender Prozess bleibt")
     }
+
+    // MARK: - Kein Ctrl+C an angedockte Hintergrund-Agents
+
+    /// App-Quit (`make dev`) und Tab-Schließen schicken echten TUIs 2× Ctrl+C.
+    /// Ein `claude attach`-Client könnte das an den Worker weiterreichen und
+    /// dessen Turn abbrechen — genau der Agent, der den Neustart überleben soll.
+    func testAttachClientsGetNoInterruptOnStop() throws {
+        let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+        var builder = makeBuilder()
+        builder.backgroundWorkerShortIDResolver = { _, _ in "1f353dce" }
+        let resumeTarget = AgentChatSession(
+            provider: .claude, projectID: project.id,
+            externalSessionID: "1f353dce-783f-407c-a2d4-402c5e884d59",
+            title: "Hintergrund", hasLaunchedInitialPrompt: true)
+        let fallback = try builder.command(for: resumeTarget, project: project)
+        XCTAssertTrue(fallback.isClaudeAttach)
+        XCTAssertFalse(fallback.sendsInterruptOnStop)
+
+        let backgroundChat = AgentChatSession(
+            provider: .claude, projectID: project.id, title: "BG",
+            kind: .backgroundChat, backgroundShortID: "7c5dcf5d")
+        let attach = try builder.command(for: backgroundChat, project: project)
+        XCTAssertFalse(attach.sendsInterruptOnStop)
+
+        builder.backgroundWorkerShortIDResolver = { _, _ in nil }
+        let resume = try builder.command(for: resumeTarget, project: project)
+        XCTAssertFalse(resume.isClaudeAttach)
+        XCTAssertTrue(resume.sendsInterruptOnStop, "normale TUI: Ctrl+C für Resume-Hinweis und JSONL-Flush")
+    }
 }
