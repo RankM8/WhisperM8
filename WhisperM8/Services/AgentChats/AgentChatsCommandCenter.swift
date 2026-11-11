@@ -58,6 +58,15 @@ struct AgentChatsWindowSnapshot: Equatable {
     var isArchiveMode: Bool
 }
 
+/// Eine Zeile der Liste links, so wie die Navigation sie braucht.
+struct AgentChatsListRow: Equatable {
+    var row: SidebarNavigationRow
+    /// Projekt, in dem „Neuer Chat“ von dieser Zeile aus landet.
+    var projectID: UUID?
+    /// Nur für Projekt-Zeilen: die aktiven Chats, die „als Workspace öffnen“ zeigt.
+    var activeSessionIDs: Set<UUID> = []
+}
+
 /// Verteilt Befehle an das Agent-Chats-Fenster, das gerade aktiv ist.
 ///
 /// Jedes Fenster meldet beim Erscheinen einen Handler an und bekommt ein
@@ -73,6 +82,9 @@ final class AgentChatsCommandCenter {
     struct Handler {
         let perform: (AgentChatsCommand) -> Bool
         let snapshot: () -> AgentChatsWindowSnapshot
+        /// Sichtbare Zeilen der Liste links in Anzeige-Reihenfolge, für die
+        /// Navigation ohne Maus. Im Ereignis-Pfad berechnet, nie im Body.
+        var listRows: () -> [AgentChatsListRow] = { [] }
     }
 
     struct Token: Equatable {
@@ -113,6 +125,12 @@ final class AgentChatsCommandCenter {
     func snapshot(of windowID: UUID? = nil) -> AgentChatsWindowSnapshot? {
         guard let id = windowID ?? activeWindowID else { return nil }
         return handlers[id]?.handler.snapshot()
+    }
+
+    /// Zeilen der Liste links eines Fensters; ohne `windowID` die des aktiven.
+    func listRows(of windowID: UUID? = nil) -> [AgentChatsListRow] {
+        guard let id = windowID ?? activeWindowID else { return [] }
+        return handlers[id]?.handler.listRows() ?? []
     }
 
     /// Führt einen Befehl aus. Ohne `windowID` nur im aktiven Fenster, und nur

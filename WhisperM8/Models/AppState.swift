@@ -157,6 +157,19 @@ final class AppState {
         await recordingCoordinator.quickActionRunner.run(modeID: modeID, input: input)
     }
 
+    /// Läuft gerade eine Schnellaktion?
+    var isQuickActionRunning: Bool { recordingCoordinator.quickActionRunner.isRunning }
+
+    func cancelQuickAction() {
+        recordingCoordinator.quickActionRunner.cancel()
+    }
+
+    /// Ausgabemodus der laufenden Aufnahme einen Schritt weiter oder zurück
+    /// (Controller: Steuerkreuz links/rechts). Die Pill zeigt den neuen Modus.
+    func stepOutputMode(_ step: Int) {
+        recordingCoordinator.stepOutputMode(step)
+    }
+
     /// Menüleiste: Schnellaktionen nur, wenn der Umfang Nacharbeit erlaubt.
     var usageProfileAllowsPostProcessing: Bool {
         AppPreferences.shared.usageProfile.wantsCodexEnrichment

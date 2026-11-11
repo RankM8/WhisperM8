@@ -364,7 +364,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             ClipboardHistoryController.shared.start()
             // Controller-Steuerung (Standard aus): startet nur, wenn sie in
             // den Einstellungen eingeschaltet ist.
-            ControllerManager.shared.applyPreferences()
+            ControllerRuntime.shared.start()
             // Statistik: Zeit, Chats, Diktate, Protokolle, Limits, Git.
             StatisticsCollectors.start()
         }
