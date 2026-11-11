@@ -97,6 +97,7 @@ CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarv
 Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history.md](docs/features/clipboard-history.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
 Notch-Statusanzeige: [notch.md](docs/features/notch.md).
 Statistik (Zeit, Token, Gegenwert, Limits): [statistics.md](docs/features/statistics.md).
+Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 
 ## Invarianten (nicht brechen)
 
@@ -174,7 +175,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter).
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`.
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 

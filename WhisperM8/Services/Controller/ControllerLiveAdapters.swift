@@ -248,7 +248,13 @@ final class ControllerRuntime {
             }
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)
-            manager.onStateChange = { [weak feedback] in
+            manager.onStateChange = { [weak feedback, weak manager] in
+                // Getrennt oder ausgeschaltet: Menü und Liste schließen ohne Wirkung.
+                if manager?.status.device == nil || manager?.status.isRunning == false {
+                    ControllerUIModel.shared.menu = nil
+                    ControllerUIModel.shared.leaveList()
+                    ControllerUIModel.shared.holdProgress = nil
+                }
                 feedback?.sync()
                 feedback?.refresh()
             }

@@ -744,6 +744,30 @@ jeweils mit dem Fokus im Terminal:
 - Trennen und Neuverbinden, Bildschirmsperre, Pause.
 - PlayStation-Taste und Create (einfach, doppelt).
 
+### 6.3 Sonderfälle und wo sie geprüft sind
+
+| Fall (Abschnitt 2) | Prüfung |
+|---|---|
+| Trennung während der Aufnahme | Umschalter, nichts ist gehalten: `ControllerBindingResolverTests.testNothingElseWorksWhileRecording`, `ControllerGestureRecognizerTests.testResetReleasesEverything` (Zurücksetzen erzeugt nur `holdCancelled`) |
+| Trennung bei offener Auswahl oder offenem Menü | `ControllerBindingResolverTests.testChatPicker` (`holdCancelled(.l2)` → `pickerCancel`); Menü und Liste schließt `ControllerRuntime` bei Trennung — Handtest |
+| App verliert den Fokus bei offener Auswahl | vorhandener `didResignKey`-Abbruch des Umschalters (`AgentChatsView`), unverändert — Handtest |
+| Bildschirmsperre, Bildschirmschoner, Ruhezustand | `ControllerFeedback` (Systemmeldungen) setzt `setSystemPaused`; `ControllerManagerTests.testSystemPauseAndUserPauseAreIndependent`, `testPausedIgnoresEverythingButTheChord` — Auslösen durch das System ist Handtest |
+| Spiel vorne | `ControllerFeedbackPolicyTests.testGameDetection`; Hintergrund ab Werk aus (`ControllerManagerTests.testBackgroundStaysOffWithoutSwitch`) |
+| Tastatur während einer Controller-Auswahl | Tasten ohne Ctrl brechen den Umschalter ab und laufen durch (`TabSwitcherShortcut.activeKeyAction`, Bestandstests); Modifier-Tasten brechen ab statt zu bestätigen (`switcherOpenedWithoutModifier`); Liste und Menü gibt `ControllerFeedback` bei Maus/Tastatur ab — Handtest |
+| Dialog, Sheet, Popover, Menü | `ControllerActionDispatcherTests.testSheetOrPopoverMakesItModal`, `ControllerBindingResolverTests.testBridgeInModalAndOtherWindow` |
+| Textfeld mit Fokus | `ControllerActionDispatcherTests.testDictationOutsideChatGoesToFrontApp` |
+| Mehrfachauswahl aktiv | `ControllerActionDispatcherTests.testMultiSelectionIsClearedFirst` |
+| Tastatur-Umschalter offen | `ControllerActionDispatcherTests.testKeyboardSwitcherIsCancelledByControllerInput`, `testRefreshLeavesKeyboardSwitcherAlone` |
+| Aufnahme läuft schon (Tastatur) | `ControllerActionDispatcherTests.testSecondToggleStopsWithoutSending`; zweite Aufnahme verhindert der Start-Guard des Coordinators |
+| Schnellaktion läuft | `ControllerBindingResolverTests.testQuickAction` |
+| Viereck ohne erkannten Entwurf | `ControllerBindingResolverTests.testSquareClearsOnlyClaudeIdleDraft` |
+| Kein wartender Chat bei Dreieck | `ControllerActionDispatcherTests.testFailedJumpGivesRejectFeedback` |
+| Chat beendet oder nur Verlauf | `ControllerBindingResolverTests.testEndedChatKeepsNavigationButNoTerminalKeys`, `ControllerActionDispatcherTests.testChatWithoutTerminalCountsAsEnded` |
+| Kein Chat offen | `ControllerContextResolverTests.testContentWithoutChatFallsBackToList`, `ControllerBindingResolverTests.testList` |
+| Zwei Controller | `GameControllerInputSource.deliver` löst beim Quellenwechsel alles Gehaltene — Handtest |
+| Diktat ohne erkannten Text | `DictationDeliveryRouterTests` (leerer Text → `nothing`), `RecordingCoordinatorDeliveryTests` |
+| Create zweimal schnell | Vermerk in `docs/features/controller.md` (Systemgeste von macOS) |
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
