@@ -9,20 +9,10 @@ extension AgentChatsView {
     /// „Neuer Chat"-Dropdown): macht es zum aktuellen Ziel und öffnet den Chat.
     func startNewChat(in project: AgentProject) {
         showNewChatProjectPicker = false
-        newChatProjectQuery = ""
         selectedProjectID = project.id
         expandedProjectIDs.insert(project.id)
         AppPreferences.shared.agentDefaultProjectPath = project.path
         createDefaultSession()
-    }
-
-    /// Enter im „Neuer Chat"-Suchfeld: öffnet den aktuell per Tastatur
-    /// hervorgehobenen Ordner. No-op bei leerer Ergebnisliste (kein falsches
-    /// Verhalten). `startNewChat` schließt Popover + setzt den Chat-Kontext.
-    func confirmHighlightedNewChatProject(_ projects: [AgentProject]) {
-        guard let id = newChatHighlightedProjectID,
-              let project = projects.first(where: { $0.id == id }) else { return }
-        startNewChat(in: project)
     }
 
     func createSession(
