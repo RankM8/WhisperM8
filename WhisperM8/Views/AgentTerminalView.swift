@@ -719,6 +719,15 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// Controller-Belegung: gerade gesendet, kein zweites Escape).
     private(set) var lastControlEnterAt: Date?
     private(set) var lastControlEscapeAt: Date?
+    /// Zuletzt per Controller ins Eingabefeld geschrieben (Rücktaste, Text ohne
+    /// Senden, Diktat ohne Senden). Gelöscht, sobald gesendet wird. Kreuz darf
+    /// bei arbeitendem Chat nur dann Enter schicken (`confirmAllowed`).
+    private(set) var lastControllerDraftInputAt: Date?
+
+    /// Controller hat etwas ins Eingabefeld geschrieben oder daraus gelöscht.
+    func noteControllerDraftInput(submitted: Bool, now: Date = Date()) {
+        lastControllerDraftInputAt = submitted ? nil : now
+    }
 
     /// Zuletzt abgeschickt, egal auf welchem programmatischen Weg (Enter vom
     /// Controller, Diktat mit Senden, `chats send`, Menü „Weiter“).
@@ -846,6 +855,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         if key == .enter, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
         if key == .enter { lastControlEnterAt = now }
         if key == .escape { lastControlEscapeAt = now }
+        if key == .backspace { noteControllerDraftInput(submitted: false, now: now) }
+        if key == .enter, status != .awaitingInput { noteControllerDraftInput(submitted: true, now: now) }
         terminal.send(key.bytes(applicationCursor: terminal.getTerminal().applicationCursor))
         return true
     }

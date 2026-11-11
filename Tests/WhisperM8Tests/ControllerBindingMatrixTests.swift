@@ -301,7 +301,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
+        // Review-Befund 3: Kreuz nur nach einer frischen Eingabe per Controller.
         ("Chat arbeitet", chatState(.working), merge(chatNavigation, dpadNavigation, backspace, [
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Chat arbeitet, Entwurf per Controller", chatState(.working) { $0.recentDraftInput = true },
+         merge(chatNavigation, dpadNavigation, backspace, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),

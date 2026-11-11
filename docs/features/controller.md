@@ -126,6 +126,10 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.
+- Arbeitet der Chat oder ist sein Zustand unklar, schickt Kreuz Enter nur, wenn in den letzten 30 s
+  per Controller getippt, gelöscht oder diktiert wurde (ohne zu senden). Zwischen dem Erscheinen eines
+  Freigabe-Dialogs und dem Status „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl
+  bestätigte. Der Entwurfs-Verdacht zählt dafür nicht, und Tippen auf der Tastatur auch nicht.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
 - Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
   programmatischen Versand: Enter vom Controller, Diktat mit Senden, `chats send`) und unbekannter Status

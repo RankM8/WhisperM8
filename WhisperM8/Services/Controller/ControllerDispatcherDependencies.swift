@@ -16,6 +16,9 @@ struct ControllerTerminalState: Equatable {
     /// Wann zuletzt Enter bzw. Escape vom Controller rausging.
     var lastEnterAt: Date?
     var lastEscapeAt: Date?
+    /// Zuletzt per Controller ins Eingabefeld geschrieben oder gelöscht
+    /// (Rücktaste, Text oder Diktat ohne Senden); `nil` nach dem Senden.
+    var lastDraftInputAt: Date? = nil
 }
 
 @MainActor

@@ -21,11 +21,23 @@ final class ControllerBindingResolverTests: XCTestCase {
 
     // MARK: - Tabelle „Kreuz, Kreis und Viereck im Chat“
 
-    func testCrossSendsEnterInEveryLiveState() {
-        for status in [ControllerChatState.Status.idle, .awaitingInput, .working, .unknown] {
+    /// Review-Befund 3: Bei Ruhe und Rückfrage wie bisher Enter. Arbeitet der
+    /// Chat oder ist sein Zustand unklar, nur nach einer frischen Eingabe per
+    /// Controller (getippt, gelöscht, diktiert) — sonst bestätigte Kreuz in
+    /// der Lücke vor „wartet“ die Vorauswahl eines Freigabe-Dialogs.
+    func testCrossSendsEnterOnlyWhenADraftIsPlausible() {
+        for status in [ControllerChatState.Status.idle, .awaitingInput] {
             XCTAssertEqual(action(.press(.cross), chat(status)), .chatKey(.enter), "\(status)")
         }
         XCTAssertEqual(action(.press(.cross), chat(.idle) { $0.recentlySubmitted = true }), .chatKey(.enter))
+        for status in [ControllerChatState.Status.working, .unknown] {
+            XCTAssertNil(action(.press(.cross), chat(status)), "\(status) ohne Eingabe")
+            XCTAssertNil(action(.press(.cross), chat(status) { $0.draftSuspected = true }),
+                         "\(status): Entwurfs-Verdacht allein reicht nicht")
+            XCTAssertEqual(action(.press(.cross), chat(status) { $0.recentDraftInput = true }), .chatKey(.enter),
+                           "\(status) nach Eingabe per Controller")
+        }
+        XCTAssertEqual(action(.press(.cross), chat(.ended)), .chatResume)
     }
 
     /// Runde 2: Kreuz auf einem gestoppten Chat startet ihn wieder.

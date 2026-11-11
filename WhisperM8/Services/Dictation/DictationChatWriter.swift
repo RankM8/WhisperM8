@@ -41,6 +41,7 @@ final class LiveDictationChatWriter: DictationChatWriting {
         // seinen sichtbaren Chat und darf an einen vorhandenen Entwurf
         // anhängen. Bracketed Paste, ein Block, Return nur mit `submit`.
         controller.sendPrompt(text, submit: submit)
+        controller.noteControllerDraftInput(submitted: submit)
         return true
     }
 }

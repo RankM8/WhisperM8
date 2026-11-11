@@ -142,12 +142,14 @@ final class ControllerActionDispatcherTests: XCTestCase {
     private func setTerminal(
         status: AgentSessionRuntimeStatus?, running: Bool = true,
         profile: ControllerChatState.Profile = .claude, draft: Bool = false,
-        statusSince: Date? = nil, lastEnter: Date? = nil, lastEscape: Date? = nil
+        statusSince: Date? = nil, lastEnter: Date? = nil, lastEscape: Date? = nil,
+        lastDraftInput: Date? = nil
     ) {
         guard let selected = window.selected else { return }
         terminals.states[selected] = ControllerTerminalState(
             isRunning: running, profile: profile, status: status, statusSince: statusSince,
-            draftSuspected: draft, lastEnterAt: lastEnter, lastEscapeAt: lastEscape)
+            draftSuspected: draft, lastEnterAt: lastEnter, lastEscapeAt: lastEscape,
+            lastDraftInputAt: lastDraftInput)
     }
 
     private var context: ControllerContext {
@@ -180,6 +182,20 @@ final class ControllerActionDispatcherTests: XCTestCase {
         setTerminal(status: .idle, running: false)
         guard case let .chat(state) = context else { return XCTFail("chat erwartet") }
         XCTAssertEqual(state.status, .ended)
+    }
+
+    /// Review-Befund 3: Eine Eingabe per Controller hält Kreuz bei
+    /// arbeitendem Chat 30 s lang scharf.
+    func testRecentDraftInputIsTimeLimited() {
+        setTerminal(status: .working, lastDraftInput: clock.addingTimeInterval(-29))
+        guard case let .chat(fresh) = context else { return XCTFail("chat erwartet") }
+        XCTAssertTrue(fresh.recentDraftInput)
+        XCTAssertEqual(ControllerBindingResolver.action(for: .press(.cross), in: context), .chatKey(.enter))
+
+        clock = clock.addingTimeInterval(2)
+        guard case let .chat(later) = context else { return XCTFail("chat erwartet") }
+        XCTAssertFalse(later.recentDraftInput)
+        XCTAssertNil(ControllerBindingResolver.action(for: .press(.cross), in: context))
     }
 
     func testRecentEnterAndEscapeAreTimeLimited() {

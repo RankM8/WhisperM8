@@ -31,6 +31,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     static let recentlySubmittedWindow: TimeInterval = 3
     /// Ein zweites Escape in dieser Zeit wird verschluckt.
     static let escapeRepeatWindow: TimeInterval = 1
+    /// So lange nach einer Eingabe ins Feld (Rücktaste, Diktat, Text ohne
+    /// Senden) darf Kreuz auch bei arbeitendem Chat Enter schicken. 30 s
+    /// reichen, um einen diktierten Entwurf zu überfliegen; ein Entwurf von
+    /// vor Minuten hält Kreuz dagegen nicht mehr scharf für eine Freigabe, die
+    /// erst später erscheint.
+    static let draftInputWindow: TimeInterval = 30
 
     init(
         chats: AgentChatsCommandCenter,
@@ -117,6 +123,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             secondsSinceAwaitingBegan: status == .awaitingInput
                 ? terminal.statusSince.map { moment.timeIntervalSince($0) } : nil,
             escapeSentRecently: within(Self.escapeRepeatWindow, of: terminal.lastEscapeAt),
+            recentDraftInput: within(Self.draftInputWindow, of: terminal.lastDraftInputAt),
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning
         )

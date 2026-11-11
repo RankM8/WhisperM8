@@ -73,16 +73,25 @@ extension ControllerBindingResolver {
         state.acceptsKeys && state.status == .awaitingInput
     }
 
-    /// Enter in jedem lebenden Zustand, außer in den ersten 0,5 s einer
-    /// Rückfrage. Ist der Beginn der Rückfrage unbekannt, gilt sie als alt.
+    /// Enter: im Ruhezustand immer, in einer Rückfrage nach den ersten 0,5 s
+    /// (unbekannter Beginn gilt als alt). Arbeitet der Chat oder ist sein
+    /// Zustand unklar, nur wenn kurz vorher per Controller getippt, gelöscht
+    /// oder diktiert wurde: Zwischen dem Erscheinen eines Freigabe-Dialogs und
+    /// dem Status „wartet“ liegt eine Lücke, in der Enter sonst die
+    /// Vorauswahl bestätigte.
     static func confirmAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys else { return false }
-        if state.status == .awaitingInput,
-           let seconds = state.secondsSinceAwaitingBegan,
-           seconds < confirmLockAfterQuestion {
+        switch state.status {
+        case .awaitingInput:
+            if let seconds = state.secondsSinceAwaitingBegan, seconds < confirmLockAfterQuestion { return false }
+            return true
+        case .idle:
+            return true
+        case .working, .unknown:
+            return state.recentDraftInput
+        case .ended:
             return false
         }
-        return true
     }
 
     /// Escape (tippen) nur, wenn der Chat ruht oder fragt und nicht gerade

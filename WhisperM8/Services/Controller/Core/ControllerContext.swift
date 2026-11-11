@@ -27,6 +27,9 @@ struct ControllerChatState: Equatable, Sendable {
     var secondsSinceAwaitingBegan: TimeInterval?
     /// Innerhalb der letzten Sekunde ging schon ein Escape an den Chat.
     var escapeSentRecently: Bool = false
+    /// Kurz vorher per Controller getippt, gelöscht oder diktiert (ohne zu
+    /// senden): Ein Entwurf zum Abschicken ist plausibel.
+    var recentDraftInput: Bool = false
     var gridActive: Bool = false
     /// Ein lebendes Terminal ist da (nicht nur der Verlauf).
     var hasTerminal: Bool = true

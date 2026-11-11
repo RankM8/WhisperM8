@@ -27,7 +27,8 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             statusSince: coordinator.activityStore.statusSince(for: sessionID),
             draftSuspected: controller.composerDraft.mayHaveUnsentInput,
             lastEnterAt: controller.lastSubmitAt,
-            lastEscapeAt: controller.lastControlEscapeAt
+            lastEscapeAt: controller.lastControlEscapeAt,
+            lastDraftInputAt: controller.lastControllerDraftInputAt
         )
     }
 
@@ -42,6 +43,7 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
     func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool {
         guard let controller = controller(for: sessionID), controller.isRunning else { return false }
         controller.sendPrompt(text, submit: submit)
+        controller.noteControllerDraftInput(submitted: submit)
         return true
     }
 }
