@@ -103,6 +103,54 @@ final class AgentGridWorkspaceChatClickTests: XCTestCase {
         XCTAssertEqual(store.window(for: second), before.1)
     }
 
+    /// Befund 2 nach Runde 3: Der Workspace gehört einem anderen Fenster.
+    /// Kreuz holte bisher nur dieses Fenster nach vorn, der Chat war nirgends
+    /// gewählt. Jetzt fällt die Ansicht auf die Klickregel zurück
+    /// (`selectedSessionID = id`: Tab hier → Einzelansicht hier, Tab in einem
+    /// anderen Fenster → dort fokussieren).
+    func testOwnedByOtherWindowFallsBackToClickRule() throws {
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let s = try seed(persistence, count: 3)
+        store.openTab(s[2], in: primary)
+        let second = store.detachToNewWindow(s[2], from: primary)
+        let ws = store.createGridWorkspace(name: "A", slots: [s[0], s[1]], activateIn: primary)
+
+        let result = store.navigateToWorkspaceChat(s[1], workspaceID: ws, in: second)
+        XCTAssertEqual(result, .alreadyActive(ownerWindowID: primary))
+        XCTAssertTrue(WorkspaceChatRowRoute.fallsBackToSelect(after: result))
+    }
+
+    /// Nur das Zeigen des Workspace beendet den Weg; Konflikte und veraltete
+    /// Zeilen fallen auf die Klickregel zurück.
+    func testFallbackRuleForEveryActivationResult() {
+        XCTAssertFalse(WorkspaceChatRowRoute.fallsBackToSelect(after: .activated))
+        XCTAssertFalse(WorkspaceChatRowRoute.fallsBackToSelect(after: .alreadyActiveHere))
+        XCTAssertTrue(WorkspaceChatRowRoute.fallsBackToSelect(after: .alreadyActive(ownerWindowID: UUID())))
+        XCTAssertTrue(WorkspaceChatRowRoute.fallsBackToSelect(after: .blockedByWindowOwnership([UUID(): UUID()])))
+        XCTAssertTrue(WorkspaceChatRowRoute.fallsBackToSelect(after: .rejected))
+    }
+
+    /// Befund 3 (Entscheidung des Nutzers): Der Mausklick auf eine Chat-Zeile
+    /// im WORKSPACES-Abschnitt folgt wieder der Klickregel; nur Kreuz am
+    /// Controller wechselt in den Workspace.
+    func testMouseUsesClickRuleControllerEntersWorkspace() throws {
+        XCTAssertEqual(WorkspaceChatRowRoute.route(for: .mouse), .select)
+        XCTAssertEqual(WorkspaceChatRowRoute.route(for: .controller), .enterWorkspace)
+
+        // Klickregel im Store: Fenster zeigt Workspace A, Klick auf einen Chat
+        // unter Workspace B → Einzelansicht, A bleibt die Workspace-Referenz.
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let wsA = store.createGridWorkspace(name: "A", slots: [s[0], s[1]], activateIn: w)
+        _ = store.createGridWorkspace(name: "B", slots: [s[2], s[3]])
+        store.navigateToSession(s[3], in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[3])
+        XCTAssertFalse(store.showsGrid(in: w))
+        XCTAssertEqual(store.window(for: w).activeWorkspaceID, wsA)
+    }
+
     /// Veraltete Zeile: Chat liegt nicht (mehr) im Workspace → abgelehnt,
     /// ohne Mutation (die Ansicht fällt auf die normale Klickregel zurück).
     func testChatNotInWorkspaceIsRejected() throws {

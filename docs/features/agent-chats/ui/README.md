@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # UI — Fenster, Sidebar, Tabs, Terminal, Timeline
@@ -62,19 +62,20 @@ fallen aus den Projektlisten heraus. Archivierte Sessions sind nicht Teil der
 normalen Liste, sondern werden über den Archiv-Modus gezeigt.
 
 Der Abschnitt WORKSPACES zeigt die angelegten Workspaces mit ihren Chats.
-Der Klick auf den Kopf öffnet das Raster. Ein einfacher Klick auf eine
-Chat-Zeile darunter gehört zu genau diesem Workspace: Ist er im Fenster
-sichtbar, bekommt die Kachel des Chats den Fokus; sonst wechselt das Fenster
-in diesen Workspace (Raster sichtbar) mit dem Chat als Kachel-Fokus
-(`AgentWindowStore.navigateToWorkspaceChat`) — auch dann, wenn der Workspace
-nur das verborgene Rücksprungziel einer Einzelansicht ist. „Zurück zum
-Workspace“ führt danach in genau diesen Workspace. Konflikte wie beim Kopf:
-Besitzt ein anderes Fenster den Workspace, kommt es nach vorn; lebt der Chat
-als Tab in einem anderen Fenster, wird er dort geöffnet. Cmd- und Shift-Klick
-bleiben Mehrfachauswahl. Chat-Zeilen unter einem Projekt folgen weiter der
-allgemeinen Klickregel (im sichtbaren Workspace Kachel-Fokus, sonst
-Einzelansicht mit unveränderter Workspace-Referenz). Kreuz am Controller auf
-einer Workspace-Zeile nimmt denselben Weg (`selectWorkspaceChat`).
+Der Klick auf den Kopf öffnet das Raster. Ein Klick auf eine Chat-Zeile
+darunter folgt der allgemeinen, quellenunabhängigen Klickregel wie jede
+andere Zeile: im sichtbaren Workspace Kachel-Fokus, sonst Einzelansicht mit
+unveränderter Workspace-Referenz. Cmd- und Shift-Klick bleiben
+Mehrfachauswahl.
+
+Nur Kreuz am Controller auf einer solchen Zeile wechselt den Workspace
+(`selectWorkspaceChat` → `WorkspaceChatRowRoute` →
+`AgentWindowStore.navigateToWorkspaceChat`): Ist er nicht sichtbar, zeigt das
+Fenster sein Raster mit dem Chat als Kachel-Fokus, und „Zurück zum Workspace“
+führt danach in genau diesen Workspace. Lebt der Chat als Tab in einem anderen
+Fenster, besitzt ein anderes Fenster den Workspace oder sind seine Chats Tabs
+anderer Fenster, gilt die Klickregel — der Chat wird geöffnet, statt nur ein
+anderes Fenster nach vorn zu holen.
 
 Sidebar-Drops laufen über den puren `AgentDragDropPlanner`. Er unterscheidet
 beim Reorder innerhalb eines Projekts die Drag-Richtung, plant Moves in ein

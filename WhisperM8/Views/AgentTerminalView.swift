@@ -723,19 +723,13 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// Steht im Composer vielleicht ungesendeter Text? Schutz fuer
     /// `chats move-account --stop-and-resume`, das die TUI beendet.
     private(set) var composerDraft = TerminalComposerDraftTracker()
-    /// Wann zuletzt Enter bzw. Escape über `sendKey` rausging (Schutzregeln der
-    /// Controller-Belegung: gerade gesendet, kein zweites Escape).
-    private(set) var lastControlEnterAt: Date?
-    private(set) var lastControlEscapeAt: Date?
-    /// Zuletzt per Controller ins Eingabefeld geschrieben; gesetzt nur über
-    /// `noteControllerDraftInput` (AgentTerminalController+ControllerInput).
-    var lastControllerDraftInputAt: Date?
+    /// Schutzregeln der Controller-Belegung (gerade gesendet, kein zweites
+    /// Escape, frische Eingabe, Auswahl offen); AgentTerminalController+ControllerInput.
+    var controllerMarks = ControllerTerminalMarks()
 
-    /// Zuletzt abgeschickt, egal auf welchem programmatischen Weg (Enter vom
-    /// Controller, Diktat mit Senden, `chats send`, Menü „Weiter“).
-    var lastSubmitAt: Date? {
-        [lastControlEnterAt, composerDraft.lastProgrammaticSubmitAt].compactMap { $0 }.max()
-    }
+    /// Zuletzt abgeschickt, auf jedem Weg: Enter vom Controller oder von der
+    /// Tastatur, Diktat mit Senden, `chats send`, Menü-Befehle.
+    var lastSubmitAt: Date? { controllerMarks.lastSubmitAt(programmatic: composerDraft.lastProgrammaticSubmitAt) }
 
     var processID: Int32? {
         let pid = terminal.process.shellPid
@@ -776,6 +770,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     @discardableResult
     func sendPrompt(_ text: String, submit: Bool) -> Bool {
         guard isRunning else { return false }
+        controllerMarks.choiceListClosed()   // Text ersetzt jede Auswahl des Menüs
         // Nach einem Abbruch oder Rewind steht vermutlich ein alter Prompt im
         // Composer (`TerminalComposerDraftTracker.mayHoldRestoredPrompt`):
         // erst mit Ctrl+C leeren, sonst hängt der neue Prompt daran und der
@@ -844,7 +839,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendKey(_ key: TerminalControlKey, now: Date = Date()) -> Bool {
         guard isRunning else { return false }
         let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
-        guard TerminalControlKey.controllerAllows(key, status: status) else { return false }
+        guard controllerAllows(key, status: status, now: now) else { return false }
         let isClaude = command.keyboardProfile == .claudeCodeChat
         if key == .escape, isClaude, composerDraft.countsAsInterrupt(status: status, now: now) {
             AgentSessionStatusCoordinator.shared.suspectTurnAborted(sessionID)
@@ -855,12 +850,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // In einer Rückfrage bestätigt Enter die Auswahl, nicht das Eingabefeld —
         // ein Entwurf dort bleibt stehen und darf nicht als gesendet gelten.
         if key == .enter, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
-        if key == .enter { lastControlEnterAt = now }
-        if key == .escape { lastControlEscapeAt = now }
-        if key == .backspace || key == .space || key == .deleteWord {
-            noteControllerDraftInput(submitted: false, now: now)
-        }
-        if key == .enter, status != .awaitingInput { noteControllerDraftInput(submitted: true, now: now) }
+        noteControllerKey(key, status: status, now: now)
         terminal.send(key.bytes(applicationCursor: terminal.getTerminal().applicationCursor))
         return true
     }
@@ -1001,6 +991,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
                 status: AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID),
                 restoresPromptOnInterrupt: self.command.keyboardProfile == .claudeCodeChat,
                 now: Date())
+            self.noteKeyboardKeyForController(event)
         }
 
         // Scroll-Guard: blockt Trackpad-Scrolls in Alt-Buffer-Mode (z. B.

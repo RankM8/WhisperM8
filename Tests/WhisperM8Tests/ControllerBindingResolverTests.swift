@@ -40,6 +40,73 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.press(.cross), chat(.ended)), .chatResume)
     }
 
+    /// Befund 1 nach Runde 3: Wo das Steuerkreuz Pfeile ins Terminal gibt.
+    /// Claude: nur in Rückfragen und in einer Liste, die das Menü geöffnet hat
+    /// (sonst Navigation — links schickte Claude im leeren Feld in den
+    /// Hintergrund). Codex: in jedem lebenden Zustand, weil es nie „wartet“.
+    func testDpadArrowsPerProfileAndState() {
+        let left = ControllerGesture.move(.left, source: .dpad, isRepeat: false)
+        let up = ControllerGesture.move(.up, source: .dpad, isRepeat: false)
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertEqual(action(left, chat(status)), .moveInContent(.left), "Claude \(status)")
+            XCTAssertEqual(action(up, chat(status)), .enterList(step: -1), "Claude \(status)")
+            XCTAssertEqual(action(left, chat(status) { $0.choiceListOpen = true }), .chatKey(.left),
+                           "Claude \(status), Auswahl offen")
+            XCTAssertEqual(action(left, chat(status, profile: .codex)), .chatKey(.left), "Codex \(status)")
+            XCTAssertEqual(action(up, chat(status, profile: .codex)), .chatKey(.up), "Codex \(status)")
+            XCTAssertEqual(action(left, chat(status, profile: .shell)), .moveInContent(.left), "Shell \(status)")
+        }
+        XCTAssertEqual(action(left, chat(.awaitingInput)), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.ended, profile: .codex)), .moveInContent(.left), "beendet: Navigation")
+        XCTAssertEqual(action(left, chat(.ended) { $0.choiceListOpen = true }), .moveInContent(.left))
+    }
+
+    /// Befund 1a: Mit offener Auswahl des Menüs sendet Kreuz Enter auch bei
+    /// arbeitendem Chat, und Kreis schließt die Liste auch direkt nach dem
+    /// Befehl, der sie geöffnet hat.
+    func testChoiceListAllowsConfirmAndEscape() {
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertEqual(action(.press(.cross), chat(status) { $0.choiceListOpen = true }), .chatKey(.enter),
+                           "\(status)")
+        }
+        XCTAssertNil(action(.tap(.circle), chat(.idle) { $0.recentlySubmitted = true }))
+        XCTAssertEqual(action(.tap(.circle), chat(.idle) { $0.recentlySubmitted = true; $0.choiceListOpen = true }),
+                       .chatKey(.escape))
+        XCTAssertNil(action(.tap(.circle), chat(.working) { $0.choiceListOpen = true }),
+                     "arbeitet: Escape bräche ab, dafür gibt es Kreis halten")
+        XCTAssertNil(action(.tap(.circle), chat(.idle) { $0.choiceListOpen = true; $0.escapeSentRecently = true }))
+    }
+
+    /// Befund 1b: Codex-Freigaben erscheinen bei „arbeitet“. Kreuz bestätigt
+    /// erst nach einer Eingabe per Controller (ein Pfeil zählt dazu).
+    func testCodexCrossWhileWorkingNeedsControllerInput() {
+        XCTAssertNil(action(.press(.cross), chat(.working, profile: .codex)))
+        XCTAssertEqual(action(.press(.cross), chat(.working, profile: .codex) { $0.recentDraftInput = true }),
+                       .chatKey(.enter))
+        XCTAssertEqual(action(.press(.cross), chat(.idle, profile: .codex)), .chatKey(.enter))
+    }
+
+    /// Befund 4: Leerzeichen, Wort löschen und Eingabe leeren nur bei Claude
+    /// und Codex; die Rücktaste bleibt in Shells, gehalten nur Zeichen.
+    func testWritingKeysOnlyInAgentChats() {
+        for profile in [ControllerChatState.Profile.claude, .codex] {
+            XCTAssertEqual(action(.press(.triangle), chat(.idle, profile: profile)), .chatKey(.space))
+            XCTAssertEqual(action(.holdRepeatLong(.square), chat(.idle, profile: profile)), .chatKey(.deleteWord))
+            XCTAssertEqual(action(.holdBegan(.r3), chat(.idle, profile: profile)), .chatClearInput)
+        }
+        for profile in [ControllerChatState.Profile.shell, .other] {
+            XCTAssertEqual(action(.press(.triangle), chat(.idle, profile: profile)), .rejected, "\(profile)")
+            XCTAssertEqual(action(.holdBegan(.r3), chat(.idle, profile: profile)), .rejected, "\(profile)")
+            XCTAssertNil(action(.holdPending(.r3, duration: 0.6), chat(.idle, profile: profile)), "kein Ring")
+            XCTAssertEqual(action(.tap(.square), chat(.idle, profile: profile)), .chatKey(.backspace))
+            XCTAssertEqual(action(.holdRepeat(.square), chat(.idle, profile: profile)), .chatKey(.backspace))
+            XCTAssertEqual(action(.holdRepeatLong(.square), chat(.idle, profile: profile)), .chatKey(.backspace),
+                           "\(profile): gehalten weiter Zeichen statt Ctrl+W")
+        }
+        XCTAssertNil(action(.press(.triangle), chat(.ended, profile: .shell)), "beendet: still")
+        XCTAssertNil(action(.holdBegan(.r3), chat(.awaitingInput)), "Rückfrage: still wie bisher")
+    }
+
     /// Runde 2: Kreuz auf einem gestoppten Chat startet ihn wieder.
     func testCrossStartsStoppedChat() {
         XCTAssertEqual(action(.press(.cross), chat(.ended)), .chatResume)
@@ -172,17 +239,26 @@ final class ControllerBindingResolverTests: XCTestCase {
 
     /// Absicherung im Terminal-Weg des Controllers.
     func testTerminalGuardForControllerKeys() {
-        for key in [TerminalControlKey.up, .down, .left, .right] {
-            XCTAssertTrue(TerminalControlKey.controllerAllows(key, status: .awaitingInput))
-            for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
-                XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: status), "\(key) \(status)")
-            }
-            XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: nil))
+        func allows(_ key: TerminalControlKey, _ status: AgentSessionRuntimeStatus?,
+                    _ profile: TerminalKeyboardProfile = .claudeCodeChat, list: Bool = false) -> Bool {
+            TerminalControlKey.controllerAllows(key, status: status, profile: profile, choiceListOpen: list)
         }
-        XCTAssertFalse(TerminalControlKey.controllerAllows(.backTab, status: .awaitingInput))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.backTab, status: .idle))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.enter, status: .working))
-        XCTAssertTrue(TerminalControlKey.controllerAllows(.backspace, status: nil))
+        for key in [TerminalControlKey.up, .down, .left, .right] {
+            XCTAssertTrue(allows(key, .awaitingInput))
+            for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
+                XCTAssertFalse(allows(key, status), "\(key) \(status)")
+                XCTAssertFalse(allows(key, status, .plainShell), "Shell \(key) \(status)")
+                // Befund 1 nach Runde 3: offene Auswahl des Menüs, Codex immer.
+                XCTAssertTrue(allows(key, status, list: true), "Auswahl offen \(key) \(status)")
+                XCTAssertTrue(allows(key, status, .codexChat), "Codex \(key) \(status)")
+            }
+            XCTAssertFalse(allows(key, nil))
+            XCTAssertTrue(allows(key, nil, .codexChat))
+        }
+        XCTAssertFalse(allows(.backTab, .awaitingInput))
+        XCTAssertTrue(allows(.backTab, .idle))
+        XCTAssertTrue(allows(.enter, .working))
+        XCTAssertTrue(allows(.backspace, nil))
     }
 
     // MARK: - Beendeter Chat und reiner Verlauf
