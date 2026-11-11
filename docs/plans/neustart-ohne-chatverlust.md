@@ -1,7 +1,7 @@
 # Plan: `make dev` ohne Chat-Abbruch
 
 **Stand:** 11.11.2026 · **Status:** Beratung mit Empfehlung, Vorversuch und Freigabe offen, kein App-Code geändert
-**Herkunft:** Wunsch vom 11.11.2026 nach der Wettbewerbsanalyse ([`wettbewerb-orca-t3code/auswahl.md`](wettbewerb-orca-t3code/auswahl.md), Punkt 5)
+**Herkunft:** Wunsch vom 11.11.2026 nach der Wettbewerbsanalyse (Punkt 5 der Auswahl, Branch `docs/wettbewerb-orca-t3code`)
 
 ## Ziel
 
