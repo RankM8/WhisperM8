@@ -1,46 +1,32 @@
 import Foundation
 
 extension AgentControlServer {
-    /// Hintergrund-Agents erben die Umgebung des Chats, der Claudes Daemon
-    /// gestartet hat — samt `WHISPERM8_SESSION_ID`/`_TOKEN`. Der Server fragt
-    /// deshalb, wer wirklich anruft: Prozess-ID des Socket-Partners → nächster
-    /// Claude-Prozess in Claudes Registry. Ist das ein Hintergrund-Agent mit
-    /// fremder Identität, gilt der Chat, dem dieser Agent gehört — mit dessen
-    /// aktuellem Token, falls sein Tab läuft, sonst als externer Aufrufer.
-    /// Interaktive Chats und Aufrufe von außen bleiben unverändert.
+    /// Eine behauptete Chat-Identität gilt nur, wenn die PTY dieses Chats in
+    /// der Prozesskette des Aufrufers steht (Prozess-ID des Socket-Partners →
+    /// Eltern per `sysctl`). Claudes Daemon und seine Worker erben Umgebung samt
+    /// `WHISPERM8_SESSION_ID`/`_TOKEN` des Chats, der den Daemon gestartet hat,
+    /// sind aber keine Nachfahren seiner PTY — ihre Aufrufe gelten damit als
+    /// extern, unabhängig davon, ob Claudes Registry sie (schon) kennt.
     static func correctingCallerIdentity(_ request: ChatsControlRequest, socket fd: Int32) -> ChatsControlRequest {
-        guard let peer = AgentCallerIdentityCheck.peerProcessID(socket: fd),
-              let record = AgentCallerIdentityCheck.nearestClaudeRecord(startingAt: peer),
-              record.isBackground else { return request }
-        let claimed = request.actor.sessionID.flatMap(UUID.init(uuidString:))
-        let lookup = AgentCallerIdentityCheck.lookups(sessions: AgentSessionStore().loadWorkspace().sessions)
-        let verdict = AgentCallerIdentityCheck.verdict(
-            claimed: claimed, record: record,
-            externalSessionIDOf: lookup.externalSessionIDOf,
-            sessionForExternalID: lookup.sessionForExternalID)
-        guard case .replace(let owner) = verdict else { return request }
-        return corrected(request, owner: owner, record: record, claimed: claimed,
-                         token: owner.flatMap { AgentSessionTokenRegistry.shared.currentToken(for: $0) })
+        guard let claimed = request.actor.sessionID.flatMap(UUID.init(uuidString:)),
+              let ptyPID = AgentSessionTokenRegistry.shared.processID(for: claimed),
+              let peer = AgentCallerIdentityCheck.peerProcessID(socket: fd) else { return request }
+        let chain = AgentCallerIdentityCheck.processChain(startingAt: peer)
+        return corrected(request, claimed: claimed, ptyPID: ptyPID, chain: chain)
     }
 
-    /// Pure: die korrigierte Anfrage. Ohne laufende PTY des Besitzers kein
-    /// Token — dann tritt der Agent als externer Aufrufer auf, statt eine
-    /// Identität zu behaupten, die er nicht belegen kann.
+    /// Pure: Steht die PTY nicht in der Kette, wird der Aufrufer extern.
     static func corrected(
         _ request: ChatsControlRequest,
-        owner: UUID?,
-        record: ClaudeSessionRecord,
-        claimed: UUID?,
-        token: String?
+        claimed: UUID,
+        ptyPID: Int32,
+        chain: [Int32]
     ) -> ChatsControlRequest {
+        guard !chain.contains(ptyPID) else { return request }
         var corrected = request
-        if let owner, let token {
-            corrected.actor = ChatsControlActor(sessionID: owner.uuidString, token: token)
-        } else {
-            corrected.actor = ChatsControlActor()
-        }
+        corrected.actor = ChatsControlActor()
         Logger.agentStore.notice(
-            "control_caller_identity_corrected claimed=\(claimed?.uuidString ?? "-", privacy: .public) agent=\(record.sessionID, privacy: .public) now=\(corrected.actor.sessionID ?? "extern", privacy: .public)"
+            "control_caller_identity_dropped claimed=\(claimed.uuidString, privacy: .public) pty=\(ptyPID, privacy: .public) peer=\(chain.first ?? -1, privacy: .public) — PTY nicht in der Prozesskette"
         )
         return corrected
     }

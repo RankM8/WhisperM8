@@ -46,7 +46,7 @@ const band = (bodyColumns: number, maxRows = 12) => ({
 type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number }
 
 /** Engine unter der Mod: Session, CLI (`whisperm8 …`) und watch-Strom gespielt. */
-const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null; hangBoard?: boolean } = {}): Calls => {
+const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null; hangBoard?: boolean; boardOkReads?: number } = {}): Calls => {
   const calls: Calls = { argv: [], prompts: [], toasts: [], sounds: 0 }
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine'] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -55,6 +55,11 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
   on('process.run', (_$, e) => {
     calls.argv.push([...e.argv])
     if (opts.hangBoard && e.argv.includes('board') && e.argv.length <= 4) return new Promise<never>(() => undefined)
+    const boardRead = e.argv.includes('board') && e.argv.length <= 4
+    if (boardRead && opts.boardOkReads !== undefined && calls.argv.filter(a => a.includes('board') && a.length <= 4).length > opts.boardOkReads) {
+      const stderr = '@self funktioniert nur innerhalb einer WhisperM8-Session (WHISPERM8_SESSION_ID fehlt) — sonst --owner <ref>.'
+      return { value: { exitCode: 4, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     const stdout = e.argv.includes('board') && e.argv.length <= 4 ? JSON.stringify(opts.board ?? BOARD) : '{"ok":true}'
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
@@ -304,6 +309,21 @@ describe('Identität', () => {
     // Grundlast ohne Ereignis: 3 Lesungen (Start, watch-Start, Takt) — das
     // Ereignis des echten Besitzers bringt genau eine dazu.
     expect(await run($, on, SID)).toBe(4)
+  })
+
+  test('ohne geprüften Besitzer verschwindet das geerbte Board', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    // Erstes Lesen liefert noch das Board des geerbten Chats, danach meldet
+    // die CLI: kein Besitzer (Hintergrund-Agent ohne eigenen Chat).
+    world(on, { boardOkReads: 1, watch: [{ event: 'started', cursor: '1:10' }, { event: 'gap', gap: true }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    expect(await ui.find({ text: 'engine' })).toBeDefined()
+    expect(await ui.find({ text: /wartet/ })).toBeUndefined()
+    await ui.unmount()
   })
 
   test('Änderungen am Board des geerbten Chats lassen die Mod kalt', async ($, on) => {

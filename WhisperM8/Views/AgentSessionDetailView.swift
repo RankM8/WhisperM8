@@ -760,7 +760,9 @@ struct AgentSessionDetailView: View {
             }
             let profile = fresh.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName
             let listed = await Task.detached(priority: .userInitiated) {
-                SupervisorRosterReader.activeWorkerShortID(
+                // Auch ein Daemon-Abzweig zählt: dann hängt der erneute Start an
+                // ihn an und bindet um, statt `--resume` auf dem alten Stand.
+                SupervisorRosterReader.attachTarget(
                     forSessionID: externalID,
                     configDir: ClaudeAccountProfiles().configDir(forProfile: profile)
                 ) != nil

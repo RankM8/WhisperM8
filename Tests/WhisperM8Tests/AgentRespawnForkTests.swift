@@ -32,6 +32,31 @@ final class AgentRespawnForkTests: XCTestCase {
         XCTAssertNil(SupervisorRosterReader.forkOrigin(fromDispatch: [
             "launch": ["mode": "resume", "fork": false, "sessionId": original]]), "kein Abzweig")
         XCTAssertNil(SupervisorRosterReader.forkOrigin(fromDispatch: nil))
+        // Gewollter Abzweig (`claude --bg --resume A --fork-session`): eigener
+        // Chat, kein Neustart — A darf nicht umgebunden werden.
+        XCTAssertNil(SupervisorRosterReader.forkOrigin(fromDispatch: [
+            "source": "cli",
+            "launch": ["mode": "resume", "fork": true, "sessionId": "\(original).jsonl"]]))
+        XCTAssertNil(SupervisorRosterReader.forkOrigin(fromDispatch: [
+            "launch": ["mode": "resume", "fork": true, "sessionId": "\(original).jsonl"]]), "ohne source kein Respawn")
+    }
+
+    /// Der Rückweg nach gescheitertem Attach fragt `attachTarget` — das muss
+    /// einen Daemon-Abzweig finden, sonst startete er `--resume` auf dem alten
+    /// Stand und es liefen zwei Prozesse.
+    func testAttachTargetFindsTheRespawnForkInTheRoster() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fork-roster-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("daemon"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let roster: [String: Any] = ["workers": ["84ca7666": [
+            "pid": Int(getpid()), "sessionId": fork, "startedAt": 1_794_430_135_755,
+            "dispatch": ["source": "respawn", "launch": ["mode": "resume", "fork": true,
+                                                         "sessionId": "/x/\(original).jsonl"]],
+        ]]]
+        try JSONSerialization.data(withJSONObject: roster).write(to: dir.appendingPathComponent("daemon/roster.json"))
+
+        XCTAssertEqual(SupervisorRosterReader.attachTarget(forSessionID: original, configDir: dir, registryJobID: { _ in nil }),
+                       .init(shortID: "84ca7666", sessionID: fork))
     }
 
     func testMatchPrefersOwnWorkerThenNewestLiveFork() {
@@ -127,6 +152,9 @@ final class AgentRespawnForkTests: XCTestCase {
     func testForkCopyOfChatRunningInTabIsNotAddedAndNotRebound() throws {
         let (origin, copy) = (original, fork)
         AgentSessionStore.respawnForkOriginsProvider = { [copy: origin] }
+        let saved = AgentSessionStore.attachedSessionIDsProvider
+        defer { AgentSessionStore.attachedSessionIDsProvider = saved }
+        AgentSessionStore.attachedSessionIDsProvider = { [] }
         var chat = AgentChatSession(provider: .claude, projectID: UUID(), externalSessionID: origin,
                                     title: "Jarvis", status: .running, hasLaunchedInitialPrompt: true)
         let (store, project, url) = try makeStore { project in
@@ -141,6 +169,32 @@ final class AgentRespawnForkTests: XCTestCase {
         let sessions = store.loadWorkspace().sessions
         XCTAssertEqual(sessions.count, 1, "die Kopie wird kein eigener Chat")
         XCTAssertEqual(sessions.first?.externalSessionID, origin, "laufender Chat bleibt auf seiner ID")
+    }
+
+    /// Ein Tab, der nur an den Agent angedockt ist, führt keine eigene
+    /// Unterhaltung: Nach einem Respawn wandert der Chat mit, sonst verlöre er
+    /// @self und das Board.
+    func testForkCopyOfAttachedTabRebinds() throws {
+        let (origin, copy) = (original, fork)
+        AgentSessionStore.respawnForkOriginsProvider = { [copy: origin] }
+        var chat = AgentChatSession(provider: .claude, projectID: UUID(), externalSessionID: origin,
+                                    title: "Jarvis", status: .running, hasLaunchedInitialPrompt: true)
+        let (store, project, url) = try makeStore { project in
+            chat.projectID = project.id
+            return [chat]
+        }
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let saved = AgentSessionStore.attachedSessionIDsProvider
+        defer { AgentSessionStore.attachedSessionIDsProvider = saved }
+        let chatID = chat.id
+        AgentSessionStore.attachedSessionIDsProvider = { [chatID] }
+
+        try store.applyIndexedScan([indexed(origin, cwd: project.path), indexed(copy, cwd: project.path)],
+                                   activeSessionIDs: [chat.id])
+
+        let sessions = store.loadWorkspace().sessions
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.externalSessionID, copy)
     }
 
     func testNewTranscriptWaitsForUnboundLaunchedChatInSameProject() throws {

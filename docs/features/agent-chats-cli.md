@@ -197,15 +197,23 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
   der Prozesskette in Claudes Registry. Ist er ein Hintergrund-Agent
   (`kind: "bg"`), gehört der Aufruf dem Chat, dessen `externalSessionID` seine
   `sessionId` ist, sonst keinem.
-  - Der Server prüft das über die Prozess-ID des Socket-Partners
-    (`LOCAL_PEERPID`). Bei einem Widerspruch nimmt er den richtigen Chat mit
-    dessen aktuellem Token, wenn sein Tab läuft. Sonst behandelt er den Agent
-    als externen Aufrufer. Log: `control_caller_identity_corrected`.
+  - Der Server lässt eine behauptete Identität samt Token nur gelten, wenn die
+    PTY dieses Chats in der Prozesskette des Aufrufers steht: Prozess-ID des
+    Socket-Partners (`LOCAL_PEERPID`), Eltern per `sysctl`, PTY-PID aus
+    `AgentSessionTokenRegistry`. Daemon und Worker sind keine Nachfahren der
+    PTY, deshalb fällt geerbte Identität heraus, auch ohne Registry-Eintrag.
+    Der Aufrufer gilt dann als extern. Log: `control_caller_identity_dropped`.
+    Nebenwirkung: Aus einer PTY abgekoppelte Prozesse (`nohup … &`, die bei
+    launchd landen) gelten ebenfalls als extern.
   - Die CLI korrigiert `@self` und „(du)“ auf dieselbe Weise
     (`ChatsCallerIdentity.checked`). Die Sitzungsliste lädt sie nur, wenn ein
     Hintergrund-Agent dahintersteht.
   - Die Board-Mod in `register.tsx` übernimmt den Besitzer, den
-    `chats board --json` liefert.
+    `chats board --json` liefert. Meldet die CLI keinen Besitzer, zeigt die Mod
+    kein Board, auch nicht das des geerbten Chats.
+  - Grenze: Die CLI prüft lokal nur über Claudes Registry. Ein Hintergrund-
+    Prozess ohne Registry-Eintrag sieht lokal weiter die geerbte Identität,
+    bei der App kommt er damit aber nicht durch.
 - **Kill-Switch:** `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
 
 ## Send-Pipeline (TOCTOU-frei)

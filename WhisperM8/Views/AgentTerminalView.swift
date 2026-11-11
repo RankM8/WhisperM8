@@ -1023,6 +1023,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             environment: environment,
             currentDirectory: command.workingDirectory
         )
+        if let pid = processID {
+            AgentSessionTokenRegistry.shared.bindProcess(sessionID: sessionID, pid: pid, isAttach: command.isClaudeAttach)
+        }
         onLaunched()
     }
 

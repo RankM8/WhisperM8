@@ -22,6 +22,12 @@ extension AgentSessionStore {
         )
     }
 
+    /// Sessions, deren Tab nur an einen Hintergrund-Agent angedockt ist. Sie
+    /// wandern bei einem Respawn mit — sonst verlöre der Chat @self und Board.
+    nonisolated(unsafe) static var attachedSessionIDsProvider: () -> Set<UUID> = {
+        AgentSessionTokenRegistry.shared.attachSessionIDs()
+    }
+
     /// Wie lange ein gestarteter, noch ungebundener Chat neue Verläufe im
     /// selben Projekt für sich reserviert, bevor der Scan sie als eigene
     /// Chats anlegt.
@@ -46,6 +52,7 @@ extension AgentSessionStore {
         now: Date = Date()
     ) -> Set<String> {
         var skipped = Set<String>()
+        let attached = attachedSessionIDsProvider()
         var boundIndexByID: [String: Int] = [:]
         for index in workspace.sessions.indices where workspace.sessions[index].provider == .claude {
             if let id = workspace.sessions[index].externalSessionID?.lowercased() {
@@ -62,7 +69,9 @@ extension AgentSessionStore {
 
             if let origin = forkOrigins[id], let index = boundIndexByID[origin] {
                 let session = workspace.sessions[index]
-                let runsInTab = activeSessionIDs?.contains(session.id) ?? (session.status == .running)
+                // Ein Tab, der nur angedockt ist, führt keine eigene Unterhaltung.
+                let runsInTab = !attached.contains(session.id)
+                    && (activeSessionIDs?.contains(session.id) ?? (session.status == .running))
                 if runsInTab {
                     Logger.claudeBinding.notice(
                         "respawn_fork_copy_skipped localID=\(session.id.uuidString, privacy: .public) origin=\(origin, privacy: .public) copy=\(id, privacy: .public) — Ursprung läuft im Tab"

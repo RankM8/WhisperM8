@@ -66,17 +66,39 @@ final class AgentCallerIdentityCheckTests: XCTestCase {
         XCTAssertEqual(lookup.sessionForExternalID(finExternal.uppercased()), manual.id)
     }
 
-    func testServerUsesTheOwnersTokenOrTreatsTheAgentAsExternal() {
+    /// Review-Befund: Ohne Registry-Eintrag (Worker-Start, bg-pty-host,
+    /// verwaiste Kinder) galt die geerbte Identität samt gültigem Token weiter.
+    /// Jetzt zählt nur, ob die PTY des Chats in der Prozesskette steht.
+    func testTokenCountsOnlyWithThePtyInTheCallersProcessChain() {
         let request = ChatsControlRequest(actor: ChatsControlActor(sessionID: fin.uuidString, token: "fins-token"),
                                           method: "session.send", params: .object([:]))
-        let bg = record(copyExternal, kind: "bg")
+        // CLI 300 → Shell 200 → Claude 100 (Fins PTY)
+        let fromFinsTab = AgentControlServer.corrected(request, claimed: fin, ptyPID: 100, chain: [300, 200, 100])
+        XCTAssertEqual(fromFinsTab.actor, request.actor)
 
-        let withTab = AgentControlServer.corrected(request, owner: jarvisCopy, record: bg, claimed: fin, token: "kopie-token")
-        XCTAssertEqual(withTab.actor, ChatsControlActor(sessionID: jarvisCopy.uuidString, token: "kopie-token"))
+        // CLI 900 → Shell 800 → bg-spare 67815 → bg-pty-host 67732 → Daemon 73520
+        let fromDaemonChild = AgentControlServer.corrected(request, claimed: fin, ptyPID: 100,
+                                                          chain: [900, 800, 67815, 67732, 73520])
+        XCTAssertEqual(fromDaemonChild.actor, ChatsControlActor(), "geerbte Identität fällt raus")
+        XCTAssertFalse(AgentControlRequestHandler.rejectsUnverifiedActor(fromDaemonChild), "extern bleibt erlaubt")
+    }
 
-        let withoutTab = AgentControlServer.corrected(request, owner: jarvisCopy, record: bg, claimed: fin, token: nil)
-        XCTAssertEqual(withoutTab.actor, ChatsControlActor(), "ohne laufende PTY keine behauptete Identität")
-        XCTAssertFalse(AgentControlRequestHandler.rejectsUnverifiedActor(withoutTab), "externe Aufrufe bleiben erlaubt")
+    func testProcessChainStopsAtLaunchd() {
+        let parents: [Int32: Int32] = [300: 200, 200: 100, 100: 1]
+        XCTAssertEqual(AgentCallerIdentityCheck.processChain(startingAt: 300, parentOf: { parents[$0] }), [300, 200, 100])
+        XCTAssertEqual(AgentCallerIdentityCheck.processChain(startingAt: getpid()).first, getpid())
+    }
+
+    func testTokenRegistryForgetsThePtyWithTheToken() {
+        let registry = AgentSessionTokenRegistry.shared
+        let id = UUID()
+        let token = registry.issueToken(for: id)
+        registry.bindProcess(sessionID: id, pid: 4242, isAttach: true)
+        XCTAssertEqual(registry.processID(for: id), 4242)
+        XCTAssertTrue(registry.attachSessionIDs().contains(id))
+        registry.revoke(sessionID: id, ifToken: token)
+        XCTAssertNil(registry.processID(for: id))
+        XCTAssertFalse(registry.attachSessionIDs().contains(id))
     }
 
     func testProcessHelpersReadTheRealKernelState() throws {

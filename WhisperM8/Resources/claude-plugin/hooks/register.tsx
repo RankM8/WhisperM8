@@ -101,7 +101,16 @@ const parseBoard = (stdout: string): BoardView | null => {
 
 const refresh = async ($: EngineInterface) => {
   const ran = await cli($, ['chats', 'board', '--json'])
-  if (!ran.ok) return
+  if (!ran.ok) {
+    // Kein geprüfter Besitzer (Hintergrund-Agent ohne eigenen Chat): kein
+    // Board, auch nicht das des Chats, dessen Umgebung geerbt wurde.
+    if (ran.message.includes('@self')) {
+      sessionID = null
+      stopWatch()
+      await update($, board, () => null)
+    }
+    return
+  }
   const next = parseBoard(ran.stdout)
   if (next === null) return
   // Die CLI prüft die Identität gegen Claudes Registry: Ein Hintergrund-Agent

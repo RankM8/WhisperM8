@@ -102,9 +102,13 @@ enum SupervisorRosterReader {
     }
 
     /// Ursprung eines Daemon-Abzweigs aus dem `dispatch`-Block. `launch.sessionId`
-    /// ist ein Transcript-Pfad (`…/<id>.jsonl`) oder eine nackte ID.
+    /// ist ein Transcript-Pfad (`…/<id>.jsonl`) oder eine nackte ID. Nur ein
+    /// Neustart DURCH DEN DAEMON (`source == "respawn"`) zählt — ein gewollter
+    /// Abzweig (`claude --bg --resume A --fork-session`) ist ein eigener Chat
+    /// und darf A nicht umbinden (Review-Befund 11.11.2026).
     static func forkOrigin(fromDispatch dispatch: Any?) -> String? {
         guard let dispatch = dispatch as? [String: Any],
+              (dispatch["source"] as? String) == "respawn",
               let launch = dispatch["launch"] as? [String: Any],
               (launch["fork"] as? Bool) == true,
               let raw = launch["sessionId"] as? String, !raw.isEmpty else { return nil }

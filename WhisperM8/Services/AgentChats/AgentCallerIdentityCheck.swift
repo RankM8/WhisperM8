@@ -62,6 +62,22 @@ enum AgentCallerIdentityCheck {
         return nil
     }
 
+    /// Prozesskette ab `pid` (inklusive) bis vor launchd, höchstens `maxDepth`.
+    static func processChain(
+        startingAt pid: Int32,
+        parentOf: (Int32) -> Int32? = { parentProcessID(of: $0) },
+        maxDepth: Int = 16
+    ) -> [Int32] {
+        var chain: [Int32] = []
+        var current = pid
+        while chain.count < maxDepth, current > 1 {
+            chain.append(current)
+            guard let parent = parentOf(current), parent != current else { break }
+            current = parent
+        }
+        return chain
+    }
+
     /// Registry-Eintrag genau dieses Prozesses (lebend), über alle Konten.
     static func registryRecord(pid: Int32, roots: [ClaudeSessionRegistry.Root]) -> ClaudeSessionRecord? {
         for root in roots {
