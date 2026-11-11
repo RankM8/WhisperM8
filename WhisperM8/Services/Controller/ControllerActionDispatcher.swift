@@ -537,7 +537,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .commands(let list):
             guard let text = list.selectedEnabled else { return playHaptic(.rejected) }
             ui.menu = nil
-            sendCommand(ControllerSlashCommand(text: text))
+            sendCommand(ControllerSlashCommand(text: text), setup: menu.setup)
         case .accounts(let list):
             guard let id = list.selectedEnabled, let sessionID = menu.setup.sessionID,
                   let account = menu.setup.chat?.accounts.first(where: { $0.id == id }) else {
@@ -564,13 +564,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .continueWork:
             // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
             // und beides gesendet.
-            guard let sessionID = selectedSessionID,
+            guard let sessionID = inputTarget(of: setup),
                   terminals.state(of: sessionID)?.draftSuspected != true else {
                 return playHaptic(.rejected)
             }
             terminals.sendText(ControllerMenuText.continueWork, submit: true, to: sessionID)
         case .cycleMode:
-            sendKey(.backTab)
+            guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
+            terminals.sendKey(.backTab, to: sessionID)
         case .commands, .switchAccount:
             break
         case .rename, .fork, .pin, .archive, .closeChat:
@@ -590,11 +591,22 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
     }
 
+    /// Chat, in den Eingaben aus dem Menü gehen: der, für den das Menü
+    /// geöffnet wurde (`setup.sessionID`), wie bei Konten und Umbenennen.
+    /// Hat sich die Auswahl seither geändert (Maus, Tastatur, Benachrichtigung),
+    /// geht nichts raus — sonst landete „Weiter“ oder ein Befehl in einem Chat,
+    /// den man nicht vor Augen hatte. Der Aufrufer meldet „geht nicht“; das
+    /// Menü ist dann schon zu.
+    private func inputTarget(of setup: ControllerMenuSetup) -> UUID? {
+        guard setup.acceptsInput, let sessionID = setup.sessionID, sessionID == selectedSessionID else { return nil }
+        return sessionID
+    }
+
     /// Befehl aus der zweiten Ebene: „/“ bleibt ungesendet stehen, damit sich
     /// die Liste der CLI öffnet; feste Befehle werden gesendet (so öffnet
     /// `/model` gleich die Modellwahl). Nie an einen Entwurf hängen.
-    private func sendCommand(_ command: ControllerSlashCommand) {
-        guard let sessionID = selectedSessionID,
+    private func sendCommand(_ command: ControllerSlashCommand, setup: ControllerMenuSetup) {
+        guard let sessionID = inputTarget(of: setup),
               terminals.state(of: sessionID)?.draftSuspected != true else {
             return playHaptic(.rejected)
         }

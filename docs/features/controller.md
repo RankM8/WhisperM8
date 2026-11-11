@@ -121,6 +121,8 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   Eingabefeld in den Hintergrund. Dieselbe Regel sichert `AgentTerminalController.sendKey` ab
   (`TerminalControlKey.controllerAllows`, nur der Weg des Controllers, nie die Tastatur).
 - „Weiter“ aus dem Menü wird nicht an einen vorhandenen Entwurf gehängt.
+- Eingaben aus dem Menü („Weiter“, „Modus wechseln“, Befehle) gehen an den Chat, für den das Menü
+  geöffnet wurde. Hat sich die Auswahl seither geändert, geht nichts raus („geht nicht“, Menü zu).
 - Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.

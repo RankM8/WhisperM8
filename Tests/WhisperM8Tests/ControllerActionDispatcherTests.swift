@@ -904,6 +904,47 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(terminals.keys, [], "Shift+Tab nie in eine Rückfrage")
     }
 
+    /// Review-Befund 2: Eingaben aus dem Menü gehen an den Chat, für den es
+    /// geöffnet wurde. Hat sich die Auswahl inzwischen geändert, geht nichts
+    /// raus, es gibt „geht nicht“, und das Menü ist zu.
+    func testMenuInputIsRejectedWhenSelectionChanged() {
+        let opened = window.selected!
+        perform(.menuToggle)
+        XCTAssertEqual(ui.menu?.setup.sessionID, opened)
+        let other = UUID()
+        window.selected = other
+        setTerminal(status: .idle)
+        perform(.menuActivate)                 // „Weiter“
+        XCTAssertEqual(terminals.texts.count, 0)
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertNil(ui.menu)
+
+        window.selected = opened
+        perform(.menuToggle)
+        ui.menu?.select(.cycleMode)
+        window.selected = other
+        perform(.menuActivate)
+        XCTAssertEqual(terminals.keys, [], "kein Shift+Tab an den anderen Chat")
+
+        window.selected = opened
+        perform(.menuToggle)
+        ui.menu?.select(.commands)
+        perform(.menuActivate)
+        window.selected = other
+        perform(.menuMove(step: 1))
+        perform(.menuActivate)
+        XCTAssertEqual(terminals.texts.count, 0, "kein Befehl an den anderen Chat")
+        XCTAssertEqual(haptics, [.rejected, .rejected, .rejected])
+    }
+
+    /// Unverändert: Mit derselben Auswahl geht „Modus wechseln“ an den Chat des Menüs.
+    func testCycleModeGoesToMenuChat() {
+        perform(.menuToggle)
+        ui.menu?.select(.cycleMode)
+        perform(.menuActivate)
+        XCTAssertEqual(terminals.keys, [.backTab])
+    }
+
     /// „Weiter“ würde an einen Entwurf angehängt und beides gesendet.
     func testContinueIsRejectedWithDraft() {
         setTerminal(status: .idle, draft: true)
