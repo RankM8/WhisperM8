@@ -1448,9 +1448,7 @@ struct AgentChatsView: View {
         let erroredSubagentIDs = Set(jobRuntimeModel.snapshotsBySessionID
             .filter { $0.value.state == .failed }
             .keys)
-        let runningSessionIDs = Self.runningSessionIDs(
-            terminalActive: terminalActiveSessionIDs, jobRuntime: jobRuntimeModel
-        )
+        let runningSessionIDs = Self.runningSessionIDs(terminalActive: terminalActiveSessionIDs, jobRuntime: jobRuntimeModel)
         let snapshot: AgentSidebarSnapshot?
         let projectByID: [UUID: AgentProject]
         if archiveModeActive {
