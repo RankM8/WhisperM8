@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-11
+updated: 2026-11-12
 description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
 ---
 
@@ -43,23 +43,23 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | Taste | Wirkung |
 |---|---|
 | Linker Stick | Liste hoch/runter; nach rechts in den Inhalt, nach links zurück in die Liste; in der Einzelansicht springt die Markierung mit hoch/runter in die Liste (Start beim aktuellen Chat, sofort ein Schritt, der offene Chat bleibt); im Raster von Kachel zu Kachel; während Aufnahme, Transkription und Nacharbeit ohne Wirkung |
-| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein — ein Chat unter einem Workspace, der nicht sichtbar ist, öffnet diesen Workspace mit dem Chat als Kachel-Fokus; im Chat Enter; gestoppter Chat: starten |
+| Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein — ein Chat unter einem Workspace, der nicht sichtbar ist, öffnet diesen Workspace mit dem Chat als Kachel-Fokus (nur Kreuz; der Mausklick folgt der Klickregel; besitzt ein anderes Fenster den Workspace, wird der Chat nach der Klickregel geöffnet); im Chat Enter; gestoppter Chat: starten |
 | Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
-| Dreieck | im Chat ein Leerzeichen (jeder lebende Chat, kein Wiederholen beim Halten); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
+| Dreieck | im Chat ein Leerzeichen (lebende Claude- und Codex-Chats, kein Wiederholen beim Halten; in Shells „geht nicht“); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
 | L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
-| Steuerkreuz | Pfeiltasten in den Chat nur, solange der Agent eine Rückfrage stellt; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im Raster Kachel zu Kachel); in der Liste wie der Stick |
+| Steuerkreuz | Pfeiltasten in den Chat, solange der Agent eine Rückfrage stellt, solange eine Liste offen ist, die das Menü geöffnet hat („Auswahl offen“, siehe Schutzregeln), und in Codex-Chats immer; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im Raster Kachel zu Kachel); in der Liste wie der Stick |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
 **Zusatz**
 
 | Taste | Wirkung |
 |---|---|
-| Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
+| Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W; in Shells weiter Zeichen); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
 | Touchpad-Klick | Zwischenablage-Verlauf auf und zu |
 | L3 | Kachel groß / zurück zum Raster |
-| R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — nicht während einer Rückfrage |
+| R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — nur Claude und Codex, nicht während einer Rückfrage |
 | Options | das eine Menü, siehe unten |
 | L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt. Im Raster öffnet halten die Workspace-Auswahl, siehe unten |
 | L2 halten, dann R2 | zum markierten Chat wechseln und diktieren |
@@ -70,7 +70,8 @@ Bildschirmaufnahme). Zwei schnelle Create-Drücke ergeben deshalb einen Screensh
 
 **Menü (Options):** drei Gruppen. Eingaben in den Chat: „Weiter“, „Befehle ›“ (zweite Ebene mit den
 festen Befehlen der CLI, Tabelle `ControllerSlashCommands`; „/ eintippen“ bleibt ungesendet, alle
-anderen werden gesendet), „Modus wechseln“ (Shift+Tab). Aktionen am Chat, dieselben Wege wie sein
+anderen werden gesendet; Befehle, nach denen die CLI eine Liste zeigt, setzen „Auswahl offen“), „Modus
+wechseln“ (Shift+Tab). Aktionen am Chat, dieselben Wege wie sein
 Kontextmenü: „Konto wechseln ›“ (Claude-Konten wie „Zu Account verschieben“, bei GPT-Chats auch die
 GPT-Konten), „Umbenennen…“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“
 in der Seitenleiste). Dazu „Belegung anzeigen“ und „Controller pausieren“. In der Liste wirken die
@@ -116,10 +117,24 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
   des Menüs, die etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in
   Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
-- Pfeiltasten gehen nur in eine offene Rückfrage. Sonst holte hoch den letzten Prompt zurück (Kreuz
-  schickte ihn erneut, in einer Shell den letzten Befehl), und links schickt Claude im leeren
-  Eingabefeld in den Hintergrund. Dieselbe Regel sichert `AgentTerminalController.sendKey` ab
-  (`TerminalControlKey.controllerAllows`, nur der Weg des Controllers, nie die Tastatur).
+- Pfeiltasten gehen bei Claude nur in eine offene Rückfrage oder eine offene Auswahl des Menüs. Sonst
+  holte hoch den letzten Prompt zurück (Kreuz schickte ihn erneut, in einer Shell den letzten Befehl),
+  und links schickt Claude im leeren Eingabefeld in den Hintergrund. In Shells nie. Dieselbe Regel
+  sichert `AgentTerminalController.sendKey` ab (`TerminalControlKey.controllerAllows` mit Profil und
+  Merker, nur der Weg des Controllers, nie die Tastatur).
+- „Auswahl offen“ (`ControllerTerminalMarks`, je Chat am Terminal): gesetzt, wenn das Menü einen
+  Befehl schickt, nach dem die CLI eine Liste zeigt — Claude „/“, `/model`, `/config`, `/resume`,
+  `/permissions`, `/mcp`, `/agents`, `/memory`; Codex „/“, `/model`, `/approvals`. Solange er steht,
+  gehen Pfeile ins Terminal, Kreuz schickt Enter auch bei „arbeitet“, und Kreis schließt die Liste
+  auch direkt nach dem Befehl. Er fällt mit Enter und Escape (Controller und Tastatur), mit Rücktaste,
+  Wort löschen, Leeren, Tab/Shift+Tab, mit jedem Text in den Chat und nach 2 min ohne Pfeil oder
+  Leerzeichen darin. Ein Chatwechsel lässt ihn stehen: Die Liste im Terminal bleibt ja offen. Grenze:
+  Öffnet Enter in einer Liste eine weitere (Untermenü in `/config`, `/mcp`, `/agents`), ist der
+  Merker trotzdem weg — dann den Befehl erneut über das Menü öffnen oder die Tastatur nehmen.
+- Codex meldet keine Rückfragen (keine Hooks); seine Freigaben erscheinen, während der Status
+  „arbeitet“ zeigt. Deshalb gehen Pfeile in Codex-Chats immer ins Terminal (links schickt Codex nicht in
+  den Hintergrund), und ein Pfeil per Controller zählt als Eingabe für die 30-s-Regel: Erst mit dem
+  Steuerkreuz wählen, dann bestätigt Kreuz — ohne Pfeil bleibt Kreuz bei „arbeitet“ ohne Wirkung.
 - „Weiter“ aus dem Menü wird nicht an einen vorhandenen Entwurf gehängt.
 - Eingaben aus dem Menü („Weiter“, „Modus wechseln“, Befehle) gehen an den Chat, für den das Menü
   geöffnet wurde. Hat sich die Auswahl seither geändert, geht nichts raus („geht nicht“, Menü zu).
@@ -127,13 +142,15 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.
 - Arbeitet der Chat oder ist sein Zustand unklar, schickt Kreuz Enter nur, wenn in den letzten 30 s
-  per Controller getippt, gelöscht oder diktiert wurde (ohne zu senden). Zwischen dem Erscheinen eines
-  Freigabe-Dialogs und dem Status „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl
-  bestätigte. Der Entwurfs-Verdacht zählt dafür nicht, und Tippen auf der Tastatur auch nicht.
+  per Controller getippt, gelöscht oder diktiert wurde und seitdem nichts abgeschickt wurde — auf
+  keinem Weg: Kreuz auch in einer Rückfrage, Enter der Tastatur, `chats send`, Diktat mit Senden,
+  Befehle aus dem Menü. Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt
+  eine Lücke, in der Enter sonst die Vorauswahl bestätigte. Der Entwurfs-Verdacht zählt dafür nicht,
+  und Tippen auf der Tastatur auch nicht.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
 - Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
-  programmatischen Versand: Enter vom Controller, Diktat mit Senden, `chats send`) und unbekannter Status
-  zählen als arbeitend.
+  Versand: Enter vom Controller oder der Tastatur, Diktat mit Senden, `chats send`) und unbekannter
+  Status zählen als arbeitend — außer bei offener Auswahl des Menüs.
 - Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Auswahl, Menü und Liste.
   Ein per Tastatur geöffneter Ctrl+Tab-Umschalter schließt erst, wenn der Controller wirklich etwas
   ausführt.
@@ -142,6 +159,11 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   einzelnes ESC bricht einen arbeitenden Chat ab. Belegt: Claude Code („Delete back to previous
   whitespace“, also ganze Pfade auf einmal), Codex (`delete_backward_word` in
   `codex-rs/tui/src/keymap.rs`), zsh und bash (`backward-kill-word`).
+- Leerzeichen, Wort löschen und Eingabe leeren nur bei Claude und Codex; in einer Shell läuft oft ein
+  Programm mit eigener Belegung (nano fügt mit Ctrl+U ein, vim und emacs deuten Ctrl+W und Ctrl+E
+  anders). Die Rücktaste bleibt in Shells, wie die echte Taste; gehalten löscht sie dort nur Zeichen.
+- Eingabe leeren (R3 halten) wirkt auf den Chat, der beim Drücken ausgewählt war; ist beim Auslösen
+  ein anderer ausgewählt, wird nichts geleert („geht nicht“).
 - Eingabe leeren (R3 halten) schickt Ctrl+E und dann 128 × Ctrl+U in Stößen alle 15 ms, nie Ctrl+C
   oder ESC. Ctrl+U löscht bis zum Zeilenanfang und am Zeilenanfang den Umbruch davor (Claude Code:
   „Repeat to clear across lines“; Codex: `kill_line_start`) — reicht für 64 Zeilen. Text unter einer
@@ -188,7 +210,7 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 ## Prüfen
 
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in acht Zuständen (mit Raster),
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster, offener Auswahl und Shell),
   Menü mit beiden Ebenen, Workspace-Auswahl, Liste der Ausgabemodi an der Pill; `ONLY=clipboard-verlauf-controller` die Fußzeile und das
   Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
