@@ -64,7 +64,7 @@ extension ControllerLegendLabel {
         case .dictate: return String(localized: "Dictation on and off")
         case .nextWaiting: return String(localized: "Jump to the next chat that is waiting for you")
         case .previousNextChat: return String(localized: "Previous / next chat in the order of the list; in the list: Active / Recent / All")
-        case .arrows: return String(localized: "Arrow keys in the chat, for questions from the agent")
+        case .arrows: return String(localized: "D-pad: arrow keys only while the agent asks a question; otherwise it moves like the left stick")
         case .scroll: return String(localized: "Scroll the conversation")
         case .backspace: return String(localized: "Delete (hold: keep deleting)")
         case .closeHold: return String(localized: "In the list, hold: close the chat (like its − or ×)")

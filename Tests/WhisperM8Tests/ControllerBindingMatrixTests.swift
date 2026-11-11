@@ -94,7 +94,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         table[.move(.up, source: .leftStick, isRepeat: false)] = .enterList(step: -1)
         table[.move(.down, source: .leftStick, isRepeat: false)] = .enterList(step: 1)
         table[.move(.left, source: .leftStick, isRepeat: false)] = .moveInContent(.left)
-        table[.move(.right, source: .leftStick, isRepeat: false)] = .moveInContent(.right)
+        // Rechts hat in der Einzelansicht keine Wirkung (Review-Befund 1).
         return merge(table, pauseChord)
     }()
 
@@ -135,6 +135,19 @@ final class ControllerBindingMatrixTests: XCTestCase {
     ]
 
     private static let chatArrows = dpad { .chatKey(ControllerChatKey($0)) }
+
+    /// Steuerkreuz außerhalb einer Rückfrage (Review-Befund 1): wie der linke
+    /// Stick, ohne Wiederholung; rechts ohne Wirkung.
+    private static let dpadNavigation: Table = [
+        .move(.up, source: .dpad, isRepeat: false): .enterList(step: -1),
+        .move(.down, source: .dpad, isRepeat: false): .enterList(step: 1),
+        .move(.left, source: .dpad, isRepeat: false): .moveInContent(.left),
+    ]
+
+    /// Im Raster von Kachel zu Kachel.
+    private static let gridDpadNavigation: Table = Dictionary(uniqueKeysWithValues: ControllerDirection.allCases.map {
+        (ControllerGesture.move($0, source: .dpad, isRepeat: false), ControllerAction.moveInContent($0))
+    })
 
     private static let bridge: Table = merge(dpad { .bridgeKey(ControllerBridgeKey($0)) }, [
         .press(.cross): .bridgeKey(.returnKey),
@@ -275,26 +288,26 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.touchpad): .clipboardToggle,
             .press(.options): .menuToggle,
         ], pauseChord)),
-        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, chatArrows, backspace, [
+        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, dpadNavigation, backspace, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
         ("Chat ruht, Codex", .chat(ControllerChatState(status: .idle, profile: .codex, draftSuspected: true)),
-         merge(chatNavigation, chatArrows, backspace, [
+         merge(chatNavigation, dpadNavigation, backspace, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
-        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, chatArrows, backspace, [
+        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, gridDpadNavigation, backspace, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
-        ("Chat arbeitet", chatState(.working), merge(chatNavigation, chatArrows, backspace, [
+        ("Chat arbeitet", chatState(.working), merge(chatNavigation, dpadNavigation, backspace, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
-        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, chatArrows, backspace, [
+        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, dpadNavigation, backspace, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
@@ -308,9 +321,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
         ("Rückfrage neu", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 0.1 },
          merge(chatNavigation, chatArrows, backspace, [.tap(.circle): .chatKey(.escape)])),
         ("Chat beendet", chatState(.ended) { $0.draftSuspected = true },
-         merge(chatNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
+         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
         ("nur Verlauf", chatState(.working) { $0.hasTerminal = false },
-         merge(chatNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
+         merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .press(.r3): .chatResume])),
     ]
 
     // MARK: - Prüfung

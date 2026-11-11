@@ -11,6 +11,20 @@ import AppKit
 enum TerminalControlKey: String, CaseIterable, Sendable {
     case enter, escape, up, down, left, right, tab, backTab, backspace
 
+    /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
+    /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
+    /// Rückfrage — sonst holt hoch den letzten Prompt zurück und links schickt
+    /// Claude im leeren Eingabefeld in den Hintergrund. Tab und Shift+Tab nie
+    /// in einer Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle
+    /// Änderungen erlauben“.
+    static func controllerAllows(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?) -> Bool {
+        switch key {
+        case .up, .down, .left, .right: return status == .awaitingInput
+        case .tab, .backTab: return status != .awaitingInput
+        case .enter, .escape, .backspace: return true
+        }
+    }
+
     /// Bytes für das PTY. Pfeile richten sich nach dem Cursor-Modus des
     /// Terminals (DECCKM): normal `ESC [ A`, im Application-Modus `ESC O A`.
     ///

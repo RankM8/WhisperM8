@@ -48,7 +48,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | nächster Chat, der wartet (wie ⌃⌥Tab); aus anderen Fenstern: Agent Chats nach vorn |
 | L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
-| Steuerkreuz | Pfeiltasten in den Chat (Rückfragen); in der Liste wie der Stick |
+| Steuerkreuz | Pfeiltasten in den Chat nur, solange der Agent eine Rückfrage stellt; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im Raster Kachel zu Kachel); in der Liste wie der Stick |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
 **Zusatz**
@@ -116,6 +116,10 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
   des Menüs, die etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in
   Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- Pfeiltasten gehen nur in eine offene Rückfrage. Sonst holte hoch den letzten Prompt zurück (Kreuz
+  schickte ihn erneut, in einer Shell den letzten Befehl), und links schickt Claude im leeren
+  Eingabefeld in den Hintergrund. Dieselbe Regel sichert `AgentTerminalController.sendKey` ab
+  (`TerminalControlKey.controllerAllows`, nur der Weg des Controllers, nie die Tastatur).
 - „Weiter“ aus dem Menü wird nicht an einen vorhandenen Entwurf gehängt.
 - Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.

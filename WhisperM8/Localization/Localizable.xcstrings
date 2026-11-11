@@ -2141,16 +2141,6 @@
         }
       }
     },
-    "Arrow keys in the chat, for questions from the agent": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pfeiltasten im Chat, für Rückfragen des Agenten"
-          }
-        }
-      }
-    },
     "Asks macOS to keep the strip out of screenshots and screen sharing. Some recording and meeting apps may still show it.": {
       "localizations": {
         "de": {
@@ -4947,6 +4937,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steuerkreuz hoch"
+          }
+        }
+      }
+    },
+    "D-pad: arrow keys only while the agent asks a question; otherwise it moves like the left stick": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz: Pfeiltasten nur, solange der Agent eine Rückfrage stellt; sonst bewegt es wie der linke Stick"
           }
         }
       }

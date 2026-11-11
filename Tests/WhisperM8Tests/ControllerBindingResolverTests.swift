@@ -120,6 +120,53 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(deletes, afterRelease, "nach dem Loslassen kein Zeichen mehr")
     }
 
+    // MARK: - Steuerkreuz (Review-Befund 1)
+
+    /// Pfeile gehen nur in einer Rückfrage ins Terminal. In jedem anderen
+    /// Zustand wirkt das Steuerkreuz wie der linke Stick — auch bei einem
+    /// vermuteten Entwurf.
+    func testDpadSendsArrowsOnlyWhileAgentAsks() {
+        let asking = chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }
+        for direction in ControllerDirection.allCases {
+            for isRepeat in [false, true] {
+                XCTAssertEqual(action(.move(direction, source: .dpad, isRepeat: isRepeat), asking),
+                               .chatKey(ControllerChatKey(direction)))
+            }
+        }
+        let others: [ControllerContext] = [
+            chat(.idle), chat(.idle) { $0.draftSuspected = true }, chat(.working), chat(.unknown), chat(.ended),
+            chat(.awaitingInput) { $0.hasTerminal = false },
+        ]
+        for context in others {
+            XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1), "\(context)")
+            XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: false), context), .enterList(step: 1), "\(context)")
+            XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), context), .moveInContent(.left), "\(context)")
+            XCTAssertNil(action(.move(.right, source: .dpad, isRepeat: false), context), "\(context)")
+            XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "\(context)")
+        }
+        let grid = chat(.working) { $0.gridActive = true }
+        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), grid), .moveInContent(.right))
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), grid), .moveInContent(.up))
+        // Während der Aufnahme bleibt das Steuerkreuz der Ausgabemodus.
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), .recording(phase: .recording, targetIsChat: true)),
+                       .outputMode(step: -1))
+    }
+
+    /// Absicherung im Terminal-Weg des Controllers.
+    func testTerminalGuardForControllerKeys() {
+        for key in [TerminalControlKey.up, .down, .left, .right] {
+            XCTAssertTrue(TerminalControlKey.controllerAllows(key, status: .awaitingInput))
+            for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
+                XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: status), "\(key) \(status)")
+            }
+            XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: nil))
+        }
+        XCTAssertFalse(TerminalControlKey.controllerAllows(.backTab, status: .awaitingInput))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.backTab, status: .idle))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.enter, status: .working))
+        XCTAssertTrue(TerminalControlKey.controllerAllows(.backspace, status: nil))
+    }
+
     // MARK: - Beendeter Chat und reiner Verlauf
 
     func testEndedChatKeepsNavigationButNoTerminalKeys() {
@@ -127,7 +174,8 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.press(.cross), context), .chatResume)
             XCTAssertNil(action(.tap(.circle), context))
             XCTAssertNil(action(.holdBegan(.circle), context))
-            XCTAssertNil(action(.move(.up, source: .dpad, isRepeat: false), context))
+            XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1),
+                           "Steuerkreuz navigiert wie der Stick, keine Pfeile")
             XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), context), .moveInContent(.left))
             XCTAssertEqual(action(.press(.triangle), context), .nextWaitingChat)
             XCTAssertEqual(action(.press(.r1), context), .adjacentChat(step: 1))
@@ -143,9 +191,11 @@ final class ControllerBindingResolverTests: XCTestCase {
 
     func testChatNavigation() {
         let context = chat(.working)
-        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), context), .moveInContent(.right))
+        XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: false), context), "rechts: in der Einzelansicht nichts")
+        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), chat(.working) { $0.gridActive = true }),
+                       .moveInContent(.right))
         XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: true), context), "ein Druck, ein Schritt")
-        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .chatKey(.down))
+        XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "kein Pfeil, keine Wiederholung")
         XCTAssertEqual(action(.press(.l1), context), .adjacentChat(step: -1), "L1/R1 folgen der Liste links")
         XCTAssertEqual(action(.press(.r1), chat(.idle) { $0.gridActive = true }), .adjacentChat(step: 1), "auch im Raster")
         XCTAssertEqual(action(.press(.l3), context), .toggleMaximize)
@@ -190,7 +240,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.press(.l1), single), .adjacentChat(step: -1), "L1/R1 wechseln weiter direkt")
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), single), .moveInContent(.left))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: true), single))
-        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .chatKey(.up), "Steuerkreuz bleibt Pfeil")
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .enterList(step: -1),
+                       "Steuerkreuz außerhalb einer Rückfrage wie der Stick")
 
         let grid = chat(.idle) { $0.gridActive = true }
         XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), grid), .moveInContent(.up))

@@ -833,8 +833,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendKey(_ key: TerminalControlKey, now: Date = Date()) -> Bool {
         guard isRunning else { return false }
         let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
-        // Shift+Tab ist in Claudes Freigabe-Dialog „alle Änderungen erlauben“.
-        if key == .tab || key == .backTab, status == .awaitingInput { return false }
+        guard TerminalControlKey.controllerAllows(key, status: status) else { return false }
         let isClaude = command.keyboardProfile == .claudeCodeChat
         if key == .escape, isClaude, composerDraft.countsAsInterrupt(status: status, now: now) {
             AgentSessionStatusCoordinator.shared.suspectTurnAborted(sessionID)

@@ -224,10 +224,17 @@ enum ControllerLegend {
         // der Einstellungen.
         let workspaceHold: [Candidate] = state.gridActive
             ? [candidate(.button(.l2), .switchWorkspaceHold, [.holdBegan(.l2)])] : []
+        // Das Steuerkreuz gibt nur in Rückfragen Pfeile; sonst bewegt es wie der Stick.
+        let arrows = ControllerBindingResolver.arrowsAllowed(state)
+        let moveInputs: [ControllerLegendInput] = arrows ? [.leftStick] : [.leftStick, .dpad]
+        let moveProbes: [ControllerGesture] = moveInputs.flatMap { input in
+            ControllerDirection.allCases.map { direction in
+                ControllerGesture.move(direction, source: input == .dpad ? .dpad : .leftStick, isRepeat: false)
+            }
+        }
         return [
-            candidate(.leftStick, .move, ControllerDirection.allCases.map {
-                .move($0, source: .leftStick, isRepeat: false)
-            }),
+            ControllerLegend.Candidate(
+                entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
@@ -235,8 +242,7 @@ enum ControllerLegend {
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.button(.triangle), .nextWaiting, [.press(.triangle)]),
             candidate(.bumpers, .previousNextChat, [.press(.l1), .press(.r1)]),
-        ] + workspaceHold + [
-            candidate(.dpad, .arrows, gestures(for: .dpad)),
+        ] + workspaceHold + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.press(.r3)]),
         ]

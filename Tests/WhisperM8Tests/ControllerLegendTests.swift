@@ -46,9 +46,10 @@ final class ControllerLegendTests: XCTestCase {
     /// Runde 2: Bei gestopptem Chat zeigt Kreuz „Start“.
     func testEndedChatShowsStartButNoTerminalKeys() {
         let shown = inputs(chat(.ended) { $0.draftSuspected = true })
-        for input in [ControllerLegendInput.button(.circle), .button(.square), .dpad] {
+        for input in [ControllerLegendInput.button(.circle), .button(.square)] {
             XCTAssertFalse(shown.contains(input), "\(input)")
         }
+        XCTAssertFalse(labels(chat(.ended)).contains(.arrows), "Steuerkreuz bewegt nur noch")
         XCTAssertTrue(labels(chat(.ended)).contains(.start))
         XCTAssertTrue(labels(chat(.working) { $0.hasTerminal = false }).contains(.start))
         XCTAssertFalse(labels(chat(.idle)).contains(.start))
@@ -72,6 +73,18 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(chat(.idle)).contains(.interruptHold))
         XCTAssertTrue(labels(chat(.working)).contains(.interruptHold))
         XCTAssertFalse(labels(chat(.working)).contains(.back))
+    }
+
+    /// Review-Befund 1: „Pfeiltasten“ nur bei einer Rückfrage; sonst steht
+    /// das Steuerkreuz beim Bewegen neben dem Stick.
+    func testArrowsOnlyWhileAgentAsks() {
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertFalse(labels(chat(status)).contains(.arrows), "\(status)")
+            XCTAssertEqual(ControllerLegend.entries(for: chat(status)).first?.inputs, [.leftStick, .dpad])
+        }
+        let asking = chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }
+        XCTAssertTrue(labels(asking).contains(.arrows))
+        XCTAssertEqual(ControllerLegend.entries(for: asking).first?.inputs, [.leftStick])
     }
 
     /// Runde 3: Der linke Stick steht in der Einzelansicht und im Raster als

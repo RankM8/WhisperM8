@@ -12,7 +12,7 @@ extension ControllerBindingResolver {
         switch gesture {
         // Navigation: wirkt auch bei beendetem Chat oder reinem Verlauf.
         case let .move(direction, .leftStick, isRepeat):
-            return leftStick(direction, isRepeat: isRepeat, gridActive: state.gridActive)
+            return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
         // L1/R1 folgen der Liste links, nicht den Tabs (die Tastatur bleibt bei den Tabs).
         case .press(.l1): return .adjacentChat(step: -1)
         case .press(.r1): return .adjacentChat(step: 1)
@@ -34,9 +34,18 @@ extension ControllerBindingResolver {
         case .holdCancelled(.l2): return .holdProgressCancelled(.l2)
         case let .scroll(lines): return .scroll(lines: lines)
 
+        // Steuerkreuz: Pfeile ins Terminal nur in einer Rückfrage. Sonst
+        // richten sie Schaden an — links im leeren Eingabefeld schickt Claude
+        // in den Hintergrund, hoch holt den letzten Prompt zurück (Kreuz
+        // schickte ihn erneut), in einer Shell den letzten Befehl. Außerhalb
+        // einer Rückfrage wirkt das Steuerkreuz deshalb wie der linke Stick.
+        // Bewusst nicht am Entwurfs-Verdacht festgemacht: Die Rücktaste setzt
+        // ihn nie zurück.
+        case let .move(direction, .dpad, isRepeat):
+            if arrowsAllowed(state) { return .chatKey(ControllerChatKey(direction)) }
+            return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
+
         // Tasten ins Terminal: nur bei lebendem Chat.
-        case let .move(direction, .dpad, _):
-            return state.acceptsKeys ? .chatKey(ControllerChatKey(direction)) : nil
         case .press(.cross):
             // Gestoppter Chat: Kreuz startet ihn wieder (wie „Starten“ im Kopf).
             guard state.acceptsKeys else { return .chatResume }
@@ -57,6 +66,11 @@ extension ControllerBindingResolver {
         default:
             return nil
         }
+    }
+
+    /// Pfeiltasten ins Terminal nur bei offener Rückfrage eines lebenden Chats.
+    static func arrowsAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.status == .awaitingInput
     }
 
     /// Enter in jedem lebenden Zustand, außer in den ersten 0,5 s einer
@@ -87,20 +101,21 @@ extension ControllerBindingResolver {
         return state.status == .working || state.status == .unknown || state.recentlySubmitted
     }
 
-    /// Linker Stick im Inhalt. Im Raster bewegt er den Kachel-Fokus (ein
-    /// Druck, ein Schritt). In der Einzelansicht springen hoch und runter mit
-    /// der Markierung in die Liste links — Start beim aktuellen Chat, sofort
-    /// ein Schritt in die gedrückte Richtung; der offene Chat bleibt
-    /// (Runde 3). Hält man weiter, kommen die Wiederholungen schon im
-    /// Zusammenhang `list` an und bewegen dort die Markierung. Links führt in
-    /// die Liste.
-    static func leftStick(_ direction: ControllerDirection, isRepeat: Bool, gridActive: Bool) -> ControllerAction? {
+    /// Linker Stick (und Steuerkreuz außerhalb von Rückfragen) im Inhalt. Im
+    /// Raster bewegt er den Kachel-Fokus (ein Druck, ein Schritt). In der
+    /// Einzelansicht springen hoch und runter mit der Markierung in die Liste
+    /// links — Start beim aktuellen Chat, sofort ein Schritt in die gedrückte
+    /// Richtung; der offene Chat bleibt (Runde 3). Hält man weiter, kommen die
+    /// Wiederholungen schon im Zusammenhang `list` an und bewegen dort die
+    /// Markierung. Links führt in die Liste, rechts hat dort keine Wirkung.
+    static func navigate(_ direction: ControllerDirection, isRepeat: Bool, gridActive: Bool) -> ControllerAction? {
         guard !isRepeat else { return nil }
         if !gridActive {
             switch direction {
             case .up: return .enterList(step: -1)
             case .down: return .enterList(step: 1)
-            case .left, .right: break
+            case .left: break
+            case .right: return nil
             }
         }
         return .moveInContent(direction)
