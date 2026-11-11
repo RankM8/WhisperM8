@@ -18,6 +18,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case jarvis
     case clipboard
     case statistics
+    case controller
 
     var id: String { rawValue }
 
@@ -61,6 +62,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Clipboard")
         case .statistics:
             return String(localized: "Statistics")
+        case .controller:
+            return String(localized: "Controller")
         }
     }
 
@@ -100,6 +103,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "doc.on.clipboard"
         case .statistics:
             return "chart.bar.xaxis"
+        case .controller:
+            return "gamecontroller"
         }
     }
 
@@ -139,6 +144,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "A searchable clipboard history with a hotkey and access for Claude.")
         case .statistics:
             return String(localized: "Active time, tokens, API value, limits, chats and dictations — calculated locally.")
+        case .controller:
+            return String(localized: "Use WhisperM8 with a gamepad.")
         }
     }
 }
@@ -342,6 +349,8 @@ struct SettingsView: View {
             ClipboardSettingsPage()
         case .statistics:
             StatisticsSettingsPage()
+        case .controller:
+            ControllerSettingsPage()
         }
     }
 

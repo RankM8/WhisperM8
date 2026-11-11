@@ -41,7 +41,7 @@ enum SettingsNavigation {
             return .core
         case .claudeAccounts, .claudeHooks:
             return .advanced
-        case .gptBackend, .voiceGate, .jarvis:
+        case .gptBackend, .voiceGate, .jarvis, .controller:
             return .labs
         }
     }
@@ -70,7 +70,7 @@ enum SettingsNavigation {
             ),
             SettingsPageGroup(
                 title: "Labs", launchClass: .labs,
-                pages: visible([.gptBackend]) + [.voiceGate] + visible([.jarvis])
+                pages: visible([.gptBackend]) + [.voiceGate] + visible([.jarvis]) + [.controller]
             )
         ]
         return groups.filter { !$0.pages.isEmpty }

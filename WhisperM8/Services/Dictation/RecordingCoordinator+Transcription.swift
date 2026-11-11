@@ -10,7 +10,8 @@ extension RecordingCoordinator {
         audioURL: URL,
         audioDuration: TimeInterval,
         outputMode: OutputMode,
-        contextBundle: TranscriptContextBundle
+        contextBundle: TranscriptContextBundle,
+        delivery: DictationDelivery = .frontApp
     ) async throws {
         guard let appState else { return }
 
@@ -73,6 +74,32 @@ extension RecordingCoordinator {
         // gesehen hat) für Bild-Zustellung, Report und Cleanup.
         let contextBundle = postProcessingResult.effectiveContextBundle ?? contextBundle
         let finalText = postProcessingResult.finalText
+
+        // Ziel erst jetzt prüfen: Während Transkription und Nacharbeit kann der
+        // Chat eine Rückfrage geöffnet haben oder beendet worden sein. Für
+        // `.frontApp` läuft danach unverändert der bisherige Weg.
+        let chatWriter = chatWriter
+        let deliveryDecision = DictationDeliveryRouter.decide(
+            delivery: delivery,
+            text: finalText,
+            chatState: { chatWriter.state(of: $0) }
+        )
+        if deliveryDecision != .frontApp {
+            await deliverToChatTarget(
+                decision: deliveryDecision,
+                audioURL: audioURL,
+                audioDuration: audioDuration,
+                outputMode: outputMode,
+                contextBundle: contextBundle,
+                provider: provider,
+                model: model,
+                language: language,
+                rawText: normalizedRawText,
+                postProcessingResult: postProcessingResult
+            )
+            return
+        }
+
         let autoPasteRequested = AppPreferences.shared.isAutoPasteEnabled
         var deliveryAttachments: [PasteAttachment] = []
         var deliveryErrors: [String] = []

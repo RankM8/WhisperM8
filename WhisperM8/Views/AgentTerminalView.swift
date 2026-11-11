@@ -723,6 +723,19 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// Steht im Composer vielleicht ungesendeter Text? Schutz fuer
     /// `chats move-account --stop-and-resume`, das die TUI beendet.
     private(set) var composerDraft = TerminalComposerDraftTracker()
+    /// Wann zuletzt Enter bzw. Escape über `sendKey` rausging (Schutzregeln der
+    /// Controller-Belegung: gerade gesendet, kein zweites Escape).
+    private(set) var lastControlEnterAt: Date?
+    private(set) var lastControlEscapeAt: Date?
+    /// Zuletzt per Controller ins Eingabefeld geschrieben; gesetzt nur über
+    /// `noteControllerDraftInput` (AgentTerminalController+ControllerInput).
+    var lastControllerDraftInputAt: Date?
+
+    /// Zuletzt abgeschickt, egal auf welchem programmatischen Weg (Enter vom
+    /// Controller, Diktat mit Senden, `chats send`, Menü „Weiter“).
+    var lastSubmitAt: Date? {
+        [lastControlEnterAt, composerDraft.lastProgrammaticSubmitAt].compactMap { $0 }.max()
+    }
 
     var processID: Int32? {
         let pid = terminal.process.shellPid
@@ -821,6 +834,56 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func sendInterrupt() {
         guard isRunning else { return }
         terminal.send([0x1B])
+    }
+
+    /// Schickt eine einzelne Taste an die TUI (Controller-Bedienung). Der
+    /// Entwurfs-Tracker und der Abbruch-Verdacht bekommen dieselbe Meldung wie
+    /// bei einem echten Tastendruck — diese Taste läuft an den Monitoren vorbei.
+    /// - Returns: `false`, wenn kein Prozess läuft.
+    @discardableResult
+    func sendKey(_ key: TerminalControlKey, now: Date = Date()) -> Bool {
+        guard isRunning else { return false }
+        let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
+        guard TerminalControlKey.controllerAllows(key, status: status) else { return false }
+        let isClaude = command.keyboardProfile == .claudeCodeChat
+        if key == .escape, isClaude, composerDraft.countsAsInterrupt(status: status, now: now) {
+            AgentSessionStatusCoordinator.shared.suspectTurnAborted(sessionID)
+        }
+        composerDraft.recordTerminalKey(
+            keyCode: key.keyCode, modifiers: key.modifiers, status: status,
+            restoresPromptOnInterrupt: isClaude, now: now)
+        // In einer Rückfrage bestätigt Enter die Auswahl, nicht das Eingabefeld —
+        // ein Entwurf dort bleibt stehen und darf nicht als gesendet gelten.
+        if key == .enter, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
+        if key == .enter { lastControlEnterAt = now }
+        if key == .escape { lastControlEscapeAt = now }
+        if key == .backspace || key == .space || key == .deleteWord {
+            noteControllerDraftInput(submitted: false, now: now)
+        }
+        if key == .enter, status != .awaitingInput { noteControllerDraftInput(submitted: true, now: now) }
+        terminal.send(key.bytes(applicationCursor: terminal.getTerminal().applicationCursor))
+        return true
+    }
+
+    /// Das Eingabefeld wurde geleert (R3 halten am Controller).
+    func noteComposerCleared() {
+        composerDraft.recordSubmitted()
+    }
+
+    /// Scrollt den Verlauf um `lines` Zeilen (positiv = nach unten). Im
+    /// Alternate-Puffer gibt es keinen Scrollback; dort bekommt die TUI
+    /// Mausrad-Ereignisse, wie beim Trackpad (`TerminalScrollGuard`).
+    func scrollHistory(lines: Int) {
+        guard lines != 0 else { return }
+        if terminal.getTerminal().isCurrentBufferAlternate {
+            guard isRunning else { return }
+            let sequence = TerminalScrollStep.wheelSequence(up: lines < 0)
+            for _ in 0..<min(abs(lines), 30) { terminal.send(txt: sequence) }
+        } else if lines < 0 {
+            terminal.scrollUp(lines: -lines)
+        } else {
+            terminal.scrollDown(lines: lines)
+        }
     }
 
     /// Ein Turn hat begonnen: der Composer ist abgeschickt (LR-CLI-002).

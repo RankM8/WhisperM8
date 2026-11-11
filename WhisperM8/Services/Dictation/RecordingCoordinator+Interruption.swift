@@ -15,6 +15,9 @@ extension RecordingCoordinator {
         let audioDuration = appState.recordingDuration
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
+        // Ein Retry der Teilaufnahme liefert ins selbe Ziel, sendet aber nie.
+        let frozenDelivery = DictationDelivery(target: pendingDeliveryTarget)
+        pendingDeliveryTarget = .frontApp
 
         recordingTimer.stop()
         removeEscKeyMonitor()
@@ -51,6 +54,7 @@ extension RecordingCoordinator {
             audioDuration: audioDuration,
             outputMode: frozenOutputMode,
             contextBundle: frozenContextBundle,
+            delivery: frozenDelivery,
             message: reason,
             logPrefix: "Recording interrupted",
             alertTitle: String(localized: "Recording interrupted")

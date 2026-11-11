@@ -46,14 +46,14 @@ extension AgentChatsView {
         }
     }
 
-    private func gptAccountLabel(_ profile: GPTAccountProfile) -> String {
+    func gptAccountLabel(_ profile: GPTAccountProfile) -> String {
         var parts = [profile.name]
         if let email = profile.emailAddress { parts.append(email) }
         if !profile.isLoggedIn { parts.append(String(localized: "not signed in")) }
         return parts.joined(separator: " · ")
     }
 
-    private func setGPTAccount(_ sessions: [AgentChatSession], toProfile profile: GPTAccountProfile) {
+    func setGPTAccount(_ sessions: [AgentChatSession], toProfile profile: GPTAccountProfile) {
         do {
             try store.setGPTSessionProfile(
                 ids: sessions.map(\.id),

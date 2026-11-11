@@ -12,7 +12,7 @@ import ScreenCaptureKit
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
         "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
-        "debug.context", "debug.record",
+        "debug.context", "debug.record", "debug.controller",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -26,6 +26,7 @@ extension AgentControlRequestHandler {
             case "debug.status": response = await debugStatus(request)
             case "debug.context": response = await debugContext(request)
             case "debug.record": response = await debugRecord(request)
+            case "debug.controller": response = await debugController(request)
             default: response = debugJob(request)
             }
         } else {

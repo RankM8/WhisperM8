@@ -29,6 +29,7 @@ enum Logger {
     static let stayAwake = os.Logger(subsystem: subsystem, category: "stay.awake")
     /// Tastatursperre zum Reinigen: Start, Ende mit Grund, Tap-Neustart.
     static let keyboardLock = os.Logger(subsystem: subsystem, category: "keyboard.lock")
+    static let controller = os.Logger(subsystem: subsystem, category: "controller")
 
     // MARK: - Optional File Logging
 

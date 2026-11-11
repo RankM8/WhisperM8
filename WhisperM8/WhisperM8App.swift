@@ -362,6 +362,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 shortcutLabel: { KeyboardShortcuts.getShortcut(for: QuickActionShortcuts.name(for: OutputMode.correctID))?.description }
             )
             ClipboardHistoryController.shared.start()
+            // Controller-Steuerung (Standard aus): startet nur, wenn sie in
+            // den Einstellungen eingeschaltet ist.
+            ControllerRuntime.shared.start()
             // Statistik: Zeit, Chats, Diktate, Protokolle, Limits, Git.
             StatisticsCollectors.start()
             // Login-Fristen der Claude-Konten: liest einmal jetzt und danach

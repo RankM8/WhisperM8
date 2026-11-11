@@ -380,6 +380,9 @@ class OverlayController: ObservableObject {
     /// Vereinte Schiene für granulare Kontext-Bearbeitung pro Item.
     private var onContextAction: ((ContextAction) -> Void)?
 
+    /// Liste der Ausgabemodi über der Pill beim Wechsel per Controller.
+    let modeList = OutputModeListPresenter()
+
     /// Tick-isoliert: Kern-Bars und Timer haben eigene Modelle (siehe oben).
     let levelModel = OverlayLevelModel()
     let clockModel = OverlayClockModel()
@@ -406,6 +409,9 @@ class OverlayController: ObservableObject {
     @Published var selectedOutputMode: OutputMode = OutputMode.defaultMode()
     @Published var outputModes: [OutputMode] = OutputMode.availableBuiltInModes()
     @Published var showModePickerInMiniOverlay: Bool = true
+    /// Ziel einer Aufnahme per Controller („→ Titel des Chats“). Steht dann
+    /// sichtbar in der Pill, samt Modus-Chip — ohne Hover. `nil` sonst.
+    @Published var controllerTargetLabel: String?
     @Published var showConfirmButton: Bool = true
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
@@ -612,6 +618,8 @@ class OverlayController: ObservableObject {
 
     func hide() {
         isPresented = false
+        modeList.hide()
+        controllerTargetLabel = nil
         isConnecting = false
         quickActionLabel = nil
         isQuickActionHint = false
@@ -727,6 +735,15 @@ class OverlayController: ObservableObject {
         onOutputModeChange?(mode)
     }
 
+    /// Zeigt die Liste aller Modi über der Pill, der aktuelle markiert
+    /// (Moduswechsel per Controller). Ohne Fenster oder vor dem ersten Layout
+    /// der Pill passiert nichts.
+    func showModeList() {
+        guard presentsWindow, let panel, panel.pillFrameInPanel.width > 0 else { return }
+        let pillFrame = panel.pillFrameInPanel.offsetBy(dx: panel.frame.origin.x, dy: panel.frame.origin.y)
+        modeList.show(modes: outputModes, selectedID: selectedOutputMode.id, pillFrame: pillFrame)
+    }
+
     func addScreenshot() {
         notePillAction()
         onAddScreenshot?()
@@ -768,6 +785,8 @@ class OverlayController: ObservableObject {
         // damit der Tick keinen objectWillChange-Churn in der Pill erzeugt.
         levelModel.level = appState.audioLevel
         clockModel.update(duration: appState.recordingDuration)
+        // Die Liste der Modi gehört zur Aufnahme: mit ihrem Ende sofort weg.
+        if !appState.isRecording, modeList.isShown { modeList.hide() }
         setIfChanged(\.isTranscribing, to: appState.isTranscribing)
         setIfChanged(\.isPostProcessing, to: appState.isPostProcessing)
         setIfChanged(\.selectedOutputMode, to: appState.selectedOutputMode)

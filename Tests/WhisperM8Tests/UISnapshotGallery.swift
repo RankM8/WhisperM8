@@ -360,6 +360,7 @@ final class UISnapshotGallery: XCTestCase {
             },
         ] + Self.notchFixtures + Self.clipboardFixtures() + Self.keyboardLockFixtures() + Self.statisticsFixtures()
             + Self.sidebarFooterFixtures() + Self.claudeLoginFixtures() + Self.missingTranscriptFixtures()
+            + Self.controllerFixtures()
     }
 
     // MARK: - Lauf

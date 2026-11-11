@@ -78,6 +78,15 @@ extension UISnapshotGallery {
             return model
         }
 
+        func connectedController() -> ControllerStatus {
+            let status = ControllerStatus()
+            status.isRunning = true
+            status.device = ControllerDeviceInfo(
+                name: "DualSense Wireless Controller", category: "DualSense",
+                batteryLevel: nil, hasLight: true, hasHaptics: true)
+            return status
+        }
+
         let size = ClipboardHistoryView.size
         return [
             Fixture(name: "clipboard-verlauf", size: size) {
@@ -117,6 +126,24 @@ extension UISnapshotGallery {
                 marked.selectionAppName = "Slack"
                 marked.selectionProbe = .unknown
                 return AnyView(ClipboardHistoryView(model: marked, now: now))
+            },
+            // Controller verbunden: Fußzeile mit Controller-Tasten (aus der Legende).
+            Fixture(name: "clipboard-verlauf-controller", size: size) {
+                let active = model(selected: "err")
+                active.quickActionsAvailable = true
+                return AnyView(ClipboardHistoryView(model: active, now: now, controllerStatus: connectedController()))
+            },
+            Fixture(name: "clipboard-verlauf-controller-menue", size: size) {
+                let active = model(selected: "err")
+                active.selectionProbe = .selected(preview: "Hallo Team")
+                active.quickActionsAvailable = true
+                active.perform(controller: .menuToggle)
+                active.perform(controller: .menuDown)
+                return AnyView(ClipboardHistoryView(model: active, now: now, controllerStatus: connectedController()))
+            },
+            Fixture(name: "clipboard-verlauf-controller-leeren", size: size) {
+                AnyView(ClipboardHistoryView(
+                    model: model(selected: "err", confirmingClear: true), now: now, controllerStatus: connectedController()))
             },
             Fixture(name: "clipboard-verlauf-bild", size: size) {
                 AnyView(ClipboardHistoryView(model: model(selected: "img"), now: now))

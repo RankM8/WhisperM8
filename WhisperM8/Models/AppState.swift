@@ -105,12 +105,14 @@ final class AppState {
         self.recordingCoordinator = RecordingCoordinator(appState: self)
     }
 
-    func startRecording() async {
-        await recordingCoordinator.startRecording()
+    /// `target`: Ziel des Diktats; der Hotkey liefert wie bisher ins vordere Programm.
+    func startRecording(target: DictationDeliveryTarget = .frontApp) async {
+        await recordingCoordinator.startRecording(target: target)
     }
 
-    func stopRecording() async {
-        await recordingCoordinator.stopRecording()
+    /// `submit`: nach dem Schreiben in einen Chat auch senden.
+    func stopRecording(submit: Bool = false) async {
+        await recordingCoordinator.stopRecording(submit: submit)
     }
 
     /// `whisperm8 debug record`: echter Hotkey-Start ohne Kontext-Capture.
@@ -137,6 +139,11 @@ final class AppState {
         recordingCoordinator.cancelPostProcessing()
     }
 
+    /// Bricht den laufenden Transkriptions-Upload ab; die Aufnahme wird gesichert.
+    func cancelTranscription() {
+        recordingCoordinator.cancelTranscription()
+    }
+
     /// Markierten Text ohne Diktat mit einem Modus umarbeiten (Kurzbefehl,
     /// Menüleiste).
     func runQuickAction(modeID: String, input: QuickActionInput = .selection) async {
@@ -148,6 +155,33 @@ final class AppState {
             try? await Task.sleep(for: .milliseconds(150))
         }
         await recordingCoordinator.quickActionRunner.run(modeID: modeID, input: input)
+    }
+
+    /// Ziel einer Aufnahme per Controller in der Pill anzeigen.
+    func showControllerDictationTarget(_ label: String?) {
+        recordingCoordinator.overlayController.controllerTargetLabel = label
+    }
+
+    /// Die Aufnahme startet noch (Mikrofon verbindet).
+    var isStartingRecording: Bool { recordingCoordinator.isStartingRecording }
+
+    /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
+    var dictationTargetSessionID: UUID? {
+        if case let .agentChat(sessionID) = recordingCoordinator.pendingDeliveryTarget { return sessionID }
+        return nil
+    }
+
+    /// Läuft gerade eine Schnellaktion?
+    var isQuickActionRunning: Bool { recordingCoordinator.quickActionRunner.isRunning }
+
+    func cancelQuickAction() {
+        recordingCoordinator.quickActionRunner.cancel()
+    }
+
+    /// Ausgabemodus der laufenden Aufnahme einen Schritt weiter oder zurück
+    /// (Controller: Steuerkreuz links/rechts). Die Pill zeigt den neuen Modus.
+    func stepOutputMode(_ step: Int) {
+        recordingCoordinator.stepOutputMode(step)
     }
 
     /// Menüleiste: Schnellaktionen nur, wenn der Umfang Nacharbeit erlaubt.
