@@ -47,6 +47,57 @@ final class NotchPanel: NSPanel {
 
 /// Hosting-View, die den ersten Klick annimmt: ein nicht aktivierendes Fenster
 /// ist beim ersten Klick noch nicht Key, der Klick soll trotzdem ankommen.
+///
+/// Pille ohne Notch: Hier (am Event-Einstieg für SwiftUI, wie bei
+/// `PillHitTestHostingView` der Diktat-Pille) wird zwischen Klick, Ziehen und
+/// Doppelklick unterschieden. Ab 4 pt Bewegung zieht die Pille, darunter ist
+/// es ein Klick; SwiftUI sieht diese Ereignisse dann nicht.
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// Gesetzt nur für die Pille ohne Notch.
+    var pillMouse: NotchPillMouse?
+    /// Liste offen: `pillMouse` gilt nur für den Kopf (Pillenhöhe), die
+    /// Zeilen bleiben Knöpfe.
+    var pillHeaderOnly = false
+    /// Liste wächst nach oben: Der Kopf liegt unten.
+    var pillHeaderAtBottom = false
+
+    private var pressStart: CGPoint?
+    private var pressMoved = false
+
+    /// Kopfbereich aus den Maßen im Moment des Klicks, nicht aus einem
+    /// vorab gemeldeten Rahmen: Während der Größen-Animation stimmt nur das.
+    private func handlesPill(_ event: NSEvent) -> Bool {
+        guard pillMouse != nil else { return false }
+        guard pillHeaderOnly else { return true }
+        return NotchPillPlacement.isInHeader(
+            y: event.locationInWindow.y, panelHeight: bounds.height, headerAtBottom: pillHeaderAtBottom)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let pillMouse, handlesPill(event) else { return super.mouseDown(with: event) }
+        if event.clickCount >= 2 {
+            pressStart = nil
+            return pillMouse.doubleClick()
+        }
+        pressStart = NSEvent.mouseLocation
+        pressMoved = false
+        pillMouse.began()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let pillMouse, let start = pressStart else { return super.mouseDragged(with: event) }
+        let now = NSEvent.mouseLocation
+        let offset = CGVector(dx: now.x - start.x, dy: now.y - start.y)
+        if !pressMoved, hypot(offset.dx, offset.dy) < NotchPillPlacement.dragThreshold { return }
+        pressMoved = true
+        pillMouse.dragged(offset)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let pillMouse, pressStart != nil else { return super.mouseUp(with: event) }
+        pressStart = nil
+        pillMouse.ended(pressMoved)
+    }
 }

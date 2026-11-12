@@ -52,16 +52,17 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
     static var maxVisibleRows: Int { 6 }
 
     private(set) var rows: [Row]
+    /// `nil`: noch keine Markierung (Startpunkt nicht in der Liste). Der
+    /// erste Stoß markiert dann die erste Zeile; bis dahin wechselt nichts.
     private(set) var selectedIndex: Int?
     private(set) var firstVisibleIndex = 0
-    /// Die Markierung steht auf dem aktuellen Eintrag (Startpunkt gefunden).
-    private(set) var startsAtCurrent: Bool
 
-    init(rows: [Row], currentID: UUID?) {
+    /// - Parameter startID: Eintrag, auf dem die Markierung beginnt (voriger
+    ///   Ort oder der aktuelle). Steht er nicht in der Liste, gibt es noch
+    ///   keine Markierung.
+    init(rows: [Row], startID: UUID?) {
         self.rows = rows
-        let current = currentID.flatMap { id in rows.firstIndex { $0.id == id } }
-        startsAtCurrent = current != nil
-        selectedIndex = current ?? (rows.isEmpty ? nil : 0)
+        selectedIndex = startID.flatMap { id in rows.firstIndex { $0.id == id } }
         scrollToSelection()
     }
 
@@ -75,9 +76,15 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
     /// Zeilen außerhalb des sichtbaren Fensters („+ n weitere“).
     var hiddenCount: Int { rows.count - visibleRows.count }
 
+    func contains(_ id: UUID) -> Bool { rows.contains { $0.id == id } }
+
     mutating func move(_ step: Int) {
-        guard let index = selectedIndex, !rows.isEmpty else { return }
-        selectedIndex = min(max(index + step, 0), rows.count - 1)
+        guard !rows.isEmpty else { return }
+        if let index = selectedIndex {
+            selectedIndex = min(max(index + step, 0), rows.count - 1)
+        } else {
+            selectedIndex = 0
+        }
         scrollToSelection()
     }
 
@@ -98,73 +105,89 @@ enum ControllerIslandTab: Int, CaseIterable, Sendable {
     case chats, workspaces
 }
 
-/// Ebene „Wohin“ (L2 gehalten).
+/// Ebene „Wohin“ (L2 gehalten), wie Cmd-Tab: Die Liste steht sofort da, die
+/// Markierung beginnt auf dem vorigen Ort (dem Ziel von L2 getippt), und
+/// Loslassen wechselt zum markierten Eintrag. Ohne vorigen Ort beginnt sie
+/// auf dem aktuellen Eintrag, Loslassen tut dann nichts.
 struct ControllerWhereToState: Equatable, Sendable {
     /// Wohin ein Wechsel führt.
     enum Destination: Equatable, Sendable {
-        /// Nichts zu wechseln: Liste zu oder der aktuelle Eintrag markiert.
+        /// Nichts zu wechseln: keine Markierung oder der aktuelle Eintrag.
         case stay
         case chat(UUID)
         case workspace(UUID)
     }
 
-    /// Erst Stick oder Steuerkreuz öffnen die Liste; davor zeigt die Insel nur
-    /// die Hinweiszeile.
-    private(set) var isListOpen = false
     private(set) var tab: ControllerIslandTab
     private(set) var chats: ControllerIslandList<ControllerIslandChatRow>
     private(set) var workspaces: ControllerIslandList<ControllerWorkspaceChoice>
-    /// Im sichtbaren Reiter wurde seit dem Öffnen bzw. dem letzten
-    /// Reiterwechsel hoch/runter bewegt. Nur dann wechselt Loslassen oder
-    /// Kreuz — ein bloßer Reiterwechsel springt nicht zum ersten Eintrag.
-    private(set) var hasMovedInTab = false
+    /// Voriger Ort, sofern er in einer der beiden Listen steht (dort beginnt
+    /// die Markierung, die Zeile trägt „vorher“).
+    let previous: Destination
+    private let currentChatID: UUID?
 
-    /// Start-Reiter: im Raster die Workspaces, in der Einzelansicht die Chats.
+    /// Start-Reiter: der Reiter des vorigen Orts, damit Loslassen ohne
+    /// Bewegung dasselbe tut wie L2 getippt. Ohne vorigen Ort im Raster die
+    /// Workspaces, in der Einzelansicht die Chats.
     init(
         chats: [ControllerIslandChatRow], currentChatID: UUID?,
-        workspaces: [ControllerWorkspaceChoice], gridActive: Bool
+        workspaces: [ControllerWorkspaceChoice], gridActive: Bool,
+        previous: Destination = .stay
     ) {
-        self.chats = ControllerIslandList(rows: chats, currentID: currentChatID)
-        self.workspaces = ControllerIslandList(
-            rows: workspaces, currentID: workspaces.first(where: \.isCurrent)?.id)
-        // Ohne angelegten Workspace gibt es im Raster nur die Chats.
-        tab = gridActive && !workspaces.isEmpty ? .workspaces : .chats
+        self.currentChatID = currentChatID
+        switch previous {
+        case let .chat(id) where chats.contains(where: { $0.id == id }):
+            self.previous = previous
+            tab = .chats
+        case let .workspace(id) where workspaces.contains(where: { $0.id == id }):
+            self.previous = previous
+            tab = .workspaces
+        default:
+            self.previous = .stay
+            // Ohne angelegten Workspace gibt es im Raster nur die Chats.
+            tab = gridActive && !workspaces.isEmpty ? .workspaces : .chats
+        }
+        self.chats = ControllerIslandList(rows: chats, startID: nil)
+        self.workspaces = ControllerIslandList(rows: workspaces, startID: nil)
+        self.chats = ControllerIslandList(rows: chats, startID: startID(for: .chats))
+        self.workspaces = ControllerIslandList(rows: workspaces, startID: startID(for: .workspaces))
     }
 
-    /// Hoch/runter. Der erste Stoß öffnet die Liste und rückt gleich einen
-    /// Schritt vom aktuellen Eintrag weiter; steht der aktuelle nicht in der
-    /// Liste, bleibt die Markierung auf der ersten Zeile.
-    mutating func move(_ step: Int) {
-        hasMovedInTab = true
-        if !isListOpen {
-            isListOpen = true
-            switch tab {
-            case .chats: if chats.startsAtCurrent { chats.move(step) }
-            case .workspaces: if workspaces.startsAtCurrent { workspaces.move(step) }
-            }
-            return
+    /// Wo die Markierung in einem Reiter beginnt: voriger Ort, wenn er dort
+    /// steht, sonst der aktuelle Eintrag.
+    private func startID(for tab: ControllerIslandTab) -> UUID? {
+        switch (tab, previous) {
+        case let (.chats, .chat(id)): return id
+        case let (.workspaces, .workspace(id)): return id
+        case (.chats, _): return currentChatID
+        case (.workspaces, _): return workspaces.rows.first(where: \.isCurrent)?.id
         }
+    }
+
+    /// Hoch/runter im sichtbaren Reiter.
+    mutating func move(_ step: Int) {
         switch tab {
         case .chats: chats.move(step)
         case .workspaces: workspaces.move(step)
         }
     }
 
-    /// Links/rechts: anderer Reiter (zwei Reiter, kein Umlauf). Öffnet die
-    /// Liste, falls sie noch zu ist. `false`, wenn es nichts zu wechseln gab.
+    /// Links/rechts: anderer Reiter (zwei Reiter, kein Umlauf). Die
+    /// Markierung dort beginnt wieder auf ihrem Startpunkt. `false`, wenn es
+    /// nichts zu wechseln gab.
     @discardableResult
     mutating func switchTab(_ step: Int) -> Bool {
         let target: ControllerIslandTab = step < 0 ? .chats : .workspaces
-        let wasOpen = isListOpen
-        isListOpen = true
-        guard target != tab else { return !wasOpen }
+        guard target != tab else { return false }
         tab = target
-        hasMovedInTab = false
+        switch target {
+        case .chats: chats = ControllerIslandList(rows: chats.rows, startID: startID(for: .chats))
+        case .workspaces: workspaces = ControllerIslandList(rows: workspaces.rows, startID: startID(for: .workspaces))
+        }
         return true
     }
 
     var destination: Destination {
-        guard isListOpen, hasMovedInTab else { return .stay }
         switch tab {
         case .chats:
             guard let row = chats.selected, !row.isCurrent else { return .stay }
@@ -174,6 +197,20 @@ struct ControllerWhereToState: Equatable, Sendable {
             return .workspace(choice.id)
         }
     }
+
+    /// Reihenfolge der Chat-Zeilen: die der Liste links, dazu der vorige
+    /// Chat, falls sie ihn gerade nicht zeigt (Filter, Suche, eingeklappt,
+    /// Archiv) — gleich hinter dem aktuellen, wie bei Cmd-Tab.
+    static func chatOrder(_ order: [UUID], current: UUID?, previous: Destination) -> [UUID] {
+        guard case let .chat(id) = previous, !order.contains(id) else { return order }
+        var result = order
+        let index = current.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+        result.insert(id, at: index)
+        return result
+    }
+
+    func isPrevious(chat id: UUID) -> Bool { previous == .chat(id) }
+    func isPrevious(workspace id: UUID) -> Bool { previous == .workspace(id) }
 
     /// Workspace, dessen Raster das Fenster zeigt (Kopf „Raster · Name“).
     var currentWorkspaceName: String? { workspaces.rows.first(where: \.isCurrent)?.name }

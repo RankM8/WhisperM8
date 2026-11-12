@@ -15,7 +15,7 @@ final class ControllerWorkspacePickerTests: XCTestCase {
 
     func testListStartsAtCurrentAndClampsAtEdges() {
         let choices = [choice("A"), choice("B", current: true), choice("C")]
-        var list = ControllerIslandList(rows: choices, currentID: choices[1].id)
+        var list = ControllerIslandList(rows: choices, startID: choices[1].id)
         XCTAssertEqual(list.selected?.name, "B")
         list.move(1)
         list.move(1)
@@ -24,31 +24,127 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         XCTAssertEqual(list.selected?.name, "A")
     }
 
-    func testListWithoutCurrentStartsAtFirst() {
-        let list = ControllerIslandList(rows: [choice("A"), choice("B")], currentID: nil)
+    /// Ohne Startpunkt keine Markierung: Loslassen darf dann nicht aus
+    /// Versehen zur ersten Zeile wechseln. Der erste Stoß markiert sie.
+    func testListWithoutStartHasNoMarkerUntilTheFirstMove() {
+        var list = ControllerIslandList(rows: [choice("A"), choice("B")], startID: nil)
+        XCTAssertNil(list.selected)
+        list.move(1)
         XCTAssertEqual(list.selected?.name, "A")
-        XCTAssertFalse(list.startsAtCurrent)
-        XCTAssertNil(ControllerIslandList<ControllerWorkspaceChoice>(rows: [], currentID: nil).selected)
+        XCTAssertNil(ControllerIslandList<ControllerWorkspaceChoice>(rows: [], startID: nil).selected)
     }
 
-    /// Review nach Runde 4, Punkt 3: Loslassen wechselt nur nach einer
-    /// Bewegung im sichtbaren Reiter.
-    func testDestinationNeedsAMoveInTheVisibleTab() {
-        let chatRows = [UUID(), UUID()].map {
-            ControllerIslandChatRow(id: $0, title: "C", project: nil, status: .idle, detail: "", isCurrent: false)
+    private func chatRows(_ count: Int, current: Int? = nil) -> [ControllerIslandChatRow] {
+        (0..<count).map {
+            ControllerIslandChatRow(id: UUID(), title: "C\($0)", project: nil, status: .idle, detail: "",
+                                    isCurrent: $0 == current)
         }
+    }
+
+    /// Cmd-Tab: Die Markierung beginnt auf dem vorigen Ort, Loslassen ohne
+    /// Bewegung führt dorthin — wie L2 getippt.
+    func testMarkerStartsOnThePreviousChat() {
+        let chats = chatRows(3, current: 1)
+        let state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[1].id, workspaces: [], gridActive: false,
+            previous: .chat(chats[2].id))
+        XCTAssertEqual(state.tab, .chats)
+        XCTAssertEqual(state.chats.selected?.id, chats[2].id)
+        XCTAssertEqual(state.destination, .chat(chats[2].id))
+        XCTAssertTrue(state.isPrevious(chat: chats[2].id))
+    }
+
+    func testMarkerStartsOnThePreviousWorkspaceInTheGrid() {
+        let chats = chatRows(2, current: 0)
+        let choices = [choice("A", current: true), choice("B"), choice("C")]
+        let state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: true,
+            previous: .workspace(choices[2].id))
+        XCTAssertEqual(state.tab, .workspaces)
+        XCTAssertEqual(state.destination, .workspace(choices[2].id))
+    }
+
+    /// Der Start-Reiter folgt dem vorigen Ort: In der Einzelansicht mit einem
+    /// Workspace als vorigem Ort öffnet der Reiter Workspaces.
+    func testStartTabFollowsThePreviousPlace() {
+        let chats = chatRows(2, current: 0)
         let choices = [choice("A"), choice("B")]
-        var state = ControllerWhereToState(chats: chatRows, currentChatID: nil, workspaces: choices, gridActive: false)
-        XCTAssertEqual(state.destination, .stay, "Liste zu")
-        state.switchTab(1)
-        XCTAssertTrue(state.isListOpen)
-        XCTAssertEqual(state.destination, .stay, "nur Reiter gewechselt")
+        let single = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: false,
+            previous: .workspace(choices[1].id))
+        XCTAssertEqual(single.tab, .workspaces)
+        XCTAssertEqual(single.destination, .workspace(choices[1].id))
+
+        let grid = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: [choice("A", current: true)], gridActive: true,
+            previous: .chat(chats[1].id))
+        XCTAssertEqual(grid.tab, .chats)
+        XCTAssertEqual(grid.destination, .chat(chats[1].id))
+    }
+
+    /// Ohne vorigen Ort steht die Markierung auf dem aktuellen Eintrag:
+    /// Loslassen tut nichts.
+    func testWithoutPreviousPlaceReleaseStays() {
+        let chats = chatRows(3, current: 1)
+        let choices = [choice("A", current: true), choice("B")]
+        let single = ControllerWhereToState(
+            chats: chats, currentChatID: chats[1].id, workspaces: choices, gridActive: false)
+        XCTAssertEqual(single.tab, .chats)
+        XCTAssertEqual(single.chats.selected?.id, chats[1].id)
+        XCTAssertEqual(single.destination, .stay)
+        let grid = ControllerWhereToState(
+            chats: chats, currentChatID: chats[1].id, workspaces: choices, gridActive: true)
+        XCTAssertEqual(grid.tab, .workspaces)
+        XCTAssertEqual(grid.destination, .stay)
+    }
+
+    /// Der vorige Chat kommt in die Liste, wenn die Seitenleiste ihn nicht
+    /// zeigt: hinter den aktuellen, ohne aktuellen ganz nach oben.
+    func testChatOrderAlwaysContainsThePreviousChat() {
+        let a = UUID(), b = UUID(), hidden = UUID()
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(hidden)), [a, hidden, b])
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: nil, previous: .chat(hidden)), [hidden, a, b])
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(b)), [a, b], "schon drin")
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .workspace(hidden)), [a, b])
+    }
+
+    /// Ein voriger Ort, der in keiner Liste steht, zählt nicht.
+    func testPreviousPlaceOutsideTheListsIsIgnored() {
+        let chats = chatRows(2, current: 0)
+        let state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: [], gridActive: false, previous: .chat(UUID()))
+        XCTAssertEqual(state.previous, .stay)
+        XCTAssertEqual(state.destination, .stay)
+    }
+
+    /// Reiterwechsel: Die Markierung beginnt dort neu — auf dem vorigen Ort,
+    /// wenn er in diesem Reiter steht, sonst auf dem aktuellen. Ohne beides
+    /// gibt es keine Markierung, Loslassen tut nichts.
+    func testSwitchingTabsResetsTheMarker() {
+        let chats = chatRows(3, current: 0)
+        let choices = [choice("A"), choice("B", current: true), choice("C")]
+        var state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: false,
+            previous: .chat(chats[2].id))
+        state.move(-1)
+        XCTAssertEqual(state.destination, .chat(chats[1].id))
+        XCTAssertTrue(state.switchTab(1))
+        XCTAssertEqual(state.workspaces.selected?.name, "B", "Workspaces: der aktuelle")
+        XCTAssertEqual(state.destination, .stay)
         state.move(1)
-        XCTAssertEqual(state.destination, .workspace(choices[1].id))
-        state.switchTab(-1)
-        XCTAssertEqual(state.destination, .stay, "neuer Reiter, noch nicht bewegt")
-        state.move(1)
-        XCTAssertEqual(state.destination, .chat(chatRows[1].id))
+        XCTAssertEqual(state.destination, .workspace(choices[2].id))
+        XCTAssertFalse(state.switchTab(1), "kein Umlauf")
+        XCTAssertTrue(state.switchTab(-1))
+        XCTAssertEqual(state.destination, .chat(chats[2].id), "zurück: wieder auf dem vorigen Chat")
+
+        let noCurrent = [choice("A"), choice("B")]
+        var bare = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: noCurrent, gridActive: false)
+        bare.switchTab(1)
+        XCTAssertNil(bare.workspaces.selected, "kein Startpunkt: keine Markierung")
+        XCTAssertEqual(bare.destination, .stay)
+        bare.move(1)
+        XCTAssertEqual(bare.destination, .workspace(noCurrent[0].id))
     }
 
     /// Review nach Runde 4, Punkt 2: Ohne sichtbare Menüleiste (Vollbild)

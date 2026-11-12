@@ -74,7 +74,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
-| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ |
+| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ (wie Cmd-Tab: Loslassen ohne Bewegung führt zum selben Ziel) |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen (in jedem Abstand gedrückt; weder Chatwechsel noch Ebene) |
 
 Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
@@ -112,8 +112,8 @@ Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options sc
 L1, R1 und L2 sind **Ebenen-Tasten** (Runde 4). Tippen (kürzer als 0,3 s und ohne zweite Taste
 dazwischen, auch ohne Stoß von Stick oder Steuerkreuz und ohne Scrollen mit dem rechten Stick) löst beim Loslassen aus, was die Taste schon
 immer tat. Gehalten wird sie zur Ebene: Kombinationen wirken sofort beim Druck der zweiten Taste, die
-0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts
-(außer bei L2 mit offener Liste). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
+0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts,
+außer bei L2: Dort wechselt Loslassen zum markierten Eintrag (siehe „Wohin“). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
 gewöhnliche Taste. Ebenen wirken im Chat und im Raster (auf den Chat der fokussierten Kachel). In der
 Liste, im Zwischenablage-Verlauf, im Menü, in Dialogen und während der Aufnahme wirken die Tasten wie
 ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren“).
@@ -127,37 +127,59 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Dreieck | Modus wechseln (Shift+Tab) |
 | | Viereck | Befehle › — öffnet das Options-Menü direkt auf dieser Unterseite |
 | | Kreis | Konto wechseln › — ebenso |
-| L2 Wohin | Stick/Steuerkreuz hoch/runter | öffnet die Liste, der erste Stoß macht gleich einen Schritt vom aktuellen Eintrag; danach bewegen (mit Wiederholung) |
-| | links/rechts | Reiter Chats / Workspaces |
-| | Loslassen, Kreuz | zum markierten Eintrag wechseln — nur, wenn im sichtbaren Reiter seit dem Öffnen bzw. dem letzten Reiterwechsel hoch/runter bewegt wurde; sonst nichts |
-| | Kreis | abbrechen |
+| L2 Wohin | (halten) | die Liste steht sofort da, ohne Hinweiszeile davor; die Markierung steht auf dem vorigen Ort (siehe unten) |
+| | Stick/Steuerkreuz hoch/runter | Markierung bewegen (mit Wiederholung) |
+| | links/rechts | Reiter Chats / Workspaces; die Markierung beginnt dort wieder auf dem vorigen Ort, wenn er in diesem Reiter steht, sonst auf dem aktuellen Eintrag |
+| | Loslassen, Kreuz | sofort zum markierten Eintrag wechseln, wie Cmd-Tab. Steht die Markierung auf dem aktuellen Eintrag, passiert nichts. Loslassen wechselt nur, solange der Chat die Eingaben hat; startet währenddessen eine Aufnahme per Hotkey oder geht ein Dialog oder Sheet auf, schließt es nur die Insel |
+| | Kreis | abbrechen, nichts passiert |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
-| | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“) |
+| | R2 | zum markierten Chat wechseln und diktieren; steht die Markierung auf dem aktuellen Chat oder Workspace, in den aktuellen Chat; ein anderer Workspace „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“). Weil die Markierung auf dem vorigen Chat beginnt, diktiert L2 halten + R2 ohne Bewegung in den vorigen Chat (die Fußzeile sagt im Reiter Workspaces „hier diktieren“) |
 | | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
 
 Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
-Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. Start-Reiter von „Wohin“: im
-Raster Workspaces, in der Einzelansicht Chats. Die Chats stehen in der Reihenfolge der Liste links, jeder
-einmal; rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen
+Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen.
+
+**Wohin wie Cmd-Tab** (Entscheidung vom 12.11.2026): Die Markierung beginnt auf dem vorigen Ort, also
+genau dem Ziel von L2 getippt (`ControllerBackTarget` mit ID, aus `AgentWindowStore+PlaceHistory`).
+Halten und Loslassen ohne Bewegung führt deshalb dorthin, wo auch Tippen hinführt; wer woanders hin
+will, bewegt vorher die Markierung. Die Zeile des vorigen Orts trägt rechts „vorher“. Der Start-Reiter
+folgt dem vorigen Ort: ein Workspace öffnet den Reiter Workspaces, ein Chat den Reiter Chats, auch wenn
+man gerade im Raster bzw. in der Einzelansicht ist (sonst täte Loslassen etwas anderes als Tippen).
+Ohne vorigen Ort gilt wie bisher: im Raster Workspaces, in der Einzelansicht Chats, und die Markierung
+steht auf dem aktuellen Eintrag, damit Loslassen nichts aus Versehen wechselt. Hat ein Reiter weder
+vorigen noch aktuellen Eintrag (Workspaces in der Einzelansicht ohne Workspace), gibt es dort zunächst
+keine Markierung; der erste Stoß markiert die erste Zeile. Die frühere Regel „Wechsel nur nach einer
+Bewegung im sichtbaren Reiter“ ist damit weg. Ist das Ziel der vorige Ort, geht der Wechsel denselben Weg
+wie L2 getippt (`lastChat`); Halten und Tippen enden also gleich, auch bei einem Fehlschlag. Die Chats
+stehen in der Reihenfolge der Liste links, jeder einmal; der vorige Chat steht immer darin, gleich
+hinter dem aktuellen, auch wenn die Seitenleiste ihn gerade nicht zeigt (Filter, Suche, eingeklappte
+Gruppe, Archiv-Ansicht); rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen
 „jetzt“). Die Workspaces sind die angelegten (ohne versteckte Projekt-Ansichten) in der Reihenfolge der
 Seitenleiste, mit Farbe, Name, Raute „wartet“ und Zahl der Chats. Höchstens sechs Zeilen, die Liste rückt
 mit der Markierung, darunter „+ n weitere“. Ein Chat wechselt wie der Klick in der Seitenleiste, ein
-Workspace wie der Klick auf seinen Kopf (Konflikte inklusive); danach hat die Kachel den Fokus, auf der
-du dort zuletzt warst (gemerkt beim Verlassen, nur für den laufenden App-Start).
+Workspace wie der Klick auf seinen Kopf, aber still: Gehört er einem anderen Fenster oder laufen seine
+Chats dort, kommt kein Fenster nach vorn und kein Dialog, der Controller vibriert „geht nicht“
+(`switchToWorkspace`). Danach hat die Kachel den Fokus, auf der du dort zuletzt warst (gemerkt beim
+Verlassen, nur für den laufenden App-Start).
 
 **Die Insel** ist ein eigenes, nicht aktivierendes Fenster ohne Maus (`ControllerIslandPresenter`),
 einmal aufgebaut, danach nur ein- und ausgeblendet. Sie erscheint auf dem Bildschirm des
-Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Notch-Anzeige und ihrer
-Bildschirmwahl. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
-(`NotchHangingShape`), ohne Notch hängt sie als Pille unter der Menüleiste und folgt hell/dunkel. Sie
-liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`) mit derselben Band-Geometrie: Steht die
-Notch-Anzeige auf diesem Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler
-(arbeitet/wartet) — nur bei „Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der
-Ziel-Chat. Eine aufgeklappte Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel
-(`fullScreenAuxiliary`, nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst ohne
-Menüleiste oben am Bildschirmrand. Eine Bewegung beim Öffnen, eine beim
-Schließen (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur
-schließen sie für das laufende Halten.
+Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Bildschirmwahl der
+Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
+(`NotchHangingShape`). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
+(siehe [notch.md](notch.md)): genau an ihrer Stelle (ist sie sichtbar, zählt ihr tatsächlicher
+Mittelpunkt, auch bei automatisch ausgeblendeter Menüleiste), im dunklen Glas der Diktat-Pille
+(`PillGlassBackground`, gleicher Rand und Schatten), immer dunkel. Sitzt die Pille in der oberen
+Bildschirmhälfte, öffnet die Insel nach unten (gemeinsame Oberkante), in der unteren nach oben
+(gemeinsame Unterkante); sie bleibt immer ganz auf dem Bildschirm (`NotchPillPlacement.frame`). Sie
+liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`): Steht die Notch-Anzeige auf diesem
+Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler (arbeitet/wartet) — nur bei
+„Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der Ziel-Chat. Eine aufgeklappte
+Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel (`fullScreenAuxiliary`,
+nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst an der gemerkten Stelle der
+Pille (ohne Menüleiste oben am Bildschirmrand). Eine Bewegung beim Öffnen, eine beim Schließen
+(0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur schließen sie
+für das laufende Halten.
 
 Die Insel ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
 Workspace-Auswahl unten im Fenster. Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
@@ -326,14 +348,18 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 ## Prüfen
 
 - `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
-  Kachel je Workspace, geschlossene Ziele, je Fenster).
+  Kachel je Workspace, geschlossene Ziele, je Fenster); `--filter ControllerWorkspacePicker` die
+  Markierung von „Wohin“ (Start auf dem vorigen Ort, Reiterwechsel, ohne vorigen Ort);
+  `--filter NotchPillPlacement` die Lage von Pille und Insel ohne Notch.
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
 - `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
-  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel in elf
-  Zuständen (Wohin: Hinweis, Chats, Workspaces, mit Notch-Zählern; Schreiben, Schreiben in der Shell;
-  Schnellbefehle, Schnellbefehle bei Rückfrage; als Pille Chats, Schnellbefehle, Shell);
+  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel (Wohin:
+  Chats mit Markierung auf dem vorigen Chat, nach zwei Schritten, ohne vorigen Ort, Workspaces, mit
+  Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
+  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Insel nach unten, Pille unten mit
+  Insel nach oben);
   `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.

@@ -12,6 +12,7 @@ final class AgentChatsCommandCenterTests: XCTestCase {
         let id = UUID()
         var isKey = true
         var isNewChatPickerOpen = false
+        var screenDisplayID: UInt32?
         var result = true
         private(set) var received: [AgentChatsCommand] = []
 
@@ -33,7 +34,8 @@ final class AgentChatsCommandCenterTests: XCTestCase {
                         isSidebarVisible: true,
                         hasMultiSelection: false,
                         isArchiveMode: false,
-                        isNewChatPickerOpen: isNewChatPickerOpen
+                        isNewChatPickerOpen: isNewChatPickerOpen,
+                        screenDisplayID: screenDisplayID
                     )
                 }
             )
@@ -152,6 +154,26 @@ final class AgentChatsCommandCenterTests: XCTestCase {
 
         XCTAssertFalse(center.perform(.nextTab))
         XCTAssertEqual(window.received, [])
+    }
+
+    /// Bildschirm für die Pille der Notch-Anzeige: bevorzugt das zuletzt
+    /// aktive Fenster; nach dem Schließen (Abmelden beim `willClose`) zählt
+    /// es nicht mehr, ohne Fenster gibt es keinen Bildschirm.
+    func testWindowDisplayIDFollowsThePreferredWindowAndForgetsClosedOnes() {
+        let center = makeCenter()
+        let first = WindowSpy()
+        first.screenDisplayID = 2
+        let second = WindowSpy()
+        second.screenDisplayID = 5
+        let firstToken = center.register(windowID: first.id, handler: first.handler)
+        let secondToken = center.register(windowID: second.id, handler: second.handler)
+
+        XCTAssertEqual(center.windowDisplayID(preferring: second.id), 5)
+        XCTAssertEqual(center.windowDisplayID(preferring: first.id), 2)
+        center.unregister(secondToken)
+        XCTAssertEqual(center.windowDisplayID(preferring: second.id), 2, "geschlossenes Fenster zählt nicht")
+        center.unregister(firstToken)
+        XCTAssertNil(center.windowDisplayID(preferring: first.id))
     }
 
     /// Neuaufbau der View: Die neue Instanz meldet sich an, danach läuft das
