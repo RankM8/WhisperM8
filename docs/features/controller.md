@@ -74,7 +74,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 |---|---|
 | Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W; in Shells weiter Zeichen); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
-| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; mit dem Touchpad als Maus ein Mausklick, der Verlauf dann über L2 + Touchpad oder das Menü |
+| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; mit dem Touchpad als Maus ein Mausklick, der Verlauf dann über L2 + Touchpad oder das Menü. L2 + Touchpad öffnet den Verlauf auch ohne diesen Schalter |
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
@@ -119,7 +119,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Kreis | abbrechen |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
 | | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“) |
-| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
+| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall und mit oder ohne Touchpad als Maus, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
 
 Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
 Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. Start-Reiter von „Wohin“: im
@@ -187,11 +187,15 @@ keine Eingaben an. Ohne Schalter bleibt alles wie vorher.
   Taste (Ziehen und Ablegen). Zwei schnelle Klicks am selben Fleck sind ein Doppelklick
   (Systemwert `NSEvent.doubleClickInterval`). 80 ms nach Drücken und Loslassen ruht der Zeiger, denn
   der Finger verrutscht beim Klicken.
-- **Rechtsklick:** mit zwei Fingern auf der Fläche drücken. Der zweite Finger zählt nur, wenn er sich in
-  den letzten 1,5 s gemeldet hat — falls das Framework sein Abheben nie meldet.
+- **Rechtsklick:** mit zwei Fingern auf der Fläche drücken. Der zweite Finger zählt nur, wenn er sich
+  nach dem letzten Drücken oder Loslassen und nach dem Aufsetzen des führenden Fingers gemeldet hat,
+  höchstens 1,5 s her. Meldet das Framework sein Abheben nie, ist so spätestens der nächste Klick
+  wieder links.
 - **Verlauf:** L2 halten und Touchpad drücken, überall (auch im Verlauf, um ihn zu schließen), oder
-  „Zwischenablage-Verlauf“ im Options-Menü. Mit gehaltenem L2 klickt das Touchpad nie. Mit gehaltenem
-  L1 oder R1 klickt es, die Taste gilt danach aber nicht mehr als getippt.
+  „Zwischenablage-Verlauf“ im Options-Menü. L2 + Touchpad gilt auch ohne den Schalter. Solange L2
+  gedrückt ist, klickt das Touchpad nie — auch nicht, wenn L2 als zweite Taste in der Ebene von L1 oder
+  R1 dazukam (dann tut der Druck im Chat nichts). Mit gehaltenem L1 oder R1 allein klickt es, die Taste
+  gilt danach aber nicht mehr als getippt.
 - **Rückmeldung:** ein sehr kurzer Tick bei jedem Klick (Schalter „Vibration“). Fehlt die
   Bedienungshilfen-Berechtigung, vibriert der Klick „geht nicht“, und die Einstellungsseite zeigt einen
   Hinweis mit Knopf zu den Systemeinstellungen. Ohne Berechtigung verwirft macOS die Mausereignisse still.
@@ -204,14 +208,23 @@ keine Eingaben an. Ohne Schalter bleibt alles wie vorher.
 
 **Aufsetzen ohne Sprung:** Das Framework meldet für das Touchpad nur Positionen
 (`touchpadPrimary`/`touchpadSecondary`, Richtungs-Pads ohne eigenen Zustand „Finger liegt auf“) und auch
-die nur bei einer Änderung. Ein neuer Finger wird deshalb dreifach erkannt: genau (0, 0) gilt als
-abgehoben, eine Lücke über 0,1 s und ein Sprung über eine halbe Flächenbreite gelten als neues Aufsetzen.
-Die erste Meldung setzt nur den Anker. Hebt der erste Finger ab und der zweite bleibt, führt der zweite.
+die nur bei einer Änderung. Ein neuer Finger wird deshalb mehrfach erkannt: genau (0, 0) gilt als
+abgehoben; als neues Aufsetzen gelten eine Lücke über 35 ms und ein Sprung um mehr als 0,5 (ein Viertel
+der Breite, die Fläche misst −1…1). Ausnahme für sehr langsames Schieben: Bis 0,25 s Lücke bleibt es
+eine Bewegung, wenn der Finger höchstens 0,02 weitergekommen ist. So springt der Zeiger auch beim
+schnellen Nachgreifen nicht zurück, falls das Framework beim Abheben die letzte Position stehen lässt.
+Die erste Meldung setzt nur den Anker. Es führt der Finger, der sich zuletzt gemeldet hat, wenn der
+andere seit mehr als 35 ms schweigt; ein liegen gelassener Finger blockiert also nichts. Jedes Abheben
+und Aufsetzen schreibt einmal `controller_touch_lifted` bzw. `controller_touch_landed reason=…` ins Log
+(Stufe debug), daran sieht man am Gerät, wie das Framework das Abheben meldet.
 
 **Leistung:** Fingerdaten kommen in hohem Takt. Sie laufen nur auf der Eingabe-Queue
 (`ControllerPointerDriver` in der Pumpe), nie über den Main Thread, nie in den Erkenner und ohne Zähler,
 Signpost oder Log je Meldung. Nur ein Klick springt für den Tick zum Main Thread. Ist der Schalter aus,
-hängt die Quelle gar keine Handler an die Fingerdaten (`setTouchTracking`).
+hängt die Quelle gar keine Handler an die Fingerdaten (`setTouchTracking`). Solange Finger gemeldet
+werden oder die Taste gedrückt ist, hält der Treiber eine Aktivität gegen App Nap (sonst ruckelte der
+Zeiger, wenn ein anderes Programm vorne ist); je Meldung wird nur die Zeit vermerkt, ein einmal
+angelegter Zeitgeber beendet sie nach 1 s Ruhe. Der Geschwindigkeits-Regler gleicht nur den Zeiger an.
 
 ## Schutzregeln
 
@@ -378,5 +391,5 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   letzte Position), ist nicht dokumentiert; die Erkennung oben deckt beides ab, am echten DualSense
   ist sie noch nicht geprüft. Ohne Hintergrund-Empfang endet der Zeiger, sobald ein Klick
   ein anderes Programm nach vorn holt (danach kommen keine Eingaben mehr an). Ein ruhender zweiter
-  Finger, der sich länger als 1,5 s nicht gemeldet hat, ergibt einen Linksklick. Der Debug-Kanal kennt
-  keine Finger.
+  Finger, der sich seit dem letzten Klick oder länger als 1,5 s nicht gemeldet hat, ergibt einen
+  Linksklick. Der Debug-Kanal kennt keine Finger.
