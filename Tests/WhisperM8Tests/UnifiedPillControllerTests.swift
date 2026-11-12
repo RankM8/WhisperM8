@@ -95,23 +95,63 @@ final class UnifiedPillControllerTests: XCTestCase {
         XCTAssertNil(hub.badge)
     }
 
+    private let screen7 = NotchScreenInfo(
+        displayID: 7, frame: CGRect(x: 0, y: 0, width: 1000, height: 800),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 775), safeAreaTop: 0,
+        auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false)
+
     func testDictationOnAScreenHidesTheStatusThereOnly() {
         let hub = UnifiedPillHub()
         let controller = makeController(hub: hub)
-        let screen = NotchScreenInfo(
-            displayID: 7, frame: CGRect(x: 0, y: 0, width: 1000, height: 800),
-            visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 775), safeAreaTop: 0,
-            auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false)
-        var other = screen
+        controller.observeDictation()
+        var other = screen7
         other.displayID = 8
-        XCTAssertFalse(controller.isDictationShown(on: screen))
+        XCTAssertFalse(controller.isDictationShown(on: screen7))
         hub.dictationDidShow(onDisplay: 7)
-        XCTAssertTrue(controller.isDictationShown(on: screen))
+        XCTAssertTrue(controller.isDictationShown(on: screen7))
         XCTAssertFalse(controller.isDictationShown(on: other))
         controller.config.unified = false
-        XCTAssertFalse(controller.isDictationShown(on: screen))
+        XCTAssertFalse(controller.isDictationShown(on: screen7))
+        controller.config.unified = true
         hub.dictationDidHide()
-        XCTAssertNil(hub.dictationDisplayID)
+        XCTAssertFalse(controller.isDictationShown(on: screen7), "nach dem Diktat steht die Anzeige wieder")
+    }
+
+    /// Review-Befund: `@Published` meldet im willSet. Wer im Beobachter den
+    /// Hub liest, sieht noch den alten Wert — deshalb übernimmt der
+    /// Controller den gemeldeten Wert (`dictationChanged(to:)`), bevor er
+    /// neu zeichnet. Hier ist die Falle festgehalten; die Reihenfolge der
+    /// Beobachter untereinander garantiert Combine nicht.
+    func testHubStillHoldsTheOldValueInsideItsObservers() {
+        let hub = UnifiedPillHub()
+        var hubInsideSink: [UInt32?] = []
+        let probe = hub.$dictationDisplayID.dropFirst().sink { _ in hubInsideSink.append(hub.dictationDisplayID) }
+        hub.dictationDidShow(onDisplay: 7)
+        hub.dictationDidHide()
+        probe.cancel()
+        XCTAssertEqual(hubInsideSink, [nil, 7])
+    }
+
+    /// Beim Wechsel zählt der neue Wert schon beim Neuzeichnen.
+    func testDictationChangeTakesTheValueBeforeRendering() {
+        let controller = makeController()
+        controller.dictationChanged(to: 7)
+        XCTAssertTrue(controller.isDictationShown(on: screen7))
+        controller.dictationChanged(to: nil)
+        XCTAssertFalse(controller.isDictationShown(on: screen7))
+    }
+
+    /// Ein Hinweis während des Diktats wird gemerkt und danach nachgeholt.
+    func testAlertDuringDictationIsRememberedAndReplayedOnEnd() {
+        let controller = makeController()
+        let id = UUID()
+        controller.inputs = [NotchChatInput(
+            id: id, title: "Jarvis", project: nil, status: .awaitingInput, statusSince: nil,
+            lastTurnAt: nil, lastActivityAt: Date(), activity: nil)]
+        controller.dictationChanged(to: 7)
+        controller.alertDuringDictation = NotchAlert(sessionID: id, title: "Jarvis", kind: .awaitingInput)
+        controller.dictationChanged(to: nil)
+        XCTAssertEqual(controller.alert?.sessionID, id)
     }
 
     // MARK: Hinweis nach dem Diktat
@@ -196,6 +236,84 @@ final class UnifiedPillControllerTests: XCTestCase {
         XCTAssertTrue(OverlayPresentation.pill.isUnified)
         XCTAssertTrue(OverlayPresentation.notch(width: 185, height: 32).isNotch)
         XCTAssertFalse(OverlayPresentation.pill.isNotch)
+    }
+
+    // MARK: Asynchroner Aufbau der Diktat-Pille
+
+    private let pillScreen = NotchScreenInfo(
+        displayID: 2, frame: CGRect(x: 0, y: 0, width: 1600, height: 1000),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1600, height: 975), safeAreaTop: 0,
+        auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false, uuid: "PILL")
+    private let notchScreen = NotchScreenInfo(
+        displayID: 1, frame: CGRect(x: -1512, y: 0, width: 1512, height: 982),
+        visibleFrame: CGRect(x: -1512, y: 0, width: 1512, height: 944), safeAreaTop: 38,
+        auxiliaryLeftWidth: 663.5, auxiliaryRightWidth: 663.5, isBuiltIn: true)
+
+    /// Pille „gezeigt“ ohne Fenster (Testprozess): wie ein Hinweis, der lange steht.
+    private func presentedOverlay() -> OverlayController {
+        let overlay = OverlayController(presentsWindow: false)
+        overlay.showQuickActionHint("x", duration: 60)
+        XCTAssertTrue(overlay.isPresented)
+        return overlay
+    }
+
+    private func begin(
+        _ overlay: OverlayController, timeout: TimeInterval = 0.08,
+        lookup: @escaping (@escaping @MainActor (UInt32?) -> Void) -> Void,
+        build: @escaping @MainActor (DictationPillPlacement) -> Void
+    ) {
+        overlay.beginUnifiedPresentation(
+            screens: [notchScreen, pillScreen], mouseDisplayID: 2, mainDisplayID: 2,
+            frontWindowLookup: lookup, timeout: timeout, build: build)
+    }
+
+    func testFrontWindowAnswerPlacesThePillThere() {
+        let overlay = presentedOverlay()
+        var built: [DictationPillPlacement] = []
+        begin(overlay, lookup: { answer in answer(1) }, build: { built.append($0) })
+        XCTAssertEqual(built, [.notch(notchScreen)], "vorderes Fenster am MacBook: an der Notch")
+        overlay.hide()
+    }
+
+    /// Antwortet die Fensterliste nicht rechtzeitig, gilt nach dem Zeitlimit
+    /// die Maus; eine späte Antwort ändert nichts mehr.
+    func testTimeoutFallsBackToTheMouseAndIgnoresALateAnswer() {
+        let overlay = presentedOverlay()
+        var built: [DictationPillPlacement] = []
+        var lateAnswer: (@MainActor (UInt32?) -> Void)?
+        begin(overlay, timeout: 0.05, lookup: { lateAnswer = $0 }, build: { built.append($0) })
+        XCTAssertTrue(built.isEmpty, "vor dem Zeitlimit steht noch nichts")
+        let waited = expectation(description: "Zeitlimit")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { waited.fulfill() }
+        wait(for: [waited], timeout: 2)
+        XCTAssertEqual(built.count, 1)
+        XCTAssertEqual(built.first?.screen.displayID, 2, "Maus-Bildschirm")
+        lateAnswer?(1)
+        XCTAssertEqual(built.count, 1, "späte Antwort wird verworfen")
+        overlay.hide()
+    }
+
+    /// Nach `hide` baut eine späte Antwort kein Fenster mehr.
+    func testLateAnswerAfterHideBuildsNothing() {
+        let overlay = presentedOverlay()
+        var built = 0
+        var answer: (@MainActor (UInt32?) -> Void)?
+        begin(overlay, timeout: 10, lookup: { answer = $0 }, build: { _ in built += 1 })
+        overlay.hide()
+        answer?(2)
+        XCTAssertEqual(built, 0)
+    }
+
+    /// Ein neuerer Aufbau (Generation) macht die Antwort des älteren wertlos.
+    func testOlderPresentationIsSupersededByANewerOne() {
+        let overlay = presentedOverlay()
+        var built: [UInt32] = []
+        var oldAnswer: (@MainActor (UInt32?) -> Void)?
+        begin(overlay, timeout: 10, lookup: { oldAnswer = $0 }, build: { built.append($0.screen.displayID) })
+        begin(overlay, lookup: { answer in answer(2) }, build: { built.append($0.screen.displayID) })
+        oldAnswer?(1)
+        XCTAssertEqual(built, [2])
+        overlay.hide()
     }
 
     // MARK: Liste der Ausgabemodi, vorderes Fenster

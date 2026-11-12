@@ -206,6 +206,9 @@ final class NotchStatusController {
     /// „braucht dich“ während eines Diktats: danach einmal nachholen, wenn
     /// der Anlass noch steht.
     var alertDuringDictation: NotchAlert?
+    /// Bildschirm, auf dem das Diktat steht (aus `UnifiedPillHub`, im
+    /// Beobachter übernommen); dort tritt die Anzeige zurück.
+    var dictationDisplayID: UInt32?
 
     var inputs: [NotchChatInput] = []
     /// Stellen der Anzeige; neu bestimmt bei Bildschirmwechsel, Einstellung
@@ -397,7 +400,7 @@ final class NotchStatusController {
         if let fired {
             show(alert: fired)
             // Beim Diktat verbreitert sich die Pille dort nicht; danach einmal.
-            if config.unified, hub.dictationDisplayID != nil { alertDuringDictation = fired }
+            if config.unified, dictationDisplayID != nil { alertDuringDictation = fired }
         }
 
         scheduleExpiry(current)

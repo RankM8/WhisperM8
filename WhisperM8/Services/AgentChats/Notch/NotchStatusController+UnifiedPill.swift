@@ -10,23 +10,30 @@ extension NotchStatusController {
     // MARK: Diktat
 
     /// Steht das Diktat auf diesem Bildschirm, zeigt sich dort nur das Diktat.
+    /// Liest den zuletzt gemeldeten Wert (`dictationDisplayID` des
+    /// Controllers), nicht den Hub: `@Published` meldet im willSet, beim
+    /// Neuzeichnen aus dem Beobachter stünde im Hub noch der alte Wert.
     func isDictationShown(on screen: NotchScreenInfo) -> Bool {
-        config.unified && hub.dictationDisplayID == screen.displayID
+        config.unified && dictationDisplayID == screen.displayID
     }
 
-    /// Diktat erscheint oder geht: neu zeichnen. Danach einen Hinweis, der
-    /// während des Diktats kam, einmal nachholen, wenn der Chat noch wartet.
+    /// Diktat erscheint oder geht: den gemeldeten Wert übernehmen, neu
+    /// zeichnen. Danach einen Hinweis, der während des Diktats kam, einmal
+    /// nachholen, wenn der Chat noch wartet.
     func observeDictation() {
+        dictationDisplayID = hub.dictationDisplayID
         hub.$dictationDisplayID
             .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] displayID in
-                guard let self else { return }
-                if displayID != nil, self.expandedKind != nil { self.collapse(rebuildAfter: false) }
-                if displayID == nil { self.replayAlertAfterDictation() }
-                self.render()
-            }
+            .sink { [weak self] displayID in self?.dictationChanged(to: displayID) }
             .store(in: &activeCancellables)
+    }
+
+    func dictationChanged(to displayID: UInt32?) {
+        dictationDisplayID = displayID
+        if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
+        if displayID == nil { replayAlertAfterDictation() }
+        render()
     }
 
     func replayAlertAfterDictation() {
