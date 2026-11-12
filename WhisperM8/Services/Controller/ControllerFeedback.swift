@@ -9,7 +9,7 @@ import Observation
 /// - Lichtleiste nach Zustand (Aufnahme, Ziel arbeitet, Rückfrage)
 /// - Doppelimpuls, wenn ein anderer Chat neu auf eine Entscheidung wartet
 /// - automatische Pause bei Bildschirmsperre, Ruhezustand und Spielen vorne
-/// - Maus oder Tastatur nehmen dem Controller die Liste und das Menü ab
+/// - Maus oder Tastatur nehmen dem Controller Liste, Menü und Insel ab
 ///
 /// Läuft nichts, hängt hier nichts: Alle Beobachter entstehen in `activate`
 /// und verschwinden in `deactivate`.
@@ -75,9 +75,7 @@ final class ControllerFeedback {
         systemAsleep = false
         gameInFront = false
         manager.setSystemPaused(false)
-        dispatcher.ui.leaveList()
-        dispatcher.ui.menu = nil
-        dispatcher.ui.workspacePicker = nil
+        dispatcher.closeControllerUI()
     }
 
     // MARK: - Zustand nachführen
@@ -206,18 +204,19 @@ final class ControllerFeedback {
 
     // MARK: - Maus und Tastatur
 
-    /// Greift der Nutzer zu Maus oder Tastatur, gibt der Controller Liste und
-    /// Menü ab. Ein Bool-Vergleich je Ereignis; Ereignisse der Tastatur-Brücke
+    /// Greift der Nutzer zu Maus oder Tastatur, gibt der Controller Liste,
+    /// Menü und Insel ab. Ein Bool-Vergleich je Ereignis; Ereignisse der Tastatur-Brücke
     /// zählen nicht.
     private func installInputMonitor() {
         let ui = dispatcher.ui
+        let dispatcher = dispatcher
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
-                guard ui.area == .list || ui.menu != nil || ui.workspacePicker != nil else { return }
+                guard ui.area == .list || ui.menu != nil || dispatcher.islandState != nil else { return }
                 if event.type == .keyDown, ControllerKeyboardBridge.isBridgeEvent(event) { return }
                 ui.leaveList()
                 ui.menu = nil
-                ui.workspacePicker = nil
+                dispatcher.closeIslandForUserInput()
             }
             return event
         }

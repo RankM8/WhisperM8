@@ -63,9 +63,6 @@ enum ControllerContext: Equatable, Sendable {
     case quickAction
     case clipboardPanel(ControllerClipboardState)
     case menu(dialogOpen: Bool)
-    case chatPicker
-    /// Workspace-Auswahl (L2 halten im Raster, Runde 3).
-    case workspacePicker
     case modal
     case list
     case chat(ControllerChatState)
@@ -93,8 +90,6 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var clipboardPanelOpen: Bool = false
     var clipboard = ControllerClipboardState()
     var controllerMenuOpen: Bool = false
-    var chatPickerOpen: Bool = false
-    var workspacePickerOpen: Bool = false
     var window: ControllerWindowKind = .agentChats
     var modalOpen: Bool = false
     var area: ControllerFocusArea = .content
@@ -103,8 +98,10 @@ struct ControllerAppSnapshot: Equatable, Sendable {
 
 enum ControllerContextResolver {
     /// Vorrang: pausiert → Aufnahme → Schnellaktion → Zwischenablage-Verlauf →
-    /// andere App vorn → kein Fenster → anderes Fenster → Menü → Chat-Auswahl →
-    /// Workspace-Auswahl → Dialog → Liste → Chat. Aufnahme und Verlauf gehen vor „andere App“,
+    /// andere App vorn → kein Fenster → anderes Fenster → Menü → Dialog →
+    /// Liste → Chat. Die Insel (L1, R1, L2 gehalten) ist kein eigener
+    /// Zusammenhang: Ihre Gesten tragen die Ebene selbst (`.inLayer`), und die
+    /// Legende bleibt beim Halten, wie sie ist. Aufnahme und Verlauf gehen vor „andere App“,
     /// weil sie auch dann bedienbar sein müssen.
     ///
     /// Ohne Chat im Inhalt gilt die Liste: Dort funktionieren Navigation und
@@ -125,8 +122,6 @@ enum ControllerContextResolver {
         if snapshot.controllerMenuOpen {
             return .menu(dialogOpen: snapshot.chat?.status == .awaitingInput)
         }
-        if snapshot.chatPickerOpen { return .chatPicker }
-        if snapshot.workspacePickerOpen { return .workspacePicker }
         if snapshot.modalOpen { return .modal }
         guard snapshot.area == .content, let chat = snapshot.chat else { return .list }
         return .chat(chat)

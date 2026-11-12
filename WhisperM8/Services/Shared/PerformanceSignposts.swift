@@ -13,6 +13,7 @@ enum PerfSignposts {
     static let sidebar = OSSignposter(subsystem: subsystem, category: "perf.sidebar")
     static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
     static let statistics = OSSignposter(subsystem: subsystem, category: "perf.statistics")
+    static let controller = OSSignposter(subsystem: subsystem, category: "perf.controller")
 }
 
 /// Wie dicht ein Messpunkt sitzt — und damit, ob er im Normalbetrieb mitläuft.
@@ -294,4 +295,11 @@ enum PerfBudgets {
     /// Main-Thread-Zeit. Der Backfill (erstes Einlesen der Historie) wird nicht
     /// gemessen, er ist gewollt langsam. Läufe mit Diktat-Pause zählen nicht.
     static let statisticsScan = PerformanceBudget(name: "statistics.scan", budget: 1.500, signposter: PerfSignposts.statistics)
+
+    // Controller
+    /// Controller-Insel einblenden: Modell im Ereignis-Pfad bauen (bei „Wohin“
+    /// die Zeilen der Liste und die Workspaces), Fenster auf Größe bringen und
+    /// zeigen. Zwei Bilder bei 60 Hz; die Animation selbst zählt nicht.
+    static let controllerIslandShow = PerformanceBudget(
+        name: "controller.islandShow", budget: 0.033, signposter: PerfSignposts.controller)
 }

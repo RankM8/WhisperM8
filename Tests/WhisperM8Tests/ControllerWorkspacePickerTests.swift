@@ -2,32 +2,33 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-/// Workspace-Auswahl des Controllers (L2 halten im Raster, Runde 3): Modell,
-/// Einträge aus dem Store und die gemerkte Kachel je Workspace.
+/// Workspaces am Controller (seit Runde 4 der Reiter „Workspaces“ der Insel):
+/// Liste, Einträge aus dem Store und die gemerkte Kachel je Workspace.
 @MainActor
 final class ControllerWorkspacePickerTests: XCTestCase {
-    // MARK: - Modell
+    // MARK: - Reiter Workspaces der Insel
 
     private func choice(_ name: String, current: Bool = false) -> ControllerWorkspaceChoice {
         ControllerWorkspaceChoice(id: UUID(), name: name, colorHex: "#888888", chatCount: 1,
                                   hasWaitingChat: false, isCurrent: current)
     }
 
-    func testModelStartsAtCurrentAndClampsAtEdges() {
+    func testListStartsAtCurrentAndClampsAtEdges() {
         let choices = [choice("A"), choice("B", current: true), choice("C")]
-        var model = ControllerWorkspacePickerModel(choices: choices)
-        XCTAssertEqual(model.selected?.name, "B")
-        model.move(1)
-        model.move(1)
-        XCTAssertEqual(model.selected?.name, "C", "kein Umlauf")
-        model.move(-5)
-        XCTAssertEqual(model.selected?.name, "A")
+        var list = ControllerIslandList(rows: choices, currentID: choices[1].id)
+        XCTAssertEqual(list.selected?.name, "B")
+        list.move(1)
+        list.move(1)
+        XCTAssertEqual(list.selected?.name, "C", "kein Umlauf")
+        list.move(-5)
+        XCTAssertEqual(list.selected?.name, "A")
     }
 
-    func testModelWithoutCurrentStartsAtFirst() {
-        let model = ControllerWorkspacePickerModel(choices: [choice("A"), choice("B")])
-        XCTAssertEqual(model.selected?.name, "A")
-        XCTAssertNil(ControllerWorkspacePickerModel(choices: []).selected)
+    func testListWithoutCurrentStartsAtFirst() {
+        let list = ControllerIslandList(rows: [choice("A"), choice("B")], currentID: nil)
+        XCTAssertEqual(list.selected?.name, "A")
+        XCTAssertFalse(list.startsAtCurrent)
+        XCTAssertNil(ControllerIslandList<ControllerWorkspaceChoice>(rows: [], currentID: nil).selected)
     }
 
     // MARK: - Einträge

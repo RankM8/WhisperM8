@@ -79,21 +79,6 @@ extension UISnapshotGallery {
                 state.gridActive = true
                 return legend(.chat(state), title: "2 Lux · Integrationen")
             },
-            Fixture(name: "controller-workspace-auswahl", size: CGSize(width: 400, height: 240)) {
-                let choices = [
-                    ControllerWorkspaceChoice(id: UUID(), name: "WhisperM8", colorHex: "#5B8DEF", chatCount: 4,
-                                              hasWaitingChat: false, isCurrent: true),
-                    ControllerWorkspaceChoice(id: UUID(), name: "DealSupply", colorHex: "#E5484D", chatCount: 3,
-                                              hasWaitingChat: true, isCurrent: false),
-                    ControllerWorkspaceChoice(id: UUID(), name: "Website-Relaunch mit sehr langem Namen",
-                                              colorHex: "#30A46C", chatCount: 1,
-                                              hasWaitingChat: false, isCurrent: false),
-                ]
-                var picker = ControllerWorkspacePickerModel(choices: choices)
-                picker.move(1)
-                return AnyView(ControllerWorkspacePickerPanel(picker: picker)
-                    .padding(20).frame(maxHeight: .infinity, alignment: .top))
-            },
             Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {
                 let session = UUID()
                 var chat = ControllerChatActionInfo(title: "2 Lux · Integrationen", isPinned: true, canFork: true)
@@ -186,7 +171,7 @@ extension UISnapshotGallery {
             .padding(20)
             .environment(\.colorScheme, .dark))
         }
-        let extraFixtures: [Fixture] = [
+        let extraFixtures: [Fixture] = islandFixtures() + [
             Fixture(name: "controller-pill-modusliste", size: CGSize(width: 520, height: 330)) { pillWithModeList() },
             Fixture(name: "controller-liste-markierung", size: CGSize(width: 340, height: 180)) { listWithMarker() },
             Fixture(name: "controller-pill-ziel", size: CGSize(width: 520, height: 80)) { pillWithTarget() },
@@ -207,6 +192,91 @@ extension UISnapshotGallery {
             ) {
                 page(status(connected: true, lastButton: .r2, background: .received))
             },
+        ]
+    }
+
+    /// Controller-Insel (Runde 4) in den Zuständen des Entwurfs
+    /// (`docs/design/controller-insel.html`), an der Notch und als Pille.
+    @MainActor
+    static func islandFixtures() -> [Fixture] {
+        let notch = ControllerIslandDisplay.Style.notch(width: 184, height: 32)
+        let current = UUID()
+        func row(_ title: String, _ project: String, _ status: ControllerIslandStatus?, _ detail: String,
+                 id: UUID = UUID()) -> ControllerIslandChatRow {
+            ControllerIslandChatRow(id: id, title: title, project: project, status: status, detail: detail,
+                                    isCurrent: id == current)
+        }
+        let chats = [
+            row("Controller Insel", "WhisperM8", .working, "jetzt", id: current),
+            row("Jarvis: Supervisor WhisperM8", "WhisperM8", .awaiting, "wartet · 2 min"),
+            row("E2E Befunde Raster", "WhisperM8", .idle, "bereit"),
+            row("Kampagnen Import", "ListM8", .working, "arbeitet · 6 min"),
+            row("Lead Varianten", "ListM8", .errored, "Fehler"),
+            row("Release Notizen 2.26", "WhisperM8", .idle, "bereit"),
+        ] + (0..<9).map { row("Älterer Chat \($0 + 1)", "WhisperM8", .idle, "bereit") }
+        let workspaces = [
+            ControllerWorkspaceChoice(id: UUID(), name: "WhisperM8", colorHex: "#5E6AD2", chatCount: 6,
+                                      hasWaitingChat: false, isCurrent: true),
+            ControllerWorkspaceChoice(id: UUID(), name: "ListM8", colorHex: "#3FA873", chatCount: 4,
+                                      hasWaitingChat: true, isCurrent: false),
+            ControllerWorkspaceChoice(id: UUID(), name: "DealSupply", colorHex: "#C9962A", chatCount: 3,
+                                      hasWaitingChat: false, isCurrent: false),
+            ControllerWorkspaceChoice(id: UUID(), name: "Aktiv", colorHex: "#D6473D", chatCount: 5,
+                                      hasWaitingChat: false, isCurrent: false),
+        ]
+        let target = ControllerIslandTarget(title: "Controller Insel", status: .working)
+        func whereTo(grid: Bool, open: [Int] = []) -> ControllerIslandModel {
+            var state = ControllerWhereToState(chats: chats, currentChatID: current, workspaces: workspaces, gridActive: grid)
+            for step in open { state.move(step) }
+            return ControllerIslandModel(target: target, content: .whereTo(state))
+        }
+        let session = UUID()
+        var chatInfo = ControllerChatActionInfo(title: "Controller Insel")
+        chatInfo.accounts = [
+            ControllerAccountChoice(kind: .claude, name: "main", label: "main", isCurrent: true, isLoggedIn: true),
+            ControllerAccountChoice(kind: .claude, name: "work", label: "work", isCurrent: false, isLoggedIn: true),
+        ]
+        var setup = ControllerMenuSetup(
+            acceptsInput: true, profile: .claude, sessionID: session, target: .chat(session), chat: chatInfo)
+        let quickDraw = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
+            content: .quickDraw(ControllerQuickDrawSlots(setup: setup)))
+        setup.dialogOpen = true
+        let quickDrawQuestion = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Jarvis: Supervisor", status: .awaiting),
+            content: .quickDraw(ControllerQuickDrawSlots(setup: setup, hit: .switchAccount)))
+        let writing = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
+            content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))))
+        let writingShell = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "zsh · whisperm8", status: .idle),
+            content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .shell))))
+
+        func island(_ model: ControllerIslandModel, style: ControllerIslandDisplay.Style = notch,
+                    counts: ControllerIslandCounts? = nil) -> AnyView {
+            let display = ControllerIslandDisplay(style: style, model: model, counts: counts)
+            return AnyView(ControllerIslandView(display: display)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(AppTheme.sidebar))
+        }
+        let size = CGSize(width: 620, height: 470)
+        let small = CGSize(width: 620, height: 230)
+        return [
+            Fixture(name: "controller-insel-wohin-hinweis", size: small) { island(whereTo(grid: false)) },
+            Fixture(name: "controller-insel-wohin-chats", size: size) { island(whereTo(grid: false, open: [1, 1])) },
+            Fixture(name: "controller-insel-wohin-workspaces", size: size) { island(whereTo(grid: true, open: [1])) },
+            Fixture(name: "controller-insel-wohin-notch-zaehler", size: small) {
+                island(whereTo(grid: false), counts: ControllerIslandCounts(working: 2, waiting: 1))
+            },
+            Fixture(name: "controller-insel-schreiben", size: small) { island(writing) },
+            Fixture(name: "controller-insel-schreiben-shell", size: small) { island(writingShell) },
+            Fixture(name: "controller-insel-schnellbefehle", size: small) { island(quickDraw) },
+            Fixture(name: "controller-insel-schnellbefehle-rueckfrage", size: small) { island(quickDrawQuestion) },
+            Fixture(name: "controller-insel-pille-chats", size: size) {
+                island(whereTo(grid: false, open: [1]), style: .pill)
+            },
+            Fixture(name: "controller-insel-pille-schnellbefehle", size: small) { island(quickDraw, style: .pill) },
+            Fixture(name: "controller-insel-pille-schreiben-shell", size: small) { island(writingShell, style: .pill) },
         ]
     }
 }

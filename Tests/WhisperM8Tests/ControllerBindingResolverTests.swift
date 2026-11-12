@@ -312,7 +312,7 @@ final class ControllerBindingResolverTests: XCTestCase {
                            "Steuerkreuz navigiert wie der Stick, keine Pfeile")
             XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), context), .moveInContent(.left))
             XCTAssertNil(action(.press(.triangle), context), "kein Leerzeichen in einen gestoppten Chat")
-            XCTAssertEqual(action(.press(.r1), context), .adjacentChat(step: 1))
+            XCTAssertEqual(action(.tap(.r1), context), .adjacentChat(step: 1))
             XCTAssertEqual(action(.tap(.l2), context), .lastChat)
             XCTAssertEqual(action(.press(.touchpad), context), .clipboardToggle)
             XCTAssertEqual(action(.press(.options), context), .menuToggle)
@@ -330,12 +330,12 @@ final class ControllerBindingResolverTests: XCTestCase {
                        .moveInContent(.right))
         XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: true), context), "ein Druck, ein Schritt")
         XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "kein Pfeil, keine Wiederholung")
-        XCTAssertEqual(action(.press(.l1), context), .adjacentChat(step: -1), "L1/R1 folgen der Liste links")
-        XCTAssertEqual(action(.press(.r1), chat(.idle) { $0.gridActive = true }), .adjacentChat(step: 1), "auch im Raster")
+        XCTAssertEqual(action(.tap(.l1), context), .adjacentChat(step: -1), "L1/R1 folgen der Liste links")
+        XCTAssertEqual(action(.tap(.r1), chat(.idle) { $0.gridActive = true }), .adjacentChat(step: 1), "auch im Raster")
         XCTAssertEqual(action(.press(.l3), context), .toggleMaximize)
         XCTAssertEqual(action(.press(.l3), chat(.working) { $0.gridActive = true }), .toggleMaximize)
-        XCTAssertEqual(action(.holdBegan(.l2), context), .pickerBegin)
-        XCTAssertNil(action(.holdEnded(.l2), context))
+        XCTAssertEqual(action(.layerBegan(.whereTo), context), .islandShow(.whereTo))
+        XCTAssertEqual(action(.layerEnded(.whereTo), context), .islandRelease)
         XCTAssertEqual(action(.press(.r2), context), .dictationToggle)
         XCTAssertEqual(action(.scroll(lines: -2), context), .scroll(lines: -2))
         XCTAssertNil(action(.tap(.r3), context), "R3 auf einem lebenden Chat: nichts, auch keine Vibration")
@@ -412,7 +412,7 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.move(.down, source: .leftStick, isRepeat: true), single))
         XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: true), .list), .listMove(step: 1))
         XCTAssertEqual(action(.move(.down, source: .leftStick, isRepeat: false), chat(.ended)), .enterList(step: 1))
-        XCTAssertEqual(action(.press(.l1), single), .adjacentChat(step: -1), "L1/R1 wechseln weiter direkt")
+        XCTAssertEqual(action(.tap(.l1), single), .adjacentChat(step: -1), "L1/R1 wechseln weiter direkt")
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), single), .moveInContent(.left))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: true), single))
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .enterList(step: -1),
@@ -436,8 +436,9 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), toChat), .outputMode(step: 1))
         XCTAssertNil(action(.move(.right, source: .dpad, isRepeat: true), toChat))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), toChat))
-        for gesture in [ControllerGesture.press(.triangle), .press(.l1), .press(.touchpad), .press(.options),
-                        .tap(.l2), .holdBegan(.l2), .holdBegan(.circle), .tap(.square), .chordCompleted] {
+        for gesture in [ControllerGesture.press(.triangle), .tap(.l1), .press(.touchpad), .press(.options),
+                        .tap(.l2), .layerBegan(.whereTo), .inLayer(.writing, .press(.square)),
+                        .holdBegan(.circle), .tap(.square), .chordCompleted] {
             XCTAssertNil(action(gesture, toChat), "\(gesture)")
         }
     }
@@ -524,8 +525,8 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: true), context), .bridgeKey(.left))
             XCTAssertEqual(action(.press(.cross), context), .bridgeKey(.returnKey))
             XCTAssertEqual(action(.tap(.circle), context), .bridgeKey(.escape))
-            XCTAssertEqual(action(.press(.l1), context), .bridgeKey(.backTab))
-            XCTAssertEqual(action(.press(.r1), context), .bridgeKey(.tab))
+            XCTAssertEqual(action(.tap(.l1), context), .bridgeKey(.backTab))
+            XCTAssertEqual(action(.tap(.r1), context), .bridgeKey(.tab))
             XCTAssertEqual(action(.press(.r2), context), .dictationToggle)
         }
         XCTAssertEqual(action(.press(.triangle), .otherWindow), .bringAppToFront)
@@ -554,8 +555,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), .list))
         XCTAssertEqual(action(.tap(.circle), .list), .leaveList)
         XCTAssertEqual(action(.press(.cross), .list), .listActivate)
-        XCTAssertEqual(action(.press(.l1), .list), .listFilter(step: -1))
-        XCTAssertEqual(action(.press(.r1), .list), .listFilter(step: 1))
+        XCTAssertEqual(action(.tap(.l1), .list), .listFilter(step: -1))
+        XCTAssertEqual(action(.tap(.r1), .list), .listFilter(step: 1))
         XCTAssertEqual(action(.press(.create), .list), .newChat)
         XCTAssertNil(action(.press(.triangle), .list), "Runde 3: kein Sprung zum wartenden Chat mehr")
         XCTAssertEqual(action(.press(.r2), .list), .dictationToggle)
@@ -609,8 +610,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         func act(_ gesture: ControllerGesture) -> ControllerAction? { action(gesture, .clipboardPanel(state)) }
         XCTAssertEqual(act(.press(.triangle)), .rejected, "Korrigieren nicht verfügbar")
         XCTAssertEqual(act(.press(.l3)), .rejected, "kein Bild")
-        XCTAssertEqual(act(.press(.l1)), .clipboard(.filterAll))
-        XCTAssertEqual(act(.press(.r1)), .clipboard(.filterDictations))
+        XCTAssertEqual(act(.tap(.l1)), .clipboard(.filterAll))
+        XCTAssertEqual(act(.tap(.r1)), .clipboard(.filterDictations))
         XCTAssertEqual(act(.press(.options)), .clipboard(.menuToggle))
         XCTAssertEqual(act(.press(.r2)), .rejected, "kein Diktat ins nicht aktivierende Fenster")
         state.canCorrect = true
@@ -619,8 +620,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(act(.press(.l3)), .clipboard(.zoom))
 
         state.isZoomed = true
-        XCTAssertNil(act(.press(.l1)), "Filter in der großen Bildansicht gesperrt (wie ⌘D)")
-        XCTAssertNil(act(.press(.r1)))
+        XCTAssertNil(act(.tap(.l1)), "Filter in der großen Bildansicht gesperrt (wie ⌘D)")
+        XCTAssertNil(act(.tap(.r1)))
         XCTAssertEqual(act(.tap(.circle)), .clipboard(.close), "Kreis: zurück aus der Bildansicht")
 
         state = ControllerClipboardState(isConfirmingClear: true)
@@ -638,42 +639,6 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(act(.press(.touchpad)), .clipboardToggle)
     }
 
-    /// Runde 3: L2 halten öffnet im Raster die Workspace-Auswahl, in der
-    /// Einzelansicht weiter die Chat-Auswahl. Tippen bleibt „letzter Chat“.
-    func testL2HoldOpensWorkspacePickerOnlyInGrid() {
-        XCTAssertEqual(action(.holdBegan(.l2), chat(.idle) { $0.gridActive = true }), .workspacePickerBegin)
-        XCTAssertEqual(action(.holdBegan(.l2), chat(.idle)), .pickerBegin)
-        XCTAssertEqual(action(.tap(.l2), chat(.idle) { $0.gridActive = true }), .lastChat)
-    }
-
-    func testWorkspacePicker() {
-        let context = ControllerContext.workspacePicker
-        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), context), .workspacePickerMove(step: -1))
-        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .workspacePickerMove(step: 1))
-        XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: false), context))
-        XCTAssertEqual(action(.holdEnded(.l2), context), .workspacePickerCommit)
-        XCTAssertEqual(action(.press(.cross), context), .workspacePickerCommit)
-        XCTAssertEqual(action(.tap(.circle), context), .workspacePickerCancel)
-        XCTAssertEqual(action(.holdCancelled(.l2), context), .workspacePickerCancel)
-        XCTAssertNil(action(.press(.r2), context), "R2 tut in der Workspace-Auswahl nichts")
-        XCTAssertNil(action(.chordCompleted, context), "kein Pause-Akkord bei gehaltenem L2")
-    }
-
-    func testChatPicker() {
-        XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), .chatPicker), .pickerMove(.left))
-        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), .chatPicker), .pickerMove(.down))
-        XCTAssertEqual(action(.holdEnded(.l2), .chatPicker), .pickerCommit)
-        XCTAssertEqual(action(.tap(.circle), .chatPicker), .pickerCancel)
-        XCTAssertEqual(action(.press(.r2), .chatPicker), .pickerCommitAndDictate)
-        XCTAssertEqual(action(.holdCancelled(.l2), .chatPicker), .pickerCancel, "Zurücksetzen schließt ohne Wechsel")
-        // Runde 2: Kreuz wechselt sofort; das spätere Loslassen von L2 trifft
-        // dann den Chat und tut dort nichts.
-        XCTAssertEqual(action(.press(.cross), .chatPicker), .pickerCommit)
-        XCTAssertNil(action(.holdEnded(.l2), chat(.idle)))
-        XCTAssertNil(action(.holdEnded(.l2), .list))
-        XCTAssertNil(action(.chordCompleted, .chatPicker))
-    }
-
     // MARK: - Pause
 
     func testPauseChord() {
@@ -682,7 +647,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.chordCancelled, .paused), .holdProgressCancelled(.l1))
         XCTAssertNil(action(.press(.cross), .paused))
         XCTAssertNil(action(.press(.r2), .paused))
-        XCTAssertNil(action(.press(.l1), .paused))
+        XCTAssertNil(action(.tap(.l1), .paused))
+        XCTAssertNil(action(.layerEnded(.whereTo), .paused), "die Pause schließt die Insel selbst")
 
         for context in [chat(.working), .list, .clipboardPanel(ControllerClipboardState()), .menu(dialogOpen: false), .modal,
                         .otherWindow, .noWindow, .quickAction, .outsideApp(backgroundEnabled: true)] {
@@ -690,6 +656,5 @@ final class ControllerBindingResolverTests: XCTestCase {
         }
         XCTAssertNil(action(.chordCompleted, .recording(phase: .recording, targetIsChat: true)))
         XCTAssertNil(action(.chordPending(duration: 1), .recording(phase: .recording, targetIsChat: true)))
-        XCTAssertNil(action(.chordCompleted, .chatPicker))
     }
 }

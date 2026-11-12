@@ -261,13 +261,20 @@ final class ControllerRuntime {
                 terminals: LiveControllerTerminals(),
                 dictation: LiveControllerDictation(),
                 environment: LiveControllerEnvironment(),
-                ui: .shared
+                ui: .shared,
+                island: ControllerIslandPresenter.shared
             )
             dispatcher.playHaptic = { [weak manager] in manager?.play($0) }
             dispatcher.togglePause = { [weak manager] in manager?.togglePause() }
             dispatcher.debugOverride = { [weak manager] in manager?.debugOverride }
             dispatcher.titleForSession = { id in
                 AgentWorkspaceUIModel.shared.workspace.sessions.first { $0.id == id }?.title
+            }
+            dispatcher.islandChatRows = { order, current in
+                ControllerIslandRows.chatRows(order: order, current: current)
+            }
+            dispatcher.islandStatus = { id in
+                ControllerIslandRows.status(AgentSessionStatusCoordinator.shared.statusStore.status(for: id))
             }
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)

@@ -172,7 +172,7 @@ struct ControllerMenuPanel: View {
     }
 }
 
-/// Überschrift eines Controller-Panels (Menü, Workspace-Auswahl).
+/// Überschrift eines Controller-Panels (Menü).
 struct ControllerPanelHeading: View {
     let text: String
 
@@ -215,9 +215,9 @@ extension View {
     }
 }
 
-/// Zeigt das Options-Menü bzw. die Workspace-Auswahl im aktiven
-/// Agent-Chats-Fenster. Eigene kleine View, damit nur sie das
-/// `ControllerUIModel` beobachtet.
+/// Zeigt das Options-Menü im aktiven Agent-Chats-Fenster. Eigene kleine
+/// View, damit nur sie das `ControllerUIModel` beobachtet. (Die Auswahl von
+/// Chats und Workspaces zeigt seit Runde 4 die Insel an der Notch.)
 struct ControllerMenuHost: View {
     let windowID: UUID
     @State private var model = ControllerUIModel.shared
@@ -227,10 +227,6 @@ struct ControllerMenuHost: View {
         if windows.keyAgentChatWindowID == windowID {
             if let menu = model.menu {
                 ControllerMenuPanel(menu: menu, fallbackHeading: model.targetTitle)
-                    .padding(.bottom, ControllerLegendBar.height + 12)
-                    .transition(.opacity)
-            } else if let picker = model.workspacePicker {
-                ControllerWorkspacePickerPanel(picker: picker)
                     .padding(.bottom, ControllerLegendBar.height + 12)
                     .transition(.opacity)
             }

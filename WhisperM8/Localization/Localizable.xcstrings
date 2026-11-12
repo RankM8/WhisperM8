@@ -831,6 +831,16 @@
         }
       }
     },
+    "+ %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+ %lld weitere"
+          }
+        }
+      }
+    },
     "+%lld": {
       "localizations": {
         "de": {
@@ -5211,6 +5221,16 @@
         }
       }
     },
+    "Delete to line start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis Zeilenanfang löschen"
+          }
+        }
+      }
+    },
     "Delete visual context files after processing": {
       "localizations": {
         "de": {
@@ -6661,6 +6681,16 @@
         }
       }
     },
+    "Go there and dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hin und diktieren"
+          }
+        }
+      }
+    },
     "Goes through permissions, transcription provider, and the agent CLIs again.": {
       "localizations": {
         "de": {
@@ -6707,6 +6737,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raster"
+          }
+        }
+      }
+    },
+    "Grid · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raster · %@"
           }
         }
       }
@@ -6931,12 +6971,102 @@
         }
       }
     },
-    "Hold L2, then R2: switch to that chat and dictate": {
+    "Hold L1, R1 or L2: layers": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "L2 halten, dann R2: zu diesem Chat wechseln und diktieren"
+            "value": "Ebenen (L1, R1 oder L2 halten)"
+          }
+        }
+      }
+    },
+    "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann □: bis zum Zeilenanfang löschen, gehalten Zeile für Zeile (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then △: new line without sending (Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann △: Zeilenumbruch, ohne zu senden (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L2, then R2: switch to the marked chat and dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann R2: zum markierten Chat wechseln und diktieren"
+          }
+        }
+      }
+    },
+    "Hold L2, then △: next chat that is waiting for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann △: nächster Chat, der auf dich wartet"
+          }
+        }
+      }
+    },
+    "Hold L2: where to — up and down open the list of chats and workspaces, left and right switch tabs, release or ✕ switches, ○ cancels": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten: wohin — hoch und runter öffnen die Liste der Chats und Workspaces, links und rechts wechseln den Reiter, Loslassen oder ✕ wechselt, ○ bricht ab"
+          }
+        }
+      }
+    },
+    "Hold R1, then □: open the commands in the menu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann □: Befehle im Menü öffnen"
+          }
+        }
+      }
+    },
+    "Hold R1, then △: switch mode (not while the agent asks a question)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann △: Modus wechseln (nicht während einer Rückfrage)"
+          }
+        }
+      }
+    },
+    "Hold R1, then ○: open the accounts in the menu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ○: Konten im Menü öffnen"
+          }
+        }
+      }
+    },
+    "Hold R1, then ✕: send “Continue”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ✕: „Weiter“ senden"
           }
         }
       }
@@ -7021,6 +7151,16 @@
         }
       }
     },
+    "Hold: layers": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halten: Ebenen"
+          }
+        }
+      }
+    },
     "Hold: pause": {
       "localizations": {
         "de": {
@@ -7031,42 +7171,12 @@
         }
       }
     },
-    "Hold: pick a chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Halten: Chat wählen"
-          }
-        }
-      }
-    },
-    "Hold: pick a chat, release to switch": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Halten: Chat wählen, loslassen wechselt"
-          }
-        }
-      }
-    },
     "Hold: resume": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Halten: fortsetzen"
-          }
-        }
-      }
-    },
-    "Hold: switch workspace": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Halten: Workspace wechseln"
           }
         }
       }
@@ -7247,16 +7357,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
-          }
-        }
-      }
-    },
-    "In the grid, hold: pick a workspace, release to switch": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Im Raster halten: Workspace wählen, loslassen wechselt"
           }
         }
       }
@@ -9481,6 +9581,16 @@
         }
       }
     },
+    "New line": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue Zeile"
+          }
+        }
+      }
+    },
     "New recordings start here. If the stored mode was deleted, recordings fall back to Fast (raw) at runtime.": {
       "localizations": {
         "de": {
@@ -9577,6 +9687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Beim nächsten Chat öffnet sich Claude Code hier und führt dich durch die Anmeldung."
+          }
+        }
+      }
+    },
+    "Next waiting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster wartender"
           }
         }
       }
@@ -10087,6 +10207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noch nicht erteilt"
+          }
+        }
+      }
+    },
+    "Not in a shell — a program there could read the keys differently.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In einer Shell nicht — dort könnte ein Programm die Tasten anders deuten."
           }
         }
       }
@@ -10704,6 +10834,16 @@
         }
       }
     },
+    "Open list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste öffnen"
+          }
+        }
+      }
+    },
     "Open notes by default": {
       "localizations": {
         "de": {
@@ -11264,16 +11404,6 @@
         }
       }
     },
-    "Pick a chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat wählen"
-          }
-        }
-      }
-    },
     "Pick a project for a new chat": {
       "localizations": {
         "de": {
@@ -11290,16 +11420,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
-          }
-        }
-      }
-    },
-    "Pick a workspace": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace wählen"
           }
         }
       }
@@ -11604,16 +11724,6 @@
         }
       }
     },
-    "Previous / next chat in the order of the list; in the list: Active / Recent / All": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Voriger / nächster Chat in der Reihenfolge der Liste; in der Liste: Aktiv / Zuletzt / Alle"
-          }
-        }
-      }
-    },
     "Price": {
       "localizations": {
         "de": {
@@ -11904,6 +12014,16 @@
         }
       }
     },
+    "Question open — nothing goes into the chat right now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückfrage offen — in den Chat geht gerade nichts."
+          }
+        }
+      }
+    },
     "Question: %@": {
       "localizations": {
         "de": {
@@ -11930,6 +12050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schnellaktion läuft"
+          }
+        }
+      }
+    },
+    "Quick commands": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellbefehle"
           }
         }
       }
@@ -12340,16 +12470,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loslassen für neues Fenster"
-          }
-        }
-      }
-    },
-    "Release: switch": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loslassen: wechseln"
           }
         }
       }
@@ -15524,16 +15644,6 @@
         }
       }
     },
-    "Switch workspace": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Workspace wechseln"
-          }
-        }
-      }
-    },
     "Switched": {
       "localizations": {
         "de": {
@@ -15744,12 +15854,22 @@
         }
       }
     },
-    "Tap: back to the previous chat": {
+    "Tap: back to the previous chat. Hold: layer, see below": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tippen: zurück zum letzten Chat"
+            "value": "Tippen: zurück zum letzten Chat. Halten: Ebene, siehe unten"
+          }
+        }
+      }
+    },
+    "Tap: previous / next chat in the order of the list; in the list: Active / Recent / All. Hold: layer, see below": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippen: voriger / nächster Chat in der Reihenfolge der Liste; in der Liste: Aktiv / Zuletzt / Alle. Halten: Ebene, siehe unten"
           }
         }
       }
@@ -18224,6 +18344,16 @@
         }
       }
     },
+    "Where to": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wohin"
+          }
+        }
+      }
+    },
     "Which Claude session belongs to this tab?": {
       "localizations": {
         "de": {
@@ -18554,6 +18684,16 @@
         }
       }
     },
+    "Workspaces": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspaces"
+          }
+        }
+      }
+    },
     "Would have switched": {
       "localizations": {
         "de": {
@@ -18580,6 +18720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schreibt detaillierte Ereignisse nach ~/Library/Logs/WhisperM8/WhisperM8-debug.log (rotiert bei 10 MB). Schalte es ein, wenn du ein Problem meldest, danach wieder aus."
+          }
+        }
+      }
+    },
+    "Writing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schreiben"
           }
         }
       }
@@ -19034,6 +19184,26 @@
         }
       }
     },
+    "free": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "frei"
+          }
+        }
+      }
+    },
+    "go + dictate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hin + diktieren"
+          }
+        }
+      }
+    },
     "has a question": {
       "localizations": {
         "de": {
@@ -19264,6 +19434,16 @@
         }
       }
     },
+    "next waiting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nächster wartender"
+          }
+        }
+      }
+    },
     "no 5-hour window": {
       "localizations": {
         "de": {
@@ -19330,6 +19510,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "nicht angemeldet"
+          }
+        }
+      }
+    },
+    "now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jetzt"
           }
         }
       }
@@ -19444,6 +19634,16 @@
         }
       }
     },
+    "release: switch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "loslassen: wechseln"
+          }
+        }
+      }
+    },
     "resetting": {
       "localizations": {
         "de": {
@@ -19480,6 +19680,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "läuft in eigenem Worktree"
+          }
+        }
+      }
+    },
+    "select": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wählen"
           }
         }
       }
@@ -19530,6 +19740,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "gestoppt"
+          }
+        }
+      }
+    },
+    "tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reiter"
           }
         }
       }

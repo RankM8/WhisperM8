@@ -302,6 +302,8 @@ final class ControllerManager {
     }
 
     private func noteButton(of gesture: ControllerGesture) {
+        // In einer Ebene zählt die zweite Taste (Tasten-Test der Einstellungen).
+        if case let .inLayer(_, inner) = gesture { return noteButton(of: inner) }
         let button: ControllerButton?
         switch gesture {
         case let .press(pressed): button = pressed

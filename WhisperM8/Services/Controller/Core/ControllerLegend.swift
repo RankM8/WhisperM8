@@ -17,7 +17,11 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case dictate, stopDictation, stopAndSend, discard, outputMode
     case space, previousNextChat, filter, move, arrows, scroll, clearInputHold, acceptSuggestion
     case backspace, newChat, clipboard, maximize, menu
-    case lastChat, pickChatHold, pickAndDictate, switchOnRelease, switchWorkspaceHold
+    case lastChat, pickAndDictate
+    // Ebenen der Insel (Runde 4)
+    case layersHold, deleteToLineStart, newline
+    case continueWork, cycleMode, commands, switchAccount
+    case whereToHold, nextWaiting
     case open, select, paste, pin, deleteHold, close, closeHold
     case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
@@ -33,7 +37,8 @@ struct ControllerLegendEntry: Equatable, Sendable {
 
 struct ControllerLegendSection: Equatable, Sendable {
     enum Kind: String, Sendable {
-        case core, extra
+        /// L1, R1 und L2 gehalten: die drei Ebenen der Insel.
+        case core, extra, layers
     }
 
     var kind: Kind
@@ -64,7 +69,8 @@ enum ControllerLegend {
             .map(\.entry)
     }
 
-    /// Belegung für die Einstellungsseite, getrennt nach Kern und Zusatz.
+    /// Belegung für die Einstellungsseite, getrennt nach Kern, Zusatz und den
+    /// drei Ebenen der Insel.
     static func allBindings() -> [ControllerLegendSection] {
         [
             ControllerLegendSection(kind: .core, entries: [
@@ -89,12 +95,35 @@ enum ControllerLegend {
                 entry(.button(.r3), .clearInputHold),
                 entry(.button(.dpadRight), .acceptSuggestion),
                 entry(.button(.l2), .lastChat),
-                entry(.button(.l2), .pickChatHold),
-                entry(.button(.l2), .switchWorkspaceHold),
-                ControllerLegendEntry(inputs: [.button(.l2), .button(.r2)], label: .pickAndDictate, isCombination: true),
                 entry(.bumpers, .pauseHold),
             ]),
+            ControllerLegendSection(kind: .layers, entries: [
+                combination(.l1, .square, .deleteToLineStart),
+                combination(.l1, .triangle, .newline),
+                combination(.r1, .cross, .continueWork),
+                combination(.r1, .triangle, .cycleMode),
+                combination(.r1, .square, .commands),
+                combination(.r1, .circle, .switchAccount),
+                entry(.button(.l2), .whereToHold),
+                combination(.l2, .triangle, .nextWaiting),
+                combination(.l2, .r2, .pickAndDictate),
+            ]),
         ]
+    }
+
+    private static func combination(
+        _ layerKey: ControllerButton, _ button: ControllerButton, _ label: ControllerLegendLabel
+    ) -> ControllerLegendEntry {
+        ControllerLegendEntry(inputs: [.button(layerKey), .button(button)], label: label, isCombination: true)
+    }
+
+    /// Gesten, für die ein Eintrag steht. Eine Kombination mit einer
+    /// Ebenen-Taste vorn steht für die zweite Taste in dieser Ebene.
+    static func probes(for entry: ControllerLegendEntry) -> [ControllerGesture] {
+        if entry.isCombination, case let .button(key)? = entry.inputs.first, let layer = ControllerLayer(key: key) {
+            return entry.inputs.dropFirst().flatMap(gestures(for:)).map { .inLayer(layer, $0) }
+        }
+        return entry.inputs.flatMap(gestures(for:))
     }
 
     /// Alle Gesten, die zu einer Eingabe gehören können. Grundlage für Tests,
@@ -106,11 +135,15 @@ enum ControllerLegend {
             if let direction = button.dpadDirection {
                 return [false, true].map { ControllerGesture.move(direction, source: .dpad, isRepeat: $0) }
             }
-            return [
+            var gestures: [ControllerGesture] = [
                 .press(button), .tap(button), .holdPending(button, duration: 1),
                 .holdBegan(button), .holdRepeat(button), .holdRepeatLong(button), .holdEnded(button),
                 .holdCancelled(button),
             ]
+            if let layer = ControllerLayer(key: button) {
+                gestures += [.layerBegan(layer), .layerEnded(layer), .layerCancelled(layer)]
+            }
+            return gestures
         case .leftStick:
             return ControllerDirection.allCases.flatMap { direction in
                 [false, true].map { ControllerGesture.move(direction, source: .leftStick, isRepeat: $0) }
@@ -122,7 +155,7 @@ enum ControllerLegend {
         case .rightStick:
             return [.scroll(lines: 1), .scroll(lines: -1)]
         case .bumpers:
-            return [.press(.l1), .press(.r1), .chordPending(duration: 1), .chordCompleted, .chordCancelled]
+            return [.tap(.l1), .tap(.r1), .chordPending(duration: 1), .chordCompleted, .chordCancelled]
         }
     }
 
@@ -165,27 +198,6 @@ enum ControllerLegend {
                 candidate(.button(.circle), .back, [.tap(.circle)]),
                 candidate(.button(.options), .close, [.press(.options)]),
             ]
-        case .chatPicker:
-            return [
-                ControllerLegend.Candidate(
-                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
-                    probes: gestures(for: .leftStick) + gestures(for: .dpad)
-                ),
-                candidate(.button(.cross), .select, [.press(.cross)]),
-                candidate(.button(.l2), .switchOnRelease, [.holdEnded(.l2)]),
-                candidate(.button(.r2), .pickAndDictate, [.press(.r2)]),
-                candidate(.button(.circle), .cancel, [.tap(.circle)]),
-            ]
-        case .workspacePicker:
-            return [
-                ControllerLegend.Candidate(
-                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
-                    probes: verticalMoves
-                ),
-                candidate(.button(.cross), .select, [.press(.cross)]),
-                candidate(.button(.l2), .switchOnRelease, [.holdEnded(.l2)]),
-                candidate(.button(.circle), .cancel, [.tap(.circle)]),
-            ]
         case .modal:
             return [
                 ControllerLegend.Candidate(
@@ -212,7 +224,7 @@ enum ControllerLegend {
                 ),
                 candidate(.button(.cross), .open, [.press(.cross)]),
                 candidate(.button(.circle), .back, [.tap(.circle)]),
-                candidate(.bumpers, .filter, [.press(.l1), .press(.r1)]),
+                candidate(.bumpers, .filter, [.tap(.l1), .tap(.r1)]),
                 candidate(.button(.square), .closeHold, [.holdBegan(.square)]),
                 candidate(.button(.create), .newChat, [.press(.create)]),
                 candidate(.button(.r2), .dictate, [.press(.r2)]),
@@ -226,11 +238,12 @@ enum ControllerLegend {
         let awaiting = state.status == .awaitingInput
         let choosing = awaiting || ControllerBindingResolver.choiceListActive(state)
         let crossLabel: ControllerLegendLabel = !state.acceptsKeys ? .start : (choosing ? .confirm : .send)
-        // Im Raster zeigt die Legende die Workspace-Auswahl auf L2. Die
-        // Chat-Auswahl der Einzelansicht steht wie bisher nur in der Übersicht
-        // der Einstellungen.
-        let workspaceHold: [Candidate] = state.gridActive
-            ? [candidate(.button(.l2), .switchWorkspaceHold, [.holdBegan(.l2)])] : []
+        // L1, R1 und L2 gehalten sind die Ebenen der Insel. Die Legende nennt
+        // sie in einem Eintrag und schaltet beim Halten nicht um — was die
+        // Ebene kann, zeigt die Insel selbst.
+        let layers = Candidate(
+            entry: ControllerLegendEntry(inputs: [.button(.l1), .button(.r1), .button(.l2)], label: .layersHold),
+            probes: ControllerLayer.allCases.map { .layerBegan($0) })
         // Das Steuerkreuz gibt Pfeile nur, wo eine Auswahl offen ist (Rückfrage,
         // Liste aus dem Menü, Codex); sonst bewegt es wie der Stick.
         let arrows = ControllerBindingResolver.arrowsAllowed(state)
@@ -255,8 +268,9 @@ enum ControllerLegend {
             candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.triangle), .space, [.press(.triangle)]),
             candidate(.button(.r2), .dictate, [.press(.r2)]),
-            candidate(.bumpers, .previousNextChat, [.press(.l1), .press(.r1)]),
-        ] + workspaceHold + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
+            candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
+            layers,
+        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.tap(.r3)]),
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),
@@ -288,7 +302,7 @@ enum ControllerLegend {
             candidate(.button(.cross), .paste, [.press(.cross)]),
             candidate(.button(.triangle), .correctAndPaste, [.press(.triangle)]),
             candidate(.button(.square), .deleteHold, [.holdBegan(.square)]),
-            candidate(.bumpers, .clipboardFilter, [.press(.l1), .press(.r1)]),
+            candidate(.bumpers, .clipboardFilter, [.tap(.l1), .tap(.r1)]),
             candidate(.button(.l3), .zoomImage, [.press(.l3)]),
             candidate(.button(.options), .menu, [.press(.options)]),
             candidate(.button(.circle), state.isZoomed ? .back : .close, [.tap(.circle)]),

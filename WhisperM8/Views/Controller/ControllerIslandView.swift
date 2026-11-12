@@ -1,0 +1,628 @@
+import SwiftUI
+
+/// Was die Insel zeichnet, als ein Wert (Snapshots, Tests). Das Fenster
+/// (`ControllerIslandPresenter`) entscheidet nur, wann ein neuer Wert kommt.
+struct ControllerIslandDisplay: Equatable {
+    enum Style: Equatable {
+        /// An der Notch: schwarz, das Band deckt genau die Aussparung.
+        case notch(width: CGFloat, height: CGFloat)
+        /// Ohne Notch: Pille unter der Menüleiste, folgt hell/dunkel.
+        case pill
+    }
+
+    var style: Style
+    var model: ControllerIslandModel
+    /// Zähler der Notch-Anzeige, wenn sie auf diesem Bildschirm steht: Sie
+    /// wandern in den Kopf der Insel (Entwurf, Zustand 8).
+    var counts: ControllerIslandCounts?
+
+    var isNotch: Bool {
+        if case .notch = style { return true }
+        return false
+    }
+
+    /// Breite des Körpers je Zustand (Entwurf); an der Notch nie schmaler
+    /// als die Aussparung.
+    var bodyWidth: CGFloat {
+        let width: CGFloat
+        switch model.content {
+        case .writing: width = 420
+        case .quickDraw: width = 524
+        case .whereTo(let state): width = state.isListOpen ? 440 : 360
+        }
+        if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
+        return width
+    }
+}
+
+struct ControllerIslandCounts: Equatable {
+    var working: Int
+    var waiting: Int
+}
+
+/// Farben der Insel. An der Notch immer dunkel wie die Hardware, als Pille
+/// wie der Rest der App.
+private struct IslandPalette {
+    var background: Color
+    var border: Color
+    var text: Color
+    var secondary: Color
+    var tertiary: Color
+    var hint: Color
+    var key: Color
+    var keyBorder: Color
+    var mark: Color
+    var markBorder: Color
+    var segment: Color
+    var segmentOn: Color
+    var slot: Color
+    var line: Color
+    var awaiting: Color
+    var working: Color
+
+    static let notch = IslandPalette(
+        background: .black, border: .clear,
+        text: Color(white: 0.957), secondary: Color(white: 0.643), tertiary: Color(white: 0.553),
+        hint: Color(white: 0.84),
+        key: Color(red: 0.165, green: 0.165, blue: 0.18), keyBorder: Color.white.opacity(0.14),
+        mark: Color(red: 0.486, green: 0.518, blue: 0.91).opacity(0.24),
+        markBorder: Color(red: 0.553, green: 0.584, blue: 0.933),
+        segment: Color.white.opacity(0.08), segmentOn: Color.white.opacity(0.16),
+        slot: Color.white.opacity(0.07), line: Color.white.opacity(0.08),
+        awaiting: Color(red: 0.914, green: 0.725, blue: 0.286),
+        working: Color(red: 0.298, green: 0.765, blue: 0.541))
+
+    static let pill = IslandPalette(
+        background: AgentTheme.statusPill, border: AgentTheme.borderStrong,
+        text: AgentTheme.textPrimary, secondary: AgentTheme.textSecondary, tertiary: AgentTheme.textTertiary,
+        hint: AgentTheme.textPrimary,
+        key: AppTheme.panel, keyBorder: AppTheme.borderStrong,
+        mark: AppTheme.accentTint, markBorder: AppTheme.accent,
+        segment: Color.gray.opacity(0.12), segmentOn: AppTheme.panel,
+        slot: Color.gray.opacity(0.10), line: AgentTheme.borderStrong,
+        awaiting: AgentTheme.statusAwaiting, working: AgentTheme.statusWorking)
+}
+
+/// Controller-Insel: Kopf mit Taste, Ebene und Ziel, darunter je Ebene die
+/// Hinweise, die Raute oder die Liste. Reine Darstellung; keine
+/// Dauerbewegung (Auf- und Zuklappen macht das Fenster einmalig).
+struct ControllerIslandView: View {
+    let display: ControllerIslandDisplay
+    /// Aufgeklappt; zu ist nur der Umriss der Notch sichtbar.
+    var revealed = true
+
+    private var palette: IslandPalette { display.isNotch ? .notch : .pill }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if case .notch(_, let height) = display.style {
+                Color.clear.frame(height: height)
+            }
+            header
+            content
+        }
+        .frame(width: display.bodyWidth)
+        .background(shape.fill(palette.background))
+        .overlay(shape.stroke(palette.border, lineWidth: display.isNotch ? 0 : 2))
+        .clipShape(shape)
+        .mask(alignment: .top) { reveal }
+        .environment(\.colorScheme, display.isNotch ? .dark : colorScheme)
+        .accessibilityElement(children: .contain)
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var shape: AnyShape {
+        if case .notch(let width, let height) = display.style {
+            return AnyShape(NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: 20))
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// Wächst aus der Notch (bzw. aus einer kleinen Pille) und zieht sich
+    /// dorthin zurück.
+    private var reveal: some View {
+        GeometryReader { proxy in
+            let collapsed = collapsedSize(in: proxy.size)
+            RoundedRectangle(cornerRadius: revealed ? 0 : 12, style: .continuous)
+                .frame(width: revealed ? proxy.size.width : collapsed.width,
+                       height: revealed ? proxy.size.height : collapsed.height)
+                .frame(maxWidth: .infinity, alignment: .top)
+        }
+    }
+
+    private func collapsedSize(in size: CGSize) -> CGSize {
+        switch display.style {
+        case .notch(let width, let height):
+            return CGSize(width: min(size.width, width), height: min(size.height, height + NotchGeometry.chinHeight))
+        case .pill:
+            return CGSize(width: min(size.width, 150), height: min(size.height, NotchGeometry.pillHeight))
+        }
+    }
+
+    // MARK: Kopf
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            IslandGlyph(text: display.model.layer.key.glyph, round: false, palette: palette)
+            Text(verbatim: display.model.layer.title)
+                .font(.system(size: 11, weight: .bold))
+                .tracking(0.2)
+                .foregroundStyle(palette.text)
+            Spacer(minLength: 12)
+            headerTarget
+                .frame(maxWidth: 190, alignment: .trailing)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 9)
+        .padding(.bottom, 6)
+    }
+
+    @ViewBuilder
+    private var headerTarget: some View {
+        if let counts = display.counts {
+            HStack(spacing: 12) {
+                if counts.working > 0 { count(.working, counts.working, palette.working) }
+                if counts.waiting > 0 { count(.awaiting, counts.waiting, palette.awaiting) }
+            }
+        } else if let workspace = gridWorkspaceTitle {
+            Text(verbatim: workspace)
+                .font(.system(size: 11))
+                .foregroundStyle(palette.tertiary)
+                .lineLimit(1)
+        } else if let title = display.model.target.title {
+            HStack(spacing: 6) {
+                IslandStatusDot(status: display.model.target.status)
+                Text(verbatim: title)
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    /// Reiter Workspaces im Raster: „Raster · Name“ statt des Chats.
+    private var gridWorkspaceTitle: String? {
+        guard let state = display.model.whereTo, state.tab == .workspaces,
+              let name = state.currentWorkspaceName else { return nil }
+        return String(localized: "Grid · \(name)")
+    }
+
+    private func count(_ status: ControllerIslandStatus, _ value: Int, _ color: Color) -> some View {
+        HStack(spacing: 6) {
+            IslandStatusDot(status: status)
+            Text(verbatim: "\(value)")
+                .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                .foregroundStyle(color)
+        }
+    }
+
+    // MARK: Inhalt
+
+    @ViewBuilder
+    private var content: some View {
+        switch display.model.content {
+        case .writing(let slots): writing(slots)
+        case .quickDraw(let slots): quickDraw(slots)
+        case .whereTo(let state): whereTo(state)
+        }
+    }
+
+    private func writing(_ slots: ControllerWritingSlots) -> some View {
+        VStack(spacing: 0) {
+            IslandFlow {
+                hint(.square, String(localized: "Delete to line start"), on: slots.canDeleteLine)
+                hint(.triangle, String(localized: "New line"), on: slots.canInsertNewline)
+                if slots.note == nil {
+                    // Bewusst frei: ausgegraut, damit klar ist, dass dort nichts liegt.
+                    hint(.cross, String(localized: "free"), on: false)
+                    hint(.circle, String(localized: "free"), on: false)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+            .padding(.bottom, 12)
+            if let note = slots.note { self.note(note) }
+        }
+    }
+
+    private func quickDraw(_ slots: ControllerQuickDrawSlots) -> some View {
+        VStack(spacing: 0) {
+            Grid(horizontalSpacing: 4, verticalSpacing: 4) {
+                GridRow {
+                    Color.clear.frame(width: 160, height: 44)
+                    slot(.cycleMode, slots)
+                    Color.clear.frame(width: 160, height: 44)
+                }
+                GridRow {
+                    slot(.commands, slots)
+                    Text(verbatim: ControllerButton.r1.glyph)
+                        .font(.system(size: 11))
+                        .foregroundStyle(palette.tertiary)
+                        .frame(width: 160, height: 44)
+                    slot(.switchAccount, slots)
+                }
+                GridRow {
+                    Color.clear.frame(width: 160, height: 44)
+                    slot(.continueWork, slots)
+                    Color.clear.frame(width: 160, height: 44)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+            .padding(.bottom, slots.dialogOpen ? 8 : 14)
+            if slots.dialogOpen { note(.question) }
+        }
+    }
+
+    private func slot(_ item: ControllerMenuItem, _ slots: ControllerQuickDrawSlots) -> some View {
+        let on = slots.enabled.contains(item)
+        let hit = slots.hit == item
+        return HStack(spacing: 7) {
+            if let button = ControllerQuickDrawSlots.button(for: item) {
+                IslandGlyph(text: button.glyph, round: true, palette: palette)
+            }
+            Text(verbatim: item.islandTitle)
+                .font(.system(size: 12))
+                .foregroundStyle(palette.text)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if item.opensSubmenu {
+                Text(verbatim: "›")
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.tertiary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(width: 160, height: 44)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(hit ? palette.mark : palette.slot)
+                .overlay {
+                    if hit {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(palette.markBorder, lineWidth: 1.5)
+                    }
+                }
+        )
+        .opacity(on || hit ? 1 : 0.36)
+    }
+
+    @ViewBuilder
+    private func whereTo(_ state: ControllerWhereToState) -> some View {
+        if !state.isListOpen {
+            IslandFlow {
+                hint(.dpadUp, String(localized: "Open list"), on: true, glyph: "▲▼")
+                hint(.triangle, String(localized: "Next waiting"), on: true)
+                hint(.r2, String(localized: "Go there and dictate"), on: true)
+                hint(.circle, String(localized: "Cancel"), on: true)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+            .padding(.bottom, 12)
+        } else {
+            VStack(spacing: 0) {
+                tabs(state.tab)
+                VStack(spacing: 0) {
+                    switch state.tab {
+                    case .chats:
+                        ForEach(state.chats.visibleRows) { row in
+                            chatRow(row, marked: row.id == state.chats.selected?.id)
+                        }
+                        more(state.chats.hiddenCount)
+                    case .workspaces:
+                        ForEach(state.workspaces.visibleRows) { choice in
+                            workspaceRow(choice, marked: choice.id == state.workspaces.selected?.id)
+                        }
+                        more(state.workspaces.hiddenCount)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+                footer(state.tab)
+            }
+        }
+    }
+
+    private func tabs(_ selected: ControllerIslandTab) -> some View {
+        HStack(spacing: 2) {
+            tab(String(localized: "Chats"), on: selected == .chats)
+            tab(String(localized: "Workspaces"), on: selected == .workspaces)
+        }
+        .padding(2)
+        .background(palette.segment, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    private func tab(_ title: String, on: Bool) -> some View {
+        Text(verbatim: title)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(on ? palette.text : palette.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .background {
+                if on {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(palette.segmentOn)
+                        .shadow(color: .black.opacity(display.isNotch ? 0 : 0.12), radius: 1, y: 1)
+                }
+            }
+    }
+
+    private func chatRow(_ row: ControllerIslandChatRow, marked: Bool) -> some View {
+        HStack(spacing: 9) {
+            IslandStatusDot(status: row.status)
+                .frame(width: 16)
+            HStack(spacing: 6) {
+                Text(verbatim: row.title)
+                    .font(.system(size: 12.5, weight: row.isCurrent ? .bold : .medium))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let project = row.project {
+                    Text(verbatim: project)
+                        .font(.system(size: 11))
+                        .foregroundStyle(palette.tertiary)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                }
+            }
+            Spacer(minLength: 8)
+            Text(verbatim: row.detail)
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(palette.tertiary)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .islandMarking(marked, palette: palette)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func workspaceRow(_ choice: ControllerWorkspaceChoice, marked: Bool) -> some View {
+        HStack(spacing: 9) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(hex: choice.colorHex))
+                .frame(width: 16, height: 16)
+                .overlay {
+                    Text(verbatim: String(choice.name.prefix(1)).uppercased())
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(.white)
+                }
+            HStack(spacing: 6) {
+                Text(verbatim: choice.name)
+                    .font(.system(size: 12.5, weight: choice.isCurrent ? .bold : .medium))
+                    .foregroundStyle(palette.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if choice.isCurrent {
+                    Text("current")
+                        .font(.system(size: 11))
+                        .foregroundStyle(palette.tertiary)
+                }
+            }
+            Spacer(minLength: 8)
+            if choice.hasWaitingChat {
+                // Dasselbe Zeichen wie der Status-Punkt eines wartenden Chats.
+                IslandStatusDot(status: .awaiting)
+            }
+            Text(verbatim: ChatsUIStrings.chatCount(choice.chatCount))
+                .font(.system(size: 11).monospacedDigit())
+                .foregroundStyle(palette.tertiary)
+                .fixedSize()
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .islandMarking(marked, palette: palette)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func more(_ count: Int) -> some View {
+        if count > 0 {
+            Text(verbatim: String(localized: "+ \(count) more"))
+                .font(.system(size: 11))
+                .foregroundStyle(palette.tertiary)
+                .padding(.top, 2)
+                .padding(.bottom, 2)
+        }
+    }
+
+    private func footer(_ tab: ControllerIslandTab) -> some View {
+        HStack(spacing: 14) {
+            footItem("▲▼", String(localized: "select"))
+            footItem("◀▶", String(localized: "tabs"))
+            switch tab {
+            case .chats:
+                footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
+                footItem(ControllerButton.r2.glyph, String(localized: "go + dictate"), round: false)
+            case .workspaces:
+                Text(verbatim: String(localized: "release: switch"))
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(palette.secondary)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 11)
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
+    }
+
+    private func footItem(_ glyph: String, _ label: String, round: Bool = true) -> some View {
+        HStack(spacing: 5) {
+            IslandGlyph(text: glyph, round: round, palette: palette)
+            Text(verbatim: label)
+        }
+        .fixedSize()
+    }
+
+    // MARK: Bausteine
+
+    private func hint(_ button: ControllerButton, _ label: String, on: Bool, glyph: String? = nil) -> some View {
+        HStack(spacing: 6) {
+            IslandGlyph(text: glyph ?? button.glyph, round: button.isRoundGlyph, palette: palette)
+            Text(verbatim: label)
+                .font(.system(size: 12))
+                .foregroundStyle(palette.hint)
+        }
+        .fixedSize()
+        .opacity(on ? 1 : 0.38)
+    }
+
+    private func note(_ note: ControllerWritingSlots.Note) -> some View {
+        Text(verbatim: note.text)
+            .font(.system(size: 11))
+            .foregroundStyle(palette.awaiting)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
+    }
+}
+
+extension ControllerWritingSlots.Note {
+    var text: String {
+        switch self {
+        case .shell: return String(localized: "Not in a shell — a program there could read the keys differently.")
+        case .question: return String(localized: "Question open — nothing goes into the chat right now.")
+        }
+    }
+}
+
+extension ControllerLayer {
+    /// Name der Ebene im Kopf der Insel.
+    var title: String {
+        switch self {
+        case .writing: return String(localized: "Writing")
+        case .quickDraw: return String(localized: "Quick commands")
+        case .whereTo: return String(localized: "Where to")
+        }
+    }
+}
+
+extension ControllerMenuItem {
+    /// Kurzer Text in der R1-Raute.
+    var islandTitle: String {
+        switch self {
+        case .continueWork: return String(localized: "Continue")
+        case .cycleMode: return String(localized: "Switch mode")
+        case .commands: return String(localized: "Commands")
+        case .switchAccount: return String(localized: "Switch account")
+        default: return title(chat: nil)
+        }
+    }
+}
+
+extension ControllerIslandStatus {
+    var runtimeStatus: AgentSessionRuntimeStatus {
+        switch self {
+        case .working: return .working
+        case .awaiting: return .awaitingInput
+        case .idle: return .idle
+        case .errored: return .errored
+        case .stopped: return .stopped
+        }
+    }
+}
+
+/// Status-Punkt der Insel: derselbe `AgentStatusIndicator` wie in Seitenleiste
+/// und Tabs (ruhige Form ohne Puls), etwas größer.
+private struct IslandStatusDot: View {
+    let status: ControllerIslandStatus?
+
+    var body: some View {
+        AgentStatusIndicator(status: status?.runtimeStatus, compact: true)
+            .scaleEffect(1.5)
+            .frame(width: 8, height: 8)
+    }
+}
+
+/// Tasten-Symbol der Insel.
+private struct IslandGlyph: View {
+    let text: String
+    let round: Bool
+    let palette: IslandPalette
+
+    var body: some View {
+        Text(verbatim: text)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(palette.text)
+            .padding(.horizontal, round ? 4 : 5)
+            .frame(minWidth: 20, minHeight: 20)
+            .background(palette.key, in: RoundedRectangle(cornerRadius: round ? 10 : 5, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: round ? 10 : 5, style: .continuous)
+                    .strokeBorder(palette.keyBorder, lineWidth: 1))
+            .fixedSize()
+    }
+}
+
+private extension View {
+    func islandMarking(_ marked: Bool, palette: IslandPalette) -> some View {
+        background {
+            if marked {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(palette.mark)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(palette.markBorder, lineWidth: 1.5))
+            }
+        }
+    }
+}
+
+/// Zeilen mit Umbruch, wie `flex-wrap` im Entwurf: 14 pt zwischen den
+/// Einträgen, 6 pt zwischen den Zeilen.
+private struct IslandFlow: Layout {
+    var spacing: CGFloat = 14
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        let lines = arrange(subviews, width: width)
+        let height = lines.reduce(0) { $0 + $1.height } + CGFloat(max(0, lines.count - 1)) * lineSpacing
+        let used = lines.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? used, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for line in arrange(subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in line.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y + (line.height - size.height) / 2), proposal: .unspecified)
+                x += size.width + spacing
+            }
+            y += line.height + lineSpacing
+        }
+    }
+
+    private struct Line {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Line] {
+        var lines: [Line] = []
+        var current = Line()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            if needed > width, !current.indices.isEmpty {
+                lines.append(current)
+                current = Line()
+            }
+            current.width = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+            current.indices.append(index)
+        }
+        if !current.indices.isEmpty { lines.append(current) }
+        return lines
+    }
+}

@@ -32,9 +32,6 @@ struct ChatSelectionHistory: Equatable {
 final class AgentChatsCommandState {
     var token: AgentChatsCommandCenter.Token?
     var history = ChatSelectionHistory()
-    /// Der laufende Umschalter wurde ohne Ctrl geöffnet (Controller). Das
-    /// Loslassen von Ctrl darf ihn dann nicht bestätigen.
-    var switcherOpenedWithoutModifier = false
     /// Projekt, das die Projekt-Auswahl „Neuer Chat“ beim nächsten Öffnen
     /// vorauswählt (Controller: Create). Wird beim Öffnen verbraucht, damit
     /// ⌘N danach wieder beim ersten Projekt beginnt.

@@ -47,7 +47,9 @@ extension AgentChatsView {
             hasMultiSelection: !multiSelection.isEmpty,
             isArchiveMode: archiveModeActive,
             isNewChatPickerOpen: showNewChatProjectPicker,
-            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil
+            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil,
+            screenDisplayID: (hostWindow?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                as? NSNumber)?.uint32Value
         )
     }
 
@@ -155,17 +157,8 @@ extension AgentChatsView {
             guard target != index else { return false }
             sidebarScope = scopes[target]
             return true
-        case .switcherBegin:
-            guard tabSwitcher == nil else { return false }
-            return beginTabSwitcher(direction: 0, modifiers: [])
-        case .switcherMove(let direction):
-            guard tabSwitcher != nil else { return false }
-            moveTabSwitcher(direction)
-            return true
-        case .switcherCommit:
-            guard tabSwitcher != nil else { return false }
-            commitTabSwitcher()
-            return true
+        case .nextWaitingChat:
+            return selectNextWaitingChat()
         case .switcherCancel:
             guard tabSwitcher != nil else { return false }
             cancelTabSwitcher()

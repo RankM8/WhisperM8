@@ -30,10 +30,6 @@ struct ControllerLegendTarget: Equatable {
             return .init(title: String(localized: "Clipboard"), detail: nil, tone: .neutral)
         case .menu:
             return .init(title: String(localized: "Menu"), detail: title, tone: .neutral)
-        case .chatPicker:
-            return .init(title: String(localized: "Pick a chat"), detail: nil, tone: .neutral)
-        case .workspacePicker:
-            return .init(title: String(localized: "Pick a workspace"), detail: nil, tone: .neutral)
         case .modal:
             return .init(title: String(localized: "Dialog"), detail: nil, tone: .neutral)
         case .list:

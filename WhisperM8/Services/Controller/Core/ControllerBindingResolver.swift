@@ -11,8 +11,12 @@ import Foundation
 ///   linke Stick nichts — auch keine „geht nicht“-Vibration.
 /// - Halte-Fortschritt (`holdProgress`) erscheint nur, wo das Halten im
 ///   Zusammenhang eine Wirkung hätte.
-/// - Der Pause-Akkord L1 + R1 gilt überall außer während der Aufnahme und in
-///   der Chat-Auswahl, und nicht außerhalb der App ohne Hintergrund-Empfang.
+/// - Der Pause-Akkord L1 + R1 gilt überall außer während der Aufnahme und
+///   nicht außerhalb der App ohne Hintergrund-Empfang. Unter L2 gibt es ihn
+///   nicht (der Erkenner bildet ihn nur aus zwei Schultertasten).
+/// - Ebenen (L1, R1, L2 gehalten) wirken nur im Chat, auch im Raster auf die
+///   fokussierte Kachel (`ControllerBindingResolver+Layers.swift`). Anderswo
+///   gelten die Tasten darin wie ohne Ebene.
 enum ControllerBindingResolver {
     /// Steht für das Paar L1 + R1 in `holdProgress`.
     static let chordProgressButton: ControllerButton = .l1
@@ -20,6 +24,12 @@ enum ControllerBindingResolver {
     static func action(for gesture: ControllerGesture, in context: ControllerContext) -> ControllerAction? {
         if let chordAction = chordAction(for: gesture, in: context) {
             return chordAction
+        }
+        switch gesture {
+        case .layerBegan, .layerEnded, .layerCancelled, .inLayer:
+            return layerAction(for: gesture, in: context)
+        default:
+            break
         }
         switch context {
         case .paused:
@@ -34,10 +44,6 @@ enum ControllerBindingResolver {
             return clipboardPanel(gesture, state: state)
         case .menu:
             return menu(gesture)
-        case .chatPicker:
-            return chatPicker(gesture)
-        case .workspacePicker:
-            return workspacePicker(gesture)
         case .modal:
             return modal(gesture)
         case .otherWindow:
@@ -55,7 +61,7 @@ enum ControllerBindingResolver {
 
     static func chordAllowed(in context: ControllerContext) -> Bool {
         switch context {
-        case .recording, .chatPicker, .workspacePicker, .outsideApp(backgroundEnabled: false):
+        case .recording, .outsideApp(backgroundEnabled: false):
             return false
         default:
             return true
@@ -120,8 +126,8 @@ enum ControllerBindingResolver {
         case let .move(direction, .dpad, _): return .bridgeKey(ControllerBridgeKey(direction))
         case .press(.cross): return .bridgeKey(.returnKey)
         case .tap(.circle): return .bridgeKey(.escape)
-        case .press(.l1): return .bridgeKey(.backTab)
-        case .press(.r1): return .bridgeKey(.tab)
+        case .tap(.l1): return .bridgeKey(.backTab)
+        case .tap(.r1): return .bridgeKey(.tab)
         case .press(.r2): return .dictationToggle
         default: return nil
         }
@@ -203,8 +209,8 @@ enum ControllerBindingResolver {
         case .press(.triangle): return state.canCorrect ? .clipboard(.correctAndPaste) : .rejected
         case .tap(.circle): return .clipboard(.close)
         // Wie ⌘D: In der großen Bildansicht tauscht der Filter nicht die Liste darunter.
-        case .press(.l1): return state.isZoomed ? nil : .clipboard(.filterAll)
-        case .press(.r1): return state.isZoomed ? nil : .clipboard(.filterDictations)
+        case .tap(.l1): return state.isZoomed ? nil : .clipboard(.filterAll)
+        case .tap(.r1): return state.isZoomed ? nil : .clipboard(.filterDictations)
         case .press(.l3): return state.selectedIsImage ? .clipboard(.zoom) : .rejected
         case .press(.options): return .clipboard(.menuToggle)
         case .press(.r2): return .rejected
@@ -229,36 +235,6 @@ enum ControllerBindingResolver {
         }
     }
 
-    /// `.holdCancelled(.l2)` kommt hier nur aus `reset` (Trennung, Ruhezustand):
-    /// Die Auswahl schließt dann ohne Wechsel. Kreuz wechselt sofort (wie
-    /// Return im Ctrl+Tab-Umschalter); das spätere Loslassen von L2 fällt
-    /// dann in den Chat und hat dort keine Wirkung.
-    private static func chatPicker(_ gesture: ControllerGesture) -> ControllerAction? {
-        switch gesture {
-        case let .move(direction, _, _): return .pickerMove(direction)
-        case .holdEnded(.l2): return .pickerCommit
-        case .press(.cross): return .pickerCommit
-        case .holdCancelled(.l2): return .pickerCancel
-        case .tap(.circle): return .pickerCancel
-        case .press(.r2): return .pickerCommitAndDictate
-        default: return nil
-        }
-    }
-
-    /// Workspace-Auswahl (L2 halten im Raster, Runde 3): wie die
-    /// Chat-Auswahl, aber eine senkrechte Liste. Loslassen oder Kreuz
-    /// wechselt, Kreis bricht ab. R2 tut hier nichts — „wechseln und
-    /// diktieren“ gibt es nur für einen Chat als Ziel.
-    private static func workspacePicker(_ gesture: ControllerGesture) -> ControllerAction? {
-        switch gesture {
-        case .move(.up, _, _): return .workspacePickerMove(step: -1)
-        case .move(.down, _, _): return .workspacePickerMove(step: 1)
-        case .holdEnded(.l2), .press(.cross): return .workspacePickerCommit
-        case .holdCancelled(.l2), .tap(.circle): return .workspacePickerCancel
-        default: return nil
-        }
-    }
-
     // MARK: - Liste links
 
     private static func list(_ gesture: ControllerGesture) -> ControllerAction? {
@@ -268,8 +244,8 @@ enum ControllerBindingResolver {
         case .move(.right, _, false): return .leaveList
         case .tap(.circle): return .leaveList
         case .press(.cross): return .listActivate
-        case .press(.l1): return .listFilter(step: -1)
-        case .press(.r1): return .listFilter(step: 1)
+        case .tap(.l1): return .listFilter(step: -1)
+        case .tap(.r1): return .listFilter(step: 1)
         // Viereck halten schließt die markierte Zeile wie ihr „−“/„×“;
         // getippt passiert nichts.
         case let .holdPending(.square, duration): return .holdProgress(.square, duration: duration)

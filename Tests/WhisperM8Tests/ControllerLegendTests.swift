@@ -106,7 +106,8 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertTrue(idle.contains(.clearInputHold))
         XCTAssertFalse(labels(chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }).contains(.clearInputHold))
         XCTAssertFalse(labels(chat(.ended)).contains(.space))
-        XCTAssertFalse(ControllerLegendLabel.allCases.map(\.rawValue).contains("nextWaiting"))
+        // Runde 4: Der nächste wartende Chat kam als L2 + Dreieck zurück, nicht als Dreieck allein.
+        XCTAssertFalse(labels(chat(.idle)).contains(.nextWaiting))
     }
 
     func testRecordingLegend() {
@@ -132,16 +133,16 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertTrue(labels(.otherWindow).contains(.bringToFront))
     }
 
-    /// Runde 3: Im Raster zeigt die Legende L2 als Workspace-Auswahl, in der
-    /// Einzelansicht nicht.
-    func testGridLegendShowsWorkspaceHold() {
-        XCTAssertTrue(labels(chat(.idle) { $0.gridActive = true }).contains(.switchWorkspaceHold))
-        XCTAssertFalse(labels(chat(.idle)).contains(.switchWorkspaceHold))
-        XCTAssertEqual(labels(.workspacePicker), [.move, .select, .switchOnRelease, .cancel])
-    }
-
-    func testChatPickerShowsCrossSwitch() {
-        XCTAssertEqual(labels(.chatPicker), [.move, .select, .switchOnRelease, .pickAndDictate, .cancel])
+    /// Runde 4: Die Legende nennt die drei Ebenen in einem Eintrag, im Chat
+    /// und im Raster; Tippen bleibt „voriger / nächster Chat“.
+    func testChatLegendNamesTheLayers() {
+        for context in [chat(.idle), chat(.idle) { $0.gridActive = true }, chat(.ended)] {
+            let entries = ControllerLegend.entries(for: context)
+            XCTAssertTrue(entries.contains(
+                ControllerLegendEntry(inputs: [.button(.l1), .button(.r1), .button(.l2)], label: .layersHold)))
+            XCTAssertTrue(entries.contains { $0.label == .previousNextChat })
+        }
+        XCTAssertFalse(labels(.list).contains(.layersHold), "in der Liste gibt es keine Ebenen")
     }
 
     /// Runde 2: Die Fußzeile des Verlaufs kommt aus dieser Tabelle. „Geht
@@ -168,25 +169,34 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(.list).contains(.startChat))
     }
 
-    func testAllBindingsHasCoreAndExtra() {
+    func testAllBindingsHasCoreExtraAndLayers() {
         let sections = ControllerLegend.allBindings()
-        XCTAssertEqual(sections.map(\.kind), [.core, .extra])
+        XCTAssertEqual(sections.map(\.kind), [.core, .extra, .layers])
         XCTAssertEqual(sections[0].entries.count, 9)
-        XCTAssertEqual(sections[1].entries.count, 14, "Runde 3: L2 halten im Raster, R3 halten leert; danach Vorschlag übernehmen")
+        XCTAssertEqual(sections[1].entries.count, 11, "Runde 4: L2 halten und L2 + R2 stehen bei den Ebenen")
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
-        XCTAssertTrue(sections[1].entries.contains {
+        // Alle drei Ebenen mit jeder Taste der Tabelle.
+        XCTAssertEqual(sections[2].entries.map(\.label), [
+            .deleteToLineStart, .newline, .continueWork, .cycleMode, .commands, .switchAccount,
+            .whereToHold, .nextWaiting, .pickAndDictate,
+        ])
+        XCTAssertTrue(sections[2].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]
         })
     }
 
     /// Jede Zeile der Einstellungsseite wirkt in mindestens einem Zusammenhang.
     func testAllBindingsAreBacked() {
-        let contexts = representativeContexts + [.chatPicker, chat(.idle) { $0.draftSuspected = true }, chat(.ended)]
+        let contexts = representativeContexts + [chat(.idle) { $0.draftSuspected = true }, chat(.ended)]
         for section in ControllerLegend.allBindings() {
             for entry in section.entries {
+                // Kombinationen mit einer Ebenen-Taste stehen für die zweite
+                // Taste in dieser Ebene, und dort muss etwas passieren.
                 let backed = contexts.contains { context in
-                    entry.inputs.flatMap(ControllerLegend.gestures(for:))
-                        .contains { ControllerBindingResolver.action(for: $0, in: context) != nil }
+                    ControllerLegend.probes(for: entry).contains { probe in
+                        guard let action = ControllerBindingResolver.action(for: probe, in: context) else { return false }
+                        return action != .rejected
+                    }
                 }
                 XCTAssertTrue(backed, "\(entry.label)")
             }

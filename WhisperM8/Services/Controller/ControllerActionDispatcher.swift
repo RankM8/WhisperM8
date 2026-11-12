@@ -8,12 +8,14 @@ import Foundation
 /// App bewirkt.
 @MainActor
 final class ControllerActionDispatcher: ControllerActionPerforming {
-    private let chats: AgentChatsCommandCenter
-    private let terminals: ControllerTerminalControlling
-    private let dictation: ControllerDictationControlling
-    private let environment: ControllerAppEnvironment
+    // `internal`, weil die Insel in `ControllerActionDispatcher+Island.swift` liegt.
+    let chats: AgentChatsCommandCenter
+    let terminals: ControllerTerminalControlling
+    let dictation: ControllerDictationControlling
+    let environment: ControllerAppEnvironment
     let ui: ControllerUIModel
-    private let now: () -> Date
+    let island: ControllerIslandPresenting
+    let now: () -> Date
 
     /// Rückmeldung am Controller (Vibration). Gesetzt vom Aufbau der Live-Kette.
     var playHaptic: (ControllerHapticPattern) -> Void = { _ in }
@@ -22,9 +24,21 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var debugOverride: () -> ControllerDebugOverride? = { nil }
     /// Titel eines Chats für Legende und Menü.
     var titleForSession: (UUID) -> String? = { _ in nil }
+    /// Zeilen des Reiters „Chats“ der Insel für diese Chats in dieser
+    /// Reihenfolge (Titel, Projekt, Status, „wartet · 2 min“). Im
+    /// Ereignis-Pfad gebaut, wenn „Wohin“ aufgeht.
+    var islandChatRows: (_ order: [UUID], _ current: UUID?) -> [ControllerIslandChatRow] = { _, _ in [] }
+    /// Status eines Chats für den Kopf der Insel.
+    var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
 
-    /// Der offene Umschalter wurde vom Controller geöffnet.
-    private var pickerOpenedByController = false
+    /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
+    var islandState: ControllerIslandSession?
+    /// Ebene, deren Insel eine Aktion schon geschlossen hat (Schnellbefehl,
+    /// Wechsel, Abbruch): bis zum Loslassen der Taste bleibt sie zu.
+    var spentLayer: ControllerLayer?
+    /// Zählt Schließ-Vorgänge, damit ein verzögertes Schließen (Markierung
+    /// eines Schnellbefehls) eine neu geöffnete Insel nicht trifft.
+    var islandGeneration = 0
     /// Chat, dessen Eingabe R3 halten leert — gebunden beim Haltebeginn, damit
     /// ein Chatwechsel während des Haltens nicht den falschen Chat leert.
     private var clearInputTarget: UUID?
@@ -47,6 +61,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         dictation: ControllerDictationControlling,
         environment: ControllerAppEnvironment,
         ui: ControllerUIModel,
+        island: ControllerIslandPresenting,
         now: @escaping () -> Date = Date.init
     ) {
         self.chats = chats
@@ -54,6 +69,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         self.dictation = dictation
         self.environment = environment
         self.ui = ui
+        self.island = island
         self.now = now
     }
 
@@ -61,13 +77,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     /// Fenster, auf das Aktionen wirken: das aktive Agent-Chats-Fenster, oder
     /// das vom Debug-Kanal genannte.
-    private var targetWindowID: UUID? {
+    var targetWindowID: UUID? {
         debugOverride()?.windowID ?? chats.activeWindowID
     }
 
     /// Ausdrückliches Ziel nur im Debug-Fall; sonst routet der Katalog selbst
     /// zum Key-Fenster und prüft, ob es wirklich Key ist.
-    private var explicitWindowID: UUID? { debugOverride()?.windowID }
+    var explicitWindowID: UUID? { debugOverride()?.windowID }
 
     /// Zustand im Moment einer Controller-Eingabe. Ohne Nebenwirkung — auch
     /// Trockenläufe und eine pausierte Steuerung ziehen ihn.
@@ -86,11 +102,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             return snapshot
         }
         snapshot.window = .agentChats
-        if !window.isSwitcherOpen { pickerOpenedByController = false }
-
-        snapshot.chatPickerOpen = window.isSwitcherOpen && pickerOpenedByController
         snapshot.controllerMenuOpen = ui.menu != nil
-        snapshot.workspacePickerOpen = ui.workspacePicker != nil
         snapshot.modalOpen = window.hasSheet || window.ownsKeyOverlay || environment.isModalOpen
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
@@ -101,7 +113,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         return snapshot
     }
 
-    private func chatState(in window: AgentChatsWindowSnapshot) -> ControllerChatState? {
+    func chatState(in window: AgentChatsWindowSnapshot) -> ControllerChatState? {
         guard let sessionID = window.selectedSessionID else { return nil }
         guard let terminal = terminals.state(of: sessionID) else {
             return ControllerChatState(status: .ended, profile: .other, gridActive: window.isGridActive, hasTerminal: false)
@@ -146,6 +158,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             ui.menuDialogOpen = dialogOpen
             ui.menu?.update(dialogOpen: dialogOpen)
         }
+        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
     }
 
     /// Zusammenhang neu bestimmen, ohne dass eine Eingabe kam (Legende nach
@@ -154,23 +167,20 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         _ = snapshot()
     }
 
-    /// Schließt, was der Controller offen hat: eigene Chat-Auswahl, Menü,
-    /// Liste, Halte-Ring. Bei Pause, Trennung und Ausschalten.
+    /// Schließt, was der Controller offen hat: Insel, Menü, Liste,
+    /// Halte-Ring. Bei Pause, Trennung und Ausschalten.
     func closeControllerUI() {
-        if pickerOpenedByController, let windowID = targetWindowID {
-            chats.perform(.switcherCancel, in: windowID)
-        }
-        pickerOpenedByController = false
         clearInputTarget = nil
+        closeIsland()
+        spentLayer = nil
         ui.menu = nil
-        ui.workspacePicker = nil
         ui.leaveList()
         ui.holdProgress = nil
     }
 
     /// Darf eine Aufnahme in diesen Chat mit Kreuz auch gesendet werden? Nur
     /// bei Claude und Codex — in einer Shell wäre der Text ein Befehl.
-    private func submitAllowed(to sessionID: UUID?) -> Bool {
+    func submitAllowed(to sessionID: UUID?) -> Bool {
         guard let sessionID, let state = terminals.state(of: sessionID) else { return false }
         return state.profile == .claude || state.profile == .codex
     }
@@ -178,6 +188,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     // MARK: - Ausführen
 
     func perform(_ action: ControllerAction, in context: ControllerContext) {
+        // Das Ende einer Ebene ohne offene Insel tut nichts — auch nicht den
+        // Ctrl+Tab-Umschalter der Tastatur schließen.
+        if action.isIslandEnd, islandState == nil {
+            spentLayer = nil
+            return
+        }
         closeKeyboardSwitcherIfNeeded()
         clearMultiSelectionIfNeeded(before: action)
         switch action {
@@ -221,20 +237,19 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .menuBack:
             if ui.menu?.back() != true { ui.menu = nil }
 
-        // Chat-Auswahl
-        case .pickerBegin: beginPicker()
-        case let .pickerMove(direction): command(.switcherMove(direction.gridDirection), orReject: false)
-        case .pickerCommit: finishPicker(.switcherCommit)
-        case .pickerCancel: finishPicker(.switcherCancel)
-        case .pickerCommitAndDictate:
-            finishPicker(.switcherCommit)
-            startDictation(target: chatTarget() ?? .frontApp)
-
-        // Workspace-Auswahl
-        case .workspacePickerBegin: beginWorkspacePicker()
-        case let .workspacePickerMove(step): ui.workspacePicker?.move(step)
-        case .workspacePickerCommit: commitWorkspacePicker()
-        case .workspacePickerCancel: ui.workspacePicker = nil
+        // Insel (L1, R1, L2 gehalten)
+        case let .islandShow(layer): showIsland(layer)
+        case .islandClose:
+            closeIsland()
+            spentLayer = nil
+        case .islandRelease: releaseWhereTo()
+        case .islandCancel: spendIsland(.whereTo)
+        case let .islandMove(step): moveInWhereTo(step)
+        case let .islandTab(step): switchWhereToTab(step)
+        case .islandCommit: commitWhereTo(dictate: false)
+        case .islandCommitAndDictate: commitWhereTo(dictate: true)
+        case .islandNextWaiting: jumpToNextWaitingChat()
+        case let .quickDraw(item): performQuickDraw(item)
 
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)
@@ -257,13 +272,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     // MARK: - Befehle an das Fenster
 
     @discardableResult
-    private func command(_ command: AgentChatsCommand, orReject: Bool) -> Bool {
+    func command(_ command: AgentChatsCommand, orReject: Bool) -> Bool {
         let done = chats.perform(command, in: explicitWindowID)
         if !done, orReject { playHaptic(.rejected) }
         return done
     }
 
-    private var selectedSessionID: UUID? {
+    var selectedSessionID: UUID? {
         targetWindowID.flatMap { chats.snapshot(of: $0) }?.selectedSessionID
     }
 
@@ -288,12 +303,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         playHaptic(.inputCleared)
     }
 
-    /// Ein per Tastatur geöffneter Umschalter gehört der Tastatur: Die erste
-    /// ausgeführte Controller-Aktion schließt ihn. Erst hier, nicht im
-    /// Schnappschuss — sonst beendete schon eine pausierte Steuerung oder
-    /// leichtes Stick-Rauschen den Ctrl+Tab-Durchlauf.
+    /// Der Ctrl+Tab-Umschalter gehört der Tastatur (am Controller ersetzt ihn
+    /// die Insel): Die erste ausgeführte Controller-Aktion schließt ihn. Erst
+    /// hier, nicht im Schnappschuss — sonst beendete schon eine pausierte
+    /// Steuerung oder leichtes Stick-Rauschen den Ctrl+Tab-Durchlauf.
     private func closeKeyboardSwitcherIfNeeded() {
-        guard !pickerOpenedByController, let windowID = targetWindowID,
+        guard let windowID = targetWindowID,
               chats.snapshot(of: windowID)?.isSwitcherOpen == true else { return }
         chats.perform(.switcherCancel, in: windowID)
     }
@@ -302,7 +317,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func clearMultiSelectionIfNeeded(before action: ControllerAction) {
         switch action {
         case .holdProgress, .holdProgressCancelled, .rejected, .pauseToggle, .bringAppToFront,
-             .clipboard, .clipboardToggle, .bridgeKey:
+             .clipboard, .clipboardToggle, .bridgeKey, .islandShow, .islandClose, .islandCancel,
+             .islandMove, .islandTab:
             return
         default:
             break
@@ -358,7 +374,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// kommen zehn Schritte pro Sekunde.
     private var listRowsCache: (rows: [AgentChatsListRow], at: Date)?
 
-    private func currentListRows(allowCached: Bool = false) -> [AgentChatsListRow] {
+    func currentListRows(allowCached: Bool = false) -> [AgentChatsListRow] {
         if allowCached, let cache = listRowsCache, now().timeIntervalSince(cache.at) < 1.5 {
             return cache.rows
         }
@@ -431,7 +447,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         DispatchQueue.main.async { [weak self] in self?.refreshListMarker() }
     }
 
-    private func refreshListMarker() {
+    func refreshListMarker() {
         guard ui.area == .list else { return }
         ui.listModel.setRows(currentListRows().map(\.row))
         if ui.markedRow != ui.listModel.marked { ui.markedRow = ui.listModel.marked }
@@ -443,45 +459,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if ui.markedRow != ui.listModel.marked { ui.markedRow = ui.listModel.marked }
     }
 
-    // MARK: - Chat-Auswahl (L2)
-
-    private func beginPicker() {
-        pickerOpenedByController = command(.switcherBegin, orReject: true)
-    }
-
-    private func finishPicker(_ command: AgentChatsCommand) {
-        self.command(command, orReject: false)
-        pickerOpenedByController = false
-    }
-
-    // MARK: - Workspace-Auswahl (L2 halten im Raster)
-
-    /// Öffnet die Auswahl der angelegten Workspaces, Markierung auf dem
-    /// aktuellen. Ohne Workspaces „geht nicht“.
-    private func beginWorkspacePicker() {
-        let choices = targetWindowID.map { chats.workspaceChoices(of: $0) } ?? []
-        guard !choices.isEmpty else {
-            playHaptic(.rejected)
-            return
-        }
-        ui.leaveList()
-        ui.workspacePicker = ControllerWorkspacePickerModel(choices: choices)
-    }
-
-    /// Wechselt in den markierten Workspace — derselbe Weg wie der Klick auf
-    /// seinen Kopf in der Seitenleiste (Konflikte inklusive). Der aktuelle
-    /// Workspace: nur schließen.
-    private func commitWorkspacePicker() {
-        guard let picker = ui.workspacePicker else { return }
-        ui.workspacePicker = nil
-        guard let target = picker.selected, !target.isCurrent else { return }
-        command(.activateWorkspace(target.id), orReject: true)
-    }
-
     // MARK: - Diktat
 
     /// Der ausgewählte Chat des aktiven Fensters als Ziel, sofern er läuft.
-    private func chatTarget() -> DictationDeliveryTarget? {
+    func chatTarget() -> DictationDeliveryTarget? {
         guard let sessionID = selectedSessionID, terminals.state(of: sessionID)?.isRunning == true else { return nil }
         return .agentChat(sessionID: sessionID)
     }
@@ -506,7 +487,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         startDictation(target: target)
     }
 
-    private func startDictation(target: DictationDeliveryTarget) {
+    func startDictation(target: DictationDeliveryTarget) {
         guard dictation.phase == nil else { return }
         let label: String
         if case let .agentChat(sessionID) = target {
@@ -533,9 +514,17 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             ui.menu = nil
             return
         }
-        let selected = selectedSessionID
-        var target: SidebarNavigationRow? = selected.map { .chat($0) }
+        var target: SidebarNavigationRow? = selectedSessionID.map { .chat($0) }
         if case .list = context, let marked = ui.markedRow, marked.sessionID != nil { target = marked }
+        let setup = menuSetup(for: target)
+        ui.menuDialogOpen = setup.dialogOpen
+        ui.menu = ControllerMenuModel(setup: setup)
+    }
+
+    /// Lage beim Öffnen des Menüs bzw. der R1-Raute: Aktionen am Chat wirken
+    /// auf `target`, Eingaben nur, wenn das der ausgewählte, lebende Chat ist.
+    func menuSetup(for target: SidebarNavigationRow?) -> ControllerMenuSetup {
+        let selected = selectedSessionID
         var setup = ControllerMenuSetup()
         setup.sessionID = target?.sessionID
         setup.target = target
@@ -545,8 +534,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             setup.profile = terminal.profile
             setup.dialogOpen = terminal.status == .awaitingInput
         }
-        ui.menuDialogOpen = setup.dialogOpen
-        ui.menu = ControllerMenuModel(setup: setup)
+        return setup
     }
 
     private func activateMenuItem() {
@@ -577,7 +565,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
     }
 
-    private func perform(_ item: ControllerMenuItem, setup: ControllerMenuSetup) {
+    func perform(_ item: ControllerMenuItem, setup: ControllerMenuSetup) {
         switch item {
         case .continueWork:
             // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
@@ -623,7 +611,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Befehl aus der zweiten Ebene: „/“ bleibt ungesendet stehen, damit sich
     /// die Liste der CLI öffnet; feste Befehle werden gesendet (so öffnet
     /// `/model` gleich die Modellwahl). Nie an einen Entwurf hängen.
-    private func sendCommand(_ command: ControllerSlashCommand, setup: ControllerMenuSetup) {
+    func sendCommand(_ command: ControllerSlashCommand, setup: ControllerMenuSetup) {
         guard let sessionID = inputTarget(of: setup), let state = terminals.state(of: sessionID),
               !state.draftSuspected else {
             return playHaptic(.rejected)
@@ -660,6 +648,8 @@ private extension ControllerChatKey {
         case .backspace: return .backspace
         case .space: return .space
         case .deleteWord: return .deleteWord
+        case .deleteToLineStart: return .killLineStart
+        case .newline: return .newline
         }
     }
 }

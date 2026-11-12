@@ -28,6 +28,35 @@ enum ControllerButton: String, CaseIterable, Sendable {
     var isBumper: Bool { self == .l1 || self == .r1 }
 }
 
+/// Die drei Ebenen der Controller-Insel (Runde 4). Eine Ebenen-Taste kurz
+/// getippt wechselt den Chat wie bisher; gehalten wird sie zur Ebene, und die
+/// anderen Tasten bekommen solange eine eigene Bedeutung.
+enum ControllerLayer: String, CaseIterable, Sendable {
+    /// L1: Schreiben (bis Zeilenanfang löschen, Zeilenumbruch).
+    case writing
+    /// R1: Schnellbefehle als Raute (Weiter, Modus, Befehle, Konto).
+    case quickDraw
+    /// L2: Wohin (Chats und Workspaces, nächster wartender Chat).
+    case whereTo
+
+    init?(key: ControllerButton) {
+        switch key {
+        case .l1: self = .writing
+        case .r1: self = .quickDraw
+        case .l2: self = .whereTo
+        default: return nil
+        }
+    }
+
+    var key: ControllerButton {
+        switch self {
+        case .writing: return .l1
+        case .quickDraw: return .r1
+        case .whereTo: return .l2
+        }
+    }
+}
+
 enum ControllerStickSide: String, CaseIterable, Sendable {
     case left, right
 }
@@ -54,9 +83,10 @@ enum ControllerInputEvent: Equatable, Sendable {
 /// Diskrete Gesten, die der Erkenner aus den Eingaben macht. Nur diese gehen
 /// an den MainActor.
 enum ControllerGesture: Hashable, Sendable {
-    /// Sofort-Taste wurde gedrückt (auch L1/R1, wenn kein Akkord daraus wurde).
+    /// Sofort-Taste wurde gedrückt.
     case press(ControllerButton)
-    /// Tippen-oder-Halten-Taste vor der Halte-Schwelle losgelassen.
+    /// Tippen-oder-Halten-Taste vor der Halte-Schwelle losgelassen. Bei den
+    /// Ebenen-Tasten (L1, R1, L2) nur, wenn keine andere Taste dazwischen kam.
     case tap(ControllerButton)
     /// Tippen-oder-Halten-Taste gedrückt, die Halte-Zeit läuft (für die Fortschrittsanzeige).
     case holdPending(ControllerButton, duration: TimeInterval)
@@ -74,6 +104,17 @@ enum ControllerGesture: Hashable, Sendable {
     case chordPending(duration: TimeInterval)
     case chordCompleted
     case chordCancelled
+    /// Ebenen-Taste seit der Halte-Schwelle gehalten: Die Insel erscheint.
+    /// Kommt auch, wenn vorher schon eine Kombination lief.
+    case layerBegan(ControllerLayer)
+    /// Ebenen-Taste nach Halten oder Kombination losgelassen (kein `.tap`).
+    case layerEnded(ControllerLayer)
+    /// Ebene ohne Loslassen beendet: Pause-Akkord oder `reset`.
+    case layerCancelled(ControllerLayer)
+    /// Geste einer anderen Taste, während die Ebenen-Taste gehalten wird.
+    /// Tasten wirken darin sofort beim Drücken (`.press`), ihr Loslassen ist
+    /// still; Viereck wiederholt in der Ebene „Schreiben“ (`.holdRepeat`).
+    indirect case inLayer(ControllerLayer, ControllerGesture)
     case move(ControllerDirection, source: ControllerMoveSource, isRepeat: Bool)
     /// Rechter Stick; positiv heißt nach unten scrollen.
     case scroll(lines: Int)

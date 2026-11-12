@@ -59,7 +59,7 @@ final class ControllerContextResolverTests: XCTestCase {
         XCTAssertEqual(context { $0.appIsActive = false }, .outsideApp(backgroundEnabled: false))
     }
 
-    func testWindowKindsBeatMenuPickerModalAndList() {
+    func testWindowKindsBeatMenuModalAndList() {
         XCTAssertEqual(context {
             $0.window = .none
             $0.controllerMenuOpen = true
@@ -67,15 +67,14 @@ final class ControllerContextResolverTests: XCTestCase {
         }, .noWindow)
         XCTAssertEqual(context {
             $0.window = .other
-            $0.chatPickerOpen = true
+            $0.controllerMenuOpen = true
             $0.area = .list
         }, .otherWindow)
     }
 
-    func testMenuBeatsPickerAndCarriesDialogState() {
+    func testMenuBeatsModalAndCarriesDialogState() {
         XCTAssertEqual(context {
             $0.controllerMenuOpen = true
-            $0.chatPickerOpen = true
             $0.modalOpen = true
         }, .menu(dialogOpen: false))
         var asking = chat
@@ -86,29 +85,12 @@ final class ControllerContextResolverTests: XCTestCase {
         }, .menu(dialogOpen: true))
     }
 
-    func testPickerBeatsModalBeatsList() {
-        XCTAssertEqual(context {
-            $0.chatPickerOpen = true
-            $0.modalOpen = true
-        }, .chatPicker)
+    func testModalBeatsList() {
         XCTAssertEqual(context {
             $0.modalOpen = true
             $0.area = .list
         }, .modal)
         XCTAssertEqual(context { $0.area = .list }, .list)
-    }
-
-    /// Runde 3: Die Workspace-Auswahl gilt vor Dialog und Liste.
-    func testWorkspacePickerBeatsModalAndList() {
-        XCTAssertEqual(context {
-            $0.workspacePickerOpen = true
-            $0.modalOpen = true
-            $0.area = .list
-        }, .workspacePicker)
-        XCTAssertEqual(context {
-            $0.controllerMenuOpen = true
-            $0.workspacePickerOpen = true
-        }, .menu(dialogOpen: false))
     }
 
     func testContentWithoutChatFallsBackToList() {
