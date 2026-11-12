@@ -170,9 +170,25 @@ final class ControllerMenuModelTests: XCTestCase {
     func testDialogOpeningLaterClosesCommandsLevel() {
         var model = ControllerMenuModel(setup: setup(), selected: .commands)
         XCTAssertTrue(model.openSubmenu())
-        model.update(dialogOpen: true)
+        model.update(dialogOpen: true, chatBusy: false)
         XCTAssertNil(model.submenu)
         XCTAssertEqual(model.selected, .rename, "Auswahl rückt auf einen aktiven Eintrag")
+    }
+
+    /// Review nach Runde 4: „Weiter“ und „Modus wechseln“ nur bei ruhendem
+    /// Chat; Befehle bleiben (eigener Schutz gegen Entwürfe).
+    func testContinueAndModeNeedARestingChat() {
+        var busy = setup()
+        busy.chatBusy = true
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.continueWork, setup: busy))
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.cycleMode, setup: busy))
+        XCTAssertTrue(ControllerMenuModel.isEnabled(.commands, setup: busy))
+        var model = ControllerMenuModel(setup: setup(), selected: .continueWork)
+        XCTAssertEqual(model.selected, .continueWork)
+        model.update(dialogOpen: false, chatBusy: true)
+        XCTAssertNotEqual(model.selected, .continueWork)
+        model.update(dialogOpen: false, chatBusy: false)
+        XCTAssertTrue(model.top.isEnabled(.continueWork))
     }
 
     func testWithoutLiveChatOrChatInfo() {

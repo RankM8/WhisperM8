@@ -80,6 +80,16 @@ protocol ControllerAppEnvironment: AnyObject {
     func openControllerSettings()
 }
 
+/// Anzeige der Controller-Insel (eigenes Fenster an der Notch bzw. als Pille
+/// unter der Menüleiste). Die Live-Fassung ist `ControllerIslandPresenter`.
+@MainActor
+protocol ControllerIslandPresenting: AnyObject {
+    /// Einblenden oder, wenn sie schon steht, auf den neuen Inhalt bringen.
+    /// - Parameter screenDisplayID: Bildschirm des Agent-Chats-Fensters.
+    func show(_ model: ControllerIslandModel, screenDisplayID: UInt32?)
+    func hide()
+}
+
 /// Fortschritt eines Haltens, als Start und Dauer: Die Anzeige läuft als eine
 /// endliche Animation, nicht als Wert pro Bild.
 struct ControllerHoldProgress: Equatable {
@@ -104,8 +114,6 @@ final class ControllerUIModel {
     var markedRow: SidebarNavigationRow?
     /// Offenes Menü (Options); `nil` = zu.
     var menu: ControllerMenuModel?
-    /// Offene Workspace-Auswahl (L2 halten im Raster); `nil` = zu.
-    var workspacePicker: ControllerWorkspacePickerModel?
     /// Im Ziel-Chat ist eine Rückfrage offen: Einträge, die Text senden, sind aus.
     var menuDialogOpen = false
     var holdProgress: ControllerHoldProgress?

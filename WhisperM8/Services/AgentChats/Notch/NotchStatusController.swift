@@ -582,6 +582,14 @@ final class NotchStatusController {
         isReleasingKey = false
     }
 
+    /// Für die Controller-Insel: die Zähler, wenn die Anzeige gerade auf
+    /// diesem Bildschirm steht (`nil` sonst). Nur lesen, nichts umbauen.
+    func visibleSummary(onDisplay displayID: UInt32) -> NotchSummary? {
+        guard config.isActive, let lastDisplay, panel?.isVisible == true,
+              let screen = cachedScreen ?? nil, screen.displayID == displayID else { return nil }
+        return lastDisplay.summary
+    }
+
     /// Klick auf eine Zeile: WhisperM8-Fenster nach vorn, genau dieser Chat.
     func select(sessionID: UUID) {
         collapse(rebuildAfter: true)

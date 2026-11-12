@@ -273,18 +273,15 @@ extension AgentChatsView {
         return nil
     }
 
-    /// Öffnet den Umschalter. Gemeinsamer Weg für Ctrl+Tab und den
-    /// Befehls-Katalog. `direction` 0 lässt die Markierung auf dem aktuellen
-    /// Chat (Controller: erst halten, dann bewegen); ±1 markiert sofort den
-    /// Nachbarn (Ctrl+Tab). Braucht mindestens zwei Ziele, sonst bleibt der
-    /// Umschalter zu.
+    /// Öffnet den Umschalter (Ctrl+Tab); `direction` ±1 markiert sofort den
+    /// Nachbarn. Braucht mindestens zwei Ziele, sonst bleibt der Umschalter
+    /// zu. Am Controller ersetzt ihn die Insel (L2 halten).
     /// - Returns: `true`, wenn er jetzt offen ist.
     @discardableResult
     func beginTabSwitcher(direction: Int, modifiers: NSEvent.ModifierFlags) -> Bool {
         // Umfang (Grid / Workspace / Projekt) statt aller offenen Tabs —
         // siehe `TabSwitcherScope`.
         tabSwitcherRun.lastModifiers = modifiers
-        commandState.switcherOpenedWithoutModifier = !modifiers.contains(.control)
         tabSwitcher = TabSwitcherModel.begin(
             order: refreshTabSwitcherScope(),
             current: selectedSession?.id,
@@ -292,14 +289,12 @@ extension AgentChatsView {
         )
         if tabSwitcher == nil {
             tabSwitcherSessions = []
-            commandState.switcherOpenedWithoutModifier = false
         }
         syncTabSwitcherGridMarking()
         return tabSwitcher != nil
     }
 
-    /// Ein Pfeil-Schritt im laufenden Umschalter. Gemeinsamer Weg für die
-    /// Pfeiltasten bei gehaltenem Ctrl und den Befehls-Katalog.
+    /// Ein Pfeil-Schritt im laufenden Umschalter (Pfeiltasten bei gehaltenem Ctrl).
     func moveTabSwitcher(_ arrow: GridFocusDirection) {
         if isGridActive {
             // Grid sichtbar (Situation A): geometrisch wie ⌃⌘-Pfeile.
@@ -370,13 +365,6 @@ extension AgentChatsView {
                     current: event.modifierFlags
                 )
                 tabSwitcherRun.lastModifiers = event.modifierFlags
-                if commandState.switcherOpenedWithoutModifier {
-                    // Ohne Ctrl geöffnet (Controller): Es gibt kein Loslassen,
-                    // das bestätigen könnte. Jede Modifier-Änderung zählt als
-                    // Griff zur Tastatur und bricht ab.
-                    if action != .none { cancelTabSwitcher() }
-                    return event
-                }
                 switch action {
                 case .none: break
                 // Echtes Loslassen von Control (egal ob Shift o. ä. noch
@@ -426,7 +414,6 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
-        commandState.switcherOpenedWithoutModifier = false
         guard let target = switcher.commitTarget(order: order) else { return }
         selectTabSwitcherTarget(target)
     }
@@ -442,7 +429,6 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
-        commandState.switcherOpenedWithoutModifier = false
         guard order.contains(sessionID) else { return }
         selectTabSwitcherTarget(sessionID)
     }
@@ -484,7 +470,6 @@ extension AgentChatsView {
         tabSwitcher = nil
         tabSwitcherSessions = []
         tabSwitcherGridMarking.reset()
-        commandState.switcherOpenedWithoutModifier = false
     }
 
     /// Löst den Switcher-Umfang frisch auf (`TabSwitcherScope`) und legt die

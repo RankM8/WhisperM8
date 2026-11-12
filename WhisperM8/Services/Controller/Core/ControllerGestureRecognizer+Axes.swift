@@ -30,10 +30,21 @@ extension ControllerGestureRecognizer {
         leftDirection = direction
         guard let direction else {
             leftRepeatAt = nil
+            leftStickInLayer = false
             return []
         }
         leftRepeatAt = time + config.repeatDelay
-        return [.move(direction, source: .leftStick, isRepeat: false)]
+        let move = ControllerGesture.move(direction, source: .leftStick, isRepeat: false)
+        // Ein Stoß während einer gehaltenen Ebenen-Taste gehört zur Ebene
+        // (bei L2 öffnet er die Liste) und macht aus ihr kein Tippen mehr.
+        guard var current = layer else {
+            leftStickInLayer = false
+            return [move]
+        }
+        current.used = true
+        layer = current
+        leftStickInLayer = true
+        return [.inLayer(current.layer, move)]
     }
 
     /// Höchstens eine Richtung ist aktiv, und zwar die der dominanten Achse.
@@ -85,16 +96,29 @@ extension ControllerGestureRecognizer {
     mutating func repeats(at time: TimeInterval) -> [ControllerGesture] {
         var gestures: [ControllerGesture] = []
         if var state = dpadRepeat, Self.isDue(state.nextAt, at: time) {
-            gestures.append(.move(state.direction, source: .dpad, isRepeat: true))
+            gestures.append(inLayerIf(dpadInLayer, .move(state.direction, source: .dpad, isRepeat: true)))
             state.nextAt = nextRepeat(after: state.nextAt, now: time)
             dpadRepeat = state
         }
         if let direction = leftDirection, let nextAt = leftRepeatAt, Self.isDue(nextAt, at: time) {
-            gestures.append(.move(direction, source: .leftStick, isRepeat: true))
+            gestures.append(inLayerIf(leftStickInLayer, .move(direction, source: .leftStick, isRepeat: true)))
             leftRepeatAt = nextRepeat(after: nextAt, now: time)
+        }
+        if var state = layerRepeat, let current = layer, Self.isDue(state.nextAt, at: time) {
+            gestures.append(.inLayer(current.layer, .holdRepeat(state.button)))
+            let next = state.nextAt + config.layerRepeatInterval
+            state.nextAt = Self.isDue(next, at: time) ? time + config.layerRepeatInterval : next
+            layerRepeat = state
         }
         gestures += holdRepeats(at: time)
         return gestures
+    }
+
+    /// Wiederholung einer Bewegung, die in der Ebene begann, bleibt in ihr.
+    /// (Endet die Ebene, hält `endLayerRepeats` die Wiederholung an.)
+    private func inLayerIf(_ inLayer: Bool, _ gesture: ControllerGesture) -> ControllerGesture {
+        guard inLayer, let layer else { return gesture }
+        return .inLayer(layer.layer, gesture)
     }
 
     /// Gehaltene Tasten mit Wiederholung (Viereck): erst `.holdRepeat` im

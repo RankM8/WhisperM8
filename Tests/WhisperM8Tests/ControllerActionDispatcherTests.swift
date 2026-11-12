@@ -2,118 +2,10 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-@MainActor
-private final class TerminalSpy: ControllerTerminalControlling {
-    var states: [UUID: ControllerTerminalState] = [:]
-    private(set) var keys: [TerminalControlKey] = []
-    private(set) var scrolled: [Int] = []
-    private(set) var texts: [(text: String, submit: Bool)] = []
-
-    func state(of sessionID: UUID) -> ControllerTerminalState? { states[sessionID] }
-    func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool { keys.append(key); return true }
-    func scroll(lines: Int, in sessionID: UUID) { scrolled.append(lines) }
-    var clearResult = true
-    private(set) var clearedSessions: [UUID] = []
-    func clearInput(in sessionID: UUID) -> Bool {
-        clearedSessions.append(sessionID)
-        return clearResult
-    }
-    func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool {
-        texts.append((text, submit))
-        return true
-    }
-    private(set) var choiceListsOpened: [UUID] = []
-    func noteChoiceListOpened(in sessionID: UUID) { choiceListsOpened.append(sessionID) }
-}
-
-@MainActor
-private final class DictationSpy: ControllerDictationControlling {
-    var phase: ControllerRecordingPhase?
-    var isQuickActionRunning = false
-    var targetSessionID: UUID?
-    private(set) var started: [DictationDeliveryTarget] = []
-    private(set) var stopped: [Bool] = []
-    private(set) var cancelCount = 0
-    private(set) var modeSteps: [Int] = []
-
-    private(set) var labels: [String?] = []
-    func start(target: DictationDeliveryTarget, label: String?) {
-        started.append(target); labels.append(label); phase = .recording
-        if case let .agentChat(id) = target { targetSessionID = id }
-    }
-    func stop(submit: Bool) { stopped.append(submit); phase = .transcribing; targetSessionID = nil }
-    func cancel() { cancelCount += 1; phase = nil }
-    func stepOutputMode(_ step: Int) { modeSteps.append(step) }
-}
-
-@MainActor
-private final class EnvironmentSpy: ControllerAppEnvironment {
-    var isAppActive = true
-    var hasOtherKeyWindow = false
-    var isModalOpen = false
-    var isClipboardPanelOpen = false
-    private(set) var clipboardToggles = 0
-    private(set) var clipboardCommands: [ControllerClipboardCommand] = []
-    private(set) var broughtToFront = 0
-    private(set) var bridgeKeys: [ControllerBridgeKey] = []
-    private(set) var openedSettings = 0
-    var clipboardState = ControllerClipboardState()
-
-    func toggleClipboardPanel() { clipboardToggles += 1 }
-    func clipboard(_ command: ControllerClipboardCommand) { clipboardCommands.append(command) }
-    func bringAgentChatsToFront() { broughtToFront += 1 }
-    func postBridgeKey(_ key: ControllerBridgeKey) { bridgeKeys.append(key) }
-    func openControllerSettings() { openedSettings += 1 }
-}
-
-/// Fenster-Attrappe am Befehls-Katalog.
-@MainActor
-private final class WindowFake {
-    let id = UUID()
-    var selected: UUID? = UUID()
-    var isGridActive = false
-    var isSwitcherOpen = false
-    var hasSheet = false
-    var isSidebarVisible = true
-    var hasMultiSelection = false
-    var isNewChatPickerOpen = false
-    var chatInfo: ControllerChatActionInfo? = ControllerChatActionInfo(title: "Chat")
-    var rows: [AgentChatsListRow] = []
-    var workspaces: [ControllerWorkspaceChoice] = []
-    /// Befehle, die „ging nicht“ melden sollen.
-    var failing: Set<String> = []
-    private(set) var commands: [AgentChatsCommand] = []
-
-    var handler: AgentChatsCommandCenter.Handler {
-        AgentChatsCommandCenter.Handler(
-            perform: { [unowned self] command in
-                commands.append(command)
-                switch command {
-                case .switcherBegin: isSwitcherOpen = true
-                case .switcherCommit, .switcherCancel: isSwitcherOpen = false
-                case .setSidebarVisible(let visible): isSidebarVisible = visible
-                case .clearMultiSelection: hasMultiSelection = false
-                case .selectSession(let id): selected = id
-                case .selectWorkspaceChat(let id, _): selected = id
-                case .showNewChatPicker: isNewChatPickerOpen = true
-                default: break
-                }
-                return !failing.contains(String(describing: command))
-            },
-            snapshot: { [unowned self] in
-                AgentChatsWindowSnapshot(
-                    windowID: id, isKeyWindow: true, selectedSessionID: selected,
-                    isGridActive: isGridActive, canReturnToWorkspace: false,
-                    isSwitcherOpen: isSwitcherOpen, hasSheet: hasSheet,
-                    isSidebarVisible: isSidebarVisible, hasMultiSelection: hasMultiSelection,
-                    isArchiveMode: false, isNewChatPickerOpen: isNewChatPickerOpen)
-            },
-            listRows: { [unowned self] in rows },
-            chatActionInfo: { [unowned self] _ in chatInfo },
-            workspaceChoices: { [unowned self] in workspaces }
-        )
-    }
-}
+private typealias TerminalSpy = ControllerTerminalSpy
+private typealias DictationSpy = ControllerDictationSpy
+private typealias EnvironmentSpy = ControllerEnvironmentSpy
+private typealias WindowFake = ControllerWindowFake
 
 /// Ausführer der Controller-Steuerung: Zustand der App als Schnappschuss und
 /// die Wirkung jeder Aktion.
@@ -142,7 +34,7 @@ final class ControllerActionDispatcherTests: XCTestCase {
         haptics = []
         dispatcher = ControllerActionDispatcher(
             chats: center, terminals: terminals, dictation: dictation, environment: environment,
-            ui: ui, now: { [unowned self] in clock })
+            ui: ui, island: ControllerIslandSpy(), now: { [unowned self] in clock })
         dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
         setTerminal(status: .idle)
     }
@@ -739,118 +631,7 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(ui.area, .list, "bleibt in der Liste")
     }
 
-    // MARK: - Workspace-Auswahl (Runde 3)
-
-    private func makeWorkspaces() -> [UUID] {
-        let ids = [UUID(), UUID(), UUID()]
-        window.workspaces = ids.enumerated().map { index, id in
-            ControllerWorkspaceChoice(id: id, name: "W\(index)", colorHex: "#888888", chatCount: index,
-                                      hasWaitingChat: index == 2, isCurrent: index == 1)
-        }
-        return ids
-    }
-
-    private func resolveAndPerform(_ gesture: ControllerGesture) {
-        let current = context
-        if let action = ControllerBindingResolver.action(for: gesture, in: current) {
-            dispatcher.perform(action, in: current)
-        }
-    }
-
-    /// Ganze Kette: L2 halten im Raster öffnet die Auswahl auf dem aktuellen
-    /// Workspace, Stick bewegt, Loslassen wechselt über denselben Befehl wie
-    /// der Klick auf den Kopf in der Seitenleiste.
-    func testWorkspacePickerOpensMovesAndSwitchesOnRelease() {
-        let ids = makeWorkspaces()
-        window.isGridActive = true
-        resolveAndPerform(.holdBegan(.l2))
-        XCTAssertEqual(context, .workspacePicker)
-        XCTAssertEqual(ui.workspacePicker?.selectedID, ids[1], "Start beim aktuellen Workspace")
-        resolveAndPerform(.move(.down, source: .leftStick, isRepeat: false))
-        resolveAndPerform(.move(.down, source: .dpad, isRepeat: true))
-        XCTAssertEqual(ui.workspacePicker?.selectedID, ids[2], "am Rand bleibt die Markierung")
-        resolveAndPerform(.press(.r2))
-        XCTAssertTrue(dictation.started.isEmpty, "R2 tut in der Auswahl nichts")
-        resolveAndPerform(.holdEnded(.l2))
-        XCTAssertNil(ui.workspacePicker)
-        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[2]))
-        XCTAssertFalse(window.commands.contains(.switcherBegin), "keine Chat-Auswahl im Raster")
-    }
-
-    func testWorkspacePickerCrossSwitchesAndCircleCancels() {
-        let ids = makeWorkspaces()
-        window.isGridActive = true
-        perform(.workspacePickerBegin)
-        perform(.workspacePickerMove(step: -1))
-        perform(.workspacePickerCommit)
-        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[0]))
-
-        perform(.workspacePickerBegin)
-        perform(.workspacePickerMove(step: 1))
-        perform(.workspacePickerCancel)
-        XCTAssertNil(ui.workspacePicker)
-        XCTAssertEqual(window.commands.last, .activateWorkspace(ids[0]), "Kreis wechselt nicht")
-    }
-
-    /// Den aktuellen Workspace zu wählen, schließt nur.
-    func testWorkspacePickerCommitOnCurrentOnlyCloses() {
-        _ = makeWorkspaces()
-        perform(.workspacePickerBegin)
-        perform(.workspacePickerCommit)
-        XCTAssertNil(ui.workspacePicker)
-        XCTAssertFalse(window.commands.contains { if case .activateWorkspace = $0 { return true }; return false })
-        XCTAssertEqual(haptics, [])
-    }
-
-    func testWorkspacePickerWithoutWorkspacesIsRejected() {
-        perform(.workspacePickerBegin)
-        XCTAssertNil(ui.workspacePicker)
-        XCTAssertEqual(haptics, [.rejected])
-    }
-
-    func testWorkspacePickerSwitchConflictIsRejected() {
-        let ids = makeWorkspaces()
-        window.failing = [String(describing: AgentChatsCommand.activateWorkspace(ids[0]))]
-        perform(.workspacePickerBegin)
-        perform(.workspacePickerMove(step: -1))
-        perform(.workspacePickerCommit)
-        XCTAssertEqual(haptics, [.rejected])
-    }
-
-    func testCloseControllerUIClosesWorkspacePicker() {
-        _ = makeWorkspaces()
-        perform(.workspacePickerBegin)
-        dispatcher.closeControllerUI()
-        XCTAssertNil(ui.workspacePicker)
-    }
-
-    // MARK: - Chat-Auswahl
-
-    func testPickerOpensMovesAndCommits() {
-        perform(.pickerBegin)
-        XCTAssertEqual(context, .chatPicker)
-        perform(.pickerMove(.down))
-        perform(.pickerCommit)
-        XCTAssertEqual(window.commands, [.switcherBegin, .switcherMove(.down), .switcherCommit])
-        guard case .chat = context else { return XCTFail("nach dem Schließen wieder chat") }
-    }
-
-    /// Runde 2: Kreuz in der Chat-Auswahl wechselt sofort; das spätere
-    /// Loslassen von L2 bewirkt nichts mehr.
-    func testCrossCommitsPickerAndLaterReleaseDoesNothing() {
-        perform(.pickerBegin)
-        let crossAction = ControllerBindingResolver.action(for: .press(.cross), in: context)
-        XCTAssertEqual(crossAction, .pickerCommit)
-        perform(crossAction!)
-        XCTAssertEqual(window.commands, [.switcherBegin, .switcherCommit])
-        XCTAssertNil(ControllerBindingResolver.action(for: .holdEnded(.l2), in: context))
-    }
-
-    func testPickerWithTooFewChatsIsRejected() {
-        window.failing = [String(describing: AgentChatsCommand.switcherBegin)]
-        perform(.pickerBegin)
-        XCTAssertEqual(haptics, [.rejected])
-    }
+    // MARK: - Ctrl+Tab der Tastatur
 
     /// Ein per Tastatur geöffneter Umschalter gehört der Tastatur: Die erste
     /// Controller-Eingabe schließt ihn.
@@ -867,13 +648,6 @@ final class ControllerActionDispatcherTests: XCTestCase {
         dispatcher.refreshContext()
         XCTAssertEqual(window.commands, [])
         XCTAssertTrue(window.isSwitcherOpen)
-    }
-
-    func testPickerCommitAndDictateTargetsTheChosenChat() {
-        perform(.pickerBegin)
-        perform(.pickerCommitAndDictate)
-        XCTAssertEqual(window.commands.suffix(1), [.switcherCommit])
-        XCTAssertEqual(dictation.started, [.agentChat(sessionID: window.selected!)])
     }
 
     // MARK: - Diktat
@@ -1157,13 +931,11 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(dictation.stopped, [false])
     }
 
-    func testCloseControllerUIClosesPickerMenuListAndRing() {
+    func testCloseControllerUIClosesMenuListAndRing() {
         window.rows = [AgentChatsListRow(row: .chat(window.selected!))]
-        perform(.pickerBegin)
         perform(.menuToggle)
         perform(.holdProgress(.circle, duration: 0.4))
         dispatcher.closeControllerUI()
-        XCTAssertEqual(window.commands.last, .switcherCancel)
         XCTAssertNil(ui.menu)
         XCTAssertNil(ui.holdProgress)
         XCTAssertEqual(ui.area, .content)

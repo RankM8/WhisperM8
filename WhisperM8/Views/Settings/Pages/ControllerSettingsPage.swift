@@ -174,6 +174,7 @@ private struct ControllerBindingsSection: View {
         switch section.kind {
         case .core: SettingsSection("Core buttons") { rows }
         case .extra: SettingsSection("More buttons") { rows }
+        case .layers: SettingsSection("Hold L1, R1 or L2: layers") { rows }
         }
     }
 

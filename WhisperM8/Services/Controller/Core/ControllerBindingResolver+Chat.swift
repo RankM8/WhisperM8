@@ -13,9 +13,10 @@ extension ControllerBindingResolver {
         // Navigation: wirkt auch bei beendetem Chat oder reinem Verlauf.
         case let .move(direction, .leftStick, isRepeat):
             return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
-        // L1/R1 folgen der Liste links, nicht den Tabs (die Tastatur bleibt bei den Tabs).
-        case .press(.l1): return .adjacentChat(step: -1)
-        case .press(.r1): return .adjacentChat(step: 1)
+        // L1/R1 getippt folgen der Liste links, nicht den Tabs (die Tastatur
+        // bleibt bei den Tabs). Gehalten sind sie Ebenen, kein Durchlaufen.
+        case .tap(.l1): return .adjacentChat(step: -1)
+        case .tap(.r1): return .adjacentChat(step: 1)
         // Dreieck: Leerzeichen (Runde 3; „nächster wartender Chat“ entfällt).
         // Nur bei Claude und Codex, in Shells „geht nicht“.
         case .press(.triangle): return writingKeysAllowed(state) ? .chatKey(.space) : writingKeyRejected(state)
@@ -35,12 +36,8 @@ extension ControllerBindingResolver {
         case .holdCancelled(.r3): return clearAllowed(state) ? .holdProgressCancelled(.r3) : nil
         case .press(.touchpad): return .clipboardToggle
         case .press(.r2): return .dictationToggle
+        // L2 gehalten ist die Ebene „Wohin“ (Insel, Runde 4).
         case .tap(.l2): return .lastChat
-        // Im Raster öffnet L2 halten die Workspace-Auswahl (Runde 3), in der
-        // Einzelansicht die Chat-Auswahl. Die Tastatur (Ctrl+Tab) bleibt bei den Chats.
-        case .holdBegan(.l2): return state.gridActive ? .workspacePickerBegin : .pickerBegin
-        case let .holdPending(.l2, duration): return .holdProgress(.l2, duration: duration)
-        case .holdCancelled(.l2): return .holdProgressCancelled(.l2)
         case let .scroll(lines): return .scroll(lines: lines)
 
         // Steuerkreuz: Pfeile ins Terminal nur, wo eine Auswahl offen ist
@@ -99,7 +96,7 @@ extension ControllerBindingResolver {
 
     /// „Geht nicht“ für eine Schreibtaste in einem lebenden Chat ohne
     /// Eingabefeld (Shell); bei beendetem Chat still.
-    private static func writingKeyRejected(_ state: ControllerChatState) -> ControllerAction? {
+    static func writingKeyRejected(_ state: ControllerChatState) -> ControllerAction? {
         state.acceptsKeys ? .rejected : nil
     }
 

@@ -7,6 +7,10 @@ enum ControllerChatKey: String, CaseIterable, Sendable {
     case space
     /// Viereck lange gehalten: ganze Wörter löschen.
     case deleteWord
+    /// L1 halten, dann Viereck: bis zum Zeilenanfang löschen (Ctrl+U).
+    case deleteToLineStart
+    /// L1 halten, dann Dreieck: Zeilenumbruch, ohne zu senden (Ctrl+J).
+    case newline
 
     init(_ direction: ControllerDirection) {
         switch direction {
@@ -99,18 +103,30 @@ enum ControllerAction: Equatable, Sendable {
     /// Kreis: eine Ebene zurück, auf der ersten Ebene schließen.
     case menuBack
 
-    // Chat-Auswahl (L2)
-    case pickerBegin
-    case pickerMove(ControllerDirection)
-    case pickerCommit
-    case pickerCancel
-    case pickerCommitAndDictate
-
-    // Workspace-Auswahl (L2 halten im Raster)
-    case workspacePickerBegin
-    case workspacePickerMove(step: Int)
-    case workspacePickerCommit
-    case workspacePickerCancel
+    // Controller-Insel (Runde 4): L1, R1 und L2 gehalten
+    /// Ebene ist seit 0,3 s gehalten: Insel einblenden.
+    case islandShow(ControllerLayer)
+    /// Ebenen-Taste los oder Ebene abgebrochen: Insel weg, nichts weiter.
+    case islandClose
+    /// L2 losgelassen: mit offener Liste zum markierten Eintrag wechseln,
+    /// sonst nur schließen.
+    case islandRelease
+    /// Kreis in „Wohin“: abbrechen; bis zum Loslassen von L2 bleibt es still.
+    case islandCancel
+    /// „Wohin“: hoch/runter. Der erste Stoß öffnet die Liste und rückt gleich
+    /// einen Schritt vom aktuellen Eintrag weiter.
+    case islandMove(step: Int)
+    /// „Wohin“: links/rechts zwischen den Reitern Chats und Workspaces.
+    case islandTab(step: Int)
+    /// „Wohin“: Kreuz wechselt sofort.
+    case islandCommit
+    /// „Wohin“: R2 wechselt zum markierten Chat und diktiert.
+    case islandCommitAndDictate
+    /// „Wohin“: Dreieck springt zum nächsten wartenden Chat (reihum).
+    case islandNextWaiting
+    /// Schnellbefehl der R1-Raute; dieselben Wege und Schutzregeln wie der
+    /// Eintrag im Options-Menü.
+    case quickDraw(ControllerMenuItem)
 
     // Sonstiges
     case bridgeKey(ControllerBridgeKey)

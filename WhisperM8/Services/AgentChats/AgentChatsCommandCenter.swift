@@ -58,10 +58,11 @@ enum AgentChatsCommand: Equatable {
     case setSidebarVisible(Bool)
     /// Filter der Seitenleiste (Aktiv / Zuletzt / Alle) um einen Schritt weiter.
     case sidebarFilter(step: Int)
-    /// Umschalter öffnen, Markierung auf dem aktuellen Chat.
-    case switcherBegin
-    case switcherMove(GridFocusDirection)
-    case switcherCommit
+    /// Nächster Chat, der auf den Nutzer wartet, reihum (wie ⌃⌥Tab). Der
+    /// Controller nutzt das in der Ebene „Wohin“ (L2 halten, dann Dreieck).
+    case nextWaitingChat
+    /// Einen per Tastatur geöffneten Ctrl+Tab-Umschalter schließen. Öffnen
+    /// tut ihn nur noch die Tastatur; am Controller ersetzt ihn die Insel.
     case switcherCancel
     case clearMultiSelection
 }
@@ -87,6 +88,9 @@ struct AgentChatsWindowSnapshot: Equatable {
     var isNewChatPickerOpen: Bool = false
     /// Rückfrage „Chat beenden?“ bzw. „Chat archivieren?“ offen.
     var isConfirmationOpen: Bool = false
+    /// Bildschirm, auf dem das Fenster liegt (`NSScreenNumber`). Dort
+    /// erscheint die Controller-Insel.
+    var screenDisplayID: UInt32? = nil
 
     /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
     /// und ist womöglich selbst Key geworden.

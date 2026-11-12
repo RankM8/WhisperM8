@@ -198,6 +198,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   solange die Liste offen ist. Beide schlucken nichts (der globale kann es
   nicht, der lokale gibt das Ereignis immer zurück).
 - Keine Dateideskriptoren, keine Subprozesse.
+- Controller-Insel: Hält man am Controller L1, R1 oder L2, legt sich die Insel
+  (eigenes Fenster, `mainMenu + 4`, dieselbe Band-Geometrie) über diese
+  Anzeige und zeigt ihre Zähler im Kopf. Die Anzeige selbst ändert sich dafür
+  nicht; sie gibt nur über `visibleSummary(onDisplay:)` lesend ihre Zähler her,
+  und eine offene Liste klappt zu. Details in [controller.md](controller.md).
 
 ## Performance-Regeln
 

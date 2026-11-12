@@ -24,6 +24,15 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     case killLineStart
     /// Ans Zeilenende: Ctrl+E (Claude Code und Codex, „move line end“).
     case lineEnd
+    /// Zeilenumbruch ohne Senden: Ctrl+J, also LF (0x0A). Claude Code
+    /// (interactive mode, „Multiline input“): „Control sequence `Ctrl+J`:
+    /// works in any terminal without configuration“. Codex: Standard von
+    /// `editor.insert_newline` in `codex-rs/tui/src/keymap.rs` ist
+    /// `ctrl-j` (neben `ctrl-m`, Shift/Alt+Enter); `composer.submit` liegt
+    /// nur auf Enter, und crossterm liest 0x0A im Raw-Modus als Ctrl+J. Nicht
+    /// Shift+Enter: Ohne Kitty-Protokoll kommt das im PTY als CR an und würde
+    /// senden.
+    case newline
 
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
@@ -58,7 +67,7 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .space, .deleteWord: return isAgentChat
         // Leeren nie in einer Rückfrage: Dort wählt man aus, das Eingabefeld
         // ist nicht gemeint.
-        case .killLineStart, .lineEnd: return isAgentChat && status != .awaitingInput
+        case .killLineStart, .lineEnd, .newline: return isAgentChat && status != .awaitingInput
         }
     }
 
@@ -85,6 +94,7 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .deleteWord: return [0x17]                       // Ctrl+W
         case .killLineStart: return [0x15]                    // Ctrl+U
         case .lineEnd: return [0x05]                          // Ctrl+E
+        case .newline: return [0x0A]                          // Ctrl+J (LF)
         }
     }
 
@@ -104,12 +114,14 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .deleteWord: return 13                           // W
         case .killLineStart: return 32                        // U
         case .lineEnd: return 14                              // E
+        // Für den Entwurfs-Tracker wie Shift+Return: ein Umbruch im Entwurf.
+        case .newline: return 36
         }
     }
 
     var modifiers: NSEvent.ModifierFlags {
         switch self {
-        case .backTab: return .shift
+        case .backTab, .newline: return .shift
         case .deleteWord, .killLineStart, .lineEnd: return .control
         default: return []
         }

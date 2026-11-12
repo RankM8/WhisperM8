@@ -12,10 +12,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
     // MARK: - Alle Gesten
 
     private static let immediateButtons: [ControllerButton] = [
-        .cross, .triangle, .l1, .r1, .r2, .l3, .create, .options, .touchpad,
+        .cross, .triangle, .r2, .l3, .create, .options, .touchpad,
     ]
     private static let holdButtons: [(ControllerButton, TimeInterval)] = [
-        (.l2, 0.3), (.circle, 0.4), (.square, 0.6), (.r3, 0.6),
+        (.circle, 0.4), (.square, 0.6), (.r3, 0.6),
+    ]
+    /// Tasten, die in einer Ebene ankommen können (beim Drücken).
+    private static let layerPressButtons: [ControllerButton] = [
+        .cross, .circle, .square, .triangle, .r2, .r3, .l3, .create, .options, .touchpad, .l1, .r1, .l2,
     ]
 
     static let allGestures: [ControllerGesture] = {
@@ -28,16 +32,43 @@ final class ControllerBindingMatrixTests: XCTestCase {
             ]
         }
         gestures += [.chordPending(duration: 1), .chordCompleted, .chordCancelled]
+        var moves: [ControllerGesture] = []
         for direction in ControllerDirection.allCases {
             for source in ControllerMoveSource.allCases {
                 for isRepeat in [false, true] {
-                    gestures.append(.move(direction, source: source, isRepeat: isRepeat))
+                    moves.append(.move(direction, source: source, isRepeat: isRepeat))
                 }
             }
         }
+        gestures += moves
         gestures += [.scroll(lines: 3), .scroll(lines: -3)]
+        // Runde 4: Ebenen-Tasten und was in einer Ebene ankommt.
+        for key in [ControllerButton.l1, .r1, .l2] {
+            gestures += [.tap(key), .holdPending(key, duration: 0.3)]
+        }
+        for layer in ControllerLayer.allCases {
+            gestures += [.layerBegan(layer), .layerEnded(layer), .layerCancelled(layer)]
+            let inner = layerPressButtons.map { ControllerGesture.press($0) } + [.holdRepeat(.square)] + moves
+            gestures += inner.map { .inLayer(layer, $0) }
+        }
         return gestures
     }()
+
+    /// Ausgang außerhalb der ausdrücklichen Tabelle: Außerhalb eines Chats
+    /// wirken die Tasten einer Ebene wie ohne Ebene, und das Ende einer Ebene
+    /// schließt die Insel (außer in der Pause). Im Chat steht alles in der
+    /// Tabelle.
+    static func expected(_ gesture: ControllerGesture, in context: ControllerContext, table: Table) -> ControllerAction? {
+        if let action = table[gesture] { return action }
+        if case .chat = context { return nil }
+        if case .paused = context { return nil }
+        switch gesture {
+        case .layerEnded(.whereTo): return .islandRelease
+        case .layerEnded, .layerCancelled: return .islandClose
+        case let .inLayer(_, inner): return expected(inner, in: context, table: table)
+        default: return nil
+        }
+    }
 
     // MARK: - Bausteine der Tabellen
 
@@ -79,17 +110,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
     /// (Runde 3; Wiederholungen kommen dann im Zusammenhang `list` an).
     private static let chatNavigation: Table = {
         var table: Table = [
-            .press(.l1): .adjacentChat(step: -1),
-            .press(.r1): .adjacentChat(step: 1),
+            .tap(.l1): .adjacentChat(step: -1),
+            .tap(.r1): .adjacentChat(step: 1),
             .press(.l3): .toggleMaximize,
             .press(.create): .newChat,
             .press(.options): .menuToggle,
             .press(.touchpad): .clipboardToggle,
             .press(.r2): .dictationToggle,
             .tap(.l2): .lastChat,
-            .holdBegan(.l2): .pickerBegin,
-            .holdPending(.l2, duration: 0.3): .holdProgress(.l2, duration: 0.3),
-            .holdCancelled(.l2): .holdProgressCancelled(.l2),
             .scroll(lines: 3): .scroll(lines: 3),
             .scroll(lines: -3): .scroll(lines: -3),
         ]
@@ -97,14 +125,49 @@ final class ControllerBindingMatrixTests: XCTestCase {
         table[.move(.down, source: .leftStick, isRepeat: false)] = .enterList(step: 1)
         table[.move(.left, source: .leftStick, isRepeat: false)] = .moveInContent(.left)
         // Rechts hat in der Einzelansicht keine Wirkung (Review-Befund 1).
-        return merge(table, pauseChord)
+        return merge(table, pauseChord, layers)
     }()
+
+    /// Ebenen im Chat (Runde 4), soweit sie nicht vom Zustand abhängen. Die
+    /// Schreib-Tasten der L1-Ebene stehen in `clearInput` bzw. bei Shell und
+    /// Rückfrage in `writingRejected`.
+    private static let layers: Table = {
+        var table: Table = [
+            .inLayer(.writing, .press(.r2)): .dictationToggle,
+            .inLayer(.quickDraw, .press(.cross)): .quickDraw(.continueWork),
+            .inLayer(.quickDraw, .press(.triangle)): .quickDraw(.cycleMode),
+            .inLayer(.quickDraw, .press(.square)): .quickDraw(.commands),
+            .inLayer(.quickDraw, .press(.circle)): .quickDraw(.switchAccount),
+            .inLayer(.quickDraw, .press(.r2)): .dictationToggle,
+            .inLayer(.whereTo, .press(.cross)): .islandCommit,
+            .inLayer(.whereTo, .press(.circle)): .islandCancel,
+            .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
+            .inLayer(.whereTo, .press(.r2)): .islandCommitAndDictate,
+            .inLayer(.whereTo, .move(.left, source: .leftStick, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.left, source: .dpad, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.right, source: .leftStick, isRepeat: false)): .islandTab(step: 1),
+            .inLayer(.whereTo, .move(.right, source: .dpad, isRepeat: false)): .islandTab(step: 1),
+        ]
+        for layer in ControllerLayer.allCases {
+            table[.layerBegan(layer)] = .islandShow(layer)
+            table[.layerEnded(layer)] = layer == .whereTo ? .islandRelease : .islandClose
+            table[.layerCancelled(layer)] = .islandClose
+        }
+        for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
+            table[.inLayer(.whereTo, gesture)] = action
+        }
+        return table
+    }()
+
+    /// L1-Ebene, wo Schreiben nicht geht (Shell, Rückfrage): „geht nicht“.
+    private static let writingRejected: Table = [
+        .inLayer(.writing, .press(.square)): .rejected,
+        .inLayer(.writing, .press(.triangle)): .rejected,
+    ]
 
     /// Im Raster bewegt der Stick den Kachel-Fokus, ein Druck ein Schritt.
     private static let gridNavigation: Table = {
         var table = chatNavigation
-        // Runde 3: L2 halten öffnet im Raster die Workspace-Auswahl.
-        table[.holdBegan(.l2)] = .workspacePickerBegin
         for direction in ControllerDirection.allCases {
             table[.move(direction, source: .leftStick, isRepeat: false)] = .moveInContent(direction)
             table[.move(direction, source: .leftStick, isRepeat: true)] = nil
@@ -123,10 +186,15 @@ final class ControllerBindingMatrixTests: XCTestCase {
     ]
 
     /// R3 halten leert die Eingabe — lebender Chat ohne Rückfrage (Runde 3).
+    /// Dieselben Schutzregeln gelten für die L1-Ebene: bis Zeilenanfang
+    /// löschen (gehalten wiederholt) und Zeilenumbruch.
     private static let clearInput: Table = [
         .holdPending(.r3, duration: 0.6): .holdProgress(.r3, duration: 0.6),
         .holdBegan(.r3): .chatClearInput,
         .holdCancelled(.r3): .holdProgressCancelled(.r3),
+        .inLayer(.writing, .press(.square)): .chatKey(.deleteToLineStart),
+        .inLayer(.writing, .holdRepeat(.square)): .chatKey(.deleteToLineStart),
+        .inLayer(.writing, .press(.triangle)): .chatKey(.newline),
     ]
 
     /// Verlauf ohne Menü und Rückfrage: was in jedem Zustand gilt.
@@ -157,6 +225,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .holdRepeatLong(.square): .chatKey(.backspace),
         .press(.triangle): .rejected,
         .holdBegan(.r3): .rejected,
+        .inLayer(.writing, .press(.square)): .rejected,
+        .inLayer(.writing, .press(.triangle)): .rejected,
     ]
 
     /// Steuerkreuz außerhalb einer Rückfrage (Review-Befund 1): wie der linke
@@ -191,8 +261,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
     private static let bridge: Table = merge(dpad { .bridgeKey(ControllerBridgeKey($0)) }, [
         .press(.cross): .bridgeKey(.returnKey),
         .tap(.circle): .bridgeKey(.escape),
-        .press(.l1): .bridgeKey(.backTab),
-        .press(.r1): .bridgeKey(.tab),
+        .tap(.l1): .bridgeKey(.backTab),
+        .tap(.r1): .bridgeKey(.tab),
         .press(.r2): .dictationToggle,
     ], pauseChord)
 
@@ -246,15 +316,15 @@ final class ControllerBindingMatrixTests: XCTestCase {
         ("Verlauf", .clipboardPanel(ControllerClipboardState()), merge(clipboardBase, [
             .press(.triangle): .rejected,
             .press(.l3): .rejected,
-            .press(.l1): .clipboard(.filterAll),
-            .press(.r1): .clipboard(.filterDictations),
+            .tap(.l1): .clipboard(.filterAll),
+            .tap(.r1): .clipboard(.filterDictations),
         ])),
         ("Verlauf, Bild mit Korrektur", .clipboardPanel(ControllerClipboardState(canCorrect: true, selectedIsImage: true)),
          merge(clipboardBase, [
              .press(.triangle): .clipboard(.correctAndPaste),
              .press(.l3): .clipboard(.zoom),
-             .press(.l1): .clipboard(.filterAll),
-             .press(.r1): .clipboard(.filterDictations),
+             .tap(.l1): .clipboard(.filterAll),
+             .tap(.r1): .clipboard(.filterDictations),
          ])),
         ("Verlauf, große Bildansicht",
          .clipboardPanel(ControllerClipboardState(isZoomed: true, selectedIsImage: true)), merge(clipboardBase, [
@@ -278,23 +348,6 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .tap(.circle): .menuBack,
             .press(.options): .menuToggle,
         ], pauseChord)),
-        ("Chat-Auswahl", .chatPicker, merge(
-            moves(.up, .pickerMove(.up)), moves(.down, .pickerMove(.down)),
-            moves(.left, .pickerMove(.left)), moves(.right, .pickerMove(.right)), [
-                .holdEnded(.l2): .pickerCommit,
-                .press(.cross): .pickerCommit,
-                .holdCancelled(.l2): .pickerCancel,
-                .tap(.circle): .pickerCancel,
-                .press(.r2): .pickerCommitAndDictate,
-            ])),
-        // Runde 3: senkrechte Liste, R2 ohne Wirkung, kein Pause-Akkord (L2 gehalten).
-        ("Workspace-Auswahl", .workspacePicker, merge(
-            moves(.up, .workspacePickerMove(step: -1)), moves(.down, .workspacePickerMove(step: 1)), [
-                .holdEnded(.l2): .workspacePickerCommit,
-                .press(.cross): .workspacePickerCommit,
-                .holdCancelled(.l2): .workspacePickerCancel,
-                .tap(.circle): .workspacePickerCancel,
-            ])),
         ("Dialog", .modal, merge(bridge, [
             .move(.up, source: .leftStick, isRepeat: false): .bridgeKey(.up),
             .move(.up, source: .leftStick, isRepeat: true): .bridgeKey(.up),
@@ -315,8 +368,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .move(.right, source: .dpad, isRepeat: false): .leaveList,
             .tap(.circle): .leaveList,
             .press(.cross): .listActivate,
-            .press(.l1): .listFilter(step: -1),
-            .press(.r1): .listFilter(step: 1),
+            .tap(.l1): .listFilter(step: -1),
+            .tap(.r1): .listFilter(step: 1),
             .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
             .holdBegan(.square): .listCloseRow,
             .holdCancelled(.square): .holdProgressCancelled(.square),
@@ -388,12 +441,12 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
         ("Rückfrage alt", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 2 },
-         merge(chatNavigation, chatArrows, backspace, [
+         merge(chatNavigation, chatArrows, backspace, writingRejected, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
         ("Rückfrage neu", chatState(.awaitingInput) { $0.secondsSinceAwaitingBegan = 0.1 },
-         merge(chatNavigation, chatArrows, backspace, [.tap(.circle): .chatKey(.escape)])),
+         merge(chatNavigation, chatArrows, backspace, writingRejected, [.tap(.circle): .chatKey(.escape)])),
         ("Chat beendet", chatState(.ended) { $0.draftSuspected = true },
          merge(chatNavigation, dpadNavigation, [.press(.cross): .chatResume, .tap(.r3): .chatResume])),
         ("nur Verlauf", chatState(.working) { $0.hasTerminal = false },
@@ -415,7 +468,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for (name, context, table) in Self.expectations {
             for gesture in Self.allGestures {
                 XCTAssertEqual(
-                    ControllerBindingResolver.action(for: gesture, in: context), table[gesture],
+                    ControllerBindingResolver.action(for: gesture, in: context),
+                    Self.expected(gesture, in: context, table: table),
                     "\(name): \(gesture)"
                 )
             }
@@ -432,8 +486,6 @@ final class ControllerBindingMatrixTests: XCTestCase {
             case .quickAction: seen.insert("quickAction")
             case .clipboardPanel: seen.insert("clipboardPanel")
             case .menu: seen.insert("menu")
-            case .chatPicker: seen.insert("chatPicker")
-            case .workspacePicker: seen.insert("workspacePicker")
             case .modal: seen.insert("modal")
             case .list: seen.insert("list")
             case .chat: seen.insert("chat")
@@ -441,6 +493,6 @@ final class ControllerBindingMatrixTests: XCTestCase {
             case .noWindow: seen.insert("noWindow")
             }
         }
-        XCTAssertEqual(seen.count, 13)
+        XCTAssertEqual(seen.count, 11)
     }
 }

@@ -11,21 +11,36 @@ import Foundation
 /// Verhalten je Taste (fest, ohne Kontext):
 /// - **sofort** (`.press` beim Drücken): Kreuz, Dreieck, L3, Create,
 ///   Options, Touchpad, R2.
-/// - **Tippen oder Halten**: L2 (0,3 s), Kreis (0,4 s), Viereck (0,6 s),
-///   R3 (0,6 s). Viereck wiederholt danach wie eine gehaltene Taste
+/// - **Tippen oder Halten**: Kreis (0,4 s), Viereck (0,6 s), R3 (0,6 s). Viereck wiederholt danach wie eine gehaltene Taste
 ///   (`.holdRepeat` alle 60 ms, nach 1 s `.holdRepeatLong` alle 150 ms — im
 ///   Chat erst Zeichen, dann Wörter, wie beim iPhone); im
 ///   Zwischenablage-Verlauf löscht nur `.holdBegan` einen Eintrag. Bewegt
 ///   sich der rechte Stick, während R3 noch nicht als gehalten gilt, verfällt
 ///   der Druck ohne `.tap` (R3 wird beim Scrollen leicht mitgedrückt).
-/// - **L1/R1**: einzeln `.press`, aber erst nach dem Akkord-Fenster oder beim
-///   früheren Loslassen. Beide zusammen ergeben den Pause-Akkord.
+/// - **Ebenen-Tasten L1, R1, L2** (Runde 4): `.tap` beim Loslassen, wenn sie
+///   kürzer als 0,3 s gehalten wurden und keine andere Taste (auch kein
+///   Stoß von Stick oder Steuerkreuz) dazwischen kam. Gehalten werden sie zur
+///   Ebene: `.layerBegan` nach 0,3 s (die Insel erscheint), andere Tasten
+///   kommen solange als `.inLayer` und wirken sofort beim Drücken, das
+///   Loslassen meldet `.layerEnded`. Es gilt immer nur eine Ebene; eine
+///   zweite Ebenen-Taste ist darin eine gewöhnliche Taste. Ausnahme: L1 und
+///   R1 zusammen sind der Pause-Akkord, egal in welchem Abstand — die Ebene
+///   endet dann still (`.layerCancelled`), es gibt weder Tippen noch
+///   Ebenen-Aktion.
 /// - **Steuerkreuz und linker Stick**: `.move` mit Wiederholung.
 /// - **Trigger**: Analogwert mit Hysterese, danach wie digitale Tasten.
 /// - **Rechter Stick**: `.scroll` im Takt von `tick`.
 struct ControllerGestureRecognizer: Sendable {
     struct Config: Equatable, Sendable {
-        var l2HoldThreshold: TimeInterval = 0.3
+        /// Ab hier gilt eine Ebenen-Taste (L1, R1, L2) als gehalten, und die
+        /// Insel erscheint. Kombinationen wirken schon vorher.
+        var layerHoldThreshold: TimeInterval = 0.3
+        /// Viereck in der Ebene „Schreiben“: erst nach dieser Zeit wiederholen,
+        /// dann im Takt von `layerRepeatInterval` (Zeile für Zeile löschen).
+        var layerRepeatDelay: TimeInterval = 0.4
+        var layerRepeatInterval: TimeInterval = 0.15
+        /// Tasten, die innerhalb einer Ebene beim Halten wiederholen.
+        var layerRepeatButtons: [ControllerLayer: Set<ControllerButton>] = [.writing: [.square]]
         var circleHoldThreshold: TimeInterval = 0.4
         var squareHoldThreshold: TimeInterval = 0.6
         var r3HoldThreshold: TimeInterval = 0.6
@@ -38,8 +53,6 @@ struct ControllerGestureRecognizer: Sendable {
         var holdRepeatLongInterval: TimeInterval = 0.15
         /// Tasten, deren Druck verfällt, sobald der rechte Stick scrollt.
         var scrollCancelsHold: Set<ControllerButton> = [.r3]
-        /// So knapp nacheinander müssen L1 und R1 kommen, damit es ein Akkord ist.
-        var chordWindow: TimeInterval = 0.15
         /// So lange müssen beide gemeinsam gehalten werden.
         var chordHoldDuration: TimeInterval = 1.0
         /// Entspricht `NSEvent.keyRepeatDelay` / `keyRepeatInterval`; die
@@ -62,7 +75,6 @@ struct ControllerGestureRecognizer: Sendable {
 
         func holdThreshold(for button: ControllerButton) -> TimeInterval? {
             switch button {
-            case .l2: return l2HoldThreshold
             case .circle: return circleHoldThreshold
             case .square: return squareHoldThreshold
             case .r3: return r3HoldThreshold
@@ -79,9 +91,20 @@ struct ControllerGestureRecognizer: Sendable {
         var nextRepeatAt: TimeInterval?
     }
 
-    struct PendingBumper: Equatable, Sendable {
-        var button: ControllerButton
+    /// Gehaltene Ebenen-Taste.
+    struct LayerState: Equatable, Sendable {
+        var layer: ControllerLayer
         var pressedAt: TimeInterval
+        /// `.layerBegan` ist gemeldet (Halte-Schwelle erreicht).
+        var began = false
+        /// Eine andere Taste kam dazwischen: kein Tippen mehr.
+        var used = false
+    }
+
+    /// Wiederholung einer Taste innerhalb einer Ebene (Viereck beim Schreiben).
+    struct LayerRepeat: Equatable, Sendable {
+        var button: ControllerButton
+        var nextAt: TimeInterval
     }
 
     struct ChordState: Equatable, Sendable {
@@ -111,7 +134,15 @@ struct ControllerGestureRecognizer: Sendable {
     // Zustand. `internal`, weil die Achsen-Logik in einer eigenen Datei liegt.
     var pressedButtons: Set<ControllerButton> = []
     var holds: [ControllerButton: HoldState] = [:]
-    var pendingBumper: PendingBumper?
+    var layer: LayerState?
+    /// In einer Ebene gedrückte Tasten: Ihr Loslassen bleibt still, auch wenn
+    /// die Ebene inzwischen vorbei ist.
+    var layerButtons: Set<ControllerButton> = []
+    var layerRepeat: LayerRepeat?
+    /// Die laufende Wiederholung des Steuerkreuzes bzw. die Richtung des
+    /// linken Sticks begann in der Ebene.
+    var dpadInLayer = false
+    var leftStickInLayer = false
     var chord: ChordState?
     /// Nach einem Akkord lösen L1 und R1 nichts mehr aus, bis beide los sind.
     var bumpersSuppressed = false
@@ -141,6 +172,12 @@ struct ControllerGestureRecognizer: Sendable {
         case let .stick(.right, _, y):
             rightStick(y: y, at: time)
             gestures += cancelHoldsWhileScrolling()
+            // Scrollen während einer gehaltenen Ebenen-Taste ist eine zweite
+            // Eingabe: kein Tippen mehr (das Scrollen selbst läuft weiter).
+            if scroll != nil, var current = layer {
+                current.used = true
+                layer = current
+            }
         }
         return gestures
     }
@@ -158,9 +195,10 @@ struct ControllerGestureRecognizer: Sendable {
             }
             if let nextRepeatAt = hold.nextRepeatAt { deadlines.append(nextRepeatAt) }
         }
-        if let pendingBumper {
-            deadlines.append(pendingBumper.pressedAt + config.chordWindow)
+        if let layer, !layer.began {
+            deadlines.append(layer.pressedAt + config.layerHoldThreshold)
         }
+        if let layerRepeat { deadlines.append(layerRepeat.nextAt) }
         if let chord, !chord.completed {
             deadlines.append(chord.startedAt + config.chordHoldDuration)
         }
@@ -172,7 +210,7 @@ struct ControllerGestureRecognizer: Sendable {
 
     /// Nichts gedrückt, kein Stick ausgelenkt.
     var isIdle: Bool {
-        pressedButtons.isEmpty && holds.isEmpty && pendingBumper == nil && chord == nil
+        pressedButtons.isEmpty && holds.isEmpty && layer == nil && layerButtons.isEmpty && chord == nil
             && !leftDeflected && leftDirection == nil && scroll == nil
     }
 
@@ -188,12 +226,17 @@ struct ControllerGestureRecognizer: Sendable {
         for button in ControllerButton.allCases where holds[button] != nil {
             gestures.append(.holdCancelled(button))
         }
+        if let layer { gestures.append(.layerCancelled(layer.layer)) }
         if let chord, !chord.completed {
             gestures.append(.chordCancelled)
         }
         pressedButtons = []
         holds = [:]
-        pendingBumper = nil
+        layer = nil
+        layerButtons = []
+        layerRepeat = nil
+        dpadInLayer = false
+        leftStickInLayer = false
         chord = nil
         bumpersSuppressed = false
         dpadRepeat = nil
@@ -222,9 +265,11 @@ struct ControllerGestureRecognizer: Sendable {
             holds[button] = hold
             gestures.append(.holdBegan(button))
         }
-        if let pending = pendingBumper, Self.isDue(pending.pressedAt + config.chordWindow, at: time) {
-            pendingBumper = nil
-            gestures.append(.press(pending.button))
+        if var current = layer, !current.began,
+           Self.isDue(current.pressedAt + config.layerHoldThreshold, at: time) {
+            current.began = true
+            layer = current
+            gestures.append(.layerBegan(current.layer))
         }
         if var current = chord, !current.completed,
            Self.isDue(current.startedAt + config.chordHoldDuration, at: time) {
@@ -248,12 +293,13 @@ struct ControllerGestureRecognizer: Sendable {
     mutating func digital(_ button: ControllerButton, pressed: Bool, at time: TimeInterval) -> [ControllerGesture] {
         if pressed {
             guard pressedButtons.insert(button).inserted else { return [] }
+            if let kind = ControllerLayer(key: button), let gestures = layerKeyDown(kind, at: time) {
+                return gestures
+            }
+            if layer != nil { return layerButtonDown(button, at: time) }
             if let direction = button.dpadDirection {
                 dpadRepeat = RepeatState(direction: direction, nextAt: time + config.repeatDelay)
                 return [.move(direction, source: .dpad, isRepeat: false)]
-            }
-            if button.isBumper {
-                return bumperDown(button, at: time)
             }
             if let threshold = config.holdThreshold(for: button) {
                 // Wer gerade scrollt, drückt R3 eher aus Versehen.
@@ -265,13 +311,28 @@ struct ControllerGestureRecognizer: Sendable {
         }
 
         guard pressedButtons.remove(button) != nil else { return [] }
+        if layerButtons.remove(button) != nil {
+            // In der Ebene gedrückt: still, auch nach dem Ende der Ebene.
+            if layerRepeat?.button == button { layerRepeat = nil }
+            if let direction = button.dpadDirection, dpadRepeat?.direction == direction {
+                dpadRepeat = nil
+                dpadInLayer = false
+            }
+            return button.isBumper ? bumperReleased() : []
+        }
         if let direction = button.dpadDirection {
             if dpadRepeat?.direction == direction { dpadRepeat = nil }
             return []
         }
-        if button.isBumper {
-            return bumperUp(button)
+        if let current = layer, current.layer.key == button {
+            layer = nil
+            endLayerRepeats()
+            return current.began || current.used ? [.layerEnded(current.layer)] : [.tap(button)]
         }
+        if button.isBumper {
+            return bumperReleased()
+        }
+        if ControllerLayer(key: button) != nil { return [] }
         if let hold = holds.removeValue(forKey: button) {
             // `advance` hat eine fällige Schwelle schon in `.holdBegan` verwandelt.
             return hold.began ? [.holdEnded(button)] : [.holdCancelled(button), .tap(button)]
@@ -292,31 +353,62 @@ struct ControllerGestureRecognizer: Sendable {
         return gestures
     }
 
-    // MARK: - L1 / R1 und der Pause-Akkord
+    // MARK: - Ebenen und der Pause-Akkord
 
-    mutating func bumperDown(_ button: ControllerButton, at time: TimeInterval) -> [ControllerGesture] {
-        guard !bumpersSuppressed, chord == nil else { return [] }
-        let other: ControllerButton = button == .l1 ? .r1 : .l1
-        if let pending = pendingBumper, pending.button == other {
-            // Innerhalb des Fensters (sonst hätte `advance` schon `.press` gemeldet).
-            pendingBumper = nil
-            chord = ChordState(startedAt: time)
-            return [.chordPending(duration: config.chordHoldDuration)]
+    /// Ebenen-Taste gedrückt. `nil` heißt: Sie ist hier eine gewöhnliche Taste
+    /// in der schon laufenden Ebene (`layerButtonDown`).
+    mutating func layerKeyDown(_ kind: ControllerLayer, at time: TimeInterval) -> [ControllerGesture]? {
+        let button = kind.key
+        if button.isBumper {
+            // Nach einem Akkord lösen L1 und R1 nichts aus, bis beide los sind.
+            if bumpersSuppressed || chord != nil { return [] }
+            if let current = layer, current.layer.key.isBumper {
+                // L1 und R1 zusammen: Pause-Akkord, die Ebene endet still.
+                layer = nil
+                endLayerRepeats()
+                chord = ChordState(startedAt: time)
+                return [.layerCancelled(current.layer), .chordPending(duration: config.chordHoldDuration)]
+            }
         }
-        if pressedButtons.contains(other) {
-            // Die andere Taste ist schon länger unten: kein Akkord mehr möglich.
-            return [.press(button)]
-        }
-        pendingBumper = PendingBumper(button: button, pressedAt: time)
-        return []
+        guard layer == nil else { return nil }
+        layer = LayerState(layer: kind, pressedAt: time)
+        // Für den Tasten-Test der Einstellungen; die Belegung zeigt keinen Ring.
+        return [.holdPending(button, duration: config.layerHoldThreshold)]
     }
 
-    mutating func bumperUp(_ button: ControllerButton) -> [ControllerGesture] {
-        var gestures: [ControllerGesture] = []
-        if pendingBumper?.button == button {
-            pendingBumper = nil
-            gestures.append(.press(button))
+    /// Andere Taste, während eine Ebenen-Taste gehalten wird: wirkt sofort,
+    /// ihr Loslassen bleibt still. Viereck wiederholt beim Schreiben.
+    mutating func layerButtonDown(_ button: ControllerButton, at time: TimeInterval) -> [ControllerGesture] {
+        guard var current = layer else { return [] }
+        current.used = true
+        layer = current
+        layerButtons.insert(button)
+        if let direction = button.dpadDirection {
+            dpadRepeat = RepeatState(direction: direction, nextAt: time + config.repeatDelay)
+            dpadInLayer = true
+            return [.inLayer(current.layer, .move(direction, source: .dpad, isRepeat: false))]
         }
+        if config.layerRepeatButtons[current.layer]?.contains(button) == true {
+            layerRepeat = LayerRepeat(button: button, nextAt: time + config.layerRepeatDelay)
+        }
+        return [.inLayer(current.layer, .press(button))]
+    }
+
+    /// Wiederholungen, die in der Ebene begannen, enden mit ihr: Die Taste
+    /// bekäme sonst nach dem Loslassen der Ebenen-Taste ihre gewöhnliche
+    /// Bedeutung.
+    mutating func endLayerRepeats() {
+        layerRepeat = nil
+        if dpadInLayer {
+            dpadRepeat = nil
+            dpadInLayer = false
+        }
+        if leftStickInLayer { leftRepeatAt = nil }
+    }
+
+    /// L1 oder R1 losgelassen (ohne eigene Ebene): beendet einen Akkord.
+    mutating func bumperReleased() -> [ControllerGesture] {
+        var gestures: [ControllerGesture] = []
         if let current = chord {
             if !current.completed { gestures.append(.chordCancelled) }
             chord = nil

@@ -38,6 +38,10 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// Claudes Freigabe-Dialog „alle Änderungen erlauben“.
     var writesToChat: Bool { group == .input }
 
+    /// Nur, wenn der Chat ruht (`ControllerMenuSetup.chatBusy`): „Weiter“
+    /// schickt Enter mit, „Modus wechseln“ ist Shift+Tab.
+    var needsRestingChat: Bool { self == .continueWork || self == .cycleMode }
+
     /// Öffnet eine zweite Ebene statt etwas auszuführen.
     var opensSubmenu: Bool { self == .commands || self == .switchAccount }
 
@@ -91,6 +95,12 @@ struct ControllerMenuSetup: Equatable, Sendable {
     /// Zeile für „Chat schließen“ (im Inhalt `.chat(id)`, in der Liste die markierte).
     var target: SidebarNavigationRow?
     var chat: ControllerChatActionInfo?
+    /// Der Chat ruht nicht: Er arbeitet, sein Zustand ist unklar oder es
+    /// wurde gerade gesendet. Dann sind „Weiter“ und „Modus wechseln“ aus —
+    /// zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“
+    /// bestätigte „Weiter“ mit Enter die Vorauswahl, und Shift+Tab heißt dort
+    /// „alle Änderungen erlauben“. Codex meldet nie „wartet“.
+    var chatBusy = false
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten). Pur.
@@ -125,7 +135,7 @@ struct ControllerMenuModel: Equatable, Sendable {
             if item == .commands {
                 return !ControllerSlashCommands.list(for: setup.profile).isEmpty
             }
-            return true
+            return !(item.needsRestingChat && setup.chatBusy)
         }
         guard item.group == .chat else { return true }
         guard let chat = setup.chat, setup.sessionID != nil else { return false }
@@ -138,10 +148,12 @@ struct ControllerMenuModel: Equatable, Sendable {
         }
     }
 
-    /// Rückfrage im Chat geht auf oder zu, während das Menü offen ist.
-    mutating func update(dialogOpen: Bool) {
-        guard setup.dialogOpen != dialogOpen else { return }
+    /// Rückfrage im Chat geht auf oder zu bzw. der Chat beginnt oder hört auf
+    /// zu arbeiten, während das Menü offen ist.
+    mutating func update(dialogOpen: Bool, chatBusy: Bool) {
+        guard setup.dialogOpen != dialogOpen || setup.chatBusy != chatBusy else { return }
         setup.dialogOpen = dialogOpen
+        setup.chatBusy = chatBusy
         top = ControllerListMenu(
             entries: ControllerMenuItem.allCases.map { .init(id: $0, enabled: Self.isEnabled($0, setup: setup)) },
             selected: top.selected

@@ -48,17 +48,17 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertEqual(down(.l2Digital, at: 0), [])  // digitale Trigger-Ereignisse zählen nicht
         XCTAssertEqual(trigger(.l2, 1, at: 0), [.holdPending(.l2, duration: 0.3)])
         XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.3, accuracy: 1e-9)
-        XCTAssertEqual(trigger(.l2, 0, at: 0.2), [.holdCancelled(.l2), .tap(.l2)])
+        XCTAssertEqual(trigger(.l2, 0, at: 0.2), [.tap(.l2)])
         XCTAssertTrue(recognizer.isIdle)
     }
 
     func testL2HoldViaTick() {
         _ = trigger(.l2, 1, at: 0)
         XCTAssertEqual(recognizer.tick(at: 0.29), [])
-        XCTAssertEqual(recognizer.tick(at: 0.3), [.holdBegan(.l2)])
+        XCTAssertEqual(recognizer.tick(at: 0.3), [.layerBegan(.whereTo)])
         XCTAssertEqual(recognizer.tick(at: 0.5), [], "nur einmal")
         XCTAssertNil(recognizer.nextDeadline)
-        XCTAssertEqual(trigger(.l2, 0, at: 2), [.holdEnded(.l2)])
+        XCTAssertEqual(trigger(.l2, 0, at: 2), [.layerEnded(.whereTo)])
     }
 
     func testCircleTapAndHold() {
@@ -76,7 +76,7 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertEqual(up(.circle, at: 0.35), [.holdCancelled(.circle), .tap(.circle)])
 
         _ = trigger(.l2, 1, at: 1)
-        XCTAssertEqual(trigger(.l2, 0, at: 1.35), [.holdBegan(.l2), .holdEnded(.l2)])
+        XCTAssertEqual(trigger(.l2, 0, at: 1.35), [.layerBegan(.whereTo), .layerEnded(.whereTo)])
     }
 
     func testReleaseExactlyAtThresholdCountsAsHold() {
@@ -102,7 +102,7 @@ final class ControllerGestureRecognizerTests: XCTestCase {
     func testOtherEventCatchesUpOverdueHold() {
         _ = trigger(.l2, 1, at: 0)
         // Kein Tick; das nächste Ereignis holt die fällige Entscheidung nach.
-        XCTAssertEqual(down(.cross, at: 1), [.holdBegan(.l2), .press(.cross)])
+        XCTAssertEqual(down(.cross, at: 1), [.layerBegan(.whereTo), .inLayer(.whereTo, .press(.cross))])
     }
 
     func testSquareIsTapOrHold() {
@@ -233,33 +233,28 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertEqual(recognizer.tick(at: 0.7), [.move(.right, source: .dpad, isRepeat: true)])
     }
 
-    // MARK: - L1 / R1 und Akkord
+    // MARK: - L1 / R1 und Akkord (Runde 4: Tippen beim Loslassen)
 
-    func testSingleL1FiresAfterChordWindow() {
-        XCTAssertEqual(down(.l1, at: 0), [])
-        XCTAssertEqual(recognizer.nextDeadline ?? -1, 0.15, accuracy: 1e-9)
-        XCTAssertEqual(recognizer.tick(at: 0.15), [.press(.l1)])
-        XCTAssertEqual(recognizer.tick(at: 0.3), [])
-        XCTAssertEqual(up(.l1, at: 1), [], "genau einmal")
-    }
-
-    func testSingleL1FiresOnEarlyRelease() {
-        XCTAssertEqual(down(.r1, at: 0), [])
-        XCTAssertEqual(up(.r1, at: 0.05), [.press(.r1)])
-        XCTAssertEqual(recognizer.tick(at: 0.2), [])
+    func testL1TapFiresOnRelease() {
+        XCTAssertEqual(down(.l1, at: 0), [.holdPending(.l1, duration: 0.3)])
+        XCTAssertEqual(recognizer.tick(at: 0.15), [])
+        XCTAssertEqual(up(.l1, at: 0.2), [.tap(.l1)])
         XCTAssertNil(recognizer.nextDeadline)
+        XCTAssertTrue(recognizer.isIdle)
     }
 
-    func testSingleL1ReleasedLateWithoutTickFiresOnce() {
-        _ = down(.l1, at: 0)
-        XCTAssertEqual(up(.l1, at: 3), [.press(.l1)])
+    func testL1HeldLongReleaseDoesNothingButEndTheLayer() {
+        _ = down(.r1, at: 0)
+        XCTAssertEqual(up(.r1, at: 3), [.layerBegan(.quickDraw), .layerEnded(.quickDraw)], "kein Tippen nach 0,3 s")
     }
 
-    func testChordWithinWindowCompletes() {
-        XCTAssertEqual(down(.l1, at: 0), [])
-        XCTAssertEqual(down(.r1, at: 0.1), [.chordPending(duration: 1.0)])
+    /// L1 + R1 in beliebigem Abstand: Akkord, die Ebene endet still, weder
+    /// Tippen noch Ebenen-Geste.
+    func testChordCompletesAndSuppressesUntilBothReleased() {
+        XCTAssertEqual(down(.l1, at: 0), [.holdPending(.l1, duration: 0.3)])
+        XCTAssertEqual(down(.r1, at: 0.1), [.layerCancelled(.writing), .chordPending(duration: 1.0)])
         XCTAssertEqual(recognizer.nextDeadline ?? -1, 1.1, accuracy: 1e-9)
-        XCTAssertEqual(recognizer.tick(at: 0.15), [], "kein .press für L1")
+        XCTAssertEqual(recognizer.tick(at: 0.3), [], "kein .layerBegan")
         XCTAssertEqual(recognizer.tick(at: 1.1), [.chordCompleted])
         XCTAssertEqual(recognizer.tick(at: 2), [], "nur einmal")
         XCTAssertEqual(up(.l1, at: 2.1), [])
@@ -271,21 +266,22 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertTrue(recognizer.isIdle)
         // Danach wieder normal.
         _ = down(.r1, at: 3)
-        XCTAssertEqual(up(.r1, at: 3.05), [.press(.r1)])
+        XCTAssertEqual(up(.r1, at: 3.05), [.tap(.r1)])
     }
 
-    func testChordOutsideWindowGivesTwoPresses() {
+    func testChordAlsoAfterTheLayerBegan() {
         _ = down(.l1, at: 0)
-        XCTAssertEqual(down(.r1, at: 0.2), [.press(.l1), .press(.r1)])
-        XCTAssertEqual(recognizer.tick(at: 2), [], "kein Akkord")
+        XCTAssertEqual(recognizer.tick(at: 0.3), [.layerBegan(.writing)])
+        XCTAssertEqual(down(.r1, at: 0.8), [.layerCancelled(.writing), .chordPending(duration: 1.0)])
+        XCTAssertEqual(recognizer.tick(at: 1.8), [.chordCompleted])
     }
 
     func testChordReleasedEarlyCancelsAndSuppresses() {
         _ = down(.r1, at: 0)
-        XCTAssertEqual(down(.l1, at: 0.05), [.chordPending(duration: 1.0)])
+        XCTAssertEqual(down(.l1, at: 0.05), [.layerCancelled(.quickDraw), .chordPending(duration: 1.0)])
         XCTAssertEqual(up(.r1, at: 0.5), [.chordCancelled])
         XCTAssertEqual(recognizer.tick(at: 2), [])
-        XCTAssertEqual(up(.l1, at: 2.1), [], "nach dem Akkord kein .press")
+        XCTAssertEqual(up(.l1, at: 2.1), [], "nach dem Akkord kein Tippen")
         XCTAssertTrue(recognizer.isIdle)
     }
 
@@ -298,8 +294,6 @@ final class ControllerGestureRecognizerTests: XCTestCase {
     // MARK: - Zurücksetzen
 
     func testResetReleasesEverything() {
-        _ = trigger(.l2, 1, at: 0)
-        _ = recognizer.tick(at: 0.3)          // L2 hält
         _ = down(.circle, at: 0.4)            // Kreis wartet noch
         _ = down(.l1, at: 0.5)
         _ = down(.r1, at: 0.55)               // Akkord läuft
@@ -309,19 +303,24 @@ final class ControllerGestureRecognizerTests: XCTestCase {
         XCTAssertFalse(recognizer.isIdle)
 
         let gestures = recognizer.reset(at: 0.7)
-        XCTAssertEqual(gestures, [.holdCancelled(.circle), .holdCancelled(.l2), .chordCancelled])
+        XCTAssertEqual(gestures, [.holdCancelled(.circle), .chordCancelled])
         XCTAssertTrue(recognizer.isIdle)
         XCTAssertNil(recognizer.nextDeadline)
         XCTAssertEqual(recognizer.tick(at: 5), [])
+        XCTAssertEqual(up(.circle, at: 5.1), [])
+    }
+
+    func testResetEndsALayerSilently() {
+        _ = trigger(.l2, 1, at: 0)
+        _ = recognizer.tick(at: 0.3)          // L2 hält, Insel offen
+        XCTAssertEqual(recognizer.reset(at: 0.7), [.layerCancelled(.whereTo)])
         // Loslassen nach dem Zurücksetzen bleibt ohne Wirkung.
         XCTAssertEqual(trigger(.l2, 0, at: 5.1), [])
-        XCTAssertEqual(up(.circle, at: 5.1), [])
     }
 
     func testResetDoesNotCatchUpOverdueDecisions() {
         _ = trigger(.l2, 1, at: 0)
-        _ = down(.l1, at: 0)
-        XCTAssertEqual(recognizer.reset(at: 5), [.holdCancelled(.l2)], "kein .holdBegan, kein .press(.l1)")
+        XCTAssertEqual(recognizer.reset(at: 5), [.layerCancelled(.whereTo)], "kein .layerBegan, kein Tippen")
     }
 
     func testNextDeadlineIsNilWhenNothingIsActive() {
