@@ -12,7 +12,8 @@ Referenzgerät ist der PS5-Controller (DualSense) über Bluetooth; andere Gamepa
 allgemeine Profil (`GCExtendedGamepad`) mit.
 
 Der Controller löst **Aktionen** aus, keine Tastendrücke an das Fenster im Vordergrund. Er schreibt
-gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung.
+gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung. Einzige
+Ausnahme ist das Touchpad als Maus (siehe unten): Mausereignisse an andere Programme brauchen sie.
 
 Plan mit Entscheidungen und Prüfprotokoll: [`../plans/controller-steuerung.md`](../plans/controller-steuerung.md).
 Entwürfe: [`../design/controller-steuerung.html`](../design/controller-steuerung.html), für die Insel
@@ -31,10 +32,13 @@ während die Steuerung aus ist, erscheint einmal eine Mitteilung.
 | Lichtleiste | an | Farbe nach Zustand |
 | Auch wenn ein anderes Programm vorne ist | aus | Diktat und Verlauf überall; in Spielen ist R2 meist Gas oder Schuss |
 | Bei Eingabe WhisperM8 nach vorn holen | an | nur mit dem Schalter darüber: Ist ein anderes Programm vorne, holt fast jede Eingabe das Agent-Chats-Fenster nach vorn |
+| Touchpad als Maus | aus | Finger bewegt den Mauszeiger, Drücken klickt; der Verlauf liegt dann auf L2 + Touchpad |
+| Zeigergeschwindigkeit | Mitte (Faktor 1) | Regler 0,3 bis 3, nur mit dem Schalter darüber |
 
 **Aufwecken:** Ist ein anderes Programm vorne und sind beide Schalter an, holt jede Taste beim
 Drücken und jeder Stick- oder Steuerkreuz-Ausschlag das Agent-Chats-Fenster nach vorn. Ausnahmen: R2
-diktiert weiter in das Programm vorne, das Touchpad öffnet den Verlauf. L1, R1 und L2 wecken erst beim
+diktiert weiter in das Programm vorne, das Touchpad öffnet den Verlauf (als Maus klickt es dort, und ein
+Finger darauf weckt nie). L1, R1 und L2 wecken erst beim
 Tippen, denn gehalten könnten sie der Anfang der Pause L1 + R1 sein. Die weckende Eingabe tut sonst
 nichts: Bis alles losgelassen ist, verwirft der Manager die restlichen Gesten. Die Pumpe meldet dazu
 mit jedem Paket, ob der Erkenner danach ruhig ist. Entschieden wird in der Reihenfolge auf dem Main
@@ -70,7 +74,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 |---|---|
 | Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W; in Shells weiter Zeichen); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
-| Touchpad-Klick | Zwischenablage-Verlauf auf und zu |
+| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; mit dem Touchpad als Maus ein Mausklick, der Verlauf dann über L2 + Touchpad oder das Menü |
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
@@ -86,7 +90,7 @@ anderen werden gesendet; Befehle, nach denen die CLI eine Liste zeigt, setzen �
 wechseln“ (Shift+Tab). Aktionen am Chat, dieselben Wege wie sein
 Kontextmenü: „Konto wechseln ›“ (Claude-Konten wie „Zu Account verschieben“, bei GPT-Chats auch die
 GPT-Konten), „Umbenennen…“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“
-in der Seitenleiste). Dazu „Belegung anzeigen“ und „Controller pausieren“. In der Liste wirken die
+in der Seitenleiste). Dazu „Zwischenablage-Verlauf“, „Belegung anzeigen“ und „Controller pausieren“. In der Liste wirken die
 Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options schließt alles.
 
 ## Ebenen und Insel
@@ -115,6 +119,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Kreis | abbrechen |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
 | | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“) |
+| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
 
 Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
 Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. Start-Reiter von „Wohin“: im
@@ -168,6 +173,45 @@ Fokus. In Dialogen des Agent-Chats-Fensters bewegt auch der linke Stick hoch/run
 „Neuer Chat“ und die Rückfragen „Chat beenden?“/„Chat archivieren?“ melden sich im Schnappschuss
 (`isNewChatPickerOpen`, `isConfirmationOpen`); das Fenster bleibt Ziel, auch wenn das Popover selbst Key
 wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
+
+## Touchpad als Maus
+
+Mit dem Schalter „Touchpad als Maus“ wird das Touchpad zum Trackpad, in jedem Programm, auch in
+WhisperM8. In anderen Programmen nur mit „Auch wenn ein anderes Programm vorne ist“, sonst kommen dort
+keine Eingaben an. Ohne Schalter bleibt alles wie vorher.
+
+- **Bewegen:** relativ wie ein MacBook-Trackpad, mit Beschleunigung: Langsam ist fein, eine schnelle
+  Wischbewegung trägt weit (Verstärkung 0,5 bis 4 je nach Tempo, mal Zeigergeschwindigkeit). Senkrecht
+  zählt der Weg halb, weil die Fläche etwa halb so hoch wie breit ist, aber auf beiden Achsen −1…1 meldet.
+- **Klicken:** Drücken ist Maustaste unten, Loslassen oben; dazwischen zieht der Finger mit gedrückter
+  Taste (Ziehen und Ablegen). Zwei schnelle Klicks am selben Fleck sind ein Doppelklick
+  (Systemwert `NSEvent.doubleClickInterval`). 80 ms nach Drücken und Loslassen ruht der Zeiger, denn
+  der Finger verrutscht beim Klicken.
+- **Rechtsklick:** mit zwei Fingern auf der Fläche drücken. Der zweite Finger zählt nur, wenn er sich in
+  den letzten 1,5 s gemeldet hat — falls das Framework sein Abheben nie meldet.
+- **Verlauf:** L2 halten und Touchpad drücken, überall (auch im Verlauf, um ihn zu schließen), oder
+  „Zwischenablage-Verlauf“ im Options-Menü. Mit gehaltenem L2 klickt das Touchpad nie. Mit gehaltenem
+  L1 oder R1 klickt es, die Taste gilt danach aber nicht mehr als getippt.
+- **Rückmeldung:** ein sehr kurzer Tick bei jedem Klick (Schalter „Vibration“). Fehlt die
+  Bedienungshilfen-Berechtigung, vibriert der Klick „geht nicht“, und die Einstellungsseite zeigt einen
+  Hinweis mit Knopf zu den Systemeinstellungen. Ohne Berechtigung verwirft macOS die Mausereignisse still.
+- **Nie** in der Pause (L1 + R1, Sperre, Ruhezustand, Spiel vorne), ausgeschaltet, getrennt oder im
+  Trockenlauf des Debug-Kanals. Pause, Trennung und Ausschalten lassen eine gedrückte Taste los.
+- **Kein Aufwecken:** Finger auf der Fläche und Klicks sind keine Gesten. Sie wecken WhisperM8 nicht,
+  ein Klick in einem anderen Programm ist ein Klick dort. Sie beeinflussen auch nicht das Verwerfen nach
+  dem Aufwecken.
+- Kein Scrollen mit zwei Fingern (bewusst noch nicht).
+
+**Aufsetzen ohne Sprung:** Das Framework meldet für das Touchpad nur Positionen
+(`touchpadPrimary`/`touchpadSecondary`, Richtungs-Pads ohne eigenen Zustand „Finger liegt auf“) und auch
+die nur bei einer Änderung. Ein neuer Finger wird deshalb dreifach erkannt: genau (0, 0) gilt als
+abgehoben, eine Lücke über 0,1 s und ein Sprung über eine halbe Flächenbreite gelten als neues Aufsetzen.
+Die erste Meldung setzt nur den Anker. Hebt der erste Finger ab und der zweite bleibt, führt der zweite.
+
+**Leistung:** Fingerdaten kommen in hohem Takt. Sie laufen nur auf der Eingabe-Queue
+(`ControllerPointerDriver` in der Pumpe), nie über den Main Thread, nie in den Erkenner und ohne Zähler,
+Signpost oder Log je Meldung. Nur ein Klick springt für den Tick zum Main Thread. Ist der Schalter aus,
+hängt die Quelle gar keine Handler an die Fingerdaten (`setTouchTracking`).
 
 ## Schutzregeln
 
@@ -282,6 +326,7 @@ debug.controller (Skript) ──┤
 | Kern | `Services/Controller/Core/` | Tasten, Gesten, Zusammenhang, Belegung, Legende, Listen- und Menü-Modell, Regeln für Licht, Warte-Signal und Spiele — nur Foundation, ein Quelltext-Test erzwingt das |
 | Quelle | `GameControllerInputSource` | Verdrahtung des Frameworks, Lichtleiste, Haptik (eine Engine je Controller, Neuaufbau nach Fehler) |
 | Pumpe | `ControllerGesturePump` | Erkennung auf eigener Queue; `DispatchSourceTimer(.strict)` nur, solange etwas gedrückt ist, dann auch Aktivität gegen App Nap |
+| Zeiger | `Core/ControllerTouchpadPointer.swift`, `ControllerPointerDriver.swift` | Touchpad als Maus: Aufsetzen, Beschleunigung, Links/Rechts und Doppelklick pur im Kern; der Treiber in der Pumpe entscheidet je Ereignis Zeiger oder Erkenner; `CGEventPointerPoster` schickt die Mausereignisse |
 | Manager | `ControllerManager` | Ein/Aus nach Schaltern, Pause, Hintergrund-Zustand (Systemwert wird zurückgelesen), Zähler je Taste |
 | Ausführer | `ControllerActionDispatcher` | Schnappschuss der App je Eingabe, Ausführung über Schnittstellen (`ControllerTerminalControlling`, `ControllerDictationControlling`, `ControllerAppEnvironment`) |
 | Rückmeldung | `ControllerFeedback` | Lichtleiste, Warte-Signal, automatische Pause, Maus/Tastatur geben Liste, Menü und Insel ab |
@@ -297,10 +342,12 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 
 ## Prüfen
 
-- `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
+- `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; der Zeiger in
+  `ControllerTouchpadPointerTests` und `ControllerPointerDriverTests`; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster, offener Auswahl und Shell),
+- `make snapshots ONLY=controller` — Einstellungsseite (auch mit Touchpad als Maus und fehlender
+  Berechtigung), Legende in zehn Zuständen (mit Raster, offener Auswahl und Shell),
   Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel in elf
   Zuständen (Wohin: Hinweis, Chats, Workspaces, mit Notch-Zählern; Schreiben, Schreiben in der Shell;
   Schnellbefehle, Schnellbefehle bei Rückfrage; als Pille Chats, Schnellbefehle, Shell);
@@ -327,3 +374,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Was eine Projektgruppe per „N weitere anzeigen“ zusätzlich aufgeklappt hat, erreicht die
   Listen-Navigation nicht; sie reicht bis zum Startlimit der Gruppe und immer bis zum gewählten Chat.
 - Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
+- **Touchpad als Maus:** Wie das Framework einen abgehobenen Finger meldet (zurück auf (0, 0) oder
+  letzte Position), ist nicht dokumentiert; die Erkennung oben deckt beides ab, am echten DualSense
+  ist sie noch nicht geprüft. Ohne Hintergrund-Empfang endet der Zeiger, sobald ein Klick
+  ein anderes Programm nach vorn holt (danach kommen keine Eingaben mehr an). Ein ruhender zweiter
+  Finger, der sich länger als 1,5 s nicht gemeldet hat, ergibt einen Linksklick. Der Debug-Kanal kennt
+  keine Finger.
