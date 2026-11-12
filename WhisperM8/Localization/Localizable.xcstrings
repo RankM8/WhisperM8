@@ -16424,6 +16424,16 @@
         }
       }
     },
+    "The chat is working — Continue and Switch mode wait until it is idle.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat arbeitet — Weiter und Modus wechseln erst, wenn er ruht."
+          }
+        }
+      }
+    },
     "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.": {
       "localizations": {
         "de": {

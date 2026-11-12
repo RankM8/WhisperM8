@@ -33,9 +33,11 @@ enum ControllerIslandGeometry {
                 x: screen.notchCenterX - bodySize.width / 2, y: screen.frame.maxY - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
         }
+        // Ohne sichtbare Menüleiste (Vollbild, automatisch ausgeblendet) sitzt
+        // die Pille oben am Bildschirmrand. An der Notch liegt das Band auch
+        // im Vollbild in der Aussparung (siehe oben).
         let menuBar = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
-        let top = screen.frame.maxY - (menuBar > 0 ? menuBar : NotchGeometry.fallbackMenuBarHeight)
-            - NotchGeometry.pillTopGap
+        let top = screen.frame.maxY - menuBar - NotchGeometry.pillTopGap
         return CGRect(
             x: screen.frame.midX - bodySize.width / 2, y: top - bodySize.height,
             width: bodySize.width, height: bodySize.height)
@@ -144,6 +146,10 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         // Über der Notch-Anzeige (`mainMenu + 3`), damit die Insel sie überdeckt.
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 4)
         panel.ignoresMouseEvents = true
+        // Auch über einem Vollbild-Fenster, sonst blieben die Kombinationen
+        // unsichtbar wirksam (wie Aufnahme-Pill und Zwischenablage-Verlauf).
+        // Nur die Insel, die Notch-Anzeige bleibt im Vollbild verborgen.
+        panel.collectionBehavior.insert(.fullScreenAuxiliary)
         panel.hasShadow = false
         let host = NSHostingView(rootView: ControllerIslandHostView(model: viewModel))
         host.safeAreaRegions = []

@@ -114,6 +114,10 @@ struct ControllerWhereToState: Equatable, Sendable {
     private(set) var tab: ControllerIslandTab
     private(set) var chats: ControllerIslandList<ControllerIslandChatRow>
     private(set) var workspaces: ControllerIslandList<ControllerWorkspaceChoice>
+    /// Im sichtbaren Reiter wurde seit dem Öffnen bzw. dem letzten
+    /// Reiterwechsel hoch/runter bewegt. Nur dann wechselt Loslassen oder
+    /// Kreuz — ein bloßer Reiterwechsel springt nicht zum ersten Eintrag.
+    private(set) var hasMovedInTab = false
 
     /// Start-Reiter: im Raster die Workspaces, in der Einzelansicht die Chats.
     init(
@@ -131,6 +135,7 @@ struct ControllerWhereToState: Equatable, Sendable {
     /// Schritt vom aktuellen Eintrag weiter; steht der aktuelle nicht in der
     /// Liste, bleibt die Markierung auf der ersten Zeile.
     mutating func move(_ step: Int) {
+        hasMovedInTab = true
         if !isListOpen {
             isListOpen = true
             switch tab {
@@ -154,11 +159,12 @@ struct ControllerWhereToState: Equatable, Sendable {
         isListOpen = true
         guard target != tab else { return !wasOpen }
         tab = target
+        hasMovedInTab = false
         return true
     }
 
     var destination: Destination {
-        guard isListOpen else { return .stay }
+        guard isListOpen, hasMovedInTab else { return .stay }
         switch tab {
         case .chats:
             guard let row = chats.selected, !row.isCurrent else { return .stay }
@@ -221,18 +227,31 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         [ControllerButton.cross, .triangle, .square, .circle].first { self.item(for: $0) == item }
     }
 
+    enum Note: String, Sendable {
+        /// Rückfrage offen: alles, was in den Chat schreibt, ist aus.
+        case question
+        /// Chat arbeitet (oder gerade gesendet): „Weiter“ und „Modus
+        /// wechseln“ warten, bis er ruht.
+        case busy
+    }
+
     var enabled: Set<ControllerMenuItem>
-    /// Rückfrage offen: alles, was in den Chat schreibt, ist aus.
-    var dialogOpen: Bool
+    var note: Note?
     /// Gerade gedrückt (kurze Markierung vor dem Schließen).
     var hit: ControllerMenuItem?
 
     /// Dieselben Regeln wie die Einträge des Options-Menüs.
     init(setup: ControllerMenuSetup, hit: ControllerMenuItem? = nil) {
         enabled = Set(Self.items.filter { ControllerMenuModel.isEnabled($0, setup: setup) })
-        dialogOpen = setup.dialogOpen
+        if setup.acceptsInput, setup.dialogOpen {
+            note = .question
+        } else if setup.acceptsInput, setup.chatBusy {
+            note = .busy
+        }
         self.hit = hit
     }
+
+    var dialogOpen: Bool { note == .question }
 }
 
 /// Alles, was die Insel zeigt.

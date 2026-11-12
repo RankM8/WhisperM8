@@ -116,8 +116,10 @@ extension ControllerActionDispatcher {
         case .quickDraw(let slots):
             guard var setup = state.setup else { return }
             let dialogOpen = chat?.status == .awaitingInput
-            guard setup.acceptsInput, setup.dialogOpen != dialogOpen else { return }
+            let busy = Self.isBusy(chat)
+            guard setup.acceptsInput, setup.dialogOpen != dialogOpen || setup.chatBusy != busy else { return }
             setup.dialogOpen = dialogOpen
+            setup.chatBusy = busy
             state.setup = setup
             state.model.content = .quickDraw(ControllerQuickDrawSlots(setup: setup, hit: slots.hit))
         case .whereTo:
@@ -150,7 +152,7 @@ extension ControllerActionDispatcher {
         defer { spentLayer = nil }
         guard let whereTo = islandState?.model.whereTo else { return closeIsland() }
         closeIsland()
-        go(to: whereTo.destination)
+        if !go(to: whereTo.destination) { playHaptic(.rejected) }
     }
 
     /// Kreuz (`dictate == false`) oder R2. Ohne offene Liste ist der aktuelle
@@ -165,10 +167,18 @@ extension ControllerActionDispatcher {
         }
         let destination = whereTo?.destination ?? .stay
         spendIsland(.whereTo)
-        go(to: destination)
-        guard dictate else { return }
-        if case let .chat(sessionID) = destination, terminals.state(of: sessionID)?.isRunning == true {
-            startDictation(target: .agentChat(sessionID: sessionID))
+        let switched = go(to: destination)
+        guard dictate else {
+            if !switched { playHaptic(.rejected) }
+            return
+        }
+        // Diktat nur in den Chat, der jetzt wirklich ausgewählt ist: Scheiterte
+        // der Wechsel (Konflikt, Chat weg), geht nichts in einen anderen.
+        if case let .chat(sessionID) = destination {
+            guard switched, selectedSessionID == sessionID, let target = chatTarget() else {
+                return playHaptic(.rejected)
+            }
+            startDictation(target: target)
         } else {
             startDictation(target: chatTarget() ?? .frontApp)
         }
@@ -184,12 +194,14 @@ extension ControllerActionDispatcher {
 
     /// Wechsel wie bisher: ein Chat wie der Klick in der Seitenleiste (wie
     /// L1/R1), ein Workspace wie der Klick auf seinen Kopf — Konflikte und die
-    /// gemerkte Kachel je Workspace inklusive.
-    private func go(to destination: ControllerWhereToState.Destination) {
+    /// gemerkte Kachel je Workspace inklusive. `false`, wenn der Wechsel nicht
+    /// ging; „geht nicht“ meldet der Aufrufer.
+    @discardableResult
+    private func go(to destination: ControllerWhereToState.Destination) -> Bool {
         switch destination {
-        case .stay: break
-        case let .chat(sessionID): command(.selectSession(sessionID), orReject: true)
-        case let .workspace(workspaceID): command(.activateWorkspace(workspaceID), orReject: true)
+        case .stay: return true
+        case let .chat(sessionID): return command(.selectSession(sessionID), orReject: false)
+        case let .workspace(workspaceID): return command(.activateWorkspace(workspaceID), orReject: false)
         }
     }
 
@@ -203,9 +215,11 @@ extension ControllerActionDispatcher {
     func performQuickDraw(_ item: ControllerMenuItem) {
         guard spentLayer != .quickDraw else { return }
         var setup = islandState?.setup ?? menuSetup(for: selectedSessionID.map { .chat($0) })
-        // Eine Rückfrage kann seit dem Öffnen erschienen sein.
+        // Eine Rückfrage kann seit dem Öffnen erschienen sein, oder der Chat
+        // hat zu arbeiten begonnen.
         if setup.acceptsInput, let sessionID = setup.sessionID, let terminal = terminals.state(of: sessionID) {
             setup.dialogOpen = terminal.status == .awaitingInput
+            setup.chatBusy = isBusy(terminal)
         }
         guard ControllerMenuModel.isEnabled(item, setup: setup) else { return playHaptic(.rejected) }
         flashQuickDrawHit(item)

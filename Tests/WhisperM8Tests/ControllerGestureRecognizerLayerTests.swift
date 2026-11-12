@@ -102,17 +102,28 @@ final class ControllerGestureRecognizerLayerTests: XCTestCase {
         XCTAssertTrue(recognizer.isIdle)
     }
 
-    /// Rechter Stick scrollt weiter und macht aus einem Tippen nichts anderes.
-    func testScrollingIsNotPartOfALayer() {
-        _ = down(.l1, at: 0)
-        _ = recognizer.handle(.stick(.right, x: 0, y: -1), at: 0.05)
-        let scrolled = recognizer.tick(at: 0.06).contains { gesture in
-            if case .scroll = gesture { return true }
-            return false
+    /// Rechter Stick scrollt weiter (nie in der Ebene), zählt aber als
+    /// zweite Eingabe: danach kein Tippen mehr (Review nach Runde 4, Punkt 5).
+    func testScrollingKeepsWorkingButCancelsTheTap() {
+        for key in [ControllerButton.l1, .r1, .l2] {
+            recognizer = ControllerGestureRecognizer()
+            _ = down(key, at: 0)
+            _ = recognizer.handle(.stick(.right, x: 0, y: -1), at: 0.05)
+            let scrolled = recognizer.tick(at: 0.06).contains { gesture in
+                if case .scroll = gesture { return true }
+                return false
+            }
+            XCTAssertTrue(scrolled, "\(key)")
+            _ = recognizer.handle(.stick(.right, x: 0, y: 0), at: 0.1)
+            XCTAssertEqual(up(key, at: 0.2), [.layerEnded(ControllerLayer(key: key)!)], "\(key)")
         }
-        XCTAssertTrue(scrolled)
-        _ = recognizer.handle(.stick(.right, x: 0, y: 0), at: 0.1)
-        XCTAssertEqual(up(.l1, at: 0.2), [.tap(.l1)])
+    }
+
+    /// Ein Ausschlag innerhalb der Totzone (Drift) stört ein Tippen nicht.
+    func testRightStickDriftDoesNotCancelTheTap() {
+        _ = down(.r1, at: 0)
+        _ = recognizer.handle(.stick(.right, x: 0, y: 0.1), at: 0.05)
+        XCTAssertEqual(up(.r1, at: 0.2), [.tap(.r1)])
     }
 
     /// Nur eine Ebene zugleich: Unter L2 sind L1 und R1 gewöhnliche Tasten

@@ -49,12 +49,14 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
 
     private func setTerminal(
         _ sessionID: UUID, status: AgentSessionRuntimeStatus?, profile: ControllerChatState.Profile = .claude,
-        draft: Bool = false
+        draft: Bool = false, lastEnter: Date? = nil
     ) {
         terminals.states[sessionID] = ControllerTerminalState(
             isRunning: true, profile: profile, status: status, statusSince: nil,
-            draftSuspected: draft, lastEnterAt: nil, lastEscapeAt: nil)
+            draftSuspected: draft, lastEnterAt: lastEnter, lastEscapeAt: nil)
     }
+
+    private let now = Date(timeIntervalSince1970: 1_000)
 
     private var context: ControllerContext {
         ControllerContextResolver.context(for: dispatcher.snapshot())
@@ -184,8 +186,11 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.dpadRight, at: 0.6)
         release(.dpadRight, at: 0.65)
         XCTAssertEqual(whereTo?.tab, .workspaces)
+        XCTAssertEqual(whereTo?.destination, .stay, "nach dem Reiterwechsel erst wieder bewegen")
+        press(.dpadDown, at: 0.7)
+        release(.dpadDown, at: 0.75)
         release(.l2, at: 1)
-        XCTAssertEqual(window.commands.last, .activateWorkspace(workspaces[1]))
+        XCTAssertEqual(window.commands.last, .activateWorkspace(workspaces[2]))
     }
 
     func testCircleCancelsAndTheIslandStaysClosed() {
@@ -402,5 +407,128 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.l1, at: 2)
         tick(2.3)
         XCTAssertTrue(island.isVisible)
+    }
+
+    // MARK: - Review nach Runde 4
+
+    /// Punkt 1: „Weiter“ und „Modus wechseln“ nur, wenn der Chat ruht — nicht
+    /// bei arbeitend, unbekannt oder gerade gesendet (Lücke vor „wartet“;
+    /// Codex meldet nie „wartet“). Konto wechseln geht weiter.
+    func testContinueAndModeOnlyWhileTheChatIsIdle() {
+        let cases: [(AgentSessionRuntimeStatus?, ControllerChatState.Profile, Date?)] = [
+            (.working, .claude, nil), (nil, .claude, nil), (.idle, .claude, now.addingTimeInterval(-1)),
+            (.working, .codex, nil),
+        ]
+        for (status, profile, lastEnter) in cases {
+            haptics = []
+            setTerminal(chats[1], status: status, profile: profile, lastEnter: lastEnter)
+            press(.r1, at: 0)
+            tick(0.3)
+            guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
+            XCTAssertEqual(slots.note, .busy, "\(String(describing: status)) \(profile)")
+            XCTAssertFalse(slots.enabled.contains(.continueWork))
+            XCTAssertFalse(slots.enabled.contains(.cycleMode))
+            XCTAssertTrue(slots.enabled.contains(.commands))
+            press(.cross, at: 0.4)
+            press(.triangle, at: 0.5)
+            XCTAssertEqual(haptics, [.rejected, .rejected])
+            XCTAssertTrue(terminals.texts.isEmpty)
+            XCTAssertTrue(terminals.keys.isEmpty, "kein Shift+Tab, kein Enter")
+            release(.cross, at: 0.6)
+            release(.triangle, at: 0.6)
+            release(.r1, at: 0.7)
+        }
+        setTerminal(chats[1], status: .idle, profile: .codex)
+        press(.r1, at: 1)
+        press(.triangle, at: 1.1)
+        XCTAssertEqual(terminals.keys, [.backTab], "ruhender Codex-Chat: Modus wechseln geht")
+    }
+
+    /// Der Chat beginnt zu arbeiten, während R1 gehalten wird: Die Raute graut
+    /// aus (nach `refreshContext`), und ein Druck geht nicht.
+    func testChatStartingToWorkWhileHoldingR1() {
+        press(.r1, at: 0)
+        tick(0.3)
+        setTerminal(chats[1], status: .working)
+        dispatcher.refreshContext()
+        guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
+        XCTAssertEqual(slots.note, .busy)
+        press(.cross, at: 0.4)
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertTrue(terminals.texts.isEmpty)
+    }
+
+    /// Das Options-Menü ist kein Schlupfloch: dieselbe Regel, auch wenn der
+    /// Chat erst nach dem Öffnen zu arbeiten beginnt.
+    func testMenuFollowsTheSameRule() {
+        setTerminal(chats[1], status: .working)
+        dispatcher.perform(.menuToggle, in: context)
+        let busyMenu = ui.menu
+        XCTAssertEqual(busyMenu?.top.isEnabled(.continueWork), false)
+        XCTAssertEqual(busyMenu?.top.isEnabled(.cycleMode), false)
+        dispatcher.perform(.menuToggle, in: context)
+
+        setTerminal(chats[1], status: .idle)
+        dispatcher.perform(.menuToggle, in: context)
+        ui.menu?.select(.continueWork)
+        setTerminal(chats[1], status: .working)
+        dispatcher.refreshContext()
+        XCTAssertEqual(ui.menu?.top.isEnabled(.continueWork), false, "Einträge folgen dem Status")
+        // Auch wenn der Status zwischen zwei Schnappschüssen wechselt, prüft
+        // das Auslösen frisch.
+        guard let setup = ui.menu?.setup else { return XCTFail("Menü erwartet") }
+        var stale = setup
+        stale.chatBusy = false
+        dispatcher.perform(.continueWork, setup: stale)
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertTrue(terminals.texts.isEmpty)
+    }
+
+    /// Punkt 3: Nur den Reiter zu wechseln und L2 loszulassen, wechselt nicht.
+    func testTabSwitchAloneDoesNotSwitch() {
+        window.workspaces = [UUID(), UUID()].map {
+            ControllerWorkspaceChoice(id: $0, name: "W", colorHex: "#888888", chatCount: 1,
+                                      hasWaitingChat: false, isCurrent: false)
+        }
+        press(.l2, at: 0)
+        press(.dpadRight, at: 0.1)
+        release(.dpadRight, at: 0.15)
+        XCTAssertEqual(whereTo?.tab, .workspaces)
+        release(.l2, at: 0.5)
+        XCTAssertFalse(window.commands.contains { if case .activateWorkspace = $0 { return true }; return false })
+        XCTAssertEqual(window.selected, chats[1])
+
+        // Bewegt, dann Reiter gewechselt: auch dann erst nach einer Bewegung.
+        press(.l2, at: 1)
+        press(.dpadDown, at: 1.1)
+        release(.dpadDown, at: 1.15)
+        press(.dpadRight, at: 1.2)
+        release(.dpadRight, at: 1.25)
+        press(.cross, at: 1.3)
+        XCTAssertFalse(window.commands.contains { if case .activateWorkspace = $0 { return true }; return false })
+        XCTAssertEqual(window.selected, chats[1])
+    }
+
+    /// Punkt 4: Scheitert der Wechsel, wird nicht diktiert.
+    func testDictatesOnlyIfTheSwitchWorked() {
+        window.failing = [String(describing: AgentChatsCommand.selectSession(chats[2]))]
+        press(.l2, at: 0)
+        press(.dpadDown, at: 0.1)
+        press(.r2, at: 0.2)
+        XCTAssertTrue(dictation.started.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Punkt 7: Der Schnappschuss zeichnet die Insel nicht nach, nur
+    /// `refreshContext` (Trockenläufe des Debug-Kanals bleiben ohne Fenster).
+    func testSnapshotHasNoIslandSideEffect() {
+        press(.r1, at: 0)
+        tick(0.3)
+        let shown = island.shown.count
+        setTerminal(chats[1], status: .awaitingInput)
+        _ = dispatcher.snapshot()
+        XCTAssertEqual(island.shown.count, shown)
+        dispatcher.refreshContext()
+        XCTAssertEqual(island.shown.count, shown + 1)
     }
 }

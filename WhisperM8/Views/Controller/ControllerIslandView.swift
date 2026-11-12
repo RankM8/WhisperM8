@@ -160,7 +160,10 @@ struct ControllerIslandView: View {
 
     @ViewBuilder
     private var headerTarget: some View {
-        if let counts = display.counts {
+        // Die Zähler der Notch-Anzeige nur bei „Wohin“ (Entwurf, Zustand 8):
+        // Schreiben und Schnellbefehle wirken auf einen Chat, der muss im
+        // Kopf stehen.
+        if let counts = display.counts, display.model.layer == .whereTo {
             HStack(spacing: 12) {
                 if counts.working > 0 { count(.working, counts.working, palette.working) }
                 if counts.waiting > 0 { count(.awaiting, counts.waiting, palette.awaiting) }
@@ -223,7 +226,7 @@ struct ControllerIslandView: View {
             .padding(.horizontal, 14)
             .padding(.top, 2)
             .padding(.bottom, 12)
-            if let note = slots.note { self.note(note) }
+            if let note = slots.note { self.note(note.text) }
         }
     }
 
@@ -251,8 +254,8 @@ struct ControllerIslandView: View {
             }
             .padding(.horizontal, 14)
             .padding(.top, 4)
-            .padding(.bottom, slots.dialogOpen ? 8 : 14)
-            if slots.dialogOpen { note(.question) }
+            .padding(.bottom, slots.note == nil ? 14 : 8)
+            if let note = slots.note { self.note(note.text) }
         }
     }
 
@@ -473,8 +476,8 @@ struct ControllerIslandView: View {
         .opacity(on ? 1 : 0.38)
     }
 
-    private func note(_ note: ControllerWritingSlots.Note) -> some View {
-        Text(verbatim: note.text)
+    private func note(_ text: String) -> some View {
+        Text(verbatim: text)
             .font(.system(size: 11))
             .foregroundStyle(palette.awaiting)
             .multilineTextAlignment(.center)
@@ -489,6 +492,15 @@ extension ControllerWritingSlots.Note {
         switch self {
         case .shell: return String(localized: "Not in a shell — a program there could read the keys differently.")
         case .question: return String(localized: "Question open — nothing goes into the chat right now.")
+        }
+    }
+}
+
+extension ControllerQuickDrawSlots.Note {
+    var text: String {
+        switch self {
+        case .question: return ControllerWritingSlots.Note.question.text
+        case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
         }
     }
 }
@@ -553,9 +565,11 @@ private struct IslandGlyph: View {
             .foregroundStyle(palette.text)
             .padding(.horizontal, round ? 4 : 5)
             .frame(minWidth: 20, minHeight: 20)
-            .background(palette.key, in: RoundedRectangle(cornerRadius: round ? 10 : 5, style: .continuous))
+            // Runde Tasten als Kapsel: Ein `.continuous`-Rechteck mit halber
+            // Höhe als Radius wirkt bei 20 pt achteckig.
+            .background(palette.key, in: RoundedRectangle(cornerRadius: round ? 10 : 5, style: round ? .circular : .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: round ? 10 : 5, style: .continuous)
+                RoundedRectangle(cornerRadius: round ? 10 : 5, style: round ? .circular : .continuous)
                     .strokeBorder(palette.keyBorder, lineWidth: 1))
             .fixedSize()
     }

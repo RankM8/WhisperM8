@@ -31,6 +31,45 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         XCTAssertNil(ControllerIslandList<ControllerWorkspaceChoice>(rows: [], currentID: nil).selected)
     }
 
+    /// Review nach Runde 4, Punkt 3: Loslassen wechselt nur nach einer
+    /// Bewegung im sichtbaren Reiter.
+    func testDestinationNeedsAMoveInTheVisibleTab() {
+        let chatRows = [UUID(), UUID()].map {
+            ControllerIslandChatRow(id: $0, title: "C", project: nil, status: .idle, detail: "", isCurrent: false)
+        }
+        let choices = [choice("A"), choice("B")]
+        var state = ControllerWhereToState(chats: chatRows, currentChatID: nil, workspaces: choices, gridActive: false)
+        XCTAssertEqual(state.destination, .stay, "Liste zu")
+        state.switchTab(1)
+        XCTAssertTrue(state.isListOpen)
+        XCTAssertEqual(state.destination, .stay, "nur Reiter gewechselt")
+        state.move(1)
+        XCTAssertEqual(state.destination, .workspace(choices[1].id))
+        state.switchTab(-1)
+        XCTAssertEqual(state.destination, .stay, "neuer Reiter, noch nicht bewegt")
+        state.move(1)
+        XCTAssertEqual(state.destination, .chat(chatRows[1].id))
+    }
+
+    /// Review nach Runde 4, Punkt 2: Ohne sichtbare Menüleiste (Vollbild)
+    /// hängt die Pille oben am Rand; an der Notch liegt das Band in der Aussparung.
+    func testIslandGeometryWithAndWithoutMenuBar() {
+        let frame = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let fullscreen = NotchScreenInfo(displayID: 1, frame: frame, visibleFrame: frame, safeAreaTop: 0,
+                                         auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false)
+        XCTAssertEqual(ControllerIslandGeometry.frame(screen: fullscreen, bodySize: CGSize(width: 400, height: 100)),
+                       CGRect(x: 600, y: 1000 - 6 - 100, width: 400, height: 100))
+        var withMenuBar = fullscreen
+        withMenuBar.visibleFrame = CGRect(x: 0, y: 0, width: 1600, height: 975)
+        XCTAssertEqual(ControllerIslandGeometry.frame(screen: withMenuBar, bodySize: CGSize(width: 400, height: 100)).maxY,
+                       1000 - 25 - 6)
+        let notch = NotchScreenInfo(displayID: 2, frame: frame, visibleFrame: frame, safeAreaTop: 32,
+                                    auxiliaryLeftWidth: 700, auxiliaryRightWidth: 700, isBuiltIn: true)
+        let island = ControllerIslandGeometry.frame(screen: notch, bodySize: CGSize(width: 440, height: 200))
+        XCTAssertEqual(island.maxY, 1000, "bündig an der Oberkante, auch im Vollbild")
+        XCTAssertEqual(island.midX, 800)
+    }
+
     // MARK: - Einträge
 
     /// Nur angelegte Workspaces in der Reihenfolge der Seitenleiste; Zahl der

@@ -172,6 +172,12 @@ struct ControllerGestureRecognizer: Sendable {
         case let .stick(.right, _, y):
             rightStick(y: y, at: time)
             gestures += cancelHoldsWhileScrolling()
+            // Scrollen während einer gehaltenen Ebenen-Taste ist eine zweite
+            // Eingabe: kein Tippen mehr (das Scrollen selbst läuft weiter).
+            if scroll != nil, var current = layer {
+                current.used = true
+                layer = current
+            }
         }
         return gestures
     }

@@ -241,6 +241,11 @@ extension UISnapshotGallery {
         let quickDraw = ControllerIslandModel(
             target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
             content: .quickDraw(ControllerQuickDrawSlots(setup: setup)))
+        var busySetup = setup
+        busySetup.chatBusy = true
+        let quickDrawBusy = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .working),
+            content: .quickDraw(ControllerQuickDrawSlots(setup: busySetup)))
         setup.dialogOpen = true
         let quickDrawQuestion = ControllerIslandModel(
             target: ControllerIslandTarget(title: "Jarvis: Supervisor", status: .awaiting),
@@ -272,6 +277,15 @@ extension UISnapshotGallery {
             Fixture(name: "controller-insel-schreiben-shell", size: small) { island(writingShell) },
             Fixture(name: "controller-insel-schnellbefehle", size: small) { island(quickDraw) },
             Fixture(name: "controller-insel-schnellbefehle-rueckfrage", size: small) { island(quickDrawQuestion) },
+            // Review nach Runde 4: Chat arbeitet — Weiter und Modus aus.
+            Fixture(name: "controller-insel-schnellbefehle-arbeitet", size: small) { island(quickDrawBusy) },
+            // Mit Notch-Zählern bleibt bei L1 und R1 der Ziel-Chat im Kopf.
+            Fixture(name: "controller-insel-schnellbefehle-notch-zaehler", size: small) {
+                island(quickDraw, counts: ControllerIslandCounts(working: 2, waiting: 1))
+            },
+            Fixture(name: "controller-insel-schreiben-notch-zaehler", size: small) {
+                island(writing, counts: ControllerIslandCounts(working: 2, waiting: 1))
+            },
             Fixture(name: "controller-insel-pille-chats", size: size) {
                 island(whereTo(grid: false, open: [1]), style: .pill)
             },

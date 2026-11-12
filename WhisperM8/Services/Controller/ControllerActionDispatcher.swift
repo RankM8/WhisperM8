@@ -154,17 +154,29 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let context = ControllerContextResolver.context(for: snapshot)
         if ui.context != context { ui.context = context }
         let dialogOpen = snapshot.chat?.status == .awaitingInput
-        if ui.menu != nil, ui.menuDialogOpen != dialogOpen {
-            ui.menuDialogOpen = dialogOpen
-            ui.menu?.update(dialogOpen: dialogOpen)
+        if ui.menu != nil {
+            if ui.menuDialogOpen != dialogOpen { ui.menuDialogOpen = dialogOpen }
+            // Nur der Chat, für den das Menü offen ist, ändert seine Einträge.
+            if ui.menu?.setup.acceptsInput == true, ui.menu?.setup.sessionID == selectedSessionID {
+                ui.menu?.update(dialogOpen: dialogOpen, chatBusy: Self.isBusy(snapshot.chat))
+            }
         }
-        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
+    }
+
+    /// Chat arbeitet, sein Zustand ist unklar oder es wurde gerade gesendet:
+    /// „Weiter“ und „Modus wechseln“ sind dann aus (Rückfrage zählt extra).
+    static func isBusy(_ chat: ControllerChatState?) -> Bool {
+        guard let chat else { return true }
+        return chat.status != .idle && chat.status != .awaitingInput || chat.recentlySubmitted
     }
 
     /// Zusammenhang neu bestimmen, ohne dass eine Eingabe kam (Legende nach
-    /// Statuswechsel).
+    /// Statuswechsel), und eine offene Insel nachführen. Die Insel hängt
+    /// bewusst hier und nicht am Schnappschuss: Der bleibt ohne Fenster-
+    /// Nebenwirkung, auch bei Trockenläufen des Debug-Kanals.
     func refreshContext() {
-        _ = snapshot()
+        let snapshot = snapshot()
+        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
     }
 
     /// Schließt, was der Controller offen hat: Insel, Menü, Liste,
@@ -533,8 +545,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             setup.acceptsInput = true
             setup.profile = terminal.profile
             setup.dialogOpen = terminal.status == .awaitingInput
+            setup.chatBusy = isBusy(terminal)
         }
         return setup
+    }
+
+    /// Wie `isBusy(_:)`, aus dem Zustand des Terminals.
+    func isBusy(_ terminal: ControllerTerminalState) -> Bool {
+        let justSent = terminal.lastEnterAt.map { now().timeIntervalSince($0) < Self.recentlySubmittedWindow } ?? false
+        return !(terminal.status == .idle || terminal.status == .awaitingInput) || justSent
     }
 
     private func activateMenuItem() {
@@ -566,6 +585,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     }
 
     func perform(_ item: ControllerMenuItem, setup: ControllerMenuSetup) {
+        // „Weiter“ und „Modus wechseln“ prüfen beim Auslösen noch einmal frisch,
+        // ob der Chat ruht — auf jedem Weg (Menü und R1-Raute).
+        if item.needsRestingChat {
+            guard let sessionID = setup.sessionID, let terminal = terminals.state(of: sessionID),
+                  terminal.status == .idle, !isBusy(terminal) else {
+                return playHaptic(.rejected)
+            }
+        }
         switch item {
         case .continueWork:
             // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
