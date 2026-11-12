@@ -172,7 +172,7 @@ final class ControllerLegendTests: XCTestCase {
         let sections = ControllerLegend.allBindings()
         XCTAssertEqual(sections.map(\.kind), [.core, .extra])
         XCTAssertEqual(sections[0].entries.count, 9)
-        XCTAssertEqual(sections[1].entries.count, 13, "Runde 3: L2 halten im Raster, R3 halten leert")
+        XCTAssertEqual(sections[1].entries.count, 14, "Runde 3: L2 halten im Raster, R3 halten leert; danach Vorschlag übernehmen")
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         XCTAssertTrue(sections[1].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]

@@ -1101,6 +1101,24 @@ Nebenbei: `sendKey` steht jetzt kürzer in `AgentTerminalView.swift` (Merker und
 - 5: Enter löscht den Merker auch bei verschachtelten Listen wie `/config` (Untermenüs dann wieder über
   das Menü öffnen).
 
+### 6.8 Vorschlag übernehmen per Steuerkreuz rechts (12.11.2026)
+
+Nach den Review-Fixes bewegte das Steuerkreuz außerhalb von Rückfragen nur noch; den grauen
+Vorschlag von Claude (nächster Prompt) ließ sich so nicht mehr übernehmen. Vom User mit „alles ja“
+entschieden:
+
+1. Steuerkreuz rechts schickt in jedem lebenden Claude-Chat den Pfeil rechts, auch im Raster.
+   Claude Code übernimmt damit den Vorschlag ins Eingabefeld (Doku: Tab oder Pfeil rechts). Mit Text
+   im Feld rückt nur der Cursor. Hoch, runter und links bleiben Navigation; im Raster wechselt nach
+   rechts nur noch der Stick die Kachel.
+2. Danach schickt Kreuz den Vorschlag ab, wie bisher.
+3. Die Legende zeigt bei Claude-Chats „▶ Vorschlag übernehmen“ — immer, weil die App nicht sicher
+   erkennt, ob gerade ein Vorschlag da ist (das hieße, graue Schrift im Terminalbild zu suchen).
+4. Kein Tab: Tab öffnet in Freigabe-Dialogen ein Kommentarfeld und nach „/“ die Befehlsliste.
+
+Codex bekommt die Pfeile ohnehin, Shells bleiben rechts ohne Wirkung. Die Absicherung im Terminal
+(`TerminalControlKey.controllerAllows`) lässt Pfeil rechts bei Claude immer durch, links bleibt gesperrt.
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
