@@ -13,6 +13,9 @@ struct ControllerTerminalState: Equatable {
     /// Seit wann der aktuelle Status gilt.
     var statusSince: Date?
     var draftSuspected: Bool
+    /// Irgendetwas steht vermutlich im Feld (auch Rückleger, zurückgeholter
+    /// oder per → übernommener Text) — `TerminalComposerDraftTracker.fieldMayHaveText`.
+    var fieldMayHaveText: Bool = false
     /// Wann zuletzt abgeschickt wurde, auf jedem Weg (Enter vom Controller
     /// oder von der Tastatur, `chats send`, Diktat und Menü mit Senden).
     var lastEnterAt: Date?

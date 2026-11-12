@@ -35,6 +35,9 @@ struct ControllerChatState: Equatable, Sendable {
     var profile: Profile
     /// Im Eingabefeld steht vermutlich ein Entwurf (Draft-Tracker).
     var draftSuspected: Bool = false
+    /// Irgendetwas steht vermutlich im Feld (Entwurf, Rückleger, ↑ oder →).
+    /// Nur ohne das sperrt Pfeil links bei Claude.
+    var fieldMayHaveText: Bool = false
     /// Gerade gesendet (`countsAsInterrupt` des Trackers).
     var recentlySubmitted: Bool = false
     /// Seit wann die Rückfrage offen ist; `nil`, wenn unbekannt.

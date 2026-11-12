@@ -13,7 +13,7 @@ extension AgentTerminalController {
         TerminalControlKey.controllerAllows(
             key, status: status, profile: command.keyboardProfile,
             choiceListOpen: controllerChoiceListOpen(status: status, at: now),
-            composerMayHaveText: composerDraft.mayHaveUnsentInput)
+            composerMayHaveText: composerDraft.fieldMayHaveText)
     }
 
     /// Ist eine Auswahlliste, die das Controller-Menü geöffnet hat, vermutlich
