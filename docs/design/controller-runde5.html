@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controller Runde 5 – Entwurf</title>
+<style>
+  /* Fortsetzung von controller-insel.html: gleiche Farben (AppTheme.swift), gleiche Bausteine.
+     Die Insel an der Notch ist immer schwarz wie die Hardware, die Pille folgt Hell und Dunkel. */
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#8d8e93; --line:rgba(0,0,0,.09);
+    --wall:linear-gradient(160deg,#cfd8ee,#e8d9ee 55%,#f3e4d6); --menubar:rgba(255,255,255,.72);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08); --border-strong:rgba(0,0,0,.14);
+    --pill-bg:rgba(250,250,252,.94); --pill-ink:#1c1c1e; --pill-ink2:#5f6064; --pill-ink3:#8d8e93; --pill-line:rgba(0,0,0,.12);
+    --pill-key:#ffffff; --pill-key-line:rgba(0,0,0,.16); --pill-mark:rgba(94,106,210,.13); --pill-mark-line:#5e6ad2;
+    --accent:#5e6ad2; --accent-tint:rgba(94,106,210,.12); --working:#3fa873; --awaiting:#c9962a; --error:#d6473d;
+  }
+  [data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#76777d; --line:rgba(255,255,255,.09);
+    --wall:linear-gradient(160deg,#1b2238,#2a2140 55%,#3a2b2e); --menubar:rgba(30,30,34,.7);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.07); --border-strong:rgba(255,255,255,.14);
+    --pill-bg:rgba(22,22,25,.95); --pill-ink:#f1f1f3; --pill-ink2:#a4a5ab; --pill-ink3:#76777d; --pill-line:rgba(255,255,255,.12);
+    --pill-key:#2a2a2e; --pill-key-line:rgba(255,255,255,.16); --pill-mark:rgba(124,132,232,.18); --pill-mark-line:#7c84e8;
+    --accent:#7c84e8; --accent-tint:rgba(124,132,232,.16); --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.4 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header p { margin:0; color:var(--ink2); }
+  header button { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  main { padding:24px 28px 60px; display:grid; grid-template-columns:repeat(auto-fill,minmax(560px,1fr)); gap:26px; }
+  h2 { grid-column:1/-1; margin:14px 0 -8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  figure { margin:0; }
+  figure.full { grid-column:1/-1; }
+  figcaption { margin:8px 2px 0; color:var(--ink2); max-width:96ch; }
+  figcaption b { color:var(--ink); font-weight:600; }
+  .rules { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul, .rules ol { margin:6px 0 0; padding-left:18px; }
+  .rules li { margin:3px 0; }
+  .rules table { border-collapse:collapse; width:100%; margin-top:8px; }
+  .rules td, .rules th { text-align:left; padding:5px 10px; border-top:1px solid var(--line); vertical-align:middle; }
+  .rules th { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); font-weight:600; border-top:0; }
+  .rules td:first-child { width:110px; white-space:nowrap; color:var(--ink); font-weight:600; }
+  .rules td:nth-child(2) { width:120px; white-space:nowrap; }
+  .rules .new { font-size:11px; font-weight:600; color:var(--accent); background:var(--accent-tint); border-radius:5px; padding:1px 6px; margin-left:6px; }
+  .rules .sep { color:var(--ink3); }
+  .rules .g { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+
+  /* Bildschirm-Attrappe */
+  .screen { position:relative; height:360px; border-radius:12px; overflow:hidden; background:var(--wall); border:1px solid var(--line); }
+  .screen.tall { height:440px; }
+  .screen.huge { height:540px; }
+  .menubar { position:absolute; inset:0 0 auto 0; height:32px; background:var(--menubar); backdrop-filter:blur(14px);
+             display:flex; align-items:center; justify-content:space-between; padding:0 14px; font-size:12px; color:var(--ink); z-index:1; }
+  .menubar.nonotch { height:24px; }
+  .menubar .l, .menubar .r { display:flex; gap:14px; opacity:.85; }
+
+  /* Agent-Chats-Fenster dahinter */
+  .win { position:absolute; left:24px; right:24px; top:48px; bottom:18px; background:var(--win); border:1px solid var(--border);
+         border-radius:10px; box-shadow:0 14px 40px rgba(0,0,0,.22); display:grid; grid-template-columns:190px 1fr; overflow:hidden; }
+  .win.nonotch { top:40px; }
+  .win.narrow { grid-template-columns:150px 1fr; }
+  .win .side { background:var(--sidebar); border-right:1px solid var(--border); padding:30px 8px 8px; font-size:11.5px; color:var(--ink2); }
+  .win .side div { height:22px; display:flex; align-items:center; gap:7px; padding:0 8px; border-radius:5px; white-space:nowrap; overflow:hidden; }
+  .win .side .sel { background:rgba(127,127,127,.14); color:var(--ink); }
+  .win .side .grp { font-weight:600; color:var(--ink); margin-top:6px; }
+  .win .chat { display:flex; flex-direction:column; min-width:0; position:relative; }
+  .win .tabs { height:30px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11px; color:var(--ink2); white-space:nowrap; overflow:hidden; }
+  .win .tabs span { padding:3px 8px; border-radius:5px; }
+  .win .tabs .on { background:var(--win); color:var(--ink); border:1px solid var(--border); }
+  .win .term { flex:1; background:var(--term); padding:12px 16px; font:11.5px/1.55 "SF Mono",ui-monospace,monospace; color:var(--ink2); overflow:hidden; }
+  .win .input { margin:0 14px 8px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:11.5px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink); background:var(--term); }
+  .win .input::before { content:"> "; color:var(--accent); }
+  .win .input .ln { display:block; padding-left:2ch; }
+  .win .input .ln:first-of-type { display:inline; padding-left:0; }
+  .caret { display:inline-block; width:2px; height:1.15em; vertical-align:-3px; background:var(--accent); margin:0 1px; }
+  .legend { height:26px; border-top:1px solid var(--border); background:var(--header); display:flex; align-items:center; gap:12px; padding:0 12px; font-size:11px; color:var(--ink2); white-space:nowrap; overflow:hidden; }
+  .legend b { color:var(--ink); font-weight:600; }
+  .legend .k { display:inline-flex; align-items:center; gap:4px; }
+  .legend .k.new { color:var(--ink); background:var(--accent-tint); box-shadow:inset 0 0 0 1px var(--accent); border-radius:6px; padding:1px 6px 1px 2px; }
+  .legend .g { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.8; }
+  .dot.working { background:#4cc38a; opacity:1; }
+  .dot.awaiting { background:#e9b949; border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.error { background:transparent; border:1.5px solid #e5594f; opacity:1; }
+
+  /* ── Insel an der Notch ─────────────────────────────────────── */
+  .hang { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; color:#f4f4f6; z-index:3; }
+  .hang .band { width:184px; height:32px; background:#000; flex:none; }
+  .hang .body { background:#000; min-width:184px; border-radius:10px 10px 20px 20px; box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  .grow { animation:grow .26s cubic-bezier(.2,.9,.25,1.05) both; transform-origin:top center; }
+  @keyframes grow { from { clip-path:inset(0 calc(50% - 92px) calc(100% - 24px) calc(50% - 92px) round 0 0 12px 12px); } }
+
+  /* ── Insel ohne Notch: Pille unter der Menüleiste ──────────── */
+  .pill { position:absolute; top:30px; left:50%; transform:translateX(-50%); background:var(--pill-bg); color:var(--pill-ink);
+          border:1px solid var(--pill-line); border-radius:20px; box-shadow:0 12px 30px rgba(0,0,0,.22); backdrop-filter:blur(18px); z-index:3; }
+
+  /* Gemeinsame Bausteine (wie controller-insel.html) */
+  .island-head { display:flex; align-items:center; gap:8px; padding:9px 14px 6px; font-size:11px; color:#8d8e93; white-space:nowrap; }
+  .pill .island-head { color:var(--pill-ink3); }
+  .island-head .layer { font-weight:700; color:#f4f4f6; letter-spacing:.02em; }
+  .pill .island-head .layer { color:var(--pill-ink); }
+  .island-head .target { margin-left:auto; display:flex; align-items:center; gap:6px; max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+  .island-head .target span { overflow:hidden; text-overflow:ellipsis; }
+  .island-head .target.wide { max-width:340px; }
+  .island-head .acct { flex:none; color:#a4a5ab; }
+  .pill .island-head .acct { color:var(--pill-ink2); }
+  .island-head .mid { opacity:.6; }
+
+  .g { display:inline-flex; align-items:center; justify-content:center; height:20px; min-width:20px; padding:0 4px; border-radius:10px;
+       background:#2a2a2e; border:1px solid rgba(255,255,255,.14); color:#f4f4f6; font-size:11px; font-weight:700; line-height:1; flex:none; }
+  .g.sq { border-radius:5px; padding:0 5px; }
+  .g.dp { border-radius:5px; font-size:10px; }
+  .pill .g { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+
+  .hints { display:flex; flex-wrap:wrap; gap:6px 14px; padding:2px 14px 12px; font-size:12px; }
+  .hints .h { display:inline-flex; align-items:center; gap:6px; color:#d6d6da; white-space:nowrap; }
+  .pill .hints .h { color:var(--pill-ink); }
+  .hints .h.off { opacity:.38; }
+  .hints .h em { font-style:normal; color:#a4a5ab; max-width:170px; overflow:hidden; text-overflow:ellipsis; }
+  .pill .hints .h em { color:var(--pill-ink2); }
+  .hints .h.new::after { content:"neu"; font-size:10px; font-weight:700; color:#8d95ee; margin-left:2px; }
+  .pill .hints .h.new::after { color:var(--pill-mark-line); }
+
+  .foot { display:flex; gap:14px; justify-content:center; padding:6px 14px 11px; font-size:11px; color:#a4a5ab; border-top:1px solid rgba(255,255,255,.08); }
+  .pill .foot { color:var(--pill-ink2); border-top-color:var(--pill-line); }
+  .foot span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .foot .hit { color:#f4f4f6; }
+  .pill .foot .hit { color:var(--pill-ink); }
+
+  .slot { display:flex; align-items:center; gap:7px; padding:0 8px; border-radius:10px; background:rgba(255,255,255,.07); font-size:12px; white-space:nowrap; color:#f4f4f6; min-width:0; }
+  .pill .slot { background:rgba(127,127,127,.10); color:var(--pill-ink); }
+  .slot.off { opacity:.36; }
+  .slot.hit { background:rgba(124,132,232,.30); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .pill .slot.hit { background:var(--pill-mark); box-shadow:inset 0 0 0 1.5px var(--pill-mark-line); }
+  .slot .chev { margin-left:auto; color:#8d8e93; }
+  .slot .tx { display:flex; flex-direction:column; min-width:0; line-height:1.2; }
+  .slot .tx > span { display:inline-flex; align-items:center; gap:5px; }
+  .slot .tx small { font-size:11px; color:#8d8e93; overflow:hidden; text-overflow:ellipsis; }
+  .pill .slot .tx small { color:var(--pill-ink3); }
+  .slot.hit .tx small { color:#c9cdf7; }
+  .pill .slot.hit .tx small { color:var(--pill-mark-line); }
+  .note-inline { padding:0 14px 12px; font-size:11px; color:#e9b949; text-align:center; }
+  .pill .note-inline { color:var(--awaiting); }
+
+  .ico { width:13px; height:13px; flex:none; stroke:currentColor; fill:none; stroke-width:1.4; stroke-linecap:round; stroke-linejoin:round; opacity:.9; }
+
+  /* ── Zwei Rauten: links Steuerkreuz (App), rechts Tasten (Chat) ── */
+  .duo { display:flex; gap:22px; justify-content:center; padding:2px 14px 14px; }
+  .dia-wrap { display:flex; flex-direction:column; gap:6px; }
+  .cap { font-size:11px; color:#76777d; text-align:center; letter-spacing:.02em; }
+  .pill .cap { color:var(--pill-ink3); }
+  .cap b { color:#a4a5ab; font-weight:600; }
+  .pill .cap b { color:var(--pill-ink2); }
+  /* Verschränkte Raute: vier halbe Spalten, jede Taste zwei davon breit. */
+  .dia { display:grid; grid-template-columns:repeat(4,76px); grid-template-rows:repeat(3,44px); gap:4px; }
+  .dia .slot.top { grid-column:2/4; grid-row:1; }
+  .dia .slot.left { grid-column:1/3; grid-row:2; }
+  .dia .slot.right { grid-column:3/5; grid-row:2; }
+  .dia .slot.bottom { grid-column:2/4; grid-row:3; }
+
+  /* Bestätigung nach einem Schalter */
+  .confirm { margin:0 14px 12px; display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:10px; background:rgba(255,255,255,.08); font-size:12px; color:#f4f4f6; white-space:nowrap; }
+  .pill .confirm { background:rgba(127,127,127,.12); color:var(--pill-ink); }
+  .confirm .ico { width:15px; height:15px; }
+  .confirm b { font-weight:600; }
+  .confirm small { margin-left:auto; font-size:11px; color:#8d8e93; display:inline-flex; align-items:center; gap:5px; }
+  .pill .confirm small { color:var(--pill-ink3); }
+
+  /* ── Limits-Karte ─────────────────────────────────────────── */
+  .lim { padding:0 8px 6px; }
+  .lhead, .lrow { display:grid; grid-template-columns:128px 1fr 1fr; gap:14px; align-items:center; padding:0 8px; }
+  .lhead { height:18px; font-size:11px; color:#76777d; font-weight:600; }
+  .pill .lhead { color:var(--pill-ink3); }
+  .lsec { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:#76777d; font-weight:600; padding:6px 8px 2px; }
+  .pill .lsec { color:var(--pill-ink3); }
+  .lrow { height:32px; border-radius:8px; }
+  .lrow .nm { display:flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; color:#f4f4f6; white-space:nowrap; overflow:hidden; }
+  .pill .lrow .nm { color:var(--pill-ink); }
+  .lrow.cur { background:rgba(124,132,232,.18); box-shadow:inset 0 0 0 1px rgba(141,149,238,.55); }
+  .pill .lrow.cur { background:var(--pill-mark); box-shadow:inset 0 0 0 1px var(--pill-mark-line); }
+  .lrow.cur .nm { font-weight:700; }
+  .this { font-size:10.5px; font-weight:600; color:#c9cdf7; }
+  .pill .this { color:var(--pill-mark-line); }
+  .ga { display:grid; grid-template-columns:70px 38px 1fr; gap:7px; align-items:center; font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .ga .bar { display:block; height:5px; border-radius:3px; background:rgba(255,255,255,.14); overflow:hidden; }
+  .pill .ga .bar { background:rgba(127,127,127,.2); }
+  .ga .bar i { display:block; height:100%; border-radius:3px; }
+  .ga b { font-weight:600; text-align:right; }
+  .ga span { color:#8d8e93; overflow:hidden; text-overflow:ellipsis; }
+  .pill .ga span { color:var(--pill-ink3); }
+  .lprob { grid-column:2/4; font-size:11px; font-weight:500; color:#e9b949; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill .lprob { color:var(--awaiting); }
+  .lrow.dim .ga { opacity:.45; }
+  .scrollbar { position:absolute; right:5px; width:3px; border-radius:2px; background:rgba(127,127,127,.45); }
+  /* Ampel wie UsageGaugeLine: unter 50 grün, ab 50 gelb, ab 80 rot (verbraucht) */
+  .ok { color:#4cc38a; } .mid { color:#e9b949; } .hi { color:#e5594f; }
+  .ga .bar i.ok { background:#4cc38a; } .ga .bar i.mid { background:#e9b949; } .ga .bar i.hi { background:#e5594f; }
+  .pill .ok { color:var(--working); } .pill .mid { color:var(--awaiting); } .pill .hi { color:var(--error); }
+  .pill .ga .bar i.ok { background:var(--working); } .pill .ga .bar i.mid { background:var(--awaiting); } .pill .ga .bar i.hi { background:var(--error); }
+  .spin { width:11px; height:11px; border-radius:50%; border:1.5px solid currentColor; border-right-color:transparent; display:inline-block; opacity:.7; }
+
+  /* ── Options-Menü im Fenster (ControllerMenuPanel) ─────────── */
+  .cmenu { position:absolute; left:50%; bottom:40px; transform:translateX(-50%); width:300px; padding:6px; background:var(--panel);
+           border:1px solid var(--border-strong); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,.28); z-index:2; }
+  .cmenu .head { display:flex; align-items:baseline; font-size:11px; color:var(--ink3); padding:6px 10px 4px; letter-spacing:.05em; text-transform:uppercase; font-weight:600; }
+  .cmenu .head small { margin-left:auto; text-transform:none; letter-spacing:0; font-weight:500; font-size:11px; }
+  .mi { display:flex; align-items:center; height:30px; padding:0 10px; border-radius:6px; gap:8px; font-size:13px; color:var(--ink); white-space:nowrap; }
+  .mi.marked { background:var(--accent-tint); box-shadow:inset 0 0 0 2px var(--accent); }
+  .mi.off { color:var(--ink3); }
+  .mi .sub { margin-left:auto; color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; }
+  .mi .sub b { font-weight:600; }
+  .mi .sub .ok { color:var(--working); } .mi .sub .mid { color:var(--awaiting); } .mi .sub .hi { color:var(--error); }
+  .best { font-size:11px; font-weight:600; color:var(--working); background:rgba(63,168,115,.14); border-radius:5px; padding:1px 6px; }
+  .mdiv { height:1px; background:var(--border); margin:5px 8px; }
+
+  /* ── L1: zwei Spalten wie die Hände ───────────────────────── */
+  .cols { display:grid; grid-template-columns:auto auto; gap:6px 26px; justify-content:center; padding:2px 16px 14px; }
+  .col { display:flex; flex-direction:column; gap:7px; }
+  .col .cap { text-align:left; }
+  .col .h { display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#d6d6da; white-space:nowrap; }
+  .pill .col .h { color:var(--pill-ink); }
+  .col .h.off { opacity:.38; }
+  .col .h .gg { display:inline-flex; gap:2px; }
+  .clip { display:inline-flex; align-items:center; gap:6px; max-width:190px; font-size:11px; color:#a4a5ab; background:rgba(255,255,255,.08); border-radius:6px; padding:2px 7px; overflow:hidden; text-overflow:ellipsis; }
+  .pill .clip { background:rgba(127,127,127,.12); color:var(--pill-ink2); }
+  .clip span { overflow:hidden; text-overflow:ellipsis; }
+  .thumb { width:22px; height:15px; border-radius:3px; flex:none; background:linear-gradient(135deg,#5e6ad2,#3fa873 60%,#e9b949); }
+
+  .chip { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; margin-left:6px; }
+  .chip.working { color:var(--working); } .chip.awaiting { color:var(--awaiting); }
+  .tag { position:absolute; left:10px; bottom:10px; font-size:11px; color:var(--ink2); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 7px; z-index:4; }
+  .strips { display:flex; flex-direction:column; gap:10px; }
+  .strip { border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .strip .legend { border-top:0; }
+  .strip-label { font-size:11px; color:var(--ink3); margin:0 2px 4px; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-bell" viewBox="0 0 16 16"><path d="M8 2.2c-2.3 0-3.9 1.8-3.9 4v2.5L3 11h10l-1.1-2.3V6.2c0-2.2-1.6-4-3.9-4z"/><path d="M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/></symbol>
+  <symbol id="i-bell-waves" viewBox="0 0 16 16"><path d="M8 3c-2 0-3.3 1.5-3.3 3.4v2.2L3.8 10.6h8.4l-.9-2V6.4C11.3 4.5 10 3 8 3z"/><path d="M6.8 12.2a1.3 1.3 0 0 0 2.4 0"/><path d="M1.8 5.2c-.5.8-.7 1.7-.7 2.6s.2 1.8.7 2.6M14.2 5.2c.5.8.7 1.7.7 2.6s-.2 1.8-.7 2.6"/></symbol>
+  <symbol id="i-bell-slash" viewBox="0 0 16 16"><path d="M8 2.2c-2.3 0-3.9 1.8-3.9 4v2.5L3 11h10l-1.1-2.3V6.2c0-2.2-1.6-4-3.9-4z"/><path d="M6.6 12.8a1.5 1.5 0 0 0 2.8 0"/><path d="M2.2 2.2l11.6 11.6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13 9.6A5.3 5.3 0 1 1 6.4 3a4.3 4.3 0 0 0 6.6 6.6z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 16 16"><path d="M6 1.8v3M10 1.8v3M4.3 4.8h7.4v2.6a3.7 3.7 0 0 1-7.4 0zM8 11.1v3.1"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.7"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 16 16"><path d="M2.2 3h11.6v3H2.2zM3.2 6v6.8h9.6V6M6.4 8.6h3.2"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.2 11.5a5.8 5.8 0 0 1 11.6 0"/><path d="M8 11.5l2.6-3.4"/></symbol>
+</svg>
+
+<header>
+  <h1>Controller · Runde 5</h1>
+  <p>Entwurf: Limits in der Insel, App-Schalter auf dem Steuerkreuz, Schreiben mit Steuerkreuz, Einfügen, zuletzt geschlossener Chat</p>
+  <button id="theme">Hell / Dunkel</button>
+</header>
+<main>
+
+  <div class="rules">
+    <b>Was neu ist</b> — freigegeben mit „alles ja“. Die Regeln der Insel bleiben (Tippen wie bisher, Halten ist die Ebene, Insel nach 0,3 s, eine Ebene zur Zeit). Neu belegt wird nur, was in der Runde 4 noch frei war.
+    <table>
+      <tr><th>Ebene</th><th>Taste</th><th>Wirkung</th></tr>
+      <tr><td>R1 halten</td><td><span class="g dp">▲</span></td><td>Limits aller Claude- und GPT-Konten, solange R1 gehalten ist<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g dp">◀</span></td><td>Mitteilungen: alles an <span class="sep">→</span> Ton aus <span class="sep">→</span> alles aus (wie die Glocke in der Seitenleiste)<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g dp">▶</span></td><td>Wach bleiben: aus <span class="sep">→</span> bei Arbeit am Strom <span class="sep">→</span> immer (wie der Wach-Knopf)<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g dp">▼</span></td><td>Archiv an / aus (wie der Archiv-Knopf unten in der Seitenleiste)<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g">✕</span> <span class="g">△</span> <span class="g">□</span> <span class="g">○</span></td><td>wie bisher: Weiter, Modus wechseln, Befehle ›, Konto wechseln › — im Konto-Menü jetzt mit freien Prozenten<span class="new">neu</span></td></tr>
+      <tr><td>L1 halten</td><td><span class="g dp">◀</span> <span class="g dp">▶</span></td><td>Wort zurück / vor<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g dp">▲</span> <span class="g dp">▼</span></td><td>Zeile hoch / runter im mehrzeiligen Entwurf<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g">✕</span></td><td>neuesten Eintrag der Zwischenablage einfügen, auch Bilder (wie ⌘V)<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g">□</span> <span class="g">△</span> · <span class="g">○</span></td><td>wie bisher: bis Zeilenanfang löschen, neue Zeile · Kreis bleibt frei</td></tr>
+      <tr><td>L2 halten</td><td><span class="g">□</span></td><td>zuletzt geschlossenen Chat wieder öffnen<span class="new">neu</span></td></tr>
+      <tr><td></td><td><span class="g sq">Touchpad</span></td><td>Zwischenablage-Verlauf (wird getrennt gebaut, hier nur gezeigt)</td></tr>
+      <tr><td>L2 tippen</td><td></td><td>Legende nennt das Ziel: „Zurück: Chat …“ oder „Zurück: Workspace …“ (wird getrennt gebaut)</td></tr>
+    </table>
+    <ul>
+      <li>Zurückgestellt und hier nicht gezeichnet: Vibration als Warnung, wenn ein Limit knapp wird.</li>
+    </ul>
+  </div>
+
+  <!-- ═══════════════════════════ R1 ═══════════════════════════ -->
+  <h2>R1 halten · Schnellbefehle mit zwei Rauten</h2>
+
+  <figure class="full">
+    <div class="screen huge">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot"></i>Controller Runde 5</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>E2E Befunde Raster</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Runde 5</span><span>Jarvis: Supervisor</span><span>E2E Befunde</span></div>
+          <div class="term">⏺ Der Entwurf liegt in docs/design/controller-runde5.html.<br>&nbsp;&nbsp;⎿ Wrote 690 lines<br><br>⏺ Soll ich die Limits-Karte auch als Pille zeigen?</div>
+          <div class="input">ja, und hell und dunkel</div>
+          <div class="legend"><b>Controller Runde 5</b><span>bereit</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span><span class="k"><span class="g sq">L1</span><span class="g sq">R1</span><span class="g sq">L2</span>halten: Ebenen</span></div>
+        </div>
+      </div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:700px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target wide"><i class="dot"></i><span>Controller Runde 5</span><span class="mid">·</span><span class="acct">main · 5 h <b class="ok">42 %</b></span></span></div>
+        <div class="duo">
+          <div class="dia-wrap">
+            <div class="cap"><b>App</b> · Steuerkreuz</div>
+            <div class="dia">
+              <div class="slot top"><span class="g dp">▲</span><span class="tx"><span><svg class="ico"><use href="#i-gauge"/></svg>Limits</span><small>alle Konten</small></span><span class="chev">›</span></div>
+              <div class="slot left"><span class="g dp">◀</span><span class="tx"><span><svg class="ico"><use href="#i-bell-waves"/></svg>Mitteilungen</span><small>alles an</small></span></div>
+              <div class="slot right"><span class="g dp">▶</span><span class="tx"><span><svg class="ico"><use href="#i-plug"/></svg>Wach bleiben</span><small>bei Arbeit am Strom</small></span></div>
+              <div class="slot bottom"><span class="g dp">▼</span><span class="tx"><span><svg class="ico"><use href="#i-archive"/></svg>Archiv</span><small>aus</small></span></div>
+            </div>
+          </div>
+          <div class="dia-wrap">
+            <div class="cap"><b>Chat</b> · Tasten</div>
+            <div class="dia">
+              <div class="slot top"><span class="g">△</span>Modus wechseln</div>
+              <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+              <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+              <div class="slot bottom"><span class="g">✕</span>Weiter</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>1 · Zwei Rauten, wie die Hände.</b> Links das Steuerkreuz mit Schaltern für die App, rechts die Tasten mit Befehlen für den Chat — beides liegt da, wo die Daumen sind. Die Schalter zeigen unter dem Namen ihren Stand, damit du vor dem Drücken siehst, was gilt. Im Kopf steht neben dem Ziel-Chat sein Konto mit dem 5-Stunden-Stand (verbraucht, Ampel wie im Limits-Popover: unter 50 % grün, ab 50 % gelb, ab 80 % rot). Die Rauten sind verschränkt statt 3 × 3, damit die Insel bei rund 700 px bleibt.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:700px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target wide"><i class="dot"></i><span>Lead Varianten</span><span class="mid">·</span><span class="acct">gpt-main · 5 h <b class="mid">57 %</b></span></span></div>
+        <div class="duo">
+          <div class="dia-wrap">
+            <div class="cap"><b>App</b> · Steuerkreuz</div>
+            <div class="dia">
+              <div class="slot top"><span class="g dp">▲</span><span class="tx"><span><svg class="ico"><use href="#i-gauge"/></svg>Limits</span><small>alle Konten</small></span><span class="chev">›</span></div>
+              <div class="slot left"><span class="g dp">◀</span><span class="tx"><span><svg class="ico"><use href="#i-bell"/></svg>Mitteilungen</span><small>Ton aus</small></span></div>
+              <div class="slot right"><span class="g dp">▶</span><span class="tx"><span><svg class="ico"><use href="#i-moon"/></svg>Wach bleiben</span><small>aus</small></span></div>
+              <div class="slot bottom"><span class="g dp">▼</span><span class="tx"><span><svg class="ico"><use href="#i-archive"/></svg>Archiv</span><small>aus</small></span></div>
+            </div>
+          </div>
+          <div class="dia-wrap">
+            <div class="cap"><b>Chat</b> · Tasten</div>
+            <div class="dia">
+              <div class="slot top"><span class="g">△</span>Modus wechseln</div>
+              <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+              <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+              <div class="slot bottom"><span class="g">✕</span>Weiter</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>2 · Als Pille</b> (Monitor ohne Notch, folgt Hell und Dunkel). Hier ein GPT-Chat: Im Kopf steht dann das GPT-Konto mit seinem 5-Stunden-Fenster. Die Symbole folgen der Seitenleiste — Glocke ohne Wellen heißt „Ton aus“, Mond heißt „Mac schläft wie gewohnt“.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:700px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target wide"><i class="dot working"></i><span>Kampagnen Import</span><span class="mid">·</span><span class="acct">konto-3 · 5 h <b class="hi">88 %</b></span></span></div>
+        <div class="duo">
+          <div class="dia-wrap">
+            <div class="cap"><b>App</b> · Steuerkreuz</div>
+            <div class="dia">
+              <div class="slot top"><span class="g dp">▲</span><span class="tx"><span><svg class="ico"><use href="#i-gauge"/></svg>Limits</span><small>alle Konten</small></span><span class="chev">›</span></div>
+              <div class="slot left"><span class="g dp">◀</span><span class="tx"><span><svg class="ico"><use href="#i-bell-waves"/></svg>Mitteilungen</span><small>alles an</small></span></div>
+              <div class="slot right"><span class="g dp">▶</span><span class="tx"><span><svg class="ico"><use href="#i-plug"/></svg>Wach bleiben</span><small>bei Arbeit am Strom</small></span></div>
+              <div class="slot bottom"><span class="g dp">▼</span><span class="tx"><span><svg class="ico"><use href="#i-archive"/></svg>Archiv</span><small>aus</small></span></div>
+            </div>
+          </div>
+          <div class="dia-wrap">
+            <div class="cap"><b>Chat</b> · Tasten</div>
+            <div class="dia">
+              <div class="slot top off"><span class="g">△</span>Modus wechseln</div>
+              <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+              <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+              <div class="slot bottom off"><span class="g">✕</span>Weiter</div>
+            </div>
+          </div>
+        </div>
+        <div class="note-inline">Chat arbeitet — Weiter und Modus wechseln erst, wenn er ruht.</div>
+      </div></div>
+    </div>
+    <figcaption><b>3 · Chat arbeitet.</b> Weiter und Modus wechseln sind aus, wie heute (gleiche Prüfung, gleicher Hinweis). Die App-Schalter links hängen nicht am Chat und gehen immer — auch bei einer offenen Rückfrage. Ein Druck auf eine ausgegraute Taste vibriert „geht nicht“ und lässt die Insel offen. Das Konto steht hier rot: 88 % des 5-Stunden-Fensters sind weg.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:700px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target wide"><i class="dot"></i><span>Controller Runde 5</span><span class="mid">·</span><span class="acct">main · 5 h <b class="ok">42 %</b></span></span></div>
+        <div class="duo">
+          <div class="dia-wrap">
+            <div class="cap"><b>App</b> · Steuerkreuz</div>
+            <div class="dia">
+              <div class="slot top"><span class="g dp">▲</span><span class="tx"><span><svg class="ico"><use href="#i-gauge"/></svg>Limits</span><small>alle Konten</small></span><span class="chev">›</span></div>
+              <div class="slot left hit"><span class="g dp">◀</span><span class="tx"><span><svg class="ico"><use href="#i-bell"/></svg>Mitteilungen</span><small>Ton aus</small></span></div>
+              <div class="slot right"><span class="g dp">▶</span><span class="tx"><span><svg class="ico"><use href="#i-plug"/></svg>Wach bleiben</span><small>bei Arbeit am Strom</small></span></div>
+              <div class="slot bottom"><span class="g dp">▼</span><span class="tx"><span><svg class="ico"><use href="#i-archive"/></svg>Archiv</span><small>aus</small></span></div>
+            </div>
+          </div>
+          <div class="dia-wrap">
+            <div class="cap"><b>Chat</b> · Tasten</div>
+            <div class="dia">
+              <div class="slot top"><span class="g">△</span>Modus wechseln</div>
+              <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+              <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+              <div class="slot bottom"><span class="g">✕</span>Weiter</div>
+            </div>
+          </div>
+        </div>
+        <div class="confirm"><svg class="ico"><use href="#i-bell"/></svg><b>Ton aus, Mitteilungen an</b><small><span class="g dp">◀</span>noch mal: alles aus</small></div>
+      </div></div>
+    </div>
+    <figcaption><b>4 · Glocke umgeschaltet.</b> R1 + ◀ schaltet eine Stufe weiter: alles an → Ton aus → alles aus → alles an. Der Schalter wird kurz markiert, sein Stand wechselt, und darunter steht ganz ausgeschrieben, was jetzt gilt — mit dem Hinweis, was der nächste Druck bringt. Anders als die Befehle rechts bleibt die Insel bei Schaltern offen, damit du mit mehreren Drücken bis zur gewünschten Stufe kommst. Dazu ein kurzer, leichter Impuls.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:700px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target wide"><i class="dot working"></i><span>Kampagnen Import</span><span class="mid">·</span><span class="acct">konto-3 · 5 h <b class="hi">88 %</b></span></span></div>
+        <div class="duo">
+          <div class="dia-wrap">
+            <div class="cap"><b>App</b> · Steuerkreuz</div>
+            <div class="dia">
+              <div class="slot top"><span class="g dp">▲</span><span class="tx"><span><svg class="ico"><use href="#i-gauge"/></svg>Limits</span><small>alle Konten</small></span><span class="chev">›</span></div>
+              <div class="slot left"><span class="g dp">◀</span><span class="tx"><span><svg class="ico"><use href="#i-bell-waves"/></svg>Mitteilungen</span><small>alles an</small></span></div>
+              <div class="slot right hit"><span class="g dp">▶</span><span class="tx"><span><svg class="ico"><use href="#i-sun"/></svg>Wach bleiben</span><small>immer wach</small></span></div>
+              <div class="slot bottom"><span class="g dp">▼</span><span class="tx"><span><svg class="ico"><use href="#i-archive"/></svg>Archiv</span><small>aus</small></span></div>
+            </div>
+          </div>
+          <div class="dia-wrap">
+            <div class="cap"><b>Chat</b> · Tasten</div>
+            <div class="dia">
+              <div class="slot top off"><span class="g">△</span>Modus wechseln</div>
+              <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+              <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+              <div class="slot bottom off"><span class="g">✕</span>Weiter</div>
+            </div>
+          </div>
+        </div>
+        <div class="confirm"><svg class="ico"><use href="#i-sun"/></svg><b>Immer wach, auch mit Akku und zugeklappt</b><small><span class="g dp">▶</span>noch mal: Mac schläft</small></div>
+      </div>
+    </div>
+    <figcaption><b>5 · Wach-Knopf umgeschaltet</b> (Pille, Chat arbeitet). Gleiches Muster: aus → bei Arbeit am Strom → immer → aus, Texte wie der Tooltip des Wach-Knopfs. Braucht eine Stufe die einmalige Admin-Freigabe des Wach-Knopfs und fehlt sie, öffnet die Insel keinen Dialog, sondern sagt „Erst in der Seitenleiste freigeben“ und vibriert „geht nicht“. Archiv (▼) bestätigt genauso: „Archiv an — die Seitenleiste zeigt archivierte Chats“.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════════ Limits ═══════════════════════════ -->
+  <h2>R1 + ▲ · Limits</h2>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:600px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Limits</span><span class="target"><span>Stand vor 1 min</span></span></div>
+        <div class="lim">
+          <div class="lhead"><span></span><span>5 Std.</span><span>Woche</span></div>
+          <div class="lsec">Claude</div>
+          <div class="lrow cur"><div class="nm">main<span class="this">dieser Chat</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:42%"></i></i><b class="ok">42 %</b><span>in 2 h 10 min</span></div>
+            <div class="ga"><i class="bar"><i class="mid" style="width:61%"></i></i><b class="mid">61 %</b><span>in 3 Tagen</span></div></div>
+          <div class="lrow"><div class="nm">konto-2</div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:12%"></i></i><b class="ok">12 %</b><span>in 4 h 35 min</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:28%"></i></i><b class="ok">28 %</b><span>in 5 Tagen</span></div></div>
+          <div class="lrow"><div class="nm">konto-3</div>
+            <div class="ga"><i class="bar"><i class="hi" style="width:88%"></i></i><b class="hi">88 %</b><span>in 50 min</span></div>
+            <div class="ga"><i class="bar"><i class="mid" style="width:73%"></i></i><b class="mid">73 %</b><span>morgen 09:00</span></div></div>
+          <div class="lsec">GPT</div>
+          <div class="lrow"><div class="nm">gpt-main</div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:23%"></i></i><b class="ok">23 %</b><span>in 3 h 05 min</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:47%"></i></i><b class="ok">47 %</b><span>in 4 Tagen</span></div></div>
+        </div>
+        <div class="foot"><span><span class="g sq">L</span>Stick: scrollen</span><span><span class="g">✕</span>aktualisieren</span><span>R1 loslassen: zu</span></div>
+      </div></div>
+    </div>
+    <figcaption><b>6 · Limits-Karte.</b> R1 halten, ▲ drücken: Die Raute weicht einer Karte mit allen angemeldeten Konten, oben Claude, darunter die Konten des GPT-Backends — dieselben Zahlen wie in den beiden Popovers unten links. Je Konto 5-Stunden- und Wochenfenster: Balken und Prozent verbraucht, rechts die Zeit bis zum Zurücksetzen (unter einem Tag als Dauer, sonst Tag oder Uhrzeit). Das Konto des aktuellen Chats ist markiert. Die Karte bleibt, solange R1 gehalten ist; Loslassen schließt sie.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:600px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Limits</span><span class="target"><span class="spin"></span><span>aktualisiere …</span></span></div>
+        <div class="lim" style="position:relative">
+          <div class="lhead"><span></span><span>5 Std.</span><span>Woche</span></div>
+          <div class="lsec">Claude</div>
+          <div class="lrow"><div class="nm">main</div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:42%"></i></i><b class="ok">42 %</b><span>in 2 h 10 min</span></div>
+            <div class="ga"><i class="bar"><i class="mid" style="width:61%"></i></i><b class="mid">61 %</b><span>in 3 Tagen</span></div></div>
+          <div class="lrow"><div class="nm">konto-2</div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:12%"></i></i><b class="ok">12 %</b><span>in 4 h 35 min</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:28%"></i></i><b class="ok">28 %</b><span>in 5 Tagen</span></div></div>
+          <div class="lrow dim"><div class="nm">konto-3</div><div class="lprob">Login abgelaufen — in den Kontoeinstellungen neu anmelden</div></div>
+          <div class="lrow"><div class="nm">konto-4</div>
+            <div class="ga"><i class="bar"><i class="mid" style="width:54%"></i></i><b class="mid">54 %</b><span>in 1 h 20 min</span></div>
+            <div class="ga"><i class="bar"><i class="hi" style="width:91%"></i></i><b class="hi">91 %</b><span>Sa 14:00</span></div></div>
+          <div class="lsec">GPT</div>
+          <div class="lrow cur"><div class="nm">gpt-main<span class="this">dieser Chat</span></div>
+            <div class="ga"><i class="bar"><i class="mid" style="width:57%"></i></i><b class="mid">57 %</b><span>in 3 h 05 min</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:47%"></i></i><b class="ok">47 %</b><span>in 4 Tagen</span></div></div>
+          <div class="lrow"><div class="nm">gpt-2</div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:3%"></i></i><b class="ok">3 %</b><span>in 4 h 58 min</span></div>
+            <div class="ga"><i class="bar"><i class="ok" style="width:9%"></i></i><b class="ok">9 %</b><span>in 6 Tagen</span></div></div>
+          <span class="scrollbar" style="top:20px;height:150px"></span>
+        </div>
+        <div class="foot"><span><span class="g sq">L</span>Stick: scrollen</span><span class="hit"><span class="g">✕</span>aktualisieren</span><span>R1 loslassen: zu</span></div>
+      </div>
+    </div>
+    <figcaption><b>7 · Viele Konten, Pille, gerade aktualisiert.</b> Passen nicht alle Konten hinein, scrollt der linke Stick (oder ▲▼, sobald ▲ die Karte geöffnet hat); ein schmaler Balken rechts zeigt, dass es weitergeht. ✕ holt die Zahlen frisch, über denselben Weg wie ↻ im Popover; bis dahin stehen die alten Werte, oben „aktualisiere …“. Probleme stehen in der Zeile statt der Balken, mit dem Text aus dem Popover. Hier ein GPT-Chat: markiert ist gpt-main.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════════ Konto wechseln ═══════════════════════════ -->
+  <h2>R1 + ○ · Konto wechseln mit freien Prozenten</h2>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="win narrow">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot"></i>Controller Runde 5</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor</div>
+          <div><i class="dot"></i>E2E Befunde Raster</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Runde 5</span><span>Jarvis</span></div>
+          <div class="term">⏺ Fertig. Entwurf und Screenshots liegen bereit.</div>
+          <div class="cmenu">
+            <div class="head">Konto wechseln<small>frei: 5 Std. · Woche</small></div>
+            <div class="mi off">main<span class="sub">aktuell · 58 % · 39 %</span></div>
+            <div class="mi marked">konto-2<span class="best">am meisten frei</span><span class="sub"><b class="ok">88 %</b> · <b class="ok">72 %</b></span></div>
+            <div class="mi">konto-3<span class="sub"><b class="hi">12 %</b> · <b class="mid">27 %</b></span></div>
+            <div class="mi off">konto-4<span class="sub">nicht angemeldet</span></div>
+          </div>
+          <div class="input">&nbsp;</div>
+          <div class="legend"><b>Controller Runde 5</b><span>bereit</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>8 · Konto-Menü, Claude-Chat.</b> Dasselbe Options-Menü wie heute, Reihenfolge unverändert. Neu steht rechts, wie viel noch frei ist: 5-Stunden-Fenster · Woche. Hier zählt „frei“, weil man ein Ziel mit Luft sucht; die Farbe folgt trotzdem der Ampel des Verbrauchs. Das Konto mit der meisten Luft trägt „am meisten frei“ — gemessen am knapperen der beiden Werte. Die Markierung startet auf diesem Konto, ✕ verschiebt wie bisher mit Vorschau.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="win narrow nonotch">
+        <div class="side">
+          <div class="grp">ListM8</div>
+          <div class="sel"><i class="dot"></i>Lead Varianten</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div class="grp">WhisperM8</div>
+          <div><i class="dot"></i>Controller Runde 5</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Lead Varianten</span><span>Kampagnen Import</span></div>
+          <div class="term">⏺ Varianten B und C sind fertig.</div>
+          <div class="cmenu" style="bottom:36px">
+            <div class="head">Konto wechseln<small>frei: 5 Std. · Woche</small></div>
+            <div class="mi">main<span class="sub"><b class="ok">58 %</b> · <b class="mid">39 %</b></span></div>
+            <div class="mi">konto-2<span class="best">am meisten frei</span><span class="sub"><b class="ok">88 %</b> · <b class="ok">72 %</b></span></div>
+            <div class="mi">konto-3<span class="sub"><b class="hi">12 %</b> · <b class="mid">27 %</b></span></div>
+            <div class="mdiv"></div>
+            <div class="mi off">gpt-main<span class="sub">aktuell · 43 % · 53 %</span></div>
+            <div class="mi marked">gpt-2<span class="best">am meisten frei</span><span class="sub">GPT · <b class="ok">97 %</b> · <b class="ok">91 %</b></span></div>
+          </div>
+          <div class="input">&nbsp;</div>
+          <div class="legend"><b>Lead Varianten</b><span>bereit</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>9 · Konto-Menü, GPT-Chat</b> (folgt Hell und Dunkel wie das ganze Fenster). Zwei Gruppen wie heute: Claude-Konten zum Verschieben, darunter die GPT-Konten (gelten ab dem nächsten Start). Jede Gruppe hebt ihr eigenes Konto mit der meisten Luft hervor; die Markierung startet in der Gruppe des Chats, hier also auf gpt-2.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════════ L1 ═══════════════════════════ -->
+  <h2>L1 halten · Schreiben mit Steuerkreuz und Einfügen</h2>
+
+  <figure class="full">
+    <div class="screen huge">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot"></i>Controller Runde 5</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>E2E Befunde Raster</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Runde 5</span><span>Jarvis: Supervisor</span><span>E2E Befunde</span></div>
+          <div class="term">⏺ Soll ich die Limits-Karte auch als Pille zeigen?</div>
+          <div class="input"><span class="ln">ja, und hell und dunkel.</span><span class="ln">Dazu bitte die Konto-Zeilen mit <span class="caret"></span>freien Prozenten,</span><span class="ln">und am Ende die Doku nachziehen.</span></div>
+          <div class="legend"><b>Controller Runde 5</b><span>bereit</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span><span class="k"><span class="g sq">L1</span><span class="g sq">R1</span><span class="g sq">L2</span>halten: Ebenen</span></div>
+        </div>
+      </div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:540px">
+        <div class="island-head"><span class="g sq">L1</span><span class="layer">Schreiben</span><span class="target"><i class="dot"></i><span>Controller Runde 5</span></span></div>
+        <div class="cols">
+          <div class="col">
+            <div class="cap"><b>Steuerkreuz</b></div>
+            <span class="h"><span class="gg"><span class="g dp">◀</span><span class="g dp">▶</span></span>Wort zurück / vor</span>
+            <span class="h"><span class="gg"><span class="g dp">▲</span><span class="g dp">▼</span></span>Zeile hoch / runter</span>
+          </div>
+          <div class="col">
+            <div class="cap"><b>Tasten</b></div>
+            <span class="h"><span class="g">□</span>Bis Zeilenanfang löschen</span>
+            <span class="h"><span class="g">△</span>Neue Zeile</span>
+            <span class="h"><span class="g">✕</span>Einfügen<span class="clip"><span>„Bitte die Tests für den Konto-Wechsel …“</span></span></span>
+            <span class="h off"><span class="g">○</span>frei</span>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>10 · Schreiben, mehrzeiliger Entwurf.</b> Links das Steuerkreuz zum Bewegen im Entwurf: ◀▶ springt wortweise, ▲▼ eine Zeile — gehalten mit Wiederholung, wie die Rücktaste. So kommst du nach einem Diktat an die Stelle, die du ändern willst, ohne Tastatur. Rechts die Tasten wie bisher, neu ist ✕: Es fügt den neuesten Eintrag der Zwischenablage ein, und die Insel zeigt vorher an, was das ist. Kreis bleibt frei. Alles nur in Claude- und Codex-Chats und nicht in einer Rückfrage.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen" style="height:240px">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:540px">
+        <div class="island-head"><span class="g sq">L1</span><span class="layer">Schreiben</span><span class="target"><i class="dot"></i><span>Controller Runde 5</span></span></div>
+        <div class="cols">
+          <div class="col">
+            <div class="cap"><b>Steuerkreuz</b></div>
+            <span class="h"><span class="gg"><span class="g dp">◀</span><span class="g dp">▶</span></span>Wort zurück / vor</span>
+            <span class="h"><span class="gg"><span class="g dp">▲</span><span class="g dp">▼</span></span>Zeile hoch / runter</span>
+          </div>
+          <div class="col">
+            <div class="cap"><b>Tasten</b></div>
+            <span class="h"><span class="g">□</span>Bis Zeilenanfang löschen</span>
+            <span class="h"><span class="g">△</span>Neue Zeile</span>
+            <span class="h"><span class="g">✕</span>Bild einfügen<span class="clip"><i class="thumb"></i><span>Bildschirmfoto · 1280 × 800</span></span></span>
+            <span class="h off"><span class="g">○</span>frei</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>11 · Bild in der Zwischenablage</b> (Pille). Ist der neueste Eintrag ein Bild, heißt die Taste „Bild einfügen“ und zeigt ein kleines Vorschaubild. Es kommt im Chat an wie mit ⌘V, also als Anhang. Ist die Zwischenablage leer, steht ✕ ausgegraut mit „nichts zum Einfügen“.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen" style="height:240px">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:540px">
+        <div class="island-head"><span class="g sq">L1</span><span class="layer">Schreiben</span><span class="target"><i class="dot"></i><span>zsh · whisperm8</span></span></div>
+        <div class="cols">
+          <div class="col">
+            <div class="cap"><b>Steuerkreuz</b></div>
+            <span class="h off"><span class="gg"><span class="g dp">◀</span><span class="g dp">▶</span></span>Wort zurück / vor</span>
+            <span class="h off"><span class="gg"><span class="g dp">▲</span><span class="g dp">▼</span></span>Zeile hoch / runter</span>
+          </div>
+          <div class="col">
+            <div class="cap"><b>Tasten</b></div>
+            <span class="h off"><span class="g">□</span>Bis Zeilenanfang löschen</span>
+            <span class="h off"><span class="g">△</span>Neue Zeile</span>
+            <span class="h off"><span class="g">✕</span>Einfügen</span>
+            <span class="h off"><span class="g">○</span>frei</span>
+          </div>
+        </div>
+        <div class="note-inline">In einer Shell nicht — dort könnte ein Programm die Tasten anders deuten.</div>
+      </div></div>
+    </div>
+    <figcaption><b>12 · Schreiben in einer Shell.</b> Die neuen Tasten folgen derselben Regel wie die alten: nur Claude und Codex. Die Insel zeigt sie trotzdem, ausgegraut, damit klar ist, warum nichts passiert. In einer offenen Rückfrage gilt dasselbe mit dem bekannten Hinweis „Rückfrage offen“.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════════ L2 ═══════════════════════════ -->
+  <h2>L2 · Wohin, wieder öffnen und zurück</h2>
+
+  <figure>
+    <div class="screen" style="height:240px">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:470px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><i class="dot"></i><span>Controller Runde 5</span></span></div>
+        <div class="hints">
+          <span class="h"><span class="g">▲▼</span>Liste öffnen</span>
+          <span class="h"><span class="g">△</span>Nächster wartender</span>
+          <span class="h new"><span class="g">□</span>Wieder öffnen<em>E2E Befunde Raster</em></span>
+          <span class="h new"><span class="g sq">Touchpad</span>Zwischenablage</span>
+          <span class="h"><span class="g sq">R2</span>Hin und diktieren</span>
+          <span class="h"><span class="g">○</span>Abbrechen</span>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>13 · L2 gehalten, mit zwei neuen Wegen.</b> □ öffnet den zuletzt geschlossenen Chat wieder, an seiner alten Stelle, und schließt die Insel; die Insel nennt vorher, welcher das ist. Ist nichts geschlossen worden, steht □ ausgegraut. Das Touchpad öffnet unter L2 den Zwischenablage-Verlauf (wird getrennt gebaut).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen" style="height:240px">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:470px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><span class="chip working"><i class="dot working"></i>2</span><span class="chip awaiting"><i class="dot awaiting"></i>1</span></span></div>
+        <div class="hints">
+          <span class="h"><span class="g">▲▼</span>Liste öffnen</span>
+          <span class="h"><span class="g">△</span>Nächster wartender</span>
+          <span class="h new off"><span class="g">□</span>Wieder öffnen<em>nichts geschlossen</em></span>
+          <span class="h new"><span class="g sq">Touchpad</span>Zwischenablage</span>
+          <span class="h"><span class="g sq">R2</span>Hin und diktieren</span>
+          <span class="h"><span class="g">○</span>Abbrechen</span>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>14 · Als Pille, nichts zum Wiederöffnen.</b> Seit dem App-Start wurde kein Chat geschlossen: □ steht ausgegraut, ein Druck vibriert „geht nicht“. Rechts im Kopf die Zähler der Notch-Anzeige wie bei „Wohin“ üblich.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="strips">
+      <div>
+        <div class="strip-label">Einzelansicht: L2 tippen springt zum letzten Chat</div>
+        <div class="strip"><div class="legend"><b>Controller Runde 5</b><span>bereit</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span><span class="k new"><span class="g sq">L2</span>Zurück: Chat E2E Befunde Raster</span><span class="k"><span class="g sq">L1</span><span class="g sq">R1</span><span class="g sq">L2</span>halten: Ebenen</span></div></div>
+      </div>
+      <div>
+        <div class="strip-label">Raster: L2 tippen springt zum letzten Workspace</div>
+        <div class="strip"><div class="legend"><b>Raster · WhisperM8</b><span>Kachel Controller Runde 5</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g sq">L3</span>Groß</span><span class="k"><span class="g sq">R2</span>Diktieren</span><span class="k new"><span class="g sq">L2</span>Zurück: Workspace ListM8</span><span class="k"><span class="g sq">L1</span><span class="g sq">R1</span><span class="g sq">L2</span>halten: Ebenen</span></div></div>
+      </div>
+    </div>
+    <figcaption><b>15 · L2 tippen in der Legende</b> (wird getrennt gebaut). Die Legende sagt vorher, wohin das Antippen führt — zum letzten Chat oder zum letzten Workspace. Lange Namen werden hinten gekürzt; gibt es kein Ziel, fehlt der Eintrag.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════════ Offen ═══════════════════════════ -->
+  <h2>Offene Fragen</h2>
+
+  <div class="rules">
+    <ol>
+      <li><b>Verbraucht oder frei?</b> Kopf und Limits-Karte zeigen verbraucht (wie das Popover), das Konto-Menü zeigt frei, weil man dort ein Ziel mit Luft sucht. Beides mischen oder überall eine Lesart?</li>
+      <li><b>„Am meisten frei“:</b> Maßstab ist hier der knappere Wert aus 5 Std. und Woche. Bei GPT-Chats eine Hervorhebung je Gruppe. Und soll die Markierung dort starten oder wie heute oben?</li>
+      <li><b>Schalter lassen die Insel offen</b> (zum Durchschalten), Befehle schließen sie. Passt diese Ausnahme zur Regel „Ein Schnellbefehl schließt die Insel“?</li>
+      <li><b>Breite:</b> Mit zwei Rauten ist die Insel rund 700 px breit. Auf dem 13-Zoll-MacBook ist das knapp die Hälfte des Bildschirms. Reicht das, oder sollen die Schalter-Texte kürzer werden?</li>
+      <li><b>Technik L1 + Steuerkreuz, vor dem Bau prüfen:</b> Wortsprung braucht Meta-b/f (beginnt mit ESC, und ein einzelnes ESC bricht einen arbeitenden Chat ab) oder Ctrl+←/→ (ob Claude Code und Codex das verstehen, ist offen). ▲ in der ersten Zeile holt bei Claude den letzten Prompt zurück, und die App kennt die Cursorzeile nicht sicher. Vorschlag: ▲▼ nur, wenn der Entwurf mehrzeilig ist, und vorher am echten Chat testen.</li>
+      <li><b>L1 + ✕ in Shells:</b> wie alle L1-Tasten aus, oder Einfügen erlauben (wäre dort harmlos wie ⌘V)? Und soll Einfügen den Eintrag im Verlauf nach oben holen?</li>
+      <li><b>Limits-Karte, was fehlt bewusst:</b> Plan-Kürzel (Max, Pro), Wochenlimit je Modell und das Codex-CLI-Konto des Diktats. Nachziehen oder schlank lassen?</li>
+      <li><b>✕ aktualisieren:</b> ↻ im Popover erneuert abgelaufene Tokens per CLI-Ping, nacheinander und spürbar langsam. Denselben Weg nehmen oder nur die Zahlen neu lesen?</li>
+      <li><b>Wieder öffnen:</b> nur geschlossene Chats dieses App-Starts oder auch über einen Neustart hinweg? Geht mehrmaliges L2 + □ weiter zurück, wie ⇧⌘T im Browser? Archivierte Chats zählen nicht als geschlossen.</li>
+    </ol>
+  </div>
+
+</main>
+<script>
+  const root = document.documentElement;
+  const forced = new URLSearchParams(location.search).get("theme");
+  const saved = localStorage.getItem("controller-runde5-theme");
+  if (forced) root.dataset.theme = forced;
+  else if (saved) root.dataset.theme = saved;
+  else if (matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark";
+  document.getElementById("theme").addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("controller-runde5-theme", root.dataset.theme);
+  });
+</script>
+</body>
+</html>
