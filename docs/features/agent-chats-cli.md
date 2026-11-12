@@ -352,7 +352,9 @@ bewusst schwache Schwester von `archive`. Contract:
 
 ## Weitere Tab-/Fenster-Befehle
 
-- **`reopen`** stellt den zuletzt geschlossenen Tab wieder her (LIFO, Cap 20).
+- **`reopen`** stellt den zuletzt geschlossenen Tab wieder her (LIFO, Cap 20),
+  an seiner alten Stelle in der Tab-Leiste und, falls er dabei einen offenen
+  Workspace verlassen hat, auch an seiner alten Kachel.
   Die History lebt ephemer im `AgentWindowStore` (bewusst nicht persistiert —
   App-Neustart leert sie) und wird von `closeTab` UND der
   `setOpenTabIDs`-View-Bridge gefüttert (X-Button/⌘W/Bulk); Fenster-Close mit
