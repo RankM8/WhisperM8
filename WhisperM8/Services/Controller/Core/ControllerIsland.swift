@@ -338,8 +338,11 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
     /// - Claude, Text im Feld oder eigener Prompt in der Warteschlange, Chat
     ///   arbeitet (oder unklar, gerade gesendet): „Jetzt senden“ (Ctrl+X Ctrl+S).
     /// - Claude, Text im Feld, Chat ruht: Enter („Senden“).
-    /// - Codex, Text im Feld: Enter — Codex greift damit sofort in den
-    ///   laufenden Turn ein.
+    /// - Codex, Text im Feld, Chat ruht: Enter. Arbeitet Codex, „geht nicht“:
+    ///   Codex meldet nie „wartet“, Enter könnte eine Freigabe bestätigen
+    ///   (Review Runde 5, Befund 2).
+    /// - Steht nur ein zurückgelegter oder mit ↑ zurückgeholter Prompt im
+    ///   Feld, „geht nicht“ — er ginge sonst ungewollt erneut raus (Befund 3).
     /// - Feld leer, Chat ruht: „Weiter“ wie bisher (`.continueWork`).
     /// - Feld leer, nichts wartet, Chat arbeitet: `nil` („geht nicht“).
     /// Nie in einer offenen Rückfrage oder bei offener Ansicht (`nil`; dort
@@ -347,16 +350,17 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
     /// mit den bisherigen Regeln).
     static func crossAction(
         profile: ControllerChatState.Profile?, busy: Bool, dialogOpen: Bool, viewOpen: Bool,
-        fieldHasText: Bool, queuedOwnPrompts: Int
+        fieldHasText: Bool, queuedOwnPrompts: Int, onlyRecalledPrompt: Bool = false
     ) -> ControllerQuickDrawCross? {
         guard !dialogOpen, !viewOpen else { return nil }
+        if fieldHasText, onlyRecalledPrompt, profile == .claude || profile == .codex { return nil }
         switch profile {
         case .claude:
             if busy { return fieldHasText || queuedOwnPrompts > 0 ? .sendNow : nil }
             return fieldHasText ? .send : .continueWork
         case .codex:
-            if fieldHasText { return .send }
-            return busy ? nil : .continueWork
+            if busy { return nil }
+            return fieldHasText ? .send : .continueWork
         case .shell, .other, nil:
             return .continueWork
         }

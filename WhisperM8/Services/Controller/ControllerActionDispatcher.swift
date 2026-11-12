@@ -56,6 +56,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     static let recentlySubmittedWindow: TimeInterval = 3
     /// Ein zweites Escape in dieser Zeit wird verschluckt.
     static let escapeRepeatWindow: TimeInterval = 1
+    /// In einer erkannten Ansicht genügt eine kürzere Sperre (Runde 5).
+    static let escapeInViewWindow: TimeInterval = 0.3
     /// So lange nach einer Eingabe ins Feld (Rücktaste, Diktat, Text ohne
     /// Senden) darf Kreuz auch bei arbeitendem Chat Enter schicken. 30 s
     /// reichen, um einen diktierten Entwurf zu überfliegen; ein Entwurf von
@@ -152,6 +154,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             secondsSinceAwaitingBegan: status == .awaitingInput
                 ? terminal.statusSince.map { moment.timeIntervalSince($0) } : nil,
             escapeSentRecently: within(Self.escapeRepeatWindow, of: terminal.lastEscapeAt),
+            escapeSentJustNow: within(Self.escapeInViewWindow, of: terminal.lastEscapeAt),
             recentDraftInput: ControllerTerminalMarks.hasFreshDraftInput(
                 draftAt: terminal.lastDraftInputAt, lastSubmitAt: terminal.lastEnterAt,
                 window: Self.draftInputWindow, now: moment),
@@ -579,7 +582,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if var chat = setup.chat, !chat.accounts.isEmpty {
             chat.accounts = accountsWithUsage(chat.accounts)
             setup.chat = chat
-            refreshAccountLimits()
         }
         if let selected, setup.sessionID == selected, let terminal = terminals.state(of: selected), terminal.isRunning {
             setup.acceptsInput = true
@@ -601,7 +603,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         return ControllerQuickDrawSlots.crossAction(
             profile: terminal.profile, busy: isBusy(terminal),
             dialogOpen: terminal.status == .awaitingInput, viewOpen: terminal.screen?.openView != nil,
-            fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts)
+            fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt)
     }
 
     /// Wie `isBusy(_:)`, aus dem Zustand des Terminals.
@@ -643,6 +646,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             guard let item = menu.top.selectedEnabled else { return playHaptic(.rejected) }
             if item.opensSubmenu {
                 if menu.openSubmenu() { ui.menu = menu } else { playHaptic(.rejected) }
+                // Verbrauch erst beim Öffnen der Konten auffrischen, nicht bei
+                // jedem Menü oder R1-Halten.
+                if item == .switchAccount { refreshAccountLimits() }
                 return
             }
             ui.menu = nil

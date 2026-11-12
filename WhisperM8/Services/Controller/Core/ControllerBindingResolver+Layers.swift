@@ -118,12 +118,17 @@ extension ControllerBindingResolver {
         }
     }
 
-    /// Einfügen (L1 + Kreuz): in jedem lebenden Chat außer bei offener
-    /// Rückfrage, auch in Shells (dort wie ⌘V, nur Text). Ob es ein Bild ist,
-    /// prüft der Ausführer.
+    /// Einfügen (L1 + Kreuz): Claude und Codex außer bei offener Rückfrage;
+    /// in Shells nur an der Eingabezeile (nicht in nano, vim und Co.), nur
+    /// Text und nur mit eingeschaltetem Bracketed Paste — das prüft der
+    /// Ausführer (Review Runde 5, Befund 6).
     static func pasteAllowed(_ state: ControllerChatState) -> Bool {
-        state.acceptsKeys && state.status != .awaitingInput
-            && (state.profile == .claude || state.profile == .codex || state.profile == .shell)
+        guard state.acceptsKeys, state.status != .awaitingInput else { return false }
+        switch state.profile {
+        case .claude, .codex: return true
+        case .shell: return state.shellAtPrompt
+        case .other: return false
+        }
     }
 
     /// Genau ein Escape (L1 + Kreis), unabhängig vom Status und ohne die

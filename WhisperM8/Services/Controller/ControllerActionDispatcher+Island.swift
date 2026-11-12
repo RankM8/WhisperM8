@@ -281,6 +281,7 @@ extension ControllerActionDispatcher {
             ui.leaveList()
             ui.menuDialogOpen = setup.dialogOpen
             ui.menu = menu
+            if item == .switchAccount { refreshAccountLimits() }
         } else {
             perform(item, setup: setup)
         }

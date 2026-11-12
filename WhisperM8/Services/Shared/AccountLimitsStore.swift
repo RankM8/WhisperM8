@@ -19,6 +19,10 @@ final class AccountLimitsStore {
     private(set) var claude: [String: Limit] = [:]
     private(set) var gpt: [String: Limit] = [:]
     private(set) var updatedAt: Date?
+    /// Letzter Abruf-Versuch, unabhängig vom Ergebnis: Auch nach Fehlern geht
+    /// der nächste frühestens nach `maxAge` (sonst hieße jedes Öffnen
+    /// Keychain und HTTP je Konto; Review Runde 5, Befund 5).
+    private(set) var lastAttemptAt: Date?
     private var isLoading = false
     /// Neue Zahlen sind da (ein offenes Konto-Menü zieht nach).
     var onChange: (() -> Void)?
@@ -57,7 +61,10 @@ final class AccountLimitsStore {
     /// `maxAge` ist. Die Kontenlisten kommen aus dem Cache des Kontextmenüs.
     func refreshIfStale(maxAge: TimeInterval = 60) {
         guard !isLoading else { return }
-        if let updatedAt, Date().timeIntervalSince(updatedAt) < maxAge { return }
+        let now = Date()
+        if let updatedAt, now.timeIntervalSince(updatedAt) < maxAge { return }
+        if let lastAttemptAt, now.timeIntervalSince(lastAttemptAt) < maxAge { return }
+        lastAttemptAt = now
         isLoading = true
         let claudeNames = AccountMenuData.claudeProfiles.value.filter(\.isLoggedIn).map(\.name)
         let gptNames = AppPreferences.shared.claudeGPTBackendEnabled
@@ -86,7 +93,6 @@ final class AccountLimitsStore {
             self.isLoading = false
             for (name, usage) in claudeResults { if let usage { self.record(claude: name, usage: usage) } }
             for (name, usage) in gptResults { if let usage { self.record(gpt: name, usage: usage) } }
-            if self.updatedAt == nil { self.updatedAt = Date() }
         }
     }
 }

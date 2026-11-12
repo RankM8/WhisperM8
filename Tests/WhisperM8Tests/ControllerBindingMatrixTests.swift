@@ -603,7 +603,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
                 }
             }
         }
-        table[.inLayer(.writing, .press(.cross))] = !question && (agent || state.profile == .shell) ? .pasteNewest : .rejected
+        let shellPrompt = state.profile == .shell && state.shellAtPrompt
+        table[.inLayer(.writing, .press(.cross))] = !question && (agent || shellPrompt) ? .pasteNewest : .rejected
         table[.inLayer(.writing, .press(.circle))] = agent ? .chatKey(.escape) : .rejected
         table[.inLayer(.writing, .press(.l3))] = state.profile == .claude && !question ? .chatKey(.undo) : .rejected
         table[.inLayer(.quickDraw, .press(.l3))] = state.profile == .claude ? .chatKey(.toggleTranscript) : .rejected

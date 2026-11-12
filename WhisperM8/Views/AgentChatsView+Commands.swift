@@ -46,7 +46,8 @@ extension AgentChatsView {
             hasMultiSelection: !multiSelection.isEmpty,
             isArchiveMode: archiveModeActive,
             isNewChatPickerOpen: showNewChatProjectPicker,
-            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil,
+            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil
+                || ControllerConfirmations.shared.isOpen(in: windowID),
             screenDisplayID: (hostWindow?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
                 as? NSNumber)?.uint32Value,
             backTarget: controllerBackTarget()

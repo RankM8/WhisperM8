@@ -54,6 +54,21 @@ extension AgentChatsView {
             defaultOpen: AppPreferences.shared.jarvisNotesDefaultOpen)
     }
 
+    /// Bestätigte Rückfrage aus `ControllerConfirmationDialog`.
+    func performControllerConfirmed(_ pending: ControllerConfirmations.Pending) {
+        switch pending.kind {
+        case .backgroundStop:
+            guard let session = workspace.sessions.first(where: { $0.id == pending.sessionID }),
+                  session.hasBackgroundShortID else { return }
+            performBackgroundLifecycle(.stop, on: session)
+        case .stopJob:
+            // Derselbe Weg wie „Job stoppen“ im Kontextmenü (`agent stop`).
+            guard let pid = jobRuntimeModel.snapshotsBySessionID[pending.sessionID]?.supervisorPid else { return }
+            _ = kill(pid, SIGTERM)
+            AgentJobWorkspaceSync.shared.requestSync(reason: "controller-stop")
+        }
+    }
+
     /// Führt eine Kopf-Aktion aus. `false`, wenn sie für den Chat nicht (mehr)
     /// passt — der Controller meldet „geht nicht“.
     func performControllerChatCommand(_ command: AgentChatsCommand) -> Bool {
@@ -113,20 +128,22 @@ extension AgentChatsView {
             guard let session = session(id), session.hasBackgroundShortID else { return false }
             showBackgroundLogs(for: session)
             return true
-        case .backgroundStop(let id), .backgroundRespawn(let id):
+        case .backgroundStop(let id):
+            // Mit Rückfrage (Review Runde 5, Befund 7); bestätigt per Kreuz.
             guard let session = session(id), session.hasBackgroundShortID,
                   !pendingLifecycleSessions.contains(id) else { return false }
-            if case .backgroundStop = command {
-                performBackgroundLifecycle(.stop, on: session)
-            } else {
-                performBackgroundLifecycle(.respawn, on: session)
-            }
+            ControllerConfirmations.shared.pending[windowID] = .init(kind: .backgroundStop, sessionID: id, title: session.title)
+            return true
+        case .backgroundRespawn(let id):
+            guard let session = session(id), session.hasBackgroundShortID,
+                  !pendingLifecycleSessions.contains(id) else { return false }
+            performBackgroundLifecycle(.respawn, on: session)
             return true
         case .stopSubagentJob(let id):
-            // Derselbe Weg wie „Job stoppen“ im Kontextmenü (`agent stop`).
-            guard let pid = jobRuntimeModel.snapshotsBySessionID[id]?.supervisorPid else { return false }
-            _ = kill(pid, SIGTERM)
-            AgentJobWorkspaceSync.shared.requestSync(reason: "controller-stop")
+            guard let session = session(id), jobRuntimeModel.snapshotsBySessionID[id]?.supervisorPid != nil else {
+                return false
+            }
+            ControllerConfirmations.shared.pending[windowID] = .init(kind: .stopJob, sessionID: id, title: session.title)
             return true
         case .cancelAccountSwitch(let id):
             guard AccountSwitchCoordinator.shared.pending[id] != nil else { return false }

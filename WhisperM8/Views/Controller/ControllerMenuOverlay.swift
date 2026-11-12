@@ -95,7 +95,7 @@ extension ControllerMenuRow {
             }
             if chat?.canUndoAccountSwitch == true {
                 rows.append(ControllerMenuRow(
-                    id: ControllerMenuModel.undoSwitchID, title: String(localized: "Undo last account switch"),
+                    id: ControllerMenuModel.undoSwitchID, title: String(localized: "Undo last account switch (all chats it moved)"),
                     startsGroup: chat?.pendingAccountSwitchTarget == nil))
             }
             return rows

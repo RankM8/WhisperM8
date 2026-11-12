@@ -18,9 +18,14 @@ extension ControllerActionDispatcher {
         let isAgentChat = terminal.profile == .claude || terminal.profile == .codex
         switch clip.kind {
         case .text:
-            guard isAgentChat || terminal.profile == .shell else { return playHaptic(.rejected) }
+            // Shell: nur an der Eingabezeile und mit Bracketed Paste — sonst
+            // käme die Klammer-Folge als Text an oder ein Umbruch führte aus.
+            let shellOK = terminal.profile == .shell && terminal.shellAtPrompt && terminal.bracketedPaste
+            guard isAgentChat || shellOK else { return playHaptic(.rejected) }
             clipboard.loadText(clip.id) { [weak self] text in
+                // Bis der Text geladen ist, kann eine Rückfrage aufgegangen sein.
                 guard let self, let text, !text.isEmpty, self.selectedSessionID == sessionID,
+                      self.terminals.state(of: sessionID)?.status != .awaitingInput,
                       self.terminals.sendText(text, submit: false, to: sessionID) else {
                     self?.playHaptic(.rejected)
                     return
@@ -30,6 +35,7 @@ extension ControllerActionDispatcher {
             guard isAgentChat else { return playHaptic(.rejected) }
             clipboard.copyImage(clip.id) { [weak self] written in
                 guard let self, written, self.selectedSessionID == sessionID,
+                      self.terminals.state(of: sessionID)?.status != .awaitingInput,
                       self.terminals.sendKey(.imagePaste, to: sessionID) else {
                     self?.playHaptic(.rejected)
                     return

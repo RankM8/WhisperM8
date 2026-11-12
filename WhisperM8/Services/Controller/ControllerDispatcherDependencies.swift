@@ -39,6 +39,11 @@ struct ControllerTerminalState: Equatable {
     /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`, Stand des
     /// letzten Transcript-Polls; Runde 5, R1).
     var queuedOwnPrompts: Int = 0
+    /// Im Feld steht vermutlich nur ein zurückgelegter oder mit ↑
+    /// zurückgeholter Prompt, nichts selbst Getipptes (R1 + Kreuz lehnt ab).
+    var onlyRecalledPrompt: Bool = false
+    /// Die TUI hat Bracketed Paste eingeschaltet (Einfügen in Shells).
+    var bracketedPaste: Bool = false
 }
 
 /// Zugriff auf den Zwischenablage-Verlauf für L1 + Kreuz (Runde 5). Closures

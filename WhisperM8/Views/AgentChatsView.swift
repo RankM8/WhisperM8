@@ -919,6 +919,7 @@ struct AgentChatsView: View {
         } message: { _ in
             Text(String(localized: "It is still running. Removing it stops the agent and deletes it from the supervisor."))
         }
+        .modifier(ControllerConfirmationDialog(windowID: windowID) { performControllerConfirmed($0) })
         .confirmationDialog(
             "Archive chat?",
             isPresented: Binding(

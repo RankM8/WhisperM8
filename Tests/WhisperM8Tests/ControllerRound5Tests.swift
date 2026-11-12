@@ -68,7 +68,6 @@ final class ControllerRound5BindingTests: XCTestCase {
 
     func testWritingLayerPasteEscapeAndUndo() {
         XCTAssertEqual(layer(.writing, .press(.cross), state(.working)), .pasteNewest)
-        XCTAssertEqual(layer(.writing, .press(.cross), state(profile: .shell)), .pasteNewest, "Text auch in Shells")
         XCTAssertEqual(layer(.writing, .press(.cross), state(.awaitingInput)), .rejected)
         var recentEscape = state(.working)
         recentEscape.escapeSentRecently = true
@@ -107,12 +106,41 @@ final class ControllerRound5BindingTests: XCTestCase {
         XCTAssertNil(cross(busy: true, dialog: true, text: true), "nie in einer Rückfrage")
         XCTAssertNil(cross(view: true, text: true), "nie bei offener Ansicht")
         // Codex
-        XCTAssertEqual(cross(.codex, busy: true, text: true), .send)
+        XCTAssertNil(cross(.codex, busy: true, text: true), "Codex meldet nie „wartet“: Enter könnte freigeben")
         XCTAssertEqual(cross(.codex, text: true), .send)
         XCTAssertEqual(cross(.codex), .continueWork)
         XCTAssertNil(cross(.codex, busy: true))
         // Shell: wie bisher
         XCTAssertEqual(cross(.shell, busy: true, text: true), .continueWork)
+    }
+
+    func testRecalledPromptIsNotSentAgain() {
+        XCTAssertNil(ControllerQuickDrawSlots.crossAction(
+            profile: .claude, busy: false, dialogOpen: false, viewOpen: false,
+            fieldHasText: true, queuedOwnPrompts: 0, onlyRecalledPrompt: true))
+        XCTAssertNil(ControllerQuickDrawSlots.crossAction(
+            profile: .claude, busy: true, dialogOpen: false, viewOpen: false,
+            fieldHasText: true, queuedOwnPrompts: 1, onlyRecalledPrompt: true))
+        // Sichtbar leer: der Rückleger-Verdacht ist veraltet, „Weiter“ geht.
+        XCTAssertEqual(ControllerQuickDrawSlots.crossAction(
+            profile: .claude, busy: false, dialogOpen: false, viewOpen: false,
+            fieldHasText: false, queuedOwnPrompts: 0, onlyRecalledPrompt: true), .continueWork)
+    }
+
+    func testSecondEscapeInAViewWaitsBriefly() {
+        var view = state(.working, view: .tasks)
+        view.escapeSentJustNow = true
+        XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: .chat(view)))
+        view.escapeSentJustNow = false
+        view.escapeSentRecently = true
+        XCTAssertEqual(ControllerBindingResolver.action(for: .tap(.circle), in: .chat(view)), .chatKey(.escape))
+    }
+
+    func testPasteInShellOnlyAtThePrompt() {
+        XCTAssertEqual(layer(.writing, .press(.cross), state(profile: .shell)), .rejected, "nano, vim …")
+        var prompt = state(profile: .shell)
+        prompt.shellAtPrompt = true
+        XCTAssertEqual(layer(.writing, .press(.cross), prompt), .pasteNewest)
     }
 
     func testQuickDrawSlotsShowCrossTitleAndState() {
@@ -306,10 +334,42 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertTrue(terminals.texts.isEmpty)
     }
 
-    func testQuickDrawCrossInCodexWithTextSendsEnterEvenWhileWorking() {
+    func testQuickDrawCrossInCodexWithText() {
         setTerminal(.working, profile: .codex, draft: true)
         dispatcher.performQuickDraw(.continueWork)
+        XCTAssertTrue(terminals.keys.isEmpty, "arbeitet: geht nicht")
+        XCTAssertEqual(haptics, [.rejected])
+        setTerminal(.idle, profile: .codex, draft: true)
+        dispatcher.performQuickDraw(.continueWork)
         XCTAssertEqual(terminals.keys, [.enter])
+    }
+
+    func testPasteTextInShellNeedsPromptAndBracketedPaste() {
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "t", kind: .text, preview: "ls") },
+            loadText: { _, completion in completion("ls -la") })
+        var shell = ControllerTerminalState(
+            isRunning: true, profile: .shell, status: nil, statusSince: nil, draftSuspected: false,
+            lastEnterAt: nil, lastEscapeAt: nil)
+        shell.shellAtPrompt = true
+        terminals.states[chat] = shell
+        perform(.pasteNewest)
+        XCTAssertTrue(terminals.texts.isEmpty, "ohne Bracketed Paste nicht")
+        shell.bracketedPaste = true
+        terminals.states[chat] = shell
+        perform(.pasteNewest)
+        XCTAssertEqual(terminals.texts.map(\.text), ["ls -la"])
+    }
+
+    func testPasteSkipsWhenAQuestionAppearedMeanwhile() {
+        var pending: (@MainActor (String?) -> Void)?
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "t", kind: .text, preview: "x") },
+            loadText: { _, completion in pending = completion })
+        perform(.pasteNewest)
+        setTerminal(.awaitingInput)
+        pending?("x")
+        XCTAssertTrue(terminals.texts.isEmpty)
     }
 
     func testQuickDrawCrossWithEmptyFieldIdleStillContinues() {
@@ -426,7 +486,10 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         let accounts = dispatcher.ui.menu?.setup.chat?.accounts ?? []
         XCTAssertEqual(accounts.first { $0.name == "a" }?.fiveHourUsed, 70)
         XCTAssertEqual(accounts.filter(\.isMostFree).map(\.name), ["b"])
-        XCTAssertEqual(refreshes, 1, "passiver Abruf beim Öffnen")
+        XCTAssertEqual(refreshes, 0, "nicht schon beim Öffnen des Menüs")
+        dispatcher.ui.menu?.select(.switchAccount)
+        perform(.menuActivate)
+        XCTAssertEqual(refreshes, 1, "passiver Abruf erst mit den Konten")
     }
 
     // MARK: Während des Diktats (Punkt 9)

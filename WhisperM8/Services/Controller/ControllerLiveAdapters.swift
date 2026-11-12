@@ -34,7 +34,10 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID)),
             shellAtPrompt: profile == .shell && !controller.terminal.getTerminal().isCurrentBufferAlternate,
             screen: controller.controllerScreenSnapshot(),
-            queuedOwnPrompts: profile == .claude ? coordinator.queuedOwnPrompts(sessionID: sessionID) : 0
+            queuedOwnPrompts: profile == .claude ? coordinator.queuedOwnPrompts(sessionID: sessionID) : 0,
+            onlyRecalledPrompt: controller.composerDraft.mayHoldRestoredPrompt
+                && !controller.composerDraft.mayHaveUnsentInput && !controller.composerDraft.mayShowAcceptedSuggestion,
+            bracketedPaste: controller.terminal.getTerminal().bracketedPasteMode
         )
     }
 

@@ -15674,6 +15674,26 @@
         }
       }
     },
+    "Stop this background agent?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Hintergrund-Agenten stoppen?"
+          }
+        }
+      }
+    },
+    "Stop this job?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Job stoppen?"
+          }
+        }
+      }
+    },
     "Stopped": {
       "localizations": {
         "de": {
@@ -17970,6 +17990,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Kontowechsel rückgängig machen"
+          }
+        }
+      }
+    },
+    "Undo last account switch (all chats it moved)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzten Kontowechsel rückgängig (alle betroffenen Chats)"
           }
         }
       }
