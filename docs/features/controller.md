@@ -74,11 +74,26 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
-| L2 tippen | letzter Chat; gehalten die Ebene „Wohin“ |
+| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen (in jedem Abstand gedrückt; weder Chatwechsel noch Ebene) |
 
 Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
 Bildschirmaufnahme). Zwei schnelle Create-Drücke ergeben deshalb einen Screenshot.
+
+**Zurück mit L2:** L2 getippt führt an den vorigen Ort des Fensters, ein zweites Tippen wieder zurück
+(wie ein kurzes Alt-Tab). Ein Ort ist ein einzelner Chat oder ein Workspace im Raster. Kachelwechsel im
+selben Raster sind kein Ortswechsel; eine große Kachel (L3) und jeder Chat in der Einzelansicht, der zum
+gemerkten Workspace gehört, zählen als dieser Workspace. Ein Workspace öffnet wie der Klick auf seinen
+Kopf als Raster, mit der Kachel, auf der du dort zuletzt warst; ein Chat wie der Klick in der
+Seitenleiste. Gibt es den vorigen Ort nicht mehr (Workspace gelöscht, Chat archiviert, geschlossen oder
+in ein anderes Fenster gewandert), vibriert der Controller „geht nicht“ und nichts passiert. Wer den
+aktuellen Ort schließt, landet mit L2 dort, wo er davor war. Die Legende nennt das Ziel („Zurück:
+Workspace Marketing“, „Zurück: Chat Login-Fix“) und fehlt ohne Ziel. Der Verlauf gilt je Fenster und
+nur für den laufenden App-Start; er wird im Store nach jeder Änderung nachgeführt
+(`AgentWindowStore+PlaceHistory`, pur: `ChatPlaceHistory`), zählt also Maus, Tastatur, Controller und
+CLI gleich. Die Legende liest ihn im Ereignis-Pfad; nach einem Klick mit der Maus steht dort bis zur
+nächsten Eingabe oder Statusänderung noch das alte Ziel. Grenze: Ist der vorige Ort ein Chat, der
+inzwischen als Kachel im sichtbaren Raster steht, bekommt nur die Kachel den Fokus.
 
 **Menü (Options):** drei Gruppen. Eingaben in den Chat: „Weiter“, „Befehle ›“ (zweite Ebene mit den
 festen Befehlen der CLI, Tabelle `ControllerSlashCommands`; „/ eintippen“ bleibt ungesendet, alle
@@ -297,10 +312,12 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 
 ## Prüfen
 
+- `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
+  Kachel je Workspace, geschlossene Ziele, je Fenster).
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster, offener Auswahl und Shell),
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
   Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel in elf
   Zuständen (Wohin: Hinweis, Chats, Workspaces, mit Notch-Zählern; Schreiben, Schreiben in der Shell;
   Schnellbefehle, Schnellbefehle bei Rückfrage; als Pille Chats, Schnellbefehle, Shell);
