@@ -27,6 +27,9 @@ SCRATCH="$REPO/.build-test"
 APP="$SCRATCH/WhisperM8Test.app"
 BIN="$APP/Contents/MacOS/WhisperM8"
 ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}"
+# Die App nimmt nur absolute Wurzeln an (AppInstance.resolveTestRoot); mit einer
+# relativen oder „~/…“ liefen `cli`-Befehle gegen die Produktiv-App.
+[[ "$ROOT" == /* ]] || { echo "WHISPERM8_TEST_ROOT muss ein absoluter Pfad sein: $ROOT" >&2; exit 64; }
 LOG="$ROOT/instance.log"
 BUNDLE_ID="com.whisperm8.app.test"
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer

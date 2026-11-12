@@ -14,10 +14,13 @@ final class HandoverSoakScriptTests: XCTestCase {
 
     private static var script: URL { root.appendingPathComponent("scripts/handover-soak.sh") }
 
-    private func run(_ arguments: [String]) throws -> (status: Int32, output: String) {
+    private func run(_ arguments: [String], environment: [String: String] = [:]) throws -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = arguments
+        if !environment.isEmpty {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+        }
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
@@ -40,9 +43,19 @@ final class HandoverSoakScriptTests: XCTestCase {
         XCTAssertFalse(result.output.contains("FAIL"), result.output)
     }
 
-    func testUnknownCommandIsUsageError() throws {
+    /// Nur Aufrufe, die nie einen echten Lauf starten (kein `run`).
+    func testUsageErrorsNeverStartARun() throws {
         XCTAssertEqual(try run([Self.script.path, "gibtsnicht"]).status, 64)
-        XCTAssertEqual(try run([Self.script.path, "run", "--rounds", "0"]).status, 64)
+        XCTAssertEqual(try run([Self.script.path, "self-test", "--rounds", "0"]).status, 64)
+        XCTAssertEqual(try run([Self.script.path, "self-test", "--bogus"]).status, 64)
+    }
+
+    /// Eine relative Wurzel ignoriert die App (`AppInstance.resolveTestRoot`)
+    /// und spräche dann die Produktiv-Instanz an.
+    func testRelativeTestRootIsRefused() throws {
+        let result = try run([Self.script.path, "self-test"], environment: ["WHISPERM8_TEST_ROOT": "~/soak"])
+        XCTAssertEqual(result.status, 64, result.output)
+        XCTAssertTrue(result.output.contains("absoluter Pfad"), result.output)
     }
 
     /// Ein Chat, der das Skript startet, darf weder die App beenden noch
@@ -61,6 +74,19 @@ final class HandoverSoakScriptTests: XCTestCase {
         XCTAssertTrue(code.contains(#"ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}""#),
                       "gleiche Wurzel wie scripts/test-instance.sh")
         XCTAssertTrue(code.contains("check_for_update_on_startup = false"), "Codex-Update-Dialog abgeschaltet")
+        // Das Binary direkt nur mit ausdrücklicher Test-Wurzel aufrufen.
+        // Dateiprüfungen wie `[[ -x "$BIN" ]]` sind kein Aufruf.
+        for line in code.split(separator: "\n") where line.contains("\"$BIN\" ") && !line.contains("-x \"$BIN\"") {
+            XCTAssertTrue(line.contains("WHISPERM8_INSTANCE_ROOT=\"$ROOT\""), "Aufruf ohne Test-Wurzel: \(line)")
+        }
+        XCTAssertNil(code.range(of: #"com\.whisperm8\.app[^.]"#, options: .regularExpression), "Produktiv-Bundle-ID im Skript")
+        XCTAssertTrue(code.contains(#"[[ "$ROOT" == /* ]]"#), "Wurzel muss absolut sein")
+    }
+
+    func testTestInstanceScriptRefusesRelativeRoot() throws {
+        let instance = Self.root.appendingPathComponent("scripts/test-instance.sh")
+        let result = try run([instance.path, "status"], environment: ["WHISPERM8_TEST_ROOT": "relativ/wurzel"])
+        XCTAssertEqual(result.status, 64, result.output)
     }
 
     func testRootMatchesTestInstanceScript() throws {
