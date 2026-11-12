@@ -1,5 +1,5 @@
 ---
-status: Plan, Bau startet nach dem Merge von touchpad, steuerkreuz und l2-zurueck in main
+status: teilweise gebaut (12.11.2026); Insel-Layout (zweite Raute, Limits-Karte, Konto im R1-Kopf) zurückgestellt bis zur vereinten Pille
 stand: 2026-11-12
 feature: Controller Runde 5 (Limits in der Insel, App-Schalter, Schreiben mit Steuerkreuz, Einfügen, Wiederöffnen, Forschungspunkte R1–R8)
 branch: feat/controller-runde5
@@ -15,6 +15,24 @@ Limit-Warnung) bleibt zurückgestellt.
 
 Feature-Doku: [`../features/controller.md`](../features/controller.md). Entwürfe:
 [`../design/controller-insel.html`](../design/controller-insel.html), Runde 5 auf dem Entwurfs-Branch.
+
+## Stand Phase 2 (12.11.2026)
+
+Gebaut auf `feat/controller-runde5` (main `d9e2ac1c` gemergt): neue Terminal-Tasten und Ctrl+Return (R8),
+Ansichts-Erkennung (R2), L1 mit Wortsprung, Zeilen, Einfügen, Escape und Rückgängig (6, 7, R3, R6), R1 + ✕
+nach der Präzisierung (R1) und R1 + L3 (R4), L2 + □ (8), Options-Menü mit Gruppen und Kopf-Aktionen (10),
+Konto-Menü mit Verbrauch, „am meisten frei“, Abbrechen/Rückgängig (3), Befehle `/tasks`, `/workflows`,
+`/rewind` (R5), „Neu zeichnen“ (R7), Steuerung während des Diktats (9). Die Insel zeigt die neuen Tasten
+nur über ihr Modell (Einträge, Beschriftungen), ohne neues Layout.
+
+Zurückgestellt, bis die vereinte Pille (`feat/pille-vereint`) in main ist: 1 (zweite Raute mit
+App-Schaltern), 2 (Limits-Karte), 4 (Konto und 5 Std. im R1-Kopf) und jede Layout-Änderung an
+`ControllerIslandView` und Presenter. Der Limits-Stand (`AccountLimitsStore`) für Karte und Kopf ist schon da.
+
+Abweichungen vom Plan oben: Der Limits-Stand ist ein eigener kleiner Speicher, den die Popovers füllen,
+statt ihre Lade-Logik zu übernehmen (weniger Umbau an den Popovers). R4 schließt die Insel nicht (wie die
+übrigen L1-Tasten). Pfeile in Shells machen Kreuz weiter wie bisher scharf; die Einschränkung auf
+Ansichten, Rückfragen und Listen gilt für Claude.
 
 ## Ausgangslage
 
