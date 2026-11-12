@@ -2971,6 +2971,16 @@
         }
       }
     },
+    "Cannot resume %@: this conversation is already running in another Claude process (PID %@). Close that process first, a second start would run the same conversation twice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem anderen Claude-Prozess (PID %@). Beende zuerst diesen Prozess, ein zweiter Start würde dieselbe Unterhaltung doppelt führen."
+          }
+        }
+      }
+    },
     "Cannot return to the workspace: %@.": {
       "localizations": {
         "de": {
