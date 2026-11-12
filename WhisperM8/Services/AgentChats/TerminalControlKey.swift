@@ -44,6 +44,11 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     ) -> Bool {
         let isAgentChat = profile == .claudeCodeChat || profile == .codexChat
         switch key {
+        // Rechts übernimmt in Claude den grauen Vorschlag; mit Text im Feld
+        // rückt nur der Cursor. Links bleibt gesperrt (leeres Feld: Claude in
+        // den Hintergrund).
+        case .right where profile == .claudeCodeChat:
+            return true
         case .up, .down, .left, .right:
             // Ein Merker zählt bei Claude nur, solange der Chat ruht.
             let listCounts = choiceListOpen && (profile != .claudeCodeChat || status == .idle)

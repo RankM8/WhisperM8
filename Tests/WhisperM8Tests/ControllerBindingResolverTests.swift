@@ -64,6 +64,23 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(left, chat(.ended) { $0.choiceListOpen = true }), .moveInContent(.left))
     }
 
+    /// Steuerkreuz rechts übernimmt in Claude-Chats den grauen Vorschlag
+    /// (Pfeil rechts), in jedem lebenden Zustand, auch im Raster. Hoch,
+    /// runter und links bleiben Navigation; Shell und beendeter Chat ohne Pfeil.
+    func testDpadRightAcceptsSuggestionInClaude() {
+        let right = ControllerGesture.move(.right, source: .dpad, isRepeat: false)
+        for status in [ControllerChatState.Status.idle, .working, .unknown, .awaitingInput] {
+            XCTAssertEqual(action(right, chat(status)), .chatKey(.right), "Claude \(status)")
+            XCTAssertEqual(action(right, chat(status) { $0.gridActive = true }), .chatKey(.right), "Raster \(status)")
+        }
+        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: true), chat(.idle)), .chatKey(.right))
+        XCTAssertNil(action(right, chat(.idle, profile: .shell)), "Shell: rechts ohne Wirkung")
+        XCTAssertNotEqual(action(right, chat(.ended)), .chatKey(.right))
+        XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: false), chat(.idle)), "Stick rechts bleibt ohne Wirkung")
+        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), chat(.idle) { $0.gridActive = true }),
+                       .moveInContent(.right), "Raster: Stick wechselt die Kachel")
+    }
+
     /// Befund 1a: Mit offener Auswahl des Menüs sendet Kreuz Enter auch bei
     /// arbeitendem Chat, und Kreis schließt die Liste auch direkt nach dem
     /// Befehl, der sie geöffnet hat.
@@ -236,15 +253,24 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1), "\(context)")
             XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: false), context), .enterList(step: 1), "\(context)")
             XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), context), .moveInContent(.left), "\(context)")
-            XCTAssertNil(action(.move(.right, source: .dpad, isRepeat: false), context), "\(context)")
+            // Rechts: in lebenden Claude-Chats Pfeil rechts (Vorschlag übernehmen), sonst nichts.
+            let rightExpected: ControllerAction? = ControllerBindingResolver.suggestionAcceptAllowed(chatState(of: context))
+                ? .chatKey(.right) : nil
+            XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), context), rightExpected, "\(context)")
             XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "\(context)")
         }
         let grid = chat(.working) { $0.gridActive = true }
-        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), grid), .moveInContent(.right))
+        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), grid), .chatKey(.right))
+        XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), grid), .moveInContent(.left))
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), grid), .moveInContent(.up))
         // Während der Aufnahme bleibt das Steuerkreuz der Ausgabemodus.
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), .recording(phase: .recording, targetIsChat: true)),
                        .outputMode(step: -1))
+    }
+
+    private func chatState(of context: ControllerContext) -> ControllerChatState {
+        guard case let .chat(state) = context else { fatalError("kein Chat") }
+        return state
     }
 
     /// Absicherung im Terminal-Weg des Controllers.
@@ -256,15 +282,17 @@ final class ControllerBindingResolverTests: XCTestCase {
         for key in [TerminalControlKey.up, .down, .left, .right] {
             XCTAssertTrue(allows(key, .awaitingInput))
             for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
-                XCTAssertFalse(allows(key, status), "\(key) \(status)")
+                // Rechts übernimmt bei Claude den grauen Vorschlag (immer erlaubt).
+                XCTAssertEqual(allows(key, status), key == .right, "\(key) \(status)")
                 XCTAssertFalse(allows(key, status, .plainShell), "Shell \(key) \(status)")
                 // Befund 1 nach Runde 3: offene Auswahl des Menüs (bei Claude
                 // nur im Ruhezustand, Nachreview), Codex immer.
-                XCTAssertEqual(allows(key, status, list: true), status == .idle, "Auswahl offen \(key) \(status)")
+                XCTAssertEqual(allows(key, status, list: true), status == .idle || key == .right,
+                               "Auswahl offen \(key) \(status)")
                 XCTAssertTrue(allows(key, status, .codexChat, list: true))
                 XCTAssertTrue(allows(key, status, .codexChat), "Codex \(key) \(status)")
             }
-            XCTAssertFalse(allows(key, nil))
+            XCTAssertEqual(allows(key, nil), key == .right)
             XCTAssertTrue(allows(key, nil, .codexChat))
         }
         XCTAssertFalse(allows(.backTab, .awaitingInput))

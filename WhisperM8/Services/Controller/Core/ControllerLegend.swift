@@ -15,7 +15,7 @@ enum ControllerLegendInput: Hashable, Sendable {
 enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case send, confirm, back, reject, cancel, interruptHold, start
     case dictate, stopDictation, stopAndSend, discard, outputMode
-    case space, previousNextChat, filter, move, arrows, scroll, clearInputHold
+    case space, previousNextChat, filter, move, arrows, scroll, clearInputHold, acceptSuggestion
     case backspace, newChat, clipboard, maximize, menu
     case lastChat, pickChatHold, pickAndDictate, switchOnRelease, switchWorkspaceHold
     case open, select, paste, pin, deleteHold, close, closeHold
@@ -87,6 +87,7 @@ enum ControllerLegend {
                 entry(.button(.options), .menu),
                 entry(.button(.r3), .startChat),
                 entry(.button(.r3), .clearInputHold),
+                entry(.button(.dpadRight), .acceptSuggestion),
                 entry(.button(.l2), .lastChat),
                 entry(.button(.l2), .pickChatHold),
                 entry(.button(.l2), .switchWorkspaceHold),
@@ -101,6 +102,10 @@ enum ControllerLegend {
     static func gestures(for input: ControllerLegendInput) -> [ControllerGesture] {
         switch input {
         case let .button(button):
+            // Die Richtungen des Steuerkreuzes kommen als Bewegung an.
+            if let direction = button.dpadDirection {
+                return [false, true].map { ControllerGesture.move(direction, source: .dpad, isRepeat: $0) }
+            }
             return [
                 .press(button), .tap(button), .holdPending(button, duration: 1),
                 .holdBegan(button), .holdRepeat(button), .holdRepeatLong(button), .holdEnded(button),
@@ -230,6 +235,11 @@ enum ControllerLegend {
         // Liste aus dem Menü, Codex); sonst bewegt es wie der Stick.
         let arrows = ControllerBindingResolver.arrowsAllowed(state)
         let moveInputs: [ControllerLegendInput] = arrows ? [.leftStick] : [.leftStick, .dpad]
+        // Rechts übernimmt in Claude den grauen Vorschlag; gleich neben Kreuz,
+        // das ihn danach abschickt. Bei offener Auswahl stehen dort die Pfeile.
+        let suggestion: [Candidate] = !arrows && ControllerBindingResolver.suggestionAcceptAllowed(state)
+            ? [candidate(.button(.dpadRight), .acceptSuggestion, [.move(.right, source: .dpad, isRepeat: false)])]
+            : []
         let moveProbes: [ControllerGesture] = moveInputs.flatMap { input in
             ControllerDirection.allCases.map { direction in
                 ControllerGesture.move(direction, source: input == .dpad ? .dpad : .leftStick, isRepeat: false)
@@ -239,6 +249,7 @@ enum ControllerLegend {
             ControllerLegend.Candidate(
                 entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
+        ] + suggestion + [
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
