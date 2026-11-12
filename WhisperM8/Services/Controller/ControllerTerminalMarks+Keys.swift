@@ -17,7 +17,7 @@ extension ControllerTerminalMarks {
     /// Escape und alles, was das Feld ändert, schließen sie ebenso. Pfeile und
     /// Leerzeichen bewegen sich darin; verlängert wird die Liste nicht.
     mutating func recordControllerKey(
-        _ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, isCodex: Bool, at now: Date
+        _ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, at now: Date
     ) {
         switch key {
         case .enter:
@@ -28,10 +28,11 @@ extension ControllerTerminalMarks {
             lastEscapeAt = now
             choiceListClosed()
         case .up, .down, .left, .right:
-            // Codex meldet keine Rückfragen: Wer per Steuerkreuz in einer
-            // Freigabe wählt, darf sie danach mit Kreuz bestätigen, auch wenn
-            // der Chat als „arbeitet“ gilt.
-            if isCodex { recordDraftInput(submitted: false, at: now) }
+            // Wer per Steuerkreuz wählt, darf danach mit Kreuz bestätigen,
+            // auch wenn der Chat als „arbeitet“ gilt: Codex meldet keine
+            // Rückfragen, und Claude zeigt Subagenten- und Workflow-Ansichten
+            // während eines Turns (seit 12.11.2026 für beide).
+            recordDraftInput(submitted: false, at: now)
         case .space:
             // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)

@@ -40,20 +40,16 @@ extension ControllerBindingResolver {
         case .tap(.l2): return .lastChat
         case let .scroll(lines): return .scroll(lines: lines)
 
-        // Steuerkreuz: Pfeile ins Terminal nur, wo eine Auswahl offen ist
-        // (`arrowsAllowed`). Sonst richten sie Schaden an — links im leeren
-        // Eingabefeld schickt Claude in den Hintergrund, hoch holt den letzten
-        // Prompt zurück (Kreuz schickte ihn erneut), in einer Shell den
-        // letzten Befehl. Dann wirkt das Steuerkreuz wie der linke Stick.
-        // Bewusst nicht am Entwurfs-Verdacht festgemacht: Die Rücktaste setzt
-        // ihn nie zurück.
+        // Steuerkreuz: in jedem lebenden Chat Pfeiltasten ins Terminal
+        // (Entscheidung 12.11.2026). Nur so kommt man in Claude in
+        // Subagenten-, Workflow- und Aufgabenansichten, in Rückfragen, die
+        // nicht als „wartet“ gemeldet werden, und durch Listen der CLI. In
+        // der App navigiert der linke Stick. Bekannter Preis: Hoch im leeren
+        // Eingabefeld holt den letzten Prompt zurück, links schickt Claude
+        // dort in den Hintergrund. Rechts übernimmt den grauen Vorschlag.
+        // Ohne lebendes Terminal (beendeter Chat, Verlauf) wie der Stick.
         case let .move(direction, .dpad, isRepeat):
             if arrowsAllowed(state) { return .chatKey(ControllerChatKey(direction)) }
-            // Rechts übernimmt in Claude den grauen Vorschlag ins Eingabefeld
-            // (Claude Code: Tab oder Pfeil rechts). Harmlos: Mit Text im Feld
-            // rückt nur der Cursor, am Ende tut der Pfeil nichts. Gilt auch im
-            // Raster; dort wechselt der Stick die Kachel.
-            if direction == .right, suggestionAcceptAllowed(state) { return .chatKey(.right) }
             return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
 
         // Tasten ins Terminal: nur bei lebendem Chat.
@@ -109,27 +105,12 @@ extension ControllerBindingResolver {
         return writingKeysAllowed(state) && state.status != .awaitingInput
     }
 
-    /// Pfeiltasten ins Terminal eines lebenden Chats:
-    /// - bei offener Rückfrage;
-    /// - solange eine Auswahlliste offen ist, die das Controller-Menü geöffnet
-    ///   hat (`/model`, `/config`, „/“ …) — der Chat ruht dabei;
-    /// - bei Codex immer. Codex meldet nie „wartet“ (keine Hooks), und seine
-    ///   Freigaben erscheinen, während das Transkript „arbeitet“ sagt (letzter
-    ///   Eintrag ist der Tool-Aufruf; nach 2 min ohne Schreiben „ruht“). Eine
-    ///   Erkennung gibt es nicht, also bleibt nur: immer. Links im leeren Feld
-    ///   schickt Codex nicht in den Hintergrund, das ist Claude-eigen; hoch
-    ///   holt den letzten Prompt, sichtbar im Feld.
-    /// Bei Claude bleibt das Steuerkreuz sonst Navigation.
+    /// Pfeiltasten ins Terminal: in jedem lebenden Chat, gleich welches
+    /// Programm (Claude, Codex, Shell). Bis 12.11.2026 nur bei offener
+    /// Auswahl und in Codex; das sperrte Ansichten, die Claude ohne
+    /// „wartet“ zeigt (Subagenten, Workflows).
     static func arrowsAllowed(_ state: ControllerChatState) -> Bool {
-        guard state.acceptsKeys else { return false }
-        return state.status == .awaitingInput || choiceListActive(state) || state.profile == .codex
-    }
-
-    /// Steuerkreuz rechts als Pfeil rechts: in jedem lebenden Claude-Chat.
-    /// Codex bekommt die Pfeile ohnehin (`arrowsAllowed`), in Shells bleibt
-    /// rechts ohne Wirkung.
-    static func suggestionAcceptAllowed(_ state: ControllerChatState) -> Bool {
-        state.acceptsKeys && state.profile == .claude
+        state.acceptsKeys
     }
 
     /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der

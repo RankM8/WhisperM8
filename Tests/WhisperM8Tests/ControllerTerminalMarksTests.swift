@@ -16,7 +16,7 @@ final class ControllerTerminalMarksTests: XCTestCase {
         for key in [TerminalControlKey.killLineStart, .newline] {
             var marks = ControllerTerminalMarks()
             marks.choiceListOpened(at: t0)
-            marks.recordControllerKey(key, status: .idle, isCodex: false, at: at(1))
+            marks.recordControllerKey(key, status: .idle, at: at(1))
             XCTAssertFalse(marks.isChoiceListOpen(at: at(2)), "\(key)")
             XCTAssertEqual(marks.lastDraftInputAt, at(1), "\(key)")
         }
@@ -34,8 +34,8 @@ final class ControllerTerminalMarksTests: XCTestCase {
         XCTAssertFalse(marks.isChoiceListOpen(at: at(120)), "zwei Minuten")
 
         marks.choiceListOpened(at: t0)
-        marks.recordControllerKey(.down, status: .idle, isCodex: false, at: at(100))
-        marks.recordControllerKey(.space, status: .idle, isCodex: false, at: at(110))
+        marks.recordControllerKey(.down, status: .idle, at: at(100))
+        marks.recordControllerKey(.space, status: .idle, at: at(110))
         XCTAssertTrue(marks.isChoiceListOpen(at: at(111)), "Pfeil und Leerzeichen schließen nicht")
         XCTAssertFalse(marks.isChoiceListOpen(at: at(121)), "und verlängern nicht")
     }
@@ -87,10 +87,10 @@ final class ControllerTerminalMarksTests: XCTestCase {
     func testUseNeverReopensAnExpiredList() {
         var marks = ControllerTerminalMarks()
         marks.choiceListOpened(at: t0)
-        marks.recordControllerKey(.up, status: .awaitingInput, isCodex: false, at: at(130))
+        marks.recordControllerKey(.up, status: .awaitingInput, at: at(130))
         XCTAssertFalse(marks.isChoiceListOpen(at: at(131)))
         var fresh = ControllerTerminalMarks()
-        fresh.recordControllerKey(.up, status: .awaitingInput, isCodex: false, at: t0)
+        fresh.recordControllerKey(.up, status: .awaitingInput, at: t0)
         XCTAssertFalse(fresh.isChoiceListOpen(at: t0))
     }
 
@@ -98,7 +98,7 @@ final class ControllerTerminalMarksTests: XCTestCase {
         for key in [TerminalControlKey.enter, .escape, .backspace, .deleteWord, .tab, .backTab, .killLineStart] {
             var marks = ControllerTerminalMarks()
             marks.choiceListOpened(at: t0)
-            marks.recordControllerKey(key, status: .idle, isCodex: false, at: at(1))
+            marks.recordControllerKey(key, status: .idle, at: at(1))
             XCTAssertFalse(marks.isChoiceListOpen(at: at(1)), "\(key)")
         }
     }
@@ -109,7 +109,7 @@ final class ControllerTerminalMarksTests: XCTestCase {
         var marks = ControllerTerminalMarks()
         XCTAssertNil(marks.lastSubmitAt(programmatic: nil))
         XCTAssertEqual(marks.lastSubmitAt(programmatic: at(5)), at(5), "chats send, Diktat, Menü")
-        marks.recordControllerKey(.enter, status: .awaitingInput, isCodex: false, at: at(6))
+        marks.recordControllerKey(.enter, status: .awaitingInput, at: at(6))
         XCTAssertEqual(marks.lastSubmitAt(programmatic: at(5)), at(6), "Kreuz auch in einer Rückfrage")
         marks.recordKeyboard(keyCode: 36, modifiers: [], at: at(7))
         XCTAssertEqual(marks.lastSubmitAt(programmatic: at(5)), at(7), "Enter der Tastatur")
@@ -123,8 +123,8 @@ final class ControllerTerminalMarksTests: XCTestCase {
     /// einen neuen Freigabe-Dialog scharf halten.
     func testEnterInsideQuestionEndsTheFreshDraftInput() {
         var marks = ControllerTerminalMarks()
-        marks.recordControllerKey(.space, status: .awaitingInput, isCodex: false, at: t0)
-        marks.recordControllerKey(.enter, status: .awaitingInput, isCodex: false, at: at(1))
+        marks.recordControllerKey(.space, status: .awaitingInput, at: t0)
+        marks.recordControllerKey(.enter, status: .awaitingInput, at: at(1))
         XCTAssertNotNil(marks.lastDraftInputAt, "die Rückfrage leert das Eingabefeld nicht")
         XCTAssertFalse(ControllerTerminalMarks.hasFreshDraftInput(
             draftAt: marks.lastDraftInputAt, lastSubmitAt: marks.lastSubmitAt(programmatic: nil),
@@ -143,14 +143,14 @@ final class ControllerTerminalMarksTests: XCTestCase {
         XCTAssertFalse(fresh(at(1), at(1), now: at(3)))
     }
 
-    /// Codex: Ein Pfeil per Controller zählt als Eingabe, damit Kreuz eine
-    /// Freigabe bestätigen kann, die Codex nie als Rückfrage meldet.
-    func testCodexArrowCountsAsInputClaudeArrowDoesNot() {
-        var codex = ControllerTerminalMarks()
-        codex.recordControllerKey(.down, status: .working, isCodex: true, at: t0)
-        XCTAssertEqual(codex.lastDraftInputAt, t0)
-        var claude = ControllerTerminalMarks()
-        claude.recordControllerKey(.down, status: .awaitingInput, isCodex: false, at: t0)
-        XCTAssertNil(claude.lastDraftInputAt)
+    /// Ein Pfeil per Controller zählt als Eingabe, damit Kreuz danach auch bei
+    /// „arbeitet“ bestätigen kann (Codex-Freigaben, Claudes Workflow- und
+    /// Subagenten-Ansichten).
+    func testArrowCountsAsInput() {
+        for status in [AgentSessionRuntimeStatus.working, .awaitingInput, .idle] {
+            var marks = ControllerTerminalMarks()
+            marks.recordControllerKey(.down, status: status, at: t0)
+            XCTAssertEqual(marks.lastDraftInputAt, t0, "\(status)")
+        }
     }
 }

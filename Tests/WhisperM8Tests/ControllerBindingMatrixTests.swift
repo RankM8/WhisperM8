@@ -260,34 +260,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .inLayer(.writing, .press(.triangle)): .rejected,
     ]
 
-    /// Steuerkreuz außerhalb einer Rückfrage (Review-Befund 1): wie der linke
-    /// Stick, ohne Wiederholung; rechts ohne Wirkung.
+    /// Steuerkreuz ohne lebendes Terminal (beendeter Chat): wie der linke
+    /// Stick, ohne Wiederholung; rechts ohne Wirkung. In jedem lebenden Chat
+    /// ist es die Pfeiltaste (`chatArrows`, seit 12.11.2026).
     private static let dpadNavigation: Table = [
         .move(.up, source: .dpad, isRepeat: false): .enterList(step: -1),
         .move(.down, source: .dpad, isRepeat: false): .enterList(step: 1),
         .move(.left, source: .dpad, isRepeat: false): .moveInContent(.left),
     ]
-
-    /// Lebender Claude-Chat: rechts übernimmt den grauen Vorschlag (Pfeil
-    /// rechts, auch gehalten), sonst wie `dpadNavigation`.
-    private static let claudeDpadNavigation: Table = merge(dpadNavigation, [
-        .move(.right, source: .dpad, isRepeat: false): .chatKey(.right),
-        .move(.right, source: .dpad, isRepeat: true): .chatKey(.right),
-    ])
-
-    /// Im Raster von Kachel zu Kachel.
-    private static let gridDpadNavigation: Table = Dictionary(uniqueKeysWithValues: ControllerDirection.allCases.map {
-        (ControllerGesture.move($0, source: .dpad, isRepeat: false), ControllerAction.moveInContent($0))
-    })
-
-    /// Raster mit Claude-Chat: rechts übernimmt den Vorschlag, die übrigen
-    /// Richtungen wechseln die Kachel (der Stick wechselt auch nach rechts).
-    private static let claudeGridDpadNavigation: Table = {
-        var table = gridDpadNavigation
-        table[.move(.right, source: .dpad, isRepeat: false)] = .chatKey(.right)
-        table[.move(.right, source: .dpad, isRepeat: true)] = .chatKey(.right)
-        return table
-    }()
 
     private static let bridge: Table = merge(dpad { .bridgeKey(ControllerBridgeKey($0)) }, [
         .press(.cross): .bridgeKey(.returnKey),
@@ -414,7 +394,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.touchpad): .clipboardToggle,
             .press(.options): .menuToggle,
         ], pauseChord)),
-        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, claudeDpadNavigation, backspace, clearInput, [
+        ("Chat ruht mit Entwurf", chatState(.idle) { $0.draftSuspected = true }, merge(chatNavigation, chatArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
@@ -448,28 +428,28 @@ final class ControllerBindingMatrixTests: XCTestCase {
              .holdCancelled(.circle): .holdProgressCancelled(.circle),
          ])),
         ("Shell ruht", .chat(ControllerChatState(status: .idle, profile: .shell)),
-         merge(chatNavigation, dpadNavigation, shellKeys, [
+         merge(chatNavigation, chatArrows, shellKeys, [
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
-        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, claudeGridDpadNavigation, backspace, clearInput, [
+        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, chatArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
         // Review-Befund 3: Kreuz nur nach einer frischen Eingabe per Controller.
-        ("Chat arbeitet", chatState(.working), merge(chatNavigation, claudeDpadNavigation, backspace, clearInput, [
+        ("Chat arbeitet", chatState(.working), merge(chatNavigation, chatArrows, backspace, clearInput, [
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
         ("Chat arbeitet, Entwurf per Controller", chatState(.working) { $0.recentDraftInput = true },
-         merge(chatNavigation, claudeDpadNavigation, backspace, clearInput, [
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
-        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, claudeDpadNavigation, backspace, clearInput, [
+        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, chatArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),

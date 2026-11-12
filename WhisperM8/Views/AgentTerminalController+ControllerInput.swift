@@ -40,7 +40,7 @@ extension AgentTerminalController {
     /// Absicherung); Regeln in `ControllerTerminalMarks.recordControllerKey`.
     func noteControllerKey(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) {
         controllerMarks.recordControllerKey(
-            key, status: status, isCodex: command.keyboardProfile == .codexChat, at: now)
+            key, status: status, at: now)
     }
 
     /// Taste der echten Tastatur an dieses Terminal: Enter zählt als Absenden

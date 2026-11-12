@@ -4991,12 +4991,12 @@
         }
       }
     },
-    "D-pad: arrow keys while the agent asks a question, in a list opened from the menu and always in Codex; otherwise it moves like the left stick": {
+    "D-pad: arrow keys in every running chat, also in subagent and workflow views; in the app you move with the left stick": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steuerkreuz: Pfeiltasten während einer Rückfrage, in einer Liste aus dem Menü und in Codex immer; sonst bewegt es wie der linke Stick"
+            "value": "Steuerkreuz: Pfeiltasten in jedem laufenden Chat, auch in Subagenten- und Workflow-Ansichten; in der App bewegst du dich mit dem linken Stick"
           }
         }
       }

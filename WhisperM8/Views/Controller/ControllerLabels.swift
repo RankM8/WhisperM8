@@ -73,7 +73,7 @@ extension ControllerLegendLabel {
         case .space: return String(localized: "Type a space in the chat (Claude and Codex)")
         case .clearInputHold: return String(localized: "Hold: clear the whole input (Claude and Codex, not while the agent asks a question)")
         case .previousNextChat: return String(localized: "Tap: previous / next chat in the order of the list; in the list: Active / Recent / All. Hold: layer, see below")
-        case .arrows: return String(localized: "D-pad: arrow keys while the agent asks a question, in a list opened from the menu and always in Codex; otherwise it moves like the left stick")
+        case .arrows: return String(localized: "D-pad: arrow keys in every running chat, also in subagent and workflow views; in the app you move with the left stick")
         case .scroll: return String(localized: "Scroll the conversation")
         case .acceptSuggestion: return String(localized: "Take Claude's grey suggestion into the input; ✕ sends it")
         case .backspace: return String(localized: "Delete (hold: characters, after a second whole words; in a shell only characters)")
