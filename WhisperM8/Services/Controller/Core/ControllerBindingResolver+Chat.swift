@@ -52,6 +52,11 @@ extension ControllerBindingResolver {
         // ihn nie zurück.
         case let .move(direction, .dpad, isRepeat):
             if arrowsAllowed(state) { return .chatKey(ControllerChatKey(direction)) }
+            // Rechts übernimmt in Claude den grauen Vorschlag ins Eingabefeld
+            // (Claude Code: Tab oder Pfeil rechts). Harmlos: Mit Text im Feld
+            // rückt nur der Cursor, am Ende tut der Pfeil nichts. Gilt auch im
+            // Raster; dort wechselt der Stick die Kachel.
+            if direction == .right, suggestionAcceptAllowed(state) { return .chatKey(.right) }
             return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
 
         // Tasten ins Terminal: nur bei lebendem Chat.
@@ -118,6 +123,13 @@ extension ControllerBindingResolver {
     static func arrowsAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys else { return false }
         return state.status == .awaitingInput || choiceListActive(state) || state.profile == .codex
+    }
+
+    /// Steuerkreuz rechts als Pfeil rechts: in jedem lebenden Claude-Chat.
+    /// Codex bekommt die Pfeile ohnehin (`arrowsAllowed`), in Shells bleibt
+    /// rechts ohne Wirkung.
+    static func suggestionAcceptAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.profile == .claude
     }
 
     /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der

@@ -48,7 +48,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | im Chat ein Leerzeichen (lebende Claude- und Codex-Chats, kein Wiederholen beim Halten; in Shells „geht nicht“); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
 | L1 / R1 | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs |
-| Steuerkreuz | Pfeiltasten in den Chat, solange der Agent eine Rückfrage stellt, solange eine Liste offen ist, die das Menü geöffnet hat („Auswahl offen“, siehe Schutzregeln), und in Codex-Chats immer; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, rechts nichts, im Raster Kachel zu Kachel); in der Liste wie der Stick |
+| Steuerkreuz | Pfeiltasten in den Chat, solange der Agent eine Rückfrage stellt, solange eine Liste offen ist, die das Menü geöffnet hat („Auswahl offen“, siehe Schutzregeln), und in Codex-Chats immer; sonst wie der linke Stick (hoch/runter markieren in der Liste, links in die Liste, im Raster Kachel zu Kachel). Rechts schickt in Claude-Chats den Pfeil rechts und übernimmt damit den grauen Vorschlag ins Eingabefeld (Claude Code: Tab oder Pfeil rechts), Kreuz schickt ihn dann ab; in Shells ohne Wirkung. Im Raster wechselt nach rechts nur der Stick die Kachel. In der Liste wie der Stick |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
 **Zusatz**

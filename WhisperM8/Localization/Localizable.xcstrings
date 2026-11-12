@@ -1151,6 +1151,16 @@
         }
       }
     },
+    "Accept suggestion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschlag übernehmen"
+          }
+        }
+      }
+    },
     "Access for Claude": {
       "localizations": {
         "de": {
@@ -15670,6 +15680,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tabs"
+          }
+        }
+      }
+    },
+    "Take Claude's grey suggestion into the input; ✕ sends it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claudes grauen Vorschlag ins Eingabefeld übernehmen; ✕ schickt ihn ab"
           }
         }
       }
