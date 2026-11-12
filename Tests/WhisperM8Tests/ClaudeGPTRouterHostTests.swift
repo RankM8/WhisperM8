@@ -21,7 +21,7 @@ final class ClaudeGPTRouterHostTests: XCTestCase {
     override func tearDown() {
         for helper in helpers where helper.isRunning {
             helper.terminate()
-            helper.waitUntilExit()
+            _ = waitForExit(helper)
         }
         try? FileManager.default.removeItem(at: root)
         try? FileManager.default.removeItem(at: registerURL)
@@ -183,9 +183,9 @@ final class ClaudeGPTRouterHostTests: XCTestCase {
 
         // Übernommen heißt „selbst gestartet“: „Proxy stoppen“ beendet ihn.
         manager.stopIfSelfStarted()
-        mainProxy.waitUntilExit()
+        XCTAssertTrue(waitForExit(mainProxy))
         XCTAssertEqual(mainProxy.terminationReason, .uncaughtSignal)
-        profileProxy.waitUntilExit()
+        XCTAssertTrue(waitForExit(profileProxy))
         XCTAssertEqual(profileProxy.terminationReason, .uncaughtSignal, "Profil-Instanz gehört mit dazu")
     }
 
@@ -255,6 +255,12 @@ final class ClaudeGPTRouterHostTests: XCTestCase {
         try service.start().get()
         addTeardownBlock { router.stop() }
         return service
+    }
+
+    private func waitForExit(_ process: Process, timeout: TimeInterval = 10) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        return !process.isRunning
     }
 
     private func spawnSleeper() throws -> Process {

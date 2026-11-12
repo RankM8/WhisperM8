@@ -26,7 +26,7 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
     override func tearDown() {
         for process in processes where process.isRunning {
             kill(process.processIdentifier, SIGKILL)
-            process.waitUntilExit()
+            _ = waitForExit(process, timeout: 5)
         }
         processes.removeAll()
         // Generationen, die nicht dieser Prozess gestartet hat (Aufsicht).
@@ -65,6 +65,14 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.02)
         }
         return nil
+    }
+
+    /// Wie `waitUntilExit`, aber mit Frist: Ein hängender Dienst macht den
+    /// Test rot statt die ganze Suite anzuhalten.
+    private func waitForExit(_ process: Process, timeout: TimeInterval = 20) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+        return !process.isRunning
     }
 
     private func waitForActive(_ minimum: Int, timeout: TimeInterval = 5) -> Bool {
@@ -107,8 +115,8 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
             let result = try XCTUnwrap(streamed).get()
             XCTAssertEqual(result.body, expected, "Runde \(round): Strom durch die alte Generation unvollständig")
 
-            current.waitUntilExit()
-            XCTAssertEqual(current.terminationStatus, 0, "Runde \(round): alte Generation endete nicht sauber")
+            XCTAssertTrue(waitForExit(current), "Runde \(round): alte Generation endet nicht")
+            XCTAssertEqual(current.isRunning ? -1 : current.terminationStatus, 0, "Runde \(round): alte Generation endete nicht sauber")
             current = next
         }
         // Nach zehn Übergaben nimmt der Socket weiter an (kein „toter“ Socket).
@@ -132,8 +140,8 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
         kill(service.processIdentifier, SIGTERM)
         wait(for: [streamDone], timeout: 15)
         XCTAssertEqual(try XCTUnwrap(streamed).get().body, SlowStreamUpstream.expectedBody(chunkCount: upstream.chunkCount))
-        service.waitUntilExit()
-        XCTAssertEqual(service.terminationStatus, 0)
+        XCTAssertTrue(waitForExit(service), "Dienst endet nach SIGTERM nicht")
+        XCTAssertEqual(service.isRunning ? -1 : service.terminationStatus, 0)
     }
 
     private func makeSupervisor(build: String) -> ClaudeGPTRouterServiceSupervisor {
@@ -157,7 +165,7 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
         XCTAssertEqual(supervisor.currentPID, probe.processIdentifier, "gleicher Build: laufenden Dienst übernehmen, nicht neu starten")
 
         kill(probe.processIdentifier, SIGKILL)
-        probe.waitUntilExit()
+        XCTAssertTrue(waitForExit(probe))
         let crashedAt = Date()
         var restarted: ClaudeGPTRouterServiceStatus?
         while Date().timeIntervalSince(crashedAt) < 10 {
@@ -195,8 +203,8 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
 
         wait(for: [streamDone], timeout: 15)
         XCTAssertEqual(try XCTUnwrap(streamed).get().body, SlowStreamUpstream.expectedBody(chunkCount: upstream.chunkCount))
-        old.waitUntilExit()
-        XCTAssertEqual(old.terminationStatus, 0)
+        XCTAssertTrue(waitForExit(old), "alte Generation endet nicht")
+        XCTAssertEqual(old.isRunning ? -1 : old.terminationStatus, 0)
         // Das Ende der alten Generation löst keinen Neustart aus.
         Thread.sleep(forTimeInterval: 0.5)
         XCTAssertEqual(ClaudeGPTRouterServiceClient.status(root: root)?.generation, 2)

@@ -123,7 +123,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         desiredPort = port
-        if let status = statusResolver(root), status.state == "serving" {
+        if let status = settledStatus(), status.state == "serving" {
             if status.port == port, status.build == build {
                 watch(pid: status.pid)
                 return .success(())
@@ -148,6 +148,18 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
             waitUntilPortFree(port)
         }
         return launch(port: port, takeOver: false)
+    }
+
+    /// Status, aber nicht mitten in einer Übergabe: Die dauert Millisekunden;
+    /// ein frischer Start dazwischen scheiterte am belegten Port.
+    private func settledStatus() -> ClaudeGPTRouterServiceStatus? {
+        var status = statusResolver(root)
+        let deadline = Date().addingTimeInterval(3)
+        while let current = status, current.state != "serving", Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+            status = statusResolver(root)
+        }
+        return status
     }
 
     private func launch(port: Int, takeOver: Bool) -> Result<Void, Error> {

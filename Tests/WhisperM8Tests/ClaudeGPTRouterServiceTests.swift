@@ -135,6 +135,33 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         XCTAssertNotNil(ClaudeGPTRouterServiceClient.status(root: root), "Steuer-Socket nach Rückfall weg")
     }
 
+    /// Den lauschenden Socket bekommt nur dasselbe Programm: Ein fremder
+    /// Prozess des Nutzers könnte sonst den Router-Port übernehmen.
+    func testHandoverRefusesForeignBinary() throws {
+        let (service, _) = try makeService(port: 0, takeOver: false)
+        let script = """
+        import json, socket, struct, sys
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(5)
+        s.connect(sys.argv[1])
+        body = json.dumps({"op": "handover", "protocol": 1, "build": "x", "pid": 1}).encode()
+        s.sendall(struct.pack(">I", len(body)) + body)
+        msg, anc, flags, addr = s.recvmsg(65536, socket.CMSG_SPACE(4))
+        print(json.loads(msg[4:]).get("error"), len(anc))
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = ["-I", "-c", script, ClaudeGPTRouterService.socketURL(root: root).path]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(text.trimmingCharacters(in: .whitespacesAndNewlines), "binary 0")
+        XCTAssertEqual(service.currentState, .serving)
+    }
+
     func testHandoverRefusesForeignProtocol() throws {
         _ = try makeService(port: 0, takeOver: false)
         let fd = try ClaudeGPTRouterWire.connect(path: ClaudeGPTRouterService.socketURL(root: root).path)

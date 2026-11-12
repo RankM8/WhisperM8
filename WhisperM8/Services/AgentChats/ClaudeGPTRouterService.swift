@@ -66,6 +66,9 @@ final class ClaudeGPTRouterService {
     private(set) var generation = 1
     private var didExit = false
     private let startedAt = Date()
+    /// Programm dieses Prozesses, beim Start gelesen (nach `make dev` ist die
+    /// Datei ersetzt, der Pfad bleibt derselbe).
+    private let ownExecutablePath = ClaudeGPTRouterService.executablePath(of: getpid())
 
     init(configuration: Configuration, router: ClaudeGPTMixRouter, onExit: @escaping (Int32) -> Void) {
         self.configuration = configuration
@@ -278,6 +281,14 @@ final class ClaudeGPTRouterService {
             try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "protocol"])
             return
         }
+        // Den lauschenden Socket bekommt nur dasselbe Programm (gleicher Pfad).
+        // Sonst könnte jeder Prozess des Nutzers den Router-Port übernehmen und
+        // die Anfragen der Chats samt Zugangsdaten mitlesen.
+        guard let own = ownExecutablePath, Self.peerExecutablePath(client) == own else {
+            log("handover_refused_foreign_binary")
+            try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "binary"])
+            return
+        }
         let mayHandOver: Bool = stateQueue.sync {
             guard state == .serving else { return false }
             state = .handingOver
@@ -365,6 +376,21 @@ final class ClaudeGPTRouterService {
         guard first else { return }
         log("exit code=\(code)")
         onExit(code)
+    }
+
+    // MARK: Gegenseite
+
+    static func executablePath(of pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    static func peerExecutablePath(_ fd: Int32) -> String? {
+        var pid: pid_t = 0
+        var length = socklen_t(MemoryLayout<pid_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0, pid > 0 else { return nil }
+        return executablePath(of: pid)
     }
 
     // MARK: Log
