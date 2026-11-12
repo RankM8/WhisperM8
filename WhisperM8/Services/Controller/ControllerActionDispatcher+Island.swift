@@ -93,15 +93,31 @@ extension ControllerActionDispatcher {
             setup = menuSetup
             content = .quickDraw(ControllerQuickDrawSlots(setup: menuSetup))
         case .whereTo:
-            // Reihenfolge wie die Liste links, jeder Chat einmal.
-            let order = SidebarChatOrder.sessions(in: currentListRows().map(\.row))
+            // Reihenfolge wie die Liste links, jeder Chat einmal. Der vorige
+            // Chat steht immer darin, auch wenn die Liste ihn gerade nicht
+            // zeigt (Filter, Suche, eingeklappt): Loslassen soll dorthin
+            // führen wie Tippen.
+            let previous = Self.whereToPrevious(window.backTarget)
+            let order = ControllerWhereToState.chatOrder(
+                SidebarChatOrder.sessions(in: currentListRows().map(\.row)), current: sessionID, previous: previous)
             content = .whereTo(ControllerWhereToState(
                 chats: islandChatRows(order, sessionID), currentChatID: sessionID,
-                workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive))
+                workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
+                previous: previous))
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
             sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID)
+    }
+
+    /// Voriger Ort des Fensters (Ziel von L2 getippt) als Startpunkt der
+    /// Markierung.
+    static func whereToPrevious(_ target: ControllerBackTarget?) -> ControllerWhereToState.Destination {
+        guard let target, let id = target.id else { return .stay }
+        switch target.kind {
+        case .chat: return .chat(id)
+        case .workspace: return .workspace(id)
+        }
     }
 
     /// Rückfrage geht auf oder zu, während die Insel offen ist: Raute und
@@ -147,27 +163,28 @@ extension ControllerActionDispatcher {
         present()
     }
 
-    /// L2 losgelassen: Mit offener Liste wie Kreuz, sonst nur schließen.
+    /// L2 losgelassen: wie Kreuz — zum markierten Eintrag, wie Cmd-Tab.
+    /// Steht die Markierung auf dem aktuellen Eintrag, passiert nichts.
     func releaseWhereTo() {
         defer { spentLayer = nil }
         guard let whereTo = islandState?.model.whereTo else { return closeIsland() }
         closeIsland()
-        if !go(to: whereTo.destination) { playHaptic(.rejected) }
+        if !go(to: whereTo.destination, previous: whereTo.previous) { playHaptic(.rejected) }
     }
 
-    /// Kreuz (`dictate == false`) oder R2. Ohne offene Liste ist der aktuelle
-    /// Eintrag markiert: Kreuz schließt nur, R2 diktiert in den aktuellen Chat.
-    /// Auf dem Reiter Workspaces diktiert R2 nicht („geht nicht“, die Insel
-    /// bleibt) — „hin und diktieren“ braucht einen Chat als Ziel.
+    /// Kreuz (`dictate == false`) oder R2. Steht die Markierung auf dem
+    /// aktuellen Eintrag, schließt Kreuz nur, R2 diktiert in den aktuellen
+    /// Chat. Ein anderer Workspace ist kein Ziel für R2 („geht nicht“, die
+    /// Insel bleibt) — „hin und diktieren“ braucht einen Chat.
     func commitWhereTo(dictate: Bool) {
         guard spentLayer != .whereTo else { return }
         let whereTo = islandState?.model.whereTo
-        if dictate, let whereTo, whereTo.isListOpen, whereTo.tab == .workspaces {
+        let destination = whereTo?.destination ?? .stay
+        if dictate, case .workspace = destination {
             return playHaptic(.rejected)
         }
-        let destination = whereTo?.destination ?? .stay
         spendIsland(.whereTo)
-        let switched = go(to: destination)
+        let switched = go(to: destination, previous: whereTo?.previous ?? .stay)
         guard dictate else {
             if !switched { playHaptic(.rejected) }
             return
@@ -192,16 +209,21 @@ extension ControllerActionDispatcher {
         command(.nextWaitingChat, orReject: true)
     }
 
-    /// Wechsel wie bisher: ein Chat wie der Klick in der Seitenleiste (wie
-    /// L1/R1), ein Workspace wie der Klick auf seinen Kopf — Konflikte und die
-    /// gemerkte Kachel je Workspace inklusive. `false`, wenn der Wechsel nicht
-    /// ging; „geht nicht“ meldet der Aufrufer.
+    /// Wechsel: Ist das Ziel der vorige Ort, derselbe Weg wie L2 getippt
+    /// (`lastChat`), damit Halten und Tippen gleich enden. Sonst ein Chat wie
+    /// der Klick in der Seitenleiste (wie L1/R1), ein Workspace wie der Klick
+    /// auf seinen Kopf mit der gemerkten Kachel, aber still: Gehört er einem
+    /// anderen Fenster, kommt nichts nach vorn und kein Dialog. `false`, wenn
+    /// der Wechsel nicht ging; „geht nicht“ meldet der Aufrufer.
     @discardableResult
-    private func go(to destination: ControllerWhereToState.Destination) -> Bool {
+    private func go(
+        to destination: ControllerWhereToState.Destination, previous: ControllerWhereToState.Destination
+    ) -> Bool {
+        if destination != .stay, destination == previous { return command(.lastChat, orReject: false) }
         switch destination {
         case .stay: return true
         case let .chat(sessionID): return command(.selectSession(sessionID), orReject: false)
-        case let .workspace(workspaceID): return command(.activateWorkspace(workspaceID), orReject: false)
+        case let .workspace(workspaceID): return command(.switchToWorkspace(workspaceID), orReject: false)
         }
     }
 

@@ -41,6 +41,12 @@ extension ControllerTerminalMarks {
             let inSequence = lastArmingArrowAt.map { now.timeIntervalSince($0) < Self.arrowArmWindow } ?? false
             if key != .up || inSequence { lastArmingArrowAt = now }
             lastArrowAt = now
+            // → übernimmt in Claude den grauen Vorschlag ins Feld: Das ist eine
+            // Eingabe wie getippter Text. Ohne das sperrte Kreuz nach 5 s, wenn
+            // der Chat noch als „arbeitet“ galt (etwa wegen eines
+            // Hintergrund-Agenten), und erst eine Rücktaste machte es wieder
+            // scharf (Handtest 12.11.2026).
+            if key == .right { recordDraftInput(submitted: false, at: now) }
         case .space:
             // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)

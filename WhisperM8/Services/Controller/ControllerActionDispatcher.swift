@@ -265,7 +265,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .islandClose:
             closeIsland()
             spentLayer = nil
-        case .islandRelease: releaseWhereTo()
+        case .islandRelease:
+            // Loslassen wechselt nur im Chat. Hat inzwischen etwas anderes die
+            // Eingaben (Aufnahme per Hotkey, Dialog, Sheet), nur schließen.
+            if case .chat = context {
+                releaseWhereTo()
+            } else {
+                closeIsland()
+                spentLayer = nil
+            }
         case .islandCancel: spendIsland(.whereTo)
         case let .islandMove(step): moveInWhereTo(step)
         case let .islandTab(step): switchWhereToTab(step)

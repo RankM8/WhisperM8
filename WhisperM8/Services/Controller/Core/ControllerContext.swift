@@ -14,6 +14,9 @@ struct ControllerBackTarget: Equatable, Sendable {
 
     var kind: Kind
     var title: String
+    /// Chat- bzw. Workspace-ID. Dort beginnt die Markierung, wenn L2
+    /// gehalten wird (Cmd-Tab: Loslassen führt ebenfalls dorthin).
+    var id: UUID? = nil
 }
 
 /// Was der Controller über den Ziel-Chat wissen muss (Plan, „Kreuz, Kreis und

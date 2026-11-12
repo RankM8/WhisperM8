@@ -13,6 +13,12 @@ struct NotchScreenInfo: Equatable {
     var auxiliaryLeftWidth: CGFloat?
     var auxiliaryRightWidth: CGFloat?
     var isBuiltIn: Bool
+    /// Feste Display-UUID (`CGDisplayCreateUUIDFromDisplayID`), Schlüssel der
+    /// gemerkten Pillen-Lage.
+    var uuid: String? = nil
+
+    /// Schlüssel für die gemerkte Lage der Pille auf diesem Bildschirm.
+    var pillStorageKey: String { uuid ?? "display-\(displayID)" }
 
     /// Notch vorhanden: Sicherheitsrand oben und beide freien Bereiche daneben.
     var hasNotch: Bool {
@@ -71,7 +77,9 @@ enum NotchGeometry {
     static let footerHeight: CGFloat = 28
     static let listPadding: CGFloat = 12
 
-    static let pillHeight: CGFloat = 28
+    /// Höhe der Pille ohne Notch: dieselbe wie die Diktat-Pille
+    /// (`PillMetrics.height`), beide sehen gleich aus.
+    static let pillHeight: CGFloat = 40
     static let pillAlertWidth: CGFloat = 340
     static let pillExpandedWidth: CGFloat = 380
     /// Abstand der Pille zur Menüleiste.
@@ -90,10 +98,13 @@ enum NotchGeometry {
         28 + CGFloat(max(0, chipCount)) * 46
     }
 
+    /// Breite der Pille, wenn nichts los ist: eine kleine leere Pille, die
+    /// wie eine Notch immer dasteht (Klick öffnet die Liste).
+    static let pillIdleWidth: CGFloat = 64
+
     /// Breite des Ruhezustands der Pille aus den sichtbaren Zählern.
     static func pillCompactWidth(chipCount: Int) -> CGFloat {
-        // Ohne Zähler steht der Hinweis "No active chats" in der Pille.
-        guard chipCount > 0 else { return 150 }
+        guard chipCount > 0 else { return pillIdleWidth }
         return max(64, chipsWidth(chipCount: chipCount))
     }
 
@@ -125,15 +136,17 @@ enum NotchGeometry {
     // MARK: Fenster-Rahmen
 
     /// Rahmen des Fensters in globalen Cocoa-Koordinaten (Ursprung unten links).
-    static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode) -> CGRect {
-        layout(screen: screen, mode: mode).frame
+    static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> CGRect {
+        layout(screen: screen, mode: mode, pillCenter: pillCenter).frame
     }
 
     /// Mit Notch: Oben deckt ein schwarzes Band genau die Aussparung (sie ist
     /// ohnehin schwarz), darunter hängt der Körper mit Zählern, Chat-Name oder
     /// Liste. Das Band ist nie breiter als die Notch, die Menüleiste daneben
-    /// bleibt frei. Ohne Notch sitzt eine Pille mittig unter der Menüleiste.
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode) -> NotchLayout {
+    /// bleibt frei. Ohne Notch sitzt eine Pille um `pillCenter` (ohne Angabe
+    /// oben mittig unter der Menüleiste); Alarm und Liste wachsen aus ihr,
+    /// in der unteren Bildschirmhälfte nach oben (`NotchPillPlacement`).
+    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> NotchLayout {
         if screen.hasNotch {
             let bandHeight = screen.safeAreaTop
             let notchWidth = screen.notchWidth
@@ -161,8 +174,6 @@ enum NotchGeometry {
             return NotchLayout(frame: band.union(body), band: band, body: body)
         }
 
-        let menuBar = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
-        let top = screen.frame.maxY - (menuBar > 0 ? menuBar : fallbackMenuBarHeight) - pillTopGap
         let width: CGFloat
         var height = pillHeight
         switch mode {
@@ -174,7 +185,8 @@ enum NotchGeometry {
             width = pillExpandedWidth
             height += listHeight(rowCount: rows, sectionCount: sections)
         }
-        let frame = CGRect(x: screen.frame.midX - width / 2, y: top - height, width: width, height: height)
+        let center = pillCenter ?? NotchPillPlacement.defaultCenter(screen)
+        let frame = NotchPillPlacement.frame(size: CGSize(width: width, height: height), growingFrom: center, on: screen)
         return NotchLayout(frame: frame, band: .zero, body: frame)
     }
 

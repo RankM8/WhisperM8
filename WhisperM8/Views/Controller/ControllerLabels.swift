@@ -59,7 +59,6 @@ extension ControllerLegendLabel {
         case .resume: return String(localized: "Hold: resume")
         case .pauseHold: return String(localized: "Hold: pause")
         case .bringToFront: return String(localized: "Open WhisperM8")
-        case .pointer: return String(localized: "Mouse pointer")
         case .clipboardWithL2: return String(localized: "Clipboard")
         }
     }
@@ -96,7 +95,6 @@ extension ControllerLegendLabel {
         case .whereToHold: return String(localized: "Hold L2: where to — up and down open the list of chats and workspaces, left and right switch tabs, release or ✕ switches, ○ cancels")
         case .nextWaiting: return String(localized: "Hold L2, then △: next chat that is waiting for you")
         case .pauseHold: return String(localized: "Hold both: pause and resume the controller")
-        case .pointer: return String(localized: "Move the pointer with one finger; press to click, with two fingers to right-click")
         case .clipboardWithL2: return String(localized: "Hold L2, then press the touchpad: open and close the clipboard history")
         default: return title
         }

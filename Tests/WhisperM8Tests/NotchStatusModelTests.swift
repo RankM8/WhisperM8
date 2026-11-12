@@ -602,8 +602,17 @@ final class NotchGeometryTests: XCTestCase {
         XCTAssertEqual(frame.height, NotchGeometry.pillHeight)
     }
 
-    func testPillWithoutChipsStillFitsItsHint() {
-        XCTAssertGreaterThan(NotchGeometry.pillCompactWidth(chipCount: 0), NotchGeometry.pillCompactWidth(chipCount: 1))
+    /// Ohne Aktivität bleibt die Pille stehen, klein und ohne Text.
+    func testIdlePillIsSmall() {
+        XCTAssertEqual(NotchGeometry.pillCompactWidth(chipCount: 0), NotchGeometry.pillIdleWidth)
+        XCTAssertLessThanOrEqual(NotchGeometry.pillCompactWidth(chipCount: 0), NotchGeometry.pillCompactWidth(chipCount: 1))
+    }
+
+    /// Die Pille sieht aus wie die Diktat-Pille: gleiche Höhe.
+    @MainActor
+    func testPillHasTheHeightOfTheDictationPill() {
+        XCTAssertEqual(NotchGeometry.pillHeight, PillMetrics.height)
+        XCTAssertEqual(NotchGeometry.pillHeight, OverlayFrameResolver.pillHeight)
     }
 
     func testPillExpandedGrowsDownward() {
