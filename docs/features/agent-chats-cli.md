@@ -231,7 +231,9 @@ an einen Claude- oder Codex-Chat bekommt die Marker-Zeile `[via whisperm8 chats 
 von <actor> · HH:MM]` vorangestellt (Ein-Hop-Regel im Skill). An Shell-Tabs geht
 der Text ohne Marker: Dessen Zeilenumbruch schickte sonst `[via …` als Befehl
 ab, und die Herkunft steht ohnehin im Audit-Log (gilt auch für die
-Warteschlange).
+Warteschlange). Bekannte Grenze: Läuft `claude` oder `codex` selbst in einem
+Shell-Tab, bekommt dieser Agent `whisperm8 chats send` ebenfalls ohne Marker;
+erkannt wird nur die Art des Tabs, nicht das Programm darin.
 
 ### Zurückgelegter Prompt nach Abbruch (Send-Schutz)
 

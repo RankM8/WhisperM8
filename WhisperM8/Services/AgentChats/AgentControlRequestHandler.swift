@@ -351,8 +351,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Schließt offene UI-Tabs — und ohne `stop` NUR die. Bewusst kein
     /// Gegenstück zu `workspace.archive`: die Session bleibt im Workspace, ein
     /// laufendes PTY läuft weiter (Registry ist sessionID-basiert, erneutes
-    /// Öffnen attached an denselben Controller inkl. Scrollback), Pin und
-    /// Grid-Mitgliedschaft bleiben. Deshalb im Normalfall kein Status-Guard:
+    /// Öffnen attached an denselben Controller inkl. Scrollback), der Pin
+    /// bleibt. Wie jedes Tab-Schließen verlässt der Chat offene Workspaces
+    /// (siehe `AgentWindowStore+GridTabClose`). Deshalb kein Status-Guard:
     /// Schließen ist nie destruktiv, egal ob das Ziel working oder
     /// awaitingInput ist.
     ///

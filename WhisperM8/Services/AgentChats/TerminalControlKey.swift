@@ -120,8 +120,8 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     /// steht der Cursor nach Tippen und Diktat immer am Ende.
     /// Darf R3 halten die Eingabe leeren? Bei Claude und Codex wie die
     /// Schreibtasten (nicht in einer Rückfrage). In einer Shell nur an der
-    /// Eingabezeile, also im normalen Puffer: Vollbild-Programme wie nano,
-    /// vim oder less laufen im Alternate-Puffer, dort hieße Ctrl+U etwas
+    /// Eingabezeile, also im normalen Puffer: Vollbild-Programme wie nano
+    /// oder vim laufen im Alternate-Puffer, dort hieße Ctrl+U etwas
     /// anderes. An der Zeile von zsh, bash und jeder readline-Eingabe leert
     /// Ctrl+E + Ctrl+U die Zeile — sonst bliebe nach einem `chats send` der
     /// Entwurfs-Verdacht für immer stehen (E2E-Befund 12.11.2026).
