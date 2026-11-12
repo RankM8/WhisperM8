@@ -97,11 +97,22 @@ extension ControllerActionDispatcher {
             let order = SidebarChatOrder.sessions(in: currentListRows().map(\.row))
             content = .whereTo(ControllerWhereToState(
                 chats: islandChatRows(order, sessionID), currentChatID: sessionID,
-                workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive))
+                workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
+                previous: Self.whereToPrevious(window.backTarget)))
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
             sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID)
+    }
+
+    /// Voriger Ort des Fensters (Ziel von L2 getippt) als Startpunkt der
+    /// Markierung.
+    static func whereToPrevious(_ target: ControllerBackTarget?) -> ControllerWhereToState.Destination {
+        guard let target, let id = target.id else { return .stay }
+        switch target.kind {
+        case .chat: return .chat(id)
+        case .workspace: return .workspace(id)
+        }
     }
 
     /// Rückfrage geht auf oder zu, während die Insel offen ist: Raute und
@@ -147,7 +158,8 @@ extension ControllerActionDispatcher {
         present()
     }
 
-    /// L2 losgelassen: Mit offener Liste wie Kreuz, sonst nur schließen.
+    /// L2 losgelassen: wie Kreuz — zum markierten Eintrag, wie Cmd-Tab.
+    /// Steht die Markierung auf dem aktuellen Eintrag, passiert nichts.
     func releaseWhereTo() {
         defer { spentLayer = nil }
         guard let whereTo = islandState?.model.whereTo else { return closeIsland() }
@@ -155,17 +167,16 @@ extension ControllerActionDispatcher {
         if !go(to: whereTo.destination) { playHaptic(.rejected) }
     }
 
-    /// Kreuz (`dictate == false`) oder R2. Ohne offene Liste ist der aktuelle
-    /// Eintrag markiert: Kreuz schließt nur, R2 diktiert in den aktuellen Chat.
-    /// Auf dem Reiter Workspaces diktiert R2 nicht („geht nicht“, die Insel
-    /// bleibt) — „hin und diktieren“ braucht einen Chat als Ziel.
+    /// Kreuz (`dictate == false`) oder R2. Steht die Markierung auf dem
+    /// aktuellen Eintrag, schließt Kreuz nur, R2 diktiert in den aktuellen
+    /// Chat. Ein anderer Workspace ist kein Ziel für R2 („geht nicht“, die
+    /// Insel bleibt) — „hin und diktieren“ braucht einen Chat.
     func commitWhereTo(dictate: Bool) {
         guard spentLayer != .whereTo else { return }
-        let whereTo = islandState?.model.whereTo
-        if dictate, let whereTo, whereTo.isListOpen, whereTo.tab == .workspaces {
+        let destination = islandState?.model.whereTo?.destination ?? .stay
+        if dictate, case .workspace = destination {
             return playHaptic(.rejected)
         }
-        let destination = whereTo?.destination ?? .stay
         spendIsland(.whereTo)
         let switched = go(to: destination)
         guard dictate else {

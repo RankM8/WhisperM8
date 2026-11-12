@@ -126,38 +126,77 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
 
     // MARK: - L2 Wohin
 
-    func testWhereToShowsHintThenListThenSwitchesOnRelease() {
+    /// Die Liste steht sofort da (keine Hinweiszeile); ohne vorigen Ort
+    /// steht die Markierung auf dem aktuellen Chat. Eine Bewegung, dann
+    /// wechselt Loslassen.
+    func testWhereToShowsListAtOnceAndSwitchesOnRelease() {
         press(.l2, at: 0)
         XCTAssertTrue(island.shown.isEmpty, "die Insel kommt erst nach 0,3 s")
         tick(0.3)
         XCTAssertEqual(island.screens.last, 7, "Bildschirm des Agent-Chats-Fensters")
-        XCTAssertEqual(whereTo?.isListOpen, false, "zuerst nur die Hinweiszeile")
         XCTAssertEqual(whereTo?.tab, .chats, "Einzelansicht: Reiter Chats")
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[1], "ohne vorigen Ort: der aktuelle")
         XCTAssertEqual(island.last?.target, ControllerIslandTarget(title: "Controller Insel", status: .working))
 
         feed(.stick(.left, x: 0, y: -1), at: 0.5)
-        XCTAssertEqual(whereTo?.isListOpen, true)
-        XCTAssertEqual(whereTo?.chats.selected?.id, chats[2], "erster Stoß: gleich ein Schritt vom aktuellen")
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[2])
         feed(.stick(.left, x: 0, y: 0), at: 0.6)
         release(.l2, at: 0.8)
         XCTAssertEqual(window.selected, chats[2], "Loslassen wechselt")
         XCTAssertFalse(island.isVisible)
     }
 
-    func testWhereToReleaseWithoutListDoesNothing() {
+    /// Cmd-Tab: Halten und Loslassen ohne Bewegung führt zum vorigen Ort —
+    /// dasselbe Ziel wie L2 getippt, aber über die Liste.
+    func testHoldAndReleaseGoesToThePreviousChat() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "Markierung auf dem vorigen Chat")
+        release(.l2, at: 1)
+        XCTAssertEqual(window.selected, chats[3])
+        XCTAssertEqual(window.commands.last, .selectSession(chats[3]))
+        XCTAssertFalse(window.commands.contains(.lastChat), "Wechsel über die Liste, nicht über Tippen")
+        XCTAssertTrue(haptics.isEmpty)
+    }
+
+    /// Kreis bricht ab, auch wenn die Markierung auf dem vorigen Ort steht.
+    func testCircleCancelsTheSwitchToThePreviousPlace() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(.l2, at: 0)
+        tick(0.3)
+        press(.circle, at: 0.5)
+        XCTAssertFalse(island.isVisible)
+        release(.circle, at: 0.6)
+        release(.l2, at: 0.8)
+        XCTAssertEqual(window.selected, chats[1], "nichts passiert")
+    }
+
+    func testWhereToReleaseWithoutPreviousPlaceDoesNothing() {
         press(.l2, at: 0)
         tick(0.3)
         release(.l2, at: 1)
         XCTAssertEqual(window.selected, chats[1])
         XCTAssertFalse(window.commands.contains(.lastChat), "kein Tippen nach dem Halten")
+        XCTAssertFalse(window.commands.contains { if case .selectSession = $0 { return true }; return false })
+        XCTAssertTrue(haptics.isEmpty)
         XCTAssertFalse(island.isVisible)
     }
 
-    /// Kombination vor 0,3 s: Stick öffnet sofort die Liste.
+    /// Tippen bleibt „zurück zum vorigen Ort“.
+    func testTapStillGoesBack() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(.l2, at: 0)
+        release(.l2, at: 0.1)
+        XCTAssertEqual(window.commands, [.lastChat])
+        XCTAssertTrue(island.shown.isEmpty)
+    }
+
+    /// Kombination vor 0,3 s: Stick öffnet sofort die Insel und macht einen Schritt.
     func testEarlyStickOpensTheListImmediately() {
         press(.l2, at: 0)
         press(.dpadDown, at: 0.05)
-        XCTAssertEqual(whereTo?.isListOpen, true)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[2])
         tick(0.3)
         XCTAssertEqual(island.shown.count, 2, "die Halte-Schwelle öffnet nicht noch einmal")
         press(.cross, at: 0.4)
@@ -174,19 +213,19 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
                                       hasWaitingChat: false, isCurrent: index == 0)
         }
         window.isGridActive = true
+        window.backTarget = ControllerBackTarget(kind: .workspace, title: "W1", id: workspaces[1])
         press(.l2, at: 0)
         tick(0.3)
         XCTAssertEqual(whereTo?.tab, .workspaces, "Raster: Reiter Workspaces")
-        press(.dpadDown, at: 0.4)
-        release(.dpadDown, at: 0.45)
-        XCTAssertEqual(whereTo?.workspaces.selected?.id, workspaces[1])
+        XCTAssertEqual(whereTo?.workspaces.selected?.id, workspaces[1], "auf dem vorigen Workspace")
         press(.dpadLeft, at: 0.5)
         release(.dpadLeft, at: 0.55)
         XCTAssertEqual(whereTo?.tab, .chats, "links: Reiter Chats")
+        XCTAssertEqual(whereTo?.destination, .stay, "Chats: Markierung auf dem aktuellen")
         press(.dpadRight, at: 0.6)
         release(.dpadRight, at: 0.65)
         XCTAssertEqual(whereTo?.tab, .workspaces)
-        XCTAssertEqual(whereTo?.destination, .stay, "nach dem Reiterwechsel erst wieder bewegen")
+        XCTAssertEqual(whereTo?.destination, .workspace(workspaces[1]), "zurück auf dem vorigen Workspace")
         press(.dpadDown, at: 0.7)
         release(.dpadDown, at: 0.75)
         release(.l2, at: 1)
@@ -236,9 +275,13 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertFalse(window.commands.contains { if case .selectSession = $0 { return true }; return false })
     }
 
-    func testR2OnWorkspacesTabIsRejected() {
-        window.workspaces = [ControllerWorkspaceChoice(
-            id: UUID(), name: "W", colorHex: "#888888", chatCount: 1, hasWaitingChat: false, isCurrent: true)]
+    /// R2 auf einem anderen Workspace: „geht nicht“, die Insel bleibt. Steht
+    /// die Markierung auf dem aktuellen Workspace, diktiert R2 in den Chat.
+    func testR2OnAnotherWorkspaceIsRejected() {
+        window.workspaces = [true, false].map {
+            ControllerWorkspaceChoice(id: UUID(), name: "W", colorHex: "#888888", chatCount: 1,
+                                      hasWaitingChat: false, isCurrent: $0)
+        }
         window.isGridActive = true
         press(.l2, at: 0)
         press(.dpadDown, at: 0.1)
@@ -246,6 +289,18 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(haptics, [.rejected])
         XCTAssertTrue(dictation.started.isEmpty)
         XCTAssertTrue(island.isVisible, "die Insel bleibt")
+    }
+
+    func testR2OnTheCurrentWorkspaceDictatesIntoTheCurrentChat() {
+        window.workspaces = [ControllerWorkspaceChoice(
+            id: UUID(), name: "W", colorHex: "#888888", chatCount: 1, hasWaitingChat: false, isCurrent: true)]
+        window.isGridActive = true
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.tab, .workspaces)
+        press(.r2, at: 0.4)
+        XCTAssertEqual(dictation.started, [.agentChat(sessionID: chats[1])])
+        XCTAssertFalse(haptics.contains(.rejected))
     }
 
     // MARK: - R1 Schnellbefehle

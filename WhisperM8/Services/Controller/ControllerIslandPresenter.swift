@@ -14,7 +14,11 @@ private struct ControllerIslandHostView: View {
     var body: some View {
         if let display = model.display {
             ControllerIslandView(display: display, revealed: model.revealed)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // Ohne Notch der Schatten der Diktat-Pille; das Fenster hat
+                // dafür Rand rundum (es nimmt keine Maus an).
+                .shadow(color: .black.opacity(display.isNotch ? 0 : 0.3), radius: 12, x: 0, y: 3)
+                .padding(display.isNotch ? 0 : ControllerIslandGeometry.shadowMargin)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: display.opensUpward ? .bottom : .top)
                 .ignoresSafeArea()
         }
     }
@@ -22,25 +26,41 @@ private struct ControllerIslandHostView: View {
 
 /// Lage der Insel in globalen Cocoa-Koordinaten. Pur, damit ohne Bildschirm
 /// testbar: Mit Notch liegt oben das Band genau in der Aussparung und der
-/// Körper hängt mittig darunter (wie `NotchGeometry.layout`); ohne Notch sitzt
-/// die Pille mittig unter der Menüleiste, an derselben Stelle wie die Pille
-/// der Notch-Anzeige.
+/// Körper hängt mittig darunter (wie `NotchGeometry.layout`); ohne Notch
+/// wächst die Insel aus der Pille der Notch-Anzeige — an ihrer gemerkten
+/// Lage, nach unten oder (untere Bildschirmhälfte) nach oben, immer ganz auf
+/// dem Bildschirm (`NotchPillPlacement`).
 enum ControllerIslandGeometry {
-    static func frame(screen: NotchScreenInfo, bodySize: CGSize) -> CGRect {
+    /// Rand für den Schatten der Pille (wie `OverlayFrameResolver.contentMargin`).
+    static let shadowMargin: CGFloat = 24
+
+    /// Mittelpunkt der Pille ohne Notch. Ohne sichtbare Menüleiste
+    /// (Vollbild, automatisch ausgeblendet) oben am Bildschirmrand.
+    static func pillCenter(screen: NotchScreenInfo, stored: NotchPillPosition?) -> CGPoint {
+        NotchPillPlacement.center(screen, stored: stored, fallbackMenuBar: false)
+    }
+
+    /// Sichtbarer Rahmen der Insel (ohne Schattenrand).
+    static func frame(screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil) -> CGRect {
         if screen.hasNotch {
             // `bodySize` enthält das Band schon (die Ansicht zeichnet es mit).
+            // An der Notch liegt das Band auch im Vollbild in der Aussparung.
             return CGRect(
                 x: screen.notchCenterX - bodySize.width / 2, y: screen.frame.maxY - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
         }
-        // Ohne sichtbare Menüleiste (Vollbild, automatisch ausgeblendet) sitzt
-        // die Pille oben am Bildschirmrand. An der Notch liegt das Band auch
-        // im Vollbild in der Aussparung (siehe oben).
-        let menuBar = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
-        let top = screen.frame.maxY - menuBar - NotchGeometry.pillTopGap
-        return CGRect(
-            x: screen.frame.midX - bodySize.width / 2, y: top - bodySize.height,
-            width: bodySize.width, height: bodySize.height)
+        return NotchPillPlacement.frame(
+            size: bodySize, growingFrom: pillCenter(screen: screen, stored: stored), on: screen, fallbackMenuBar: false)
+    }
+
+    static func opensUpward(screen: NotchScreenInfo, stored: NotchPillPosition?) -> Bool {
+        !screen.hasNotch && NotchPillPlacement.opensUpward(center: pillCenter(screen: screen, stored: stored), on: screen)
+    }
+
+    /// Fensterrahmen: ohne Notch mit Rand für den Schatten.
+    static func panelFrame(screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil) -> CGRect {
+        let visible = frame(screen: screen, bodySize: bodySize, stored: stored)
+        return screen.hasNotch ? visible : visible.insetBy(dx: -shadowMargin, dy: -shadowMargin)
     }
 
     static func style(for screen: NotchScreenInfo) -> ControllerIslandDisplay.Style {
@@ -79,13 +99,16 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             // Eine aufgeklappte Liste der Notch-Anzeige ragte unter der Insel hervor.
             NotchStatusController.shared.collapse()
         }
+        // Ohne Notch wächst die Insel aus der Pille, an ihrer gemerkten Lage.
+        let stored = screen.hasNotch ? nil : AppPreferences.shared.notchPillPositions[screen.pillStorageKey]
         let display = ControllerIslandDisplay(
-            style: ControllerIslandGeometry.style(for: screen), model: model, counts: counts)
+            style: ControllerIslandGeometry.style(for: screen), model: model, counts: counts,
+            opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored))
         let panel = ensurePanel()
         let wasShown = panel.isVisible && viewModel.revealed
         generation += 1
         if viewModel.display != display { viewModel.display = display }
-        let frame = ControllerIslandGeometry.frame(screen: screen, bodySize: measure(display))
+        let frame = ControllerIslandGeometry.panelFrame(screen: screen, bodySize: measure(display), stored: stored)
         if frame != lastFrame {
             lastFrame = frame
             panel.setFrame(frame, display: true)
@@ -154,6 +177,8 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         let host = NSHostingView(rootView: ControllerIslandHostView(model: viewModel))
         host.safeAreaRegions = []
         host.sizingOptions = []
+        // Immer dunkel: an der Notch schwarz, ohne Notch das Glas der Diktat-Pille.
+        host.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = host
         self.panel = panel
         return panel

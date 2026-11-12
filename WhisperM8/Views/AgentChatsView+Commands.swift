@@ -71,9 +71,9 @@ extension AgentChatsView {
         switch backPlace() {
         case .chat(let id)?:
             let title = workspace.sessions.first { $0.id == id }?.title ?? String(localized: "Chat")
-            return ControllerBackTarget(kind: .chat, title: title)
+            return ControllerBackTarget(kind: .chat, title: title, id: id)
         case .workspace(let id)?:
-            return windowStore.gridWorkspace(id: id).map { ControllerBackTarget(kind: .workspace, title: $0.name) }
+            return windowStore.gridWorkspace(id: id).map { ControllerBackTarget(kind: .workspace, title: $0.name, id: id) }
         case nil:
             return nil
         }

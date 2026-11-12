@@ -731,6 +731,24 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusExpandOnHover) }
     }
 
+    /// Gemerkte Lage der Pille je Bildschirm ohne Notch (mit der Maus
+    /// verschoben). Schlüssel ist die feste Display-UUID, nicht die Nummer
+    /// des Bildschirms. Leer: überall oben mittig. Zurücksetzen über den
+    /// Knopf in den Einstellungen oder einen Doppelklick auf die Pille.
+    var notchPillPositions: [String: NotchPillPosition] {
+        get {
+            guard let data = defaults.data(forKey: Keys.notchPillPositions) else { return [:] }
+            return (try? JSONDecoder().decode([String: NotchPillPosition].self, from: data)) ?? [:]
+        }
+        nonmutating set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Keys.notchPillPositions)
+            } else if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Keys.notchPillPositions)
+            }
+        }
+    }
+
     /// Claude-Code-Plugin `whisperm8` (Skills + Jarvis-Board-Mod): Die App legt
     /// es beim Start unter Application Support ab und gibt es jeder
     /// Claude-Session per `CLAUDE_CODE_PLUGIN_DIRS` mit. Aus = keine Variable,
@@ -1137,6 +1155,7 @@ enum PreferenceKeys {
     static let notchStatusHideFromCapture = "notchStatusHideFromCapture"
     static let notchStatusShowFreshDone = "notchStatusShowFreshDone"
     static let notchStatusExpandOnHover = "notchStatusExpandOnHover"
+    static let notchPillPositions = "notchPillPositions"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"

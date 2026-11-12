@@ -7,7 +7,8 @@ struct NotchDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, bündig an der Oberkante.
         case notch(width: CGFloat, height: CGFloat)
-        /// Ohne Notch: Pille unter der Menüleiste, folgt hell/dunkel.
+        /// Ohne Notch: Pille im dunklen Glas der Diktat-Pille, immer dunkel,
+        /// verschiebbar.
         case pill
     }
 
@@ -16,6 +17,9 @@ struct NotchDisplay: Equatable {
     var alert: NotchAlert?
     var isExpanded: Bool
     var sections: [NotchSection]
+    /// Nur Pille: Sie sitzt in der unteren Bildschirmhälfte, die Liste wächst
+    /// nach oben und der Kopf bleibt unten, wo die Pille war.
+    var opensUpward = false
 
     var isNotch: Bool {
         if case .notch = style { return true }
@@ -23,8 +27,9 @@ struct NotchDisplay: Equatable {
     }
 }
 
-/// Farben der Anzeige. An der Notch immer dunkel (die Hardware ist schwarz,
-/// die Verlängerung muss nahtlos anschließen), als Pille wie der Rest der App.
+/// Farben der Anzeige. Immer dunkel: An der Notch ist die Hardware schwarz
+/// (die Verlängerung muss nahtlos anschließen), ohne Notch sitzt die Anzeige
+/// im dunklen Glas der Diktat-Pille.
 struct NotchPalette {
     var background: Color
     var border: Color
@@ -51,18 +56,13 @@ struct NotchPalette {
         rowHover: Color.white.opacity(0.08),
         attentionTint: Color(red: 0.914, green: 0.725, blue: 0.286).opacity(0.12))
 
-    static let pill = NotchPalette(
-        background: AgentTheme.statusPill,
-        border: AgentTheme.borderStrong,
-        text: AgentTheme.textPrimary,
-        secondary: AgentTheme.textSecondary,
-        tertiary: AgentTheme.textTertiary,
-        working: AgentTheme.statusWorking,
-        awaiting: AgentTheme.statusAwaiting,
-        error: AgentTheme.statusError,
-        idle: AgentTheme.textTertiary,
-        rowHover: AgentTheme.border,
-        attentionTint: AgentTheme.statusAwaiting.opacity(0.13))
+    /// Pille ohne Notch: dieselben hellen Farben auf dunklem Glas; den
+    /// Hintergrund zeichnet `PillGlassBackground`.
+    static let pill: NotchPalette = {
+        var palette = NotchPalette.notch
+        palette.background = .clear
+        return palette
+    }()
 }
 
 /// Statusanzeige an der Notch: Ruhezustand (Zähler), „braucht dich" (kurz
@@ -84,6 +84,7 @@ struct NotchStatusView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if display.isExpanded, display.opensUpward { list }
             Button(action: onToggle) {
                 header
                     .contentShape(shape)
@@ -91,21 +92,33 @@ struct NotchStatusView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(headerAccessibilityLabel)
             .accessibilityHint(display.isExpanded ? Text("Closes the chat list") : Text("Opens the chat list"))
-
-            if display.isExpanded {
-                NotchChatList(sections: display.sections, palette: palette, onSelect: onSelect, onTurnOff: onTurnOff)
-                    .transition(.opacity)
-            }
+            if display.isExpanded, !display.opensUpward { list }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(shape.fill(palette.background))
-        // Mittig gezogen und danach beschnitten: sichtbar bleibt 1 pt innen.
-        .overlay(shape.stroke(palette.border, lineWidth: display.isNotch ? 0 : 2))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: display.opensUpward ? .bottom : .top)
+        .background { background }
         .clipShape(shape)
         .contentShape(shape)
         .ignoresSafeArea()
+        .environment(\.colorScheme, .dark)
         .onHover(perform: onHover)
         .animation(.easeOut(duration: 0.22), value: display)
+    }
+
+    private var list: some View {
+        NotchChatList(sections: display.sections, palette: palette, onSelect: onSelect, onTurnOff: onTurnOff)
+            .transition(.opacity)
+    }
+
+    /// An der Notch schwarz, ohne Notch das Glas der Diktat-Pille.
+    @ViewBuilder
+    private var background: some View {
+        if display.isNotch {
+            shape.fill(palette.background)
+        } else if display.isExpanded {
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+        } else {
+            PillGlassBackground(shape: Capsule())
+        }
     }
 
     private var shape: AnyShape {
@@ -114,10 +127,10 @@ struct NotchStatusView: View {
                 bandWidth: notchWidth, bandHeight: notchHeight,
                 bottomRadius: display.isExpanded ? 18 : 11))
         }
-        let radius: CGFloat = display.isExpanded ? 16 : NotchGeometry.pillHeight / 2
-        return AnyShape(UnevenRoundedRectangle(
-            topLeadingRadius: radius, bottomLeadingRadius: radius,
-            bottomTrailingRadius: radius, topTrailingRadius: radius))
+        if display.isExpanded {
+            return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+        }
+        return AnyShape(Capsule())
     }
 
     // MARK: Kopfzeile
@@ -142,6 +155,13 @@ struct NotchStatusView: View {
         }
     }
 
+    /// Schrift wie in der Diktat-Pille (12,5 pt, mittel); an der Notch wie bisher.
+    private var chipFont: Font {
+        display.isNotch
+            ? .system(size: 12, weight: .semibold)
+            : .system(size: 12.5, weight: .medium)
+    }
+
     /// Zähler, im Alarm der Chat-Name mit den arbeitenden Chats davor.
     @ViewBuilder
     private var headerRow: some View {
@@ -162,14 +182,20 @@ struct NotchStatusView: View {
         if display.summary.errored > 0 { chip(.errored, display.summary.errored) }
         if display.summary.freshDone > 0 { chip(.done, display.summary.freshDone) }
         if !display.summary.hasActivity {
-            Text("No active chats")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(palette.secondary)
+            if display.isExpanded || display.isNotch {
+                Text("No active chats")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(palette.secondary)
+            } else {
+                // Dauerhafte Pille ohne Aktivität: nur ein ruhiger Punkt, wie
+                // eine Notch, an der nichts los ist. Klick öffnet die Liste.
+                NotchStatusDot(status: .idle, palette: palette)
+            }
         }
     }
 
     private func chip(_ kind: NotchChip.Kind, _ count: Int) -> some View {
-        NotchChip(kind: kind, count: count, palette: palette)
+        NotchChip(kind: kind, count: count, palette: palette, font: chipFont)
     }
 
     private var headerAccessibilityLabel: Text {
@@ -280,12 +306,13 @@ struct NotchChip: View {
     let kind: Kind
     let count: Int
     let palette: NotchPalette
+    var font: Font = .system(size: 12, weight: .semibold)
 
     var body: some View {
         HStack(spacing: 6) {
             symbol
             Text("\(count)")
-                .font(.system(size: 12, weight: .semibold))
+                .font(font)
                 .monospacedDigit()
                 .foregroundStyle(color)
         }

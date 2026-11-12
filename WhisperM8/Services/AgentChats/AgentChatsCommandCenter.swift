@@ -173,6 +173,15 @@ final class AgentChatsCommandCenter {
         return handlers.first { $0.value.handler.snapshot().ownsKeyOverlay }?.key
     }
 
+    /// Bildschirm eines Agent-Chats-Fensters (`NSScreenNumber`): bevorzugt
+    /// `preferred` (das zuletzt aktive), sonst irgendeins der angemeldeten.
+    /// Für die Pille der Notch-Anzeige; nur im Ereignis-Pfad.
+    func windowDisplayID(preferring preferred: UUID?) -> UInt32? {
+        if let preferred, let id = handlers[preferred]?.handler.snapshot().screenDisplayID { return id }
+        return handlers.keys.sorted { $0.uuidString < $1.uuidString }.lazy
+            .compactMap { self.handlers[$0]?.handler.snapshot().screenDisplayID }.first
+    }
+
     /// Schnappschuss eines Fensters; ohne `windowID` der des aktiven Fensters.
     func snapshot(of windowID: UUID? = nil) -> AgentChatsWindowSnapshot? {
         guard let id = windowID ?? activeWindowID else { return nil }
