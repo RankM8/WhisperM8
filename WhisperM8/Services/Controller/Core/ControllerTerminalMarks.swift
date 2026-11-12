@@ -1,13 +1,13 @@
 import Foundation
 
 /// Was die Controller-Steuerung je Chat-Terminal festhält, damit Kreuz, Kreis
-/// und das Steuerkreuz nur dort wirken, wo sie nichts anrichten. Pur und ohne
+/// und Pfeil links nur dort wirken, wo sie nichts anrichten. Pur und ohne
 /// Uhr; gehalten vom `AgentTerminalController` (ein Wert je Chat, er lebt so
 /// lange wie das Terminal).
 struct ControllerTerminalMarks: Equatable, Sendable {
     /// Höchstdauer einer Auswahlliste ab dem Öffnen, ohne Verlängerung: Wer
     /// länger braucht, hat sie meist anders geschlossen (Maus, anderes
-    /// Programm) — dann soll das Steuerkreuz wieder navigieren.
+    /// Programm) — dann gelten wieder die Regeln für das Eingabefeld.
     static let choiceListTimeout: TimeInterval = 120
 
     /// Enter vom Controller, auch in einer Rückfrage.
@@ -19,6 +19,26 @@ struct ControllerTerminalMarks: Equatable, Sendable {
     var lastDraftInputAt: Date?
     /// Enter (ohne Shift/Option) auf der Tastatur des Nutzers.
     var lastKeyboardSubmitAt: Date?
+    /// Letzter Pfeil vom Controller (Claude, Shell), und der letzte, der
+    /// Kreuz bei arbeitendem Chat scharf macht (`arrowArmWindow`). Ein ↑ als
+    /// erster Pfeil macht nicht scharf: Er holt im Eingabefeld den letzten
+    /// Prompt zurück, Kreuz schickte ihn sonst erneut.
+    var lastArrowAt: Date?
+    var lastArmingArrowAt: Date?
+
+    /// So lange nach einem scharf machenden Pfeil darf Kreuz bei arbeitendem
+    /// Claude-Chat Enter schicken (Auswahl in Subagenten- und
+    /// Workflow-Ansichten). Kurz gehalten wegen der Lücke vor einem
+    /// Freigabe-Dialog: Dort bestätigte Enter die Vorauswahl.
+    static let arrowArmWindow: TimeInterval = 5
+
+    /// Kreuz ist durch einen Pfeil scharf: innerhalb `arrowArmWindow` und
+    /// nach dem letzten Absenden.
+    static func hasFreshArrow(armedAt: Date?, lastSubmitAt: Date?, now: Date) -> Bool {
+        guard let armedAt, now.timeIntervalSince(armedAt) < arrowArmWindow else { return false }
+        guard let lastSubmitAt else { return true }
+        return armedAt > lastSubmitAt
+    }
     /// „Auswahl offen“: gesetzt, wenn das Controller-Menü einen Befehl
     /// geschickt hat, der eine Liste öffnet. `nil` = keine Liste.
     private(set) var choiceListOpenedAt: Date?
