@@ -358,6 +358,7 @@ final class NotchStatusController {
         inputs = []
         cachedPlacements = nil
         hub.updateBadge(nil)
+        hub.restSnapshot = { _ in nil }
         for slot in slots.values {
             slot.lastDisplay = nil
             slot.lastFrame = nil

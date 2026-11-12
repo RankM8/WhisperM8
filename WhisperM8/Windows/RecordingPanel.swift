@@ -369,7 +369,7 @@ enum ContextAction {
 @MainActor
 class OverlayController: ObservableObject {
     var panel: RecordingPanel?
-    private var hostingView: PillHitTestHostingView<RecordingOverlayView>?
+    var hostingView: PillHitTestHostingView<RecordingOverlayView>?
     var previousApp: NSRunningApplication?
     private var modesObserver: NSObjectProtocol?
     private var menuTrackingObservers: [NSObjectProtocol] = []
@@ -448,6 +448,14 @@ class OverlayController: ObservableObject {
     var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?
+    /// Übergang aus der und in die ruhende Pille (`RecordingPanel+PillMorph.swift`):
+    /// Die Pille zeigt statt des Diktats das Ruhebild `restLook`.
+    @Published var showsRestLook = false
+    @Published var restLook: UnifiedPillRestLook?
+    /// Mittelpunkt der ruhenden Pille (ohne Notch), dorthin zieht sie sich zurück.
+    var restCenter: CGPoint?
+    var morph = UnifiedPillMorph()
+    var morphSignpost: PerformanceBudget.Token?
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
@@ -538,9 +546,13 @@ class OverlayController: ObservableObject {
         // Bildschirm feststeht.
         if UnifiedPillHub.shared.isEnabled() {
             installPresentationObservers()
+            // Zieht sich die Pille gerade zurück, wächst dasselbe Fenster wieder.
+            if adoptRetiringPanel() { return }
+            finishRetiringPanelNow()
             presentUnifiedPanel()
             return
         }
+        finishRetiringPanelNow()
         presentation = .classic
 
         // Anker laden entscheidet zugleich über „Custom-Position": nur eine
@@ -660,7 +672,10 @@ class OverlayController: ObservableObject {
 
     func hide() {
         isPresented = false
-        tearDownUnified()
+        // Vereinte Pille: Zieht sie sich ins Ruhebild zurück, bleibt das
+        // Fenster noch einen Moment stehen und schließt danach selbst.
+        let retiring = retireUnifiedPanel()
+        tearDownUnified(keepingWindow: retiring)
         modeList.hide()
         controllerTargetLabel = nil
         isConnecting = false
@@ -682,9 +697,11 @@ class OverlayController: ObservableObject {
         recenterWork = nil
         // Default-Position bleibt Default: gespeichert wird nur, was der
         // User selbst bewegt hat (onMoveAnchor persistiert live).
-        panel?.close()
-        panel = nil
-        hostingView = nil
+        if !retiring {
+            panel?.close()
+            panel = nil
+            hostingView = nil
+        }
         onCancel = nil
         onCancelTranscription = nil
         onCancelPostProcessing = nil
@@ -887,7 +904,7 @@ class OverlayController: ObservableObject {
         panel.pillFrameInPanel = appKitFrame
         // Breite der zugeklappten Pille merken: beim Darüberfahren bleibt
         // ihre rechte Kante stehen (vereinte Pille).
-        if !isHoverExpanded { collapsedPillWidth = appKitFrame.width }
+        if !isHoverExpanded, !showsRestLook { collapsedPillWidth = appKitFrame.width }
         // An der Notch hängt die Pille fest unter der Aussparung.
         if presentation.isNotch { return }
 

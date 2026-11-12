@@ -76,7 +76,7 @@ extension NotchStatusController {
         let wasVisible = panel.isVisible
         if display != slot.lastDisplay {
             slot.lastDisplay = display
-            slot.viewModel.display = display
+            setDisplay(display, on: slot, animated: wasVisible)
         }
         updatePillMouse(slot, display: display)
         // Während des Ziehens bestimmt die Maus die Lage.

@@ -157,6 +157,34 @@ struct NotchStatusView: View {
         }
     }
 
+    private var headerRow: some View {
+        NotchHeaderRow(display: display)
+    }
+
+    private var headerAccessibilityLabel: Text {
+        var parts: [String] = []
+        let summary = display.summary
+        if summary.working > 0 { parts.append(String(localized: "\(summary.working) working")) }
+        if summary.waiting > 0 { parts.append(String(localized: "\(summary.waiting) waiting for you")) }
+        if summary.errored > 0 { parts.append(String(localized: "\(summary.errored) with an error")) }
+        if summary.freshDone > 0 { parts.append(String(localized: "\(summary.freshDone) just finished")) }
+        if let alert = display.alert, !display.isExpanded {
+            parts.insert("\(alert.title), \(NotchAlertLabel.word(for: alert.kind))", at: 0)
+        }
+        if parts.isEmpty { return Text("No active chats") }
+        return Text(parts.joined(separator: ", "))
+    }
+}
+
+/// Zähler, im Alarm der Chat-Name mit den arbeitenden Chats davor: Kopfzeile
+/// der Anzeige. Geteilt mit dem Ruhebild der Diktat-Zeile an der Notch
+/// (`UnifiedPillRestLookView`), damit der Übergang ins Diktat ohne Sprung
+/// beginnt.
+struct NotchHeaderRow: View {
+    let display: NotchDisplay
+
+    private var palette: NotchPalette { display.isNotch ? .notch : .pill }
+
     /// Schrift wie in der Diktat-Pille (12,5 pt, mittel); an der Notch wie bisher.
     private var chipFont: Font {
         display.isNotch
@@ -164,9 +192,7 @@ struct NotchStatusView: View {
             : .system(size: 12.5, weight: .medium)
     }
 
-    /// Zähler, im Alarm der Chat-Name mit den arbeitenden Chats davor.
-    @ViewBuilder
-    private var headerRow: some View {
+    var body: some View {
         HStack(spacing: 12) {
             if let alert = display.alert, !display.isExpanded {
                 if display.summary.working > 0 { chip(.working, display.summary.working) }
@@ -199,20 +225,6 @@ struct NotchStatusView: View {
     private func chip(_ kind: NotchChip.Kind, _ count: Int) -> some View {
         NotchChip(kind: kind, count: count, palette: palette, font: chipFont)
     }
-
-    private var headerAccessibilityLabel: Text {
-        var parts: [String] = []
-        let summary = display.summary
-        if summary.working > 0 { parts.append(String(localized: "\(summary.working) working")) }
-        if summary.waiting > 0 { parts.append(String(localized: "\(summary.waiting) waiting for you")) }
-        if summary.errored > 0 { parts.append(String(localized: "\(summary.errored) with an error")) }
-        if summary.freshDone > 0 { parts.append(String(localized: "\(summary.freshDone) just finished")) }
-        if let alert = display.alert, !display.isExpanded {
-            parts.insert("\(alert.title), \(NotchAlertLabel.word(for: alert.kind))", at: 0)
-        }
-        if parts.isEmpty { return Text("No active chats") }
-        return Text(parts.joined(separator: ", "))
-    }
 }
 
 // MARK: - Bausteine
@@ -224,6 +236,13 @@ struct NotchHangingShape: Shape {
     var bandWidth: CGFloat
     var bandHeight: CGFloat
     var bottomRadius: CGFloat
+
+    /// Der untere Radius gleitet mit (Notch-Anzeige auf und zu, Diktat-Zeile
+    /// aus dem Ruhebild und zurück), statt am Anfang zu springen.
+    var animatableData: CGFloat {
+        get { bottomRadius }
+        set { bottomRadius = newValue }
+    }
 
     func path(in rect: CGRect) -> Path {
         let width = rect.width

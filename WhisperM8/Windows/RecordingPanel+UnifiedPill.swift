@@ -100,10 +100,18 @@ extension OverlayController {
     /// Ab hier wird es eng: lieber die Maus nehmen als die Pille warten lassen.
     static let frontWindowTimeout: TimeInterval = 0.08
 
-    private func buildUnifiedPanel(_ placement: DictationPillPlacement) {
+    /// `allowMorph`: Steht dort eine ruhende Pille, wächst das Diktat aus ihr
+    /// (`RecordingPanel+PillMorph.swift`); nach einem Bildschirmwechsel nicht.
+    private func buildUnifiedPanel(_ placement: DictationPillPlacement, allowMorph: Bool = true) {
         let token = PerfBudgets.unifiedPillShow.begin()
         defer { PerfBudgets.unifiedPillShow.end(token) }
         let screen = placement.screen
+        // Ruhebild vor dem Aufbau setzen: Die Ansicht beginnt ohne Animation
+        // genau mit dem Bild der ruhenden Pille.
+        let snapshot = allowMorph ? restSnapshot(onDisplay: screen.displayID, isNotch: placement.isNotch) : nil
+        restLook = snapshot?.look
+        restCenter = snapshot?.center
+        showsRestLook = snapshot != nil
         let panel: RecordingPanel
         switch placement {
         case .notch(let screen):
@@ -120,8 +128,10 @@ extension OverlayController {
         case .pill(let screen, let center):
             presentation = .pill
             let size = OverlayFrameResolver.panelSize
+            // Genau über der ruhenden Pille, auch wenn die am Rand verschoben steht.
+            let pillCenter = snapshot?.center ?? center
             panel = RecordingPanel(
-                initialOrigin: UnifiedPillGeometry.pillDictationPanelOrigin(center: center, panelSize: size),
+                initialOrigin: UnifiedPillGeometry.pillDictationPanelOrigin(center: pillCenter, panelSize: size),
                 size: size)
             hasCustomPosition = AppPreferences.shared.notchPillPositions[screen.pillStorageKey] != nil
         }
@@ -138,8 +148,14 @@ extension OverlayController {
         }
         installPanel(panel, safeAreaFree: placement.isNotch)
         observeScreenChanges()
+        observeUnifiedBadge()
+        // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
+        // Status-Pille dort tritt zurück), mit Übergang erst nach dem ersten Bild.
+        applyMorph(morph.show(morph: snapshot != nil))
+    }
 
-        UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID)
+    /// Raute für wartende Chats und Fehler, solange das Diktat steht.
+    func observeUnifiedBadge() {
         statusBadge = UnifiedPillHub.shared.badge
         badgeCancellable = UnifiedPillHub.shared.$badge
             .removeDuplicates()
@@ -211,19 +227,28 @@ extension OverlayController {
             positions: AppPreferences.shared.notchPillPositions) else { return }
         Logger.info("unified_pill_relocated")
         closePanelForRebuild()
-        buildUnifiedPanel(placement)
+        morph.reset()
+        buildUnifiedPanel(placement, allowMorph: false)
     }
 
-    /// Aufräumen beim Ausblenden (aus `hide`).
-    func tearDownUnified() {
+    /// Aufräumen beim Ausblenden (aus `hide`). `keepingWindow`: Die Pille
+    /// zieht sich noch zurück; Fenster, Bildschirm und Meldung beim Hub
+    /// räumt dann der Übergang selbst ab.
+    func tearDownUnified(keepingWindow: Bool = false) {
         unifiedGeneration += 1
+        badgeCancellable = nil
+        if statusBadge != nil { statusBadge = nil }
+        guard !keepingWindow else { return }
         if let unifiedScreenObserver {
             NotificationCenter.default.removeObserver(unifiedScreenObserver)
             self.unifiedScreenObserver = nil
         }
-        badgeCancellable = nil
-        if statusBadge != nil { statusBadge = nil }
         unifiedScreen = nil
+        // Kein Ruhebild mehr übrig (etwa Stopp vor dem ersten Bild): Das
+        // nächste Diktat, auch die getrennte Pille, beginnt sauber.
+        if showsRestLook { showsRestLook = false }
+        restLook = nil
+        restCenter = nil
         UnifiedPillHub.shared.dictationDidHide()
     }
 

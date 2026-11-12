@@ -23,6 +23,12 @@ final class UnifiedPillHub: ObservableObject {
     /// zeigen, Einstellungen anwenden), nie im Takt.
     var isEnabled: () -> Bool = { AppPreferences.shared.isUnifiedPillEnabled }
 
+    /// Ruhebild der Status-Seite für einen Bildschirm (`UnifiedPillMorph`):
+    /// Aus ihm wächst das Diktat, in es zieht es sich zurück. Gesetzt vom
+    /// `NotchStatusController`, solange er läuft; gefragt nur beim Ein- und
+    /// Ausblenden des Diktats.
+    var restSnapshot: (UInt32) -> UnifiedPillRestSnapshot? = { _ in nil }
+
     func dictationDidShow(onDisplay displayID: UInt32) {
         if dictationDisplayID != displayID { dictationDisplayID = displayID }
     }
