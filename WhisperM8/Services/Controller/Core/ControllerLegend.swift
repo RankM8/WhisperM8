@@ -176,6 +176,20 @@ enum ControllerLegend {
 
     // MARK: - Kandidaten je Zusammenhang
 
+    /// Während eines gebundenen Diktats (Runde 5, Punkt 9): Stick, L1/R1 und
+    /// die Ebenen L2 und R1. Gezeigt nur, wo die Belegung sie hergibt.
+    private static var recordingNavigation: [Candidate] {
+        [
+            Candidate(
+                entry: ControllerLegendEntry(inputs: [.leftStick], label: .move),
+                probes: ControllerDirection.allCases.map { .move($0, source: .leftStick, isRepeat: false) }),
+            candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
+            Candidate(
+                entry: ControllerLegendEntry(inputs: [.button(.r1), .button(.l2)], label: .layersHold),
+                probes: [.layerBegan(.quickDraw), .layerBegan(.whereTo)]),
+        ]
+    }
+
     static func candidates(for context: ControllerContext) -> [Candidate] {
         switch context {
         case .paused:
@@ -186,19 +200,19 @@ enum ControllerLegend {
                 candidate(.button(.triangle), .bringToFront, [.press(.triangle)]),
                 candidate(.button(.touchpad), .clipboard, [.press(.touchpad)]),
             ]
-        case .recording(.recording, _):
+        case .recording(.recording, _, _):
             return [
                 candidate(.button(.r2), .stopDictation, [.press(.r2)]),
                 candidate(.button(.cross), .stopAndSend, [.press(.cross)]),
                 candidate(.button(.circle), .discard, [.tap(.circle)]),
                 candidate(.dpad, .outputMode, gestures(for: .dpad)),
                 candidate(.rightStick, .scroll, gestures(for: .rightStick)),
-            ]
+            ] + recordingNavigation
         case .recording:
             return [
                 candidate(.button(.circle), .cancel, [.tap(.circle)]),
                 candidate(.rightStick, .scroll, gestures(for: .rightStick)),
-            ]
+            ] + recordingNavigation
         case .quickAction:
             return [candidate(.button(.circle), .cancel, [.tap(.circle)])]
         case let .clipboardPanel(state):

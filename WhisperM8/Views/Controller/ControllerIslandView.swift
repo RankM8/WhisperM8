@@ -520,6 +520,7 @@ extension ControllerQuickDrawSlots.Note {
         switch self {
         case .question: return ControllerWritingSlots.Note.question.text
         case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
+        case .dictating: return String(localized: "Dictation running — the text goes into its chat; nothing else goes into the field now.")
         }
     }
 }

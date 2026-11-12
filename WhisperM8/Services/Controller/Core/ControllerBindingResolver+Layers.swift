@@ -18,6 +18,9 @@ extension ControllerBindingResolver {
         case .layerCancelled: return .islandClose
         default: break
         }
+        if case let .recording(phase, targetIsChat, navigation?) = context {
+            return recordingLayer(gesture, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
+        }
         guard case let .chat(state) = context else {
             if case let .inLayer(_, inner) = gesture { return action(for: inner, in: context) }
             return nil
@@ -30,6 +33,35 @@ extension ControllerBindingResolver {
             case .writing: return writingLayer(inner, state: state)
             case .quickDraw: return quickDrawLayer(inner, state: state)
             case .whereTo: return whereToLayer(inner)
+            }
+        default: return nil
+        }
+    }
+
+    /// Ebenen während eines an einen Chat gebundenen Diktats (Runde 5, Punkt
+    /// 9): L2 „Wohin“ geht samt Wechsel, R1 zeigt die Raute, aber alles, was
+    /// ins Feld schriebe, ist aus („geht nicht“) — dorthin kommt gleich der
+    /// Diktattext. L1 „Schreiben“ bleibt aus. R2 bleibt in jeder Ebene „stopp“,
+    /// die übrigen Tasten unter L1 wirken wie ohne Ebene.
+    private static func recordingLayer(
+        _ gesture: ControllerGesture, phase: ControllerRecordingPhase, targetIsChat: Bool,
+        navigation: ControllerRecordingNavigation
+    ) -> ControllerAction? {
+        func plain(_ inner: ControllerGesture) -> ControllerAction? {
+            recording(inner, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
+        }
+        switch gesture {
+        case let .layerBegan(layer): return layer == .writing ? nil : .islandShow(layer)
+        case let .inLayer(layer, inner):
+            if inner == .press(.r2) { return plain(inner) }
+            switch layer {
+            case .writing: return plain(inner)
+            case .whereTo: return whereToLayer(inner)
+            case .quickDraw:
+                if case .press(let button) = inner, ControllerQuickDrawSlots.item(for: button) != nil || button == .l3 {
+                    return .rejected
+                }
+                return nil
             }
         default: return nil
         }

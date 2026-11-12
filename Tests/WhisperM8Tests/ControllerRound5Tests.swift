@@ -201,6 +201,7 @@ final class ControllerRound5DispatcherTests: XCTestCase {
     private var center: AgentChatsCommandCenter!
     private var terminals: ControllerTerminalSpy!
     private var island: ControllerIslandSpy!
+    private var dictation: ControllerDictationSpy!
     private var dispatcher: ControllerActionDispatcher!
     private var haptics: [ControllerHapticPattern] = []
     private var chat = UUID()
@@ -212,9 +213,10 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         _ = center.register(windowID: window.id, handler: window.handler)
         terminals = ControllerTerminalSpy()
         island = ControllerIslandSpy()
+        dictation = ControllerDictationSpy()
         haptics = []
         dispatcher = ControllerActionDispatcher(
-            chats: center, terminals: terminals, dictation: ControllerDictationSpy(),
+            chats: center, terminals: terminals, dictation: dictation,
             environment: ControllerEnvironmentSpy(), ui: ControllerUIModel(), island: island, now: { [now] in now })
         dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
         dispatcher.islandChatRows = { order, current in
@@ -425,5 +427,51 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertEqual(accounts.first { $0.name == "a" }?.fiveHourUsed, 70)
         XCTAssertEqual(accounts.filter(\.isMostFree).map(\.name), ["b"])
         XCTAssertEqual(refreshes, 1, "passiver Abruf beim Öffnen")
+    }
+
+    // MARK: Während des Diktats (Punkt 9)
+
+    func testNavigationDuringDictationKeepsTheBoundTarget() {
+        let other = UUID()
+        window.rows = [AgentChatsListRow(row: .chat(chat)), AgentChatsListRow(row: .chat(other))]
+        terminals.states[other] = terminals.states[chat]
+        dispatcher.titleForSession = { [chat] id in id == chat ? "Ziel" : "Anderer" }
+        perform(.dictationToggle)
+        XCTAssertEqual(dictation.started, [.agentChat(sessionID: chat)])
+        let context = ControllerContextResolver.context(for: dispatcher.snapshot())
+        XCTAssertEqual(context, .recording(
+            phase: .recording, targetIsChat: true, navigation: .init(area: .content, gridActive: false)))
+        // R1 getippt wechselt den Chat …
+        let next = ControllerBindingResolver.action(for: .tap(.r1), in: context)
+        XCTAssertEqual(next, .adjacentChat(step: 1))
+        dispatcher.perform(next!, in: context)
+        XCTAssertEqual(window.selected, other)
+        // … Legende und Insel nennen weiter das Ziel des Diktats.
+        _ = dispatcher.snapshot()
+        XCTAssertEqual(dispatcher.ui.targetTitle, "Ziel")
+        dispatcher.showIsland(.whereTo)
+        XCTAssertEqual(dispatcher.islandState?.model.target.title, "→ Ziel")
+        // Kreuz beendet und sendet — an das gebundene Ziel (der Spy kennt es).
+        let afterSwitch = ControllerContextResolver.context(for: dispatcher.snapshot())
+        XCTAssertEqual(ControllerBindingResolver.action(for: .press(.cross), in: afterSwitch), .dictationStopAndSubmit)
+        dispatcher.perform(.dictationStopAndSubmit, in: afterSwitch)
+        XCTAssertEqual(dictation.stopped, [true])
+    }
+
+    func testFrontAppDictationDoesNotNavigate() {
+        dictation.start(target: .frontApp, label: nil)
+        let context = ControllerContextResolver.context(for: dispatcher.snapshot())
+        XCTAssertEqual(context, .recording(phase: .recording, targetIsChat: false))
+        XCTAssertNil(ControllerBindingResolver.action(for: .tap(.r1), in: context))
+        XCTAssertNil(ControllerBindingResolver.action(for: .move(.up, source: .leftStick, isRepeat: false), in: context))
+        XCTAssertNil(ControllerBindingResolver.action(for: .layerBegan(.whereTo), in: context))
+    }
+
+    func testQuickDrawDuringDictationIsGreyedOut() {
+        perform(.dictationToggle)
+        dispatcher.showIsland(.quickDraw)
+        guard case let .quickDraw(slots)? = dispatcher.islandState?.model.content else { return XCTFail("R1 erwartet") }
+        XCTAssertTrue(slots.enabled.isEmpty)
+        XCTAssertEqual(slots.note, .dictating)
     }
 }

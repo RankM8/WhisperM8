@@ -5561,6 +5561,16 @@
         }
       }
     },
+    "Dictation running — the text goes into its chat; nothing else goes into the field now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat läuft — der Text geht in seinen Chat; ins Feld geht jetzt nichts anderes."
+          }
+        }
+      }
+    },
     "Dictations": {
       "localizations": {
         "de": {

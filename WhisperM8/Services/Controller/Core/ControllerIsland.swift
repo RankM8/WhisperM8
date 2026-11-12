@@ -368,6 +368,8 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         /// Chat arbeitet (oder gerade gesendet): „Weiter“ und „Modus
         /// wechseln“ warten, bis er ruht.
         case busy
+        /// Ein Diktat läuft: Ins Feld kommt gleich der Diktattext (Runde 5).
+        case dictating
     }
 
     var enabled: Set<ControllerMenuItem>
@@ -381,16 +383,20 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
     /// Dieselben Regeln wie die Einträge des Options-Menüs; Kreuz nach
     /// `crossAction` (Runde 5).
     init(setup: ControllerMenuSetup, hit: ControllerMenuItem? = nil) {
-        cross = setup.quickCross
+        cross = setup.dictationRunning ? nil : setup.quickCross
         enabled = Set(Self.items.filter { item in
-            guard item == .continueWork, setup.acceptsInput else { return ControllerMenuModel.isEnabled(item, setup: setup) }
+            guard item == .continueWork, setup.acceptsInput, !setup.dictationRunning else {
+                return ControllerMenuModel.isEnabled(item, setup: setup)
+            }
             switch setup.quickCross {
             case .send?, .sendNow?: return true
             case .continueWork?: return ControllerMenuModel.isEnabled(item, setup: setup)
             case nil: return false
             }
         })
-        if setup.acceptsInput, setup.dialogOpen {
+        if setup.dictationRunning {
+            note = .dictating
+        } else if setup.acceptsInput, setup.dialogOpen {
             note = .question
         } else if setup.acceptsInput, setup.chatBusy, setup.quickCross != .sendNow, setup.quickCross != .send {
             note = .busy

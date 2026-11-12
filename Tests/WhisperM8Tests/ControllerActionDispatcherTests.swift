@@ -674,7 +674,9 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(dictation.labels, ["Mein Chat"], "Die Pill zeigt das Ziel")
         XCTAssertEqual(dictation.started, [.agentChat(sessionID: window.selected!)])
         XCTAssertEqual(haptics, [.recordingStarted])
-        XCTAssertEqual(context, .recording(phase: .recording, targetIsChat: true))
+        // Runde 5: an einen Chat gebunden, also mit Navigation.
+        XCTAssertEqual(context, .recording(
+            phase: .recording, targetIsChat: true, navigation: .init(area: .content, gridActive: false)))
     }
 
     func testSecondToggleStopsWithoutSending() {
@@ -948,7 +950,8 @@ final class ControllerActionDispatcherTests: XCTestCase {
     func testStopAndSubmitOnlyForClaudeAndCodex() {
         setTerminal(status: .idle, profile: .shell)
         perform(.dictationToggle)
-        XCTAssertEqual(context, .recording(phase: .recording, targetIsChat: false))
+        XCTAssertEqual(context, .recording(
+            phase: .recording, targetIsChat: false, navigation: .init(area: .content, gridActive: false)))
         dispatcher.perform(.dictationStopAndSubmit, in: context)
         XCTAssertEqual(dictation.stopped, [false])
     }

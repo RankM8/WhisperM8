@@ -61,6 +61,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
     static func expected(_ gesture: ControllerGesture, in context: ControllerContext, table: Table) -> ControllerAction? {
         if let action = table[gesture] { return action }
         if case .chat = context { return nil }
+        // Gebundenes Diktat (Runde 5): L2 und R1 stehen vollständig in der
+        // Tabelle, L1 wirkt wie ohne Ebene.
+        if case .recording(_, _, _?) = context {
+            switch gesture {
+            case .layerBegan, .inLayer(.whereTo, _), .inLayer(.quickDraw, _): return nil
+            default: break
+            }
+        }
         if case .paused = context { return nil }
         switch gesture {
         case .layerEnded(.whereTo): return .islandRelease
@@ -192,6 +200,77 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
         return table
     }()
+
+    // MARK: Diktat mit gebundenem Ziel (Runde 5, Punkt 9)
+
+    private static let recordingOutputModes: Table = [
+        .move(.left, source: .dpad, isRepeat: false): .outputMode(step: -1),
+        .move(.right, source: .dpad, isRepeat: false): .outputMode(step: 1),
+        .move(.up, source: .dpad, isRepeat: false): .outputMode(step: -1),
+        .move(.up, source: .dpad, isRepeat: true): .outputMode(step: -1),
+        .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
+        .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
+    ]
+    private static let recordingInChat: Table = merge([
+        .press(.r2): .dictationToggle,
+        .press(.cross): .dictationStopAndSubmit,
+        .tap(.circle): .dictationCancel,
+    ], recordingOutputModes, scrollWhileRecording)
+    private static let recordingInApp: Table = merge([
+        .press(.r2): .dictationToggle,
+        .tap(.circle): .dictationCancel,
+    ], recordingOutputModes, scrollWhileRecording)
+
+    /// Stick und L1/R1 navigieren wie sonst.
+    private static func boundNavigation(area: ControllerFocusArea, grid: Bool) -> Table {
+        var table: Table = [.tap(.l1): .adjacentChat(step: -1), .tap(.r1): .adjacentChat(step: 1)]
+        func stick(_ direction: ControllerDirection, _ isRepeat: Bool) -> ControllerGesture {
+            .move(direction, source: .leftStick, isRepeat: isRepeat)
+        }
+        if area == .list {
+            for isRepeat in [false, true] {
+                table[stick(.up, isRepeat)] = .listMove(step: -1)
+                table[stick(.down, isRepeat)] = .listMove(step: 1)
+            }
+            table[stick(.right, false)] = .leaveList
+        } else if grid {
+            for direction in ControllerDirection.allCases { table[stick(direction, false)] = .moveInContent(direction) }
+        } else {
+            table[stick(.up, false)] = .enterList(step: -1)
+            table[stick(.down, false)] = .enterList(step: 1)
+            table[stick(.left, false)] = .moveInContent(.left)
+        }
+        return table
+    }
+
+    /// L2 „Wohin“ samt Wechsel, R1 nur „geht nicht“, R2 bleibt „stopp“.
+    private static func boundLayers(recording: Bool) -> Table {
+        var table: Table = [
+            .layerBegan(.whereTo): .islandShow(.whereTo),
+            .layerBegan(.quickDraw): .islandShow(.quickDraw),
+            .inLayer(.whereTo, .press(.cross)): .islandCommit,
+            .inLayer(.whereTo, .press(.circle)): .islandCancel,
+            .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
+            .inLayer(.whereTo, .press(.square)): .islandReopenClosed,
+            .inLayer(.whereTo, .press(.touchpad)): .clipboardToggle,
+            .inLayer(.whereTo, .move(.left, source: .leftStick, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.left, source: .dpad, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.right, source: .leftStick, isRepeat: false)): .islandTab(step: 1),
+            .inLayer(.whereTo, .move(.right, source: .dpad, isRepeat: false)): .islandTab(step: 1),
+        ]
+        for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
+            table[.inLayer(.whereTo, gesture)] = action
+        }
+        for button in [ControllerButton.cross, .triangle, .square, .circle, .l3] {
+            table[.inLayer(.quickDraw, .press(button))] = .rejected
+        }
+        if recording {
+            table[.inLayer(.whereTo, .press(.r2))] = .dictationToggle
+            table[.inLayer(.quickDraw, .press(.r2))] = .dictationToggle
+            table[.inLayer(.writing, .press(.r2))] = .dictationToggle
+        }
+        return table
+    }
 
     /// L1-Ebene, wo Schreiben nicht geht (Shell, Rückfrage): „geht nicht“.
     private static let writingRejected: Table = [
@@ -332,6 +411,19 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
             .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
         ], scrollWhileRecording)),
+        ("Aufnahme gebunden, Einzelansicht",
+         .recording(phase: .recording, targetIsChat: true, navigation: .init(area: .content, gridActive: false)),
+         merge(recordingInChat, boundNavigation(area: .content, grid: false), boundLayers(recording: true))),
+        ("Aufnahme gebunden, Liste",
+         .recording(phase: .recording, targetIsChat: true, navigation: .init(area: .list, gridActive: false)),
+         merge(recordingInChat, boundNavigation(area: .list, grid: false), boundLayers(recording: true))),
+        ("Aufnahme gebunden, Raster (Shell)",
+         .recording(phase: .recording, targetIsChat: false, navigation: .init(area: .content, gridActive: true)),
+         merge(recordingInApp, boundNavigation(area: .content, grid: true), boundLayers(recording: true))),
+        ("Transkription gebunden",
+         .recording(phase: .transcribing, targetIsChat: true, navigation: .init(area: .content, gridActive: false)),
+         merge([.tap(.circle): .dictationCancel], scrollWhileRecording,
+               boundNavigation(area: .content, grid: false), boundLayers(recording: false))),
         ("Transkription", .recording(phase: .transcribing, targetIsChat: true),
          merge([.tap(.circle): .dictationCancel], scrollWhileRecording)),
         ("Nacharbeit", .recording(phase: .postProcessing, targetIsChat: false),

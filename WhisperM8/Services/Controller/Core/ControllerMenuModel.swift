@@ -194,6 +194,9 @@ struct ControllerMenuSetup: Equatable, Sendable {
     /// Runde 5); ohne Angabe „Weiter“ nach den bisherigen Regeln, `nil`
     /// heißt „geht nicht“.
     var quickCross: ControllerQuickDrawCross? = .continueWork
+    /// Ein Diktat läuft (Runde 5, Punkt 9): Eingaben in den Chat und „Konto
+    /// wechseln“ sind aus — ins Feld kommt gleich der Diktattext.
+    var dictationRunning = false
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten, Workspaces). Pur.
@@ -266,6 +269,7 @@ struct ControllerMenuModel: Equatable, Sendable {
     }
 
     static func isEnabled(_ item: ControllerMenuItem, setup: ControllerMenuSetup) -> Bool {
+        if setup.dictationRunning, item.writesToChat || item == .switchAccount { return false }
         if item.writesToChat {
             guard setup.acceptsInput, !setup.dialogOpen else { return false }
             if item == .commands {

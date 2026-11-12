@@ -85,13 +85,23 @@ struct ControllerClipboardState: Equatable, Sendable {
     var menuOpen = false
 }
 
+/// Wo man während eines Diktats steht, dessen Ziel ein Chat ist (Runde 5,
+/// Punkt 9): Dann navigieren Stick, L1/R1 und L2 wie sonst; der Text geht
+/// trotzdem in den Chat, in dem das Diktat begann.
+struct ControllerRecordingNavigation: Equatable, Sendable {
+    var area: ControllerFocusArea
+    var gridActive: Bool
+}
+
 /// Zusammenhang, in dem eine Geste ausgewertet wird (Plan 3.1).
 enum ControllerContext: Equatable, Sendable {
     case paused
     /// Ein anderes Programm ist vorne. `wakeOnInput`: Fast jede Eingabe holt
     /// das Agent-Chats-Fenster nach vorn (nur mit Hintergrund-Empfang).
     case outsideApp(backgroundEnabled: Bool, wakeOnInput: Bool = false)
-    case recording(phase: ControllerRecordingPhase, targetIsChat: Bool)
+    /// `navigation`: nur, wenn das Diktat an einen Chat gebunden ist und das
+    /// Agent-Chats-Fenster die Eingaben hat (Runde 5, Punkt 9).
+    case recording(phase: ControllerRecordingPhase, targetIsChat: Bool, navigation: ControllerRecordingNavigation? = nil)
     case quickAction
     case clipboardPanel(ControllerClipboardState)
     case menu(dialogOpen: Bool)
@@ -119,6 +129,8 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var wakeOnInputEnabled: Bool = false
     var recordingPhase: ControllerRecordingPhase?
     var recordingTargetIsChat: Bool = false
+    /// Das Diktat ist an einen Chat gebunden (auch eine Shell).
+    var recordingTargetBound: Bool = false
     var quickActionRunning: Bool = false
     var clipboardPanelOpen: Bool = false
     var clipboard = ControllerClipboardState()
@@ -142,7 +154,15 @@ enum ControllerContextResolver {
     static func context(for snapshot: ControllerAppSnapshot) -> ControllerContext {
         if snapshot.isPaused { return .paused }
         if let phase = snapshot.recordingPhase {
-            return .recording(phase: phase, targetIsChat: snapshot.recordingTargetIsChat)
+            // Navigation nur mit gebundenem Ziel und nur im Agent-Chats-Fenster
+            // ohne Menü und Dialog: Bei „Programm vorne“ ginge der Text per ⌘V
+            // dorthin, wo beim Stopp der Fokus liegt.
+            let navigates = snapshot.recordingTargetBound && snapshot.appIsActive && snapshot.window == .agentChats
+                && !snapshot.controllerMenuOpen && !snapshot.modalOpen
+            let navigation = navigates
+                ? ControllerRecordingNavigation(area: snapshot.area, gridActive: snapshot.chat?.gridActive ?? false)
+                : nil
+            return .recording(phase: phase, targetIsChat: snapshot.recordingTargetIsChat, navigation: navigation)
         }
         if snapshot.quickActionRunning { return .quickAction }
         if snapshot.clipboardPanelOpen { return .clipboardPanel(snapshot.clipboard) }

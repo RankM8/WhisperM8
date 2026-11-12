@@ -100,6 +100,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         snapshot.appIsActive = debugOverride()?.assumeFrontmost == true || environment.isAppActive
         snapshot.recordingPhase = dictation.phase
         snapshot.recordingTargetIsChat = submitAllowed(to: dictation.targetSessionID)
+        snapshot.recordingTargetBound = dictation.phase != nil && dictation.targetSessionID != nil
         snapshot.quickActionRunning = dictation.isQuickActionRunning
         snapshot.clipboardPanelOpen = environment.isClipboardPanelOpen
         if snapshot.clipboardPanelOpen { snapshot.clipboard = environment.clipboardState }
@@ -115,7 +116,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
-        let title = window.selectedSessionID.flatMap(titleForSession)
+        // Während eines gebundenen Diktats nennt die Legende dessen Ziel, nicht
+        // die Auswahl: Die darf wechseln, der Text geht trotzdem dorthin.
+        let titleSession = snapshot.recordingTargetBound ? dictation.targetSessionID : window.selectedSessionID
+        let title = titleSession.flatMap(titleForSession)
         if ui.targetTitle != title { ui.targetTitle = title }
         publish(snapshot)
         return snapshot
@@ -584,6 +588,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             setup.chatBusy = isBusy(terminal)
             setup.quickCross = quickCross(terminal)
         }
+        // Während eines Diktats geht nichts ins Feld (Runde 5, Punkt 9).
+        setup.dictationRunning = dictation.phase != nil
         return setup
     }
 

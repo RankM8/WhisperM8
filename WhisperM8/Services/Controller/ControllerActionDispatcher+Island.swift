@@ -81,8 +81,13 @@ extension ControllerActionDispatcher {
     private func makeIsland(_ layer: ControllerLayer) -> ControllerIslandSession? {
         guard let windowID = targetWindowID, let window = chats.snapshot(of: windowID) else { return nil }
         let sessionID = window.selectedSessionID
-        let target = ControllerIslandTarget(
+        var target = ControllerIslandTarget(
             title: sessionID.flatMap(titleForSession), status: sessionID.flatMap(islandStatus))
+        // Während eines Diktats nennt der Kopf dessen Ziel (Runde 5, Punkt 9).
+        if dictation.phase != nil, let dictationTarget = dictation.targetSessionID {
+            let title = titleForSession(dictationTarget) ?? String(localized: "Chat")
+            target = ControllerIslandTarget(title: "→ \(title)", status: islandStatus(dictationTarget))
+        }
         var setup: ControllerMenuSetup?
         let content: ControllerIslandModel.Content
         switch layer {
