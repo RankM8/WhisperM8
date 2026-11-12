@@ -13,6 +13,9 @@ echo ""
 
 # Kill all running instances
 echo "1. Stopping all WhisperM8 processes..."
+# Ausdrücklich auch der GPT-Router-Dienst (Labs „Neustart ohne Chatverlust“):
+# Er überlebt sonst jeden App-Neustart und hielte den Router-Port.
+pkill -9 -f " gpt-router " 2>/dev/null || true
 pkill -9 -f "WhisperM8" 2>/dev/null || true
 pkill -9 -f "whisperm8" 2>/dev/null || true
 killall WhisperM8 2>/dev/null || true

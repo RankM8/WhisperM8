@@ -338,6 +338,15 @@ Die Test-Instanz deckt alles außer dem GPT-Chat ab (kein GPT-Login, Logins werd
 
 **Reihenfolge-Begründung:** Paket 0 lohnt sich auch ohne das Feature, der close-on-exec-Fix ist ein Sicherheitsfehler. Pakete 1 bis 3 sind unabhängig voneinander baubar und testbar, ohne die App zu verändern. Paket 4 setzt sie zusammen. Ohne Paket 3 würde Paket 4 auf diesem Mac jede gerade strömende Antwort abreißen. Deshalb kommt 3 vor 4, und eingeschaltet wird erst, wenn beide da sind.
 
+### Nacharbeit Paket 3 (aus dem Opus-Review vom 12.11.2026)
+
+Behoben vor dem Merge: `gptRouter.startProfile` nur im Dienst-Modus und nur der Profilpfad; Socket-Übergabe nur an dasselbe Programm (Code-Signatur über `LOCAL_PEERTOKEN`, bei jeder Nachricht), Test-Upstreams nur im Debug-Build, `--root` nur der Ordner der App; verwaister Dienst ohne `router.sock` wird vom Port geräumt; ohne `released` gibt die neue Generation auf; anderer Programmort startet frisch, statt bei jedem Chat-Start eine Übernahme zu versuchen.
+
+Später:
+- **Main Thread:** Stop-Knopf und `willTerminate` warten bis zu 2 s auf den Steuer-Socket des Dienstes. Den Aufruf vom Main Thread lösen.
+- **Tests:** feste Sleeps durch Bedingungen ersetzen; Prozess-Tests werden still übersprungen, wenn das Binary fehlt (in der CI sichtbar machen); Router-Dienste nach einem Absturz von xctest bleiben als Waisen (Aufräumen per Prozessgruppe).
+- **Offene Entscheidung (User):** Leerlauf-Frist für den Dienst — er beendet sich geordnet, wenn 30 Minuten lang keine App verbunden war und keine Anfrage läuft. Noch nicht gebaut.
+
 ## Entscheidungen
 
 Am 12.11.2026 vom User getroffen, jeweils wie empfohlen.

@@ -77,6 +77,9 @@ enum CLIModeDetector {
         // dort ist argv0 das App-Binary (WhisperM8), nicht der Symlink,
         // deshalb muss das Keyword hier stehen.
         "agent", "agent-supervise",
+        // Interner Modus: GPT-Router als eigener Dienst (Labs, Plan
+        // neustart-ohne-chatverlust.md) — argv0 ist das App-Binary.
+        "gpt-router",
         // Agent-Chats-Verwaltung (Jarvis-CLI) — docs/plans/whisperm8-chats-cli/.
         "chats",
         // Debug-Steuerkanal (UI-Tests ohne Computer Use) — docs/features/ui-testing.md.
@@ -153,6 +156,9 @@ enum CLICommand {
             return await SpeakCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "clipboard":
             return await ClipboardCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "gpt-router":
+            // Interner Dienst-Modus — startet nur ClaudeGPTRouterServiceSupervisor.
+            return await GPTRouterCommand.run(arguments: Array(arguments.dropFirst()))
         case "app":
             return await AppCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "handover-keeper":

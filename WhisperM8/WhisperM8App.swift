@@ -440,7 +440,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                     ClaudeCodeProxyOrphanGuard.replaceIfOutdated(
                         port: AppPreferences.shared.claudeGPTBackendPort,
                         resolvedBinaryPath: ClaudeCodeProxyManager.shared.resolvedBinaryPath(),
-                        requireTranscriptionRoute: AppPreferences.shared.isChatGPTTranscriptionEnabled
+                        requireTranscriptionRoute: AppPreferences.shared.isChatGPTTranscriptionEnabled,
+                        // Leer, solange der Labs-Schalter aus ist (kein Register).
+                        protectedPIDs: ClaudeCodeProxyManager.shared.adoptedProxyPIDs()
                     )
                 }
                 _ = ClaudeCodeProxyManager.shared.ensureRunning(

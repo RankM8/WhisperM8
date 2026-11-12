@@ -1192,6 +1192,8 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         manager.storedAccountIDResolver = { _ in nil }
         manager.profilesEnabledResolver = { true }
         manager.transcriptionsAPIEnabledResolver = { true }
+        // Heutiger Weg (Labs-Schalter aus), unabhängig von den Defaults der Maschine.
+        manager.routerModeResolver = { .inApp }
         return manager
     }
 

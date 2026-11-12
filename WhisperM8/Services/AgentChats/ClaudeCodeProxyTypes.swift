@@ -69,13 +69,21 @@ struct ClaudeCodeProxyBinaryCandidate: Equatable {
 final class ClaudeCodeProxyProcessHandle {
     private let isRunningResolver: () -> Bool
     private let terminateAction: () -> Void
+    /// PID und Programm des Prozesses (für das Proxy-Register des
+    /// Router-Dienstes); `nil` bei Test-Handles.
+    let pid: Int32?
+    let executablePath: String?
 
     init(
         isRunning: @escaping () -> Bool,
-        terminate: @escaping () -> Void
+        terminate: @escaping () -> Void,
+        pid: Int32? = nil,
+        executablePath: String? = nil
     ) {
         self.isRunningResolver = isRunning
         self.terminateAction = terminate
+        self.pid = pid
+        self.executablePath = executablePath
     }
 
     var isRunning: Bool { isRunningResolver() }

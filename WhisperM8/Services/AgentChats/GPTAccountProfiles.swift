@@ -539,4 +539,11 @@ final class GPTPromotedProfiles: @unchecked Sendable {
         defer { lock.unlock() }
         return names.contains(name)
     }
+
+    /// Alle beförderten Profile (für das Proxy-Register des Router-Dienstes).
+    func allNames() -> Set<String> {
+        lock.lock()
+        defer { lock.unlock() }
+        return names
+    }
 }
