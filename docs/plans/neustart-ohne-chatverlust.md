@@ -288,6 +288,14 @@ Fork-Branch `whisperm8-handover` (auf `whisperm8-pty-cloexec`), Pin in `Package.
 - **`LocalProcess.adopt(_:) -> Bool`:** liest von der übergebenen Leitung und überwacht eine PID, die kein eigenes Kind sein muss. Das Ende kommt genau einmal, mit dem Wait-Status aus `kqueue` (`NOTE_EXITSTATUS`), sonst `nil`. Ein schon vorher beendeter Prozess wird sofort gemeldet.
 - **Ehrlicher Exit-Status:** `nil` statt erfundener 0, wenn `waitpid` nichts abholen kann. Die App wertet `nil` schon heute wie ein normales Ende (`AgentAttachRecovery.decode`, Zustandsmaschine), am Verhalten ändert sich nichts.
 - **Kind schließt vor `execve` alle Deskriptoren ab 3** (Nachtrag 1 aus dem Review von Paket 0).
+- **Im Aufbewahrer angebunden:** `HandoverTerminalSerializer` ist dessen Standard; der Nur-Text-Platzhalter bleibt für Tests.
+- **Nach dem Review (Fork `4c3b0fa`):**
+  - Die Abgabe wartet nur noch auf den letzten Lesevorgang. Ein offener Schreibauftrag an einen Chat, der seine Eingabe nicht liest, blockiert sie nicht mehr.
+  - Ein übernommener Zombie wird als beendet gemeldet.
+  - Scrollbereich und gesicherter Zustand des Hauptpuffers sind auch unter dem Alt-Screen dabei.
+  - Ein offener Umbruch am rechten Rand und ein offener Link werden nachgebaut.
+  - Überlange Sequenzen werden verschluckt statt als Text gedruckt.
+  - Das Kind schließt nur die tatsächlich offenen Deskriptoren, statt bis zu 61.440 `close()` (27 ms je Chat-Start).
 - **Befund für Aufbewahrer und App:** Ein Prozess, der mit ungelesener Ausgabe auf seinem Terminal endet, hängt in seinem Ende, bis jemand liest oder der letzte Master schließt. Wer eine Leitung hält, muss also mitlesen oder sie schließen; nur halten reicht nicht. Im Test äußerte sich das als `waitpid`, das nie zurückkam.
 
 ## Bau-Reihenfolge
