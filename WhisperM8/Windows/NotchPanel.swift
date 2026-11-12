@@ -43,6 +43,14 @@ final class NotchPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) {
         onCancel?()
     }
+
+    /// Pfeile und Return in der offenen Liste (`true` = verbraucht).
+    var onKeyDown: ((NSEvent) -> Bool)?
+
+    override func keyDown(with event: NSEvent) {
+        if onKeyDown?(event) == true { return }
+        super.keyDown(with: event)
+    }
 }
 
 /// Hosting-View, die den ersten Klick annimmt: ein nicht aktivierendes Fenster
@@ -62,15 +70,35 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     var pillHeaderOnly = false
     /// Liste wächst nach oben: Der Kopf liegt unten.
     var pillHeaderAtBottom = false
+    /// Vereinte Pille: Fenster mit Schattenrand. Nur die Pille selbst nimmt
+    /// Klicks an (wie `PillHitTestHostingView` der Diktat-Pille), der Kopf
+    /// liegt innerhalb des Rands.
+    var unifiedPill = false
+    /// Sichtbare Pille in SwiftUI-Koordinaten (oben links), `nil` = alles.
+    var interactiveSwiftUIFrame: CGRect?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard unifiedPill, let frame = interactiveSwiftUIFrame else { return super.hitTest(point) }
+        let local = convert(point, from: superview)
+        let topLeft = CGPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
+        guard frame.insetBy(dx: -2, dy: -2).contains(topLeft) else { return nil }
+        return super.hitTest(point)
+    }
 
     private var pressStart: CGPoint?
     private var pressMoved = false
+    /// Ort des Drückens in SwiftUI-Koordinaten (oben links): Kern oder Rest.
+    private var pressPoint: CGPoint = .zero
 
     /// Kopfbereich aus den Maßen im Moment des Klicks, nicht aus einem
     /// vorab gemeldeten Rahmen: Während der Größen-Animation stimmt nur das.
     private func handlesPill(_ event: NSEvent) -> Bool {
         guard pillMouse != nil else { return false }
         guard pillHeaderOnly else { return true }
+        if unifiedPill {
+            return UnifiedPillGeometry.isInStatusHeader(
+                y: event.locationInWindow.y, panelHeight: bounds.height, headerAtBottom: pillHeaderAtBottom)
+        }
         return NotchPillPlacement.isInHeader(
             y: event.locationInWindow.y, panelHeight: bounds.height, headerAtBottom: pillHeaderAtBottom)
     }
@@ -82,6 +110,7 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
             return pillMouse.doubleClick()
         }
         pressStart = NSEvent.mouseLocation
+        pressPoint = CGPoint(x: event.locationInWindow.x, y: bounds.height - event.locationInWindow.y)
         pressMoved = false
         pillMouse.began()
     }
@@ -98,6 +127,6 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     override func mouseUp(with event: NSEvent) {
         guard let pillMouse, pressStart != nil else { return super.mouseUp(with: event) }
         pressStart = nil
-        pillMouse.ended(pressMoved)
+        pillMouse.ended(pressMoved, pressPoint)
     }
 }
