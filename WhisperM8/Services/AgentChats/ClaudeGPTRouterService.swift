@@ -70,9 +70,18 @@ final class ClaudeGPTRouterService {
     /// Datei ersetzt, der Pfad bleibt derselbe).
     private let ownExecutablePath = ClaudeGPTRouterService.executablePath(of: getpid())
 
-    init(configuration: Configuration, router: ClaudeGPTMixRouter, onExit: @escaping (Int32) -> Void) {
+    /// Prüft die Gegenseite einer Übergabe (Standard: gleiche Code-Signatur).
+    private let peerCheck: (Int32) -> Bool
+
+    init(
+        configuration: Configuration,
+        router: ClaudeGPTMixRouter,
+        peerCheck: @escaping (Int32) -> Bool = { ClaudeGPTRouterPeerCheck.isSameProgram($0) },
+        onExit: @escaping (Int32) -> Void
+    ) {
         self.configuration = configuration
         self.router = router
+        self.peerCheck = peerCheck
         self.onExit = onExit
     }
 
@@ -139,13 +148,40 @@ final class ClaudeGPTRouterService {
             // Erst den eigenen Steuer-Socket aufbauen, dann bestätigen — so ist
             // der Pfad nie länger als nötig ohne Generation dahinter.
             try bindControlSocket(replacingLiveSocket: true)
-            try ClaudeGPTRouterWire.send(fd, ["op": "ack"])
-            _ = try? ClaudeGPTRouterWire.receive(fd) // „released“, nur zur Info
+            let released: Bool
+            do {
+                try ClaudeGPTRouterWire.send(fd, ["op": "ack"])
+                released = (try ClaudeGPTRouterWire.receive(fd)).message["op"] as? String == "released"
+            } catch {
+                released = false
+            }
+            guard released else {
+                // Spätes ACK: Die alte Generation hat ihre Frist verstrichen
+                // lassen und nimmt wieder an. Zwei Generationen auf einem Socket
+                // darf es nicht geben — diese gibt auf.
+                abandonTakeOver()
+                return .failure(ServiceError.takeOverFailed("keine Freigabe nach ack"))
+            }
         } catch {
+            if router.listeningSocketDescriptor != nil { abandonTakeOver() }
             return .failure(ServiceError.takeOverFailed("\(error)"))
         }
         log("took_over pid=\(getpid()) port=\(router.listeningPort ?? -1) generation=\(generation) build=\(configuration.build)")
         return .success(())
+    }
+
+    /// Übernahme gescheitert, nachdem der Socket schon hier lag: Lauscher und
+    /// Steuer-Socket schließen (den Pfad nur, wenn er noch uns gehört) und
+    /// bereits angenommene Anfragen zu Ende bringen.
+    private func abandonTakeOver() {
+        log("take_over_abandoned")
+        router.closeListenerKeepingConnections()
+        closeControlSocket(unlinkPath: true)
+        let deadline = Date().addingTimeInterval(configuration.drainLimit)
+        while router.activeConnectionCount > 0, Date() < deadline {
+            Thread.sleep(forTimeInterval: configuration.drainPollInterval)
+        }
+        router.stop()
     }
 
     // MARK: Steuer-Socket
@@ -271,6 +307,7 @@ final class ClaudeGPTRouterService {
             "state": current.rawValue,
             "active": router.activeConnectionCount,
             "startedAt": startedAt.timeIntervalSince1970,
+            "executable": ownExecutablePath ?? "",
         ]
     }
 
@@ -281,10 +318,11 @@ final class ClaudeGPTRouterService {
             try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "protocol"])
             return
         }
-        // Den lauschenden Socket bekommt nur dasselbe Programm (gleicher Pfad).
-        // Sonst könnte jeder Prozess des Nutzers den Router-Port übernehmen und
-        // die Anfragen der Chats samt Zugangsdaten mitlesen.
-        guard let own = ownExecutablePath, Self.peerExecutablePath(client) == own else {
+        // Den lauschenden Socket bekommt nur dasselbe Programm (Code-Signatur,
+        // bei jeder Nachricht neu geprüft). Sonst könnte jeder Prozess des
+        // Nutzers den Router-Port übernehmen und die Anfragen der Chats samt
+        // Zugangsdaten mitlesen.
+        guard peerCheck(client) else {
             log("handover_refused_foreign_binary")
             try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "binary"])
             return
@@ -311,7 +349,7 @@ final class ClaudeGPTRouterService {
             ], passing: listening)
             let ack = try ClaudeGPTRouterWire.receive(client)
             ack.descriptor.map { _ = close($0) }
-            guard ack.message["op"] as? String == "ack" else {
+            guard ack.message["op"] as? String == "ack", peerCheck(client) else {
                 throw ClaudeGPTRouterWire.WireError.malformed
             }
         } catch {
@@ -378,19 +416,12 @@ final class ClaudeGPTRouterService {
         onExit(code)
     }
 
-    // MARK: Gegenseite
+    // MARK: Programmpfad (für den Status)
 
     static func executablePath(of pid: pid_t) -> String? {
         var buffer = [CChar](repeating: 0, count: Int(4 * MAXPATHLEN))
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         return String(cString: buffer)
-    }
-
-    static func peerExecutablePath(_ fd: Int32) -> String? {
-        var pid: pid_t = 0
-        var length = socklen_t(MemoryLayout<pid_t>.size)
-        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0, pid > 0 else { return nil }
-        return executablePath(of: pid)
     }
 
     // MARK: Log

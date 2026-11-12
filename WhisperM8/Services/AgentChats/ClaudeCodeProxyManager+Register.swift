@@ -28,6 +28,20 @@ extension ClaudeCodeProxyManager {
         }
     }
 
+    // MARK: Bitte des Router-Dienstes
+
+    /// Nur der Profilpfad: kein Rückfall auf main (den `ensureRunning(profile:)`
+    /// bei ausgeschalteten Profilen nähme) und damit nie ein Start von
+    /// main-Proxy oder Router auf Zuruf von außen. `false` = abgelehnt.
+    @discardableResult
+    func startProfileInstanceForRouterService(profile: String) -> Bool {
+        guard isRouterServiceMode, profilesEnabledResolver(), !Self.isMainProfile(profile) else {
+            return false
+        }
+        startInstanceInBackground(profile: profile)
+        return true
+    }
+
     // MARK: Register schreiben
 
     /// Schreibt main- und Profil-Instanzen samt PID und Startzeit. Nur im

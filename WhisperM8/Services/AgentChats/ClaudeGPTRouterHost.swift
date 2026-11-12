@@ -28,6 +28,7 @@ final class ClaudeGPTRouterHost: @unchecked Sendable {
     private let inAppStart: (Int) -> Result<Void, Error>
     private let inAppStop: () -> Void
     private let supervisor: ClaudeGPTRouterServiceSupervisor
+    private let portReaper: (Int) -> Bool
     private let lock = NSLock()
     private var didRetireLeftoverService = false
 
@@ -35,12 +36,14 @@ final class ClaudeGPTRouterHost: @unchecked Sendable {
         mode: ClaudeGPTRouterMode = .current,
         inAppStart: @escaping (Int) -> Result<Void, Error> = { ClaudeGPTMixRouter.shared.start(port: $0) },
         inAppStop: @escaping () -> Void = { ClaudeGPTMixRouter.shared.stop() },
-        supervisor: ClaudeGPTRouterServiceSupervisor = .shared
+        supervisor: ClaudeGPTRouterServiceSupervisor = .shared,
+        portReaper: @escaping (Int) -> Bool = { ClaudeGPTRouterServiceReaper.freePortIfHeldByOrphanedService(port: $0) }
     ) {
         self.mode = mode
         self.inAppStart = inAppStart
         self.inAppStop = inAppStop
         self.supervisor = supervisor
+        self.portReaper = portReaper
     }
 
     func start(port: Int) -> Result<Void, Error> {
@@ -70,7 +73,12 @@ final class ClaudeGPTRouterHost: @unchecked Sendable {
         guard !didRetireLeftoverService else { return }
         didRetireLeftoverService = true
         let root = supervisor.root
-        guard ClaudeGPTRouterServiceClient.status(root: root) != nil else { return }
+        guard ClaudeGPTRouterServiceClient.status(root: root) != nil else {
+            // Dienst ohne erreichbaren Steuer-Socket (Ordner weg, hängt)?
+            // Nur dann etwas tun, wenn der Port belegt ist.
+            if !ClaudeCodeProxyManager.isPortFree(port) { _ = portReaper(port) }
+            return
+        }
         Logger.claudeGPTRouter.notice("gpt_router_service_retired_for_in_app_router")
         ClaudeGPTRouterServiceClient.shutdown(root: root)
         for _ in 0..<60 where !ClaudeCodeProxyManager.isPortFree(port) {

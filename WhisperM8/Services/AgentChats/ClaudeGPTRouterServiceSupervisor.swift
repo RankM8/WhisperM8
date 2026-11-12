@@ -9,6 +9,8 @@ struct ClaudeGPTRouterServiceStatus: Equatable {
     var generation: Int
     var state: String
     var active: Int
+    /// Programmpfad des Dienstes (leer bei älteren Generationen).
+    var executable: String
 
     init?(_ payload: [String: Any]) {
         guard payload["ok"] as? Bool == true,
@@ -21,6 +23,7 @@ struct ClaudeGPTRouterServiceStatus: Equatable {
         generation = payload["generation"] as? Int ?? 0
         state = payload["state"] as? String ?? ""
         active = payload["active"] as? Int ?? 0
+        executable = payload["executable"] as? String ?? ""
     }
 }
 
@@ -84,6 +87,11 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     private var desiredPort: Int?
     private var restartAttempt = 0
     private var lastHealthyStart: Date?
+    private let ownExecutable: String
+    private let portReaper: (Int) -> Bool
+    /// Build eines Dienstes, dessen Übernahme in diesem Lauf scheiterte: kein
+    /// neuer Versuch bei jedem Chat-Start, der alte Dienst bedient weiter.
+    private var failedTakeOverBuild: String?
 
     init(
         root: URL = ClaudeGPTRouterServiceSupervisor.defaultRoot(),
@@ -91,7 +99,9 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         spawner: @escaping Spawner = ClaudeGPTRouterServiceSupervisor.spawnFromAppBinary,
         statusResolver: @escaping (URL) -> ClaudeGPTRouterServiceStatus? = { ClaudeGPTRouterServiceClient.status(root: $0) },
         readyTimeout: TimeInterval = 10,
-        restartDelays: [TimeInterval] = [0.5, 1, 2, 5, 10, 30]
+        restartDelays: [TimeInterval] = [0.5, 1, 2, 5, 10, 30],
+        ownExecutable: String = ClaudeGPTRouterService.executablePath(of: getpid()) ?? "",
+        portReaper: @escaping (Int) -> Bool = { ClaudeGPTRouterServiceReaper.freePortIfHeldByOrphanedService(port: $0) }
     ) {
         self.root = root
         self.build = build
@@ -99,6 +109,8 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         self.statusResolver = statusResolver
         self.readyTimeout = readyTimeout
         self.restartDelays = restartDelays
+        self.ownExecutable = ownExecutable
+        self.portReaper = portReaper
     }
 
     /// `<Application Support>/WhisperM8/gpt-router`; wird der Socket-Pfad zu
@@ -124,13 +136,16 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         defer { lock.unlock() }
         desiredPort = port
         if let status = settledStatus(), status.state == "serving" {
-            if status.port == port, status.build == build {
+            switch Self.takeOverPlan(
+                status: status, port: port, ownExecutable: ownExecutable,
+                failedTakeOverBuild: failedTakeOverBuild, build: build
+            ) {
+            case .keepRunning:
                 watch(pid: status.pid)
                 return .success(())
-            }
-            if status.port == port {
-                // Älteres (oder anderes) Programm: neue Generation übernimmt
-                // den lauschenden Socket, die alte läuft aus.
+            case .takeOver:
+                // Älteres Programm am selben Ort: neue Generation übernimmt den
+                // lauschenden Socket, die alte läuft aus.
                 switch launch(port: port, takeOver: true) {
                 case .success:
                     return .success(())
@@ -139,15 +154,46 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
                     Logger.claudeGPTRouter.error(
                         "gpt_router_service_takeover_failed \(error.localizedDescription, privacy: .public)"
                     )
+                    failedTakeOverBuild = status.build
                     watch(pid: status.pid)
                     return .success(())
                 }
+            case .replace:
+                // Anderer Port oder anderer Programmort (die Übernahme würde
+                // abgelehnt): alte Generation gibt den Port sofort frei und
+                // läuft aus, die neue startet frisch.
+                ClaudeGPTRouterServiceClient.shutdown(root: root)
+                waitUntilPortFree(port)
             }
-            // Anderer Port eingestellt: alte Generation freigeben, neu starten.
-            ClaudeGPTRouterServiceClient.shutdown(root: root)
-            waitUntilPortFree(port)
+        }
+        if !ClaudeCodeProxyManager.isPortFree(port) {
+            // Ein Dienst ohne erreichbaren Steuer-Socket hielte den Port sonst
+            // bis zum Neustart des Macs.
+            _ = portReaper(port)
         }
         return launch(port: port, takeOver: false)
+    }
+
+    enum TakeOverPlan: Equatable {
+        case keepRunning
+        case takeOver
+        case replace
+    }
+
+    /// Reine Entscheidung — unit-getestet.
+    static func takeOverPlan(
+        status: ClaudeGPTRouterServiceStatus,
+        port: Int,
+        ownExecutable: String,
+        failedTakeOverBuild: String?,
+        build: String? = nil
+    ) -> TakeOverPlan {
+        guard status.port == port else { return .replace }
+        if let build, status.build == build { return .keepRunning }
+        if !status.executable.isEmpty, !ownExecutable.isEmpty, status.executable != ownExecutable {
+            return .replace
+        }
+        return failedTakeOverBuild == status.build ? .keepRunning : .takeOver
     }
 
     /// Status, aber nicht mitten in einer Übergabe: Die dauert Millisekunden;

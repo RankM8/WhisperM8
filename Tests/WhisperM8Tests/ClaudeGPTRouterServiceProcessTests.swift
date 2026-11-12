@@ -150,7 +150,9 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
             build: build,
             spawner: { [unowned self] arguments in try self.spawn(arguments).processIdentifier },
             readyTimeout: 10,
-            restartDelays: [0.1, 0.2]
+            restartDelays: [0.1, 0.2],
+            // Wie in der App: Aufsicht und Dienst sind dasselbe Programm.
+            ownExecutable: binary.path
         )
     }
 

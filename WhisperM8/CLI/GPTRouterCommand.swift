@@ -5,8 +5,14 @@ import Foundation
 /// der GPT-Mix-Router als eigener Prozess (Plan neustart-ohne-chatverlust.md,
 /// Paket 3). Gestartet nur von `ClaudeGPTRouterServiceSupervisor`, nie von Hand.
 ///
-/// Nur für Tests: `--codex-url` und `--anthropic-url` setzen feste Upstreams
-/// (ohne Konto-Profile und ohne Router-Token), wie der Test-Konstruktor des Routers.
+/// Nur im Debug-Build, nur für Tests: `--codex-url` und `--anthropic-url` setzen
+/// feste Upstreams (ohne Konto-Profile und ohne Router-Token). Im Release gibt
+/// es sie nicht — sonst bekäme ein Aufruf mit `--take-over` und fremder
+/// Adresse den echten Socket, und alle Anfragen samt OAuth gingen dorthin.
+///
+/// Ohne Test-Upstreams muss `--root` der Ordner sein, den die App selbst
+/// bestimmt (`ClaudeGPTRouterServiceSupervisor.defaultRoot()`). Die Test-Instanz
+/// hat einen eigenen Ordner und erreicht den Dienst der echten App so nicht.
 enum GPTRouterCommand {
     struct Arguments: Equatable {
         var root: URL
@@ -37,12 +43,14 @@ enum GPTRouterCommand {
                 port = parsed
             case "--take-over":
                 takeOver = true
+            #if DEBUG
             case "--codex-url":
                 guard let raw = value(), let url = URL(string: raw) else { return nil }
                 codexURL = url
             case "--anthropic-url":
                 guard let raw = value(), let url = URL(string: raw) else { return nil }
                 anthropicURL = url
+            #endif
             default:
                 return nil
             }
@@ -53,9 +61,21 @@ enum GPTRouterCommand {
         return Arguments(root: root, port: port, takeOver: takeOver, codexURL: codexURL, anthropicURL: anthropicURL)
     }
 
+    /// Echter Betrieb nur im Ordner der App; Test-Upstreams (nur Debug) dürfen
+    /// eigene Ordner nutzen.
+    static func isAllowedRoot(_ arguments: Arguments, expected: URL) -> Bool {
+        guard arguments.codexURL == nil else { return true }
+        return arguments.root.standardizedFileURL.resolvingSymlinksInPath().path
+            == expected.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
     static func run(arguments: [String]) async -> Int32 {
         guard let parsed = parse(arguments) else {
             CLIIO.err("Usage: WhisperM8 gpt-router --root <ordner> --port <port> [--take-over] (interner Modus)")
+            return 64
+        }
+        guard isAllowedRoot(parsed, expected: ClaudeGPTRouterServiceSupervisor.defaultRoot()) else {
+            CLIIO.err("gpt-router: --root muss der Ordner der App sein (\(ClaudeGPTRouterServiceSupervisor.defaultRoot().path)).")
             return 64
         }
         // Eigene Sitzung: kein SIGHUP vom Terminal oder von der App.
