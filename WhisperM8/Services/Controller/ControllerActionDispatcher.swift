@@ -131,7 +131,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
                 window: Self.draftInputWindow, now: moment),
             choiceListOpen: terminal.choiceListOpen,
             gridActive: window.isGridActive,
-            hasTerminal: terminal.isRunning
+            hasTerminal: terminal.isRunning,
+            shellAtPrompt: terminal.shellAtPrompt
         )
     }
 

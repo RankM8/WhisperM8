@@ -219,8 +219,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
                     return .failure(.conflict, PromptDeliveryGate.draftMessage)
                 }
-                // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop, entschieden).
-                let marked = Self.markedPrompt(prompt, actor: markerActor)
+                // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop) — nur bei Agent-Chats, nie in eine Shell.
+                let marked = Self.deliveredPrompt(prompt, actor: markerActor, toShell: controller.command.keyboardProfile == .plainShell)
                 clearedInput = controller.sendPrompt(marked, submit: submit)
                 return .success(session)
             }()
@@ -351,8 +351,9 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Schließt offene UI-Tabs — und ohne `stop` NUR die. Bewusst kein
     /// Gegenstück zu `workspace.archive`: die Session bleibt im Workspace, ein
     /// laufendes PTY läuft weiter (Registry ist sessionID-basiert, erneutes
-    /// Öffnen attached an denselben Controller inkl. Scrollback), Pin und
-    /// Grid-Mitgliedschaft bleiben. Deshalb im Normalfall kein Status-Guard:
+    /// Öffnen attached an denselben Controller inkl. Scrollback), der Pin
+    /// bleibt. Wie jedes Tab-Schließen verlässt der Chat offene Workspaces
+    /// (siehe `AgentWindowStore+GridTabClose`). Deshalb kein Status-Guard:
     /// Schließen ist nie destruktiv, egal ob das Ziel working oder
     /// awaitingInput ist.
     ///
@@ -856,13 +857,12 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     }
                 }
             } else {
-                let removed = store.removeSession(
-                    targetID, fromGridWorkspace: workspaceEntity.id,
-                    compacting: keepSlot ? false : nil
-                )
+                // `keptSlot` meldet den tatsächlichen Effekt (--keep-slot ODER „Close gaps…“ aus).
+                let compacting = WorkspaceSlotOps.removalCompacts(keepSlot: keepSlot, closeGapsEnabled: store.isGridAutoCompactEnabled())
+                let removed = store.removeSession(targetID, fromGridWorkspace: workspaceEntity.id, compacting: compacting)
                 return .ok(MembershipDetail(
                     outcome: removed ? "removed" : "notMember",
-                    keptSlot: (removed && keepSlot) ? true : nil
+                    keptSlot: (removed && !compacting) ? true : nil
                 ), workspaceEntity)
             }
         }
@@ -1701,15 +1701,6 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: - Audit + Marker
 
-    /// Präfix der Markerzeile — die einzige Quelle dieser Zeile ist die App.
-    static let markerPrefix = "[via whisperm8 chats"
-
-    /// Marker-Zeile für gesendete Prompts (Kennzeichnung + Ein-Hop-Regel).
-    static func markedPrompt(_ prompt: String, actor: String) -> String {
-        let time = markerTimeFormatter.string(from: Date())
-        return "\(markerPrefix) · von \(actor) · \(time)]\n\(prompt)"
-    }
-
     private func auditActorLabel(_ actor: ChatsControlActor) async -> String {
         guard let idString = actor.sessionID, let id = UUID(uuidString: idString) else {
             return "extern"
@@ -1743,12 +1734,6 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             outcome: outcome, promptChars: prompt?.count,
             promptHead: prompt.map(ChatsAuditLog.promptHead)))
     }
-
-    private static let markerTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 
     // MARK: - Outcome-Typen
 

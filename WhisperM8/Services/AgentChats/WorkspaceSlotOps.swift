@@ -246,6 +246,13 @@ enum WorkspaceSlotOps {
 
     // MARK: - Entfernen / Verschieben / Tauschen
 
+    /// Rücken die übrigen Chats beim Entfernen nach? `--keep-slot` erzwingt
+    /// Nein, sonst entscheidet „Close gaps…" (`gridAutoCompactEnabled`). Die
+    /// CLI meldet `keptSlot` genau dann, wenn hier `false` herauskommt.
+    static func removalCompacts(keepSlot: Bool, closeGapsEnabled: Bool) -> Bool {
+        !keepSlot && closeGapsEnabled
+    }
+
     /// Setzt den Slot der Session auf `nil`. Mit `compacting` ruecken die
     /// uebrigen Chats nach und die Stufe faellt auf die kleinste passende.
     ///

@@ -114,7 +114,17 @@ ausgeblendet oder im Archiv-Modus, übernimmt `ProjectViewLiveSync`
 `AgentSidebarModelBuilder.activeSessionIDsByProject`. Diese kleine View
 hängt nur im Fenster, solange irgendwo eine Projekt-Ansicht offen ist, und
 beobachtet Terminal-Registry und Job-Modell selbst, damit deren Ticks nicht
-den Fensterbody neu auswerten.
+den Fensterbody neu auswerten. Ihr Body sammelt nur die Eingaben; die
+Aktiv-Menge rechnet der `.task`, wenn sich eine davon geändert hat.
+
+## Fokus beim Öffnen eines Workspace
+
+Wer zwischen zwei sichtbaren Rastern wechselt (L2), landet auf der Kachel,
+die im Ziel zuletzt den Fokus hatte — auch wenn der gerade fokussierte Chat
+in beiden Workspaces liegt. Wer aus der Einzelansicht öffnet (Kopf in der
+Seitenleiste, ⊞, `chats workspace open` ohne `--slot`), behält den gerade
+angesehenen Chat als Fokus, sofern er im Ziel liegt. Ein gezielter Klick auf
+einen Chat unter einem Workspace fokussiert immer genau diesen Chat.
 
 ## Mehrere Fenster
 
@@ -130,3 +140,17 @@ Terminals zu stehlen. Details: [`multiwindow.md`](multiwindow.md).
 - Snapshots: `make snapshots ONLY=raster-` rendert alle Stufen, die
   Projekt-Ansicht nach einem weggefallenen Chat, einen einzelnen Chat und
   einen leeren Workspace (hell und dunkel).
+
+## Offene Punkte
+
+- Der Live-Abgleich der Projekt-Ansicht läuft bei jeder geänderten Eingabe;
+  günstiger wäre, ihn nur bei einer tatsächlich geänderten Aktiv-Menge
+  aufzurufen.
+- Es fehlen Tests für das Wiederöffnen in ein Ersatzfenster (das
+  Ursprungsfenster ist zu) und ein Test auf Handler-Ebene für `keptSlot` bei
+  `chats workspace remove`; die Entscheidung selbst ist pur getestet
+  (`WorkspaceSlotOps.removalCompacts`).
+- Leistung: Der Aufbau der Panes und die Seitenleiste, die bei jedem
+  Fokuswechsel mitgerechnet wird, siehe
+  [`../../performance-messung.md`](../../performance-messung.md), Abschnitt
+  „Raster".

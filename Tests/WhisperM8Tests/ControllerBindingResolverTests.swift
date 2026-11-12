@@ -692,4 +692,17 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertNil(action(.chordPending(duration: 1), .recording(phase: .recording, targetIsChat: true)))
         XCTAssertNil(action(.chordCompleted, .chatPicker))
     }
+
+    /// E2E-Befund 12.11.2026: An der Shell-Eingabezeile leert R3 die Zeile
+    /// (und damit den Entwurfs-Verdacht nach `chats send`); in nano, vim und
+    /// Co. (Vollbild-Puffer) bleibt es abgelehnt.
+    func testR3ClearsShellOnlyAtItsPrompt() {
+        let atPrompt = chat(.unknown, profile: .shell) { $0.shellAtPrompt = true }
+        XCTAssertEqual(action(.holdBegan(.r3), atPrompt), .chatClearInput)
+        XCTAssertEqual(action(.holdPending(.r3, duration: 0.6), atPrompt), .holdProgress(.r3, duration: 0.6))
+        let inEditor = chat(.unknown, profile: .shell)
+        XCTAssertEqual(action(.holdBegan(.r3), inEditor), .rejected)
+        let ended = chat(.ended, profile: .shell) { $0.shellAtPrompt = true }
+        XCTAssertNotEqual(action(.holdBegan(.r3), ended), .chatClearInput)
+    }
 }

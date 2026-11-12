@@ -227,8 +227,13 @@ Eingabefeld (`--force` überstimmt; ein alter Rückleger wird stattdessen geleer
 siehe unten). Danach Bracketed Paste
 (`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
-bekommt die Marker-Zeile `[via whisperm8 chats · von <actor> · HH:MM]`
-vorangestellt (Ein-Hop-Regel im Skill).
+an einen Claude- oder Codex-Chat bekommt die Marker-Zeile `[via whisperm8 chats ·
+von <actor> · HH:MM]` vorangestellt (Ein-Hop-Regel im Skill). An Shell-Tabs geht
+der Text ohne Marker: Dessen Zeilenumbruch schickte sonst `[via …` als Befehl
+ab, und die Herkunft steht ohnehin im Audit-Log (gilt auch für die
+Warteschlange). Bekannte Grenze: Läuft `claude` oder `codex` selbst in einem
+Shell-Tab, bekommt dieser Agent `whisperm8 chats send` ebenfalls ohne Marker;
+erkannt wird nur die Art des Tabs, nicht das Programm darin.
 
 ### Zurückgelegter Prompt nach Abbruch (Send-Schutz)
 
@@ -352,7 +357,9 @@ bewusst schwache Schwester von `archive`. Contract:
 
 ## Weitere Tab-/Fenster-Befehle
 
-- **`reopen`** stellt den zuletzt geschlossenen Tab wieder her (LIFO, Cap 20).
+- **`reopen`** stellt den zuletzt geschlossenen Tab wieder her (LIFO, Cap 20),
+  an seiner alten Stelle in der Tab-Leiste und, falls er dabei einen offenen
+  Workspace verlassen hat, auch an seiner alten Kachel.
   Die History lebt ephemer im `AgentWindowStore` (bewusst nicht persistiert —
   App-Neustart leert sie) und wird von `closeTab` UND der
   `setOpenTabIDs`-View-Bridge gefüttert (X-Button/⌘W/Bulk); Fenster-Close mit
@@ -379,8 +386,10 @@ bewusst schwache Schwester von `archive`. Contract:
     (`displacedSessionID`)/`alreadyMember`, jeweils mit `slot` (1-basiert).
   - `remove` **kompaktiert per Default** (übrige rücken nach vorn, Stufe
     fällt — global abschaltbar via `gridAutoCompactEnabled`); `--keep-slot`
-    erzwingt für diesen Aufruf stabile Positionen (Slot wird nur leer,
-    Outcome-Feld `keptSlot`).
+    erzwingt für diesen Aufruf stabile Positionen (Slot wird nur leer).
+    Das Outcome-Feld `keptSlot: true` steht immer dann, wenn der Slot leer
+    geblieben ist — mit `--keep-slot` und ebenso, wenn „Close gaps…“ in den
+    Einstellungen aus ist.
   - Ablehnungen sind benannt statt gesammelt: Session nicht gefunden →
     Exit 3, Session archiviert → Exit 4 (+ `unarchive`-Hinweis), Slot
     außerhalb → Exit 1.

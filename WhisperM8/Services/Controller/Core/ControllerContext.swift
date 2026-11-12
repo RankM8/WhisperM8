@@ -37,6 +37,9 @@ struct ControllerChatState: Equatable, Sendable {
     var gridActive: Bool = false
     /// Ein lebendes Terminal ist da (nicht nur der Verlauf).
     var hasTerminal: Bool = true
+    /// Shell an ihrer Eingabezeile (kein Vollbild-Programm): R3 halten darf
+    /// die Zeile leeren.
+    var shellAtPrompt: Bool = false
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

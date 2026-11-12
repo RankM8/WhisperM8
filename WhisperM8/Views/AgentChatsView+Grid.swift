@@ -277,8 +277,8 @@ extension AgentChatsView {
         .background {
             GeometryReader { geo in
                 Color.clear
-                    .onAppear { gridAreaSize = geo.size }
-                    .onChange(of: geo.size) { _, size in gridAreaSize = size }
+                    .onAppear { gridAreaSize.update(geo.size) }
+                    .onChange(of: geo.size) { _, size in gridAreaSize.update(size) }
             }
         }
         .onChange(of: selectedSessionID) { _, selected in
@@ -403,7 +403,9 @@ extension AgentChatsView {
                     JarvisNotesToggleButton(windowID: windowID, sessionIDs: Set(entity.occupiedSessionIDs))
                 }
                 if entity.sourceProjectID == nil {
-                    gridCapacityPicker(entity: entity, available: gridAreaSize)
+                    GridCapacityPicker(entity: entity, area: gridAreaSize) { stage in
+                        requestCapacityChange(entity: entity, to: stage)
+                    }
                 }
             }
         }
@@ -413,50 +415,6 @@ extension AgentChatsView {
     }
 
     // MARK: - Kapazitäts-Picker (F10)
-
-    /// Kompakter Stufen-Picker im Grid-Chrome (1 bis 9). Stufen,
-    /// die nicht in die übergebene GRID-Fläche passen (~240 pt je Spalte,
-    /// ~200 pt je Zeile, inkl. 1-px-Divider), werden ausgeblendet — die
-    /// aktuelle Stufe bleibt immer sichtbar.
-    func gridCapacityPicker(entity: AgentGridWorkspace, available: CGSize) -> some View {
-        HStack(spacing: 2) {
-            ForEach(AgentGridWorkspace.allowedCapacities, id: \.self) { stage in
-                if stage == entity.capacity || capacityStageFits(stage, in: available) {
-                    Button {
-                        requestCapacityChange(entity: entity, to: stage)
-                    } label: {
-                        Text(Self.capacityLabel(stage))
-                            .font(.system(size: 11, weight: stage == entity.capacity ? .bold : .medium).monospacedDigit())
-                            .foregroundStyle(stage == entity.capacity ? AgentTheme.textPrimary : AgentTheme.textSecondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(
-                                stage == entity.capacity ? AgentTheme.accentTint : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 5)
-                            )
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Capacity \(Self.capacityLabel(stage))")
-                    .accessibilityLabel("Set capacity to \(Self.capacityLabel(stage))")
-                }
-            }
-        }
-        .padding(3)
-        .background(AgentTheme.header.opacity(0.92), in: RoundedRectangle(cornerRadius: 7))
-        .overlay {
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(AgentTheme.border, lineWidth: 1)
-        }
-    }
-
-    private func capacityStageFits(_ stage: Int, in size: CGSize) -> Bool {
-        guard size.width > 0, size.height > 0 else { return true }
-        let columns = CGFloat(AgentGridWorkspace.columns(forCapacity: stage))
-        let rows = CGFloat(AgentGridWorkspace.rows(forCapacity: stage))
-        return columns * GridSplitResolver.minPane + (columns - 1) <= size.width
-            && rows * 200 + (rows - 1) <= size.height
-    }
 
     /// Stufe wählen: Wachsen wendet sofort an. Verkleinern ebenfalls, solange
     /// die Belegung nach dem Kompaktieren in die Zielstufe passt (Löcher aus
@@ -708,6 +666,8 @@ extension AgentChatsView {
         projectsByID: [UUID: AgentProject]
     ) -> some View {
         let occupied = entity.slots.indices.contains(index) ? entity.slots[index] : nil
+        // Detail-Stufe: wie oft Slot-Bodies bei Aufbau und Fokuswechsel laufen.
+        let _ = PerfDetailGate.isEnabled ? PerfSignposts.grid.emitEvent("grid.bodyEval.slot") : ()
         GridSlotDropArea(
             slotIndex: index,
             occupiedTitle: occupied.flatMap { sessionsByID[$0]?.title },

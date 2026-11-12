@@ -148,4 +148,17 @@ final class TerminalControlKeyTests: XCTestCase {
         XCTAssertTrue(
             tracker(after: [.escape], status: .working, startingWithDraft: false).mayHoldRestoredPrompt)
     }
+
+    /// R3 leeren: Shell nur im normalen Puffer, Agent-Chats wie Ctrl+U.
+    func testControllerMayClearInput() {
+        func may(_ profile: TerminalKeyboardProfile, _ status: AgentSessionRuntimeStatus?, alternate: Bool) -> Bool {
+            TerminalControlKey.controllerMayClearInput(
+                status: status, profile: profile, alternateBuffer: alternate, choiceListOpen: false)
+        }
+        XCTAssertTrue(may(.plainShell, nil, alternate: false))
+        XCTAssertFalse(may(.plainShell, nil, alternate: true), "nano, vim, less")
+        XCTAssertTrue(may(.claudeCodeChat, .idle, alternate: true))
+        XCTAssertFalse(may(.claudeCodeChat, .awaitingInput, alternate: true))
+        XCTAssertFalse(may(.claudeAgentsView, .idle, alternate: false))
+    }
 }

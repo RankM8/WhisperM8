@@ -161,19 +161,22 @@ final class AgentWindowStore {
     /// Entfernte IDs landen in der Reopen-History — die View-Tab-Closes
     /// (X-Button, ⌘W, Bulk) laufen genau ueber diese Bridge.
     func setOpenTabIDs(_ ids: [UUID], in windowID: UUID) {
-        let removed = openTabIDs(in: windowID).filter { !ids.contains($0) }
+        let before = openTabIDs(in: windowID)
+        let removed = before.filter { !ids.contains($0) }
         let focusBefore = gridFocusBeforeClosing(in: windowID)
         updateWindow(windowID) { $0.openTabIDs = ids }
         let released = releaseClosedTabsFromOpenGrids(
             removed, closingWindowID: windowID, focusBefore: focusBefore
         )
-        recordClosedTabs(removed, windowID: windowID, releasedFrom: released)
+        recordClosedTabs(removed, windowID: windowID, releasedFrom: released,
+                         positions: ClosedTabPosition.positions(of: removed, in: before))
     }
 
     /// Schliesst einen Tab. Selektion rueckt auf den vorherigen Tab (sonst den
     /// neuen letzten), nie ins Leere, solange noch Tabs da sind.
     func closeTab(_ sessionID: UUID, in windowID: UUID) {
-        let wasOpen = openTabIDs(in: windowID).contains(sessionID)
+        let before = openTabIDs(in: windowID)
+        let wasOpen = before.contains(sessionID)
         let focusBefore = gridFocusBeforeClosing(in: windowID)
         updateWindow(windowID) { window in
             guard let index = window.openTabIDs.firstIndex(of: sessionID) else { return }
@@ -189,7 +192,8 @@ final class AgentWindowStore {
             let released = releaseClosedTabsFromOpenGrids(
                 [sessionID], closingWindowID: windowID, focusBefore: focusBefore
             )
-            recordClosedTabs([sessionID], windowID: windowID, releasedFrom: released)
+            recordClosedTabs([sessionID], windowID: windowID, releasedFrom: released,
+                             positions: ClosedTabPosition.positions(of: [sessionID], in: before))
         }
     }
 
@@ -204,6 +208,8 @@ final class AgentWindowStore {
         /// (offen in einem Fenster), samt seiner Stelle — Wiederöffnen setzt
         /// ihn genau dorthin zurück.
         var releasedFrom: [ReleasedSlot] = []
+        /// Stelle in der Tab-Leiste — Wiederöffnen setzt den Tab dorthin.
+        var tabPosition: ClosedTabPosition?
     }
 
     /// Wo ein geschlossener Chat im Workspace stand: `order` = Anzahl der
@@ -225,14 +231,16 @@ final class AgentWindowStore {
     private func recordClosedTabs(
         _ sessionIDs: [UUID],
         windowID: UUID,
-        releasedFrom: [UUID: [ReleasedSlot]] = [:]
+        releasedFrom: [UUID: [ReleasedSlot]] = [:],
+        positions: [UUID: ClosedTabPosition] = [:]
     ) {
         guard !sessionIDs.isEmpty else { return }
         for id in sessionIDs {
             recentlyClosedTabs.removeAll { $0.sessionID == id }
             recentlyClosedTabs.append(ClosedTabRecord(
                 sessionID: id, windowID: windowID,
-                releasedFrom: releasedFrom[id] ?? []
+                releasedFrom: releasedFrom[id] ?? [],
+                tabPosition: positions[id]
             ))
         }
         if recentlyClosedTabs.count > Self.reopenHistoryCap {
@@ -251,7 +259,16 @@ final class AgentWindowStore {
             guard isEligible(entry.sessionID),
                   windowID(containingTab: entry.sessionID) == nil else { continue }
             let target = hasWindow(entry.windowID) ? entry.windowID : state.primaryWindowID
-            openTab(entry.sessionID, in: target)
+            // An die alte Stelle in der Tab-Leiste (nur im Ursprungsfenster —
+            // im Rückfall-Fenster hinten an), selektiert wie `openTab`.
+            let position = target == entry.windowID ? entry.tabPosition : nil
+            updateWindow(target) { window in
+                if !window.openTabIDs.contains(entry.sessionID) {
+                    let index = position?.insertionIndex(in: window.openTabIDs) ?? window.openTabIDs.count
+                    window.openTabIDs.insert(entry.sessionID, at: index)
+                }
+                window.selectedSessionID = entry.sessionID
+            }
             // Zurück an die alte Stelle in den Workspaces, die der Chat beim
             // Schließen verlassen hat. Klappt das nicht (voll, gelöscht),
             // bleibt es beim offenen Tab — und der Grund steht im Log.
@@ -887,7 +904,12 @@ final class AgentWindowStore {
             window.activeWorkspaceID = workspaceID
             window.showsGrid = true
             Self.materializeSlotTabs(&window, entity: entity, skipping: foreignHosted)
-            Self.repairGridFocus(&window, entity: entity, lastFocusInWorkspace: remembered)
+            // Nur wer ein sichtbares Raster verlässt (L2 zwischen zwei
+            // Rastern), bekommt die gemerkte Kachel vor der Auswahl. Aus der
+            // Einzelansicht (Kopf, ⊞, `workspace open`) gewinnt wie früher
+            // der gerade angesehene Chat, sofern er im Ziel liegt.
+            Self.repairGridFocus(&window, entity: entity, lastFocusInWorkspace: remembered,
+                                 preferLastFocus: current.showsGrid)
         }
         return alreadyHere ? .alreadyActiveHere : .activated
     }
@@ -1097,13 +1119,29 @@ final class AgentWindowStore {
     }
 
     /// Fokus-Invariante im sichtbaren Grid: Selektion muss ein belegter Slot
-    /// sein — bevorzugt der gemerkte Pane-Fokus (`gridFocusSessionID`, damit
+    /// sein. Reihenfolge: die aktuelle Auswahl, sonst die im Ziel zuletzt
+    /// benutzte Kachel (`lastFocusInWorkspace`, nur beim echten Wechsel
+    /// gesetzt), sonst der gemerkte Pane-Fokus (`gridFocusSessionID`, damit
     /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
     /// Slot; leerer Workspace → `nil`.
+    ///
+    /// `preferLastFocus`: Wechsel von einem sichtbaren Raster ins andere.
+    /// Dann kommt die gemerkte Kachel VOR der Auswahl — liegt der gerade
+    /// fokussierte Chat auch im Ziel (ein Chat in zwei Workspaces), gewann
+    /// sonst er, und der Rückweg landete auf der falschen Kachel (E2E-Befund
+    /// 12.11.2026). Aus der Einzelansicht bleibt der angesehene Chat vorn.
+    /// Wer gezielt einen Chat öffnet (`navigateToWorkspaceChat`), fokussiert
+    /// ihn danach selbst.
     private static func repairGridFocus(
         _ window: inout AgentChatWindowState, entity: AgentGridWorkspace,
-        lastFocusInWorkspace: UUID? = nil
+        lastFocusInWorkspace: UUID? = nil,
+        preferLastFocus: Bool = false
     ) {
+        if preferLastFocus, let lastFocusInWorkspace {
+            window.selectedSessionID = lastFocusInWorkspace
+            window.gridFocusSessionID = lastFocusInWorkspace
+            return
+        }
         if let selected = window.selectedSessionID,
            entity.slotIndex(of: selected) != nil {
             window.gridFocusSessionID = selected

@@ -52,16 +52,21 @@ extension AgentTerminalController {
 
     /// R3 halten: ganze Eingabe leeren (`TerminalControlKey.clearInputBursts`),
     /// in Stößen alle 15 ms über den Main-Run-Loop, ohne zu blockieren. Nicht
-    /// in einer Rückfrage, nur bei Claude und Codex. Der Entwurfs-Tracker gilt
-    /// danach als leer.
+    /// in einer Rückfrage; in einer Shell nur an der Eingabezeile
+    /// (`TerminalControlKey.controllerMayClearInput`). Der Entwurfs-Tracker
+    /// gilt danach als leer.
     /// - Returns: `false`, wenn kein Prozess läuft, eine Rückfrage offen ist
-    ///   oder der Chat eine Shell ist.
+    ///   oder in der Shell ein Vollbild-Programm läuft.
     @discardableResult
     func clearInputFromController() -> Bool {
         guard isRunning else { return false }
         let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
         let now = Date()
-        guard controllerAllows(.killLineStart, status: status, now: now) else { return false }
+        guard TerminalControlKey.controllerMayClearInput(
+            status: status, profile: command.keyboardProfile,
+            alternateBuffer: terminal.getTerminal().isCurrentBufferAlternate,
+            choiceListOpen: controllerChoiceListOpen(status: status, at: now)
+        ) else { return false }
         noteComposerCleared()
         controllerMarks.lastDraftInputAt = nil
         controllerMarks.choiceListClosed()
