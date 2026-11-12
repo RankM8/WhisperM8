@@ -63,6 +63,21 @@ final class ClaudeGPTRouterToken {
         return fresh
     }
 
+    /// Nur lesen, nie erzeugen — für den Router-Dienst. Erzeugte er selbst eins,
+    /// könnten App und Dienst gleichzeitig verschiedene Tokens schreiben.
+    /// `nil`, solange die App noch keins angelegt hat.
+    func existing() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached { return cached }
+        guard let data = try? Data(contentsOf: fileURL),
+              let text = String(data: data, encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              Self.isWellFormed(text) else { return nil }
+        cached = text
+        return text
+    }
+
     static func isWellFormed(_ token: String) -> Bool {
         token.count >= 32 && token.allSatisfy { $0.isHexDigit }
     }
