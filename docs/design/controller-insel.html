@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controller-Insel – Entwurf</title>
+<style>
+  /* Farben aus AppTheme.swift; die Insel an der Notch ist immer schwarz wie die Hardware. */
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#8d8e93; --line:rgba(0,0,0,.09);
+    --wall:linear-gradient(160deg,#cfd8ee,#e8d9ee 55%,#f3e4d6); --menubar:rgba(255,255,255,.72);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --pill-bg:rgba(250,250,252,.94); --pill-ink:#1c1c1e; --pill-ink2:#5f6064; --pill-ink3:#8d8e93; --pill-line:rgba(0,0,0,.12);
+    --pill-key:#ffffff; --pill-key-line:rgba(0,0,0,.16); --pill-mark:rgba(94,106,210,.13); --pill-mark-line:#5e6ad2;
+    --accent:#5e6ad2; --working:#3fa873; --awaiting:#c9962a; --error:#d6473d;
+  }
+  [data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#76777d; --line:rgba(255,255,255,.09);
+    --wall:linear-gradient(160deg,#1b2238,#2a2140 55%,#3a2b2e); --menubar:rgba(30,30,34,.7);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.07);
+    --pill-bg:rgba(22,22,25,.95); --pill-ink:#f1f1f3; --pill-ink2:#a4a5ab; --pill-ink3:#76777d; --pill-line:rgba(255,255,255,.12);
+    --pill-key:#2a2a2e; --pill-key-line:rgba(255,255,255,.16); --pill-mark:rgba(124,132,232,.18); --pill-mark-line:#7c84e8;
+    --accent:#7c84e8; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.4 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header p { margin:0; color:var(--ink2); }
+  header button { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  main { padding:24px 28px 60px; display:grid; grid-template-columns:repeat(auto-fill,minmax(560px,1fr)); gap:26px; }
+  h2 { grid-column:1/-1; margin:14px 0 -8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  figure { margin:0; }
+  figure.full { grid-column:1/-1; }
+  figcaption { margin:8px 2px 0; color:var(--ink2); max-width:78ch; }
+  figcaption b { color:var(--ink); font-weight:600; }
+  .rules { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul { margin:6px 0 0; padding-left:18px; }
+  .rules li { margin:3px 0; }
+
+  /* Bildschirm-Attrappe */
+  .screen { position:relative; height:360px; border-radius:12px; overflow:hidden; background:var(--wall); border:1px solid var(--line); }
+  .screen.tall { height:440px; }
+  .screen.huge { height:520px; }
+  .menubar { position:absolute; inset:0 0 auto 0; height:32px; background:var(--menubar); backdrop-filter:blur(14px);
+             display:flex; align-items:center; justify-content:space-between; padding:0 14px; font-size:12px; color:var(--ink); z-index:1; }
+  .menubar.nonotch { height:24px; }
+  .menubar .l, .menubar .r { display:flex; gap:14px; opacity:.85; }
+
+  /* Agent-Chats-Fenster dahinter, damit man sieht, was frei bleibt */
+  .win { position:absolute; left:24px; right:24px; top:48px; bottom:18px; background:var(--win); border:1px solid var(--border);
+         border-radius:10px; box-shadow:0 14px 40px rgba(0,0,0,.22); display:grid; grid-template-columns:190px 1fr; overflow:hidden; }
+  .win.nonotch { top:40px; }
+  .win .side { background:var(--sidebar); border-right:1px solid var(--border); padding:30px 8px 8px; font-size:11.5px; color:var(--ink2); }
+  .win .side div { height:22px; display:flex; align-items:center; gap:7px; padding:0 8px; border-radius:5px; white-space:nowrap; overflow:hidden; }
+  .win .side .sel { background:rgba(127,127,127,.14); color:var(--ink); }
+  .win .side .grp { font-weight:600; color:var(--ink); margin-top:6px; }
+  .win .chat { display:flex; flex-direction:column; min-width:0; }
+  .win .tabs { height:30px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11px; color:var(--ink2); }
+  .win .tabs span { padding:3px 8px; border-radius:5px; }
+  .win .tabs .on { background:var(--win); color:var(--ink); border:1px solid var(--border); }
+  .win .term { flex:1; background:var(--term); padding:12px 16px; font:11.5px/1.55 "SF Mono",ui-monospace,monospace; color:var(--ink2); overflow:hidden; }
+  .win .input { margin:0 14px 8px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:11.5px "SF Mono",ui-monospace,monospace; color:var(--ink); background:var(--term); }
+  .win .input::before { content:"> "; color:var(--accent); }
+  .win .legend { height:26px; border-top:1px solid var(--border); background:var(--header); display:flex; align-items:center; gap:12px; padding:0 12px; font-size:11px; color:var(--ink2); white-space:nowrap; overflow:hidden; }
+  .win .legend b { color:var(--ink); font-weight:600; }
+  .win .legend .k { display:inline-flex; align-items:center; gap:4px; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.8; }
+  .dot.working { background:#4cc38a; opacity:1; }
+  .dot.awaiting { background:#e9b949; border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.error { background:transparent; border:1.5px solid #e5594f; opacity:1; }
+
+  /* ── Insel an der Notch ─────────────────────────────────────── */
+  .hang { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; color:#f4f4f6; z-index:3; }
+  .hang .band { width:184px; height:32px; background:#000; flex:none; }
+  .hang .body { background:#000; min-width:184px; border-radius:10px 10px 20px 20px; box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  .hang .body.small { border-radius:0 0 14px 14px; }
+  .grow { animation:grow .26s cubic-bezier(.2,.9,.25,1.05) both; transform-origin:top center; }
+  @keyframes grow { from { clip-path:inset(0 calc(50% - 92px) calc(100% - 24px) calc(50% - 92px) round 0 0 12px 12px); } }
+
+  /* ── Insel ohne Notch: Pille unter der Menüleiste ──────────── */
+  .pill { position:absolute; top:30px; left:50%; transform:translateX(-50%); background:var(--pill-bg); color:var(--pill-ink);
+          border:1px solid var(--pill-line); border-radius:20px; box-shadow:0 12px 30px rgba(0,0,0,.22); backdrop-filter:blur(18px); z-index:3; }
+
+  /* Gemeinsame Bausteine */
+  .island-head { display:flex; align-items:center; gap:8px; padding:9px 14px 6px; font-size:11px; color:#8d8e93; white-space:nowrap; }
+  .pill .island-head { color:var(--pill-ink3); }
+  .island-head .layer { font-weight:700; color:#f4f4f6; letter-spacing:.02em; }
+  .pill .island-head .layer { color:var(--pill-ink); }
+  .island-head .target { margin-left:auto; display:flex; align-items:center; gap:6px; max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+  .island-head .target span { overflow:hidden; text-overflow:ellipsis; }
+
+  .g { display:inline-flex; align-items:center; justify-content:center; height:20px; min-width:20px; padding:0 4px; border-radius:10px;
+       background:#2a2a2e; border:1px solid rgba(255,255,255,.14); color:#f4f4f6; font-size:11px; font-weight:700; line-height:1; flex:none; }
+  .g.sq { border-radius:5px; padding:0 5px; }
+  .pill .g { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+
+  .hints { display:flex; flex-wrap:wrap; gap:6px 14px; padding:2px 14px 12px; font-size:12px; }
+  .hints .h { display:inline-flex; align-items:center; gap:6px; color:#d6d6da; white-space:nowrap; }
+  .pill .hints .h { color:var(--pill-ink); }
+  .hints .h.off { opacity:.38; }
+
+  /* Reiter */
+  .seg { display:flex; gap:2px; margin:0 12px 6px; padding:2px; background:rgba(255,255,255,.08); border-radius:8px; }
+  .pill .seg { background:rgba(127,127,127,.12); }
+  .seg span { flex:1; text-align:center; font-size:11.5px; font-weight:600; padding:4px 0; border-radius:6px; color:#a4a5ab; }
+  .pill .seg span { color:var(--pill-ink2); }
+  .seg span.on { background:rgba(255,255,255,.16); color:#fff; }
+  .pill .seg span.on { background:var(--pill-key); color:var(--pill-ink); box-shadow:0 1px 2px rgba(0,0,0,.12); }
+
+  /* Liste */
+  .rows { padding:0 8px 4px; }
+  .r { display:grid; grid-template-columns:16px 1fr auto; gap:9px; align-items:center; height:34px; padding:0 8px; border-radius:8px; }
+  .r .t { font-size:12.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#f4f4f6; }
+  .pill .r .t { color:var(--pill-ink); }
+  .r .t small { font-weight:400; color:#8d8e93; margin-left:6px; font-size:11px; }
+  .pill .r .t small { color:var(--pill-ink3); }
+  .r .w { font-size:11px; color:#8d8e93; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+  .pill .r .w { color:var(--pill-ink3); }
+  .r.cur .t { font-weight:700; }
+  .r.mark { background:rgba(124,132,232,.24); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .pill .r.mark { background:var(--pill-mark); box-shadow:inset 0 0 0 1.5px var(--pill-mark-line); }
+  .r .sw { width:15px; height:15px; border-radius:4px; color:#fff; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .more { text-align:center; font-size:11px; color:#76777d; padding:0 0 4px; }
+  .pill .more { color:var(--pill-ink3); }
+  .foot { display:flex; gap:14px; justify-content:center; padding:6px 14px 11px; font-size:11px; color:#a4a5ab; border-top:1px solid rgba(255,255,255,.08); }
+  .pill .foot { color:var(--pill-ink2); border-top-color:var(--pill-line); }
+  .foot span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+
+  /* Quick Draw: Raute wie die Tasten */
+  .diamond { display:grid; grid-template-columns:repeat(3,152px); grid-template-rows:repeat(3,44px); gap:4px; padding:4px 14px 14px; justify-content:center; }
+  .slot { display:flex; align-items:center; gap:7px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,.07); font-size:12px; white-space:nowrap; color:#f4f4f6; }
+  .pill .slot { background:rgba(127,127,127,.10); color:var(--pill-ink); }
+  .slot.top { grid-column:2; grid-row:1; } .slot.left { grid-column:1; grid-row:2; }
+  .slot.right { grid-column:3; grid-row:2; } .slot.bottom { grid-column:2; grid-row:3; }
+  .slot.off { opacity:.36; }
+  .slot.hit { background:rgba(124,132,232,.30); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .slot .chev { margin-left:auto; color:#8d8e93; }
+  .center { grid-column:2; grid-row:2; display:flex; align-items:center; justify-content:center; font-size:11px; color:#76777d; }
+  .pill .center { color:var(--pill-ink3); }
+  .note-inline { padding:0 14px 12px; font-size:11px; color:#e9b949; text-align:center; }
+  .pill .note-inline { color:var(--awaiting); }
+
+  /* Vorher/Nachher nebeneinander */
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .chin { height:24px; display:flex; align-items:center; justify-content:center; gap:12px; padding:0 14px; font-size:12px; font-weight:600; }
+  .chip { display:inline-flex; align-items:center; gap:6px; }
+  .chip.working { color:#4cc38a; } .chip.awaiting { color:#e9b949; }
+  .tag { position:absolute; left:10px; bottom:10px; font-size:11px; color:var(--ink2); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 7px; z-index:4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Controller-Insel</h1>
+  <p>Entwurf: L1 Schreiben, R1 Schnellbefehle, L2 Wohin — oben an der Notch statt unten über dem Eingabefeld</p>
+  <button id="theme">Hell / Dunkel</button>
+</header>
+<main>
+
+  <div class="rules">
+    <b>Was gilt</b>
+    <ul>
+      <li><b>Tippen</b> (kurz, ohne zweite Taste): L1 voriger Chat, R1 nächster Chat, L2 letzter Chat. Der Wechsel passiert beim Loslassen.</li>
+      <li><b>Halten</b>: Die Taste wird zur Ebene. Kombinationen wirken sofort; die Insel erscheint erst nach 0,3 s, damit schnelle Griffe nichts aufblitzen lassen.</li>
+      <li>Loslassen ohne Kombination tut nichts (außer bei L2 mit offener Liste: dorthin wechseln). L1 + R1 zusammen 1 s halten pausiert wie bisher. R2 diktiert auf jeder Ebene.</li>
+      <li>Die Insel sitzt auf dem Bildschirm des Agent-Chats-Fensters: mit Notch wächst sie aus der Notch, ohne Notch hängt sie als Pille unter der Menüleiste. Die Legende unten bleibt, wie sie ist.</li>
+    </ul>
+  </div>
+
+  <h2>Wo sie sitzt</h2>
+
+  <figure class="full">
+    <div class="screen huge">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>E2E Befunde Raster</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>E2E Befunde</span></div>
+          <div class="term">⏺ Ich lege den Arbeitsordner an und baue zuerst den Entwurf.<br>⏺ Bash(git worktree add -b feat/controller-insel …)<br>&nbsp;&nbsp;⎿ HEAD is now at d9c9710a<br><br>⏺ Write(docs/design/controller-insel.html)<br>&nbsp;&nbsp;⎿ Wrote 412 lines</div>
+          <div class="input">und dann die Insel auch für die Ausgabemodi</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="g">✕</span>Senden</span><span class="k"><span class="g">○</span>Zurück</span><span class="k"><span class="g sq">R2</span>Diktieren</span><span class="k"><span class="g sq">L1</span><span class="g sq">R1</span><span class="g sq">L2</span>halten: Ebenen</span></div>
+        </div>
+      </div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:440px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div>
+        <div class="seg"><span class="on">Chats</span><span>Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">E2E Befunde Raster<small>WhisperM8</small></div><div class="w">bereit</div></div>
+          <div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div>
+        </div>
+        <div class="foot"><span><span class="g">▲▼</span>wählen</span><span><span class="g">◀▶</span>Reiter</span><span><span class="g">△</span>nächster wartender</span><span>loslassen: wechseln</span></div>
+      </div></div>
+    </div>
+    <figcaption><b>Gesamtbild.</b> Die Insel hängt oben, wo ohnehin nur Menüleiste und Tab-Leiste liegen. Eingabefeld, Verlauf und Legende bleiben sichtbar — du siehst beim Auswählen weiter, was im Chat steht. Die Insel verschwindet beim Loslassen in derselben Bewegung zurück in die Notch.</figcaption>
+  </figure>
+
+  <h2>L2 halten · Wohin</h2>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:360px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div>
+        <div class="hints">
+          <span class="h"><span class="g">▲▼</span>Liste öffnen</span>
+          <span class="h"><span class="g">△</span>Nächster wartender</span>
+          <span class="h"><span class="g sq">R2</span>Hin und diktieren</span>
+          <span class="h"><span class="g">○</span>Abbrechen</span>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>1 · Gehalten, noch nicht bewegt.</b> Nach 0,3 s zeigt die Insel nur, was diese Ebene kann — klein, eine Zeile. Erst Stick oder Steuerkreuz öffnet die Liste. Antippen von L2 springt wie bisher zum letzten Chat, ohne dass die Insel auftaucht.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:460px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div>
+        <div class="seg"><span class="on">Chats</span><span>Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">E2E Befunde Raster<small>WhisperM8</small></div><div class="w">bereit</div></div>
+          <div class="r mark"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div>
+          <div class="r"><i class="dot error"></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">Fehler</div></div>
+          <div class="r"><i class="dot"></i><div class="t">Release Notizen 2.26<small>WhisperM8</small></div><div class="w">bereit</div></div>
+        </div>
+        <div class="more">+ 9 weitere</div>
+        <div class="foot"><span><span class="g">▲▼</span>wählen</span><span><span class="g">◀▶</span>Reiter</span><span><span class="g">△</span>nächster wartender</span><span><span class="g sq">R2</span>hin + diktieren</span></div>
+      </div></div>
+    </div>
+    <figcaption><b>2 · Reiter Chats</b> (Start in der Einzelansicht). Reihenfolge wie die Liste links, der aktuelle Chat fett und Startpunkt; der erste Stoß macht gleich einen Schritt. Höchstens sechs Zeilen sichtbar, die Liste scrollt mit der Markierung. Loslassen oder Kreuz wechselt, Kreis bricht ab.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:400px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><span>Raster · WhisperM8</span></span></div>
+        <div class="seg"><span>Chats</span><span class="on">Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><span class="sw" style="background:#5e6ad2">W</span><div class="t">WhisperM8<small>aktuell</small></div><div class="w">6 Chats</div></div>
+          <div class="r mark"><span class="sw" style="background:#3fa873">L</span><div class="t">ListM8</div><div class="w"><i class="dot awaiting"></i>&nbsp; 4 Chats</div></div>
+          <div class="r"><span class="sw" style="background:#c9962a">D</span><div class="t">DealSupply</div><div class="w">3 Chats</div></div>
+          <div class="r"><span class="sw" style="background:#d6473d">A</span><div class="t">Aktiv</div><div class="w">5 Chats</div></div>
+        </div>
+        <div class="foot"><span><span class="g">▲▼</span>wählen</span><span><span class="g">◀▶</span>Reiter</span><span>loslassen: wechseln</span></div>
+      </div></div>
+    </div>
+    <figcaption><b>3 · Reiter Workspaces</b> (Start im Raster). Dieselben Zeilen wie die heutige Workspace-Auswahl: Farbe, Name, Raute, wenn dort jemand wartet, Zahl der Chats. Nach dem Wechsel hat die Kachel den Fokus, auf der du dort zuletzt warst. Ersetzt das Panel unten.</figcaption>
+  </figure>
+
+  <h2>L1 halten · Schreiben</h2>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:420px">
+        <div class="island-head"><span class="g sq">L1</span><span class="layer">Schreiben</span><span class="target"><i class="dot"></i><span>Controller Insel</span></span></div>
+        <div class="hints">
+          <span class="h"><span class="g">□</span>Bis Zeilenanfang löschen</span>
+          <span class="h"><span class="g">△</span>Neue Zeile</span>
+          <span class="h off"><span class="g">✕</span>frei</span>
+          <span class="h off"><span class="g">○</span>frei</span>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>4 · Schreiben.</b> L1 + Viereck löscht bis zum Zeilenanfang, wie ⌘ + Rücktaste; gehalten Zeile für Zeile. L1 + Dreieck setzt einen Zeilenumbruch, ohne zu senden. Kreuz und Kreis bleiben frei und stehen ausgegraut da, damit du weißt, dass dort bewusst nichts liegt.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:420px">
+        <div class="island-head"><span class="g sq">L1</span><span class="layer">Schreiben</span><span class="target"><i class="dot"></i><span>zsh · whisperm8</span></span></div>
+        <div class="hints">
+          <span class="h off"><span class="g">□</span>Bis Zeilenanfang löschen</span>
+          <span class="h off"><span class="g">△</span>Neue Zeile</span>
+        </div>
+        <div class="note-inline">In einer Shell nicht — dort könnte ein Programm die Tasten anders deuten.</div>
+      </div></div>
+    </div>
+    <figcaption><b>5 · Schreiben in einer Shell.</b> Dieselbe Regel wie bei Wort löschen und Eingabe leeren: nur in Claude- und Codex-Chats. Die Insel sagt das, statt still nichts zu tun.</figcaption>
+  </figure>
+
+  <h2>R1 halten · Schnellbefehle</h2>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body grow" style="width:500px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target"><i class="dot"></i><span>Controller Insel</span></span></div>
+        <div class="diamond">
+          <div class="slot top"><span class="g">△</span>Modus wechseln</div>
+          <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+          <div class="center">R1</div>
+          <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+          <div class="slot bottom"><span class="g">✕</span>Weiter</div>
+        </div>
+      </div></div>
+    </div>
+    <figcaption><b>6 · Quick Draw.</b> Vier Befehle, angeordnet wie die Tasten unter deinem Daumen — du musst nicht lesen, wo was liegt. Ein Druck führt aus und schließt die Insel. „›“ öffnet das Menü direkt auf dieser Unterseite; dann darf R1 los.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body" style="width:500px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target"><i class="dot awaiting"></i><span>Jarvis: Supervisor</span></span></div>
+        <div class="diamond">
+          <div class="slot top off"><span class="g">△</span>Modus wechseln</div>
+          <div class="slot left off"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+          <div class="center">R1</div>
+          <div class="slot right hit"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+          <div class="slot bottom off"><span class="g">✕</span>Weiter</div>
+        </div>
+        <div class="note-inline">Rückfrage offen — in den Chat geht gerade nichts.</div>
+      </div></div>
+    </div>
+    <figcaption><b>7 · Während einer Rückfrage.</b> Alles, was etwas in den Chat schreibt, ist aus — dieselben Schutzregeln wie im Menü (Modus wechseln wäre dort „alle Änderungen erlauben“). Konto wechseln geht weiter; hier gerade gedrückt (Markierung kurz vor dem Schließen).</figcaption>
+  </figure>
+
+  <h2>Übergang aus der Notch-Anzeige</h2>
+
+  <figure class="full">
+    <div class="pair">
+      <div class="screen" style="height:260px">
+        <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+        <div class="hang"><div class="band"></div><div class="body small" style="width:184px">
+          <div class="chin"><span class="chip working"><i class="dot working"></i>2</span><span class="chip awaiting"><i class="dot awaiting"></i>1</span></div>
+        </div></div>
+        <span class="tag">vorher: Notch-Anzeige mit Zählern</span>
+      </div>
+      <div class="screen" style="height:260px">
+        <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+        <div class="hang"><div class="band"></div><div class="body grow" style="width:360px">
+          <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><span class="chip working" style="font-weight:600"><i class="dot working"></i>2</span><span class="chip awaiting" style="font-weight:600"><i class="dot awaiting"></i>1</span></span></div>
+          <div class="hints">
+            <span class="h"><span class="g">▲▼</span>Liste öffnen</span>
+            <span class="h"><span class="g">△</span>Nächster wartender</span>
+            <span class="h"><span class="g sq">R2</span>Hin und diktieren</span>
+          </div>
+        </div></div>
+        <span class="tag">L2 gehalten: Zähler wandern in den Kopf</span>
+      </div>
+    </div>
+    <figcaption><b>8 · Nahtlos.</b> Zeigt die Notch gerade ihre Zähler, wächst die Insel aus genau dieser Form heraus; die Zähler rutschen nach rechts in den Kopf. Beim Loslassen zieht sie sich zurück und die Notch-Anzeige steht wieder da. Ist die Notch-Anzeige aus, wächst die Insel aus der nackten Notch. Eine Bewegung beim Öffnen, eine beim Schließen, sonst nichts in Bewegung.</figcaption>
+  </figure>
+
+  <h2>Ohne Notch (externer Monitor) · folgt Hell und Dunkel</h2>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:440px">
+        <div class="island-head"><span class="g sq">L2</span><span class="layer">Wohin</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div>
+        <div class="seg"><span class="on">Chats</span><span>Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">E2E Befunde Raster<small>WhisperM8</small></div><div class="w">bereit</div></div>
+          <div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div>
+        </div>
+        <div class="foot"><span><span class="g">▲▼</span>wählen</span><span><span class="g">◀▶</span>Reiter</span><span><span class="g">△</span>nächster wartender</span></div>
+      </div>
+    </div>
+    <figcaption><b>9 · Pille unter der Menüleiste.</b> Wie die Notch-Anzeige ohne Notch: dieselbe Lage, Glas statt Schwarz, hell und dunkel nach System. Sie erscheint auf dem Bildschirm, auf dem das Agent-Chats-Fenster liegt — nicht auf dem MacBook, wenn du am Monitor sitzt.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen tall">
+      <div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 23:41</span></div></div>
+      <div class="pill" style="width:500px">
+        <div class="island-head"><span class="g sq">R1</span><span class="layer">Schnellbefehle</span><span class="target"><i class="dot"></i><span>Controller Insel</span></span></div>
+        <div class="diamond">
+          <div class="slot top"><span class="g">△</span>Modus wechseln</div>
+          <div class="slot left"><span class="g">□</span>Befehle<span class="chev">›</span></div>
+          <div class="center">R1</div>
+          <div class="slot right"><span class="g">○</span>Konto wechseln<span class="chev">›</span></div>
+          <div class="slot bottom"><span class="g">✕</span>Weiter</div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>10 · Schnellbefehle als Pille.</b> Gleicher Aufbau, gleiche Raute. Zum Vergleich mit Zustand 6 oben rechts auf „Hell / Dunkel“ schalten.</figcaption>
+  </figure>
+
+</main>
+<script>
+  const root = document.documentElement;
+  const saved = localStorage.getItem("controller-insel-theme");
+  if (saved) root.dataset.theme = saved;
+  else if (matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark";
+  document.getElementById("theme").addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("controller-insel-theme", root.dataset.theme);
+  });
+</script>
+</body>
+</html>
