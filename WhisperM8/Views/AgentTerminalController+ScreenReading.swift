@@ -16,24 +16,43 @@ extension AgentTerminalController {
         let atBottom = swiftTerm.isCurrentBufferAlternate || !terminal.canScroll || terminal.scrollPosition >= 1
         guard atBottom else { return nil }
         PerformanceCounters.shared.count(.controllerScreenRead)
-        let count = min(ControllerScreenReading.lineCount, swiftTerm.rows)
-        let firstRow = swiftTerm.rows - count
-        var lines: [String] = []
+        let capture = ControllerScreenCapture.bottomLines(of: swiftTerm)
+        return ControllerScreenReading.read(
+            lines: capture.lines, cursor: capture.cursor, detectViews: profile == .claudeCodeChat)
+    }
+}
+
+/// Liest die unteren Zeilen eines SwiftTerm-Terminals in den drei Fassungen
+/// von `ControllerScreenLine`. Getrennt vom Controller, damit Tests echte
+/// ANSI-Folgen durch einen `Terminal` schicken können.
+enum ControllerScreenCapture {
+    static func bottomLines(of terminal: Terminal) -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) {
+        let count = min(ControllerScreenReading.lineCount, terminal.rows)
+        let firstRow = terminal.rows - count
+        var lines: [ControllerScreenLine] = []
         lines.reserveCapacity(count)
-        for row in firstRow..<swiftTerm.rows {
-            let text = swiftTerm.getLine(row: row)?.translateToString(
-                trimRight: true, skipNullCellsFollowingWide: true,
-                characterProvider: { cell in
-                    // Abgeblendet oder unsichtbar zählt nicht als Text (Platzhalter).
-                    let style = cell.attribute.style
-                    if style.contains(.dim) || style.contains(.invisible) { return " " }
-                    return cell.getCharacter()
-                }) ?? ""
-            lines.append(text)
+        for row in firstRow..<terminal.rows {
+            guard let line = terminal.getLine(row: row) else {
+                lines.append(ControllerScreenLine(full: "", plain: "", dim: ""))
+                continue
+            }
+            // Alle drei Fassungen über dieselbe Zellenfolge: gleich viele Zeichen.
+            func render(_ keep: @escaping (CharacterStyle) -> Bool) -> String {
+                line.translateToString(trimRight: false, skipNullCellsFollowingWide: true) { cell in
+                    let character = cell.getCharacter()
+                    // Leere Zellen liefern NUL.
+                    return character == "\u{0}" || !keep(cell.attribute.style) ? " " : character
+                }
+            }
+            func isFaint(_ style: CharacterStyle) -> Bool { style.contains(.dim) || style.contains(.invisible) }
+            lines.append(ControllerScreenLine(
+                full: render { _ in true },
+                plain: render { !isFaint($0) },
+                dim: render { $0.contains(.dim) && !$0.contains(.invisible) }))
         }
-        let location = swiftTerm.getCursorLocation()
+        let location = terminal.getCursorLocation()
         let cursorRow = location.y - firstRow
         let cursor = cursorRow >= 0 && cursorRow < count ? (row: cursorRow, col: location.x) : nil
-        return ControllerScreenReading.read(lines: lines, cursor: cursor, detectViews: profile == .claudeCodeChat)
+        return (lines, cursor)
     }
 }

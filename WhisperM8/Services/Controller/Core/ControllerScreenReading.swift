@@ -8,22 +8,51 @@ import Foundation
 /// Ansicht von Claude Code, die Escape abfängt (schließen, zurück), statt den
 /// laufenden Turn abzubrechen. Die Hinweistexte stammen aus Claude Code
 /// 2.1.322 (Hinweis-Komponente `${key} to ${action}`, getrennt mit „ · “; der
-/// knappe Stil schreibt sie klein und ohne „to“).
+/// knappe Stil schreibt sie klein und ohne „to“). Claude zeichnet diese
+/// Hinweise abgeblendet (SGR 2); gesucht wird deshalb nur im abgeblendeten
+/// Text der untersten Zeilen — normale Ausgabe, die dieselben Wörter enthält,
+/// zählt nie.
 ///
 /// Bewusst nicht dabei: die Subagent-/Teammate-Ansicht. Sie hat keinen festen
 /// Hinweis, und während der Agent läuft steht dort „esc to interrupt“ —
 /// Escape bräche den Chat ab.
 enum ControllerOpenView: String, CaseIterable, Sendable {
-    /// Ausführliches Transkript (Ctrl+O): „Showing detailed transcript“.
+    /// Ausführliches Transkript (Ctrl+O): „Showing detailed transcript · ctrl+o to toggle“.
     case transcript
-    /// `/workflows`: „… · s to save · Esc to close“.
+    /// `/workflows`: „↑/↓ to select · Enter to view · x to stop · s to save · Esc to close“.
     case workflows
-    /// `/tasks` (Dialog „Background“): „x to stop · Esc to close“.
+    /// `/tasks` (Dialog „Background“): „↑/↓ to select · Enter to view · x to stop · Esc to close“,
+    /// im Detail „… Esc to go back“.
     case tasks
-    /// Zurückspulen: Titel „Rewind“, „Enter to continue · Esc to cancel“.
+    /// Zurückspulen und andere Dialoge mit „Enter to continue · Esc to cancel“.
     case rewind
-    /// Auswahl in der Fußzeile: „Esc to collapse“, „to stop all agents“.
+    /// Auswahl in der Fußzeile: „… Esc to collapse · ctrl+x ctrl+k to stop all agents“.
     case footerSelection
+}
+
+/// Eine Bildschirmzeile in drei Fassungen, Zeichen für Zeichen gleich lang.
+struct ControllerScreenLine: Equatable, Sendable {
+    /// Alles, was dasteht (Trennlinien, Prompt-Zeichen — Claude blendet „❯“ ab).
+    var full: String
+    /// Ohne abgeblendete und unsichtbare Zellen (Platzhalter zählen nicht als Text).
+    var plain: String
+    /// Nur die abgeblendeten Zellen (Hinweise), alles andere als Leerzeichen.
+    var dim: String
+
+    init(full: String, plain: String, dim: String) {
+        self.full = full
+        self.plain = plain
+        self.dim = dim
+    }
+
+    /// Für Tests: ganze Zeile in einer Fassung.
+    static func plain(_ text: String) -> ControllerScreenLine {
+        ControllerScreenLine(full: text, plain: text, dim: String(repeating: " ", count: text.count))
+    }
+
+    static func dimmed(_ text: String) -> ControllerScreenLine {
+        ControllerScreenLine(full: text, plain: String(repeating: " ", count: text.count), dim: text)
+    }
 }
 
 /// Das Eingabefeld von Claude oder Codex, wie es am Bildschirm steht.
@@ -57,23 +86,31 @@ struct ControllerScreenSnapshot: Equatable, Sendable {
 enum ControllerScreenReading {
     /// So viele Zeilen von unten liest der Live-Adapter.
     static let lineCount = 16
+    /// Ohne Eingabefeld zählen nur so viele unterste nicht leere Zeilen als
+    /// Hinweiszeilen (Dialoge stehen ganz unten, ein Hinweis bricht höchstens
+    /// einmal um).
+    static let hintLineCount = 2
 
     /// - Parameters:
-    ///   - lines: die unteren Zeilen des lebendigen Bildschirms, oben zuerst;
-    ///     abgeblendete und unsichtbare Zellen als Leerzeichen.
+    ///   - lines: die unteren Zeilen des lebendigen Bildschirms, oben zuerst.
     ///   - cursor: Cursor in diesen Zeilen (Zeile, Spalte), sofern bekannt.
     ///   - detectViews: nur bei Claude (Codex hat diese Ansichten nicht).
-    static func read(lines: [String], cursor: (row: Int, col: Int)?, detectViews: Bool) -> ControllerScreenSnapshot {
-        let box = promptBox(in: lines)
+    static func read(lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, detectViews: Bool) -> ControllerScreenSnapshot {
+        let box = promptBox(in: lines.map(\.full))
         var snapshot = ControllerScreenSnapshot()
         if let box {
             snapshot.promptField = field(in: lines, box: box, cursor: cursor)
         }
         if detectViews {
             // Mit sichtbarem Eingabefeld zählen nur die Zeilen darunter (die
-            // Fußzeile): Chat-Text darüber könnte einen Hinweis zitieren.
-            let hintLines = box.map { Array(lines[($0.lower + 1)...]) } ?? Array(lines.suffix(lineCount))
-            snapshot.openView = openView(hintLines: hintLines, hasPromptBox: box != nil)
+            // Fußzeile); ohne nur die untersten nicht leeren Zeilen. Gesucht
+            // wird nur im abgeblendeten Text.
+            let candidates = box.map { Array(lines[($0.lower + 1)...]) } ?? lines
+            let hintLines = candidates
+                .filter { !$0.full.trimmingCharacters(in: .whitespaces).isEmpty }
+                .suffix(box == nil ? hintLineCount : lineCount)
+                .map(\.dim)
+            snapshot.openView = openView(dimHintLines: hintLines, hasPromptBox: box != nil)
         }
         return snapshot
     }
@@ -82,11 +119,7 @@ enum ControllerScreenReading {
     /// sperrt, sichtbarer Text gibt frei; sonst die Schätzung des Trackers.
     static func fieldMayHaveText(screen: ControllerScreenSnapshot?, tracker: Bool) -> Bool {
         if screen?.openView != nil { return true }
-        if let field = screen?.promptField {
-            if field.isEmpty { return false }
-            if field.hasText { return true }
-        }
-        return tracker
+        return fieldHasText(screen: screen, tracker: tracker)
     }
 
     /// Steht Text im Eingabefeld (R1 + Kreuz)? Wie `fieldMayHaveText`, aber
@@ -101,23 +134,22 @@ enum ControllerScreenReading {
 
     // MARK: - Ansichten
 
-    static func openView(hintLines: [String], hasPromptBox: Bool) -> ControllerOpenView? {
-        let text = hintLines.map { $0.lowercased() }
-        func any(_ needles: String...) -> Bool {
-            text.contains { line in needles.contains { line.contains($0) } }
-        }
+    /// Muster der Hinweiszeilen. Jede Ansicht braucht mehrere Teile desselben
+    /// Hinweises, jeweils in der ausführlichen oder der knappen Schreibweise.
+    static func openView(dimHintLines: [String], hasPromptBox: Bool) -> ControllerOpenView? {
+        // Bindestriche und Mehrfach-Leerzeichen vereinheitlichen; alles klein.
+        let text = dimHintLines.map { $0.lowercased() }.joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        func has(_ needles: String...) -> Bool { needles.allSatisfy { text.contains($0) } }
         // Die Auswahl in der Fußzeile lässt das Eingabefeld stehen.
-        if any("esc to collapse", "esc collapse", "to stop all agents") { return .footerSelection }
+        if has("to stop all agents"), has("esc to collapse") || has("esc collapse") { return .footerSelection }
         // Die übrigen Ansichten ersetzen das Eingabefeld.
         guard !hasPromptBox else { return nil }
-        if any("showing detailed transcript") { return .transcript }
-        if any("s to save") || (any("x stop") && any("s save")) { return .workflows }
-        if any("esc to cancel", "esc cancel"),
-           any("rewind", "restore the conversation", "confirm you want to restore") {
-            return .rewind
-        }
-        if any("x to stop", "x stop"),
-           any("esc to close", "esc close", "esc to go back", "esc go back") {
+        if has("showing detailed transcript"), has("ctrl+o to toggle") || has("ctrl+o toggle") { return .transcript }
+        if has("x to stop", "s to save", "esc to close") || has("x stop", "s save", "esc close") { return .workflows }
+        if has("enter to continue", "esc to cancel") || has("enter continue", "esc cancel") { return .rewind }
+        if has("enter to view", "x to stop", "esc to close") || has("enter view", "x stop", "esc close")
+            || has("x to stop", "esc to go back") || has("x stop", "esc go back") {
             return .tasks
         }
         return nil
@@ -165,12 +197,14 @@ enum ControllerScreenReading {
         return index
     }
 
-    private static func field(in lines: [String], box: PromptBox, cursor: (row: Int, col: Int)?) -> ControllerPromptField {
+    private static func field(in lines: [ControllerScreenLine], box: PromptBox, cursor: (row: Int, col: Int)?) -> ControllerPromptField {
         let firstRow = box.upper + 1
         let rows = box.lower - box.upper - 1
-        let start = promptStart(lines[firstRow]) ?? 0
-        var content = String(Array(lines[firstRow]).dropFirst(start))
-        for row in (firstRow + 1)..<box.lower { content += " " + lines[row] }
+        // Wo der Text beginnt, sagt die volle Zeile (das „❯“ ist abgeblendet);
+        // ob Text dasteht, die Fassung ohne Abgeblendetes.
+        let start = promptStart(lines[firstRow].full) ?? 0
+        var content = String(Array(lines[firstRow].plain).dropFirst(start))
+        for row in (firstRow + 1)..<box.lower { content += " " + lines[row].plain }
         let isEmpty = content.replacingOccurrences(of: "│", with: " ")
             .trimmingCharacters(in: .whitespaces).isEmpty
         var cursorRow: Int?

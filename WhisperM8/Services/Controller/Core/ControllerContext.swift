@@ -44,6 +44,10 @@ struct ControllerChatState: Equatable, Sendable {
     var secondsSinceAwaitingBegan: TimeInterval?
     /// Innerhalb der letzten Sekunde ging schon ein Escape an den Chat.
     var escapeSentRecently: Bool = false
+    /// Innerhalb der letzten 0,3 s ging ein Escape an den Chat — gilt auch in
+    /// einer erkannten Ansicht: Ein zweites ○, bevor Claude die Ansicht zu
+    /// hat, träfe sonst den Hauptchat (Review Runde 5, Befund 4).
+    var escapeSentJustNow: Bool = false
     /// Kurz vorher per Controller getippt, gelöscht oder diktiert (ohne zu
     /// senden): Ein Entwurf zum Abschicken ist plausibel.
     var recentDraftInput: Bool = false

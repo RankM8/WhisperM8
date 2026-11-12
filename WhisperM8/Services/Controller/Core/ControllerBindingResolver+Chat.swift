@@ -179,11 +179,11 @@ extension ControllerBindingResolver {
     /// des Menüs schließt Escape auch direkt nach dem Befehl, der sie geöffnet
     /// hat (der zählt als „gerade gesendet“).
     ///
-    /// In einer erkannten Ansicht immer, auch bei „arbeitet“, gerade gesendet
-    /// und ohne die 1-s-Sperre (Runde 5, R2): Escape schließt dort die
-    /// Ansicht, das Zurückspulen öffnet es nicht.
+    /// In einer erkannten Ansicht auch bei „arbeitet“ und gerade gesendet,
+    /// mit nur 0,3 s Sperre statt 1 s (Runde 5, R2): Escape schließt dort die
+    /// Ansicht; ein zweites, bevor sie zu ist, träfe den Hauptchat.
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
-        if viewOpen(state) { return true }
+        if viewOpen(state) { return !state.escapeSentJustNow }
         guard state.acceptsKeys, !state.escapeSentRecently else { return false }
         guard state.status == .idle || state.status == .awaitingInput else { return false }
         return !state.recentlySubmitted || choiceListActive(state)
