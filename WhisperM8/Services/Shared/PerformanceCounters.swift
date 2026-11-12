@@ -51,6 +51,9 @@ final class PerformanceCounters: Sendable {
         case ptyResizeRequested
         /// Davon wurde tatsächlich `TIOCSWINSZ` gesendet (nach `PTYResizeCoalescer`).
         case ptyResizeForwarded
+        /// Der Controller hat den unteren Rand eines Terminals abgelesen
+        /// (Runde 5, R2) — einmal je Controller-Eingabe in einem Agent-Chat.
+        case controllerScreenRead
 
         var label: String {
             switch self {
@@ -62,6 +65,7 @@ final class PerformanceCounters: Sendable {
             case .activityExtracted: return "activity.extracted"
             case .ptyResizeRequested: return "pty.resize.requested"
             case .ptyResizeForwarded: return "pty.resize.forwarded"
+            case .controllerScreenRead: return "controller.screen.read"
             }
         }
 

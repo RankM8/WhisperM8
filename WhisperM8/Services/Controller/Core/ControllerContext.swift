@@ -62,6 +62,11 @@ struct ControllerChatState: Equatable, Sendable {
     var shellAtPrompt: Bool = false
     /// Ziel von L2 getippt; `nil`, wenn es keinen vorigen Ort (mehr) gibt.
     var backTarget: ControllerBackTarget?
+    /// Am unteren Rand erkannte Claude-Ansicht, die Escape selbst abfängt
+    /// (Runde 5, R2); `nil`, wenn keine erkannt oder nicht ablesbar.
+    var openView: ControllerOpenView?
+    /// Eingabefeld, wie es am Bildschirm steht; `nil`, wenn nicht ablesbar.
+    var promptField: ControllerPromptField?
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }
