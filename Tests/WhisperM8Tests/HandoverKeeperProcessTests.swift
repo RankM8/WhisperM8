@@ -93,7 +93,7 @@ final class HandoverKeeperProcessTests: XCTestCase {
 
             // Neue App übernimmt.
             let take = try connect()
-            let hello = try take.helloTake()
+            let hello = try take.helloTake(secret: secrets[keeper.processIdentifier])
             XCTAssertEqual(hello.runID, "round-\(round)")
             XCTAssertEqual(try take.list().map(\.manifest.chatID), ["chat-1"])
             let taken = try take.take(chatID: "chat-1")
@@ -174,10 +174,10 @@ final class HandoverKeeperProcessTests: XCTestCase {
 
         // Eine „neue App“, die nur Version 2 und 3 spricht.
         let take = try connect()
-        XCTAssertThrowsError(try take.helloTake(range: 2...3)) { error in
+        XCTAssertThrowsError(try take.helloTake(range: 2...3, secret: secrets[keeper.processIdentifier])) { error in
             XCTAssertEqual(error as? HandoverClient.ClientError, .incompatible)
         }
-        try take.release()
+        try take.release(secret: secrets[keeper.processIdentifier])
         take.close()
 
         XCTAssertTrue(HandoverTestSupport.waitForExit(keeper, timeout: 15), "Aufbewahrer endet nach RELEASE")
@@ -258,5 +258,28 @@ final class HandoverKeeperProcessTests: XCTestCase {
         )) { XCTAssertEqual($0 as? HandoverClient.VerificationError, .wrongRunID) }
         otherRun.close()
         XCTAssertTrue(child.isAlive)
+    }
+
+    func testTakeWithoutSecretIsRefusedByKeeperProcess() throws {
+        let child = try spawnChild()
+        let keeper = try launchKeeper(run: "take-secret")
+        let deposit = try connect()
+        try helloDeposit(deposit, keeper: keeper, run: "take-secret")
+        try deposit.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: [])
+        try deposit.commit()
+        child.closeMaster()
+        deposit.close()
+
+        let stranger = try connect()
+        XCTAssertThrowsError(try stranger.helloTake(secret: nil))
+        stranger.close()
+        let take = try connect()
+        _ = try take.helloTake(secret: secrets[keeper.processIdentifier])
+        let taken = try take.take(chatID: "a")
+        try take.done()
+        take.close()
+        XCTAssertTrue(HandoverTestSupport.waitForExit(keeper, timeout: 15))
+        XCTAssertTrue(child.isAlive)
+        if let fd = taken.descriptor { close(fd) }
     }
 }

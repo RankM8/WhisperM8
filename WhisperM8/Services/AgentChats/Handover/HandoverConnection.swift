@@ -47,6 +47,10 @@ final class HandoverConnection {
     let fd: Int32
     private var pendingDescriptors: [Int32] = []
     private var closed = false
+    /// Audit-Token (PID und PID-Version) des Absenders, der sich auf dieser
+    /// Verbindung zuerst ausgewiesen hat. Jedes weitere Telegramm muss vom
+    /// selben Prozess kommen (`HandoverKeeper.receiveChecked`).
+    var pinnedSender: (pid: pid_t, version: UInt32)?
 
     init(fd: Int32) {
         self.fd = fd
@@ -145,11 +149,13 @@ final class HandoverConnection {
 
     // MARK: Empfangen
 
-    /// Liest ein Telegramm. Leitungen nimmt nur an, wer `acceptDescriptor`
-    /// setzt (Abgabe beim Aufbewahrer, `CHAT` bei der App); sonst wird jede
-    /// mitgeschickte Leitung sofort geschlossen. Ein fremder Prozess kann den
-    /// Empfänger so nicht mit Deskriptoren fluten.
-    func receive(timeout: TimeInterval, acceptDescriptor: Bool = false) throws -> HandoverReceived {
+    /// Liest ein Telegramm. Leitungen und Nutzlast nimmt nur an, wer
+    /// `acceptAttachments` setzt (Abgabe beim Aufbewahrer, `CHAT` bei der App).
+    /// Sonst wird jede mitgeschickte Leitung sofort geschlossen, und eine
+    /// angekündigte Nutzlast bricht ab, bevor auch nur ein Byte davon gelesen
+    /// ist: Ein Absender könnte sonst den Rest eines Telegramms von einem
+    /// anderen Prozess schreiben lassen und sich so dessen Identität borgen.
+    func receive(timeout: TimeInterval, acceptAttachments: Bool = false) throws -> HandoverReceived {
         let deadline = Date().addingTimeInterval(timeout)
         let header = try readExactly(4, deadline: deadline)
         let length = Int(UInt32(header[0]) << 24 | UInt32(header[1]) << 16 | UInt32(header[2]) << 8 | UInt32(header[3]))
@@ -162,13 +168,18 @@ final class HandoverConnection {
         guard payloadLength >= 0, payloadLength <= HandoverProtocol.maxPayloadBytes else {
             throw HandoverWireError.payloadTooLarge(payloadLength)
         }
+        guard acceptAttachments || payloadLength == 0 else {
+            for fd in pendingDescriptors { Darwin.close(fd) }
+            pendingDescriptors.removeAll()
+            throw HandoverWireError.unexpected("Nutzlast an \(message.type.rawValue) nicht erlaubt")
+        }
         let payload = payloadLength > 0 ? try readExactly(payloadLength, deadline: deadline) : []
 
         var descriptor: Int32?
         if message.hasDescriptor == true {
             guard !pendingDescriptors.isEmpty else { throw HandoverWireError.missingDescriptor }
             descriptor = pendingDescriptors.removeFirst()
-            if !acceptDescriptor, let unwanted = descriptor {
+            if !acceptAttachments, let unwanted = descriptor {
                 Darwin.close(unwanted)
                 descriptor = nil
             }
@@ -392,6 +403,8 @@ struct HandoverPeerPolicy {
 struct HandoverPeer {
     var uid: uid_t
     var pid: pid_t?
+    /// PID-Version aus dem Audit-Token (ändert sich bei `exec`).
+    var pidVersion: UInt32?
     /// Code des Prozesses hinter dem Audit-Token (zuletzt am Socket tätig).
     /// `nil`, wenn er nicht mehr zu finden ist.
     var code: SecCode?
@@ -404,12 +417,12 @@ struct HandoverPeer {
         var token = audit_token_t()
         var length = socklen_t(MemoryLayout<audit_token_t>.size)
         guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &length) == 0 else {
-            return HandoverPeer(uid: euid, pid: nil, code: nil, executablePath: nil)
+            return HandoverPeer(uid: euid, pid: nil, pidVersion: nil, code: nil, executablePath: nil)
         }
-        // audit_token_t: val[5] ist die PID.
+        // audit_token_t: val[5] ist die PID, val[7] die PID-Version.
         let pid = pid_t(bitPattern: token.val.5)
         let code = Self.code(for: token)
-        return HandoverPeer(uid: euid, pid: pid, code: code, executablePath: code.flatMap(Self.path(of:)))
+        return HandoverPeer(uid: euid, pid: pid, pidVersion: token.val.7, code: code, executablePath: code.flatMap(Self.path(of:)))
     }
 
     static func code(for token: audit_token_t) -> SecCode? {

@@ -16,9 +16,21 @@ extension HandoverKeeper {
     /// Verbindet sich ein Kind und lädt danach per `exec` das App-Binary,
     /// sähe ein Test beim `accept` „die App“; der Elternprozess, der danach
     /// über dieselbe Verbindung spricht, fällt erst bei seinem Telegramm auf.
+    ///
+    /// Wer mehr als `STATUS` will, braucht außerdem das Einmal-Geheimnis
+    /// (HELLO und RELEASE). Den Inhalt eines Telegramms kann sich ein fremder
+    /// Prozess nicht vom App-Binary schreiben lassen, wohl aber dessen
+    /// Identität am Socket borgen — deshalb beides.
     func serve(_ connection: HandoverConnection) {
         let timeout = configuration.ioTimeout
-        guard let first = try? receiveChecked(connection, timeout: timeout) else { return }
+        guard let first = try? receiveChecked(connection, timeout: configuration.firstMessageTimeout) else { return }
+        if first.message.type == .hello || first.message.type == .release {
+            guard hasValidSecret(first.message) else {
+                log("peer_rejected reason=secret type=\(first.message.type.rawValue)")
+                try? connection.send(.error("ohne gültigen Nachweis"), timeout: timeout)
+                return
+            }
+        }
 
         switch first.message.type {
         case .status:
@@ -43,17 +55,35 @@ extension HandoverKeeper {
     /// Liest ein Telegramm und prüft den Absender, außer bei `STATUS`.
     /// Fremde Absender bekommen ERROR, ihre Leitungen werden geschlossen,
     /// und die Verbindung endet.
-    func receiveChecked(_ connection: HandoverConnection, timeout: TimeInterval, acceptDescriptor: Bool = false) throws -> HandoverReceived {
-        let received = try connection.receive(timeout: timeout, acceptDescriptor: acceptDescriptor)
+    ///
+    /// Der erste geprüfte Absender wird festgehalten (PID und PID-Version aus
+    /// dem Audit-Token); jedes weitere Telegramm muss von genau ihm kommen.
+    func receiveChecked(_ connection: HandoverConnection, timeout: TimeInterval, acceptAttachments: Bool = false) throws -> HandoverReceived {
+        let received = try connection.receive(timeout: timeout, acceptAttachments: acceptAttachments)
         guard received.message.type != .status else { return received }
         let peer = HandoverPeer.of(socket: connection.fd)
-        guard let peer, peer.uid == getuid(), configuration.peerPolicy.isAllowed(peer) else {
+        var allowed = false
+        if let peer, peer.uid == getuid(), configuration.peerPolicy.isAllowed(peer),
+           let pid = peer.pid, let version = peer.pidVersion {
+            if let pinned = connection.pinnedSender {
+                allowed = pinned.pid == pid && pinned.version == version
+            } else {
+                connection.pinnedSender = (pid, version)
+                allowed = true
+            }
+        }
+        guard allowed else {
             if let fd = received.descriptor { close(fd) }
             log("peer_rejected type=\(received.message.type.rawValue) pid=\(peer?.pid.map(String.init) ?? "?") path=\(peer?.executablePath ?? "-")")
             try? connection.send(.error("nur die App dieser Instanz darf das"), timeout: configuration.ioTimeout)
             throw HandoverWireError.unexpected("Gegenseite nicht berechtigt")
         }
         return received
+    }
+
+    func hasValidSecret(_ message: HandoverMessage) -> Bool {
+        guard let expected = configuration.secret else { return true }
+        return HandoverSecret.matches(message.secret, expected: expected)
     }
 
     private func okReply(protocolVersion: Int) -> HandoverMessage {
@@ -70,12 +100,6 @@ extension HandoverKeeper {
         let timeout = configuration.ioTimeout
         guard let version = hello.protocolVersion, HandoverProtocol.supported.contains(version) else {
             try? connection.send(HandoverMessage(type: .incompatible), timeout: timeout)
-            return
-        }
-        // Nur die App, die diesen Aufbewahrer gestartet hat, kennt das Geheimnis.
-        if let expected = configuration.depositSecret, !HandoverSecret.matches(hello.secret, expected: expected) {
-            log("deposit_rejected reason=secret")
-            try? connection.send(.error("Abgabe ohne gültigen Nachweis"), timeout: timeout)
             return
         }
         let admitted: String? = queue.sync {
@@ -106,7 +130,7 @@ extension HandoverKeeper {
         do {
             try connection.send(okReply(protocolVersion: version), timeout: timeout)
             while true {
-                let received = try receiveChecked(connection, timeout: configuration.depositSeconds, acceptDescriptor: true)
+                let received = try receiveChecked(connection, timeout: configuration.depositSeconds, acceptAttachments: true)
                 if received.message.type != .deposit, let stray = received.descriptor { close(stray) }
                 switch received.message.type {
                 case .deposit:
@@ -135,7 +159,23 @@ extension HandoverKeeper {
                         commit()
                         return true
                     }
-                    try? connection.send(committed ? okReply(protocolVersion: version) : .error("zu spät"), timeout: timeout)
+                    guard committed else {
+                        try? connection.send(.error("zu spät"), timeout: timeout)
+                        return
+                    }
+                    do {
+                        try connection.send(okReply(protocolVersion: version), timeout: timeout)
+                    } catch {
+                        // Ohne OK hält die App sich an den heutigen Weg (Ctrl+C,
+                        // Originale zu). Dann darf hier keine Kopie die Chats halten.
+                        queue.sync {
+                            log("commit_ok_lost chats=\(chats.count)")
+                            releaseSilently()
+                            finish(.depositLost)
+                        }
+                        return
+                    }
+                    queue.sync { if phase == .holding, chats.isEmpty { finish(.allTaken) } }
                     return
                 case .abort:
                     try? connection.send(okReply(protocolVersion: version), timeout: timeout)
@@ -235,10 +275,11 @@ extension HandoverKeeper {
     /// Ein Chat geht an die neue App:
     /// 1. Lesen anhalten, Rest verarbeiten, Bild sichern.
     /// 2. `CHAT` + Leitung + Bild schicken, auf `ACK` warten (`ackTimeout`).
-    /// 3. Mit ACK: eigene Kopie schließen, dann `OK {chatID}` — erst danach
-    ///    übernimmt die App. Ohne ACK (Frist, Abbruch, falsche Antwort):
-    ///    der Chat bleibt beim Aufbewahrer; ein zu spätes ACK bekommt kein OK,
-    ///    die App schließt ihre Kopie dann nur, ohne Ctrl+C.
+    /// 3. Mit ACK: `OK {chatID}` senden, danach die eigene Kopie schließen —
+    ///    erst mit dem OK übernimmt die App. Ohne ACK oder ohne zugestelltes
+    ///    OK (Frist, Abbruch, falsche Antwort): Der Chat bleibt beim
+    ///    Aufbewahrer. Ein zu spätes ACK bekommt kein OK, die App schließt
+    ///    ihre Kopie dann nur, ohne Ctrl+C.
     private func handleTake(_ connection: HandoverConnection, chatID: String?) throws {
         let timeout = configuration.ioTimeout
         typealias Prepared = (message: HandoverMessage, fd: Int32?, image: [UInt8])
@@ -292,16 +333,18 @@ extension HandoverKeeper {
             guard reply.message.type == .ack, reply.message.chatID == chatID else {
                 throw HandoverWireError.unexpected("ACK erwartet für \(chatID)")
             }
+            // Erst das OK, solange die eigene Kopie noch offen ist: Geht es
+            // nicht hinaus, behält der Aufbewahrer den Chat, statt ihn ohne
+            // Halter zurückzulassen (die App schließt ohne OK ihre Kopie).
+            var confirm = okReply(protocolVersion: HandoverProtocol.current)
+            confirm.chatID = chatID
+            try connection.send(confirm, timeout: timeout)
             acknowledged = true
         } catch {
             settle()
             throw error
         }
         settle()
-        // Erst jetzt ist die Kopie des Aufbewahrers zu: die App darf übernehmen.
-        var confirm = okReply(protocolVersion: HandoverProtocol.current)
-        confirm.chatID = chatID
-        try connection.send(confirm, timeout: timeout)
     }
 
     private func handleRelease(_ connection: HandoverConnection) {

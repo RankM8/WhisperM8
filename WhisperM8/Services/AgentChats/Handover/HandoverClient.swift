@@ -100,7 +100,10 @@ final class HandoverClient {
         appPid: Int32 = getpid(),
         protocolVersion: Int = HandoverProtocol.current
     ) throws -> String? {
-        if expectedPID != nil { try verifyServer(expectedPID: expectedPID) }
+        if let expectedPID {
+            try verifyServer(expectedPID: expectedPID)
+            keeperPID = expectedPID
+        }
         var hello = HandoverMessage(type: .hello)
         hello.role = .deposit
         hello.protocolVersion = protocolVersion
@@ -125,11 +128,24 @@ final class HandoverClient {
         }
     }
 
+    /// PID des Aufbewahrers, sobald `helloDeposit(expectedPID:)` sie geprüft hat.
+    var keeperPID: pid_t?
+
     /// Nach Rückkehr ohne Fehler hält der Aufbewahrer alle Chats; erst jetzt
     /// darf die App ihre Originale schließen.
+    ///
+    /// Scheitert `commit`, ist unklar, ob der Aufbewahrer schon hält (das OK
+    /// kann unterwegs verloren gegangen sein). Damit dann keine Kopie die
+    /// Chats weiter hält, während die App auf dem heutigen Weg endet, bekommt
+    /// der Aufbewahrer SIGTERM: vor COMMIT schließt er still, danach geordnet.
     func commit() throws {
-        let reply = try roundTrip(HandoverMessage(type: .commit))
-        guard reply.message.type == .ok else { throw ClientError.unexpected("OK erwartet") }
+        do {
+            let reply = try roundTrip(HandoverMessage(type: .commit))
+            guard reply.message.type == .ok else { throw ClientError.unexpected("OK erwartet") }
+        } catch {
+            if let keeperPID, keeperPID > 1 { kill(keeperPID, SIGTERM) }
+            throw error
+        }
     }
 
     func abort() throws {
@@ -138,9 +154,13 @@ final class HandoverClient {
 
     // MARK: Übernahme
 
-    func helloTake(range: ClosedRange<Int> = HandoverProtocol.supported) throws -> TakeHello {
+    /// HELLO der Übernahme. `secret` ist das Geheimnis, das die alte App dem
+    /// Aufbewahrer gegeben hat; die neue App bekommt es von ihr über den
+    /// Schlüsselbund (Paket 4).
+    func helloTake(range: ClosedRange<Int> = HandoverProtocol.supported, secret: String?) throws -> TakeHello {
         var hello = HandoverMessage(type: .hello)
         hello.role = .take
+        hello.secret = secret
         hello.protocolRange = [range.lowerBound, range.upperBound]
         hello.build = HandoverProtocol.buildIdentifier
         hello.appPid = getpid()
@@ -167,7 +187,7 @@ final class HandoverClient {
         var message = HandoverMessage(type: .take)
         message.chatID = chatID
         try connection.send(message, timeout: timeout)
-        let reply = try connection.receive(timeout: timeout, acceptDescriptor: true)
+        let reply = try connection.receive(timeout: timeout, acceptAttachments: true)
         if reply.message.type == .error {
             if let fd = reply.descriptor { Darwin.close(fd) }
             throw ClientError.refused(reply.message.message ?? "ohne Grund")
@@ -216,8 +236,13 @@ final class HandoverClient {
 
     /// Unverträglich oder Übernahme gescheitert: der Aufbewahrer beendet
     /// geordnet, die App setzt danach per `--resume` fort.
-    func release() throws {
-        _ = try roundTrip(HandoverMessage(type: .release))
+    /// Mit Geheimnis, wenn `RELEASE` die erste Nachricht der Verbindung ist.
+    /// Nach einem HELLO (auch nach `INCOMPATIBLE`) ist die Verbindung schon
+    /// ausgewiesen; das Feld schadet dann nicht.
+    func release(secret: String?) throws {
+        var message = HandoverMessage(type: .release)
+        message.secret = secret
+        _ = try roundTrip(message)
     }
 
     // MARK: Status

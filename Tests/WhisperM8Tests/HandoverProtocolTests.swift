@@ -30,7 +30,7 @@ final class HandoverProtocolTests: XCTestCase {
             do { try a.send(message, descriptor: pipeFDs[1], payload: payload, timeout: 5) } catch { XCTFail("\(error)") }
             sent.fulfill()
         }
-        let received = try b.receive(timeout: 5, acceptDescriptor: true)
+        let received = try b.receive(timeout: 5, acceptAttachments: true)
         wait(for: [sent], timeout: 5)
         close(pipeFDs[1]) // erst nach dem Empfang (ACK-Regel)
 
@@ -59,6 +59,24 @@ final class HandoverProtocolTests: XCTestCase {
         XCTAssertNil(received.descriptor)
         var byte: UInt8 = 0
         XCTAssertEqual(read(fds[0], &byte, 1), 0, "letzte Kopie zu → EOF")
+    }
+
+    func testPayloadIsRejectedBeforeReadingUnlessAccepted() throws {
+        let (a, b) = socketPair()
+        defer { a.close(); b.close() }
+        // Nur der Kopf mit angekündigter Nutzlast, die Nutzlast selbst fehlt:
+        // abgelehnt wird sofort, nicht erst nach dem Lesen.
+        var message = HandoverMessage(type: .take)
+        message.chatID = "a"
+        message.payloadBytes = 10
+        let json = try JSONEncoder().encode(message)
+        var frame = [UInt8]()
+        withUnsafeBytes(of: UInt32(json.count).bigEndian) { frame.append(contentsOf: $0) }
+        frame.append(contentsOf: json)
+        XCTAssertEqual(frame.withUnsafeBytes { Darwin.write(a.fd, $0.baseAddress, $0.count) }, frame.count)
+        let started = Date()
+        XCTAssertThrowsError(try b.receive(timeout: 3))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1, "keine Wartezeit auf die Nutzlast")
     }
 
     func testOversizedFrameIsRejected() throws {

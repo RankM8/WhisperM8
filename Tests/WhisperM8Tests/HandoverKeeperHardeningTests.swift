@@ -122,7 +122,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         let status = try connect().status()
         XCTAssertEqual(status.chats.map(\.chatID), ["a"], "der Aufbewahrer antwortet weiter")
         let release = try connect()
-        try release.release()
+        try release.release(secret: nil)
         release.close()
         XCTAssertNotNil(child.waitForExit(timeout: 10), "geordnetes Ende trotz voller Leitung")
     }
@@ -138,12 +138,12 @@ final class HandoverKeeperHardeningTests: XCTestCase {
 
         let take = try connect()
         defer { take.close() }
-        _ = try take.helloTake()
+        _ = try take.helloTake(secret: nil)
         let taken = try take.take(chatID: "a", acknowledge: false)
         let fd = try XCTUnwrap(taken.descriptor)
 
         let release = try connect()
-        try release.release()
+        try release.release(secret: nil)
         release.close()
         XCTAssertEqual(keeper.queue.sync { keeper.phase }, .closing, "Ende wartet auf die Übergabe")
         XCTAssertFalse(child.marker.contains("INT"), "kein Ctrl+C an einen Chat mitten in der Übergabe")
@@ -165,7 +165,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         try depositAll([(child, child.manifest(chatID: "a"))])
 
         let take = try connect()
-        _ = try take.helloTake()
+        _ = try take.helloTake(secret: nil)
         let taken = try take.take(chatID: "a", acknowledge: false)
         keeper.terminate()
         XCTAssertTrue(HandoverTestSupport.waitUntil(timeout: 10) { keeper.queue.sync { keeper.phase } == .closing })
@@ -209,7 +209,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         // LIST mit angehängter Leitung in der Übernahme.
         let take = try connect()
         defer { take.close() }
-        _ = try take.helloTake()
+        _ = try take.helloTake(secret: nil)
         try assertKeeperClosesIt { fd in
             try take.connection.send(HandoverMessage(type: .list), descriptor: fd, timeout: 5)
             XCTAssertEqual(try take.connection.receive(timeout: 5).message.type, .chats)
@@ -224,7 +224,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         try depositAll([(child, child.manifest(chatID: "a"))])
 
         let take = try connect()
-        _ = try take.helloTake()
+        _ = try take.helloTake(secret: nil)
         let taken = try take.take(chatID: "a", acknowledge: false)
         usleep(800_000) // ACK-Frist des Aufbewahrers verstreicht
         XCTAssertThrowsError(try take.confirmTake(chatID: "a"), "kein OK auf ein zu spätes ACK")
@@ -415,7 +415,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
             runID: "secret",
             ioTimeout: 10,
             peerPolicy: HandoverPeerPolicy(allowedExecutablePaths: []),
-            depositSecret: secret,
+            secret: secret,
             logToFile: false
         ))
         try keeper.start(onFinish: { _ in })
@@ -432,5 +432,123 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         try client.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: [])
         try client.commit()
         child.closeMaster()
+    }
+
+    // MARK: Zweiter Review
+
+    /// Wer sich zuerst ausweist, bleibt der einzige Absender der Verbindung.
+    /// Hier ohne Pfadprüfung (leere Policy): Nur die Absender-Bindung hält
+    /// ein Kind auf, das über die geerbte Verbindung LIST schickt.
+    func testOtherProcessCannotSpeakOnPinnedConnection() throws {
+        let child = try spawn { try .ticking(in: directory) }
+        let keeper = try makeKeeper()
+        try depositAll([(child, child.manifest(chatID: "a"))])
+        let client = try connect()
+        defer { client.close() }
+        _ = try client.helloTake(secret: nil)
+
+        var list = HandoverMessage(type: .list)
+        list.chatID = nil
+        let json = try JSONEncoder().encode(list)
+        var frame = [UInt8]()
+        withUnsafeBytes(of: UInt32(json.count).bigEndian) { frame.append(contentsOf: $0) }
+        frame.append(contentsOf: json)
+        let sock = client.connection.fd
+        _ = fcntl(sock, F_SETFD, 0) // das Kind soll die Verbindung erben
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("sleep"), strdup("3"), nil]
+        let envp: [UnsafeMutablePointer<CChar>?] = [nil]
+        defer { argv.forEach { free($0) } }
+        var master: Int32 = -1
+        let pid: pid_t = frame.withUnsafeBytes { framePtr in
+            let pid = forkpty(&master, nil, nil, nil)
+            if pid == 0 {
+                _ = Darwin.write(sock, framePtr.baseAddress, framePtr.count)
+                argv.withUnsafeBufferPointer { a in
+                    envp.withUnsafeBufferPointer { e in _ = execve("/bin/sleep", a.baseAddress, e.baseAddress) }
+                }
+                _exit(127)
+            }
+            return pid
+        }
+        HandoverSocket.setCloseOnExec(sock)
+        XCTAssertGreaterThan(pid, 0)
+        defer {
+            close(master)
+            kill(pid, SIGKILL)
+            var status: Int32 = 0
+            waitpid(pid, &status, 0)
+        }
+        let reply = try client.connection.receive(timeout: 10)
+        XCTAssertEqual(reply.message.type, .error, "fremder Absender auf gebundener Verbindung")
+        XCTAssertNil(reply.message.chats)
+        XCTAssertEqual(keeper.queue.sync { keeper.chats.count }, 1)
+    }
+
+    func testTakeAndReleaseRequireSecret() throws {
+        let child = try spawn { try .ticking(in: directory) }
+        let secret = HandoverSecret.make()
+        let finished = expectation(description: "Ende")
+        let keeper = HandoverKeeper(configuration: .init(
+            paths: HandoverPaths(directory: directory),
+            runID: "secret-take",
+            ioTimeout: 10,
+            peerPolicy: HandoverPeerPolicy(allowedExecutablePaths: []),
+            secret: secret,
+            logToFile: false
+        ))
+        try keeper.start(onFinish: { _ in finished.fulfill() })
+        keepers.append(keeper)
+        let deposit = try connect()
+        try deposit.helloDeposit(secret: secret)
+        try deposit.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: [])
+        try deposit.commit()
+        deposit.close()
+        child.closeMaster()
+
+        for wrong in [nil, HandoverSecret.make()] {
+            let take = try connect()
+            XCTAssertThrowsError(try take.helloTake(secret: wrong))
+            take.close()
+            let release = try connect()
+            XCTAssertThrowsError(try release.release(secret: wrong))
+            release.close()
+        }
+        XCTAssertEqual(keeper.queue.sync { keeper.phase }, .holding, "nichts freigegeben")
+        XCTAssertTrue(child.isAlive)
+
+        let release = try connect()
+        try release.release(secret: secret)
+        release.close()
+        wait(for: [finished], timeout: 15)
+        XCTAssertNotNil(child.waitForExit(timeout: 10))
+    }
+
+    /// Kommt das OK auf COMMIT nicht an, bekommt der Aufbewahrer SIGTERM.
+    func testFailedCommitSendsSigtermToKeeper() throws {
+        let stand = try spawn {
+            try .spawn(script: "trap 'echo TERM >> \"$MARKER\"; exit 143' TERM; : > \"$READY\"; while :; do sleep 0.1; done", in: directory)
+        }
+        var fds: [Int32] = [-1, -1]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let client = HandoverClient(connection: HandoverConnection(fd: fds[0]), timeout: 5)
+        let server = HandoverConnection(fd: fds[1])
+        defer { client.close(); server.close() }
+        client.keeperPID = stand.pid
+        DispatchQueue.global().async {
+            _ = try? server.receive(timeout: 5) // COMMIT
+            server.close() // kein OK
+        }
+        XCTAssertThrowsError(try client.commit())
+        XCTAssertNotNil(stand.waitForExit(timeout: 10))
+        XCTAssertTrue(stand.marker.contains("TERM"))
+    }
+
+    func testIdleConnectionsDoNotBlockOthers() throws {
+        _ = try makeKeeper()
+        var idle: [HandoverClient] = []
+        for _ in 0..<8 { idle.append(try connect()) }
+        defer { idle.forEach { $0.close() } }
+        let status = try connect().status()
+        XCTAssertEqual(status.runID, "hardening")
     }
 }

@@ -23,7 +23,7 @@ WhisperM8 handover-keeper --root <ordner> --run <id> [--hold-seconds N] [--depos
 whisperm8 app handover-status [--json]
 ```
 
-- **Geheimnis:** Die App erzeugt je Start ein Einmal-Geheimnis (`HandoverSecret.make()`, 32 Byte hex) und gibt es dem Aufbewahrer als erste Zeile auf stdin (`HandoverKeeperLauncher.launch(…, secret:)`). Ohne gültiges Geheimnis startet er nicht (Exit 64). Als Argument geht es nie mit, weil es dann in `ps` stünde, und auf die Platte kommt es nicht. Wer abgibt, muss es im `HELLO` nennen.
+- **Geheimnis:** Die App erzeugt je Start ein Einmal-Geheimnis (`HandoverSecret.make()`, 32 Byte hex) und gibt es dem Aufbewahrer als erste Zeile auf stdin (`HandoverKeeperLauncher.launch(…, secret:)`). Ohne gültiges Geheimnis startet er nicht (Exit 64). Als Argument geht es nie mit, weil es dann in `ps` stünde. Jedes `HELLO` (Abgabe und Übernahme) und ein `RELEASE` ohne vorheriges `HELLO` muss es nennen. Die neue App bekommt es von der alten über den Schlüsselbund, mit Zugriff nur für die App selbst (Paket 4).
 - `--root`: Standard `Application Support/WhisperM8/handover/` der Instanz (die Test-Instanz hat ihren eigenen). Darin liegen `keeper.lock` (`flock`, höchstens ein Aufbewahrer je Instanz), `keeper.sock` (0600 in einem 0700-Ordner), `keeper.log` (rotiert ab 1 MB) und `socket-path`. Ist der Socket-Pfad zu lang für `sun_path`, weicht er nach `/private/tmp/whisperm8-<uid>-h<hash>/keeper.sock` aus, und `socket-path` nennt den echten Pfad.
 - `--hold-seconds`: Haltefrist, höchstens 600 (Entscheidung 2), auch per Argument nicht mehr.
 - `--deposit-seconds`: Abgabefrist, Standard 30. Sie läuft vom Start bis zum `HELLO` und danach jeweils ab dem letzten `HELLO` oder `DEPOSIT` bis zum `COMMIT`.
@@ -32,9 +32,15 @@ whisperm8 app handover-status [--json]
 
 ## Wer darf was
 
-`STATUS` darf jeder Prozess desselben Nutzers. Die Antwort enthält weder Tokens noch Terminal-Inhalte. Alles andere prüft der Aufbewahrer bei **jedem einzelnen Telegramm** (`HandoverKeeper.receiveChecked`): gleiche UID, ein Audit-Token per `LOCAL_PEERTOKEN`, dazu Pfad und Code-Anforderung des Codes hinter diesem Token.
+`STATUS` darf jeder Prozess desselben Nutzers. Die Antwort enthält weder Tokens noch Terminal-Inhalte. Für alles andere gelten drei Prüfungen.
 
-Warum bei jedem Telegramm (gemessen am 12.11.2026): `LOCAL_PEERTOKEN` und `LOCAL_PEERPID` nennen den Prozess, der den Socket zuletzt benutzt hat, und zwar in seinem jetzigen Zustand, nicht den vom `connect`. Verbindet sich ein Kind und lädt danach per `exec` das App-Binary, sähe eine Prüfung beim `accept` „die App“. Der Elternprozess, der danach über dieselbe Verbindung spricht, fällt erst bei seinem eigenen Telegramm auf (`HandoverKeeperHardeningTests.testPeerThatExecsAllowedBinaryAfterConnectIsNotTrusted`, `testParentSpeakingAfterChildHelloIsRefused`).
+1. **Geheimnis** im `HELLO` bzw. im ersten `RELEASE` (siehe oben). Das ist der eigentliche Schutz: Den *Inhalt* eines Telegramms kann sich ein fremder Prozess nicht vom App-Binary schreiben lassen.
+2. **Code des Absenders** bei jedem einzelnen Telegramm (`HandoverKeeper.receiveChecked`): gleiche UID, ein Audit-Token per `LOCAL_PEERTOKEN`, dazu Pfad und Code-Anforderung des Codes hinter diesem Token.
+3. **Absender-Bindung:** Der erste geprüfte Absender einer Verbindung (PID und PID-Version aus dem Audit-Token) wird festgehalten. Jedes weitere Telegramm muss von genau ihm kommen.
+
+Dazu nimmt der Aufbewahrer Nutzlast und Leitungen nur an `DEPOSIT` an. Bei jedem anderen Telegramm bricht er schon nach dem Kopf ab, bevor er die Nutzlast liest.
+
+Warum so viel (gemessen am 12.11.2026, Review): `LOCAL_PEERTOKEN` und `LOCAL_PEERPID` nennen den Prozess, der den Socket zuletzt benutzt hat, in seinem jetzigen Zustand, nicht den vom `connect`. Eine Prüfung nur beim `accept` lässt sich mit „verbinden, dann `exec` des App-Binarys“ umgehen. Auch eine Prüfung je Telegramm allein reicht nicht: Ein fremder Prozess kann den Anfang eines Telegramms schreiben und den Rest vom App-Binary schreiben lassen, etwa über die Ausgabe von `whisperm8 chats tail` aus einem Verlauf, den er selbst bestimmt. Dann gilt das App-Binary als letzter Absender. Dagegen helfen nur das Geheimnis und die Bindung (`HandoverKeeperHardeningTests`: `testPeerThatExecsAllowedBinaryAfterConnectIsNotTrusted`, `testParentSpeakingAfterChildHelloIsRefused`, `testOtherProcessCannotSpeakOnPinnedConnection`, `testTakeAndReleaseRequireSecret`).
 
 Umgekehrt prüft die App den Aufbewahrer: bei der Abgabe PID (`LOCAL_PEERTOKEN` des Servers) und `runID`, bei der Übernahme auf Wunsch Pfad und Code-Anforderung (`HandoverClient.verifyServer`).
 
@@ -45,18 +51,18 @@ Rahmung: 4 Byte Länge (big-endian), dann JSON, dann `payloadBytes` rohe Bytes (
 | Phase | Ablauf |
 |---|---|
 | Abgabe | `HELLO {role: deposit, protocolVersion, secret}` → `OK {runID}`; je Chat `DEPOSIT {manifest}` + Leitung + Bild → `ACK {chatID}`; `COMMIT` → `OK` oder `ABORT` → `OK` |
-| Übernahme | `HELLO {role: take, protocolRange}` → `OK {protocolVersion}` oder `INCOMPATIBLE`; `LIST` → `CHATS`; je Chat `TAKE {chatID}` → `CHAT {manifest, exited, exitStatus, gapBytes}` + Leitung (nicht bei beendeten Chats) + Bild → `ACK {chatID}` → `OK {chatID}`; `DONE` |
-| Freigabe | `RELEASE` → `OK`, dann geordnet beenden; auch direkt nach `INCOMPATIBLE` und ohne `HELLO` |
+| Übernahme | `HELLO {role: take, protocolRange, secret}` → `OK {protocolVersion}` oder `INCOMPATIBLE`; `LIST` → `CHATS`; je Chat `TAKE {chatID}` → `CHAT {manifest, exited, exitStatus, gapBytes}` + Leitung (nicht bei beendeten Chats) + Bild → `ACK {chatID}` → `OK {chatID}`; `DONE` |
+| Freigabe | `RELEASE {secret}` → `OK`, dann geordnet beenden; auch direkt nach `INCOMPATIBLE` und ohne `HELLO` |
 | Status | `STATUS` → `STATUS_RESULT` |
 
-Versionsunabhängig sind die Rahmung, `type`, `HELLO`, `INCOMPATIBLE`, `RELEASE` und `STATUS`. Telegrammnamen und Manifestfelder werden nur ergänzt, nie umbenannt (`HandoverProtocolTests.testMessageTypesKeepTheirWireNames`).
+Versionsunabhängig sind die Rahmung, `type`, `secret`, `HELLO`, `INCOMPATIBLE`, `RELEASE` und `STATUS`. Telegrammnamen und Manifestfelder werden nur ergänzt, nie umbenannt (`HandoverProtocolTests.testMessageTypesKeepTheirWireNames`).
 
 ### Wann gehört eine Leitung wem
 
 Für jede Seite gilt: Wer eine Leitung schickt, schließt sie erst nach der Bestätigung. Daraus folgen zwei Regeln für die App.
 
-- **Abgabe:** Die App hält ihre Originale, bis `commit()` ohne Fehler zurückkam (`COMMIT` → `OK`). Das `ACK` nach einem `DEPOSIT` reicht dafür nicht. Bricht vorher etwas ab (Verbindung weg, Abgabefrist, SIGTERM, `ABORT`), schließt der Aufbewahrer seine Kopien still. Die Originale der App halten die Chats, und sie beendet sich auf dem heutigen Weg.
-- **Übernahme:** Die App benutzt eine Leitung erst nach `OK {chatID}`. Dieses `OK` schickt der Aufbewahrer, nachdem er seine eigene Kopie geschlossen hat. Kommt ihr `ACK` zu spät (nach `ackTimeout`), liest der Aufbewahrer weiter, und auf das späte `ACK` folgt kein `OK`. Die App schließt ihre Kopie dann nur, ohne Ctrl+C (`HandoverClient.take` erledigt das selbst). So lesen nie zwei Prozesse dieselbe Leitung. Die App wartet doppelt so lange auf das `OK` wie der Aufbewahrer auf das `ACK`.
+- **Abgabe:** Die App hält ihre Originale, bis `commit()` ohne Fehler zurückkam (`COMMIT` → `OK`). Das `ACK` nach einem `DEPOSIT` reicht dafür nicht. Bricht vorher etwas ab (Verbindung weg, Abgabefrist, SIGTERM, `ABORT`), schließt der Aufbewahrer seine Kopien still. Die Originale der App halten die Chats, und sie beendet sich auf dem heutigen Weg. Lässt sich das `OK` auf `COMMIT` nicht zustellen, gibt der Aufbewahrer ebenfalls still frei. Kommt es bei der App nicht an, schickt `commit()` dem Aufbewahrer SIGTERM, bevor es den Fehler meldet: Vor `COMMIT` schließt er dann still, danach geordnet. So hält nie eine Kopie Chats weiter, während die App auf dem heutigen Weg endet.
+- **Übernahme:** Die App benutzt eine Leitung erst nach `OK {chatID}`. Der Aufbewahrer schickt dieses `OK`, solange seine Kopie noch offen ist, und schließt sie erst danach. Geht das `OK` nicht hinaus, behält er den Chat und liest weiter. Kommt das `ACK` der App zu spät (nach `ackTimeout`), liest der Aufbewahrer ebenfalls weiter, und auf das späte `ACK` folgt kein `OK`. Ohne `OK` schließt die App ihre Kopie nur, ohne Ctrl+C (`HandoverClient.take` erledigt das selbst). So lesen nie zwei Prozesse dieselbe Leitung. Die App wartet doppelt so lange auf das `OK` wie der Aufbewahrer auf das `ACK`. Geht das `OK` hinaus und stirbt die App direkt danach, endet der Chat; das ist der Rückfall per `--resume`.
 
 **Manifest:** Die Felder stehen im Plan. Neu in diesem Paket ist das optionale Feld `terminalColors {foreground, background}` (`#rrggbb`), damit der Aufbewahrer auf OSC 10/11 dieselben Farben meldet wie die App. Fehlt es, gelten SwiftTerms Standardfarben. `launchCommand` und `pendingAccountSwitch` sind für den Aufbewahrer undurchsichtiges JSON, ihren Inhalt legt Paket 4 fest. Ist `pidStartTime` gesetzt, lehnt der Aufbewahrer eine Abgabe ab, wenn die Startzeit des Prozesses nicht passt (wiederverwendete PID).
 
@@ -91,7 +97,8 @@ Je Chat ein SwiftTerm-`Terminal`. Es wird erst mit dem Bild gefüttert, dann mit
   - unverträgliches Protokoll → `RELEASE` → geordnetes Ende;
   - zweiter Aufbewahrer → Exit 75; SIGTERM;
   - Start ohne Geheimnis → Exit 64;
-  - falsches Geheimnis, falsche `runID` oder falsche PID → keine Abgabe.
+  - falsches Geheimnis, falsche `runID` oder falsche PID → keine Abgabe;
+  - Übernahme ohne Geheimnis → abgelehnt.
 - `HandoverKeeperTests` (im Testprozess): Ausgabe der Lücke kommt an, fehlendes `ACK`, Ende in der Lücke mit Exit-Code, Fristen, `ABORT`, verlorene Abgabe, falsche Startzeit, fremdes Binary, Token nie im Status, `app handover-status`.
 - `HandoverKeeperHardeningTests`, je ein Test pro Review-Befund:
   - Abgabefrist ab `HELLO` und je `DEPOSIT`, Originale bis `COMMIT`;
@@ -99,17 +106,21 @@ Je Chat ein SwiftTerm-`Terminal`. Es wird erst mit dem Bild gefüttert, dann mit
   - `RELEASE` und SIGTERM mitten in der Übergabe;
   - Leitungen außerhalb der Abgabe;
   - spätes `ACK`;
-  - Audit-Token und beide `exec`-Angriffe;
-  - Geheimnis.
+  - Audit-Token, beide `exec`-Angriffe und Absender-Bindung;
+  - Geheimnis bei Abgabe, Übernahme und Freigabe;
+  - SIGTERM nach gescheitertem `COMMIT`;
+  - leere Verbindungen blockieren nichts.
 - `HandoverProtocolTests`: Rahmung mit Deskriptor und großer Nutzlast, Annahme nur auf Wunsch, Fristen, Aushandeln, Manifest, Pfade, Antworten auf Rückfragen, OSC-52-Sperre, Farben, Platzhalter-Serialisierer, CLI-Argumente.
 
 Die Prozess-Tests brauchen das gebaute `WhisperM8`-Binary neben dem Test-Bundle. `swift test` linkt es mit; fehlt es, scheitern die Tests, statt still übersprungen zu werden.
 
 ## Offen für Paket 4
 
-- **Start:** den Aufbewahrer per `HandoverKeeperLauncher.launch(…, secret:)` starten und Geheimnis, `runID` und PID nur im Speicher halten. Bei der Abgabe `helloDeposit(secret:expectedRunID:expectedPID:)` benutzen. Vorher per `STATUS` klären, ob schon ein Aufbewahrer mit Chats lebt, die noch niemand übernommen hat.
+- **Start:** den Aufbewahrer per `HandoverKeeperLauncher.launch(…, secret:)` starten. Bei der Abgabe `helloDeposit(secret:expectedRunID:expectedPID:)` benutzen. Vorher per `STATUS` klären, ob schon ein Aufbewahrer mit Chats lebt, die noch niemand übernommen hat.
+- **Geheimnis weiterreichen:** Die alte App legt das Geheimnis vor `COMMIT` in den Schlüsselbund, als Eintrag je Instanz, den nur die App lesen darf (Zugriff an ihre Code-Signatur gebunden). Die neue App liest es für `helloTake(secret:)` und `release(secret:)` und löscht es danach. Ohne Geheimnis kann die neue App nicht übernehmen; es gilt der Rückfall per `--resume`, nachdem der Aufbewahrer nach Frist beendet hat. Kann die App nicht übernehmen, beendet sie ihn deshalb per SIGTERM über die PID aus `STATUS`.
 - **Originale:** erst nach `commit()` schließen, Leitungen erst nach dem `OK` aus `take` benutzen.
 - **Prozesslisten:** `make kill` (`GUI_PIDS`, `Makefile` ~Z. 252) und `scripts/test-instance.sh` (`cmd_stop` ~Z. 97, `pids()`) treffen heute jeden Prozess des Binarys. Prozesse mit dem Argument `handover-keeper` müssen sie ausnehmen. `make clean-install` trifft ihn absichtlich.
 - **Farben:** `terminalColors` aus den Farben der Terminal-View füllen.
 - **close-on-exec:** Empfangene Leitungen bekommen close-on-exec erst nach `recvmsg`. Deshalb nicht übernehmen, während auf einem anderen Thread ein `forkpty` läuft; beides auf dem Main Thread löst das.
 - **Signatur:** Zwischen verschieden signierten Builds, etwa von `make dev` zur Brew-Version, passt die Code-Anforderung nicht. Die Übernahme scheitert dann, und es gilt der Rückfall per `--resume`. Das ist so gewollt.
+- **Lastgrenze:** 32 gleichzeitige Verbindungen, das erste Telegramm muss binnen 3 s kommen. Ein Prozess desselben Nutzers könnte den Aufbewahrer ohnehin per Signal beenden; Schutz gegen ihn ist hier nur, dass er keine Chats bekommt, nicht, dass er nichts stören kann.

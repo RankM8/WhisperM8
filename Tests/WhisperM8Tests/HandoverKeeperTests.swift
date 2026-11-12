@@ -81,7 +81,7 @@ final class HandoverKeeperTests: XCTestCase {
 
         let client = try connect()
         defer { client.close() }
-        let hello = try client.helloTake()
+        let hello = try client.helloTake(secret: nil)
         XCTAssertEqual(hello.protocolVersion, 1)
         XCTAssertEqual(hello.runID, "test-run")
         let listed = try client.list()
@@ -110,7 +110,7 @@ final class HandoverKeeperTests: XCTestCase {
         _ = try makeKeeper { reason = $0; finished.fulfill() }
         try depositAll([(child, child.manifest(chatID: "a"))])
         let client = try connect()
-        _ = try client.helloTake()
+        _ = try client.helloTake(secret: nil)
         let taken = try client.take(chatID: "a")
         try client.done()
         client.close()
@@ -127,7 +127,7 @@ final class HandoverKeeperTests: XCTestCase {
         try depositAll([(child, child.manifest(chatID: "a"))])
 
         let first = try connect()
-        _ = try first.helloTake()
+        _ = try first.helloTake(secret: nil)
         let unacknowledged = try first.take(chatID: "a", acknowledge: false)
         // App stürzt vor dem ACK ab: ihre Kopie und die Verbindung sind weg.
         if let fd = unacknowledged.descriptor { close(fd) }
@@ -142,7 +142,7 @@ final class HandoverKeeperTests: XCTestCase {
 
         let second = try connect()
         defer { second.close() }
-        _ = try second.helloTake()
+        _ = try second.helloTake(secret: nil)
         let taken = try second.take(chatID: "a")
         XCTAssertNotNil(taken.descriptor)
         try second.done()
@@ -158,7 +158,7 @@ final class HandoverKeeperTests: XCTestCase {
         })
         let client = try connect()
         defer { client.close() }
-        _ = try client.helloTake()
+        _ = try client.helloTake(secret: nil)
         let summary = try XCTUnwrap(try client.list().first)
         XCTAssertTrue(summary.exited)
         let taken = try client.take(chatID: "a")
@@ -201,10 +201,10 @@ final class HandoverKeeperTests: XCTestCase {
 
         let client = try connect()
         defer { client.close() }
-        XCTAssertThrowsError(try client.helloTake(range: 2...3)) { error in
+        XCTAssertThrowsError(try client.helloTake(range: 2...3, secret: nil)) { error in
             XCTAssertEqual(error as? HandoverClient.ClientError, .incompatible)
         }
-        try client.release()
+        try client.release(secret: nil)
         wait(for: [finished], timeout: 15)
         XCTAssertEqual(reason, .released)
         let st = tui.waitForExit(timeout: 10)
@@ -262,7 +262,7 @@ final class HandoverKeeperTests: XCTestCase {
         _ = try makeKeeper { reason = $0; finished.fulfill() }
         try depositAll([(kept, kept.manifest(chatID: "kept")), (left, left.manifest(chatID: "left"))])
         let client = try connect()
-        _ = try client.helloTake()
+        _ = try client.helloTake(secret: nil)
         let taken = try client.take(chatID: "kept")
         try client.done()
         client.close()
@@ -324,10 +324,10 @@ final class HandoverKeeperTests: XCTestCase {
         statusClient.close()
 
         let take = try connect()
-        XCTAssertThrowsError(try take.helloTake())
+        XCTAssertThrowsError(try take.helloTake(secret: nil))
         take.close()
         let release = try connect()
-        XCTAssertThrowsError(try release.release())
+        XCTAssertThrowsError(try release.release(secret: nil))
         release.close()
         XCTAssertEqual(keeper.queue.sync { keeper.phase }, .holding)
     }
@@ -349,7 +349,7 @@ final class HandoverKeeperTests: XCTestCase {
 
         let client = try connect()
         defer { client.close() }
-        _ = try client.helloTake()
+        _ = try client.helloTake(secret: nil)
         XCTAssertEqual(try client.list().first?.manifest.controlToken, "geheim-123")
         let taken = try client.take(chatID: "a")
         try client.done()

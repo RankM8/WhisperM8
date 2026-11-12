@@ -99,7 +99,7 @@ enum HandoverKeeperCommand {
                 allowedExecutablePaths: allowed,
                 requirement: HandoverPeerPolicy.ownRequirement()
             ),
-            depositSecret: secret
+            secret: secret
         ))
 
         var signalSources: [DispatchSourceSignal] = []

@@ -36,9 +36,14 @@ final class HandoverKeeper: @unchecked Sendable {
         /// Frist für das `ACK` nach einer übergebenen Leitung.
         var ackTimeout: TimeInterval = 10
         var peerPolicy: HandoverPeerPolicy
-        /// Einmal-Geheimnis, das die alte App beim Start über stdin übergibt.
-        /// Ohne passendes Geheimnis keine Abgabe. `nil` nur in Tests im selben Prozess.
-        var depositSecret: String?
+        /// Einmal-Geheimnis, das die alte App beim Start über stdin übergibt
+        /// und der neuen App über den Schlüsselbund weiterreicht (Paket 4).
+        /// Ohne passendes Geheimnis weder Abgabe noch Übernahme noch Freigabe.
+        /// `nil` nur in Tests im selben Prozess.
+        var secret: String?
+        /// Frist für das erste Telegramm einer Verbindung. Kurz, damit leere
+        /// Verbindungen keine Plätze blockieren.
+        var firstMessageTimeout: TimeInterval = 3
         var serializer: HandoverScreenSerializing = HandoverPlainTextSerializer()
         /// Wie `AgentTerminalRegistry.captureAllSnapshotsForAppQuit`: Ctrl+C,
         /// 80 ms, Ctrl+C, 180 ms.
@@ -83,7 +88,9 @@ final class HandoverKeeper: @unchecked Sendable {
     let queue = DispatchQueue(label: "com.whisperm8.handover-keeper", qos: .userInitiated)
     private let connectionQueue = DispatchQueue(
         label: "com.whisperm8.handover-keeper.conn", qos: .userInitiated, attributes: .concurrent)
-    private let connectionSlots = DispatchSemaphore(value: 4)
+    /// Großzügig: Ein Prozess desselben Nutzers könnte den Aufbewahrer ohnehin
+    /// per Signal beenden; die Plätze sollen nur eine Verbindungsflut deckeln.
+    private let connectionSlots = DispatchSemaphore(value: 32)
 
     private(set) var phase: Phase = .starting
     private(set) var finishReason: FinishReason?
@@ -221,7 +228,11 @@ final class HandoverKeeper: @unchecked Sendable {
         let clientFD = accept(listenFD, nil, nil)
         guard clientFD >= 0 else { return }
         HandoverSocket.setCloseOnExec(clientFD)
-        guard let peer = HandoverPeer.of(socket: clientFD), peer.uid == getuid() else {
+        // Hier nur die UID (billig, auf der Queue). Code und Audit-Token prüft
+        // der Verbindungs-Thread bei jedem Telegramm.
+        var euid: uid_t = 0
+        var egid: gid_t = 0
+        guard getpeereid(clientFD, &euid, &egid) == 0, euid == getuid() else {
             log("peer_rejected reason=uid")
             close(clientFD)
             return
@@ -306,10 +317,8 @@ final class HandoverKeeper: @unchecked Sendable {
         guard phase == .awaitingDeposit else { return }
         phase = .holding
         log("committed chats=\(chats.count)")
-        if chats.isEmpty {
-            finish(.allTaken)
-            return
-        }
+        // Ohne Chats endet der Aufbewahrer erst, nachdem die App ihr OK hat
+        // (serveDeposit), sonst schlösse `finish` die Verbindung davor.
         arm(deadline: Date().addingTimeInterval(configuration.holdSeconds)) { [weak self] in
             self?.holdDeadlineReached()
         }
