@@ -100,8 +100,11 @@ Settings.
 
 **Cancel:** click the X in the overlay. Nothing is transcribed.
 
-**Overlay:** shows level, timer and buttons at the bottom of the screen. Drag it anywhere; double-click
-resets the position. Full or Mini layout under Settings → Recording.
+**Pill:** one dark pill at the top center of the screen (on a MacBook: at the notch) shows level,
+timer and buttons while you dictate. At rest it shrinks to a gray core with the chat counters; a
+click on the core starts dictating, a click on the counters opens the chat list. Drag it anywhere on
+a display without a notch (each display remembers its spot); double-click resets the position. Full
+or Mini layout under Settings → Recording, everything else under Settings → General, Pill and Notch.
 
 **Output modes:** with AI enrichment you pick a mode (e.g. Clean, Email, Slack) in the overlay or the
 menu bar. The transcript is then rewritten by Codex using your ChatGPT login. Modes, templates and a
@@ -218,7 +221,7 @@ pages sit behind *Show Agent Chats settings*.
 
 | Page | What you find there |
 |---|---|
-| **Recording** | Hotkey (hold or toggle), input device, audio ducking, overlay layout and position, auto-paste |
+| **Recording** | Hotkey (hold or toggle), input device, audio ducking, overlay layout, auto-paste |
 | **Transcription** | Provider (Groq/OpenAI), API key, model and price, spoken language |
 | **AI Output** | ChatGPT connection for Codex, output modes, templates, test lab |
 | **Context & Privacy** | Selected text and visual context (screenshots, screen clips), deleting context files |
@@ -226,7 +229,7 @@ pages sit behind *Show Agent Chats settings*.
 | **Agent Chats** | Default chat type and project folder, automatic titles, tab swipe, *Advanced agent features*, summaries, notifications, terminal |
 | **CLI & Skills** | The `whisperm8` command-line tool and agent skills |
 | **Statistics** | Active time, agent time, tokens per model with their API value, leverage of your subscriptions, limits, chats, dictations; calculated locally (only the exchange rate and, with gh signed in, your pull requests are fetched), sharable as image or Markdown |
-| **General** | Usage profile, start at login, appearance, automatic update check |
+| **General** | Usage profile, start at login, appearance, pill and notch, automatic update check |
 | **Permissions** | Status of microphone, accessibility and screen recording, with links to System Settings |
 | **About** | Version and update |
 | **Accounts** | *Advanced:* several Claude accounts, login renewal, MCP servers across accounts |
