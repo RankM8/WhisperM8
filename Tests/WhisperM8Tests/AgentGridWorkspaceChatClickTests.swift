@@ -220,4 +220,38 @@ final class AgentGridWorkspaceChatClickTests: XCTestCase {
         XCTAssertEqual(store.navigateToWorkspaceChat(s[0], workspaceID: neun, in: w), .activated)
         XCTAssertEqual(store.selectedSession(in: w), s[0], "geteilter Chat gezielt gewählt")
     }
+
+    /// Review-Befund: Aus der Einzelansicht (Kopf von „Neun", ⊞, `workspace
+    /// open` ohne --slot) bekommt der gerade angesehene Chat den Fokus, wenn
+    /// er im Ziel liegt — nicht die alte gemerkte Kachel.
+    func testFromSingleViewTheViewedChatBeatsRememberedPane() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let drei = store.createGridWorkspace(name: "Drei", slots: [s[0], s[1]])
+        let neun = store.createGridWorkspace(name: "Neun", slots: [s[0], s[2], s[3]], activateIn: w)
+        store.setGridFocusedSession(s[2], in: w)
+        store.activateGridWorkspace(drei, in: w)     // merkt s[2] für „Neun"
+
+        store.showSingleSession(s[3], in: w)          // Einzelansicht, Chat aus „Neun"
+        XCTAssertFalse(store.showsGrid(in: w))
+        XCTAssertEqual(store.activateGridWorkspace(neun, in: w), .activated)
+        XCTAssertEqual(store.selectedSession(in: w), s[3], "angesehener Chat, nicht die gemerkte Kachel")
+    }
+
+    /// Aus der Einzelansicht mit einem Chat, der NICHT im Ziel liegt: wie
+    /// bisher die gemerkte Kachel.
+    func testFromSingleViewWithForeignChatFallsBackToRememberedPane() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 5)
+        let drei = store.createGridWorkspace(name: "Drei", slots: [s[0], s[1]])
+        let neun = store.createGridWorkspace(name: "Neun", slots: [s[0], s[2], s[3]], activateIn: w)
+        store.setGridFocusedSession(s[2], in: w)
+        store.activateGridWorkspace(drei, in: w)
+
+        store.showSingleSession(s[4], in: w)
+        store.activateGridWorkspace(neun, in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[2])
+    }
 }

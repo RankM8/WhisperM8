@@ -904,7 +904,12 @@ final class AgentWindowStore {
             window.activeWorkspaceID = workspaceID
             window.showsGrid = true
             Self.materializeSlotTabs(&window, entity: entity, skipping: foreignHosted)
-            Self.repairGridFocus(&window, entity: entity, lastFocusInWorkspace: remembered)
+            // Nur wer ein sichtbares Raster verlässt (L2 zwischen zwei
+            // Rastern), bekommt die gemerkte Kachel vor der Auswahl. Aus der
+            // Einzelansicht (Kopf, ⊞, `workspace open`) gewinnt wie früher
+            // der gerade angesehene Chat, sofern er im Ziel liegt.
+            Self.repairGridFocus(&window, entity: entity, lastFocusInWorkspace: remembered,
+                                 preferLastFocus: current.showsGrid)
         }
         return alreadyHere ? .alreadyActiveHere : .activated
     }
@@ -1114,22 +1119,25 @@ final class AgentWindowStore {
     }
 
     /// Fokus-Invariante im sichtbaren Grid: Selektion muss ein belegter Slot
-    /// sein. Reihenfolge: beim echten Workspace-Wechsel die dort zuletzt
-    /// benutzte Kachel (`lastFocusInWorkspace`), sonst die aktuelle Auswahl,
-    /// sonst der gemerkte Pane-Fokus (`gridFocusSessionID`, damit „Zurück zum
-    /// Workspace" exakt wiederherstellt), sonst erster belegter Slot; leerer
-    /// Workspace → `nil`.
+    /// sein. Reihenfolge: die aktuelle Auswahl, sonst die im Ziel zuletzt
+    /// benutzte Kachel (`lastFocusInWorkspace`, nur beim echten Wechsel
+    /// gesetzt), sonst der gemerkte Pane-Fokus (`gridFocusSessionID`, damit
+    /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
+    /// Slot; leerer Workspace → `nil`.
     ///
-    /// Die gemerkte Kachel MUSS vor der Auswahl kommen: Liegt der gerade
-    /// fokussierte Chat auch im Ziel-Workspace (ein Chat in zwei
-    /// Workspaces), gewann sonst er, und der Rückweg landete auf der falschen
-    /// Kachel (E2E-Befund 12.11.2026). Wer gezielt einen Chat öffnet
-    /// (`navigateToWorkspaceChat`), fokussiert ihn danach selbst.
+    /// `preferLastFocus`: Wechsel von einem sichtbaren Raster ins andere.
+    /// Dann kommt die gemerkte Kachel VOR der Auswahl — liegt der gerade
+    /// fokussierte Chat auch im Ziel (ein Chat in zwei Workspaces), gewann
+    /// sonst er, und der Rückweg landete auf der falschen Kachel (E2E-Befund
+    /// 12.11.2026). Aus der Einzelansicht bleibt der angesehene Chat vorn.
+    /// Wer gezielt einen Chat öffnet (`navigateToWorkspaceChat`), fokussiert
+    /// ihn danach selbst.
     private static func repairGridFocus(
         _ window: inout AgentChatWindowState, entity: AgentGridWorkspace,
-        lastFocusInWorkspace: UUID? = nil
+        lastFocusInWorkspace: UUID? = nil,
+        preferLastFocus: Bool = false
     ) {
-        if let lastFocusInWorkspace {
+        if preferLastFocus, let lastFocusInWorkspace {
             window.selectedSessionID = lastFocusInWorkspace
             window.gridFocusSessionID = lastFocusInWorkspace
             return
@@ -1137,6 +1145,11 @@ final class AgentWindowStore {
         if let selected = window.selectedSessionID,
            entity.slotIndex(of: selected) != nil {
             window.gridFocusSessionID = selected
+            return
+        }
+        if let lastFocusInWorkspace {
+            window.selectedSessionID = lastFocusInWorkspace
+            window.gridFocusSessionID = lastFocusInWorkspace
             return
         }
         if let remembered = window.gridFocusSessionID,
