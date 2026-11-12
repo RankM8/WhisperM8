@@ -32,7 +32,9 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             lastDraftInputAt: controller.controllerMarks.lastDraftInputAt,
             lastArmingArrowAt: controller.controllerMarks.lastArmingArrowAt,
             choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID)),
-            shellAtPrompt: profile == .shell && !controller.terminal.getTerminal().isCurrentBufferAlternate
+            shellAtPrompt: profile == .shell && !controller.terminal.getTerminal().isCurrentBufferAlternate,
+            screen: controller.controllerScreenSnapshot(),
+            queuedOwnPrompts: profile == .claude ? coordinator.queuedOwnPrompts(sessionID: sessionID) : 0
         )
     }
 
@@ -279,6 +281,13 @@ final class ControllerRuntime {
             dispatcher.islandStatus = { id in
                 ControllerIslandRows.status(AgentSessionStatusCoordinator.shared.statusStore.status(for: id))
             }
+            dispatcher.clipboard = ControllerClipboardAccess(
+                newest: { LiveControllerClipboard.newest() },
+                loadText: { LiveControllerClipboard.loadText(id: $0, completion: $1) },
+                copyImage: { LiveControllerClipboard.copyImage(id: $0, completion: $1) })
+            dispatcher.closedChats = ControllerClosedChatsAccess(
+                nextTitle: { ClosedChatReopener.next()?.title },
+                reopen: { ClosedChatReopener.reopen() != nil })
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)
             manager.onStateChange = { [weak feedback, weak manager, weak dispatcher] in

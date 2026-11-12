@@ -3911,6 +3911,16 @@
         }
       }
     },
+    "Close view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht schließen"
+          }
+        }
+      }
+    },
     "Close/archive %lld": {
       "localizations": {
         "de": {
@@ -5921,6 +5931,16 @@
         }
       }
     },
+    "Escape once": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal Escape"
+          }
+        }
+      }
+    },
     "Euro amounts": {
       "localizations": {
         "de": {
@@ -7011,6 +7031,16 @@
         }
       }
     },
+    "Hold L1, then L3: undo (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann L3: rückgängig (Claude)"
+          }
+        }
+      }
+    },
     "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)": {
       "localizations": {
         "de": {
@@ -7021,12 +7051,52 @@
         }
       }
     },
+    "Hold L1, then ▲ ▼: line up or down in a draft with several lines, not from its first or last line": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ▲ ▼: eine Zeile hoch oder runter im mehrzeiligen Entwurf, nicht aus der ersten bzw. letzten Zeile"
+          }
+        }
+      }
+    },
     "Hold L1, then △: new line without sending (Claude and Codex)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "L1 halten, dann △: Zeilenumbruch, ohne zu senden (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ◀ ▶: jump a word back or forward (Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ◀ ▶: ein Wort zurück oder vor (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ○: send exactly one Escape — while the chat works it interrupts unless a view is open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ○: genau ein Escape — arbeitet der Chat, unterbricht es, wenn keine Ansicht offen ist"
+          }
+        }
+      }
+    },
+    "Hold L1, then ✕: paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ✕: neuesten Eintrag der Zwischenablage einfügen; Bilder kommen wie mit ⌘V an (Bilder nur in Claude und Codex)"
           }
         }
       }
@@ -7051,6 +7121,16 @@
         }
       }
     },
+    "Hold L2, then □: reopen the most recently closed chat; again for the one before": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann □: zuletzt geschlossenen Chat wieder öffnen; noch mal für den davor"
+          }
+        }
+      }
+    },
     "Hold L2, then △: next chat that is waiting for you": {
       "localizations": {
         "de": {
@@ -7067,6 +7147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L2 halten: wohin — hoch und runter öffnen die Liste der Chats und Workspaces, links und rechts wechseln den Reiter, Loslassen oder ✕ wechselt, ○ bricht ab"
+          }
+        }
+      }
+    },
+    "Hold R1, then L3: detailed transcript on and off (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann L3: ausführliches Transkript an und aus (Claude)"
           }
         }
       }
@@ -7387,6 +7477,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deine bisherigen Chats werden eingelesen"
+          }
+        }
+      }
+    },
+    "In Claude's views (tasks, workflows, transcript, rewind, footer selection) ○ closes the view, also while the chat works": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Claudes Ansichten (Aufgaben, Workflows, Transkript, Zurückspulen, Auswahl in der Fußzeile) schließt ○ die Ansicht, auch während der Chat arbeitet"
           }
         }
       }
@@ -8137,6 +8237,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limits aktualisiert."
+          }
+        }
+      }
+    },
+    "Line up / down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeile hoch / runter"
           }
         }
       }
@@ -10511,6 +10621,16 @@
         }
       }
     },
+    "Nothing to paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts zum Einfügen"
+          }
+        }
+      }
+    },
     "Nothing was recorded. Wait until the text is inserted, then press the hotkey again. Esc cancels the clean-up.": {
       "localizations": {
         "de": {
@@ -11254,6 +11374,36 @@
         }
       }
     },
+    "Paste image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen"
+          }
+        }
+      }
+    },
+    "Paste image · %lld × %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen · %lld × %lld"
+          }
+        }
+      }
+    },
+    "Paste newest": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes einfügen"
+          }
+        }
+      }
+    },
     "Paste original": {
       "localizations": {
         "de": {
@@ -11290,6 +11440,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fügt ein, was du gesagt hast, bevor der Modus es umformuliert hat"
+          }
+        }
+      }
+    },
+    "Paste “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einfügen „%@“"
           }
         }
       }
@@ -12964,6 +13124,16 @@
         }
       }
     },
+    "Reopen closed chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschlossenen Chat wieder öffnen"
+          }
+        }
+      }
+    },
     "Reopen tab of %@": {
       "localizations": {
         "de": {
@@ -14000,6 +14170,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sende eine Testbenachrichtigung oder erlaube Benachrichtigungen, wenn macOS fragt."
+          }
+        }
+      }
+    },
+    "Send now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt senden"
           }
         }
       }
@@ -17404,6 +17584,16 @@
         }
       }
     },
+    "Transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript"
+          }
+        }
+      }
+    },
     "Transcript + post-processing through an output mode": {
       "localizations": {
         "de": {
@@ -18694,6 +18884,16 @@
         }
       }
     },
+    "Word back / forward": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wort zurück / vor"
+          }
+        }
+      }
+    },
     "Words": {
       "localizations": {
         "de": {
@@ -18740,6 +18940,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeitet …"
+          }
+        }
+      }
+    },
+    "Working: ○ interrupts if no view is open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet: ○ unterbricht, wenn keine Ansicht offen ist."
           }
         }
       }
@@ -19624,6 +19834,16 @@
         }
       }
     },
+    "nothing closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nichts geschlossen"
+          }
+        }
+      }
+    },
     "now": {
       "localizations": {
         "de": {
@@ -19760,6 +19980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "loslassen: wechseln"
+          }
+        }
+      }
+    },
+    "reopen %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wieder öffnen: %@"
           }
         }
       }

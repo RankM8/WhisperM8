@@ -28,6 +28,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Reihenfolge (Titel, Projekt, Status, „wartet · 2 min“). Im
     /// Ereignis-Pfad gebaut, wenn „Wohin“ aufgeht.
     var islandChatRows: (_ order: [UUID], _ current: UUID?) -> [ControllerIslandChatRow] = { _, _ in [] }
+    /// Zwischenablage-Verlauf für L1 + Kreuz (Runde 5).
+    var clipboard = ControllerClipboardAccess()
+    /// Zuletzt geschlossene Chats für L2 + Viereck (Runde 5).
+    var closedChats = ControllerClosedChatsAccess()
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
 
@@ -149,7 +153,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning,
             shellAtPrompt: terminal.shellAtPrompt,
-            backTarget: window.backTarget
+            backTarget: window.backTarget,
+            openView: terminal.screen?.openView,
+            promptField: terminal.screen?.promptField
         )
     }
 
@@ -226,6 +232,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()
+        case .pasteNewest: pasteNewest()
         // Danach gleich neu lesen: Die Legende nennt sonst noch den Ort, an
         // dem man jetzt ist, als Ziel.
         case .lastChat: if command(.lastChat, orReject: true) { refreshContext() }
@@ -280,6 +287,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .islandCommit: commitWhereTo(dictate: false)
         case .islandCommitAndDictate: commitWhereTo(dictate: true)
         case .islandNextWaiting: jumpToNextWaitingChat()
+        case .islandReopenClosed: reopenClosedChat()
         case let .quickDraw(item): performQuickDraw(item)
 
         // Sonstiges
@@ -565,8 +573,20 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             setup.profile = terminal.profile
             setup.dialogOpen = terminal.status == .awaitingInput
             setup.chatBusy = isBusy(terminal)
+            setup.quickCross = quickCross(terminal)
         }
         return setup
+    }
+
+    /// Was R1 + Kreuz aus dem Zustand des Terminals tut (Runde 5, R1).
+    func quickCross(_ terminal: ControllerTerminalState) -> ControllerQuickDrawCross? {
+        guard terminal.isRunning else { return nil }
+        let fieldHasText = ControllerScreenReading.fieldHasText(
+            screen: terminal.screen, tracker: terminal.fieldMayHaveText || terminal.draftSuspected)
+        return ControllerQuickDrawSlots.crossAction(
+            profile: terminal.profile, busy: isBusy(terminal),
+            dialogOpen: terminal.status == .awaitingInput, viewOpen: terminal.screen?.openView != nil,
+            fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts)
     }
 
     /// Wie `isBusy(_:)`, aus dem Zustand des Terminals.
@@ -698,6 +718,10 @@ private extension ControllerChatKey {
         case .deleteWord: return .deleteWord
         case .deleteToLineStart: return .killLineStart
         case .newline: return .newline
+        case .wordLeft: return .wordLeft
+        case .wordRight: return .wordRight
+        case .undo: return .undo
+        case .toggleTranscript: return .toggleTranscript
         }
     }
 }

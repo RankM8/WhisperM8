@@ -11,6 +11,12 @@ enum ControllerChatKey: String, CaseIterable, Sendable {
     case deleteToLineStart
     /// L1 halten, dann Dreieck: Zeilenumbruch, ohne zu senden (Ctrl+J).
     case newline
+    /// L1 halten, dann ◀ ▶: Wort zurück / vor (Ctrl+←/→, Runde 5).
+    case wordLeft, wordRight
+    /// L1 halten, dann L3: Rückgängig (Claude Ctrl+_).
+    case undo
+    /// R1 halten, dann L3: ausführliches Transkript (Claude Ctrl+O).
+    case toggleTranscript
 
     init(_ direction: ControllerDirection) {
         switch direction {
@@ -65,6 +71,9 @@ enum ControllerAction: Equatable, Sendable {
     case chatResume
     /// R3 halten: ganze Eingabe leeren (nicht in einer Rückfrage).
     case chatClearInput
+    /// L1 halten, dann Kreuz: neuesten Eintrag der Zwischenablage einfügen
+    /// (Text wie ein Diktat, Bild wie ⌘V; Runde 5).
+    case pasteNewest
     case lastChat
     /// Im Raster von Kachel zu Kachel; am linken Rand macht der Ausführer
     /// daraus den Wechsel in die Liste.
@@ -124,6 +133,8 @@ enum ControllerAction: Equatable, Sendable {
     case islandCommitAndDictate
     /// „Wohin“: Dreieck springt zum nächsten wartenden Chat (reihum).
     case islandNextWaiting
+    /// „Wohin“: Viereck öffnet den zuletzt geschlossenen Chat wieder (Runde 5).
+    case islandReopenClosed
     /// Schnellbefehl der R1-Raute; dieselben Wege und Schutzregeln wie der
     /// Eintrag im Options-Menü.
     case quickDraw(ControllerMenuItem)

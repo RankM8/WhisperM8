@@ -33,6 +33,34 @@ struct ControllerTerminalState: Equatable {
     /// Shell an ihrer Eingabezeile (normaler Puffer, kein Vollbild-Programm
     /// wie nano oder vim) — dort darf R3 die Zeile leeren.
     var shellAtPrompt: Bool = false
+    /// Abgelesener unterer Rand (offene Ansicht, Eingabefeld); `nil`, wenn
+    /// nicht ablesbar (hochgescrollt, Shell, kein Prozess).
+    var screen: ControllerScreenSnapshot? = nil
+    /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`, Stand des
+    /// letzten Transcript-Polls; Runde 5, R1).
+    var queuedOwnPrompts: Int = 0
+}
+
+/// Zugriff auf den Zwischenablage-Verlauf für L1 + Kreuz (Runde 5). Closures
+/// statt Protokoll, damit Tests synchron antworten können.
+@MainActor
+struct ControllerClipboardAccess {
+    /// Neuester Eintrag (Text oder Bild), aus dem Index im Speicher.
+    var newest: () -> ControllerClipPreview? = { nil }
+    /// Vollen Text laden (lange Texte liegen in einer Datei).
+    var loadText: (_ id: String, _ completion: @escaping @MainActor (String?) -> Void) -> Void = { $1(nil) }
+    /// Bild in die allgemeine Zwischenablage legen (als eigener Schreibvorgang
+    /// beansprucht, landet also nicht doppelt im Verlauf).
+    var copyImage: (_ id: String, _ completion: @escaping @MainActor (Bool) -> Void) -> Void = { $1(false) }
+}
+
+/// Zuletzt geschlossene Chats dieses App-Starts (L2 + Viereck, Runde 5).
+@MainActor
+struct ControllerClosedChatsAccess {
+    /// Titel des Chats, den „Wieder öffnen“ als nächstes zurückholt.
+    var nextTitle: () -> String? = { nil }
+    /// Holt ihn zurück; `false`, wenn es keinen gibt.
+    var reopen: () -> Bool = { false }
 }
 
 @MainActor

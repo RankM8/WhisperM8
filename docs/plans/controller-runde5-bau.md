@@ -426,23 +426,31 @@ Nicht gebaut.
 - Tests: `AgentWindowStoreTests` (peek ändert nichts, übersprungene Einträge), Dispatcher (Name in der Insel,
   zweimal hintereinander zwei Chats), Belegung.
 
-### R1. R1 + ✕: Weiter oder Jetzt senden
+### R1. R1 + ✕: Weiter, Senden oder Jetzt senden
 
-- Pure Entscheidung `ControllerQuickDrawSlots.crossAction(state:)` → `.continueWork`, `.sendNow` oder `nil`:
-  - Ruht der Chat (heutige Regel): „Weiter“ (nicht an einen Entwurf hängen).
-  - Arbeitet ein Claude-Chat und gilt `queuedOwnPrompt || draftSuspected && recentDraftInput` (frischer
-    Entwurf): „Jetzt senden“.
-  - Rückfrage, Shell, Codex, unbekannter Status: aus.
-- `queuedOwnPrompt`: neue pure Funktion `ClaudeQueueScan.pendingOwnPrompts(inTail:)` (Warteschlange
+Präzisiert vom Nutzer (12.11.2026): „wie Ctrl+Enter, im Prompt direkt nachschießen“.
+
+- Pure Entscheidung `ControllerQuickDrawSlots.crossAction(…)` → `ControllerQuickDrawCross`:
+  | Lage | Wirkung | Beschriftung |
+  |---|---|---|
+  | Claude, Text im Feld oder eigener Prompt in der Warteschlange, Chat arbeitet (auch unklar, gerade gesendet) | Ctrl+X Ctrl+S (`sendNow`) | „Jetzt senden“ |
+  | Claude, Text im Feld, Chat ruht | Enter | „Senden“ |
+  | Codex, Text im Feld (jeder Status) | Enter — Codex greift damit sofort in den Turn ein | „Senden“ |
+  | Feld leer, Chat ruht | „Weiter“ wie bisher | „Weiter“ |
+  | Feld leer, nichts wartet, Chat arbeitet | „geht nicht“ (ausgegraut, Vibration) | „Weiter“ aus |
+  | offene Rückfrage oder erkannte Ansicht | wie heute: aus | |
+  | Shell | wie heute | |
+- „Text im Feld“: `ControllerScreenReading.fieldHasText` — Bildschirm, wenn das Feld ablesbar ist (sichtbar
+  leer bzw. sicher Text), sonst `fieldMayHaveText || draftSuspected` des Trackers.
+- Eigener Prompt in der Warteschlange: `ClaudeQueueScan.pendingOwnPrompts(inTail:)` (Warteschlange
   nachspielen: `enqueue` hängt an, `dequeue` nimmt das erste, `remove` das erste mit gleichem Inhalt, `popAll`
   alles; zählen, was nicht mit `<` beginnt und nicht leer ist). Aufgerufen in
   `AgentSessionRuntimeWatcher.pollSnapshot` auf demselben 64-KB-Tail (nur Zeilen mit `"queue-operation"`
-  werden geparst), gespeichert im `AgentSessionActivityStore` neben der Stand-Zeile, gelesen in
-  `state(of:)`. Kein zusätzliches I/O.
-- Senden: `sendKey(.sendNow)`; zählt als Absenden (Tracker, `lastEnterAt`, „gerade gesendet“).
-- Insel: Beschriftung wechselt („Jetzt senden“), Prüfung beim Auslösen frisch wie heute (`perform`).
-- Tests: Queue-Scan mit echten Zeilenformen aus der Stichprobe (Benachrichtigungen, `absorbed_mid_turn`,
-  `popAll`, abgeschnittene erste Zeile), Entscheidungstabelle.
+  werden geparst), gemerkt am beobachteten Eintrag, gelesen in `state(of:)`. Kein zusätzliches I/O.
+- Senden und „Jetzt senden“ zählen als Absenden (Merker `lastEnterAt`, 30-s-Regel, Entwurfs-Tracker).
+- Insel: Beschriftung über das Modell (`ControllerQuickDrawSlots.cross`), keine Layout-Änderung. Prüfung beim
+  Auslösen frisch.
+- Tests: Queue-Scan mit echten Zeilenformen, Entscheidungstabelle, Ausführer je Fall.
 
 ### R2. Offene Claude-Ansicht erkennen
 

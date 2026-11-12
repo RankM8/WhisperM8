@@ -87,7 +87,7 @@ extension ControllerActionDispatcher {
         let content: ControllerIslandModel.Content
         switch layer {
         case .writing:
-            content = .writing(ControllerWritingSlots(state: chatState(in: window)))
+            content = .writing(ControllerWritingSlots(state: chatState(in: window), clip: clipboard.newest()))
         case .quickDraw:
             let menuSetup = menuSetup(for: sessionID.map { .chat($0) })
             setup = menuSetup
@@ -100,10 +100,12 @@ extension ControllerActionDispatcher {
             let previous = Self.whereToPrevious(window.backTarget)
             let order = ControllerWhereToState.chatOrder(
                 SidebarChatOrder.sessions(in: currentListRows().map(\.row)), current: sessionID, previous: previous)
-            content = .whereTo(ControllerWhereToState(
+            var whereTo = ControllerWhereToState(
                 chats: islandChatRows(order, sessionID), currentChatID: sessionID,
                 workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
-                previous: previous))
+                previous: previous)
+            whereTo.reopenTitle = closedChats.nextTitle()
+            content = .whereTo(whereTo)
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
@@ -126,16 +128,20 @@ extension ControllerActionDispatcher {
         guard var state = islandState, state.sessionID == sessionID, spentLayer != state.model.layer else { return }
         switch state.model.content {
         case .writing(let slots):
-            let fresh = ControllerWritingSlots(state: chat)
+            let fresh = ControllerWritingSlots(state: chat, clip: slots.clip)
             guard fresh != slots else { return }
             state.model.content = .writing(fresh)
         case .quickDraw(let slots):
             guard var setup = state.setup else { return }
             let dialogOpen = chat?.status == .awaitingInput
             let busy = Self.isBusy(chat)
-            guard setup.acceptsInput, setup.dialogOpen != dialogOpen || setup.chatBusy != busy else { return }
+            let cross = sessionID.flatMap { terminals.state(of: $0) }.flatMap(quickCross)
+            guard setup.acceptsInput,
+                  setup.dialogOpen != dialogOpen || setup.chatBusy != busy || setup.quickCross != cross
+            else { return }
             setup.dialogOpen = dialogOpen
             setup.chatBusy = busy
+            setup.quickCross = cross
             state.setup = setup
             state.model.content = .quickDraw(ControllerQuickDrawSlots(setup: setup, hit: slots.hit))
         case .whereTo:
@@ -242,6 +248,25 @@ extension ControllerActionDispatcher {
         if setup.acceptsInput, let sessionID = setup.sessionID, let terminal = terminals.state(of: sessionID) {
             setup.dialogOpen = terminal.status == .awaitingInput
             setup.chatBusy = isBusy(terminal)
+            setup.quickCross = quickCross(terminal)
+        }
+        // R1 + Kreuz mit Text im Feld oder Wartendem: Senden bzw. „Jetzt
+        // senden“ statt „Weiter“ (Runde 5, R1). Leeres Feld bei arbeitendem
+        // Chat: „geht nicht“.
+        if item == .continueWork, setup.acceptsInput {
+            switch setup.quickCross {
+            case let cross? where cross != .continueWork:
+                guard let sessionID = setup.sessionID, sessionID == selectedSessionID else {
+                    return playHaptic(.rejected)
+                }
+                flashQuickDrawHit(item)
+                if !terminals.sendKey(cross == .sendNow ? .sendNow : .enter, to: sessionID) { playHaptic(.rejected) }
+                return
+            case nil:
+                return playHaptic(.rejected)
+            default:
+                break
+            }
         }
         guard ControllerMenuModel.isEnabled(item, setup: setup) else { return playHaptic(.rejected) }
         flashQuickDrawHit(item)

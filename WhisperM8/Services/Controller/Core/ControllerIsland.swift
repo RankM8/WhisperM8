@@ -119,6 +119,9 @@ struct ControllerWhereToState: Equatable, Sendable {
     }
 
     private(set) var tab: ControllerIslandTab
+    /// Chat, den Viereck wieder öffnen würde (Runde 5); `nil`: nichts
+    /// geschlossen in diesem App-Start.
+    var reopenTitle: String?
     private(set) var chats: ControllerIslandList<ControllerIslandChatRow>
     private(set) var workspaces: ControllerIslandList<ControllerWorkspaceChoice>
     /// Voriger Ort, sofern er in einer der beiden Listen steht (dort beginnt
@@ -216,6 +219,31 @@ struct ControllerWhereToState: Equatable, Sendable {
     var currentWorkspaceName: String? { workspaces.rows.first(where: \.isCurrent)?.name }
 }
 
+/// Was R1 + Kreuz schickt (Runde 5, R1).
+enum ControllerQuickDrawCross: String, Sendable {
+    /// „Weiter“ als Text mit Enter (leeres Feld, Chat ruht).
+    case continueWork
+    /// Enter: den Text im Feld abschicken.
+    case send
+    /// Ctrl+X Ctrl+S: Claude schickt Entwurf bzw. Warteschlange sofort.
+    case sendNow
+}
+
+/// Neuester Eintrag der Zwischenablage, wie die Insel ihn für L1 + Kreuz
+/// ankündigt (Runde 5).
+struct ControllerClipPreview: Equatable, Sendable {
+    enum Kind: String, Sendable {
+        case text, image
+    }
+
+    var id: String
+    var kind: Kind
+    /// Erste Zeile, gekürzt (bei Bildern leer).
+    var preview: String
+    var imageWidth: Int?
+    var imageHeight: Int?
+}
+
 /// Ebene „Schreiben“ (L1 gehalten): was in der Insel an oder aus ist.
 struct ControllerWritingSlots: Equatable, Sendable {
     enum Note: String, Sendable {
@@ -223,11 +251,26 @@ struct ControllerWritingSlots: Equatable, Sendable {
         case shell
         /// Offene Rückfrage: in den Chat geht gerade nichts.
         case question
+        /// Chat arbeitet, keine Ansicht erkannt: Escape bricht ab (Runde 5, R3).
+        case escapeInterrupts
+    }
+
+    /// Ein Eintrag der Insel, in der Reihenfolge der Anzeige.
+    enum Hint: String, CaseIterable, Sendable {
+        case deleteLine, newline, wordJump, lineMove, paste, escape, undo
     }
 
     var canDeleteLine: Bool
     var canInsertNewline: Bool
     var note: Note?
+    // Runde 5
+    var canMoveWord = false
+    var canMoveLine = false
+    var canPaste = false
+    var canEscape = false
+    var canUndo = false
+    /// Was Kreuz einfügen würde; `nil`: nichts zum Einfügen.
+    var clip: ControllerClipPreview?
 
     init(canDeleteLine: Bool, canInsertNewline: Bool, note: Note?) {
         self.canDeleteLine = canDeleteLine
@@ -235,13 +278,39 @@ struct ControllerWritingSlots: Equatable, Sendable {
         self.note = note
     }
 
-    init(state: ControllerChatState?) {
+    init(state: ControllerChatState?, clip: ControllerClipPreview? = nil) {
         let allowed = state.map(ControllerBindingResolver.layerWritingAllowed) ?? false
         canDeleteLine = allowed
         canInsertNewline = allowed
         note = nil
-        guard let state, state.acceptsKeys, !allowed else { return }
-        note = ControllerBindingResolver.writingKeysAllowed(state) ? .question : .shell
+        self.clip = clip
+        if let state {
+            canMoveWord = allowed
+            canMoveLine = allowed && (ControllerBindingResolver.lineMoveAllowed(.up, state: state)
+                || ControllerBindingResolver.lineMoveAllowed(.down, state: state))
+            canPaste = clip != nil && ControllerBindingResolver.pasteAllowed(state)
+                && (clip?.kind == .text || state.profile != .shell)
+            canEscape = ControllerBindingResolver.escapeOnceAllowed(state)
+            canUndo = ControllerBindingResolver.undoAllowed(state)
+        }
+        guard let state, state.acceptsKeys else { return }
+        if !allowed {
+            note = ControllerBindingResolver.writingKeysAllowed(state) ? .question : .shell
+        } else if state.profile == .claude, state.status == .working, state.openView == nil {
+            note = .escapeInterrupts
+        }
+    }
+
+    func isOn(_ hint: Hint) -> Bool {
+        switch hint {
+        case .deleteLine: return canDeleteLine
+        case .newline: return canInsertNewline
+        case .wordJump: return canMoveWord
+        case .lineMove: return canMoveLine
+        case .paste: return canPaste
+        case .escape: return canEscape
+        case .undo: return canUndo
+        }
     }
 }
 
@@ -264,6 +333,35 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         [ControllerButton.cross, .triangle, .square, .circle].first { self.item(for: $0) == item }
     }
 
+    /// Was R1 + Kreuz tut (Runde 5, R1; Präzisierung des Nutzers: „wie
+    /// Ctrl+Enter, im Prompt direkt nachschießen“):
+    /// - Claude, Text im Feld oder eigener Prompt in der Warteschlange, Chat
+    ///   arbeitet (oder unklar, gerade gesendet): „Jetzt senden“ (Ctrl+X Ctrl+S).
+    /// - Claude, Text im Feld, Chat ruht: Enter („Senden“).
+    /// - Codex, Text im Feld: Enter — Codex greift damit sofort in den
+    ///   laufenden Turn ein.
+    /// - Feld leer, Chat ruht: „Weiter“ wie bisher (`.continueWork`).
+    /// - Feld leer, nichts wartet, Chat arbeitet: `nil` („geht nicht“).
+    /// Nie in einer offenen Rückfrage oder bei offener Ansicht (`nil`; dort
+    /// gilt die bisherige Regel, also aus) und nie in Shells (`.continueWork`
+    /// mit den bisherigen Regeln).
+    static func crossAction(
+        profile: ControllerChatState.Profile?, busy: Bool, dialogOpen: Bool, viewOpen: Bool,
+        fieldHasText: Bool, queuedOwnPrompts: Int
+    ) -> ControllerQuickDrawCross? {
+        guard !dialogOpen, !viewOpen else { return nil }
+        switch profile {
+        case .claude:
+            if busy { return fieldHasText || queuedOwnPrompts > 0 ? .sendNow : nil }
+            return fieldHasText ? .send : .continueWork
+        case .codex:
+            if fieldHasText { return .send }
+            return busy ? nil : .continueWork
+        case .shell, .other, nil:
+            return .continueWork
+        }
+    }
+
     enum Note: String, Sendable {
         /// Rückfrage offen: alles, was in den Chat schreibt, ist aus.
         case question
@@ -277,12 +375,24 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
     /// Gerade gedrückt (kurze Markierung vor dem Schließen).
     var hit: ControllerMenuItem?
 
-    /// Dieselben Regeln wie die Einträge des Options-Menüs.
+    /// Was Kreuz gerade tut (Beschriftung „Weiter“, „Senden“, „Jetzt senden“).
+    var cross: ControllerQuickDrawCross?
+
+    /// Dieselben Regeln wie die Einträge des Options-Menüs; Kreuz nach
+    /// `crossAction` (Runde 5).
     init(setup: ControllerMenuSetup, hit: ControllerMenuItem? = nil) {
-        enabled = Set(Self.items.filter { ControllerMenuModel.isEnabled($0, setup: setup) })
+        cross = setup.quickCross
+        enabled = Set(Self.items.filter { item in
+            guard item == .continueWork, setup.acceptsInput else { return ControllerMenuModel.isEnabled(item, setup: setup) }
+            switch setup.quickCross {
+            case .send?, .sendNow?: return true
+            case .continueWork?: return ControllerMenuModel.isEnabled(item, setup: setup)
+            case nil: return false
+            }
+        })
         if setup.acceptsInput, setup.dialogOpen {
             note = .question
-        } else if setup.acceptsInput, setup.chatBusy {
+        } else if setup.acceptsInput, setup.chatBusy, setup.quickCross != .sendNow, setup.quickCross != .send {
             note = .busy
         }
         self.hit = hit

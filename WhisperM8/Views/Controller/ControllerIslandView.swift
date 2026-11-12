@@ -218,12 +218,8 @@ struct ControllerIslandView: View {
     private func writing(_ slots: ControllerWritingSlots) -> some View {
         VStack(spacing: 0) {
             IslandFlow {
-                hint(.square, String(localized: "Delete to line start"), on: slots.canDeleteLine)
-                hint(.triangle, String(localized: "New line"), on: slots.canInsertNewline)
-                if slots.note == nil {
-                    // Bewusst frei: ausgegraut, damit klar ist, dass dort nichts liegt.
-                    hint(.cross, String(localized: "free"), on: false)
-                    hint(.circle, String(localized: "free"), on: false)
+                ForEach(ControllerWritingSlots.Hint.allCases, id: \.self) { item in
+                    hint(item.button, item.label(slots), on: slots.isOn(item), glyph: item.glyph)
                 }
             }
             .padding(.horizontal, 14)
@@ -269,7 +265,7 @@ struct ControllerIslandView: View {
             if let button = ControllerQuickDrawSlots.button(for: item) {
                 IslandGlyph(text: button.glyph, round: true, palette: palette)
             }
-            Text(verbatim: item.islandTitle)
+            Text(verbatim: item == .continueWork ? slots.crossTitle : item.islandTitle)
                 .font(.system(size: 12))
                 .foregroundStyle(palette.text)
                 .lineLimit(1)
@@ -320,7 +316,7 @@ struct ControllerIslandView: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
-            footer(state.tab)
+            footer(state.tab, reopenTitle: state.reopenTitle)
         }
     }
 
@@ -452,13 +448,16 @@ struct ControllerIslandView: View {
     /// Fußzeile: Was die Tasten jetzt tun. Loslassen wechselt zum markierten
     /// Eintrag, Kreis bricht ab — beides steht immer da, weil es keine
     /// Hinweiszeile mehr davor gibt.
-    private func footer(_ tab: ControllerIslandTab) -> some View {
+    private func footer(_ tab: ControllerIslandTab, reopenTitle: String? = nil) -> some View {
         IslandFlow(spacing: 12, lineSpacing: 5) {
             footItem("▲▼", String(localized: "select"))
             footItem("◀▶", String(localized: "tabs"))
             footItem(ControllerButton.l2.glyph, String(localized: "release: switch"), round: false)
             footItem(ControllerButton.circle.glyph, String(localized: "cancel"))
             footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
+            footItem(ControllerButton.square.glyph,
+                     reopenTitle.map { String(localized: "reopen \($0)") } ?? String(localized: "nothing closed"),
+                     round: false)
             // Im Reiter Workspaces diktiert R2 nur, wenn die Markierung auf
             // dem aktuellen Workspace steht (in den aktuellen Chat).
             footItem(ControllerButton.r2.glyph,
@@ -511,6 +510,7 @@ extension ControllerWritingSlots.Note {
         switch self {
         case .shell: return String(localized: "Not in a shell — a program there could read the keys differently.")
         case .question: return String(localized: "Question open — nothing goes into the chat right now.")
+        case .escapeInterrupts: return String(localized: "Working: ○ interrupts if no view is open.")
         }
     }
 }

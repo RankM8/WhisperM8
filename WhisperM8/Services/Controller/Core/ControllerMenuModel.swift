@@ -103,6 +103,10 @@ struct ControllerMenuSetup: Equatable, Sendable {
     /// bestätigte „Weiter“ mit Enter die Vorauswahl, und Shift+Tab heißt dort
     /// „alle Änderungen erlauben“. Codex meldet nie „wartet“.
     var chatBusy = false
+    /// Was R1 + Kreuz gerade tut (`ControllerQuickDrawSlots.crossAction`,
+    /// Runde 5); ohne Angabe „Weiter“ nach den bisherigen Regeln, `nil`
+    /// heißt „geht nicht“.
+    var quickCross: ControllerQuickDrawCross? = .continueWork
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten). Pur.

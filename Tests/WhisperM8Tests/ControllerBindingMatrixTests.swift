@@ -173,6 +173,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .inLayer(.whereTo, .press(.cross)): .islandCommit,
             .inLayer(.whereTo, .press(.circle)): .islandCancel,
             .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
+            .inLayer(.whereTo, .press(.square)): .islandReopenClosed,
             .inLayer(.whereTo, .press(.r2)): .islandCommitAndDictate,
             // Touchpad als Maus: L2 + Touchpad ist der Weg zum Verlauf.
             .inLayer(.whereTo, .press(.touchpad)): .clipboardToggle,
@@ -490,8 +491,36 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
     }
 
+    /// Runde 5 im Chat: L1 mit Wortsprung, Zeilen, Einfügen, Escape und
+    /// Rückgängig, R1 + L3 (Transkript). Aus den Regeln abgeleitet, damit die
+    /// Tabellen oben unverändert bleiben. Die Zeilen sind hier nie ablesbar
+    /// (kein Eingabefeld im Zustand): ▲ ▼ gehen deshalb nie.
+    static func round5(_ context: ControllerContext) -> Table {
+        guard case let .chat(state) = context, state.acceptsKeys else { return [:] }
+        let agent = state.profile == .claude || state.profile == .codex
+        let question = state.status == .awaitingInput
+        let writing = agent && !question
+        var table: Table = [:]
+        for direction in ControllerDirection.allCases {
+            for isRepeat in [false, true] {
+                let gesture = ControllerGesture.inLayer(.writing, .move(direction, source: .dpad, isRepeat: isRepeat))
+                if writing, direction == .left || direction == .right {
+                    table[gesture] = .chatKey(direction == .left ? .wordLeft : .wordRight)
+                } else {
+                    table[gesture] = isRepeat ? nil : .rejected
+                }
+            }
+        }
+        table[.inLayer(.writing, .press(.cross))] = !question && (agent || state.profile == .shell) ? .pasteNewest : .rejected
+        table[.inLayer(.writing, .press(.circle))] = agent ? .chatKey(.escape) : .rejected
+        table[.inLayer(.writing, .press(.l3))] = state.profile == .claude && !question ? .chatKey(.undo) : .rejected
+        table[.inLayer(.quickDraw, .press(.l3))] = state.profile == .claude ? .chatKey(.toggleTranscript) : .rejected
+        return table
+    }
+
     func testEveryGestureInEveryContextHasTheExpectedOutcome() {
-        for (name, context, table) in Self.expectations {
+        for (name, context, base) in Self.expectations {
+            let table = base.merging(Self.round5(context)) { old, _ in old }
             for gesture in Self.allGestures {
                 XCTAssertEqual(
                     ControllerBindingResolver.action(for: gesture, in: context),
