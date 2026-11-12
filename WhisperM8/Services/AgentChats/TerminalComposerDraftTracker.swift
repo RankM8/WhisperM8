@@ -39,6 +39,9 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Versand haengte seinen Text daran an, und der abgebrochene Auftrag
     /// liefe mit dem neuen Prompt zusammen erneut los (E2E 17.10.2026).
     private(set) var mayHoldRestoredPrompt = false
+    /// Der Controller hat mit → einen grauen Vorschlag ins Feld geholt
+    /// (Claude). Zaehlt nur fuer `fieldMayHaveText`, nicht als eigener Entwurf.
+    private(set) var mayShowAcceptedSuggestion = false
     /// Zeitpunkt des letzten programmatischen Absendens (`chats send`,
     /// Queue-Zustellung).
     private(set) var lastProgrammaticSubmitAt: Date?
@@ -88,8 +91,23 @@ struct TerminalComposerDraftTracker: Equatable {
     /// setzt die Schaetzung wieder. Ein Abbruch, der NACH dem Absenden kam,
     /// bleibt stehen: Der Status meldet den Start dieses Turns oft erst, wenn
     /// das ESC schon durch ist.
+    /// Steht vermutlich irgendetwas im Feld — eigener Entwurf, Rueckleger,
+    /// zurueckgeholter oder per → uebernommener Text? Nur wenn nicht, sperrt
+    /// der Controller Pfeil links bei Claude (leeres Feld: ← schickt die
+    /// Sitzung in die Agent-Ansicht).
+    var fieldMayHaveText: Bool {
+        mayHaveUnsentInput || mayHoldRestoredPrompt || mayShowAcceptedSuggestion
+    }
+
+    /// → vom Controller ausserhalb einer Rueckfrage und offenen Auswahl: holt
+    /// in Claude den grauen Vorschlag ins Feld.
+    mutating func recordSuggestionAccepted() {
+        mayShowAcceptedSuggestion = true
+    }
+
     mutating func recordSubmittedByTurnStart() {
         mayHaveUnsentInput = false
+        mayShowAcceptedSuggestion = false
         escapeRun = 0
         if !interruptedSinceSubmit {
             mayHoldRestoredPrompt = false
@@ -177,12 +195,14 @@ struct TerminalComposerDraftTracker: Equatable {
             } else {
                 mayHaveUnsentInput = false
                 mayHoldRestoredPrompt = false
+                mayShowAcceptedSuggestion = false
                 interruptedSinceSubmit = false
             }
         case 8 where flags.contains(.control):
             // Ctrl+C leert in Claude Code den Composer.
             mayHaveUnsentInput = false
             mayHoldRestoredPrompt = false
+            mayShowAcceptedSuggestion = false
             interruptedSinceSubmit = false
         case 9 where flags.contains(.command):
             // Cmd+V fuegt ein.
@@ -225,6 +245,7 @@ struct TerminalComposerDraftTracker: Equatable {
     mutating func recordSubmitted(programmaticAt date: Date? = nil) {
         mayHaveUnsentInput = false
         mayHoldRestoredPrompt = false
+        mayShowAcceptedSuggestion = false
         interruptedSinceSubmit = false
         escapeRun = 0
         programmaticWrites += 1

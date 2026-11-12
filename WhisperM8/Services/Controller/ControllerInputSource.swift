@@ -30,8 +30,6 @@ enum ControllerHapticPattern: String, CaseIterable, Sendable {
     case rejected
     /// Eingabe geleert (R3 halten): ein kurzer, leichter Impuls.
     case inputCleared
-    /// Klick mit dem Touchpad als Maus: ein sehr kurzer, leichter Tick.
-    case pointerClick
 }
 
 /// Quelle für Controller-Eingaben. Die Live-Fassung spricht mit dem
@@ -55,17 +53,7 @@ protocol ControllerInputSource: AnyObject {
     @discardableResult
     func setBackgroundMonitoring(_ enabled: Bool) -> Bool
 
-    /// Fingerpositionen des Touchpads melden (`.touch`). Nur an, solange das
-    /// Touchpad als Maus dient — sonst kostet jeder aufliegende Finger
-    /// Ereignisse ohne Nutzen. Auf dem Main Thread.
-    func setTouchTracking(_ enabled: Bool)
-
     /// Farbe der Lichtleiste; `nil` lässt sie unverändert.
     func setLight(_ color: ControllerLightColor?)
     func play(_ pattern: ControllerHapticPattern)
-}
-
-extension ControllerInputSource {
-    /// Quellen ohne Touchpad (Tests, Debug-Kanal) haben nichts zu melden.
-    func setTouchTracking(_ enabled: Bool) {}
 }

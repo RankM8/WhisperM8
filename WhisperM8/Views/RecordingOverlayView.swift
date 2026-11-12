@@ -22,11 +22,31 @@ struct RecordingOverlayView: View {
                         }
                 }
             }
+            // Vereinte Pille ohne Notch: Zustandswechsel wachsen um die
+            // Mitte, nur das Darüberfahren klappt nach links auf (die rechte
+            // Kante bleibt). Sonst ist der Ausrichtungspunkt die Mitte, wie
+            // SwiftUI ihn ohnehin setzt.
+            .alignmentGuide(HorizontalAlignment.center) { dimensions in
+                guard controller.presentation == .pill else { return dimensions.width / 2 }
+                return UnifiedPillGeometry.centerGuide(
+                    width: dimensions.width,
+                    collapsedWidth: controller.collapsedPillWidth,
+                    hoverExpanded: controller.isHoverExpanded)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: pillAlignment)
-            .padding(OverlayFrameResolver.contentMargin)
+            .padding(edgeInsets)
+    }
+
+    /// Rand für den Schatten; an der Notch oben keiner (das Band liegt in der
+    /// Menüleiste, bündig mit der Oberkante).
+    private var edgeInsets: EdgeInsets {
+        let margin = OverlayFrameResolver.contentMargin
+        return EdgeInsets(
+            top: controller.presentation.isNotch ? 0 : margin, leading: margin, bottom: margin, trailing: margin)
     }
 
     private var pillAlignment: Alignment {
+        if controller.presentation.isNotch { return .top }
         switch controller.pillAlignment {
         case .trailing:
             return .trailing

@@ -173,7 +173,11 @@ struct MenuBarView: View {
         // Statusanzeige an der Notch; weg bei Kill-Switch.
         if AppPreferences.shared.isNotchStatusFeatureEnabled {
             Divider()
-            Toggle("Chat Status at the Notch", isOn: $notchStatusEnabled)
+            if AppPreferences.shared.isUnifiedPillEnabled {
+                Toggle("Chat Status in the Pill", isOn: $notchStatusEnabled)
+            } else {
+                Toggle("Chat Status at the Notch", isOn: $notchStatusEnabled)
+            }
         }
         // Zwischenablage-Verlauf (Maccy-Ersatz); erscheint nur bei eingeschaltetem Schalter.
         if clipboardEnabled {

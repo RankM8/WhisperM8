@@ -6,6 +6,8 @@ import SwiftUI
 extension KeyboardShortcuts.Name {
     /// Notch-Anzeige ein- und ausblenden. Ohne Standardbelegung.
     static let toggleNotchStatus = Self("toggleNotchStatus")
+    /// Statusliste mit Tastaturfokus öffnen (vereinte Pille). Ohne Standardbelegung.
+    static let openNotchStatusList = Self("openNotchStatusList")
 }
 
 /// Einstellungen der Anzeige als Wert, damit ein Preference-Schreibzugriff
@@ -16,14 +18,24 @@ struct NotchConfig: Equatable {
     var hideFromCapture: Bool
     var showFreshDone: Bool
     var expandOnHover: Bool
+    /// Gemerkte Lage der Pille je Bildschirm ohne Notch.
+    var pillPositions: [String: NotchPillPosition] = [:]
+    /// Vereinte Pille (Kill-Switch `unifiedPillEnabled`): Status-Pille sieht
+    /// aus wie die Diktat-Pille und macht ihr beim Diktat Platz.
+    var unified = false
 
     static func current(_ prefs: AppPreferences = .shared) -> NotchConfig {
-        NotchConfig(
+        let unified = prefs.isUnifiedPillEnabled
+        return NotchConfig(
             isActive: prefs.isNotchStatusFeatureEnabled && prefs.isNotchStatusEnabled,
-            screenChoice: NotchScreenChoice(rawValue: prefs.notchStatusScreenRaw) ?? .auto,
+            // Vereint gibt es keine Bildschirmwahl mehr: Notch = Bildschirm
+            // mit Notch, Pille = Bildschirm des Agent-Chats-Fensters.
+            screenChoice: unified ? .auto : NotchScreenChoice(rawValue: prefs.notchStatusScreenRaw) ?? .auto,
             hideFromCapture: prefs.isNotchStatusHiddenFromCapture,
             showFreshDone: prefs.isNotchStatusShowingFreshDone,
-            expandOnHover: prefs.isNotchStatusExpandingOnHover)
+            expandOnHover: prefs.isNotchStatusExpandingOnHover,
+            pillPositions: prefs.notchPillPositions,
+            unified: unified)
     }
 }
 
@@ -67,23 +79,77 @@ final class NotchViewModel: ObservableObject {
         style: .pill, summary: .empty, alert: nil, isExpanded: false, sections: [])
 }
 
-private struct NotchHostView: View {
+struct NotchHostView: View {
     @ObservedObject var model: NotchViewModel
     let controller: NotchStatusController
+    let kind: NotchPlacement.Kind
+    /// Vereinte Pille ohne Notch: gezeichnet wie die Diktat-Pille.
+    var unified = false
 
     var body: some View {
-        NotchStatusView(
-            display: model.display,
-            onToggle: { controller.toggleExpanded() },
-            onSelect: { controller.select(sessionID: $0) },
-            onTurnOff: { controller.turnOff() },
-            onHover: { controller.hoverChanged($0) })
+        if unified {
+            UnifiedStatusPillView(
+                display: model.display,
+                onToggle: { controller.toggleExpanded(kind) },
+                onStartDictation: { controller.startDictationFromPill(kind) },
+                onSelect: { controller.select(sessionID: $0) },
+                onTurnOff: { controller.turnOff() },
+                onHover: { controller.hoverChanged($0, kind: kind) },
+                onLayout: { controller.pillLayoutChanged(kind, pill: $0, core: $1) })
+        } else {
+            NotchStatusView(
+                display: model.display,
+                onToggle: { controller.toggleExpanded(kind) },
+                onSelect: { controller.select(sessionID: $0) },
+                onTurnOff: { controller.turnOff() },
+                onHover: { controller.hoverChanged($0, kind: kind) })
+        }
+    }
+}
+
+/// Eine Stelle, an der die Anzeige steht (Notch oder Pille): eigenes
+/// Fenster, eigener Wert, eigene Vollbild-Prüfung.
+@MainActor
+final class NotchSlot {
+    let kind: NotchPlacement.Kind
+    let viewModel = NotchViewModel()
+    var panel: NotchPanel?
+    var host: NotchHostingView<NotchHostView>?
+    var screen: NotchScreenInfo?
+    var lastDisplay: NotchDisplay?
+    var lastFrame: CGRect?
+    var isFullscreenHidden = false
+    /// Ursprung des Fensters beim Beginn eines Ziehens (nur Pille).
+    var dragOrigin: CGPoint?
+    /// Die Liste war beim letzten Drücken schon offen. Ein Doppelklick setzt
+    /// die Pille nur zurück, wenn sie davor zu war; sonst ist er schnelles
+    /// Zu und Auf.
+    var pressStartedExpanded = false
+    /// Vereinte Pille: Fenster mit Schattenrand, Ansicht `UnifiedStatusPillView`.
+    var isUnified = false
+    /// Kern der vereinten Pille (SwiftUI-Koordinaten der Hosting-View):
+    /// Klick darauf startet ein Diktat.
+    var coreFrame: CGRect?
+    /// Zuletzt per Klick auf den Kern ein Diktat gestartet: der zweite Klick
+    /// eines Doppelklicks setzt dann nichts zurück.
+    var lastCoreClickAt = Date.distantPast
+    /// Verkleinern nach dem Zuklappen erst, wenn die Liste ausgeblendet ist.
+    var shrinkTask: Task<Void, Never>?
+
+    init(kind: NotchPlacement.Kind) {
+        self.kind = kind
     }
 }
 
 /// Besitzer der Notch-Anzeige: Fenster, Beobachter, Auslöser. Die Logik
 /// (Sortierung, Zähler, Auslöser, Geometrie) liegt rein in `NotchStatusModel`,
-/// `NotchAlertTracker` und `NotchGeometry`; hier hängt nur die AppKit-Seite.
+/// `NotchAlertTracker`, `NotchGeometry` und `NotchPillPlacement`; hier hängt
+/// nur die AppKit-Seite. Fenster, Bildschirme, Vollbild und Ziehen stehen in
+/// `NotchStatusController+Placements.swift`.
+///
+/// Höchstens zwei Stellen: an der Notch (wie bisher, nur wenn etwas los ist)
+/// und als dauerhafte Pille auf dem Bildschirm des Agent-Chats-Fensters, wenn
+/// der keine Notch hat.
 ///
 /// Performance: Im Ruhezustand hört die Anzeige nur auf den
 /// `AgentSessionRuntimeStatusStore` (gedrosselt auf 300 ms) und baut nur dann
@@ -102,41 +168,57 @@ final class NotchStatusController {
     private let statusStore: AgentSessionRuntimeStatusStore
     private let activityStore: AgentSessionActivityStore
     private let workspaceProvider: @MainActor () -> AgentWorkspace
-    private let now: () -> Date
+    let now: () -> Date
     private let appIsActive: @MainActor () -> Bool
     private let focusSession: @MainActor (UUID) -> Void
-    private let prefs: AppPreferences
+    /// Klick auf den ruhenden Kern: derselbe Weg wie der Diktat-Hotkey.
+    let startDictation: @MainActor () -> Void
+    let hub: UnifiedPillHub
+    /// Bildschirm des Agent-Chats-Fensters (`NSScreenNumber`), dort steht die
+    /// Pille, wenn er keine Notch hat. Nur im Ereignis-Pfad gefragt.
+    let agentWindowDisplayID: @MainActor () -> UInt32?
+    let prefs: AppPreferences
 
-    private let viewModel = NotchViewModel()
-    private var panel: NotchPanel?
-    private var config = NotchConfig(
+    let slots: [NotchPlacement.Kind: NotchSlot] = Dictionary(
+        uniqueKeysWithValues: NotchPlacement.Kind.allCases.map { ($0, NotchSlot(kind: $0)) })
+    var config = NotchConfig(
         isActive: false, screenChoice: .auto, hideFromCapture: true, showFreshDone: true, expandOnHover: false)
 
     private var started = false
     private var tracker = NotchAlertTracker()
-    private var alert: NotchAlert?
+    var alert: NotchAlert?
     private var alertTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var hoverTask: Task<Void, Never>?
-    private var fullscreenRecheckTask: Task<Void, Never>?
+    var fullscreenRecheckTask: Task<Void, Never>?
 
-    private var isExpanded = false
+    /// Stelle, deren Liste offen ist (nur eine zugleich).
+    var expandedKind: NotchPlacement.Kind?
+    var isExpanded: Bool { expandedKind != nil }
     private var expandedByHover = false
     private var isHovering = false
-    private var isFullscreenHidden = false
-    private var isReleasingKey = false
+    var isReleasingKey = false
+    /// Mit der Tastatur markierte Zeile der offenen Liste.
+    var keyboardSelection: UUID?
+    /// Zeilen der offenen Liste in Anzeige-Reihenfolge (für die Pfeiltasten).
+    var listRowIDs: [UUID] = []
+    /// „braucht dich“ während eines Diktats: danach einmal nachholen, wenn
+    /// der Anlass noch steht.
+    var alertDuringDictation: NotchAlert?
+    /// Bildschirm, auf dem das Diktat steht (aus `UnifiedPillHub`, im
+    /// Beobachter übernommen); dort tritt die Anzeige zurück.
+    var dictationDisplayID: UInt32?
 
-    private var inputs: [NotchChatInput] = []
-    private var lastDisplay: NotchDisplay?
-    private var lastFrame: CGRect?
-    /// Gewählter Bildschirm; neu bestimmt bei Bildschirmwechsel und Einstellung.
-    private var cachedScreen: NotchScreenInfo??
+    var inputs: [NotchChatInput] = []
+    /// Stellen der Anzeige; neu bestimmt bei Bildschirmwechsel, Einstellung
+    /// und wenn das Agent-Chats-Fenster den Bildschirm wechselt.
+    var cachedPlacements: [NotchPlacement]?
     /// Zählt Vollbild-Prüfungen, damit eine überholte Antwort verworfen wird.
-    private var fullscreenGeneration = 0
+    var fullscreenGeneration = 0
 
     private var generalCancellables = Set<AnyCancellable>()
-    private var activeCancellables = Set<AnyCancellable>()
+    var activeCancellables = Set<AnyCancellable>()
     private var expandedCancellables = Set<AnyCancellable>()
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -148,15 +230,25 @@ final class NotchStatusController {
         now: @escaping () -> Date = Date.init,
         appIsActive: @escaping @MainActor () -> Bool = { NSApp.isActive },
         focusSession: @escaping @MainActor (UUID) -> Void = { WindowRequestCenter.shared.requestSessionFocus(sessionID: $0) },
-        prefs: AppPreferences = .shared
+        agentWindowDisplayID: @escaping @MainActor () -> UInt32? = {
+            AgentChatsCommandCenter.shared.windowDisplayID(preferring: AgentWindowStore.shared.dictationWindowID)
+        },
+        prefs: AppPreferences = .shared,
+        startDictation: @escaping @MainActor () -> Void = {
+            Task { @MainActor in await AppState.shared.startRecording() }
+        },
+        hub: UnifiedPillHub = .shared
     ) {
         self.prefs = prefs
+        self.startDictation = startDictation
+        self.hub = hub
         self.statusStore = statusStore ?? AgentSessionStatusCoordinator.shared.statusStore
         self.activityStore = activityStore ?? AgentSessionStatusCoordinator.shared.activityStore
         self.workspaceProvider = workspaceProvider
         self.now = now
         self.appIsActive = appIsActive
         self.focusSession = focusSession
+        self.agentWindowDisplayID = agentWindowDisplayID
     }
 
     // MARK: Start
@@ -176,6 +268,9 @@ final class NotchStatusController {
             KeyboardShortcuts.onKeyDown(for: .toggleNotchStatus) {
                 Task { @MainActor in NotchStatusController.shared.toggleFeature() }
             }
+            KeyboardShortcuts.onKeyDown(for: .openNotchStatusList) {
+                Task { @MainActor in NotchStatusController.shared.openListFromKeyboard() }
+            }
         }
         applyConfigIfChanged(force: true)
     }
@@ -194,15 +289,23 @@ final class NotchStatusController {
         applyConfigIfChanged()
     }
 
-    private func applyConfigIfChanged(force: Bool = false) {
+    func applyConfigIfChanged(force: Bool = false) {
         let new = NotchConfig.current(prefs)
         guard force || new != config else { return }
         let wasActive = config.isActive
+        let screenChanged = new.screenChoice != config.screenChoice
+        // Kill-Switch umgelegt: Fenster neu aufbauen (andere Ansicht, anderer Rand).
+        if new.unified != config.unified { dismantlePanels() }
         config = new
-        cachedScreen = nil
+        if screenChanged || !new.isActive || force { cachedPlacements = nil }
         if new.isActive {
             if !wasActive || force { activate() }
-            panel?.sharingType = new.hideFromCapture ? .none : .readOnly
+            for slot in slots.values {
+                slot.panel?.sharingType = new.hideFromCapture ? .none : .readOnly
+                // Neue gemerkte Lage (Ziehen, Doppelklick, Knopf in den
+                // Einstellungen): Rahmen neu setzen.
+                slot.lastFrame = nil
+            }
             rebuild()
         } else {
             deactivate()
@@ -222,10 +325,11 @@ final class NotchStatusController {
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.lastFrame = nil
-                self?.cachedScreen = nil
-                self?.scheduleFullscreenCheck()
-                self?.render()
+                guard let self else { return }
+                for slot in self.slots.values { slot.lastFrame = nil }
+                self.cachedPlacements = nil
+                self.scheduleFullscreenCheck()
+                self.render()
             }
             .store(in: &activeCancellables)
 
@@ -235,6 +339,8 @@ final class NotchStatusController {
             .sink { [weak self] _ in self?.scheduleFullscreenCheck() }
             .store(in: &activeCancellables)
 
+        observeAgentWindowScreen()
+        observeDictation()
         scheduleFullscreenCheck()
         Logger.info("notch_status_started")
     }
@@ -248,18 +354,23 @@ final class NotchStatusController {
         fullscreenGeneration += 1
         collapse(rebuildAfter: false)
         alert = nil
+        alertDuringDictation = nil
         inputs = []
-        lastDisplay = nil
-        lastFrame = nil
-        cachedScreen = nil
-        isFullscreenHidden = false
-        panel?.orderOut(nil)
+        cachedPlacements = nil
+        hub.updateBadge(nil)
+        for slot in slots.values {
+            slot.lastDisplay = nil
+            slot.lastFrame = nil
+            slot.isFullscreenHidden = false
+            slot.dragOrigin = nil
+            slot.panel?.orderOut(nil)
+        }
     }
 
     // MARK: Daten
 
     /// Baut Zeilen, Zähler und Auslöser neu und aktualisiert die Anzeige.
-    private func rebuild() {
+    func rebuild() {
         guard config.isActive else { return }
         let statuses = statusStore.statuses
         let current = now()
@@ -286,13 +397,17 @@ final class NotchStatusController {
             alertTask?.cancel(); alertTask = nil
             self.alert = nil
         }
-        if let fired { show(alert: fired) }
+        if let fired {
+            show(alert: fired)
+            // Beim Diktat verbreitert sich die Pille dort nicht; danach einmal.
+            if config.unified, dictationDisplayID != nil { alertDuringDictation = fired }
+        }
 
         scheduleExpiry(current)
         render()
     }
 
-    private func show(alert fired: NotchAlert) {
+    func show(alert fired: NotchAlert) {
         alert = fired
         alertTask?.cancel()
         alertTask = Task { [weak self] in
@@ -318,184 +433,14 @@ final class NotchStatusController {
         }
     }
 
-    // MARK: Darstellung
-
-    private func render() {
-        guard config.isActive else { return }
-        let current = now()
-        let rows = NotchStatusModel.rows(from: inputs, now: current, showFreshDone: config.showFreshDone)
-        let summary = NotchStatusModel.summary(of: rows)
-        let sections = isExpanded ? NotchStatusModel.sections(of: rows) : []
-
-        guard let screen = selectedScreen(),
-              !isFullscreenHidden,
-              NotchStatusModel.isVisible(summary: summary, isExpanded: isExpanded, alert: alert) else {
-            lastDisplay = nil
-            panel?.orderOut(nil)
-            return
-        }
-
-        let mode = NotchStatusModel.panelMode(isExpanded: isExpanded, alert: alert, rows: rows, sections: sections)
-        let display = NotchDisplay(
-            style: screen.hasNotch ? .notch(width: screen.notchWidth, height: screen.safeAreaTop) : .pill,
-            summary: summary, alert: alert, isExpanded: isExpanded, sections: sections)
-        let frame = NotchGeometry.panelFrame(screen: screen, mode: mode)
-
-        let panel = ensurePanel()
-        panel.hasShadow = !screen.hasNotch
-        let wasVisible = panel.isVisible
-        if display != lastDisplay {
-            lastDisplay = display
-            viewModel.display = display
-        }
-        if frame != lastFrame {
-            lastFrame = frame
-            if wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-                // Über den Animator: `setFrame(_:display:animate:)` hielte den
-                // Main Thread für die ganze Animation fest.
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.2
-                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                    panel.animator().setFrame(frame, display: true)
-                }
-            } else {
-                panel.setFrame(frame, display: true)
-            }
-        }
-        if !wasVisible { panel.orderFrontRegardless() }
-    }
-
-    private func ensurePanel() -> NotchPanel {
-        if let panel { return panel }
-        let panel = NotchPanel()
-        let host = NotchHostingView(rootView: NotchHostView(model: viewModel, controller: self))
-        host.safeAreaRegions = []
-        host.sizingOptions = []
-        panel.contentView = host
-        panel.sharingType = config.hideFromCapture ? .none : .readOnly
-        panel.onCancel = { [weak self] in self?.collapse() }
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, !self.isReleasingKey else { return }
-                self.collapse()
-            }
-        }
-        self.panel = panel
-        return panel
-    }
-
-    // MARK: Bildschirm
-
-    private func selectedScreen() -> NotchScreenInfo? {
-        if let cachedScreen { return cachedScreen }
-        let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
-        // Hauptbildschirm = der mit der Menüleiste (`CGMainDisplayID`), nicht
-        // `NSScreen.main`: das folgt dem Fokus und ließe die Anzeige springen.
-        let screen = NotchGeometry.selectScreen(
-            choice: config.screenChoice, screens: screens, mainDisplayID: CGMainDisplayID())
-        cachedScreen = .some(screen)
-        return screen
-    }
-
-    /// Vollbild-Spaces verstecken die Anzeige. Geprüft bei Space- und App-Wechsel
-    /// und kurz danach noch einmal, weil der Übergang erst nach der Meldung endet.
-    private func scheduleFullscreenCheck() {
-        updateFullscreenState()
-        fullscreenRecheckTask?.cancel()
-        fullscreenRecheckTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled else { return }
-            self?.updateFullscreenState()
-        }
-    }
-
-    /// Die Fensterliste kostet je nach Anzahl der Fenster einige Millisekunden
-    /// und wird deshalb abseits des Main Threads gelesen.
-    private func updateFullscreenState() {
-        guard config.isActive, let screen = selectedScreen() else { return }
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? screen.frame.height
-        let screenQuartz = NotchFullscreenDetector.quartzFrame(fromCocoa: screen.frame, primaryHeight: primaryHeight)
-        let safeAreaTop = screen.safeAreaTop
-        let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
-        let ownPID = ProcessInfo.processInfo.processIdentifier
-        fullscreenGeneration += 1
-        let generation = fullscreenGeneration
-        Task.detached(priority: .utility) { [weak self] in
-            let hidden = NotchFullscreenDetector.isFullscreen(
-                screenFrameQuartz: screenQuartz,
-                safeAreaTop: safeAreaTop,
-                windows: Self.onScreenWindows(),
-                ownPID: ownPID,
-                systemReportsFullScreen: systemFullScreen,
-                windowIsFullScreen: Self.accessibilityReportsFullScreen)
-            await MainActor.run { [weak self] in
-                guard let self, self.fullscreenGeneration == generation,
-                      hidden != self.isFullscreenHidden else { return }
-                self.isFullscreenHidden = hidden
-                self.render()
-            }
-        }
-    }
-
-    /// Fragt die Besitzer-App per Accessibility, ob ein Fenster mit genau
-    /// diesen Maßen im Vollbild ist. Läuft abseits des Main Threads, nur für
-    /// Fenster mit den Maßen „Vollbild unter der Kamera“. Ohne Recht: nein.
-    nonisolated private static func accessibilityReportsFullScreen(_ window: NotchWindowSample) -> Bool {
-        guard AXIsProcessTrusted() else { return false }
-        let app = AXUIElementCreateApplication(window.ownerPID)
-        AXUIElementSetMessagingTimeout(app, 0.25)
-        var list: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &list) == .success,
-              let windows = list as? [AXUIElement] else { return false }
-        for element in windows {
-            // Abgeleitete Elemente erben das Zeitlimit der App nicht (Standard ~6 s).
-            AXUIElementSetMessagingTimeout(element, 0.25)
-            var flag: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(element, "AXFullScreen" as CFString, &flag) == .success,
-                  (flag as? Bool) == true else { continue }
-            // Dieselben Koordinaten wie die Fensterliste (oben links am Hauptbildschirm).
-            guard let frame = axFrame(of: element) else { return true }
-            if abs(frame.minX - window.bounds.minX) <= 2, abs(frame.minY - window.bounds.minY) <= 2,
-               abs(frame.width - window.bounds.width) <= 2, abs(frame.height - window.bounds.height) <= 2 {
-                return true
-            }
-        }
-        return false
-    }
-
-    nonisolated private static func axFrame(of element: AXUIElement) -> CGRect? {
-        var positionValue: CFTypeRef?
-        var sizeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
-              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
-              let positionValue, let sizeValue,
-              CFGetTypeID(positionValue) == AXValueGetTypeID(), CFGetTypeID(sizeValue) == AXValueGetTypeID() else { return nil }
-        var position = CGPoint.zero
-        var size = CGSize.zero
-        guard AXValueGetValue(positionValue as! AXValue, .cgPoint, &position),
-              AXValueGetValue(sizeValue as! AXValue, .cgSize, &size) else { return nil }
-        return CGRect(origin: position, size: size)
-    }
-
-    nonisolated private static func onScreenWindows() -> [NotchWindowSample] {
-        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
-            as? [[String: Any]] ?? []
-        return list.compactMap { info in
-            guard let layer = info[kCGWindowLayer as String] as? Int,
-                  let pid = info[kCGWindowOwnerPID as String] as? Int32,
-                  let boundsDict = info[kCGWindowBounds as String] as? NSDictionary,
-                  let bounds = CGRect(dictionaryRepresentation: boundsDict) else { return nil }
-            return NotchWindowSample(layer: layer, bounds: bounds, ownerPID: pid)
-        }
-    }
-
     // MARK: Aufklappen
 
-    func toggleExpanded() {
+    /// Klick auf den Kopf einer Stelle. Eine offene Liste an der anderen
+    /// Stelle klappt dabei zu.
+    func toggleExpanded(_ kind: NotchPlacement.Kind = .notch) {
+        if let expandedKind, expandedKind != kind { collapse(rebuildAfter: false) }
         switch NotchStatusModel.clickAction(isExpanded: isExpanded, expandedByHover: expandedByHover) {
-        case .expand: expand(byHover: false)
+        case .expand: expand(kind, byHover: false)
         case .collapse: collapse()
         case .pin: pinHoverList()
         }
@@ -506,13 +451,13 @@ final class NotchStatusController {
     private func pinHoverList() {
         hoverTask?.cancel(); hoverTask = nil
         expandedByHover = false
-        if let panel {
+        if let panel = expandedKind.flatMap({ slots[$0]?.panel }) {
             panel.allowsKey = true
             panel.makeKey()
         }
     }
 
-    func hoverChanged(_ hovering: Bool) {
+    func hoverChanged(_ hovering: Bool, kind: NotchPlacement.Kind = .notch) {
         isHovering = hovering
         hoverTask?.cancel()
         guard config.expandOnHover else { return }
@@ -520,7 +465,7 @@ final class NotchStatusController {
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(350))
                 guard !Task.isCancelled, let self, self.isHovering else { return }
-                self.expand(byHover: true)
+                self.expand(kind, byHover: true)
             }
         } else if !hovering, isExpanded, expandedByHover {
             hoverTask = Task { [weak self] in
@@ -531,10 +476,11 @@ final class NotchStatusController {
         }
     }
 
-    private func expand(byHover: Bool) {
+    private func expand(_ kind: NotchPlacement.Kind, byHover: Bool) {
         guard config.isActive, !isExpanded else { return }
-        isExpanded = true
+        expandedKind = kind
         expandedByHover = byHover
+        keyboardSelection = nil
         alertTask?.cancel(); alert = nil
 
         // Stand-Zeilen nur lesen, solange die Liste offen ist.
@@ -552,7 +498,7 @@ final class NotchStatusController {
         }
         installDismissMonitors()
         rebuild()
-        if !byHover, let panel {
+        if !byHover, let panel = slots[kind]?.panel {
             panel.allowsKey = true
             panel.makeKey()
         }
@@ -560,19 +506,21 @@ final class NotchStatusController {
 
     func collapse() { collapse(rebuildAfter: true) }
 
-    private func collapse(rebuildAfter: Bool) {
-        guard isExpanded else { return }
-        isExpanded = false
+    func collapse(rebuildAfter: Bool) {
+        guard let kind = expandedKind else { return }
+        expandedKind = nil
         expandedByHover = false
+        keyboardSelection = nil
+        listRowIDs = []
         expandedCancellables.removeAll()
         tickTask?.cancel(); tickTask = nil
         removeDismissMonitors()
-        releaseKey()
+        releaseKey(slots[kind]?.panel)
         if rebuildAfter { rebuild() }
     }
 
     /// Key-Status zurückgeben, damit Tastatureingaben wieder in der App davor landen.
-    private func releaseKey() {
+    private func releaseKey(_ panel: NotchPanel?) {
         guard let panel else { return }
         panel.allowsKey = false
         guard panel.isKeyWindow else { return }
@@ -582,12 +530,20 @@ final class NotchStatusController {
         isReleasingKey = false
     }
 
+    /// Für die Controller-Insel: Mittelpunkt der sichtbaren Pille auf diesem
+    /// Bildschirm, damit die Insel genau aus ihr wächst (`nil` ohne Pille).
+    func visiblePillCenter(onDisplay displayID: UInt32) -> CGPoint? {
+        guard config.isActive, let slot = slots[.pill], slot.panel?.isVisible == true,
+              let screen = slot.screen, screen.displayID == displayID else { return nil }
+        return pillCenter(on: screen)
+    }
+
     /// Für die Controller-Insel: die Zähler, wenn die Anzeige gerade auf
     /// diesem Bildschirm steht (`nil` sonst). Nur lesen, nichts umbauen.
     func visibleSummary(onDisplay displayID: UInt32) -> NotchSummary? {
-        guard config.isActive, let lastDisplay, panel?.isVisible == true,
-              let screen = cachedScreen ?? nil, screen.displayID == displayID else { return nil }
-        return lastDisplay.summary
+        guard config.isActive else { return nil }
+        let slot = slots.values.first { $0.screen?.displayID == displayID && $0.panel?.isVisible == true }
+        return slot?.lastDisplay?.summary
     }
 
     /// Klick auf eine Zeile: WhisperM8-Fenster nach vorn, genau dieser Chat.
@@ -605,7 +561,7 @@ final class NotchStatusController {
             Task { @MainActor in self?.collapse() }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            if let self, event.window !== self.panel { self.collapse() }
+            if let self, !self.slots.values.contains(where: { $0.panel === event.window }) { self.collapse() }
             return event
         }
     }
@@ -625,6 +581,12 @@ extension NotchScreenInfo {
             return nil
         }
         let id = number.uint32Value
+        // Feste UUID des Bildschirms: bleibt über Neustarts und Umstecken
+        // gleich, anders als die Nummer.
+        let uuid = CGDisplayCreateUUIDFromDisplayID(id).map { unmanaged -> String in
+            let value = unmanaged.takeRetainedValue()
+            return (CFUUIDCreateString(nil, value) as String?) ?? "display-\(id)"
+        }
         self.init(
             displayID: id,
             frame: screen.frame,
@@ -632,6 +594,7 @@ extension NotchScreenInfo {
             safeAreaTop: screen.safeAreaInsets.top,
             auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
             auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width,
-            isBuiltIn: CGDisplayIsBuiltin(id) != 0)
+            isBuiltIn: CGDisplayIsBuiltin(id) != 0,
+            uuid: uuid)
     }
 }

@@ -250,6 +250,8 @@ final class ControllerBindingResolverTests: XCTestCase {
             XCTAssertEqual(action(left, chat(status)), .rejected, "\(status)")
             XCTAssertNil(action(.move(.left, source: .dpad, isRepeat: true), chat(status)), "\(status) gehalten")
             XCTAssertEqual(action(left, chat(status) { $0.draftSuspected = true }), .chatKey(.left), "\(status) Entwurf")
+            XCTAssertEqual(action(left, chat(status) { $0.fieldMayHaveText = true }), .chatKey(.left),
+                           "\(status) Text im Feld (Rückleger, ↑, →)")
         }
         XCTAssertEqual(action(left, chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 2 }), .chatKey(.left))
         XCTAssertEqual(action(left, chat(.idle) { $0.choiceListOpen = true }), .chatKey(.left))

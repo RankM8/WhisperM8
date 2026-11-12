@@ -47,6 +47,8 @@ enum AgentCommandError: LocalizedError, Equatable {
     case missingProject(String)
     case missingExternalSessionID(String)
     case missingBackgroundShortID(String)
+    /// Die Sitzung läuft schon in einem anderen Claude-Prozess (Registry).
+    case sessionAlreadyRunning(title: String, pid: Int32)
 
     var errorDescription: String? {
         switch self {
@@ -58,6 +60,8 @@ enum AgentCommandError: LocalizedError, Equatable {
             return "Cannot resume \(title): the original agent session ID was not indexed yet. Refresh sessions or start a new chat explicitly."
         case .missingBackgroundShortID(let title):
             return "Cannot attach to background agent \(title): no short ID stored yet. Spawn the agent first."
+        case .sessionAlreadyRunning(let title, let pid):
+            return String(localized: "Cannot resume \(title): this conversation is already running in another Claude process (PID \(String(pid))). Close that process first, a second start would run the same conversation twice.")
         }
     }
 }
@@ -252,6 +256,13 @@ struct AgentCommandBuilder {
                 forProfile: profileName ?? ClaudeAccountProfiles.mainProfileName
             )
         )
+    }
+
+    /// Lebender Vordergrund-Prozess, der die Claude-Sitzung schon führt
+    /// (Registry aller Konten, siehe `ClaudeSessionRunningGuard`). Gibt es
+    /// ihn, startet kein `--resume`. Im Test überschreibbar.
+    var runningSessionProcessResolver: (String) -> ClaudeSessionRecord? = { sessionID in
+        ClaudeSessionRunningGuard.liveLookup(sessionID: sessionID)
     }
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
@@ -800,6 +811,17 @@ struct AgentCommandBuilder {
                 isBackgroundAttachFallback: true,
                 reboundExternalSessionID: reboundID
             )
+        }
+
+        // Nie zwei Prozesse auf einer Sitzung: Läuft sie schon in einem
+        // anderen Vordergrund-Prozess, wird nicht fortgesetzt. Ein Abzweig
+        // (`--fork-session`) bekommt eine neue ID und darf.
+        if !isFork, let resumeSessionID,
+           let running = runningSessionProcessResolver(resumeSessionID) {
+            Logger.agentStore.error(
+                "resume_blocked_session_running session=\(resumeSessionID, privacy: .public) pid=\(running.pid) profile=\(running.profileName, privacy: .public)"
+            )
+            throw AgentCommandError.sessionAlreadyRunning(title: session.title, pid: running.pid)
         }
 
         if let resumeSessionID {

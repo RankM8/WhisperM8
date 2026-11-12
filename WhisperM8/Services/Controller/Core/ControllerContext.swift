@@ -14,6 +14,9 @@ struct ControllerBackTarget: Equatable, Sendable {
 
     var kind: Kind
     var title: String
+    /// Chat- bzw. Workspace-ID. Dort beginnt die Markierung, wenn L2
+    /// gehalten wird (Cmd-Tab: Loslassen führt ebenfalls dorthin).
+    var id: UUID? = nil
 }
 
 /// Was der Controller über den Ziel-Chat wissen muss (Plan, „Kreuz, Kreis und
@@ -32,6 +35,9 @@ struct ControllerChatState: Equatable, Sendable {
     var profile: Profile
     /// Im Eingabefeld steht vermutlich ein Entwurf (Draft-Tracker).
     var draftSuspected: Bool = false
+    /// Irgendetwas steht vermutlich im Feld (Entwurf, Rückleger, ↑ oder →).
+    /// Nur ohne das sperrt Pfeil links bei Claude.
+    var fieldMayHaveText: Bool = false
     /// Gerade gesendet (`countsAsInterrupt` des Trackers).
     var recentlySubmitted: Bool = false
     /// Seit wann die Rückfrage offen ist; `nil`, wenn unbekannt.

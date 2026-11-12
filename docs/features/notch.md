@@ -1,19 +1,124 @@
 ---
-status: umgesetzt, Review-Fixes drin, wartet auf make-dev-QA
-stand: 2026-11-04
-feature: Statusanzeige an der Notch
+status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled)
+stand: 2026-11-12
+feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
 # Statusanzeige an der Notch
 
-Eine kleine Anzeige an der MacBook-Notch (ohne Notch eine Pille oben mittig
-unter der Menüleiste) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
+Eine kleine Anzeige an der MacBook-Notch (auf einem Bildschirm ohne Notch eine
+dunkle Pille, die immer dasteht) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
 wie viele auf dich warten, wie viele gerade fertig wurden. Wer woanders
 arbeitet, sieht auf einen Blick, ob er gebraucht wird, und springt mit einem
 Klick in den passenden Chat. Prototyp der Zustände:
 [`../design/notch-prototype.html`](../design/notch-prototype.html).
 
 Standardmäßig **an** (seit 05.11.2026, vorher aus).
+
+## Vereinte Pille (Standard seit 12.11.2026)
+
+Diktat-Pille und Status-Pille sind eine Pille. Entwurf mit allen Zuständen und
+den 13 beantworteten Fragen: Branch `docs/pille-vereint-entwurf`,
+`docs/design/pille-vereint.html`. Abweichung von Frage 13: Ein Klick auf den
+ruhenden Kern startet ein Diktat (derselbe Weg wie der Hotkey), ein Klick auf
+die Zähler oder den Rest der Pille öffnet die Liste.
+
+**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Insel vor Diktat vor
+offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
+
+| Zustand | Ohne Notch | Mit Notch |
+|---|---|---|
+| Ruhe | Pille oben mittig: Kern als stille graue Linie, rechts die Zähler | wie bisher: Zähler unter der Notch, nichts los = nichts zu sehen |
+| Hinweis | Kern, Punkt, Chat-Name, Wort, „+ n“, einmal ca. 4 s | wie bisher |
+| Liste | wächst aus der Pille, Pillen-Zeile bleibt stehen; unten „Status in der Pille ausblenden“ | wie bisher |
+| Diktat | die Diktat-Pille an der Stelle der Pille, links Raute bzw. Ring für wartende Chats und Fehler | die Diktat-Zeile hängt schwarz unter der Notch, Raute links |
+| Insel | wächst aus der Pille | wächst aus der Notch |
+
+**Aussehen:** Die Pille in Ruhe, beim Hinweis und mit Liste ist gezeichnet wie
+die Diktat-Pille: 40 pt hoch, Kapsel, `PillGlassBackground` (dünnes Material,
+Tönung `OverlayPalette.glassTint`, 0,5-pt-Rand Weiß 14 %), im Fenster
+gezeichneter Schatten (`pillGlassShadow`, Schwarz 30 %, Radius 12, 3 pt nach
+unten), Schrift 12,5 pt. Kein Fensterschatten mehr (der brachte den hellen
+Rand und die weiche Kante, die die Diktat-Pille nicht hat). Dafür hat das
+Fenster wie die Diktat-Pille einen Rand von 24 pt für den Schatten; nur die
+Pille selbst nimmt Klicks an (`NotchHostingView.hitTest`), der Rand ist
+durchsichtig. Wie bei der Diktat-Pille fängt der Schattenhof dicht an der
+Pille Klicks ab (die Fensterverwaltung reicht nur völlig durchsichtige Pixel
+weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
+(28 pt hoch, mindestens 46 pt breit, fünf Balken), grau und flach.
+
+**Wo sie steht:**
+
+- Ohne Notch auf dem Bildschirm des Agent-Chats-Fensters (ohne Fenster auf
+  dem Hauptbildschirm), oben mittig unter der Menüleiste oder an der
+  gemerkten Lage dieses Bildschirms (`notchPillPositions`, Display-UUID).
+  Die Einstellung „Bildschirm“ (`notchStatusScreen`) gilt nicht mehr.
+- Ein Diktat erscheint dort, wo du tippst: Bildschirm des vorderen Fensters
+  (Fensterliste abseits des Main Threads, `FrontWindowLocator`, höchstens
+  80 ms, sonst die Maus). Mit Notch an der Notch, sonst an der gemerkten Lage
+  dieses Bildschirms, nur bis das Diktat fertig ist. Auf diesem Bildschirm
+  tritt die Status-Pille so lange zurück (`UnifiedPillHub.dictationDisplayID`).
+- Gemerkt wird nur echtes Ziehen (linke Maustaste gedrückt). Wird der
+  Bildschirm des Diktats abgesteckt oder ändert er seine Maße, baut die
+  Pille an neuer Stelle neu auf (Maus-Bildschirm, dort Notch oder gemerkte
+  Lage), damit ✓ und ✕ sichtbar bleiben; das Diktat läuft weiter.
+- An der Notch nimmt nur der Körper unter der Menüleiste Klicks und
+  Darüberfahren an, nicht das Band über der Aussparung.
+- Die alte Lage der Diktat-Pille (`overlayAnchor…`, unten mittig) bleibt
+  gespeichert, wird aber nicht benutzt; mit dem Kill-Switch gilt sie wieder.
+
+**Bewegung:** Zustandswechsel wachsen um die Mitte (eine Kurve, 0,35 s). Nur
+das Darüberfahren beim Diktat (Mini) klappt nach links auf, die rechte Kante
+bleibt (`UnifiedPillGeometry.centerGuide`, über eine Ausrichtungslinie im
+selben Layout-Durchgang, ohne Fensterbewegung). Am Bildschirmrand wird zur
+Mitte hin verschoben. Wächst die Pille beim Darüberfahren weiter (Kontext
+kommt dazu), bleibt sie ganz im Fenster. An der Notch ist nichts verschiebbar (kein Griff),
+alles wächst um die Mitte der Notch.
+
+**Bedienung:** Klick auf den grauen Kern startet ein Diktat
+(`AppState.startRecording()`, wie der Hotkey), Klick auf den Rest öffnet die
+Liste, ab 4 pt Bewegung wird gezogen. Doppelklick auf die Fläche außerhalb
+des Kerns setzt oben mittig zurück; ein Doppelklick auf den Kern startet nur
+das Diktat (der erste Klick), der zweite Klick tut dann nichts mehr, auch
+nicht an der Diktat-Pille, die inzwischen erscheint. Beim Diktat bleibt
+alles wie bei der Diktat-Pille mit der Maus bedienbar (✓, ✕, Modus, Kontext).
+Hotkey „Statusliste öffnen“ (`openNotchStatusList`, ab Werk ohne Belegung):
+Liste mit Tastaturfokus, Pfeile wählen, Return springt in den Chat, Esc
+schließt.
+
+**Hinweis beim Diktat:** Kommt währenddessen ein „braucht dich“, verbreitert
+sich die Pille dort nicht, die Raute erscheint links. Wartet der Chat nach dem
+Diktat noch, kommt die Verbreiterung einmal nach (`alertDuringDictation`).
+
+**Menüs und Listen:** In der oberen Bildschirmhälfte nach unten, in der
+unteren nach oben (Statusliste, Insel, Liste der Ausgabemodi am Controller;
+die Menüs von Modus und Kontext legt macOS selbst passend).
+
+**Vollbild:** In Ruhe ausgeblendet, Diktat und Insel erscheinen trotzdem.
+**Aus Bildschirmfotos ausblenden** gilt für die ganze Pille, auch das Diktat.
+**Status aus:** Die Pille erscheint nur beim Diktat und für die Insel.
+
+**Technik:** Die Diktat-Logik ist unberührt (Coordinator, Aufnahme,
+Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
+und wie sie aussieht (`OverlayPresentation`: `classic`, `pill`, `notch`,
+`RecordingPanel+UnifiedPill.swift`). Die Status-Seite hängt in
+`NotchStatusController+UnifiedPill.swift`. Beide treffen sich in
+`UnifiedPillHub` (Bildschirm des Diktats, Raute); der Status übernimmt den
+Bildschirm aus dem gemeldeten Wert, er liest den Hub dabei nicht erneut
+(`@Published` meldet im willSet, dort stünde noch der alte Wert). Es bleiben getrennte
+Fenster, von denen je Bildschirm immer nur eins sichtbar ist; so läuft das
+Diktat weiter durch sein bewährtes Fenster.
+
+### Kill-Switch der vereinten Pille
+
+```bash
+defaults write com.whisperm8.app unifiedPillEnabled -bool NO
+```
+
+Getrennte Diktat-Pille (unten mittig, eine Lage für alle Bildschirme) und
+Status-Pille (Fensterschatten, Bildschirmwahl) wie vor dem 12.11.2026, die
+Einstellungen stehen wieder an den alten Stellen. Wirkt für die Status-Pille
+sofort, für das Diktat beim nächsten Erscheinen.
 
 ## Bedienung
 
@@ -22,7 +127,7 @@ Standardmäßig **an** (seit 05.11.2026, vorher aus).
 | Ruhe | Die Notch wird ein Stück länger, darunter grüner Punkt mit Zahl (arbeitet), Amber-Raute (wartet), roter Ring (Fehler), Häkchen (frisch fertig) | Mindestens ein Chat arbeitet, wartet, hat einen Fehler oder wurde frisch fertig |
 | Braucht dich | Die Zeile unter der Notch verbreitert sich einmal kurz (ca. 4 s) und zeigt den Chat-Titel mit „wartet", „Fehler" oder „fertig", bei mehreren „+n" | Ein bekannter Chat wechselt nach `awaitingInput` oder `errored`, oder von `working` nach `idle` |
 | Aufgeklappt | Liste nach Aufmerksamkeit: Braucht dich, Frisch fertig, Arbeitet, Bereit | Klick auf den Streifen (optional Darüberfahren) |
-| Ausgeblendet | nichts | Nur bereite Chats, nichts Aktives, Funktion aus oder Vollbild-App im Vordergrund |
+| Ausgeblendet | nichts | An der Notch: nur bereite Chats, nichts Aktives. Überall: Funktion aus oder Vollbild-App im Vordergrund. Die Pille ohne Notch bleibt sonst immer stehen (siehe unten) |
 
 - Eine Zeile zeigt Status-Punkt (gleiche Formen wie `AgentStatusIndicator`:
   Scheibe, Raute, Ring), Titel, Stand-Zeile („› Edit Store.swift"), Projekt
@@ -62,7 +167,60 @@ Fenster auch dort Klicks annehmen).
 Band und Körper gehen mit kleinen Hohlkehlen ineinander über
 (`NotchHangingShape`).
 
-Ohne Notch ist es eine Pille unter der Menüleiste, die hell und dunkel mitgeht.
+### Ohne Notch: die Pille
+
+Auf einem Bildschirm ohne Notch steht die Anzeige als Pille da, und zwar
+**immer**, wie die Notch am MacBook: auch wenn gerade nichts los ist (dann nur
+ein ruhiger grauer Punkt). Sie sieht genauso aus wie die Diktat-Pille: gleiche
+Höhe (40 pt), Kapsel, dunkles Glas mit feinem hellem Rand (`PillGlassBackground`,
+aus der Diktat-Pille herausgezogen, deren Aussehen unverändert blieb), Schrift
+12,5 pt, immer dunkel, egal ob hell oder dunkel eingestellt ist. Aufgeklappt
+wird daraus ein abgerundetes Rechteck mit halber Pillenhöhe als Radius.
+
+Welcher Bildschirm (`NotchPillPlacement.placements`, Entscheidung vom 12.11.2026):
+
+- An der Notch bleibt alles wie bisher: Der gewählte Bildschirm
+  (Einstellung „Bildschirm“) zeigt die Anzeige an der Notch, wenn er eine hat.
+- Die Pille steht auf dem Bildschirm des Agent-Chats-Fensters (das zuletzt
+  aktive), wenn der keine Notch hat. Zieht man das Fenster auf einen anderen
+  Bildschirm, wandert die Pille mit.
+- Gibt es kein Agent-Chats-Fenster (oder liegt es an der Notch) und hat der
+  gewählte Bildschirm keine Notch, steht die Pille dort.
+- Also höchstens zwei Stellen: MacBook mit externem Bildschirm und Agent Chats
+  auf dem externen zeigt die Notch am MacBook und die Pille auf dem externen.
+  Nie zwei Pillen.
+
+Die Liste öffnet sich immer nur an einer Stelle; ein Klick auf die andere
+klappt sie dort zu und hier auf. Der „braucht dich“-Hinweis erscheint an beiden.
+
+**Verschieben:** Wie die Diktat-Pille lässt sich die Pille mit der Maus an jede
+Stelle ihres Bildschirms ziehen; die ganze Pille ist Zieh-Fläche. Unter 4 pt
+Bewegung zählt es als Klick (Liste auf und zu), ab 4 pt wird gezogen. Sie
+bleibt im sichtbaren Bereich des Bildschirms (ohne Menüleiste und Dock, wie die
+Diktat-Pille). Die Stelle merkt sich jeder Bildschirm einzeln, über seine feste
+Display-UUID (`CGDisplayCreateUUIDFromDisplayID`), nicht über die Nummer, und
+als Anteil am Bildschirm, damit sie nach einem Auflösungswechsel passt. Ein
+Doppelklick auf die Pille setzt sie oben mittig zurück (eine Liste, die der
+erste Klick geöffnet hat, klappt dabei zu). Zurückgesetzt wird nur, wenn die
+Pille vor dem ersten Klick zu war; zwei schnelle Klicks auf eine offene Liste
+sind Zu und wieder Auf, die gemerkte Stelle bleibt. Ob ein Klick im Kopf liegt,
+wird aus der Fensterhöhe im Moment des Klicks bestimmt
+(`NotchPillPlacement.isInHeader`), damit der zweite Klick auch während der
+Aufklapp-Animation ankommt. Bei offener Liste wird nicht gezogen: Ein Klick
+auf den Kopf klappt sie zu, die Zeilen bleiben Knöpfe. Eine offene Liste an
+der Notch des anderen Bildschirms hindert das Ziehen nicht. Sitzt die Pille in der unteren
+Bildschirmhälfte, wächst die Liste nach oben und der Kopf bleibt unten, wo die
+Pille war; oben wächst sie nach unten. Alles bleibt ganz auf dem Bildschirm.
+
+Unterschieden werden Klick, Ziehen und Doppelklick am Event-Einstieg der
+Hosting-View (`NotchHostingView.pillMouse`), wie bei der Diktat-Pille
+(`PillHitTestHostingView`). Die Diktat-Pille zieht über
+`isMovableByWindowBackground` und nur auf freier Fläche; hier ist die ganze
+Pille zugleich Knopf (Liste auf und zu), deshalb führt die Hosting-View das
+Fenster selbst mit der Maus mit und meldet einen Klick nur ohne Bewegung.
+
+Die Controller-Insel wächst ohne Notch aus genau dieser Pille (siehe
+[controller.md](controller.md)).
 
 **Ausschalten direkt in der Notch:** Unten links in der aufgeklappten Liste
 steht „Turn off notch“. Das setzt denselben Schalter wie die Einstellungen
@@ -71,8 +229,17 @@ einen selbst belegten Hotkey; ab Werk hat er keine Belegung).
 
 ## Einstellungen
 
-Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"
-(`NotchSettingsSection`):
+Vereinte Pille: Einstellungen, General, Abschnitt „Pille und Notch“
+(`PillSettingsSection`), mit Verweisen aus Recording und Agent Chats. Dort:
+Chat-Status in der Pille zeigen, Ausblenden aus Bildschirmfotos (ganze
+Pille), Fertige Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
+„Statusliste öffnen“ und Ein-/Ausblenden. Die Bildschirmwahl fällt weg.
+Recording behält Voll/Mini (nur beim Diktat) und „Ausgabemodus beim Diktat
+immer zeigen“ (`showModePickerInMiniOverlay`). Menüleiste: „Chat-Status in
+der Pille“.
+
+Mit Kill-Switch (getrennte Pillen): Einstellungen, Agent Chats, Tab Workspace,
+Abschnitt „Notch Status" (`NotchSettingsSection`):
 
 | Einstellung | Schlüssel | Standard |
 |---|---|---|
@@ -81,12 +248,14 @@ Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"
 | In Screenshots und Bildschirmfreigabe ausblenden | `notchStatusHideFromCapture` | an |
 | Fertige Chats anzeigen | `notchStatusShowFreshDone` | an |
 | Liste beim Darüberfahren öffnen | `notchStatusExpandOnHover` | aus |
+| Lage der Pille: „Zurücksetzen“ (alle Bildschirme oben mittig) | `notchPillPositions` | leer (oben mittig) |
 | Hotkey zum Ein- und Ausblenden | `KeyboardShortcuts` `toggleNotchStatus` | ohne Belegung |
 
 Auch im Menüleisten-Menü: „Chat Status at the Notch" (Schalter).
 
 Bildschirmwahl „Automatisch": eingebauter Bildschirm mit Notch, sonst der
-Hauptbildschirm. Hauptbildschirm heißt der mit der Menüleiste
+Hauptbildschirm. Sie gilt für die Anzeige an der Notch; die Pille folgt dem
+Agent-Chats-Fenster, wenn dessen Bildschirm keine Notch hat (siehe oben). Hauptbildschirm heißt der mit der Menüleiste
 (`CGMainDisplayID`), nicht `NSScreen.main` (das folgt dem Fokus). Die Anzeige
 folgt Bildschirmwechseln (`NSApplication.didChangeScreenParametersNotification`),
 die Wahl wird bis dahin zwischengespeichert.
@@ -131,9 +300,18 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 |---|---|
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
-| `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Fenster, Klick-daneben, Hotkey, Einstellungen |
-| `Windows/NotchPanel.swift` | Nicht aktivierendes `NSPanel`, Hosting-View mit erstem Klick |
+| `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Controller-Insel |
+| `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
+| `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
+| `Windows/NotchPanel.swift` | Nicht aktivierendes `NSPanel`, Hosting-View mit erstem Klick und Klick/Ziehen/Doppelklick der Pille |
+| `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Insel |
 | `Views/NotchStatusView.swift` | Darstellung aus einem fertigen `NotchDisplay`-Wert |
+| `Services/Shared/UnifiedPill/UnifiedPillModel.swift` | Rein: Priorität, Ort des Diktats, Raute, Geometrie (Mitte, Rechts-Anker beim Darüberfahren, Fenster mit Schattenrand), Klickziel, Aufklapprichtung |
+| `Services/Shared/UnifiedPill/UnifiedPillHub.swift` | Treffpunkt Diktat und Status: Bildschirm des Diktats, Raute |
+| `Services/AgentChats/Notch/NotchStatusController+UnifiedPill.swift` | Status-Pille vereint: Fenster mit Schattenrand, Platz fürs Diktat, Klick auf den Kern, Tastatur, nachgeholter Hinweis |
+| `Windows/RecordingPanel+UnifiedPill.swift` | Diktat-Pille vereint: Bildschirm des vorderen Fensters, Lage je Bildschirm, an der Notch, Raute |
+| `Views/UnifiedStatusPillView.swift` | Ruhe, Hinweis und Liste im Aussehen der Diktat-Pille; `PillRestCoreView`, Raute `DictationStatusBadgeView` |
+| `Views/Settings/Pages/PillSettingsSection.swift` | Abschnitt „Pille und Notch“ auf General, Verweis-Zeile für Recording und Agent Chats |
 | `Views/Settings/Pages/NotchSettingsSection.swift` | Einstellungen |
 | `CLI/ChatsAttentionModel.swift` | `AttentionModelBuilder.classify(status:lastTurnAt:since:now:)` ist die geteilte Rang-Logik, das CLI-Verhalten blieb gleich |
 
@@ -175,9 +353,27 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Fenstergröße wechselt je Zustand einmalig über `animator().setFrame`
   (blockiert den Main Thread nicht, anders als `setFrame(_:display:animate:)`),
   bei „Bewegung reduzieren" ohne Animation. Keine `repeatForever`-Animation.
+- Ohne Notch trägt das Fenster einen Fensterschatten (`hasShadow`) statt des
+  in der Diktat-Pille gezeichneten. Ein gezeichneter Schatten bräuchte einen
+  Rand im Fenster, und bei einer dauerhaft sichtbaren Pille finge dieser Rand
+  Klicks in die Fenster darunter ab. So bleibt es beim Klick-Durchlass oben:
+  Nur die Pille selbst nimmt Klicks an, ihre transparenten Ecken nicht.
+- Beide Stellen, auch die an der Notch, haben das dunkle Erscheinungsbild
+  (`darkAqua` an der Hosting-View, `colorScheme` dunkel in der Ansicht). An der
+  Notch änderte das nichts Sichtbares, die Farben dort waren schon fest dunkel;
+  es betrifft nur Systemfarben und Materialien.
+- Den Bildschirm des Agent-Chats-Fensters fragt die Anzeige nur bei
+  Fenster-Ereignissen ab (`NSWindow.didChangeScreenNotification`,
+  `didBecomeKey`, `willClose`, entprellt auf 250 ms), über
+  `AgentChatsCommandCenter.windowDisplayID(preferring:)`. Gezeichnet wird nur,
+  wenn sich die Stellen dadurch ändern. Schließt man das letzte
+  Agent-Chats-Fenster, hat es sich beim `willClose` schon abgemeldet; nach der
+  Entprellung zählt es nicht mehr, und die Pille verschwindet bzw. geht auf den
+  gewählten Bildschirm, falls der keine Notch hat.
 - Notch-Erkennung: `safeAreaInsets.top > 0` und beide `auxiliaryTop…Area`.
   Notch-Breite = Bildschirmbreite minus die beiden freien Bereiche.
-- Vollbild: Über Vollbild-Apps wird die Anzeige ausgeblendet. Erkannt wird ein
+- Vollbild: Über Vollbild-Apps wird die Anzeige ausgeblendet, je Stelle für
+  ihren Bildschirm geprüft (eine Fensterliste für beide). Erkannt wird ein
   fremdes Fenster der Ebene 0, das den Bildschirm samt Menüleistenbereich exakt
   deckt (`CGWindowListCopyWindowInfo`, braucht keine Aufnahmerechte). Auf
   Notch-Bildschirmen legt macOS Vollbild-Apps meist unter die Kamera; ein
@@ -199,8 +395,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   nicht, der lokale gibt das Ereignis immer zurück).
 - Keine Dateideskriptoren, keine Subprozesse.
 - Controller-Insel: Hält man am Controller L1, R1 oder L2, legt sich die Insel
-  (eigenes Fenster, `mainMenu + 4`, dieselbe Band-Geometrie) über diese
-  Anzeige und zeigt ihre Zähler im Kopf. Die Anzeige selbst ändert sich dafür
+  (eigenes Fenster, `mainMenu + 4`, dieselbe Band-Geometrie an der Notch,
+  ohne Notch an der Stelle der Pille) über diese Anzeige und zeigt ihre Zähler
+  im Kopf. Die Anzeige selbst ändert sich dafür
   nicht; sie gibt nur über `visibleSummary(onDisplay:)` lesend ihre Zähler her,
   und eine offene Liste klappt zu. Details in [controller.md](controller.md).
 
@@ -239,16 +436,39 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - `NotchStatusModelTests.testClickOnHoverOpenedListPinsItInsteadOfClosing`:
   Klick auf den Kopf je nach Zustand auf, zu oder festhalten.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
+- `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
+  Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
+  sichtbaren Bereich, nach oben in der unteren Hälfte, Insel an derselben
+  Stelle, Schlüssel ist die Display-UUID, Speichern und Zurücksetzen.
+- `UnifiedPillModelTests`: Priorität (Insel, Diktat, Liste, Hinweis, Ruhe;
+  Status aus, Vollbild), Ort des Diktats (vorderes Fenster, Maus,
+  Hauptbildschirm, Notch, gemerkte Lage), Raute, Rechts-Anker beim
+  Darüberfahren, Fenster mit Schattenrand, Liste nach oben und unten,
+  Begrenzung am Rand, Klickziel Kern oder Liste.
+- `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
+  Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
+  nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
+  Abmelden beim Hub, vorderes Fenster aus der Fensterliste, Liste der
+  Ausgabemodi nach unten.
+- Snapshots vereint: `make snapshots ONLY=vereint` (Ruhe leer und mit
+  Zählern, Hinweis, Fehler, Liste nach unten und oben, Diktat mit Raute,
+  Diktat an der Notch, Vergleich Diktat-Pille und ruhende Pille Seite an
+  Seite). `ONLY=diktatpille` zeigt die Diktat-Pille in allen Zuständen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
-  braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille, hell
-  und dunkel). Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
+  braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
+  die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
+  `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
 
 ## Grenzen
 
 - Der Streifen kennt nur Chats, die die App gerade beobachtet (Status im
   `AgentSessionRuntimeStatusStore`). Chats ohne laufenden Prozess fehlen.
-- Die Anzeige erscheint nur auf einem Bildschirm (der gewählte).
+- Die Anzeige erscheint an höchstens zwei Stellen: an der Notch des gewählten
+  Bildschirms und als Pille auf dem Bildschirm des Agent-Chats-Fensters ohne
+  Notch. Weitere Bildschirme zeigen nichts.
+- Die Pille lässt sich nur innerhalb ihres Bildschirms ziehen, nicht auf einen
+  anderen.
 - Ob man einen bestimmten Chat gerade ansieht, weiß sie nicht: die
   Fertig-Verbreiterung wird nur unterdrückt, solange WhisperM8 aktive App ist.
 - Unter der Notch verdeckt die Anzeige ein kleines Stück oben in der
@@ -264,7 +484,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 
 ## Keywords
 
-Notch, MacBook, Dynamic Island, Statusanzeige, Streifen, Pille, braucht dich,
+Notch, MacBook, Dynamic Island, Statusanzeige, Streifen, Pille, verschieben, braucht dich,
 frisch fertig, `NotchStatusController`, `NotchStatusModel`, `NotchGeometry`,
-`NotchAlertTracker`, `NotchPanel`, `notchStatusEnabled`,
+`NotchAlertTracker`, `NotchPanel`, `NotchPillPlacement`, `notchPillPositions`, `notchStatusEnabled`,
 `notchStatusFeatureEnabled`, `toggleNotchStatus`, `sharingType`.
