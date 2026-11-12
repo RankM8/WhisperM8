@@ -266,6 +266,8 @@ extension UISnapshotGallery {
         }
         let size = CGSize(width: 620, height: 470)
         let small = CGSize(width: 620, height: 230)
+        // Raute mit Hinweiszeile darunter braucht etwas mehr Höhe.
+        let smallNote = CGSize(width: 620, height: 260)
         return [
             Fixture(name: "controller-insel-wohin-hinweis", size: small) { island(whereTo(grid: false)) },
             Fixture(name: "controller-insel-wohin-chats", size: size) { island(whereTo(grid: false, open: [1, 1])) },
@@ -276,9 +278,9 @@ extension UISnapshotGallery {
             Fixture(name: "controller-insel-schreiben", size: small) { island(writing) },
             Fixture(name: "controller-insel-schreiben-shell", size: small) { island(writingShell) },
             Fixture(name: "controller-insel-schnellbefehle", size: small) { island(quickDraw) },
-            Fixture(name: "controller-insel-schnellbefehle-rueckfrage", size: small) { island(quickDrawQuestion) },
+            Fixture(name: "controller-insel-schnellbefehle-rueckfrage", size: smallNote) { island(quickDrawQuestion) },
             // Review nach Runde 4: Chat arbeitet — Weiter und Modus aus.
-            Fixture(name: "controller-insel-schnellbefehle-arbeitet", size: small) { island(quickDrawBusy) },
+            Fixture(name: "controller-insel-schnellbefehle-arbeitet", size: smallNote) { island(quickDrawBusy) },
             // Mit Notch-Zählern bleibt bei L1 und R1 der Ziel-Chat im Kopf.
             Fixture(name: "controller-insel-schnellbefehle-notch-zaehler", size: small) {
                 island(quickDraw, counts: ControllerIslandCounts(working: 2, waiting: 1))
