@@ -25,7 +25,7 @@ extension UISnapshotGallery {
                 dependencies: ControllerSettingsDependencies(status: { status }, applyPreferences: {})
             ))
         }
-        let size = CGSize(width: 760, height: 1500)
+        let size = CGSize(width: 760, height: 1950)
         let chat = ControllerChatState(status: .idle, profile: .claude)
         func legend(_ context: ControllerContext, title: String = "WhisperM8 PS5-Controller-Steuerung",
                     hold: ControllerButton? = nil) -> AnyView {
@@ -40,7 +40,11 @@ extension UISnapshotGallery {
         }
         let legendSize = CGSize(width: 1100, height: 60)
         let legendFixtures: [Fixture] = [
-            Fixture(name: "controller-legende-chat", size: legendSize) { legend(.chat(chat)) },
+            Fixture(name: "controller-legende-chat", size: CGSize(width: 1340, height: 60)) {
+                var state = chat
+                state.backTarget = ControllerBackTarget(kind: .chat, title: "Login-Fix")
+                return legend(.chat(state))
+            },
             Fixture(name: "controller-legende-rueckfrage", size: legendSize) {
                 var state = chat
                 state.status = .awaitingInput
@@ -73,10 +77,11 @@ extension UISnapshotGallery {
                 legend(.recording(phase: .recording, targetIsChat: true))
             },
             Fixture(name: "controller-legende-pause", size: legendSize) { legend(.paused) },
-            // Runde 3: Raster mit L2 = Workspace-Auswahl, dazu die offene Auswahl.
+            // Raster: L2 getippt führt zurück in den vorigen Workspace.
             Fixture(name: "controller-legende-raster", size: CGSize(width: 1340, height: 60)) {
                 var state = chat
                 state.gridActive = true
+                state.backTarget = ControllerBackTarget(kind: .workspace, title: "Marketing")
                 return legend(.chat(state), title: "2 Lux · Integrationen")
             },
             Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {
@@ -225,8 +230,13 @@ extension UISnapshotGallery {
                                       hasWaitingChat: false, isCurrent: false),
         ]
         let target = ControllerIslandTarget(title: "Controller Insel", status: .working)
-        func whereTo(grid: Bool, open: [Int] = []) -> ControllerIslandModel {
-            var state = ControllerWhereToState(chats: chats, currentChatID: current, workspaces: workspaces, gridActive: grid)
+        /// Wie Cmd-Tab: Die Liste steht sofort da, die Markierung auf dem
+        /// vorigen Ort (hier „Jarvis“ bzw. „ListM8“), sonst auf dem aktuellen.
+        func whereTo(grid: Bool, previous: Bool = true, open: [Int] = []) -> ControllerIslandModel {
+            let back: ControllerWhereToState.Destination = previous
+                ? (grid ? .workspace(workspaces[1].id) : .chat(chats[1].id)) : .stay
+            var state = ControllerWhereToState(
+                chats: chats, currentChatID: current, workspaces: workspaces, gridActive: grid, previous: back)
             for step in open { state.move(step) }
             return ControllerIslandModel(target: target, content: .whereTo(state))
         }
@@ -264,15 +274,46 @@ extension UISnapshotGallery {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(AppTheme.sidebar))
         }
+
+        /// Bildschirm ohne Notch mit der Pille an `pill` (Anteil am
+        /// Bildschirm) und der Insel, die aus ihr wächst — oben nach unten,
+        /// unten nach oben.
+        func pillScene(_ model: ControllerIslandModel, pill: NotchPillPosition?, size: CGSize) -> AnyView {
+            let screen = NotchScreenInfo(
+                displayID: 9, frame: CGRect(origin: .zero, size: size),
+                visibleFrame: CGRect(x: 0, y: 0, width: size.width, height: size.height - 25),
+                safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false)
+            let display = ControllerIslandDisplay(
+                style: .pill, model: model, counts: ControllerIslandCounts(working: 2, waiting: 1),
+                opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: pill))
+            let host = NSHostingView(rootView: ControllerIslandView(display: display))
+            let body = CGSize(width: display.bodyWidth, height: host.fittingSize.height)
+            let frame = ControllerIslandGeometry.frame(screen: screen, bodySize: body, stored: pill)
+            return AnyView(
+                ZStack(alignment: .topLeading) {
+                    LinearGradient(colors: [Color(red: 0.80, green: 0.84, blue: 0.93), Color(red: 0.93, green: 0.86, blue: 0.82)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Rectangle().fill(Color.white.opacity(0.55)).frame(height: 25)
+                    ControllerIslandView(display: display)
+                        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 3)
+                        .frame(width: frame.width, height: frame.height)
+                        .offset(x: frame.minX, y: size.height - frame.maxY)
+                }
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
+                .clipped())
+        }
         let size = CGSize(width: 620, height: 470)
         let small = CGSize(width: 620, height: 230)
         // Raute mit Hinweiszeile darunter braucht etwas mehr Höhe.
         let smallNote = CGSize(width: 620, height: 260)
         return [
-            Fixture(name: "controller-insel-wohin-hinweis", size: small) { island(whereTo(grid: false)) },
-            Fixture(name: "controller-insel-wohin-chats", size: size) { island(whereTo(grid: false, open: [1, 1])) },
-            Fixture(name: "controller-insel-wohin-workspaces", size: size) { island(whereTo(grid: true, open: [1])) },
-            Fixture(name: "controller-insel-wohin-notch-zaehler", size: small) {
+            // L2 gehalten: Liste sofort, Markierung auf dem vorigen Chat.
+            Fixture(name: "controller-insel-wohin-chats", size: size) { island(whereTo(grid: false)) },
+            Fixture(name: "controller-insel-wohin-chats-bewegt", size: size) { island(whereTo(grid: false, open: [1, 1])) },
+            // Ohne vorigen Ort: Markierung auf dem aktuellen Chat, Loslassen tut nichts.
+            Fixture(name: "controller-insel-wohin-ohne-vorher", size: size) { island(whereTo(grid: false, previous: false)) },
+            Fixture(name: "controller-insel-wohin-workspaces", size: size) { island(whereTo(grid: true)) },
+            Fixture(name: "controller-insel-wohin-notch-zaehler", size: size) {
                 island(whereTo(grid: false), counts: ControllerIslandCounts(working: 2, waiting: 1))
             },
             Fixture(name: "controller-insel-schreiben", size: small) { island(writing) },
@@ -290,6 +331,13 @@ extension UISnapshotGallery {
             },
             Fixture(name: "controller-insel-pille-chats", size: size) {
                 island(whereTo(grid: false, open: [1]), style: .pill)
+            },
+            // Pille oben mittig: Insel wächst nach unten; Pille unten links: nach oben.
+            Fixture(name: "controller-insel-pille-oben-nach-unten", size: CGSize(width: 900, height: 560)) {
+                pillScene(whereTo(grid: false), pill: nil, size: CGSize(width: 900, height: 560))
+            },
+            Fixture(name: "controller-insel-pille-unten-nach-oben", size: CGSize(width: 900, height: 560)) {
+                pillScene(whereTo(grid: true), pill: NotchPillPosition(x: 0.2, y: 0.1), size: CGSize(width: 900, height: 560))
             },
             Fixture(name: "controller-insel-pille-schnellbefehle", size: small) { island(quickDraw, style: .pill) },
             Fixture(name: "controller-insel-pille-schreiben-shell", size: small) { island(writingShell, style: .pill) },

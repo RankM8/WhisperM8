@@ -82,6 +82,9 @@ final class ControllerWindowFake {
     var chatInfo: ControllerChatActionInfo? = ControllerChatActionInfo(title: "Chat")
     var rows: [AgentChatsListRow] = []
     var workspaces: [ControllerWorkspaceChoice] = []
+    var backTarget: ControllerBackTarget?
+    /// Wird mit `lastChat` zum neuen Ziel (wie der Ort, den man verlässt).
+    var backTargetAfterJump: ControllerBackTarget?
     /// Befehle, die „ging nicht“ melden sollen.
     var failing: Set<String> = []
     private(set) var commands: [AgentChatsCommand] = []
@@ -97,6 +100,10 @@ final class ControllerWindowFake {
                 case .selectSession(let id): selected = id
                 case .selectWorkspaceChat(let id, _): selected = id
                 case .showNewChatPicker: isNewChatPickerOpen = true
+                case .lastChat:
+                    // Wie `goBack`: ein voriger Chat wird ausgewählt.
+                    if let target = backTarget, target.kind == .chat, let id = target.id { selected = id }
+                    backTarget = backTargetAfterJump
                 default: break
                 }
                 return !failing.contains(String(describing: command))
@@ -107,7 +114,8 @@ final class ControllerWindowFake {
                     isGridActive: isGridActive, canReturnToWorkspace: false,
                     isSwitcherOpen: isSwitcherOpen, hasSheet: hasSheet,
                     isSidebarVisible: isSidebarVisible, hasMultiSelection: hasMultiSelection,
-                    isArchiveMode: false, isNewChatPickerOpen: isNewChatPickerOpen, screenDisplayID: 7)
+                    isArchiveMode: false, isNewChatPickerOpen: isNewChatPickerOpen, screenDisplayID: 7,
+                    backTarget: backTarget)
             },
             listRows: { [unowned self] in rows },
             chatActionInfo: { [unowned self] _ in chatInfo },

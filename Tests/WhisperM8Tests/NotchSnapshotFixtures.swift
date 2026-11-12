@@ -37,7 +37,8 @@ extension UISnapshotGallery {
     }
 
     private static func display(
-        notch: Bool, expanded: Bool = false, alert: NotchAlert? = nil, inputs: [NotchChatInput]? = nil
+        notch: Bool, expanded: Bool = false, alert: NotchAlert? = nil, inputs: [NotchChatInput]? = nil,
+        upward: Bool = false
     ) -> NotchDisplay {
         let rows = NotchStatusModel.rows(from: inputs ?? demoInputs, now: now, showFreshDone: true)
         return NotchDisplay(
@@ -45,23 +46,29 @@ extension UISnapshotGallery {
             summary: NotchStatusModel.summary(of: rows),
             alert: alert,
             isExpanded: expanded,
-            sections: expanded ? NotchStatusModel.sections(of: rows) : [])
+            sections: expanded ? NotchStatusModel.sections(of: rows) : [],
+            opensUpward: upward)
     }
 
     /// Bildschirm-Attrappe mit Menüleiste, damit man die Lage zur Notch sieht.
-    private static func screen(_ display: NotchDisplay, mode: NotchPanelMode, size: CGSize) -> AnyView {
+    /// `pill`: gemerkte Lage der Pille (ohne Notch), sonst oben mittig.
+    private static func screen(
+        _ display: NotchDisplay, mode: NotchPanelMode, size: CGSize, pill: NotchPillPosition? = nil
+    ) -> AnyView {
+        let screenHeight = max(600, size.height)
         let info = display.isNotch
             ? NotchScreenInfo(
-                displayID: 1, frame: CGRect(x: 0, y: 0, width: size.width, height: 600),
-                visibleFrame: CGRect(x: 0, y: 0, width: size.width, height: 562),
+                displayID: 1, frame: CGRect(x: 0, y: 0, width: size.width, height: screenHeight),
+                visibleFrame: CGRect(x: 0, y: 0, width: size.width, height: screenHeight - 38),
                 safeAreaTop: notchHeight,
                 auxiliaryLeftWidth: (size.width - notchWidth) / 2, auxiliaryRightWidth: (size.width - notchWidth) / 2,
                 isBuiltIn: true)
             : NotchScreenInfo(
-                displayID: 2, frame: CGRect(x: 0, y: 0, width: size.width, height: 600),
-                visibleFrame: CGRect(x: 0, y: 0, width: size.width, height: 575),
+                displayID: 2, frame: CGRect(x: 0, y: 0, width: size.width, height: screenHeight),
+                visibleFrame: CGRect(x: 0, y: 0, width: size.width, height: screenHeight - 25),
                 safeAreaTop: 0, auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false)
-        let frame = NotchGeometry.panelFrame(screen: info, mode: mode)
+        let frame = NotchGeometry.panelFrame(
+            screen: info, mode: mode, pillCenter: display.isNotch ? nil : NotchPillPlacement.center(info, stored: pill))
         // Cocoa (unten links) → SwiftUI (oben links).
         let top = info.frame.maxY - frame.maxY
         return AnyView(
@@ -83,6 +90,8 @@ extension UISnapshotGallery {
                 }
                 NotchStatusView(display: display)
                     .frame(width: frame.width, height: frame.height)
+                    // Ohne Notch trägt das Fenster einen Schatten.
+                    .shadow(color: .black.opacity(display.isNotch ? 0 : 0.3), radius: 12, x: 0, y: 3)
                     .offset(x: frame.minX, y: top)
             }
             .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -151,8 +160,16 @@ extension UISnapshotGallery {
             fixture("notch-fehler", notch: true, mode: .alert, alert: errorAlert, size: size),
             fixture("notch-aufgeklappt", notch: true, mode: expandedMode, expanded: true, size: tall),
             fixture("notch-pille-ruhe", notch: false, mode: compactMode, size: size),
+            // Dauerhaft da, auch wenn nichts los ist.
+            fixture("notch-pille-leer", notch: false, mode: .compact(chipCount: 0), inputs: [], size: size),
             fixture("notch-pille-braucht-dich", notch: false, mode: .alert, alert: alert, size: size),
             fixture("notch-pille-aufgeklappt", notch: false, mode: expandedMode, expanded: true, size: tall),
+            // Unten am Bildschirm verschoben: Liste wächst nach oben, Kopf bleibt unten.
+            Fixture(name: "notch-pille-unten-aufgeklappt", size: CGSize(width: 640, height: 620)) {
+                let d = display(notch: false, expanded: true, upward: true)
+                return screen(d, mode: expandedMode, size: CGSize(width: 640, height: 620),
+                              pill: NotchPillPosition(x: 0.35, y: 0.1))
+            },
         ]
     }
 }

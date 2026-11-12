@@ -191,7 +191,7 @@ private struct ControllerBindingsSection: View {
             ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
                 HStack(alignment: .center, spacing: 14) {
                     ControllerInputGlyphs(inputs: entry.inputs, isCombination: entry.isCombination)
-                        .frame(width: 96, alignment: .leading)
+                        .frame(width: 116, alignment: .leading)
                     Text(verbatim: entry.label.explanation)
                         .font(.system(size: 13))
                         .foregroundStyle(AppTheme.textPrimary)

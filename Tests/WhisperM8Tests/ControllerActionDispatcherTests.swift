@@ -225,6 +225,22 @@ final class ControllerActionDispatcherTests: XCTestCase {
         XCTAssertEqual(window.commands, [.lastChat])
     }
 
+    /// Das Ziel von L2 kommt aus dem Fenster in den Zusammenhang, und nach
+    /// dem Sprung nennt die Legende gleich das neue Ziel (den verlassenen Ort).
+    func testBackTargetReachesContextAndRefreshesAfterJump() {
+        let marketing = ControllerBackTarget(kind: .workspace, title: "Marketing")
+        let loginFix = ControllerBackTarget(kind: .chat, title: "Login-Fix")
+        window.backTarget = marketing
+        window.backTargetAfterJump = loginFix
+        guard case let .chat(state) = context else { return XCTFail("chat erwartet") }
+        XCTAssertEqual(state.backTarget, marketing)
+
+        perform(.lastChat)
+        guard case let .chat(after) = ui.context else { return XCTFail("chat erwartet") }
+        XCTAssertEqual(after.backTarget, loginFix)
+        XCTAssertEqual(haptics, [])
+    }
+
     func testFailedJumpGivesRejectFeedback() {
         window.failing = [String(describing: AgentChatsCommand.lastChat)]
         perform(.lastChat)
@@ -951,11 +967,13 @@ final class ControllerActionDispatcherTests: XCTestCase {
     func testMenuSettingsAndPause() {
         var pauses = 0
         dispatcher.togglePause = { pauses += 1 }
-        for item in [ControllerMenuItem.showBindings, .pause] {
+        for item in [ControllerMenuItem.clipboardHistory, .showBindings, .pause] {
             perform(.menuToggle)
             ui.menu?.select(item)
             perform(.menuActivate)
         }
+        XCTAssertEqual(environment.clipboardToggles, 1, "Verlauf aus dem Menü")
+        XCTAssertNil(ui.menu)
         XCTAssertEqual(environment.openedSettings, 1)
         XCTAssertEqual(pauses, 1)
     }

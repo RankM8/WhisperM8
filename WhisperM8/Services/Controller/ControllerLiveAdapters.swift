@@ -26,9 +26,11 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             status: coordinator.statusStore.status(for: sessionID),
             statusSince: coordinator.activityStore.statusSince(for: sessionID),
             draftSuspected: controller.composerDraft.mayHaveUnsentInput,
+            fieldMayHaveText: controller.composerDraft.fieldMayHaveText,
             lastEnterAt: controller.lastSubmitAt,
             lastEscapeAt: controller.controllerMarks.lastEscapeAt,
             lastDraftInputAt: controller.controllerMarks.lastDraftInputAt,
+            lastArmingArrowAt: controller.controllerMarks.lastArmingArrowAt,
             choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID)),
             shellAtPrompt: profile == .shell && !controller.terminal.getTerminal().isCurrentBufferAlternate
         )

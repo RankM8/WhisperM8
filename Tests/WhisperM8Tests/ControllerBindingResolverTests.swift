@@ -40,41 +40,14 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.press(.cross), chat(.ended)), .chatResume)
     }
 
-    /// Befund 1 nach Runde 3: Wo das Steuerkreuz Pfeile ins Terminal gibt.
-    /// Claude: nur in Rückfragen und in einer Liste, die das Menü geöffnet hat
-    /// (sonst Navigation — links schickte Claude im leeren Feld in den
-    /// Hintergrund). Codex: in jedem lebenden Zustand, weil es nie „wartet“.
-    func testDpadArrowsPerProfileAndState() {
-        let left = ControllerGesture.move(.left, source: .dpad, isRepeat: false)
-        let up = ControllerGesture.move(.up, source: .dpad, isRepeat: false)
-        for status in [ControllerChatState.Status.idle, .working, .unknown] {
-            XCTAssertEqual(action(left, chat(status)), .moveInContent(.left), "Claude \(status)")
-            XCTAssertEqual(action(up, chat(status)), .enterList(step: -1), "Claude \(status)")
-            // Nachreview: Bei Claude zählt der Merker nur im Ruhezustand.
-            XCTAssertEqual(action(left, chat(status) { $0.choiceListOpen = true }),
-                           status == .idle ? .chatKey(.left) : .moveInContent(.left),
-                           "Claude \(status), Auswahl offen")
-            XCTAssertEqual(action(left, chat(status, profile: .codex) { $0.choiceListOpen = true }), .chatKey(.left))
-            XCTAssertEqual(action(left, chat(status, profile: .codex)), .chatKey(.left), "Codex \(status)")
-            XCTAssertEqual(action(up, chat(status, profile: .codex)), .chatKey(.up), "Codex \(status)")
-            XCTAssertEqual(action(left, chat(status, profile: .shell)), .moveInContent(.left), "Shell \(status)")
-        }
-        XCTAssertEqual(action(left, chat(.awaitingInput)), .chatKey(.left))
-        XCTAssertEqual(action(left, chat(.ended, profile: .codex)), .moveInContent(.left), "beendet: Navigation")
-        XCTAssertEqual(action(left, chat(.ended) { $0.choiceListOpen = true }), .moveInContent(.left))
-    }
-
-    /// Steuerkreuz rechts übernimmt in Claude-Chats den grauen Vorschlag
-    /// (Pfeil rechts), in jedem lebenden Zustand, auch im Raster. Hoch,
-    /// runter und links bleiben Navigation; Shell und beendeter Chat ohne Pfeil.
-    func testDpadRightAcceptsSuggestionInClaude() {
+    /// Steuerkreuz und Stick getrennt: Rechts mit dem Steuerkreuz ist in
+    /// jedem lebenden Chat Pfeil rechts (auch: grauen Vorschlag übernehmen),
+    /// der Stick rechts bleibt Navigation.
+    func testDpadRightIsArrowStickRightNavigates() {
         let right = ControllerGesture.move(.right, source: .dpad, isRepeat: false)
-        for status in [ControllerChatState.Status.idle, .working, .unknown, .awaitingInput] {
-            XCTAssertEqual(action(right, chat(status)), .chatKey(.right), "Claude \(status)")
-            XCTAssertEqual(action(right, chat(status) { $0.gridActive = true }), .chatKey(.right), "Raster \(status)")
+        for profile in [ControllerChatState.Profile.claude, .codex, .shell] {
+            XCTAssertEqual(action(right, chat(.idle, profile: profile)), .chatKey(.right), "\(profile)")
         }
-        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: true), chat(.idle)), .chatKey(.right))
-        XCTAssertNil(action(right, chat(.idle, profile: .shell)), "Shell: rechts ohne Wirkung")
         XCTAssertNotEqual(action(right, chat(.ended)), .chatKey(.right))
         XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: false), chat(.idle)), "Stick rechts bleibt ohne Wirkung")
         XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), chat(.idle) { $0.gridActive = true }),
@@ -234,38 +207,63 @@ final class ControllerBindingResolverTests: XCTestCase {
 
     // MARK: - Steuerkreuz (Review-Befund 1)
 
-    /// Pfeile gehen nur in einer Rückfrage ins Terminal. In jedem anderen
-    /// Zustand wirkt das Steuerkreuz wie der linke Stick — auch bei einem
-    /// vermuteten Entwurf.
-    func testDpadSendsArrowsOnlyWhileAgentAsks() {
-        let asking = chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }
-        for direction in ControllerDirection.allCases {
-            for isRepeat in [false, true] {
-                XCTAssertEqual(action(.move(direction, source: .dpad, isRepeat: isRepeat), asking),
-                               .chatKey(ControllerChatKey(direction)))
+    /// Das Steuerkreuz ist in jedem lebenden Chat die Pfeiltaste (Entscheidung
+    /// 12.11.2026): Claude, Codex und Shell, ruhend, arbeitend oder fragend,
+    /// auch im Raster. Ohne lebendes Terminal wirkt es wie der linke Stick.
+    func testDpadSendsArrowsInEveryLiveChat() {
+        let live: [ControllerContext] = [
+            chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }, chat(.idle),
+            chat(.idle) { $0.draftSuspected = true }, chat(.working), chat(.unknown),
+            chat(.working) { $0.gridActive = true },
+            .chat(ControllerChatState(status: .idle, profile: .codex)),
+            .chat(ControllerChatState(status: .working, profile: .shell)),
+        ]
+        for context in live {
+            for direction in ControllerDirection.allCases where direction != .left {
+                for isRepeat in [false, true] {
+                    XCTAssertEqual(action(.move(direction, source: .dpad, isRepeat: isRepeat), context),
+                                   .chatKey(ControllerChatKey(direction)), "\(context) \(direction)")
+                }
             }
         }
-        let others: [ControllerContext] = [
-            chat(.idle), chat(.idle) { $0.draftSuspected = true }, chat(.working), chat(.unknown), chat(.ended),
-            chat(.awaitingInput) { $0.hasTerminal = false },
-        ]
-        for context in others {
+        // Raster mit beendetem Chat: Das Steuerkreuz wechselt die Kachel.
+        XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), chat(.ended) { $0.gridActive = true }),
+                       .moveInContent(.left))
+        for context in [chat(.ended), chat(.awaitingInput) { $0.hasTerminal = false }] {
             XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1), "\(context)")
-            XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: false), context), .enterList(step: 1), "\(context)")
             XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), context), .moveInContent(.left), "\(context)")
-            // Rechts: in lebenden Claude-Chats Pfeil rechts (Vorschlag übernehmen), sonst nichts.
-            let rightExpected: ControllerAction? = ControllerBindingResolver.suggestionAcceptAllowed(chatState(of: context))
-                ? .chatKey(.right) : nil
-            XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), context), rightExpected, "\(context)")
-            XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "\(context)")
+            XCTAssertNil(action(.move(.right, source: .dpad, isRepeat: false), context), "\(context)")
         }
-        let grid = chat(.working) { $0.gridActive = true }
-        XCTAssertEqual(action(.move(.right, source: .dpad, isRepeat: false), grid), .chatKey(.right))
-        XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), grid), .moveInContent(.left))
-        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), grid), .moveInContent(.up))
+        // Der linke Stick navigiert weiter in der App.
+        XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), chat(.idle)), .enterList(step: -1))
         // Während der Aufnahme bleibt das Steuerkreuz der Ausgabemodus.
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), .recording(phase: .recording, targetIsChat: true)),
                        .outputMode(step: -1))
+    }
+
+    /// Links im vermutlich leeren Claude-Feld schickt die Sitzung in Claudes
+    /// Agent-Ansicht — gesperrt („geht nicht“, beim Halten still). Erlaubt in
+    /// einer Rückfrage, in einer offenen Auswahl, mit Entwurf, in Codex und Shell.
+    func testDpadLeftBlockedInEmptyClaudeField() {
+        let left = ControllerGesture.move(.left, source: .dpad, isRepeat: false)
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertEqual(action(left, chat(status)), .rejected, "\(status)")
+            XCTAssertNil(action(.move(.left, source: .dpad, isRepeat: true), chat(status)), "\(status) gehalten")
+            XCTAssertEqual(action(left, chat(status) { $0.draftSuspected = true }), .chatKey(.left), "\(status) Entwurf")
+            XCTAssertEqual(action(left, chat(status) { $0.fieldMayHaveText = true }), .chatKey(.left),
+                           "\(status) Text im Feld (Rückleger, ↑, →)")
+        }
+        XCTAssertEqual(action(left, chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 2 }), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.idle) { $0.choiceListOpen = true }), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.working) { $0.choiceListOpen = true }), .rejected, "Auswahl zählt nur im Ruhezustand")
+        XCTAssertEqual(action(left, chat(.working, profile: .codex)), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.idle, profile: .shell)), .chatKey(.left))
+    }
+
+    /// Kreuz bei arbeitendem Chat nach einem scharfen Pfeil (nicht ↑ zuerst).
+    func testCrossAfterArrowWhileWorking() {
+        XCTAssertNil(action(.press(.cross), chat(.working)))
+        XCTAssertEqual(action(.press(.cross), chat(.working) { $0.recentArrowNavigation = true }), .chatKey(.enter))
     }
 
     private func chatState(of context: ControllerContext) -> ControllerChatState {
@@ -279,22 +277,25 @@ final class ControllerBindingResolverTests: XCTestCase {
                     _ profile: TerminalKeyboardProfile = .claudeCodeChat, list: Bool = false) -> Bool {
             TerminalControlKey.controllerAllows(key, status: status, profile: profile, choiceListOpen: list)
         }
-        for key in [TerminalControlKey.up, .down, .left, .right] {
-            XCTAssertTrue(allows(key, .awaitingInput))
-            for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored] {
-                // Rechts übernimmt bei Claude den grauen Vorschlag (immer erlaubt).
-                XCTAssertEqual(allows(key, status), key == .right, "\(key) \(status)")
-                XCTAssertFalse(allows(key, status, .plainShell), "Shell \(key) \(status)")
-                // Befund 1 nach Runde 3: offene Auswahl des Menüs (bei Claude
-                // nur im Ruhezustand, Nachreview), Codex immer.
-                XCTAssertEqual(allows(key, status, list: true), status == .idle || key == .right,
-                               "Auswahl offen \(key) \(status)")
-                XCTAssertTrue(allows(key, status, .codexChat, list: true))
-                XCTAssertTrue(allows(key, status, .codexChat), "Codex \(key) \(status)")
+        // Pfeile immer, in jedem Programm und Zustand (12.11.2026) — außer
+        // links im vermutlich leeren Claude-Feld.
+        for key in [TerminalControlKey.up, .down, .right] {
+            for status in [AgentSessionRuntimeStatus.awaitingInput, .idle, .working, .stopped, .errored, nil] {
+                for profile in [TerminalKeyboardProfile.claudeCodeChat, .codexChat, .plainShell] {
+                    XCTAssertTrue(allows(key, status, profile), "\(key) \(String(describing: status)) \(profile)")
+                }
             }
-            XCTAssertEqual(allows(key, nil), key == .right)
-            XCTAssertTrue(allows(key, nil, .codexChat))
         }
+        for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored, nil] {
+            XCTAssertFalse(allows(.left, status), "Claude leer \(String(describing: status))")
+            XCTAssertTrue(TerminalControlKey.controllerAllows(
+                .left, status: status, profile: .claudeCodeChat, choiceListOpen: false, composerMayHaveText: true))
+            XCTAssertTrue(allows(.left, status, .codexChat))
+            XCTAssertTrue(allows(.left, status, .plainShell))
+        }
+        XCTAssertTrue(allows(.left, .awaitingInput))
+        XCTAssertTrue(allows(.left, .idle, list: true))
+        XCTAssertFalse(allows(.left, .working, list: true))
         XCTAssertFalse(allows(.backTab, .awaitingInput))
         XCTAssertTrue(allows(.backTab, .idle))
         XCTAssertTrue(allows(.enter, .working))
@@ -329,7 +330,7 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: false), chat(.working) { $0.gridActive = true }),
                        .moveInContent(.right))
         XCTAssertNil(action(.move(.right, source: .leftStick, isRepeat: true), context), "ein Druck, ein Schritt")
-        XCTAssertNil(action(.move(.down, source: .dpad, isRepeat: true), context), "kein Pfeil, keine Wiederholung")
+        XCTAssertEqual(action(.move(.down, source: .dpad, isRepeat: true), context), .chatKey(.down), "Pfeil mit Wiederholung")
         XCTAssertEqual(action(.tap(.l1), context), .adjacentChat(step: -1), "L1/R1 folgen der Liste links")
         XCTAssertEqual(action(.tap(.r1), chat(.idle) { $0.gridActive = true }), .adjacentChat(step: 1), "auch im Raster")
         XCTAssertEqual(action(.press(.l3), context), .toggleMaximize)
@@ -415,8 +416,8 @@ final class ControllerBindingResolverTests: XCTestCase {
         XCTAssertEqual(action(.tap(.l1), single), .adjacentChat(step: -1), "L1/R1 wechseln weiter direkt")
         XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: false), single), .moveInContent(.left))
         XCTAssertNil(action(.move(.left, source: .leftStick, isRepeat: true), single))
-        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .enterList(step: -1),
-                       "Steuerkreuz außerhalb einer Rückfrage wie der Stick")
+        XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), single), .chatKey(.up),
+                       "Steuerkreuz ist im Chat die Pfeiltaste")
 
         let grid = chat(.idle) { $0.gridActive = true }
         XCTAssertEqual(action(.move(.up, source: .leftStick, isRepeat: false), grid), .moveInContent(.up))

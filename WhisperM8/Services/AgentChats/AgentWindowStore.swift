@@ -920,6 +920,10 @@ final class AgentWindowStore {
     /// Einträge (Chat nicht mehr im Workspace) fallen bei der Aktivierung weg.
     @ObservationIgnored private var gridFocusByWorkspace: [UUID: UUID] = [:]
 
+    /// Orte je Fenster für L2 am Controller (`AgentWindowStore+PlaceHistory`).
+    /// Flüchtig und nicht beobachtet, wie die Kachel je Workspace.
+    @ObservationIgnored var placeHistories: [UUID: ChatPlaceHistory] = [:]
+
     /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
     /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt
     /// wieder her), Slots bleiben unverändert.
@@ -1331,9 +1335,11 @@ final class AgentWindowStore {
         var pruned = state
         pruned.prune(workspace: workspace, compactingGridWorkspaces: isGridAutoCompactEnabled())
         guard pruned != state else { return }
+        let before = state
         state = pruned
         dirtyRevision += 1
         scheduleSave()
+        recordPlaces(before: before)
     }
 
     /// Erzwingt sofortiges Persistieren (z. B. vor App-Terminierung,
@@ -1392,10 +1398,12 @@ final class AgentWindowStore {
         var updated = state
         block(&updated)
         guard updated != state else { return }
+        let before = state
         state = updated
         dirtyRevision += 1
         scheduleSave()
         clearDismissalsOfReopenedTabs()
+        recordPlaces(before: before)
     }
 
     /// Dirty-Tracking (Spez 14d92786): `savedRevision` folgt `dirtyRevision`

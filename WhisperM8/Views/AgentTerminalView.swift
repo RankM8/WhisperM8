@@ -850,6 +850,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // In einer Rückfrage bestätigt Enter die Auswahl, nicht das Eingabefeld —
         // ein Entwurf dort bleibt stehen und darf nicht als gesendet gelten.
         if key == .enter, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
+        // ↑ holt im Feld den letzten Prompt zurück (Review 12.11.2026): Ein
+        // „Weiter“ oder `chats send` darf sich nicht daran hängen.
+        if key == .up, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
+            composerDraft.recordHistoryRecall(isClaude: isClaude)
+        }
+        if key == .right, isClaude, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
+            composerDraft.recordSuggestionAccepted()
+        }
         noteControllerKey(key, status: status, now: now)
         terminal.send(key.bytes(applicationCursor: terminal.getTerminal().applicationCursor))
         return true

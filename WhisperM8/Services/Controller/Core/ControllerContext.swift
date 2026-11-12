@@ -5,6 +5,20 @@ enum ControllerRecordingPhase: String, CaseIterable, Sendable {
     case recording, transcribing, postProcessing
 }
 
+/// Wohin L2 getippt zurückführt: der vorige Ort des Fensters, ein Chat oder
+/// ein Workspace im Raster. Die Legende nennt ihn.
+struct ControllerBackTarget: Equatable, Sendable {
+    enum Kind: String, Sendable {
+        case chat, workspace
+    }
+
+    var kind: Kind
+    var title: String
+    /// Chat- bzw. Workspace-ID. Dort beginnt die Markierung, wenn L2
+    /// gehalten wird (Cmd-Tab: Loslassen führt ebenfalls dorthin).
+    var id: UUID? = nil
+}
+
 /// Was der Controller über den Ziel-Chat wissen muss (Plan, „Kreuz, Kreis und
 /// Viereck im Chat“). Der Schnappschuss wird beim Eintreffen einer Geste auf
 /// dem MainActor gezogen.
@@ -21,6 +35,9 @@ struct ControllerChatState: Equatable, Sendable {
     var profile: Profile
     /// Im Eingabefeld steht vermutlich ein Entwurf (Draft-Tracker).
     var draftSuspected: Bool = false
+    /// Irgendetwas steht vermutlich im Feld (Entwurf, Rückleger, ↑ oder →).
+    /// Nur ohne das sperrt Pfeil links bei Claude.
+    var fieldMayHaveText: Bool = false
     /// Gerade gesendet (`countsAsInterrupt` des Trackers).
     var recentlySubmitted: Bool = false
     /// Seit wann die Rückfrage offen ist; `nil`, wenn unbekannt.
@@ -30,6 +47,9 @@ struct ControllerChatState: Equatable, Sendable {
     /// Kurz vorher per Controller getippt, gelöscht oder diktiert (ohne zu
     /// senden): Ein Entwurf zum Abschicken ist plausibel.
     var recentDraftInput: Bool = false
+    /// Vor höchstens 5 s ein Pfeil vom Controller, der Kreuz scharf macht
+    /// (nicht ↑ als erster Pfeil; `ControllerTerminalMarks.arrowArmWindow`).
+    var recentArrowNavigation: Bool = false
     /// Das Controller-Menü hat eine Auswahlliste der CLI geöffnet (`/model`,
     /// `/config`, „/“ …), und sie ist vermutlich noch offen
     /// (`ControllerTerminalMarks`): Pfeile und Kreuz gehen dann ins Terminal.
@@ -40,6 +60,8 @@ struct ControllerChatState: Equatable, Sendable {
     /// Shell an ihrer Eingabezeile (kein Vollbild-Programm): R3 halten darf
     /// die Zeile leeren.
     var shellAtPrompt: Bool = false
+    /// Ziel von L2 getippt; `nil`, wenn es keinen vorigen Ort (mehr) gibt.
+    var backTarget: ControllerBackTarget?
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

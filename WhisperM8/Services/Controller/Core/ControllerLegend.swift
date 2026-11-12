@@ -25,6 +25,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case open, select, paste, pin, deleteHold, close, closeHold
     case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
+    /// L2 + Touchpad: Verlauf, in jedem Zusammenhang.
+    case clipboardWithL2
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -33,6 +35,8 @@ struct ControllerLegendEntry: Equatable, Sendable {
     var inputs: [ControllerLegendInput]
     var label: ControllerLegendLabel
     var isCombination: Bool = false
+    /// Nur bei `lastChat` in der Legende: wohin L2 zurückführt.
+    var backTarget: ControllerBackTarget? = nil
 }
 
 struct ControllerLegendSection: Equatable, Sendable {
@@ -70,7 +74,8 @@ enum ControllerLegend {
     }
 
     /// Belegung für die Einstellungsseite, getrennt nach Kern, Zusatz und den
-    /// drei Ebenen der Insel.
+    /// drei Ebenen der Insel. L2 + Touchpad (Verlauf) gilt überall und steht
+    /// bei den Ebenen.
     static func allBindings() -> [ControllerLegendSection] {
         [
             ControllerLegendSection(kind: .core, entries: [
@@ -106,6 +111,7 @@ enum ControllerLegend {
                 combination(.r1, .circle, .switchAccount),
                 entry(.button(.l2), .whereToHold),
                 combination(.l2, .triangle, .nextWaiting),
+                combination(.l2, .touchpad, .clipboardWithL2),
                 combination(.l2, .r2, .pickAndDictate),
             ]),
         ]
@@ -244,37 +250,41 @@ enum ControllerLegend {
         let layers = Candidate(
             entry: ControllerLegendEntry(inputs: [.button(.l1), .button(.r1), .button(.l2)], label: .layersHold),
             probes: ControllerLayer.allCases.map { .layerBegan($0) })
-        // Das Steuerkreuz gibt Pfeile nur, wo eine Auswahl offen ist (Rückfrage,
-        // Liste aus dem Menü, Codex); sonst bewegt es wie der Stick.
+        // Das Steuerkreuz gibt in jedem lebenden Chat Pfeile ins Terminal;
+        // ohne Terminal bewegt es wie der Stick.
         let arrows = ControllerBindingResolver.arrowsAllowed(state)
         let moveInputs: [ControllerLegendInput] = arrows ? [.leftStick] : [.leftStick, .dpad]
-        // Rechts übernimmt in Claude den grauen Vorschlag; gleich neben Kreuz,
-        // das ihn danach abschickt. Bei offener Auswahl stehen dort die Pfeile.
-        let suggestion: [Candidate] = !arrows && ControllerBindingResolver.suggestionAcceptAllowed(state)
-            ? [candidate(.button(.dpadRight), .acceptSuggestion, [.move(.right, source: .dpad, isRepeat: false)])]
-            : []
+        // L2 getippt: zurück an den vorigen Ort, mit seinem Namen. Ohne Ziel
+        // fehlt der Eintrag (der Druck vibriert dann „geht nicht“).
+        let back: [Candidate] = state.backTarget.map { target in
+            [Candidate(entry: ControllerLegendEntry(inputs: [.button(.l2)], label: .lastChat, backTarget: target),
+                       probes: [.tap(.l2)])]
+        } ?? []
         let moveProbes: [ControllerGesture] = moveInputs.flatMap { input in
             ControllerDirection.allCases.map { direction in
                 ControllerGesture.move(direction, source: input == .dpad ? .dpad : .leftStick, isRepeat: false)
             }
         }
-        return [
+        let head: [Candidate] = [
             ControllerLegend.Candidate(
                 entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
+        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
-        ] + suggestion + [
+        ]
+        let keys: [Candidate] = [
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.triangle), .space, [.press(.triangle)]),
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
-            layers,
-        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
+        ]
+        let tail: [Candidate] = [layers] + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.tap(.r3)]),
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),
         ]
+        return head + keys + back + tail
     }
 
     /// Verlauf: dieselbe Tabelle liefert die Fußzeile des Verlauf-Fensters,

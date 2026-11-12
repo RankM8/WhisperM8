@@ -13,6 +13,9 @@ struct ControllerTerminalState: Equatable {
     /// Seit wann der aktuelle Status gilt.
     var statusSince: Date?
     var draftSuspected: Bool
+    /// Irgendetwas steht vermutlich im Feld (auch Rückleger, zurückgeholter
+    /// oder per → übernommener Text) — `TerminalComposerDraftTracker.fieldMayHaveText`.
+    var fieldMayHaveText: Bool = false
     /// Wann zuletzt abgeschickt wurde, auf jedem Weg (Enter vom Controller
     /// oder von der Tastatur, `chats send`, Diktat und Menü mit Senden).
     var lastEnterAt: Date?
@@ -22,6 +25,8 @@ struct ControllerTerminalState: Equatable {
     /// (Rücktaste, Text oder Diktat ohne Senden). Zählt nur, wenn es nach dem
     /// letzten Absenden (`lastEnterAt`) liegt.
     var lastDraftInputAt: Date? = nil
+    /// Letzter Pfeil vom Controller, der Kreuz scharf macht.
+    var lastArmingArrowAt: Date? = nil
     /// Eine Auswahlliste, die das Controller-Menü geöffnet hat, ist vermutlich
     /// noch offen (`ControllerTerminalMarks.isChoiceListOpen`).
     var choiceListOpen: Bool = false

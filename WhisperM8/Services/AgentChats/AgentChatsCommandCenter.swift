@@ -53,6 +53,11 @@ enum AgentChatsCommand: Equatable {
     case selectWorkspaceChat(UUID, workspaceID: UUID)
     /// Workspace als Raster öffnen.
     case activateWorkspace(UUID)
+    /// Workspace als Raster öffnen wie `activateWorkspace`, aber still: Gehört
+    /// er einem anderen Fenster oder laufen seine Chats dort, kommt kein
+    /// Fenster nach vorn und kein Dialog, der Befehl meldet nur „ging nicht“.
+    /// Für die Insel am Controller (L2 „Wohin“).
+    case switchToWorkspace(UUID)
     /// Projekt als Workspace seiner aktiven Chats öffnen.
     case openProjectAsWorkspace(UUID, activeSessionIDs: Set<UUID>)
     case setSidebarVisible(Bool)
@@ -91,6 +96,8 @@ struct AgentChatsWindowSnapshot: Equatable {
     /// Bildschirm, auf dem das Fenster liegt (`NSScreenNumber`). Dort
     /// erscheint die Controller-Insel.
     var screenDisplayID: UInt32? = nil
+    /// Wohin L2 am Controller zurückführt (voriger Ort des Fensters).
+    var backTarget: ControllerBackTarget? = nil
 
     /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
     /// und ist womöglich selbst Key geworden.
@@ -169,6 +176,15 @@ final class AgentChatsCommandCenter {
     var activeWindowID: UUID? {
         if let id = keyWindowID(), handlers[id] != nil { return id }
         return handlers.first { $0.value.handler.snapshot().ownsKeyOverlay }?.key
+    }
+
+    /// Bildschirm eines Agent-Chats-Fensters (`NSScreenNumber`): bevorzugt
+    /// `preferred` (das zuletzt aktive), sonst irgendeins der angemeldeten.
+    /// Für die Pille der Notch-Anzeige; nur im Ereignis-Pfad.
+    func windowDisplayID(preferring preferred: UUID?) -> UInt32? {
+        if let preferred, let id = handlers[preferred]?.handler.snapshot().screenDisplayID { return id }
+        return handlers.keys.sorted { $0.uuidString < $1.uuidString }.lazy
+            .compactMap { self.handlers[$0]?.handler.snapshot().screenDisplayID }.first
     }
 
     /// Schnappschuss eines Fensters; ohne `windowID` der des aktiven Fensters.

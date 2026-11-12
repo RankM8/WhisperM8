@@ -1051,12 +1051,12 @@
         }
       }
     },
-    "A small strip at the notch (or a pill at the top of the screen without one) shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. On by default.": {
+    "A small strip at the notch shows how many chats are working or waiting for you. Click it to see the list and jump to a chat. On a display without a notch, the Agent Chats window's display always shows a dark pill instead. On by default.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ein schmaler Streifen an der Notch (ohne Notch eine Pille oben am Bildschirm) zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, ein weiterer springt zum Chat. Standardmäßig an."
+            "value": "Ein kleiner Streifen an der Notch zeigt, wie viele Chats arbeiten oder auf dich warten. Ein Klick öffnet die Liste, von dort springst du in einen Chat. Hat der Bildschirm des Agent-Chats-Fensters keine Notch, steht dort stattdessen immer eine dunkle Pille. Standardmäßig an."
           }
         }
       }
@@ -2381,16 +2381,6 @@
         }
       }
     },
-    "Automatic uses the built-in display with a notch, otherwise the main display.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Automatisch nimmt den eingebauten Bildschirm mit Notch, sonst den Hauptbildschirm."
-          }
-        }
-      }
-    },
     "Awake on power while a chat works, even with the lid closed": {
       "localizations": {
         "de": {
@@ -2431,6 +2421,16 @@
         }
       }
     },
+    "Back to previous": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum vorigen Ort"
+          }
+        }
+      }
+    },
     "Back to project view “%@”": {
       "localizations": {
         "de": {
@@ -2457,6 +2457,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zurück, abbrechen"
+          }
+        }
+      }
+    },
+    "Back: chat %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück: Chat %@"
+          }
+        }
+      }
+    },
+    "Back: workspace %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück: Workspace %@"
           }
         }
       }
@@ -4991,12 +5011,12 @@
         }
       }
     },
-    "D-pad: arrow keys while the agent asks a question, in a list opened from the menu and always in Codex; otherwise it moves like the left stick": {
+    "D-pad: arrow keys in every running chat, also in subagent and workflow views; in the app you move with the left stick": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Steuerkreuz: Pfeiltasten während einer Rückfrage, in einer Liste aus dem Menü und in Codex immer; sonst bewegt es wie der linke Stick"
+            "value": "Steuerkreuz: Pfeiltasten in jedem laufenden Chat, auch in Subagenten- und Workflow-Ansichten; in der App bewegst du dich mit dem linken Stick"
           }
         }
       }
@@ -5577,6 +5597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertig und senden"
+          }
+        }
+      }
+    },
+    "Drag the pill anywhere on its display; each display remembers its own spot. Double-click the pill to put it back at the top center.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Pille lässt sich mit der Maus überallhin auf ihrem Bildschirm ziehen, jeder Bildschirm merkt sich seine Stelle. Ein Doppelklick auf die Pille setzt sie wieder oben in die Mitte."
           }
         }
       }
@@ -6691,16 +6721,6 @@
         }
       }
     },
-    "Go there and dictate": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hin und diktieren"
-          }
-        }
-      }
-    },
     "Goes through permissions, transcription provider, and the agent CLIs again.": {
       "localizations": {
         "de": {
@@ -7017,6 +7037,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L2 halten, dann R2: zum markierten Chat wechseln und diktieren"
+          }
+        }
+      }
+    },
+    "Hold L2, then press the touchpad: open and close the clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann Touchpad drücken: Zwischenablage-Verlauf auf und zu"
           }
         }
       }
@@ -7847,16 +7877,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zuletzt %1$@: %2$@"
-          }
-        }
-      }
-    },
-    "Last chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Letzter Chat"
           }
         }
       }
@@ -9851,6 +9871,16 @@
         }
       }
     },
+    "No chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Chats"
+          }
+        }
+      }
+    },
     "No chats in this period": {
       "localizations": {
         "de": {
@@ -10147,6 +10177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noch keine Werte"
+          }
+        }
+      }
+    },
+    "No workspaces": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Workspaces"
           }
         }
       }
@@ -10844,16 +10884,6 @@
         }
       }
     },
-    "Open list": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Liste öffnen"
-          }
-        }
-      }
-    },
     "Open notes by default": {
       "localizations": {
         "de": {
@@ -11430,6 +11460,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
+          }
+        }
+      }
+    },
+    "Pill position": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lage der Pille"
           }
         }
       }
@@ -13230,6 +13270,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Benennung aufheben"
+          }
+        }
+      }
+    },
+    "Reset position": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurücksetzen"
           }
         }
       }
@@ -15864,12 +15914,12 @@
         }
       }
     },
-    "Tap: back to the previous chat. Hold: layer, see below": {
+    "Tap: back to where you were before — the previous chat, or the previous workspace as a grid. Hold: layer, see below": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tippen: zurück zum letzten Chat. Halten: Ebene, siehe unten"
+            "value": "Tippen: zurück dorthin, wo du vorher warst — zum vorigen Chat oder zum vorigen Workspace als Raster. Halten: Ebene, siehe unten"
           }
         }
       }
@@ -18354,6 +18404,16 @@
         }
       }
     },
+    "Where the notch strip appears. Automatic uses the built-in display with a notch, otherwise the main display. The pill always follows the Agent Chats window when its display has no notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wo der Streifen an der Notch erscheint. „Automatisch“ nimmt den eingebauten Bildschirm mit Notch, sonst den Hauptbildschirm. Die Pille folgt immer dem Agent-Chats-Fenster, wenn dessen Bildschirm keine Notch hat."
+          }
+        }
+      }
+    },
     "Where the window appears.": {
       "localizations": {
         "de": {
@@ -19004,6 +19064,16 @@
         }
       }
     },
+    "cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "abbrechen"
+          }
+        }
+      }
+    },
     "catalog as of %@": {
       "localizations": {
         "de": {
@@ -19060,6 +19130,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "aktuell"
+          }
+        }
+      }
+    },
+    "dictate here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hier diktieren"
           }
         }
       }
@@ -19620,6 +19700,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "pausiert (Diktat läuft)"
+          }
+        }
+      }
+    },
+    "previous": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vorher"
           }
         }
       }
