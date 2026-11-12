@@ -4,7 +4,12 @@ import Network
 import XCTest
 @testable import WhisperM8
 
-final class ClaudeGPTMixRouterTests: XCTestCase {
+/// Läuft zweimal: gegen den Router in der App (`NWListener`) und, über die
+/// Unterklasse `ClaudeGPTMixRouterSocketListenerTests`, gegen den BSD-Lauscher
+/// des Router-Dienstes (Plan neustart-ohne-chatverlust.md, Paket 3).
+class ClaudeGPTMixRouterTests: XCTestCase {
+    class var listenerKind: ClaudeGPTMixRouter.ListenerKind { .network }
+
     override class func setUp() {
         super.setUp()
         useFallbackGPTCatalogForTests()
@@ -496,7 +501,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
 
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(codexMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(anthropicMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(anthropicMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         try router.start(port: 0).get()
         defer { router.stop() }
@@ -543,7 +549,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
         defer { unusedUpstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -601,7 +607,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
         defer { unusedUpstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -628,7 +634,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let upstream = try LocalHTTPMockServer(status: 400, responseChunks: [errorBody])
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -646,7 +652,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
         defer { unusedUpstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -665,7 +671,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let unusedUpstream = try LocalHTTPMockServer(status: 200, responseChunks: [])
         defer { unusedUpstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(unusedUpstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -701,7 +707,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [], rawResponse: raw)
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -738,7 +744,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let router = ClaudeGPTMixRouter(
             codexProxyURL: url,
             anthropicURL: url,
-            gptContextWindow: 272_000
+            gptContextWindow: 272_000,
+            listenerKind: type(of: self).listenerKind
         )
         try router.start(port: 0).get()
         defer { router.stop() }
@@ -780,7 +787,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let router = ClaudeGPTMixRouter(
             codexProxyURL: url,
             anthropicURL: url,
-            gptContextWindow: ClaudeGPTModelAlias.maximumConfigurableContextWindow
+            gptContextWindow: ClaudeGPTModelAlias.maximumConfigurableContextWindow,
+            listenerKind: type(of: self).listenerKind
         )
         try router.start(port: 0).get()
         defer { router.stop() }
@@ -831,7 +839,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -859,7 +867,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         defer { nonSSE.stop() }
         let nonSSEURL = URL(string: "http://127.0.0.1:\(nonSSE.port)")!
-        let nonSSERouter = ClaudeGPTMixRouter(codexProxyURL: nonSSEURL, anthropicURL: nonSSEURL)
+        let nonSSERouter = ClaudeGPTMixRouter(codexProxyURL: nonSSEURL, anthropicURL: nonSSEURL, listenerKind: type(of: self).listenerKind)
         try nonSSERouter.start(port: 0).get()
         let nonSSEResponse = try Self.sendRawRequest(
             port: try XCTUnwrap(nonSSERouter.listeningPort),
@@ -875,7 +883,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let anthropicURL = URL(string: "http://127.0.0.1:\(anthropic.port)")!
         let anthropicRouter = ClaudeGPTMixRouter(
             codexProxyURL: anthropicURL,
-            anthropicURL: anthropicURL
+            anthropicURL: anthropicURL,
+            listenerKind: type(of: self).listenerKind
         )
         try anthropicRouter.start(port: 0).get()
         defer { anthropicRouter.stop() }
@@ -897,7 +906,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [prefix])
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -928,7 +937,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -957,7 +966,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -989,7 +998,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         )
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -1028,7 +1037,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [exactError])
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -1054,7 +1063,7 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         let upstream = try LocalHTTPMockServer(status: 200, responseChunks: [original])
         defer { upstream.stop() }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
-        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url)
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: type(of: self).listenerKind)
         try router.start(port: 0).get()
         defer { router.stop() }
 
@@ -1109,7 +1118,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         router.profilesEnabledResolver = { true }
         router.activeProfileResolver = { nil }
@@ -1144,7 +1154,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         router.profilesEnabledResolver = { true }
         router.activeProfileResolver = { "zweit" }
@@ -1179,7 +1190,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         router.profilesEnabledResolver = { true }
         router.activeProfileResolver = { "zweit" }
@@ -1207,7 +1219,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         defer { mainMock.stop() }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         var started: [String] = []
         router.profilesEnabledResolver = { true }
@@ -1236,7 +1249,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         defer { mainMock.stop() }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         var started: [String] = []
         router.profilesEnabledResolver = { true }
@@ -1266,7 +1280,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         defer { mainMock.stop() }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         var started: [String] = []
         router.profilesEnabledResolver = { true }
@@ -1296,7 +1311,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
         defer { mainMock.stop() }
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mainMock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         router.profilesEnabledResolver = { false }
         router.codexProxyURLResolver = { _ in nil }
@@ -1322,7 +1338,8 @@ final class ClaudeGPTMixRouterTests: XCTestCase {
     private func makeTokenRouter(mock: LocalHTTPMockServer, started: @escaping (String) -> Void = { _ in }) throws -> (ClaudeGPTMixRouter, Int) {
         let router = ClaudeGPTMixRouter(
             codexProxyURL: URL(string: "http://127.0.0.1:\(mock.port)")!,
-            anthropicURL: URL(string: "http://127.0.0.1:\(mock.port)")!
+            anthropicURL: URL(string: "http://127.0.0.1:\(mock.port)")!,
+            listenerKind: type(of: self).listenerKind
         )
         router.profilesEnabledResolver = { true }
         router.codexProxyURLResolver = { _ in nil }
