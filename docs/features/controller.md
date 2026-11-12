@@ -205,6 +205,8 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   3. Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
      oder ↑ nach einem scharfen Pfeil): kurz, wegen der Lücke vor einem Freigabe-Dialog, in der Enter
      die Vorauswahl bestätigte. Codex behält die 30-s-Regel (Freigaben ohne „wartet“).
+     Ausnahme →: Es übernimmt den grauen Vorschlag ins Feld und zählt deshalb wie getippter Text
+     (30 s). Sonst sperrte Kreuz nach 5 s, wenn der Chat noch als „arbeitet“ galt.
   In einer Shell im Ruhezustand sind ↑ und Kreuz wie an der Tastatur: der letzte Befehl läuft erneut.
 - „Auswahl offen“ (`ControllerTerminalMarks`, je Chat am Terminal): gesetzt, wenn das Menü einen
   Befehl schickt, nach dem die CLI eine Liste zeigt — Claude „/“, `/model`, `/config`, `/resume`,
