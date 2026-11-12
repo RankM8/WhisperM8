@@ -1172,6 +1172,25 @@ Handtest nach dem nächsten `make dev`: siehe Bericht der Runde (Insel an der No
 der Notch-Anzeige, auf dem zweiten Bildschirm, Zeilenumbruch in Claude und Codex, Ctrl+U über mehrere
 Zeilen, Pause-Akkord, Raute bei Rückfrage, „›“ ins Menü, Workspace-Wechsel mit gemerkter Kachel).
 
+### 6.10 Review-Fixes nach Runde 4 (12.11.2026)
+
+1. **„Weiter“ und „Modus wechseln“ nur bei ruhendem Chat** (Raute und Options-Menü): `ControllerMenuSetup.chatBusy`
+   (arbeitet, unbekannt oder 3 s nach einem Absenden) graut beide aus, die Insel sagt warum, und
+   `perform(_:setup:)` prüft beim Auslösen frisch. Grund: die Lücke zwischen Freigabe-Dialog und
+   „wartet“ (Enter bestätigte die Vorauswahl, Shift+Tab hieße „alle Änderungen erlauben“), Codex meldet
+   nie „wartet“. Befehle bleiben, wie sie sind (eigener Entwurfs-Schutz).
+2. **Vollbild:** Das Insel-Fenster hat `.fullScreenAuxiliary`; ohne sichtbare Menüleiste hängt die
+   Pille oben am Rand, an der Notch liegt das Band in der Aussparung.
+3. **Reiterwechsel allein wechselt nicht:** Loslassen oder Kreuz nur nach einer Bewegung im sichtbaren
+   Reiter (`ControllerWhereToState.hasMovedInTab`).
+4. **L2 + R2** diktiert nur, wenn der Wechsel gelang und der Chat danach ausgewählt ist, sonst „geht nicht“.
+5. **Rechter Stick** über der Totzone während einer gehaltenen Ebenen-Taste macht aus ihr kein Tippen mehr.
+6. **Notch-Zähler** im Kopf nur bei „Wohin“; Schreiben und Schnellbefehle zeigen immer den Ziel-Chat.
+7. **Schnappschuss ohne Fenster:** Die Insel wird über `refreshContext` nachgeführt, nicht im
+   Schnappschuss (Trockenläufe des Debug-Kanals öffnen nichts).
+
+Dazu: runde Tasten-Symbole der Insel als Kreis statt kontinuierlicher Ecken (wirkten achteckig).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |

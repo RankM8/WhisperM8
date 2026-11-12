@@ -80,7 +80,7 @@ Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options sc
 ## Ebenen und Insel
 
 L1, R1 und L2 sind **Ebenen-Tasten** (Runde 4). Tippen (kürzer als 0,3 s und ohne zweite Taste
-dazwischen, auch ohne Stoß von Stick oder Steuerkreuz) löst beim Loslassen aus, was die Taste schon
+dazwischen, auch ohne Stoß von Stick oder Steuerkreuz und ohne Scrollen mit dem rechten Stick) löst beim Loslassen aus, was die Taste schon
 immer tat. Gehalten wird sie zur Ebene: Kombinationen wirken sofort beim Druck der zweiten Taste, die
 0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts
 (außer bei L2 mit offener Liste). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
@@ -99,10 +99,10 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Kreis | Konto wechseln › — ebenso |
 | L2 Wohin | Stick/Steuerkreuz hoch/runter | öffnet die Liste, der erste Stoß macht gleich einen Schritt vom aktuellen Eintrag; danach bewegen (mit Wiederholung) |
 | | links/rechts | Reiter Chats / Workspaces |
-| | Loslassen, Kreuz | zum markierten Eintrag wechseln (ohne offene Liste: nichts) |
+| | Loslassen, Kreuz | zum markierten Eintrag wechseln — nur, wenn im sichtbaren Reiter seit dem Öffnen bzw. dem letzten Reiterwechsel hoch/runter bewegt wurde; sonst nichts |
 | | Kreis | abbrechen |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
-| | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“ |
+| | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“) |
 
 Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
 Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. Start-Reiter von „Wohin“: im
@@ -121,7 +121,10 @@ Bildschirmwahl. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Kö
 (`NotchHangingShape`), ohne Notch hängt sie als Pille unter der Menüleiste und folgt hell/dunkel. Sie
 liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`) mit derselben Band-Geometrie: Steht die
 Notch-Anzeige auf diesem Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler
-(arbeitet/wartet); eine aufgeklappte Notch-Liste klappt zu. Eine Bewegung beim Öffnen, eine beim
+(arbeitet/wartet) — nur bei „Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der
+Ziel-Chat. Eine aufgeklappte Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel
+(`fullScreenAuxiliary`, nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst ohne
+Menüleiste oben am Bildschirmrand. Eine Bewegung beim Öffnen, eine beim
 Schließen (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur
 schließen sie für das laufende Halten.
 
@@ -201,7 +204,12 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   ausführt (das bloße Loslassen einer Ebene ohne offene Insel zählt nicht).
 - Die R1-Raute folgt den Regeln des Options-Menüs (`ControllerMenuModel.isEnabled`): Bei offener
   Rückfrage sind „Weiter“, „Modus wechseln“ und „Befehle“ aus, „Konto wechseln“ geht. Die Rückfrage wird
-  beim Drücken frisch gelesen. Eingaben gehen an den Chat, der beim Öffnen der Insel ausgewählt war;
+  beim Drücken frisch gelesen.
+- „Weiter“ und „Modus wechseln“ — in der Raute und im Options-Menü — nur, wenn der Chat ruht: nicht bei
+  „arbeitet“, unbekanntem Status oder 3 s nach einem Absenden. Zwischen dem Erscheinen eines
+  Freigabe-Dialogs und dem Status „wartet“ bestätigte „Weiter“ mit Enter die Vorauswahl, und Shift+Tab
+  heißt dort „alle Änderungen erlauben“; Codex meldet nie „wartet“. Ausgegraut mit Hinweis in der Insel,
+  ein Druck vibriert „geht nicht“; geprüft wird beim Auslösen frisch (`perform(_:setup:)`). Eingaben gehen an den Chat, der beim Öffnen der Insel ausgewählt war;
   sonst „geht nicht“.
 - L1-Ebene: Bis Zeilenanfang löschen (Ctrl+U, 0x15) und Zeilenumbruch (Ctrl+J, 0x0A) nur bei Claude und
   Codex und nicht in einer Rückfrage — dieselben Regeln wie „Eingabe leeren“, auch in der Absicherung
