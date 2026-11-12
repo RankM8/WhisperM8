@@ -148,14 +148,14 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(ControllerMenuItem.allCases, [
             .continueWork, .commands, .cycleMode,
             .switchAccount, .rename, .fork, .pin, .archive, .closeChat,
-            .showBindings, .pause,
+            .clipboardHistory, .showBindings, .pause,
         ])
-        XCTAssertEqual(ControllerMenuItem.allCases.filter(\.startsGroup), [.switchAccount, .showBindings])
+        XCTAssertEqual(ControllerMenuItem.allCases.filter(\.startsGroup), [.switchAccount, .clipboardHistory])
         let model = ControllerMenuModel(setup: setup())
         XCTAssertEqual(model.selected, .continueWork)
         // Ohne Konten und ohne Fork sind diese beiden aus.
         XCTAssertEqual(enabled(model), [.continueWork, .commands, .cycleMode, .rename, .pin, .archive, .closeChat,
-                                        .showBindings, .pause])
+                                        .clipboardHistory, .showBindings, .pause])
     }
 
     /// Bei offener Rückfrage ist alles aus, was in den Chat schreibt (auch
@@ -164,7 +164,7 @@ final class ControllerMenuModelTests: XCTestCase {
         let model = ControllerMenuModel(setup: setup(dialogOpen: true))
         XCTAssertEqual(model.selected, .rename)
         XCTAssertFalse(ControllerMenuModel.isEnabled(.cycleMode, setup: setup(dialogOpen: true)))
-        XCTAssertEqual(enabled(model), [.rename, .pin, .archive, .closeChat, .showBindings, .pause])
+        XCTAssertEqual(enabled(model), [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
     }
 
     func testDialogOpeningLaterClosesCommandsLevel() {
@@ -193,9 +193,9 @@ final class ControllerMenuModelTests: XCTestCase {
 
     func testWithoutLiveChatOrChatInfo() {
         XCTAssertEqual(enabled(ControllerMenuModel(setup: setup(acceptsInput: false))),
-                       [.rename, .pin, .archive, .closeChat, .showBindings, .pause])
+                       [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
         XCTAssertEqual(enabled(ControllerMenuModel(setup: setup(acceptsInput: false, chat: nil))),
-                       [.showBindings, .pause])
+                       [.clipboardHistory, .showBindings, .pause])
         XCTAssertFalse(ControllerMenuModel.isEnabled(.commands, setup: setup(profile: .shell)), "Shell: keine Befehle")
     }
 

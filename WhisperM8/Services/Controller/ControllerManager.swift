@@ -107,7 +107,9 @@ final class ControllerEventCounters: @unchecked Sendable {
 /// gehen zum Main Thread; dort werden Zusammenhang und Aktion bestimmt.
 @MainActor
 final class ControllerManager {
-    static let shared = ControllerManager(source: GameControllerInputSource())
+    static let shared = ControllerManager(
+        source: GameControllerInputSource(),
+        pump: ControllerGesturePump(pointerPoster: CGEventPointerPoster()))
 
     let status = ControllerStatus()
     let counters = ControllerEventCounters()
@@ -115,8 +117,14 @@ final class ControllerManager {
     /// Führt aus. Ohne Ausführer werden Gesten nur aufgelöst und gezählt.
     weak var performer: ControllerActionPerforming?
 
-    /// Trockenlauf (Debug-Kanal): auflösen, aber nichts ausführen.
-    var isDryRun = false
+    /// Trockenlauf (Debug-Kanal): auflösen, aber nichts ausführen. Auch der
+    /// Mauszeiger ruht dann.
+    var isDryRun = false {
+        didSet { if oldValue != isDryRun { syncPointer() } }
+    }
+    /// Darf die App Mausereignisse an andere Programme schicken
+    /// (Bedienungshilfen)? Ohne Berechtigung vibriert ein Klick „geht nicht“.
+    var accessibilityTrusted: () -> Bool = { AXIsProcessTrusted() }
     /// Ersetzt im Schnappschuss, was die Test-Instanz nie hat: ein aktives
     /// Fenster. Nur über den Debug-Kanal gesetzt.
     var debugOverride: ControllerDebugOverride?
@@ -152,13 +160,18 @@ final class ControllerManager {
 
         let counters = self.counters
         source.onEvent = { [pump] event in
-            counters.record(event)
+            // Fingerdaten kommen in hohem Takt: nicht zählen.
+            if case .touch = event {} else { counters.record(event) }
             pump.ingest(event)
         }
         source.onReset = { [pump] in pump.reset() }
         source.onDeviceChange = { [weak self] info in self?.deviceChanged(info) }
         pump.onGestures = { [weak self] gestures, idleAfter in
             Task { @MainActor in self?.handle(gestures, idleAfter: idleAfter) }
+        }
+        // Ein Klick ist diskret: nur er kommt zum Main Thread, für den Tick.
+        pump.pointer.onClick = { [weak self] in
+            Task { @MainActor in self?.pointerClicked() }
         }
     }
 
@@ -175,6 +188,7 @@ final class ControllerManager {
             stop()
         }
         if status.isRunning { applyBackgroundPreference() }
+        syncPointer()
     }
 
     private func start() {
@@ -264,6 +278,7 @@ final class ControllerManager {
 
     private func pauseChanged() {
         status.isPaused = isPaused
+        syncPointer()
         onStateChange?()
         Logger.controller.info("controller_pause user=\(self.userPaused, privacy: .public) system=\(self.systemPaused, privacy: .public)")
     }
@@ -342,6 +357,26 @@ final class ControllerManager {
         case .chordPending, .chordCompleted, .chordCancelled, .press(.r2): return true
         default: return false
         }
+    }
+
+    // MARK: - Touchpad als Maus
+
+    /// Gleicht Schalter, Pause und Trockenlauf mit dem Zeiger auf der
+    /// Eingabe-Queue ab. Ohne Schalter meldet die Quelle keine Fingerdaten.
+    /// Auch direkt für den Geschwindigkeits-Regler (ohne den ganzen Abgleich).
+    func syncPointer() {
+        let prefs = preferences()
+        let enabled = status.isRunning && prefs.isControllerTouchpadPointerEnabled
+        source.setTouchTracking(enabled)
+        pump.setPointer(ControllerPointerDriver.Settings(
+            enabled: enabled,
+            active: enabled && !isPaused && !isDryRun,
+            speed: prefs.controllerPointerSpeed,
+            doubleClickInterval: NSEvent.doubleClickInterval))
+    }
+
+    private func pointerClicked() {
+        play(accessibilityTrusted() ? .pointerClick : .rejected)
     }
 
     // MARK: - Rückmeldung am Gerät

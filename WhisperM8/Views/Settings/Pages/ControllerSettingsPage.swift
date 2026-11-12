@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Was die Seite von außen braucht. Snapshots und Tests setzen eigene Werte;
@@ -7,13 +8,22 @@ struct ControllerSettingsDependencies {
     var status: @MainActor () -> ControllerStatus
     /// Schalter wurden geändert: Lauf der Steuerung angleichen.
     var applyPreferences: @MainActor () -> Void
+    /// Bedienungshilfen erlaubt? Ohne sie kann das Touchpad den Zeiger nicht bewegen.
+    var accessibilityTrusted: @MainActor () -> Bool = { PermissionService.hasAccessibilityPermission }
+    /// Nur den Zeiger angleichen (Geschwindigkeits-Regler, je Schritt).
+    var applyPointerSettings: @MainActor () -> Void = {}
+    var requestAccessibility: @MainActor () -> Void = {
+        PermissionService.requestAccessibilityPermission()
+        PermissionService.openAccessibilityPrivacySettings()
+    }
 
     static let live = ControllerSettingsDependencies(
         status: { ControllerManager.shared.status },
         applyPreferences: {
             ControllerManager.shared.applyPreferences()
             ControllerConnectHint.shared.sync()
-        }
+        },
+        applyPointerSettings: { ControllerManager.shared.syncPointer() }
     )
 }
 
@@ -26,6 +36,11 @@ struct ControllerSettingsPage: View {
     @AppStorage(PreferenceKeys.controllerLightEnabled) private var lightEnabled = true
     @AppStorage(PreferenceKeys.controllerBackgroundEnabled) private var backgroundEnabled = false
     @AppStorage(PreferenceKeys.controllerWakeOnInputEnabled) private var wakeOnInputEnabled = true
+    @AppStorage(PreferenceKeys.controllerTouchpadPointerEnabled) private var touchpadPointerEnabled = false
+    @AppStorage(PreferenceKeys.controllerPointerSpeed) private var pointerSpeed = ControllerTouchpadPointer.Config.defaultSpeed
+    /// Wird beim Zurückkehren in die App erhöht: Die Berechtigung kann sich in
+    /// den Systemeinstellungen geändert haben.
+    @State private var permissionCheck = 0
 
     let dependencies: ControllerSettingsDependencies
 
@@ -79,7 +94,34 @@ struct ControllerSettingsPage: View {
                 .disabled(!backgroundEnabled)
             }
 
-            ForEach(ControllerLegend.allBindings(), id: \.kind) { section in
+            SettingsSection("Touchpad") {
+                SettingsToggleRow(
+                    title: "Touchpad as mouse",
+                    subtitle: "Slide a finger to move the pointer, press the touchpad to click, press with two fingers to right-click. In other apps this needs the switch “Also when another app is in front”. The clipboard history then opens with L2 + touchpad or from the Options menu.",
+                    isOn: $touchpadPointerEnabled
+                )
+                SettingsSliderRow(
+                    title: "Pointer speed",
+                    subtitle: "A quick swipe always carries the pointer farther than a slow one.",
+                    value: $pointerSpeed,
+                    in: ControllerTouchpadPointer.Config.speedRange
+                )
+                .disabled(!touchpadPointerEnabled)
+                if touchpadPointerEnabled, !dependencies.accessibilityTrusted() {
+                    SettingsStatusRow(
+                        title: "Accessibility",
+                        subtitle: "Moving the pointer and clicking need the Accessibility permission. Until you grant it, the touchpad does nothing.",
+                        tone: .warn,
+                        detail: "Not granted yet"
+                    ) {
+                        Button("Open System Settings") { dependencies.requestAccessibility() }
+                            .buttonStyle(SettingsButtonStyle.standard)
+                    }
+                    .id(permissionCheck)
+                }
+            }
+
+            ForEach(ControllerLegend.allBindings(touchpadPointer: touchpadPointerEnabled), id: \.kind) { section in
                 ControllerBindingsSection(section: section)
             }
 
@@ -89,6 +131,11 @@ struct ControllerSettingsPage: View {
         }
         .onChange(of: enabled) { _, _ in dependencies.applyPreferences() }
         .onChange(of: backgroundEnabled) { _, _ in dependencies.applyPreferences() }
+        .onChange(of: touchpadPointerEnabled) { _, _ in dependencies.applyPreferences() }
+        .onChange(of: pointerSpeed) { _, _ in dependencies.applyPointerSettings() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            permissionCheck += 1
+        }
     }
 }
 
@@ -191,7 +238,7 @@ private struct ControllerBindingsSection: View {
             ForEach(Array(section.entries.enumerated()), id: \.offset) { _, entry in
                 HStack(alignment: .center, spacing: 14) {
                     ControllerInputGlyphs(inputs: entry.inputs, isCombination: entry.isCombination)
-                        .frame(width: 96, alignment: .leading)
+                        .frame(width: 116, alignment: .leading)
                     Text(verbatim: entry.label.explanation)
                         .font(.system(size: 13))
                         .foregroundStyle(AppTheme.textPrimary)

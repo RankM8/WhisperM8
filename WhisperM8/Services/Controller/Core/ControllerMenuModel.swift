@@ -19,6 +19,9 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// beenden, sonst archivieren).
     case closeChat
     // Steuerung
+    /// Zwischenablage-Verlauf öffnen (mit dem Touchpad als Maus sonst nur
+    /// über L2 + Touchpad erreichbar).
+    case clipboardHistory
     case showBindings, pause
 
     enum Group: Sendable {
@@ -29,7 +32,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
         switch self {
         case .continueWork, .commands, .cycleMode: return .input
         case .switchAccount, .rename, .fork, .pin, .archive, .closeChat: return .chat
-        case .showBindings, .pause: return .controller
+        case .clipboardHistory, .showBindings, .pause: return .controller
         }
     }
 
@@ -46,7 +49,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     var opensSubmenu: Bool { self == .commands || self == .switchAccount }
 
     /// Trennlinie vor dem ersten Eintrag einer Gruppe.
-    var startsGroup: Bool { self == .switchAccount || self == .showBindings }
+    var startsGroup: Bool { self == .switchAccount || self == .clipboardHistory }
 }
 
 /// Ein Ziel-Konto in der zweiten Ebene von „Konto wechseln“.

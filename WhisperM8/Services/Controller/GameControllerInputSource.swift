@@ -24,6 +24,8 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
     /// Alle Controller, an denen Handler hängen — auch solche, die
     /// `GCController.controllers()` nicht (mehr) nennt. Nur auf dem Main Thread.
     private var wiredControllers: [ObjectIdentifier: GCController] = [:]
+    /// Fingerpositionen melden (Touchpad als Maus). Nur auf dem Main Thread.
+    private var touchTracking = false
 
     // MARK: - Start und Stopp
 
@@ -111,6 +113,44 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         pad.rightThumbstick.valueChangedHandler = { [weak self] _, x, y in
             self?.deliver(.stick(.right, x: x, y: y), from: id)
         }
+        wireTouch(controller)
+    }
+
+    func setTouchTracking(_ enabled: Bool) {
+        guard touchTracking != enabled else { return }
+        touchTracking = enabled
+        wiredControllers.values.forEach(wireTouch)
+    }
+
+    /// Finger auf dem Touchpad, nur solange es als Maus dient. Die Werte kommen
+    /// nur bei einer Änderung; ob ein Finger aufliegt, meldet das Framework
+    /// nicht eigens (siehe `ControllerTouchpadPointer`).
+    private func wireTouch(_ controller: GCController) {
+        guard let (primary, secondary) = Self.touchSurfaces(of: controller.extendedGamepad) else { return }
+        guard touchTracking, queue != nil else {
+            primary.valueChangedHandler = nil
+            secondary.valueChangedHandler = nil
+            return
+        }
+        let id = ObjectIdentifier(controller)
+        primary.valueChangedHandler = { [weak self] _, x, y in
+            self?.deliver(.touch(.primary, x: x, y: y), from: id)
+        }
+        secondary.valueChangedHandler = { [weak self] _, x, y in
+            self?.deliver(.touch(.secondary, x: x, y: y), from: id)
+        }
+    }
+
+    private static func touchSurfaces(
+        of pad: GCExtendedGamepad?
+    ) -> (GCControllerDirectionPad, GCControllerDirectionPad)? {
+        if let dualSense = pad as? GCDualSenseGamepad {
+            return (dualSense.touchpadPrimary, dualSense.touchpadSecondary)
+        }
+        if let dualShock = pad as? GCDualShockGamepad {
+            return (dualShock.touchpadPrimary, dualShock.touchpadSecondary)
+        }
+        return nil
     }
 
     /// Alle Tasten, die `wire` belegt. Beim DualSense ist Create die
@@ -147,6 +187,10 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
             trigger.valueChangedHandler = nil
         }
         pad.dpad.valueChangedHandler = nil
+        if let (primary, secondary) = Self.touchSurfaces(of: pad) {
+            primary.valueChangedHandler = nil
+            secondary.valueChangedHandler = nil
+        }
         pad.leftThumbstick.valueChangedHandler = nil
         pad.rightThumbstick.valueChangedHandler = nil
         pad.valueChangedHandler = nil
@@ -260,6 +304,8 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
             return [0, 0.07, 0.14].map { pulse(at: $0, duration: 0.03, intensity: 0.5) }
         case .inputCleared:
             return [pulse(at: 0, duration: 0.04, intensity: 0.6)]
+        case .pointerClick:
+            return [pulse(at: 0, duration: 0.025, intensity: 0.4)]
         }
     }
 }
