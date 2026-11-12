@@ -25,6 +25,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case open, select, paste, pin, deleteHold, close, closeHold
     case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
+    // Runde 5
+    case closeView, wordJump, lineMove, pasteNewest, escapeOnce, undo, transcript, reopenClosed
     /// L2 + Touchpad: Verlauf, in jedem Zusammenhang.
     case clipboardWithL2
 }
@@ -105,12 +107,19 @@ enum ControllerLegend {
             ControllerLegendSection(kind: .layers, entries: [
                 combination(.l1, .square, .deleteToLineStart),
                 combination(.l1, .triangle, .newline),
+                combination(.l1, .dpadLeft, .wordJump),
+                combination(.l1, .dpadUp, .lineMove),
+                combination(.l1, .cross, .pasteNewest),
+                combination(.l1, .circle, .escapeOnce),
+                combination(.l1, .l3, .undo),
                 combination(.r1, .cross, .continueWork),
                 combination(.r1, .triangle, .cycleMode),
                 combination(.r1, .square, .commands),
                 combination(.r1, .circle, .switchAccount),
+                combination(.r1, .l3, .transcript),
                 entry(.button(.l2), .whereToHold),
                 combination(.l2, .triangle, .nextWaiting),
+                combination(.l2, .square, .reopenClosed),
                 combination(.l2, .touchpad, .clipboardWithL2),
                 combination(.l2, .r2, .pickAndDictate),
             ]),
@@ -167,6 +176,20 @@ enum ControllerLegend {
 
     // MARK: - Kandidaten je Zusammenhang
 
+    /// Während eines gebundenen Diktats (Runde 5, Punkt 9): Stick, L1/R1 und
+    /// die Ebenen L2 und R1. Gezeigt nur, wo die Belegung sie hergibt.
+    private static var recordingNavigation: [Candidate] {
+        [
+            Candidate(
+                entry: ControllerLegendEntry(inputs: [.leftStick], label: .move),
+                probes: ControllerDirection.allCases.map { .move($0, source: .leftStick, isRepeat: false) }),
+            candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
+            Candidate(
+                entry: ControllerLegendEntry(inputs: [.button(.r1), .button(.l2)], label: .layersHold),
+                probes: [.layerBegan(.quickDraw), .layerBegan(.whereTo)]),
+        ]
+    }
+
     static func candidates(for context: ControllerContext) -> [Candidate] {
         switch context {
         case .paused:
@@ -177,19 +200,19 @@ enum ControllerLegend {
                 candidate(.button(.triangle), .bringToFront, [.press(.triangle)]),
                 candidate(.button(.touchpad), .clipboard, [.press(.touchpad)]),
             ]
-        case .recording(.recording, _):
+        case .recording(.recording, _, _):
             return [
                 candidate(.button(.r2), .stopDictation, [.press(.r2)]),
                 candidate(.button(.cross), .stopAndSend, [.press(.cross)]),
                 candidate(.button(.circle), .discard, [.tap(.circle)]),
                 candidate(.dpad, .outputMode, gestures(for: .dpad)),
                 candidate(.rightStick, .scroll, gestures(for: .rightStick)),
-            ]
+            ] + recordingNavigation
         case .recording:
             return [
                 candidate(.button(.circle), .cancel, [.tap(.circle)]),
                 candidate(.rightStick, .scroll, gestures(for: .rightStick)),
-            ]
+            ] + recordingNavigation
         case .quickAction:
             return [candidate(.button(.circle), .cancel, [.tap(.circle)])]
         case let .clipboardPanel(state):
@@ -272,7 +295,8 @@ enum ControllerLegend {
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
         ]
         let keys: [Candidate] = [
-            candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
+            candidate(.button(.circle), ControllerBindingResolver.viewOpen(state) ? .closeView : (awaiting ? .reject : .back),
+                      [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.triangle), .space, [.press(.triangle)]),

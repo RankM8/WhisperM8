@@ -144,6 +144,11 @@ final class RecordingCoordinator {
     /// Ziel der laufenden Aufnahme, gemerkt beim Start. Wird beim
     /// angenommenen Stopp eingefroren und dann wieder auf `.frontApp` gesetzt.
     var pendingDeliveryTarget: DictationDeliveryTarget = .frontApp
+    /// Ziel des Laufs, der gerade transkribiert oder nachbearbeitet wird —
+    /// das beim Stopp eingefrorene `pendingDeliveryTarget`. Nur zur Anzeige
+    /// (Controller: Legende, Insel, Navigation in Transkription und
+    /// Nacharbeit); die Zustellung nimmt weiter `DictationDelivery`.
+    var inFlightDeliveryTarget: DictationDeliveryTarget = .frontApp
     /// Schreibt Diktate direkt in das Terminal eines Agent-Chats.
     let chatWriter: DictationChatWriting
     /// Hinweis, wenn ein Diktat für einen Chat nur in der Zwischenablage
@@ -537,6 +542,7 @@ final class RecordingCoordinator {
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
         let frozenDelivery = DictationDelivery(target: pendingDeliveryTarget, submit: submit)
+        inFlightDeliveryTarget = frozenDelivery.target
         // Ab hier gehört das Ziel diesem Lauf; das nächste Diktat beginnt wieder beim vorderen Programm.
         pendingDeliveryTarget = .frontApp
         Logger.debug(" Stopping recording. Duration: \(String(format: "%.1f", audioDuration))s")

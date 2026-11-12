@@ -4,6 +4,15 @@ import SwiftUI
 /// gestoppten Chat): Angaben über einen Chat und das Starten. Alles ruft
 /// dieselben Funktionen wie das Kontextmenü und der Kopf des Chats.
 extension AgentChatsView {
+    /// Kopf der Einzelansicht mit Anker für die Menü-Karte des Controllers
+    /// (sie hängt rechts darunter, `ControllerMenuCard.swift`).
+    var anchoredChatStatusRow: some View {
+        activeChatStatusRow
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .controllerMenuAnchor(.header, sessionID: selectedSessionID)
+    }
+
     /// Angaben für das Menü. Nur im Ereignis-Pfad aufrufen: Die Kontenlisten
     /// kommen aus dem kurzlebigen Cache des Kontextmenüs.
     func controllerChatActionInfo(for sessionID: UUID) -> ControllerChatActionInfo? {
@@ -27,7 +36,7 @@ extension AgentChatsView {
                     isCurrent: profile.name == current, isLoggedIn: profile.isLoggedIn)
             }
         }
-        return ControllerChatActionInfo(
+        var info = ControllerChatActionInfo(
             title: session.title,
             isPinned: pinnedSessionIDs.contains(session.id),
             isArchived: session.status == .archived,
@@ -35,6 +44,8 @@ extension AgentChatsView {
             canFork: session.isForkable,
             accounts: accounts
         )
+        addControllerHeadActions(to: &info, session: session)
+        return info
     }
 
     /// Startet einen gestoppten Chat — derselbe Weg wie der Knopf „Starten“

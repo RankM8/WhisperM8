@@ -18,7 +18,10 @@ struct ControllerSlashCommand: Equatable, Sendable {
 enum ControllerSlashCommands {
     static let claude: [String] = [
         "/", "/model", "/config", "/clear", "/compact", "/context", "/usage", "/resume",
-        "/status", "/permissions", "/mcp", "/agents", "/memory", "/help",
+        "/status", "/permissions", "/mcp", "/agents", "/memory",
+        // Runde 5 (R5): Ansichten, die Claude ohne „wartet“ zeigt.
+        "/tasks", "/workflows", "/rewind",
+        "/help",
     ]
 
     /// Codex: Im Repo und in der Doku ist keine Befehlsliste belegt; hier
@@ -30,6 +33,7 @@ enum ControllerSlashCommands {
     /// „/“ zeigt die Befehlsliste, `/memory` die Auswahl der Memory-Dateien.
     static let claudeChoiceLists: Set<String> = [
         "/", "/model", "/config", "/resume", "/permissions", "/mcp", "/agents", "/memory",
+        "/tasks", "/workflows", "/rewind",
     ]
     static let codexChoiceLists: Set<String> = ["/", "/model", "/approvals"]
 
