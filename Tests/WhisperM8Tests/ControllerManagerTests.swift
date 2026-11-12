@@ -31,7 +31,11 @@ private final class SpyPerformer: ControllerActionPerforming {
     private(set) var performed: [ControllerAction] = []
 
     func snapshot() -> ControllerAppSnapshot { current }
-    func perform(_ action: ControllerAction, in context: ControllerContext) { performed.append(action) }
+    func perform(_ action: ControllerAction, in context: ControllerContext) {
+        performed.append(action)
+        // Wie die echte App: Nach vorn geholt, ist sie aktiv.
+        if action == .bringAppToFront { current.appIsActive = true }
+    }
 }
 
 /// Manager der Controller-Steuerung: Ein/Aus über die Schalter, Auflösen und
@@ -205,13 +209,40 @@ final class ControllerManagerTests: XCTestCase {
         XCTAssertEqual(wake.map(\.action), [.bringAppToFront])
         XCTAssertEqual(wake.first?.context, .outsideApp(backgroundEnabled: true, wakeOnInput: true))
 
-        performer.current.appIsActive = true
         let after = await send([
             .button(.circle, pressed: false),
             .button(.cross, pressed: true),
         ], expecting: 1)
         XCTAssertEqual(after.map(\.gesture), [.press(.cross)], "Kreis loslassen darf nicht als Tippen ankommen")
         XCTAssertEqual(performer.performed, [.bringAppToFront, .chatKey(.enter)])
+    }
+
+    /// Drücken und Loslassen sind schon unterwegs, bevor das Aufwecken auf dem
+    /// Main Thread ankommt: Das Loslassen darf trotzdem nicht als Escape im
+    /// Chat landen. Die Pause geht auch während des Verwerfens.
+    func testWakeDiscardsGesturesAlreadyInFlight() async {
+        enable(background: true)
+        performer.current.appIsActive = false
+        let resolutions = await send([
+            .button(.circle, pressed: true),
+            .button(.circle, pressed: false),
+            .button(.cross, pressed: true),
+        ], expecting: 2)
+        XCTAssertEqual(resolutions.map(\.gesture), [.holdPending(.circle, duration: 0.4), .press(.cross)])
+        XCTAssertEqual(performer.performed, [.bringAppToFront, .chatKey(.enter)])
+    }
+
+    /// Der Stick hat geweckt und wird weiter gehalten: L1 + R1 kommt trotzdem an.
+    func testChordPassesWhileDiscarding() async {
+        enable(background: true)
+        performer.current.appIsActive = false
+        let resolutions = await send([
+            .stick(.left, x: 0, y: 1),
+            .button(.l1, pressed: true),
+            .button(.r1, pressed: true),
+        ], expecting: 2)
+        XCTAssertEqual(resolutions.first?.action, .bringAppToFront)
+        XCTAssertEqual(resolutions.last?.gesture, .chordPending(duration: 1))
     }
 
     /// Ohne den Schalter bleibt es beim alten Verhalten: nur Dreieck holt nach vorn.

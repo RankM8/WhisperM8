@@ -132,6 +132,13 @@ final class ControllerManager {
     private let preferences: () -> AppPreferences
     private var activeObservers: [NSObjectProtocol] = []
     private var userPaused = false
+    /// Nach dem Aufwecken aus einem anderen Programm: Gesten verwerfen, bis
+    /// Tasten und Sticks losgelassen sind. Was die App nach vorn geholt hat,
+    /// soll dort nicht auch noch wirken (Kreis loslassen wäre sonst Escape,
+    /// ein gehaltener Stick liefe weiter durch die Liste). Entschieden in der
+    /// Reihenfolge der Gesten auf dem Main Thread, damit nichts durchrutscht,
+    /// das schon unterwegs war.
+    private var discardUntilIdle = false
     private var systemPaused = false
 
     init(
@@ -150,8 +157,8 @@ final class ControllerManager {
         }
         source.onReset = { [pump] in pump.reset() }
         source.onDeviceChange = { [weak self] info in self?.deviceChanged(info) }
-        pump.onGestures = { [weak self] gestures in
-            Task { @MainActor in self?.handle(gestures) }
+        pump.onGestures = { [weak self] gestures, idleAfter in
+            Task { @MainActor in self?.handle(gestures, idleAfter: idleAfter) }
         }
     }
 
@@ -263,15 +270,20 @@ final class ControllerManager {
 
     // MARK: - Gesten
 
-    private func handle(_ gestures: [ControllerGesture]) {
+    private func handle(_ gestures: [ControllerGesture], idleAfter: Bool) {
         // Nach dem Ausschalten können noch Gesten unterwegs sein.
         guard status.isRunning || isDebugRunActive else { return }
         for gesture in gestures {
+            if discardUntilIdle, !Self.passesWhileDiscarding(gesture) { continue }
             noteButton(of: gesture)
             let resolution = resolve(gesture)
             remember(resolution)
             onResolution?(resolution)
+            if resolution.action == .bringAppToFront, case .outsideApp = resolution.context {
+                discardUntilIdle = true
+            }
         }
+        if idleAfter { discardUntilIdle = false }
         if status.background == .waiting, counters.receivedInBackground {
             status.background = .received
         }
@@ -293,9 +305,6 @@ final class ControllerManager {
             togglePause()
         } else {
             performer.perform(action, in: context)
-        }
-        if action == .bringAppToFront, case .outsideApp = context {
-            pump.swallowUntilIdle()
         }
         return ControllerResolution(gesture: gesture, context: context, action: action, executed: true)
     }
@@ -324,6 +333,15 @@ final class ControllerManager {
         guard let button else { return }
         status.lastButton = button
         status.lastButtonCount += 1
+    }
+
+    /// Pause (L1 + R1) und Diktat sind eigene, bewusste Eingaben: Sie gehen
+    /// auch durch, solange der Rest des Aufweckens verworfen wird.
+    private static func passesWhileDiscarding(_ gesture: ControllerGesture) -> Bool {
+        switch gesture {
+        case .chordPending, .chordCompleted, .chordCancelled, .press(.r2): return true
+        default: return false
+        }
     }
 
     // MARK: - Rückmeldung am Gerät

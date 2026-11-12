@@ -13,15 +13,17 @@ final class ControllerGesturePump: @unchecked Sendable {
     /// verzögert, wenn sich die Handler eine ausgelastete Queue teilen.
     let queue = DispatchQueue(label: "com.whisperm8.controller.input", qos: .userInteractive)
 
-    /// Fertige Gesten. Aufgerufen auf `queue`.
-    var onGestures: (@Sendable ([ControllerGesture]) -> Void)?
+    /// Fertige Gesten, dazu ob danach nichts mehr gedrückt oder ausgelenkt
+    /// ist. Aufgerufen auf `queue`. Wird der Erkenner ruhig, kommt ein Aufruf
+    /// auch ohne Gesten (Stick losgelassen): Der Manager verwirft nach dem
+    /// Aufwecken bis genau zu diesem Punkt.
+    var onGestures: (@Sendable (_ gestures: [ControllerGesture], _ idleAfter: Bool) -> Void)?
 
     private var recognizer: ControllerGestureRecognizer
     private let clock: @Sendable () -> TimeInterval
     private var timer: DispatchSourceTimer?
     private var activity: NSObjectProtocol?
-    /// Gesten verwerfen, bis nichts mehr gedrückt oder ausgelenkt ist.
-    private var swallowing = false
+    private var wasIdle = true
 
     init(
         config: ControllerGestureRecognizer.Config = .init(),
@@ -54,25 +56,14 @@ final class ControllerGesturePump: @unchecked Sendable {
         }
     }
 
-    /// Verwirft alle Gesten, bis Tasten und Sticks losgelassen sind. Nach dem
-    /// Aufwecken aus einem anderen Programm: Was die App nach vorn geholt hat,
-    /// soll dort nicht auch noch wirken (Kreis loslassen wäre sonst „zurück“,
-    /// ein gehaltener Stick liefe weiter durch die Liste).
-    func swallowUntilIdle() {
-        queue.async { [self] in
-            swallowing = !recognizer.isIdle
-        }
-    }
-
     // MARK: - Zeitgeber (nur auf `queue`)
 
     private func emit(_ gestures: [ControllerGesture]) {
-        if swallowing {
-            if recognizer.isIdle { swallowing = false }
-            return
-        }
-        guard !gestures.isEmpty else { return }
-        onGestures?(gestures)
+        let idle = recognizer.isIdle
+        let becameIdle = idle && !wasIdle
+        wasIdle = idle
+        guard !gestures.isEmpty || becameIdle else { return }
+        onGestures?(gestures, idle)
     }
 
     private func reschedule() {
