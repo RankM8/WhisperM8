@@ -199,6 +199,19 @@ struct TerminalComposerDraftTracker: Equatable {
         }
     }
 
+    /// Pfeil hoch vom Controller ausserhalb einer Rueckfrage und einer offenen
+    /// Auswahl: holt den letzten Prompt (in einer Shell den letzten Befehl)
+    /// ins Feld. Bei Claude steht er schon im Transcript wie ein Rueckleger —
+    /// ein programmatischer Versand („Weiter“, Menue-Befehl, `chats send`)
+    /// leert das Feld vorher. Sonst gilt er vorsichtshalber als Entwurf.
+    mutating func recordHistoryRecall(isClaude: Bool) {
+        if isClaude {
+            mayHoldRestoredPrompt = true
+        } else {
+            mayHaveUnsentInput = true
+        }
+    }
+
     /// Eingefuegter Text ohne Absenden (Datei-Drop, Report-Routing,
     /// `chats send --no-submit`).
     mutating func recordTextInserted() {

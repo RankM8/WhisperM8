@@ -141,6 +141,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             recentDraftInput: ControllerTerminalMarks.hasFreshDraftInput(
                 draftAt: terminal.lastDraftInputAt, lastSubmitAt: terminal.lastEnterAt,
                 window: Self.draftInputWindow, now: moment),
+            recentArrowNavigation: ControllerTerminalMarks.hasFreshArrow(
+                armedAt: terminal.lastArmingArrowAt, lastSubmitAt: terminal.lastEnterAt, now: moment),
             choiceListOpen: terminal.choiceListOpen,
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning,

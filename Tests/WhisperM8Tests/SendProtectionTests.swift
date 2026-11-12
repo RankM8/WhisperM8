@@ -331,4 +331,16 @@ final class PromptGuardStubTests: XCTestCase {
         wait(for: [skipped], timeout: 0.5)
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
     }
+
+    /// ↑ vom Controller holt den letzten Prompt zurück: Bei Claude leert ein
+    /// programmatischer Versand das Feld vorher, sonst gilt er als Entwurf.
+    func testHistoryRecallFromController() {
+        var claude = TerminalComposerDraftTracker()
+        claude.recordHistoryRecall(isClaude: true)
+        XCTAssertTrue(claude.shouldClearBeforeSubmit)
+        XCTAssertFalse(claude.mayHaveUnsentInput, "← bleibt gesperrt, der Feldinhalt ist nur geschätzt")
+        var codex = TerminalComposerDraftTracker()
+        codex.recordHistoryRecall(isClaude: false)
+        XCTAssertTrue(codex.mayHaveUnsentInput)
+    }
 }

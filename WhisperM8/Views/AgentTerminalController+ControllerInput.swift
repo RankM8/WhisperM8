@@ -12,7 +12,8 @@ extension AgentTerminalController {
     func controllerAllows(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) -> Bool {
         TerminalControlKey.controllerAllows(
             key, status: status, profile: command.keyboardProfile,
-            choiceListOpen: controllerChoiceListOpen(status: status, at: now))
+            choiceListOpen: controllerChoiceListOpen(status: status, at: now),
+            composerMayHaveText: composerDraft.mayHaveUnsentInput)
     }
 
     /// Ist eine Auswahlliste, die das Controller-Menü geöffnet hat, vermutlich
@@ -40,7 +41,7 @@ extension AgentTerminalController {
     /// Absicherung); Regeln in `ControllerTerminalMarks.recordControllerKey`.
     func noteControllerKey(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) {
         controllerMarks.recordControllerKey(
-            key, status: status, at: now)
+            key, status: status, isCodex: command.keyboardProfile == .codexChat, at: now)
     }
 
     /// Taste der echten Tastatur an dieses Terminal: Enter zählt als Absenden

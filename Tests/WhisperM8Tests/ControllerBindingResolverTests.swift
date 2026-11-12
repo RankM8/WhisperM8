@@ -219,13 +219,16 @@ final class ControllerBindingResolverTests: XCTestCase {
             .chat(ControllerChatState(status: .working, profile: .shell)),
         ]
         for context in live {
-            for direction in ControllerDirection.allCases {
+            for direction in ControllerDirection.allCases where direction != .left {
                 for isRepeat in [false, true] {
                     XCTAssertEqual(action(.move(direction, source: .dpad, isRepeat: isRepeat), context),
                                    .chatKey(ControllerChatKey(direction)), "\(context) \(direction)")
                 }
             }
         }
+        // Raster mit beendetem Chat: Das Steuerkreuz wechselt die Kachel.
+        XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), chat(.ended) { $0.gridActive = true }),
+                       .moveInContent(.left))
         for context in [chat(.ended), chat(.awaitingInput) { $0.hasTerminal = false }] {
             XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .enterList(step: -1), "\(context)")
             XCTAssertEqual(action(.move(.left, source: .dpad, isRepeat: false), context), .moveInContent(.left), "\(context)")
@@ -236,6 +239,29 @@ final class ControllerBindingResolverTests: XCTestCase {
         // Während der Aufnahme bleibt das Steuerkreuz der Ausgabemodus.
         XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), .recording(phase: .recording, targetIsChat: true)),
                        .outputMode(step: -1))
+    }
+
+    /// Links im vermutlich leeren Claude-Feld schickt die Sitzung in Claudes
+    /// Agent-Ansicht — gesperrt („geht nicht“, beim Halten still). Erlaubt in
+    /// einer Rückfrage, in einer offenen Auswahl, mit Entwurf, in Codex und Shell.
+    func testDpadLeftBlockedInEmptyClaudeField() {
+        let left = ControllerGesture.move(.left, source: .dpad, isRepeat: false)
+        for status in [ControllerChatState.Status.idle, .working, .unknown] {
+            XCTAssertEqual(action(left, chat(status)), .rejected, "\(status)")
+            XCTAssertNil(action(.move(.left, source: .dpad, isRepeat: true), chat(status)), "\(status) gehalten")
+            XCTAssertEqual(action(left, chat(status) { $0.draftSuspected = true }), .chatKey(.left), "\(status) Entwurf")
+        }
+        XCTAssertEqual(action(left, chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 2 }), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.idle) { $0.choiceListOpen = true }), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.working) { $0.choiceListOpen = true }), .rejected, "Auswahl zählt nur im Ruhezustand")
+        XCTAssertEqual(action(left, chat(.working, profile: .codex)), .chatKey(.left))
+        XCTAssertEqual(action(left, chat(.idle, profile: .shell)), .chatKey(.left))
+    }
+
+    /// Kreuz bei arbeitendem Chat nach einem scharfen Pfeil (nicht ↑ zuerst).
+    func testCrossAfterArrowWhileWorking() {
+        XCTAssertNil(action(.press(.cross), chat(.working)))
+        XCTAssertEqual(action(.press(.cross), chat(.working) { $0.recentArrowNavigation = true }), .chatKey(.enter))
     }
 
     private func chatState(of context: ControllerContext) -> ControllerChatState {
@@ -249,14 +275,25 @@ final class ControllerBindingResolverTests: XCTestCase {
                     _ profile: TerminalKeyboardProfile = .claudeCodeChat, list: Bool = false) -> Bool {
             TerminalControlKey.controllerAllows(key, status: status, profile: profile, choiceListOpen: list)
         }
-        // Pfeile immer, in jedem Programm und Zustand (12.11.2026).
-        for key in [TerminalControlKey.up, .down, .left, .right] {
+        // Pfeile immer, in jedem Programm und Zustand (12.11.2026) — außer
+        // links im vermutlich leeren Claude-Feld.
+        for key in [TerminalControlKey.up, .down, .right] {
             for status in [AgentSessionRuntimeStatus.awaitingInput, .idle, .working, .stopped, .errored, nil] {
                 for profile in [TerminalKeyboardProfile.claudeCodeChat, .codexChat, .plainShell] {
                     XCTAssertTrue(allows(key, status, profile), "\(key) \(String(describing: status)) \(profile)")
                 }
             }
         }
+        for status in [AgentSessionRuntimeStatus.idle, .working, .stopped, .errored, nil] {
+            XCTAssertFalse(allows(.left, status), "Claude leer \(String(describing: status))")
+            XCTAssertTrue(TerminalControlKey.controllerAllows(
+                .left, status: status, profile: .claudeCodeChat, choiceListOpen: false, composerMayHaveText: true))
+            XCTAssertTrue(allows(.left, status, .codexChat))
+            XCTAssertTrue(allows(.left, status, .plainShell))
+        }
+        XCTAssertTrue(allows(.left, .awaitingInput))
+        XCTAssertTrue(allows(.left, .idle, list: true))
+        XCTAssertFalse(allows(.left, .working, list: true))
         XCTAssertFalse(allows(.backTab, .awaitingInput))
         XCTAssertTrue(allows(.backTab, .idle))
         XCTAssertTrue(allows(.enter, .working))

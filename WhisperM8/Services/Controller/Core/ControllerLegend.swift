@@ -256,6 +256,7 @@ enum ControllerLegend {
         return [
             ControllerLegend.Candidate(
                 entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
+        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
         ] + [
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
@@ -265,7 +266,7 @@ enum ControllerLegend {
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
             layers,
-        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
+        ] + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.tap(.r3)]),
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),

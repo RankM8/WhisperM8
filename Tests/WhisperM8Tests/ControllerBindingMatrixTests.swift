@@ -247,6 +247,15 @@ final class ControllerBindingMatrixTests: XCTestCase {
 
     private static let chatArrows = dpad { .chatKey(ControllerChatKey($0)) }
 
+    /// Claude mit vermutlich leerem Feld (ohne Rückfrage, Auswahl, Entwurf):
+    /// links „geht nicht“ — es schickte die Sitzung in die Agent-Ansicht.
+    private static let claudeEmptyFieldArrows: Table = {
+        var table = chatArrows
+        table[.move(.left, source: .dpad, isRepeat: false)] = .rejected
+        table[.move(.left, source: .dpad, isRepeat: true)] = nil
+        return table
+    }()
+
     /// Shell (Review nach Runde 3, Befund 4): Rücktaste bleibt, auch gehalten —
     /// dort aber nur Zeichen, kein Ctrl+W. Leerzeichen und Leeren „geht nicht“.
     private static let shellKeys: Table = [
@@ -432,24 +441,24 @@ final class ControllerBindingMatrixTests: XCTestCase {
              .press(.cross): .chatKey(.enter),
              .tap(.circle): .chatKey(.escape),
          ])),
-        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, chatArrows, backspace, clearInput, [
+        ("Raster, Chat ruht", chatState(.idle) { $0.gridActive = true }, merge(gridNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .tap(.circle): .chatKey(.escape),
         ])),
         // Review-Befund 3: Kreuz nur nach einer frischen Eingabe per Controller.
-        ("Chat arbeitet", chatState(.working), merge(chatNavigation, chatArrows, backspace, clearInput, [
+        ("Chat arbeitet", chatState(.working), merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
         ("Chat arbeitet, Entwurf per Controller", chatState(.working) { $0.recentDraftInput = true },
-         merge(chatNavigation, chatArrows, backspace, clearInput, [
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
-        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, chatArrows, backspace, clearInput, [
+        ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),

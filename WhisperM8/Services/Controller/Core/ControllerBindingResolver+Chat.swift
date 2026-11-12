@@ -44,12 +44,15 @@ extension ControllerBindingResolver {
         // (Entscheidung 12.11.2026). Nur so kommt man in Claude in
         // Subagenten-, Workflow- und Aufgabenansichten, in Rückfragen, die
         // nicht als „wartet“ gemeldet werden, und durch Listen der CLI. In
-        // der App navigiert der linke Stick. Bekannter Preis: Hoch im leeren
-        // Eingabefeld holt den letzten Prompt zurück, links schickt Claude
-        // dort in den Hintergrund. Rechts übernimmt den grauen Vorschlag.
-        // Ohne lebendes Terminal (beendeter Chat, Verlauf) wie der Stick.
+        // der App navigiert der linke Stick. Rechts übernimmt den grauen
+        // Vorschlag. Ausnahme: links im vermutlich leeren Claude-Feld
+        // („geht nicht“, siehe `leftArrowAllowed`). Ohne lebendes Terminal
+        // (beendeter Chat, Verlauf) wie der Stick.
         case let .move(direction, .dpad, isRepeat):
-            if arrowsAllowed(state) { return .chatKey(ControllerChatKey(direction)) }
+            if arrowsAllowed(state) {
+                if direction == .left, !leftArrowAllowed(state) { return isRepeat ? nil : .rejected }
+                return .chatKey(ControllerChatKey(direction))
+            }
             return navigate(direction, isRepeat: isRepeat, gridActive: state.gridActive)
 
         // Tasten ins Terminal: nur bei lebendem Chat.
@@ -113,6 +116,16 @@ extension ControllerBindingResolver {
         state.acceptsKeys
     }
 
+    /// Links bei Claude nur, wo es sicher nicht das leere Eingabefeld trifft:
+    /// in einer Rückfrage, in einer offenen Auswahl des Menüs oder wenn ein
+    /// Entwurf im Feld steht. Im leeren Feld schickt ← die ganze Sitzung in
+    /// Claudes Agent-Ansicht — so gingen am 12.11.2026 zwei Sitzungen
+    /// verloren. Dieselbe Regel prüft `TerminalControlKey.controllerAllows`.
+    static func leftArrowAllowed(_ state: ControllerChatState) -> Bool {
+        guard state.profile == .claude else { return true }
+        return state.status == .awaitingInput || choiceListActive(state) || state.draftSuspected
+    }
+
     /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der
     /// Chat ruht. Arbeitet er (auch ein Turn, den Claude selbst beginnt),
     /// gingen Pfeile und Kreuz sonst in den arbeitenden Chat, und Kreuz
@@ -125,7 +138,8 @@ extension ControllerBindingResolver {
     /// Enter: im Ruhezustand immer, in einer Rückfrage nach den ersten 0,5 s
     /// (unbekannter Beginn gilt als alt). Arbeitet der Chat oder ist sein
     /// Zustand unklar, nur wenn kurz vorher per Controller getippt, gelöscht
-    /// oder diktiert (bei Codex: ein Pfeil gedrückt) und seither nichts
+    /// oder diktiert (bei Codex: ein Pfeil gedrückt; bei Claude bis 5 s nach
+    /// einem scharfen Pfeil, `recentArrowNavigation`) und seither nichts
     /// abgeschickt wurde, oder wenn eine Auswahl des Menüs offen ist: Zwischen
     /// dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt eine
     /// Lücke, in der Enter sonst die Vorauswahl bestätigte.
@@ -138,7 +152,7 @@ extension ControllerBindingResolver {
         case .idle:
             return true
         case .working, .unknown:
-            return state.recentDraftInput || choiceListActive(state)
+            return state.recentDraftInput || choiceListActive(state) || state.recentArrowNavigation
         case .ended:
             return false
         }

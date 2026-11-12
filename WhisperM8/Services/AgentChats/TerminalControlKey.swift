@@ -38,7 +38,8 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile immer: Das
     /// Steuerkreuz ist im Chat die Pfeiltaste (seit 12.11.2026; vorher nur in
     /// Rückfragen, offenen Listen und Codex, was Subagenten- und
-    /// Workflow-Ansichten unerreichbar machte). Tab und Shift+Tab nie in einer
+    /// Workflow-Ansichten unerreichbar machte) — außer links im vermutlich
+    /// leeren Claude-Feld. Tab und Shift+Tab nie in einer
     /// Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle Änderungen
     /// erlauben“. Schreibtasten (Leerzeichen, Wort löschen, Leeren) nur bei
     /// Claude und Codex: In einer Shell läuft oft nano, vim oder emacs, dort
@@ -47,12 +48,20 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         _ key: TerminalControlKey,
         status: AgentSessionRuntimeStatus?,
         profile: TerminalKeyboardProfile,
-        choiceListOpen: Bool
+        choiceListOpen: Bool,
+        composerMayHaveText: Bool = false
     ) -> Bool {
         let isAgentChat = profile == .claudeCodeChat || profile == .codexChat
         switch key {
-        // Pfeile immer (Entscheidung 12.11.2026): Das Steuerkreuz ist im Chat
-        // die Pfeiltaste, auch in Subagenten- und Workflow-Ansichten.
+        // Links bei Claude nie ins vermutlich leere Eingabefeld: Dort schickt
+        // ← die ganze Sitzung in Claudes Agent-Ansicht (zwei verlorene
+        // Sitzungen am 12.11.2026). Erlaubt in einer Rückfrage, in einer
+        // offenen Auswahl des Menüs (nur im Ruhezustand) und mit Entwurf.
+        case .left where profile == .claudeCodeChat:
+            let listCounts = choiceListOpen && status == .idle
+            return status == .awaitingInput || listCounts || composerMayHaveText
+        // Sonst Pfeile immer (Entscheidung 12.11.2026): Das Steuerkreuz ist im
+        // Chat die Pfeiltaste, auch in Subagenten- und Workflow-Ansichten.
         case .up, .down, .left, .right:
             return true
         case .tab, .backTab: return status != .awaitingInput
