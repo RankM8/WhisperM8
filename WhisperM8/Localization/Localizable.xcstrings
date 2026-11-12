@@ -2711,6 +2711,16 @@
         }
       }
     },
+    "Bring WhisperM8 to the front on input": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei Eingabe WhisperM8 nach vorn holen"
+          }
+        }
+      }
+    },
     "Build %@": {
       "localizations": {
         "de": {
@@ -18390,6 +18400,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In welcher Sprache diktierst du?"
+          }
+        }
+      }
+    },
+    "While another app is in front, moving a stick or pressing a button brings the Agent Chats window forward. That first input does nothing else. R2 and the touchpad keep working in the other app. Needs the switch above.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ist ein anderes Programm vorne, holt ein Stick oder eine Taste das Agent-Chats-Fenster nach vorn. Diese erste Eingabe bewirkt sonst nichts. R2 und Touchpad wirken weiter im anderen Programm. Braucht den Schalter darüber."
           }
         }
       }

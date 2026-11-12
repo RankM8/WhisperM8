@@ -59,6 +59,19 @@ final class ControllerContextResolverTests: XCTestCase {
         XCTAssertEqual(context { $0.appIsActive = false }, .outsideApp(backgroundEnabled: false))
     }
 
+    /// Aufwecken gilt nur mit Hintergrund-Empfang.
+    func testOutsideAppWakesOnlyWithBackground() {
+        XCTAssertEqual(context {
+            $0.appIsActive = false
+            $0.backgroundEnabled = true
+            $0.wakeOnInputEnabled = true
+        }, .outsideApp(backgroundEnabled: true, wakeOnInput: true))
+        XCTAssertEqual(context {
+            $0.appIsActive = false
+            $0.wakeOnInputEnabled = true
+        }, .outsideApp(backgroundEnabled: false, wakeOnInput: false))
+    }
+
     func testWindowKindsBeatMenuModalAndList() {
         XCTAssertEqual(context {
             $0.window = .none

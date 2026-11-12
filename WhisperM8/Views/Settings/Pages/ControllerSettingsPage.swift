@@ -25,6 +25,7 @@ struct ControllerSettingsPage: View {
     @AppStorage(PreferenceKeys.controllerHapticsEnabled) private var hapticsEnabled = true
     @AppStorage(PreferenceKeys.controllerLightEnabled) private var lightEnabled = true
     @AppStorage(PreferenceKeys.controllerBackgroundEnabled) private var backgroundEnabled = false
+    @AppStorage(PreferenceKeys.controllerWakeOnInputEnabled) private var wakeOnInputEnabled = true
 
     let dependencies: ControllerSettingsDependencies
 
@@ -70,6 +71,12 @@ struct ControllerSettingsPage: View {
                     isOn: $backgroundEnabled
                 )
                 ControllerBackgroundRow(status: dependencies.status(), isEnabled: enabled && backgroundEnabled)
+                SettingsToggleRow(
+                    title: "Bring WhisperM8 to the front on input",
+                    subtitle: "While another app is in front, moving a stick or pressing a button brings the Agent Chats window forward. That first input does nothing else. R2 and the touchpad keep working in the other app. Needs the switch above.",
+                    isOn: $wakeOnInputEnabled
+                )
+                .disabled(!backgroundEnabled)
             }
 
             ForEach(ControllerLegend.allBindings(), id: \.kind) { section in
