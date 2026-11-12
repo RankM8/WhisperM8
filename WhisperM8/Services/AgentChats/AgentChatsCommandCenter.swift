@@ -88,6 +88,13 @@ enum AgentChatsCommand: Equatable {
     case removeChatFromWorkspace(UUID)
     case addChatToWorkspace(UUID, workspaceID: UUID)
     case moveChatToNewWindow(UUID)
+    /// Workspace umbenennen: öffnet dasselbe Sheet wie das Kontextmenü der
+    /// Seitenleiste. Nur angelegte Workspaces.
+    case renameWorkspace(UUID)
+    /// Rastergröße eines angelegten Workspace setzen wie der Stufenwähler —
+    /// aber nie mit der Auswahl „wer bleibt“: Bräuchte das Verkleinern sie,
+    /// geht der Befehl nicht (`false`).
+    case setWorkspaceCapacity(UUID, capacity: Int)
     /// Hintergrund-Chat (`claude --bg`).
     case backgroundLogs(UUID)
     case backgroundStop(UUID)

@@ -1009,6 +1009,7 @@ extension AgentChatsView {
         .padding(.horizontal, 10)
         .frame(height: Self.gridPaneHeaderHeight)
         .background(AgentTheme.header.opacity(Self.gridPaneHeaderOpacity(isFocused: isFocused)))
+        .controllerMenuAnchor(.tile, sessionID: session.id)
         .contentShape(Rectangle())
         // Doppelklick auf den Header = schneller Maximize-Weg. Der einfache
         // Klick (Fokus) läuft über den leftMouseDown-Monitor — bewusst KEIN

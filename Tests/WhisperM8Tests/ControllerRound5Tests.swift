@@ -121,6 +121,9 @@ final class ControllerRound5BindingTests: XCTestCase {
         XCTAssertNil(ControllerQuickDrawSlots.crossAction(
             profile: .claude, busy: true, dialogOpen: false, viewOpen: false,
             fieldHasText: true, queuedOwnPrompts: 1, onlyRecalledPrompt: true))
+        XCTAssertNil(ControllerQuickDrawSlots.crossAction(
+            profile: .codex, busy: false, dialogOpen: false, viewOpen: false,
+            fieldHasText: true, queuedOwnPrompts: 0, onlyRecalledPrompt: true), "Codex: mit ↑ zurückgeholt")
         // Sichtbar leer: der Rückleger-Verdacht ist veraltet, „Weiter“ geht.
         XCTAssertEqual(ControllerQuickDrawSlots.crossAction(
             profile: .claude, busy: false, dialogOpen: false, viewOpen: false,
@@ -443,6 +446,36 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         perform(.menuActivate)
         perform(.menuActivate)
         XCTAssertEqual(window.commands.last, .addChatToWorkspace(chat, workspaceID: target))
+    }
+
+    func testWorkspaceRenameAndGridCapacity() {
+        let workspace = UUID()
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.shownInWorkspace = ControllerWorkspaceContext(
+            id: workspace, name: "Marketing", gridVisible: true, chatIsMember: true, isCurated: true,
+            capacities: [
+                ControllerCapacityChoice(capacity: 2, label: "1×2", isCurrent: false, needsSelection: true),
+                ControllerCapacityChoice(capacity: 4, label: "2×2", isCurrent: true, needsSelection: false),
+                ControllerCapacityChoice(capacity: 6, label: "3×2", isCurrent: false, needsSelection: false),
+            ])
+        window.chatInfo = info
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.renameWorkspace)
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .renameWorkspace(workspace))
+        XCTAssertNil(dispatcher.ui.menu)
+
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.gridCapacity)
+        perform(.menuActivate)
+        // Start auf der aktuellen Stufe: Kreuz dort geht nicht, das Menü bleibt.
+        perform(.menuActivate)
+        XCTAssertEqual(haptics.last, .rejected)
+        XCTAssertNotNil(dispatcher.ui.menu)
+        perform(.menuMove(step: 1))
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .setWorkspaceCapacity(workspace, capacity: 6))
+        XCTAssertNil(dispatcher.ui.menu)
     }
 
     func testCancelAndUndoAccountSwitch() {

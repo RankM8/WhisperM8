@@ -31,17 +31,21 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     case openProject
     /// Projektordner im Finder zeigen.
     case revealInFinder
-    // Workspace
+    // Workspace: erst der Chat, dann der Workspace selbst
+    /// Aus dem Workspace nehmen, in dem der Chat gerade gezeigt wird.
+    case removeFromWorkspace
+    /// Zweite Ebene: zu einem (anderen) angelegten Workspace hinzufügen.
+    case addToWorkspace
     /// Notiz-Karte der Kachel auf/zu (wie ihr Knopf am Kachelkopf).
     case toggleTileNote
-    /// Standard „Notizen an/aus“ für alle Kacheln (wie ⌥⌘N).
-    case toggleNotes
-    /// Aus dem sichtbaren Workspace nehmen.
-    case removeFromWorkspace
-    /// Zweite Ebene: zu einem angelegten Workspace hinzufügen.
-    case addToWorkspace
     /// In ein neues Fenster verschieben.
     case moveToNewWindow
+    /// Standard „Notizen an/aus“ für alle Kacheln (wie ⌥⌘N).
+    case toggleNotes
+    /// Workspace umbenennen (dasselbe Sheet wie im Kontextmenü der Seitenleiste).
+    case renameWorkspace
+    /// Zweite Ebene: Rastergröße (wie der Stufenwähler im Workspace-Kopf).
+    case gridCapacity
     // Lebenszyklus
     /// Laufenden Chat neu starten (mit der bestehenden Rückfrage).
     case restart
@@ -54,16 +58,20 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     case clipboardHistory
     case showBindings, pause
 
-    enum Group: Sendable {
+    /// Gruppen in der Reihenfolge des Menüs.
+    enum Group: Int, CaseIterable, Sendable {
         case input, chat, project, workspace, lifecycle, controller
     }
 
+    /// Feste Gruppe. „Zu Workspace hinzufügen“ und „In neues Fenster“ stehen
+    /// außerhalb eines Workspace unter „Chat“ (`ControllerMenuModel.group`).
     var group: Group {
         switch self {
         case .continueWork, .commands, .cycleMode, .redraw: return .input
         case .switchAccount, .rename, .refreshTitle, .fork, .pin, .archive, .closeChat: return .chat
         case .openProject, .revealInFinder: return .project
-        case .toggleTileNote, .toggleNotes, .removeFromWorkspace, .addToWorkspace, .moveToNewWindow: return .workspace
+        case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+             .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
         case .clipboardHistory, .showBindings, .pause: return .controller
         }
@@ -79,7 +87,43 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     var needsRestingChat: Bool { self == .continueWork || self == .cycleMode }
 
     /// Öffnet eine zweite Ebene statt etwas auszuführen.
-    var opensSubmenu: Bool { self == .commands || self == .switchAccount || self == .addToWorkspace }
+    var opensSubmenu: Bool {
+        self == .commands || self == .switchAccount || self == .addToWorkspace || self == .gridCapacity
+    }
+}
+
+/// Der Workspace, in dem der Chat gerade gezeigt wird: das sichtbare Raster
+/// oder der Workspace, aus dem die Kachel groß gemacht wurde. Dann zeigt das
+/// Menü die Gruppe „Workspace“.
+struct ControllerWorkspaceContext: Equatable, Sendable {
+    var id: UUID
+    var name: String
+    /// Das Raster ist sichtbar (sonst: Kachel groß in der Einzelansicht).
+    var gridVisible: Bool
+    /// Der Chat ist eine Kachel dieses Workspace.
+    var chatIsMember: Bool
+    /// Angelegter Workspace (keine Projekt-Ansicht): Umbenennen und
+    /// Rastergröße gehen nur dort, wie in Seitenleiste und Workspace-Kopf.
+    var isCurated: Bool
+    /// Stufen des Rasters wie im Stufenwähler (nur die, die in die Fläche
+    /// passen, und die aktuelle).
+    var capacities: [ControllerCapacityChoice] = []
+    /// Im Raster läuft gerade die Auswahl „wer bleibt“ für ein Verkleinern.
+    var shrinkSelectionActive = false
+}
+
+/// Eine Stufe der Rastergröße.
+struct ControllerCapacityChoice: Equatable, Sendable {
+    var capacity: Int
+    /// „2×2“ usw. wie im Stufenwähler.
+    var label: String
+    var isCurrent: Bool
+    /// Verkleinern ginge nur, wenn man wählt, welche Chats bleiben. Das kann
+    /// der Controller nicht: Die Stufe ist aus („geht nur mit der Maus“).
+    var needsSelection: Bool
+
+    var id: String { "capacity:\(capacity)" }
+    var isChoosable: Bool { !isCurrent && !needsSelection }
 }
 
 /// Ein Ziel-Konto in der zweiten Ebene von „Konto wechseln“.
@@ -141,6 +185,8 @@ struct ControllerChatActionInfo: Equatable, Sendable {
     var removableWorkspaceName: String?
     /// Angelegte Workspaces, in denen der Chat noch nicht ist.
     var addableWorkspaces: [ControllerWorkspaceChoice] = []
+    /// Der Chat wird in einem Workspace gezeigt (Raster oder große Kachel).
+    var shownInWorkspace: ControllerWorkspaceContext?
     /// Vorgemerkter Kontowechsel (Ziel), den man abbrechen kann.
     var pendingAccountSwitchTarget: String?
     var canUndoAccountSwitch = false
@@ -206,6 +252,8 @@ struct ControllerMenuModel: Equatable, Sendable {
         case accounts(ControllerListMenu<String>)
         /// „Zu Workspace hinzufügen“: IDs der angelegten Workspaces.
         case workspaces(ControllerListMenu<String>)
+        /// „Rastergröße“: `ControllerCapacityChoice.id`.
+        case capacities(ControllerListMenu<String>)
     }
 
     /// Sonder-Einträge unter den Konten (Runde 5): nur, solange ein Wechsel
@@ -223,9 +271,33 @@ struct ControllerMenuModel: Equatable, Sendable {
     }
 
     private static func entries(setup: ControllerMenuSetup) -> [ControllerListMenu<ControllerMenuItem>.Entry] {
-        ControllerMenuItem.allCases
-            .filter { isVisible($0, setup: setup) }
-            .map { .init(id: $0, enabled: isEnabled($0, setup: setup)) }
+        let visible = ControllerMenuItem.allCases.filter { isVisible($0, setup: setup) }
+        // Stabil nach Gruppe sortieren: Einträge mit wechselnder Gruppe
+        // rücken so zu ihren Nachbarn.
+        return visible.enumerated()
+            .sorted { lhs, rhs in
+                let left = group(of: lhs.element, setup: setup).rawValue
+                let right = group(of: rhs.element, setup: setup).rawValue
+                return left == right ? lhs.offset < rhs.offset : left < right
+            }
+            .map { .init(id: $0.element, enabled: isEnabled($0.element, setup: setup)) }
+    }
+
+    /// Gruppe im Menü: „Zu Workspace hinzufügen“ und „In neues Fenster“
+    /// gehören nur in einem Workspace zur Gruppe „Workspace“, sonst zu „Chat“
+    /// — die Gruppe „Workspace“ gibt es nur, wenn der Chat in einem gezeigt wird.
+    static func group(of item: ControllerMenuItem, setup: ControllerMenuSetup) -> ControllerMenuItem.Group {
+        switch item {
+        case .addToWorkspace, .moveToNewWindow:
+            return setup.chat?.shownInWorkspace == nil ? .chat : .workspace
+        default:
+            return item.group
+        }
+    }
+
+    /// Gruppe eines sichtbaren Eintrags in diesem Menü.
+    func group(of item: ControllerMenuItem) -> ControllerMenuItem.Group {
+        Self.group(of: item, setup: setup)
     }
 
     var selected: ControllerMenuItem? { top.selected }
@@ -238,7 +310,16 @@ struct ControllerMenuModel: Equatable, Sendable {
     /// Trennlinie vor `item`: erster sichtbarer Eintrag einer neuen Gruppe.
     func startsGroup(_ item: ControllerMenuItem) -> Bool {
         guard let index = top.entries.firstIndex(where: { $0.id == item }), index > 0 else { return false }
-        return top.entries[index - 1].id.group != item.group
+        return group(of: top.entries[index - 1].id) != group(of: item)
+    }
+
+    /// Überschrift vor `item`: erster sichtbarer Eintrag seiner Gruppe,
+    /// auch der allererste (die Karte zeigt jede Gruppe mit Überschrift).
+    func groupStart(_ item: ControllerMenuItem) -> ControllerMenuItem.Group? {
+        guard let index = top.entries.firstIndex(where: { $0.id == item }) else { return nil }
+        let own = group(of: item)
+        if index == 0 || group(of: top.entries[index - 1].id) != own { return own }
+        return nil
     }
 
     /// Passt der Eintrag zu diesem Chat? Sonst fehlt er im Menü (Runde 5).
@@ -261,6 +342,10 @@ struct ControllerMenuModel: Equatable, Sendable {
         case .removeFromWorkspace: return chat?.removableWorkspaceName != nil
         case .addToWorkspace: return !(chat?.addableWorkspaces.isEmpty ?? true)
         case .moveToNewWindow: return chat?.hasTab == true
+        case .renameWorkspace: return chat?.shownInWorkspace?.isCurated == true
+        case .gridCapacity:
+            guard let context = chat?.shownInWorkspace else { return false }
+            return context.isCurated && context.capacities.count > 1
         case .restart: return chat?.canRestart == true
         case .backgroundLogs, .backgroundStop, .backgroundRestart: return chat?.isBackgroundChat == true
         case .stopJob: return chat?.canStopJob == true
@@ -286,6 +371,11 @@ struct ControllerMenuModel: Equatable, Sendable {
                 || chat.pendingAccountSwitchTarget != nil || chat.canUndoAccountSwitch)
         case .fork: return chat.canFork && !chat.isArchived
         case .archive, .closeChat: return !chat.isArchived
+        case .gridCapacity:
+            // Während der Auswahl „wer bleibt“ wählt man keine weitere Stufe
+            // (wie der Stufenwähler, den dann die Aktionsleiste ersetzt).
+            guard let context = chat.shownInWorkspace, !context.shrinkSelectionActive else { return false }
+            return context.capacities.contains(where: \.isChoosable)
         default: return isVisible(item, setup: setup)
         }
     }
@@ -319,6 +409,9 @@ struct ControllerMenuModel: Equatable, Sendable {
         case var .workspaces(list):
             list.move(step)
             submenu = .workspaces(list)
+        case var .capacities(list):
+            list.move(step)
+            submenu = .capacities(list)
         case nil:
             top.move(step)
         }
@@ -354,6 +447,13 @@ struct ControllerMenuModel: Equatable, Sendable {
             let workspaces = setup.chat?.addableWorkspaces ?? []
             guard !workspaces.isEmpty else { return false }
             submenu = .workspaces(ControllerListMenu(entries: workspaces.map { .init(id: $0.id.uuidString, enabled: true) }))
+        case .gridCapacity:
+            let choices = setup.chat?.shownInWorkspace?.capacities ?? []
+            guard choices.contains(where: \.isChoosable) else { return false }
+            // Wie beim Konto: Start auf der aktuellen Stufe.
+            let current = choices.first(where: \.isCurrent)?.id
+            submenu = .capacities(ControllerListMenu(
+                entries: choices.map { .init(id: $0.id, enabled: $0.isChoosable) }, start: current))
         default:
             return false
         }

@@ -642,6 +642,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
                   let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
             ui.menu = nil
             command(.addChatToWorkspace(sessionID, workspaceID: workspaceID), orReject: true)
+        case .capacities(let list):
+            guard let id = list.selectedEnabled, let context = menu.setup.chat?.shownInWorkspace,
+                  let choice = context.capacities.first(where: { $0.id == id }) else { return playHaptic(.rejected) }
+            ui.menu = nil
+            command(.setWorkspaceCapacity(context.id, capacity: choice.capacity), orReject: true)
         case nil:
             guard let item = menu.top.selectedEnabled else { return playHaptic(.rejected) }
             if item.opensSubmenu {
@@ -677,13 +682,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .cycleMode:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             terminals.sendKey(.backTab, to: sessionID)
-        case .commands, .switchAccount, .addToWorkspace:
+        case .commands, .switchAccount, .addToWorkspace, .gridCapacity:
             break
         case .redraw:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             if !terminals.sendKey(.redraw, to: sessionID) { playHaptic(.rejected) }
         case .refreshTitle, .openProject, .revealInFinder, .toggleTileNote, .toggleNotes, .removeFromWorkspace,
-             .moveToNewWindow, .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob:
+             .moveToNewWindow, .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
+             .renameWorkspace:
             performChatAction(item, setup: setup)
         case .rename, .fork, .pin, .archive, .closeChat:
             guard let sessionID = setup.sessionID else { return playHaptic(.rejected) }

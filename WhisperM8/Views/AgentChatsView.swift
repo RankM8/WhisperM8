@@ -771,7 +771,6 @@ struct AgentChatsView: View {
                 mainWorkspace
                     .background { projectViewSyncWithoutSidebar }
                     .safeAreaInset(edge: .bottom, spacing: 0) { ControllerLegendHost(windowID: windowID) }
-                    .overlay(alignment: .bottom) { ControllerMenuHost(windowID: windowID) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if isInspectorVisible {
@@ -794,6 +793,7 @@ struct AgentChatsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .controllerMenuCardOverlay(windowID: windowID)
         }
         // Bewusst KEINE feste Mindestgröße mehr — der User soll das Fenster
         // so klein ziehen können, wie er will. Die einzige Untergrenze ist
@@ -2931,7 +2931,7 @@ struct AgentChatsView: View {
             } else {
                 activeChatStatusRow
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
+                    .padding(.vertical, 3).controllerMenuAnchor(.header, sessionID: selectedSessionID)
             }
         }
         .background(AgentTheme.header)

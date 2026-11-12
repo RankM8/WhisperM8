@@ -112,6 +112,8 @@ extension UISnapshotGallery {
                 chat.notesDefaultOpen = true
                 chat.tileNoteOpen = false
                 chat.removableWorkspaceName = "Marketing"
+                chat.shownInWorkspace = ControllerWorkspaceContext(
+                    id: UUID(), name: "Marketing", gridVisible: true, chatIsMember: true, isCurated: true)
                 chat.pendingAccountSwitchTarget = "work"
                 let setup = ControllerMenuSetup(
                     acceptsInput: true, profile: .claude, sessionID: session, target: .chat(session), chat: chat)
@@ -123,10 +125,10 @@ extension UISnapshotGallery {
                 var accounts = ControllerMenuModel(setup: setup, selected: .switchAccount)
                 _ = accounts.openSubmenu()
                 return AnyView(HStack(alignment: .top, spacing: 20) {
-                    ControllerMenuPanel(menu: ControllerMenuModel(setup: setup))
-                    ControllerMenuPanel(menu: ControllerMenuModel(setup: question))
-                    ControllerMenuPanel(menu: commands)
-                    ControllerMenuPanel(menu: accounts)
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: setup), fallbackTitle: nil)
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: question), fallbackTitle: nil)
+                    ControllerMenuCard(menu: commands, fallbackTitle: nil)
+                    ControllerMenuCard(menu: accounts, fallbackTitle: nil)
                 }.padding(20).frame(maxHeight: .infinity, alignment: .top))
             },
         ]

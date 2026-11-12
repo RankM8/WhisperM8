@@ -77,6 +77,9 @@ extension ControllerActionDispatcher {
         case .backgroundStop: chatCommand = .backgroundStop(sessionID)
         case .backgroundRestart: chatCommand = .backgroundRespawn(sessionID)
         case .stopJob: chatCommand = .stopSubagentJob(sessionID)
+        case .renameWorkspace:
+            guard let workspaceID = setup.chat?.shownInWorkspace?.id else { return playHaptic(.rejected) }
+            chatCommand = .renameWorkspace(workspaceID)
         default: return playHaptic(.rejected)
         }
         command(chatCommand, orReject: true)

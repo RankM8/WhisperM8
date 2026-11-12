@@ -1211,6 +1211,16 @@
         }
       }
     },
+    "Account · 5 h · week": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto · 5 Std. · Woche"
+          }
+        }
+      }
+    },
     "Account …%@": {
       "localizations": {
         "de": {
@@ -1487,6 +1497,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trag deine Abos ein, um zu sehen, wie viel mehr du aus ihnen herausholst."
+          }
+        }
+      }
+    },
+    "Add to another workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu anderem Workspace hinzufügen"
           }
         }
       }
@@ -6881,6 +6901,26 @@
         }
       }
     },
+    "Grid size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße"
+          }
+        }
+      }
+    },
+    "Grid size · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße · %@"
+          }
+        }
+      }
+    },
     "Grid · %@": {
       "localizations": {
         "de": {
@@ -7881,6 +7921,16 @@
         }
       }
     },
+    "Into the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In den Chat"
+          }
+        }
+      }
+    },
     "It is still running. Removing it stops the agent and deletes it from the supervisor.": {
       "localizations": {
         "de": {
@@ -8297,6 +8347,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hebel deiner Abos %@"
+          }
+        }
+      }
+    },
+    "Lifecycle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lebenszyklus"
           }
         }
       }
@@ -13024,6 +13084,16 @@
         }
       }
     },
+    "Remove from this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus diesem Workspace nehmen"
+          }
+        }
+      }
+    },
     "Remove from workspace": {
       "localizations": {
         "de": {
@@ -13210,6 +13280,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspace umbenennen"
+          }
+        }
+      }
+    },
+    "Rename workspace…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace umbenennen…"
           }
         }
       }
@@ -16120,16 +16200,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Konto wechseln"
-          }
-        }
-      }
-    },
-    "Switch account · used 5 h · week": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Konto wechseln · verbraucht 5 Std. · Woche"
           }
         }
       }
@@ -19324,6 +19394,16 @@
         }
       }
     },
+    "Workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace „%@“"
+          }
+        }
+      }
+    },
     "Workspace “%@” cannot open here: %@.": {
       "localizations": {
         "de": {
@@ -19640,6 +19720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Katalog vom %@"
+          }
+        }
+      }
+    },
+    "choose with the mouse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur mit der Maus"
           }
         }
       }
@@ -21050,6 +21140,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "⚠️ %@"
+          }
+        }
+      }
+    },
+    "✕ select · ○ back · Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ zurück · Options schließt"
+          }
+        }
+      }
+    },
+    "✕ select · ○ or Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ oder Options schließt"
           }
         }
       }

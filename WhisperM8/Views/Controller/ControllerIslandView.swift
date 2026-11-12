@@ -46,7 +46,7 @@ struct ControllerIslandCounts: Equatable {
 
 /// Farben der Insel. Immer dunkel: an der Notch wie die Hardware, ohne Notch
 /// im dunklen Glas der Diktat-Pille.
-private struct IslandPalette {
+struct IslandPalette {
     var background: Color
     var border: Color
     var text: Color

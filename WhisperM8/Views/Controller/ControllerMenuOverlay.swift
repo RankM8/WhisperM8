@@ -21,10 +21,16 @@ extension ControllerMenuItem {
         case .toggleTileNote: return chat?.tileNoteOpen == true ? String(localized: "Hide note") : String(localized: "Show note")
         case .toggleNotes: return chat?.notesDefaultOpen == true ? String(localized: "Notes off") : String(localized: "Notes on")
         case .removeFromWorkspace:
-            let name = chat?.removableWorkspaceName ?? ""
-            return String(localized: "Remove from workspace “\(name)”")
-        case .addToWorkspace: return String(localized: "Add to workspace")
+            // Die Gruppe nennt den Workspace schon in ihrer Überschrift.
+            return String(localized: "Remove from this workspace")
+        case .addToWorkspace:
+            return chat?.shownInWorkspace?.chatIsMember == true
+                ? String(localized: "Add to another workspace") : String(localized: "Add to workspace")
         case .moveToNewWindow: return String(localized: "Move to new window")
+        case .renameWorkspace: return String(localized: "Rename workspace…")
+        case .gridCapacity:
+            let current = chat?.shownInWorkspace?.capacities.first(where: \.isCurrent)?.label
+            return current.map { String(localized: "Grid size · \($0)") } ?? String(localized: "Grid size")
         case .restart: return String(localized: "Restart")
         case .backgroundLogs: return String(localized: "Show logs")
         case .backgroundStop: return String(localized: "Stop")
@@ -39,9 +45,25 @@ extension ControllerMenuItem {
     /// Kurzer Hinweis rechts: was in den Chat geht, oder dass eine zweite Ebene folgt.
     var hint: String? {
         switch self {
-        case .commands, .switchAccount, .addToWorkspace: return "›"
+        case .commands, .switchAccount, .addToWorkspace, .gridCapacity: return "›"
         case .cycleMode: return "⇧⇥"
         default: return nil
+        }
+    }
+}
+
+extension ControllerMenuItem.Group {
+    /// Überschrift der Gruppe in der Menü-Karte.
+    func heading(chat: ControllerChatActionInfo?) -> String {
+        switch self {
+        case .input: return String(localized: "Into the chat")
+        case .chat: return String(localized: "Chat")
+        case .project: return String(localized: "Project")
+        case .workspace:
+            guard let name = chat?.shownInWorkspace?.name else { return String(localized: "Workspace") }
+            return String(localized: "Workspace “\(name)”")
+        case .lifecycle: return String(localized: "Lifecycle")
+        case .controller: return String(localized: "Controller")
         }
     }
 }
@@ -53,6 +75,8 @@ struct ControllerMenuRow: Identifiable, Equatable {
     var hint: String?
     var enabled = true
     var startsGroup = false
+    /// Überschrift über der Zeile: Beginn einer Gruppe in der Menü-Karte.
+    var groupHeading: String? = nil
     /// Plakette hinter dem Titel („am meisten frei“).
     var badge: String? = nil
     /// Verbrauch rechts, in Ampelfarbe (Konto-Menü, Runde 5).
@@ -106,11 +130,21 @@ extension ControllerMenuRow {
                     id: choice.id.uuidString, title: choice.name, hint: nil,
                     enabled: list.isEnabled(choice.id.uuidString))
             }
+        case .capacities(let list):
+            let choices = menu.setup.chat?.shownInWorkspace?.capacities ?? []
+            return choices.map { choice in
+                ControllerMenuRow(
+                    id: choice.id, title: choice.label,
+                    hint: choice.isCurrent ? String(localized: "current")
+                        : (choice.needsSelection ? String(localized: "choose with the mouse") : nil),
+                    enabled: list.isEnabled(choice.id))
+            }
         case nil:
             return menu.top.entries.map { entry in
                 ControllerMenuRow(
                     id: entry.id.rawValue, title: entry.id.title(chat: menu.setup.chat), hint: entry.id.hint,
-                    enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id))
+                    enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id),
+                    groupHeading: menu.groupStart(entry.id)?.heading(chat: menu.setup.chat))
             }
         }
     }
@@ -143,7 +177,8 @@ extension ControllerMenuRow {
     /// Markierte Zeile, je nach Ebene.
     static func selectedID(of menu: ControllerMenuModel) -> String? {
         switch menu.submenu {
-        case .commands(let list), .accounts(let list), .workspaces(let list): return list.selected
+        case .commands(let list), .accounts(let list), .workspaces(let list), .capacities(let list):
+            return list.selected
         case nil: return menu.selected?.rawValue
         }
     }
@@ -152,8 +187,9 @@ extension ControllerMenuRow {
     static func heading(of menu: ControllerMenuModel, fallback: String?) -> String {
         switch menu.submenu {
         case .commands: return String(localized: "Commands")
-        case .accounts: return String(localized: "Switch account · used 5 h · week")
+        case .accounts: return String(localized: "Account · 5 h · week")
         case .workspaces: return String(localized: "Add to workspace")
+        case .capacities: return String(localized: "Grid size")
         case nil: return menu.setup.chat?.title ?? fallback ?? String(localized: "Menu")
         }
     }
@@ -187,9 +223,9 @@ extension ControllerSlashCommand {
     }
 }
 
-/// Menü des Controllers: kurze Liste mit Markierung, bedient mit Stick oder
-/// Steuerkreuz. Dasselbe Panel zeigt das Options-Menü im Chat (mit zweiter
-/// Ebene) und das Menü im Zwischenablage-Verlauf.
+/// Menü des Controllers im Zwischenablage-Verlauf: kurze Liste mit
+/// Markierung, bedient mit Stick oder Steuerkreuz. Das Options-Menü im Chat
+/// zeichnet `ControllerMenuCard`.
 struct ControllerMenuPanel: View {
     let heading: String
     let rows: [ControllerMenuRow]
@@ -199,14 +235,6 @@ struct ControllerMenuPanel: View {
         self.heading = heading
         self.rows = rows
         self.selectedID = selectedID
-    }
-
-    /// Options-Menü (beide Ebenen).
-    init(menu: ControllerMenuModel, fallbackHeading: String? = nil) {
-        self.init(
-            heading: ControllerMenuRow.heading(of: menu, fallback: fallbackHeading),
-            rows: ControllerMenuRow.rows(of: menu),
-            selectedID: ControllerMenuRow.selectedID(of: menu))
     }
 
     var body: some View {
@@ -302,25 +330,6 @@ extension View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(AppTheme.accent, lineWidth: 2)
                     )
-            }
-        }
-    }
-}
-
-/// Zeigt das Options-Menü im aktiven Agent-Chats-Fenster. Eigene kleine
-/// View, damit nur sie das `ControllerUIModel` beobachtet. (Die Auswahl von
-/// Chats und Workspaces zeigt seit Runde 4 die Insel an der Notch.)
-struct ControllerMenuHost: View {
-    let windowID: UUID
-    @State private var model = ControllerUIModel.shared
-    @State private var windows = AgentWindowStore.shared
-
-    var body: some View {
-        if windows.keyAgentChatWindowID == windowID {
-            if let menu = model.menu {
-                ControllerMenuPanel(menu: menu, fallbackHeading: model.targetTitle)
-                    .padding(.bottom, ControllerLegendBar.height + 12)
-                    .transition(.opacity)
             }
         }
     }

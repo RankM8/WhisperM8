@@ -25,10 +25,12 @@ extension AgentChatsView {
 
         // Workspace: nur angelegte Workspaces (Projekt-Ansichten verwalten
         // ihre Mitglieder selbst), wie das Kontextmenü.
-        let visible = isGridActive ? activeGridWorkspaceEntity : nil
-        if let visible, visible.sourceProjectID == nil, visible.slotIndex(of: session.id) != nil {
-            info.removableWorkspaceName = visible.name
+        let context = controllerWorkspaceContext(for: session.id)
+        info.shownInWorkspace = context
+        if let context, context.isCurated, context.chatIsMember {
+            info.removableWorkspaceName = context.name
         }
+        let visible = isGridActive ? activeGridWorkspaceEntity : nil
         let curated = windowStore.gridWorkspaces.filter { $0.sourceProjectID == nil && $0.slotIndex(of: session.id) == nil }
         info.addableWorkspaces = ControllerWorkspaceChoice.choices(
             from: curated, currentID: nil, status: { AgentSessionStatusCoordinator.shared.statusStore.status(for: $0) })
@@ -42,6 +44,35 @@ extension AgentChatsView {
 
         info.pendingAccountSwitchTarget = AccountSwitchCoordinator.shared.pending[session.id]?.targetName
         info.canUndoAccountSwitch = hasUndoableAccountMove
+    }
+
+    /// Workspace, in dem der Chat gerade gezeigt wird: das sichtbare Raster
+    /// (auch für eine markierte Zeile der Liste, dann wirken Notizen,
+    /// Umbenennen und Rastergröße auf dieses Raster) oder der Workspace, aus
+    /// dem der Chat groß gemacht wurde. Liest nur Speicher (Store, gemessene
+    /// Rasterfläche), kein I/O.
+    private func controllerWorkspaceContext(for sessionID: UUID) -> ControllerWorkspaceContext? {
+        guard let entity = activeGridWorkspaceEntity else { return nil }
+        let isMember = entity.slotIndex(of: sessionID) != nil
+        guard isGridActive || (isMember && selectedSessionID == sessionID) else { return nil }
+        let isCurated = entity.sourceProjectID == nil
+        var context = ControllerWorkspaceContext(
+            id: entity.id, name: entity.name, gridVisible: isGridActive, chatIsMember: isMember, isCurated: isCurated,
+            shrinkSelectionActive: gridShrinkSelection?.workspaceID == entity.id)
+        guard isCurated else { return context }
+        // Dieselben Stufen wie der Stufenwähler: die aktuelle und alle, die in
+        // die zuletzt gemessene Rasterfläche passen.
+        let area = gridAreaSize.size
+        context.capacities = AgentGridWorkspace.allowedCapacities
+            .filter { $0 == entity.capacity || GridCapacityPicker.stageFits($0, in: area) }
+            .map { stage in
+                let needsSelection = stage < entity.capacity
+                    && !windowStore.previewCapacityChange(of: entity.id, to: stage).isEmpty
+                return ControllerCapacityChoice(
+                    capacity: stage, label: Self.capacityLabel(stage),
+                    isCurrent: stage == entity.capacity, needsSelection: needsSelection)
+            }
+        return context
     }
 
     /// Ist die Notiz-Karte der Kachel gerade offen? Dieselbe Regel wie die
@@ -111,10 +142,30 @@ extension AgentChatsView {
             JarvisNotesShortcut.toggleDefault(windowID: windowID)
             return true
         case .removeChatFromWorkspace(let id):
-            guard isGridActive, let entity = activeGridWorkspaceEntity, entity.sourceProjectID == nil,
-                  entity.slotIndex(of: id) != nil else { return false }
+            // Im Raster oder aus der großen Kachel heraus.
+            guard isGridActive || selectedSessionID == id, let entity = activeGridWorkspaceEntity,
+                  entity.sourceProjectID == nil, entity.slotIndex(of: id) != nil else { return false }
             removeSessionFromWorkspace(id, workspaceID: entity.id)
             return true
+        case .renameWorkspace(let workspaceID):
+            // Dasselbe Sheet wie „Umbenennen…“ im Kontextmenü der Seitenleiste.
+            guard let entity = windowStore.gridWorkspace(id: workspaceID), entity.sourceProjectID == nil else {
+                return false
+            }
+            renameWorkspaceDraft = entity.name
+            renameWorkspaceTargetID = entity.id
+            return true
+        case .setWorkspaceCapacity(let workspaceID, let capacity):
+            // Wie der Stufenwähler (`requestCapacityChange`), aber ohne den
+            // Auswahlmodus „wer bleibt“: Den bedient man mit der Maus an den
+            // Kacheln. Bräuchte das Verkleinern ihn, geht der Befehl nicht.
+            guard let entity = windowStore.gridWorkspace(id: workspaceID), entity.sourceProjectID == nil,
+                  AgentGridWorkspace.allowedCapacities.contains(capacity), capacity != entity.capacity,
+                  gridShrinkSelection == nil else { return false }
+            if capacity < entity.capacity, !windowStore.previewCapacityChange(of: workspaceID, to: capacity).isEmpty {
+                return false
+            }
+            return windowStore.setCapacity(ofGridWorkspace: workspaceID, to: capacity) == .applied
         case .addChatToWorkspace(let id, let workspaceID):
             guard session(id) != nil, let entity = windowStore.gridWorkspace(id: workspaceID),
                   entity.slotIndex(of: id) == nil else { return false }

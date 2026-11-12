@@ -154,7 +154,8 @@ final class ControllerMenuModelTests: XCTestCase {
             .continueWork, .commands, .cycleMode, .redraw,
             .switchAccount, .rename, .refreshTitle, .fork, .pin, .archive, .closeChat,
             .openProject, .revealInFinder,
-            .toggleTileNote, .toggleNotes, .removeFromWorkspace, .addToWorkspace, .moveToNewWindow,
+            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+            .renameWorkspace, .gridCapacity,
             .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
             .clipboardHistory, .showBindings, .pause,
         ])
@@ -165,31 +166,110 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(visible(model), [.continueWork, .commands, .cycleMode, .redraw, .rename, .pin, .archive,
                                         .closeChat, .clipboardHistory, .showBindings, .pause])
         XCTAssertEqual(model.top.entries.map(\.id).filter(model.startsGroup), [.rename, .clipboardHistory])
+        // Die Karte zeigt jede Gruppe mit Überschrift, auch die erste.
+        XCTAssertEqual(model.top.entries.compactMap { model.groupStart($0.id) }, [.input, .chat, .controller])
     }
 
-    func testHeadActionsAppearWhenTheyFit() {
+    private func workspaceChat(gridVisible: Bool = true, member: Bool = true, curated: Bool = true) -> ControllerChatActionInfo {
         var chat = ControllerChatActionInfo(title: "Chat")
         chat.hasProject = true
         chat.projectOpenTargetName = "PhpStorm"
         chat.canRefreshTitle = true
         chat.canRestart = true
         chat.hasTab = true
-        chat.notesAvailable = true
-        chat.tileNoteOpen = false
-        chat.removableWorkspaceName = "Marketing"
+        chat.notesAvailable = gridVisible
+        chat.tileNoteOpen = gridVisible && member ? false : nil
+        chat.removableWorkspaceName = member && curated ? "Marketing" : nil
+        chat.addableWorkspaces = [ControllerWorkspaceChoice(
+            id: UUID(), name: "Ops", colorHex: "#fff", chatCount: 1, hasWaitingChat: false, isCurrent: false)]
+        chat.shownInWorkspace = ControllerWorkspaceContext(
+            id: UUID(), name: "Marketing", gridVisible: gridVisible, chatIsMember: member, isCurated: curated,
+            capacities: curated ? [
+                ControllerCapacityChoice(capacity: 2, label: "1×2", isCurrent: false, needsSelection: true),
+                ControllerCapacityChoice(capacity: 4, label: "2×2", isCurrent: true, needsSelection: false),
+                ControllerCapacityChoice(capacity: 6, label: "3×2", isCurrent: false, needsSelection: false),
+            ] : [])
+        return chat
+    }
+
+    func testHeadActionsAppearWhenTheyFit() {
+        let model = ControllerMenuModel(setup: setup(chat: workspaceChat()))
+        XCTAssertEqual(visible(model), [
+            .continueWork, .commands, .cycleMode, .redraw,
+            .rename, .refreshTitle, .pin, .archive, .closeChat,
+            .openProject, .revealInFinder,
+            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+            .renameWorkspace, .gridCapacity,
+            .restart,
+            .clipboardHistory, .showBindings, .pause,
+        ])
+        XCTAssertEqual(visible(model).filter(model.startsGroup),
+                       [.rename, .openProject, .removeFromWorkspace, .restart, .clipboardHistory])
+    }
+
+    /// Ohne Workspace gibt es die Gruppe nicht: „Zu Workspace hinzufügen“ und
+    /// „In neues Fenster“ stehen dann unter „Chat“.
+    func testWithoutWorkspaceAddAndMoveBelongToTheChatGroup() {
+        var chat = ControllerChatActionInfo(title: "Chat")
+        chat.hasTab = true
         chat.addableWorkspaces = [ControllerWorkspaceChoice(
             id: UUID(), name: "Ops", colorHex: "#fff", chatCount: 1, hasWaitingChat: false, isCurrent: false)]
         let model = ControllerMenuModel(setup: setup(chat: chat))
         XCTAssertEqual(visible(model), [
             .continueWork, .commands, .cycleMode, .redraw,
-            .rename, .refreshTitle, .pin, .archive, .closeChat,
-            .openProject, .revealInFinder,
-            .toggleTileNote, .toggleNotes, .removeFromWorkspace, .addToWorkspace, .moveToNewWindow,
-            .restart,
+            .rename, .pin, .archive, .closeChat, .addToWorkspace, .moveToNewWindow,
             .clipboardHistory, .showBindings, .pause,
         ])
-        XCTAssertEqual(visible(model).filter(model.startsGroup),
-                       [.rename, .openProject, .toggleTileNote, .restart, .clipboardHistory])
+        XCTAssertNil(model.groupStart(.addToWorkspace))
+        XCTAssertFalse(model.top.entries.contains { model.group(of: $0.id) == .workspace })
+    }
+
+    /// Große Kachel (Einzelansicht aus dem Raster): Aus dem Workspace nehmen,
+    /// Umbenennen und Rastergröße, aber keine Notizen (die gibt es nur an Kacheln).
+    func testMaximizedTileShowsTheWorkspaceWithoutNotes() {
+        let model = ControllerMenuModel(setup: setup(chat: workspaceChat(gridVisible: false)))
+        let workspace = visible(model).filter { model.group(of: $0) == .workspace }
+        XCTAssertEqual(workspace, [.removeFromWorkspace, .addToWorkspace, .moveToNewWindow, .renameWorkspace, .gridCapacity])
+    }
+
+    /// Projekt-Ansicht: weder Umbenennen noch Rastergröße noch Herausnehmen
+    /// (wie Seitenleiste und Workspace-Kopf).
+    func testProjectViewHasNoRenameOrCapacity() {
+        let model = ControllerMenuModel(setup: setup(chat: workspaceChat(curated: false)))
+        let items = visible(model)
+        XCTAssertFalse(items.contains(.renameWorkspace) || items.contains(.gridCapacity) || items.contains(.removeFromWorkspace))
+        XCTAssertTrue(items.contains(.toggleNotes))
+    }
+
+    /// Rastergröße: Start auf der aktuellen Stufe; Verkleinern mit Auswahl
+    /// „wer bleibt“ ist aus, der Schritt überspringt es.
+    func testGridCapacitySubmenu() {
+        var model = ControllerMenuModel(setup: setup(chat: workspaceChat()), selected: .gridCapacity)
+        XCTAssertTrue(model.openSubmenu())
+        guard case .capacities(var list) = model.submenu else { return XCTFail("keine Stufen") }
+        XCTAssertEqual(list.selected, "capacity:4")
+        XCTAssertNil(list.selectedEnabled)
+        XCTAssertFalse(list.isEnabled("capacity:2"))
+        list.move(1)
+        XCTAssertEqual(list.selected, "capacity:6")
+        list.move(1)
+        XCTAssertEqual(list.selected, "capacity:6", "nur eine wählbare Stufe")
+        model.move(1)
+        XCTAssertTrue(model.back())
+    }
+
+    func testGridCapacityIsOffDuringShrinkSelection() {
+        var chat = workspaceChat()
+        chat.shownInWorkspace?.shrinkSelectionActive = true
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.gridCapacity, setup: setup(chat: chat)))
+        var onlyCurrent = workspaceChat()
+        onlyCurrent.shownInWorkspace?.capacities = [
+            ControllerCapacityChoice(capacity: 2, label: "1×2", isCurrent: false, needsSelection: true),
+            ControllerCapacityChoice(capacity: 4, label: "2×2", isCurrent: true, needsSelection: false),
+        ]
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.gridCapacity, setup: setup(chat: onlyCurrent)))
+        var model = ControllerMenuModel(setup: setup(chat: onlyCurrent), selected: .gridCapacity)
+        XCTAssertFalse(model.openSubmenu())
     }
 
     func testBackgroundChatAndJob() {
