@@ -70,7 +70,7 @@ extension NotchStatusController {
             slot.lastDisplay = display
             slot.viewModel.display = display
         }
-        updatePillMouse(slot, display: display, frameHeight: frame.height)
+        updatePillMouse(slot, display: display)
         // Während des Ziehens bestimmt die Maus die Lage.
         if frame != slot.lastFrame, slot.dragOrigin == nil {
             slot.lastFrame = frame
@@ -198,10 +198,11 @@ extension NotchStatusController {
                     systemReportsFullScreen: systemFullScreen,
                     windowIsFullScreen: Self.accessibilityReportsFullScreen)
             }
+            let result = hidden
             await MainActor.run { [weak self] in
                 guard let self, self.fullscreenGeneration == generation else { return }
                 var changed = false
-                for (kind, value) in hidden {
+                for (kind, value) in result {
                     guard let slot = self.slots[kind], slot.isFullscreenHidden != value else { continue }
                     slot.isFullscreenHidden = value
                     changed = true
@@ -274,29 +275,42 @@ extension NotchStatusController {
     /// zieht, unter 4 pt Bewegung ist es ein Klick (Liste auf und zu), ein
     /// Doppelklick setzt sie oben mittig zurück. Bei offener Liste gilt das
     /// nur für den Kopf; die Zeilen bleiben normale Knöpfe.
-    private func updatePillMouse(_ slot: NotchSlot, display: NotchDisplay, frameHeight: CGFloat) {
+    private func updatePillMouse(_ slot: NotchSlot, display: NotchDisplay) {
         guard let host = slot.host else { return }
         guard slot.kind == .pill, !display.isNotch else {
             host.pillMouse = nil
             return
         }
-        let header = NotchGeometry.pillHeight
-        // Fensterkoordinaten, Ursprung unten links.
-        host.pillMouseArea = display.isExpanded
-            ? CGRect(x: 0, y: display.opensUpward ? 0 : frameHeight - header, width: .greatestFiniteMagnitude, height: header)
-            : nil
+        host.pillHeaderOnly = display.isExpanded
+        host.pillHeaderAtBottom = display.opensUpward
         guard host.pillMouse == nil else { return }
         let kind = slot.kind
         host.pillMouse = NotchPillMouse(
             began: { [weak self] in self?.pillDragBegan(kind) },
             dragged: { [weak self] in self?.pillDragged(kind, by: $0) },
             ended: { [weak self] in self?.pillDragEnded(kind, moved: $0) },
-            doubleClick: { [weak self] in self?.resetPillPosition(kind) })
+            doubleClick: { [weak self] in self?.pillDoubleClicked(kind) })
     }
 
     private func pillDragBegan(_ kind: NotchPlacement.Kind) {
         guard let slot = slots[kind], let panel = slot.panel else { return }
-        slot.dragOrigin = isExpanded ? nil : panel.frame.origin
+        let expandedHere = expandedKind == kind
+        slot.pressStartedExpanded = expandedHere
+        // Offene Liste hier: nicht ziehen. Eine offene Liste an der Notch
+        // des anderen Bildschirms hindert nicht.
+        slot.dragOrigin = expandedHere ? nil : panel.frame.origin
+    }
+
+    /// Doppelklick: zurücksetzen nur, wenn die Pille vor dem ersten Klick zu
+    /// war (der erste Klick hat dann die Liste geöffnet). War sie offen, ist
+    /// es schnelles Zu und wieder Auf, die gemerkte Lage bleibt.
+    private func pillDoubleClicked(_ kind: NotchPlacement.Kind) {
+        guard let slot = slots[kind] else { return }
+        if slot.pressStartedExpanded {
+            toggleExpanded(kind)
+        } else {
+            resetPillPosition(kind)
+        }
     }
 
     /// Fenster mit der Maus mitführen, die Pille bleibt im sichtbaren Bereich

@@ -34,14 +34,18 @@ enum ControllerIslandGeometry {
     /// Rand für den Schatten der Pille (wie `OverlayFrameResolver.contentMargin`).
     static let shadowMargin: CGFloat = 24
 
-    /// Mittelpunkt der Pille ohne Notch. Ohne sichtbare Menüleiste
-    /// (Vollbild, automatisch ausgeblendet) oben am Bildschirmrand.
-    static func pillCenter(screen: NotchScreenInfo, stored: NotchPillPosition?) -> CGPoint {
-        NotchPillPlacement.center(screen, stored: stored, fallbackMenuBar: false)
+    /// Mittelpunkt der Pille ohne Notch: der der sichtbaren Pille, wenn es
+    /// sie gibt (`visible`, die Insel wächst genau aus ihr, auch bei
+    /// automatisch ausgeblendeter Menüleiste). Sonst die gemerkte Lage; ohne
+    /// sichtbare Menüleiste (Vollbild) oben am Bildschirmrand.
+    static func pillCenter(screen: NotchScreenInfo, stored: NotchPillPosition?, visible: CGPoint? = nil) -> CGPoint {
+        visible ?? NotchPillPlacement.center(screen, stored: stored, fallbackMenuBar: false)
     }
 
     /// Sichtbarer Rahmen der Insel (ohne Schattenrand).
-    static func frame(screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil) -> CGRect {
+    static func frame(
+        screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil, visiblePill: CGPoint? = nil
+    ) -> CGRect {
         if screen.hasNotch {
             // `bodySize` enthält das Band schon (die Ansicht zeichnet es mit).
             // An der Notch liegt das Band auch im Vollbild in der Aussparung.
@@ -49,17 +53,22 @@ enum ControllerIslandGeometry {
                 x: screen.notchCenterX - bodySize.width / 2, y: screen.frame.maxY - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
         }
+        let center = pillCenter(screen: screen, stored: stored, visible: visiblePill)
+        // Mit sichtbarer Pille gilt deren Begrenzung (Menüleiste wie bei ihr).
         return NotchPillPlacement.frame(
-            size: bodySize, growingFrom: pillCenter(screen: screen, stored: stored), on: screen, fallbackMenuBar: false)
+            size: bodySize, growingFrom: center, on: screen, fallbackMenuBar: visiblePill != nil)
     }
 
-    static func opensUpward(screen: NotchScreenInfo, stored: NotchPillPosition?) -> Bool {
-        !screen.hasNotch && NotchPillPlacement.opensUpward(center: pillCenter(screen: screen, stored: stored), on: screen)
+    static func opensUpward(screen: NotchScreenInfo, stored: NotchPillPosition?, visiblePill: CGPoint? = nil) -> Bool {
+        !screen.hasNotch && NotchPillPlacement.opensUpward(
+            center: pillCenter(screen: screen, stored: stored, visible: visiblePill), on: screen)
     }
 
     /// Fensterrahmen: ohne Notch mit Rand für den Schatten.
-    static func panelFrame(screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil) -> CGRect {
-        let visible = frame(screen: screen, bodySize: bodySize, stored: stored)
+    static func panelFrame(
+        screen: NotchScreenInfo, bodySize: CGSize, stored: NotchPillPosition? = nil, visiblePill: CGPoint? = nil
+    ) -> CGRect {
+        let visible = frame(screen: screen, bodySize: bodySize, stored: stored, visiblePill: visiblePill)
         return screen.hasNotch ? visible : visible.insetBy(dx: -shadowMargin, dy: -shadowMargin)
     }
 
@@ -101,14 +110,16 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         }
         // Ohne Notch wächst die Insel aus der Pille, an ihrer gemerkten Lage.
         let stored = screen.hasNotch ? nil : AppPreferences.shared.notchPillPositions[screen.pillStorageKey]
+        let visiblePill = screen.hasNotch ? nil : NotchStatusController.shared.visiblePillCenter(onDisplay: screen.displayID)
         let display = ControllerIslandDisplay(
             style: ControllerIslandGeometry.style(for: screen), model: model, counts: counts,
-            opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored))
+            opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored, visiblePill: visiblePill))
         let panel = ensurePanel()
         let wasShown = panel.isVisible && viewModel.revealed
         generation += 1
         if viewModel.display != display { viewModel.display = display }
-        let frame = ControllerIslandGeometry.panelFrame(screen: screen, bodySize: measure(display), stored: stored)
+        let frame = ControllerIslandGeometry.panelFrame(
+            screen: screen, bodySize: measure(display), stored: stored, visiblePill: visiblePill)
         if frame != lastFrame {
             lastFrame = frame
             panel.setFrame(frame, display: true)

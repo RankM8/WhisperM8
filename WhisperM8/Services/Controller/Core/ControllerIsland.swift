@@ -198,6 +198,17 @@ struct ControllerWhereToState: Equatable, Sendable {
         }
     }
 
+    /// Reihenfolge der Chat-Zeilen: die der Liste links, dazu der vorige
+    /// Chat, falls sie ihn gerade nicht zeigt (Filter, Suche, eingeklappt,
+    /// Archiv) — gleich hinter dem aktuellen, wie bei Cmd-Tab.
+    static func chatOrder(_ order: [UUID], current: UUID?, previous: Destination) -> [UUID] {
+        guard case let .chat(id) = previous, !order.contains(id) else { return order }
+        var result = order
+        let index = current.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
+        result.insert(id, at: index)
+        return result
+    }
+
     func isPrevious(chat id: UUID) -> Bool { previous == .chat(id) }
     func isPrevious(workspace id: UUID) -> Bool { previous == .workspace(id) }
 

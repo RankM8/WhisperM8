@@ -459,9 +459,11 @@ struct ControllerIslandView: View {
             footItem(ControllerButton.l2.glyph, String(localized: "release: switch"), round: false)
             footItem(ControllerButton.circle.glyph, String(localized: "cancel"))
             footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
-            if tab == .chats {
-                footItem(ControllerButton.r2.glyph, String(localized: "go + dictate"), round: false)
-            }
+            // Im Reiter Workspaces diktiert R2 nur, wenn die Markierung auf
+            // dem aktuellen Workspace steht (in den aktuellen Chat).
+            footItem(ControllerButton.r2.glyph,
+                     tab == .chats ? String(localized: "go + dictate") : String(localized: "dictate here"),
+                     round: false)
         }
         .font(.system(size: 11))
         .foregroundStyle(palette.secondary)

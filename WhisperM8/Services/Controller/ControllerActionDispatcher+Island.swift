@@ -93,12 +93,17 @@ extension ControllerActionDispatcher {
             setup = menuSetup
             content = .quickDraw(ControllerQuickDrawSlots(setup: menuSetup))
         case .whereTo:
-            // Reihenfolge wie die Liste links, jeder Chat einmal.
-            let order = SidebarChatOrder.sessions(in: currentListRows().map(\.row))
+            // Reihenfolge wie die Liste links, jeder Chat einmal. Der vorige
+            // Chat steht immer darin, auch wenn die Liste ihn gerade nicht
+            // zeigt (Filter, Suche, eingeklappt): Loslassen soll dorthin
+            // führen wie Tippen.
+            let previous = Self.whereToPrevious(window.backTarget)
+            let order = ControllerWhereToState.chatOrder(
+                SidebarChatOrder.sessions(in: currentListRows().map(\.row)), current: sessionID, previous: previous)
             content = .whereTo(ControllerWhereToState(
                 chats: islandChatRows(order, sessionID), currentChatID: sessionID,
                 workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
-                previous: Self.whereToPrevious(window.backTarget)))
+                previous: previous))
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
@@ -164,7 +169,7 @@ extension ControllerActionDispatcher {
         defer { spentLayer = nil }
         guard let whereTo = islandState?.model.whereTo else { return closeIsland() }
         closeIsland()
-        if !go(to: whereTo.destination) { playHaptic(.rejected) }
+        if !go(to: whereTo.destination, previous: whereTo.previous) { playHaptic(.rejected) }
     }
 
     /// Kreuz (`dictate == false`) oder R2. Steht die Markierung auf dem
@@ -173,12 +178,13 @@ extension ControllerActionDispatcher {
     /// Insel bleibt) — „hin und diktieren“ braucht einen Chat.
     func commitWhereTo(dictate: Bool) {
         guard spentLayer != .whereTo else { return }
-        let destination = islandState?.model.whereTo?.destination ?? .stay
+        let whereTo = islandState?.model.whereTo
+        let destination = whereTo?.destination ?? .stay
         if dictate, case .workspace = destination {
             return playHaptic(.rejected)
         }
         spendIsland(.whereTo)
-        let switched = go(to: destination)
+        let switched = go(to: destination, previous: whereTo?.previous ?? .stay)
         guard dictate else {
             if !switched { playHaptic(.rejected) }
             return
@@ -203,16 +209,21 @@ extension ControllerActionDispatcher {
         command(.nextWaitingChat, orReject: true)
     }
 
-    /// Wechsel wie bisher: ein Chat wie der Klick in der Seitenleiste (wie
-    /// L1/R1), ein Workspace wie der Klick auf seinen Kopf — Konflikte und die
-    /// gemerkte Kachel je Workspace inklusive. `false`, wenn der Wechsel nicht
-    /// ging; „geht nicht“ meldet der Aufrufer.
+    /// Wechsel: Ist das Ziel der vorige Ort, derselbe Weg wie L2 getippt
+    /// (`lastChat`), damit Halten und Tippen gleich enden. Sonst ein Chat wie
+    /// der Klick in der Seitenleiste (wie L1/R1), ein Workspace wie der Klick
+    /// auf seinen Kopf mit der gemerkten Kachel, aber still: Gehört er einem
+    /// anderen Fenster, kommt nichts nach vorn und kein Dialog. `false`, wenn
+    /// der Wechsel nicht ging; „geht nicht“ meldet der Aufrufer.
     @discardableResult
-    private func go(to destination: ControllerWhereToState.Destination) -> Bool {
+    private func go(
+        to destination: ControllerWhereToState.Destination, previous: ControllerWhereToState.Destination
+    ) -> Bool {
+        if destination != .stay, destination == previous { return command(.lastChat, orReject: false) }
         switch destination {
         case .stay: return true
         case let .chat(sessionID): return command(.selectSession(sessionID), orReject: false)
-        case let .workspace(workspaceID): return command(.activateWorkspace(workspaceID), orReject: false)
+        case let .workspace(workspaceID): return command(.switchToWorkspace(workspaceID), orReject: false)
         }
     }
 

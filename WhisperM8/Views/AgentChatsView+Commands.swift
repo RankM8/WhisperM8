@@ -183,6 +183,9 @@ extension AgentChatsView {
             guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
             activateWorkspaceFromSidebar(entity)
             return true
+        case .switchToWorkspace(let workspaceID):
+            guard let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
+            return activateWorkspaceFromSidebar(entity, reportConflicts: false)
         case .openProjectAsWorkspace(let projectID, let activeSessionIDs):
             guard let project = workspace.projects.first(where: { $0.id == projectID }) else { return false }
             openProjectAsWorkspace(project, activeSessionIDs: activeSessionIDs)

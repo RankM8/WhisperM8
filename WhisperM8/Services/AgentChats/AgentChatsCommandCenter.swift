@@ -53,6 +53,11 @@ enum AgentChatsCommand: Equatable {
     case selectWorkspaceChat(UUID, workspaceID: UUID)
     /// Workspace als Raster öffnen.
     case activateWorkspace(UUID)
+    /// Workspace als Raster öffnen wie `activateWorkspace`, aber still: Gehört
+    /// er einem anderen Fenster oder laufen seine Chats dort, kommt kein
+    /// Fenster nach vorn und kein Dialog, der Befehl meldet nur „ging nicht“.
+    /// Für die Insel am Controller (L2 „Wohin“).
+    case switchToWorkspace(UUID)
     /// Projekt als Workspace seiner aktiven Chats öffnen.
     case openProjectAsWorkspace(UUID, activeSessionIDs: Set<UUID>)
     case setSidebarVisible(Bool)

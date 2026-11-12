@@ -19214,6 +19214,16 @@
         }
       }
     },
+    "dictate here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hier diktieren"
+          }
+        }
+      }
+    },
     "different definitions per account — not copied": {
       "localizations": {
         "de": {

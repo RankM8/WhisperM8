@@ -99,6 +99,10 @@ final class NotchSlot {
     var isFullscreenHidden = false
     /// Ursprung des Fensters beim Beginn eines Ziehens (nur Pille).
     var dragOrigin: CGPoint?
+    /// Die Liste war beim letzten Drücken schon offen. Ein Doppelklick setzt
+    /// die Pille nur zurück, wenn sie davor zu war; sonst ist er schnelles
+    /// Zu und Auf.
+    var pressStartedExpanded = false
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -458,6 +462,14 @@ final class NotchStatusController {
         panel.orderOut(nil)
         panel.orderFrontRegardless()
         isReleasingKey = false
+    }
+
+    /// Für die Controller-Insel: Mittelpunkt der sichtbaren Pille auf diesem
+    /// Bildschirm, damit die Insel genau aus ihr wächst (`nil` ohne Pille).
+    func visiblePillCenter(onDisplay displayID: UInt32) -> CGPoint? {
+        guard config.isActive, let slot = slots[.pill], slot.panel?.isVisible == true,
+              let screen = slot.screen, screen.displayID == displayID else { return nil }
+        return pillCenter(on: screen)
     }
 
     /// Für die Controller-Insel: die Zähler, wenn die Anzeige gerade auf

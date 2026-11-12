@@ -96,8 +96,14 @@ Diktat-Pille). Die Stelle merkt sich jeder Bildschirm einzeln, über seine feste
 Display-UUID (`CGDisplayCreateUUIDFromDisplayID`), nicht über die Nummer, und
 als Anteil am Bildschirm, damit sie nach einem Auflösungswechsel passt. Ein
 Doppelklick auf die Pille setzt sie oben mittig zurück (eine Liste, die der
-erste Klick geöffnet hat, klappt dabei zu). Bei offener Liste wird nicht
-gezogen: Ein Klick auf den Kopf klappt sie zu, die Zeilen bleiben Knöpfe. Sitzt die Pille in der unteren
+erste Klick geöffnet hat, klappt dabei zu). Zurückgesetzt wird nur, wenn die
+Pille vor dem ersten Klick zu war; zwei schnelle Klicks auf eine offene Liste
+sind Zu und wieder Auf, die gemerkte Stelle bleibt. Ob ein Klick im Kopf liegt,
+wird aus der Fensterhöhe im Moment des Klicks bestimmt
+(`NotchPillPlacement.isInHeader`), damit der zweite Klick auch während der
+Aufklapp-Animation ankommt. Bei offener Liste wird nicht gezogen: Ein Klick
+auf den Kopf klappt sie zu, die Zeilen bleiben Knöpfe. Eine offene Liste an
+der Notch des anderen Bildschirms hindert das Ziehen nicht. Sitzt die Pille in der unteren
 Bildschirmhälfte, wächst die Liste nach oben und der Kopf bleibt unten, wo die
 Pille war; oben wächst sie nach unten. Alles bleibt ganz auf dem Bildschirm.
 
@@ -231,13 +237,19 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   in der Diktat-Pille gezeichneten. Ein gezeichneter Schatten bräuchte einen
   Rand im Fenster, und bei einer dauerhaft sichtbaren Pille finge dieser Rand
   Klicks in die Fenster darunter ab. So bleibt es beim Klick-Durchlass oben:
-  Nur die Pille selbst nimmt Klicks an, ihre transparenten Ecken nicht. Die
-  Hosting-View hat immer das dunkle Erscheinungsbild (`darkAqua`).
+  Nur die Pille selbst nimmt Klicks an, ihre transparenten Ecken nicht.
+- Beide Stellen, auch die an der Notch, haben das dunkle Erscheinungsbild
+  (`darkAqua` an der Hosting-View, `colorScheme` dunkel in der Ansicht). An der
+  Notch änderte das nichts Sichtbares, die Farben dort waren schon fest dunkel;
+  es betrifft nur Systemfarben und Materialien.
 - Den Bildschirm des Agent-Chats-Fensters fragt die Anzeige nur bei
   Fenster-Ereignissen ab (`NSWindow.didChangeScreenNotification`,
   `didBecomeKey`, `willClose`, entprellt auf 250 ms), über
   `AgentChatsCommandCenter.windowDisplayID(preferring:)`. Gezeichnet wird nur,
-  wenn sich die Stellen dadurch ändern.
+  wenn sich die Stellen dadurch ändern. Schließt man das letzte
+  Agent-Chats-Fenster, hat es sich beim `willClose` schon abgemeldet; nach der
+  Entprellung zählt es nicht mehr, und die Pille verschwindet bzw. geht auf den
+  gewählten Bildschirm, falls der keine Notch hat.
 - Notch-Erkennung: `safeAreaInsets.top > 0` und beide `auxiliaryTop…Area`.
   Notch-Breite = Bildschirmbreite minus die beiden freien Bereiche.
 - Vollbild: Über Vollbild-Apps wird die Anzeige ausgeblendet, je Stelle für

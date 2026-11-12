@@ -100,7 +100,10 @@ final class ControllerWindowFake {
                 case .selectSession(let id): selected = id
                 case .selectWorkspaceChat(let id, _): selected = id
                 case .showNewChatPicker: isNewChatPickerOpen = true
-                case .lastChat: backTarget = backTargetAfterJump
+                case .lastChat:
+                    // Wie `goBack`: ein voriger Chat wird ausgewählt.
+                    if let target = backTarget, target.kind == .chat, let id = target.id { selected = id }
+                    backTarget = backTargetAfterJump
                 default: break
                 }
                 return !failing.contains(String(describing: command))

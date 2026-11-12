@@ -107,6 +107,15 @@ enum NotchPillPlacement {
             y: Double((center.y - screen.frame.minY) / max(1, screen.frame.height)))
     }
 
+    /// Liegt ein Klick (Fensterkoordinaten, unten links) im Kopf einer
+    /// aufgeklappten Pille? Der Kopf ist so hoch wie die Pille, oben oder
+    /// (Liste nach oben) unten. Aus der Höhe im Moment des Klicks gerechnet,
+    /// damit es auch während der Größen-Animation stimmt.
+    static func isInHeader(y: CGFloat, panelHeight: CGFloat, headerAtBottom: Bool) -> Bool {
+        let header = NotchGeometry.pillHeight
+        return headerAtBottom ? y <= header : y >= panelHeight - header
+    }
+
     /// Sitzt die Pille in der unteren Bildschirmhälfte, öffnet alles nach oben.
     static func opensUpward(center: CGPoint, on screen: NotchScreenInfo) -> Bool {
         center.y < screen.frame.midY

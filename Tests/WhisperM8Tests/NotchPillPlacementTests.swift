@@ -155,6 +155,34 @@ final class NotchPillPlacementTests: XCTestCase {
         XCTAssertEqual(panel, top.insetBy(dx: -ControllerIslandGeometry.shadowMargin, dy: -ControllerIslandGeometry.shadowMargin))
     }
 
+    /// Der Kopf einer offenen Liste ergibt sich aus der Höhe im Moment des
+    /// Klicks: Während die Liste aufgeht, ist das Fenster noch klein, der
+    /// zweite Klick eines Doppelklicks liegt trotzdem im Kopf.
+    func testHeaderHitUsesTheCurrentHeight() {
+        let pill = NotchGeometry.pillHeight
+        // Mitten in der Animation: Fenster erst 60 hoch, Klick oben in der Pille.
+        XCTAssertTrue(NotchPillPlacement.isInHeader(y: 50, panelHeight: 60, headerAtBottom: false))
+        XCTAssertFalse(NotchPillPlacement.isInHeader(y: 10, panelHeight: 400, headerAtBottom: false))
+        XCTAssertTrue(NotchPillPlacement.isInHeader(y: 400 - pill + 1, panelHeight: 400, headerAtBottom: false))
+        XCTAssertTrue(NotchPillPlacement.isInHeader(y: 10, panelHeight: 400, headerAtBottom: true))
+        XCTAssertFalse(NotchPillPlacement.isInHeader(y: 380, panelHeight: 400, headerAtBottom: true))
+    }
+
+    /// Mit automatisch ausgeblendeter Menüleiste sitzt die Pille 24 pt
+    /// tiefer; die Insel wächst trotzdem genau aus ihr, wenn sie sichtbar ist.
+    func testIslandFollowsTheVisiblePillWithHiddenMenuBar() {
+        var hidden = external
+        hidden.visibleFrame = CGRect(x: 1512, y: 70, width: 2560, height: 1370)
+        let pill = NotchPillPlacement.center(hidden, stored: nil)
+        let pillFrame = NotchGeometry.panelFrame(screen: hidden, mode: .compact(chipCount: 1), pillCenter: pill)
+        let island = ControllerIslandGeometry.frame(
+            screen: hidden, bodySize: CGSize(width: 440, height: 320), visiblePill: pill)
+        XCTAssertEqual(island.maxY, pillFrame.maxY, accuracy: 0.001)
+        // Ohne sichtbare Pille (Vollbild): oben am Rand.
+        let fullscreen = ControllerIslandGeometry.frame(screen: hidden, bodySize: CGSize(width: 440, height: 320))
+        XCTAssertEqual(fullscreen.maxY, hidden.frame.maxY - NotchGeometry.pillTopGap, accuracy: 0.001)
+    }
+
     /// Schlüssel der gemerkten Lage ist die feste UUID, nicht die Nummer.
     func testStorageKeyIsTheDisplayUUID() {
         XCTAssertEqual(external.pillStorageKey, "EXTERNAL")

@@ -155,9 +155,57 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "Markierung auf dem vorigen Chat")
         release(.l2, at: 1)
         XCTAssertEqual(window.selected, chats[3])
-        XCTAssertEqual(window.commands.last, .selectSession(chats[3]))
-        XCTAssertFalse(window.commands.contains(.lastChat), "Wechsel über die Liste, nicht über Tippen")
+        XCTAssertEqual(window.commands.last, .lastChat, "derselbe Weg wie Tippen")
         XCTAssertTrue(haptics.isEmpty)
+    }
+
+    /// Der vorige Chat steht auch dann in der Liste, wenn die Seitenleiste
+    /// ihn gerade nicht zeigt (Filter, Suche, eingeklappt).
+    func testPreviousChatOutsideTheSidebarIsStillListed() {
+        let hidden = UUID()
+        setTerminal(hidden, status: .idle)
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: hidden)
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.chats.rows.map(\.id), [chats[0], chats[1], hidden, chats[2], chats[3]],
+                       "gleich hinter dem aktuellen")
+        XCTAssertEqual(whereTo?.chats.selected?.id, hidden)
+        release(.l2, at: 1)
+        XCTAssertEqual(window.commands.last, .lastChat)
+        XCTAssertEqual(window.selected, hidden)
+    }
+
+    /// Halten und Loslassen auf den vorigen Workspace geht denselben Weg wie
+    /// Tippen; scheitert er (Workspace gehört einem anderen Fenster),
+    /// vibriert es „geht nicht“ und kein Fenster kommt nach vorn.
+    func testReleaseOnPreviousWorkspaceGoesBackAndRejectsQuietly() {
+        let workspaces = [UUID(), UUID()]
+        window.workspaces = workspaces.enumerated().map { index, id in
+            ControllerWorkspaceChoice(id: id, name: "W\(index)", colorHex: "#888888", chatCount: 2,
+                                      hasWaitingChat: false, isCurrent: index == 0)
+        }
+        window.isGridActive = true
+        window.backTarget = ControllerBackTarget(kind: .workspace, title: "W1", id: workspaces[1])
+        window.failing = [String(describing: AgentChatsCommand.lastChat)]
+        press(.l2, at: 0)
+        tick(0.3)
+        release(.l2, at: 1)
+        XCTAssertEqual(window.commands.last, .lastChat)
+        XCTAssertFalse(window.commands.contains(.activateWorkspace(workspaces[1])))
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Hat beim Loslassen etwas anderes die Eingaben (Sheet, Dialog,
+    /// Aufnahme), schließt die Insel nur.
+    func testReleaseOutsideTheChatOnlyClosesTheIsland() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(.l2, at: 0)
+        tick(0.3)
+        window.hasSheet = true
+        release(.l2, at: 1)
+        XCTAssertEqual(window.selected, chats[1])
+        XCTAssertFalse(window.commands.contains(.lastChat))
+        XCTAssertFalse(island.isVisible)
     }
 
     /// Kreis bricht ab, auch wenn die Markierung auf dem vorigen Ort steht.
@@ -229,7 +277,7 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.dpadDown, at: 0.7)
         release(.dpadDown, at: 0.75)
         release(.l2, at: 1)
-        XCTAssertEqual(window.commands.last, .activateWorkspace(workspaces[2]))
+        XCTAssertEqual(window.commands.last, .switchToWorkspace(workspaces[2]), "still, ohne Konfliktdialog")
     }
 
     func testCircleCancelsAndTheIslandStaysClosed() {

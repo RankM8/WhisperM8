@@ -98,6 +98,16 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         XCTAssertEqual(grid.destination, .stay)
     }
 
+    /// Der vorige Chat kommt in die Liste, wenn die Seitenleiste ihn nicht
+    /// zeigt: hinter den aktuellen, ohne aktuellen ganz nach oben.
+    func testChatOrderAlwaysContainsThePreviousChat() {
+        let a = UUID(), b = UUID(), hidden = UUID()
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(hidden)), [a, hidden, b])
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: nil, previous: .chat(hidden)), [hidden, a, b])
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(b)), [a, b], "schon drin")
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .workspace(hidden)), [a, b])
+    }
+
     /// Ein voriger Ort, der in keiner Liste steht, zählt nicht.
     func testPreviousPlaceOutsideTheListsIsIgnored() {
         let chats = chatRows(2, current: 0)

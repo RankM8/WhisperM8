@@ -57,17 +57,22 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
 
     /// Gesetzt nur für die Pille ohne Notch.
     var pillMouse: NotchPillMouse?
-    /// Bereich in Fensterkoordinaten (unten links), in dem `pillMouse` gilt;
-    /// `nil` heißt die ganze Pille. Bei offener Liste nur der Kopf.
-    var pillMouseArea: CGRect?
+    /// Liste offen: `pillMouse` gilt nur für den Kopf (Pillenhöhe), die
+    /// Zeilen bleiben Knöpfe.
+    var pillHeaderOnly = false
+    /// Liste wächst nach oben: Der Kopf liegt unten.
+    var pillHeaderAtBottom = false
 
     private var pressStart: CGPoint?
     private var pressMoved = false
 
+    /// Kopfbereich aus den Maßen im Moment des Klicks, nicht aus einem
+    /// vorab gemeldeten Rahmen: Während der Größen-Animation stimmt nur das.
     private func handlesPill(_ event: NSEvent) -> Bool {
         guard pillMouse != nil else { return false }
-        guard let area = pillMouseArea else { return true }
-        return area.contains(event.locationInWindow)
+        guard pillHeaderOnly else { return true }
+        return NotchPillPlacement.isInHeader(
+            y: event.locationInWindow.y, panelHeight: bounds.height, headerAtBottom: pillHeaderAtBottom)
     }
 
     override func mouseDown(with event: NSEvent) {
