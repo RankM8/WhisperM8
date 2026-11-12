@@ -1,5 +1,5 @@
 ---
-status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled)
+status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung
 stand: 2026-11-12
 feature: Statusanzeige an der Notch und vereinte Pille
 ---
@@ -31,7 +31,7 @@ offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
 | Ruhe | Pille oben mittig: Kern als stille graue Linie, rechts die Zähler | wie bisher: Zähler unter der Notch, nichts los = nichts zu sehen |
 | Hinweis | Kern, Punkt, Chat-Name, Wort, „+ n“, einmal ca. 4 s | wie bisher |
 | Liste | wächst aus der Pille, Pillen-Zeile bleibt stehen; unten „Status in der Pille ausblenden“ | wie bisher |
-| Diktat | die Diktat-Pille an der Stelle der Pille, links Raute bzw. Ring für wartende Chats und Fehler | die Diktat-Zeile hängt schwarz unter der Notch, Raute links |
+| Diktat | die Pille wächst in die Diktat-Pille hinein (Breite um die Mitte), links Raute bzw. Ring für wartende Chats und Fehler | das schwarze Band wächst nach unten in die Diktat-Zeile, Raute links |
 | Insel | wächst aus der Pille | wächst aus der Notch |
 
 **Aussehen:** Die Pille in Ruhe, beim Hinweis und mit Liste ist gezeichnet wie
@@ -66,6 +66,21 @@ weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
   Darüberfahren an, nicht das Band über der Aussparung.
 - Die alte Lage der Diktat-Pille (`overlayAnchor…`, unten mittig) bleibt
   gespeichert, wird aber nicht benutzt; mit dem Kill-Switch gilt sie wieder.
+
+**Übergang ins Diktat:** Startet ein Diktat auf dem
+Bildschirm, auf dem die Pille steht, wird die Pille selbst zur Diktat-Pille:
+Sie wächst aus ihrer Mitte in der Breite (dieselbe Kurve, 0,35 s), der graue
+Kern bleibt derselbe Kern, gleitet mit und färbt sich zum Aufnahme-Kern. Kein
+Versatz, kein Aus- und Einblenden der ganzen Pille. Am Ende zieht sie sich
+genau so in die ruhende Pille zurück, mit den Zählern von jetzt (auch einem
+nachgeholten Hinweis). An der Notch wächst das schwarze Band bzw. die Zeile
+mit den Zählern nach unten in die Diktat-Zeile und schrumpft danach zurück;
+ist an der Notch nichts los, wächst die Zeile aus dem Band in der
+Aussparung. Ein Diktat auf einem anderen Bildschirm erscheint dort wie bisher
+direkt, die ruhende Pille auf dem anderen Bildschirm bleibt stehen. Ohne
+Übergang auch bei offener Liste, im Vollbild und mit ausgeschaltetem Status.
+Die Aufnahme wartet nie auf die Animation: Sie startet und endet sofort, nur
+das Bild folgt.
 
 **Bewegung:** Zustandswechsel wachsen um die Mitte (eine Kurve, 0,35 s). Nur
 das Darüberfahren beim Diktat (Mini) klappt nach links auf, die rechte Kante
@@ -103,11 +118,34 @@ Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
 und wie sie aussieht (`OverlayPresentation`: `classic`, `pill`, `notch`,
 `RecordingPanel+UnifiedPill.swift`). Die Status-Seite hängt in
 `NotchStatusController+UnifiedPill.swift`. Beide treffen sich in
-`UnifiedPillHub` (Bildschirm des Diktats, Raute); der Status übernimmt den
+`UnifiedPillHub` (Bildschirm des Diktats, Raute, Ruhebild); der Status übernimmt den
 Bildschirm aus dem gemeldeten Wert, er liest den Hub dabei nicht erneut
 (`@Published` meldet im willSet, dort stünde noch der alte Wert). Es bleiben getrennte
 Fenster, von denen je Bildschirm immer nur eins sichtbar ist; so läuft das
-Diktat weiter durch sein bewährtes Fenster.
+Diktat weiter durch sein bewährtes Fenster (nicht aktivierend, nie Key, über
+Vollbild-Apps).
+
+**Technik des Übergangs:** Das Diktat-Fenster zeigt zuerst das Ruhebild der
+Pille (`UnifiedPillRestLook`: Kern und Zähler bzw. Hinweis, an der Notch die
+Zeile unter der Aussparung oder nur das Band), genau an deren Stelle. Das
+Ruhebild liefert die Status-Seite über den Hub
+(`NotchStatusController.restSnapshot`), aus ihrem Zustand gerechnet, nicht
+aus dem Fenster. Es wird aus denselben Bausteinen gezeichnet wie die
+Status-Pille (`PillRestCoreView`, `UnifiedPillRestStatus`, `NotchHeaderRow`);
+ein Pixeltest hält beide gleich. Hat das Diktat-Fenster sein erstes Bild
+gezeichnet (30 ms), tritt die Status-Pille zurück und die Pille wächst in
+einer SwiftUI-Animation ins Diktat (`showsRestLook`, Kern über
+`matchedGeometryEffect`). Am Ende umgekehrt: zurück ins Ruhebild, die
+Status-Pille erscheint wieder (ohne Animation, mit dem aktuellen Wert), ein
+Bild später schließt das Diktat-Fenster. Für diesen einen Moment liegen zwei
+gleiche Bilder übereinander, nie keins. Der Ablauf ist rein und getestet
+(`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen, Übergabe;
+Unterbrechungen über eine Generation), ausgeführt in
+`RecordingPanel+PillMorph.swift`. Stopp im Wachsen zieht sich aus dem
+jetzigen Stand zurück, ein neues Diktat im Zurückziehen übernimmt dasselbe
+Fenster und wächst wieder. Beim Zurückziehen nimmt das Fenster keine Klicks
+an. Messpunkt `pill.morph` (Detail-Stufe, Budget 450 ms) meldet, wenn der
+Main Thread den Übergang aufhält.
 
 ### Kill-Switch der vereinten Pille
 
@@ -445,6 +483,15 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Hauptbildschirm, Notch, gemerkte Lage), Raute, Rechts-Anker beim
   Darüberfahren, Fenster mit Schattenrand, Liste nach oben und unten,
   Begrenzung am Rand, Klickziel Kern oder Liste.
+- `UnifiedPillMorphTests`: Ablauf des Übergangs (Ruhe, Übergabe, Wachsen,
+  Diktat, Zurückziehen, Übergabe), Stopp vor dem ersten Bild und im
+  Wachsen, Start im Zurückziehen, Bildschirmwechsel, Abbruch beim
+  Kill-Switch, ohne ruhende Pille direkt.
+- `UnifiedPillRestSnapshotTests`: Ruhebild je Bildschirm (Zähler, Mittelpunkt,
+  gemerkte Lage, Notch nur mit Anzeige, nachgeholter Hinweis), kein Übergang
+  bei offener Liste, Vollbild, Status aus, Kill-Switch.
+- `UnifiedPillRestLookPixelTests`: Ruhebild der Diktat-Pille Pixel für Pixel
+  wie die Status-Pille bzw. die Notch-Zeile, mit und ohne Hinweis.
 - `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
   Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
   nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
@@ -454,6 +501,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Zählern, Hinweis, Fehler, Liste nach unten und oben, Diktat mit Raute,
   Diktat an der Notch, Vergleich Diktat-Pille und ruhende Pille Seite an
   Seite). `ONLY=diktatpille` zeigt die Diktat-Pille in allen Zuständen.
+  `ONLY=uebergang` zeigt den Übergang: Ruhe, Mitte, Diktat ohne Notch und an
+  der Notch (aus dem Band und aus der Zeile mit Zählern).
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
