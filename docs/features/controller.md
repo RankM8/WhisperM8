@@ -59,7 +59,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
 | Touchpad-Klick | Zwischenablage-Verlauf auf und zu |
 | L3 | Kachel groß / zurück zum Raster |
-| R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — nur Claude und Codex, nicht während einer Rückfrage |
+| R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim, less und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
 | L2 tippen / halten | letzter Chat / Chat-Auswahl (der Ctrl+Tab-Umschalter); Kreuz oder Loslassen wechselt. Im Raster öffnet halten die Workspace-Auswahl, siehe unten |
 | L2 halten, dann R2 | zum markierten Chat wechseln und diktieren |
@@ -171,7 +171,10 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   oder ESC. Ctrl+U löscht bis zum Zeilenanfang und am Zeilenanfang den Umbruch davor (Claude Code:
   „Repeat to clear across lines“; Codex: `kill_line_start`) — reicht für 64 Zeilen. Text unter einer
   Zeile, in die der Cursor per Tastatur bewegt wurde, bleibt stehen. In einer Rückfrage wird nicht
-  geleert: Dort wählt man aus. Scrollt der rechte Stick, verfällt ein R3-Druck ganz.
+  geleert: Dort wählt man aus. Scrollt der rechte Stick, verfällt ein R3-Druck ganz. In einer
+  Shell leert R3 nur die Eingabezeile, erkannt am normalen Terminal-Puffer; Vollbild-Programme
+  laufen im Alternate-Puffer, dort bedeuten Ctrl+E und Ctrl+U etwas anderes. Danach gilt auch dort
+  der Entwurfs-Verdacht als erledigt, und `chats send` geht wieder.
 - Befehle und „Weiter“ aus dem Menü werden nie an einen vermuteten Entwurf gehängt.
 - R3 getippt auf einem lebenden Chat tut nichts (er wird beim Scrollen leicht gedrückt).
 - Schließen und Archivieren laufen über dieselben Funktionen wie die Seitenleiste, mit ihren Rückfragen.

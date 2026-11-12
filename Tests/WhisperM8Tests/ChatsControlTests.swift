@@ -150,6 +150,17 @@ final class ChatsMarkerTests: XCTestCase {
         let body = marked.components(separatedBy: "\n").dropFirst().joined(separator: "\n")
         XCTAssertEqual(body, "Zeile 1\nZeile 2")
     }
+
+    /// E2E-Befund 12.11.2026: In eine Shell nie die Markerzeile — ihr
+    /// Zeilenumbruch schickte `[via …` als Befehl ab. Agent-Chats behalten sie
+    /// (Ein-Hop-Regel).
+    func testDeliveredPromptSkipsMarkerOnlyForShells() {
+        XCTAssertEqual(
+            AgentControlRequestHandler.deliveredPrompt("ls -la", actor: "jarvis", toShell: true), "ls -la")
+        let agent = AgentControlRequestHandler.deliveredPrompt("Bitte prüfen.", actor: "jarvis", toShell: false)
+        XCTAssertTrue(agent.hasPrefix(AgentControlRequestHandler.markerPrefix))
+        XCTAssertTrue(agent.hasSuffix("\nBitte prüfen."))
+    }
 }
 
 // MARK: - Audit-Log

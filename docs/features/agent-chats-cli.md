@@ -227,8 +227,11 @@ Eingabefeld (`--force` überstimmt; ein alter Rückleger wird stattdessen geleer
 siehe unten). Danach Bracketed Paste
 (`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
-bekommt die Marker-Zeile `[via whisperm8 chats · von <actor> · HH:MM]`
-vorangestellt (Ein-Hop-Regel im Skill).
+an einen Claude- oder Codex-Chat bekommt die Marker-Zeile `[via whisperm8 chats ·
+von <actor> · HH:MM]` vorangestellt (Ein-Hop-Regel im Skill). An Shell-Tabs geht
+der Text ohne Marker: Dessen Zeilenumbruch schickte sonst `[via …` als Befehl
+ab, und die Herkunft steht ohnehin im Audit-Log (gilt auch für die
+Warteschlange).
 
 ### Zurückgelegter Prompt nach Abbruch (Send-Schutz)
 

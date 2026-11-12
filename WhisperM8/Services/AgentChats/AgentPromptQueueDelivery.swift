@@ -75,8 +75,9 @@ final class AgentPromptQueueDelivery {
             return
         }
 
-        let marked = AgentControlRequestHandler.markedPrompt(
-            reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)")
+        let marked = AgentControlRequestHandler.deliveredPrompt(
+            reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)",
+            toShell: controller.command.keyboardProfile == .plainShell)
         // Ein Entwurf des Users hält die Zustellung oben an (`draftPending`,
         // bleibt in der Queue); ein vermuteter alter Rückleger wird geräumt.
         let clearedInput = controller.sendPrompt(marked, submit: true)

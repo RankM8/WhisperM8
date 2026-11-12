@@ -25,6 +25,9 @@ struct ControllerTerminalState: Equatable {
     /// Eine Auswahlliste, die das Controller-Menü geöffnet hat, ist vermutlich
     /// noch offen (`ControllerTerminalMarks.isChoiceListOpen`).
     var choiceListOpen: Bool = false
+    /// Shell an ihrer Eingabezeile (normaler Puffer, kein Vollbild-Programm
+    /// wie nano oder vim) — dort darf R3 die Zeile leeren.
+    var shellAtPrompt: Bool = false
 }
 
 @MainActor

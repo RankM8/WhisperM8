@@ -25,8 +25,8 @@ extension ControllerBindingResolver {
         case .press(.options): return .menuToggle
         // R3 tippen startet einen gestoppten Chat. Auf einem lebenden nichts,
         // auch keine Vibration: beim Scrollen drückt man ihn leicht aus
-        // Versehen. R3 halten leert die ganze Eingabe (nicht in Rückfragen,
-        // nicht in Shells).
+        // Versehen. R3 halten leert die ganze Eingabe (nicht in Rückfragen;
+        // in Shells nur an der Eingabezeile, nie in nano, vim und Co.).
         case .tap(.r3): return state.acceptsKeys ? nil : .chatResume
         case .holdBegan(.r3):
             if clearAllowed(state) { return .chatClearInput }
@@ -99,9 +99,12 @@ extension ControllerBindingResolver {
     }
 
     /// Ganze Eingabe leeren: Claude oder Codex, keine Rückfrage — dort wählt
-    /// man aus, und Leeren könnte die Auswahl zerstören.
+    /// man aus, und Leeren könnte die Auswahl zerstören. Shell nur an ihrer
+    /// Eingabezeile; sonst bliebe nach `chats send` der Entwurfs-Verdacht
+    /// stehen (E2E-Befund 12.11.2026).
     static func clearAllowed(_ state: ControllerChatState) -> Bool {
-        writingKeysAllowed(state) && state.status != .awaitingInput
+        if state.profile == .shell { return state.acceptsKeys && state.shellAtPrompt }
+        return writingKeysAllowed(state) && state.status != .awaitingInput
     }
 
     /// Pfeiltasten ins Terminal eines lebenden Chats:
