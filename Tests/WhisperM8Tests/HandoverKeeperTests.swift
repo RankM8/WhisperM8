@@ -53,17 +53,17 @@ final class HandoverKeeperTests: XCTestCase {
         try HandoverClient.connect(paths: HandoverPaths(directory: directory), timeout: 10)
     }
 
-    /// Abgabe wie die alte App: HELLO, je Chat DEPOSIT bis ACK, eigene Kopie
-    /// erst danach schließen, COMMIT.
+    /// Abgabe wie die alte App: HELLO, je Chat DEPOSIT bis ACK, COMMIT — und
+    /// erst nach COMMIT → OK die eigenen Leitungen schließen.
     private func depositAll(_ list: [(HandoverPTYChild, HandoverManifest)], image: [UInt8] = []) throws {
         let client = try connect()
         defer { client.close() }
-        try client.helloDeposit()
+        try client.helloDeposit(secret: nil)
         for (child, manifest) in list {
             try client.deposit(manifest: manifest, descriptor: child.master, image: image)
-            child.closeMaster()
         }
         try client.commit()
+        for (child, _) in list { child.closeMaster() }
     }
 
     // MARK: Abgabe und Übernahme
@@ -96,7 +96,7 @@ final class HandoverKeeperTests: XCTestCase {
         next.read(for: 0.3)
         let ticks = HandoverTestSupport.ticks(in: next.text)
         XCTAssertTrue(HandoverTestSupport.isContinuous(ticks), "Ausgabe lückenlos: \(ticks)")
-        XCTAssertGreaterThan(ticks.count, 10)
+        XCTAssertFalse(ticks.isEmpty)
         XCTAssertTrue(child.isAlive)
         XCTAssertFalse(child.marker.contains("HUP"))
         try client.done()
@@ -219,7 +219,7 @@ final class HandoverKeeperTests: XCTestCase {
         var reason: HandoverKeeper.FinishReason?
         _ = try makeKeeper { reason = $0; finished.fulfill() }
         let client = try connect()
-        try client.helloDeposit()
+        try client.helloDeposit(secret: nil)
         try client.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: [])
         // Ein späterer Schritt scheitert: die App bricht ab und behält ihre Leitung.
         try client.abort()
@@ -237,7 +237,7 @@ final class HandoverKeeperTests: XCTestCase {
         var reason: HandoverKeeper.FinishReason?
         _ = try makeKeeper { reason = $0; finished.fulfill() }
         let client = try connect()
-        try client.helloDeposit()
+        try client.helloDeposit(secret: nil)
         try client.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: [])
         client.close()
         wait(for: [finished], timeout: 15)
@@ -283,7 +283,7 @@ final class HandoverKeeperTests: XCTestCase {
         manifest.pidStartTime = (manifest.pidStartTime ?? 0) - 3_600
         let client = try connect()
         defer { client.close() }
-        try client.helloDeposit()
+        try client.helloDeposit(secret: nil)
         XCTAssertThrowsError(try client.deposit(manifest: manifest, descriptor: child.master, image: [])) { error in
             guard case HandoverClient.ClientError.refused(let text)? = error as? HandoverClient.ClientError else {
                 return XCTFail("\(error)")

@@ -30,7 +30,7 @@ final class HandoverProtocolTests: XCTestCase {
             do { try a.send(message, descriptor: pipeFDs[1], payload: payload, timeout: 5) } catch { XCTFail("\(error)") }
             sent.fulfill()
         }
-        let received = try b.receive(timeout: 5)
+        let received = try b.receive(timeout: 5, acceptDescriptor: true)
         wait(for: [sent], timeout: 5)
         close(pipeFDs[1]) // erst nach dem Empfang (ACK-Regel)
 
@@ -45,6 +45,20 @@ final class HandoverProtocolTests: XCTestCase {
         XCTAssertEqual(read(pipeFDs[0], &buffer, 2), 2)
         XCTAssertEqual(buffer, Array("hi".utf8))
         close(fd)
+    }
+
+    func testReceiveClosesDescriptorUnlessAccepted() throws {
+        let (a, b) = socketPair()
+        defer { a.close(); b.close() }
+        var fds: [Int32] = [-1, -1]
+        XCTAssertEqual(pipe(&fds), 0)
+        defer { close(fds[0]) }
+        try a.send(HandoverMessage(type: .list), descriptor: fds[1], timeout: 2)
+        close(fds[1])
+        let received = try b.receive(timeout: 2)
+        XCTAssertNil(received.descriptor)
+        var byte: UInt8 = 0
+        XCTAssertEqual(read(fds[0], &byte, 1), 0, "letzte Kopie zu → EOF")
     }
 
     func testOversizedFrameIsRejected() throws {

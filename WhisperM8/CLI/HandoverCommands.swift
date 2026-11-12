@@ -71,6 +71,12 @@ enum HandoverKeeperCommand {
             return 64
         }
 
+        // Das Einmal-Geheimnis der App kommt über stdin, nie als Argument.
+        guard let secret = readSecret(from: STDIN_FILENO, timeout: 5) else {
+            CLIIO.err("handover-keeper: kein Nachweis der App auf stdin (interner Modus)")
+            return 64
+        }
+
         // Eigene Sitzung: Das Beenden der App (oder eines Terminals, aus dem
         // jemand das Binary startet) erreicht den Aufbewahrer nicht.
         setsid()
@@ -89,7 +95,11 @@ enum HandoverKeeperCommand {
             runID: options.runID,
             holdSeconds: options.holdSeconds,
             depositSeconds: options.depositSeconds,
-            peerPolicy: HandoverPeerPolicy(allowedExecutablePaths: allowed)
+            peerPolicy: HandoverPeerPolicy(
+                allowedExecutablePaths: allowed,
+                requirement: HandoverPeerPolicy.ownRequirement()
+            ),
+            depositSecret: secret
         ))
 
         var signalSources: [DispatchSourceSignal] = []
@@ -112,6 +122,30 @@ enum HandoverKeeperCommand {
                 continuation.resume(returning: 1)
             }
         }
+    }
+}
+
+extension HandoverKeeperCommand {
+    /// Liest eine Zeile (das Geheimnis) mit Gesamtfrist. `nil`, wenn nichts
+    /// Brauchbares kommt — dann nimmt der Aufbewahrer keine Abgabe an.
+    static func readSecret(from fd: Int32, timeout: TimeInterval) -> String? {
+        let end = Date().addingTimeInterval(timeout)
+        var data = [UInt8]()
+        var byte: UInt8 = 0
+        while data.count < 256 {
+            let remaining = Int32(max(0, end.timeIntervalSinceNow * 1000))
+            guard remaining > 0 else { return nil }
+            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&pfd, 1, remaining)
+            if ready < 0, errno == EINTR { continue }
+            guard ready > 0 else { return nil }
+            let count = read(fd, &byte, 1)
+            if count < 0, errno == EINTR { continue }
+            if count <= 0 || byte == 0x0A { break }
+            data.append(byte)
+        }
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+        return HandoverSecret.isWellFormed(text) ? text : nil
     }
 }
 

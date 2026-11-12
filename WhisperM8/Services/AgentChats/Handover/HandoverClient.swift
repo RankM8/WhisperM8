@@ -6,9 +6,15 @@ import Foundation
 /// Gegenstück zum Aufbewahrer. Die App nutzt es ab Paket 4 (Abgabe beim
 /// Beenden, Übernahme beim Start), die CLI für `app handover-status`.
 ///
-/// Regel für den Aufrufer: Nach `deposit` hält die App ihre eigene Leitung
-/// noch; schließen darf sie sie erst, wenn `deposit` ohne Fehler
-/// zurückkam (dann liegt das ACK vor).
+/// Regeln für den Aufrufer:
+/// - **Abgabe:** Die App hält ihre eigenen Leitungen, bis `commit()` ohne
+///   Fehler zurückkam (COMMIT → OK). Erst dann schließt sie sie. Scheitert
+///   vorher irgendetwas, schließt der Aufbewahrer seine Kopien still, und die
+///   App beendet sich auf dem heutigen Weg — ihre Originale halten die Chats.
+/// - **Übernahme:** `take` liefert eine Leitung erst, wenn der Aufbewahrer
+///   nach dem ACK mit `OK {chatID}` bestätigt hat, dass seine Kopie zu ist.
+///   Kommt das OK nicht, schließt `take` die empfangene Kopie selbst, ohne
+///   Ctrl+C — der Chat bleibt beim Aufbewahrer. Nie zwei Leser.
 final class HandoverClient {
     enum ClientError: Error, Equatable, CustomStringConvertible {
         case refused(String)
@@ -22,6 +28,12 @@ final class HandoverClient {
             case .unexpected(let text): return text
             }
         }
+    }
+
+    enum VerificationError: Error, Equatable {
+        case wrongRunID
+        case wrongPID
+        case untrustedServer
     }
 
     struct TakeHello: Equatable {
@@ -67,21 +79,43 @@ final class HandoverClient {
 
     // MARK: Abgabe
 
+    /// Prüft, ob am anderen Ende wirklich der Aufbewahrer sitzt, den die App
+    /// gestartet hat (PID) bzw. der aus dem erlaubten Binary läuft (Policy).
+    func verifyServer(expectedPID: pid_t? = nil, policy: HandoverPeerPolicy? = nil) throws {
+        guard let peer = HandoverPeer.of(socket: connection.fd), peer.uid == getuid() else {
+            throw VerificationError.untrustedServer
+        }
+        if let expectedPID, peer.pid != expectedPID { throw VerificationError.wrongPID }
+        if let policy, !policy.isAllowed(peer) { throw VerificationError.untrustedServer }
+    }
+
+    /// HELLO der Abgabe mit dem Geheimnis, das die App dem Aufbewahrer beim
+    /// Start gegeben hat. Mit `expectedRunID`/`expectedPID` prüft die App, dass
+    /// sie mit genau ihrem Aufbewahrer spricht.
     @discardableResult
-    func helloDeposit(appPid: Int32 = getpid(), protocolVersion: Int = HandoverProtocol.current) throws -> String? {
+    func helloDeposit(
+        secret: String?,
+        expectedRunID: String? = nil,
+        expectedPID: pid_t? = nil,
+        appPid: Int32 = getpid(),
+        protocolVersion: Int = HandoverProtocol.current
+    ) throws -> String? {
+        if expectedPID != nil { try verifyServer(expectedPID: expectedPID) }
         var hello = HandoverMessage(type: .hello)
         hello.role = .deposit
         hello.protocolVersion = protocolVersion
         hello.appPid = appPid
         hello.build = HandoverProtocol.buildIdentifier
+        hello.secret = secret
         let reply = try roundTrip(hello)
         if reply.message.type == .incompatible { throw ClientError.incompatible }
         guard reply.message.type == .ok else { throw ClientError.unexpected("OK erwartet") }
+        if let expectedRunID, reply.message.runID != expectedRunID { throw VerificationError.wrongRunID }
         return reply.message.runID
     }
 
-    /// Gibt einen Chat ab und wartet auf das ACK. Erst danach darf der
-    /// Aufrufer seine eigene Kopie der Leitung schließen.
+    /// Gibt einen Chat ab und wartet auf das ACK. Die eigene Kopie der
+    /// Leitung bleibt trotzdem offen, bis `commit()` zurückkam.
     func deposit(manifest: HandoverManifest, descriptor: Int32, image: [UInt8]) throws {
         var message = HandoverMessage(type: .deposit)
         message.manifest = manifest
@@ -91,6 +125,8 @@ final class HandoverClient {
         }
     }
 
+    /// Nach Rückkehr ohne Fehler hält der Aufbewahrer alle Chats; erst jetzt
+    /// darf die App ihre Originale schließen.
     func commit() throws {
         let reply = try roundTrip(HandoverMessage(type: .commit))
         guard reply.message.type == .ok else { throw ClientError.unexpected("OK erwartet") }
@@ -122,12 +158,20 @@ final class HandoverClient {
         return reply.message.chats ?? []
     }
 
-    /// Holt einen Chat. Mit `acknowledge` (Standard) geht das ACK sofort
-    /// hinaus, sobald die Leitung in diesem Prozess angekommen ist.
+    /// Holt einen Chat: CHAT empfangen, ACK senden, auf `OK {chatID}` warten.
+    /// Erst mit dem OK gehört die Leitung der App. Ohne OK schließt `take` die
+    /// empfangene Kopie wieder (ohne Ctrl+C) und wirft.
+    ///
+    /// `acknowledge: false` nur für Tests: liefert die Leitung ohne ACK.
     func take(chatID: String, acknowledge: Bool = true) throws -> TakenChat {
         var message = HandoverMessage(type: .take)
         message.chatID = chatID
-        let reply = try roundTrip(message)
+        try connection.send(message, timeout: timeout)
+        let reply = try connection.receive(timeout: timeout, acceptDescriptor: true)
+        if reply.message.type == .error {
+            if let fd = reply.descriptor { Darwin.close(fd) }
+            throw ClientError.refused(reply.message.message ?? "ohne Grund")
+        }
         guard reply.message.type == .chat, reply.message.chatID == chatID, let manifest = reply.message.manifest else {
             if let fd = reply.descriptor { Darwin.close(fd) }
             throw ClientError.unexpected("CHAT erwartet für \(chatID)")
@@ -142,14 +186,28 @@ final class HandoverClient {
             exitStatus: reply.message.exitStatus,
             gapBytes: reply.message.gapBytes ?? 0
         )
-        if acknowledge { try self.acknowledge(chatID: chatID) }
+        guard acknowledge else { return taken }
+        do {
+            try confirmTake(chatID: chatID)
+        } catch {
+            // Im Zweifel nur schließen: der Aufbewahrer hält den Chat weiter.
+            if let fd = taken.descriptor { Darwin.close(fd) }
+            throw error
+        }
         return taken
     }
 
-    func acknowledge(chatID: String) throws {
+    /// ACK senden und auf das OK des Aufbewahrers warten. Die Wartezeit ist
+    /// länger als seine ACK-Frist, damit ein knappes ACK nicht beide Seiten
+    /// ohne Leitung zurücklässt.
+    func confirmTake(chatID: String) throws {
         var ack = HandoverMessage(type: .ack)
         ack.chatID = chatID
         try connection.send(ack, timeout: timeout)
+        let reply = try connection.receive(timeout: timeout * 2)
+        guard reply.message.type == .ok, reply.message.chatID == chatID else {
+            throw ClientError.unexpected("OK erwartet für \(chatID)")
+        }
     }
 
     func done() throws {
@@ -193,14 +251,23 @@ enum HandoverKeeperLauncher {
         return args
     }
 
-    static func launch(executable: URL, arguments: [String]) throws -> Process {
+    /// Startet den Aufbewahrer und gibt ihm das Geheimnis über stdin (nie als
+    /// Argument: das stünde in `ps`). Die App merkt sich Geheimnis, runID und
+    /// PID (`process.processIdentifier`) nur im Speicher.
+    static func launch(executable: URL, arguments: [String], secret: String) throws -> Process {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
+        let input = Pipe()
+        process.standardInput = input
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        let writer = input.fileHandleForWriting
+        // Stirbt der Aufbewahrer sofort, darf das Schreiben kein SIGPIPE auslösen.
+        _ = fcntl(writer.fileDescriptor, F_SETNOSIGPIPE, 1)
+        defer { try? writer.close() }
+        try writer.write(contentsOf: Data((secret + "\n").utf8))
         return process
     }
 }

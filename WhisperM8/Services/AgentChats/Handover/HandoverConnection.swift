@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Security
 
 // MARK: - Verbindung (Rahmung, Deskriptoren, Fristen)
 
@@ -144,7 +145,11 @@ final class HandoverConnection {
 
     // MARK: Empfangen
 
-    func receive(timeout: TimeInterval) throws -> HandoverReceived {
+    /// Liest ein Telegramm. Leitungen nimmt nur an, wer `acceptDescriptor`
+    /// setzt (Abgabe beim Aufbewahrer, `CHAT` bei der App); sonst wird jede
+    /// mitgeschickte Leitung sofort geschlossen. Ein fremder Prozess kann den
+    /// Empfänger so nicht mit Deskriptoren fluten.
+    func receive(timeout: TimeInterval, acceptDescriptor: Bool = false) throws -> HandoverReceived {
         let deadline = Date().addingTimeInterval(timeout)
         let header = try readExactly(4, deadline: deadline)
         let length = Int(UInt32(header[0]) << 24 | UInt32(header[1]) << 16 | UInt32(header[2]) << 8 | UInt32(header[3]))
@@ -163,6 +168,10 @@ final class HandoverConnection {
         if message.hasDescriptor == true {
             guard !pendingDescriptors.isEmpty else { throw HandoverWireError.missingDescriptor }
             descriptor = pendingDescriptors.removeFirst()
+            if !acceptDescriptor, let unwanted = descriptor {
+                Darwin.close(unwanted)
+                descriptor = nil
+            }
         }
         // Unangekündigte Deskriptoren nie stillschweigend behalten.
         for extra in pendingDescriptors { Darwin.close(extra) }
@@ -307,11 +316,26 @@ enum HandoverSocket {
 
 /// Wer darf was? `STATUS` darf jeder Prozess desselben Nutzers (enthält weder
 /// Tokens noch Inhalte). Abgeben, Übernehmen und Freigeben nur ein Prozess
-/// aus dem erlaubten Binary (dem der Instanz).
+/// aus dem erlaubten Binary, dessen Code zum Audit-Token passt.
+///
+/// Achtung, gemessen 12.11.2026: `LOCAL_PEERTOKEN`/`LOCAL_PEERPID` nennen
+/// den Prozess, der den Socket zuletzt benutzt hat, und zwar in seinem
+/// jetzigen Zustand — nicht den vom `connect`. Eine Prüfung nur beim
+/// `accept` lässt sich mit „verbinden, dann `exec` des App-Binarys“
+/// umgehen. Der Aufbewahrer prüft deshalb jedes Telegramm einzeln
+/// (`HandoverKeeper.receiveChecked`).
 struct HandoverPeerPolicy {
-    /// Erlaubte Pfade des Binarys der Gegenseite. Leer = nur UID-Prüfung
+    /// Erlaubte Pfade des Binarys der Gegenseite. Leer = keine Pfadprüfung
     /// (nur für Tests im selben Prozess).
     var allowedExecutablePaths: [String]
+    /// Code-Anforderung (Designated Requirement der App). `nil` = keine
+    /// Signaturprüfung, etwa bei ad hoc signierten Builds.
+    var requirement: SecRequirement?
+
+    init(allowedExecutablePaths: [String], requirement: SecRequirement? = nil) {
+        self.allowedExecutablePaths = allowedExecutablePaths
+        self.requirement = requirement
+    }
 
     /// `realpath`, sonst der bereinigte Pfad. Nicht `resolvingSymlinksInPath`:
     /// das schneidet `/private` ab und vergliche dann Äpfel mit Birnen.
@@ -329,25 +353,88 @@ struct HandoverPeerPolicy {
         let candidate = Self.normalized(executablePath)
         return allowedExecutablePaths.contains { Self.normalized($0) == candidate }
     }
+
+    func isAllowed(_ peer: HandoverPeer) -> Bool {
+        if allowedExecutablePaths.isEmpty && requirement == nil { return true }
+        // Ohne gültigen Code zum Audit-Token (Prozess hat seitdem `exec`
+        // ausgeführt oder ist weg) kein Vertrauen.
+        guard let code = peer.code else { return false }
+        guard isAllowed(executablePath: peer.executablePath) else { return false }
+        if let requirement {
+            return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+        }
+        return true
+    }
+
+    /// Anforderung für den Aufbewahrer der App: ihr eigenes Designated
+    /// Requirement, sofern sie mit einem Zertifikat signiert ist. `make dev`
+    /// signiert mit „WhisperM8 Local Dev“ (Kennung plus Zertifikat, stabil
+    /// über Neubauten). Ad hoc signierte oder unsignierte Builds: `nil`, dann
+    /// gilt nur der Pfad samt Audit-Token.
+    static func ownRequirement() -> SecRequirement? {
+        var selfCode: SecCode?
+        guard SecCodeCopySelf([], &selfCode) == errSecSuccess, let selfCode else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(selfCode, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return nil }
+        let flags = (dict[kSecCodeInfoFlags as String] as? NSNumber)?.uint32Value ?? 0
+        let isAdhoc = flags & SecCodeSignatureFlags.adhoc.rawValue != 0
+        let certificates = dict[kSecCodeInfoCertificates as String] as? [Any] ?? []
+        guard !isAdhoc, !certificates.isEmpty else { return nil }
+        var requirement: SecRequirement?
+        guard SecCodeCopyDesignatedRequirement(staticCode, [], &requirement) == errSecSuccess else { return nil }
+        return requirement
+    }
 }
 
-struct HandoverPeer: Equatable {
+struct HandoverPeer {
     var uid: uid_t
     var pid: pid_t?
+    /// Code des Prozesses hinter dem Audit-Token (zuletzt am Socket tätig).
+    /// `nil`, wenn er nicht mehr zu finden ist.
+    var code: SecCode?
     var executablePath: String?
 
     static func of(socket fd: Int32) -> HandoverPeer? {
         var euid: uid_t = 0
         var egid: gid_t = 0
         guard getpeereid(fd, &euid, &egid) == 0 else { return nil }
-        var pid: pid_t = 0
-        var length = socklen_t(MemoryLayout<pid_t>.size)
-        let pidKnown = getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &pid, &length) == 0 && pid > 0
-        return HandoverPeer(
-            uid: euid,
-            pid: pidKnown ? pid : nil,
-            executablePath: pidKnown ? executablePath(of: pid) : nil
-        )
+        var token = audit_token_t()
+        var length = socklen_t(MemoryLayout<audit_token_t>.size)
+        guard getsockopt(fd, SOL_LOCAL, LOCAL_PEERTOKEN, &token, &length) == 0 else {
+            return HandoverPeer(uid: euid, pid: nil, code: nil, executablePath: nil)
+        }
+        // audit_token_t: val[5] ist die PID.
+        let pid = pid_t(bitPattern: token.val.5)
+        let code = Self.code(for: token)
+        return HandoverPeer(uid: euid, pid: pid, code: code, executablePath: code.flatMap(Self.path(of:)))
+    }
+
+    static func code(for token: audit_token_t) -> SecCode? {
+        var token = token
+        let data = withUnsafeBytes(of: &token) { Data($0) }
+        let attributes = [kSecGuestAttributeAudit: data] as CFDictionary
+        var code: SecCode?
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess else { return nil }
+        return code
+    }
+
+    /// Pfad des Haupt-Binarys. `SecCodeCopyPath` nennt bei Bundles nur den
+    /// `.app`-Ordner, deshalb zuerst `kSecCodeInfoMainExecutable`.
+    static func path(of code: SecCode) -> String? {
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return nil }
+        var info: CFDictionary?
+        if SecCodeCopySigningInformation(staticCode, [], &info) == errSecSuccess,
+           let dict = info as? [String: Any],
+           let main = dict[kSecCodeInfoMainExecutable as String] as? URL {
+            return main.path
+        }
+        var url: CFURL?
+        guard SecCodeCopyPath(staticCode, [], &url) == errSecSuccess, let url else { return nil }
+        return (url as URL).path
     }
 
     static func executablePath(of pid: pid_t) -> String? {

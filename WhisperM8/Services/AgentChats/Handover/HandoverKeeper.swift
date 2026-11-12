@@ -28,13 +28,17 @@ final class HandoverKeeper: @unchecked Sendable {
         var runID: String
         /// Entscheidung 2: höchstens 10 Minuten halten.
         var holdSeconds: TimeInterval = 600
-        /// Frist für die Abgabe ab Start (bis `COMMIT`).
+        /// Frist für die Abgabe: ab Start bis `HELLO`, danach ab dem letzten
+        /// Telegramm der Abgabe (jedes `DEPOSIT` verlängert) bis `COMMIT`.
         var depositSeconds: TimeInterval = 30
         /// Frist je Telegramm innerhalb einer Verbindung.
         var ioTimeout: TimeInterval = 10
         /// Frist für das `ACK` nach einer übergebenen Leitung.
         var ackTimeout: TimeInterval = 10
         var peerPolicy: HandoverPeerPolicy
+        /// Einmal-Geheimnis, das die alte App beim Start über stdin übergibt.
+        /// Ohne passendes Geheimnis keine Abgabe. `nil` nur in Tests im selben Prozess.
+        var depositSecret: String?
         var serializer: HandoverScreenSerializing = HandoverPlainTextSerializer()
         /// Wie `AgentTerminalRegistry.captureAllSnapshotsForAppQuit`: Ctrl+C,
         /// 80 ms, Ctrl+C, 180 ms.
@@ -44,7 +48,9 @@ final class HandoverKeeper: @unchecked Sendable {
     }
 
     enum Phase: String {
-        case starting, awaitingDeposit, holding, finished
+        /// `closing`: geordnetes Ende läuft, wartet aber noch auf eine
+        /// Übergabe, deren ACK fehlt.
+        case starting, awaitingDeposit, holding, closing, finished
     }
 
     enum FinishReason: String {
@@ -99,6 +105,7 @@ final class HandoverKeeper: @unchecked Sendable {
     private var activeConnections: Set<Int32> = []
     private let fileLog: LoggerFileSink?
     private var onFinish: ((FinishReason) -> Void)?
+    private var pendingFinishReason: FinishReason?
 
     init(configuration: Configuration) {
         self.configuration = configuration
@@ -223,13 +230,12 @@ final class HandoverKeeper: @unchecked Sendable {
             close(clientFD)
             return
         }
-        let trusted = configuration.peerPolicy.isAllowed(executablePath: peer.executablePath)
         activeConnections.insert(clientFD)
         connectionQueue.async { [weak self] in
             defer { self?.connectionSlots.signal() }
             guard let self else { close(clientFD); return }
             let connection = HandoverConnection(fd: clientFD)
-            self.serve(connection, peer: peer, trusted: trusted)
+            self.serve(connection)
             self.queue.sync { _ = self.activeConnections.remove(clientFD) }
             connection.close()
         }
@@ -264,7 +270,8 @@ final class HandoverKeeper: @unchecked Sendable {
 
     private func processExited(pid: pid_t, status: Int32?) {
         for chat in chats.values where chat.manifest.pid == pid && !chat.exited {
-            chat.pump()
+            // Mitten in der Übergabe liest nur noch die App.
+            if !chat.inTransfer { chat.pump() }
             chat.markExited(status: status)
             log("chat_exited chat=\(chat.manifest.chatID) status=\(status.map(String.init) ?? "?")")
         }
@@ -318,6 +325,14 @@ final class HandoverKeeper: @unchecked Sendable {
         self.timer = timer
     }
 
+    /// Abgabe lebt: Frist neu setzen (nach `HELLO` und jedem `DEPOSIT`).
+    func extendDepositDeadline() {
+        guard phase == .awaitingDeposit else { return }
+        arm(deadline: Date().addingTimeInterval(configuration.depositSeconds)) { [weak self] in
+            self?.depositDeadlineReached()
+        }
+    }
+
     private func depositDeadlineReached() {
         guard phase == .awaitingDeposit else { return }
         log("deposit_deadline_reached chats=\(chats.count)")
@@ -327,12 +342,6 @@ final class HandoverKeeper: @unchecked Sendable {
 
     private func holdDeadlineReached() {
         guard phase == .holding else { return }
-        // Nie mitten in einer Übergabe enden: die App hält die Leitung, das
-        // ACK fehlt noch (harte Regel). Kurz danach erneut prüfen.
-        if chats.values.contains(where: \.inTransfer) {
-            arm(deadline: Date().addingTimeInterval(1)) { [weak self] in self?.holdDeadlineReached() }
-            return
-        }
         log("hold_deadline_reached chats=\(chats.count)")
         shutDownOrderly(reason: .holdExpired)
     }
@@ -340,15 +349,18 @@ final class HandoverKeeper: @unchecked Sendable {
     /// SIGTERM/SIGINT: wie Fristende.
     func terminate() {
         queue.async { [weak self] in
-            guard let self, self.phase != .finished else { return }
-            if self.phase == .awaitingDeposit {
-                // Die alte App hält ihre Leitungen noch und beendet sich selbst.
+            guard let self else { return }
+            switch self.phase {
+            case .starting, .awaitingDeposit:
+                // Die alte App hält ihre Originale bis COMMIT → OK und beendet
+                // sich selbst auf dem heutigen Weg.
                 self.releaseSilently()
-            } else {
-                self.stopReadingAll()
-                self.sendInterrupts(to: Array(self.chats.values))
+                self.finish(.terminated)
+            case .holding:
+                self.shutDownOrderly(reason: .terminated)
+            case .closing, .finished:
+                break
             }
-            self.finish(.terminated)
         }
     }
 
@@ -364,14 +376,38 @@ final class HandoverKeeper: @unchecked Sendable {
 
     /// Geordnet wie heute: zweimal Ctrl+C an TUIs, dann Leitungen schließen —
     /// die Chats bekommen SIGHUP und enden. Fortgesetzt wird per `--resume`.
+    ///
+    /// Ein Chat mitten in der Übergabe (CHAT gesendet, ACK fehlt) bekommt
+    /// kein Ctrl+C, und seine Leitung bleibt offen, bis die Übergabe
+    /// entschieden ist (`transferSettled`): Mit ACK gehört er der App, ohne
+    /// wird die Kopie nur geschlossen. Erst danach endet der Aufbewahrer.
     func shutDownOrderly(reason: FinishReason) {
-        stopReadingAll()
-        sendInterrupts(to: Array(chats.values))
+        guard phase == .holding else { return }
+        let settled = chats.values.filter { !$0.inTransfer }
+        for chat in settled { chat.stopReading() }
+        sendInterrupts(to: settled)
+        for chat in settled { remove(chat) }
+        if chats.values.contains(where: \.inTransfer) {
+            phase = .closing
+            pendingFinishReason = reason
+            log("finish_deferred_for_transfer reason=\(reason.rawValue)")
+            return
+        }
         finish(reason)
     }
 
-    private func stopReadingAll() {
-        for chat in chats.values { chat.stopReading() }
+    /// Eine Übergabe ist entschieden. Läuft ein aufgeschobenes Ende, jetzt beenden.
+    func transferSettled() {
+        guard phase == .closing, let reason = pendingFinishReason else { return }
+        guard !chats.values.contains(where: \.inTransfer) else { return }
+        pendingFinishReason = nil
+        finish(reason)
+    }
+
+    func remove(_ chat: KeptChat) {
+        chat.closeDescriptor()
+        chats[chat.manifest.chatID] = nil
+        chatOrder.removeAll { $0 == chat.manifest.chatID }
     }
 
     private func sendInterrupts(to list: [KeptChat]) {
@@ -496,10 +532,16 @@ final class KeptChat {
     /// Liest, was gerade anliegt, ohne zu blockieren (`poll` mit 0 statt
     /// `O_NONBLOCK`: das Flag gälte für die gemeinsame Dateibeschreibung und
     /// damit auch für die App, die dieselbe Leitung hält).
+    /// Obergrenze je Durchlauf, damit ein Chat, der ohne Pause schreibt, die
+    /// Queue (Fristen, accept, TAKE, SIGTERM) nicht für sich allein hat. Der
+    /// Rest kommt im nächsten Durchlauf der Lesequelle.
+    static let pumpBudget = 1_048_576
+
     func pump() {
         guard descriptor >= 0, !readerAtEnd else { return }
         var buffer = [UInt8](repeating: 0, count: 65_536)
-        while true {
+        var consumed = 0
+        while consumed < Self.pumpBudget {
             var pfd = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
             let ready = poll(&pfd, 1, 0)
             if ready < 0 && errno == EINTR { continue }
@@ -514,26 +556,45 @@ final class KeptChat {
                 return
             }
             gapBytes += count
+            consumed += count
             screen.feed(buffer[0..<count])
         }
     }
 
+    /// Bytes, die nicht in die Leitung passten und verworfen wurden.
+    private(set) var droppedBytes = 0
+
+    /// Schreibt, ohne je zu warten: Liest das Kind seine Eingabe nicht
+    /// (angehaltener Job, Datei voller Rückfragen), ist die Leitung voll, und
+    /// ein blockierendes `write` hielte den ganzen Aufbewahrer an. Was nicht
+    /// passt, wird verworfen — es sind nur Antworten auf Rückfragen und Ctrl+C.
     func write(_ bytes: [UInt8]) {
-        guard descriptor >= 0 else { return }
-        KeptChat.writeAll(fd: descriptor, bytes)
+        guard descriptor >= 0, !bytes.isEmpty else { return }
+        let written = KeptChat.writeWithoutWaiting(fd: descriptor, bytes)
+        droppedBytes += bytes.count - written
     }
 
-    static func writeAll(fd: Int32, _ bytes: [UInt8]) {
+    /// `O_NONBLOCK` gilt für die gemeinsame Dateibeschreibung. Das Flag wird
+    /// nur für diesen Aufruf gesetzt und gleich zurückgenommen; solange der
+    /// Aufbewahrer schreibt, liest und schreibt niemand sonst auf der Leitung
+    /// (die alte App hat aufgehört, die neue bekommt sie erst nach TAKE).
+    static func writeWithoutWaiting(fd: Int32, _ bytes: [UInt8]) -> Int {
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0 else { return 0 }
+        let wasBlocking = flags & O_NONBLOCK == 0
+        if wasBlocking { _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK) }
+        defer { if wasBlocking { _ = fcntl(fd, F_SETFL, flags) } }
         var offset = 0
-        var attempts = 0
-        while offset < bytes.count, attempts < 100 {
+        while offset < bytes.count {
             let written = bytes.withUnsafeBytes { Darwin.write(fd, $0.baseAddress!.advanced(by: offset), bytes.count - offset) }
             if written < 0 {
-                if errno == EINTR || errno == EAGAIN { attempts += 1; usleep(1_000); continue }
-                return
+                if errno == EINTR { continue }
+                break // EAGAIN: voll, Rest verwerfen; sonst Leitung zu
             }
+            if written == 0 { break }
             offset += written
         }
+        return offset
     }
 
     /// Schließt die eigene Kopie der Leitung — bei laufendem oder eben

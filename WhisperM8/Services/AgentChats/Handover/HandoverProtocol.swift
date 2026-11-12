@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // MARK: - Übergabeprotokoll (Aufbewahrer ↔ App ↔ CLI)
 
@@ -93,6 +94,9 @@ struct HandoverMessage: Codable, Equatable {
     var appPid: Int32?
     /// Kennung des Aufbewahrer-Laufs (`--run`), in `OK` und `STATUS_RESULT`.
     var runID: String?
+    /// HELLO der Abgabe: das Einmal-Geheimnis, das die alte App dem
+    /// Aufbewahrer beim Start über stdin gegeben hat.
+    var secret: String?
 
     // DEPOSIT / CHAT / ACK / TAKE
     var chatID: String?
@@ -140,6 +144,33 @@ struct HandoverChatSummary: Codable, Equatable {
     var exited: Bool
     var exitStatus: Int32?
     var gapBytes: Int
+}
+
+// MARK: - Einmal-Geheimnis
+
+/// Nachweis der alten App gegenüber „ihrem“ Aufbewahrer. Geht nie über
+/// Argumente (sichtbar in `ps`) und nie auf die Platte, nur über stdin.
+enum HandoverSecret {
+    static func make() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes")
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func isWellFormed(_ text: String) -> Bool {
+        text.count >= 32 && text.allSatisfy(\.isHexDigit)
+    }
+
+    /// Vergleich ohne frühen Ausstieg.
+    static func matches(_ given: String?, expected: String) -> Bool {
+        guard let given else { return false }
+        let a = Array(given.utf8), b = Array(expected.utf8)
+        guard a.count == b.count else { return false }
+        var diff: UInt8 = 0
+        for index in 0..<a.count { diff |= a[index] ^ b[index] }
+        return diff == 0
+    }
 }
 
 // MARK: - Manifest

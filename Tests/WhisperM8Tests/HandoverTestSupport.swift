@@ -126,7 +126,7 @@ final class HandoverAppDouble {
         self.fd = fd
         let writeFD = fd
         screen = HandoverHeadlessTerminal(cols: 80, rows: 24, scrollback: scrollback, colors: nil) { bytes in
-            KeptChat.writeAll(fd: writeFD, bytes)
+            _ = KeptChat.writeWithoutWaiting(fd: writeFD, bytes)
         }
         screen.feed(image)
     }
