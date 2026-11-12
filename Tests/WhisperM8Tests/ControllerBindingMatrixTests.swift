@@ -78,6 +78,37 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .chordCancelled: .holdProgressCancelled(.l1),
     ]
 
+    /// Außerhalb der App mit „Bei Eingabe nach vorn holen“: Tasten beim
+    /// Drücken, Sticks und Steuerkreuz beim ersten Ausschlag, L1/R1/L2 erst
+    /// beim Tippen. Wiederholungen und das Halten danach nicht.
+    private static let wakeTable: Table = {
+        var table: Table = [:]
+        for button in immediateButtons where button != .r2 && button != .touchpad {
+            table[.press(button)] = .bringAppToFront
+        }
+        // Tasten, die nur in einer Ebene als Druck ankommen (Kreis, L1 …).
+        let layerOnly = Set(layerPressButtons).subtracting(immediateButtons)
+        for layer in ControllerLayer.allCases {
+            for button in layerOnly {
+                table[.inLayer(layer, .press(button))] = .bringAppToFront
+            }
+        }
+        for (button, duration) in holdButtons {
+            table[.holdPending(button, duration: duration)] = .bringAppToFront
+        }
+        for key in [ControllerButton.l1, .r1, .l2] {
+            table[.tap(key)] = .bringAppToFront
+        }
+        for direction in ControllerDirection.allCases {
+            for source in ControllerMoveSource.allCases {
+                table[.move(direction, source: source, isRepeat: false)] = .bringAppToFront
+            }
+        }
+        table[.scroll(lines: 3)] = .bringAppToFront
+        table[.scroll(lines: -3)] = .bringAppToFront
+        return table
+    }()
+
     /// Alle Bewegungen in `direction` aus beiden Quellen, mit und ohne Wiederholung.
     private static func moves(_ direction: ControllerDirection, _ action: ControllerAction) -> Table {
         var table: Table = [:]
@@ -284,6 +315,10 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.triangle): .bringAppToFront,
         ], pauseChord)),
         ("outsideApp aus", .outsideApp(backgroundEnabled: false), [:]),
+        ("outsideApp aufwecken", .outsideApp(backgroundEnabled: true, wakeOnInput: true), merge([
+            .press(.r2): .dictationToggle,
+            .press(.touchpad): .clipboardToggle,
+        ], wakeTable, pauseChord)),
         ("Aufnahme in Chat", .recording(phase: .recording, targetIsChat: true), merge([
             .press(.r2): .dictationToggle,
             .press(.cross): .dictationStopAndSubmit,

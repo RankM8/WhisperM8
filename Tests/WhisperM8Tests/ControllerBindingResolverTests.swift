@@ -519,6 +519,35 @@ final class ControllerBindingResolverTests: XCTestCase {
         }
     }
 
+    /// Aufwecken: Jede bewusste Eingabe holt WhisperM8 nach vorn. R2 und
+    /// Touchpad behalten ihre Bedeutung, L1/R1/L2 wecken erst beim Tippen
+    /// (gehalten könnten sie die Pause L1 + R1 beginnen).
+    func testOutsideAppWakesOnInput() {
+        let wake = ControllerContext.outsideApp(backgroundEnabled: true, wakeOnInput: true)
+        let wakers: [ControllerGesture] = [
+            .press(.cross), .press(.options), .press(.create), .press(.l3), .press(.triangle),
+            .holdPending(.circle, duration: 0.4), .holdPending(.square, duration: 0.6), .holdPending(.r3, duration: 0.6),
+            .tap(.l1), .tap(.r1), .tap(.l2),
+            .move(.up, source: .dpad, isRepeat: false), .move(.left, source: .leftStick, isRepeat: false),
+            .scroll(lines: 2),
+            .inLayer(.writing, .press(.cross)),
+        ]
+        for gesture in wakers {
+            XCTAssertEqual(action(gesture, wake), .bringAppToFront, "\(gesture)")
+        }
+        XCTAssertEqual(action(.press(.r2), wake), .dictationToggle)
+        XCTAssertEqual(action(.press(.touchpad), wake), .clipboardToggle)
+        XCTAssertEqual(action(.chordCompleted, wake), .pauseToggle)
+        let quiet: [ControllerGesture] = [
+            .holdPending(.l1, duration: 0.3), .holdPending(.r1, duration: 0.3), .holdPending(.l2, duration: 0.3),
+            .layerBegan(.writing), .move(.down, source: .dpad, isRepeat: true),
+            .holdBegan(.circle), .holdRepeat(.square), .tap(.circle),
+        ]
+        for gesture in quiet {
+            XCTAssertNotEqual(action(gesture, wake), .bringAppToFront, "\(gesture)")
+        }
+    }
+
     func testBridgeInModalAndOtherWindow() {
         for context in [ControllerContext.modal, .otherWindow] {
             XCTAssertEqual(action(.move(.up, source: .dpad, isRepeat: false), context), .bridgeKey(.up))

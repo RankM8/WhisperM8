@@ -30,6 +30,15 @@ während die Steuerung aus ist, erscheint einmal eine Mitteilung.
 | Vibration | an | Impulse bei Aufnahme, wartenden Chats und geleerter Eingabe |
 | Lichtleiste | an | Farbe nach Zustand |
 | Auch wenn ein anderes Programm vorne ist | aus | Diktat und Verlauf überall; in Spielen ist R2 meist Gas oder Schuss |
+| Bei Eingabe WhisperM8 nach vorn holen | an | nur mit dem Schalter darüber: Ist ein anderes Programm vorne, holt fast jede Eingabe das Agent-Chats-Fenster nach vorn |
+
+**Aufwecken:** Ist ein anderes Programm vorne und sind beide Schalter an, holt jede Taste beim
+Drücken und jeder Stick- oder Steuerkreuz-Ausschlag das Agent-Chats-Fenster nach vorn. Ausnahmen: R2
+diktiert weiter in das Programm vorne, das Touchpad öffnet den Verlauf. L1, R1 und L2 wecken erst beim
+Tippen, denn gehalten könnten sie der Anfang der Pause L1 + R1 sein. Die weckende Eingabe tut sonst
+nichts: Bis alles losgelassen ist, verwirft die Pumpe die restlichen Gesten
+(`ControllerGesturePump.swallowUntilIdle`). Sonst käme etwa das Loslassen von Kreis im Chat als
+„zurück“ an. Ist ein Spiel vorne, pausiert der Controller ohnehin und weckt nicht.
 
 Notbremse: `defaults write com.whisperm8.app controllerFeatureEnabled -bool NO` — kein Zugriff auf
 das GameController-Framework, der Schalter wirkt nicht.

@@ -34,8 +34,8 @@ enum ControllerBindingResolver {
         switch context {
         case .paused:
             return nil
-        case let .outsideApp(backgroundEnabled):
-            return backgroundEnabled ? outsideApp(gesture) : nil
+        case let .outsideApp(backgroundEnabled, wakeOnInput):
+            return backgroundEnabled ? outsideApp(gesture, wakeOnInput: wakeOnInput) : nil
         case let .recording(phase, targetIsChat):
             return recording(gesture, phase: phase, targetIsChat: targetIsChat)
         case .quickAction:
@@ -61,7 +61,7 @@ enum ControllerBindingResolver {
 
     static func chordAllowed(in context: ControllerContext) -> Bool {
         switch context {
-        case .recording, .outsideApp(backgroundEnabled: false):
+        case .recording, .outsideApp(backgroundEnabled: false, _):
             return false
         default:
             return true
@@ -80,12 +80,32 @@ enum ControllerBindingResolver {
 
     // MARK: - Außerhalb der App und ohne Agent-Chats-Fenster
 
-    private static func outsideApp(_ gesture: ControllerGesture) -> ControllerAction? {
+    private static func outsideApp(_ gesture: ControllerGesture, wakeOnInput: Bool) -> ControllerAction? {
         switch gesture {
         case .press(.r2): return .dictationToggle
         case .press(.touchpad): return .clipboardToggle
         case .press(.triangle): return .bringAppToFront
-        default: return nil
+        default: return wakeOnInput && wakes(gesture) ? .bringAppToFront : nil
+        }
+    }
+
+    /// Eingaben, die außerhalb der App WhisperM8 nach vorn holen: jede Taste
+    /// beim Drücken, Sticks und Steuerkreuz beim ersten Ausschlag. L1, R1 und
+    /// L2 erst beim Tippen — gehalten könnten sie der Anfang von L1 + R1
+    /// (Pause) sein, und die muss auch in einem Browser-Spiel gehen.
+    /// Was danach noch gehalten wird, verschluckt der Manager bis zum Loslassen.
+    static func wakes(_ gesture: ControllerGesture) -> Bool {
+        switch gesture {
+        case let .press(button):
+            return button != .r2 && button != .touchpad
+        case let .holdPending(button, _):
+            return ControllerLayer(key: button) == nil
+        case let .tap(button):
+            return ControllerLayer(key: button) != nil
+        case .move(_, _, isRepeat: false), .scroll:
+            return true
+        default:
+            return false
         }
     }
 

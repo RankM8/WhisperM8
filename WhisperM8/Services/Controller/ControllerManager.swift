@@ -283,6 +283,7 @@ final class ControllerManager {
         var snapshot = performer?.snapshot() ?? ControllerAppSnapshot(window: .none)
         snapshot.isPaused = isPaused
         snapshot.backgroundEnabled = preferences().isControllerBackgroundEnabled
+        snapshot.wakeOnInputEnabled = preferences().isControllerWakeOnInputEnabled
         let context = ControllerContextResolver.context(for: snapshot)
         let action = ControllerBindingResolver.action(for: gesture, in: context)
         guard let action, !isDryRun, let performer else {
@@ -292,6 +293,9 @@ final class ControllerManager {
             togglePause()
         } else {
             performer.perform(action, in: context)
+        }
+        if action == .bringAppToFront, case .outsideApp = context {
+            pump.swallowUntilIdle()
         }
         return ControllerResolution(gesture: gesture, context: context, action: action, executed: true)
     }

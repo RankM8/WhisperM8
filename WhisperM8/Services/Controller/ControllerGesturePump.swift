@@ -20,6 +20,8 @@ final class ControllerGesturePump: @unchecked Sendable {
     private let clock: @Sendable () -> TimeInterval
     private var timer: DispatchSourceTimer?
     private var activity: NSObjectProtocol?
+    /// Gesten verwerfen, bis nichts mehr gedrückt oder ausgelenkt ist.
+    private var swallowing = false
 
     init(
         config: ControllerGestureRecognizer.Config = .init(),
@@ -52,9 +54,23 @@ final class ControllerGesturePump: @unchecked Sendable {
         }
     }
 
+    /// Verwirft alle Gesten, bis Tasten und Sticks losgelassen sind. Nach dem
+    /// Aufwecken aus einem anderen Programm: Was die App nach vorn geholt hat,
+    /// soll dort nicht auch noch wirken (Kreis loslassen wäre sonst „zurück“,
+    /// ein gehaltener Stick liefe weiter durch die Liste).
+    func swallowUntilIdle() {
+        queue.async { [self] in
+            swallowing = !recognizer.isIdle
+        }
+    }
+
     // MARK: - Zeitgeber (nur auf `queue`)
 
     private func emit(_ gestures: [ControllerGesture]) {
+        if swallowing {
+            if recognizer.isIdle { swallowing = false }
+            return
+        }
         guard !gestures.isEmpty else { return }
         onGestures?(gestures)
     }

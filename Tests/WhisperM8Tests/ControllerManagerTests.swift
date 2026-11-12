@@ -193,6 +193,37 @@ final class ControllerManagerTests: XCTestCase {
         XCTAssertEqual(manager.counters.snapshot.counts[.triangle]?.downInactive, 1)
     }
 
+    // MARK: - Aufwecken aus einem anderen Programm
+
+    /// Kreis holt WhisperM8 nach vorn. Sein Loslassen (sonst „zurück“) wird
+    /// verschluckt, auch wenn die App inzwischen vorne ist; die nächste
+    /// Eingabe wirkt wieder.
+    func testWakeSwallowsRestOfThePressUntilReleased() async {
+        enable(background: true)
+        performer.current.appIsActive = false
+        let wake = await send([.button(.circle, pressed: true)], expecting: 1)
+        XCTAssertEqual(wake.map(\.action), [.bringAppToFront])
+        XCTAssertEqual(wake.first?.context, .outsideApp(backgroundEnabled: true, wakeOnInput: true))
+
+        performer.current.appIsActive = true
+        let after = await send([
+            .button(.circle, pressed: false),
+            .button(.cross, pressed: true),
+        ], expecting: 1)
+        XCTAssertEqual(after.map(\.gesture), [.press(.cross)], "Kreis loslassen darf nicht als Tippen ankommen")
+        XCTAssertEqual(performer.performed, [.bringAppToFront, .chatKey(.enter)])
+    }
+
+    /// Ohne den Schalter bleibt es beim alten Verhalten: nur Dreieck holt nach vorn.
+    func testWakeOffKeepsOldOutsideBehavior() async {
+        defaults.set(false, forKey: PreferenceKeys.controllerWakeOnInputEnabled)
+        enable(background: true)
+        performer.current.appIsActive = false
+        let resolutions = await send([.button(.cross, pressed: true)], expecting: 1)
+        XCTAssertNil(resolutions.first?.action)
+        XCTAssertEqual(performer.performed, [])
+    }
+
     // MARK: - Debug-Kanal
 
     /// Ein Trockenlauf führt auch nachlaufende Gesten nicht aus, und ein

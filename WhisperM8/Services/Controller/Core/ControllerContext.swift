@@ -61,7 +61,9 @@ struct ControllerClipboardState: Equatable, Sendable {
 /// Zusammenhang, in dem eine Geste ausgewertet wird (Plan 3.1).
 enum ControllerContext: Equatable, Sendable {
     case paused
-    case outsideApp(backgroundEnabled: Bool)
+    /// Ein anderes Programm ist vorne. `wakeOnInput`: Fast jede Eingabe holt
+    /// das Agent-Chats-Fenster nach vorn (nur mit Hintergrund-Empfang).
+    case outsideApp(backgroundEnabled: Bool, wakeOnInput: Bool = false)
     case recording(phase: ControllerRecordingPhase, targetIsChat: Bool)
     case quickAction
     case clipboardPanel(ControllerClipboardState)
@@ -87,6 +89,7 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var isPaused: Bool = false
     var appIsActive: Bool = true
     var backgroundEnabled: Bool = false
+    var wakeOnInputEnabled: Bool = false
     var recordingPhase: ControllerRecordingPhase?
     var recordingTargetIsChat: Bool = false
     var quickActionRunning: Bool = false
@@ -116,7 +119,12 @@ enum ControllerContextResolver {
         }
         if snapshot.quickActionRunning { return .quickAction }
         if snapshot.clipboardPanelOpen { return .clipboardPanel(snapshot.clipboard) }
-        if !snapshot.appIsActive { return .outsideApp(backgroundEnabled: snapshot.backgroundEnabled) }
+        if !snapshot.appIsActive {
+            return .outsideApp(
+                backgroundEnabled: snapshot.backgroundEnabled,
+                wakeOnInput: snapshot.backgroundEnabled && snapshot.wakeOnInputEnabled
+            )
+        }
         switch snapshot.window {
         case .none: return .noWindow
         case .other: return .otherWindow

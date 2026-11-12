@@ -644,6 +644,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerBackgroundEnabled) }
     }
 
+    /// Ist ein anderes Programm vorne, holt jede Eingabe am Controller (außer
+    /// R2 und Touchpad) das Agent-Chats-Fenster nach vorn. Wirkt nur mit
+    /// `isControllerBackgroundEnabled`. Standard: an.
+    var isControllerWakeOnInputEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerWakeOnInputEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerWakeOnInputEnabled) }
+    }
+
     var isControllerHapticsEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.controllerHapticsEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerHapticsEnabled) }
@@ -1100,6 +1108,7 @@ enum PreferenceKeys {
     static let controllerFeatureEnabled = "controllerFeatureEnabled"
     static let controllerEnabled = "controllerEnabled"
     static let controllerBackgroundEnabled = "controllerBackgroundEnabled"
+    static let controllerWakeOnInputEnabled = "controllerWakeOnInputEnabled"
     static let controllerHapticsEnabled = "controllerHapticsEnabled"
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
