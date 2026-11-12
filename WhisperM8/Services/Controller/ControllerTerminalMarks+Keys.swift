@@ -35,10 +35,13 @@ extension ControllerTerminalMarks {
         case .space:
             // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)
-        case .backspace, .deleteWord:
+        case .backspace, .deleteWord, .killLineStart, .newline:
+            // Bis Zeilenanfang löschen und Zeilenumbruch (L1-Ebene) sind
+            // Eingaben ins Feld wie die Rücktaste. Das Leeren per R3 läuft
+            // nicht hier durch (`clearInputFromController`).
             choiceListClosed()
             recordDraftInput(submitted: false, at: now)
-        case .tab, .backTab, .killLineStart, .lineEnd:
+        case .tab, .backTab, .lineEnd:
             choiceListClosed()
         }
     }

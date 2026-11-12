@@ -9,6 +9,19 @@ final class ControllerTerminalMarksTests: XCTestCase {
 
     private func at(_ seconds: TimeInterval) -> Date { t0.addingTimeInterval(seconds) }
 
+    /// Runde 4: Bis Zeilenanfang löschen und Zeilenumbruch (L1-Ebene) sind
+    /// Eingaben ins Feld: Sie schließen eine Auswahl und halten Kreuz für die
+    /// 30-s-Regel scharf.
+    func testLayerWritingKeysCountAsDraftInput() {
+        for key in [TerminalControlKey.killLineStart, .newline] {
+            var marks = ControllerTerminalMarks()
+            marks.choiceListOpened(at: t0)
+            marks.recordControllerKey(key, status: .idle, isCodex: false, at: at(1))
+            XCTAssertFalse(marks.isChoiceListOpen(at: at(2)), "\(key)")
+            XCTAssertEqual(marks.lastDraftInputAt, at(1), "\(key)")
+        }
+    }
+
     // MARK: - Auswahl offen (Befund 1a)
 
     /// Feste Höchstdauer ab dem Öffnen: Pfeile und Leerzeichen halten die

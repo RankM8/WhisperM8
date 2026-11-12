@@ -42,6 +42,28 @@ final class TerminalControlKeyTests: XCTestCase {
         XCTAssertEqual(TerminalControlKey.backspace.modifiers, [])
     }
 
+    /// Runde 4: Zeilenumbruch per Ctrl+J (LF). Der Entwurfs-Tracker sieht
+    /// Shift+Return — ein Umbruch im Entwurf, kein Absenden.
+    func testNewlineIsLineFeedAndKeepsTheDraft() {
+        for applicationCursor in [false, true] {
+            XCTAssertEqual(TerminalControlKey.newline.bytes(applicationCursor: applicationCursor), [0x0A])
+        }
+        XCTAssertEqual(TerminalControlKey.killLineStart.bytes(applicationCursor: false), [0x15])
+        XCTAssertTrue(tracker(after: [.newline], startingWithDraft: false).mayHaveUnsentInput)
+        XCTAssertTrue(tracker(after: [.newline], startingWithDraft: true).mayHaveUnsentInput)
+    }
+
+    /// Zeilenumbruch und Löschen bis Zeilenanfang nur bei Claude und Codex,
+    /// nicht in einer Rückfrage.
+    func testNewlineAndKillLineOnlyInAgentInputs() {
+        for key in [TerminalControlKey.newline, .killLineStart] {
+            XCTAssertTrue(TerminalControlKey.controllerAllows(key, status: .idle, profile: .claudeCodeChat, choiceListOpen: false))
+            XCTAssertTrue(TerminalControlKey.controllerAllows(key, status: .working, profile: .codexChat, choiceListOpen: false))
+            XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: .idle, profile: .plainShell, choiceListOpen: false))
+            XCTAssertFalse(TerminalControlKey.controllerAllows(key, status: .awaitingInput, profile: .claudeCodeChat, choiceListOpen: false))
+        }
+    }
+
     func testWheelSequencesForAlternateBuffer() {
         XCTAssertEqual(TerminalScrollStep.wheelSequence(up: true), "\u{1b}[<64;1;1M")
         XCTAssertEqual(TerminalScrollStep.wheelSequence(up: false), "\u{1b}[<65;1;1M")
