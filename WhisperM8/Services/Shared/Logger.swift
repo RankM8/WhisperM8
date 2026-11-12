@@ -30,6 +30,9 @@ enum Logger {
     /// Tastatursperre zum Reinigen: Start, Ende mit Grund, Tap-Neustart.
     static let keyboardLock = os.Logger(subsystem: subsystem, category: "keyboard.lock")
     static let controller = os.Logger(subsystem: subsystem, category: "controller")
+    /// Aufbewahrer beim „Neustart ohne Chatverlust“ (`handover-keeper`):
+    /// Abgabe, Übernahme, Fristen. Nie Tokens oder Terminal-Inhalte.
+    static let handover = os.Logger(subsystem: subsystem, category: "handover")
 
     // MARK: - Optional File Logging
 
