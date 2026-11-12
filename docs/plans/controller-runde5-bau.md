@@ -42,12 +42,16 @@ Presenter. Die vereinte Pille ist seit `83b46822` in main und hier gemergt. Der 
   (`ControllerMenuAnchorMark`, `ControllerListMarker`); feste Zeilenhöhen, kein Messen.
 - **Gruppe „Workspace“** nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster oder große
   Kachel): „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“, „In neues
-  Fenster“, dann „Notizen im Workspace an/aus“, „Workspace umbenennen…“ (`renameWorkspace`, dasselbe Sheet wie in der
+  Fenster“, dann „Workspace umbenennen…“ (`renameWorkspace`, dasselbe Sheet wie in der
   Seitenleiste), „Rastergröße ›“ (`setWorkspaceCapacity`). Außerhalb eines Workspace stehen „Zu Workspace
   hinzufügen ›“ und „In neues Fenster“ unter „Chat“. Entscheidung Rastergröße: Wachsen und Verkleinern ohne
   Verlust gehen; Stufen, die die Auswahl „wer bleibt“ bräuchten, sind aus („nur mit der Maus“), und der Befehl
   lehnt sie ab — der Controller öffnet den Auswahlmodus nie. Notizen gibt es in der großen Kachel nicht (die
   Karte hängt an der Kachel im Raster).
+- **Nach dem Review (13.11.2026):** „Notizen überall an/aus“ steht unter Steuerung (die Umschaltung gilt
+  app-weit); die Karte hängt nur neben einer Zeile der Liste, wenn das Menü ihr gilt; Herausnehmen trägt die
+  Workspace-ID vom Öffnen mit; in Codex zählt ↑ nach Ctrl+U, Ctrl+C oder sichtbar leerem Feld als
+  Zurückholen; in sehr kleinen Fenstern wird die Karte an ihrem Rahmen abgeschnitten.
 - **Befund 3 behoben:** Ein in Codex mit ↑ zurückgeholter, unveränderter Prompt ist vom eigenen Entwurf
   unterscheidbar (`TerminalComposerDraftTracker.mayHoldRecalledCodexPrompt`); R1 + Kreuz schickt ihn nicht
   erneut ab. Tippen, Löschen oder Einfügen macht ihn zum eigenen Entwurf; ↑ in einem eigenen Entwurf zählt

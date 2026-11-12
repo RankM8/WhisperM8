@@ -23,6 +23,23 @@ enum ControllerMenuPlacement {
         }
     }
 
+    /// Darf die markierte Zeile der Liste die Karte tragen? Nur, wenn das Menü
+    /// beim Öffnen genau dieser Zeile galt (`setup.target`). Ist eine Projekt-
+    /// oder Workspace-Zeile markiert, gilt das Menü dem ausgewählten Chat —
+    /// dann hängt die Karte an dessen Kopf bzw. Kachel, nicht neben der Zeile.
+    static func listRowCarriesMenu(_ setup: ControllerMenuSetup?, row: SidebarNavigationRow) -> Bool {
+        guard let setup, setup.sessionID != nil else { return false }
+        return setup.target == row
+    }
+
+    /// Darf der Kopf bzw. die Kachel dieses Chats die Karte tragen? Wenn das
+    /// Menü diesem Chat gilt; trägt zugleich die Zeile der Liste, gewinnt sie
+    /// (`Anchor.preferred`).
+    static func chatCarriesMenu(_ setup: ControllerMenuSetup?, sessionID: UUID?) -> Bool {
+        guard let setup, let sessionID else { return false }
+        return setup.sessionID == sessionID
+    }
+
     /// Abstand zum Fensterrand.
     static let margin: CGFloat = 8
     /// Abstand zwischen Anker und Karte.

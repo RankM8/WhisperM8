@@ -463,6 +463,13 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         dispatcher.ui.menu?.select(.renameWorkspace)
         perform(.menuActivate)
         XCTAssertEqual(window.commands.last, .renameWorkspace(workspace))
+
+        // Herausnehmen nennt den Workspace, den das Menü gezeigt hat (Review).
+        window.chatInfo?.removableWorkspaceName = "Marketing"
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.removeFromWorkspace)
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .removeChatFromWorkspace(chat, workspaceID: workspace))
         XCTAssertNil(dispatcher.ui.menu)
 
         perform(.menuToggle)

@@ -47,6 +47,10 @@ struct TerminalComposerDraftTracker: Equatable {
     /// wie ein Entwurf (`mayHaveUnsentInput`); R1 + Kreuz schickt ihn aber nicht
     /// erneut ab (Review Runde 5, Befund 3).
     private(set) var mayHoldRecalledCodexPrompt = false
+    /// Codex: Das Feld wurde vielleicht geleert (Ctrl+U), ohne dass der
+    /// Entwurfs-Verdacht faellt. Holt ↑ danach etwas, ist es ein
+    /// zurueckgeholter Prompt (Review Runde 5).
+    private var mayHaveEmptiedField = false
     /// Zeitpunkt des letzten programmatischen Absendens (`chats send`,
     /// Queue-Zustellung).
     private(set) var lastProgrammaticSubmitAt: Date?
@@ -224,6 +228,13 @@ struct TerminalComposerDraftTracker: Equatable {
             // Cmd+V fuegt ein.
             mayHaveUnsentInput = true
             mayHoldRecalledCodexPrompt = false
+            mayHaveEmptiedField = false
+        case 32 where flags.contains(.control):
+            // Ctrl+U loescht bis zum Zeilenanfang — im einzeiligen Feld alles.
+            // Der Entwurfs-Verdacht bleibt (mehrzeilig bleibt Text stehen), aber
+            // ein folgendes ↑ zaehlt als Zurueckholen.
+            mayHoldRecalledCodexPrompt = false
+            mayHaveEmptiedField = true
         case 51, 117:
             // Loeschen fuegt keinen Text ein, veraendert aber einen
             // zurueckgeholten Prompt: danach ist er ein eigener Entwurf.
@@ -238,6 +249,7 @@ struct TerminalComposerDraftTracker: Equatable {
             if flags.contains(.command) || flags.contains(.control) { break }
             mayHaveUnsentInput = true
             mayHoldRecalledCodexPrompt = false
+            mayHaveEmptiedField = false
         }
     }
 
@@ -246,14 +258,25 @@ struct TerminalComposerDraftTracker: Equatable {
     /// ins Feld. Bei Claude steht er schon im Transcript wie ein Rueckleger —
     /// ein programmatischer Versand („Weiter“, Menue-Befehl, `chats send`)
     /// leert das Feld vorher. Sonst gilt er vorsichtshalber als Entwurf.
-    mutating func recordHistoryRecall(isClaude: Bool) {
+    /// - Parameter fieldVisiblyEmpty: Das Feld war vor dem ↑ am Bildschirm
+    ///   sichtbar leer (`ControllerScreenReading`); `nil`, wenn nicht ablesbar.
+    mutating func recordHistoryRecall(isClaude: Bool, fieldVisiblyEmpty: Bool? = nil) {
         if isClaude {
             mayHoldRestoredPrompt = true
         } else {
             // Codex holt nur aus einem leeren Feld (oder aus einem unveraendert
             // zurueckgeholten Prompt) den Verlauf; in einem eigenen Entwurf
             // bewegt ↑ den Cursor. Nur dann ist es ein zurueckgeholter Prompt.
-            if !mayHaveUnsentInput || mayHoldRecalledCodexPrompt { mayHoldRecalledCodexPrompt = true }
+            // Leer heisst: kein Entwurf geschaetzt, geleert (Ctrl+U) oder am
+            // Bildschirm sichtbar leer (etwa nach Ruecktaste bis zum Anfang).
+            let wasEmpty = !mayHaveUnsentInput || mayHaveEmptiedField || fieldVisiblyEmpty == true
+            if fieldVisiblyEmpty == false, !mayHoldRecalledCodexPrompt {
+                // Sichtbar Text im Feld, und der kam nicht vom Zurueckholen.
+                mayHoldRecalledCodexPrompt = false
+            } else if wasEmpty || mayHoldRecalledCodexPrompt {
+                mayHoldRecalledCodexPrompt = true
+            }
+            mayHaveEmptiedField = false
             mayHaveUnsentInput = true
         }
     }
@@ -263,6 +286,7 @@ struct TerminalComposerDraftTracker: Equatable {
     mutating func recordTextInserted() {
         mayHaveUnsentInput = true
         mayHoldRecalledCodexPrompt = false
+        mayHaveEmptiedField = false
         programmaticWrites += 1
     }
 
@@ -274,6 +298,7 @@ struct TerminalComposerDraftTracker: Equatable {
         mayHoldRestoredPrompt = false
         mayShowAcceptedSuggestion = false
         mayHoldRecalledCodexPrompt = false
+        mayHaveEmptiedField = false
         interruptedSinceSubmit = false
         escapeRun = 0
         programmaticWrites += 1

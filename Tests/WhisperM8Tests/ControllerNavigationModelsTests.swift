@@ -154,10 +154,10 @@ final class ControllerMenuModelTests: XCTestCase {
             .continueWork, .commands, .cycleMode, .redraw,
             .switchAccount, .rename, .refreshTitle, .fork, .pin, .archive, .closeChat,
             .openProject, .revealInFinder,
-            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
             .renameWorkspace, .gridCapacity,
             .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
-            .clipboardHistory, .showBindings, .pause,
+            .toggleNotes, .clipboardHistory, .showBindings, .pause,
         ])
         let model = ControllerMenuModel(setup: setup())
         XCTAssertEqual(model.selected, .continueWork)
@@ -198,13 +198,15 @@ final class ControllerMenuModelTests: XCTestCase {
             .continueWork, .commands, .cycleMode, .redraw,
             .rename, .refreshTitle, .pin, .archive, .closeChat,
             .openProject, .revealInFinder,
-            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+            .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
             .renameWorkspace, .gridCapacity,
             .restart,
-            .clipboardHistory, .showBindings, .pause,
+            .toggleNotes, .clipboardHistory, .showBindings, .pause,
         ])
+        // „Notizen überall an/aus“ gilt app-weit: Gruppe Steuerung, nicht Workspace.
+        XCTAssertEqual(model.group(of: .toggleNotes), .controller)
         XCTAssertEqual(visible(model).filter(model.startsGroup),
-                       [.rename, .openProject, .removeFromWorkspace, .restart, .clipboardHistory])
+                       [.rename, .openProject, .removeFromWorkspace, .restart, .toggleNotes])
     }
 
     /// Ohne Workspace gibt es die Gruppe nicht: „Zu Workspace hinzufügen“ und

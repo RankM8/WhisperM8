@@ -11,6 +11,7 @@ extension UISnapshotGallery {
         let windowID = UUID()
         let selected = UUID(), other1 = UUID(), other2 = UUID(), other3 = UUID()
         let workspaceID = UUID()
+        let projectID = UUID()
 
         func accounts() -> [ControllerAccountChoice] {
             var list = [
@@ -99,7 +100,7 @@ extension UISnapshotGallery {
                 row("1 Moe · Doku: auf den neuesten Stand", .chat(other1), dot: AppTheme.statusWorking)
                 row("2 Lux · Integrationen", .chat(selected), dot: AppTheme.statusAwaiting, chosen: true)
                 row("3 Kit · Release-Notizen", .chat(other2), dot: AppTheme.textTertiary)
-                row("whisperm8", nil, dot: nil, indent: false, bold: true)
+                row("whisperm8", .project(projectID), dot: nil, indent: false, bold: true)
                 row("Controller Insel", .chat(other3), dot: AppTheme.statusWorking)
                 row("E2E Befunde Raster", nil, dot: AppTheme.textTertiary)
                 row("Release Notizen 2.26", nil, dot: AppTheme.textTertiary)
@@ -296,6 +297,12 @@ extension UISnapshotGallery {
             Fixture(name: "controller-menue-karte-liste", size: large) {
                 show(menu(chatInfo(inWorkspace: false, title: "3 Kit · Release-Notizen"), selected: .rename, session: other2),
                      area: .list, marked: .chat(other2))
+                return listView()
+            },
+            // Projekt-Zeile markiert: Das Menü gilt dem ausgewählten Chat und hängt
+            // an dessen Kopf, nicht neben der Projekt-Zeile (Review Runde 5).
+            Fixture(name: "controller-menue-karte-liste-projektzeile", size: large) {
+                show(menu(chatInfo(inWorkspace: false), selected: .rename), area: .list, marked: .project(projectID))
                 return listView()
             },
             // Langes Menü im kleinen Fenster: die Liste scrollt in der Karte.

@@ -125,10 +125,10 @@ extension UISnapshotGallery {
                 var accounts = ControllerMenuModel(setup: setup, selected: .switchAccount)
                 _ = accounts.openSubmenu()
                 return AnyView(HStack(alignment: .top, spacing: 20) {
-                    ControllerMenuCard(menu: ControllerMenuModel(setup: setup), fallbackTitle: nil)
-                    ControllerMenuCard(menu: ControllerMenuModel(setup: question), fallbackTitle: nil)
-                    ControllerMenuCard(menu: commands, fallbackTitle: nil)
-                    ControllerMenuCard(menu: accounts, fallbackTitle: nil)
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: setup), fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: question), fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: commands, fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: accounts, fallbackTitle: nil).pillGlassShadow()
                 }.padding(20).frame(maxHeight: .infinity, alignment: .top))
             },
         ]

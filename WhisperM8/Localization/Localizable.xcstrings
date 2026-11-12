@@ -18084,22 +18084,22 @@
         }
       }
     },
-    "Turn notes off in this workspace": {
+    "Turn notes off everywhere": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Notizen im Workspace aus"
+            "value": "Notizen überall aus"
           }
         }
       }
     },
-    "Turn notes on in this workspace": {
+    "Turn notes on everywhere": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Notizen im Workspace an"
+            "value": "Notizen überall an"
           }
         }
       }

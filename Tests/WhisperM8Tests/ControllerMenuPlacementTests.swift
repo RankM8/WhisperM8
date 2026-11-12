@@ -128,3 +128,37 @@ final class ControllerMenuWindowTests: XCTestCase {
         XCTAssertTrue(range.contains(3))
     }
 }
+
+/// Woran die Karte hängt (Review Runde 5): Die markierte Zeile trägt sie nur,
+/// wenn das Menü ihr gilt; sonst Kopf bzw. Kachel des ausgewählten Chats.
+final class ControllerMenuAnchorRuleTests: XCTestCase {
+    private let selected = UUID()
+    private let other = UUID()
+
+    private func setup(target: SidebarNavigationRow?) -> ControllerMenuSetup {
+        ControllerMenuSetup(sessionID: target?.sessionID, target: target, chat: ControllerChatActionInfo(title: "Chat"))
+    }
+
+    func testProjectRowMarkedMenuHangsAtTheSelectedChat() {
+        // Projekt-Zeile markiert: Das Menü gilt dem ausgewählten Chat.
+        let menu = setup(target: .chat(selected))
+        XCTAssertFalse(ControllerMenuPlacement.listRowCarriesMenu(menu, row: .project(UUID())))
+        XCTAssertTrue(ControllerMenuPlacement.chatCarriesMenu(menu, sessionID: selected))
+        XCTAssertFalse(ControllerMenuPlacement.chatCarriesMenu(menu, sessionID: other))
+    }
+
+    func testMarkedChatRowCarriesItsMenu() {
+        let row = SidebarNavigationRow.workspaceChat(session: other, workspace: UUID())
+        let menu = setup(target: row)
+        XCTAssertTrue(ControllerMenuPlacement.listRowCarriesMenu(menu, row: row))
+        XCTAssertFalse(ControllerMenuPlacement.listRowCarriesMenu(menu, row: .chat(other)), "andere Zeile desselben Chats")
+        XCTAssertFalse(ControllerMenuPlacement.chatCarriesMenu(menu, sessionID: selected))
+        XCTAssertEqual(ControllerMenuPlacement.Anchor.preferred([.listRow, .header]), .listRow)
+    }
+
+    func testClosedMenuOrNoChatCarriesNothing() {
+        XCTAssertFalse(ControllerMenuPlacement.listRowCarriesMenu(nil, row: .chat(selected)))
+        XCTAssertFalse(ControllerMenuPlacement.chatCarriesMenu(nil, sessionID: selected))
+        XCTAssertFalse(ControllerMenuPlacement.chatCarriesMenu(setup(target: nil), sessionID: nil))
+    }
+}

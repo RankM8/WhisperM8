@@ -26,7 +26,8 @@ private struct ControllerListMarker: View {
 
     var body: some View {
         if model.area == .list, model.markedRow == row, model.listWindowID == windowID {
-            let menuOpen = model.menu != nil
+            // Nur, wenn das Menü dieser Zeile gilt (beim Öffnen festgehalten).
+            let carriesMenu = ControllerMenuPlacement.listRowCarriesMenu(model.menu?.setup, row: row)
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(AppTheme.accentTint)
                 .overlay(
@@ -38,7 +39,7 @@ private struct ControllerListMarker: View {
                 .accessibilityHidden(true)
                 // Offenes Options-Menü hängt sich neben die markierte Zeile.
                 .anchorPreference(key: ControllerMenuAnchorKey.self, value: .bounds) { anchor in
-                    menuOpen ? [.listRow: anchor] : [:]
+                    carriesMenu ? [.listRow: anchor] : [:]
                 }
         }
     }

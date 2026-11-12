@@ -2929,9 +2929,7 @@ struct AgentChatsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
             } else {
-                activeChatStatusRow
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3).controllerMenuAnchor(.header, sessionID: selectedSessionID)
+                anchoredChatStatusRow
             }
         }
         .background(AgentTheme.header)
@@ -2945,7 +2943,7 @@ struct AgentChatsView: View {
     ///   der TUI, live-getrackt ueber `~/.claude/jobs/*/state.json`
     /// - Runtime-Info (Provider · Modell · Status) ganz rechts
     @ViewBuilder
-    private var activeChatStatusRow: some View {
+    var activeChatStatusRow: some View {
         HStack(alignment: .center, spacing: 8) {
             statusDot
 

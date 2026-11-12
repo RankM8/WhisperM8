@@ -372,6 +372,34 @@ final class PromptGuardStubTests: XCTestCase {
         XCTAssertFalse(codex.holdsOnlyRecalledPrompt)
     }
 
+    /// Review Runde 5: Geleertes Feld, dann ↑ — das ist wieder ein
+    /// zurückgeholter Prompt, kein eigener Entwurf.
+    func testCodexRecallAfterTheFieldWasCleared() {
+        var ctrlU = TerminalComposerDraftTracker()
+        ctrlU.recordKeyDown(keyCode: 0, modifiers: [])
+        ctrlU.recordKeyDown(keyCode: 32, modifiers: .control)
+        ctrlU.recordHistoryRecall(isClaude: false)
+        XCTAssertTrue(ctrlU.holdsOnlyRecalledPrompt, "Ctrl+U")
+
+        var ctrlC = TerminalComposerDraftTracker()
+        ctrlC.recordKeyDown(keyCode: 0, modifiers: [])
+        ctrlC.recordKeyDown(keyCode: 8, modifiers: .control)
+        ctrlC.recordHistoryRecall(isClaude: false)
+        XCTAssertTrue(ctrlC.holdsOnlyRecalledPrompt, "Ctrl+C")
+
+        // Rücktaste bis leer: nur der Bildschirm weiß es.
+        var screen = TerminalComposerDraftTracker()
+        screen.recordKeyDown(keyCode: 0, modifiers: [])
+        screen.recordKeyDown(keyCode: 51, modifiers: [])
+        screen.recordHistoryRecall(isClaude: false, fieldVisiblyEmpty: true)
+        XCTAssertTrue(screen.holdsOnlyRecalledPrompt, "sichtbar leer")
+
+        // Sichtbar Text im Feld (eigener Entwurf): ↑ holt nichts.
+        var draft = TerminalComposerDraftTracker()
+        draft.recordHistoryRecall(isClaude: false, fieldVisiblyEmpty: false)
+        XCTAssertFalse(draft.holdsOnlyRecalledPrompt)
+    }
+
     /// → vom Controller (Vorschlag übernommen) und ↑ (Prompt zurückgeholt)
     /// heißen „Text im Feld“: Pfeil links wird frei. Absenden setzt zurück.
     func testFieldMayHaveTextAfterSuggestionAndRecall() {

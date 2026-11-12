@@ -70,7 +70,10 @@ extension ControllerActionDispatcher {
         case .revealInFinder: chatCommand = .revealProjectInFinder(sessionID)
         case .toggleTileNote: chatCommand = .toggleTileNote(sessionID)
         case .toggleNotes: chatCommand = .toggleNotes
-        case .removeFromWorkspace: chatCommand = .removeChatFromWorkspace(sessionID)
+        case .removeFromWorkspace:
+            // Der Workspace, den das Menü beim Öffnen gezeigt hat.
+            guard let workspaceID = setup.chat?.shownInWorkspace?.id else { return playHaptic(.rejected) }
+            chatCommand = .removeChatFromWorkspace(sessionID, workspaceID: workspaceID)
         case .moveToNewWindow: chatCommand = .moveChatToNewWindow(sessionID)
         case .restart: chatCommand = .restartChat(sessionID)
         case .backgroundLogs: chatCommand = .backgroundLogs(sessionID)

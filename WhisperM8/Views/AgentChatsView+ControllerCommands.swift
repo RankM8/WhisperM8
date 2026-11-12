@@ -141,10 +141,12 @@ extension AgentChatsView {
             guard isGridActive else { return false }
             JarvisNotesShortcut.toggleDefault(windowID: windowID)
             return true
-        case .removeChatFromWorkspace(let id):
-            // Im Raster oder aus der großen Kachel heraus.
+        case .removeChatFromWorkspace(let id, let workspaceID):
+            // Im Raster oder aus der großen Kachel heraus, und nur aus dem
+            // Workspace, den das Menü gezeigt hat.
             guard isGridActive || selectedSessionID == id, let entity = activeGridWorkspaceEntity,
-                  entity.sourceProjectID == nil, entity.slotIndex(of: id) != nil else { return false }
+                  entity.id == workspaceID, entity.sourceProjectID == nil,
+                  entity.slotIndex(of: id) != nil else { return false }
             removeSessionFromWorkspace(id, workspaceID: entity.id)
             return true
         case .renameWorkspace(let workspaceID):

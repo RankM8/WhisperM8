@@ -24,8 +24,9 @@ extension ControllerMenuItem {
             return chat?.tileNoteOpen == true
                 ? String(localized: "Hide this tile's note") : String(localized: "Show this tile's note")
         case .toggleNotes:
+            // Gilt app-weit (`JarvisNotesShortcut.toggleDefault`), nicht je Workspace.
             return chat?.notesDefaultOpen == true
-                ? String(localized: "Turn notes off in this workspace") : String(localized: "Turn notes on in this workspace")
+                ? String(localized: "Turn notes off everywhere") : String(localized: "Turn notes on everywhere")
         case .removeFromWorkspace:
             // Die Gruppe nennt den Workspace schon in ihrer Überschrift.
             return String(localized: "Remove from this workspace")

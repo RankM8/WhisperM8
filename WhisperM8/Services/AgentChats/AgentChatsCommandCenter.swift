@@ -84,8 +84,9 @@ enum AgentChatsCommand: Equatable {
     case toggleTileNote(UUID)
     /// Standard „Notizen an/aus“ für dieses Fenster (wie ⌥⌘N).
     case toggleNotes
-    /// Aus dem sichtbaren Workspace nehmen.
-    case removeChatFromWorkspace(UUID)
+    /// Aus dem Workspace nehmen, den das Menü beim Öffnen gezeigt hat. Ist
+    /// inzwischen ein anderer zu sehen, geht der Befehl nicht.
+    case removeChatFromWorkspace(UUID, workspaceID: UUID)
     case addChatToWorkspace(UUID, workspaceID: UUID)
     case moveChatToNewWindow(UUID)
     /// Workspace umbenennen: öffnet dasselbe Sheet wie das Kontextmenü der

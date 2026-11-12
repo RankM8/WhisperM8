@@ -40,8 +40,6 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     case toggleTileNote
     /// In ein neues Fenster verschieben.
     case moveToNewWindow
-    /// Standard „Notizen an/aus“ für alle Kacheln (wie ⌥⌘N).
-    case toggleNotes
     /// Workspace umbenennen (dasselbe Sheet wie im Kontextmenü der Seitenleiste).
     case renameWorkspace
     /// Zweite Ebene: Rastergröße (wie der Stufenwähler im Workspace-Kopf).
@@ -53,6 +51,10 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     case backgroundLogs, backgroundStop, backgroundRestart
     /// Laufenden Subagent-Job stoppen.
     case stopJob
+    // Steuerung und App
+    /// Standard „Notizen an/aus“ für alle Kacheln (wie ⌥⌘N). Gilt app-weit,
+    /// nicht je Workspace — deshalb nicht in der Gruppe Workspace.
+    case toggleNotes
     // Steuerung
     /// Zwischenablage-Verlauf öffnen (wie Touchpad bzw. L2 + Touchpad).
     case clipboardHistory
@@ -70,10 +72,10 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
         case .continueWork, .commands, .cycleMode, .redraw: return .input
         case .switchAccount, .rename, .refreshTitle, .fork, .pin, .archive, .closeChat: return .chat
         case .openProject, .revealInFinder: return .project
-        case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow, .toggleNotes,
+        case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
              .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
-        case .clipboardHistory, .showBindings, .pause: return .controller
+        case .toggleNotes, .clipboardHistory, .showBindings, .pause: return .controller
         }
     }
 

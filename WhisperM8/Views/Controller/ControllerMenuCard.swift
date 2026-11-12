@@ -22,14 +22,17 @@ struct ControllerMenuAnchorKey: PreferenceKey {
 }
 
 /// Meldet den Rahmen von Chat-Kopf oder Kachelkopf, solange das Menü für
-/// diesen Chat im Inhalt offen ist. Als `.background` an den Kopf hängen.
+/// diesen Chat offen ist. Als `.background` an den Kopf hängen.
 struct ControllerMenuAnchorMark: View {
     let kind: ControllerMenuPlacement.Anchor
     let sessionID: UUID?
     @State private var model = ControllerUIModel.shared
 
     var body: some View {
-        if let sessionID, model.area == .content, model.menu?.setup.sessionID == sessionID {
+        // Auch in der Liste, wenn das Menü dem ausgewählten Chat gilt (eine
+        // Projekt- oder Workspace-Zeile ist markiert); gilt es der markierten
+        // Zeile, gewinnt deren Anker.
+        if ControllerMenuPlacement.chatCarriesMenu(model.menu?.setup, sessionID: sessionID) {
             Color.clear
                 .anchorPreference(key: ControllerMenuAnchorKey.self, value: .bounds) { [kind: $0] }
                 .allowsHitTesting(false)
@@ -137,7 +140,6 @@ struct ControllerMenuCard: View {
             PillGlassBackground(shape: RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .pillGlassShadow()
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
     }
@@ -370,6 +372,11 @@ struct ControllerMenuCardLayer: View {
             isSubmenu: menu.submenu != nil, rows: layout.rows, selectedID: selectedID,
             peekAbove: layout.above, peekBelow: layout.below)
             .frame(width: layout.frame.width, height: layout.frame.height, alignment: .top)
+            // In sehr kleinen Fenstern passt nicht einmal eine Zeile samt Kopf und
+            // Fuß: dann wird die Karte an ihrem Rahmen abgeschnitten, statt über
+            // ihn hinauszuragen.
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .pillGlassShadow()
             .position(x: layout.frame.midX, y: layout.frame.midY)
     }
 }

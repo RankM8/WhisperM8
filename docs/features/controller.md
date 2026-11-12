@@ -107,6 +107,9 @@ zeigt die Karte nur ganze Zeilen rund um die Markierung und rückt mit ihr (`Con
 Kante, an der es weitergeht, ist der nächste Eintrag nur als verblassender Rand zu sehen. Ohne Anker (kein Chat sichtbar) steht sie
 unten mittig über der Legende. Platzierung pur in `ControllerMenuPlacement`, Anker über
 `ControllerMenuAnchorKey` (`ControllerMenuCard.swift`): Die Anker melden nur bei offenem Menü einen Rahmen.
+Neben einer Zeile der Liste steht die Karte nur, wenn das Menü dieser Zeile gilt; ist eine Projekt- oder
+Workspace-Zeile markiert, gilt es dem ausgewählten Chat und hängt an dessen Kopf bzw. Kachel. „Aus diesem
+Workspace nehmen“ wirkt nur auf den Workspace, den das Menü beim Öffnen gezeigt hat.
 
 Gruppen in fester Reihenfolge: Eingaben · Chat · Projekt · Workspace · Lebenszyklus · Steuerung. Ein Eintrag
 erscheint nur, wenn er für diesen Chat passt; ausgegraut ist nur, was passt, aber gerade nicht geht (etwa
@@ -118,9 +121,9 @@ Kontextmenü des Chats bzw. Seitenleiste und Workspace-Kopf (je ein `AgentChatsC
 | Eingaben | „Weiter“, „Befehle ›“ (feste Befehle der CLI, Tabelle `ControllerSlashCommands`, bei Claude auch `/tasks`, `/workflows`, `/rewind`; „/ eintippen“ bleibt ungesendet, alle anderen werden gesendet; Befehle mit Liste setzen „Auswahl offen“), „Modus wechseln“ (Shift+Tab), „Neu zeichnen“ (nur Claude, Ctrl+L) |
 | Chat | „Konto wechseln ›“, „Umbenennen…“, „Titel neu lesen“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“ in der Seitenleiste); außerhalb eines Workspace auch „Zu Workspace hinzufügen ›“ und „In neues Fenster verschieben“ |
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
-| Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Notizen im Workspace an/aus“ (wie ⌥⌘N), „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Notizen nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
+| Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Die Notiz der Kachel nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
 | Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
-| Steuerung | „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
+| Steuerung | „Notizen überall an/aus“ (wie ⌥⌘N, gilt app-weit, nur bei sichtbarem Raster), „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 
 **Konto wechseln ›** zeigt rechts den Verbrauch „5 Std. · Woche“ wie das Limits-Popover (Ampel: unter 50 %
 grün, ab 50 gelb, ab 80 rot) und markiert je Gruppe (Claude, GPT) das wählbare Konto mit dem kleinsten

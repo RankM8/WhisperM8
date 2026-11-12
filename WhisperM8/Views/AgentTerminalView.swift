@@ -861,7 +861,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // ↑ holt im Feld den letzten Prompt zurück (Review 12.11.2026): Ein
         // „Weiter“ oder `chats send` darf sich nicht daran hängen.
         if key == .up, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
-            composerDraft.recordHistoryRecall(isClaude: isClaude)
+            // Codex: vorher am Bildschirm ablesen, ob das Feld leer ist (nur
+            // hier im Ereignis-Pfad, höchstens 12 Zeilen).
+            let field = isClaude ? nil : controllerScreenSnapshot()?.promptField
+            let empty: Bool? = field.flatMap { $0.isEmpty ? true : ($0.hasText ? false : nil) }
+            composerDraft.recordHistoryRecall(isClaude: isClaude, fieldVisiblyEmpty: empty)
         }
         if key == .right, isClaude, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
             composerDraft.recordSuggestionAccepted()
