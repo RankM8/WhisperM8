@@ -13,6 +13,7 @@ extension AgentControlRequestHandler {
         case debug
         case speech
         case clipboard
+        case gptRouter
 
         var methods: Set<String> {
             switch self {
@@ -20,6 +21,7 @@ extension AgentControlRequestHandler {
             case .debug: return AgentControlRequestHandler.debugMethods
             case .speech: return AgentControlRequestHandler.speechMethods
             case .clipboard: return AgentControlRequestHandler.clipboardMethods
+            case .gptRouter: return [AgentControlRequestHandler.gptRouterStartProfileMethod]
             }
         }
     }
@@ -36,6 +38,7 @@ extension AgentControlRequestHandler {
         case .debug: return await debugRequest(request)
         case .speech: return await speechRequest(request)
         case .clipboard: return await clipboardRequest(request)
+        case .gptRouter: return gptRouterStartProfile(request)
         }
     }
 }

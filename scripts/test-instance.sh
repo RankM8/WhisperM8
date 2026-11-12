@@ -27,6 +27,9 @@ SCRATCH="$REPO/.build-test"
 APP="$SCRATCH/WhisperM8Test.app"
 BIN="$APP/Contents/MacOS/WhisperM8"
 ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}"
+# Die App nimmt nur absolute Wurzeln an (AppInstance.resolveTestRoot); mit einer
+# relativen oder „~/…“ liefen `cli`-Befehle gegen die Produktiv-App.
+[[ "$ROOT" == /* ]] || { echo "WHISPERM8_TEST_ROOT muss ein absoluter Pfad sein: $ROOT" >&2; exit 64; }
 LOG="$ROOT/instance.log"
 BUNDLE_ID="com.whisperm8.app.test"
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
@@ -35,7 +38,9 @@ pids() {
     # Jede laufende Test-Instanz, auch aus einem anderen Worktree — es gibt nur
     # eine Wurzel, zwei Instanzen würden sich die Daten teilen. Nie die
     # Produktiv-App (anderer Bundle-Name).
-    ps -axo pid=,comm= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ {print $1}'
+    # Der Router-Dienst (`gpt-router`) ist kein App-Prozess: er überlebt den
+    # Neustart der App (Labs „Neustart ohne Chatverlust“).
+    ps -axww -o pid=,args= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / {print $1}'
 }
 
 cmd_build() {
