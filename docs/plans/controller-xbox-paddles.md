@@ -517,3 +517,15 @@ Danach „bereit für make dev“ mit Branch und Commit, dann H1–H10.
   Eingabeüberwachung): https://discussions.unity.com/t/xbox-controller-not-working-on-macos/932929
 - OpenEmu Wiki, „Troubleshooting: Input problems“ (Eingabeüberwachung betrifft auch Controller):
   https://github.com/OpenEmu/OpenEmu/wiki/Troubleshooting:-Input-problems
+
+## Nachtrag 12.11.2026: Xbox-Knopf = Zwischenablage-Verlauf
+
+Gemessen am Elite 2 (BLE, Firmware 5.21): Der runde Xbox-Knopf kommt über GameController nicht an,
+auch nicht mit `preferredSystemGestureState = .disabled` („Button Home“ ist im Profil vorhanden, meldet aber
+keinen Druck). In den rohen HID-Daten erscheint er als Tastenseite 0x09, Usage 0x0D (Druck 1, Loslassen 0).
+macOS tut mit dem Knopf sonst nichts. Der kleine Profil-Knopf darunter meldet Consumer 0x0C/0x85 (Profil 0–3)
+und gehört dem Controller; er wird nicht belegt.
+
+Freigegeben vom User: Der Xbox-Knopf öffnet und schließt den Zwischenablage-Verlauf, wie das Touchpad am
+DualSense. Er läuft über denselben HID-Leser wie die Paddles (nur Microsoft-Gamepads). Ohne HID-Zugriff hat er
+keine Wirkung; die Einstellungen sagen das in der Zustandszeile. View (Create) und Menu (Options) bleiben, wie sie sind.
