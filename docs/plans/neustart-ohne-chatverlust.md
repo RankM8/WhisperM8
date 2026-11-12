@@ -264,6 +264,21 @@ Diese Tests halten den **heutigen** Stand fest und laufen grün auf main, bevor 
 8. Makefile: `GUI_PIDS` nimmt `agent-supervise` aus (Textprüfung). Neue Ausnahmen kommen später dazu.
 9. Statusquelle: Registry-Eintrag ohne eigenes Terminal wird verworfen (vorhanden, Ergänzung um „Eintrag kommt später“).
 
+### Stand nach Paket 0 (12.11.2026)
+
+- Erledigt: 2 (Cmd+Q-Dialog, vorhandene Tests), 3 (Hook-Bridge), 4 (Sperre gegen Doppelstart, jetzt umgesetzt), 5 (Router-Strom, `testRouterDispatchesToBothLocalUpstreamsAndStreamsResponses`), 7 (Prompt-Queue, vorhandene Tests), 8 (Makefile).
+- Teilweise: 1. Ctrl+C an Chats, keins an angedockte Tabs und eine gemeinsame Wartezeit sind getestet. Die Marker-Entscheidung beim SIGTERM-Quit als reine Funktion fehlt noch und kommt in Paket 4, wo sie sich ändert.
+- Verschoben: 6 (Leck von Profil-Proxys) nach Paket 3, 9 (Registry-Eintrag kommt nach dem Terminal) nach Paket 4.
+
+### Nachträge aus dem Review von Paket 0
+
+1. **Deskriptoren im Kind schließen.** Das Kind schließt vor `execve` alle Deskriptoren ab 3. close-on-exec am Master deckt nur die eigenen PTYs ab. Jeder Deskriptor, der ohne das Flag entsteht (fremde Bibliotheken, per `SCM_RIGHTS` empfangene Leitungen im Aufbewahrer), würde sonst weiter vererbt. Gilt für den Fork (Paket 1) und für den Aufbewahrer (Paket 2).
+2. **Sperrmeldung mit Ort und Aktionen.** Die Meldung nennt heute nur die PID. Besser: wo die Sitzung läuft (anderer Tab, Terminal außerhalb der App) und eine Aktion wie „Zum Chat wechseln“. Kommt mit Paket 4.
+3. **Fehlende Tests.**
+   - Neustart eines Tabs über den echten Weg (Beenden, sofort neu bauen, Sperre greift nicht).
+   - Die offenen Punkte oben.
+   - Die Makefile-Prüfung ist eine Textprüfung und damit fragil. Sie wird ersetzt, sobald `GUI_PIDS` in Paket 4 ohnehin umgebaut wird.
+
 ## Bau-Reihenfolge
 
 Jedes Paket hat einen eigenen Branch und Arbeitsordner, wird einzeln reviewt und geht erst nach grüner Suite in main. Ist der Labs-Schalter aus, ändert keins das heutige Verhalten. Ausnahme ist Paket 0, das sind Fehlerbehebungen.
