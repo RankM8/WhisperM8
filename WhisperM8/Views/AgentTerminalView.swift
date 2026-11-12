@@ -855,6 +855,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         if key == .up, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
             composerDraft.recordHistoryRecall(isClaude: isClaude)
         }
+        if key == .right, isClaude, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
+            composerDraft.recordSuggestionAccepted()
+        }
         noteControllerKey(key, status: status, now: now)
         terminal.send(key.bytes(applicationCursor: terminal.getTerminal().applicationCursor))
         return true

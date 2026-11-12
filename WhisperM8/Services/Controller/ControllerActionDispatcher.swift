@@ -135,6 +135,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             status: terminal.isRunning ? status : .ended,
             profile: terminal.profile,
             draftSuspected: terminal.draftSuspected,
+            fieldMayHaveText: terminal.fieldMayHaveText || terminal.draftSuspected,
             recentlySubmitted: within(Self.recentlySubmittedWindow, of: terminal.lastEnterAt),
             secondsSinceAwaitingBegan: status == .awaitingInput
                 ? terminal.statusSince.map { moment.timeIntervalSince($0) } : nil,
