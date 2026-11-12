@@ -674,6 +674,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerConnectHintShown) }
     }
 
+    // MARK: Vereinte Pille
+
+    /// Notbremse für die vereinte Pille (Diktat und Chat-Status in einer
+    /// Pille, ohne Notch oben mittig, mit Notch an der Notch). Aus = die
+    /// getrennte Diktat-Pille und Status-Pille wie vor dem 12.11.2026.
+    /// `defaults write com.whisperm8.app unifiedPillEnabled -bool NO`
+    var isUnifiedPillEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.unifiedPillEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.unifiedPillEnabled) }
+    }
+
     // MARK: Notch-Status
 
     /// Notbremse für die Statusanzeige an der Notch: Aus = kein Fenster, keine
@@ -1131,6 +1142,7 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"

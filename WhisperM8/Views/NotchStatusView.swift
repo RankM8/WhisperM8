@@ -20,6 +20,8 @@ struct NotchDisplay: Equatable {
     /// Nur Pille: Sie sitzt in der unteren Bildschirmhälfte, die Liste wächst
     /// nach oben und der Kopf bleibt unten, wo die Pille war.
     var opensUpward = false
+    /// Mit der Tastatur markierte Zeile (Hotkey „Statusliste öffnen“).
+    var selectedRowID: UUID?
 
     var isNotch: Bool {
         if case .notch = style { return true }
@@ -403,21 +405,35 @@ struct NotchChatList: View {
     let palette: NotchPalette
     var onSelect: (UUID) -> Void
     var onTurnOff: () -> Void = {}
+    /// Text des Ausschalters unten links (vereinte Pille: „Status in der
+    /// Pille ausblenden“).
+    var turnOffTitle: LocalizedStringKey = "Turn off notch"
+    var turnOffHelp: String = String(localized: "Hides the chat status at the notch. Turn it back on in Settings or the menu bar.")
+    /// Mit der Tastatur markierte Zeile.
+    var selectedRowID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(sections) { section in
-                        sectionTitle(section.kind)
-                        ForEach(section.rows) { row in
-                            NotchRowButton(row: row, palette: palette) { onSelect(row.id) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(sections) { section in
+                            sectionTitle(section.kind)
+                            ForEach(section.rows) { row in
+                                NotchRowButton(row: row, palette: palette, isSelected: row.id == selectedRowID) {
+                                    onSelect(row.id)
+                                }
+                                .id(row.id)
+                            }
                         }
                     }
+                    .padding(.horizontal, 8)
                 }
-                .padding(.horizontal, 8)
+                .scrollIndicators(.hidden)
+                .onChange(of: selectedRowID) { _, id in
+                    if let id { proxy.scrollTo(id) }
+                }
             }
-            .scrollIndicators(.hidden)
 
             HStack {
                 // Sichtbarer Ausschalter direkt in der Notch. Wieder an:
@@ -425,13 +441,13 @@ struct NotchChatList: View {
                 Button(action: onTurnOff) {
                     HStack(spacing: 4) {
                         Image(systemName: "power")
-                        Text("Turn off notch")
+                        Text(turnOffTitle)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(palette.secondary)
-                .help(String(localized: "Hides the chat status at the notch. Turn it back on in Settings or the menu bar."))
+                .help(turnOffHelp)
                 Spacer()
                 Text("Esc closes")
             }
@@ -466,6 +482,7 @@ struct NotchChatList: View {
 struct NotchRowButton: View {
     let row: NotchRow
     let palette: NotchPalette
+    var isSelected = false
     var action: () -> Void
 
     @State private var isHovering = false
@@ -514,6 +531,7 @@ struct NotchRowButton: View {
 
     /// Wartende Zeilen leicht amber, Fehler leicht rot, sonst nur beim Darüberfahren.
     private var background: Color {
+        if isSelected { return palette.rowHover.opacity(2) }
         guard row.category == .needsYou else { return isHovering ? palette.rowHover : .clear }
         return row.status == .errored ? palette.error.opacity(0.14) : palette.attentionTint
     }

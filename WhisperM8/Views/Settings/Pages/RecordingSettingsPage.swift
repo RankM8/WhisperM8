@@ -66,29 +66,54 @@ struct RecordingSettingsPage: View {
                 }
             }
 
-            SettingsSection("Recording Overlay") {
-                SettingsPickerRow(
-                    title: "Overlay UI",
-                    selection: $overlayStyleRaw,
-                    options: OverlayStyle.allCases.map(\.rawValue)
-                ) { rawValue in
-                    Text(settingsLocalized: OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
-                }
-
-                SettingsToggleRow(
-                    title: "Show mode picker in Mini overlay",
-                    subtitle: "Single source now — this is the only toggle for the Mini overlay mode picker.",
-                    isOn: $showModePickerInMiniOverlay
-                )
-
-                SettingsButtonRow(
-                    title: "Overlay position",
-                    subtitle: "You can also drag the overlay; double-click resets it."
-                ) {
-                    Button("Reset Position") {
-                        OverlayPositionStore.clearPosition()
+            if AppPreferences.shared.isUnifiedPillEnabled {
+                // Vereinte Pille: Stil und Modus-Chip wirken nur beim Diktat,
+                // Lage und Aufnahme-Schutz stehen unter General.
+                SettingsSection("Recording Overlay") {
+                    SettingsPickerRow(
+                        title: "Overlay UI",
+                        subtitle: "Applies while you dictate. Full keeps the drag handle, screenshot and screen clip open; Mini shows them on hover. At rest the pill is always small.",
+                        selection: $overlayStyleRaw,
+                        options: OverlayStyle.allCases.map(\.rawValue)
+                    ) { rawValue in
+                        Text(settingsLocalized: OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
                     }
-                    .buttonStyle(SettingsButtonStyle.standard)
+
+                    SettingsToggleRow(
+                        title: "Always show the output mode while dictating",
+                        subtitle: "Off: the mode chip only appears on hover. With a controller it is always shown.",
+                        isOn: $showModePickerInMiniOverlay
+                    )
+
+                    PillSettingsLinkRow(
+                        subtitle: "Position, hiding from screenshots and the chat status live in General, section Pill and Notch."
+                    )
+                }
+            } else {
+                SettingsSection("Recording Overlay") {
+                    SettingsPickerRow(
+                        title: "Overlay UI",
+                        selection: $overlayStyleRaw,
+                        options: OverlayStyle.allCases.map(\.rawValue)
+                    ) { rawValue in
+                        Text(settingsLocalized: OverlayStyle(rawValue: rawValue)?.displayName ?? rawValue.capitalized)
+                    }
+
+                    SettingsToggleRow(
+                        title: "Show mode picker in Mini overlay",
+                        subtitle: "Single source now — this is the only toggle for the Mini overlay mode picker.",
+                        isOn: $showModePickerInMiniOverlay
+                    )
+
+                    SettingsButtonRow(
+                        title: "Overlay position",
+                        subtitle: "You can also drag the overlay; double-click resets it."
+                    ) {
+                        Button("Reset Position") {
+                            OverlayPositionStore.clearPosition()
+                        }
+                        .buttonStyle(SettingsButtonStyle.standard)
+                    }
                 }
             }
 

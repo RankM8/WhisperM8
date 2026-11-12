@@ -1971,6 +1971,16 @@
         }
       }
     },
+    "Always show the output mode while dictating": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgabemodus beim Diktat immer zeigen"
+          }
+        }
+      }
+    },
     "Always uses the newest frontier model from your Codex CLI — currently %@.": {
       "localizations": {
         "de": {
@@ -2067,6 +2077,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erscheinungsbild"
+          }
+        }
+      }
+    },
+    "Applies to the whole pill, dictation included. Asks macOS to keep it out of screenshots and screen sharing; some recording and meeting apps may still show it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt für die ganze Pille, auch beim Diktat. Bittet macOS, sie aus Bildschirmfotos und Bildschirmfreigaben herauszuhalten; manche Aufnahme- und Meeting-Apps zeigen sie trotzdem."
+          }
+        }
+      }
+    },
+    "Applies while you dictate. Full keeps the drag handle, screenshot and screen clip open; Mini shows them on hover. At rest the pill is always small.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt beim Diktat. Voll zeigt Griff, Bildschirmfoto und Bildschirmclip immer, Mini erst beim Darüberfahren. In Ruhe ist die Pille immer klein."
           }
         }
       }
@@ -2951,6 +2981,16 @@
         }
       }
     },
+    "Cannot resume %@: this conversation is already running in another Claude process (PID %@). Close that process first, a second start would run the same conversation twice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem anderen Claude-Prozess (PID %@). Beende zuerst diesen Prozess, ein zweiter Start würde dieselbe Unterhaltung doppelt führen."
+          }
+        }
+      }
+    },
     "Cannot return to the workspace: %@.": {
       "localizations": {
         "de": {
@@ -3047,6 +3087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat-Status an der Notch"
+          }
+        }
+      }
+    },
+    "Chat Status in the Pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status in der Pille"
           }
         }
       }
@@ -4801,6 +4851,16 @@
         }
       }
     },
+    "Counts chats that just finished and briefly widens the pill when one does.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zählt gerade fertig gewordene Chats und verbreitert die Pille kurz, wenn einer fertig wird."
+          }
+        }
+      }
+    },
     "Counts chats that just finished and briefly widens the strip when one does.": {
       "localizations": {
         "de": {
@@ -5627,6 +5687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertig und senden"
+          }
+        }
+      }
+    },
+    "Drag the pill anywhere on a display without a notch; each display remembers its own spot. Double-click the pill to put it back at the top center. At the notch the pill stays put.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehe die Pille auf einem Bildschirm ohne Notch an jede Stelle; jeder Bildschirm merkt sich seine eigene. Doppelklick auf die Pille setzt sie oben mittig zurück. An der Notch bleibt sie fest."
           }
         }
       }
@@ -6971,6 +7041,16 @@
         }
       }
     },
+    "Hide status in the pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status in der Pille ausblenden"
+          }
+        }
+      }
+    },
     "Hide this mode from recording.": {
       "localizations": {
         "de": {
@@ -7007,6 +7087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blendet den Chat-Status an der Notch aus. Wieder einschalten in den Einstellungen oder in der Menüleiste."
+          }
+        }
+      }
+    },
+    "Hides the chat status in the pill. The pill still shows up for dictation. Turn it back on in Settings or the menu bar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blendet den Chat-Status in der Pille aus. Für das Diktat erscheint die Pille weiter. Wieder an über die Einstellungen oder die Menüleiste."
           }
         }
       }
@@ -7517,6 +7607,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Claudes Ansichten (Aufgaben, Workflows, Transkript, Zurückspulen, Auswahl in der Fußzeile) schließt ○ die Ansicht, auch während der Chat arbeitet"
+          }
+        }
+      }
+    },
+    "In addition to clicking, only while you are not dictating.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusätzlich zum Klick, nur wenn du gerade nicht diktierst."
           }
         }
       }
@@ -10774,6 +10874,16 @@
         }
       }
     },
+    "Off: the mode chip only appears on hover. With a controller it is always shown.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus: Der Modus erscheint nur beim Darüberfahren. Am Controller steht er immer da."
+          }
+        }
+      }
+    },
     "Official instructions": {
       "localizations": {
         "de": {
@@ -11014,6 +11124,16 @@
         }
       }
     },
+    "Open in General": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In General öffnen"
+          }
+        }
+      }
+    },
     "Open in PhpStorm": {
       "localizations": {
         "de": {
@@ -11084,6 +11204,16 @@
         }
       }
     },
+    "Open status list hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkey „Statusliste öffnen“"
+          }
+        }
+      }
+    },
     "Open the Codex and Claude session hub.": {
       "localizations": {
         "de": {
@@ -11150,6 +11280,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Öffnet die Chat-Liste"
+          }
+        }
+      }
+    },
+    "Opens the chat list with the keyboard: arrow keys choose, Return opens the chat, Esc closes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnet die Chat-Liste mit der Tastatur: Pfeiltasten wählen, Return öffnet den Chat, Esc schließt."
           }
         }
       }
@@ -11654,6 +11794,26 @@
         }
       }
     },
+    "Pill and Notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pille und Notch"
+          }
+        }
+      }
+    },
+    "Pill and notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pille und Notch"
+          }
+        }
+      }
+    },
     "Pill position": {
       "localizations": {
         "de": {
@@ -11870,6 +12030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Position"
+          }
+        }
+      }
+    },
+    "Position, hiding from screenshots and the chat status live in General, section Pill and Notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lage, Ausblenden aus Bildschirmfotos und der Chat-Status stehen unter General, Abschnitt Pille und Notch."
           }
         }
       }
@@ -14654,6 +14824,16 @@
         }
       }
     },
+    "Show chat status in the pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status in der Pille zeigen"
+          }
+        }
+      }
+    },
     "Show chat tasks in notes": {
       "localizations": {
         "de": {
@@ -14800,6 +14980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hotkey zum Ein- und Ausblenden"
+          }
+        }
+      }
+    },
+    "Show or hide status hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkey zum Ein- und Ausblenden des Status"
           }
         }
       }
@@ -15480,6 +15670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat starten"
+          }
+        }
+      }
+    },
+    "Start dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat starten"
           }
         }
       }
@@ -16794,6 +16994,16 @@
         }
       }
     },
+    "The chat status now lives in the pill at the top of the screen (on a MacBook: the notch). Its settings are in General, section Pill and Notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat-Status steht jetzt in der Pille oben am Bildschirm (am MacBook: an der Notch). Die Einstellungen dazu stehen unter General, Abschnitt Pille und Notch."
+          }
+        }
+      }
+    },
     "The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.": {
       "localizations": {
         "de": {
@@ -17080,6 +17290,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der neue Login hat ein unerwartetes Format."
+          }
+        }
+      }
+    },
+    "The pill at the top of the screen (on a MacBook: the notch) shows how many chats are working or waiting for you. Click the counters for the list, click the gray core to start dictating. Off: the pill only appears while you dictate or use the controller.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Pille oben am Bildschirm (am MacBook: die Notch) zeigt, wie viele Chats arbeiten oder auf dich warten. Klick auf die Zähler öffnet die Liste, Klick auf den grauen Kern startet ein Diktat. Aus: Die Pille erscheint nur beim Diktat und am Controller."
           }
         }
       }
@@ -17880,6 +18100,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tab-Gruppen einschalten"
+          }
+        }
+      }
+    },
+    "Turns the chat status in the pill on or off from anywhere.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet den Chat-Status in der Pille von überall ein oder aus."
           }
         }
       }

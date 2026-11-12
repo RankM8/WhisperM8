@@ -178,7 +178,8 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`.
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`,
+`unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
 
