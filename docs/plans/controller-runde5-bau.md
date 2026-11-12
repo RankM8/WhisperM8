@@ -209,6 +209,7 @@ Verloren geht dabei nur y/n im Freigabe-Dialog; wer das behalten will, lässt al
 | ohne Ebene | ○ tippen | bei offener Claude-Ansicht Escape auch bei „arbeitet“ und ohne 1-s-Sperre (R2) | geändert |
 | Menü | Befehle › | zusätzlich `/tasks`, `/workflows`, `/rewind` (R5) | ja |
 | Tastatur | Ctrl+Return | in Claude-Chats `0x18 0x13` (R8) | ja |
+| Menü | Projekt, Workspace, Lebenszyklus | Kopf-Aktionen des Chats im Options-Menü (Punkt 10) | ja |
 | Diktat | Stick, L1/R1 tippen, L2, R1-App-Raute | navigieren und schalten während der Aufnahme, Ziel bleibt gebunden (Punkt 9) | ja |
 
 ## Was sich gegenüber dem Auftrag ändert
@@ -575,6 +576,85 @@ Die Liste darf während der Aufnahme betreten werden (`enterList`, `listMove`). 
 **Snapshots:** Legende während der Aufnahme mit Ziel; R1-Insel während der Aufnahme (Chat-Raute ausgegraut,
 App-Raute an, Kopf „→ Chatname“); L2-Insel während der Aufnahme.
 
+### 10. Kopf-Aktionen des Chats im Options-Menü (freigegeben 12.11.2026)
+
+Was der Kopf der Einzelansicht (`activeChatStatusRow`, `AgentChatsView.swift` 2947–3004), der Kachelkopf im
+Raster (`AgentChatsView+Grid.swift` 888–1044) und das Sitzungsmenü (`AgentChatsView+SessionMenus.swift` 27–120
+mit `SessionMenuPolicy`) anbieten, soll per Controller erreichbar sein. Jede Aktion läuft über dieselbe
+Funktion wie der Knopf bzw. Menüeintrag; der Controller bekommt keine eigene Logik.
+
+**Menü-Aufbau** (`ControllerMenuItem.Group`): Eingaben · Chat · Projekt · Workspace · Lebenszyklus ·
+Steuerung. Neu ist: Ein Eintrag, der für diesen Chat nicht passt, **fehlt** (heute: ausgegraut). Ausgegraut
+bleibt nur, was grundsätzlich passt, aber gerade nicht geht (etwa „Weiter“, während der Chat arbeitet, oder
+Eingaben bei offener Rückfrage). Dafür bekommt `ControllerMenuModel` neben `isEnabled` ein `isVisible`, die
+Einträge werden aus `ControllerMenuItem.allCases` gefiltert, Trennlinien vor jeder sichtbaren Gruppe.
+
+| Gruppe | Eintrag | sichtbar wenn | Weg (bestehende Funktion) |
+|---|---|---|---|
+| Eingaben | Weiter, Befehle ›, Modus wechseln, Neu zeichnen (R7) | wie bisher / R7: Claude | wie bisher |
+| Chat | Konto wechseln ›, Umbenennen…, Titel neu lesen, Forken, Anheften/Lösen, Archivieren, Chat schließen | Titel neu lesen: Chat mit Transkript, kein Shell-Terminal | `forceAutoNameSession` (`AgentChatsView.swift` 3301); Tab-Farbe bewusst nicht |
+| Projekt | In PhpStorm öffnen (bzw. gemerktes Ziel), Im Finder zeigen | Chat hat ein Projekt mit Pfad | `openProject(_:in:)` (3393) mit `ProjectOpenTarget(rawValue: projectOpenTargetRaw)` (Beschriftung folgt dem gemerkten Ziel); Finder über `NSWorkspace.activateFileViewerSelecting` auf den Projektordner |
+| Workspace | Notiz der Kachel auf/zu | Raster sichtbar, Chat ist Kachel, Notizen an (`jarvisNotesEnabled`) | `JarvisNotesStore.setOverride(_:windowID:sessionID:)` |
+| | Notizen an/aus | Raster sichtbar, Notizen verfügbar | `JarvisNotesShortcut.toggleDefault(windowID:)` |
+| | Aus Workspace nehmen | Chat ist Mitglied des sichtbaren Workspace | `removeSessionFromWorkspace(_:workspaceID:)` (`+Grid.swift` 53) |
+| | Zu Workspace hinzufügen › | es gibt Workspaces, in denen er noch nicht ist | zweite Ebene mit Zielen wie `workspaceChoices` (Command-Center), Einfügen über denselben Weg wie das Sitzungsmenü |
+| | In neues Fenster | Chat hat einen Tab | `moveSingleTabToNewWindow` (`+SessionMenus.swift` 170; wird `internal`) |
+| Lebenszyklus | Neu starten | Chat läuft (kein Hintergrund-Chat) | `sessionActionRequest = .init(sessionID:, kind: .restart)`; die bestehende Rückfrage bleibt und ist per Tastatur-Brücke bedienbar (Kreuz bestätigt) |
+| | Logs, Stoppen, Neu starten (Hintergrund) | `isBackgroundChat` | `showBackgroundLogs(for:)`, `performBackgroundLifecycle(…)` (`+BackgroundAgents.swift` 208/239) |
+| | Job stoppen | Chat ist ein Subagent-Job mit Supervisor | Weg von `SubagentJobDetailView.stopJob` (SIGTERM an `supervisorPid`, dann `AgentJobWorkspaceSync.requestSync`); zieht in eine gemeinsame Funktion, die Ansicht und Controller teilen |
+| Steuerung | Zwischenablage, Belegung anzeigen, Controller pausieren | wie bisher | wie bisher |
+
+**Konto wechseln ›, zweite Ebene:** unter den Konten (mit Prozenten aus Punkt 3) zusätzlich, nur wenn
+zutreffend: „Kontowechsel zu X abbrechen“ (`AccountSwitchCoordinator.shared.pending[sessionID]` →
+`cancel(sessionID:)`) und „Letzten Kontowechsel rückgängig“ (`AccountMenuData.hasUndoableAccountMove` →
+`undoLastAccountMove()`), dieselben Bedingungen wie im Kontextmenü (`AgentChatsView+AccountMove.swift`
+196–206). Die Untermenü-IDs bekommen dafür Sonderfälle neben `kind:name`.
+
+**Nicht:** Inspector ein/aus, Rastergröße, Tab-Farbe.
+
+**Daten:** `ControllerChatActionInfo` (gebaut in `AgentChatsView+ControllerActions.swift`, nur im
+Ereignis-Pfad) wird erweitert: `isRunning`, `projectPath`/`hasProject`, `projectOpenTargetTitle`,
+`isBackgroundChat`, `subagentJob: Bool`, `isTerminal` (gibt es), `gridWorkspaceID` (Mitglied des sichtbaren
+Workspace), `addableWorkspaces: [ControllerWorkspaceChoice]`, `notesAvailable`, `noteOpen`, `hasTab`,
+`pendingAccountSwitchTarget: String?`, `canUndoAccountSwitch`. Alles aus Zuständen, die die Ansicht schon hat,
+oder aus den kurzlebigen Caches des Kontextmenüs (`AccountMenuData`) — kein I/O beim Öffnen. Prüfen beim
+Bau: `hasUndoableAccountMove` liest das Journal über einen Stempel-Cache; nur beim Öffnen des Menüs aufrufen,
+nie im Body des Menü-Panels.
+
+**Befehle:** Jede Aktion bekommt einen eigenen Fall in `AgentChatsCommand` (`AgentChatsCommandCenter.swift`
+10–67) und einen Eintrag in `performCommand` (`AgentChatsView+Commands.swift` 110–212), etwa
+`openProject(UUID)`, `revealProjectInFinder(UUID)`, `refreshTitle(UUID)`, `restartChat(UUID)`,
+`toggleTileNote(UUID)`, `toggleNotes`, `removeFromWorkspace(UUID)`, `addToWorkspace(UUID, workspaceID:)`,
+`moveToNewWindow(UUID)`, `backgroundLogs(UUID)`, `backgroundStop(UUID)`, `backgroundRestart(UUID)`,
+`stopSubagentJob(UUID)`, `cancelAccountSwitch(UUID)`, `undoLastAccountSwitch`. Jeder Fall prüft wie die
+anderen, ob der Chat noch existiert und die Aktion passt, und gibt sonst `false` (Controller: „geht nicht“).
+`AgentChatsView+Commands.swift` wächst dabei deutlich; die neuen Fälle kommen in eine eigene Datei
+`AgentChatsView+ControllerCommands.swift` (Größengrenze 1.500 Zeilen, `SourceSizeGuardTests`).
+
+**Ausführung:** `ControllerActionDispatcher.perform(_:setup:)` (607–636) bekommt die neuen Einträge; die
+Ausführung zieht in `ControllerActionDispatcher+MenuActions.swift`, damit der Ausführer nicht über die
+Grenze wächst. Aktionen mit Rückfrage (Neu starten, Stoppen) schließen das Menü, die Rückfrage übernimmt die
+Tastatur-Brücke. Ziel ist wie bisher `setup.sessionID` (in der Liste die markierte Zeile).
+
+**R1-Raute:** unverändert (Weiter, Modus, Befehle ›, Konto ›); die neuen Einträge gibt es nur im Options-Menü.
+
+**Tests:**
+- `ControllerMenuModel`: Sichtbarkeit je Eintrag aus `ControllerChatActionInfo` (Shell-Terminal ohne Projekt,
+  Hintergrund-Chat, Kachel mit/ohne Notiz, kein Workspace), Reihenfolge der Gruppen, Trennlinien nur vor
+  sichtbaren Gruppen, Navigation überspringt nichts Sichtbares; Untermenüs „Zu Workspace hinzufügen“ und
+  Konto mit Abbrechen/Rückgängig.
+- Dispatcher: jeder Eintrag ruft genau seinen Befehl mit der richtigen Session; Chat inzwischen weg →
+  „geht nicht“.
+- `AgentChatsCommand`: neue Fälle in den bestehenden Command-Tests (falscher Chat → `false`).
+- Lokalisierung: alle neuen Einträge englisch mit deutscher Übersetzung („Open in PhpStorm“ bzw. Name des
+  gemerkten Ziels, „Show in Finder“, „Refresh title“, „Restart“, „Show note“/„Hide note“, „Notes on“/„Notes
+  off“, „Remove from workspace“, „Add to workspace“, „Move to new window“, „Logs“, „Stop“, „Stop job“, „Cancel
+  account switch to %@“, „Undo last account switch“ — vorhandene Schlüssel des Kontextmenüs wiederverwenden).
+
+**Snapshots** (`ONLY=controller`): Menü für einen Claude-Chat in der Einzelansicht (alle Gruppen), für eine
+Kachel im Raster mit Notiz, für einen Hintergrund-Chat, für ein Shell-Terminal (schmales Menü), Untermenü
+„Zu Workspace hinzufügen“ und Konto-Untermenü mit „Kontowechsel abbrechen“.
+
 ## Legende, Einstellungsseite, Lokalisierung
 
 - Legende (`ControllerLegend.swift`): Die Leiste ändert sich kaum (Ebenen stehen in einem Eintrag). Neu:
@@ -640,9 +720,14 @@ Befehlen, Legende mit „Ansicht schließen“. Nach jeder Ansichtsänderung ren
 9. `feat(controller): Jetzt senden mit R1 und Kreuz` — R1 (Queue-Scan im Watcher).
 10. `feat(controller): Konto wechseln mit Verbrauch und „am meisten frei“` — Punkt 3.
 11. `feat(controller): zuletzt geschlossenen Chat mit L2 und Viereck wieder öffnen` — Punkt 8.
-12. `feat(controller): Befehle /tasks, /workflows, /rewind und Neu zeichnen` — R5, R7.
-12a. `feat(controller): während des Diktats navigieren, Ziel bleibt gebunden` — Punkt 9 (braucht die
-    R1-App-Raute aus Schritt 7).
+12. `feat(controller): Options-Menü mit Gruppen und Kopf-Aktionen des Chats` — Punkt 10 zuerst als Umbau
+    des Menü-Modells (Sichtbarkeit, Gruppen), dann die Befehle je Gruppe; danach im selben Schritt R5
+    (`/tasks`, `/workflows`, `/rewind`) und R7 („Neu zeichnen“), weil alle dieselben Menü-Dateien
+    (`ControllerMenuModel`, `ControllerMenuOverlay`, `perform(_:setup:)`) ändern. Konto-Untermenü mit
+    Abbrechen/Rückgängig kommt nach Schritt 10 (Konto mit Prozenten), damit die Liste nur einmal umgebaut
+    wird. Bei Bedarf in zwei Commits: 12a Menü-Umbau plus Punkt 10, 12b R5 und R7.
+12c. `feat(controller): während des Diktats navigieren, Ziel bleibt gebunden` — Punkt 9 (braucht die
+    R1-App-Raute aus Schritt 7; R1-Raute während des Diktats nutzt `isEnabled` aus dem umgebauten Menü-Modell).
 13. `docs(controller): Runde 5 beschrieben` — `docs/features/controller.md` (Belegung, Ebenen, Schutzregeln,
     Grenzen: Leertaste bei eingeschalteter Claude-Sprachfunktion, Subagent-Ansicht nicht erkennbar,
     Ctrl+L-Beleg an Version 2.1.322), Snapshots.
@@ -665,4 +750,7 @@ eigenen Agenten (Opus) über den ganzen Branch.
 - Tastatur Ctrl+Return in Claude bei arbeitendem Chat.
 - Diktat per R2 in Chat A, während der Aufnahme mit R1 tippen zu Chat B, L2-Liste öffnen, R1 + ◀ Glocke;
   dann ✕: Text kommt in A an und wird dort gesendet, B bleibt ausgewählt; Pille und Legende zeigen „→ A“.
+- Options-Menü: Gruppen erscheinen nur, wenn sie passen (Shell, Kachel, Hintergrund-Chat); PhpStorm öffnet
+  das gemerkte Ziel, Finder den Projektordner; Neu starten zeigt die Rückfrage, Kreuz bestätigt; Notiz der
+  Kachel auf/zu; Zu Workspace hinzufügen ›; In neues Fenster; Kontowechsel abbrechen bei vorgemerktem Wechsel.
 - Diktat per Hotkey (Ziel „Programm vorne“): Stick und L1/R1 bleiben wie bisher ohne Wirkung.
