@@ -1021,6 +1021,16 @@
         }
       }
     },
+    "A quick swipe always carries the pointer farther than a slow one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine schnelle Bewegung trägt den Zeiger immer weiter als eine langsame."
+          }
+        }
+      }
+    },
     "A searchable clipboard history with a hotkey and access for Claude.": {
       "localizations": {
         "de": {
@@ -7021,6 +7031,16 @@
         }
       }
     },
+    "Hold L2, then press the touchpad: open and close the clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann Touchpad drücken: Zwischenablage-Verlauf auf und zu"
+          }
+        }
+      }
+    },
     "Hold L2, then △: next chat that is waiting for you": {
       "localizations": {
         "de": {
@@ -9061,6 +9081,16 @@
         }
       }
     },
+    "Mouse pointer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mauszeiger"
+          }
+        }
+      }
+    },
     "Move": {
       "localizations": {
         "de": {
@@ -9147,6 +9177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hierher verschieben"
+          }
+        }
+      }
+    },
+    "Move the pointer with one finger; press to click, with two fingers to right-click": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit einem Finger den Zeiger bewegen; drücken klickt, mit zwei Fingern Rechtsklick"
           }
         }
       }
@@ -9247,6 +9287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verschiebe und setze fort …"
+          }
+        }
+      }
+    },
+    "Moving the pointer and clicking need the Accessibility permission. Until you grant it, the touchpad does nothing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeiger bewegen und klicken braucht die Berechtigung für Bedienungshilfen. Bis du sie erteilst, tut das Touchpad nichts."
           }
         }
       }
@@ -11610,6 +11660,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spielt, wenn ein Agent mit seiner Antwort fertig ist. Benachrichtigungen bei Rückfragen bleiben still."
+          }
+        }
+      }
+    },
+    "Pointer speed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigergeschwindigkeit"
           }
         }
       }
@@ -14844,6 +14904,16 @@
         }
       }
     },
+    "Slide a finger to move the pointer, press the touchpad to click, press with two fingers to right-click. In other apps this needs the switch “Also when another app is in front”. The clipboard history then opens with L2 + touchpad or from the Options menu.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit einem Finger bewegst du den Zeiger, Drücken klickt, Drücken mit zwei Fingern ist ein Rechtsklick. In anderen Programmen braucht das den Schalter „Auch wenn ein anderes Programm vorne ist“. Der Zwischenablage-Verlauf öffnet sich dann mit L2 + Touchpad oder über das Options-Menü."
+          }
+        }
+      }
+    },
     "Slot %lld (free)": {
       "localizations": {
         "de": {
@@ -17330,6 +17400,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summe"
+          }
+        }
+      }
+    },
+    "Touchpad": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchpad"
+          }
+        }
+      }
+    },
+    "Touchpad as mouse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Touchpad als Maus"
           }
         }
       }

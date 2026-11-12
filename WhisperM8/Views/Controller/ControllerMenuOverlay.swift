@@ -12,6 +12,7 @@ extension ControllerMenuItem {
         case .pin: return chat?.isPinned == true ? String(localized: "Unpin") : String(localized: "Pin")
         case .archive: return chat?.isTerminal == true ? String(localized: "Close terminal") : String(localized: "Archive")
         case .closeChat: return String(localized: "Close chat")
+        case .clipboardHistory: return String(localized: "Clipboard history")
         case .showBindings: return String(localized: "Show button layout")
         case .pause: return String(localized: "Pause controller")
         }

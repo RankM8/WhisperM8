@@ -242,7 +242,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             if let sessionID = ui.markedRow?.sessionID { command(.startChat(sessionID), orReject: false) }
 
         // Zwischenablage-Verlauf
-        case .clipboardToggle: environment.toggleClipboardPanel()
+        case .clipboardToggle:
+            // L2 + Touchpad: Die Insel macht dem Verlauf Platz.
+            spendIsland()
+            environment.toggleClipboardPanel()
         case let .clipboard(command): environment.clipboard(command)
 
         // Menü
@@ -620,6 +623,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             default:
                 if command(.closeListRow(setup.target ?? .chat(sessionID)), orReject: true) { refreshListMarker() }
             }
+        case .clipboardHistory:
+            environment.toggleClipboardPanel()
         case .showBindings:
             environment.openControllerSettings()
         case .pause:
