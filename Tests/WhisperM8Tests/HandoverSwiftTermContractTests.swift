@@ -1,5 +1,6 @@
 import XCTest
 import SwiftTerm
+@testable import WhisperM8
 
 /// Was „Neustart ohne Chatverlust“ vom SwiftTerm-Fork braucht
 /// (`docs/plans/neustart-ohne-chatverlust.md`, Paket 1). Schlägt dieser Test
@@ -27,6 +28,27 @@ final class HandoverSwiftTermContractTests: XCTestCase {
         XCTAssertEqual(copy.mouseMode, original.mouseMode)
         XCTAssertEqual(copy.getCursorLocation().x, original.getCursorLocation().x)
         XCTAssertEqual(copy.getCursorLocation().y, original.getCursorLocation().y)
+    }
+
+    /// Der Aufbewahrer sichert mit dem Fork-Serialisierer, nicht mit dem
+    /// Nur-Text-Platzhalter: Farben und Schalter bleiben erhalten.
+    func testKeeperUsesTheFullScreenSerializerByDefault() throws {
+        let configuration = HandoverKeeper.Configuration(
+            paths: HandoverPaths(directory: FileManager.default.temporaryDirectory),
+            runID: "test",
+            peerPolicy: HandoverPeerPolicy(allowedExecutablePaths: [])
+        )
+        XCTAssertTrue(configuration.serializer is HandoverTerminalSerializer)
+
+        let delegate = Silent()
+        let options = TerminalOptions(cols: 30, rows: 5, scrollback: 50)
+        let source = Terminal(delegate: delegate, options: options)
+        source.feed(text: "\u{1b}[38;5;208morange\u{1b}[0m\r\n\u{1b}[>7u\u{1b}[?1003h\u{1b}[?1006h")
+        let restored = Terminal(delegate: delegate, options: options)
+        restored.feed(byteArray: configuration.serializer.serialize(source))
+        XCTAssertEqual(restored.getCharData(col: 0, row: 0)?.attribute, source.getCharData(col: 0, row: 0)?.attribute)
+        XCTAssertEqual(restored.keyboardEnhancementFlags, source.keyboardEnhancementFlags)
+        XCTAssertEqual(restored.mouseMode, source.mouseMode)
     }
 
     func testHandoverAPIsExist() {
