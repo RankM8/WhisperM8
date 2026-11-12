@@ -20,14 +20,12 @@ extension UISnapshotGallery {
             }
             return status
         }
-        func page(_ status: ControllerStatus, accessibilityTrusted: Bool = true) -> AnyView {
+        func page(_ status: ControllerStatus) -> AnyView {
             AnyView(ControllerSettingsPage(
-                dependencies: ControllerSettingsDependencies(
-                    status: { status }, applyPreferences: {},
-                    accessibilityTrusted: { accessibilityTrusted }, requestAccessibility: {})
+                dependencies: ControllerSettingsDependencies(status: { status }, applyPreferences: {})
             ))
         }
-        let size = CGSize(width: 760, height: 2150)
+        let size = CGSize(width: 760, height: 1950)
         let chat = ControllerChatState(status: .idle, profile: .claude)
         func legend(_ context: ControllerContext, title: String = "WhisperM8 PS5-Controller-Steuerung",
                     hold: ControllerButton? = nil) -> AnyView {
@@ -198,15 +196,6 @@ extension UISnapshotGallery {
                 storage: [PreferenceKeys.controllerEnabled: true, PreferenceKeys.controllerBackgroundEnabled: true]
             ) {
                 page(status(connected: true, lastButton: .r2, background: .received))
-            },
-            // Touchpad als Maus an, Bedienungshilfen fehlen: Hinweis, Zeiger in
-            // der Belegung, Verlauf bei den Ebenen (L2 + Touchpad).
-            Fixture(
-                name: "controller-einstellungen-touchpad", size: CGSize(width: 760, height: 2250),
-                storage: [PreferenceKeys.controllerEnabled: true, PreferenceKeys.controllerBackgroundEnabled: true,
-                          PreferenceKeys.controllerTouchpadPointerEnabled: true]
-            ) {
-                page(status(connected: true, lastButton: .touchpad, background: .received), accessibilityTrusted: false)
             },
         ]
     }

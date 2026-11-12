@@ -182,7 +182,6 @@ struct ControllerLegendHost: View {
     @State private var model = ControllerUIModel.shared
     @State private var windows = AgentWindowStore.shared
     @AppStorage(PreferenceKeys.controllerLegendEnabled) private var legendEnabled = true
-    @AppStorage(PreferenceKeys.controllerTouchpadPointerEnabled) private var touchpadPointer = false
 
     var body: some View {
         if legendEnabled, status.isRunning, status.device != nil {
@@ -190,7 +189,7 @@ struct ControllerLegendHost: View {
             let context: ControllerContext = status.isPaused ? .paused : (isThisWindow ? model.context : .otherWindow)
             ControllerLegendBar(
                 target: .make(context: context, chatTitle: model.targetTitle),
-                entries: isThisWindow || status.isPaused ? ControllerLegend.entries(for: context, touchpadPointer: touchpadPointer) : [],
+                entries: isThisWindow || status.isPaused ? ControllerLegend.entries(for: context) : [],
                 holdProgress: isThisWindow ? model.holdProgress : nil
             )
         }
