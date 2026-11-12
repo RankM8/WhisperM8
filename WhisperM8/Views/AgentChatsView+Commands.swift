@@ -11,7 +11,6 @@ extension AgentChatsView {
     /// Monitore in `onAppear`.
     func registerCommandHandler() {
         guard commandState.token == nil else { return }
-        commandState.history.record(selectedSessionID)
         commandState.token = AgentChatsCommandCenter.shared.register(
             windowID: windowID,
             handler: AgentChatsCommandCenter.Handler(
@@ -49,8 +48,56 @@ extension AgentChatsView {
             isNewChatPickerOpen: showNewChatProjectPicker,
             isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil,
             screenDisplayID: (hostWindow?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
-                as? NSNumber)?.uint32Value
+                as? NSNumber)?.uint32Value,
+            backTarget: controllerBackTarget()
         )
+    }
+
+    // MARK: - Zurück (L2 getippt)
+
+    /// Voriger Ort dieses Fensters, sofern es ihn noch gibt: der Workspace
+    /// angelegt, der Chat hier als Tab offen und nicht archiviert.
+    func backPlace() -> ChatPlace? {
+        let place = windowStore.previousPlace(in: windowID)
+        if case .chat(let id) = place,
+           !workspace.sessions.contains(where: { $0.id == id && $0.status != .archived }) {
+            return nil
+        }
+        return place
+    }
+
+    /// Ziel von L2 für die Legende, aus demselben `backPlace()` wie der Befehl.
+    private func controllerBackTarget() -> ControllerBackTarget? {
+        switch backPlace() {
+        case .chat(let id)?:
+            let title = workspace.sessions.first { $0.id == id }?.title ?? String(localized: "Chat")
+            return ControllerBackTarget(kind: .chat, title: title)
+        case .workspace(let id)?:
+            return windowStore.gridWorkspace(id: id).map { ControllerBackTarget(kind: .workspace, title: $0.name) }
+        case nil:
+            return nil
+        }
+    }
+
+    /// Zurück an den vorigen Ort. Ein Chat öffnet wie der Klick in der
+    /// Seitenleiste, ein Workspace wie der Klick auf seinen Kopf — als Raster,
+    /// mit der Kachel, auf der man dort zuletzt war (merkt der Store beim
+    /// Verlassen). Danach ist der verlassene Ort das nächste Ziel. Ein
+    /// Konflikt (Workspace gehört inzwischen einem anderen Fenster) holt
+    /// nichts nach vorn und zeigt keinen Dialog: Der Controller vibriert
+    /// „geht nicht“.
+    private func goBack() -> Bool {
+        switch backPlace() {
+        case .chat(let id)?:
+            selectedSessionID = id
+        case .workspace(let id)?:
+            guard let entity = windowStore.gridWorkspace(id: id),
+                  activateWorkspaceFromSidebar(entity, reportConflicts: false) else { return false }
+        case nil:
+            return false
+        }
+        multiSelection = []
+        return true
     }
 
     // MARK: - Ausführung
@@ -67,13 +114,7 @@ extension AgentChatsView {
         case .nextTab:
             return changingSelection { selectAdjacentTab(+1) }
         case .lastChat:
-            let sessions = workspace.sessions
-            guard let target = commandState.history.lastChat(isAvailable: { id in
-                sessions.contains { $0.id == id && $0.status != .archived }
-            }) else { return false }
-            selectedSessionID = target
-            multiSelection = []
-            return true
+            return goBack()
         case .gridFocus(let direction):
             guard isGridActive else { return false }
             return changingSelection { moveGridFocus(direction) }

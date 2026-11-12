@@ -2441,6 +2441,16 @@
         }
       }
     },
+    "Back to previous": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum vorigen Ort"
+          }
+        }
+      }
+    },
     "Back to project view “%@”": {
       "localizations": {
         "de": {
@@ -2467,6 +2477,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zurück, abbrechen"
+          }
+        }
+      }
+    },
+    "Back: chat %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück: Chat %@"
+          }
+        }
+      }
+    },
+    "Back: workspace %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück: Workspace %@"
           }
         }
       }
@@ -7867,16 +7897,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zuletzt %1$@: %2$@"
-          }
-        }
-      }
-    },
-    "Last chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Letzter Chat"
           }
         }
       }
@@ -15934,12 +15954,12 @@
         }
       }
     },
-    "Tap: back to the previous chat. Hold: layer, see below": {
+    "Tap: back to where you were before — the previous chat, or the previous workspace as a grid. Hold: layer, see below": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tippen: zurück zum letzten Chat. Halten: Ebene, siehe unten"
+            "value": "Tippen: zurück dorthin, wo du vorher warst — zum vorigen Chat oder zum vorigen Workspace als Raster. Halten: Ebene, siehe unten"
           }
         }
       }

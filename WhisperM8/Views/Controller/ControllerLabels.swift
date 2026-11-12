@@ -33,7 +33,7 @@ extension ControllerLegendLabel {
         case .clipboard: return String(localized: "Clipboard")
         case .maximize: return String(localized: "Enlarge tile")
         case .menu: return String(localized: "Menu")
-        case .lastChat: return String(localized: "Last chat")
+        case .lastChat: return String(localized: "Back to previous")
         case .pickAndDictate: return String(localized: "Switch and dictate")
         case .layersHold: return String(localized: "Hold: layers")
         case .deleteToLineStart: return String(localized: "Delete to line start")
@@ -85,7 +85,7 @@ extension ControllerLegendLabel {
         case .maximize: return String(localized: "Enlarge the tile, or go back to the grid")
         case .menu: return String(localized: "Menu: input for the chat, chat actions, controller")
         case .startChat: return String(localized: "Start a stopped chat")
-        case .lastChat: return String(localized: "Tap: back to the previous chat. Hold: layer, see below")
+        case .lastChat: return String(localized: "Tap: back to where you were before — the previous chat, or the previous workspace as a grid. Hold: layer, see below")
         case .pickAndDictate: return String(localized: "Hold L2, then R2: switch to the marked chat and dictate")
         case .deleteToLineStart: return String(localized: "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)")
         case .newline: return String(localized: "Hold L1, then △: new line without sending (Claude and Codex)")
@@ -99,6 +99,20 @@ extension ControllerLegendLabel {
         case .pointer: return String(localized: "Move the pointer with one finger; press to click, with two fingers to right-click")
         case .clipboardWithL2: return String(localized: "Hold L2, then press the touchpad: open and close the clipboard history")
         default: return title
+        }
+    }
+}
+
+extension ControllerLegendEntry {
+    /// Text in der Legende; bei L2 mit dem Namen des Ziels („Zurück: Workspace
+    /// Marketing“). Lange Namen werden gekürzt, damit die Leiste nicht schon
+    /// wegen eines Titels Tasten weglässt.
+    var title: String {
+        guard let backTarget else { return label.title }
+        let name = backTarget.title.count > 28 ? String(backTarget.title.prefix(27)) + "…" : backTarget.title
+        switch backTarget.kind {
+        case .chat: return String(localized: "Back: chat \(name)")
+        case .workspace: return String(localized: "Back: workspace \(name)")
         }
     }
 }

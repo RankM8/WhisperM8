@@ -91,6 +91,8 @@ struct AgentChatsWindowSnapshot: Equatable {
     /// Bildschirm, auf dem das Fenster liegt (`NSScreenNumber`). Dort
     /// erscheint die Controller-Insel.
     var screenDisplayID: UInt32? = nil
+    /// Wohin L2 am Controller zurückführt (voriger Ort des Fensters).
+    var backTarget: ControllerBackTarget? = nil
 
     /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
     /// und ist womöglich selbst Key geworden.

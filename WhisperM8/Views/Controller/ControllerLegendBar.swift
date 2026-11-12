@@ -85,11 +85,14 @@ struct ControllerLegendBar: View {
             Spacer(minLength: 0)
 
             // Schmale Fenster (Kacheln, halbe Bildschirme): von hinten kürzen,
-            // die wichtigsten Tasten stehen vorn.
+            // die wichtigsten Tasten stehen vorn. Das Ziel von L2 bleibt beim
+            // Kürzen stehen — es steht weit hinten, wäre sonst fast nie zu
+            // sehen und ist die einzige Angabe, die sich nicht von selbst
+            // versteht.
             ViewThatFits(in: .horizontal) {
                 keys(entries)
-                keys(Array(entries.prefix(6)))
-                keys(Array(entries.prefix(4)))
+                keys(Self.shortened(entries, to: 6))
+                keys(Self.shortened(entries, to: 4))
                 keys(Array(entries.prefix(2)))
             }
             .layoutPriority(1)
@@ -104,6 +107,13 @@ struct ControllerLegendBar: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Die ersten `count` Einträge, dazu das Ziel von L2, falls es dahinter lag.
+    static func shortened(_ entries: [ControllerLegendEntry], to count: Int) -> [ControllerLegendEntry] {
+        let head = Array(entries.prefix(count))
+        guard let back = entries.dropFirst(count).first(where: { $0.backTarget != nil }) else { return head }
+        return head + [back]
+    }
+
     private func keys(_ shown: [ControllerLegendEntry]) -> some View {
         HStack(spacing: 14) {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, entry in
@@ -115,7 +125,7 @@ struct ControllerLegendBar: View {
                                     .id(holdProgress.startedAt)
                             }
                         }
-                    Text(verbatim: entry.label.title)
+                    Text(verbatim: entry.title)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppTheme.textPrimary)
                         .lineLimit(1)

@@ -116,7 +116,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     func chatState(in window: AgentChatsWindowSnapshot) -> ControllerChatState? {
         guard let sessionID = window.selectedSessionID else { return nil }
         guard let terminal = terminals.state(of: sessionID) else {
-            return ControllerChatState(status: .ended, profile: .other, gridActive: window.isGridActive, hasTerminal: false)
+            return ControllerChatState(status: .ended, profile: .other, gridActive: window.isGridActive,
+                                       hasTerminal: false, backTarget: window.backTarget)
         }
         let moment = now()
         let status: ControllerChatState.Status
@@ -146,7 +147,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             choiceListOpen: terminal.choiceListOpen,
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning,
-            shellAtPrompt: terminal.shellAtPrompt
+            shellAtPrompt: terminal.shellAtPrompt,
+            backTarget: window.backTarget
         )
     }
 
@@ -223,7 +225,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()
-        case .lastChat: command(.lastChat, orReject: true)
+        // Danach gleich neu lesen: Die Legende nennt sonst noch den Ort, an
+        // dem man jetzt ist, als Ziel.
+        case .lastChat: if command(.lastChat, orReject: true) { refreshContext() }
         case let .moveInContent(direction): moveInContent(direction)
         case let .adjacentChat(step): moveToAdjacentChat(step)
         case .newChat: newChat()
