@@ -78,6 +78,15 @@ enum ControllerInputEvent: Equatable, Sendable {
     case trigger(ControllerButton, value: Float)
     /// Wertebereich je Achse −1…1, `y` positiv heißt oben.
     case stick(ControllerStickSide, x: Float, y: Float)
+    /// Finger auf dem Touchpad (DualSense, DualShock), −1…1, `y` positiv
+    /// heißt oben. Kommt in hohem Takt und geht nie in den Erkenner: Die
+    /// Pumpe macht daraus Mausbewegungen (`ControllerTouchpadPointer`).
+    case touch(ControllerTouchFinger, x: Float, y: Float)
+}
+
+/// Die zwei Finger, die das Touchpad meldet.
+enum ControllerTouchFinger: String, CaseIterable, Sendable {
+    case primary, secondary
 }
 
 /// Diskrete Gesten, die der Erkenner aus den Eingaben macht. Nur diese gehen

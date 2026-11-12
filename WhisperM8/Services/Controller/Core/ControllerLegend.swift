@@ -25,6 +25,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case open, select, paste, pin, deleteHold, close, closeHold
     case startChat, correctAndPaste, clipboardFilter, zoomImage, clearHistory
     case resume, pauseHold, bringToFront
+    // Touchpad als Maus
+    case pointer, clipboardWithL2
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -60,8 +62,10 @@ enum ControllerLegend {
         var probes: [ControllerGesture]
     }
 
-    static func entries(for context: ControllerContext) -> [ControllerLegendEntry] {
-        candidates(for: context)
+    /// - Parameter touchpadPointer: Touchpad als Maus ist an; der Verlauf
+    ///   liegt dann auf L2 + Touchpad.
+    static func entries(for context: ControllerContext, touchpadPointer: Bool = false) -> [ControllerLegendEntry] {
+        candidates(for: context, touchpadPointer: touchpadPointer)
             .filter { candidate in
                 candidate.probes.contains { probe in
                     guard let action = ControllerBindingResolver.action(for: probe, in: context) else { return false }
@@ -72,8 +76,20 @@ enum ControllerLegend {
     }
 
     /// Belegung für die Einstellungsseite, getrennt nach Kern, Zusatz und den
-    /// drei Ebenen der Insel.
-    static func allBindings() -> [ControllerLegendSection] {
+    /// drei Ebenen der Insel. Mit dem Touchpad als Maus steht beim Touchpad
+    /// der Zeiger; L2 + Touchpad (Verlauf) gilt immer und steht bei den Ebenen.
+    static func allBindings(touchpadPointer: Bool = false) -> [ControllerLegendSection] {
+        var sections = standardBindings()
+        guard touchpadPointer else { return sections }
+        for index in sections.indices where sections[index].kind == .extra {
+            if let position = sections[index].entries.firstIndex(of: entry(.button(.touchpad), .clipboard)) {
+                sections[index].entries[position] = entry(.button(.touchpad), .pointer)
+            }
+        }
+        return sections
+    }
+
+    private static func standardBindings() -> [ControllerLegendSection] {
         [
             ControllerLegendSection(kind: .core, entries: [
                 entry(.leftStick, .move),
@@ -108,6 +124,7 @@ enum ControllerLegend {
                 combination(.r1, .circle, .switchAccount),
                 entry(.button(.l2), .whereToHold),
                 combination(.l2, .triangle, .nextWaiting),
+                combination(.l2, .touchpad, .clipboardWithL2),
                 combination(.l2, .r2, .pickAndDictate),
             ]),
         ]
@@ -163,15 +180,19 @@ enum ControllerLegend {
 
     // MARK: - Kandidaten je Zusammenhang
 
-    static func candidates(for context: ControllerContext) -> [Candidate] {
+    static func candidates(for context: ControllerContext, touchpadPointer: Bool = false) -> [Candidate] {
         switch context {
         case .paused:
             return [candidate(.bumpers, .resume, [.chordCompleted])]
         case .outsideApp, .noWindow:
+            let clipboard = touchpadPointer
+                ? Candidate(entry: combination(.l2, .touchpad, .clipboardWithL2),
+                            probes: [.inLayer(.whereTo, .press(.touchpad))])
+                : candidate(.button(.touchpad), .clipboard, [.press(.touchpad)])
             return [
                 candidate(.button(.r2), .dictate, [.press(.r2)]),
                 candidate(.button(.triangle), .bringToFront, [.press(.triangle)]),
-                candidate(.button(.touchpad), .clipboard, [.press(.touchpad)]),
+                clipboard,
             ]
         case .recording(.recording, _):
             return [

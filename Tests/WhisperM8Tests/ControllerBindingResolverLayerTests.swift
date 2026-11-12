@@ -139,6 +139,8 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.circle)), context), .islandCancel)
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.triangle)), context), .islandNextWaiting)
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.r2)), context), .islandCommitAndDictate)
+            XCTAssertEqual(action(.inLayer(.whereTo, .press(.touchpad)), context), .clipboardToggle,
+                           "L2 + Touchpad: Verlauf (Touchpad als Maus)")
             XCTAssertNil(action(.inLayer(.whereTo, .press(.square)), context))
             XCTAssertNil(action(.inLayer(.whereTo, .press(.l1)), context), "kein Pause-Akkord unter L2")
             XCTAssertEqual(action(.layerEnded(.whereTo), context), .islandRelease)

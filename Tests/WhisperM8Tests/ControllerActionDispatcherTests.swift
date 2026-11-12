@@ -967,11 +967,13 @@ final class ControllerActionDispatcherTests: XCTestCase {
     func testMenuSettingsAndPause() {
         var pauses = 0
         dispatcher.togglePause = { pauses += 1 }
-        for item in [ControllerMenuItem.showBindings, .pause] {
+        for item in [ControllerMenuItem.clipboardHistory, .showBindings, .pause] {
             perform(.menuToggle)
             ui.menu?.select(item)
             perform(.menuActivate)
         }
+        XCTAssertEqual(environment.clipboardToggles, 1, "Verlauf aus dem Menü")
+        XCTAssertNil(ui.menu)
         XCTAssertEqual(environment.openedSettings, 1)
         XCTAssertEqual(pauses, 1)
     }

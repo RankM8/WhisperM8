@@ -668,6 +668,22 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
     }
 
+    /// Touchpad als Maus: Finger bewegt den Zeiger, Drücken klickt (mit zwei
+    /// Fingern rechts). Der Verlauf liegt dann auf L2 + Touchpad. Standard: aus.
+    var isControllerTouchpadPointerEnabled: Bool {
+        get { defaults.bool(forKey: Keys.controllerTouchpadPointerEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerTouchpadPointerEnabled) }
+    }
+
+    /// Zeigergeschwindigkeit für das Touchpad als Maus (Faktor, 1 = Standard).
+    var controllerPointerSpeed: Double {
+        get {
+            let value = defaults.double(forKey: Keys.controllerPointerSpeed)
+            return value > 0 ? value : ControllerTouchpadPointer.Config.defaultSpeed
+        }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerPointerSpeed) }
+    }
+
     /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
     var controllerConnectHintShown: Bool {
         get { defaults.bool(forKey: Keys.controllerConnectHintShown) }
@@ -1113,6 +1129,8 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let controllerTouchpadPointerEnabled = "controllerTouchpadPointerEnabled"
+    static let controllerPointerSpeed = "controllerPointerSpeed"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"
