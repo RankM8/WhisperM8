@@ -165,4 +165,59 @@ final class AgentGridWorkspaceChatClickTests: XCTestCase {
         XCTAssertEqual(store.navigateToWorkspaceChat(s[1], workspaceID: UUID(), in: w), .rejected)
         XCTAssertEqual(store.window(for: w), before)
     }
+
+    // MARK: - Gemerkte Kachel bei einem Chat in zwei Workspaces (E2E 12.11.2026)
+
+    /// Shell 1 liegt in „Drei" und „Neun". In „Neun" ist Shell 3 fokussiert,
+    /// Wechsel nach „Drei" (Fokus Shell 1), zurück nach „Neun" → Shell 3.
+    func testSwitchBackRestoresRememberedPaneWhenFocusedChatIsAlsoMember() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let drei = store.createGridWorkspace(name: "Drei", slots: [s[0], s[1]])
+        let neun = store.createGridWorkspace(name: "Neun", slots: [s[0], s[2], s[3]], activateIn: w)
+        store.setGridFocusedSession(s[2], in: w)
+
+        XCTAssertEqual(store.activateGridWorkspace(drei, in: w), .activated)
+        store.setGridFocusedSession(s[0], in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[0])
+
+        XCTAssertEqual(store.activateGridWorkspace(neun, in: w), .activated)
+        XCTAssertEqual(store.selectedSession(in: w), s[2], "gemerkte Kachel, nicht der geteilte Chat")
+        XCTAssertEqual(store.window(for: w).gridFocusSessionID, s[2])
+    }
+
+    /// Gegenprobe: Chat nur in „Drei" fokussiert — Rückweg wie bisher.
+    func testSwitchBackRestoresRememberedPaneWhenFocusedChatIsNotMember() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let drei = store.createGridWorkspace(name: "Drei", slots: [s[0], s[1]])
+        let neun = store.createGridWorkspace(name: "Neun", slots: [s[0], s[2], s[3]], activateIn: w)
+        store.setGridFocusedSession(s[2], in: w)
+
+        store.activateGridWorkspace(drei, in: w)
+        store.setGridFocusedSession(s[1], in: w)
+        store.activateGridWorkspace(neun, in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[2])
+    }
+
+    /// Gezielter Klick (bzw. Kreuz) auf einen Chat unter dem anderen
+    /// Workspace fokussiert weiter genau diesen Chat — die gemerkte Kachel
+    /// gewinnt dort nicht.
+    func testExplicitChatChoiceBeatsRememberedPane() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let drei = store.createGridWorkspace(name: "Drei", slots: [s[0], s[1]])
+        let neun = store.createGridWorkspace(name: "Neun", slots: [s[0], s[2], s[3]], activateIn: w)
+        store.setGridFocusedSession(s[2], in: w)
+        store.activateGridWorkspace(drei, in: w)
+
+        XCTAssertEqual(store.navigateToWorkspaceChat(s[3], workspaceID: neun, in: w), .activated)
+        XCTAssertEqual(store.selectedSession(in: w), s[3])
+        store.activateGridWorkspace(drei, in: w)
+        XCTAssertEqual(store.navigateToWorkspaceChat(s[0], workspaceID: neun, in: w), .activated)
+        XCTAssertEqual(store.selectedSession(in: w), s[0], "geteilter Chat gezielt gewählt")
+    }
 }

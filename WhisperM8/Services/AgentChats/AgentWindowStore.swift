@@ -1097,21 +1097,29 @@ final class AgentWindowStore {
     }
 
     /// Fokus-Invariante im sichtbaren Grid: Selektion muss ein belegter Slot
-    /// sein — bevorzugt der gemerkte Pane-Fokus (`gridFocusSessionID`, damit
-    /// „Zurück zum Workspace" exakt wiederherstellt), sonst erster belegter
-    /// Slot; leerer Workspace → `nil`.
+    /// sein. Reihenfolge: beim echten Workspace-Wechsel die dort zuletzt
+    /// benutzte Kachel (`lastFocusInWorkspace`), sonst die aktuelle Auswahl,
+    /// sonst der gemerkte Pane-Fokus (`gridFocusSessionID`, damit „Zurück zum
+    /// Workspace" exakt wiederherstellt), sonst erster belegter Slot; leerer
+    /// Workspace → `nil`.
+    ///
+    /// Die gemerkte Kachel MUSS vor der Auswahl kommen: Liegt der gerade
+    /// fokussierte Chat auch im Ziel-Workspace (ein Chat in zwei
+    /// Workspaces), gewann sonst er, und der Rückweg landete auf der falschen
+    /// Kachel (E2E-Befund 12.11.2026). Wer gezielt einen Chat öffnet
+    /// (`navigateToWorkspaceChat`), fokussiert ihn danach selbst.
     private static func repairGridFocus(
         _ window: inout AgentChatWindowState, entity: AgentGridWorkspace,
         lastFocusInWorkspace: UUID? = nil
     ) {
-        if let selected = window.selectedSessionID,
-           entity.slotIndex(of: selected) != nil {
-            window.gridFocusSessionID = selected
-            return
-        }
         if let lastFocusInWorkspace {
             window.selectedSessionID = lastFocusInWorkspace
             window.gridFocusSessionID = lastFocusInWorkspace
+            return
+        }
+        if let selected = window.selectedSessionID,
+           entity.slotIndex(of: selected) != nil {
+            window.gridFocusSessionID = selected
             return
         }
         if let remembered = window.gridFocusSessionID,
