@@ -185,8 +185,8 @@ struct ControllerGestureRecognizer: Sendable {
         return gestures
     }
 
-    /// Ebene, deren Taste gerade gehalten wird (auch vor der Halte-Schwelle).
-    var activeLayer: ControllerLayer? { layer?.layer }
+    /// Ist die Taste gerade gedrückt (Trigger: über der Schwelle)?
+    func isPressed(_ button: ControllerButton) -> Bool { pressedButtons.contains(button) }
 
     /// Eine Eingabe außerhalb des Erkenners (Mausklick am Touchpad) kam
     /// dazwischen: Die gehaltene Ebenen-Taste gilt nicht mehr als getippt.

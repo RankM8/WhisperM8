@@ -11,7 +11,7 @@ import Foundation
 final class ControllerGesturePump: @unchecked Sendable {
     /// Eigene Queue, nie eine globale: Das Framework liefert Eingaben
     /// verzögert, wenn sich die Handler eine ausgelastete Queue teilen.
-    let queue = DispatchQueue(label: "com.whisperm8.controller.input", qos: .userInteractive)
+    let queue: DispatchQueue
 
     /// Fertige Gesten, dazu ob danach nichts mehr gedrückt oder ausgelenkt
     /// ist. Aufgerufen auf `queue`. Wird der Erkenner ruhig, kommt ein Aufruf
@@ -32,8 +32,10 @@ final class ControllerGesturePump: @unchecked Sendable {
         pointerPoster: ControllerPointerPosting? = nil,
         clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        let queue = DispatchQueue(label: "com.whisperm8.controller.input", qos: .userInteractive)
+        self.queue = queue
         self.recognizer = ControllerGestureRecognizer(config: config)
-        self.pointer = ControllerPointerDriver(poster: pointerPoster)
+        self.pointer = ControllerPointerDriver(poster: pointerPoster, queue: queue, clock: clock)
         self.clock = clock
     }
 
@@ -50,7 +52,7 @@ final class ControllerGesturePump: @unchecked Sendable {
             let now = clock()
             // Fingerdaten und Mausklicks bleiben beim Zeiger: keine Gesten,
             // kein Main Thread, kein Einfluss auf das Verwerfen nach dem Aufwecken.
-            switch pointer.handle(event, at: now, activeLayer: recognizer.activeLayer) {
+            switch pointer.handle(event, at: now, l2Held: recognizer.isPressed(.l2)) {
             case .handled: return
             case .clicked:
                 recognizer.markLayerUsed()

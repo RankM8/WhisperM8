@@ -10,6 +10,8 @@ struct ControllerSettingsDependencies {
     var applyPreferences: @MainActor () -> Void
     /// Bedienungshilfen erlaubt? Ohne sie kann das Touchpad den Zeiger nicht bewegen.
     var accessibilityTrusted: @MainActor () -> Bool = { PermissionService.hasAccessibilityPermission }
+    /// Nur den Zeiger angleichen (Geschwindigkeits-Regler, je Schritt).
+    var applyPointerSettings: @MainActor () -> Void = {}
     var requestAccessibility: @MainActor () -> Void = {
         PermissionService.requestAccessibilityPermission()
         PermissionService.openAccessibilityPrivacySettings()
@@ -20,7 +22,8 @@ struct ControllerSettingsDependencies {
         applyPreferences: {
             ControllerManager.shared.applyPreferences()
             ControllerConnectHint.shared.sync()
-        }
+        },
+        applyPointerSettings: { ControllerManager.shared.syncPointer() }
     )
 }
 
@@ -129,7 +132,7 @@ struct ControllerSettingsPage: View {
         .onChange(of: enabled) { _, _ in dependencies.applyPreferences() }
         .onChange(of: backgroundEnabled) { _, _ in dependencies.applyPreferences() }
         .onChange(of: touchpadPointerEnabled) { _, _ in dependencies.applyPreferences() }
-        .onChange(of: pointerSpeed) { _, _ in dependencies.applyPreferences() }
+        .onChange(of: pointerSpeed) { _, _ in dependencies.applyPointerSettings() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             permissionCheck += 1
         }

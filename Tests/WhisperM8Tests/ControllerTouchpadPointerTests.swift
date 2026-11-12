@@ -53,7 +53,7 @@ final class ControllerTouchpadPointerTests: XCTestCase {
         _ = touch(-0.5, 0.2, at: 0)
         XCTAssertNil(touch(0.6, -0.4, at: 0.01), "Sprung über die halbe Fläche")
         XCTAssertNotNil(touch(0.61, -0.4, at: 0.02))
-        XCTAssertNil(touch(0.65, -0.4, at: 0.2), "Lücke länger als 0,1 s")
+        XCTAssertNil(touch(0.65, -0.4, at: 0.2), "Lücke länger als 35 ms und weiter als langsames Schieben")
         XCTAssertNotNil(touch(0.66, -0.4, at: 0.21))
     }
 
@@ -130,13 +130,14 @@ final class ControllerTouchpadPointerTests: XCTestCase {
     /// zieht der Finger mit gedrückter Taste (Ziehen und Ablegen).
     func testClickSettlesThenDrags() {
         _ = touch(0.1, 0, at: 0)
-        XCTAssertNotNil(touch(0.105, 0, at: 0.08))
-        _ = pointer.press(at: 0.1)
-        XCTAssertNil(touch(0.11, 0, at: 0.12), "Verrutschen beim Drücken")
-        XCTAssertNotNil(touch(0.13, 0, at: 0.2), "Ziehen mit gedrückter Taste")
-        XCTAssertNotNil(touch(0.135, 0, at: 0.25))
-        _ = pointer.release(at: 0.3)
-        XCTAssertNil(touch(0.14, 0, at: 0.32), "Verrutschen beim Loslassen")
+        XCTAssertNotNil(touch(0.105, 0, at: 0.02))
+        _ = pointer.press(at: 0.03)
+        XCTAssertNil(touch(0.11, 0, at: 0.05), "Verrutschen beim Drücken")
+        XCTAssertNil(touch(0.115, 0, at: 0.07))
+        XCTAssertNotNil(touch(0.13, 0, at: 0.13), "Ziehen mit gedrückter Taste")
+        XCTAssertNotNil(touch(0.135, 0, at: 0.15))
+        _ = pointer.release(at: 0.16)
+        XCTAssertNil(touch(0.14, 0, at: 0.18), "Verrutschen beim Loslassen")
     }
 
     func testDoubleClickCountsWhenQuickAndStill() {
@@ -155,6 +156,63 @@ final class ControllerTouchpadPointerTests: XCTestCase {
         _ = touch(0.1, 0, at: 0.3)
         _ = touch(0.2, 0, at: 0.31)
         XCTAssertEqual(pointer.press(at: 0.4), .buttonDown(.left, clickCount: 1))
+    }
+
+    // MARK: - Framework ohne (0, 0) beim Abheben (Review-Befund 1)
+
+    /// Nachgreifen: Abheben und weiter links wieder aufsetzen, ohne dass das
+    /// Framework (0, 0) meldet. Der Zeiger darf nicht rückwärts springen.
+    func testRegripWithoutZeroDoesNotJumpBack() {
+        _ = touch(0.3, 0, at: 0)
+        _ = touch(0.4, 0, at: 0.01)
+        _ = touch(0.5, 0, at: 0.02)
+        XCTAssertNil(touch(0.2, 0, at: 0.07), "nach 50 ms an anderer Stelle: neu aufgesetzt")
+        XCTAssertEqual(pointer.lastTransition, .landed(.primary, .gap))
+        XCTAssertGreaterThan(delta(touch(0.25, 0, at: 0.08)).dx, 0, "weiter nach rechts")
+    }
+
+    /// Sehr langsames Schieben meldet selten eine neue Position und bleibt
+    /// trotzdem eine Bewegung.
+    func testVerySlowSlideStillMoves() {
+        _ = touch(0.1, 0, at: 0)
+        XCTAssertGreaterThan(delta(touch(0.101, 0, at: 0.2)).dx, 0)
+        XCTAssertNil(pointer.lastTransition)
+    }
+
+    /// Ein liegen gelassener erster Finger, dessen Abheben nie kam, blockiert
+    /// nichts: Es führt der Finger, der sich meldet.
+    func testSilentFirstFingerDoesNotBlockTheSecond() {
+        _ = touch(-0.6, 0, at: 0)
+        _ = touch(0.5, 0, at: 0.5, finger: .secondary)
+        XCTAssertEqual(pointer.driver, .secondary)
+        XCTAssertGreaterThan(delta(touch(0.52, 0, at: 0.51, finger: .secondary)).dx, 0)
+        XCTAssertEqual(pointer.press(at: 0.6), .buttonDown(.left, clickCount: 1),
+                       "der erste hat sich vor dem Aufsetzen des zweiten zuletzt gemeldet")
+    }
+
+    /// Nach einem Rechtsklick ist der nächste Einfingerklick links, auch wenn
+    /// das Framework den zweiten Finger nie als abgehoben meldet.
+    func testRightClickDoesNotStickToTheNextClick() {
+        _ = touch(-0.3, 0, at: 0)
+        _ = touch(0.3, 0, at: 0.01, finger: .secondary)
+        XCTAssertEqual(pointer.press(at: 0.1), .buttonDown(.right, clickCount: 1))
+        _ = pointer.release(at: 0.2)
+        _ = touch(-0.29, 0, at: 0.21)
+        XCTAssertEqual(pointer.press(at: 0.4), .buttonDown(.left, clickCount: 1))
+    }
+
+    /// Wechsel kommen einmal je Abheben bzw. Aufsetzen (für das Log am Gerät).
+    func testTransitionsAreReportedOncePerChange() {
+        _ = touch(0.1, 0, at: 0)
+        XCTAssertEqual(pointer.lastTransition, .landed(.primary, .first))
+        _ = touch(0.11, 0, at: 0.01)
+        XCTAssertNil(pointer.lastTransition)
+        _ = touch(0.9, 0, at: 0.02)
+        XCTAssertEqual(pointer.lastTransition, .landed(.primary, .jump))
+        _ = touch(0, 0, at: 0.03)
+        XCTAssertEqual(pointer.lastTransition, .lifted(.primary))
+        _ = touch(0, 0, at: 0.04)
+        XCTAssertNil(pointer.lastTransition, "kein zweites Abheben")
     }
 
     /// Zurücksetzen (Pause, Trennung) lässt eine gedrückte Taste los, sonst

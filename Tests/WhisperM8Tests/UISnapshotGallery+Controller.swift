@@ -27,7 +27,7 @@ extension UISnapshotGallery {
                     accessibilityTrusted: { accessibilityTrusted }, requestAccessibility: {})
             ))
         }
-        let size = CGSize(width: 760, height: 1700)
+        let size = CGSize(width: 760, height: 2150)
         let chat = ControllerChatState(status: .idle, profile: .claude)
         func legend(_ context: ControllerContext, title: String = "WhisperM8 PS5-Controller-Steuerung",
                     hold: ControllerButton? = nil) -> AnyView {

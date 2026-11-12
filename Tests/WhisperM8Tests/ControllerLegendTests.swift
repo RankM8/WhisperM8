@@ -178,15 +178,15 @@ final class ControllerLegendTests: XCTestCase {
         // Alle drei Ebenen mit jeder Taste der Tabelle.
         XCTAssertEqual(sections[2].entries.map(\.label), [
             .deleteToLineStart, .newline, .continueWork, .cycleMode, .commands, .switchAccount,
-            .whereToHold, .nextWaiting, .pickAndDictate,
+            .whereToHold, .nextWaiting, .clipboardWithL2, .pickAndDictate,
         ])
         XCTAssertTrue(sections[2].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]
         })
     }
 
-    /// Touchpad als Maus: Die Belegung zeigt den Zeiger, der Verlauf steht bei
-    /// L2. Ohne den Schalter bleibt alles, wie es war.
+    /// Touchpad als Maus: Die Belegung zeigt beim Touchpad den Zeiger; L2 +
+    /// Touchpad (Verlauf) steht in beiden Fällen bei den Ebenen.
     func testTouchpadPointerBindings() {
         XCTAssertEqual(ControllerLegend.allBindings(touchpadPointer: false), ControllerLegend.allBindings())
         let sections = ControllerLegend.allBindings(touchpadPointer: true)

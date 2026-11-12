@@ -35,9 +35,9 @@ final class ControllerPointerDriverTests: XCTestCase {
     }
 
     private func handle(
-        _ event: ControllerInputEvent, at time: TimeInterval, layer: ControllerLayer? = nil
+        _ event: ControllerInputEvent, at time: TimeInterval, l2Held: Bool = false
     ) -> ControllerPointerDriver.Disposition {
-        driver.handle(event, at: time, activeLayer: layer)
+        driver.handle(event, at: time, l2Held: l2Held)
     }
 
     // MARK: - Schalter aus: alles wie bisher
@@ -68,16 +68,33 @@ final class ControllerPointerDriverTests: XCTestCase {
     /// L2 gehalten: Der Druck gehört dem Erkenner (Verlauf), kein Klick.
     func testWhereToLayerTakesTheTouchpadPress() {
         driver.apply(Self.on)
-        XCTAssertEqual(handle(.button(.touchpad, pressed: true), at: 0, layer: .whereTo), .recognizer)
+        XCTAssertEqual(handle(.button(.touchpad, pressed: true), at: 0, l2Held: true), .recognizer)
         XCTAssertEqual(handle(.button(.touchpad, pressed: false), at: 0.1), .recognizer, "auch nach dem Loslassen von L2")
         XCTAssertEqual(poster.buttons, [])
     }
 
-    /// L1 oder R1 gehalten: Der Klick geht raus (die Ebene merkt es sich).
-    func testOtherLayersStillClick() {
-        driver.apply(Self.on)
-        XCTAssertEqual(handle(.button(.touchpad, pressed: true), at: 0, layer: .writing), .clicked)
-        XCTAssertEqual(handle(.button(.touchpad, pressed: false), at: 0.1, layer: .writing), .handled)
+    /// App Nap: Finger und Klick halten eine Aktivität, nach Ruhe endet sie.
+    /// Eine gedrückte Taste hält sie auch ohne Fingerdaten.
+    func testActivityAgainstAppNapEndsAfterQuiet() {
+        let queue = DispatchQueue(label: "pointer-activity-test")
+        let driver = ControllerPointerDriver(poster: poster, queue: queue, idleTimeout: 0.05)
+        queue.sync { driver.apply(Self.on) }
+        queue.sync { _ = driver.handle(.touch(.primary, x: 0.1, y: 0), at: ProcessInfo.processInfo.systemUptime, l2Held: false) }
+        XCTAssertTrue(queue.sync { driver.holdsActivity })
+        let quiet = expectation(description: "Aktivität beendet")
+        queue.asyncAfter(deadline: .now() + 0.4) {
+            if !driver.holdsActivity { quiet.fulfill() }
+        }
+        wait(for: [quiet], timeout: 2)
+
+        queue.sync { _ = driver.handle(.button(.touchpad, pressed: true), at: ProcessInfo.processInfo.systemUptime, l2Held: false) }
+        let held = expectation(description: "gehalten")
+        queue.asyncAfter(deadline: .now() + 0.3) {
+            if driver.holdsActivity { held.fulfill() }
+        }
+        wait(for: [held], timeout: 2)
+        queue.sync { driver.apply(ControllerPointerDriver.Settings(enabled: true, active: false)) }
+        XCTAssertFalse(queue.sync { driver.holdsActivity }, "Pause beendet sie sofort")
     }
 
     /// Pause oder Trockenlauf: weder Zeiger noch Klick noch Verlauf.
@@ -177,6 +194,32 @@ final class ControllerGesturePumpPointerTests: XCTestCase {
             .button(.touchpad, pressed: false), .button(.l1, pressed: false),
         ])
         XCTAssertEqual(gestures, [.holdPending(.l1, duration: 0.3), .layerEnded(.writing)])
+        XCTAssertEqual(poster.buttons.count, 2)
+    }
+
+    /// L1 gehalten, dann L2 dazu: Das Touchpad klickt nicht (L2 ist gedrückt),
+    /// der Druck geht als Taste in der L1-Ebene an den Erkenner.
+    func testL2InsideAnotherLayerStillBlocksTheClick() {
+        pump.setPointer(.init(enabled: true, active: true))
+        send([
+            .button(.l1, pressed: true), .trigger(.l2, value: 1), .button(.touchpad, pressed: true),
+            .button(.touchpad, pressed: false), .trigger(.l2, value: 0), .button(.l1, pressed: false),
+        ])
+        XCTAssertEqual(gestures, [
+            .holdPending(.l1, duration: 0.3), .inLayer(.writing, .press(.l2)),
+            .inLayer(.writing, .press(.touchpad)), .layerEnded(.writing),
+        ])
+        XCTAssertEqual(poster.posted, [])
+    }
+
+    /// L1 oder R1 gehalten (ohne L2): Der Klick geht raus.
+    func testClickUnderR1Clicks() {
+        pump.setPointer(.init(enabled: true, active: true))
+        send([
+            .button(.r1, pressed: true), .button(.touchpad, pressed: true),
+            .button(.touchpad, pressed: false), .button(.r1, pressed: false),
+        ])
+        XCTAssertEqual(gestures, [.holdPending(.r1, duration: 0.3), .layerEnded(.quickDraw)])
         XCTAssertEqual(poster.buttons.count, 2)
     }
 

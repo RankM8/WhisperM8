@@ -363,7 +363,8 @@ final class ControllerManager {
 
     /// Gleicht Schalter, Pause und Trockenlauf mit dem Zeiger auf der
     /// Eingabe-Queue ab. Ohne Schalter meldet die Quelle keine Fingerdaten.
-    private func syncPointer() {
+    /// Auch direkt für den Geschwindigkeits-Regler (ohne den ganzen Abgleich).
+    func syncPointer() {
         let prefs = preferences()
         let enabled = status.isRunning && prefs.isControllerTouchpadPointerEnabled
         source.setTouchTracking(enabled)

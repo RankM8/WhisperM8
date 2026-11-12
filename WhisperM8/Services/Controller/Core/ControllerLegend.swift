@@ -74,25 +74,15 @@ enum ControllerLegend {
     }
 
     /// Belegung für die Einstellungsseite, getrennt nach Kern, Zusatz und den
-    /// drei Ebenen der Insel. Mit dem Touchpad als Maus steht dort der Zeiger,
-    /// und der Verlauf wandert zu den Ebenen (L2 + Touchpad).
+    /// drei Ebenen der Insel. Mit dem Touchpad als Maus steht beim Touchpad
+    /// der Zeiger; L2 + Touchpad (Verlauf) gilt immer und steht bei den Ebenen.
     static func allBindings(touchpadPointer: Bool = false) -> [ControllerLegendSection] {
         var sections = standardBindings()
         guard touchpadPointer else { return sections }
-        for index in sections.indices {
-            var entries = sections[index].entries
-            switch sections[index].kind {
-            case .extra:
-                if let position = entries.firstIndex(of: entry(.button(.touchpad), .clipboard)) {
-                    entries[position] = entry(.button(.touchpad), .pointer)
-                }
-            case .layers:
-                let anchor = entries.firstIndex { $0.label == .nextWaiting }.map { $0 + 1 } ?? entries.endIndex
-                entries.insert(combination(.l2, .touchpad, .clipboardWithL2), at: anchor)
-            case .core:
-                break
+        for index in sections.indices where sections[index].kind == .extra {
+            if let position = sections[index].entries.firstIndex(of: entry(.button(.touchpad), .clipboard)) {
+                sections[index].entries[position] = entry(.button(.touchpad), .pointer)
             }
-            sections[index].entries = entries
         }
         return sections
     }
@@ -132,6 +122,7 @@ enum ControllerLegend {
                 combination(.r1, .circle, .switchAccount),
                 entry(.button(.l2), .whereToHold),
                 combination(.l2, .triangle, .nextWaiting),
+                combination(.l2, .touchpad, .clipboardWithL2),
                 combination(.l2, .r2, .pickAndDictate),
             ]),
         ]
