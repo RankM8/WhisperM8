@@ -1,7 +1,7 @@
 ---
-status: umgesetzt, Review-Fixes drin, wartet auf make-dev-QA; Pille ohne Notch neu (12.11.2026)
+status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled)
 stand: 2026-11-12
-feature: Statusanzeige an der Notch
+feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
 # Statusanzeige an der Notch
@@ -14,6 +14,100 @@ Klick in den passenden Chat. Prototyp der Zustände:
 [`../design/notch-prototype.html`](../design/notch-prototype.html).
 
 Standardmäßig **an** (seit 05.11.2026, vorher aus).
+
+## Vereinte Pille (Standard seit 12.11.2026)
+
+Diktat-Pille und Status-Pille sind eine Pille. Entwurf mit allen Zuständen und
+den 13 beantworteten Fragen: Branch `docs/pille-vereint-entwurf`,
+`docs/design/pille-vereint.html`. Abweichung von Frage 13: Ein Klick auf den
+ruhenden Kern startet ein Diktat (derselbe Weg wie der Hotkey), ein Klick auf
+die Zähler oder den Rest der Pille öffnet die Liste.
+
+**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Insel vor Diktat vor
+offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
+
+| Zustand | Ohne Notch | Mit Notch |
+|---|---|---|
+| Ruhe | Pille oben mittig: Kern als stille graue Linie, rechts die Zähler | wie bisher: Zähler unter der Notch, nichts los = nichts zu sehen |
+| Hinweis | Kern, Punkt, Chat-Name, Wort, „+ n“, einmal ca. 4 s | wie bisher |
+| Liste | wächst aus der Pille, Pillen-Zeile bleibt stehen; unten „Status in der Pille ausblenden“ | wie bisher |
+| Diktat | die Diktat-Pille an der Stelle der Pille, links Raute bzw. Ring für wartende Chats und Fehler | die Diktat-Zeile hängt schwarz unter der Notch, Raute links |
+| Insel | wächst aus der Pille | wächst aus der Notch |
+
+**Aussehen:** Die Pille in Ruhe, beim Hinweis und mit Liste ist gezeichnet wie
+die Diktat-Pille: 40 pt hoch, Kapsel, `PillGlassBackground` (dünnes Material,
+Tönung `OverlayPalette.glassTint`, 0,5-pt-Rand Weiß 14 %), im Fenster
+gezeichneter Schatten (`pillGlassShadow`, Schwarz 30 %, Radius 12, 3 pt nach
+unten), Schrift 12,5 pt. Kein Fensterschatten mehr (der brachte den hellen
+Rand und die weiche Kante, die die Diktat-Pille nicht hat). Dafür hat das
+Fenster wie die Diktat-Pille einen Rand von 24 pt für den Schatten; nur die
+Pille selbst nimmt Klicks an (`NotchHostingView.hitTest`), der Rand ist
+durchsichtig. Wie bei der Diktat-Pille fängt der Schattenhof dicht an der
+Pille Klicks ab (die Fensterverwaltung reicht nur völlig durchsichtige Pixel
+weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
+(28 pt hoch, mindestens 46 pt breit, fünf Balken), grau und flach.
+
+**Wo sie steht:**
+
+- Ohne Notch auf dem Bildschirm des Agent-Chats-Fensters (ohne Fenster auf
+  dem Hauptbildschirm), oben mittig unter der Menüleiste oder an der
+  gemerkten Lage dieses Bildschirms (`notchPillPositions`, Display-UUID).
+  Die Einstellung „Bildschirm“ (`notchStatusScreen`) gilt nicht mehr.
+- Ein Diktat erscheint dort, wo du tippst: Bildschirm des vorderen Fensters
+  (Fensterliste abseits des Main Threads, `FrontWindowLocator`, höchstens
+  80 ms, sonst die Maus). Mit Notch an der Notch, sonst an der gemerkten Lage
+  dieses Bildschirms, nur bis das Diktat fertig ist. Auf diesem Bildschirm
+  tritt die Status-Pille so lange zurück (`UnifiedPillHub.dictationDisplayID`).
+- Die alte Lage der Diktat-Pille (`overlayAnchor…`, unten mittig) bleibt
+  gespeichert, wird aber nicht benutzt; mit dem Kill-Switch gilt sie wieder.
+
+**Bewegung:** Zustandswechsel wachsen um die Mitte (eine Kurve, 0,35 s). Nur
+das Darüberfahren beim Diktat (Mini) klappt nach links auf, die rechte Kante
+bleibt (`UnifiedPillGeometry.centerGuide`, über eine Ausrichtungslinie im
+selben Layout-Durchgang, ohne Fensterbewegung). Am Bildschirmrand wird zur
+Mitte hin verschoben. An der Notch ist nichts verschiebbar (kein Griff),
+alles wächst um die Mitte der Notch.
+
+**Bedienung:** Klick auf den grauen Kern startet ein Diktat
+(`AppState.startRecording()`, wie der Hotkey), Klick auf den Rest öffnet die
+Liste, ab 4 pt Bewegung wird gezogen, Doppelklick setzt oben mittig zurück
+(nicht, wenn der erste Klick ein Diktat gestartet hat). Beim Diktat bleibt
+alles wie bei der Diktat-Pille mit der Maus bedienbar (✓, ✕, Modus, Kontext).
+Hotkey „Statusliste öffnen“ (`openNotchStatusList`, ab Werk ohne Belegung):
+Liste mit Tastaturfokus, Pfeile wählen, Return springt in den Chat, Esc
+schließt.
+
+**Hinweis beim Diktat:** Kommt währenddessen ein „braucht dich“, verbreitert
+sich die Pille dort nicht, die Raute erscheint links. Wartet der Chat nach dem
+Diktat noch, kommt die Verbreiterung einmal nach (`alertDuringDictation`).
+
+**Menüs und Listen:** In der oberen Bildschirmhälfte nach unten, in der
+unteren nach oben (Statusliste, Insel, Liste der Ausgabemodi am Controller;
+die Menüs von Modus und Kontext legt macOS selbst passend).
+
+**Vollbild:** In Ruhe ausgeblendet, Diktat und Insel erscheinen trotzdem.
+**Aus Bildschirmfotos ausblenden** gilt für die ganze Pille, auch das Diktat.
+**Status aus:** Die Pille erscheint nur beim Diktat und für die Insel.
+
+**Technik:** Die Diktat-Logik ist unberührt (Coordinator, Aufnahme,
+Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
+und wie sie aussieht (`OverlayPresentation`: `classic`, `pill`, `notch`,
+`RecordingPanel+UnifiedPill.swift`). Die Status-Seite hängt in
+`NotchStatusController+UnifiedPill.swift`. Beide treffen sich in
+`UnifiedPillHub` (Bildschirm des Diktats, Raute). Es bleiben getrennte
+Fenster, von denen je Bildschirm immer nur eins sichtbar ist; so läuft das
+Diktat weiter durch sein bewährtes Fenster.
+
+### Kill-Switch der vereinten Pille
+
+```bash
+defaults write com.whisperm8.app unifiedPillEnabled -bool NO
+```
+
+Getrennte Diktat-Pille (unten mittig, eine Lage für alle Bildschirme) und
+Status-Pille (Fensterschatten, Bildschirmwahl) wie vor dem 12.11.2026, die
+Einstellungen stehen wieder an den alten Stellen. Wirkt für die Status-Pille
+sofort, für das Diktat beim nächsten Erscheinen.
 
 ## Bedienung
 
@@ -124,8 +218,17 @@ einen selbst belegten Hotkey; ab Werk hat er keine Belegung).
 
 ## Einstellungen
 
-Einstellungen, Agent Chats, Tab Workspace, Abschnitt „Notch Status"
-(`NotchSettingsSection`):
+Vereinte Pille: Einstellungen, General, Abschnitt „Pille und Notch“
+(`PillSettingsSection`), mit Verweisen aus Recording und Agent Chats. Dort:
+Chat-Status in der Pille zeigen, Ausblenden aus Bildschirmfotos (ganze
+Pille), Fertige Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
+„Statusliste öffnen“ und Ein-/Ausblenden. Die Bildschirmwahl fällt weg.
+Recording behält Voll/Mini (nur beim Diktat) und „Ausgabemodus beim Diktat
+immer zeigen“ (`showModePickerInMiniOverlay`). Menüleiste: „Chat-Status in
+der Pille“.
+
+Mit Kill-Switch (getrennte Pillen): Einstellungen, Agent Chats, Tab Workspace,
+Abschnitt „Notch Status" (`NotchSettingsSection`):
 
 | Einstellung | Schlüssel | Standard |
 |---|---|---|
@@ -192,6 +295,12 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 | `Windows/NotchPanel.swift` | Nicht aktivierendes `NSPanel`, Hosting-View mit erstem Klick und Klick/Ziehen/Doppelklick der Pille |
 | `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Insel |
 | `Views/NotchStatusView.swift` | Darstellung aus einem fertigen `NotchDisplay`-Wert |
+| `Services/Shared/UnifiedPill/UnifiedPillModel.swift` | Rein: Priorität, Ort des Diktats, Raute, Geometrie (Mitte, Rechts-Anker beim Darüberfahren, Fenster mit Schattenrand), Klickziel, Aufklapprichtung |
+| `Services/Shared/UnifiedPill/UnifiedPillHub.swift` | Treffpunkt Diktat und Status: Bildschirm des Diktats, Raute |
+| `Services/AgentChats/Notch/NotchStatusController+UnifiedPill.swift` | Status-Pille vereint: Fenster mit Schattenrand, Platz fürs Diktat, Klick auf den Kern, Tastatur, nachgeholter Hinweis |
+| `Windows/RecordingPanel+UnifiedPill.swift` | Diktat-Pille vereint: Bildschirm des vorderen Fensters, Lage je Bildschirm, an der Notch, Raute |
+| `Views/UnifiedStatusPillView.swift` | Ruhe, Hinweis und Liste im Aussehen der Diktat-Pille; `PillRestCoreView`, Raute `DictationStatusBadgeView` |
+| `Views/Settings/Pages/PillSettingsSection.swift` | Abschnitt „Pille und Notch“ auf General, Verweis-Zeile für Recording und Agent Chats |
 | `Views/Settings/Pages/NotchSettingsSection.swift` | Einstellungen |
 | `CLI/ChatsAttentionModel.swift` | `AttentionModelBuilder.classify(status:lastTurnAt:since:now:)` ist die geteilte Rang-Logik, das CLI-Verhalten blieb gleich |
 
@@ -320,6 +429,20 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
   sichtbaren Bereich, nach oben in der unteren Hälfte, Insel an derselben
   Stelle, Schlüssel ist die Display-UUID, Speichern und Zurücksetzen.
+- `UnifiedPillModelTests`: Priorität (Insel, Diktat, Liste, Hinweis, Ruhe;
+  Status aus, Vollbild), Ort des Diktats (vorderes Fenster, Maus,
+  Hauptbildschirm, Notch, gemerkte Lage), Raute, Rechts-Anker beim
+  Darüberfahren, Fenster mit Schattenrand, Liste nach oben und unten,
+  Begrenzung am Rand, Klickziel Kern oder Liste.
+- `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
+  Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
+  nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
+  Abmelden beim Hub, vorderes Fenster aus der Fensterliste, Liste der
+  Ausgabemodi nach unten.
+- Snapshots vereint: `make snapshots ONLY=vereint` (Ruhe leer und mit
+  Zählern, Hinweis, Fehler, Liste nach unten und oben, Diktat mit Raute,
+  Diktat an der Notch, Vergleich Diktat-Pille und ruhende Pille Seite an
+  Seite). `ONLY=diktatpille` zeigt die Diktat-Pille in allen Zuständen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).

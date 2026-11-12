@@ -181,6 +181,10 @@ Pille (ohne Menüleiste oben am Bildschirmrand). Eine Bewegung beim Öffnen, ein
 (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur schließen sie
 für das laufende Halten.
 
+Mit der vereinten Pille (siehe [notch.md](notch.md)) ist die Pille, aus der die Insel wächst,
+dieselbe wie die Diktat-Pille; die Insel hat dort Vorrang vor allem anderen. Ihr Aussehen (Glas,
+Rand, Schatten der Diktat-Pille) blieb gleich.
+
 Die Insel ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
 Workspace-Auswahl unten im Fenster. Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
 einem Eintrag („L1 R1 L2 Halten: Ebenen“).
