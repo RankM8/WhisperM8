@@ -267,15 +267,10 @@ enum ControllerLegend {
         let layers = Candidate(
             entry: ControllerLegendEntry(inputs: [.button(.l1), .button(.r1), .button(.l2)], label: .layersHold),
             probes: ControllerLayer.allCases.map { .layerBegan($0) })
-        // Das Steuerkreuz gibt Pfeile nur, wo eine Auswahl offen ist (Rückfrage,
-        // Liste aus dem Menü, Codex); sonst bewegt es wie der Stick.
+        // Das Steuerkreuz gibt in jedem lebenden Chat Pfeile ins Terminal;
+        // ohne Terminal bewegt es wie der Stick.
         let arrows = ControllerBindingResolver.arrowsAllowed(state)
         let moveInputs: [ControllerLegendInput] = arrows ? [.leftStick] : [.leftStick, .dpad]
-        // Rechts übernimmt in Claude den grauen Vorschlag; gleich neben Kreuz,
-        // das ihn danach abschickt. Bei offener Auswahl stehen dort die Pfeile.
-        let suggestion: [Candidate] = !arrows && ControllerBindingResolver.suggestionAcceptAllowed(state)
-            ? [candidate(.button(.dpadRight), .acceptSuggestion, [.move(.right, source: .dpad, isRepeat: false)])]
-            : []
         // L2 getippt: zurück an den vorigen Ort, mit seinem Namen. Ohne Ziel
         // fehlt der Eintrag (der Druck vibriert dann „geht nicht“).
         let back: [Candidate] = state.backTarget.map { target in
@@ -290,8 +285,9 @@ enum ControllerLegend {
         let head: [Candidate] = [
             ControllerLegend.Candidate(
                 entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
+        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
-        ] + suggestion
+        ]
         let keys: [Candidate] = [
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
@@ -300,7 +296,7 @@ enum ControllerLegend {
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
         ]
-        let tail: [Candidate] = [layers] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
+        let tail: [Candidate] = [layers] + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.tap(.r3)]),
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),

@@ -35,12 +35,11 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     case newline
 
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
-    /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile nur in einer
-    /// Rückfrage, in einer Auswahlliste, die das Controller-Menü geöffnet hat
-    /// (`choiceListOpen`, bei Claude nur im Ruhezustand), und bei Codex
-    /// (meldet keine Rückfragen) — sonst
-    /// holt hoch den letzten Prompt zurück und links schickt Claude im leeren
-    /// Eingabefeld in den Hintergrund. Tab und Shift+Tab nie in einer
+    /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile immer: Das
+    /// Steuerkreuz ist im Chat die Pfeiltaste (seit 12.11.2026; vorher nur in
+    /// Rückfragen, offenen Listen und Codex, was Subagenten- und
+    /// Workflow-Ansichten unerreichbar machte) — außer links im vermutlich
+    /// leeren Claude-Feld. Tab und Shift+Tab nie in einer
     /// Rückfrage: Shift+Tab heißt in Claudes Freigabe-Dialog „alle Änderungen
     /// erlauben“. Schreibtasten (Leerzeichen, Wort löschen, Leeren) nur bei
     /// Claude und Codex: In einer Shell läuft oft nano, vim oder emacs, dort
@@ -49,19 +48,22 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         _ key: TerminalControlKey,
         status: AgentSessionRuntimeStatus?,
         profile: TerminalKeyboardProfile,
-        choiceListOpen: Bool
+        choiceListOpen: Bool,
+        composerMayHaveText: Bool = false
     ) -> Bool {
         let isAgentChat = profile == .claudeCodeChat || profile == .codexChat
         switch key {
-        // Rechts übernimmt in Claude den grauen Vorschlag; mit Text im Feld
-        // rückt nur der Cursor. Links bleibt gesperrt (leeres Feld: Claude in
-        // den Hintergrund).
-        case .right where profile == .claudeCodeChat:
-            return true
+        // Links bei Claude nie ins vermutlich leere Eingabefeld: Dort schickt
+        // ← die ganze Sitzung in Claudes Agent-Ansicht (zwei verlorene
+        // Sitzungen am 12.11.2026). Erlaubt in einer Rückfrage, in einer
+        // offenen Auswahl des Menüs (nur im Ruhezustand) und mit Entwurf.
+        case .left where profile == .claudeCodeChat:
+            let listCounts = choiceListOpen && status == .idle
+            return status == .awaitingInput || listCounts || composerMayHaveText
+        // Sonst Pfeile immer (Entscheidung 12.11.2026): Das Steuerkreuz ist im
+        // Chat die Pfeiltaste, auch in Subagenten- und Workflow-Ansichten.
         case .up, .down, .left, .right:
-            // Ein Merker zählt bei Claude nur, solange der Chat ruht.
-            let listCounts = choiceListOpen && (profile != .claudeCodeChat || status == .idle)
-            return status == .awaitingInput || listCounts || profile == .codexChat
+            return true
         case .tab, .backTab: return status != .awaitingInput
         case .enter, .escape, .backspace: return true
         case .space, .deleteWord: return isAgentChat

@@ -29,9 +29,18 @@ extension ControllerTerminalMarks {
             choiceListClosed()
         case .up, .down, .left, .right:
             // Codex meldet keine Rückfragen: Wer per Steuerkreuz in einer
-            // Freigabe wählt, darf sie danach mit Kreuz bestätigen, auch wenn
-            // der Chat als „arbeitet“ gilt.
-            if isCodex { recordDraftInput(submitted: false, at: now) }
+            // Freigabe wählt, darf sie danach mit Kreuz bestätigen (30 s).
+            if isCodex {
+                recordDraftInput(submitted: false, at: now)
+                return
+            }
+            // Claude und Shell: Ein Pfeil macht Kreuz für kurze Zeit scharf
+            // (Subagenten- und Workflow-Ansichten während eines Turns). ↑ nur,
+            // wenn schon ein scharfer Pfeil vorausging — als erster Pfeil
+            // holt ↑ den letzten Prompt zurück, und auch ↑↑ bleibt Verlauf.
+            let inSequence = lastArmingArrowAt.map { now.timeIntervalSince($0) < Self.arrowArmWindow } ?? false
+            if key != .up || inSequence { lastArmingArrowAt = now }
+            lastArrowAt = now
         case .space:
             // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)

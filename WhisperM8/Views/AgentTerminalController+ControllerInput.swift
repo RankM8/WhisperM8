@@ -12,7 +12,8 @@ extension AgentTerminalController {
     func controllerAllows(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) -> Bool {
         TerminalControlKey.controllerAllows(
             key, status: status, profile: command.keyboardProfile,
-            choiceListOpen: controllerChoiceListOpen(status: status, at: now))
+            choiceListOpen: controllerChoiceListOpen(status: status, at: now),
+            composerMayHaveText: composerDraft.mayHaveUnsentInput)
     }
 
     /// Ist eine Auswahlliste, die das Controller-Menü geöffnet hat, vermutlich

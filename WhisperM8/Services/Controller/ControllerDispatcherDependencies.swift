@@ -22,6 +22,8 @@ struct ControllerTerminalState: Equatable {
     /// (Rücktaste, Text oder Diktat ohne Senden). Zählt nur, wenn es nach dem
     /// letzten Absenden (`lastEnterAt`) liegt.
     var lastDraftInputAt: Date? = nil
+    /// Letzter Pfeil vom Controller, der Kreuz scharf macht.
+    var lastArmingArrowAt: Date? = nil
     /// Eine Auswahlliste, die das Controller-Menü geöffnet hat, ist vermutlich
     /// noch offen (`ControllerTerminalMarks.isChoiceListOpen`).
     var choiceListOpen: Bool = false

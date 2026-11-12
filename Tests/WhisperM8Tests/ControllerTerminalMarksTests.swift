@@ -153,4 +153,26 @@ final class ControllerTerminalMarksTests: XCTestCase {
         claude.recordControllerKey(.down, status: .awaitingInput, isCodex: false, at: t0)
         XCTAssertNil(claude.lastDraftInputAt)
     }
+
+    /// Claude: Ein Pfeil macht Kreuz kurz scharf (5 s), ↑ als erster Pfeil
+    /// nicht — er holt den letzten Prompt zurück. ↓↑ macht scharf, ↑↑ nicht.
+    func testArrowArmsCrossButFirstUpDoesNot() {
+        var down = ControllerTerminalMarks()
+        down.recordControllerKey(.down, status: .working, isCodex: false, at: t0)
+        XCTAssertEqual(down.lastArmingArrowAt, t0)
+        XCTAssertTrue(ControllerTerminalMarks.hasFreshArrow(armedAt: down.lastArmingArrowAt, lastSubmitAt: nil, now: at(4)))
+        XCTAssertFalse(ControllerTerminalMarks.hasFreshArrow(armedAt: down.lastArmingArrowAt, lastSubmitAt: nil, now: at(6)))
+        XCTAssertFalse(ControllerTerminalMarks.hasFreshArrow(armedAt: down.lastArmingArrowAt, lastSubmitAt: at(1), now: at(2)))
+
+        var up = ControllerTerminalMarks()
+        up.recordControllerKey(.up, status: .working, isCodex: false, at: t0)
+        up.recordControllerKey(.up, status: .working, isCodex: false, at: at(1))
+        XCTAssertNil(up.lastArmingArrowAt, "↑ und ↑↑ holen Prompts zurück")
+        XCTAssertNil(up.lastDraftInputAt)
+
+        var downUp = ControllerTerminalMarks()
+        downUp.recordControllerKey(.down, status: .working, isCodex: false, at: t0)
+        downUp.recordControllerKey(.up, status: .working, isCodex: false, at: at(2))
+        XCTAssertEqual(downUp.lastArmingArrowAt, at(2))
+    }
 }

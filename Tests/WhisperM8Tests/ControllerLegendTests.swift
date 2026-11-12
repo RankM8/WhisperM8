@@ -75,16 +75,15 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(chat(.working)).contains(.back))
     }
 
-    /// Review-Befund 1: „Pfeiltasten“ nur bei einer Rückfrage; sonst steht
-    /// das Steuerkreuz beim Bewegen neben dem Stick.
-    func testArrowsOnlyWhileAgentAsks() {
-        for status in [ControllerChatState.Status.idle, .working, .unknown] {
-            XCTAssertFalse(labels(chat(status)).contains(.arrows), "\(status)")
-            XCTAssertEqual(ControllerLegend.entries(for: chat(status)).first?.inputs, [.leftStick, .dpad])
+    /// Seit 12.11.2026: In jedem lebenden Chat steht das Steuerkreuz als
+    /// „Pfeiltasten“, der Stick allein bewegt. Ohne Terminal bewegt beides.
+    func testArrowsInEveryLiveChat() {
+        for status in [ControllerChatState.Status.idle, .working, .unknown, .awaitingInput] {
+            XCTAssertTrue(labels(chat(status)).contains(.arrows), "\(status)")
+            XCTAssertEqual(ControllerLegend.entries(for: chat(status)).first?.inputs, [.leftStick])
         }
-        let asking = chat(.awaitingInput) { $0.secondsSinceAwaitingBegan = 3 }
-        XCTAssertTrue(labels(asking).contains(.arrows))
-        XCTAssertEqual(ControllerLegend.entries(for: asking).first?.inputs, [.leftStick])
+        XCTAssertFalse(labels(chat(.ended)).contains(.arrows))
+        XCTAssertEqual(ControllerLegend.entries(for: chat(.ended)).first?.inputs, [.leftStick, .dpad])
     }
 
     /// Runde 3: Der linke Stick steht in der Einzelansicht und im Raster als
