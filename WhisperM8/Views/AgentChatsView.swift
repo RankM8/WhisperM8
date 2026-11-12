@@ -209,7 +209,7 @@ struct AgentChatsView: View {
     /// Gemessene Grid-Fläche — der Kapazitäts-Picker sitzt seit dem Umzug in
     /// die Header-Zeile außerhalb des Grids und braucht die Fläche weiterhin,
     /// um nicht passende Stufen auszublenden.
-    @State var gridAreaSize: CGSize = .zero
+    @State var gridAreaSize = GridAreaSizeBox()
     /// Stufe 2 der Subagent-Expansion in der WORKSPACE-Sektion (Fertige
     /// hinter der Welle-Zeile) — lokaler View-State wie das Pendant
     /// `finishedExpandedParentIDs` in `ProjectChatGroup`; Stufe 1 teilt sich

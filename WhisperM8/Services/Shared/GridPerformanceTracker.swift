@@ -81,6 +81,11 @@ final class GridPerformanceTracker {
     /// der Hierarchie. Attaches außerhalb einer Messung sind no-ops.
     func didAttach(sessionID: UUID) {
         guard buildToken != nil else { return }
+        // Detail-Stufe: jede Pane einzeln, damit sich die Aufbauzeit auf die
+        // Panes verteilen lässt (Analyse grid.build, 12.11.2026).
+        if PerfDetailGate.isEnabled, pendingAttachIDs.contains(sessionID) {
+            PerfSignposts.grid.emitEvent("grid.build.paneAttached")
+        }
         pendingAttachIDs.remove(sessionID)
         guard pendingAttachIDs.isEmpty else { return }
         PerfSignposts.grid.emitEvent("grid.build.allAttached")

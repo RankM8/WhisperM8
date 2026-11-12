@@ -19,28 +19,55 @@ struct ProjectViewSyncTrigger: Equatable {
 /// (ausgeblendet oder im Archiv-Modus — dann gibt es keinen Snapshot).
 /// Eigene kleine View: Sie beobachtet Terminal-Registry und Job-Modell
 /// selbst, damit deren Ticks nur diesen Winzling neu auswerten und nicht den
-/// Fensterbody. Kein I/O — nur Mengen aus dem Speicher.
+/// Fensterbody. Der Body sammelt nur die Eingaben (Mengen und einen
+/// Fingerabdruck der Sessions); die Aktiv-Menge rechnet erst der `.task`,
+/// wenn sich eine Eingabe geändert hat. Kein I/O.
 struct ProjectViewLiveSync: View {
     @ObservedObject var terminalRegistry: AgentTerminalRegistry
     let jobRuntimeModel: AgentJobRuntimeModel
     let windowStore: AgentWindowStore
     let sessions: [AgentChatSession]
 
+    struct Inputs: Equatable {
+        var running: Set<UUID>
+        var globalTabs: Set<UUID>
+        var sessionsFingerprint: Int
+        var slotsFingerprint: [UUID: [UUID?]]
+        var dismissed: [UUID: Set<UUID>]
+    }
+
+    /// Ändert sich, sobald sich etwas ändert, das die Aktiv-Menge bestimmt:
+    /// Session dazu oder weg, Status (archiviert), Projekt, Art, Parent.
+    static func sessionsFingerprint(_ sessions: [AgentChatSession]) -> Int {
+        var hasher = Hasher()
+        for session in sessions {
+            hasher.combine(session.id)
+            hasher.combine(session.status)
+            hasher.combine(session.projectID)
+            hasher.combine(session.isManuallyCreated)
+            hasher.combine(session.isSubagentJob)
+            hasher.combine(session.externalSessionID)
+            hasher.combine(session.subagentParentSessionID)
+        }
+        return hasher.finalize()
+    }
+
     var body: some View {
-        let active = AgentSidebarModelBuilder.activeSessionIDsByProject(
-            sessions: sessions,
-            runningSessionIDs: AgentChatsView.runningSessionIDs(
+        let inputs = Inputs(
+            running: AgentChatsView.runningSessionIDs(
                 terminalActive: terminalRegistry.activeSessionIDs, jobRuntime: jobRuntimeModel
             ),
-            globalOpenTabIDs: windowStore.allWindowOpenTabIDs
+            globalTabs: windowStore.allWindowOpenTabIDs,
+            sessionsFingerprint: Self.sessionsFingerprint(sessions),
+            slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint,
+            dismissed: windowStore.dismissedProjectViewSessionIDs
         )
         Color.clear
             .frame(width: 0, height: 0)
-            .task(id: ProjectViewSyncTrigger(
-                activeByProject: active,
-                slotsFingerprint: windowStore.activeProjectViewSlotsFingerprint,
-                dismissed: windowStore.dismissedProjectViewSessionIDs
-            )) {
+            .task(id: inputs) {
+                let active = AgentSidebarModelBuilder.activeSessionIDsByProject(
+                    sessions: sessions, runningSessionIDs: inputs.running, globalOpenTabIDs: inputs.globalTabs
+                )
                 windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
             }
     }

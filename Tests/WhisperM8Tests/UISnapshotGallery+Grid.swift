@@ -134,6 +134,19 @@ extension UISnapshotGallery {
             return gridView(entity, titles: titles)
         })
 
+        // Stufenwähler im Raster-Kopf: 4er-Workspace auf mittlerer Fläche
+        // (3×3 passt nicht und fehlt).
+        fixtures.append(Fixture(name: "raster-stufenwaehler", size: CGSize(width: 420, height: 60)) {
+            let box = GridAreaSizeBox()
+            box.update(CGSize(width: 900, height: 500))
+            return AnyView(
+                GridCapacityPicker(entity: AgentGridWorkspace(capacity: 4), area: box) { _ in }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AgentTheme.background)
+            )
+        })
+
         // Leerer eigener Workspace (gerade per ＋ angelegt).
         fixtures.append(Fixture(name: "raster-workspace-leer", size: size) {
             let (store, _, titles) = gridStore(count: 0)

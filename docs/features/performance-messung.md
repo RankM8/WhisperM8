@@ -50,3 +50,40 @@ also Hintergrundzeit, keine Main-Thread-Zeit. Das erste Einlesen der Historie
 (Backfill) wird nicht gemessen, es ist gewollt gedrosselt (`.background`,
 Pause zwischen Dateien, wartet bei Diktat, Stromsparmodus und Hitze). Läufe,
 die wegen eines Diktats gewartet haben, werden verworfen statt bewertet.
+
+## Raster: Aufbau und Fokuswechsel
+
+Kategorie `perf.grid`, Budgets `grid.build` (50 ms) und `grid.focusSwitch`
+(33 ms), gemessen von `GridPerformanceTracker`. `grid.build` beginnt beim
+Wechsel ins Raster und endet einen Runloop-Durchgang, nachdem alle Panes mit
+lebendem Terminal eingehängt sind (Event `grid.build.allAttached`).
+`grid.focusSwitch` reicht vom Selektionswechsel bis zum erfolgreichen
+`makeFirstResponder` der neuen Pane.
+
+**Befund 12.11.2026** (echte App, Log der letzten 24 h, nur Überschreitungen):
+`grid.build` 117-mal über Budget, Median 318 ms, p90 629 ms; `grid.focusSwitch`
+154-mal, Schnitt 93 ms. 71 der 117 langsamen Aufbauten hatten keine andere
+Budget-Verletzung in der Nähe — die Zeit steckt im Aufbau selbst. Ein voll
+aufgezeichneter Aufbau (232 ms) zeigte zwei komplette Durchläufe des
+Fensterbodys samt Seitenleiste (`sidebar.bodyEval.chats` zweimal), je rund
+70–80 ms Pane-Aufbau danach, und nur 33 ms nach dem Einhängen. Der zweite
+Durchlauf kam vom Schreiben der gemessenen Raster-Größe in einen `@State` des
+Fensters; sie liegt jetzt in `GridAreaSizeBox`, die nur der Stufenwähler
+beobachtet (`GridCapacityPicker`). Offen ist der Pane-Aufbau selbst und dass
+der Fensterbody bei jedem Fokuswechsel die Seitenleiste mitrechnet.
+
+**Messlauf** (mit `make dev-release`, Detail-Stufe an:
+`defaults write com.whisperm8.app agentPerfDetailEnabled -bool YES`, Neustart):
+einen Workspace mit 4 und einen mit 9 laufenden Chats je zehnmal öffnen
+(aus der Einzelansicht per „Zurück zum Workspace" und per Klick auf den
+Workspace), dann im 9er-Raster zwanzigmal die Pane wechseln (⌃⌘-Pfeile).
+Auswerten mit
+
+```bash
+/usr/bin/log show --signpost --last 15m --predicate 'subsystem == "com.whisperm8.app" AND category IN {"perf.grid","perf.sidebar"}' --style compact
+```
+
+Pro Aufbau zählen: Abstand `grid.build.requested` → `grid.build.allAttached`,
+Zahl der `sidebar.bodyEval.chats` dazwischen (Ziel: eine), Zahl der
+`grid.bodyEval.slot` (Ziel: eine je Pane) und die Abstände der
+`grid.build.paneAttached`.
