@@ -12,6 +12,24 @@ extension ControllerMenuItem {
         case .pin: return chat?.isPinned == true ? String(localized: "Unpin") : String(localized: "Pin")
         case .archive: return chat?.isTerminal == true ? String(localized: "Close terminal") : String(localized: "Archive")
         case .closeChat: return String(localized: "Close chat")
+        case .redraw: return String(localized: "Redraw")
+        case .refreshTitle: return String(localized: "Re-read title")
+        case .openProject:
+            let target = chat?.projectOpenTargetName ?? "PhpStorm"
+            return String(localized: "Open in \(target)")
+        case .revealInFinder: return String(localized: "Show in Finder")
+        case .toggleTileNote: return chat?.tileNoteOpen == true ? String(localized: "Hide note") : String(localized: "Show note")
+        case .toggleNotes: return chat?.notesDefaultOpen == true ? String(localized: "Notes off") : String(localized: "Notes on")
+        case .removeFromWorkspace:
+            let name = chat?.removableWorkspaceName ?? ""
+            return String(localized: "Remove from workspace “\(name)”")
+        case .addToWorkspace: return String(localized: "Add to workspace")
+        case .moveToNewWindow: return String(localized: "Move to new window")
+        case .restart: return String(localized: "Restart")
+        case .backgroundLogs: return String(localized: "Show logs")
+        case .backgroundStop: return String(localized: "Stop")
+        case .backgroundRestart: return String(localized: "Respawn")
+        case .stopJob: return String(localized: "Stop job")
         case .clipboardHistory: return String(localized: "Clipboard history")
         case .showBindings: return String(localized: "Show button layout")
         case .pause: return String(localized: "Pause controller")
@@ -21,7 +39,7 @@ extension ControllerMenuItem {
     /// Kurzer Hinweis rechts: was in den Chat geht, oder dass eine zweite Ebene folgt.
     var hint: String? {
         switch self {
-        case .commands, .switchAccount: return "›"
+        case .commands, .switchAccount, .addToWorkspace: return "›"
         case .cycleMode: return "⇧⇥"
         default: return nil
         }
@@ -35,6 +53,15 @@ struct ControllerMenuRow: Identifiable, Equatable {
     var hint: String?
     var enabled = true
     var startsGroup = false
+    /// Plakette hinter dem Titel („am meisten frei“).
+    var badge: String? = nil
+    /// Verbrauch rechts, in Ampelfarbe (Konto-Menü, Runde 5).
+    var usage: String? = nil
+    var usageLevel: UsageLevel? = nil
+
+    enum UsageLevel: Equatable {
+        case low, medium, high
+    }
 }
 
 extension ControllerMenuRow {
@@ -50,19 +77,40 @@ extension ControllerMenuRow {
                     hint: command.summary, enabled: entry.enabled)
             }
         case .accounts(let list):
-            let accounts = menu.setup.chat?.accounts ?? []
-            return accounts.enumerated().map { index, account in
+            let chat = menu.setup.chat
+            let accounts = chat?.accounts ?? []
+            var rows = accounts.enumerated().map { index, account in
                 ControllerMenuRow(
                     id: account.id, title: account.label,
                     hint: accountHint(account),
                     enabled: list.isEnabled(account.id),
-                    startsGroup: index > 0 && account.kind != accounts[index - 1].kind)
+                    startsGroup: index > 0 && account.kind != accounts[index - 1].kind,
+                    badge: account.isMostFree ? String(localized: "most free") : nil,
+                    usage: usageText(account), usageLevel: usageLevel(account))
+            }
+            if let target = chat?.pendingAccountSwitchTarget {
+                rows.append(ControllerMenuRow(
+                    id: ControllerMenuModel.cancelSwitchID,
+                    title: String(localized: "Cancel account switch to \(target)"), startsGroup: true))
+            }
+            if chat?.canUndoAccountSwitch == true {
+                rows.append(ControllerMenuRow(
+                    id: ControllerMenuModel.undoSwitchID, title: String(localized: "Undo last account switch"),
+                    startsGroup: chat?.pendingAccountSwitchTarget == nil))
+            }
+            return rows
+        case .workspaces(let list):
+            let workspaces = menu.setup.chat?.addableWorkspaces ?? []
+            return workspaces.map { choice in
+                ControllerMenuRow(
+                    id: choice.id.uuidString, title: choice.name, hint: nil,
+                    enabled: list.isEnabled(choice.id.uuidString))
             }
         case nil:
             return menu.top.entries.map { entry in
                 ControllerMenuRow(
                     id: entry.id.rawValue, title: entry.id.title(chat: menu.setup.chat), hint: entry.id.hint,
-                    enabled: entry.enabled, startsGroup: entry.id.startsGroup)
+                    enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id))
             }
         }
     }
@@ -76,10 +124,26 @@ extension ControllerMenuRow {
         }
     }
 
+    /// Verbraucht: „42 % · 61 %“ (5 Std. · Woche), wie das Limits-Popover.
+    private static func usageText(_ account: ControllerAccountChoice) -> String? {
+        guard account.fiveHourUsed != nil || account.weekUsed != nil else { return nil }
+        func percent(_ value: Double?) -> String { value.map { "\(Int($0.rounded())) %" } ?? "—" }
+        return "\(percent(account.fiveHourUsed)) · \(percent(account.weekUsed))"
+    }
+
+    /// Ampel wie `UsageGaugeLine`: unter 50 grün, ab 50 gelb, ab 80 rot (am
+    /// knapperen Fenster).
+    private static func usageLevel(_ account: ControllerAccountChoice) -> ControllerMenuRow.UsageLevel? {
+        guard let used = [account.fiveHourUsed, account.weekUsed].compactMap({ $0 }).max() else { return nil }
+        if used >= 80 { return .high }
+        if used >= 50 { return .medium }
+        return .low
+    }
+
     /// Markierte Zeile, je nach Ebene.
     static func selectedID(of menu: ControllerMenuModel) -> String? {
         switch menu.submenu {
-        case .commands(let list), .accounts(let list): return list.selected
+        case .commands(let list), .accounts(let list), .workspaces(let list): return list.selected
         case nil: return menu.selected?.rawValue
         }
     }
@@ -88,7 +152,8 @@ extension ControllerMenuRow {
     static func heading(of menu: ControllerMenuModel, fallback: String?) -> String {
         switch menu.submenu {
         case .commands: return String(localized: "Commands")
-        case .accounts: return String(localized: "Switch account")
+        case .accounts: return String(localized: "Switch account · used 5 h · week")
+        case .workspaces: return String(localized: "Add to workspace")
         case nil: return menu.setup.chat?.title ?? fallback ?? String(localized: "Menu")
         }
     }
@@ -111,6 +176,9 @@ extension ControllerSlashCommand {
         case "/mcp": return String(localized: "MCP servers")
         case "/agents": return String(localized: "Agents")
         case "/memory": return String(localized: "Memory")
+        case "/tasks": return String(localized: "Background tasks")
+        case "/workflows": return String(localized: "Workflows")
+        case "/rewind": return String(localized: "Rewind")
         case "/help": return String(localized: "Help")
         case "/approvals": return String(localized: "Approvals")
         case "/new": return String(localized: "New conversation")
@@ -154,13 +222,36 @@ struct ControllerMenuPanel: View {
         .controllerPanelChrome()
     }
 
+    private static func color(_ level: ControllerMenuRow.UsageLevel) -> Color {
+        switch level {
+        case .low: return AppTheme.statusWorking
+        case .medium: return AppTheme.statusAwaiting
+        case .high: return AppTheme.statusError
+        }
+    }
+
     private func row(_ row: ControllerMenuRow, marked: Bool) -> some View {
         HStack(spacing: 8) {
             Text(verbatim: row.title)
                 .font(.system(size: 13))
                 .foregroundStyle(row.enabled ? AppTheme.textPrimary : AppTheme.textTertiary)
                 .lineLimit(1)
+            if let badge = row.badge {
+                Text(verbatim: badge)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(AppTheme.statusWorking)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(AppTheme.statusWorking.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+                    .fixedSize()
+            }
             Spacer(minLength: 0)
+            if let usage = row.usage {
+                Text(verbatim: usage)
+                    .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(row.usageLevel.map(Self.color) ?? AppTheme.textTertiary)
+                    .fixedSize()
+            }
             if let hint = row.hint {
                 Text(verbatim: hint)
                     .font(.system(size: 11))

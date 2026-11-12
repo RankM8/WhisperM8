@@ -32,6 +32,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var clipboard = ControllerClipboardAccess()
     /// Zuletzt geschlossene Chats für L2 + Viereck (Runde 5).
     var closedChats = ControllerClosedChatsAccess()
+    /// Letzter Verbrauch eines Kontos (5 Std., Woche) für das Konto-Menü.
+    var accountLimit: (ControllerAccountChoice.Kind, String) -> (fiveHour: Double?, week: Double?)? = { _, _ in nil }
+    /// Stößt den passiven Abruf der Limits an, wenn der Stand alt ist.
+    var refreshAccountLimits: () -> Void = {}
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
 
@@ -568,6 +572,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         setup.sessionID = target?.sessionID
         setup.target = target
         setup.chat = setup.sessionID.flatMap { chats.chatActionInfo($0, in: targetWindowID) }
+        if var chat = setup.chat, !chat.accounts.isEmpty {
+            chat.accounts = accountsWithUsage(chat.accounts)
+            setup.chat = chat
+            refreshAccountLimits()
+        }
         if let selected, setup.sessionID == selected, let terminal = terminals.state(of: selected), terminal.isRunning {
             setup.acceptsInput = true
             setup.profile = terminal.profile
@@ -602,6 +611,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             guard let text = list.selectedEnabled else { return playHaptic(.rejected) }
             ui.menu = nil
             sendCommand(ControllerSlashCommand(text: text), setup: menu.setup)
+        case .accounts(let list) where list.selectedEnabled == ControllerMenuModel.cancelSwitchID:
+            ui.menu = nil
+            guard let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
+            command(.cancelAccountSwitch(sessionID), orReject: true)
+        case .accounts(let list) where list.selectedEnabled == ControllerMenuModel.undoSwitchID:
+            ui.menu = nil
+            command(.undoLastAccountSwitch, orReject: true)
         case .accounts(let list):
             guard let id = list.selectedEnabled, let sessionID = menu.setup.sessionID,
                   let account = menu.setup.chat?.accounts.first(where: { $0.id == id }) else {
@@ -612,6 +628,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             case .claude: command(.moveChatToAccount(sessionID, profileName: account.name), orReject: true)
             case .gpt: command(.setGPTAccount(sessionID, profileName: account.name), orReject: true)
             }
+        case .workspaces(let list):
+            guard let raw = list.selectedEnabled, let workspaceID = UUID(uuidString: raw),
+                  let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
+            ui.menu = nil
+            command(.addChatToWorkspace(sessionID, workspaceID: workspaceID), orReject: true)
         case nil:
             guard let item = menu.top.selectedEnabled else { return playHaptic(.rejected) }
             if item.opensSubmenu {
@@ -644,8 +665,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .cycleMode:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             terminals.sendKey(.backTab, to: sessionID)
-        case .commands, .switchAccount:
+        case .commands, .switchAccount, .addToWorkspace:
             break
+        case .redraw:
+            guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
+            if !terminals.sendKey(.redraw, to: sessionID) { playHaptic(.rejected) }
+        case .refreshTitle, .openProject, .revealInFinder, .toggleTileNote, .toggleNotes, .removeFromWorkspace,
+             .moveToNewWindow, .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob:
+            performChatAction(item, setup: setup)
         case .rename, .fork, .pin, .archive, .closeChat:
             guard let sessionID = setup.sessionID else { return playHaptic(.rejected) }
             switch item {

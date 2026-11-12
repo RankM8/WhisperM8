@@ -139,32 +139,82 @@ final class ControllerMenuModelTests: XCTestCase {
             sessionID: session, target: .chat(session), chat: chat)
     }
 
+    private func visible(_ model: ControllerMenuModel) -> [ControllerMenuItem] {
+        model.top.entries.map(\.id)
+    }
+
     private func enabled(_ model: ControllerMenuModel) -> [ControllerMenuItem] {
         model.top.entries.filter(\.enabled).map(\.id)
     }
 
-    /// Runde 2: ein Menü mit drei Gruppen in fester Reihenfolge.
+    /// Runde 5: Gruppen Eingaben · Chat · Projekt · Workspace · Lebenszyklus ·
+    /// Steuerung, in fester Reihenfolge.
     func testItemsAndGroups() {
         XCTAssertEqual(ControllerMenuItem.allCases, [
-            .continueWork, .commands, .cycleMode,
-            .switchAccount, .rename, .fork, .pin, .archive, .closeChat,
+            .continueWork, .commands, .cycleMode, .redraw,
+            .switchAccount, .rename, .refreshTitle, .fork, .pin, .archive, .closeChat,
+            .openProject, .revealInFinder,
+            .toggleTileNote, .toggleNotes, .removeFromWorkspace, .addToWorkspace, .moveToNewWindow,
+            .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
             .clipboardHistory, .showBindings, .pause,
         ])
-        XCTAssertEqual(ControllerMenuItem.allCases.filter(\.startsGroup), [.switchAccount, .clipboardHistory])
         let model = ControllerMenuModel(setup: setup())
         XCTAssertEqual(model.selected, .continueWork)
-        // Ohne Konten und ohne Fork sind diese beiden aus.
-        XCTAssertEqual(enabled(model), [.continueWork, .commands, .cycleMode, .rename, .pin, .archive, .closeChat,
-                                        .clipboardHistory, .showBindings, .pause])
+        // Was für diesen Chat nicht passt, fehlt: ohne Konten, Fork, Projekt,
+        // Raster, Tab und laufenden Prozess bleibt das hier.
+        XCTAssertEqual(visible(model), [.continueWork, .commands, .cycleMode, .redraw, .rename, .pin, .archive,
+                                        .closeChat, .clipboardHistory, .showBindings, .pause])
+        XCTAssertEqual(model.top.entries.map(\.id).filter(model.startsGroup), [.rename, .clipboardHistory])
+    }
+
+    func testHeadActionsAppearWhenTheyFit() {
+        var chat = ControllerChatActionInfo(title: "Chat")
+        chat.hasProject = true
+        chat.projectOpenTargetName = "PhpStorm"
+        chat.canRefreshTitle = true
+        chat.canRestart = true
+        chat.hasTab = true
+        chat.notesAvailable = true
+        chat.tileNoteOpen = false
+        chat.removableWorkspaceName = "Marketing"
+        chat.addableWorkspaces = [ControllerWorkspaceChoice(
+            id: UUID(), name: "Ops", colorHex: "#fff", chatCount: 1, hasWaitingChat: false, isCurrent: false)]
+        let model = ControllerMenuModel(setup: setup(chat: chat))
+        XCTAssertEqual(visible(model), [
+            .continueWork, .commands, .cycleMode, .redraw,
+            .rename, .refreshTitle, .pin, .archive, .closeChat,
+            .openProject, .revealInFinder,
+            .toggleTileNote, .toggleNotes, .removeFromWorkspace, .addToWorkspace, .moveToNewWindow,
+            .restart,
+            .clipboardHistory, .showBindings, .pause,
+        ])
+        XCTAssertEqual(visible(model).filter(model.startsGroup),
+                       [.rename, .openProject, .toggleTileNote, .restart, .clipboardHistory])
+    }
+
+    func testBackgroundChatAndJob() {
+        var chat = ControllerChatActionInfo(title: "bg")
+        chat.isBackgroundChat = true
+        chat.canStopJob = true
+        let items = visible(ControllerMenuModel(setup: setup(acceptsInput: false, chat: chat)))
+        XCTAssertTrue(items.contains(.backgroundLogs) && items.contains(.backgroundStop)
+            && items.contains(.backgroundRestart) && items.contains(.stopJob))
+        XCTAssertFalse(items.contains(.continueWork), "Eingaben nur in den ausgewählten, lebenden Chat")
     }
 
     /// Bei offener Rückfrage ist alles aus, was in den Chat schreibt (auch
-    /// Shift+Tab); Aktionen am Chat bleiben.
+    /// Shift+Tab und Neu zeichnen); Aktionen am Chat bleiben.
     func testInputGroupIsOffDuringQuestion() {
         let model = ControllerMenuModel(setup: setup(dialogOpen: true))
         XCTAssertEqual(model.selected, .rename)
         XCTAssertFalse(ControllerMenuModel.isEnabled(.cycleMode, setup: setup(dialogOpen: true)))
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.redraw, setup: setup(dialogOpen: true)))
         XCTAssertEqual(enabled(model), [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
+    }
+
+    func testRedrawOnlyInClaude() {
+        XCTAssertFalse(visible(ControllerMenuModel(setup: setup(profile: .codex))).contains(.redraw))
+        XCTAssertFalse(visible(ControllerMenuModel(setup: setup(profile: .shell))).contains(.redraw))
     }
 
     func testDialogOpeningLaterClosesCommandsLevel() {
@@ -192,11 +242,11 @@ final class ControllerMenuModelTests: XCTestCase {
     }
 
     func testWithoutLiveChatOrChatInfo() {
-        XCTAssertEqual(enabled(ControllerMenuModel(setup: setup(acceptsInput: false))),
+        XCTAssertEqual(visible(ControllerMenuModel(setup: setup(acceptsInput: false))),
                        [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
-        XCTAssertEqual(enabled(ControllerMenuModel(setup: setup(acceptsInput: false, chat: nil))),
+        XCTAssertEqual(visible(ControllerMenuModel(setup: setup(acceptsInput: false, chat: nil))),
                        [.clipboardHistory, .showBindings, .pause])
-        XCTAssertFalse(ControllerMenuModel.isEnabled(.commands, setup: setup(profile: .shell)), "Shell: keine Befehle")
+        XCTAssertFalse(visible(ControllerMenuModel(setup: setup(profile: .shell))).contains(.commands), "Shell: keine Befehle")
     }
 
     func testMoveWrapsAndSkipsDisabled() {
@@ -205,9 +255,9 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(model.selected, .continueWork)
         model.move(-1)
         XCTAssertEqual(model.selected, .pause)
-        model = ControllerMenuModel(setup: setup(), selected: .cycleMode)
+        model = ControllerMenuModel(setup: setup(), selected: .redraw)
         model.move(1)
-        XCTAssertEqual(model.selected, .rename, "Konto wechseln und Forken sind aus")
+        XCTAssertEqual(model.selected, .rename)
     }
 
     func testCommandsLevel() {
@@ -224,7 +274,9 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertFalse(model.back(), "auf der ersten Ebene schließt der Aufrufer")
     }
 
-    func testAccountsLevelSkipsCurrentAndSignedOut() {
+    /// Runde 5: Die Markierung beginnt auf dem Konto des Chats (aus), der
+    /// erste Schritt geht zum nächsten wählbaren.
+    func testAccountsLevelStartsOnCurrentAndSkipsSignedOut() {
         var chat = ControllerChatActionInfo(title: "Chat")
         chat.accounts = [
             ControllerAccountChoice(kind: .claude, name: "main", label: "main", isCurrent: true, isLoggedIn: true),
@@ -237,7 +289,54 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertTrue(model.openSubmenu())
         guard case let .accounts(list) = model.submenu else { return XCTFail("Konten erwartet") }
         XCTAssertEqual(list.entries.filter(\.enabled).map(\.id), ["claude:work"])
-        XCTAssertEqual(list.selected, "claude:work")
+        XCTAssertEqual(list.selected, "claude:main")
+        XCTAssertNil(list.selectedEnabled, "Kreuz auf dem eigenen Konto geht nicht")
+        model.move(1)
+        guard case let .accounts(moved) = model.submenu else { return XCTFail("Konten erwartet") }
+        XCTAssertEqual(moved.selected, "claude:work")
+    }
+
+    func testAccountsLevelOffersCancelAndUndo() {
+        var chat = ControllerChatActionInfo(title: "Chat")
+        chat.accounts = [ControllerAccountChoice(kind: .claude, name: "main", label: "main", isCurrent: true, isLoggedIn: true)]
+        XCTAssertFalse(ControllerMenuModel.isEnabled(.switchAccount, setup: setup(chat: chat)))
+        chat.pendingAccountSwitchTarget = "work"
+        chat.canUndoAccountSwitch = true
+        var model = ControllerMenuModel(setup: setup(chat: chat), selected: .switchAccount)
+        XCTAssertTrue(model.openSubmenu())
+        guard case let .accounts(list) = model.submenu else { return XCTFail("Konten erwartet") }
+        XCTAssertEqual(list.entries.filter(\.enabled).map(\.id),
+                       [ControllerMenuModel.cancelSwitchID, ControllerMenuModel.undoSwitchID])
+    }
+
+    func testWorkspacesLevel() {
+        var chat = ControllerChatActionInfo(title: "Chat")
+        let ops = UUID()
+        chat.addableWorkspaces = [ControllerWorkspaceChoice(
+            id: ops, name: "Ops", colorHex: "#fff", chatCount: 0, hasWaitingChat: false, isCurrent: false)]
+        var model = ControllerMenuModel(setup: setup(chat: chat), selected: .addToWorkspace)
+        XCTAssertTrue(model.openSubmenu())
+        guard case let .workspaces(list) = model.submenu else { return XCTFail("Workspaces erwartet") }
+        XCTAssertEqual(list.selected, ops.uuidString)
+    }
+
+    func testMostFreePerGroup() {
+        func account(_ kind: ControllerAccountChoice.Kind, _ name: String, current: Bool = false,
+                     _ fiveHour: Double?, _ week: Double?) -> ControllerAccountChoice {
+            var choice = ControllerAccountChoice(kind: kind, name: name, label: name, isCurrent: current, isLoggedIn: true)
+            choice.fiveHourUsed = fiveHour
+            choice.weekUsed = week
+            return choice
+        }
+        let marked = ControllerAccountHeadroom.marked([
+            account(.claude, "main", current: true, 5, 5),
+            account(.claude, "a", 10, 80),
+            account(.claude, "b", 40, 30),
+            account(.claude, "c", nil, nil),
+            account(.gpt, "g1", 90, 10),
+            account(.gpt, "g2", 20, 20),
+        ])
+        XCTAssertEqual(marked.filter(\.isMostFree).map(\.name), ["b", "g2"], "knapperes Fenster zählt, eigenes Konto nicht")
     }
 
     func testForkOnlyWhenForkable() {
@@ -256,6 +355,9 @@ final class ControllerSlashCommandsTests: XCTestCase {
     func testListsPerProfile() {
         XCTAssertEqual(ControllerSlashCommands.list(for: .claude).map(\.text).prefix(3), ["/", "/model", "/config"])
         XCTAssertEqual(ControllerSlashCommands.list(for: .claude).last?.text, "/help")
+        XCTAssertTrue(["/tasks", "/workflows", "/rewind"].allSatisfy {
+            ControllerSlashCommands.opensChoiceList(ControllerSlashCommand(text: $0), profile: .claude)
+        }, "Runde 5 (R5)")
         XCTAssertEqual(ControllerSlashCommands.list(for: .codex).map(\.text), ["/", "/model", "/approvals", "/new", "/compact"])
         XCTAssertTrue(ControllerSlashCommands.list(for: .shell).isEmpty)
         XCTAssertTrue(ControllerSlashCommands.list(for: nil).isEmpty)

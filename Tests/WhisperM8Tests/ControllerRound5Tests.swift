@@ -340,4 +340,90 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertEqual(haptics, [.rejected])
         XCTAssertNotNil(dispatcher.islandState)
     }
+
+    // MARK: Options-Menü (Punkt 10, R7, Punkt 3)
+
+    func testHeadActionsSendTheirCommand() {
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.hasProject = true
+        info.canRestart = true
+        info.hasTab = true
+        window.chatInfo = info
+        for (item, expected) in [
+            (ControllerMenuItem.openProject, AgentChatsCommand.openProjectOfChat(chat)),
+            (.revealInFinder, .revealProjectInFinder(chat)),
+            (.restart, .restartChat(chat)),
+            (.moveToNewWindow, .moveChatToNewWindow(chat)),
+        ] {
+            perform(.menuToggle)
+            dispatcher.ui.menu?.select(item)
+            perform(.menuActivate)
+            XCTAssertEqual(window.commands.last, expected, "\(item)")
+            XCTAssertNil(dispatcher.ui.menu)
+        }
+    }
+
+    func testRedrawSendsCtrlL() {
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.redraw)
+        perform(.menuActivate)
+        XCTAssertEqual(terminals.keys, [.redraw])
+    }
+
+    func testAddToWorkspaceSubmenu() {
+        let target = UUID()
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.addableWorkspaces = [ControllerWorkspaceChoice(
+            id: target, name: "Ops", colorHex: "#fff", chatCount: 0, hasWaitingChat: false, isCurrent: false)]
+        window.chatInfo = info
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.addToWorkspace)
+        perform(.menuActivate)
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .addChatToWorkspace(chat, workspaceID: target))
+    }
+
+    func testCancelAndUndoAccountSwitch() {
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.accounts = [ControllerAccountChoice(kind: .claude, name: "main", label: "main", isCurrent: true, isLoggedIn: true)]
+        info.pendingAccountSwitchTarget = "work"
+        info.canUndoAccountSwitch = true
+        window.chatInfo = info
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.switchAccount)
+        perform(.menuActivate)
+        perform(.menuMove(step: 1))
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .cancelAccountSwitch(chat))
+        perform(.menuToggle)
+        dispatcher.ui.menu?.select(.switchAccount)
+        perform(.menuActivate)
+        perform(.menuMove(step: 2))
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.last, .undoLastAccountSwitch)
+    }
+
+    func testAccountsCarryUsageAndMostFree() {
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.accounts = [
+            ControllerAccountChoice(kind: .claude, name: "main", label: "main", isCurrent: true, isLoggedIn: true),
+            ControllerAccountChoice(kind: .claude, name: "a", label: "a", isCurrent: false, isLoggedIn: true),
+            ControllerAccountChoice(kind: .claude, name: "b", label: "b", isCurrent: false, isLoggedIn: true),
+        ]
+        window.chatInfo = info
+        var refreshes = 0
+        dispatcher.refreshAccountLimits = { refreshes += 1 }
+        dispatcher.accountLimit = { _, name in
+            switch name {
+            case "a": return (fiveHour: 70, week: 20)
+            case "b": return (fiveHour: 10, week: 30)
+            default: return nil
+            }
+        }
+        perform(.menuToggle)
+        let accounts = dispatcher.ui.menu?.setup.chat?.accounts ?? []
+        XCTAssertEqual(accounts.first { $0.name == "a" }?.fiveHourUsed, 70)
+        XCTAssertEqual(accounts.filter(\.isMostFree).map(\.name), ["b"])
+        XCTAssertEqual(refreshes, 1, "passiver Abruf beim Öffnen")
+    }
 }

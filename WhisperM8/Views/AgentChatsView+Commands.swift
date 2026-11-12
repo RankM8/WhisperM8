@@ -203,6 +203,10 @@ extension AgentChatsView {
             return true
         case .nextWaitingChat:
             return selectNextWaitingChat()
+        case .openProjectOfChat, .revealProjectInFinder, .refreshChatTitle, .restartChat, .toggleTileNote,
+             .toggleNotes, .removeChatFromWorkspace, .addChatToWorkspace, .moveChatToNewWindow, .backgroundLogs,
+             .backgroundStop, .backgroundRespawn, .stopSubagentJob, .cancelAccountSwitch, .undoLastAccountSwitch:
+            return performControllerChatCommand(command)
         case .switcherCancel:
             guard tabSwitcher != nil else { return false }
             cancelTabSwitcher()

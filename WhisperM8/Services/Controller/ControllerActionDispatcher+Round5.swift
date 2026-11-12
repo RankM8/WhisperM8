@@ -48,3 +48,52 @@ extension ControllerActionDispatcher {
         refreshContext()
     }
 }
+
+// MARK: - Kopf-Aktionen im Options-Menü (Runde 5, Punkt 10)
+
+extension ControllerActionDispatcher {
+    /// Aktionen aus den Gruppen Chat, Projekt, Workspace und Lebenszyklus: je
+    /// ein Befehl an das Fenster, derselbe Weg wie Kopf, Kachel und
+    /// Kontextmenü. Geht er nicht (Chat weg, nicht mehr passend), „geht nicht“.
+    func performChatAction(_ item: ControllerMenuItem, setup: ControllerMenuSetup) {
+        guard let sessionID = setup.sessionID else { return playHaptic(.rejected) }
+        let chatCommand: AgentChatsCommand
+        switch item {
+        case .refreshTitle: chatCommand = .refreshChatTitle(sessionID)
+        case .openProject: chatCommand = .openProjectOfChat(sessionID)
+        case .revealInFinder: chatCommand = .revealProjectInFinder(sessionID)
+        case .toggleTileNote: chatCommand = .toggleTileNote(sessionID)
+        case .toggleNotes: chatCommand = .toggleNotes
+        case .removeFromWorkspace: chatCommand = .removeChatFromWorkspace(sessionID)
+        case .moveToNewWindow: chatCommand = .moveChatToNewWindow(sessionID)
+        case .restart: chatCommand = .restartChat(sessionID)
+        case .backgroundLogs: chatCommand = .backgroundLogs(sessionID)
+        case .backgroundStop: chatCommand = .backgroundStop(sessionID)
+        case .backgroundRestart: chatCommand = .backgroundRespawn(sessionID)
+        case .stopJob: chatCommand = .stopSubagentJob(sessionID)
+        default: return playHaptic(.rejected)
+        }
+        command(chatCommand, orReject: true)
+    }
+}
+
+// MARK: - Konto-Menü mit Verbrauch (Runde 5, Punkt 3)
+
+extension ControllerActionDispatcher {
+    /// Verbrauch je Konto und „am meisten frei“, aus dem letzten Stand.
+    func accountsWithUsage(_ accounts: [ControllerAccountChoice]) -> [ControllerAccountChoice] {
+        ControllerAccountHeadroom.marked(accounts.map { account in
+            var copy = account
+            let limit = accountLimit(account.kind, account.name)
+            copy.fiveHourUsed = limit?.fiveHour
+            copy.weekUsed = limit?.week
+            return copy
+        })
+    }
+
+    /// Neue Zahlen kamen an: ein offenes Menü zieht nach.
+    func accountLimitsChanged() {
+        guard let accounts = ui.menu?.setup.chat?.accounts, !accounts.isEmpty else { return }
+        ui.menu?.updateAccounts(accountsWithUsage(accounts))
+    }
+}

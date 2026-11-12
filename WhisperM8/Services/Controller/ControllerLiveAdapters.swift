@@ -288,6 +288,11 @@ final class ControllerRuntime {
             dispatcher.closedChats = ControllerClosedChatsAccess(
                 nextTitle: { ClosedChatReopener.next()?.title },
                 reopen: { ClosedChatReopener.reopen() != nil })
+            dispatcher.accountLimit = { kind, name in
+                AccountLimitsStore.shared.limit(kind: kind, name: name).map { (fiveHour: $0.fiveHour, week: $0.week) }
+            }
+            dispatcher.refreshAccountLimits = { AccountLimitsStore.shared.refreshIfStale() }
+            AccountLimitsStore.shared.onChange = { [weak dispatcher] in dispatcher?.accountLimitsChanged() }
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)
             manager.onStateChange = { [weak feedback, weak manager, weak dispatcher] in

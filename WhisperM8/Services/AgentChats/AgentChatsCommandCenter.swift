@@ -70,6 +70,33 @@ enum AgentChatsCommand: Equatable {
     /// tut ihn nur noch die Tastatur; am Controller ersetzt ihn die Insel.
     case switcherCancel
     case clearMultiSelection
+    // Kopf-Aktionen des Chats für das Options-Menü des Controllers (Runde 5),
+    // dieselben Wege wie Kopf, Kachelkopf und Kontextmenü.
+    /// Projekt im gemerkten Ziel öffnen (meist PhpStorm).
+    case openProjectOfChat(UUID)
+    /// Projektordner im Finder zeigen.
+    case revealProjectInFinder(UUID)
+    /// „Titel neu lesen“.
+    case refreshChatTitle(UUID)
+    /// Laufenden Chat neu starten, mit der Rückfrage der Detail-Ansicht.
+    case restartChat(UUID)
+    /// Notiz-Karte der Kachel auf/zu.
+    case toggleTileNote(UUID)
+    /// Standard „Notizen an/aus“ für dieses Fenster (wie ⌥⌘N).
+    case toggleNotes
+    /// Aus dem sichtbaren Workspace nehmen.
+    case removeChatFromWorkspace(UUID)
+    case addChatToWorkspace(UUID, workspaceID: UUID)
+    case moveChatToNewWindow(UUID)
+    /// Hintergrund-Chat (`claude --bg`).
+    case backgroundLogs(UUID)
+    case backgroundStop(UUID)
+    case backgroundRespawn(UUID)
+    /// Laufenden Subagent-Job stoppen (SIGTERM an den Supervisor).
+    case stopSubagentJob(UUID)
+    /// Vorgemerkten Kontowechsel abbrechen.
+    case cancelAccountSwitch(UUID)
+    case undoLastAccountSwitch
 }
 
 /// Was ein Fenster über sich sagt, wenn eine Eingabe eintrifft. Wird im

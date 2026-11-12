@@ -925,6 +925,12 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.menuToggle)
         ui.menu?.select(.switchAccount)
         perform(.menuActivate)
+        // Runde 5: Die Markierung beginnt auf dem eigenen Konto; Kreuz dort
+        // geht nicht, der erste Schritt führt zum nächsten wählbaren.
+        let commandsBefore = window.commands.count
+        perform(.menuActivate)
+        XCTAssertEqual(window.commands.count, commandsBefore)
+        perform(.menuMove(step: 1))
         perform(.menuActivate)
         XCTAssertEqual(window.commands.last, .moveChatToAccount(session, profileName: "work"))
         XCTAssertNil(ui.menu)
@@ -932,7 +938,7 @@ final class ControllerActionDispatcherTests: XCTestCase {
         perform(.menuToggle)
         ui.menu?.select(.switchAccount)
         perform(.menuActivate)
-        perform(.menuMove(step: 1))
+        perform(.menuMove(step: 2))
         perform(.menuActivate)
         XCTAssertEqual(window.commands.last, .setGPTAccount(session, profileName: "team"))
     }

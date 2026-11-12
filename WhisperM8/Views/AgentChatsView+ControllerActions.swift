@@ -27,7 +27,7 @@ extension AgentChatsView {
                     isCurrent: profile.name == current, isLoggedIn: profile.isLoggedIn)
             }
         }
-        return ControllerChatActionInfo(
+        var info = ControllerChatActionInfo(
             title: session.title,
             isPinned: pinnedSessionIDs.contains(session.id),
             isArchived: session.status == .archived,
@@ -35,6 +35,8 @@ extension AgentChatsView {
             canFork: session.isForkable,
             accounts: accounts
         )
+        addControllerHeadActions(to: &info, session: session)
+        return info
     }
 
     /// Startet einen gestoppten Chat — derselbe Weg wie der Knopf „Starten“

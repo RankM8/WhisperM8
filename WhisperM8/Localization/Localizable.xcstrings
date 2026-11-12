@@ -2561,6 +2561,16 @@
         }
       }
     },
+    "Background tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Aufgaben"
+          }
+        }
+      }
+    },
     "Background tasks still running — switches afterwards": {
       "localizations": {
         "de": {
@@ -6907,6 +6917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Aufnahmen und Bildschirmfreigabe ausblenden"
+          }
+        }
+      }
+    },
+    "Hide note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz zuklappen"
           }
         }
       }
@@ -12644,6 +12664,16 @@
         }
       }
     },
+    "Redraw": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu zeichnen"
+          }
+        }
+      }
+    },
     "Reduce system volume while recording": {
       "localizations": {
         "de": {
@@ -13610,6 +13640,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Lauf und archivierte Ausgabeberichte ansehen."
+          }
+        }
+      }
+    },
+    "Rewind": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurückspulen"
           }
         }
       }
@@ -14664,6 +14704,16 @@
         }
       }
     },
+    "Show in Finder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Finder zeigen"
+          }
+        }
+      }
+    },
     "Show in recording overlay and Test Lab": {
       "localizations": {
         "de": {
@@ -14700,6 +14750,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Weitere Sessions dieses Projekts einblenden"
+          }
+        }
+      }
+    },
+    "Show note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz aufklappen"
           }
         }
       }
@@ -15830,6 +15890,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Konto wechseln"
+          }
+        }
+      }
+    },
+    "Switch account · used 5 h · week": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto wechseln · verbraucht 5 Std. · Woche"
           }
         }
       }
@@ -18904,6 +18974,16 @@
         }
       }
     },
+    "Workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows"
+          }
+        }
+      }
+    },
     "Working": {
       "localizations": {
         "de": {
@@ -19740,6 +19820,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        }
+      }
+    },
+    "most free": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "am meisten frei"
           }
         }
       }
