@@ -50,6 +50,11 @@ enum ClaudeGPTRouterServiceReaper {
             if isPortFree(port) { return true }
             sleep(0.05)
         }
+        // Vor SIGKILL neu nachsehen: noch derselbe Prozess, noch unser Dienst?
+        guard let again = holderResolver(port), again.pid == holder.pid,
+              isOrphanedRouterService(again, ownExecutable: ownExecutable) else {
+            return isPortFree(port)
+        }
         signaler(holder.pid, SIGKILL)
         for _ in 0..<40 {
             if isPortFree(port) { return true }
@@ -74,6 +79,7 @@ enum ClaudeGPTRouterServiceReaper {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        process.environment = LoginShellEnvironment.shared.processEnvironment()
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

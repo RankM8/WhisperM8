@@ -41,18 +41,24 @@ final class ClaudeGPTRouterHostTests: XCTestCase {
         var stopped = 0
         var spawned = 0
         let supervisor = ClaudeGPTRouterServiceSupervisor(root: root, build: "b", spawner: { _ in spawned += 1; return 0 })
+        var reaped = 0
         let host = ClaudeGPTRouterHost(
             mode: .inApp,
             inAppStart: { started.append($0); return .success(()) },
             inAppStop: { stopped += 1 },
-            supervisor: supervisor
+            supervisor: supervisor,
+            // Nie lsof/ps gegen den echten Port der laufenden App.
+            portReaper: { _ in reaped += 1; return false },
+            deadControlSocket: { _ in true }
         )
-        try host.start(port: 18_766).get()
-        try host.start(port: 18_766).get()
+        let port = GPTRouterTestClient.freePort()
+        try host.start(port: port).get()
+        try host.start(port: port).get()
         host.stop()
-        XCTAssertEqual(started, [18_766, 18_766])
+        XCTAssertEqual(started, [port, port])
         XCTAssertEqual(stopped, 1)
         XCTAssertEqual(spawned, 0)
+        XCTAssertLessThanOrEqual(reaped, 1, "höchstens einmal je Lauf und nur bei belegtem Port")
     }
 
     /// Schalter wieder aus, Dienst aus einem früheren Lauf hält den Port: Er

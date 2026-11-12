@@ -252,7 +252,7 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
 
         let fd = try ClaudeGPTRouterWire.connect(path: ClaudeGPTRouterService.socketURL(root: root).path)
         defer { close(fd) }
-        try ClaudeGPTRouterWire.send(fd, ["op": "handover", "protocol": ClaudeGPTRouterService.protocolVersion, "build": "n", "pid": 1])
+        try ClaudeGPTRouterWire.send(fd, ["op": "handover", "protocol": ClaudeGPTRouterService.protocolVersion, "build": "n", "pid": 1, "instanceRoot": AppInstance.testRoot?.path ?? "", "testUpstreams": false])
         let reply = try ClaudeGPTRouterWire.receive(fd)
         reply.descriptor.map { _ = close($0) }
         Thread.sleep(forTimeInterval: 0.8)
@@ -273,12 +273,11 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
             ])!
         }
         let plan = ClaudeGPTRouterServiceSupervisor.takeOverPlan
-        XCTAssertEqual(plan(status(build: "new"), 18_766, "/A/WhisperM8", nil, "new"), .keepRunning)
-        XCTAssertEqual(plan(status(), 18_766, "/A/WhisperM8", nil, "new"), .takeOver)
-        XCTAssertEqual(plan(status(), 18_766, "/A/WhisperM8", "old", "new"), .keepRunning, "gescheiterte Übernahme nicht wiederholen")
-        XCTAssertEqual(plan(status(), 18_766, "/B/WhisperM8", nil, "new"), .replace, "anderer Ort: Übernahme würde abgelehnt")
-        XCTAssertEqual(plan(status(), 18_767, "/A/WhisperM8", nil, "new"), .replace, "anderer Port")
-        XCTAssertEqual(plan(status(executable: ""), 18_766, "/B/WhisperM8", nil, "new"), .takeOver, "ältere Generation ohne Pfad")
+        XCTAssertEqual(plan(status(build: "new"), 18_766, "/A/WhisperM8", "new"), .keepRunning)
+        XCTAssertEqual(plan(status(), 18_766, "/A/WhisperM8", "new"), .takeOver)
+        XCTAssertEqual(plan(status(), 18_766, "/B/WhisperM8", "new"), .replace, "anderer Ort: frisch starten")
+        XCTAssertEqual(plan(status(), 18_767, "/A/WhisperM8", "new"), .replace, "anderer Port")
+        XCTAssertEqual(plan(status(executable: ""), 18_766, "/B/WhisperM8", "new"), .takeOver, "ältere Generation ohne Pfad")
     }
 
     func testStatusReportsExecutablePath() throws {
@@ -291,6 +290,96 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
         try service.start().get()
         let status = try XCTUnwrap(ClaudeGPTRouterServiceClient.status(root: root))
         XCTAssertEqual(status.executable, ClaudeGPTRouterService.executablePath(of: getpid()))
+    }
+
+    // MARK: Nachträge aus dem eigenen Opus-Review
+
+    /// Herkunft im Handshake: Test-Instanz oder Test-Upstreams bekommen den
+    /// Socket einer echten Generation nie (und umgekehrt).
+    func testHandoverRequiresSameOrigin() {
+        var configuration = ClaudeGPTRouterService.Configuration(root: root, port: 0, build: "b", takeOver: false)
+        configuration.instanceRoot = ""
+        configuration.testUpstreams = false
+        let matches = { ClaudeGPTRouterService.handoverOriginMatches($0, configuration: configuration) }
+        XCTAssertTrue(matches(["instanceRoot": "", "testUpstreams": false]))
+        XCTAssertFalse(matches(["instanceRoot": "/tmp/x", "testUpstreams": false]), "umgebogenes WHISPERM8_INSTANCE_ROOT")
+        XCTAssertFalse(matches(["instanceRoot": "", "testUpstreams": true]), "Debug-Build mit fremden Upstreams")
+        XCTAssertFalse(matches([:]), "ältere Generation ohne Angaben")
+    }
+
+    func testHandoverWithForeignOriginIsRefusedEndToEnd() throws {
+        let target = URL(string: "http://127.0.0.1:9")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: target, anthropicURL: target, listenerKind: .bsdSockets)
+        defer { router.stop() }
+        var configuration = ClaudeGPTRouterService.Configuration(root: root, port: 0, build: "b", takeOver: false)
+        configuration.instanceRoot = ""
+        let service = ClaudeGPTRouterService(configuration: configuration, router: router) { _ in }
+        try service.start().get()
+        let fd = try ClaudeGPTRouterWire.connect(path: ClaudeGPTRouterService.socketURL(root: root).path)
+        defer { close(fd) }
+        try ClaudeGPTRouterWire.send(fd, [
+            "op": "handover", "protocol": ClaudeGPTRouterService.protocolVersion, "build": "x", "pid": 1,
+            "instanceRoot": "/tmp/fremd", "testUpstreams": false,
+        ])
+        let reply = try ClaudeGPTRouterWire.receive(fd)
+        XCTAssertNil(reply.descriptor)
+        XCTAssertEqual(reply.message["error"] as? String, "origin")
+        XCTAssertEqual(service.currentState, .serving)
+    }
+
+    func testTestInstanceOnlyFromTestBundle() {
+        XCTAssertTrue(GPTRouterCommand.isAllowedInstance(testUpstreams: false, isTestInstance: false, bundleIdentifier: "com.whisperm8.app"))
+        XCTAssertTrue(GPTRouterCommand.isAllowedInstance(testUpstreams: false, isTestInstance: true, bundleIdentifier: AppInstance.testBundleIdentifier))
+        XCTAssertFalse(GPTRouterCommand.isAllowedInstance(testUpstreams: false, isTestInstance: true, bundleIdentifier: "com.whisperm8.app"))
+        XCTAssertTrue(GPTRouterCommand.isAllowedInstance(testUpstreams: true, isTestInstance: true, bundleIdentifier: nil))
+    }
+
+    /// Reaper nur bei totem Steuer-Socket: fehlt die Datei oder lauscht
+    /// niemand, ja; ein lebender (auch langsamer) Dienst, nein.
+    func testControlSocketDeadOnlyWhenMissingOrRefused() throws {
+        XCTAssertTrue(ClaudeGPTRouterServiceClient.controlSocketIsDead(root: root), "Datei fehlt")
+        XCTAssertTrue(AgentControlServer.prepareOwnedDirectory(at: root))
+        let path = ClaudeGPTRouterService.socketURL(root: root).path
+        let listening = try bindUnixSocket(path)
+        XCTAssertFalse(ClaudeGPTRouterServiceClient.controlSocketIsDead(root: root), "jemand lauscht")
+        close(listening)
+        XCTAssertTrue(ClaudeGPTRouterServiceClient.controlSocketIsDead(root: root), "Datei da, niemand lauscht")
+    }
+
+    func testReaperRechecksHolderBeforeSigkill() {
+        var signals: [Int32] = []
+        var calls = 0
+        _ = ClaudeGPTRouterServiceReaper.freePortIfHeldByOrphanedService(
+            port: 18_766,
+            ownExecutable: "/a/WhisperM8",
+            holderResolver: { _ in
+                calls += 1
+                // Nach SIGTERM hält ein anderer Prozess den Port.
+                return calls == 1
+                    ? .init(pid: 4242, uid: getuid(), arguments: "/a/WhisperM8 gpt-router --root /x")
+                    : .init(pid: 5555, uid: getuid(), arguments: "/a/WhisperM8 gpt-router --root /x")
+            },
+            signaler: { _, signal in signals.append(signal) },
+            isPortFree: { _ in false },
+            sleep: { _ in }
+        )
+        XCTAssertEqual(signals, [SIGTERM], "SIGKILL nur an denselben Prozess")
+    }
+
+    func testSupervisorDoesNotReapWhenControlSocketAlive() throws {
+        let holder = try ClaudeGPTRouterSocketListener.bind(port: 0)
+        defer { close(holder) }
+        let port = try XCTUnwrap(ClaudeGPTRouterSocketListener.listeningPort(of: holder))
+        var reaped = 0
+        let supervisor = ClaudeGPTRouterServiceSupervisor(
+            root: root, build: "b", spawner: { _ in throw GPTRouterTestError.setup("kein Start") },
+            statusResolver: { _ in nil }, readyTimeout: 0.1,
+            ownExecutable: "/a/WhisperM8",
+            portReaper: { _ in reaped += 1; return true },
+            deadControlSocket: { _ in false }
+        )
+        _ = supervisor.ensureRunning(port: port)
+        XCTAssertEqual(reaped, 0, "Status-Timeout ist kein Waise")
     }
 
     // MARK: Hilfen

@@ -30,6 +30,20 @@ final class ClaudeGPTRouterService {
         /// Obergrenze fürs Auslaufen (Upstream-Frist 600 s plus Luft).
         var drainLimit: TimeInterval = 15 * 60
         var drainPollInterval: TimeInterval = 0.25
+        /// Herkunft dieser Generation, im Handshake verglichen: Wurzel der
+        /// Test-Instanz (leer im Normalbetrieb) und ob feste Test-Upstreams
+        /// gelten (nur Debug). Eine Generation übergibt nur an eine mit
+        /// gleicher Herkunft — sonst bekäme etwa ein Aufruf mit umgebogenem
+        /// `WHISPERM8_INSTANCE_ROOT` oder ein gleich signierter Debug-Build mit
+        /// fremden Upstreams den echten Socket.
+        var instanceRoot: String = AppInstance.testRoot?.path ?? ""
+        var testUpstreams = false
+    }
+
+    /// Reine Entscheidung — unit-getestet.
+    static func handoverOriginMatches(_ request: [String: Any], configuration: Configuration) -> Bool {
+        (request["instanceRoot"] as? String) == configuration.instanceRoot
+            && (request["testUpstreams"] as? Bool) == configuration.testUpstreams
     }
 
     enum ServiceError: LocalizedError {
@@ -102,8 +116,17 @@ final class ClaudeGPTRouterService {
         guard ChatsControlProtocol.socketPathFits(Self.socketURL(root: configuration.root)) else {
             return .failure(ServiceError.socketPathTooLong(socketPath))
         }
+        // Eigene Signatur-Anforderung JETZT lesen, solange die Programmdatei
+        // noch die ist, aus der dieser Prozess läuft. Bei der ersten Übergabe
+        // hätte `make dev` oder brew sie schon ersetzt.
+        _ = ClaudeGPTRouterPeerCheck.ownRequirement
         if configuration.takeOver {
-            return takeOver()
+            // Bis zur Freigabe der alten Generation nicht „serving“ melden —
+            // die Aufsicht hielte die Übernahme sonst zu früh für gelungen.
+            stateQueue.sync { state = .handingOver }
+            let result = takeOver()
+            if case .success = result { stateQueue.sync { state = .serving } }
+            return result
         }
         if case .failure(let error) = router.start(port: configuration.port) {
             return .failure(error)
@@ -133,6 +156,8 @@ final class ClaudeGPTRouterService {
                 "protocol": Self.protocolVersion,
                 "build": configuration.build,
                 "pid": Int(getpid()),
+                "instanceRoot": configuration.instanceRoot,
+                "testUpstreams": configuration.testUpstreams,
             ])
             let reply = try ClaudeGPTRouterWire.receive(fd)
             guard reply.message["ok"] as? Bool == true, let listening = reply.descriptor else {
@@ -325,6 +350,11 @@ final class ClaudeGPTRouterService {
         guard peerCheck(client) else {
             log("handover_refused_foreign_binary")
             try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "binary"])
+            return
+        }
+        guard Self.handoverOriginMatches(request, configuration: configuration) else {
+            log("handover_refused_foreign_origin")
+            try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "origin"])
             return
         }
         let mayHandOver: Bool = stateQueue.sync {

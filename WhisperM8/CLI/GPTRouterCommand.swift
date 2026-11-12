@@ -69,6 +69,11 @@ enum GPTRouterCommand {
             == expected.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
+    static func isAllowedInstance(testUpstreams: Bool, isTestInstance: Bool, bundleIdentifier: String?) -> Bool {
+        guard !testUpstreams, isTestInstance else { return true }
+        return bundleIdentifier == AppInstance.testBundleIdentifier
+    }
+
     static func run(arguments: [String]) async -> Int32 {
         guard let parsed = parse(arguments) else {
             CLIIO.err("Usage: WhisperM8 gpt-router --root <ordner> --port <port> [--take-over] (interner Modus)")
@@ -76,6 +81,18 @@ enum GPTRouterCommand {
         }
         guard isAllowedRoot(parsed, expected: ClaudeGPTRouterServiceSupervisor.defaultRoot()) else {
             CLIIO.err("gpt-router: --root muss der Ordner der App sein (\(ClaudeGPTRouterServiceSupervisor.defaultRoot().path)).")
+            return 64
+        }
+        // Test-Instanz nur aus dem Test-Bundle: Mit gesetztem Instanz-Ordner
+        // läse der Dienst die Einstellungen der Test-Instanz (Upstream-Port,
+        // Router-Token) — aus dem echten Programm heraus wäre das ein Weg,
+        // dem echten Dienst fremde Einstellungen unterzuschieben.
+        guard isAllowedInstance(
+            testUpstreams: parsed.codexURL != nil,
+            isTestInstance: AppInstance.isTestInstance,
+            bundleIdentifier: Bundle.main.bundleIdentifier
+        ) else {
+            CLIIO.err("gpt-router: Test-Instanz nur aus dem Test-Bundle.")
             return 64
         }
         // Eigene Sitzung: kein SIGHUP vom Terminal oder von der App.
@@ -94,31 +111,28 @@ enum GPTRouterCommand {
         }
 
         return await withCheckedContinuation { continuation in
-            let service = ClaudeGPTRouterService(
-                configuration: .init(
-                    root: parsed.root,
-                    port: parsed.port,
-                    build: ClaudeGPTRouterBuild.current,
-                    takeOver: parsed.takeOver
-                ),
-                router: router,
-                onExit: { code in continuation.resume(returning: code) }
+            // Genau einmal fortsetzen: Ein Signal während des Starts kann zum
+            // Ende führen, bevor `start()` zurückkehrt.
+            let resumeLock = NSLock()
+            var resumed = false
+            let resume: (Int32) -> Void = { code in
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: code)
+            }
+            var configuration = ClaudeGPTRouterService.Configuration(
+                root: parsed.root,
+                port: parsed.port,
+                build: ClaudeGPTRouterBuild.current,
+                takeOver: parsed.takeOver
             )
-            if case .failure(let error) = service.start() {
-                CLIIO.err("gpt-router: \(error.localizedDescription)")
-                ClaudeGPTRouterService.appendLog(
-                    "\(ISO8601DateFormatter().string(from: Date())) [\(getpid())] start_failed \(error.localizedDescription)\n",
-                    to: parsed.root.appendingPathComponent("gpt-router.log")
-                )
-                continuation.resume(returning: 1)
-                return
-            }
-            if parsed.codexURL == nil {
-                // Nur im echten Betrieb: Mit Test-Upstreams darf der Dienst den
-                // Proxy der laufenden App nicht anfragen.
-                ClaudeGPTRouterServiceEnvironment.startBackgroundRefresh()
-            }
-            // SIGTERM/SIGINT: geordnet auslaufen statt hart enden.
+            configuration.testUpstreams = parsed.codexURL != nil
+            let service = ClaudeGPTRouterService(configuration: configuration, router: router, onExit: resume)
+            GPTRouterCommand.service = service
+            // SIGTERM/SIGINT: geordnet auslaufen statt hart enden — schon vor
+            // dem Start, damit auch eine laufende Übernahme nicht hart endet.
             for signalNumber in [SIGTERM, SIGINT] {
                 signal(signalNumber, SIG_IGN)
                 let source = DispatchSource.makeSignalSource(signal: signalNumber, queue: .global())
@@ -126,7 +140,20 @@ enum GPTRouterCommand {
                 source.resume()
                 GPTRouterCommand.signalSources.append(source)
             }
-            GPTRouterCommand.service = service
+            if case .failure(let error) = service.start() {
+                CLIIO.err("gpt-router: \(error.localizedDescription)")
+                ClaudeGPTRouterService.appendLog(
+                    "\(ISO8601DateFormatter().string(from: Date())) [\(getpid())] start_failed \(error.localizedDescription)\n",
+                    to: parsed.root.appendingPathComponent("gpt-router.log")
+                )
+                resume(1)
+                return
+            }
+            if parsed.codexURL == nil {
+                // Nur im echten Betrieb: Mit Test-Upstreams darf der Dienst den
+                // Proxy der laufenden App nicht anfragen.
+                ClaudeGPTRouterServiceEnvironment.startBackgroundRefresh()
+            }
         }
     }
 

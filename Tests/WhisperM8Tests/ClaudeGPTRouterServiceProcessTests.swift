@@ -43,9 +43,9 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
     }
 
     @discardableResult
-    private func spawn(_ arguments: [String]) throws -> Process {
+    private func spawn(_ arguments: [String], executable: URL? = nil) throws -> Process {
         let process = Process()
-        process.executableURL = binary
+        process.executableURL = executable ?? binary
         process.arguments = arguments + testFlags()
         process.environment = ClaudeGPTRouterServiceSupervisor.serviceEnvironment(ProcessInfo.processInfo.environment)
         process.standardInput = FileHandle.nullDevice
@@ -123,6 +123,32 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
         for _ in 0..<5 {
             XCTAssertEqual(try GPTRouterTestClient.stream(port: port).body, expected)
         }
+    }
+
+    /// Update unter dem laufenden Dienst (make dev, brew): Die Programmdatei
+    /// wird ersetzt, bevor die neue Generation übernimmt. Die alte muss ihre
+    /// Signatur-Anforderung beim Start gelesen haben, sonst scheitert die
+    /// Übergabe an der ersetzten Datei.
+    func testTakeOverAfterBinaryWasReplacedOnDisk() throws {
+        let folder = URL(fileURLWithPath: "/private/tmp/wm8bin-\(UUID().uuidString.prefix(6))", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let installed = folder.appendingPathComponent("WhisperM8")
+        try FileManager.default.copyItem(at: binary, to: installed)
+
+        let port = GPTRouterTestClient.freePort()
+        let old = try spawn(["gpt-router", "--root", root.path, "--port", String(port)], executable: installed)
+        XCTAssertNotNil(waitForServing(pid: old.processIdentifier))
+
+        // Wie rsync/brew: neue Datei daneben, dann per rename an den Platz.
+        let staged = folder.appendingPathComponent(".WhisperM8.new")
+        try FileManager.default.copyItem(at: binary, to: staged)
+        XCTAssertEqual(rename(staged.path, installed.path), 0)
+
+        let new = try spawn(["gpt-router", "--root", root.path, "--port", String(port), "--take-over"], executable: installed)
+        XCTAssertEqual(waitForServing(pid: new.processIdentifier)?.generation, 2, "Übernahme nach Austausch der Datei gescheitert")
+        XCTAssertTrue(waitForExit(old), "alte Generation endet nicht")
+        XCTAssertEqual(try GPTRouterTestClient.stream(port: port).body, SlowStreamUpstream.expectedBody(chunkCount: upstream.chunkCount))
     }
 
     /// SIGTERM (z. B. `make kill` ohne Ausnahme) heißt: auslaufen, nicht abbrechen.

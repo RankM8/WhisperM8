@@ -119,7 +119,7 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         let socketPath = ClaudeGPTRouterService.socketURL(root: root).path
 
         let fd = try ClaudeGPTRouterWire.connect(path: socketPath)
-        try ClaudeGPTRouterWire.send(fd, ["op": "handover", "protocol": ClaudeGPTRouterService.protocolVersion, "build": "y", "pid": 1])
+        try ClaudeGPTRouterWire.send(fd, ["op": "handover", "protocol": ClaudeGPTRouterService.protocolVersion, "build": "y", "pid": 1, "instanceRoot": AppInstance.testRoot?.path ?? "", "testUpstreams": false])
         let reply = try ClaudeGPTRouterWire.receive(fd)
         let passed = try XCTUnwrap(reply.descriptor, "Deskriptor fehlt")
         XCTAssertEqual(ClaudeGPTRouterSocketListener.listeningPort(of: passed), port)
@@ -144,7 +144,7 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(5)
         s.connect(sys.argv[1])
-        body = json.dumps({"op": "handover", "protocol": 1, "build": "x", "pid": 1}).encode()
+        body = json.dumps({"op": "handover", "protocol": 1, "build": "x", "pid": 1, "instanceRoot": "", "testUpstreams": False}).encode()
         s.sendall(struct.pack(">I", len(body)) + body)
         msg, anc, flags, addr = s.recvmsg(65536, socket.CMSG_SPACE(4))
         print(json.loads(msg[4:]).get("error"), len(anc))

@@ -33,6 +33,23 @@ enum ClaudeGPTRouterServiceClient {
         request(root: root, ["op": "status"], timeout: timeout).flatMap(ClaudeGPTRouterServiceStatus.init)
     }
 
+    /// Ist der Steuer-Socket tot (Datei fehlt, niemand lauscht)? Ein Timeout
+    /// zählt NICHT — dann lebt der Dienst, ist nur langsam. Nur in diesem Fall
+    /// darf der Reaper einen Dienst vom Port räumen.
+    static func controlSocketIsDead(root: URL) -> Bool {
+        let path = ClaudeGPTRouterService.socketURL(root: root).path
+        guard FileManager.default.fileExists(atPath: path) else { return true }
+        do {
+            let fd = try ClaudeGPTRouterWire.connect(path: path, timeout: 1)
+            close(fd)
+            return false
+        } catch ClaudeGPTRouterWire.WireError.connectFailed(let code) {
+            return code == ECONNREFUSED || code == ENOENT
+        } catch {
+            return false
+        }
+    }
+
     /// Lauscher schließen (Port sofort frei), auslaufen lassen.
     @discardableResult
     static func shutdown(root: URL, timeout: TimeInterval = 2) -> Bool {
@@ -89,9 +106,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     private var lastHealthyStart: Date?
     private let ownExecutable: String
     private let portReaper: (Int) -> Bool
-    /// Build eines Dienstes, dessen Übernahme in diesem Lauf scheiterte: kein
-    /// neuer Versuch bei jedem Chat-Start, der alte Dienst bedient weiter.
-    private var failedTakeOverBuild: String?
+    private let deadControlSocket: (URL) -> Bool
 
     init(
         root: URL = ClaudeGPTRouterServiceSupervisor.defaultRoot(),
@@ -101,7 +116,8 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         readyTimeout: TimeInterval = 10,
         restartDelays: [TimeInterval] = [0.5, 1, 2, 5, 10, 30],
         ownExecutable: String = ClaudeGPTRouterService.executablePath(of: getpid()) ?? "",
-        portReaper: @escaping (Int) -> Bool = { ClaudeGPTRouterServiceReaper.freePortIfHeldByOrphanedService(port: $0) }
+        portReaper: @escaping (Int) -> Bool = { ClaudeGPTRouterServiceReaper.freePortIfHeldByOrphanedService(port: $0) },
+        deadControlSocket: @escaping (URL) -> Bool = { ClaudeGPTRouterServiceClient.controlSocketIsDead(root: $0) }
     ) {
         self.root = root
         self.build = build
@@ -111,6 +127,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         self.restartDelays = restartDelays
         self.ownExecutable = ownExecutable
         self.portReaper = portReaper
+        self.deadControlSocket = deadControlSocket
     }
 
     /// `<Application Support>/WhisperM8/gpt-router`; wird der Socket-Pfad zu
@@ -136,10 +153,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         defer { lock.unlock() }
         desiredPort = port
         if let status = settledStatus(), status.state == "serving" {
-            switch Self.takeOverPlan(
-                status: status, port: port, ownExecutable: ownExecutable,
-                failedTakeOverBuild: failedTakeOverBuild, build: build
-            ) {
+            switch Self.takeOverPlan(status: status, port: port, ownExecutable: ownExecutable, build: build) {
             case .keepRunning:
                 watch(pid: status.pid)
                 return .success(())
@@ -150,23 +164,26 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
                 case .success:
                     return .success(())
                 case .failure(let error):
-                    // Die alte Generation nimmt nach ihrer Frist wieder an.
+                    // Abgelehnt (andere Signatur, andere Herkunft) oder zu
+                    // spät: Die alte Generation nimmt wieder an. Statt sie für
+                    // immer zu behalten und bei jedem Chat-Start erneut zu
+                    // scheitern: geordnet ersetzen (Port sofort frei, laufende
+                    // Antworten laufen in ihr aus; Claude wiederholt abgelehnte
+                    // Verbindungen in der kurzen Lücke).
                     Logger.claudeGPTRouter.error(
-                        "gpt_router_service_takeover_failed \(error.localizedDescription, privacy: .public)"
+                        "gpt_router_service_takeover_failed_replacing \(error.localizedDescription, privacy: .public)"
                     )
-                    failedTakeOverBuild = status.build
-                    watch(pid: status.pid)
-                    return .success(())
+                    ClaudeGPTRouterServiceClient.shutdown(root: root)
+                    waitUntilPortFree(port)
                 }
             case .replace:
-                // Anderer Port oder anderer Programmort (die Übernahme würde
-                // abgelehnt): alte Generation gibt den Port sofort frei und
-                // läuft aus, die neue startet frisch.
+                // Anderer Port oder anderer Programmort: alte Generation gibt
+                // den Port sofort frei und läuft aus, die neue startet frisch.
                 ClaudeGPTRouterServiceClient.shutdown(root: root)
                 waitUntilPortFree(port)
             }
         }
-        if !ClaudeCodeProxyManager.isPortFree(port) {
+        if !ClaudeCodeProxyManager.isPortFree(port), deadControlSocket(root) {
             // Ein Dienst ohne erreichbaren Steuer-Socket hielte den Port sonst
             // bis zum Neustart des Macs.
             _ = portReaper(port)
@@ -185,15 +202,16 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         status: ClaudeGPTRouterServiceStatus,
         port: Int,
         ownExecutable: String,
-        failedTakeOverBuild: String?,
-        build: String? = nil
+        build: String
     ) -> TakeOverPlan {
         guard status.port == port else { return .replace }
-        if let build, status.build == build { return .keepRunning }
+        if status.build == build { return .keepRunning }
+        // Anderer Programmort: frisch statt Übernahme — die neue Generation
+        // läuft aus diesem Ort, der Dienst soll zum Programm der App passen.
         if !status.executable.isEmpty, !ownExecutable.isEmpty, status.executable != ownExecutable {
             return .replace
         }
-        return failedTakeOverBuild == status.build ? .keepRunning : .takeOver
+        return .takeOver
     }
 
     /// Status, aber nicht mitten in einer Übergabe: Die dauert Millisekunden;

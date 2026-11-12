@@ -18,6 +18,9 @@ extension ClaudeCodeProxyManager {
             Logger.claudeGPTRouter.notice("gpt_backend_kept_for_handover")
             return
         }
+        processLock.lock()
+        routerServiceStopped = true
+        processLock.unlock()
         stopIfSelfStarted()
         stopAllProfileInstances()
         stopDeviceLogin()
@@ -30,15 +33,19 @@ extension ClaudeCodeProxyManager {
 
     // MARK: Bitte des Router-Dienstes
 
-    /// Nur der Profilpfad: kein Rückfall auf main (den `ensureRunning(profile:)`
-    /// bei ausgeschalteten Profilen nähme) und damit nie ein Start von
-    /// main-Proxy oder Router auf Zuruf von außen. `false` = abgelehnt.
+    /// Nur der Profilpfad (`profileOnly`): kein Rückfall auf main, kein
+    /// Router-Start — auch nicht, wenn die Profile zwischen dieser Prüfung und
+    /// dem Start im Hintergrund ausgeschaltet werden. Nach dem Beenden des
+    /// Dienstes (echtes Beenden der App) nichts mehr. `false` = abgelehnt.
     @discardableResult
     func startProfileInstanceForRouterService(profile: String) -> Bool {
-        guard isRouterServiceMode, profilesEnabledResolver(), !Self.isMainProfile(profile) else {
+        processLock.lock()
+        let stopped = routerServiceStopped
+        processLock.unlock()
+        guard isRouterServiceMode, !stopped, profilesEnabledResolver(), !Self.isMainProfile(profile) else {
             return false
         }
-        startInstanceInBackground(profile: profile)
+        startInstanceInBackground(profile: profile, profileOnly: true)
         return true
     }
 

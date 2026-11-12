@@ -15,7 +15,10 @@ import Security
 /// trägt die Prozessversion; nach einem exec passt es nicht mehr zum Prozess,
 /// und die Prüfung schlägt fehl. Deshalb prüft der Dienst bei jeder Nachricht.
 enum ClaudeGPTRouterPeerCheck {
-    /// Designierte Anforderung des eigenen Programms, einmal gelesen.
+    /// Designierte Anforderung des eigenen Programms. Der Dienst liest sie beim
+    /// Start (`ClaudeGPTRouterService.start`), solange die Programmdatei noch
+    /// die laufende ist; danach bleibt der Wert, auch wenn ein Update die
+    /// Datei ersetzt.
     static let ownRequirement: SecRequirement? = {
         var me: SecCode?
         guard SecCodeCopySelf([], &me) == errSecSuccess, let me else { return nil }

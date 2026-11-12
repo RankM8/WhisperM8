@@ -260,6 +260,8 @@ final class ClaudeCodeProxyManager {
     var registerStartTimeResolver: (pid_t) -> Date? = ProcessStartTime.of(pid:)
     var didAdoptRegister = false
     var adoptedProxyPIDStorage: Set<Int32> = []
+    /// Echtes Beenden hat begonnen: keine Profil-Starts mehr auf Zuruf.
+    var routerServiceStopped = false
 
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
@@ -410,8 +412,11 @@ final class ClaudeCodeProxyManager {
     /// eigenen Port; laeuft sie schon und antwortet, wird sie wiederverwendet.
     /// Ein Profil ohne eigene Auth-Datei wird NIE gestartet — die Instanz
     /// liefe sonst still auf dem Default-Konto.
-    func ensureRunning(profile: String?) -> Result<Void, ClaudeCodeProxyError> {
+    /// `profileOnly` (Bitte des Router-Dienstes): weder Rückfall auf main noch
+    /// Router-Start — nur die Instanz des Profils.
+    func ensureRunning(profile: String?, profileOnly: Bool = false) -> Result<Void, ClaudeCodeProxyError> {
         guard profilesEnabledResolver(), !Self.isMainProfile(profile), let profile else {
+            if profileOnly { return .failure(.profileNotLoggedIn(profile ?? GPTAccountProfiles.mainProfileName)) }
             return ensureRunning(port: mainPortResolver())
         }
         adoptRegisteredProxiesIfNeeded()
@@ -481,6 +486,7 @@ final class ClaudeCodeProxyManager {
                 "gpt_profile_proxy_started profile=\(profile, privacy: .public) port=\(port)"
             )
         }
+        if profileOnly { return .success(()) }
 
         switch routerStarter(routerPortResolver()) {
         case .success:
@@ -552,14 +558,14 @@ final class ClaudeCodeProxyManager {
 
     /// Start im Hintergrund fuer den 503-Pfad des Routers — pro Profil nur
     /// ein Versuch gleichzeitig, Ergebnis wird geloggt statt verworfen.
-    func startInstanceInBackground(profile: String) {
+    func startInstanceInBackground(profile: String, profileOnly: Bool = false) {
         processLock.lock()
         let alreadyStarting = !startingProfiles.insert(profile).inserted
         processLock.unlock()
         guard !alreadyStarting else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            let result = self.ensureRunning(profile: profile)
+            let result = self.ensureRunning(profile: profile, profileOnly: profileOnly)
             self.processLock.lock()
             self.startingProfiles.remove(profile)
             self.processLock.unlock()
