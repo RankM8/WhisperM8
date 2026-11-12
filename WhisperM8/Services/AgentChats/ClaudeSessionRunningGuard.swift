@@ -30,16 +30,28 @@ enum ClaudeSessionRunningGuard {
         }
     }
 
-    /// Echte Abfrage über alle Konten. Nur im App-Prozess: Unter `swift test`
-    /// und in der CLI liefert sie `nil`, damit kein Test von zufällig laufenden
-    /// Claude-Prozessen auf dem Rechner abhängt.
-    static func liveLookup(sessionID: String) -> ClaudeSessionRecord? {
-        guard AppInstance.isAppBundleProcess else { return nil }
-        return runningForegroundProcess(
+    /// Alle lebenden Vordergrund-Einträge der Registry aller Konten. Liest
+    /// Dateien und fragt Prozess-Startzeiten ab — nicht auf dem Main Thread
+    /// aufrufen. Nur im App-Prozess: Unter `swift test` und in der CLI leer,
+    /// damit kein Test von zufällig laufenden Claude-Prozessen abhängt.
+    static func liveForegroundRecords() -> [ClaudeSessionRecord] {
+        guard AppInstance.isAppBundleProcess else { return [] }
+        return ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots()).filter { !$0.isBackground }
+    }
+
+    /// Prüfung gegen eine vorher (abseits des Main Threads) gelesene Liste.
+    /// Ob die App einen Prozess gerade beendet, entscheidet sich erst jetzt.
+    static func runningForegroundProcess(sessionID: String, in records: [ClaudeSessionRecord]) -> ClaudeSessionRecord? {
+        runningForegroundProcess(
             sessionID: sessionID,
-            records: ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots()),
+            records: records,
             isBeingTerminated: { ProcessTerminationLedger.shared.isBeingTerminated(pid: $0) }
         )
+    }
+
+    /// Abfrage in einem Schritt, für Aufrufer ohne vorbereitete Liste.
+    static func liveLookup(sessionID: String) -> ClaudeSessionRecord? {
+        runningForegroundProcess(sessionID: sessionID, in: liveForegroundRecords())
     }
 }
 

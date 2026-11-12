@@ -90,6 +90,37 @@ final class ClaudeSessionRunningGuardTests: XCTestCase {
     func testLiveLookupIsOffOutsideTheApp() {
         // Unter `swift test` kein Blick auf echte Claude-Prozesse des Rechners.
         XCTAssertNil(ClaudeSessionRunningGuard.liveLookup(sessionID: "abc"))
+        XCTAssertTrue(ClaudeSessionRunningGuard.liveForegroundRecords().isEmpty)
+    }
+
+    func testPrescannedListIsCheckedAgainstTheTerminationLedger() {
+        let records = [record("abc", pid: 31_337)]
+        XCTAssertEqual(ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: "abc", in: records)?.pid, 31_337)
+        ProcessTerminationLedger.shared.noteTerminating(pid: 31_337)
+        XCTAssertNil(ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: "abc", in: records),
+                     "erst beim Bauen gefragt: ein gerade beendeter Prozess sperrt nicht")
+    }
+
+    // MARK: Zweites Fenster
+
+    /// Derselbe Chat in zwei Fenstern: Der zweite Start darf gar nicht erst bauen,
+    /// wenn der Controller dieser App schon läuft, sonst meldet die Sperre den
+    /// eigenen Prozess als fremd. Die Detailansicht fragt vor dem Bauen genau
+    /// dieses Tor (`prepareCommand`).
+    @MainActor
+    func testRunningControllerOfThisAppStopsTheLaunchBeforeTheBuilder() {
+        let registry = AgentTerminalRegistry(sleep: { _ in })
+        let id = UUID()
+        XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(
+            controllerIsRunning: registry.controller(for: id)?.isRunning))
+        registry.startController(
+            sessionID: id,
+            command: AgentLaunchCommand(executablePath: "/bin/sleep", arguments: ["30"],
+                                        workingDirectory: NSTemporaryDirectory(), keyboardProfile: .claudeCodeChat),
+            onLaunched: {}, onTerminated: { _ in })
+        defer { _ = registry.terminateAll() }
+        XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(
+            controllerIsRunning: registry.controller(for: id)?.isRunning))
     }
 
     // MARK: Vermerk „wird beendet“
