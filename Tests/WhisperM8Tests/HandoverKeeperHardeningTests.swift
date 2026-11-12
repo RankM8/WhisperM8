@@ -543,6 +543,28 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         XCTAssertTrue(stand.marker.contains("TERM"))
     }
 
+    func testNoSigtermWhenKeeperPIDBelongsToAnotherProcess() throws {
+        let stand = try spawn {
+            try .spawn(script: "trap 'echo TERM >> \"$MARKER\"; exit 143' TERM; : > \"$READY\"; while :; do sleep 0.1; done", in: directory)
+        }
+        var fds: [Int32] = [-1, -1]
+        XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &fds), 0)
+        let client = HandoverClient(connection: HandoverConnection(fd: fds[0]), timeout: 5)
+        let server = HandoverConnection(fd: fds[1])
+        defer { client.close(); server.close() }
+        // Die PID gehört inzwischen einem anderen Prozess (andere Startzeit).
+        client.keeperPID = stand.pid
+        client.keeperStartTime = Date(timeIntervalSince1970: 1_000)
+        DispatchQueue.global().async {
+            _ = try? server.receive(timeout: 5)
+            server.close()
+        }
+        XCTAssertThrowsError(try client.commit())
+        usleep(300_000)
+        XCTAssertTrue(stand.isAlive)
+        XCTAssertEqual(stand.marker, "")
+    }
+
     func testIdleConnectionsDoNotBlockOthers() throws {
         _ = try makeKeeper()
         var idle: [HandoverClient] = []

@@ -103,6 +103,7 @@ final class HandoverClient {
         if let expectedPID {
             try verifyServer(expectedPID: expectedPID)
             keeperPID = expectedPID
+            keeperStartTime = ProcessStartTime.of(pid: expectedPID)
         }
         var hello = HandoverMessage(type: .hello)
         hello.role = .deposit
@@ -128,8 +129,10 @@ final class HandoverClient {
         }
     }
 
-    /// PID des Aufbewahrers, sobald `helloDeposit(expectedPID:)` sie geprüft hat.
+    /// PID des Aufbewahrers, sobald `helloDeposit(expectedPID:)` sie geprüft hat,
+    /// samt Startzeit gegen eine inzwischen neu vergebene PID.
     var keeperPID: pid_t?
+    var keeperStartTime: Date?
 
     /// Nach Rückkehr ohne Fehler hält der Aufbewahrer alle Chats; erst jetzt
     /// darf die App ihre Originale schließen.
@@ -143,9 +146,20 @@ final class HandoverClient {
             let reply = try roundTrip(HandoverMessage(type: .commit))
             guard reply.message.type == .ok else { throw ClientError.unexpected("OK erwartet") }
         } catch {
-            if let keeperPID, keeperPID > 1 { kill(keeperPID, SIGTERM) }
+            terminateKeeperIfStillTheSame()
             throw error
         }
+    }
+
+    /// SIGTERM nur, wenn unter der PID noch derselbe Prozess läuft: Hat der
+    /// Aufbewahrer sich schon beendet, kann die PID einem anderen gehören.
+    func terminateKeeperIfStillTheSame() {
+        guard let keeperPID, keeperPID > 1 else { return }
+        if let expected = keeperStartTime {
+            guard let current = ProcessStartTime.of(pid: keeperPID),
+                  abs(current.timeIntervalSince(expected)) < 0.001 else { return }
+        }
+        kill(keeperPID, SIGTERM)
     }
 
     func abort() throws {

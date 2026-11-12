@@ -213,12 +213,23 @@ extension HandoverKeeper {
             }
             return
         }
-        let admitted: String? = queue.sync {
-            guard phase == .holding else { return "nichts zu übernehmen (\(phase.rawValue))" }
-            guard !takeConnectionActive else { return "belegt" }
-            takeConnectionActive = true
-            return nil
-        }
+        // Erst nach dem OK auf COMMIT: Geht es verloren, gibt die Abgabe alle
+        // Kopien frei, und eine laufende Übergabe verlöre ihre Leitung. Die
+        // App hat das OK womöglich schon, bevor die Abgabe-Verbindung hier als
+        // beendet gilt — deshalb kurz warten statt sofort abzuweisen.
+        var admitted: String?
+        let admissionEnd = Date().addingTimeInterval(2)
+        repeat {
+            admitted = queue.sync {
+                guard phase == .holding else { return "nichts zu übernehmen (\(phase.rawValue))" }
+                guard !depositConnectionActive else { return "Abgabe noch nicht abgeschlossen" }
+                guard !takeConnectionActive else { return "belegt" }
+                takeConnectionActive = true
+                return nil
+            }
+            guard admitted == "Abgabe noch nicht abgeschlossen", Date() < admissionEnd else { break }
+            usleep(20_000)
+        } while true
         if let admitted {
             try? connection.send(.error(admitted), timeout: timeout)
             return
