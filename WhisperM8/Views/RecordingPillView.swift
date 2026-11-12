@@ -40,6 +40,9 @@ struct RecordingPillView: View {
 
     private var isFullStyle: Bool { controller.overlayStyle == .full }
 
+    /// An der Notch ist nichts verschiebbar: kein Griff.
+    private var showsGrip: Bool { !controller.presentation.isNotch }
+
     var body: some View {
         // Zwei Anordnungen, ein Prinzip:
         // - Full (permanent expandiert): klassische Anatomie, Kern links außen.
@@ -48,6 +51,13 @@ struct RecordingPillView: View {
         //   Zuständen identisch — nichts rutscht beim Expandieren unter der
         //   Maus weg (z. B. der Mode-Chip, den man gerade anklicken wollte).
         HStack(spacing: 0) {
+            // Vereinte Pille: wartende Chats und Fehler ganz links, hinter
+            // einem feinen Trenner (sonst nie gesetzt).
+            if let badge = controller.statusBadge {
+                DictationStatusBadgeView(badge: badge)
+                    .transition(.opacity)
+                PillSeparator()
+            }
             if let quickActionLabel = controller.quickActionLabel {
                 PillQuickActionContent(
                     label: quickActionLabel,
@@ -72,18 +82,7 @@ struct RecordingPillView: View {
         }
         .padding(.horizontal, PillMetrics.horizontalPadding)
         .frame(height: PillMetrics.height)
-        .background {
-            // Dunkles Glas wie im Prototyp (rgba(19,22,27,.86)): Material
-            // liefert den Blur, die Tönung drückt es Richtung Fast-Schwarz.
-            Capsule()
-                .fill(.thinMaterial)
-                .overlay(Capsule().fill(OverlayPalette.glassTint))
-                .overlay(
-                    Capsule()
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                )
-        }
-        .shadow(color: .black.opacity(0.3), radius: 12, x: 0, y: 3)
+        .modifier(PillChrome(presentation: controller.presentation))
         .animation(reduceMotion ? nil : .pill, value: isExpanded)
         .animation(reduceMotion ? nil : .pill, value: phase)
         .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
@@ -91,6 +90,7 @@ struct RecordingPillView: View {
         .animation(reduceMotion ? nil : .pill, value: controller.showModePickerInMiniOverlay)
         .animation(reduceMotion ? nil : .pill, value: controller.showConfirmButton)
         .animation(reduceMotion ? nil : .pill, value: controller.overlayStyle)
+        .animation(reduceMotion ? nil : .pill, value: controller.statusBadge)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
     }
@@ -121,7 +121,9 @@ struct RecordingPillView: View {
     /// Full: klassische Anatomie, permanent expandiert.
     @ViewBuilder
     private var fullLayout: some View {
-        PillGrip()
+        if showsGrip {
+            PillGrip()
+        }
 
         coreView
 
@@ -150,8 +152,10 @@ struct RecordingPillView: View {
     @ViewBuilder
     private var miniLayout: some View {
         if isExpanded {
-            PillGrip()
-                .transition(.opacity)
+            if showsGrip {
+                PillGrip()
+                    .transition(.opacity)
+            }
             PillCameraButton(controller: controller)
                 .transition(.opacity)
         }
@@ -193,6 +197,36 @@ struct RecordingPillView: View {
             PillContextChip(controller: controller)
                 .padding(.trailing, 5)
                 .transition(.opacity)
+        }
+    }
+}
+
+// MARK: - Hülle
+
+/// Hintergrund der Pill: als Pille das dunkle Glas samt Schatten (geteilt mit
+/// der Status-Pille, `PillGlassBackground`), an der Notch schwarz wie die
+/// Hardware — die Zeile hängt unter einem Band in Notch-Breite.
+private struct PillChrome: ViewModifier {
+    let presentation: OverlayPresentation
+
+    func body(content: Content) -> some View {
+        switch presentation {
+        case .classic, .pill:
+            content
+                .background {
+                    // Dunkles Glas wie im Prototyp, geteilt mit der Pille der
+                    // Notch-Anzeige (`PillGlassBackground`).
+                    PillGlassBackground(shape: Capsule())
+                }
+                .pillGlassShadow()
+        case .notch(let width, let height):
+            content
+                .frame(minWidth: width)
+                .padding(.top, height)
+                .background {
+                    NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: 18)
+                        .fill(Color.black)
+                }
         }
     }
 }

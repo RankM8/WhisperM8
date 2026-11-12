@@ -76,9 +76,9 @@ extension ControllerBindingResolver {
     /// bewegen die Markierung (mit Wiederholung), links/rechts wechseln den
     /// Reiter (ein Druck, ein Schritt). Kreuz wechselt, Kreis bricht ab,
     /// Dreieck springt zum nächsten wartenden Chat, R2 wechselt und diktiert.
-    /// Das Touchpad öffnet den Zwischenablage-Verlauf — überall, denn mit dem
-    /// Touchpad als Maus ist L2 + Touchpad der einzige Weg dorthin (außerhalb
-    /// des Chats kommt das schon über die Tasten ohne Ebene).
+    /// Das Touchpad öffnet den Zwischenablage-Verlauf — überall, auch wenn die
+    /// Insel offen ist (außerhalb des Chats kommt das schon über die Tasten
+    /// ohne Ebene).
     private static func whereToLayer(_ gesture: ControllerGesture) -> ControllerAction? {
         switch gesture {
         case .move(.up, _, _): return .islandMove(step: -1)

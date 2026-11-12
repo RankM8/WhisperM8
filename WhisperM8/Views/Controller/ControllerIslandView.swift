@@ -6,7 +6,8 @@ struct ControllerIslandDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, das Band deckt genau die Aussparung.
         case notch(width: CGFloat, height: CGFloat)
-        /// Ohne Notch: Pille unter der Menüleiste, folgt hell/dunkel.
+        /// Ohne Notch: wächst aus der Pille der Notch-Anzeige, im dunklen
+        /// Glas der Diktat-Pille.
         case pill
     }
 
@@ -15,6 +16,9 @@ struct ControllerIslandDisplay: Equatable {
     /// Zähler der Notch-Anzeige, wenn sie auf diesem Bildschirm steht: Sie
     /// wandern in den Kopf der Insel (Entwurf, Zustand 8).
     var counts: ControllerIslandCounts?
+    /// Nur Pille: Sie sitzt in der unteren Bildschirmhälfte, die Insel wächst
+    /// nach oben aus ihr heraus.
+    var opensUpward = false
 
     var isNotch: Bool {
         if case .notch = style { return true }
@@ -28,7 +32,7 @@ struct ControllerIslandDisplay: Equatable {
         switch model.content {
         case .writing: width = 420
         case .quickDraw: width = 524
-        case .whereTo(let state): width = state.isListOpen ? 440 : 360
+        case .whereTo: width = 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
         return width
@@ -40,8 +44,8 @@ struct ControllerIslandCounts: Equatable {
     var waiting: Int
 }
 
-/// Farben der Insel. An der Notch immer dunkel wie die Hardware, als Pille
-/// wie der Rest der App.
+/// Farben der Insel. Immer dunkel: an der Notch wie die Hardware, ohne Notch
+/// im dunklen Glas der Diktat-Pille.
 private struct IslandPalette {
     var background: Color
     var border: Color
@@ -71,16 +75,6 @@ private struct IslandPalette {
         slot: Color.white.opacity(0.07), line: Color.white.opacity(0.08),
         awaiting: Color(red: 0.914, green: 0.725, blue: 0.286),
         working: Color(red: 0.298, green: 0.765, blue: 0.541))
-
-    static let pill = IslandPalette(
-        background: AgentTheme.statusPill, border: AgentTheme.borderStrong,
-        text: AgentTheme.textPrimary, secondary: AgentTheme.textSecondary, tertiary: AgentTheme.textTertiary,
-        hint: AgentTheme.textPrimary,
-        key: AppTheme.panel, keyBorder: AppTheme.borderStrong,
-        mark: AppTheme.accentTint, markBorder: AppTheme.accent,
-        segment: Color.gray.opacity(0.12), segmentOn: AppTheme.panel,
-        slot: Color.gray.opacity(0.10), line: AgentTheme.borderStrong,
-        awaiting: AgentTheme.statusAwaiting, working: AgentTheme.statusWorking)
 }
 
 /// Controller-Insel: Kopf mit Taste, Ebene und Ziel, darunter je Ebene die
@@ -91,7 +85,7 @@ struct ControllerIslandView: View {
     /// Aufgeklappt; zu ist nur der Umriss der Notch sichtbar.
     var revealed = true
 
-    private var palette: IslandPalette { display.isNotch ? .notch : .pill }
+    private var palette: IslandPalette { .notch }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -102,32 +96,40 @@ struct ControllerIslandView: View {
             content
         }
         .frame(width: display.bodyWidth)
-        .background(shape.fill(palette.background))
-        .overlay(shape.stroke(palette.border, lineWidth: display.isNotch ? 0 : 2))
+        .background { background }
         .clipShape(shape)
-        .mask(alignment: .top) { reveal }
-        .environment(\.colorScheme, display.isNotch ? .dark : colorScheme)
+        .mask(alignment: display.opensUpward ? .bottom : .top) { reveal }
+        .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
     }
 
-    @Environment(\.colorScheme) private var colorScheme
+    /// An der Notch schwarz, ohne Notch das Glas der Diktat-Pille.
+    @ViewBuilder
+    private var background: some View {
+        if display.isNotch {
+            shape.fill(palette.background)
+        } else {
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+        }
+    }
 
     private var shape: AnyShape {
         if case .notch(let width, let height) = display.style {
             return AnyShape(NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: 20))
         }
-        return AnyShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
     }
 
-    /// Wächst aus der Notch (bzw. aus einer kleinen Pille) und zieht sich
-    /// dorthin zurück.
+    /// Wächst aus der Notch (bzw. aus der Pille) und zieht sich dorthin
+    /// zurück; aus einer Pille in der unteren Bildschirmhälfte nach oben.
     private var reveal: some View {
         GeometryReader { proxy in
             let collapsed = collapsedSize(in: proxy.size)
-            RoundedRectangle(cornerRadius: revealed ? 0 : 12, style: .continuous)
+            RoundedRectangle(cornerRadius: revealed ? 0 : collapsed.height / 2, style: .continuous)
                 .frame(width: revealed ? proxy.size.width : collapsed.width,
                        height: revealed ? proxy.size.height : collapsed.height)
-                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: display.opensUpward ? .bottom : .top)
         }
     }
 
@@ -136,7 +138,8 @@ struct ControllerIslandView: View {
         case .notch(let width, let height):
             return CGSize(width: min(size.width, width), height: min(size.height, height + NotchGeometry.chinHeight))
         case .pill:
-            return CGSize(width: min(size.width, 150), height: min(size.height, NotchGeometry.pillHeight))
+            return CGSize(width: min(size.width, NotchGeometry.pillIdleWidth),
+                          height: min(size.height, NotchGeometry.pillHeight))
         }
     }
 
@@ -292,40 +295,49 @@ struct ControllerIslandView: View {
         .opacity(on || hit ? 1 : 0.36)
     }
 
-    @ViewBuilder
+    /// Die Liste steht sofort da (wie Cmd-Tab), die Markierung auf dem
+    /// vorigen Ort.
     private func whereTo(_ state: ControllerWhereToState) -> some View {
-        if !state.isListOpen {
-            IslandFlow {
-                hint(.dpadUp, String(localized: "Open list"), on: true, glyph: "▲▼")
-                hint(.triangle, String(localized: "Next waiting"), on: true)
-                hint(.r2, String(localized: "Go there and dictate"), on: true)
-                hint(.circle, String(localized: "Cancel"), on: true)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 2)
-            .padding(.bottom, 12)
-        } else {
+        VStack(spacing: 0) {
+            tabs(state.tab)
             VStack(spacing: 0) {
-                tabs(state.tab)
-                VStack(spacing: 0) {
-                    switch state.tab {
-                    case .chats:
-                        ForEach(state.chats.visibleRows) { row in
-                            chatRow(row, marked: row.id == state.chats.selected?.id)
-                        }
-                        more(state.chats.hiddenCount)
-                    case .workspaces:
-                        ForEach(state.workspaces.visibleRows) { choice in
-                            workspaceRow(choice, marked: choice.id == state.workspaces.selected?.id)
-                        }
-                        more(state.workspaces.hiddenCount)
+                switch state.tab {
+                case .chats:
+                    ForEach(state.chats.visibleRows) { row in
+                        chatRow(row, marked: row.id == state.chats.selected?.id,
+                                previous: state.isPrevious(chat: row.id))
                     }
+                    more(state.chats.hiddenCount)
+                    if state.chats.rows.isEmpty { empty(String(localized: "No chats")) }
+                case .workspaces:
+                    ForEach(state.workspaces.visibleRows) { choice in
+                        workspaceRow(choice, marked: choice.id == state.workspaces.selected?.id,
+                                     previous: state.isPrevious(workspace: choice.id))
+                    }
+                    more(state.workspaces.hiddenCount)
+                    if state.workspaces.rows.isEmpty { empty(String(localized: "No workspaces")) }
                 }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 4)
-                footer(state.tab)
             }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+            footer(state.tab)
         }
+    }
+
+    private func empty(_ text: String) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 12))
+            .foregroundStyle(palette.secondary)
+            .frame(height: 34)
+    }
+
+    /// Kleiner Hinweis an der Zeile des vorigen Orts: Dorthin führt
+    /// Loslassen ohne Bewegung, genau wie L2 getippt.
+    private func previousTag() -> some View {
+        Text("previous")
+            .font(.system(size: 11))
+            .foregroundStyle(palette.tertiary)
+            .fixedSize()
     }
 
     private func tabs(_ selected: ControllerIslandTab) -> some View {
@@ -354,7 +366,7 @@ struct ControllerIslandView: View {
             }
     }
 
-    private func chatRow(_ row: ControllerIslandChatRow, marked: Bool) -> some View {
+    private func chatRow(_ row: ControllerIslandChatRow, marked: Bool, previous: Bool) -> some View {
         HStack(spacing: 9) {
             IslandStatusDot(status: row.status)
                 .frame(width: 16)
@@ -373,6 +385,7 @@ struct ControllerIslandView: View {
                 }
             }
             Spacer(minLength: 8)
+            if previous { previousTag() }
             Text(verbatim: row.detail)
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(palette.tertiary)
@@ -385,7 +398,7 @@ struct ControllerIslandView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func workspaceRow(_ choice: ControllerWorkspaceChoice, marked: Bool) -> some View {
+    private func workspaceRow(_ choice: ControllerWorkspaceChoice, marked: Bool, previous: Bool) -> some View {
         HStack(spacing: 9) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(Color(hex: choice.colorHex))
@@ -405,6 +418,8 @@ struct ControllerIslandView: View {
                     Text("current")
                         .font(.system(size: 11))
                         .foregroundStyle(palette.tertiary)
+                } else if previous {
+                    previousTag()
                 }
             }
             Spacer(minLength: 8)
@@ -434,24 +449,28 @@ struct ControllerIslandView: View {
         }
     }
 
+    /// Fußzeile: Was die Tasten jetzt tun. Loslassen wechselt zum markierten
+    /// Eintrag, Kreis bricht ab — beides steht immer da, weil es keine
+    /// Hinweiszeile mehr davor gibt.
     private func footer(_ tab: ControllerIslandTab) -> some View {
-        HStack(spacing: 14) {
+        IslandFlow(spacing: 12, lineSpacing: 5) {
             footItem("▲▼", String(localized: "select"))
             footItem("◀▶", String(localized: "tabs"))
-            switch tab {
-            case .chats:
-                footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
-                footItem(ControllerButton.r2.glyph, String(localized: "go + dictate"), round: false)
-            case .workspaces:
-                Text(verbatim: String(localized: "release: switch"))
-            }
+            footItem(ControllerButton.l2.glyph, String(localized: "release: switch"), round: false)
+            footItem(ControllerButton.circle.glyph, String(localized: "cancel"))
+            footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
+            // Im Reiter Workspaces diktiert R2 nur, wenn die Markierung auf
+            // dem aktuellen Workspace steht (in den aktuellen Chat).
+            footItem(ControllerButton.r2.glyph,
+                     tab == .chats ? String(localized: "go + dictate") : String(localized: "dictate here"),
+                     round: false)
         }
         .font(.system(size: 11))
         .foregroundStyle(palette.secondary)
         .padding(.horizontal, 14)
-        .padding(.top, 6)
+        .padding(.top, 7)
         .padding(.bottom, 11)
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
     }
 

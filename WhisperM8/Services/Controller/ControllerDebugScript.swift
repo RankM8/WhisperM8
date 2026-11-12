@@ -86,9 +86,6 @@ enum ControllerDebugScript {
                 triggers[button] = value
             case let .stick(side, x, y):
                 sticks[side] = x != 0 || y != 0
-            case .touch:
-                // Das Skript kennt keine Finger (der Parser erzeugt keine).
-                break
             }
         }
         var open = pressed.map { "up:\($0.rawValue)" }.sorted()

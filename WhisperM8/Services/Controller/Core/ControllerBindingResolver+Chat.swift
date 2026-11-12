@@ -117,13 +117,15 @@ extension ControllerBindingResolver {
     }
 
     /// Links bei Claude nur, wo es sicher nicht das leere Eingabefeld trifft:
-    /// in einer Rückfrage, in einer offenen Auswahl des Menüs oder wenn ein
-    /// Entwurf im Feld steht. Im leeren Feld schickt ← die ganze Sitzung in
+    /// in einer Rückfrage, in einer offenen Auswahl des Menüs oder wenn
+    /// irgendetwas im Feld steht (getippt, diktiert, Rückleger, mit ↑
+    /// zurückgeholt, mit → übernommen; seit 12.11.2026 weniger streng). Im leeren Feld schickt ← die ganze Sitzung in
     /// Claudes Agent-Ansicht — so gingen am 12.11.2026 zwei Sitzungen
     /// verloren. Dieselbe Regel prüft `TerminalControlKey.controllerAllows`.
     static func leftArrowAllowed(_ state: ControllerChatState) -> Bool {
         guard state.profile == .claude else { return true }
-        return state.status == .awaitingInput || choiceListActive(state) || state.draftSuspected
+        return state.status == .awaitingInput || choiceListActive(state)
+            || state.draftSuspected || state.fieldMayHaveText
     }
 
     /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der

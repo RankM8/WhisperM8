@@ -679,26 +679,21 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
     }
 
-    /// Touchpad als Maus: Finger bewegt den Zeiger, Drücken klickt (mit zwei
-    /// Fingern rechts). Der Verlauf liegt dann auf L2 + Touchpad. Standard: aus.
-    var isControllerTouchpadPointerEnabled: Bool {
-        get { defaults.bool(forKey: Keys.controllerTouchpadPointerEnabled) }
-        nonmutating set { defaults.set(newValue, forKey: Keys.controllerTouchpadPointerEnabled) }
-    }
-
-    /// Zeigergeschwindigkeit für das Touchpad als Maus (Faktor, 1 = Standard).
-    var controllerPointerSpeed: Double {
-        get {
-            let value = defaults.double(forKey: Keys.controllerPointerSpeed)
-            return value > 0 ? value : ControllerTouchpadPointer.Config.defaultSpeed
-        }
-        nonmutating set { defaults.set(newValue, forKey: Keys.controllerPointerSpeed) }
-    }
-
     /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
     var controllerConnectHintShown: Bool {
         get { defaults.bool(forKey: Keys.controllerConnectHintShown) }
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerConnectHintShown) }
+    }
+
+    // MARK: Vereinte Pille
+
+    /// Notbremse für die vereinte Pille (Diktat und Chat-Status in einer
+    /// Pille, ohne Notch oben mittig, mit Notch an der Notch). Aus = die
+    /// getrennte Diktat-Pille und Status-Pille wie vor dem 12.11.2026.
+    /// `defaults write com.whisperm8.app unifiedPillEnabled -bool NO`
+    var isUnifiedPillEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.unifiedPillEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.unifiedPillEnabled) }
     }
 
     // MARK: Notch-Status
@@ -740,6 +735,24 @@ struct AppPreferences {
     var isNotchStatusExpandingOnHover: Bool {
         get { defaults.bool(forKey: Keys.notchStatusExpandOnHover) }
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusExpandOnHover) }
+    }
+
+    /// Gemerkte Lage der Pille je Bildschirm ohne Notch (mit der Maus
+    /// verschoben). Schlüssel ist die feste Display-UUID, nicht die Nummer
+    /// des Bildschirms. Leer: überall oben mittig. Zurücksetzen über den
+    /// Knopf in den Einstellungen oder einen Doppelklick auf die Pille.
+    var notchPillPositions: [String: NotchPillPosition] {
+        get {
+            guard let data = defaults.data(forKey: Keys.notchPillPositions) else { return [:] }
+            return (try? JSONDecoder().decode([String: NotchPillPosition].self, from: data)) ?? [:]
+        }
+        nonmutating set {
+            if newValue.isEmpty {
+                defaults.removeObject(forKey: Keys.notchPillPositions)
+            } else if let data = try? JSONEncoder().encode(newValue) {
+                defaults.set(data, forKey: Keys.notchPillPositions)
+            }
+        }
     }
 
     /// Claude-Code-Plugin `whisperm8` (Skills + Jarvis-Board-Mod): Die App legt
@@ -1141,14 +1154,14 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
-    static let controllerTouchpadPointerEnabled = "controllerTouchpadPointerEnabled"
-    static let controllerPointerSpeed = "controllerPointerSpeed"
+    static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"
     static let notchStatusHideFromCapture = "notchStatusHideFromCapture"
     static let notchStatusShowFreshDone = "notchStatusShowFreshDone"
     static let notchStatusExpandOnHover = "notchStatusExpandOnHover"
+    static let notchPillPositions = "notchPillPositions"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
     static let chatsNewProfileDefaultEnabled = "chatsNewProfileDefaultEnabled"

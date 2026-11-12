@@ -343,4 +343,21 @@ final class PromptGuardStubTests: XCTestCase {
         codex.recordHistoryRecall(isClaude: false)
         XCTAssertTrue(codex.mayHaveUnsentInput)
     }
+
+    /// → vom Controller (Vorschlag übernommen) und ↑ (Prompt zurückgeholt)
+    /// heißen „Text im Feld“: Pfeil links wird frei. Absenden setzt zurück.
+    func testFieldMayHaveTextAfterSuggestionAndRecall() {
+        var tracker = TerminalComposerDraftTracker()
+        XCTAssertFalse(tracker.fieldMayHaveText)
+        tracker.recordSuggestionAccepted()
+        XCTAssertTrue(tracker.fieldMayHaveText)
+        XCTAssertFalse(tracker.mayHaveUnsentInput, "kein eigener Entwurf")
+        tracker.recordSubmitted()
+        XCTAssertFalse(tracker.fieldMayHaveText)
+        tracker.recordHistoryRecall(isClaude: true)
+        XCTAssertTrue(tracker.fieldMayHaveText)
+        tracker.recordSubmittedByTurnStart()
+        tracker.recordSubmitted()
+        XCTAssertFalse(tracker.fieldMayHaveText)
+    }
 }

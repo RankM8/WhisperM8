@@ -31,9 +31,13 @@ let package = Package(
         // falschen Zeilen — Prompt und Statusblock von Claude Code blieben
         // stehen, bis ein Klick alles neu zeichnete.
         //
+        // Dazu (2d05c3a): der PTY-Master bekommt close-on-exec. Vorher erbte
+        // jeder spaeter gestartete Chat die Master aller frueheren Chats und
+        // konnte deren Terminals lesen und beschreiben.
+        //
         // Upstream-PR-faehig — bei Merge zurueck auf migueldeicaza/SwiftTerm +
         // Version-Bump. Pin auf Commit fuer reproduzierbare Builds.
-        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "5365a76a953251550fbcb14c3a835d18bc0bb51b"),
+        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "2d05c3a4995259a26e71d18a9cecbab03a4e338f"),
     ],
     targets: [
         // Winziges Objective-C-Target, nur damit Swift eine NSException

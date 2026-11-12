@@ -175,4 +175,17 @@ final class ControllerTerminalMarksTests: XCTestCase {
         downUp.recordControllerKey(.up, status: .working, isCodex: false, at: at(2))
         XCTAssertEqual(downUp.lastArmingArrowAt, at(2))
     }
+
+    /// → übernimmt in Claude den grauen Vorschlag: zählt als Eingabe (30 s),
+    /// damit Kreuz ihn auch bei „arbeitet“ abschickt.
+    func testRightArrowCountsAsDraftInput() {
+        var marks = ControllerTerminalMarks()
+        marks.recordControllerKey(.right, status: .working, isCodex: false, at: t0)
+        XCTAssertEqual(marks.lastDraftInputAt, t0)
+        XCTAssertTrue(ControllerTerminalMarks.hasFreshDraftInput(
+            draftAt: marks.lastDraftInputAt, lastSubmitAt: nil, window: 30, now: at(20)))
+        var down = ControllerTerminalMarks()
+        down.recordControllerKey(.down, status: .working, isCodex: false, at: t0)
+        XCTAssertNil(down.lastDraftInputAt, "nur → zählt als Eingabe")
+    }
 }

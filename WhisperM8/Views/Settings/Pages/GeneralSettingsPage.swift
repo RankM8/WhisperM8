@@ -60,6 +60,8 @@ struct GeneralSettingsPage: View {
                 )
             }
 
+            PillSettingsSection()
+
             KeyboardCleaningSettingsSection()
 
             SettingsSection("Setup") {

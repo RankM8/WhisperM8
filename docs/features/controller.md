@@ -12,8 +12,7 @@ Referenzgerät ist der PS5-Controller (DualSense) über Bluetooth; andere Gamepa
 allgemeine Profil (`GCExtendedGamepad`) mit.
 
 Der Controller löst **Aktionen** aus, keine Tastendrücke an das Fenster im Vordergrund. Er schreibt
-gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung. Einzige
-Ausnahme ist das Touchpad als Maus (siehe unten): Mausereignisse an andere Programme brauchen sie.
+gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung.
 
 Plan mit Entscheidungen und Prüfprotokoll: [`../plans/controller-steuerung.md`](../plans/controller-steuerung.md).
 Entwürfe: [`../design/controller-steuerung.html`](../design/controller-steuerung.html), für die Insel
@@ -32,13 +31,10 @@ während die Steuerung aus ist, erscheint einmal eine Mitteilung.
 | Lichtleiste | an | Farbe nach Zustand |
 | Auch wenn ein anderes Programm vorne ist | aus | Diktat und Verlauf überall; in Spielen ist R2 meist Gas oder Schuss |
 | Bei Eingabe WhisperM8 nach vorn holen | an | nur mit dem Schalter darüber: Ist ein anderes Programm vorne, holt fast jede Eingabe das Agent-Chats-Fenster nach vorn |
-| Touchpad als Maus | aus | Finger bewegt den Mauszeiger, Drücken klickt; der Verlauf liegt dann auf L2 + Touchpad |
-| Zeigergeschwindigkeit | Mitte (Faktor 1) | Regler 0,3 bis 3, nur mit dem Schalter darüber |
 
 **Aufwecken:** Ist ein anderes Programm vorne und sind beide Schalter an, holt jede Taste beim
 Drücken und jeder Stick- oder Steuerkreuz-Ausschlag das Agent-Chats-Fenster nach vorn. Ausnahmen: R2
-diktiert weiter in das Programm vorne, das Touchpad öffnet den Verlauf (als Maus klickt es dort, und ein
-Finger darauf weckt nie). L1, R1 und L2 wecken erst beim
+diktiert weiter in das Programm vorne, das Touchpad öffnet den Verlauf. L1, R1 und L2 wecken erst beim
 Tippen, denn gehalten könnten sie der Anfang der Pause L1 + R1 sein. Die weckende Eingabe tut sonst
 nichts: Bis alles losgelassen ist, verwirft der Manager die restlichen Gesten. Die Pumpe meldet dazu
 mit jedem Paket, ob der Erkenner danach ruhig ist. Entschieden wird in der Reihenfolge auf dem Main
@@ -65,7 +61,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | im Chat ein Leerzeichen (lebende Claude- und Codex-Chats, kein Wiederholen beim Halten; in Shells „geht nicht“); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
 | L1 / R1 tippen | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs. Gehalten sind sie Ebenen (siehe „Ebenen und Insel“), ein Durchlaufen beim Halten gibt es nicht |
-| Steuerkreuz | in jedem lebenden Chat Pfeiltasten ins Terminal (Claude, Codex, Shell; ruhend, arbeitend oder fragend, auch im Raster), mit Wiederholung beim Halten. So erreicht man Subagenten-, Workflow- und Aufgabenansichten von Claude und jede Auswahlliste der CLI. Rechts übernimmt in Claude den grauen Vorschlag, Kreuz schickt ihn dann ab. **Ausnahme links:** Im vermutlich leeren Claude-Feld (keine Rückfrage, keine offene Auswahl, kein Entwurf) „geht nicht“, denn dort schickt ← die ganze Sitzung in Claudes Agent-Ansicht. Hoch holt den letzten Prompt zurück; er gilt dann als Rückleger, den „Weiter“, Menü-Befehle und `chats send` vorher leeren. In der App (Liste, Kacheln) bewegt nur der linke Stick. Ohne lebendes Terminal (beendeter Chat) wie der Stick. Entscheidung vom 12.11.2026; vorher gab es Pfeile nur in Rückfragen, offenen Listen und Codex |
+| Steuerkreuz | in jedem lebenden Chat Pfeiltasten ins Terminal (Claude, Codex, Shell; ruhend, arbeitend oder fragend, auch im Raster), mit Wiederholung beim Halten. So erreicht man Subagenten-, Workflow- und Aufgabenansichten von Claude und jede Auswahlliste der CLI. Rechts übernimmt in Claude den grauen Vorschlag, Kreuz schickt ihn dann ab. **Ausnahme links:** Im vermutlich leeren Claude-Feld (direkt nach dem Absenden, seither nichts im Feld, keine Rückfrage, keine offene Auswahl) „geht nicht“, denn dort schickt ← die ganze Sitzung in Claudes Agent-Ansicht. Hoch holt den letzten Prompt zurück; er gilt dann als Rückleger, den „Weiter“, Menü-Befehle und `chats send` vorher leeren. In der App (Liste, Kacheln) bewegt nur der linke Stick. Ohne lebendes Terminal (beendeter Chat) wie der Stick. Entscheidung vom 12.11.2026; vorher gab es Pfeile nur in Rückfragen, offenen Listen und Codex |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
 **Zusatz**
@@ -74,11 +70,11 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 |---|---|
 | Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W; in Shells weiter Zeichen); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
-| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; mit dem Touchpad als Maus ein Mausklick, der Verlauf dann über L2 + Touchpad oder das Menü. L2 + Touchpad öffnet den Verlauf auch ohne diesen Schalter |
+| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; ebenso L2 + Touchpad (überall) und „Zwischenablage-Verlauf“ im Options-Menü |
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
-| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ |
+| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ (wie Cmd-Tab: Loslassen ohne Bewegung führt zum selben Ziel) |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen (in jedem Abstand gedrückt; weder Chatwechsel noch Ebene) |
 
 Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
@@ -116,8 +112,8 @@ Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options sc
 L1, R1 und L2 sind **Ebenen-Tasten** (Runde 4). Tippen (kürzer als 0,3 s und ohne zweite Taste
 dazwischen, auch ohne Stoß von Stick oder Steuerkreuz und ohne Scrollen mit dem rechten Stick) löst beim Loslassen aus, was die Taste schon
 immer tat. Gehalten wird sie zur Ebene: Kombinationen wirken sofort beim Druck der zweiten Taste, die
-0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts
-(außer bei L2 mit offener Liste). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
+0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts,
+außer bei L2: Dort wechselt Loslassen zum markierten Eintrag (siehe „Wohin“). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
 gewöhnliche Taste. Ebenen wirken im Chat und im Raster (auf den Chat der fokussierten Kachel). In der
 Liste, im Zwischenablage-Verlauf, im Menü, in Dialogen und während der Aufnahme wirken die Tasten wie
 ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren“).
@@ -131,37 +127,63 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Dreieck | Modus wechseln (Shift+Tab) |
 | | Viereck | Befehle › — öffnet das Options-Menü direkt auf dieser Unterseite |
 | | Kreis | Konto wechseln › — ebenso |
-| L2 Wohin | Stick/Steuerkreuz hoch/runter | öffnet die Liste, der erste Stoß macht gleich einen Schritt vom aktuellen Eintrag; danach bewegen (mit Wiederholung) |
-| | links/rechts | Reiter Chats / Workspaces |
-| | Loslassen, Kreuz | zum markierten Eintrag wechseln — nur, wenn im sichtbaren Reiter seit dem Öffnen bzw. dem letzten Reiterwechsel hoch/runter bewegt wurde; sonst nichts |
-| | Kreis | abbrechen |
+| L2 Wohin | (halten) | die Liste steht sofort da, ohne Hinweiszeile davor; die Markierung steht auf dem vorigen Ort (siehe unten) |
+| | Stick/Steuerkreuz hoch/runter | Markierung bewegen (mit Wiederholung) |
+| | links/rechts | Reiter Chats / Workspaces; die Markierung beginnt dort wieder auf dem vorigen Ort, wenn er in diesem Reiter steht, sonst auf dem aktuellen Eintrag |
+| | Loslassen, Kreuz | sofort zum markierten Eintrag wechseln, wie Cmd-Tab. Steht die Markierung auf dem aktuellen Eintrag, passiert nichts. Loslassen wechselt nur, solange der Chat die Eingaben hat; startet währenddessen eine Aufnahme per Hotkey oder geht ein Dialog oder Sheet auf, schließt es nur die Insel |
+| | Kreis | abbrechen, nichts passiert |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
-| | R2 | zum markierten Chat wechseln und diktieren; ohne offene Liste in den aktuellen Chat; auf dem Reiter Workspaces „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“) |
-| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall und mit oder ohne Touchpad als Maus, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
+| | R2 | zum markierten Chat wechseln und diktieren; steht die Markierung auf dem aktuellen Chat oder Workspace, in den aktuellen Chat; ein anderer Workspace „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“). Weil die Markierung auf dem vorigen Chat beginnt, diktiert L2 halten + R2 ohne Bewegung in den vorigen Chat (die Fußzeile sagt im Reiter Workspaces „hier diktieren“) |
+| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
 
 Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
-Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. Start-Reiter von „Wohin“: im
-Raster Workspaces, in der Einzelansicht Chats. Die Chats stehen in der Reihenfolge der Liste links, jeder
-einmal; rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen
+Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen.
+
+**Wohin wie Cmd-Tab** (Entscheidung vom 12.11.2026): Die Markierung beginnt auf dem vorigen Ort, also
+genau dem Ziel von L2 getippt (`ControllerBackTarget` mit ID, aus `AgentWindowStore+PlaceHistory`).
+Halten und Loslassen ohne Bewegung führt deshalb dorthin, wo auch Tippen hinführt; wer woanders hin
+will, bewegt vorher die Markierung. Die Zeile des vorigen Orts trägt rechts „vorher“. Der Start-Reiter
+folgt dem vorigen Ort: ein Workspace öffnet den Reiter Workspaces, ein Chat den Reiter Chats, auch wenn
+man gerade im Raster bzw. in der Einzelansicht ist (sonst täte Loslassen etwas anderes als Tippen).
+Ohne vorigen Ort gilt wie bisher: im Raster Workspaces, in der Einzelansicht Chats, und die Markierung
+steht auf dem aktuellen Eintrag, damit Loslassen nichts aus Versehen wechselt. Hat ein Reiter weder
+vorigen noch aktuellen Eintrag (Workspaces in der Einzelansicht ohne Workspace), gibt es dort zunächst
+keine Markierung; der erste Stoß markiert die erste Zeile. Die frühere Regel „Wechsel nur nach einer
+Bewegung im sichtbaren Reiter“ ist damit weg. Ist das Ziel der vorige Ort, geht der Wechsel denselben Weg
+wie L2 getippt (`lastChat`); Halten und Tippen enden also gleich, auch bei einem Fehlschlag. Die Chats
+stehen in der Reihenfolge der Liste links, jeder einmal; der vorige Chat steht immer darin, gleich
+hinter dem aktuellen, auch wenn die Seitenleiste ihn gerade nicht zeigt (Filter, Suche, eingeklappte
+Gruppe, Archiv-Ansicht); rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen
 „jetzt“). Die Workspaces sind die angelegten (ohne versteckte Projekt-Ansichten) in der Reihenfolge der
 Seitenleiste, mit Farbe, Name, Raute „wartet“ und Zahl der Chats. Höchstens sechs Zeilen, die Liste rückt
 mit der Markierung, darunter „+ n weitere“. Ein Chat wechselt wie der Klick in der Seitenleiste, ein
-Workspace wie der Klick auf seinen Kopf (Konflikte inklusive); danach hat die Kachel den Fokus, auf der
-du dort zuletzt warst (gemerkt beim Verlassen, nur für den laufenden App-Start).
+Workspace wie der Klick auf seinen Kopf, aber still: Gehört er einem anderen Fenster oder laufen seine
+Chats dort, kommt kein Fenster nach vorn und kein Dialog, der Controller vibriert „geht nicht“
+(`switchToWorkspace`). Danach hat die Kachel den Fokus, auf der du dort zuletzt warst (gemerkt beim
+Verlassen, nur für den laufenden App-Start).
 
 **Die Insel** ist ein eigenes, nicht aktivierendes Fenster ohne Maus (`ControllerIslandPresenter`),
 einmal aufgebaut, danach nur ein- und ausgeblendet. Sie erscheint auf dem Bildschirm des
-Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Notch-Anzeige und ihrer
-Bildschirmwahl. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
-(`NotchHangingShape`), ohne Notch hängt sie als Pille unter der Menüleiste und folgt hell/dunkel. Sie
-liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`) mit derselben Band-Geometrie: Steht die
-Notch-Anzeige auf diesem Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler
-(arbeitet/wartet) — nur bei „Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der
-Ziel-Chat. Eine aufgeklappte Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel
-(`fullScreenAuxiliary`, nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst ohne
-Menüleiste oben am Bildschirmrand. Eine Bewegung beim Öffnen, eine beim
-Schließen (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur
-schließen sie für das laufende Halten.
+Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Bildschirmwahl der
+Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
+(`NotchHangingShape`). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
+(siehe [notch.md](notch.md)): genau an ihrer Stelle (ist sie sichtbar, zählt ihr tatsächlicher
+Mittelpunkt, auch bei automatisch ausgeblendeter Menüleiste), im dunklen Glas der Diktat-Pille
+(`PillGlassBackground`, gleicher Rand und Schatten), immer dunkel. Sitzt die Pille in der oberen
+Bildschirmhälfte, öffnet die Insel nach unten (gemeinsame Oberkante), in der unteren nach oben
+(gemeinsame Unterkante); sie bleibt immer ganz auf dem Bildschirm (`NotchPillPlacement.frame`). Sie
+liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`): Steht die Notch-Anzeige auf diesem
+Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler (arbeitet/wartet) — nur bei
+„Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der Ziel-Chat. Eine aufgeklappte
+Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel (`fullScreenAuxiliary`,
+nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst an der gemerkten Stelle der
+Pille (ohne Menüleiste oben am Bildschirmrand). Eine Bewegung beim Öffnen, eine beim Schließen
+(0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur schließen sie
+für das laufende Halten.
+
+Mit der vereinten Pille (siehe [notch.md](notch.md)) ist die Pille, aus der die Insel wächst,
+dieselbe wie die Diktat-Pille; die Insel hat dort Vorrang vor allem anderen. Ihr Aussehen (Glas,
+Rand, Schatten der Diktat-Pille) blieb gleich.
 
 Die Insel ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
 Workspace-Auswahl unten im Fenster. Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
@@ -192,58 +214,6 @@ Fokus. In Dialogen des Agent-Chats-Fensters bewegt auch der linke Stick hoch/run
 (`isNewChatPickerOpen`, `isConfirmationOpen`); das Fenster bleibt Ziel, auch wenn das Popover selbst Key
 wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 
-## Touchpad als Maus
-
-Mit dem Schalter „Touchpad als Maus“ wird das Touchpad zum Trackpad, in jedem Programm, auch in
-WhisperM8. In anderen Programmen nur mit „Auch wenn ein anderes Programm vorne ist“, sonst kommen dort
-keine Eingaben an. Ohne Schalter bleibt alles wie vorher.
-
-- **Bewegen:** relativ wie ein MacBook-Trackpad, mit Beschleunigung: Langsam ist fein, eine schnelle
-  Wischbewegung trägt weit (Verstärkung 0,5 bis 4 je nach Tempo, mal Zeigergeschwindigkeit). Senkrecht
-  zählt der Weg halb, weil die Fläche etwa halb so hoch wie breit ist, aber auf beiden Achsen −1…1 meldet.
-- **Klicken:** Drücken ist Maustaste unten, Loslassen oben; dazwischen zieht der Finger mit gedrückter
-  Taste (Ziehen und Ablegen). Zwei schnelle Klicks am selben Fleck sind ein Doppelklick
-  (Systemwert `NSEvent.doubleClickInterval`). 80 ms nach Drücken und Loslassen ruht der Zeiger, denn
-  der Finger verrutscht beim Klicken.
-- **Rechtsklick:** mit zwei Fingern auf der Fläche drücken. Der zweite Finger zählt nur, wenn er sich
-  nach dem letzten Drücken oder Loslassen und nach dem Aufsetzen des führenden Fingers gemeldet hat,
-  höchstens 1,5 s her. Meldet das Framework sein Abheben nie, ist so spätestens der nächste Klick
-  wieder links.
-- **Verlauf:** L2 halten und Touchpad drücken, überall (auch im Verlauf, um ihn zu schließen), oder
-  „Zwischenablage-Verlauf“ im Options-Menü. L2 + Touchpad gilt auch ohne den Schalter. Solange L2
-  gedrückt ist, klickt das Touchpad nie — auch nicht, wenn L2 als zweite Taste in der Ebene von L1 oder
-  R1 dazukam (dann tut der Druck im Chat nichts). Mit gehaltenem L1 oder R1 allein klickt es, die Taste
-  gilt danach aber nicht mehr als getippt.
-- **Rückmeldung:** ein sehr kurzer Tick bei jedem Klick (Schalter „Vibration“). Fehlt die
-  Bedienungshilfen-Berechtigung, vibriert der Klick „geht nicht“, und die Einstellungsseite zeigt einen
-  Hinweis mit Knopf zu den Systemeinstellungen. Ohne Berechtigung verwirft macOS die Mausereignisse still.
-- **Nie** in der Pause (L1 + R1, Sperre, Ruhezustand, Spiel vorne), ausgeschaltet, getrennt oder im
-  Trockenlauf des Debug-Kanals. Pause, Trennung und Ausschalten lassen eine gedrückte Taste los.
-- **Kein Aufwecken:** Finger auf der Fläche und Klicks sind keine Gesten. Sie wecken WhisperM8 nicht,
-  ein Klick in einem anderen Programm ist ein Klick dort. Sie beeinflussen auch nicht das Verwerfen nach
-  dem Aufwecken.
-- Kein Scrollen mit zwei Fingern (bewusst noch nicht).
-
-**Aufsetzen ohne Sprung:** Das Framework meldet für das Touchpad nur Positionen
-(`touchpadPrimary`/`touchpadSecondary`, Richtungs-Pads ohne eigenen Zustand „Finger liegt auf“) und auch
-die nur bei einer Änderung. Ein neuer Finger wird deshalb mehrfach erkannt: genau (0, 0) gilt als
-abgehoben; als neues Aufsetzen gelten eine Lücke über 35 ms und ein Sprung um mehr als 0,5 (ein Viertel
-der Breite, die Fläche misst −1…1). Ausnahme für sehr langsames Schieben: Bis 0,25 s Lücke bleibt es
-eine Bewegung, wenn der Finger höchstens 0,02 weitergekommen ist. So springt der Zeiger auch beim
-schnellen Nachgreifen nicht zurück, falls das Framework beim Abheben die letzte Position stehen lässt.
-Die erste Meldung setzt nur den Anker. Es führt der Finger, der sich zuletzt gemeldet hat, wenn der
-andere seit mehr als 35 ms schweigt; ein liegen gelassener Finger blockiert also nichts. Jedes Abheben
-und Aufsetzen schreibt einmal `controller_touch_lifted` bzw. `controller_touch_landed reason=…` ins Log
-(Stufe debug), daran sieht man am Gerät, wie das Framework das Abheben meldet.
-
-**Leistung:** Fingerdaten kommen in hohem Takt. Sie laufen nur auf der Eingabe-Queue
-(`ControllerPointerDriver` in der Pumpe), nie über den Main Thread, nie in den Erkenner und ohne Zähler,
-Signpost oder Log je Meldung. Nur ein Klick springt für den Tick zum Main Thread. Ist der Schalter aus,
-hängt die Quelle gar keine Handler an die Fingerdaten (`setTouchTracking`). Solange Finger gemeldet
-werden oder die Taste gedrückt ist, hält der Treiber eine Aktivität gegen App Nap (sonst ruckelte der
-Zeiger, wenn ein anderes Programm vorne ist); je Meldung wird nur die Zeit vermerkt, ein einmal
-angelegter Zeitgeber beendet sie nach 1 s Ruhe. Der Geschwindigkeits-Regler gleicht nur den Zeiger an.
-
 ## Schutzregeln
 
 - In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
@@ -251,9 +221,11 @@ angelegter Zeitgeber beendet sie nach 1 s Ruhe. Der Geschwindigkeits-Regler glei
   Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
 - Pfeiltasten gehen in jedem lebenden Chat ins Terminal (seit 12.11.2026, siehe Steuerkreuz), mit drei
   Absicherungen:
-  1. Links nie ins vermutlich leere Claude-Feld (erlaubt nur in einer Rückfrage, in einer offenen
-     Auswahl im Ruhezustand oder mit Entwurf): Dort schickt ← die Sitzung in Claudes Agent-Ansicht, so
-     gingen am 12.11.2026 zwei Sitzungen verloren. Geprüft in der Belegung (`leftArrowAllowed`) und in
+  1. Links nie ins vermutlich leere Claude-Feld. Erlaubt in einer Rückfrage, in einer offenen Auswahl
+     im Ruhezustand und sobald irgendetwas im Feld stehen kann: getippt, diktiert, Rückleger nach einem
+     Abbruch, mit ↑ zurückgeholt oder mit → als Vorschlag übernommen (`fieldMayHaveText`). Gesperrt nur
+     direkt nach dem Absenden, solange seither nichts ins Feld kam. Dort schickt ← die Sitzung in
+     Claudes Agent-Ansicht, so gingen am 12.11.2026 zwei Sitzungen verloren. Geprüft in der Belegung (`leftArrowAllowed`) und in
      `AgentTerminalController.sendKey` (`TerminalControlKey.controllerAllows` mit dem Entwurfs-Tracker).
   2. Hoch vom Controller (ohne Rückfrage und offene Auswahl) holt den letzten Prompt zurück. Bei Claude
      gilt er als Rückleger: „Weiter“, Menü-Befehle und `chats send` leeren das Feld vorher; bei Codex
@@ -261,6 +233,8 @@ angelegter Zeitgeber beendet sie nach 1 s Ruhe. Der Geschwindigkeits-Regler glei
   3. Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
      oder ↑ nach einem scharfen Pfeil): kurz, wegen der Lücke vor einem Freigabe-Dialog, in der Enter
      die Vorauswahl bestätigte. Codex behält die 30-s-Regel (Freigaben ohne „wartet“).
+     Ausnahme →: Es übernimmt den grauen Vorschlag ins Feld und zählt deshalb wie getippter Text
+     (30 s). Sonst sperrte Kreuz nach 5 s, wenn der Chat noch als „arbeitet“ galt.
   In einer Shell im Ruhezustand sind ↑ und Kreuz wie an der Tastatur: der letzte Befehl läuft erneut.
 - „Auswahl offen“ (`ControllerTerminalMarks`, je Chat am Terminal): gesetzt, wenn das Menü einen
   Befehl schickt, nach dem die CLI eine Liste zeigt — Claude „/“, `/model`, `/config`, `/resume`,
@@ -364,7 +338,6 @@ debug.controller (Skript) ──┤
 | Kern | `Services/Controller/Core/` | Tasten, Gesten, Zusammenhang, Belegung, Legende, Listen- und Menü-Modell, Regeln für Licht, Warte-Signal und Spiele — nur Foundation, ein Quelltext-Test erzwingt das |
 | Quelle | `GameControllerInputSource` | Verdrahtung des Frameworks, Lichtleiste, Haptik (eine Engine je Controller, Neuaufbau nach Fehler) |
 | Pumpe | `ControllerGesturePump` | Erkennung auf eigener Queue; `DispatchSourceTimer(.strict)` nur, solange etwas gedrückt ist, dann auch Aktivität gegen App Nap |
-| Zeiger | `Core/ControllerTouchpadPointer.swift`, `ControllerPointerDriver.swift` | Touchpad als Maus: Aufsetzen, Beschleunigung, Links/Rechts und Doppelklick pur im Kern; der Treiber in der Pumpe entscheidet je Ereignis Zeiger oder Erkenner; `CGEventPointerPoster` schickt die Mausereignisse |
 | Manager | `ControllerManager` | Ein/Aus nach Schaltern, Pause, Hintergrund-Zustand (Systemwert wird zurückgelesen), Zähler je Taste |
 | Ausführer | `ControllerActionDispatcher` | Schnappschuss der App je Eingabe, Ausführung über Schnittstellen (`ControllerTerminalControlling`, `ControllerDictationControlling`, `ControllerAppEnvironment`) |
 | Rückmeldung | `ControllerFeedback` | Lichtleiste, Warte-Signal, automatische Pause, Maus/Tastatur geben Liste, Menü und Insel ab |
@@ -381,16 +354,18 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 ## Prüfen
 
 - `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
-  Kachel je Workspace, geschlossene Ziele, je Fenster).
-- `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; der Zeiger in
-  `ControllerTouchpadPointerTests` und `ControllerPointerDriverTests`; die Ebenen in
+  Kachel je Workspace, geschlossene Ziele, je Fenster); `--filter ControllerWorkspacePicker` die
+  Markierung von „Wohin“ (Start auf dem vorigen Ort, Reiterwechsel, ohne vorigen Ort);
+  `--filter NotchPillPlacement` die Lage von Pille und Insel ohne Notch.
+- `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
-- `make snapshots ONLY=controller` — Einstellungsseite (auch mit Touchpad als Maus und fehlender
-  Berechtigung), Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
-  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel in elf
-  Zuständen (Wohin: Hinweis, Chats, Workspaces, mit Notch-Zählern; Schreiben, Schreiben in der Shell;
-  Schnellbefehle, Schnellbefehle bei Rückfrage; als Pille Chats, Schnellbefehle, Shell);
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
+  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel (Wohin:
+  Chats mit Markierung auf dem vorigen Chat, nach zwei Schritten, ohne vorigen Ort, Workspaces, mit
+  Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
+  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Insel nach unten, Pille unten mit
+  Insel nach oben);
   `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.
@@ -417,9 +392,3 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Raster W, dann Chat Y (nicht in W), dann Chat X (in W) aus der Seitenleiste — X in der Einzelansicht
   zählt als Workspace W, nicht als eigener Chat.
 - Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
-- **Touchpad als Maus:** Wie das Framework einen abgehobenen Finger meldet (zurück auf (0, 0) oder
-  letzte Position), ist nicht dokumentiert; die Erkennung oben deckt beides ab, am echten DualSense
-  ist sie noch nicht geprüft. Ohne Hintergrund-Empfang endet der Zeiger, sobald ein Klick
-  ein anderes Programm nach vorn holt (danach kommen keine Eingaben mehr an). Ein ruhender zweiter
-  Finger, der sich seit dem letzten Klick oder länger als 1,5 s nicht gemeldet hat, ergibt einen
-  Linksklick. Der Debug-Kanal kennt keine Finger.
