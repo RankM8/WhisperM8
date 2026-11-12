@@ -238,6 +238,9 @@ _install_bundle:
 #   abbrechen", siehe AgentSuperviseCommand). Supervisor werden ueber ihr
 #   `agent-supervise`-Argument ausgenommen; CLI-Aufrufe laufen ueber den
 #   lowercase-Symlink ~/.local/bin/whisperm8 und matchen case-sensitiv nicht.
+#   Ebenso der Router-Dienst (`gpt-router`, Labs „Neustart ohne
+#   Chatverlust“): er soll den Neustart überleben, eine neue Generation
+#   übernimmt seinen Socket.
 #   argv[0]-Match faengt auch app-gestartete Instanzen, deren Prozessname
 #   auf manchen Systemen nicht "$(APP_NAME)" ist (frueherer pkill-x-Blindfleck).
 # - SIGTERM zuerst: der AppDelegate leitet es in einen regulaeren AppKit-Quit
@@ -249,7 +252,7 @@ _install_bundle:
 #   startet die neue Instanz, waehrend der Kernel die FDs des alten Prozesses
 #   (u. a. den `flock` des Control-Servers) noch nicht freigegeben hat.
 #   Zweite Verteidigungslinie dagegen ist der Lock-Retry im AgentControlServer.
-GUI_PIDS = ps -axww -o pid=,args= | awk '$$2 ~ /\/$(APP_NAME)$$/ && $$0 !~ /agent-supervise/ {print $$1}'
+GUI_PIDS = ps -axww -o pid=,args= | awk '$$2 ~ /\/$(APP_NAME)$$/ && $$0 !~ /agent-supervise/ && $$0 !~ / gpt-router / {print $$1}'
 
 kill:
 	@pids="$$($(GUI_PIDS))"; \

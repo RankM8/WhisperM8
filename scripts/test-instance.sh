@@ -35,7 +35,9 @@ pids() {
     # Jede laufende Test-Instanz, auch aus einem anderen Worktree — es gibt nur
     # eine Wurzel, zwei Instanzen würden sich die Daten teilen. Nie die
     # Produktiv-App (anderer Bundle-Name).
-    ps -axo pid=,comm= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ {print $1}'
+    # Der Router-Dienst (`gpt-router`) ist kein App-Prozess: er überlebt den
+    # Neustart der App (Labs „Neustart ohne Chatverlust“).
+    ps -axww -o pid=,args= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / {print $1}'
 }
 
 cmd_build() {

@@ -516,6 +516,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryEnabled) }
     }
 
+    /// Labs „Neustart ohne Chatverlust“ (Plan neustart-ohne-chatverlust.md),
+    /// ab Werk aus. Bisher wirkt er nur auf den GPT-Router: an = Router als
+    /// eigener Dienst `gpt-router` samt Proxy-Register, ab dem nächsten
+    /// App-Start. Aus = Router in der App wie bisher. Den UI-Schalter bringt
+    /// Paket 4 (Abgabe und Übernahme der Chats).
+    /// `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool YES`
+    var isRestartKeepsChatsEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.restartKeepsChatsEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.restartKeepsChatsEnabled) }
+    }
+
     /// MCP-Server beim App-Start über alle Claude-Konten angleichen (nur
     /// ergänzen, per `claude mcp add-json -s user`). Default aus — für neue
     /// Nutzer soll nichts ungefragt in ihre Konten geschrieben werden.
@@ -1110,6 +1121,7 @@ enum PreferenceKeys {
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
+    static let restartKeepsChatsEnabled = "restartKeepsChatsEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let claudeLoginExpiryWarningEnabled = "claudeLoginExpiryWarningEnabled"

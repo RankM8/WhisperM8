@@ -160,12 +160,12 @@ final class ClaudeCodeProxyManager {
     private let managedBinaryResolver: () -> String?
     private let managedInstaller: () throws -> String
     private let modelListRefresher: (Int) -> Void
-    private let reachabilityResolver: (Int) -> Bool
+    let reachabilityResolver: (Int) -> Bool
     private let processLauncher: ProcessLauncher
     private let commandRunner: CommandRunner
     private let deviceLoginLauncher: DeviceLoginLauncher
     private let routerStarter: RouterStarter
-    private let routerStopper: RouterStopper
+    let routerStopper: RouterStopper
     private let routerPortResolver: () -> Int
     private let agentDefinitionSyncer: () -> Void
     private let environmentResolver: () -> [String: String]
@@ -174,8 +174,8 @@ final class ClaudeCodeProxyManager {
     private let retryDelay: TimeInterval
     private let notificationCenter: NotificationCenter
     private let ensureLock = NSLock()
-    private let processLock = NSLock()
-    private var selfStartedProcess: ClaudeCodeProxyProcessHandle?
+    let processLock = NSLock()
+    var selfStartedProcess: ClaudeCodeProxyProcessHandle?
     private var deviceLoginProcess: ClaudeCodeProxyProcessHandle?
     private var terminateObserver: NSObjectProtocol?
     /// `--version`-Ergebnis pro Binary-Pfad, gueltig solange die mtime gleich
@@ -247,7 +247,19 @@ final class ClaudeCodeProxyManager {
     /// Laufende Instanzen je Zusatzprofil (main lebt in `selfStartedProcess`
     /// bzw. extern). Zugriff nur unter `processLock`; der Start selbst ist
     /// ueber `ensureLock` serialisiert wie bei main.
-    private var profileInstances: [String: ClaudeCodeProxyProfileInstance] = [:]
+    var profileInstances: [String: ClaudeCodeProxyProfileInstance] = [:]
+
+    // MARK: Router-Dienst (Labs `restartKeepsChatsEnabled`, siehe `+Register`)
+
+    /// Router-Variante dieses App-Laufs. Nur `.service` schreibt und übernimmt
+    /// das Proxy-Register und lässt Proxys bei einer Übergabe weiterlaufen.
+    var routerModeResolver: () -> ClaudeGPTRouterMode = { ClaudeGPTRouterMode.current }
+    /// Setzt Paket 4 vor einem Beenden mit Übergabe der Chats.
+    var handoverRequestedResolver: () -> Bool = { ClaudeGPTBackendHandover.isRequested }
+    var proxyRegister = ClaudeCodeProxyRegister()
+    var registerStartTimeResolver: (pid_t) -> Date? = ProcessStartTime.of(pid:)
+    var didAdoptRegister = false
+    var adoptedProxyPIDStorage: Set<Int32> = []
 
     init(
         commandResolver: @escaping (String) -> String? = { AgentCommandBuilder.commandPath($0) },
@@ -264,8 +276,10 @@ final class ClaudeCodeProxyManager {
             try ClaudeCodeProxyManager.runCommand(executable: $0, arguments: $1, environment: $2)
         },
         deviceLoginLauncher: @escaping DeviceLoginLauncher = ClaudeCodeProxyManager.launchDeviceLogin,
-        routerStarter: @escaping RouterStarter = { ClaudeGPTMixRouter.shared.start(port: $0) },
-        routerStopper: @escaping RouterStopper = { ClaudeGPTMixRouter.shared.stop() },
+        // Die Weiche ruft im Modus `.inApp` (Labs-Schalter aus) genau
+        // `ClaudeGPTMixRouter.shared.start/stop` wie bisher.
+        routerStarter: @escaping RouterStarter = { ClaudeGPTRouterHost.shared.start(port: $0) },
+        routerStopper: @escaping RouterStopper = { ClaudeGPTRouterHost.shared.stop() },
         routerPortResolver: @escaping () -> Int = { AppPreferences.shared.claudeGPTRouterPort },
         agentDefinitionSyncer: @escaping () -> Void = {
             ClaudeGPTAgentDefinitionInstaller().syncFromPreferences()
@@ -304,9 +318,7 @@ final class ClaudeCodeProxyManager {
             object: nil,
             queue: nil
         ) { [weak self] _ in
-            self?.stopIfSelfStarted()
-            self?.stopAllProfileInstances()
-            self?.stopDeviceLogin()
+            self?.handleWillTerminate()
         }
     }
 
@@ -321,6 +333,9 @@ final class ClaudeCodeProxyManager {
     }
 
     func ensureRunning(port: Int) -> Result<Void, ClaudeCodeProxyError> {
+        // Dienst-Modus: laufende Proxys aus dem Register übernehmen, bevor die
+        // Erreichbarkeit entscheidet (sonst gälten sie als extern).
+        adoptRegisteredProxiesIfNeeded()
         // Zwei gleichzeitige Chat-Starts duerfen nicht zwei Proxy-Prozesse
         // oder Router-Listener erzeugen. Beide Lifecycle-Schritte werden als
         // atomare Startsequenz serialisiert: zuerst Proxy, dann Router.
@@ -399,6 +414,7 @@ final class ClaudeCodeProxyManager {
         guard profilesEnabledResolver(), !Self.isMainProfile(profile), let profile else {
             return ensureRunning(port: mainPortResolver())
         }
+        adoptRegisteredProxiesIfNeeded()
 
         ensureLock.lock()
         defer { ensureLock.unlock() }
@@ -446,6 +462,7 @@ final class ClaudeCodeProxyManager {
             processLock.lock()
             profileInstances[profile] = ClaudeCodeProxyProfileInstance(port: port, process: process)
             processLock.unlock()
+            persistProxyRegisterIfServiceMode()
             processStartedForThisAttempt = process
 
             var becameReachable = false
@@ -517,6 +534,7 @@ final class ClaudeCodeProxyManager {
         if let instance, instance.process.isRunning {
             instance.process.terminate()
         }
+        persistProxyRegisterIfServiceMode()
     }
 
     func stopAllProfileInstances() {
@@ -529,6 +547,7 @@ final class ClaudeCodeProxyManager {
         for instance in instances.values where instance.process.isRunning {
             instance.process.terminate()
         }
+        persistProxyRegisterIfServiceMode()
     }
 
     /// Start im Hintergrund fuer den 503-Pfad des Routers — pro Profil nur
@@ -596,6 +615,9 @@ final class ClaudeCodeProxyManager {
         Logger.agentStore.notice(
             "gpt_main_grant_replaced profile=\(profile, privacy: .public) restart=\(mainWasRunning)"
         )
+        // Beförderung ins Register, damit der Router-Dienst den alten Header
+        // überlebender Chats auf main legt.
+        persistProxyRegisterIfServiceMode()
         guard mainWasRunning else { return .success(()) }
         return ensureRunning(port: mainPort)
     }
@@ -637,6 +659,7 @@ final class ClaudeCodeProxyManager {
         if process.isRunning {
             process.terminate()
         }
+        persistProxyRegisterIfServiceMode()
     }
 
     /// Erster freier Port oberhalb von main + Offset, der weder von einer
@@ -1193,7 +1216,7 @@ final class ClaudeCodeProxyManager {
         return ClaudeCodeProxyDeviceCodeInfo(visitURL: visitURL, code: code)
     }
 
-    private func stopDeviceLogin() {
+    func stopDeviceLogin() {
         processLock.lock()
         let process = deviceLoginProcess
         deviceLoginProcess = nil
@@ -1215,6 +1238,7 @@ final class ClaudeCodeProxyManager {
         if previous !== replacement, previous?.isRunning == true {
             previous?.terminate()
         }
+        persistProxyRegisterIfServiceMode()
     }
 
     private func discardSelfStartedProcess(_ process: ClaudeCodeProxyProcessHandle) {
@@ -1227,6 +1251,7 @@ final class ClaudeCodeProxyManager {
         if process.isRunning {
             process.terminate()
         }
+        persistProxyRegisterIfServiceMode()
     }
 
     /// Der raine-Proxy besitzt mit `/healthz` eine eindeutige Probe. Nur die
@@ -1329,7 +1354,9 @@ final class ClaudeCodeProxyManager {
 
         return ClaudeCodeProxyProcessHandle(
             isRunning: { process.isRunning },
-            terminate: { process.terminate() }
+            terminate: { process.terminate() },
+            pid: process.processIdentifier,
+            executablePath: executable
         )
     }
 

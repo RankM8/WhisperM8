@@ -79,6 +79,7 @@ enum ClaudeCodeProxyOrphanGuard {
         port: Int,
         resolvedBinaryPath: String?,
         requireTranscriptionRoute: Bool = false,
+        protectedPIDs: Set<Int32> = [],
         routeProbe: (Int) -> ClaudeCodeProxyTranscriptionRoute = { ClaudeCodeProxyManager.transcriptionRouteStatus(port: $0) },
         listenerResolver: (Int) -> ListenerProcess? = ClaudeCodeProxyOrphanGuard.listener,
         terminator: (Int32) -> Void = { _ = kill($0, SIGTERM) },
@@ -86,6 +87,13 @@ enum ClaudeCodeProxyOrphanGuard {
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) -> Bool {
         guard let listener = listenerResolver(port) else { return false }
+        // Aus dem Proxy-Register übernommen (Router-Dienst): daran hängen
+        // überlebende GPT-Chats — nie ersetzen, auch wenn er veraltet ist.
+        // Ein neueres Binary wirkt beim nächsten echten Neustart.
+        guard !protectedPIDs.contains(listener.pid) else {
+            Logger.claudeGPTRouter.notice("claude_code_proxy_orphan_kept_adopted pid=\(listener.pid)")
+            return false
+        }
         let modified = resolvedBinaryPath.flatMap {
             (try? FileManager.default.attributesOfItem(atPath: $0))?[.modificationDate] as? Date
         }

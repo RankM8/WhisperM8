@@ -189,6 +189,47 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         XCTAssertEqual(Set(environment.keys), ["HOME", "PATH", AppInstance.rootEnvironmentKey])
     }
 
+    /// `make kill`/`make dev` und `test-instance.sh stop` treffen die App, nie
+    /// den Router-Dienst (gleiches Binary, Argument `gpt-router`).
+    func testKillFiltersSpareRouterService() throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let makefile = try String(contentsOf: repo.appendingPathComponent("Makefile"), encoding: .utf8)
+        let makeLine = try XCTUnwrap(makefile.components(separatedBy: "\n").first { $0.hasPrefix("GUI_PIDS = ") })
+        let makeAwk = try XCTUnwrap(makeLine.range(of: "awk '").map { String(makeLine[$0.upperBound...].dropLast()) })
+            .replacingOccurrences(of: "$$", with: "$")
+            .replacingOccurrences(of: "$(APP_NAME)", with: "WhisperM8")
+        let app = "/Applications/WhisperM8.app/Contents/MacOS/WhisperM8"
+        let lines = [
+            "101 \(app)",
+            "102 \(app) gpt-router --root /x --port 18766",
+            "103 \(app) agent-supervise abc",
+        ].joined(separator: "\n")
+        XCTAssertEqual(try awk(makeAwk, lines), ["101"])
+
+        let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
+        XCTAssertTrue(script.contains("!~ / gpt-router /"), "test-instance.sh nimmt den Router-Dienst nicht aus")
+        let testApp = "/tmp/WhisperM8Test.app/Contents/MacOS/WhisperM8"
+        let testAwk = #"$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / {print $1}"#
+        XCTAssertTrue(script.contains(testAwk))
+        XCTAssertEqual(try awk(testAwk, "201 \(testApp)\n202 \(testApp) gpt-router --root /y --port 28766"), ["201"])
+    }
+
+    private func awk(_ program: String, _ input: String) throws -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/awk")
+        process.arguments = [program]
+        let stdin = Pipe()
+        let stdout = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        try process.run()
+        try stdin.fileHandleForWriting.write(contentsOf: Data((input + "\n").utf8))
+        try stdin.fileHandleForWriting.close()
+        process.waitUntilExit()
+        let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        return output.split(separator: "\n").map(String.init)
+    }
+
     func testBuildIdentifierChangesWithExecutable() throws {
         let file = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("bin-\(UUID().uuidString)")
         try Data("a".utf8).write(to: file)
