@@ -18,8 +18,10 @@ Feature-Doku: [`../features/controller.md`](../features/controller.md). Entwürf
 
 ## Ausgangslage
 
-- Basis ist `main` mit `feat/controller-touchpad` (schon drin), `feat/controller-steuerkreuz` und
-  `feat/controller-l2-zurueck`. Phase 2 beginnt mit `git merge main` in `feat/controller-runde5`.
+- Basis ist `main` mit `feat/controller-touchpad`, `feat/controller-steuerkreuz` und
+  `feat/controller-l2-zurueck` (alle drei seit `b6798593` in main) und danach
+  `feat/controller-pille-wohin` (in Arbeit, Stand unten). Phase 2 beginnt mit `git merge main` in
+  `feat/controller-runde5`, sobald auch die Pille-Wohin-Arbeit in main ist.
 - Nach dem Steuerkreuz-Branch gibt das Steuerkreuz in jedem lebenden Chat Pfeile ins Terminal
   (`arrowsAllowed == acceptsKeys`), und jeder Pfeil zählt als frische Eingabe
   (`ControllerTerminalMarks.recordControllerKey`). Der Vorschlag rechts (`suggestionAcceptAllowed`) ist dort
@@ -27,6 +29,22 @@ Feature-Doku: [`../features/controller.md`](../features/controller.md). Entwürf
 - Nach dem L2-Branch trägt `ControllerChatState` ein `backTarget`, und die Legende nennt das Ziel von L2.
 - Touchpad: L2 + Touchpad öffnet den Verlauf, das Options-Menü hat „Zwischenablage“. Die L2-Insel zeigt das
   schon; Runde 5 ergänzt dort nur □.
+- **Pille-Wohin (`feat/controller-pille-wohin`, Stand 12.11. noch nicht committet):** Die L2-Liste steht
+  sofort da, die Markierung beginnt auf dem vorigen Ort (`ControllerBackTarget.id`), Loslassen wechselt dorthin
+  (wie Cmd-Tab); `ControllerWhereToState` verliert `isListOpen`/`hasMovedInTab` und bekommt `previous`,
+  `ControllerIslandList(rows:startID:)` ersetzt `currentID`/`startsAtCurrent`. Die Status-Pille ohne Notch wird
+  schwarz, dauerhaft und verschiebbar (`NotchPillPlacement`, `PillGlass`), und `ControllerIslandPresenter`,
+  `ControllerIslandView` und `RecordingPillView` ändern sich mit. Folgen für Runde 5:
+  - Alles an der Insel (zweite Raute, Limits-Karte, L1-Spalten, □ in L2) setzt auf den neuen Stand von
+    `ControllerIsland.swift`, `ControllerIslandView.swift` und dem Presenter auf. Die Aufteilung der
+    `ControllerIslandView` in `+QuickDraw`, `+Writing`, `+Limits` passiert erst nach dem Merge, damit kein
+    Konflikt in der großen Datei entsteht.
+  - L2 + □ (Punkt 8) ergänzt die neue Wohin-Ansicht um eine Zeile, ohne `Destination` zu ändern; Loslassen nach
+    □ wechselt nicht mehr (□ verbraucht die Ebene wie Dreieck).
+  - Die Pille-Darstellung (schwarz, verschiebbar) gilt für alle neuen Insel-Zustände; Snapshots als Pille
+    werden gegen den neuen Stil gerendert.
+  - Während des Diktats (Punkt 9) wechselt ein losgelassenes L2 nach dem neuen Verhalten sofort zum vorigen
+    Ort. Das ist gewollt; das Diktatziel bleibt gebunden.
 - Ebenen liefern alle Tasten als `.inLayer(layer, .press(button))`, das Steuerkreuz und den linken Stick als
   `.inLayer(layer, .move(…, isRepeat:))` mit Wiederholung. Neue Kombinationen brauchen also keine Änderung am
   Erkenner, nur an der Belegung (`ControllerBindingResolver+Layers.swift`).
@@ -191,6 +209,7 @@ Verloren geht dabei nur y/n im Freigabe-Dialog; wer das behalten will, lässt al
 | ohne Ebene | ○ tippen | bei offener Claude-Ansicht Escape auch bei „arbeitet“ und ohne 1-s-Sperre (R2) | geändert |
 | Menü | Befehle › | zusätzlich `/tasks`, `/workflows`, `/rewind` (R5) | ja |
 | Tastatur | Ctrl+Return | in Claude-Chats `0x18 0x13` (R8) | ja |
+| Diktat | Stick, L1/R1 tippen, L2, R1-App-Raute | navigieren und schalten während der Aufnahme, Ziel bleibt gebunden (Punkt 9) | ja |
 
 ## Was sich gegenüber dem Auftrag ändert
 
@@ -476,6 +495,86 @@ Cmd/Option/Shift) + Return bei `.claudeCodeChat` → `[0x18, 0x13]`. `Controller
 zählt Ctrl+Return schon als Absenden; der Entwurfs-Tracker (`recordKeyDown`) ebenso prüfen und testen.
 Tests in den bestehenden `TerminalShortcut`-Tests.
 
+### 9. Controller während des Diktats (freigegeben 12.11.2026)
+
+Heute ist der Zusammenhang `recording` fast eingerastet: Der linke Stick ruht, L1/R1 tippen tun nichts, die
+Ebenen öffnen keine Insel (`layerAction` liefert für `layerBegan` außerhalb von `.chat` nichts und reicht
+`.inLayer`-Gesten an `recording(_:)` weiter), der Pause-Akkord ist aus (`chordAllowed`). In Transkription und
+Nacharbeit wirkt nur Kreis (abbrechen).
+
+**Neu, während der Aufnahme:**
+
+| Eingabe | Wirkung |
+|---|---|
+| Linker Stick | navigiert wie sonst: in der Liste Markierung, im Raster Kachel zu Kachel, in der Einzelansicht hoch/runter in die Liste (`enterList`) |
+| L1 / R1 tippen | voriger / nächster Chat (`adjacentChat`) |
+| L2 halten | Wohin wie sonst, inklusive Wechsel (Loslassen, Kreuz, Dreieck); Kreis bricht die Insel ab |
+| R1 halten | nur die App-Raute (Steuerkreuz: Limits, Glocke, Wach-Knopf, Archiv); Weiter, Modus, Befehle und Konto ausgegraut mit Hinweis „Diktat läuft — das Feld bekommt gleich den Diktattext“ |
+| L1 halten | aus (keine Insel, Tasten wirken wie ohne Ebene) |
+| R2, ✕, ○, Steuerkreuz, rechter Stick | unverändert: stopp, stopp und senden, verwerfen, Ausgabemodus, scrollen |
+| L1 + R1 | Pause-Akkord bleibt während der Aufnahme aus (wie bisher) |
+
+**Ziel gebunden.** Das Ziel bindet schon heute der `RecordingCoordinator` beim Start
+(`pendingDeliveryTarget = target` in `startRecording(target:)`, eingefroren in `DictationDelivery` beim
+angenommenen Stopp). Der Ausführer liest beim Stoppen `dictation.targetSessionID`, nicht die Auswahl. Ein
+Chatwechsel verschiebt das Ziel also nicht. Zwei Lücken schließt der Plan:
+
+- **Ziel „Programm vorne“** (Diktat per Hotkey, `.frontApp`): Der Text geht per ⌘V dorthin, wo beim Stopp der
+  Fokus liegt. Navigation würde ihn in einen anderen Chat lenken. Deshalb gilt die neue Navigation nur, wenn
+  das Ziel ein Chat ist; bei `.frontApp` bleibt es beim heutigen Verhalten (Stick ruht, L1/R1 nichts, keine
+  Insel).
+- **Shell-Chat als Ziel:** `recording(targetIsChat:)` ist heute `submitAllowed(to:)` und damit für Shells
+  `false` (Kreuz sendet dort nicht). Für die Navigation braucht es ein eigenes Feld `targetBound`
+  (`dictation.targetSessionID != nil`). `targetIsChat` behält seine Bedeutung für Kreuz.
+
+**Belegung (pur):**
+
+- `ControllerContext.recording` bekommt `targetBound: Bool`, `area: ControllerFocusArea` und `gridActive: Bool`
+  (aus dem Schnappschuss, den `ControllerContextResolver` heute vor Liste und Chat abschneidet). Lieber
+  zusätzliche Felder als ein verschachtelter Zusammenhang: Legende und Matrix-Test bleiben flach.
+- `recording(_:)`: Ist `targetBound`, gehen `.move(_, .leftStick, _)` an `list(_:)` (bei `area == .list`, nur
+  die Bewegungen) bzw. an `navigate(direction:isRepeat:gridActive:)`, `.tap(.l1/.r1)` an `adjacentChat`. Kreuz
+  bleibt „stopp und senden“, auch in der Liste (öffnet dort nicht), Kreis bleibt „verwerfen“, nicht „zurück“.
+- `layerAction`: Neuer Zweig für `.recording` mit `targetBound`: `layerBegan(.whereTo)` und
+  `layerBegan(.quickDraw)` öffnen die Insel, `.writing` nicht. In der Wohin-Ebene gelten deren Tasten außer
+  R2: **R2 bleibt in jeder Ebene „stopp“** (Aufnahme-Steuerung geht vor). L2 + R2 bleibt der Weg, bewusst
+  woanders zu diktieren — vor dem Diktat; während eines Diktats wäre „hin und diktieren“ ein zweites Diktat.
+  In der R1-Ebene wirken nur die App-Schalter und das Steuerkreuz für die Karte; die Chat-Tasten liefern
+  `.rejected`. Unter L1 kommen die Tasten wie heute als Aufnahme-Gesten an.
+- Dieselben Regeln für Transkription und Nacharbeit, außer was die Aufnahme steuert: Dort wirken Navigation,
+  L1/R1, L2 und die App-Raute; R2, Kreuz und das Steuerkreuz (Ausgabemodus) bleiben wie heute ohne Wirkung,
+  Kreis bricht ab. Der Text geht weiter an das gebundene Ziel.
+
+**Ausführer:** `toggleDictation`, `stopDictation` und `submitAllowed` lesen schon das gebundene Ziel. Neu:
+Die Liste darf während der Aufnahme betreten werden (`enterList`, `listMove`). Beim Bau prüfen, dass kein Weg in
+`perform(_:)` dabei die Aufnahme beendet oder ihr Ziel anfasst (Test unten). Die R1-Insel baut ihr `ControllerMenuSetup` mit
+`dictationRunning = true` (neues Feld), `ControllerMenuModel.isEnabled` macht die Gruppe „Eingaben“ und
+„Konto wechseln“ dann aus; `ControllerQuickDrawSlots.Note` bekommt `.dictating`.
+
+**Anzeige des Ziels („→ Chatname“):**
+- Legende: im Zusammenhang Aufnahme ein Eintrag mit dem Ziel (`ControllerLegendEntry` bekommt wie
+  `backTarget` ein `dictationTarget: String?`), Titel aus `titleForSession(dictation.targetSessionID)`, nicht aus
+  `ui.targetTitle` (der folgt der Auswahl).
+- Insel: Kopf zeigt während eines Diktats „→ Chatname“ neben dem Ebenennamen, auch wenn ein anderer Chat
+  ausgewählt ist.
+- Diktat-Pille: zeigt das Ziel schon (`showControllerDictationTarget`). Bei Wechsel der Auswahl bleibt der
+  Name stehen; geprüft wird, dass `RecordingPillView` (nach Pille-Wohin) ihn nicht aus der Auswahl neu liest.
+
+**Tests:**
+- `ControllerBindingMatrixTests`: neue Zeilen für `recording(targetBound: true/false, area: .list/.content,
+  gridActive:)` und für `transcribing`/`postProcessing` — Stick, L1/R1 tippen, L2/R1/L1 halten, R2 und Kreuz in
+  den Ebenen, Pause-Akkord aus.
+- `ControllerBindingResolverLayerTests`: R2 in Wohin während der Aufnahme = stopp; R1-Raute: Chat-Tasten
+  `.rejected`, App-Schalter wirken; L1 ohne Insel.
+- `ControllerContextResolverTests`: Felder `targetBound`, `area`, `gridActive` im Zusammenhang Aufnahme.
+- `ControllerActionDispatcherTests`: Chatwechsel per R1 tippen während der Aufnahme, danach ✕ — Stopp geht an
+  das gebundene Ziel (`dictation.stop(submit:)` mit dem alten Chat), Auswahl bleibt beim neuen; `.frontApp`-Ziel
+  lässt die Navigation aus.
+- `ControllerLegendTests`: „→ Chatname“ steht in der Aufnahme-Legende, auch nach Wechsel der Auswahl.
+
+**Snapshots:** Legende während der Aufnahme mit Ziel; R1-Insel während der Aufnahme (Chat-Raute ausgegraut,
+App-Raute an, Kopf „→ Chatname“); L2-Insel während der Aufnahme.
+
 ## Legende, Einstellungsseite, Lokalisierung
 
 - Legende (`ControllerLegend.swift`): Die Leiste ändert sich kaum (Ebenen stehen in einem Eintrag). Neu:
@@ -542,6 +641,8 @@ Befehlen, Legende mit „Ansicht schließen“. Nach jeder Ansichtsänderung ren
 10. `feat(controller): Konto wechseln mit Verbrauch und „am meisten frei“` — Punkt 3.
 11. `feat(controller): zuletzt geschlossenen Chat mit L2 und Viereck wieder öffnen` — Punkt 8.
 12. `feat(controller): Befehle /tasks, /workflows, /rewind und Neu zeichnen` — R5, R7.
+12a. `feat(controller): während des Diktats navigieren, Ziel bleibt gebunden` — Punkt 9 (braucht die
+    R1-App-Raute aus Schritt 7).
 13. `docs(controller): Runde 5 beschrieben` — `docs/features/controller.md` (Belegung, Ebenen, Schutzregeln,
     Grenzen: Leertaste bei eingeschalteter Claude-Sprachfunktion, Subagent-Ansicht nicht erkennbar,
     Ctrl+L-Beleg an Version 2.1.322), Snapshots.
@@ -562,3 +663,6 @@ eigenen Agenten (Opus) über den ganzen Branch.
 - R1 + ✕ bei arbeitendem Chat mit getipptem Entwurf: „Jetzt senden“.
 - L2 + □ zweimal: zwei geschlossene Chats in umgekehrter Reihenfolge zurück.
 - Tastatur Ctrl+Return in Claude bei arbeitendem Chat.
+- Diktat per R2 in Chat A, während der Aufnahme mit R1 tippen zu Chat B, L2-Liste öffnen, R1 + ◀ Glocke;
+  dann ✕: Text kommt in A an und wird dort gesendet, B bleibt ausgewählt; Pille und Legende zeigen „→ A“.
+- Diktat per Hotkey (Ziel „Programm vorne“): Stick und L1/R1 bleiben wie bisher ohne Wirkung.
