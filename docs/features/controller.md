@@ -89,15 +89,18 @@ Bildschirmaufnahme). Zwei schnelle Create-Drücke ergeben deshalb einen Screensh
 selben Raster sind kein Ortswechsel; eine große Kachel (L3) und jeder Chat in der Einzelansicht, der zum
 gemerkten Workspace gehört, zählen als dieser Workspace. Ein Workspace öffnet wie der Klick auf seinen
 Kopf als Raster, mit der Kachel, auf der du dort zuletzt warst; ein Chat wie der Klick in der
-Seitenleiste. Gibt es den vorigen Ort nicht mehr (Workspace gelöscht, Chat archiviert, geschlossen oder
-in ein anderes Fenster gewandert), vibriert der Controller „geht nicht“ und nichts passiert. Wer den
+Seitenleiste. Gibt es den vorigen Ort nicht mehr (Workspace gelöscht oder von einem anderen Fenster
+gezeigt, Chat archiviert, geschlossen oder in ein anderes Fenster gewandert), vibriert der Controller
+„geht nicht“ und nichts passiert — kein fremdes Fenster kommt nach vorn, kein Dialog erscheint. Ein Chat,
+der im Workspace liegt, den das Fenster gerade referenziert, ist kein Ziel: Ihn zu wählen gäbe nur den
+Fokus einer Kachel, L2 hinge auf der Stelle. Öffnet man aus Chat A einen Workspace mit A, bleibt das
+Ziel von davor. Wer den
 aktuellen Ort schließt, landet mit L2 dort, wo er davor war. Die Legende nennt das Ziel („Zurück:
 Workspace Marketing“, „Zurück: Chat Login-Fix“) und fehlt ohne Ziel. Der Verlauf gilt je Fenster und
 nur für den laufenden App-Start; er wird im Store nach jeder Änderung nachgeführt
 (`AgentWindowStore+PlaceHistory`, pur: `ChatPlaceHistory`), zählt also Maus, Tastatur, Controller und
 CLI gleich. Die Legende liest ihn im Ereignis-Pfad; nach einem Klick mit der Maus steht dort bis zur
-nächsten Eingabe oder Statusänderung noch das alte Ziel. Grenze: Ist der vorige Ort ein Chat, der
-inzwischen als Kachel im sichtbaren Raster steht, bekommt nur die Kachel den Fokus.
+nächsten Eingabe oder Statusänderung noch das alte Ziel.
 
 **Menü (Options):** drei Gruppen. Eingaben in den Chat: „Weiter“, „Befehle ›“ (zweite Ebene mit den
 festen Befehlen der CLI, Tabelle `ControllerSlashCommands`; „/ eintippen“ bleibt ungesendet, alle
@@ -403,6 +406,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   erreicht sie nur mit eingeschalteter Tastaturnavigation des Systems.
 - Was eine Projektgruppe per „N weitere anzeigen“ zusätzlich aufgeklappt hat, erreicht die
   Listen-Navigation nicht; sie reicht bis zum Startlimit der Gruppe und immer bis zum gewählten Chat.
+- Zurück mit L2 folgt dem Workspace, den das Fenster referenziert, auch wenn der Bezug veraltet ist:
+  Raster W, dann Chat Y (nicht in W), dann Chat X (in W) aus der Seitenleiste — X in der Einzelansicht
+  zählt als Workspace W, nicht als eigener Chat.
 - Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
 - **Touchpad als Maus:** Wie das Framework einen abgehobenen Finger meldet (zurück auf (0, 0) oder
   letzte Position), ist nicht dokumentiert; die Erkennung oben deckt beides ab, am echten DualSense

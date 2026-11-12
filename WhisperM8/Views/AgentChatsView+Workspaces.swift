@@ -427,7 +427,13 @@ extension AgentChatsView {
 
     /// Header-/⊞-Klick: Workspace als Grid öffnen. Single-Owner-Konflikte
     /// werden als Werte gemeldet — kein stilles Stehlen.
-    func activateWorkspaceFromSidebar(_ entity: AgentGridWorkspace) {
+    /// - Parameter reportConflicts: Konflikte sichtbar machen (Besitzerfenster
+    ///   nach vorn, Hinweis). `false` für L2 am Controller: Dort vibriert ein
+    ///   Konflikt nur „geht nicht“, statt ein fremdes Fenster oder einen
+    ///   Dialog hervorzuholen.
+    /// - Returns: `true`, wenn das Raster jetzt in diesem Fenster steht.
+    @discardableResult
+    func activateWorkspaceFromSidebar(_ entity: AgentGridWorkspace, reportConflicts: Bool = true) -> Bool {
         let wasVisibleHere = isGridActive
             && windowStore.window(for: windowID).activeWorkspaceID == entity.id
         switch windowStore.activateGridWorkspace(entity.id, in: windowID) {
@@ -440,14 +446,19 @@ extension AgentChatsView {
                 beginGridBuildMeasurement(for: entity)
             }
             multiSelection = []
+            return true
         case .alreadyActive(let owner):
             // Ein anderes Fenster besitzt den Workspace bereits — dieses
             // Fenster nach vorn holen statt Terminals zu stehlen.
-            focusWindow(owner)
+            if reportConflicts { focusWindow(owner) }
+            return false
         case .blockedByWindowOwnership(let conflicts):
-            errorMessage = String(localized: "Workspace “\(entity.name)” cannot open here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
+            if reportConflicts {
+                errorMessage = String(localized: "Workspace “\(entity.name)” cannot open here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
+            }
+            return false
         case .rejected:
-            break
+            return false
         }
     }
 

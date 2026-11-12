@@ -82,14 +82,17 @@ extension AgentChatsView {
     /// Zurück an den vorigen Ort. Ein Chat öffnet wie der Klick in der
     /// Seitenleiste, ein Workspace wie der Klick auf seinen Kopf — als Raster,
     /// mit der Kachel, auf der man dort zuletzt war (merkt der Store beim
-    /// Verlassen). Danach ist der verlassene Ort das nächste Ziel.
+    /// Verlassen). Danach ist der verlassene Ort das nächste Ziel. Ein
+    /// Konflikt (Workspace gehört inzwischen einem anderen Fenster) holt
+    /// nichts nach vorn und zeigt keinen Dialog: Der Controller vibriert
+    /// „geht nicht“.
     private func goBack() -> Bool {
         switch backPlace() {
         case .chat(let id)?:
             selectedSessionID = id
         case .workspace(let id)?:
-            guard let entity = windowStore.gridWorkspace(id: id) else { return false }
-            activateWorkspaceFromSidebar(entity)
+            guard let entity = windowStore.gridWorkspace(id: id),
+                  activateWorkspaceFromSidebar(entity, reportConflicts: false) else { return false }
         case nil:
             return false
         }

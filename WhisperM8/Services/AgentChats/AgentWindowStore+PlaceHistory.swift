@@ -20,16 +20,29 @@ extension AgentWindowStore {
         )
     }
 
-    /// Gibt es den Ort für dieses Fenster noch? Ein Workspace, solange er
-    /// angelegt ist; ein Chat, solange er hier als Tab offen ist — ein
+    /// Ist der Ort für dieses Fenster ein brauchbares Ziel?
+    ///
+    /// Ein Workspace, solange er angelegt ist und kein anderes Fenster ihn
+    /// zeigt oder als Rücksprungziel hält — sonst holte L2 ein fremdes
+    /// Fenster nach vorn. Ein Chat, solange er hier als Tab offen ist (ein
     /// geschlossener, archivierter oder in ein anderes Fenster gewanderter
-    /// Chat ist kein Rücksprungziel.
+    /// Chat ist kein Ziel) und nicht im Workspace liegt, den das Fenster
+    /// gerade referenziert: Ihn zu wählen ergäbe wieder diesen Workspace
+    /// (Kachel-Fokus statt Ortswechsel), L2 hinge dann auf der Stelle.
     static func isPlaceAvailable(
         _ place: ChatPlace, window: AgentChatWindowState?, in state: AgentUIState
     ) -> Bool {
         switch place {
-        case .workspace(let id): return state.gridWorkspaces.contains { $0.id == id }
-        case .chat(let id): return window?.openTabIDs.contains(id) == true
+        case .workspace(let id):
+            guard state.gridWorkspaces.contains(where: { $0.id == id }) else { return false }
+            let owner = state.windows.first { $0.activeWorkspaceID == id }?.id
+            return owner == nil || owner == window?.id
+        case .chat(let id):
+            guard let window, window.openTabIDs.contains(id) else { return false }
+            let referenced = window.activeWorkspaceID.flatMap { workspaceID in
+                state.gridWorkspaces.first { $0.id == workspaceID }
+            }
+            return referenced?.slotIndex(of: id) == nil
         }
     }
 

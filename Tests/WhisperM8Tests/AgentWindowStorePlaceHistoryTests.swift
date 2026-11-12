@@ -146,6 +146,58 @@ final class AgentWindowStorePlaceHistoryTests: XCTestCase {
         XCTAssertEqual(store.previousPlace(in: w), .chat(s[1]), "der geschlossene Chat ist kein Ziel")
     }
 
+    /// Review-Befund 1: Einzelansicht Chat A, dann einen Workspace öffnen, in
+    /// dem A liegt. A darf kein Ziel werden — ihn zu wählen gäbe nur
+    /// Kachel-Fokus, L2 hinge auf der Stelle. Das ältere Ziel bleibt.
+    func testChatInsideNewWorkspaceIsNoTarget() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 3)
+        store.openTab(s[2], in: w)
+        store.openTab(s[0], in: w)
+        XCTAssertEqual(store.previousPlace(in: w), .chat(s[2]))
+        let ws = store.createGridWorkspace(name: "W", slots: [s[0], s[1]])
+        store.activateGridWorkspace(ws, in: w)
+        XCTAssertEqual(store.selectedSession(in: w), s[0])
+        XCTAssertEqual(store.previousPlace(in: w), .chat(s[2]), "A liegt im Raster, das ältere Ziel bleibt")
+        XCTAssertNotEqual(store.placeHistories[w]?.previous, .chat(s[0]))
+    }
+
+    /// Review-Befund 1, zweite Hälfte: Ein altes Chat-Ziel, das inzwischen im
+    /// referenzierten Workspace liegt, gilt beim Abfragen nicht mehr.
+    func testOldChatTargetNowInReferencedWorkspaceIsNoTarget() throws {
+        let (store, persistence) = makeStore()
+        let w = store.primaryWindowID
+        let s = try seed(persistence, count: 3)
+        store.openTab(s[0], in: w)
+        store.openTab(s[2], in: w)
+        XCTAssertEqual(store.previousPlace(in: w), .chat(s[0]))
+        let ws = store.createGridWorkspace(name: "W", slots: [s[1]])
+        store.activateGridWorkspace(ws, in: w)
+        XCTAssertEqual(store.previousPlace(in: w), .chat(s[2]))
+        store.addSession(s[2], toGridWorkspace: ws)
+        XCTAssertNil(store.previousPlace(in: w), "s2 ist jetzt eine Kachel des Rasters")
+    }
+
+    /// Review-Befund 2: Ein Workspace, den ein anderes Fenster zeigt, ist kein
+    /// Ziel — L2 holte sonst dieses Fenster nach vorn.
+    func testWorkspaceOwnedByOtherWindowIsNoTarget() throws {
+        let (store, persistence) = makeStore()
+        let primary = store.primaryWindowID
+        let s = try seed(persistence, count: 4)
+        let wsA = store.createGridWorkspace(name: "A", slots: [s[0], s[1]], activateIn: primary)
+        store.openTab(s[2], in: primary, select: false)
+        let second = store.detachToNewWindow(s[2], from: primary)
+        let wsB = store.createGridWorkspace(name: "B", slots: [s[3]])
+        store.activateGridWorkspace(wsB, in: primary)
+        XCTAssertEqual(store.previousPlace(in: primary), .workspace(wsA))
+
+        XCTAssertEqual(store.activateGridWorkspace(wsA, in: second), .activated)
+        XCTAssertNil(store.previousPlace(in: primary), "A gehört jetzt dem zweiten Fenster")
+        XCTAssertTrue(AgentWindowStore.isPlaceAvailable(
+            .workspace(wsA), window: store.window(for: second), in: store.state))
+    }
+
     /// Jedes Fenster hat seinen eigenen Verlauf.
     func testHistoryIsPerWindow() throws {
         let (store, persistence) = makeStore()
