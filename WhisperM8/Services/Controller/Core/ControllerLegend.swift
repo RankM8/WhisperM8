@@ -33,6 +33,8 @@ struct ControllerLegendEntry: Equatable, Sendable {
     var inputs: [ControllerLegendInput]
     var label: ControllerLegendLabel
     var isCombination: Bool = false
+    /// Nur bei `lastChat` in der Legende: wohin L2 zurückführt.
+    var backTarget: ControllerBackTarget? = nil
 }
 
 struct ControllerLegendSection: Equatable, Sendable {
@@ -253,28 +255,36 @@ enum ControllerLegend {
         let suggestion: [Candidate] = !arrows && ControllerBindingResolver.suggestionAcceptAllowed(state)
             ? [candidate(.button(.dpadRight), .acceptSuggestion, [.move(.right, source: .dpad, isRepeat: false)])]
             : []
+        // L2 getippt: zurück an den vorigen Ort, mit seinem Namen. Ohne Ziel
+        // fehlt der Eintrag (der Druck vibriert dann „geht nicht“).
+        let back: [Candidate] = state.backTarget.map { target in
+            [Candidate(entry: ControllerLegendEntry(inputs: [.button(.l2)], label: .lastChat, backTarget: target),
+                       probes: [.tap(.l2)])]
+        } ?? []
         let moveProbes: [ControllerGesture] = moveInputs.flatMap { input in
             ControllerDirection.allCases.map { direction in
                 ControllerGesture.move(direction, source: input == .dpad ? .dpad : .leftStick, isRepeat: false)
             }
         }
-        return [
+        let head: [Candidate] = [
             ControllerLegend.Candidate(
                 entry: ControllerLegendEntry(inputs: moveInputs, label: .move), probes: moveProbes),
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
-        ] + suggestion + [
+        ] + suggestion
+        let keys: [Candidate] = [
             candidate(.button(.circle), awaiting ? .reject : .back, [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.triangle), .space, [.press(.triangle)]),
             candidate(.button(.r2), .dictate, [.press(.r2)]),
             candidate(.bumpers, .previousNextChat, [.tap(.l1), .tap(.r1)]),
-            layers,
-        ] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
+        ]
+        let tail: [Candidate] = [layers] + (arrows ? [candidate(.dpad, .arrows, gestures(for: .dpad))] : []) + [
             candidate(.rightStick, .scroll, gestures(for: .rightStick)),
             candidate(.button(.r3), .startChat, [.tap(.r3)]),
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),
         ]
+        return head + keys + back + tail
     }
 
     /// Verlauf: dieselbe Tabelle liefert die Fußzeile des Verlauf-Fensters,

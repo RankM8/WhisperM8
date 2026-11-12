@@ -1072,7 +1072,6 @@ struct AgentChatsView: View {
             // Der eigene Commit räumt den Switcher VOR dem Selektieren
             // (siehe commitTabSwitcher) und ist hier deshalb ein No-op.
             if tabSwitcher != nil { cancelTabSwitcher() }
-            commandState.history.record(newValue)
             syncActiveAgentChat()
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.

@@ -5,6 +5,17 @@ enum ControllerRecordingPhase: String, CaseIterable, Sendable {
     case recording, transcribing, postProcessing
 }
 
+/// Wohin L2 getippt zurückführt: der vorige Ort des Fensters, ein Chat oder
+/// ein Workspace im Raster. Die Legende nennt ihn.
+struct ControllerBackTarget: Equatable, Sendable {
+    enum Kind: String, Sendable {
+        case chat, workspace
+    }
+
+    var kind: Kind
+    var title: String
+}
+
 /// Was der Controller über den Ziel-Chat wissen muss (Plan, „Kreuz, Kreis und
 /// Viereck im Chat“). Der Schnappschuss wird beim Eintreffen einer Geste auf
 /// dem MainActor gezogen.
@@ -40,6 +51,8 @@ struct ControllerChatState: Equatable, Sendable {
     /// Shell an ihrer Eingabezeile (kein Vollbild-Programm): R3 halten darf
     /// die Zeile leeren.
     var shellAtPrompt: Bool = false
+    /// Ziel von L2 getippt; `nil`, wenn es keinen vorigen Ort (mehr) gibt.
+    var backTarget: ControllerBackTarget?
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

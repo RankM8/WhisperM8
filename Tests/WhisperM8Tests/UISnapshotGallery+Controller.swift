@@ -40,7 +40,11 @@ extension UISnapshotGallery {
         }
         let legendSize = CGSize(width: 1100, height: 60)
         let legendFixtures: [Fixture] = [
-            Fixture(name: "controller-legende-chat", size: legendSize) { legend(.chat(chat)) },
+            Fixture(name: "controller-legende-chat", size: CGSize(width: 1340, height: 60)) {
+                var state = chat
+                state.backTarget = ControllerBackTarget(kind: .chat, title: "Login-Fix")
+                return legend(.chat(state))
+            },
             Fixture(name: "controller-legende-rueckfrage", size: legendSize) {
                 var state = chat
                 state.status = .awaitingInput
@@ -73,10 +77,11 @@ extension UISnapshotGallery {
                 legend(.recording(phase: .recording, targetIsChat: true))
             },
             Fixture(name: "controller-legende-pause", size: legendSize) { legend(.paused) },
-            // Runde 3: Raster mit L2 = Workspace-Auswahl, dazu die offene Auswahl.
+            // Raster: L2 getippt führt zurück in den vorigen Workspace.
             Fixture(name: "controller-legende-raster", size: CGSize(width: 1340, height: 60)) {
                 var state = chat
                 state.gridActive = true
+                state.backTarget = ControllerBackTarget(kind: .workspace, title: "Marketing")
                 return legend(.chat(state), title: "2 Lux · Integrationen")
             },
             Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {

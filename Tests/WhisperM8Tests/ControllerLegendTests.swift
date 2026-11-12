@@ -145,6 +145,35 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertFalse(labels(.list).contains(.layersHold), "in der Liste gibt es keine Ebenen")
     }
 
+    /// L2 getippt steht nur mit Ziel in der Legende, mit dessen Namen — im
+    /// Chat und im Raster, direkt nach L1/R1.
+    func testBackTargetIsShownWithItsName() {
+        XCTAssertFalse(labels(chat(.idle)).contains(.lastChat), "ohne Ziel kein Eintrag")
+        let target = ControllerBackTarget(kind: .workspace, title: "Marketing")
+        for context in [chat(.idle) { $0.backTarget = target },
+                        chat(.working) { $0.backTarget = target; $0.gridActive = true }] {
+            let entries = ControllerLegend.entries(for: context)
+            let index = entries.firstIndex { $0.label == .lastChat }
+            XCTAssertNotNil(index, "\(context)")
+            XCTAssertEqual(entries[index! - 1].label, .previousNextChat)
+            XCTAssertEqual(entries[index!].inputs, [.button(.l2)])
+            XCTAssertEqual(entries[index!].backTarget, target)
+        }
+    }
+
+    /// Gekürzte Legende (schmale Fenster): Das Ziel von L2 bleibt stehen.
+    @MainActor
+    func testShortenedLegendKeepsBackTarget() {
+        let target = ControllerBackTarget(kind: .chat, title: "Login-Fix")
+        let entries = ControllerLegend.entries(for: chat(.idle) { $0.backTarget = target })
+        let short = ControllerLegendBar.shortened(entries, to: 4)
+        XCTAssertEqual(short.count, 5)
+        XCTAssertEqual(Array(short.prefix(4)), Array(entries.prefix(4)))
+        XCTAssertEqual(short.last?.backTarget, target)
+        let plain = ControllerLegend.entries(for: chat(.idle))
+        XCTAssertEqual(ControllerLegendBar.shortened(plain, to: 4), Array(plain.prefix(4)))
+    }
+
     /// Runde 2: Die Fußzeile des Verlaufs kommt aus dieser Tabelle. „Geht
     /// nicht“ (Korrigieren ohne Text, Bild groß ohne Bild) zeigt sie nicht.
     func testClipboardEntriesFollowState() {
