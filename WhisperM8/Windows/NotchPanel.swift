@@ -107,7 +107,8 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
         guard let pillMouse, handlesPill(event) else { return super.mouseDown(with: event) }
         if event.clickCount >= 2 {
             pressStart = nil
-            return pillMouse.doubleClick()
+            let point = CGPoint(x: event.locationInWindow.x, y: bounds.height - event.locationInWindow.y)
+            return pillMouse.doubleClick(point)
         }
         pressStart = NSEvent.mouseLocation
         pressPoint = CGPoint(x: event.locationInWindow.x, y: bounds.height - event.locationInWindow.y)

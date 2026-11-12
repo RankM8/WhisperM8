@@ -32,45 +32,67 @@ extension OverlayController {
     /// (Fensterliste); bis dahin (höchstens `frontWindowTimeout`) steht noch
     /// nichts, das Diktat selbst läuft davon unabhängig.
     func presentUnifiedPanel() {
-        unifiedGeneration += 1
-        let generation = unifiedGeneration
         let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
         let mouse = NSEvent.mouseLocation
         let mouseDisplayID = screens.first { $0.frame.contains(mouse) }?.displayID
-        let finish: (UInt32?) -> Void = { [weak self] frontDisplayID in
-            guard let self, self.isPresented, self.unifiedGeneration == generation, self.panel == nil else { return }
-            let placement = DictationPillPlacement.resolve(
-                frontWindowDisplayID: frontDisplayID,
-                mouseDisplayID: mouseDisplayID,
-                mainDisplayID: CGMainDisplayID(),
-                screens: screens,
-                positions: AppPreferences.shared.notchPillPositions)
-            guard let placement else { return }
-            self.buildUnifiedPanel(placement)
-        }
 
-        // WhisperM8 selbst vorne: das Key-Fenster kennen wir ohne Fensterliste.
         // Unsere Fenster aktivieren nicht: vorne ist die App, in der man tippt.
         let frontApp = NSWorkspace.shared.frontmostApplication
+        let lookup: (@escaping @MainActor (UInt32?) -> Void) -> Void
         if frontApp?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            // WhisperM8 selbst vorne: das Key-Fenster kennen wir ohne Fensterliste.
             let window = NSApp.keyWindow ?? NSApp.mainWindow
-            return finish(window.flatMap { DictationPillPlacement.displayID(containing: $0.frame, screens: screens) })
+            let displayID = window.flatMap { DictationPillPlacement.displayID(containing: $0.frame, screens: screens) }
+            lookup = { answer in answer(displayID) }
+        } else if let pid = frontApp?.processIdentifier {
+            let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+            lookup = { answer in
+                Task.detached(priority: .userInitiated) {
+                    let rect = FrontWindowLocator.frontWindowFrame(pid: pid, primaryHeight: primaryHeight)
+                    await MainActor.run {
+                        answer(rect.flatMap { DictationPillPlacement.displayID(containing: $0, screens: screens) })
+                    }
+                }
+            }
+        } else {
+            lookup = { answer in answer(nil) }
         }
-        guard let pid = frontApp?.processIdentifier else { return finish(nil) }
-        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        beginUnifiedPresentation(
+            screens: screens, mouseDisplayID: mouseDisplayID, mainDisplayID: CGMainDisplayID(),
+            frontWindowLookup: lookup, timeout: Self.frontWindowTimeout,
+            build: { [weak self] placement in self?.buildUnifiedPanel(placement) })
+    }
+
+    /// Kern des asynchronen Aufbaus, ohne Fenster testbar: Die erste Antwort
+    /// gewinnt (Fensterliste oder Zeitlimit, dann die Maus). Gebaut wird nur,
+    /// solange die Pille noch gezeigt werden soll, kein neuerer Aufbau läuft
+    /// (Generation) und noch kein Fenster steht.
+    func beginUnifiedPresentation(
+        screens: [NotchScreenInfo],
+        mouseDisplayID: UInt32?,
+        mainDisplayID: UInt32?,
+        frontWindowLookup: (@escaping @MainActor (UInt32?) -> Void) -> Void,
+        timeout: TimeInterval,
+        build: @escaping @MainActor (DictationPillPlacement) -> Void
+    ) {
+        unifiedGeneration += 1
+        let generation = unifiedGeneration
         var settled = false
-        let settle: (UInt32?) -> Void = { displayID in
+        let settle: @MainActor (UInt32?) -> Void = { [weak self] frontDisplayID in
             guard !settled else { return }
             settled = true
-            finish(displayID)
+            guard let self, self.isPresented, self.unifiedGeneration == generation, self.panel == nil else { return }
+            guard let placement = DictationPillPlacement.resolve(
+                frontWindowDisplayID: frontDisplayID,
+                mouseDisplayID: mouseDisplayID,
+                mainDisplayID: mainDisplayID,
+                screens: screens,
+                positions: AppPreferences.shared.notchPillPositions) else { return }
+            build(placement)
         }
-        Task.detached(priority: .userInitiated) {
-            let rect = FrontWindowLocator.frontWindowFrame(pid: pid, primaryHeight: primaryHeight)
-            await MainActor.run {
-                settle(rect.flatMap { DictationPillPlacement.displayID(containing: $0, screens: screens) })
-            }
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.frontWindowTimeout) {
+        frontWindowLookup(settle)
+        guard !settled else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             MainActor.assumeIsolated { settle(nil) }
         }
     }
@@ -115,6 +137,7 @@ extension OverlayController {
             self.rememberUnifiedPosition(anchor)
         }
         installPanel(panel, safeAreaFree: placement.isNotch)
+        observeScreenChanges()
 
         UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID)
         statusBadge = UnifiedPillHub.shared.badge
@@ -129,7 +152,10 @@ extension OverlayController {
     /// Gezogen: Lage je Bildschirm merken (wie die Status-Pille), als Anteil
     /// am Bildschirm über die Display-UUID.
     private func rememberUnifiedPosition(_ anchor: PillAnchor) {
-        guard presentation == .pill else { return }
+        // Nur echtes Ziehen (linke Maustaste gedrückt) merken; Verschiebungen
+        // durch AppKit (Bildschirm abgesteckt) überschrieben sonst die Lage
+        // auf einem anderen Bildschirm.
+        guard presentation == .pill, NSEvent.pressedMouseButtons & 1 != 0 else { return }
         let center = UnifiedPillGeometry.center(of: anchor)
         let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
         guard let screen = screens.first(where: { $0.frame.contains(center) }) ?? unifiedScreen else { return }
@@ -159,9 +185,42 @@ extension OverlayController {
         }
     }
 
+    /// Bildschirme geändert (abgesteckt, Auflösung): Steht der Bildschirm des
+    /// Diktats nicht mehr oder hat er andere Maße, wird die Pille neu
+    /// platziert (Maus-Bildschirm, gemerkte Lage), damit ✓ und ✕ sichtbar
+    /// bleiben. Das Diktat selbst läuft weiter.
+    private func observeScreenChanges() {
+        if let unifiedScreenObserver { NotificationCenter.default.removeObserver(unifiedScreenObserver) }
+        unifiedScreenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.relocateAfterScreenChange() }
+        }
+    }
+
+    func relocateAfterScreenChange() {
+        guard isPresented, presentation.isUnified, let current = unifiedScreen else { return }
+        let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
+        if let same = screens.first(where: { $0.displayID == current.displayID }), same == current { return }
+        let mouse = NSEvent.mouseLocation
+        guard let placement = DictationPillPlacement.resolve(
+            frontWindowDisplayID: screens.first(where: { $0.displayID == current.displayID })?.displayID,
+            mouseDisplayID: screens.first { $0.frame.contains(mouse) }?.displayID,
+            mainDisplayID: CGMainDisplayID(),
+            screens: screens,
+            positions: AppPreferences.shared.notchPillPositions) else { return }
+        Logger.info("unified_pill_relocated")
+        closePanelForRebuild()
+        buildUnifiedPanel(placement)
+    }
+
     /// Aufräumen beim Ausblenden (aus `hide`).
     func tearDownUnified() {
         unifiedGeneration += 1
+        if let unifiedScreenObserver {
+            NotificationCenter.default.removeObserver(unifiedScreenObserver)
+            self.unifiedScreenObserver = nil
+        }
         badgeCancellable = nil
         if statusBadge != nil { statusBadge = nil }
         unifiedScreen = nil

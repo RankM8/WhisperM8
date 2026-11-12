@@ -304,7 +304,7 @@ extension NotchStatusController {
             began: { [weak self] in self?.pillDragBegan(kind) },
             dragged: { [weak self] in self?.pillDragged(kind, by: $0) },
             ended: { [weak self] in self?.pillDragEnded(kind, moved: $0, at: $1) },
-            doubleClick: { [weak self] in self?.pillDoubleClicked(kind) })
+            doubleClick: { [weak self] in self?.pillDoubleClicked(kind, at: $0) })
         host.unifiedPill = slot.isUnified
     }
 
@@ -320,10 +320,12 @@ extension NotchStatusController {
     /// Doppelklick: zurücksetzen nur, wenn die Pille vor dem ersten Klick zu
     /// war (der erste Klick hat dann die Liste geöffnet). War sie offen, ist
     /// es schnelles Zu und wieder Auf, die gemerkte Lage bleibt.
-    private func pillDoubleClicked(_ kind: NotchPlacement.Kind) {
+    private func pillDoubleClicked(_ kind: NotchPlacement.Kind, at point: CGPoint) {
         guard let slot = slots[kind] else { return }
-        // Der erste Klick lag auf dem Kern und hat ein Diktat gestartet.
+        // Der erste Klick lag auf dem Kern und hat ein Diktat gestartet: dann
+        // tut der zweite nichts mehr. Zurückgesetzt wird nur außerhalb des Kerns.
         if Date().timeIntervalSince(slot.lastCoreClickAt) < 0.6 { return }
+        if slot.isUnified, UnifiedPillClickTarget.resolve(point: point, coreFrame: slot.coreFrame) == .core { return }
         if slot.pressStartedExpanded {
             toggleExpanded(kind)
         } else {
@@ -383,5 +385,6 @@ struct NotchPillMouse {
     /// `true`: gezogen, `false`: Klick; dazu der Ort des Drückens
     /// (SwiftUI-Koordinaten der Hosting-View, oben links).
     var ended: (Bool, CGPoint) -> Void
-    var doubleClick: () -> Void
+    /// Ort des zweiten Klicks (SwiftUI-Koordinaten, oben links).
+    var doubleClick: (CGPoint) -> Void
 }

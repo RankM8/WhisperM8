@@ -58,6 +58,12 @@ weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
   80 ms, sonst die Maus). Mit Notch an der Notch, sonst an der gemerkten Lage
   dieses Bildschirms, nur bis das Diktat fertig ist. Auf diesem Bildschirm
   tritt die Status-Pille so lange zurück (`UnifiedPillHub.dictationDisplayID`).
+- Gemerkt wird nur echtes Ziehen (linke Maustaste gedrückt). Wird der
+  Bildschirm des Diktats abgesteckt oder ändert er seine Maße, baut die
+  Pille an neuer Stelle neu auf (Maus-Bildschirm, dort Notch oder gemerkte
+  Lage), damit ✓ und ✕ sichtbar bleiben; das Diktat läuft weiter.
+- An der Notch nimmt nur der Körper unter der Menüleiste Klicks und
+  Darüberfahren an, nicht das Band über der Aussparung.
 - Die alte Lage der Diktat-Pille (`overlayAnchor…`, unten mittig) bleibt
   gespeichert, wird aber nicht benutzt; mit dem Kill-Switch gilt sie wieder.
 
@@ -65,13 +71,16 @@ weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
 das Darüberfahren beim Diktat (Mini) klappt nach links auf, die rechte Kante
 bleibt (`UnifiedPillGeometry.centerGuide`, über eine Ausrichtungslinie im
 selben Layout-Durchgang, ohne Fensterbewegung). Am Bildschirmrand wird zur
-Mitte hin verschoben. An der Notch ist nichts verschiebbar (kein Griff),
+Mitte hin verschoben. Wächst die Pille beim Darüberfahren weiter (Kontext
+kommt dazu), bleibt sie ganz im Fenster. An der Notch ist nichts verschiebbar (kein Griff),
 alles wächst um die Mitte der Notch.
 
 **Bedienung:** Klick auf den grauen Kern startet ein Diktat
 (`AppState.startRecording()`, wie der Hotkey), Klick auf den Rest öffnet die
-Liste, ab 4 pt Bewegung wird gezogen, Doppelklick setzt oben mittig zurück
-(nicht, wenn der erste Klick ein Diktat gestartet hat). Beim Diktat bleibt
+Liste, ab 4 pt Bewegung wird gezogen. Doppelklick auf die Fläche außerhalb
+des Kerns setzt oben mittig zurück; ein Doppelklick auf den Kern startet nur
+das Diktat (der erste Klick), der zweite Klick tut dann nichts mehr, auch
+nicht an der Diktat-Pille, die inzwischen erscheint. Beim Diktat bleibt
 alles wie bei der Diktat-Pille mit der Maus bedienbar (✓, ✕, Modus, Kontext).
 Hotkey „Statusliste öffnen“ (`openNotchStatusList`, ab Werk ohne Belegung):
 Liste mit Tastaturfokus, Pfeile wählen, Return springt in den Chat, Esc
@@ -94,7 +103,9 @@ Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
 und wie sie aussieht (`OverlayPresentation`: `classic`, `pill`, `notch`,
 `RecordingPanel+UnifiedPill.swift`). Die Status-Seite hängt in
 `NotchStatusController+UnifiedPill.swift`. Beide treffen sich in
-`UnifiedPillHub` (Bildschirm des Diktats, Raute). Es bleiben getrennte
+`UnifiedPillHub` (Bildschirm des Diktats, Raute); der Status übernimmt den
+Bildschirm aus dem gemeldeten Wert, er liest den Hub dabei nicht erneut
+(`@Published` meldet im willSet, dort stünde noch der alte Wert). Es bleiben getrennte
 Fenster, von denen je Bildschirm immer nur eins sichtbar ist; so läuft das
 Diktat weiter durch sein bewährtes Fenster.
 

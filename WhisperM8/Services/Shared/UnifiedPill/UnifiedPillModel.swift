@@ -121,12 +121,21 @@ enum UnifiedPillGeometry {
 
     /// Ausrichtungspunkt der Diktat-Pille im Fenster (von ihrer linken
     /// Kante). Normal die Mitte; aufgeklappt per Darüberfahren der Punkt, der
-    /// die rechte Kante dort hält, wo sie zugeklappt war.
-    static func centerGuide(width: CGFloat, collapsedWidth: CGFloat?, hoverExpanded: Bool) -> CGFloat {
+    /// die rechte Kante dort hält, wo sie zugeklappt war. Begrenzt auf
+    /// `available` (Breite für die Pille im Fenster): Wächst die Pille beim
+    /// Darüberfahren weiter (Kontext kommt dazu), bleibt sie ganz im Fenster,
+    /// statt links abgeschnitten zu werden.
+    static func centerGuide(
+        width: CGFloat, collapsedWidth: CGFloat?, hoverExpanded: Bool,
+        available: CGFloat = OverlayFrameResolver.maxPillWidth
+    ) -> CGFloat {
         guard hoverExpanded, let collapsedWidth, collapsedWidth > 0, collapsedWidth < width else {
             return width / 2
         }
-        return width - collapsedWidth / 2
+        let guide = width - collapsedWidth / 2
+        let half = available / 2
+        // Linke Kante ≥ 0: guide ≤ half; rechte Kante ≤ available: guide ≥ width − half.
+        return min(max(guide, width - half), max(half, width / 2))
     }
 
     /// Geschätzte Breite der Status-Pille je Zustand, für die Begrenzung auf

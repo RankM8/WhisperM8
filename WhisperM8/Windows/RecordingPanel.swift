@@ -445,6 +445,7 @@ class OverlayController: ObservableObject {
     var unifiedGeneration = 0
     var unifiedScreen: NotchScreenInfo?
     var badgeCancellable: AnyCancellable?
+    var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?
 
@@ -696,6 +697,17 @@ class OverlayController: ObservableObject {
         onContextAction = nil
     }
 
+    /// Fenster schließen, Zustand und Rückwege behalten (vereinte Pille baut
+    /// nach einem Bildschirmwechsel an neuer Stelle neu auf).
+    func closePanelForRebuild() {
+        hoverCollapseWork?.cancel()
+        hoverCollapseWork = nil
+        panel?.close()
+        panel = nil
+        hostingView = nil
+        isHoverExpanded = false
+    }
+
     /// Schnellaktion läuft: Pill mit Arbeits-Animation, Text und ✕ (bricht ab).
     func showQuickActionWorking(label: String, onCancel: @escaping () -> Void) {
         hide()
@@ -849,8 +861,16 @@ class OverlayController: ObservableObject {
     /// SwiftUI meldet den sichtbaren Pill-Frame (Koordinaten des Hosting-Views,
     /// top-left origin) — hier wird er in AppKit-Koordinaten gedreht und an
     /// hitTest/Tracking/Clamp/Persistenz verteilt.
-    func reportPillFrame(_ swiftUIFrame: CGRect) {
+    func reportPillFrame(_ reportedFrame: CGRect) {
         guard let panel, let hostingView else { return }
+        // An der Notch zählt nur der Körper unter der Menüleiste: Das Band
+        // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
+        // die Menüleiste (Treffer- und Hover-Fläche).
+        var swiftUIFrame = reportedFrame
+        if case .notch(_, let bandHeight) = presentation {
+            swiftUIFrame.origin.y += bandHeight
+            swiftUIFrame.size.height -= bandHeight
+        }
         guard swiftUIFrame.width > 0, swiftUIFrame.height > 0 else { return }
 
         // Fenster-Koordinaten sind immer bottom-left; die Hosting-View

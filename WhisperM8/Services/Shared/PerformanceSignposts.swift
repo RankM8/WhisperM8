@@ -296,18 +296,19 @@ enum PerfBudgets {
     /// gemessen, er ist gewollt langsam. Läufe mit Diktat-Pause zählen nicht.
     static let statisticsScan = PerformanceBudget(name: "statistics.scan", budget: 1.500, signposter: PerfSignposts.statistics)
 
+    // Vereinte Pille
+    /// Diktat-Fenster an seiner Stelle aufbauen (nach der Bildschirmsuche,
+    /// auf dem Main Thread). Nur in der Detail-Stufe.
+    static let unifiedPillShow = PerformanceBudget(
+        name: "pill.unifiedShow", budget: 0.016, signposter: PerfSignposts.recording, tier: .detail)
+    /// Status-Pille neu zeichnen (Zustandswechsel, gedrosselt). Nur in der Detail-Stufe.
+    static let unifiedPillRender = PerformanceBudget(
+        name: "pill.unifiedRender", budget: 0.008, signposter: PerfSignposts.sidebar, tier: .detail)
+
     // Controller
     /// Controller-Insel einblenden: Modell im Ereignis-Pfad bauen (bei „Wohin“
     /// die Zeilen der Liste und die Workspaces), Fenster auf Größe bringen und
     /// zeigen. Zwei Bilder bei 60 Hz; die Animation selbst zählt nicht.
-    /// Vereinte Pille: Diktat-Fenster an seiner Stelle aufbauen (nach der
-    /// Bildschirmsuche, auf dem Main Thread). Nur in der Detail-Stufe.
-    static let unifiedPillShow = PerformanceBudget(
-        name: "pill.unifiedShow", budget: 0.016, signposter: PerfSignposts.recording, tier: .detail)
-    /// Vereinte Pille: Status-Pille neu zeichnen (Zustandswechsel, gedrosselt).
-    static let unifiedPillRender = PerformanceBudget(
-        name: "pill.unifiedRender", budget: 0.008, signposter: PerfSignposts.sidebar, tier: .detail)
-
     static let controllerIslandShow = PerformanceBudget(
         name: "controller.islandShow", budget: 0.033, signposter: PerfSignposts.controller)
 }

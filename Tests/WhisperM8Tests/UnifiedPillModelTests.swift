@@ -129,6 +129,16 @@ final class UnifiedPillModelTests: XCTestCase {
         XCTAssertEqual(260 - guide, 200 / 2)
     }
 
+    /// Kommt beim Darüberfahren Kontext dazu, bleibt die Pille im Fenster
+    /// (560 pt Platz): nicht mehr als die halbe Breite links der Mitte.
+    func testHoverGuideNeverPushesThePillOutOfThePanel() {
+        let guide = UnifiedPillGeometry.centerGuide(width: 500, collapsedWidth: 120, hoverExpanded: true, available: 560)
+        XCTAssertEqual(guide, 280, "linke Kante bei 0")
+        XCTAssertLessThanOrEqual(500 - guide, 280, "rechte Kante im Fenster")
+        let narrow = UnifiedPillGeometry.centerGuide(width: 300, collapsedWidth: 220, hoverExpanded: true, available: 560)
+        XCTAssertEqual(narrow, 190)
+    }
+
     func testStatusPanelIsCenteredOnThePillWithShadowMargin() {
         let center = NotchPillPlacement.defaultCenter(external)
         let frame = UnifiedPillGeometry.statusPanelFrame(mode: .compact(chipCount: 2), center: center, screen: external)
