@@ -296,55 +296,6 @@ final class ControllerManagerTests: XCTestCase {
         manager.play(.rejected)
         XCTAssertEqual(source.haptics.count, 1, "In der Pause schweigt der Controller")
     }
-    // MARK: - Touchpad als Maus
-
-    /// Schalter, Pause und Trockenlauf steuern den Zeiger auf der
-    /// Eingabe-Queue; ein Klick vibriert kurz (ohne Bedienungshilfen: „geht nicht“).
-    func testTouchpadPointerFollowsSwitchPauseAndDryRun() async {
-        let poster = SpyPointerPoster()
-        let pump = ControllerGesturePump(pointerPoster: poster)
-        let defaults = defaults!
-        let manager = ControllerManager(source: source, pump: pump, preferences: { AppPreferences(defaults: defaults) })
-        manager.performer = performer
-        manager.accessibilityTrusted = { true }
-        defaults.set(true, forKey: PreferenceKeys.controllerEnabled)
-        defaults.set(true, forKey: PreferenceKeys.controllerTouchpadPointerEnabled)
-        manager.applyPreferences()
-        source.onDeviceChange?(Self.device)
-        func click() {
-            source.onEvent?(.button(.touchpad, pressed: true))
-            source.onEvent?(.button(.touchpad, pressed: false))
-            pump.queue.sync {}
-        }
-
-        click()
-        XCTAssertEqual(poster.buttons.count, 2)
-        try? await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(source.haptics.last, .pointerClick)
-        XCTAssertEqual(manager.recentResolutions, [], "ein Klick ist keine Geste")
-
-        manager.togglePause()
-        click()
-        manager.togglePause()
-        manager.isDryRun = true
-        click()
-        manager.isDryRun = false
-        XCTAssertEqual(poster.buttons.count, 2, "pausiert und im Trockenlauf kein Klick")
-
-        manager.accessibilityTrusted = { false }
-        click()
-        try? await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(source.haptics.last, .rejected)
-
-        // Schalter aus: Der Druck ist wieder der Verlauf, wie bisher.
-        defaults.set(false, forKey: PreferenceKeys.controllerTouchpadPointerEnabled)
-        manager.applyPreferences()
-        let done = expectation(description: "Verlauf")
-        manager.onResolution = { if $0.action == .clipboardToggle { done.fulfill() } }
-        click()
-        await fulfillment(of: [done], timeout: 2)
-        XCTAssertEqual(poster.buttons.count, 4)
-    }
 }
 
 /// Verdrahtung des GameController-Frameworks, geprüft an einem virtuellen
@@ -404,19 +355,6 @@ final class GameControllerInputSourceTests: XCTestCase {
         XCTAssertNil(pad.leftThumbstick.valueChangedHandler)
         XCTAssertNil(pad.rightThumbstick.valueChangedHandler)
         XCTAssertNil(pad.dpad.valueChangedHandler)
-    }
-
-    /// Fingerdaten nur, solange das Touchpad als Maus dient.
-    func testTouchTrackingFollowsTheSwitch() throws {
-        let source = GameControllerInputSource()
-        let virtual = GCController.withExtendedGamepad()
-        source.start(queue: DispatchQueue(label: "controller-source-touch-test"))
-        NotificationCenter.default.post(name: .GCControllerDidConnect, object: virtual)
-        source.setTouchTracking(true)
-        source.setTouchTracking(false)
-        source.stop()
-        // Ein virtuelles Gamepad hat kein Touchpad: Es darf nichts passieren.
-        XCTAssertNil(virtual.extendedGamepad?.leftThumbstick.valueChangedHandler)
     }
 
     func testHapticPatternsAreShortAndNeverEmpty() {

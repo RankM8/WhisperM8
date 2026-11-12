@@ -213,19 +213,15 @@ final class ControllerLegendTests: XCTestCase {
         })
     }
 
-    /// Touchpad als Maus: Die Belegung zeigt beim Touchpad den Zeiger; L2 +
-    /// Touchpad (Verlauf) steht in beiden Fällen bei den Ebenen.
-    func testTouchpadPointerBindings() {
-        XCTAssertEqual(ControllerLegend.allBindings(touchpadPointer: false), ControllerLegend.allBindings())
-        let sections = ControllerLegend.allBindings(touchpadPointer: true)
-        XCTAssertTrue(sections[1].entries.contains(ControllerLegendEntry(inputs: [.button(.touchpad)], label: .pointer)))
-        XCTAssertFalse(sections[1].entries.contains { $0.label == .clipboard })
-        XCTAssertEqual(sections[2].entries.map(\.label), [
-            .deleteToLineStart, .newline, .continueWork, .cycleMode, .commands, .switchAccount,
-            .whereToHold, .nextWaiting, .clipboardWithL2, .pickAndDictate,
-        ])
+    /// L2 + Touchpad (Verlauf) steht bei den Ebenen und wirkt überall; die
+    /// Leiste außerhalb der App zeigt weiter das Touchpad allein.
+    func testClipboardWithL2WorksEverywhere() {
+        let sections = ControllerLegend.allBindings()
+        XCTAssertTrue(sections[1].entries.contains(ControllerLegendEntry(inputs: [.button(.touchpad)], label: .clipboard)))
         // L2 + Touchpad wirkt im Chat, in der Liste, im Verlauf und außerhalb der App.
         let combo = sections[2].entries.first { $0.label == .clipboardWithL2 }!
+        XCTAssertEqual(combo, ControllerLegendEntry(
+            inputs: [.button(.l2), .button(.touchpad)], label: .clipboardWithL2, isCombination: true))
         for context in [chat(.idle), .list, .clipboardPanel(ControllerClipboardState()),
                         .outsideApp(backgroundEnabled: true, wakeOnInput: true), .noWindow, .otherWindow] {
             let acts = ControllerLegend.probes(for: combo).contains {
@@ -233,9 +229,6 @@ final class ControllerLegendTests: XCTestCase {
             }
             XCTAssertTrue(acts, "\(context)")
         }
-        XCTAssertEqual(
-            ControllerLegend.entries(for: .noWindow, touchpadPointer: true).last,
-            ControllerLegendEntry(inputs: [.button(.l2), .button(.touchpad)], label: .clipboardWithL2, isCombination: true))
         XCTAssertEqual(ControllerLegend.entries(for: .noWindow).last?.label, .clipboard)
     }
 

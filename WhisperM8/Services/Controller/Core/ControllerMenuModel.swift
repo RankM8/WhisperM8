@@ -19,8 +19,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// beenden, sonst archivieren).
     case closeChat
     // Steuerung
-    /// Zwischenablage-Verlauf öffnen (mit dem Touchpad als Maus sonst nur
-    /// über L2 + Touchpad erreichbar).
+    /// Zwischenablage-Verlauf öffnen (wie Touchpad bzw. L2 + Touchpad).
     case clipboardHistory
     case showBindings, pause
 
