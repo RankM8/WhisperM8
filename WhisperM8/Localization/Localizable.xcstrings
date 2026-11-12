@@ -7041,16 +7041,6 @@
         }
       }
     },
-    "Hide note": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Notiz zuklappen"
-          }
-        }
-      }
-    },
     "Hide pinned chats": {
       "localizations": {
         "de": {
@@ -7097,6 +7087,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Modus bei der Aufnahme ausblenden."
+          }
+        }
+      }
+    },
+    "Hide this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel ausblenden"
           }
         }
       }
@@ -15024,16 +15024,6 @@
         }
       }
     },
-    "Show note": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Notiz aufklappen"
-          }
-        }
-      }
-    },
     "Show notes on grid tiles": {
       "localizations": {
         "de": {
@@ -15150,6 +15140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Modus bei der Aufnahme zeigen."
+          }
+        }
+      }
+    },
+    "Show this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel zeigen"
           }
         }
       }
@@ -18080,6 +18080,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Turn notes off in this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen im Workspace aus"
+          }
+        }
+      }
+    },
+    "Turn notes on in this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen im Workspace an"
           }
         }
       }

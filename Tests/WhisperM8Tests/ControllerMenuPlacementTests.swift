@@ -99,3 +99,32 @@ final class ControllerMenuPlacementTests: XCTestCase {
                        2 * Metrics.listPadding + 3 * Metrics.rowHeight + Metrics.headingHeight + Metrics.separatorHeight)
     }
 }
+
+/// Kleines Fenster: nur ganze Zeilen, Markierung mit Nachbarn (Nachbesserung
+/// nach der Freigabe der Menü-Karte).
+final class ControllerMenuWindowTests: XCTestCase {
+    func testEverythingFits() {
+        XCTAssertEqual(ControllerMenuWindow.range(heights: [28, 28, 28], selected: 1, available: 100), 0..<3)
+    }
+
+    func testOnlyWholeRowsAroundTheSelection() {
+        let heights: [CGFloat] = Array(repeating: 28, count: 20)
+        let range = ControllerMenuWindow.range(heights: heights, selected: 10, available: 150)
+        XCTAssertEqual(range.count, 5, "5 × 28 = 140 passt, 6 nicht")
+        XCTAssertTrue(range.contains(10))
+        XCTAssertEqual(range, 8..<13, "Markierung in der Mitte")
+    }
+
+    func testAtTheEdgesTheWindowStaysFull() {
+        let heights: [CGFloat] = Array(repeating: 28, count: 20)
+        XCTAssertEqual(ControllerMenuWindow.range(heights: heights, selected: 0, available: 150), 0..<5)
+        XCTAssertEqual(ControllerMenuWindow.range(heights: heights, selected: 19, available: 150), 15..<20)
+    }
+
+    func testRowsWithHeadingsCountTheirHeading() {
+        let heights: [CGFloat] = [50, 28, 28, 50, 28, 28]
+        let range = ControllerMenuWindow.range(heights: heights, selected: 3, available: 110)
+        XCTAssertLessThanOrEqual(range.map { heights[$0] }.reduce(0, +), 110)
+        XCTAssertTrue(range.contains(3))
+    }
+}

@@ -18,8 +18,14 @@ extension ControllerMenuItem {
             let target = chat?.projectOpenTargetName ?? "PhpStorm"
             return String(localized: "Open in \(target)")
         case .revealInFinder: return String(localized: "Show in Finder")
-        case .toggleTileNote: return chat?.tileNoteOpen == true ? String(localized: "Hide note") : String(localized: "Show note")
-        case .toggleNotes: return chat?.notesDefaultOpen == true ? String(localized: "Notes off") : String(localized: "Notes on")
+        // Kachel und Workspace klar getrennt benennen, sonst verwechselt man
+        // „Notiz zeigen“ und „Notizen aus“ leicht.
+        case .toggleTileNote:
+            return chat?.tileNoteOpen == true
+                ? String(localized: "Hide this tile's note") : String(localized: "Show this tile's note")
+        case .toggleNotes:
+            return chat?.notesDefaultOpen == true
+                ? String(localized: "Turn notes off in this workspace") : String(localized: "Turn notes on in this workspace")
         case .removeFromWorkspace:
             // Die Gruppe nennt den Workspace schon in ihrer Überschrift.
             return String(localized: "Remove from this workspace")

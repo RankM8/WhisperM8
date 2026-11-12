@@ -103,7 +103,8 @@ direkt unter dem Chat-Kopf (beim „…“-Knopf), im Raster am Kopf der fokussi
 neben der markierten Zeile. Sie sieht aus wie Insel und Diktat-Pille (dunkles Glas, heller Rand, Markierung
 in Indigo) und zeigt jede Gruppe mit Überschrift; darunter steht, was ✕, ○ und Options tun. Am Rand kippt
 sie über den Anker (Kachel unten im Raster) oder rückt nach links bzw. oben; ist das Fenster zu klein,
-scrollt die Liste in der Karte und hält die Markierung sichtbar. Ohne Anker (kein Chat sichtbar) steht sie
+zeigt die Karte nur ganze Zeilen rund um die Markierung und rückt mit ihr (`ControllerMenuWindow`); an der
+Kante, an der es weitergeht, ist der nächste Eintrag nur als verblassender Rand zu sehen. Ohne Anker (kein Chat sichtbar) steht sie
 unten mittig über der Legende. Platzierung pur in `ControllerMenuPlacement`, Anker über
 `ControllerMenuAnchorKey` (`ControllerMenuCard.swift`): Die Anker melden nur bei offenem Menü einen Rahmen.
 
@@ -117,7 +118,7 @@ Kontextmenü des Chats bzw. Seitenleiste und Workspace-Kopf (je ein `AgentChatsC
 | Eingaben | „Weiter“, „Befehle ›“ (feste Befehle der CLI, Tabelle `ControllerSlashCommands`, bei Claude auch `/tasks`, `/workflows`, `/rewind`; „/ eintippen“ bleibt ungesendet, alle anderen werden gesendet; Befehle mit Liste setzen „Auswahl offen“), „Modus wechseln“ (Shift+Tab), „Neu zeichnen“ (nur Claude, Ctrl+L) |
 | Chat | „Konto wechseln ›“, „Umbenennen…“, „Titel neu lesen“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“ in der Seitenleiste); außerhalb eines Workspace auch „Zu Workspace hinzufügen ›“ und „In neues Fenster verschieben“ |
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
-| Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz aufklappen/zuklappen“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Notizen an/aus“ (wie ⌥⌘N), „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Notizen nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
+| Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Notizen im Workspace an/aus“ (wie ⌥⌘N), „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Notizen nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
 | Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
 | Steuerung | „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 

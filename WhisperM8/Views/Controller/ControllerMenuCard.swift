@@ -66,16 +66,25 @@ enum ControllerMenuCardMetrics {
     static let separatorHeight: CGFloat = 9
     static let listPadding: CGFloat = 4
 
-    static func listHeight(_ rows: [ControllerMenuRow]) -> CGFloat {
-        rows.reduce(2 * listPadding) { total, row in
-            total + rowHeight + (row.groupHeading != nil ? headingHeight : 0)
-                + (row.groupHeading == nil && row.startsGroup ? separatorHeight : 0)
+    /// Höhe einer Zeile samt Überschrift bzw. Trennlinie davor.
+    static func height(of row: ControllerMenuRow) -> CGFloat {
+        rowHeight + (row.groupHeading != nil ? headingHeight : 0)
+            + (row.groupHeading == nil && row.startsGroup ? separatorHeight : 0)
+    }
+
+    /// Höhe des angeschnittenen, verblassenden Nachbarn oben/unten, wenn die
+    /// Liste dort weitergeht (statt des normalen Rands).
+    static let peekHeight: CGFloat = 12
+
+    static func listHeight(_ rows: [ControllerMenuRow], peekAbove: Bool = false, peekBelow: Bool = false) -> CGFloat {
+        rows.reduce((peekAbove ? peekHeight : listPadding) + (peekBelow ? peekHeight : listPadding)) {
+            $0 + height(of: $1)
         }
     }
 
     /// Volle Höhe: Titel, Trennlinie, Liste, Trennlinie, Fußzeile.
-    static func contentHeight(_ rows: [ControllerMenuRow]) -> CGFloat {
-        2 * padding + titleHeight + 1 + listHeight(rows) + 1 + footerHeight
+    static func contentHeight(_ rows: [ControllerMenuRow], peekAbove: Bool = false, peekBelow: Bool = false) -> CGFloat {
+        2 * padding + titleHeight + 1 + listHeight(rows, peekAbove: peekAbove, peekBelow: peekBelow) + 1 + footerHeight
     }
 }
 
@@ -85,43 +94,38 @@ struct ControllerMenuCard: View {
     let isSubmenu: Bool
     let rows: [ControllerMenuRow]
     let selectedID: String?
-    /// Die Liste ist höher als der Platz: Sie scrollt in der Karte und hält
-    /// die Markierung sichtbar.
-    var scrolls = false
+    /// Über bzw. unter den gezeigten Zeilen geht die Liste weiter (kleines
+    /// Fenster): Von diesem Nachbarn ist nur ein verblassender Rand zu sehen.
+    /// Die gezeigten Zeilen selbst sind immer ganz zu sehen.
+    var peekAbove: ControllerMenuRow? = nil
+    var peekBelow: ControllerMenuRow? = nil
 
     private var palette: IslandPalette { .notch }
     private typealias Metrics = ControllerMenuCardMetrics
 
-    init(title: String, isSubmenu: Bool, rows: [ControllerMenuRow], selectedID: String?, scrolls: Bool = false) {
+    init(title: String, isSubmenu: Bool, rows: [ControllerMenuRow], selectedID: String?,
+         peekAbove: ControllerMenuRow? = nil, peekBelow: ControllerMenuRow? = nil) {
         self.title = title
         self.isSubmenu = isSubmenu
         self.rows = rows
         self.selectedID = selectedID
-        self.scrolls = scrolls
+        self.peekAbove = peekAbove
+        self.peekBelow = peekBelow
     }
 
-    init(menu: ControllerMenuModel, fallbackTitle: String?, scrolls: Bool = false) {
+    init(menu: ControllerMenuModel, fallbackTitle: String?) {
         self.init(
             title: ControllerMenuRow.heading(of: menu, fallback: fallbackTitle),
             isSubmenu: menu.submenu != nil,
             rows: ControllerMenuRow.rows(of: menu),
-            selectedID: ControllerMenuRow.selectedID(of: menu),
-            scrolls: scrolls)
+            selectedID: ControllerMenuRow.selectedID(of: menu))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             titleBar
             divider
-            if scrolls {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical) { list }
-                        .onAppear { scrollToSelection(proxy, animated: false) }
-                        .onChange(of: selectedID) { _, _ in scrollToSelection(proxy, animated: true) }
-                }
-            } else {
-                list
-            }
+            list
             divider
             footer
         }
@@ -138,15 +142,17 @@ struct ControllerMenuCard: View {
         .accessibilityElement(children: .contain)
     }
 
-    private func scrollToSelection(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let selectedID else { return }
-        if animated {
-            // Beim Weitergehen nur so weit, bis die Zeile zu sehen ist.
-            withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(selectedID) }
-        } else {
-            // Beim Öffnen die Markierung in die Mitte, mit Nachbarn darüber und darunter.
-            proxy.scrollTo(selectedID, anchor: .center)
-        }
+    /// Rand eines Nachbarn, der nicht mehr ganz hineinpasst: angeschnitten
+    /// und zur Kante hin verblassend — zeigt, dass es dort weitergeht.
+    private func peek(_ row: ControllerMenuRow, above: Bool) -> some View {
+        self.row(row, marked: false)
+            .frame(height: Metrics.peekHeight, alignment: above ? .bottom : .top)
+            .clipped()
+            .mask {
+                LinearGradient(colors: [.black.opacity(0.55), .clear],
+                               startPoint: above ? .bottom : .top, endPoint: above ? .top : .bottom)
+            }
+            .accessibilityHidden(true)
     }
 
     private var divider: some View {
@@ -181,6 +187,11 @@ struct ControllerMenuCard: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let peekAbove {
+                peek(peekAbove, above: true)
+            } else {
+                Color.clear.frame(height: Metrics.listPadding)
+            }
             ForEach(rows) { row in
                 if let heading = row.groupHeading {
                     Text(verbatim: heading)
@@ -196,10 +207,13 @@ struct ControllerMenuCard: View {
                     divider.padding(.horizontal, 8).frame(height: Metrics.separatorHeight)
                 }
                 self.row(row, marked: row.id == selectedID)
-                    .id(row.id)
+            }
+            if let peekBelow {
+                peek(peekBelow, above: false)
+            } else {
+                Color.clear.frame(height: Metrics.listPadding)
             }
         }
-        .padding(.vertical, Metrics.listPadding)
     }
 
     private func row(_ row: ControllerMenuRow, marked: Bool) -> some View {
@@ -314,16 +328,48 @@ struct ControllerMenuCardLayer: View {
     let container: CGRect
     let bottomInset: CGFloat
 
-    var body: some View {
+    private typealias Metrics = ControllerMenuCardMetrics
+
+    private struct Layout {
+        var rows: [ControllerMenuRow]
+        var above: ControllerMenuRow?
+        var below: ControllerMenuRow?
+        var frame: CGRect
+    }
+
+    /// Passt nicht alles, zeigt die Karte ganze Zeilen rund um die Markierung
+    /// und rückt mit ihr (kein Scroll-Bereich, keine halbe Zeile unter der
+    /// Kopfzeile); vom nächsten Eintrag ist nur ein verblassender Rand zu sehen.
+    private func layout(selectedID: String?) -> Layout {
         let rows = ControllerMenuRow.rows(of: menu)
+        let full = ControllerMenuPlacement.place(
+            anchor: anchor, contentHeight: Metrics.contentHeight(rows),
+            width: Metrics.width, container: container, bottomInset: bottomInset)
+        guard full.scrolls else { return Layout(rows: rows, frame: full.frame) }
+        let visible = ControllerMenuWindow.range(
+            heights: rows.map(Metrics.height(of:)),
+            selected: rows.firstIndex { $0.id == selectedID },
+            available: full.frame.height - Metrics.contentHeight([], peekAbove: true, peekBelow: true))
+        var shown = Array(rows[visible])
+        // Beginnt das Fenster mitten in einer Gruppe, steht keine Trennlinie oben.
+        if !shown.isEmpty, shown[0].groupHeading == nil { shown[0].startsGroup = false }
+        let above = visible.lowerBound > 0 ? rows[visible.lowerBound - 1] : nil
+        let below = visible.upperBound < rows.count ? rows[visible.upperBound] : nil
         let placement = ControllerMenuPlacement.place(
-            anchor: anchor, contentHeight: ControllerMenuCardMetrics.contentHeight(rows),
-            width: ControllerMenuCardMetrics.width, container: container, bottomInset: bottomInset)
+            anchor: anchor,
+            contentHeight: Metrics.contentHeight(shown, peekAbove: above != nil, peekBelow: below != nil),
+            width: Metrics.width, container: container, bottomInset: bottomInset)
+        return Layout(rows: shown, above: above, below: below, frame: placement.frame)
+    }
+
+    var body: some View {
+        let selectedID = ControllerMenuRow.selectedID(of: menu)
+        let layout = layout(selectedID: selectedID)
         ControllerMenuCard(
             title: ControllerMenuRow.heading(of: menu, fallback: fallbackTitle),
-            isSubmenu: menu.submenu != nil, rows: rows,
-            selectedID: ControllerMenuRow.selectedID(of: menu), scrolls: placement.scrolls)
-            .frame(width: placement.frame.width, height: placement.frame.height, alignment: .top)
-            .position(x: placement.frame.midX, y: placement.frame.midY)
+            isSubmenu: menu.submenu != nil, rows: layout.rows, selectedID: selectedID,
+            peekAbove: layout.above, peekBelow: layout.below)
+            .frame(width: layout.frame.width, height: layout.frame.height, alignment: .top)
+            .position(x: layout.frame.midX, y: layout.frame.midY)
     }
 }

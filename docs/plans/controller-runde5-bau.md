@@ -37,12 +37,12 @@ Presenter. Die vereinte Pille ist seit `83b46822` in main und hier gemergt. Der 
   Liste neben der markierten Zeile. Stil wie Insel und Diktat-Pille (`PillGlassBackground`, Palette der
   Insel), Gruppen mit Überschrift, Fußzeile mit ✕/○/Options. Platzierung pur (`ControllerMenuPlacement`:
   rechts bündig unter dem Anker, über ihn gekippt, wenn unten der Platz fehlt, in der Liste rechts daneben
-  bzw. links, wenn rechts kein Platz ist; Breite und Höhe auf das Fenster begrenzt, dann scrollt die Liste
-  und hält die Markierung sichtbar). Anker per `anchorPreference`, nur bei offenem Menü
+  bzw. links, wenn rechts kein Platz ist; Breite und Höhe auf das Fenster begrenzt; passt nicht alles, zeigt
+  sie ganze Zeilen rund um die Markierung, mit verblassendem Rand des nächsten Eintrags an der Kante). Anker per `anchorPreference`, nur bei offenem Menü
   (`ControllerMenuAnchorMark`, `ControllerListMarker`); feste Zeilenhöhen, kein Messen.
 - **Gruppe „Workspace“** nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster oder große
-  Kachel): „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz auf/zu“, „In neues
-  Fenster“, dann „Notizen an/aus“, „Workspace umbenennen…“ (`renameWorkspace`, dasselbe Sheet wie in der
+  Kachel): „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“, „In neues
+  Fenster“, dann „Notizen im Workspace an/aus“, „Workspace umbenennen…“ (`renameWorkspace`, dasselbe Sheet wie in der
   Seitenleiste), „Rastergröße ›“ (`setWorkspaceCapacity`). Außerhalb eines Workspace stehen „Zu Workspace
   hinzufügen ›“ und „In neues Fenster“ unter „Chat“. Entscheidung Rastergröße: Wachsen und Verkleinern ohne
   Verlust gehen; Stufen, die die Auswahl „wer bleibt“ bräuchten, sind aus („nur mit der Maus“), und der Befehl
@@ -801,8 +801,8 @@ eigenen Agenten (Opus) über den ganzen Branch.
 - Diktat per R2 in Chat A, während der Aufnahme mit R1 tippen zu Chat B, L2-Liste öffnen, R1 + ◀ Glocke;
   dann ✕: Text kommt in A an und wird dort gesendet, B bleibt ausgewählt; Pille und Legende zeigen „→ A“.
 - Options-Menü als Karte: Einzelansicht rechts unter dem Chat-Kopf, Raster an der fokussierten Kachel (auch
-  unten rechts: kippt nach oben), Liste neben der markierten Zeile; im kleinen Fenster scrollt die Liste in
-  der Karte. Gruppe „Workspace“ im Raster und in der großen Kachel: umbenennen (Sheet, Kreuz bestätigt),
+  unten rechts: kippt nach oben), Liste neben der markierten Zeile; im kleinen Fenster nur ganze Zeilen, oben/unten
+  ein verblassender Rand, wo es weitergeht. Gruppe „Workspace“ im Raster und in der großen Kachel: umbenennen (Sheet, Kreuz bestätigt),
   Rastergröße wachsen und verlustfrei verkleinern, Stufen mit Auswahl aus.
 - Codex: mit ↑ einen alten Prompt holen, R1 + Kreuz geht nicht; ein Zeichen tippen, dann sendet es.
 - Options-Menü: Gruppen erscheinen nur, wenn sie passen (Shell, Kachel, Hintergrund-Chat); PhpStorm öffnet

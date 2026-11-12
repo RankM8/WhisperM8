@@ -99,3 +99,38 @@ enum ControllerMenuPlacement {
         return min(max(value, low), high)
     }
 }
+
+/// Welche Zeilen die Menü-Karte zeigt, wenn nicht alle hineinpassen: immer
+/// ganze Zeilen (keine halb abgeschnittene unter der Kopfzeile), die
+/// Markierung möglichst in der Mitte, mit Nachbarn darüber und darunter.
+/// Statt eines Scroll-Bereichs rückt das Fenster mit der Markierung.
+enum ControllerMenuWindow {
+    /// - Parameters:
+    ///   - heights: Höhe je Zeile (mit Überschrift bzw. Trennlinie davor).
+    ///   - selected: Index der Markierung; ohne sie ab dem Anfang.
+    ///   - available: Platz für die Zeilen.
+    static func range(heights: [CGFloat], selected: Int?, available: CGFloat) -> Range<Int> {
+        guard !heights.isEmpty else { return 0..<0 }
+        if heights.reduce(0, +) <= available { return 0..<heights.count }
+        let anchor = min(max(selected ?? 0, 0), heights.count - 1)
+        var start = anchor
+        var end = anchor + 1
+        var used = heights[anchor]
+        // Abwechselnd unten und oben je eine ganze Zeile dazu, solange sie passt.
+        while true {
+            var grew = false
+            if end < heights.count, used + heights[end] <= available {
+                used += heights[end]
+                end += 1
+                grew = true
+            }
+            if start > 0, used + heights[start - 1] <= available {
+                start -= 1
+                used += heights[start]
+                grew = true
+            }
+            if !grew { break }
+        }
+        return start..<end
+    }
+}
