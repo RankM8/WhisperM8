@@ -1,5 +1,5 @@
 ---
-status: teilweise gebaut (12.11.2026); Insel-Layout (zweite Raute, Limits-Karte, Konto im R1-Kopf) zurückgestellt bis zur vereinten Pille
+status: gebaut bis auf das Insel-Layout (12.11.2026); Menü-Karte am Chat und Gruppe Workspace nachgetragen; zweite Raute, Limits-Karte, Konto im R1-Kopf folgen im Insel-Paket
 stand: 2026-11-12
 feature: Controller Runde 5 (Limits in der Insel, App-Schalter, Schreiben mit Steuerkreuz, Einfügen, Wiederöffnen, Forschungspunkte R1–R8)
 branch: feat/controller-runde5
@@ -25,9 +25,33 @@ Konto-Menü mit Verbrauch, „am meisten frei“, Abbrechen/Rückgängig (3), Be
 `/rewind` (R5), „Neu zeichnen“ (R7), Steuerung während des Diktats (9). Die Insel zeigt die neuen Tasten
 nur über ihr Modell (Einträge, Beschriftungen), ohne neues Layout.
 
-Zurückgestellt, bis die vereinte Pille (`feat/pille-vereint`) in main ist: 1 (zweite Raute mit
-App-Schaltern), 2 (Limits-Karte), 4 (Konto und 5 Std. im R1-Kopf) und jede Layout-Änderung an
-`ControllerIslandView` und Presenter. Der Limits-Stand (`AccountLimitsStore`) für Karte und Kopf ist schon da.
+Zurückgestellt (Insel-Paket, eigener Schritt nach Runde 5): 1 (zweite Raute mit App-Schaltern),
+2 (Limits-Karte), 4 (Konto und 5 Std. im R1-Kopf) und jede Layout-Änderung an `ControllerIslandView` und
+Presenter. Die vereinte Pille ist seit `83b46822` in main und hier gemergt. Der Limits-Stand
+(`AccountLimitsStore`) für Karte und Kopf ist schon da.
+
+**Nachtrag 12.11.2026 (freigegeben mit „ja alles“):**
+
+- **Menü als Karte am Chat.** Das Options-Menü erscheint nicht mehr unten mittig, sondern als dunkle Karte
+  am Chat: Einzelansicht rechts unter dem Chat-Kopf (beim „…“), Raster am Kopf der fokussierten Kachel,
+  Liste neben der markierten Zeile. Stil wie Insel und Diktat-Pille (`PillGlassBackground`, Palette der
+  Insel), Gruppen mit Überschrift, Fußzeile mit ✕/○/Options. Platzierung pur (`ControllerMenuPlacement`:
+  rechts bündig unter dem Anker, über ihn gekippt, wenn unten der Platz fehlt, in der Liste rechts daneben
+  bzw. links, wenn rechts kein Platz ist; Breite und Höhe auf das Fenster begrenzt, dann scrollt die Liste
+  und hält die Markierung sichtbar). Anker per `anchorPreference`, nur bei offenem Menü
+  (`ControllerMenuAnchorMark`, `ControllerListMarker`); feste Zeilenhöhen, kein Messen.
+- **Gruppe „Workspace“** nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster oder große
+  Kachel): „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz auf/zu“, „In neues
+  Fenster“, dann „Notizen an/aus“, „Workspace umbenennen…“ (`renameWorkspace`, dasselbe Sheet wie in der
+  Seitenleiste), „Rastergröße ›“ (`setWorkspaceCapacity`). Außerhalb eines Workspace stehen „Zu Workspace
+  hinzufügen ›“ und „In neues Fenster“ unter „Chat“. Entscheidung Rastergröße: Wachsen und Verkleinern ohne
+  Verlust gehen; Stufen, die die Auswahl „wer bleibt“ bräuchten, sind aus („nur mit der Maus“), und der Befehl
+  lehnt sie ab — der Controller öffnet den Auswahlmodus nie. Notizen gibt es in der großen Kachel nicht (die
+  Karte hängt an der Kachel im Raster).
+- **Befund 3 behoben:** Ein in Codex mit ↑ zurückgeholter, unveränderter Prompt ist vom eigenen Entwurf
+  unterscheidbar (`TerminalComposerDraftTracker.mayHoldRecalledCodexPrompt`); R1 + Kreuz schickt ihn nicht
+  erneut ab. Tippen, Löschen oder Einfügen macht ihn zum eigenen Entwurf; ↑ in einem eigenen Entwurf zählt
+  nicht als Zurückholen (Codex bewegt dort den Cursor).
 
 Abweichungen vom Plan oben: Der Limits-Stand ist ein eigener kleiner Speicher, den die Popovers füllen,
 statt ihre Lade-Logik zu übernehmen (weniger Umbau an den Popovers). R4 schließt die Insel nicht (wie die
@@ -776,6 +800,11 @@ eigenen Agenten (Opus) über den ganzen Branch.
 - Tastatur Ctrl+Return in Claude bei arbeitendem Chat.
 - Diktat per R2 in Chat A, während der Aufnahme mit R1 tippen zu Chat B, L2-Liste öffnen, R1 + ◀ Glocke;
   dann ✕: Text kommt in A an und wird dort gesendet, B bleibt ausgewählt; Pille und Legende zeigen „→ A“.
+- Options-Menü als Karte: Einzelansicht rechts unter dem Chat-Kopf, Raster an der fokussierten Kachel (auch
+  unten rechts: kippt nach oben), Liste neben der markierten Zeile; im kleinen Fenster scrollt die Liste in
+  der Karte. Gruppe „Workspace“ im Raster und in der großen Kachel: umbenennen (Sheet, Kreuz bestätigt),
+  Rastergröße wachsen und verlustfrei verkleinern, Stufen mit Auswahl aus.
+- Codex: mit ↑ einen alten Prompt holen, R1 + Kreuz geht nicht; ein Zeichen tippen, dann sendet es.
 - Options-Menü: Gruppen erscheinen nur, wenn sie passen (Shell, Kachel, Hintergrund-Chat); PhpStorm öffnet
   das gemerkte Ziel, Finder den Projektordner; Neu starten zeigt die Rückfrage, Kreuz bestätigt; Notiz der
   Kachel auf/zu; Zu Workspace hinzufügen ›; In neues Fenster; Kontowechsel abbrechen bei vorgemerktem Wechsel.

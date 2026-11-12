@@ -98,17 +98,26 @@ nur für den laufenden App-Start; er wird im Store nach jeder Änderung nachgef�
 CLI gleich. Die Legende liest ihn im Ereignis-Pfad; nach einem Klick mit der Maus steht dort bis zur
 nächsten Eingabe oder Statusänderung noch das alte Ziel.
 
-**Menü (Options):** Gruppen in fester Reihenfolge (Runde 5): Eingaben · Chat · Projekt · Workspace ·
-Lebenszyklus · Steuerung. Ein Eintrag erscheint nur, wenn er für diesen Chat passt; ausgegraut ist nur, was
-passt, aber gerade nicht geht (etwa „Weiter“, während der Chat arbeitet). Alle Aktionen nehmen dieselben
-Wege wie Kopf, Kachelkopf und Kontextmenü des Chats (je ein `AgentChatsCommand`).
+**Menü (Options):** eine dunkle Karte am Chat, für den sie gilt (Runde 5): in der Einzelansicht rechts
+direkt unter dem Chat-Kopf (beim „…“-Knopf), im Raster am Kopf der fokussierten Kachel, in der Liste rechts
+neben der markierten Zeile. Sie sieht aus wie Insel und Diktat-Pille (dunkles Glas, heller Rand, Markierung
+in Indigo) und zeigt jede Gruppe mit Überschrift; darunter steht, was ✕, ○ und Options tun. Am Rand kippt
+sie über den Anker (Kachel unten im Raster) oder rückt nach links bzw. oben; ist das Fenster zu klein,
+scrollt die Liste in der Karte und hält die Markierung sichtbar. Ohne Anker (kein Chat sichtbar) steht sie
+unten mittig über der Legende. Platzierung pur in `ControllerMenuPlacement`, Anker über
+`ControllerMenuAnchorKey` (`ControllerMenuCard.swift`): Die Anker melden nur bei offenem Menü einen Rahmen.
+
+Gruppen in fester Reihenfolge: Eingaben · Chat · Projekt · Workspace · Lebenszyklus · Steuerung. Ein Eintrag
+erscheint nur, wenn er für diesen Chat passt; ausgegraut ist nur, was passt, aber gerade nicht geht (etwa
+„Weiter“, während der Chat arbeitet). Alle Aktionen nehmen dieselben Wege wie Kopf, Kachelkopf und
+Kontextmenü des Chats bzw. Seitenleiste und Workspace-Kopf (je ein `AgentChatsCommand`).
 
 | Gruppe | Einträge |
 |---|---|
 | Eingaben | „Weiter“, „Befehle ›“ (feste Befehle der CLI, Tabelle `ControllerSlashCommands`, bei Claude auch `/tasks`, `/workflows`, `/rewind`; „/ eintippen“ bleibt ungesendet, alle anderen werden gesendet; Befehle mit Liste setzen „Auswahl offen“), „Modus wechseln“ (Shift+Tab), „Neu zeichnen“ (nur Claude, Ctrl+L) |
-| Chat | „Konto wechseln ›“, „Umbenennen…“, „Titel neu lesen“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“ in der Seitenleiste) |
+| Chat | „Konto wechseln ›“, „Umbenennen…“, „Titel neu lesen“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“ in der Seitenleiste); außerhalb eines Workspace auch „Zu Workspace hinzufügen ›“ und „In neues Fenster verschieben“ |
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
-| Workspace | „Notiz aufklappen/zuklappen“ (Kachel mit Notiz), „Notizen an/aus“ (wie ⌥⌘N), „Aus Workspace „…“ nehmen“, „Zu Workspace hinzufügen ›“, „In neues Fenster verschieben“ |
+| Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz aufklappen/zuklappen“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Notizen an/aus“ (wie ⌥⌘N), „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Notizen nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
 | Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
 | Steuerung | „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 
@@ -120,7 +129,14 @@ wenn zutreffend, „Kontowechsel zu … abbrechen“ und „Letzten Kontowechsel
 Chats)“ — das wirkt auf den ganzen letzten Wechsel, nicht nur auf diesen Chat. Die Zahlen kommen
 aus `AccountLimitsStore`: Die Popovers tragen ihre Ergebnisse ein, und erst beim Öffnen der Konto-Ebene
 stößt der Controller denselben passiven Abruf an (nie Tokens erneuern), höchstens einmal je Minute — auch
-nach einem gescheiterten Versuch; ein offenes Menü zieht nach. Nicht im Menü: Tab-Farbe, Inspector, Rastergröße.
+nach einem gescheiterten Versuch; ein offenes Menü zieht nach. Nicht im Menü: Tab-Farbe, Inspector.
+
+**Rastergröße ›** zeigt dieselben Stufen wie der Stufenwähler im Workspace-Kopf (die aktuelle und alle, die
+in die zuletzt gemessene Rasterfläche passen); die Markierung beginnt auf der aktuellen. Wachsen geht
+immer, Verkleinern nur, wenn alle Chats nach dem Zusammenrücken noch Platz haben. Bräuchte das Verkleinern
+die Auswahl „wer bleibt“ an den Kacheln, ist die Stufe aus („nur mit der Maus“) und der Befehl
+`setWorkspaceCapacity` lehnt ab — der Controller öffnet diesen Auswahlmodus nie, damit kein Chat aus Versehen
+das Raster verlässt. Läuft die Auswahl gerade, ist „Rastergröße“ aus.
 
 In der Liste wirken die Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options
 schließt alles.
@@ -412,7 +428,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
 - `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
-  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-insel` die Insel (Wohin:
+  Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-menue-karte` die Menü-Karte am
+  Chat (Einzelansicht, Raster mit Gruppe Workspace, Rastergröße, Liste, große Kachel, kleines Fenster mit
+  Scrollen); `ONLY=controller-insel` die Insel (Wohin:
   Chats mit Markierung auf dem vorigen Chat, nach zwei Schritten, ohne vorigen Ort, Workspaces, mit
   Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
   arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Insel nach unten, Pille unten mit
@@ -452,5 +470,7 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   auch Dreieck.
 - Ctrl+L zeichnet in Claude Code 2.1.322 nur neu (`chat:clearInput` und `chat:clearScreen` teilen den
   Handler `forceRedraw`); in Codex leert Ctrl+L die Oberfläche, deshalb „Neu zeichnen“ nur für Claude.
+- Ein mit ↑ zurückgeholter Prompt zählt nur, wenn der Controller das ↑ geschickt hat; ein ↑ auf der
+  Tastatur sieht der Entwurfs-Tracker nicht als Zurückholen.
 - „Jetzt senden“ hängt an Claudes Warteschlange im Transcript (`queue-operation`); 2.1.322 nimmt
   Wartendes meist schon an der nächsten Tool-Grenze auf.
