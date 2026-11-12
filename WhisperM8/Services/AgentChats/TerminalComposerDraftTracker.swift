@@ -42,6 +42,11 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Der Controller hat mit → einen grauen Vorschlag ins Feld geholt
     /// (Claude). Zaehlt nur fuer `fieldMayHaveText`, nicht als eigener Entwurf.
     private(set) var mayShowAcceptedSuggestion = false
+    /// Codex: Der Controller hat mit ↑ einen alten Prompt ins leere Feld geholt,
+    /// und seither wurde nichts getippt. Fuer Schutz und Warteschlange zaehlt er
+    /// wie ein Entwurf (`mayHaveUnsentInput`); R1 + Kreuz schickt ihn aber nicht
+    /// erneut ab (Review Runde 5, Befund 3).
+    private(set) var mayHoldRecalledCodexPrompt = false
     /// Zeitpunkt des letzten programmatischen Absendens (`chats send`,
     /// Queue-Zustellung).
     private(set) var lastProgrammaticSubmitAt: Date?
@@ -99,6 +104,14 @@ struct TerminalComposerDraftTracker: Equatable {
         mayHaveUnsentInput || mayHoldRestoredPrompt || mayShowAcceptedSuggestion
     }
 
+    /// Steht vermutlich nur ein alter Prompt im Feld — zurueckgelegt (Claude)
+    /// oder mit ↑ zurueckgeholt und unveraendert (Claude, Codex)? Dann schickt
+    /// R1 + Kreuz nichts ab.
+    var holdsOnlyRecalledPrompt: Bool {
+        if mayHoldRecalledCodexPrompt { return true }
+        return mayHoldRestoredPrompt && !mayHaveUnsentInput && !mayShowAcceptedSuggestion
+    }
+
     /// → vom Controller ausserhalb einer Rueckfrage und offenen Auswahl: holt
     /// in Claude den grauen Vorschlag ins Feld.
     mutating func recordSuggestionAccepted() {
@@ -108,6 +121,7 @@ struct TerminalComposerDraftTracker: Equatable {
     mutating func recordSubmittedByTurnStart() {
         mayHaveUnsentInput = false
         mayShowAcceptedSuggestion = false
+        mayHoldRecalledCodexPrompt = false
         escapeRun = 0
         if !interruptedSinceSubmit {
             mayHoldRestoredPrompt = false
@@ -190,6 +204,7 @@ struct TerminalComposerDraftTracker: Equatable {
         case 36, 76:
             // Return/Enter schickt ab; mit Shift/Option ist es ein Zeilenumbruch
             // im Entwurf.
+            mayHoldRecalledCodexPrompt = false
             if flags.contains(.shift) || flags.contains(.option) {
                 mayHaveUnsentInput = true
             } else {
@@ -203,11 +218,17 @@ struct TerminalComposerDraftTracker: Equatable {
             mayHaveUnsentInput = false
             mayHoldRestoredPrompt = false
             mayShowAcceptedSuggestion = false
+            mayHoldRecalledCodexPrompt = false
             interruptedSinceSubmit = false
         case 9 where flags.contains(.command):
             // Cmd+V fuegt ein.
             mayHaveUnsentInput = true
-        case 53, 48, 51, 117, 115, 119, 116, 121, 123, 124, 125, 126:
+            mayHoldRecalledCodexPrompt = false
+        case 51, 117:
+            // Loeschen fuegt keinen Text ein, veraendert aber einen
+            // zurueckgeholten Prompt: danach ist er ein eigener Entwurf.
+            mayHoldRecalledCodexPrompt = false
+        case 53, 48, 115, 119, 116, 121, 123, 124, 125, 126:
             // ESC, Tab, Loeschen, Navigation: fuegen keinen neuen Text ein. Ein
             // nach ESC-Abbruch zurueckgelegter Prompt steht bereits im
             // Transcript — ihn zu verwerfen verliert nichts.
@@ -216,6 +237,7 @@ struct TerminalComposerDraftTracker: Equatable {
             // Andere Cmd-/Ctrl-Kuerzel sind Bedienung, kein Text.
             if flags.contains(.command) || flags.contains(.control) { break }
             mayHaveUnsentInput = true
+            mayHoldRecalledCodexPrompt = false
         }
     }
 
@@ -228,6 +250,10 @@ struct TerminalComposerDraftTracker: Equatable {
         if isClaude {
             mayHoldRestoredPrompt = true
         } else {
+            // Codex holt nur aus einem leeren Feld (oder aus einem unveraendert
+            // zurueckgeholten Prompt) den Verlauf; in einem eigenen Entwurf
+            // bewegt ↑ den Cursor. Nur dann ist es ein zurueckgeholter Prompt.
+            if !mayHaveUnsentInput || mayHoldRecalledCodexPrompt { mayHoldRecalledCodexPrompt = true }
             mayHaveUnsentInput = true
         }
     }
@@ -236,6 +262,7 @@ struct TerminalComposerDraftTracker: Equatable {
     /// `chats send --no-submit`).
     mutating func recordTextInserted() {
         mayHaveUnsentInput = true
+        mayHoldRecalledCodexPrompt = false
         programmaticWrites += 1
     }
 
@@ -246,6 +273,7 @@ struct TerminalComposerDraftTracker: Equatable {
         mayHaveUnsentInput = false
         mayHoldRestoredPrompt = false
         mayShowAcceptedSuggestion = false
+        mayHoldRecalledCodexPrompt = false
         interruptedSinceSubmit = false
         escapeRun = 0
         programmaticWrites += 1
