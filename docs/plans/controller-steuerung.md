@@ -1119,6 +1119,59 @@ entschieden:
 Codex bekommt die Pfeile ohnehin, Shells bleiben rechts ohne Wirkung. Die Absicherung im Terminal
 (`TerminalControlKey.controllerAllows`) lässt Pfeil rechts bei Claude immer durch, links bleibt gesperrt.
 
+### 6.9 Runde 4: Controller-Insel mit drei Ebenen (12.11.2026)
+
+Entwurf: [`../design/controller-insel.html`](../design/controller-insel.html). Vom User mit „alles ja“
+bestätigt:
+
+1. **L1, R1, L2 sind Ebenen-Tasten.** Tippen (unter 0,3 s, keine andere Taste und kein Stoß von Stick
+   oder Steuerkreuz dazwischen) löst beim Loslassen aus wie bisher: voriger Chat, nächster Chat, letzter
+   Chat; in Liste und Verlauf die Filter, in Dialogen Shift+Tab/Tab. Gehalten werden sie zur Ebene.
+   Kombinationen wirken sofort beim Druck der zweiten Taste; die 0,3 s steuern nur, wann die Insel
+   erscheint. Loslassen nach Halten ohne Kombination tut nichts (außer L2 mit offener Liste). Eine
+   Wiederholung beim Halten von L1/R1 gibt es nicht. Umgesetzt im Erkenner als `.tap`,
+   `.layerBegan/.layerEnded/.layerCancelled` und `.inLayer(Ebene, Geste)`; die Belegung liegt in
+   `ControllerBindingResolver+Layers.swift`. Ebenen gelten nur im Zusammenhang `chat` (auch im Raster);
+   anderswo wirken die Tasten darin wie ohne Ebene.
+2. **L1 + R1** zusammen 1 s: Pause wie bisher, jetzt in jedem Abstand (vorher 0,15 s Fenster). Die Ebene
+   endet dabei still, kein Chatwechsel, keine Ebenen-Aktion. Unter L2 gibt es keinen Akkord.
+3. **L1 „Schreiben“:** Viereck = bis Zeilenanfang löschen (Ctrl+U), gehalten nach 0,4 s alle 150 ms
+   Zeile für Zeile; Dreieck = Zeilenumbruch ohne Senden (Ctrl+J). Kreuz und Kreis frei. Nur Claude und
+   Codex, nicht in einer Rückfrage; in Shells Hinweis in der Insel und „geht nicht“. Ctrl+J belegt in
+   Claude Code („Multiline input“, Control sequence) und Codex (`editor.insert_newline` = `ctrl-j` in
+   `codex-rs/tui/src/keymap.rs`, `composer.submit` nur Enter). Shift+Enter verworfen: kommt im PTY als
+   CR an.
+4. **R1 „Schnellbefehle“** als Raute: Kreuz „Weiter“, Dreieck „Modus wechseln“, Viereck „Befehle ›“,
+   Kreis „Konto wechseln ›“. Ein Druck führt aus und schließt die Insel; „›“ öffnet das Options-Menü auf
+   der Unterseite. Regeln und Wege wie die Menüeinträge (`ControllerMenuModel.isEnabled`, `perform`),
+   Ziel ist der Chat beim Öffnen. Die Rückfrage wird beim Drücken frisch gelesen. Abweichung: Ein
+   Eintrag, der gerade nicht geht, vibriert und lässt die Insel offen (statt sie zu schließen).
+5. **L2 „Wohin“:** erst die Hinweiszeile, Stick/Steuerkreuz hoch/runter öffnet die Liste (erster Stoß ein
+   Schritt vom aktuellen Eintrag), links/rechts wechselt den Reiter Chats/Workspaces, Start-Reiter im
+   Raster Workspaces, sonst Chats. Loslassen oder Kreuz wechselt, Kreis bricht ab, Dreieck springt zum
+   nächsten wartenden Chat reihum (`AgentChatsCommand.nextWaitingChat` → `selectNextWaitingChat`, wie
+   ⌃⌥Tab), R2 wechselt und diktiert. Auf dem Reiter Workspaces ist R2 „geht nicht“ (vorher in der
+   Workspace-Auswahl ohne Wirkung).
+6. **Die Insel** ersetzt den Ctrl+Tab-Umschalter am Controller (`switcherBegin/Move/Commit` und
+   `switcherOpenedWithoutModifier` entfernt, die Tastatur unverändert) und die Workspace-Auswahl unten
+   (`ControllerWorkspacePickerPanel`, `ControllerWorkspacePickerModel`, Zusammenhänge `chatPicker` und
+   `workspacePicker` entfernt). Eigenes nicht aktivierendes Fenster ohne Maus auf dem Bildschirm des
+   Agent-Chats-Fensters (`AgentChatsWindowSnapshot.screenDisplayID`), eine Ebene über der Notch-Anzeige
+   mit derselben Band-Geometrie. Steht die Notch-Anzeige dort, zeigt die Insel ihre Zähler im Kopf
+   (`NotchStatusController.visibleSummary(onDisplay:)`, nur lesend; eine offene Notch-Liste klappt zu).
+   Öffnen und Schließen je eine Bewegung von 0,25 s. Signpost `controller.islandShow`, Budget 33 ms.
+7. **Legende** schaltet beim Halten nicht um; im Chat steht ein Eintrag „L1 R1 L2 Halten: Ebenen“
+   (ersetzt „Halten: Workspace wechseln“ im Raster). Die Einstellungsseite nennt alle drei Ebenen in einem
+   eigenen Abschnitt.
+
+Bewusst so gelassen: In Liste, Verlauf und Brücke lösen L1/R1 jetzt beim Loslassen aus (vorher nach
+0,15 s); lange gehalten passiert dort nichts. Ein Stoß mit dem Stick während des Haltens von L1 oder R1
+macht aus dem Tippen kein Tippen mehr.
+
+Handtest nach dem nächsten `make dev`: siehe Bericht der Runde (Insel an der Notch und als Pille, über
+der Notch-Anzeige, auf dem zweiten Bildschirm, Zeilenumbruch in Claude und Codex, Ctrl+U über mehrere
+Zeilen, Pause-Akkord, Raute bei Rückfrage, „›“ ins Menü, Workspace-Wechsel mit gemerkter Kachel).
+
 ## 7. Fortschritt
 
 | Etappe | Stand | Commit | Notiz |
@@ -1139,3 +1192,4 @@ Codex bekommt die Pfeile ohnehin, Shells bleiben rechts ohne Wirkung. Die Absich
 | 13 Doku und Übergabe | erledigt | (dieser Commit) | `docs/features/controller.md`, Verweis und Notbremse in `CLAUDE.md`, Test-Instanz in 6.3, Sonderfälle in 6.4, Handtest-Liste in 6.2; unabhängige Durchsicht des gesamten Diffs (Opus): keine Regression ohne Controller, 3 hohe/mittlere und 8 kleinere Befunde, alle eingearbeitet (5d3d0f1a); volle Suite danach 4.285 Tests grün |
 | Runde 3 | erledigt | cde3b413, bfa95c4d, 375913ff, 87f388b4, 8877fed0, fddecdd0, 01becb6d | Stick markiert in der Liste, Workspace-Zeilen wechseln den Workspace (Klick und Kreuz), Workspace-Auswahl auf L2 im Raster, Review-Befunde 1/2/3/5, Schreibtasten (Leerzeichen, Wörter, Eingabe leeren); Abschnitt 6.6. Handtest nach dem nächsten Neustart aus main |
 | Review-Fixes nach Runde 3 | erledigt | e9bab93c, 4c4c04d2 | 4.457 Tests grün; Auswahl offen, Codex-Pfeile, Konflikt-Rückfall bei mehreren Fenstern, Mausklick wie vor Runde 3, Schreibtasten nur Claude/Codex, Absenden auf jedem Weg, Leeren an den Haltebeginn gebunden; Abschnitt 6.7. Handtest nach dem nächsten Neustart |
+| Runde 4: Controller-Insel | erledigt | d821977a, c35e6391 | 4.551 Tests grün; Abschnitt 6.9. Ebenen L1/R1/L2, Insel an der Notch, Ctrl+Tab und Workspace-Auswahl am Controller ersetzt; Handtest nach dem nächsten Neustart |
