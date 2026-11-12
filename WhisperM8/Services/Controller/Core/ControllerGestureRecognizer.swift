@@ -178,8 +178,22 @@ struct ControllerGestureRecognizer: Sendable {
                 current.used = true
                 layer = current
             }
+        case .touch:
+            // Fingerdaten sind Sache des Zeigers, nicht der Gesten.
+            break
         }
         return gestures
+    }
+
+    /// Ebene, deren Taste gerade gehalten wird (auch vor der Halte-Schwelle).
+    var activeLayer: ControllerLayer? { layer?.layer }
+
+    /// Eine Eingabe außerhalb des Erkenners (Mausklick am Touchpad) kam
+    /// dazwischen: Die gehaltene Ebenen-Taste gilt nicht mehr als getippt.
+    mutating func markLayerUsed() {
+        guard var current = layer else { return }
+        current.used = true
+        layer = current
     }
 
     mutating func tick(at time: TimeInterval) -> [ControllerGesture] {

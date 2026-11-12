@@ -174,6 +174,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .inLayer(.whereTo, .press(.circle)): .islandCancel,
             .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
             .inLayer(.whereTo, .press(.r2)): .islandCommitAndDictate,
+            // Touchpad als Maus: L2 + Touchpad ist der Weg zum Verlauf.
+            .inLayer(.whereTo, .press(.touchpad)): .clipboardToggle,
             .inLayer(.whereTo, .move(.left, source: .leftStick, isRepeat: false)): .islandTab(step: -1),
             .inLayer(.whereTo, .move(.left, source: .dpad, isRepeat: false)): .islandTab(step: -1),
             .inLayer(.whereTo, .move(.right, source: .leftStick, isRepeat: false)): .islandTab(step: 1),

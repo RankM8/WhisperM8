@@ -185,6 +185,32 @@ final class ControllerLegendTests: XCTestCase {
         })
     }
 
+    /// Touchpad als Maus: Die Belegung zeigt den Zeiger, der Verlauf steht bei
+    /// L2. Ohne den Schalter bleibt alles, wie es war.
+    func testTouchpadPointerBindings() {
+        XCTAssertEqual(ControllerLegend.allBindings(touchpadPointer: false), ControllerLegend.allBindings())
+        let sections = ControllerLegend.allBindings(touchpadPointer: true)
+        XCTAssertTrue(sections[1].entries.contains(ControllerLegendEntry(inputs: [.button(.touchpad)], label: .pointer)))
+        XCTAssertFalse(sections[1].entries.contains { $0.label == .clipboard })
+        XCTAssertEqual(sections[2].entries.map(\.label), [
+            .deleteToLineStart, .newline, .continueWork, .cycleMode, .commands, .switchAccount,
+            .whereToHold, .nextWaiting, .clipboardWithL2, .pickAndDictate,
+        ])
+        // L2 + Touchpad wirkt im Chat, in der Liste, im Verlauf und außerhalb der App.
+        let combo = sections[2].entries.first { $0.label == .clipboardWithL2 }!
+        for context in [chat(.idle), .list, .clipboardPanel(ControllerClipboardState()),
+                        .outsideApp(backgroundEnabled: true, wakeOnInput: true), .noWindow, .otherWindow] {
+            let acts = ControllerLegend.probes(for: combo).contains {
+                ControllerBindingResolver.action(for: $0, in: context) == .clipboardToggle
+            }
+            XCTAssertTrue(acts, "\(context)")
+        }
+        XCTAssertEqual(
+            ControllerLegend.entries(for: .noWindow, touchpadPointer: true).last,
+            ControllerLegendEntry(inputs: [.button(.l2), .button(.touchpad)], label: .clipboardWithL2, isCombination: true))
+        XCTAssertEqual(ControllerLegend.entries(for: .noWindow).last?.label, .clipboard)
+    }
+
     /// Jede Zeile der Einstellungsseite wirkt in mindestens einem Zusammenhang.
     func testAllBindingsAreBacked() {
         let contexts = representativeContexts + [chat(.idle) { $0.draftSuspected = true }, chat(.ended)]

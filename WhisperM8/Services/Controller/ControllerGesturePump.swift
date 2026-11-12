@@ -24,12 +24,16 @@ final class ControllerGesturePump: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var activity: NSObjectProtocol?
     private var wasIdle = true
+    /// Touchpad als Maus. Nur auf `queue`.
+    let pointer: ControllerPointerDriver
 
     init(
         config: ControllerGestureRecognizer.Config = .init(),
+        pointerPoster: ControllerPointerPosting? = nil,
         clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.recognizer = ControllerGestureRecognizer(config: config)
+        self.pointer = ControllerPointerDriver(poster: pointerPoster)
         self.clock = clock
     }
 
@@ -43,17 +47,34 @@ final class ControllerGesturePump: @unchecked Sendable {
         queue.async { [self] in
             // Zeit beim Empfang selbst messen: Die Zeitstempel des Frameworks
             // lagen bis macOS 26.1 in einer anderen Zeitbasis.
-            emit(recognizer.handle(event, at: clock()))
+            let now = clock()
+            // Fingerdaten und Mausklicks bleiben beim Zeiger: keine Gesten,
+            // kein Main Thread, kein Einfluss auf das Verwerfen nach dem Aufwecken.
+            switch pointer.handle(event, at: now, activeLayer: recognizer.activeLayer) {
+            case .handled: return
+            case .clicked:
+                recognizer.markLayerUsed()
+                return
+            case .recognizer: break
+            }
+            emit(recognizer.handle(event, at: now))
             reschedule()
         }
     }
 
-    /// Alles Gehaltene lösen (Trennung, Ruhezustand, Ausschalten).
+    /// Alles Gehaltene lösen (Trennung, Ruhezustand, Ausschalten). Eine per
+    /// Touchpad gedrückte Maustaste wird losgelassen.
     func reset() {
         queue.async { [self] in
+            pointer.reset()
             emit(recognizer.reset(at: clock()))
             reschedule()
         }
+    }
+
+    /// Schalter und Lage für das Touchpad als Maus.
+    func setPointer(_ settings: ControllerPointerDriver.Settings) {
+        queue.async { [self] in pointer.apply(settings) }
     }
 
     // MARK: - Zeitgeber (nur auf `queue`)
