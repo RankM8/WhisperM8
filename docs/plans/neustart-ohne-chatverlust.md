@@ -279,6 +279,17 @@ Diese Tests halten den **heutigen** Stand fest und laufen grün auf main, bevor 
    - Die offenen Punkte oben.
    - Die Makefile-Prüfung ist eine Textprüfung und damit fragil. Sie wird ersetzt, sobald `GUI_PIDS` in Paket 4 ohnehin umgebaut wird.
 
+### Stand nach Paket 1 (12.11.2026)
+
+Fork-Branch `whisperm8-handover` (auf `whisperm8-pty-cloexec`), Pin in `Package.swift`. Was Paket 2 und 4 davon nutzen:
+
+- **`Terminal.serializeScreen() -> [UInt8]`:** Bild und Schalter als ANSI-Strom. Einspielen heißt: frisches Terminal mit gleichen Spalten, Zeilen und gleichem Scrollback, Strom per `feed(byteArray:)`, sonst nichts. Eine am Ende angeschnittene Steuersequenz oder ein angeschnittenes UTF-8-Zeichen hängt der Strom selbst an; dafür merkt sich jedes Terminal seine letzten 32 KB Eingabe. Der Aufrufer muss den Schnittpunkt also nicht sauber wählen. Nicht enthalten: Bilder (Sixel, Kitty), Paletten-Änderungen (OSC 4), linke und rechte Ränder, Zeichensatz-Umschaltungen, ein offener Umbruch genau am rechten Rand.
+- **`LocalProcess.detachForHandover(timeout:) -> HandoverHandle?`:** hält das Lesen an, ohne das Terminal zu schließen und ohne Signal, liefert alles schon Gelesene an den Delegate aus und gibt eine Kopie des Masters (close-on-exec) samt PID zurück. Nur im Main-Queue-Betrieb und nur auf dem Main Thread. Danach meldet die Instanz das Prozessende nicht mehr. Reihenfolge in der App: `detachForHandover`, dann die eigene Drosselung leeren (`flushPendingOutput`), dann `serializeScreen`. Endet das Anhalten nicht rechtzeitig, liest die Instanz weiter, und nichts wird übergeben.
+- **`LocalProcess.adopt(_:) -> Bool`:** liest von der übergebenen Leitung und überwacht eine PID, die kein eigenes Kind sein muss. Das Ende kommt genau einmal, mit dem Wait-Status aus `kqueue` (`NOTE_EXITSTATUS`), sonst `nil`. Ein schon vorher beendeter Prozess wird sofort gemeldet.
+- **Ehrlicher Exit-Status:** `nil` statt erfundener 0, wenn `waitpid` nichts abholen kann. Die App wertet `nil` schon heute wie ein normales Ende (`AgentAttachRecovery.decode`, Zustandsmaschine), am Verhalten ändert sich nichts.
+- **Kind schließt vor `execve` alle Deskriptoren ab 3** (Nachtrag 1 aus dem Review von Paket 0).
+- **Befund für Aufbewahrer und App:** Ein Prozess, der mit ungelesener Ausgabe auf seinem Terminal endet, hängt in seinem Ende, bis jemand liest oder der letzte Master schließt. Wer eine Leitung hält, muss also mitlesen oder sie schließen; nur halten reicht nicht. Im Test äußerte sich das als `waitpid`, das nie zurückkam.
+
 ## Bau-Reihenfolge
 
 Jedes Paket hat einen eigenen Branch und Arbeitsordner, wird einzeln reviewt und geht erst nach grüner Suite in main. Ist der Labs-Schalter aus, ändert keins das heutige Verhalten. Ausnahme ist Paket 0, das sind Fehlerbehebungen.
