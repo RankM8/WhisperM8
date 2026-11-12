@@ -379,8 +379,10 @@ bewusst schwache Schwester von `archive`. Contract:
     (`displacedSessionID`)/`alreadyMember`, jeweils mit `slot` (1-basiert).
   - `remove` **kompaktiert per Default** (übrige rücken nach vorn, Stufe
     fällt — global abschaltbar via `gridAutoCompactEnabled`); `--keep-slot`
-    erzwingt für diesen Aufruf stabile Positionen (Slot wird nur leer,
-    Outcome-Feld `keptSlot`).
+    erzwingt für diesen Aufruf stabile Positionen (Slot wird nur leer).
+    Das Outcome-Feld `keptSlot: true` steht immer dann, wenn der Slot leer
+    geblieben ist — mit `--keep-slot` und ebenso, wenn „Close gaps…“ in den
+    Einstellungen aus ist.
   - Ablehnungen sind benannt statt gesammelt: Session nicht gefunden →
     Exit 3, Session archiviert → Exit 4 (+ `unarchive`-Hinweis), Slot
     außerhalb → Exit 1.

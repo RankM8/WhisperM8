@@ -636,4 +636,13 @@ final class WorkspaceSlotOpsTests: XCTestCase {
         XCTAssertEqual(result, .full)
         XCTAssertEqual(same, workspace)
     }
+
+    /// CLI `workspace remove`: `keptSlot` folgt dem tatsächlichen Effekt —
+    /// auch bei ausgeschaltetem „Close gaps…" ohne `--keep-slot` (E2E 12.11.2026).
+    func testRemovalCompactsOnlyWithoutKeepSlotAndWithCloseGaps() {
+        XCTAssertTrue(WorkspaceSlotOps.removalCompacts(keepSlot: false, closeGapsEnabled: true))
+        XCTAssertFalse(WorkspaceSlotOps.removalCompacts(keepSlot: true, closeGapsEnabled: true))
+        XCTAssertFalse(WorkspaceSlotOps.removalCompacts(keepSlot: false, closeGapsEnabled: false))
+        XCTAssertFalse(WorkspaceSlotOps.removalCompacts(keepSlot: true, closeGapsEnabled: false))
+    }
 }

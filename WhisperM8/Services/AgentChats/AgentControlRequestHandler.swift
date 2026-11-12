@@ -856,13 +856,12 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     }
                 }
             } else {
-                let removed = store.removeSession(
-                    targetID, fromGridWorkspace: workspaceEntity.id,
-                    compacting: keepSlot ? false : nil
-                )
+                // `keptSlot` meldet den tatsächlichen Effekt (--keep-slot ODER „Close gaps…“ aus).
+                let compacting = WorkspaceSlotOps.removalCompacts(keepSlot: keepSlot, closeGapsEnabled: store.isGridAutoCompactEnabled())
+                let removed = store.removeSession(targetID, fromGridWorkspace: workspaceEntity.id, compacting: compacting)
                 return .ok(MembershipDetail(
                     outcome: removed ? "removed" : "notMember",
-                    keptSlot: (removed && keepSlot) ? true : nil
+                    keptSlot: (removed && !compacting) ? true : nil
                 ), workspaceEntity)
             }
         }
