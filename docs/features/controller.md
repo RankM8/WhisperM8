@@ -109,17 +109,18 @@ Wege wie Kopf, Kachelkopf und Kontextmenü des Chats (je ein `AgentChatsCommand`
 | Chat | „Konto wechseln ›“, „Umbenennen…“, „Titel neu lesen“, „Forken“, „Anheften/Lösen“, „Archivieren“, „Chat schließen“ (wie „−“/„×“ in der Seitenleiste) |
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
 | Workspace | „Notiz aufklappen/zuklappen“ (Kachel mit Notiz), „Notizen an/aus“ (wie ⌥⌘N), „Aus Workspace „…“ nehmen“, „Zu Workspace hinzufügen ›“, „In neues Fenster verschieben“ |
-| Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“, „Respawn“, bei Subagent-Jobs „Job stoppen“ |
+| Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
 | Steuerung | „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 
 **Konto wechseln ›** zeigt rechts den Verbrauch „5 Std. · Woche“ wie das Limits-Popover (Ampel: unter 50 %
 grün, ab 50 gelb, ab 80 rot) und markiert je Gruppe (Claude, GPT) das wählbare Konto mit dem kleinsten
 Verbrauch im knapperen Fenster als „am meisten frei“. Die Reihenfolge bleibt; die Markierung beginnt auf
 dem eigenen Konto (Kreuz dort geht nicht), der erste Schritt führt zum nächsten wählbaren. Darunter, nur
-wenn zutreffend, „Kontowechsel zu … abbrechen“ und „Letzten Kontowechsel rückgängig“. Die Zahlen kommen
-aus `AccountLimitsStore`: Die Popovers tragen ihre Ergebnisse ein, und beim Öffnen des Konto-Menüs stößt
-der Controller höchstens einmal je Minute denselben passiven Abruf an (nie Tokens erneuern); ein offenes
-Menü zieht nach. Nicht im Menü: Tab-Farbe, Inspector, Rastergröße.
+wenn zutreffend, „Kontowechsel zu … abbrechen“ und „Letzten Kontowechsel rückgängig (alle betroffenen
+Chats)“ — das wirkt auf den ganzen letzten Wechsel, nicht nur auf diesen Chat. Die Zahlen kommen
+aus `AccountLimitsStore`: Die Popovers tragen ihre Ergebnisse ein, und erst beim Öffnen der Konto-Ebene
+stößt der Controller denselben passiven Abruf an (nie Tokens erneuern), höchstens einmal je Minute — auch
+nach einem gescheiterten Versuch; ein offenes Menü zieht nach. Nicht im Menü: Tab-Farbe, Inspector, Rastergröße.
 
 In der Liste wirken die Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options
 schließt alles.
@@ -141,10 +142,10 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Dreieck | Zeilenumbruch ohne Senden (Ctrl+J, siehe Schutzregeln) |
 | | Steuerkreuz ◀ ▶ | Wort zurück/vor (Ctrl+←/→ als vollständige CSI-Sequenz), mit Wiederholung — Claude und Codex |
 | | Steuerkreuz ▲ ▼ | Zeile hoch/runter, nur im sichtbar mehrzeiligen Entwurf und nicht aus der ersten (▲) bzw. letzten (▼) Zeile; dort holte Claude den Verlauf. Ist das Feld oder die Cursorzeile nicht ablesbar, „geht nicht“ |
-| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden (auch in Shells), Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). Die Insel zeigt vorher, was es ist |
+| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt. Die Insel zeigt vorher, was es ist |
 | | Kreis | genau ein Escape, unabhängig vom Status und ohne 1-s-Sperre. Arbeitet der Chat und ist keine Ansicht erkannt, warnt die Insel: es unterbricht |
 | | L3 | Rückgängig (Ctrl+_), nur Claude; Codex hat im Standard-Editor kein Undo |
-| R1 Schnellbefehle | Kreuz | „Weiter“; mit Text im Feld wie Ctrl+Enter: bei ruhendem Claude-Chat und in Codex Enter („Senden“), bei arbeitendem Claude-Chat — oder wenn ein eigener Prompt in Claudes Warteschlange wartet — Ctrl+X Ctrl+S („Jetzt senden“). Leeres Feld bei arbeitendem Chat: „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
+| R1 Schnellbefehle | Kreuz | „Weiter“; mit Text im Feld wie Ctrl+Enter: bei ruhendem Chat Enter („Senden“), bei arbeitendem Claude-Chat — oder wenn ein eigener Prompt in Claudes Warteschlange wartet — Ctrl+X Ctrl+S („Jetzt senden“). Arbeitender Codex-Chat: „geht nicht“ (Codex meldet nie „wartet“, Enter könnte eine Freigabe bestätigen). Steht nur ein zurückgelegter oder mit ↑ zurückgeholter Prompt im Feld: „geht nicht“. Leeres Feld bei arbeitendem Chat: „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
 | | L3 | ausführliches Transkript an/aus (Ctrl+O), nur Claude |
 | | Dreieck | Modus wechseln (Shift+Tab) |
 | | Viereck | Befehle › — öffnet das Options-Menü direkt auf dieser Unterseite |
@@ -221,7 +222,8 @@ den Chat, L2 „Wohin“ geht samt Wechsel, R1 zeigt die Raute mit allem ausgegr
 (Hinweis „Diktat läuft“). L1 bleibt aus; R2 ist in jeder Ebene „stopp“, Kreuz, Kreis, Steuerkreuz und
 rechter Stick bleiben wie oben. Der Text geht in den Chat, in dem das Diktat begann
 (`RecordingCoordinator.pendingDeliveryTarget`, beim Start gesetzt); Legende und Insel nennen ihn
-(„→ Chat“). Dasselbe gilt in Transkription und Nacharbeit, außer was die Aufnahme steuert. Bei einem
+(„→ Chat“). Dasselbe gilt in Transkription und Nacharbeit, außer was die Aufnahme steuert; das Ziel
+kommt dann aus `RecordingCoordinator.inFlightDeliveryTarget` (beim Stopp eingefroren, nur zur Anzeige). Bei einem
 Diktat ins Programm vorne (Hotkey) ruht der linke Stick wie bisher: Der Text ginge per ⌘V dorthin, wo
 beim Stopp der Fokus liegt. Der Pause-Akkord bleibt während der Aufnahme aus.
 
@@ -248,13 +250,19 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
   des Menüs, die etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in
   Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
 - **Ansichten am Bildschirm (Runde 5):** Bei einer Controller-Eingabe in einen Claude-Chat liest
-  `controllerScreenSnapshot` die unteren 16 Zeilen des Terminals (nur wenn die Ansicht ganz unten steht,
-  abgeblendete Zellen als leer; Zähler `controller.screen.read`). Erkannt werden an ihren Hinweistexten
-  (Claude Code 2.1.322): Transkript („Showing detailed transcript“), `/workflows` („s to save“), `/tasks`
-  („x to stop“ + „Esc to close“), Zurückspulen („Rewind“ + „Esc to cancel“) und die Auswahl in der
-  Fußzeile („Esc to collapse“). Mit sichtbarem Eingabefeld zählen nur Zeilen darunter. In einer erkannten
-  Ansicht schließt Kreis auch bei „arbeitet“ und ohne 1-s-Sperre, ← ist frei, und Pfeile machen Kreuz
-  scharf. Die Subagent-Ansicht wird bewusst nicht erkannt (dort steht „esc to interrupt“).
+  `controllerScreenSnapshot` die unteren 16 Zeilen des Terminals, nur wenn die Ansicht ganz unten steht
+  (Zähler `controller.screen.read`), in drei Fassungen (`ControllerScreenCapture`): voller Text für
+  Trennlinien und das abgeblendete Prompt-Zeichen „❯“, Text ohne Abgeblendetes für „Feld leer?“ und nur
+  das Abgeblendete für die Hinweise. Claude zeichnet seine Hinweise abgeblendet (SGR 2); gesucht wird nur
+  dort, mit sichtbarem Eingabefeld nur in den Zeilen darunter, ohne Feld nur in den zwei untersten nicht
+  leeren Zeilen. Jede Ansicht braucht mehrere Teile ihres Hinweises (Claude Code 2.1.322): Transkript
+  („Showing detailed transcript“ + „ctrl+o to toggle“), `/workflows` („x to stop“ + „s to save“ + „Esc to
+  close“), `/tasks` („Enter to view“ + „x to stop“ + „Esc to close“ bzw. „x to stop“ + „Esc to go back“),
+  Dialoge wie Zurückspulen („Enter to continue“ + „Esc to cancel“) und die Auswahl in der Fußzeile („Esc
+  to collapse“ + „to stop all agents“), jeweils auch im knappen Stil. Normale Ausgabe mit denselben
+  Wörtern zählt nie. In einer erkannten Ansicht schließt Kreis auch bei „arbeitet“, mit nur 0,3 s Sperre
+  statt 1 s (ein zweites ○ vor dem Neuzeichnen träfe sonst den Hauptchat), ← ist frei, und Pfeile machen
+  Kreuz scharf. Die Subagent-Ansicht wird bewusst nicht erkannt (dort steht „esc to interrupt“).
 - Pfeiltasten gehen in jedem lebenden Chat ins Terminal (seit 12.11.2026, siehe Steuerkreuz), mit drei
   Absicherungen:
   1. Links nie ins leere Claude-Feld. Ist das Feld ablesbar, entscheidet der Bildschirm (sichtbar leer
