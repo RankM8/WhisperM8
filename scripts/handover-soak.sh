@@ -88,13 +88,18 @@ record_verdict() { # runde prüfung befund
 
 # MARK: - Fähigkeiten (Paket 4)
 
+# Ausgaben erst einsammeln, dann suchen: `… | grep -q` unter pipefail scheitert,
+# sobald grep früh aufhört und der Schreiber SIGPIPE bekommt.
+contains() { grep -qE -- "$2" <<< "$1"; }
 has_keep_chats() { grep -q -- '--keep-chats' "$TI"; }
-has_terminal_tabs() { cli chats help 2>/dev/null | grep -qE -- '--provider [^ ]*terminal'; }
-has_background_chats() { cli chats help 2>/dev/null | grep -q -- '--background'; }
-has_terminal_text() { cli debug help 2>/dev/null | grep -q '^  terminal'; }
+has_terminal_tabs() { contains "$(cli chats help 2>/dev/null || true)" '--provider [^ ]*terminal'; }
+has_background_chats() { contains "$(cli chats help 2>/dev/null || true)" '--background'; }
+has_terminal_text() { contains "$(cli debug help 2>/dev/null || true)" '^  terminal'; }
 # Nur echter Code, kein Kommentar, der den Namen erwähnt.
 has_notification_log() {
-    grep -rh 'session_notification_posted' "$REPO/WhisperM8" 2>/dev/null | grep -qv '^[[:space:]]*//'
+    local hits
+    hits=$(grep -rh 'session_notification_posted' "$REPO/WhisperM8" 2>/dev/null | grep -v '^[[:space:]]*//' || true)
+    [[ -n "$hits" ]]
 }
 
 cmd_capabilities() {
@@ -168,11 +173,12 @@ find_transcript() { # home id
 
 # Transcript auf API-Fehler durchsuchen, ab Byte-Position. „Retrying“ zeigt
 # Claude nur im Terminal, nicht im JSONL — das prüft check_round über den
-# Terminaltext (Paket 4).
+# Terminaltext (Paket 4). Mit drittem Argument schreibt die Suche den Stand,
+# bis zu dem sie gelesen hat, in diese Datei (nächste Runde liest ab dort).
 scan_transcript_errors() {
-    "$PY" -I - "$1" "${2:-0}" <<'PYEOF'
+    "$PY" -I - "$1" "${2:-0}" "${3:-}" <<'PYEOF'
 import sys
-path, start = sys.argv[1], int(sys.argv[2])
+path, start, offset_out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 hits = []
 with open(path, "rb") as f:
     f.seek(start)
@@ -180,6 +186,10 @@ with open(path, "rb") as f:
         line = raw.decode("utf-8", "replace")
         if '"isApiErrorMessage":true' in line.replace(" ", "") or "API Error" in line:
             hits.append(line[:120].strip())
+    end = f.tell()
+if offset_out:
+    with open(offset_out, "w") as out:
+        out.write(str(end))
 print("FEHLER " + " | ".join(hits[:3]) if hits else "OK")
 PYEOF
 }
@@ -321,6 +331,7 @@ attached SOAK-BG-ENDE 0"
 
 chat_names() { cut -f1 "$STATE/chats.tsv"; }
 chat_ref() { awk -F'\t' -v n="$1" '$1 == n {print $2}' "$STATE/chats.tsv"; }
+chat_provider() { awk -F'\t' -v n="$1" '$1 == n {print $3}' "$STATE/chats.tsv"; }
 chat_show() { cli chats show "$(chat_ref "$1")" --json 2>/dev/null || true; }
 external_id() { chat_show "$1" | json_field '.get("externalSessionID") or ""' 2>/dev/null || true; }
 transcript_path() { find_transcript "$ROOT/home" "$(external_id "$1")"; }
@@ -394,29 +405,41 @@ check_round() { # runde vorher-datei
             record "$round" "pid:$name" FEHLER "vorher $pid_before, jetzt ${pid_now:-keiner}"
         fi
 
-        path=$(transcript_path "$name")
-        if [[ -z "$path" || ! -f "$path" ]]; then
-            record "$round" "api-fehler:$name" FEHLER "kein Transcript gefunden"
-        else
-            # Ab dem Stand der letzten Prüfung, damit nichts zwischen zwei Runden
-            # durchrutscht; am Ende prüft final_checks noch einmal alles ab 0.
-            verdict=$(scan_transcript_errors "$path" "$(offset_of "$name")")
-            record_verdict "$round" "api-fehler:$name" "$verdict"
-            size=$(stat -f %z "$path")
-            set_offset "$name" "$size"
-        fi
-
-        if has_terminal_text; then
-            if cli debug terminal "$(chat_ref "$name")" --text 2>/dev/null | grep -qE 'Retrying|API Error'; then
-                record "$round" "retrying:$name" FEHLER "im Terminal sichtbar"
+        # Terminal-Tabs haben weder Transcript noch API.
+        if [[ "$(chat_provider "$name")" != terminal ]]; then
+            path=$(transcript_path "$name")
+            if [[ -z "$path" || ! -f "$path" ]]; then
+                record "$round" "api-fehler:$name" FEHLER "kein Transcript gefunden"
             else
-                record "$round" "retrying:$name" OK ""
+                # Ab dem Stand der letzten Prüfung; die Suche nennt selbst, bis
+                # wohin sie gelesen hat. Am Ende prüft final_checks alles ab 0.
+                verdict=$(scan_transcript_errors "$path" "$(offset_of "$name")" "$STATE/offset.tmp")
+                record_verdict "$round" "api-fehler:$name" "$verdict"
+                set_offset "$name" "$(cat "$STATE/offset.tmp")"
             fi
-        else
-            record "$round" "retrying:$name" FEHLT "„Retrying“ steht nur im Terminal (Paket 4: debug terminal --text)"
+
+            if has_terminal_text; then
+                local screen
+                screen=$(cli debug terminal "$(chat_ref "$name")" --text 2>/dev/null || true)
+                if contains "$screen" 'Retrying|API Error'; then
+                    record "$round" "retrying:$name" FEHLER "im Terminal sichtbar"
+                elif [[ -z "$screen" ]]; then
+                    record "$round" "retrying:$name" FEHLER "Terminaltext nicht lesbar"
+                else
+                    record "$round" "retrying:$name" OK ""
+                fi
+            else
+                record "$round" "retrying:$name" FEHLT "„Retrying“ steht nur im Terminal (Paket 4: debug terminal --text)"
+            fi
         fi
 
-        [[ -n "$pid_now" ]] && check_chat_identity "$round" "$name" "$pid_now"
+        if [[ -n "$pid_now" ]]; then
+            check_chat_identity "$round" "$name" "$pid_now"
+        elif [[ -z "$pid_before" ]]; then
+            record "$round" "token:$name" FEHLT "ohne PID keine Chat-Identität"
+        else
+            record "$round" "token:$name" FEHLER "Prozess nach dem Neustart weg"
+        fi
     done < "$before"
 
     local registry doubles
@@ -459,6 +482,8 @@ final_checks() {
         record_verdict ende "vollstaendig:$name" "$(check_answer_complete "$path" "$marker" "$lines")"
         record_verdict ende "api-fehler-gesamt:$name" "$(scan_transcript_errors "$path" 0)"
     done <<< "$ANSWERS"
+    path=$(transcript_path question)
+    [[ -n "$path" ]] && record_verdict ende "api-fehler-gesamt:question" "$(scan_transcript_errors "$path" 0)"
 
     if has_notification_log; then
         local since id count
@@ -559,8 +584,13 @@ cmd_run() {
         check_round "$round" "$STATE/before-$round.tsv"
         sleep 5
     done
-    log "warte auf vollständige Antworten (höchstens 15 min)"
-    wait_for_answers
+    if has_keep_chats; then
+        log "warte auf vollständige Antworten (höchstens 15 min)"
+        wait_for_answers
+    else
+        # Ohne Übergabe enden die Chats beim Neustart; warten bringt nichts.
+        log "ohne --keep-chats: kein Warten auf Antworten"
+    fi
     final_checks
     (( KEEP )) || cleanup_chats
     RUN_STARTED=0
@@ -612,6 +642,9 @@ cmd_self_test() {
     expect FEHLER "$(scan_transcript_errors "$dir/t2.jsonl" 0)" "API-Fehler gefunden"
     expect_exact OK "$(scan_transcript_errors "$dir/t1.jsonl" 0)" "kein API-Fehler"
     expect_exact OK "$(scan_transcript_errors "$dir/t2.jsonl" "$(stat -f %z "$dir/t2.jsonl")")" "nur ab Position gesucht"
+    scan_transcript_errors "$dir/t2.jsonl" 0 "$dir/offset" >/dev/null
+    expect_exact "$(stat -f %z "$dir/t2.jsonl")" "$(cat "$dir/offset")" "Suche nennt ihren Endstand"
+    expect_exact "ja" "$(contains "$(printf 'a\n  terminal x\n')" '^  terminal' && echo ja || echo nein)" "contains ohne Pipe"
 
     printf '%s\n' '{"message":{"role":"assistant","content":[{"type":"tool_use","id":"q1","name":"AskUserQuestion"}]}}' > "$dir/t3.jsonl"
     expect_exact OK "$(check_question_open "$dir/t3.jsonl")" "Rückfrage offen"
