@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eine Pille – Diktat und Status vereint · Entwurf</title>
+<style>
+  /* Seite und Schreibtisch folgen Hell/Dunkel. Die Pille selbst ist immer schwarz
+     (dunkles Glas der Diktat-Pille: thinMaterial + #13161B, feiner heller Rand). */
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#8d8e93; --line:rgba(0,0,0,.09);
+    --wall:radial-gradient(120% 90% at 15% 0%,#c8dcf2 0%,transparent 55%),radial-gradient(110% 100% at 85% 10%,#f4e3c8 0%,transparent 50%),linear-gradient(160deg,#a8c4e0 0%,#b6d0c4 45%,#dcc9a8 100%);
+    --menubar:rgba(255,255,255,.62); --menuink:#1c1c1e;
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08); --winink:#1c1c1e; --winink2:#6a6b70;
+    --accent:#5e6ad2; --tagbg:rgba(255,255,255,.55); --tagink:rgba(20,26,34,.8);
+    --code:#ececf0;
+  }
+  [data-theme="dark"] {
+    --bg:#111215; --panel:#1b1c20; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#76777d; --line:rgba(255,255,255,.09);
+    --wall:radial-gradient(120% 90% at 20% 0%,#24334d 0%,transparent 60%),radial-gradient(100% 90% at 85% 15%,#3d2c4a 0%,transparent 55%),linear-gradient(165deg,#141b28 0%,#1d2433 55%,#2a2233 100%);
+    --menubar:rgba(28,28,32,.62); --menuink:#ececef;
+    --win:#151618; --sidebar:#1a1b1e; --header:#18191c; --term:#131416; --border:rgba(255,255,255,.07); --winink:#ececef; --winink2:#8d8e93;
+    --accent:#7c84e8; --tagbg:rgba(0,0,0,.35); --tagink:rgba(255,255,255,.85);
+    --code:#26272c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13.5px/1.5 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  code { font:12px ui-monospace,"SF Mono",Menlo,monospace; background:var(--code); border-radius:4px; padding:1px 5px; white-space:nowrap; }
+  header.doc { display:flex; align-items:flex-start; gap:24px; padding:28px 32px 22px; border-bottom:1px solid var(--line); }
+  header.doc h1 { font-size:22px; margin:0 0 4px; font-weight:650; letter-spacing:-.01em; }
+  header.doc p { margin:0; color:var(--ink2); max-width:82ch; }
+  header.doc button { margin-left:auto; flex:none; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; font:inherit; }
+  main { padding:22px 32px 70px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:26px 26px; max-width:1320px; }
+  h2 { grid-column:1/-1; margin:22px 0 -10px; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink3); font-weight:650; }
+  figure { margin:0; min-width:0; }
+  figure.full { grid-column:1/-1; }
+  figcaption { margin:9px 2px 0; color:var(--ink2); max-width:80ch; }
+  figcaption b { color:var(--ink); font-weight:600; }
+  .box { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 20px; color:var(--ink2); }
+  .box b { color:var(--ink); }
+  .box ul, .box ol { margin:6px 0 0; padding-left:20px; }
+  .box li { margin:4px 0; }
+  .ladder { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:10px 0 2px; }
+  .ladder span { border:1px solid var(--line); border-radius:99px; padding:3px 11px; color:var(--ink); background:var(--bg); font-weight:560; font-size:12.5px; }
+  .ladder em { font-style:normal; color:var(--ink3); }
+
+  /* ── Bildschirm-Attrappe ─────────────────────────────────────── */
+  .screen { position:relative; height:300px; border-radius:12px; overflow:hidden; background:var(--wall); border:1px solid var(--line); isolation:isolate; }
+  .screen.h360 { height:360px; } .screen.h420 { height:420px; } .screen.h470 { height:470px; } .screen.h220 { height:220px; }
+  .menubar { position:absolute; inset:0 0 auto 0; height:24px; background:var(--menubar); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+             display:flex; align-items:center; justify-content:space-between; padding:0 12px; font-size:12px; color:var(--menuink); z-index:1; }
+  .menubar.notch { height:32px; }
+  .menubar .l, .menubar .r { display:flex; gap:14px; opacity:.88; white-space:nowrap; }
+  .tag { position:absolute; left:10px; bottom:10px; font-size:11px; font-weight:600; color:var(--tagink); background:var(--tagbg);
+         backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); border-radius:99px; padding:2px 9px; z-index:6; }
+  .tag.r { left:auto; right:10px; }
+  .note { position:absolute; font-size:11px; color:var(--tagink); background:var(--tagbg); border-radius:6px; padding:2px 7px; z-index:6; white-space:nowrap; }
+
+  /* Fenster im Hintergrund (nur Andeutung) */
+  .win { position:absolute; left:22px; right:22px; top:44px; bottom:16px; background:var(--win); border:1px solid var(--border); border-radius:10px;
+         box-shadow:0 14px 40px rgba(0,0,0,.20); display:grid; grid-template-columns:170px 1fr; overflow:hidden; color:var(--winink2); font-size:11.5px; }
+  .win.notch { top:50px; }
+  .win.plain { grid-template-columns:1fr; }
+  .win .side { background:var(--sidebar); border-right:1px solid var(--border); padding:26px 8px 8px; }
+  .win .side div { height:21px; display:flex; align-items:center; gap:7px; padding:0 8px; border-radius:5px; white-space:nowrap; overflow:hidden; }
+  .win .side .sel { background:rgba(127,127,127,.14); color:var(--winink); }
+  .win .side .grp { font-weight:600; color:var(--winink); margin-top:6px; }
+  .win .main { display:flex; flex-direction:column; min-width:0; }
+  .win .tabs { height:28px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11px; }
+  .win .tabs span { padding:3px 8px; border-radius:5px; white-space:nowrap; }
+  .win .tabs .on { background:var(--win); color:var(--winink); border:1px solid var(--border); }
+  .win .term { flex:1; background:var(--term); padding:12px 16px; font:11px/1.6 "SF Mono",ui-monospace,monospace; overflow:hidden; }
+  .win .titlebar { height:28px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win .titlebar i { width:10px; height:10px; border-radius:50%; background:rgba(127,127,127,.35); }
+  .win .titlebar b { margin-left:10px; font-weight:600; color:var(--winink); }
+  .win .doc { padding:16px 22px; line-height:1.9; }
+  .win .doc .ln { height:8px; border-radius:4px; background:rgba(127,127,127,.18); margin:10px 0; }
+  .win .doc .caret { display:inline-block; width:1.5px; height:13px; background:var(--accent); vertical-align:-2px; }
+
+  /* ── Die Pille ───────────────────────────────────────────────── */
+  .pill, .sheet {
+    --rec:#3ddc97; --tx:#f2b13e; --pp:#a78bfa; --clip:#ff6b6b; --wait:#e9b949; --err:#e5594f; --work:#4cc38a;
+    --g-ink:#eef1f5; --g-ink2:#aab3bf; --g-ink3:#7d8590;
+    background:rgba(17,19,23,.93); backdrop-filter:blur(24px) saturate(1.3); -webkit-backdrop-filter:blur(24px) saturate(1.3);
+    border:.5px solid rgba(255,255,255,.14); box-shadow:0 3px 12px rgba(0,0,0,.30), 0 1px 1px rgba(0,0,0,.18);
+    color:var(--g-ink); white-space:nowrap; user-select:none;
+  }
+  .pill { display:inline-flex; align-items:center; height:40px; padding:0 6px; border-radius:999px; }
+  .at-top { position:absolute; top:30px; left:50%; transform:translateX(-50%); z-index:4; }
+  .sheet { position:absolute; left:50%; transform:translateX(-50%); border-radius:20px; z-index:4; overflow:hidden; }
+  .sheet .row { display:flex; align-items:center; height:40px; padding:0 6px; }
+  .sheet.up { display:flex; flex-direction:column-reverse; }
+
+  /* Kern: 5 Bars, Bewegungsart + Farbe = Zustand */
+  .core { --c:rgba(255,255,255,.34); flex:none; display:inline-flex; align-items:center; justify-content:center; gap:2.5px; height:28px; min-width:46px; padding:0 10px; border-radius:99px;
+          background:color-mix(in srgb,var(--c) 16%,transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 24%,transparent); }
+  .core i { width:3px; height:3px; border-radius:99px; background:var(--c); }
+  .core.idle { --c:rgba(255,255,255,.42); background:rgba(255,255,255,.05); box-shadow:inset 0 0 0 1px rgba(255,255,255,.09); }
+  .core.idle i { background:rgba(255,255,255,.30); }
+  .core.rec { --c:var(--rec); }
+  .core.rec i:nth-child(1){height:7px} .core.rec i:nth-child(2){height:13px} .core.rec i:nth-child(3){height:18px} .core.rec i:nth-child(4){height:11px} .core.rec i:nth-child(5){height:6px}
+  .core.rec.quiet i { height:3px; background:rgba(255,255,255,.28); }
+  .core.tx { --c:var(--tx); } .core.tx i { height:10px; opacity:.32; } .core.tx i:nth-child(2){opacity:1} .core.tx i:nth-child(3){opacity:.6}
+  .core.pp { --c:var(--pp); } .core.pp i { height:11px; } .core.pp i:nth-child(even){height:7px; opacity:.5}
+  @media (prefers-reduced-motion:no-preference) {
+    .live .core.rec i { animation:lv 1.1s ease-in-out infinite; }
+    .live .core.rec i:nth-child(1){animation-delay:-.9s} .live .core.rec i:nth-child(2){animation-delay:-.6s} .live .core.rec i:nth-child(4){animation-delay:-.7s} .live .core.rec i:nth-child(5){animation-delay:-.4s}
+  }
+  @keyframes lv { 0%,100%{transform:scaleY(.55)} 40%{transform:scaleY(1)} 70%{transform:scaleY(.75)} }
+
+  .time { font:500 12.5px ui-monospace,"SF Mono",Menlo,monospace; color:var(--g-ink2); padding:0 10px 0 9px; font-variant-numeric:tabular-nums; }
+  .chip { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 10px; border-radius:99px; background:rgba(255,255,255,.08); font-size:12px; font-weight:500; color:var(--g-ink); margin-right:5px; }
+  .chip.off { color:rgba(170,179,191,.6); }
+  .chip .chev { width:8px; height:8px; opacity:.6; }
+  .chip.ctx { color:var(--rec); gap:4px; }
+  .chip.ctx svg { width:12px; height:12px; }
+  .chip.ctx .plus { color:rgba(255,255,255,.35); font-size:11px; }
+  .chip.ctx .n { font-size:11.5px; }
+  .target { font-size:11.5px; font-weight:500; color:var(--g-ink2); padding-right:8px; max-width:170px; overflow:hidden; text-overflow:ellipsis; }
+  .btn { width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+  .btn svg { width:16px; height:16px; }
+  .ico { width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; color:var(--g-ink2); flex:none; }
+  .ico svg { width:14px; height:14px; }
+  .grip { display:grid; grid-template-columns:repeat(2,3px); gap:2.5px; padding:0 7px 0 5px; }
+  .grip i { width:3px; height:3px; border-radius:50%; background:rgba(255,255,255,.28); }
+  .sep { width:1px; height:16px; background:rgba(255,255,255,.12); margin:0 6px; flex:none; }
+
+  /* Status-Zähler (Formen wie AgentStatusIndicator) */
+  .cnts { display:inline-flex; align-items:center; gap:11px; padding:0 10px 0 9px; font-size:12.5px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .cnt { display:inline-flex; align-items:center; gap:6px; }
+  .cnt.working { color:var(--work); } .cnt.awaiting { color:var(--wait); } .cnt.error { color:var(--err); } .cnt.done { color:var(--g-ink2); }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:#7d8590; }
+  .dot.working { background:#4cc38a; }
+  .dot.awaiting { background:#e9b949; border-radius:2px; transform:rotate(45deg) scale(.82); }
+  .dot.error { background:transparent; border:1.5px solid #e5594f; }
+  .dot.done { background:transparent; width:auto; height:auto; border-radius:0; color:#aab3bf; font-size:11px; font-weight:800; }
+  .dot.done::before { content:"✓"; }
+  .alert { display:inline-flex; align-items:center; gap:7px; padding:0 12px 0 9px; font-size:12.5px; }
+  .alert b { font-weight:600; color:var(--g-ink); max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+  .alert .w { color:var(--wait); font-weight:600; } .alert .e { color:var(--err); font-weight:600; }
+  .alert .more { color:var(--g-ink3); }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:0 3px 0 8px; font-size:12.5px; font-weight:600; color:var(--wait); }
+  .badge.err { color:var(--err); }
+
+  /* Listen (Status, Insel) */
+  .sec { padding:6px 14px 2px; font-size:10.5px; font-weight:650; letter-spacing:.05em; text-transform:uppercase; color:var(--g-ink3); }
+  .rows { padding:0 8px 4px; }
+  .r { display:grid; grid-template-columns:14px 1fr auto; gap:9px; align-items:center; min-height:34px; padding:3px 8px; border-radius:9px; }
+  .r .t { font-size:12.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis; color:var(--g-ink); }
+  .r .t small { display:block; font-weight:400; color:var(--g-ink3); font-size:11px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; }
+  .r .t small.inline { display:inline; margin-left:6px; }
+  .r .w { font-size:11px; color:var(--g-ink3); text-align:right; font-variant-numeric:tabular-nums; }
+  .r.cur .t { font-weight:700; }
+  .r.mark { background:rgba(124,132,232,.24); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .foot { display:flex; gap:14px; justify-content:space-between; align-items:center; padding:7px 14px 10px; font-size:11px; color:var(--g-ink3); border-top:1px solid rgba(255,255,255,.08); }
+  .foot.c { justify-content:center; }
+  .foot span { display:inline-flex; align-items:center; gap:5px; }
+  .more { text-align:center; font-size:11px; color:var(--g-ink3); padding:0 0 4px; }
+  .k { display:inline-flex; align-items:center; justify-content:center; height:20px; min-width:20px; padding:0 4px; border-radius:10px; background:#2a2a2e; border:1px solid rgba(255,255,255,.14); color:#f4f4f6; font-size:11px; font-weight:700; line-height:1; flex:none; }
+  .k.sq { border-radius:5px; padding:0 5px; }
+  .ihead { display:flex; align-items:center; gap:8px; height:40px; padding:0 8px 0 10px; font-size:11.5px; color:var(--g-ink3); }
+  .ihead .layer { font-weight:700; color:var(--g-ink); }
+  .ihead .rt { margin-left:auto; display:flex; align-items:center; gap:10px; }
+  .seg { display:flex; gap:2px; margin:0 12px 6px; padding:2px; background:rgba(255,255,255,.08); border-radius:8px; }
+  .seg span { flex:1; text-align:center; font-size:11.5px; font-weight:600; padding:4px 0; border-radius:6px; color:#a4a5ab; }
+  .seg span.on { background:rgba(255,255,255,.16); color:#fff; }
+  .diamond { display:grid; grid-template-columns:repeat(3,140px); grid-template-rows:repeat(3,42px); gap:4px; padding:2px 14px 14px; justify-content:center; }
+  .slot { display:flex; align-items:center; gap:7px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,.07); font-size:12px; color:#f4f4f6; }
+  .slot.top { grid-column:2; grid-row:1; } .slot.left { grid-column:1; grid-row:2; } .slot.right { grid-column:3; grid-row:2; } .slot.bottom { grid-column:2; grid-row:3; }
+  .slot .chev2 { margin-left:auto; color:#8d8e93; }
+  .center { grid-column:2; grid-row:2; display:flex; align-items:center; justify-content:center; font-size:11px; color:#76777d; }
+
+  /* ── Notch ───────────────────────────────────────────────────── */
+  .hang { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; z-index:4; color:#f4f4f6; }
+  .hang .band { width:184px; height:32px; background:#000; flex:none; position:relative; }
+  .hang .band::after { content:""; position:absolute; left:50%; top:12px; width:7px; height:7px; margin-left:-3.5px; border-radius:50%; background:#16181d; }
+  .hang .body { --rec:#3ddc97; --tx:#f2b13e; --pp:#a78bfa; --wait:#e9b949; --err:#e5594f; --work:#4cc38a; --g-ink:#eef1f5; --g-ink2:#aab3bf; --g-ink3:#7d8590;
+                background:#000; border-radius:0 0 20px 20px; box-shadow:0 18px 40px rgba(0,0,0,.30); position:relative; white-space:nowrap; }
+  .hang .body.wide { border-radius:10px 10px 20px 20px; }
+  .hang .body.small { border-radius:0 0 14px 14px; }
+  .hang .body .row { display:flex; align-items:center; height:40px; padding:0 8px; }
+  .hang .body .chin { display:flex; justify-content:center; height:26px; align-items:center; }
+  .hang .body .chin .cnts { padding:0; }
+
+  /* Zwei Bildschirme */
+  .duo { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .ghost { outline:1.5px dashed rgba(255,255,255,.55); outline-offset:4px; }
+  [data-theme="light"] .ghost, :root:not([data-theme="dark"]) .ghost { outline-color:rgba(20,26,34,.45); }
+  .home { position:absolute; top:28px; left:50%; transform:translateX(-50%); width:56px; height:3px; border-radius:99px; background:rgba(20,26,34,.28); z-index:3; }
+  [data-theme="dark"] .home { background:rgba(255,255,255,.3); }
+
+  /* Anker-Skizze */
+  .anchor { display:flex; flex-direction:column; align-items:flex-end; gap:12px; padding:26px 0 18px; position:relative; width:max-content; margin:0 auto; }
+  .anchor .line { position:absolute; right:0; top:10px; bottom:6px; border-right:1.5px dashed var(--accent); }
+  .anchor .lbl { position:absolute; right:-6px; top:0; transform:translateX(100%); font-size:11px; color:var(--accent); font-weight:600; }
+
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); font-weight:650; padding:6px 10px; border-bottom:1px solid var(--line); }
+  td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; color:var(--ink2); }
+  td:first-child { color:var(--ink); width:38%; }
+  .qs { counter-reset:q; list-style:none; padding:0 !important; }
+  .qs li { counter-increment:q; position:relative; padding:10px 0 10px 38px !important; border-bottom:1px solid var(--line); margin:0 !important; }
+  .qs li:last-child { border-bottom:none; }
+  .qs li::before { content:counter(q); position:absolute; left:0; top:10px; width:24px; height:24px; border-radius:50%; background:var(--accent); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+  .qs .q { color:var(--ink); font-weight:600; display:block; margin-bottom:2px; }
+  .qs .rec { display:block; margin-top:4px; }
+  .qs .rec::before { content:"Empfehlung: "; color:var(--accent); font-weight:650; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-chev" viewBox="0 0 10 10"><path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-ok" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="rgba(238,241,245,.75)"/><path d="M4.8 8.3 7 10.4 11.2 5.9" fill="none" stroke="#14161a" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-x" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="rgba(170,179,191,.55)"/><path d="M5.4 5.4 10.6 10.6M10.6 5.4 5.4 10.6" stroke="#14161a" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 14 14"><path d="M2 3.2C2 2.5 2.6 2 3.3 2h7.4c.7 0 1.3.5 1.3 1.2v5c0 .7-.6 1.3-1.3 1.3H6l-2.6 2.2V9.5H3.3C2.6 9.5 2 8.9 2 8.2Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 14 14"><path d="M2 3.5h10M2 7h10M2 10.5h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-photo" viewBox="0 0 14 14"><rect x="1.5" y="2.5" width="11" height="9" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3 10l3-3 2 2 1.5-1.5L12 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 14 14"><path d="M1.5 4.5v-2h2M10.5 2.5h2v2M12.5 9.5v2h-2M3.5 11.5h-2v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="7" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="7" cy="7" r="2.6" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+
+<header class="doc">
+  <div>
+    <h1>Eine Pille für Diktat und Chat-Status</h1>
+    <p>Entwurf, keine Swift-Änderung. Diktat-Pille und Status-Pille werden eins. Ohne Notch sitzt sie oben mittig, lässt sich verschieben (gemerkt je Bildschirm, Doppelklick setzt zurück) und zeigt, was gerade zählt. Mit Notch übernimmt die Notch dieselbe Rolle. Die Pille ist immer schwarz, der Schreibtisch dahinter wechselt zwischen hell und dunkel.</p>
+  </div>
+  <button id="theme">Hell / Dunkel</button>
+</header>
+
+<main>
+
+  <div class="box">
+    <b>Was die Pille zeigt — immer nur eins, in dieser Reihenfolge</b>
+    <div class="ladder"><span>Insel</span><em>vor</em><span>Diktat</span><em>vor</em><span>Hinweis „braucht dich“</span><em>vor</em><span>Ruhe mit Zählern</span></div>
+    <ul>
+      <li><b>Ruhe:</b> der Kern als stille graue Linie (Mikro aus), daneben die Zähler wie an der Notch: grüner Punkt arbeitet, Amber-Raute wartet, roter Ring Fehler, Häkchen frisch fertig. Ein Klick öffnet die Liste.</li>
+      <li><b>Diktat:</b> exakt die Diktat-Pille von heute: Kern = Zustand (Pegel in Mint, Lauflicht in Amber, Puls in Violett), Timer, Modus-Chip, Kontext, dezentes ✓ und ✕. Wartende Chats bleiben als kleine Raute links sichtbar.</li>
+      <li><b>Insel:</b> solange L1, R1 oder L2 gehalten wird, klappt sie aus der Pille; die Pillen-Zeile wird ihr Kopf.</li>
+      <li>Höhe 40 pt und Kern bleiben in jedem Zustand gleich, es ändert sich nur die Breite (eine Kurve, 0,35 s). Steht die Pille in der oberen Bildschirmhälfte, klappt alles nach unten auf, in der unteren nach oben.</li>
+    </ul>
+  </div>
+
+  <!-- ═══════════════════════ RUHE ═══════════════════════ -->
+  <h2>Ohne Notch · Ruhe</h2>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span></div>
+      <span class="tag">nichts los</span>
+    </div>
+    <figcaption><b>1 · Kein Chat braucht dich.</b> Nur der Kern, flach und grau: WhisperM8 ist da, das Mikro ist aus. So klein wie die Pille des Status-Umbaus (64 pt). Klick öffnet die Liste mit den bereiten Chats.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="cnts"><span class="cnt working"><i class="dot working"></i>2</span><span class="cnt done"><i class="dot done"></i>1</span></span></div>
+      <span class="tag">zwei arbeiten, einer frisch fertig</span>
+    </div>
+    <figcaption><b>2 · Es läuft etwas.</b> Rechts vom Kern die Zähler, dieselben Formen wie in Seitenleiste, Tab und Notch. Kein Text, keine Bewegung.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="alert"><i class="dot awaiting"></i><b>Jarvis: Supervisor</b><span class="w">wartet</span></span></div>
+      <span class="tag">ein Chat wartet · erste 4 s</span>
+    </div>
+    <figcaption><b>3a · Ein Chat wartet.</b> Beim Wechsel nach „wartet“ verbreitert sich die Pille einmal für etwa 4 s und nennt den Chat. Bei mehreren steht „+ 2“ dahinter.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="cnts"><span class="cnt working"><i class="dot working"></i>1</span><span class="cnt awaiting"><i class="dot awaiting"></i>1</span></span></div>
+      <span class="tag">danach</span>
+    </div>
+    <figcaption><b>3b · Danach.</b> Die Raute bleibt stehen, bis der Chat wieder arbeitet. Nur die Verbreiterung ist einmalig.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="alert"><i class="dot error"></i><b>Lead Varianten</b><span class="e">Fehler</span><span class="more">+ 1</span></span></div>
+      <span class="tag">Fehler · erste 4 s</span>
+    </div>
+    <figcaption><b>4a · Fehler.</b> Gleiche Verbreiterung, roter Ring. Kommen Fehler und Warten im selben Moment, gewinnt der Fehler, der Rest zählt als „+ n“.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="cnts"><span class="cnt working"><i class="dot working"></i>1</span><span class="cnt awaiting"><i class="dot awaiting"></i>1</span><span class="cnt error"><i class="dot error"></i>1</span></span></div>
+      <span class="tag">danach</span>
+    </div>
+    <figcaption><b>4b · Danach.</b> Der Ring bleibt als Zähler, bis der Chat wieder läuft oder geschlossen wird.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen h470">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 10:12</span></div></div>
+      <div class="win" style="opacity:.75">
+        <div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot working"></i>Pille vereint</div><div><i class="dot awaiting"></i>Jarvis: Supervisor</div><div><i class="dot"></i>Release Notizen</div><div class="grp">ListM8</div><div><i class="dot error"></i>Lead Varianten</div><div><i class="dot working"></i>Kampagnen Import</div></div>
+        <div class="main"><div class="tabs"><span class="on">Pille vereint</span><span>Jarvis: Supervisor</span></div><div class="term">⏺ Ich lege den Entwurf an.<br>⏺ Write(docs/design/pille-vereint.html)</div></div>
+      </div>
+      <div class="sheet" style="top:30px;width:400px">
+        <div class="row"><span class="core idle"></span><span class="cnts"><span class="cnt working"><i class="dot working"></i>2</span><span class="cnt awaiting"><i class="dot awaiting"></i>1</span><span class="cnt error"><i class="dot error"></i>1</span></span></div>
+        <div class="sec">Braucht dich</div>
+        <div class="rows">
+          <div class="r"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor<small>› Frage: Merge jetzt oder nach dem Test?</small></div><div class="w">WhisperM8<br>wartet · 2 min</div></div>
+          <div class="r"><i class="dot error"></i><div class="t">Lead Varianten<small>› API error 529</small></div><div class="w">ListM8<br>Fehler · 6 min</div></div>
+        </div>
+        <div class="sec">Arbeitet</div>
+        <div class="rows">
+          <div class="r"><i class="dot working"></i><div class="t">Pille vereint<small>› Write pille-vereint.html</small></div><div class="w">WhisperM8<br>arbeitet · 4 min</div></div>
+          <div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>› Bash swift test</small></div><div class="w">ListM8<br>arbeitet · 11 min</div></div>
+        </div>
+        <div class="foot"><span>Status in der Pille ausblenden</span><span>Esc schließt</span></div>
+      </div>
+      <span class="tag">Klick auf die Pille (Darüberfahren nur mit Einstellung)</span>
+    </div>
+    <figcaption><b>5 · Aufgeklappt.</b> Die Liste wächst aus der Pille nach unten; die Pillen-Zeile bleibt oben stehen, nichts springt. Reihenfolge wie an der Notch: braucht dich, frisch fertig, arbeitet, bereit. Klick auf eine Zeile holt WhisperM8 nach vorn und öffnet genau diesen Chat. Zu mit Esc, Klick daneben oder Klick auf die Pillen-Zeile. „Status in der Pille ausblenden“ ersetzt „Turn off notch“: die Pille bleibt fürs Diktat da.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════ DIKTAT ═══════════════════════ -->
+  <h2>Ohne Notch · Diktat</h2>
+
+  <figure>
+    <div class="screen h220 live">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="pill at-top"><span class="core rec"></span><span class="time">0:07</span><span class="chip">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">Aufnahme</span>
+    </div>
+    <figcaption><b>6 · Aufnahme.</b> Die Pille wächst aus dem Ruhe-Kern heraus, der Kern färbt sich Mint und folgt nur dem echten Pegel (Stille = graue Linie, zu laut = Amber). Timer, Modus-Chip (Einstellung „immer zeigen“), ✓ und ✕ wie heute. Kein „Aufnahme…“-Text.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="pill at-top"><span class="core tx"></span><span class="time">0:42</span><span class="chip off">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">Transkribieren</span>
+    </div>
+    <figcaption><b>7 · Transkribieren.</b> Amber-Lauflicht im Kern, Modus gesperrt, das ✓ ist weg. ✕ bricht ab und sichert die Aufnahme. Der Zustand steht im Tooltip, nicht als Text daneben.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="pill at-top"><span class="core pp"></span><span class="time">0:42</span><span class="chip off">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">Verbessern</span>
+    </div>
+    <figcaption><b>8 · Verbessern.</b> Violetter Puls, sonst gleich. ✕ bricht die Nacharbeit ab und nimmt den Rohtext. Danach zieht sich die Pille in den Ruhe-Kern zurück, mit den Zählern von vorher.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220 live">
+      <div class="menubar"><div class="l"><b>Mail</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="pill at-top"><span class="core rec"></span><span class="time">0:19</span><span class="chip">Mail<svg class="chev"><use href="#i-chev"/></svg></span><span class="chip ctx"><svg><use href="#i-chat"/></svg><span class="plus">+</span><svg><use href="#i-quote"/></svg><span class="plus">+</span><svg><use href="#i-photo"/></svg><span class="n">2</span></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">Aufnahme mit Kontext</span>
+    </div>
+    <figcaption><b>9 · Mit Kontext.</b> Chat, markierter Text und zwei Bildschirmfotos als Icon-Segmente in Mint, nie abgeschnitten. Kontext ist Inhalt und bleibt auch ohne Darüberfahren sichtbar; Klick öffnet das Kontext-Menü wie heute (nach unten, weil die Pille oben steht).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220 live">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="pill at-top"><span class="badge"><i class="dot awaiting"></i>1</span><span class="sep"></span><span class="core rec"></span><span class="time">0:05</span><span class="chip">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">Diktat, während ein Chat wartet</span>
+    </div>
+    <figcaption><b>10a · Das Diktat gewinnt.</b> Was du gerade sprichst, hat Vorrang. Wartende Chats und Fehler schrumpfen zu einer Raute bzw. einem Ring ganz links, hinter einem feinen Trenner; „arbeitet“ und „fertig“ fallen weg. Kommt währenddessen ein neuer Hinweis, gibt es keine Verbreiterung: Die Raute erscheint links (dort klappt ohnehin alles auf, nichts unter der Maus verrutscht).</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:15</span></div></div>
+      <div class="pill at-top"><span class="core idle"></span><span class="alert"><i class="dot awaiting"></i><b>Jarvis: Supervisor</b><span class="w">wartet</span></span></div>
+      <span class="tag">direkt nach dem Diktat</span>
+    </div>
+    <figcaption><b>10b · Nachgeholt.</b> Wartet der Chat nach dem Diktat noch, kommt die Verbreiterung jetzt einmal. Hat er inzwischen weitergearbeitet, entfällt sie.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220 live">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:15</span></div></div>
+      <div class="pill at-top"><span class="badge"><i class="dot awaiting"></i>1</span><span class="sep"></span><span class="core rec"></span><span class="time">0:03</span><span class="target">→ Jarvis: Supervisor</span><span class="chip">Chat<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+      <span class="tag">per Controller: R2 im wartenden Chat</span>
+    </div>
+    <figcaption><b>10c · Diktat am Controller.</b> Ziel und Modus stehen ohne Darüberfahren da, wie heute. Die Raute zählt den Ziel-Chat mit; sie verschwindet, sobald er wieder arbeitet.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:14</span></div></div>
+      <div class="anchor" style="padding-top:44px">
+        <div class="pill live"><span class="core rec"></span><span class="time">0:07</span><span class="chip">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+        <div class="pill live"><span class="grip"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ico"><svg><use href="#i-cam"/></svg></span><span class="ico"><svg><use href="#i-clip"/></svg></span><span class="core rec"></span><span class="time">0:07</span><span class="chip">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+        <span class="line" style="top:38px"></span>
+      </div>
+      <span class="tag">oben: so · unten: beim Darüberfahren</span>
+    </div>
+    <figcaption><b>11 · Rechts-Anker beim Darüberfahren.</b> Griff, Bildschirmfoto und Bildschirmclip klappen nur links auf; was schon zu sehen war, bleibt pixelgenau stehen. Zustandswechsel (Ruhe → Aufnahme → Ruhe) wachsen dagegen um die Mitte, damit die Pille oben mittig bleibt.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════ INSEL ═══════════════════════ -->
+  <h2>Ohne Notch · Insel am Controller</h2>
+
+  <figure>
+    <div class="screen h360">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:20</span></div></div>
+      <div class="win" style="opacity:.7"><div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot working"></i>Pille vereint</div><div><i class="dot awaiting"></i>Jarvis: Supervisor</div></div><div class="main"><div class="tabs"><span class="on">Pille vereint</span></div><div class="term">⏺ …</div></div></div>
+      <div class="sheet" style="top:30px;width:440px">
+        <div class="ihead"><span class="k sq">L2</span><span class="layer">Wohin</span><span class="rt"><span class="cnt working" style="font-weight:600"><i class="dot working"></i>2</span><span class="cnt awaiting" style="font-weight:600"><i class="dot awaiting"></i>1</span></span></div>
+        <div class="seg"><span class="on">Chats</span><span>Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><i class="dot working"></i><div class="t">Pille vereint<small class="inline">WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor<small class="inline">WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">Release Notizen<small class="inline">WhisperM8</small></div><div class="w">bereit</div></div>
+          <div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small class="inline">ListM8</small></div><div class="w">arbeitet · 11 min</div></div>
+        </div>
+        <div class="foot c"><span><span class="k">▲▼</span>wählen</span><span><span class="k">◀▶</span>Reiter</span><span><span class="k">△</span>nächster wartender</span><span>loslassen: wechseln</span></div>
+      </div>
+      <span class="tag">L2 gehalten</span>
+    </div>
+    <figcaption><b>12 · L2 Wohin.</b> Die Insel klappt aus der Pille: Die Pillen-Zeile wird zum Kopf (Ebene links, Zähler rechts), darunter die Liste wie im Insel-Entwurf. Schwarz wie die Pille, nicht mehr hell/dunkel. Loslassen zieht sie in dieselbe Pille zurück.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h360">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:20</span></div></div>
+      <div class="win" style="opacity:.7"><div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot"></i>Pille vereint</div></div><div class="main"><div class="tabs"><span class="on">Pille vereint</span></div><div class="term">⏺ …</div></div></div>
+      <div class="sheet" style="top:30px;width:476px">
+        <div class="ihead"><span class="k sq">R1</span><span class="layer">Schnellbefehle</span><span class="rt"><i class="dot"></i><span style="color:#aab3bf">Pille vereint</span></span></div>
+        <div class="diamond">
+          <div class="slot top"><span class="k">△</span>Modus wechseln</div>
+          <div class="slot left"><span class="k">□</span>Befehle<span class="chev2">›</span></div>
+          <div class="center">R1</div>
+          <div class="slot right"><span class="k">○</span>Konto wechseln<span class="chev2">›</span></div>
+          <div class="slot bottom"><span class="k">✕</span>Weiter</div>
+        </div>
+      </div>
+      <span class="tag">R1 gehalten</span>
+    </div>
+    <figcaption><b>13 · R1 Schnellbefehle.</b> Dieselbe Raute wie unter dem Daumen. Im Kopf steht der Ziel-Chat statt der Zähler (wie heute bei Schreiben und Schnellbefehlen). Ein Druck führt aus und schließt die Insel.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen h470">
+      <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:21</span></div></div>
+      <div class="win" style="opacity:.7;top:64px;bottom:70px"><div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot working"></i>Pille vereint</div><div><i class="dot awaiting"></i>Jarvis: Supervisor</div></div><div class="main"><div class="tabs"><span class="on">Pille vereint</span></div><div class="term">⏺ …</div></div></div>
+      <span class="home"></span>
+      <div class="sheet up" style="bottom:16px;left:auto;right:150px;transform:none;width:440px">
+        <div class="ihead" style="border-top:1px solid rgba(255,255,255,.08)"><span class="k sq">L2</span><span class="layer">Wohin</span><span class="rt"><span class="cnt working" style="font-weight:600"><i class="dot working"></i>2</span><span class="cnt awaiting" style="font-weight:600"><i class="dot awaiting"></i>1</span></span></div>
+        <div class="rows" style="padding-top:6px">
+          <div class="r cur"><i class="dot working"></i><div class="t">Pille vereint<small class="inline">WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor<small class="inline">WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">Release Notizen<small class="inline">WhisperM8</small></div><div class="w">bereit</div></div>
+        </div>
+        <div class="seg" style="margin-top:8px"><span class="on">Chats</span><span>Workspaces</span></div>
+      </div>
+      <span class="note" style="top:34px;left:50%;transform:translateX(-50%) translateY(6px)">Heimat oben mittig · Doppelklick auf die Pille führt zurück</span>
+      <span class="tag">Pille nach unten rechts gezogen</span>
+    </div>
+    <figcaption><b>14 · Pille unten.</b> Wer die Pille in die untere Hälfte zieht, bekommt alles nach oben: Insel, Statusliste, Kontext- und Modus-Menü. Der Kopf bleibt an der Stelle der Pille, die Reiter rücken ans obere Ende, damit der Daumen-Weg (Stick nach oben = Liste hoch) gleich bleibt. Die gemerkte Lage gilt nur für diesen Bildschirm; die Kerbe oben zeigt die Heimat.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════ ZWEI BILDSCHIRME ═══════════════════════ -->
+  <h2>Zwei Bildschirme</h2>
+
+  <figure class="full">
+    <div class="duo">
+      <div class="screen h360">
+        <div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:30</span></div></div>
+        <div class="win"><div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot working"></i>Pille vereint</div><div><i class="dot awaiting"></i>Jarvis: Supervisor</div><div class="grp">ListM8</div><div><i class="dot working"></i>Kampagnen Import</div></div><div class="main"><div class="tabs"><span class="on">Pille vereint</span><span>Jarvis</span></div><div class="term">⏺ Write(docs/design/pille-vereint.html)<br>&nbsp;&nbsp;⎿ Wrote 640 lines</div></div></div>
+        <div class="pill at-top"><span class="core idle"></span><span class="cnts"><span class="cnt working"><i class="dot working"></i>2</span><span class="cnt awaiting"><i class="dot awaiting"></i>1</span></span></div>
+        <span class="tag">Monitor links · Agent-Chats-Fenster</span>
+      </div>
+      <div class="screen h360">
+        <div class="menubar"><div class="l"><b>Notizen</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 10:30</span></div></div>
+        <div class="win plain"><div class="titlebar"><i></i><i></i><i></i><b>Notizen · Einkauf</b></div><div class="doc"><div class="ln" style="width:70%"></div><div class="ln" style="width:52%"></div><span class="caret"></span></div></div>
+        <div class="pill at-top ghost live"><span class="core rec"></span><span class="time">0:04</span><span class="chip">Notes<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div>
+        <span class="tag">Monitor rechts · hier wird getippt</span>
+        <span class="note" style="top:38px;left:calc(50% + 128px)">nur während des Diktats</span>
+      </div>
+    </div>
+    <figcaption><b>15 · Diktat auf dem anderen Bildschirm.</b> Die Pille mit dem Chat-Status wohnt auf dem Bildschirm des Agent-Chats-Fensters und bleibt dort. Startest du ein Diktat, während du rechts in Notizen arbeitest, erscheint die Aufnahme dort, wo der Text hingeht: als Pille an der gemerkten Lage dieses Bildschirms (sonst oben mittig), nur bis das Diktat fertig ist. Links bleiben die Zähler stehen. Ist der andere Bildschirm das MacBook mit Notch, zeigt die Notch das Diktat (Abschnitt unten). Entscheidung offen, siehe Frage 1.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════ NOTCH ═══════════════════════ -->
+  <h2>Mit Notch · die Notch übernimmt die Rolle der Pille</h2>
+
+  <figure>
+    <div class="screen h220">
+      <div class="menubar notch"><div class="l"><b>WhisperM8</b><span>Ablage</span></div><div class="r"><span>Do 10:40</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body small" style="width:184px"><div class="chin"><span class="cnts"><span class="cnt working"><i class="dot working"></i>2</span><span class="cnt awaiting"><i class="dot awaiting"></i>1</span></span></div></div></div>
+      <span class="tag">Ruhe an der Notch</span>
+    </div>
+    <figcaption><b>16 · Ruhe.</b> Unverändert: Die Notch wird ein Stück länger, darunter die Zähler. Ist nichts los, ist nichts zu sehen. Die Menüleiste links und rechts bleibt frei. Die Hinweis-Verbreiterung und die Liste wie bisher.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="screen h220 live">
+      <div class="menubar notch"><div class="l"><b>Notizen</b><span>Ablage</span></div><div class="r"><span>Do 10:41</span></div></div>
+      <div class="hang"><div class="band"></div><div class="body wide" style="width:300px"><div class="row"><span class="badge"><i class="dot awaiting"></i>1</span><span class="sep"></span><span class="core rec"></span><span class="time">0:07</span><span class="chip">Prompt<svg class="chev"><use href="#i-chev"/></svg></span><span class="btn"><svg><use href="#i-ok"/></svg></span><span class="btn"><svg><use href="#i-x"/></svg></span></div></div></div>
+      <span class="tag">Aufnahme an der Notch</span>
+    </div>
+    <figcaption><b>17 · Diktat an der Notch.</b> Der Körper unter der Notch wird zur Diktat-Zeile: dieselben Teile wie in der Pille, nur schwarz wie die Hardware und an der Notch fest. Die Raute für wartende Chats sitzt wieder links. Transkribieren und Verbessern genauso, nur der Kern wechselt.</figcaption>
+  </figure>
+
+  <figure class="full">
+    <div class="screen h420">
+      <div class="menubar notch"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Fenster</span></div><div class="r"><span>Do 10:42</span></div></div>
+      <div class="win notch" style="opacity:.7"><div class="side"><div class="grp">WhisperM8</div><div class="sel"><i class="dot working"></i>Pille vereint</div><div><i class="dot awaiting"></i>Jarvis: Supervisor</div></div><div class="main"><div class="tabs"><span class="on">Pille vereint</span></div><div class="term">⏺ …</div></div></div>
+      <div class="hang"><div class="band"></div><div class="body wide" style="width:440px">
+        <div class="ihead"><span class="k sq">L2</span><span class="layer">Wohin</span><span class="rt"><span class="cnt working" style="font-weight:600"><i class="dot working"></i>2</span><span class="cnt awaiting" style="font-weight:600"><i class="dot awaiting"></i>1</span></span></div>
+        <div class="seg"><span class="on">Chats</span><span>Workspaces</span></div>
+        <div class="rows">
+          <div class="r cur"><i class="dot working"></i><div class="t">Pille vereint<small class="inline">WhisperM8</small></div><div class="w">jetzt</div></div>
+          <div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor<small class="inline">WhisperM8</small></div><div class="w">wartet · 2 min</div></div>
+          <div class="r"><i class="dot"></i><div class="t">Release Notizen<small class="inline">WhisperM8</small></div><div class="w">bereit</div></div>
+          <div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small class="inline">ListM8</small></div><div class="w">arbeitet · 11 min</div></div>
+        </div>
+        <div class="foot c"><span><span class="k">▲▼</span>wählen</span><span><span class="k">◀▶</span>Reiter</span><span><span class="k">△</span>nächster wartender</span></div>
+      </div></div>
+      <span class="tag">L2 gehalten an der Notch</span>
+    </div>
+    <figcaption><b>18 · Insel an der Notch.</b> Wie heute: Sie wächst aus der Notch, die Zähler rutschen in den Kopf. Neu ist nur, dass Notch-Anzeige, Diktat und Insel ein Fenster mit einem Zustand sind statt drei übereinanderliegender Fenster.</figcaption>
+  </figure>
+
+  <!-- ═══════════════════════ EINSTELLUNGEN ═══════════════════════ -->
+  <h2>Einstellungen · was zusammengeht, was wegfällt</h2>
+
+  <div class="box">
+    <table>
+      <thead><tr><th>Heute</th><th>Vorschlag</th></tr></thead>
+      <tbody>
+        <tr><td>Recording › Recording Overlay › Overlay UI <code>overlayStyle</code> (Mini, Standard / Full)</td><td>Bleibt, wirkt nur noch während des Diktats. In Ruhe ist die Pille immer klein.</td></tr>
+        <tr><td>Show mode picker in Mini overlay <code>showModePickerInMiniOverlay</code> (an)</td><td>Bleibt, neuer Name „Ausgabemodus beim Diktat immer zeigen“. In Ruhe nie ein Modus-Chip.</td></tr>
+        <tr><td>Recording › Hotkey › Show confirm button (✓) <code>showConfirmButtonInOverlay</code> (an)</td><td>Unverändert.</td></tr>
+        <tr><td>Reset Position (<code>overlayAnchorMaxX/MinX/Y</code>, alt <code>overlayPositionX/Y</code>; eine Lage für alle Bildschirme, Standard unten mittig)</td><td>Ein Knopf „Lage zurücksetzen“ für alle Bildschirme (<code>notchPillPositions</code>, je Display-UUID). Die alten Diktat-Schlüssel werden einmal gelöscht, nicht übernommen.</td></tr>
+        <tr><td>Agent Chats › Tab Workspace › Notch Status › Show chat status at the notch <code>notchStatusEnabled</code> (an)</td><td>„Chat-Status in der Pille zeigen“. Aus: Pille nur beim Diktat und für die Insel, wie die Diktat-Pille heute.</td></tr>
+        <tr><td>Display <code>notchStatusScreen</code> (Automatisch / Eingebaut / Hauptbildschirm)</td><td>Fällt weg. Notch = eingebauter Bildschirm mit Notch, Pille = Bildschirm des Agent-Chats-Fensters.</td></tr>
+        <tr><td>Hide from screenshots and screen sharing <code>notchStatusHideFromCapture</code> (an)</td><td>Gilt für die ganze Pille, auch beim Diktat (Frage 8).</td></tr>
+        <tr><td>Show finished chats <code>notchStatusShowFreshDone</code> (an)</td><td>Unverändert.</td></tr>
+        <tr><td>Open the list on hover <code>notchStatusExpandOnHover</code> (aus)</td><td>Unverändert, nur in Ruhe. Beim Diktat bleibt das Darüberfahren für Griff, Foto und Clip.</td></tr>
+        <tr><td>Hotkey <code>toggleNotchStatus</code> (ohne Belegung), Menüleiste „Chat Status at the Notch“</td><td>Bleibt, schaltet den Status-Teil. Dazu optional „Statusliste öffnen“ (Frage 6).</td></tr>
+        <tr><td>Kill-Switch <code>notchStatusFeatureEnabled</code></td><td>Bleibt Notbremse nur für den Status-Teil; das Diktat zeigt sich weiter.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══════════════════════ OFFENE FRAGEN ═══════════════════════ -->
+  <h2>Offene Fragen</h2>
+
+  <div class="box">
+    <ol class="qs">
+      <li><span class="q">Wo zeigt sich ein Diktat, wenn das Agent-Chats-Fenster auf einem anderen Bildschirm liegt?</span>
+        Variante A: dort, wo du tippst. Variante B: immer an der festen Pille beim Agent-Chats-Fenster.
+        <span class="rec">A. Bildschirm des vorderen Fensters (ersatzweise der Maus). Mit Notch an der Notch, sonst eine Pille an der gemerkten Lage dieses Bildschirms, nur bis das Diktat fertig ist. Bei B sprichst du ins Leere: ✓, ✕ und Pegel stehen auf dem anderen Bildschirm.</span></li>
+      <li><span class="q">Was ersetzt „unten mittig“ als Standard?</span>
+        Die Diktat-Pille stand bisher unten mittig, mit einer Lage für alle Bildschirme.
+        <span class="rec">Oben mittig unter der Menüleiste, für alle. Eine dauerhaft sichtbare Pille unten verdeckt Dock und Eingabefelder. Die alte Lage nicht übernehmen; wer unten will, zieht einmal je Bildschirm.</span></li>
+      <li><span class="q">Was wird aus Voll und Mini (<code>overlayStyle</code>)?</span>
+        <span class="rec">Beide bleiben, Mini bleibt Standard. „Voll“ heißt nur noch: beim Diktat sind Griff, Foto und Clip immer offen. In Ruhe ist die Pille in beiden Stilen klein.</span></li>
+      <li><span class="q">Was passiert mit <code>showModePickerInMiniOverlay</code>?</span>
+        <span class="rec">Bleibt an, wirkt nur beim Diktat, heißt „Ausgabemodus beim Diktat immer zeigen“. Am Controller steht der Modus ohnehin immer da.</span></li>
+      <li><span class="q">Was heißt „Status aus“ künftig?</span>
+        <span class="rec">Die Pille erscheint dann nur beim Diktat und für die Insel und verschwindet danach, wie die Diktat-Pille heute. Der Kill-Switch nimmt nur den Status-Teil heraus.</span></li>
+      <li><span class="q">Wie kommen Nutzer ohne Maus an die Liste?</span>
+        Heute: Klick oder Darüberfahren; per Tastatur nur ⌃⌥Tab (nächster wartender Chat) und Esc zum Abbrechen eines Diktats.
+        <span class="rec">Neuer Hotkey „Statusliste öffnen“ ab Werk ohne Belegung: öffnet mit Tastaturfokus, Pfeile wählen, Return springt in den Chat, Esc schließt. Esc beim Diktat bleibt. VoiceOver liest Zähler und Diktat-Zustand als eine Pille vor.</span></li>
+      <li><span class="q">Über Vollbild-Apps zeigen oder nicht?</span>
+        Heute erscheint die Diktat-Pille dort, die Notch-Anzeige nicht.
+        <span class="rec">In Ruhe ausblenden, Diktat und Insel trotzdem zeigen. Wer im Vollbild diktiert, braucht ✓ und ✕.</span></li>
+      <li><span class="q">Gilt „aus Bildschirmfotos und Freigaben ausblenden“ auch fürs Diktat?</span>
+        Heute nur für die Notch-Anzeige.
+        <span class="rec">Ja, ein Schalter für die ganze Pille, Standard an. Nebeneffekt: Die Pille fehlt dann auch in eigenen Bildschirmclips als Kontext, was eher hilft. Kein Versprechen für Zoom und Meet (Handtest offen).</span></li>
+      <li><span class="q">Wohin klappen Modusliste, AirPods-Hinweis, Schnellaktion (⇧⌘K) und die Menüs?</span>
+        Heute öffnet alles über der Pille, weil sie unten stand.
+        <span class="rec">Dieselbe Regel wie die Insel: obere Bildschirmhälfte nach unten, untere nach oben. Die Schnellaktion („Korrigiere…“) nutzt die Pille direkt, wie ein kurzes Diktat ohne Timer.</span></li>
+      <li><span class="q">Wo stehen die Einstellungen?</span>
+        Heute verteilt auf Recording › Recording Overlay und Agent Chats › Tab Workspace › Notch Status.
+        <span class="rec">Ein Abschnitt „Pille und Notch“ auf der Seite General, mit Verweisen aus Recording und Agent Chats. <code>notchStatusScreen</code> fällt weg.</span></li>
+      <li><span class="q">Wachsen um die Mitte oder am rechten Rand verankert?</span>
+        <span class="rec">Zustandswechsel wachsen um die Mitte, damit die Pille mittig bleibt. Nur das Darüberfahren beim Diktat klappt nach links auf (Rechts-Anker), damit nichts unter der Maus wegrutscht. Am rechten Bildschirmrand wird zur Mitte hin verschoben.</span></li>
+      <li><span class="q">Darf man das Diktat von der Notch wegziehen?</span>
+        <span class="rec">Nein. An der Notch ist alles fest, die Menüleiste bleibt frei. Ziehen gibt es nur auf Bildschirmen ohne Notch.</span></li>
+      <li><span class="q">Startet ein Klick auf den ruhenden Kern ein Diktat?</span>
+        <span class="rec">Vorerst nein. Klick heißt überall „Liste“; ein zweiter Klick-Sinn auf 46 pt wäre leicht zu verwechseln.</span></li>
+    </ol>
+  </div>
+
+</main>
+<script>
+  // Fünf Bars in jeden leeren Kern.
+  document.querySelectorAll(".core").forEach(c => { if (!c.children.length) c.innerHTML = "<i></i>".repeat(5); });
+  const root = document.documentElement;
+  const param = new URLSearchParams(location.search).get("theme");
+  const saved = localStorage.getItem("pille-vereint-theme");
+  root.dataset.theme = param || saved || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.getElementById("theme").addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("pille-vereint-theme", root.dataset.theme);
+  });
+</script>
+</body>
+</html>
