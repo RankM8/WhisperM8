@@ -85,6 +85,8 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Pages/JarvisCalloutsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/KeyboardCleaningSettingsSection.swift",
         "WhisperM8/Views/Settings/Pages/NotchSettingsSection.swift",
+        "WhisperM8/Views/Settings/Pages/PillSettingsSection.swift",
+        "WhisperM8/Views/UnifiedStatusPillView.swift",
         "WhisperM8/Views/Settings/Pages/OutputWorkspacePage.swift",
         "WhisperM8/Views/Settings/Pages/PermissionsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/RecordingSettingsPage.swift",
