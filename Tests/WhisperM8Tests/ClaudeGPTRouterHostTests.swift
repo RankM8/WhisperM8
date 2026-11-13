@@ -23,7 +23,7 @@ final class ClaudeGPTRouterHostTests: XCTestCase {
             helper.terminate()
             _ = waitForExit(helper)
         }
-        try? FileManager.default.removeItem(at: root)
+        GPTRouterTestClient.removeRoot(root)
         try? FileManager.default.removeItem(at: registerURL)
     }
 

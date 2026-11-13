@@ -44,7 +44,7 @@ final class HandoverKeeper: @unchecked Sendable {
         /// Frist für das erste Telegramm einer Verbindung. Kurz, damit leere
         /// Verbindungen keine Plätze blockieren.
         var firstMessageTimeout: TimeInterval = 3
-        var serializer: HandoverScreenSerializing = HandoverPlainTextSerializer()
+        var serializer: HandoverScreenSerializing = HandoverTerminalSerializer()
         /// Wie `AgentTerminalRegistry.captureAllSnapshotsForAppQuit`: Ctrl+C,
         /// 80 ms, Ctrl+C, 180 ms.
         var interruptPauses: (first: useconds_t, second: useconds_t) = (80_000, 180_000)
