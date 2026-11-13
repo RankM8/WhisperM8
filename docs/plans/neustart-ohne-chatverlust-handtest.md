@@ -59,6 +59,16 @@ Sobald Oles CLI-Paket (Terminal-Tab per `chats new --provider terminal --command
 - Schalter an (Schritt 1 und 2 oben). Vor jedem Schritt: `whisperm8 app handover-status` zeigt „Kein Aufbewahrer aktiv“.
 - Belege je Schritt in einen eigenen Ordner, Name wie in Lauf 1 (`r<n>-vor.json`, `r<n>-nach.json`, Log, Foto).
 
+**Fester Messpunkt je Runde: einmal diktieren (Vic).** Lauf 1 hat „kein Dialog“ nur direkt nach dem Start gemessen. Der Schlüsselbund fragt aber erst beim ersten Diktat nach einem neuen Build nach dem API-Schlüssel, und bis Fins Fix hält das den Main Thread an (Lauf 1: `main_thread_freeze durationMs=5011`, 20:21:49). Deshalb nach jeder Übergabe, sobald die App wieder da ist, ein kurzes Diktat in ein leeres Textfeld außerhalb der App (etwa TextEdit), vor allem in Schritt 2, wo sich die Signatur ändert. Messen: Erscheint ein Schlüsselbund-Dialog (dann Foto mit dem Namen des Eintrags, „Immer erlauben“ klicken und die Sekunden bis zum Klick notieren), und steht danach im Log `main_thread_freeze` oder `main_thread_blocked_ongoing` (`/usr/bin/log show --last 2m --predicate 'eventMessage CONTAINS "main_thread"'`)? In der Notiz steht, ob Fins Fix (`fix/diktat-schluesselbund-main-thread`) im gebauten Stand ist (`git -C <ordner> merge-base --is-ancestor <fix-commit> HEAD`, den Commit nennt Jarvis). So liest sich das Ergebnis:
+
+| Fins Fix im Build | Dialog nach neuem Build | Freeze | Bewertung |
+|---|---|---|---|
+| nein | ja, Eintrag des API-Schlüssels | ja, so lange der Dialog offen ist | bekannt, kein Übergabe-Befund |
+| ja | ja, Eintrag des API-Schlüssels | nein | erwartet: der Dialog bleibt, bis die App eine Team-ID hat |
+| ja | ja | ja | Befund an Fin: der Fix greift nicht |
+| egal | Dialog für einen anderen Eintrag, oder ohne Diktat | – | Befund, Foto an Jarvis |
+| egal | kein Dialog bei gleichem Build | nein | erwartet |
+
 Für jeden Chat gilt dieselbe Messung vor und nach jedem `make dev`: `whisperm8 chats show <ref> --json` (Status, PID, Startzeit des Prozesses per `ps -o lstart= -p <pid>`). **Erfolg** heißt: gleiche PID, gleiche Startzeit, kein „Starten“ im Tab, `make dev` meldet „Übergeben: N Chats“ mit dem erwarteten N. **Fehlschlag** heißt: neue PID, „Starten“, kleineres N, eine Zeile „Keine Übergabe“ oder „Übergabe gescheitert“.
 
 ### Schritt 1: Terminal-Tab mit Zähler
@@ -75,7 +85,8 @@ Für jeden Chat gilt dieselbe Messung vor und nach jedem `make dev`: `whisperm8 
 - **Befehl vor und nach jedem `make dev`:** `codesign -dvvv /Applications/WhisperM8.app 2>&1 | grep CDHash`.
 - **Erfolg:** Der CDHash wechselt bei jeder Runde, und trotzdem „Übergeben: 3 Chats“, gleiche PIDs, kein Schlüsselbund-Dialog (`pgrep -x SecurityAgent` direkt nach dem Start leer). Seit Option A hängt die Übergabe an keiner Signatur mehr.
 - **Fehlschlag:** „Keine Übergabe“ oder Rückfall (`handover_fallback_resume` im Log), ein Dialog, gleicher CDHash (dann war der Build nicht verschieden und die Runde zählt nicht).
-- **Beleg:** CDHash je Runde, `make dev`-Ausgabe, Messung je Chat. Hinweis: Das erste Diktat nach jedem neuen Build zeigt derzeit einen Schlüsselbund-Dialog für den API-Schlüssel (Fix läuft bei Fin auf `fix/diktat-schluesselbund-main-thread`). Das ist nicht die Übergabe; während des Tests nicht diktieren oder den Dialog mit „Immer erlauben“ schließen.
+- **Diktat je Runde:** Hier zählt der feste Messpunkt oben besonders, weil jeder Wechsel A ↔ B einen neuen CDHash bringt. Erwartet ist je Wechsel ein Dialog für den API-Schlüssel; ob dabei der Main Thread hängt, hängt an Fins Fix (Tabelle oben).
+- **Beleg:** CDHash je Runde, `make dev`-Ausgabe, Messung je Chat, Foto jedes Dialogs, `main_thread`-Zeilen aus dem Log.
 
 ### Schritt 3: Die anderen Chat-Arten
 
