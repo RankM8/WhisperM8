@@ -505,6 +505,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeRegistryStatusEnabled) }
     }
 
+    /// Doppelstart-Sperre für Codex (`CodexSessionRunningGuard`). Aus = Codex
+    /// setzt wieder ohne Prüfung fort — für den Fall, dass eine künftige
+    /// Codex-Version einen langlebigen Prozess mit `resume <id>` hält und
+    /// damit jedes Fortsetzen sperren würde.
+    /// `defaults write com.whisperm8.app codexStartGuardEnabled -bool NO`
+    var isCodexStartGuardEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.codexStartGuardEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexStartGuardEnabled) }
+    }
+
     /// Gemeinsames Auto-Memory: Chats von Zusatzprofilen bekommen per
     /// `autoMemoryDirectory` das Memory von `main` (Plan
     /// claude-account-switch-ohne-stopp.md, Slice 1). Aus = jedes Profil nutzt
@@ -1138,6 +1148,7 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let claudeRegistryStatusEnabled = "claudeRegistryStatusEnabled"
+    static let codexStartGuardEnabled = "codexStartGuardEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
