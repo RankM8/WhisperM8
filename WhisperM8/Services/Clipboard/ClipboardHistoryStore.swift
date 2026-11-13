@@ -164,7 +164,8 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             )
             entries = trimmed.kept
             for removed in trimmed.removed {
-                removeBlobs(of: removed)
+                // Wie oben: Dateien erst weg, wenn der Index sie nicht mehr nennt.
+                pendingBlobRemovals.append(contentsOf: removed.blobFiles)
                 search.remove(id: removed.id)
             }
             search.enforceBudget(entries)
@@ -267,9 +268,9 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     private func changed(writeNow: Bool = false) {
         onChange?(ClipboardHistoryState(entries: entries, search: search))
         if writeNow {
-            writeIndexNow()
             // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
-            // Der User hat ausdrücklich gelöscht.
+            // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
+            if !writeIndexNow() { scheduleFlush() }
             removePendingBlobs()
         } else {
             scheduleFlush()
@@ -288,10 +289,11 @@ final class ClipboardHistoryStore: @unchecked Sendable {
 
     /// Schreibt jetzt; ein geplantes Schreiben fällt weg, damit nach `flush()`
     /// nichts mehr nachläuft.
-    private func writeIndexNow() {
+    @discardableResult
+    private func writeIndexNow() -> Bool {
         pendingFlush?.cancel()
         pendingFlush = nil
-        writeIndex()
+        return writeIndex()
     }
 
     private func ensureDirectory() {
@@ -303,14 +305,16 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     }
 
-    private func writeIndex() {
+    @discardableResult
+    private func writeIndex() -> Bool {
         ensureDirectory()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(IndexFile(schema: Self.schema, entries: entries)) else { return }
+        guard let data = try? encoder.encode(IndexFile(schema: Self.schema, entries: entries)) else { return false }
         let url = directory.appendingPathComponent(Self.indexFileName)
-        guard writeFile(data, to: url) else { return }
+        guard writeFile(data, to: url) else { return false }
         removePendingBlobs()
+        return true
     }
 
     private func removePendingBlobs() {
@@ -352,10 +356,6 @@ final class ClipboardHistoryStore: @unchecked Sendable {
 
     private func removeBlob(_ file: String) {
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(file))
-    }
-
-    private func removeBlobs(of entry: ClipboardEntry) {
-        for file in entry.blobFiles { removeBlob(file) }
     }
 
     private func directoryContents() -> [String] {

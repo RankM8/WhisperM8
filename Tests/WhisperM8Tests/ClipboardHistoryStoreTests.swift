@@ -261,6 +261,23 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertFalse(raw.contains("geheim"))
     }
 
+    /// Gekürzte Einträge verlieren ihre Dateien erst, wenn der Index sie nicht
+    /// mehr nennt; sonst kämen sie nach einem Absturz ohne Dateien zurück.
+    func testTrimmedBlobsGoOnlyAfterTheIndexIsWritten() throws {
+        let store = ClipboardHistoryStore(directory: directory, debounceSeconds: 60)
+        store.add(ClipboardCapture(imageData: pngData(), imageIsPNG: true, date: Date(timeIntervalSince1970: 1)), maxItems: 1)
+        store.flush()
+        let image = try XCTUnwrap(store.snapshot().first?.imageFile)
+        let file = directory.appendingPathComponent(image)
+        store.add(text("neu", at: 2), maxItems: 1)
+        store.waitUntilIdle()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).first?.imageFile, image)
+        store.flush()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).map(\.text), ["neu"])
+    }
+
     /// Nach `flush()` läuft kein geplantes Schreiben mehr nach (der Wackler in
     /// `testClearWithoutPinsEmptiesTheFolder`: Temp-Datei beim Auflisten).
     func testFlushCancelsThePendingWrite() throws {
