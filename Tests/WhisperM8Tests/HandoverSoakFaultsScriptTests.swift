@@ -49,10 +49,13 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         XCTAssertFalse(result.output.contains("FAIL"), result.output)
     }
 
-    /// Unbekanntes Szenario und relative Wurzel brechen ab, bevor irgendetwas
-    /// an der Test-Instanz passiert.
+    /// Unbekannter Befehl, unbekanntes Szenario und relative Wurzel brechen ab,
+    /// bevor irgendetwas an der Test-Instanz passiert.
     func testUsageErrorsNeverStartARun() throws {
         XCTAssertEqual(try run([Self.script.path, "gibtsnicht"]).status, 64)
+        let unknown = try run([Self.script.path, "run", "--only", "gibtsnicht"])
+        XCTAssertEqual(unknown.status, 64, unknown.output)
+        XCTAssertTrue(unknown.output.contains("unbekanntes Szenario"), unknown.output)
         XCTAssertEqual(try run([Self.script.path, "self-test", "--bogus"]).status, 64)
         let relative = try run([Self.script.path, "self-test"], environment: ["WHISPERM8_TEST_ROOT": "~/soak"])
         XCTAssertEqual(relative.status, 64, relative.output)
@@ -75,13 +78,19 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         for line in code.split(separator: "\n") where line.contains("\"$BIN\" ") && !line.contains("-x \"$BIN\"") {
             XCTAssertTrue(line.contains("WHISPERM8_INSTANCE_ROOT=\"$ROOT\""), "Aufruf ohne Test-Wurzel: \(line)")
         }
-        // SIGKILL nur über kill_keeper, das die Kommandozeile prüft.
-        // (`kill -0` prüft nur, ob ein Prozess lebt, und sendet nichts.)
-        let killLines = code.split(separator: "\n").filter {
-            ($0.contains("kill -") && !$0.contains("kill -0")) || $0.contains("kill \"-")
+        // Signale nur in drei bekannten Formen: kill_keeper (prüft vorher die
+        // Kommandozeile), der eigene Wächter-Prozess und der Selbsttest-Prozess.
+        // `kill -0` prüft nur, ob ein Prozess lebt.
+        let allowed = [#"kill "-$2" "$1""#, #"kill "$SAMPLER_PID""#, #"kill "$stranger""#, "kill -0 "]
+        for line in code.split(separator: "\n") where line.range(of: #"(^|[\s;(&|])kill\s"#, options: .regularExpression) != nil {
+            XCTAssertTrue(allowed.contains { line.contains($0) }, "unbekannter kill-Aufruf: \(line)")
         }
-        XCTAssertEqual(killLines.count, 1, "nur kill_keeper sendet Signale: \(killLines)")
-        XCTAssertTrue(code.contains(#"[[ "$command" == *"handover-keeper --root $ROOT"* ]]"#))
+        XCTAssertTrue(code.contains(#"[[ "$command" == *"handover-keeper --root $HANDOVER_DIR "* ]]"#))
+        // rsync --delete nur auf das Test-Bundle dieses Arbeitsordners.
+        XCTAssertTrue(code.contains(#"APP="$REPO/.build-test/WhisperM8Test.app""#))
+        for line in code.split(separator: "\n") where line.contains("rsync") {
+            XCTAssertTrue(line.contains(#""$APP/""#), "rsync mit anderem Ziel: \(line)")
+        }
     }
 
     func testFaultScriptReusesTheSoakLibrary() throws {

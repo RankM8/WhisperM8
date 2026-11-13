@@ -94,7 +94,7 @@ contains() { grep -qE -- "$2" <<< "$1"; }
 has_keep_chats() { grep -q -- '--keep-chats' "$TI"; }
 # Chat ohne Anzeige starten (Paket 4). Heute startet ein Chat erst, wenn sein
 # Tab angezeigt wird — in der versteckten Test-Instanz also nie (Lauf 13.11.).
-has_chat_start() { contains "$(cli chats help 2>/dev/null || true)" '--start'; }
+has_chat_start() { contains "$(cli chats help 2>/dev/null || true)" '--start([^-a-z]|$)'; }
 has_terminal_tabs() { contains "$(cli chats help 2>/dev/null || true)" '--provider [^ ]*terminal'; }
 has_background_chats() { contains "$(cli chats help 2>/dev/null || true)" '--background'; }
 has_terminal_text() { contains "$(cli debug help 2>/dev/null || true)" '^  terminal'; }
@@ -566,8 +566,8 @@ report() {
 
 # Bricht der Lauf ab (gescheiterter Neustart, `chats new` …): trotzdem Chats
 # beenden und einen Bericht schreiben, statt Chats laufen zu lassen.
-on_exit() {
-    local status=$?
+on_exit() { # [exit-status] — ohne Argument der Status beim Aufruf als Trap
+    local status=${1:-$?}
     (( RUN_STARTED )) || return 0
     RUN_STARTED=0
     if (( status != 0 )); then
