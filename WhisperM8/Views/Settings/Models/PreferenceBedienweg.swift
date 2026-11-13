@@ -83,6 +83,5 @@ enum PreferenceBedienweg {
     static let measurementTools: [Entry] = [
         Entry(key: "agentStatusPulseEnabled", reason: "A/B-Schalter für die alte Dauerbewegung der Status-Punkte, nur für Lastmessungen."),
         Entry(key: "debugControlEnabled", reason: "Aktiviert den Debug-Control-Socket für Entwickler und QA (`whisperm8 debug`)."),
-        Entry(key: "restartKeepsChatsEnabled", reason: "Labs „Neustart ohne Chatverlust“ im Bau: schaltet bisher nur den GPT-Router als eigenen Dienst. Den UI-Schalter samt Übersetzung bringt Paket 4 mit demselben Schlüssel, dann fällt dieser Eintrag weg."),
     ]
 }

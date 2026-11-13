@@ -31,7 +31,7 @@ enum SettingsNavigation {
     /// Diktat-Profil stehen sie nicht in der Hauptliste — erreichbar bleiben sie
     /// über „Show Agent Chats settings“ und über Deep-Links.
     static let agentPages: [SettingsPage] = [
-        .agentChats, .cli, .claudeAccounts, .claudeHooks, .gptBackend, .jarvis
+        .agentChats, .cli, .claudeAccounts, .claudeHooks, .gptBackend, .jarvis, .restart
     ]
 
     static func launchClass(of page: SettingsPage) -> SettingsLaunchClass {
@@ -41,7 +41,7 @@ enum SettingsNavigation {
             return .core
         case .claudeAccounts, .claudeHooks:
             return .advanced
-        case .gptBackend, .voiceGate, .jarvis, .controller:
+        case .gptBackend, .voiceGate, .jarvis, .controller, .restart:
             return .labs
         }
     }
@@ -70,7 +70,7 @@ enum SettingsNavigation {
             ),
             SettingsPageGroup(
                 title: "Labs", launchClass: .labs,
-                pages: visible([.gptBackend]) + [.voiceGate] + visible([.jarvis]) + [.controller]
+                pages: visible([.gptBackend]) + [.voiceGate] + visible([.jarvis]) + [.controller] + visible([.restart])
             )
         ]
         return groups.filter { !$0.pages.isEmpty }

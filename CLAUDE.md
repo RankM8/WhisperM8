@@ -183,8 +183,9 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs „Neustart ohne Chatverlust“, im Bau; bisher nur GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem
-nächsten App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
+(Labs „Neustart ohne Chatverlust“, im Bau, UI-Schalter in Labs: `make dev` gibt Chats an den Aufbewahrer ab, die neue
+App übernimmt sie; GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem nächsten App-Start; Plan
+[neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 
