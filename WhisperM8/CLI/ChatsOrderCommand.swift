@@ -8,13 +8,15 @@ import Foundation
 /// vorn, `--last` ans Ende, alle übrigen behalten ihre relative Folge
 /// dazwischen. Die App schreibt, die CLI handelt über den Socket.
 enum ChatsOrderCommand {
-    static let usage = "Usage: whisperm8 chats order <ref> [<ref>…] [--last <ref>]… [--dry-run] [--json]"
+    static let usage = "Usage: whisperm8 chats order [--tabs] <ref> [<ref>…] [--last <ref>]… [--dry-run] [--json]"
 
     struct Options: Equatable {
         var first: [String] = []
         var last: [String] = []
         var dryRun = false
         var json = false
+        /// Tab-Folge im Fenster statt Folge in der Seitenleiste.
+        var tabs = false
     }
 
     static func parse(_ arguments: [String]) throws -> Options {
@@ -30,6 +32,7 @@ enum ChatsOrderCommand {
                 }
                 options.last.append(arguments[index])
             case "--dry-run": options.dryRun = true
+            case "--tabs": options.tabs = true
             case "--json": options.json = true
             default:
                 if argument.hasPrefix("--") { throw ChatsOrderParseError("Unbekannte Option: \(argument)") }
@@ -75,26 +78,29 @@ enum ChatsOrderCommand {
             "lastSessionIDs": last.map(\.uuidString),
             "dryRun": options.dryRun,
         ]
-        switch ChatsLiveSupport.perform(method: "session.order", params: params) {
+        switch ChatsLiveSupport.perform(method: options.tabs ? "tab.order" : "session.order", params: params) {
         case .failed(let code): return code
         case .ok(let response):
             guard response.ok else { return ChatsLiveSupport.mapError(response) }
             if options.json {
                 CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response)))
             } else {
-                CLIIO.out(textReport(response.result))
+                CLIIO.out(textReport(response.result, tabs: options.tabs))
             }
             return ChatsCLIExit.ok
         }
     }
 
     /// Lesbare Ausgabe: neue Folge mit Nummer, bei Änderung die alte Position.
-    static func textReport(_ result: ChatsControlJSON?) -> String {
+    static func textReport(_ result: ChatsControlJSON?, tabs: Bool = false) -> String {
         let project = result?["project"]?.stringValue ?? "?"
         let dryRun = result?["dryRun"]?.boolValue ?? false
         let changed = result?["changed"]?.boolValue ?? false
         let before = (result?["before"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }
-        var lines = [dryRun ? "Vorschau für \(project) (nichts geändert):" : "Reihenfolge in \(project):"]
+        let place = tabs
+            ? "Tabs im Fenster \(ChatsWindowCommand.shortWindowID(result?["windowID"]?.stringValue)) (Projekt \(project))"
+            : project
+        var lines = [dryRun ? "Vorschau für \(place) (nichts geändert):" : "Reihenfolge in \(place):"]
         for entry in result?["after"]?.arrayValue ?? [] {
             let position = entry["position"]?.intValue ?? 0
             let title = entry["title"]?.stringValue ?? ""
@@ -113,6 +119,9 @@ enum ChatsOrderCommand {
                 : "Projekt-Ansicht folgt: \(moved.compactMap { $0["name"]?.stringValue }.joined(separator: ", "))")
         }
         if !changed { lines.append("Unverändert: Die Folge stimmte schon.") }
+        if result?["persisted"]?.boolValue == false {
+            lines.append("Achtung: In der App gesetzt, aber noch nicht gespeichert; chats list kann kurz die alte Folge zeigen.")
+        }
         return lines.joined(separator: "\n")
     }
 }

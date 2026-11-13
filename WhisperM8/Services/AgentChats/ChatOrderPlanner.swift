@@ -24,6 +24,18 @@ enum ChatOrderPlanner {
         let middle = current.filter { !seen.contains($0) }
         return head + middle + tail
     }
+
+    /// Tab-Folge eines Fensters nach `chats order --tabs`: Die Tabs von
+    /// `block` (die Tabs EINES Projekts in ihrer neuen Folge) rücken als Block
+    /// an die Stelle des ersten von ihnen; Tabs anderer Projekte behalten
+    /// ihre Folge davor und dahinter.
+    static func tabBlockOrder(window: [UUID], block: [UUID]) -> [UUID] {
+        let members = Set(block)
+        guard let start = window.firstIndex(where: members.contains) else { return window }
+        let others = window.filter { !members.contains($0) }
+        let insertAt = window[..<start].filter { !members.contains($0) }.count
+        return Array(others[..<insertAt]) + block.filter { window.contains($0) } + Array(others[insertAt...])
+    }
 }
 
 extension WorkspaceSlotOps {

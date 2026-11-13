@@ -499,6 +499,17 @@ bewusst schwache Schwester von `archive`. Contract:
   `after` (je `position`, `id`, `title`) und `projectViews` (Plätze vorher und
   nachher). Beispiel, Chats nach Nummer und Jarvis ans Ende:
   `whisperm8 chats order fin ole dex gus vic jon doc --last jarvis --dry-run`.
+  Der Befehl antwortet erst, wenn der Workspace auf der Platte steht, damit ein
+  `chats list` direkt danach die neue Folge liest (Befund 13.11.2026: vorher
+  bis zu 20 s alte Folge).
+  **`--tabs`** (Methode `tab.order`) ordnet stattdessen die Tabs eines
+  Fensters: Alle genannten Chats müssen im selben Fenster als Tab offen sein
+  und zur selben Tab-Gruppe gehören, wie die Tab-Leiste sie bildet
+  (`AgentTabGrouping.key`: ein Raster-Workspace geht vor dem Projekt). Die Tabs
+  dieser Gruppe werden wie oben geordnet und rücken als Block an die Stelle des
+  ersten; andere Tabs behalten ihre Folge davor und dahinter. Die Auswahl im
+  Fenster bleibt. Scheitert das sofortige Schreiben, steht im Ergebnis
+  `persisted: false` (Folge in der App gesetzt, auf der Platte noch nicht).
 - **`move <ref> --window <primary|id>`** verschiebt einen Tab in ein anderes
   BESTEHENDES Fenster (`AgentUIState.moveTab`-Semantik: nicht-offene Tabs
   werden im Ziel geöffnet). Fenster-Refs: `primary` oder ID/-Präfix ≥ 8 aus

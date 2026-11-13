@@ -108,6 +108,11 @@ extension AgentControlRequestHandler {
                 }
                 let views = AgentWindowStore.shared.reorderProjectViews(
                     projectID: plan.projectID, order: plan.after, dryRun: dryRun)
+                // UI-Zustand (Projekt-Ansicht, Tabs) sofort schreiben: Die CLI
+                // liest danach von Disk.
+                if !dryRun, views.contains(where: { $0.before != $0.after }) {
+                    AgentWindowStore.shared.flush()
+                }
                 return .success((plan, views))
             }
         }
@@ -117,6 +122,12 @@ extension AgentControlRequestHandler {
             return .failure(requestID: request.requestID, code: error.code, message: error.message)
         case .success(let (plan, views)):
             let changed = plan.after != plan.before || views.contains { $0.before != $0.after }
+            // Befund 13.11.2026: `chats list` las direkt danach noch die alte
+            // Folge. Erst antworten, wenn der Workspace auf der Platte steht.
+            var persisted = true
+            if !dryRun, plan.after != plan.before {
+                persisted = await AgentSessionStore().flushToDisk(reason: "order")
+            }
             if !dryRun, changed {
                 await audit(request.actor, method: "order", target: plan.projectName, outcome: "ok", prompt: nil)
             }
@@ -130,6 +141,9 @@ extension AgentControlRequestHandler {
                 "ok": true,
                 "dryRun": dryRun,
                 "changed": changed,
+                // false: Folge gesetzt, aber noch nicht auf der Platte; chats list
+                // kann bis zum nächsten Schreibversuch die alte Folge lesen.
+                "persisted": persisted,
                 "project": plan.projectName,
                 "projectID": plan.projectID.uuidString,
                 "before": list(plan.before),

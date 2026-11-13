@@ -243,6 +243,31 @@ final class AgentWorkspaceStore: @unchecked Sendable {
         }
     }
 
+    /// Wie `flush`, kehrt aber erst zurück, wenn der Stand auf der Platte
+    /// steht. Für Mutationen über den Steuer-Socket, nach denen die CLI sofort
+    /// wieder von Disk liest (`chats order`, dann `chats list`). Nie vom Main
+    /// Thread aus warten: Encoding und Write laufen auf der Utility-Queue.
+    /// `false`, wenn das Schreiben scheiterte (der Stand bleibt dann dirty,
+    /// der Retry mit Backoff läuft wie sonst).
+    @discardableResult
+    func flushToDisk(reason: String) async -> Bool {
+        guard case .debounced = policy else { return true }
+        lock.lock()
+        pendingFlush?.cancel()
+        pendingFlush = nil
+        lock.unlock()
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            flushQueue.async { [weak self] in
+                guard let self else { return continuation.resume(returning: false) }
+                self.drain(reason: reason)
+                self.lock.lock()
+                let written = !self.dirty
+                self.lock.unlock()
+                continuation.resume(returning: written)
+            }
+        }
+    }
+
     /// Ausschliesslich fuer willTerminate: NotificationCenter stellt den
     /// Observer synchron auf dem Main Thread zu, daher muss vor der Rueckkehr
     /// auch der serielle Persist-Drain abgeschlossen sein.
