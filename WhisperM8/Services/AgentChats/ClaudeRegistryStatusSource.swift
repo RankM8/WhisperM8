@@ -65,6 +65,11 @@ final class ClaudeRegistryStatusSource {
         ClaudeSessionRegistry.indexBySessionID(Array(recordsByPID.values))[id]
     }
 
+    /// Alle bekannten Einträge zu einer Session-ID, je Prozess einer.
+    func records(forExternalSessionID id: String) -> [ClaudeSessionRecord] {
+        recordsByPID.values.filter { $0.sessionID.caseInsensitiveCompare(id) == .orderedSame }
+    }
+
     func start() {
         guard rescanTask == nil else { return }
         rescanTask = Task { @MainActor [weak self] in

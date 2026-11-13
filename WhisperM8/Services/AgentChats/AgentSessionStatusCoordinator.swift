@@ -184,6 +184,19 @@ final class AgentSessionStatusCoordinator {
     var registryRecordLookup: (String) -> ClaudeSessionRecord? = {
         ClaudeRegistryStatusSource.shared.record(forExternalSessionID: $0)
     }
+    /// Alle lebenden Registry-Einträge zu einer Session-ID (mehrere Prozesse möglich).
+    var foregroundRecordsLookup: (String) -> [ClaudeSessionRecord] = {
+        ClaudeRegistryStatusSource.shared.records(forExternalSessionID: $0)
+    }
+    /// PID des Claude-Prozesses im PTY des Chats (direktes Kind der App).
+    var terminalProcessID: (UUID) -> Int32? = {
+        AgentTerminalRegistry.shared.controller(for: $0)?.processID
+    }
+    /// Prozesse, denen die App gerade das Ende geschickt hat (Tab-Neustart,
+    /// Kontowechsel): Der auslaufende Vorgänger des eigenen Chats ist nicht fremd.
+    var isBeingTerminated: (Int32) -> Bool = {
+        ProcessTerminationLedger.shared.isBeingTerminated(pid: $0)
+    }
 
     /// Test-Injection: Existiert das Transcript der Claude-Session
     /// (localID, externalID, transcript_path aus dem Hook)? Default prüft
@@ -1107,6 +1120,12 @@ final class AgentSessionStatusCoordinator {
     ///   garantiert).
     /// - Bisherige ID ohne Transcript → nichts zu verlieren, sofort.
     /// - Neue ID mit Transcript (`/resume` in der TUI) → sofort.
+    /// - Bisherige ID läuft laut Claudes Registry gerade in einem ANDEREN
+    ///   Vordergrund-Prozess → sie war nie die eigene (Rückfall-Bindung an ein
+    ///   fremdes Transcript, Befund 13.11.2026), sofort. Nur die Registry
+    ///   entscheidet das, nicht eine zweite Bindung im Workspace: Alte
+    ///   Doppel-Einträge gibt es dort viele, und beim echten Besitzer nach
+    ///   `/background` muss die leere Session weiter zurückgestellt werden.
     /// - Sonst (`/clear`, leere Session nach `/background`) → zurückstellen,
     ///   bis die neue ID einen Turn zeigt.
     nonisolated static func externalIDBindingDecision(
@@ -1114,14 +1133,35 @@ final class AgentSessionStatusCoordinator {
         newID: String,
         source: String?,
         newTranscriptExists: Bool,
-        currentTranscriptExists: Bool
+        currentTranscriptExists: Bool,
+        currentIDRunsInOtherProcess: Bool = false
     ) -> ExternalIDBindingDecision {
         guard let currentID, !currentID.isEmpty else { return .bind }
         if currentID == newID { return .unchanged }
         if source == "fork" { return .ignoreFork }
+        if currentIDRunsInOtherProcess { return .bind }
         if !currentTranscriptExists { return .bind }
         if newTranscriptExists { return .bind }
         return .postpone
+    }
+
+    /// Führt ein lebender Vordergrund-Prozess außer dem eigenen die Sitzung?
+    /// Hintergrund-Worker zählen nicht (`/background` gibt die Sitzung bewusst
+    /// dorthin ab), ebenso Prozesse, die die App gerade beendet — wie in der
+    /// Doppelstart-Sperre (`ClaudeSessionRunningGuard`). Ohne eigene PID lässt
+    /// sich der eigene Prozess nicht ausnehmen — dann nie (der Registry-Cache
+    /// kann den eigenen Prozess nach `/background` noch mit der alten ID führen).
+    nonisolated static func runsInOtherForegroundProcess(
+        sessionID: String,
+        ownProcessID: Int32?,
+        records: [ClaudeSessionRecord],
+        isBeingTerminated: (Int32) -> Bool = { _ in false }
+    ) -> Bool {
+        guard !sessionID.isEmpty, let ownProcessID else { return false }
+        return records.contains {
+            !$0.isBackground && $0.pid != ownProcessID && !isBeingTerminated($0.pid)
+                && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
+        }
     }
 
     /// Nimmt `id` aus der Fork-Merkliste des Chats (LR-AK-020).
@@ -1135,8 +1175,12 @@ final class AgentSessionStatusCoordinator {
         guard let newID = event.sessionID, !newID.isEmpty else { return }
         let currentID = store.loadWorkspace().sessions
             .first(where: { $0.id == localID })?.externalSessionID
+        let isReplacement = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
+        let runsElsewhere = isReplacement && Self.runsInOtherForegroundProcess(
+            sessionID: currentID ?? "", ownProcessID: terminalProcessID(localID),
+            records: foregroundRecordsLookup(currentID ?? ""), isBeingTerminated: isBeingTerminated)
         // Dateisystem nur befragen, wo die Regel es wirklich braucht.
-        let needsFileCheck = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
+        let needsFileCheck = isReplacement && !runsElsewhere
         let currentExists = needsFileCheck
             && transcriptExists(localID: localID, externalID: currentID ?? "", transcriptPath: nil)
         let newExists = currentExists
@@ -1146,8 +1190,12 @@ final class AgentSessionStatusCoordinator {
             newID: newID,
             source: event.source,
             newTranscriptExists: newExists,
-            currentTranscriptExists: currentExists
+            currentTranscriptExists: currentExists,
+            currentIDRunsInOtherProcess: runsElsewhere
         )
+        if runsElsewhere, decision == .bind {
+            Logger.claudeBinding.notice("binding_foreign_id_replaced localID=\(localID.uuidString, privacy: .public) foreign=\(currentID ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
+        }
         switch decision {
         case .unchanged:
             pendingExternalIDs[localID] = nil
