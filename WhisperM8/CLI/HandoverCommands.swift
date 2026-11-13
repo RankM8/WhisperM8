@@ -333,6 +333,15 @@ enum AppCLICommand {
         }
     }
 
+    /// Zeile für die Ausgabe von `make dev` bei klassischem Neustart.
+    static func classicLine(reason: String?) -> String {
+        if reason == "routerInApp" {
+            return "Keine Übergabe: Der Schalter „Neustart ohne Chatverlust“ wirkt erst ab diesem Neustart "
+                + "(der GPT-Router lief noch in der App). Diesmal enden die Chats wie bisher und werden fortgesetzt."
+        }
+        return "Keine Übergabe: \(reason ?? "ohne Grund")"
+    }
+
     /// `make dev` bei ausgeschaltetem Schalter: still bleiben.
     static func reportsClassic(reason: String?, silentWhenDisabled: Bool) -> Bool {
         !(silentWhenDisabled && reason == "featureDisabled")
@@ -350,7 +359,7 @@ enum AppCLICommand {
             return HandoverExit.handedOver
         case "classic":
             if reportsClassic(reason: reason, silentWhenDisabled: silentWhenDisabled) {
-                CLIIO.err("Keine Übergabe: \(reason ?? "ohne Grund")")
+                CLIIO.err(classicLine(reason: reason))
             }
             return HandoverExit.classic
         default:

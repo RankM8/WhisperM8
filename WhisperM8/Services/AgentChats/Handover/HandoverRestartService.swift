@@ -39,6 +39,8 @@ final class HandoverRestartService {
     private var isRunning = false
 
     var isEnabled: () -> Bool = { AppPreferences.shared.isRestartKeepsChatsEnabled }
+    /// Läuft der GPT-Router in diesem App-Lauf als eigener Dienst?
+    var routerRunsAsService: () -> Bool = { ClaudeGPTRouterMode.current == .service }
     var paths = HandoverPaths.default
     var registry: AgentTerminalRegistry { .shared }
 
@@ -64,7 +66,8 @@ final class HandoverRestartService {
         }
         let plan = HandoverPlanning.quitPlan(
             featureEnabled: isEnabled(), trigger: trigger,
-            keeper: Self.keeperPresence(paths: paths), candidates: candidates)
+            keeper: Self.keeperPresence(paths: paths), candidates: candidates,
+            routerRunsAsService: routerRunsAsService())
 
         switch plan {
         case .classic(let reason):

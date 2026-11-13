@@ -294,6 +294,26 @@ final class HandoverPlanningTests: XCTestCase {
             .restart(handOver: [a, b], excluded: [c: .kindNotHandedOver, d: .notRunning]))
     }
 
+    /// Vic, Gesamt-Review Teil 2: Ist der Schalter erst in diesem App-Lauf
+    /// eingeschaltet, läuft der GPT-Router noch in der App. Dann klassisch,
+    /// sonst rissen laufende Antworten ab.
+    func testNoHandoverWhileTheRouterStillRunsInTheApp() {
+        let chat = HandoverQuitCandidate(sessionID: UUID(), kind: .claude, hasLiveProcess: true)
+        XCTAssertEqual(HandoverPlanning.quitPlan(featureEnabled: true, trigger: .restartRequest, keeper: .none,
+                                                 candidates: [chat], routerRunsAsService: false),
+                       .classic(.routerInApp))
+        XCTAssertEqual(HandoverPlanning.quitPlan(featureEnabled: false, trigger: .restartRequest, keeper: .none,
+                                                 candidates: [chat], routerRunsAsService: false),
+                       .classic(.featureDisabled), "Schalter aus bleibt „aus“")
+        if case .restart = HandoverPlanning.quitPlan(featureEnabled: true, trigger: .restartRequest, keeper: .none,
+                                                     candidates: [chat], routerRunsAsService: true) {} else {
+            XCTFail("mit Router-Dienst wird übergeben")
+        }
+        XCTAssertTrue(AppCLICommand.classicLine(reason: "routerInApp").contains("erst ab diesem Neustart"))
+        XCTAssertTrue(AppCLICommand.reportsClassic(reason: "routerInApp", silentWhenDisabled: true),
+                      "make dev zeigt die Zeile")
+    }
+
     func testRestartWithoutChatsStillRestarts() {
         XCTAssertEqual(HandoverPlanning.quitPlan(featureEnabled: true, trigger: .restartRequest, keeper: .none,
                                                  candidates: []),
