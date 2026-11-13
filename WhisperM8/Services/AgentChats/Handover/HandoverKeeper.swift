@@ -459,6 +459,9 @@ final class HandoverKeeper: @unchecked Sendable {
             }
             boundSocket = nil
         }
+        // Option A: Das Einmal-Geheimnis liegt als Datei; mit dem Ende des
+        // Aufbewahrers gilt es nicht mehr (Vics Auflage 2).
+        HandoverFileSecretStore.remove(at: configuration.paths)
         releaseLock()
         log("keeper_finished reason=\(reason.rawValue)")
         let callback = onFinish

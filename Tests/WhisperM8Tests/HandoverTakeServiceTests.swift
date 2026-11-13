@@ -42,7 +42,7 @@ final class HandoverTakeServiceTests: XCTestCase {
     }
 
     /// Alte App: abgeben und den Marker auf „übergeben“ setzen.
-    private func handOver(_ sources: [FakeDepositSource], secrets: FakeSecretStore) throws -> String {
+    private func handOver(_ sources: [FakeDepositSource], secrets: HandoverSecretStoring) throws -> String {
         let old = marker(pid: 100)
         _ = old.beginRun()
         let coordinator = HandoverDepositCoordinator(dependencies: .init(
@@ -120,6 +120,20 @@ final class HandoverTakeServiceTests: XCTestCase {
             XCTAssertTrue(source.child.isAlive)
             XCTAssertFalse(source.child.marker.contains("HUP"))
         }
+    }
+
+    /// Option A von Abgabe bis Übernahme: Die alte App legt das Geheimnis als
+    /// Datei ab, eine neue Instanz der Ablage (wie die neue App) liest es,
+    /// übernimmt und löscht es.
+    func testFileSecretCarriesTheTakeAcrossInstances() throws {
+        let sources = [try spawn(), try spawn()]
+        _ = try handOver(sources, secrets: HandoverFileSecretStore(paths: paths))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.secretFileURL.path))
+        let calls = Calls()
+        let summary = service(secrets: HandoverFileSecretStore(paths: paths), sessions: sources.map { session(for: $0) },
+                              calls: calls).takeAtLaunch()
+        XCTAssertEqual(Set(summary.adopted), Set(sources.map(\.sessionID)))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.secretFileURL.path), "nach dem Lesen gelöscht")
     }
 
     func testChatEndedInGapIsShownAsEnded() throws {
