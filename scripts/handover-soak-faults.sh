@@ -484,12 +484,27 @@ scenario_function() { echo "fault_$(printf '%s' "$1" | tr '-' '_')"; }
 
 # MARK: - Ablauf
 
+# Liefert die App für diesen Chat eine PID? Claude über die Registry; Codex und
+# Terminal erst mit runtime.pid aus Paket 4.
+pid_measurable() { # name
+    [[ "$(chat_provider "$1")" == claude ]] && return 0
+    contains "$(chat_show "$1")" '"pid"'
+}
+
 wait_until_running() {
-    local end name missing
+    local end name missing unmeasurable=""
+    for name in $(chat_names); do pid_measurable "$name" || unmeasurable="$unmeasurable $name"; done
+    if [[ -n "$unmeasurable" ]] && [[ ! -f "$STATE/unmeasurable-recorded" ]]; then
+        record setup pid-messbar FEHLT "ohne ermittelbare PID (runtime.pid, Paket 4):$unmeasurable — dort keine Prüfung"
+        : > "$STATE/unmeasurable-recorded"
+    fi
     end=$(( $(date +%s) + COMEBACK_TIMEOUT ))
     while :; do
         missing=""
-        for name in $(chat_names); do [[ -n "$(chat_pid "$name")" ]] || missing="$missing $name"; done
+        for name in $(chat_names); do
+            [[ " $unmeasurable " == *" $name "* ]] && continue
+            [[ -n "$(chat_pid "$name")" ]] || missing="$missing $name"
+        done
         [[ -z "$missing" ]] && return 0
         (( $(date +%s) < end )) || break
         sleep 2
@@ -521,6 +536,7 @@ cmd_fault_run() {
     trap on_fault_exit EXIT
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
+    rm -f "$STATE/unmeasurable-recorded"
     setup_chats
     if ! wait_until_running; then
         for scenario in $list; do
