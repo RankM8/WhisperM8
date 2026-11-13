@@ -491,10 +491,11 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertEqual(terminals.keys, [.sendNow])
     }
 
-    func testQuickDrawCrossWithDraftWhileIdleSendsEnter() {
+    /// Claude ruht, Text im Feld: auch hier „Jetzt senden“ (wie Ctrl+Enter).
+    func testQuickDrawCrossWithDraftWhileIdleSendsNow() {
         setTerminal(.idle, draft: true)
         dispatcher.performQuickDraw(.continueWork)
-        XCTAssertEqual(terminals.keys, [.enter])
+        XCTAssertEqual(terminals.keys, [.sendNow])
         XCTAssertTrue(terminals.texts.isEmpty)
     }
 
@@ -536,16 +537,26 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertTrue(terminals.texts.isEmpty)
     }
 
-    func testQuickDrawCrossWithEmptyFieldIdleStillContinues() {
+    /// Claude, leeres Feld: kein „Weiter“ mehr, sondern „Jetzt senden“ —
+    /// Claude tut dann nichts. „Weiter“ gibt es im Options-Menü.
+    func testQuickDrawCrossWithEmptyFieldInClaudeSendsNow() {
+        dispatcher.performQuickDraw(.continueWork)
+        XCTAssertEqual(terminals.keys, [.sendNow])
+        XCTAssertTrue(terminals.texts.isEmpty, "kein „Weiter“")
+    }
+
+    func testQuickDrawCrossWithEmptyFieldIdleStillContinuesInCodex() {
+        setTerminal(.idle, profile: .codex)
         dispatcher.performQuickDraw(.continueWork)
         XCTAssertTrue(terminals.keys.isEmpty)
         XCTAssertEqual(terminals.texts.map(\.submit), [true], "„Weiter“ mit Senden")
     }
 
-    func testQuickDrawCrossWhileWorkingWithoutQueueIsRejected() {
-        setTerminal(.working)
+    func testQuickDrawCrossWhileCodexWorksWithoutTextIsRejected() {
+        setTerminal(.working, profile: .codex)
         dispatcher.performQuickDraw(.continueWork)
         XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertTrue(terminals.texts.isEmpty)
         XCTAssertEqual(haptics, [.rejected])
     }
 
