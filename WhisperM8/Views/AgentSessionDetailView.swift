@@ -87,42 +87,24 @@ struct AgentSessionDetailView: View {
         }
     }
 
-    /// Knöpfe unter der Sperr-Meldung (kein Hover: immer sichtbar).
-    @ViewBuilder
-    private var codexEndActions: some View {
-        if let state = codexEndable {
-            HStack(spacing: 8) {
-                switch state.phase {
-                case .ready:
-                    Button("End Process") {
-                        if state.needsConfirmation {
-                            codexEndConfirming = true
-                        } else {
-                            endCodexProcess(force: false)
-                        }
-                    }
-                case .ending:
-                    ProgressView().controlSize(.small)
-                    Text("Ending process…")
-                case .notEnded:
-                    Text("The process did not end.")
-                    Button("Force Quit") { endCodexProcess(force: true) }
-                case .signalFailed:
-                    Text("The process could not be ended. Close it where it runs.")
-                }
-            }
-            .font(.system(size: 12))
-            .controlSize(.small)
-            .confirmationDialog(
-                "Quit the Codex in that terminal?",
-                isPresented: $codexEndConfirming,
-                presenting: state.process
-            ) { _ in
-                Button("Quit Codex", role: .destructive) { endCodexProcess(force: false) }
-                Button("Cancel", role: .cancel) {}
-            } message: { process in
-                Text(Self.codexTerminalQuitMessage(pid: process.pid))
-            }
+    /// Zustand des Knopfs im Banner (`AgentSessionNoticeBanner`).
+    private var bannerCodexEndPhase: AgentSessionNoticeBanner.CodexEndPhase? {
+        switch codexEndable?.phase {
+        case .ready: return .ready
+        case .ending: return .ending
+        case .notEnded: return .notEnded
+        case .signalFailed: return .signalFailed
+        case nil: return nil
+        }
+    }
+
+    /// „Prozess beenden“: bei Codex im Terminal erst die Rückfrage.
+    private func requestCodexEnd() {
+        guard let state = codexEndable else { return }
+        if state.needsConfirmation {
+            codexEndConfirming = true
+        } else {
+            endCodexProcess(force: false)
         }
     }
 
@@ -172,45 +154,33 @@ struct AgentSessionDetailView: View {
             // errorMessage wurde gesetzt, aber nie gerendert — abgebrochene
             // Launches wirkten wie ein No-op bzw. verschwundener Verlauf).
             if errorMessage != nil || fallbackNotice != nil {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    // Fehler (samt „Prozess beenden“ der Codex-Startsperre) und
-                    // Hinweis des Rückfalls stehen untereinander, keiner
-                    // verdeckt den anderen.
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AgentTheme.textPrimary)
-                                .textSelection(.enabled)
-                            codexEndActions
-                        }
-                        if let fallbackNotice {
-                            Text(fallbackNotice)
-                                .font(.system(size: 12))
-                                .foregroundStyle(AgentTheme.textPrimary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
+                AgentSessionNoticeBanner(
+                    errorMessage: errorMessage,
+                    fallbackNotice: fallbackNotice,
+                    codexEndPhase: errorMessage == nil ? nil : bannerCodexEndPhase,
+                    onEndProcess: requestCodexEnd,
+                    onForceQuit: { endCodexProcess(force: true) },
+                    onClose: {
                         // Erst der Fehler samt Codex-Zustand, dann der Hinweis.
-                        if self.errorMessage != nil {
-                            self.errorMessage = nil
-                            self.codexEndable = nil
+                        if errorMessage != nil {
+                            errorMessage = nil
+                            codexEndable = nil
+                            codexEndConfirming = false
                         } else {
-                            self.fallbackNotice = nil
+                            fallbackNotice = nil
                         }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(AgentTheme.textSecondary)
                     }
-                    .buttonStyle(.plain)
+                )
+                .confirmationDialog(
+                    "Quit the Codex in that terminal?",
+                    isPresented: $codexEndConfirming,
+                    presenting: codexEndable?.process
+                ) { _ in
+                    Button("Quit Codex", role: .destructive) { endCodexProcess(force: false) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { process in
+                    Text(Self.codexTerminalQuitMessage(pid: process.pid))
                 }
-                .padding(10)
-                .background(Color.yellow.opacity(0.12))
             }
             if let missingCLI, controller == nil {
                 AgentCLIMissingView(cli: missingCLI, onInstalled: { self.missingCLI = nil })
@@ -267,6 +237,7 @@ struct AgentSessionDetailView: View {
             errorMessage = nil
             fallbackNotice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id)
             codexEndable = nil
+            codexEndConfirming = false
             showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
