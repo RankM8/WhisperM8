@@ -66,7 +66,21 @@ ANSWERS="bash SOAK-BASH-ENDE 0
 stream SOAK-STREAM-ENDE 400
 codex SOAK-CODEX-ENDE 0"
 
-ti() { "$TI" "$@"; }
+# Nach jedem Start oder Neustart das Grid wieder öffnen (solange Chats nur
+# über die Anzeige starten), sonst starten fortgesetzte Chats nicht.
+ti() {
+    local rc=0
+    "$TI" "$@" || rc=$?
+    if (( rc == 0 )) && [[ "${1:-}" == start || "${1:-}" == restart ]]; then reopen_grid; fi
+    return "$rc"
+}
+reopen_grid() {
+    [[ -f "${STATE:-/nonexistent}/grid-name" ]] || return 0
+    local name
+    name=$(cat "$STATE/grid-name")
+    cli chats workspace open "$name" --json >/dev/null 2>&1 \
+        || record grid wieder-offen FEHLER "Grid „$name“ nach dem Neustart nicht geöffnet"
+}
 cli() { "$TI" cli "$@"; }
 log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 
@@ -276,6 +290,7 @@ prepare_instance() {
         exit 1
     fi
     mkdir -p "$STATE" "$PROJECT"
+    rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
     # Codex in der Test-Instanz: nie ein Update-Dialog, den ein Enter bestätigt.
@@ -321,7 +336,11 @@ show_in_grid() {
         record setup grid FEHLER "Grid-Workspace nicht geöffnet: $(printf '%s' "$out" | tail -1)"
         return 1
     fi
-    record setup grid OK "${#refs[@]} Chats im Grid „$name“ angezeigt (sichtbare Test-Instanz, bis Paket 4 --start bietet)"
+    printf '%s' "$name" > "$STATE/grid-name"
+    record setup grid OK "${#refs[@]} Chats im Grid „$name“ geöffnet (bis Paket 4 --start bietet)"
+    if (( USE_RUNNING )); then
+        record setup grid-sichtbar FEHLT "laufende Instanz (--use-running): ob sie sichtbar läuft, ist unbekannt; versteckt starten die Chats nicht"
+    fi
 }
 
 new_chat() { # name provider prompt [extra…]
@@ -341,6 +360,7 @@ setup_chats() {
     : > "$STATE/chats.tsv"
     : > "$STATE/offsets.tsv"
     local start=() grid=0
+    rm -f "$STATE/grid-name"
     if has_chat_start; then
         start=(--start)
     else

@@ -113,7 +113,8 @@ for line in sys.stdin:
     parts = line.split(None, 2)
     if len(parts) < 3 or os.path.basename(parts[1]) != "codex":
         continue
-    if ("WHISPERM8_INSTANCE_ROOT=" + root) not in parts[2]:
+    found = re.search(r"WHISPERM8_INSTANCE_ROOT=(\S+)", parts[2])
+    if not found or os.path.normpath(found.group(1)) != os.path.normpath(root):
         continue
     m = re.search(r"WHISPERM8_SESSION_ID=(\S+)", parts[2])
     if m:
@@ -230,7 +231,12 @@ await_pid() { # name pid_vorher erwartung frist(epoch) → pid oder leer
             stable=$(chat_pid "$name")
             if [[ "$stable" == "$pid" ]] && kill -0 "$pid" 2>/dev/null; then echo "$pid"; return 0; fi
         fi
-        (( $(date +%s) < deadline )) || { echo "${stable:-$pid}"; return 0; }
+        if (( $(date +%s) >= deadline )); then
+            # Frist vorbei: frisch lesen und nur eine lebende PID melden.
+            pid=$(chat_pid "$name")
+            if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then echo "$pid"; else echo ""; fi
+            return 0
+        fi
         sleep 2
     done
 }
@@ -563,8 +569,12 @@ cmd_fault_self_test() {
         "102 /usr/local/bin/codex codex resume a WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=S1" \
         "103 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=S2" \
         "104 /bin/zsh zsh WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=S2" \
-        "105 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/anders WHISPERM8_SESSION_ID=S2")
-    expect_exact "S1 101 102" "$(printf '%s\n' "$ps_fixture" | codex_doubles /r)" "Codex doppelt, nur eigene Wurzel, nur codex"
+        "105 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/anders WHISPERM8_SESSION_ID=S2" \
+        "106 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/r2 WHISPERM8_SESSION_ID=S2" \
+        "107 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/r/ WHISPERM8_SESSION_ID=S3" \
+        "108 /usr/local/bin/codex codex WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=S3")
+    expect_exact "S1 101 102
+S3 107 108" "$(printf '%s\n' "$ps_fixture" | codex_doubles /r)" "Codex doppelt: Wurzel exakt (auch mit /), nur codex"
 
     expect_exact "4242 2 holding" "$(printf '%s' '{"active": true, "keeper": {"pid": 4242, "phase": "holding", "chats": [{}, {}]}}' | keeper_summary)" "Aufbewahrer-Status gelesen"
     expect_exact "" "$(printf '%s' '{"active": false}' | keeper_summary)" "kein Aufbewahrer"
@@ -603,6 +613,7 @@ cmd_fault_self_test() {
     # auf eine neue PID.
     expect_exact "$$" "$(SETTLE_SECONDS=0; chat_pid() { echo "$$"; }; await_pid x 1 either 0)" "Frist vorbei: trotzdem gelesen"
     expect_exact "$$" "$(SETTLE_SECONDS=0; chat_pid() { echo "$$"; }; await_pid x "$$" resumed 0)" "resumed ohne neue PID: alte gemeldet, judge sagt FEHLER"
+    expect_exact "" "$(SETTLE_SECONDS=0; chat_pid() { echo 999999; }; await_pid x 1 same 0)" "Frist vorbei, tote PID: leer statt übernommen"
 
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi
 }
