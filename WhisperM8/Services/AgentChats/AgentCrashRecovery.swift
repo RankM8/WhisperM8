@@ -241,8 +241,11 @@ enum AgentCrashRecoveryCoordinator {
         isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled,
         previousRun: AgentCrashRecoveryMarker.PreviousRun? = nil,
         handledByHandover: Set<UUID> = [],
-        alreadyStarted: Set<UUID>? = nil
+        alreadyStarted: Set<UUID>? = nil,
+        hookPaths: ClaudeHookPaths = ClaudeHookPaths(),
+        notices: AgentCollectiveStartNotices? = nil
     ) -> [UUID] {
+        let notices = notices ?? .shared
         let registry = registry ?? .shared
         let windowStore = windowStore ?? .shared
         let previouslyRunning = (previousRun?.runningSessionIDs ?? marker.beginRun())
@@ -263,11 +266,19 @@ enum AgentCrashRecoveryCoordinator {
             AgentCrashRecoveryPlanner.sessionsToResume(previouslyRunning: previouslyRunning, sessions: sessions),
             sessions: sessions,
             alreadyStarted: alreadyStarted
-                ?? registry.activeSessionIDs.union(HandoverFallbackLaunchQueue.shared.scheduledThisLaunch)
+                ?? registry.activeSessionIDs.union(HandoverFallbackLaunchQueue.shared.scheduledThisLaunch),
+            evidence: { AgentSessionOwnershipEvidence.live(for: $0, hookPaths: hookPaths) }
         )
+        let titles = Dictionary(sessions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         for skipped in plan.skipped {
             // Läuft der Chat selbst schon (übernommen), bleibt sein Flag.
             guard let keeper = plan.keeperOf[skipped], keeper != skipped else { continue }
+            let title = titles[keeper].flatMap { $0.isEmpty ? nil : $0 }
+            notices.note(skipped: skipped, keeperTitle: title ?? String(keeper.uuidString.prefix(8)).lowercased())
+            // Ohne Tab sähe niemand den Hinweis: zurückholen, ohne Auswahlwechsel.
+            if windowStore.windowID(containingTab: skipped) == nil {
+                windowStore.openTab(skipped, in: windowStore.primaryWindowID, select: false)
+            }
             // Ein altes Flag darf den übersprungenen Chat nicht doch starten.
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(
