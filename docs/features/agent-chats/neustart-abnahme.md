@@ -70,10 +70,14 @@ Jedes Szenario prüft danach:
 - Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil.
 - Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
 - Kein Kind erbt einen Socket.
+- Start ohne Auswahl: Jeder Chat, der vorher einen Prozess hatte, hat nach 20 s wieder einen, ohne dass er ausgewählt wurde. Sonst ist das ein FEHLER; danach wählt das Skript die fehlenden Chats per `chats open` aus, damit die übrigen Prüfungen laufen (Befund vom 13.11.: Nach dem Rückfall startete nur der ausgewählte Chat im Grid).
+- Eine PID je Sitzung: Wird die PID eines Chats über seine Prozessumgebung bestimmt (`WHISPERM8_SESSION_ID` in der Wurzel der Test-Instanz) und gibt es dabei mehr als einen obersten Prozess, ist das der FEHLER `zwei-prozesse-umgebung`. Das Skript wählt dann keine der PIDs aus.
 - Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
-- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 (`keeper.lock`, `keeper.log`, Socket) 0600, solange sie existiert.
+- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`) 0600, solange sie existiert.
 
-Am Ende des Laufs prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidat ist jede kleine Datei im Ordner des Aufbewahrers, die nicht zu Paket 2 gehört. Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Ohne Kandidat steht der Punkt als FEHLT da.
+Am Ende des Laufs prüft `geheimnis-muster` das System-Log der Test-App seit Laufbeginn (mit `--info --debug`), `keeper.log` und das Log der Test-Instanz auf eine Zeile mit „secret“ und einem Hex-Wert ab 7 Zeichen; UUIDs zählen nicht. Der Bericht zeigt davon höchstens die ersten 6 Zeichen. Das greift auch, wenn das Geheimnis im Schlüsselbund liegt (Befund vom 13.11.: `handover_take_plan` schrieb den Anfang des Geheimnisses ins System-Log).
+
+Danach prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidat ist jede kleine Datei im Ordner des Aufbewahrers, die nicht zu Paket 2 gehört. Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Ohne Kandidat steht der Punkt als FEHLT da.
 
 ## Was Paket 4 dafür liefern muss
 
@@ -87,7 +91,7 @@ Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschlä
 6. `runtime.pid` in `chats show --json` für Codex und Terminal.
 7. Stellschrauben nur für die Test-Instanz: `handoverHoldSeconds`, `handoverTakeDelayMs`, `handoverSecretOverride` (`missing`, `wrong`).
 8. Das Geheimnis als Datei im Ordner des Aufbewahrers (`…/WhisperM8/handover/`), nicht anderswo; sonst sehen `geheimnis-im-log` und `leichen:dateien` sie nicht.
-9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert. Heute legt Paket 2 ihn mit 0755 an; bis ein Geheimnis als Datei auftaucht, steht `rechte-aufbewahrer` deshalb als FEHLT da.
+9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert. Gemessen am 13.11.: Der Ordner hat 0700; solange kein Geheimnis als Datei auftaucht, prüft `rechte-aufbewahrer` nur den Ordner.
 
 ## Bekannte Grenzen
 
