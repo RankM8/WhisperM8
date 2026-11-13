@@ -204,8 +204,10 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         }
     }
 
-    /// Entfernt alles; `keepPinned` lässt Angepinnte stehen. Ohne Pins wird
-    /// der Ordner komplett geleert, auch Reste nach einem Absturz.
+    /// Entfernt alles; `keepPinned` lässt Angepinnte und ihre Dateien stehen.
+    /// In beiden Fällen gehen ein beiseitegelegter kaputter Index und Dateien
+    /// ohne Eintrag mit weg: Was er enthielt, auch Pins, lädt die App nie
+    /// wieder, und wer leert, erwartet, dass die Texte weg sind.
     ///
     /// Leeren und Löschen schreiben den Index sofort statt gebündelt: Stürbe
     /// die App im Debounce-Fenster, stünden die Texte sonst beim nächsten
@@ -217,13 +219,16 @@ final class ClipboardHistoryStore: @unchecked Sendable {
                 for entry in entries where !entry.isPinned { pendingBlobRemovals.append(contentsOf: entry.blobFiles) }
                 entries = entries.filter(\.isPinned)
                 search.retain(entries)
+                changed(writeNow: true)
+                removeBrokenIndexes()
+                removeOrphans()
             } else {
                 entries = []
                 search = ClipboardSearchIndex(limits: limits.search)
                 pendingBlobRemovals.removeAll()
                 removeAllFiles()
+                changed(writeNow: true)
             }
-            changed(writeNow: true)
         }
     }
 
@@ -365,6 +370,10 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     /// „Verlauf leeren“: alles weg, auch ein beiseitegelegter kaputter Index.
     private func removeAllFiles() {
         for name in directoryContents() { removeBlob(name) }
+    }
+
+    private func removeBrokenIndexes() {
+        for name in directoryContents() where name.hasPrefix(Self.brokenIndexPrefix) { removeBlob(name) }
     }
 
     /// Blob- und Temp-Dateien ohne Eintrag (Absturz zwischen Blob und Index)

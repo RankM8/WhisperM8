@@ -193,6 +193,28 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["index.json"])
     }
 
+    /// Fußzeile „Clear History…“ und „Clear when WhisperM8 quits“ räumen einen
+    /// beiseitegelegten kaputten Index samt seiner Dateien weg; Pins bleiben.
+    func testClearKeepingPinsRemovesASetAsideIndexAndItsFiles() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{ kaputt, geheim".utf8).write(to: directory.appendingPathComponent("index.json"))
+        try Data("blob".utf8).write(to: directory.appendingPathComponent("alt.png"))
+        let store = makeStore()
+        store.add(ClipboardCapture(imageData: pngData(), imageIsPNG: true, date: Date(timeIntervalSince1970: 1)), maxItems: 10)
+        let pinned = try XCTUnwrap(store.snapshot().first)
+        store.setPinned(id: pinned.id, pinned: true)
+        store.add(text("weg", at: 2), maxItems: 10)
+        store.flush()
+        XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .contains { $0.hasPrefix(ClipboardHistoryStore.brokenIndexPrefix) })
+
+        store.clear(keepPinned: true)
+        store.waitUntilIdle()
+        let names = Set(try FileManager.default.contentsOfDirectory(atPath: directory.path))
+        XCTAssertEqual(names, ["index.json", try XCTUnwrap(pinned.imageFile)])
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).map(\.id), [pinned.id])
+    }
+
     func testOneBrokenEntryDoesNotCostTheWholeHistory() throws {
         let store = makeStore()
         store.add(text("eins", at: 1), maxItems: 10)
