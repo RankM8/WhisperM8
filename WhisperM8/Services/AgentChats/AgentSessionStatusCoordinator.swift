@@ -192,6 +192,11 @@ final class AgentSessionStatusCoordinator {
     var terminalProcessID: (UUID) -> Int32? = {
         AgentTerminalRegistry.shared.controller(for: $0)?.processID
     }
+    /// Prozesse, denen die App gerade das Ende geschickt hat (Tab-Neustart,
+    /// Kontowechsel): Der auslaufende Vorgänger des eigenen Chats ist nicht fremd.
+    var isBeingTerminated: (Int32) -> Bool = {
+        ProcessTerminationLedger.shared.isBeingTerminated(pid: $0)
+    }
 
     /// Test-Injection: Existiert das Transcript der Claude-Session
     /// (localID, externalID, transcript_path aus dem Hook)? Default prüft
@@ -1109,15 +1114,19 @@ final class AgentSessionStatusCoordinator {
 
     /// Führt ein lebender Vordergrund-Prozess außer dem eigenen die Sitzung?
     /// Hintergrund-Worker zählen nicht (`/background` gibt die Sitzung bewusst
-    /// dorthin ab). Ohne eigene PID lässt sich der eigene Prozess nicht
-    /// ausnehmen — dann nie (der Registry-Cache kann den eigenen Prozess nach
-    /// `/background` noch mit der alten ID führen).
+    /// dorthin ab), ebenso Prozesse, die die App gerade beendet — wie in der
+    /// Doppelstart-Sperre (`ClaudeSessionRunningGuard`). Ohne eigene PID lässt
+    /// sich der eigene Prozess nicht ausnehmen — dann nie (der Registry-Cache
+    /// kann den eigenen Prozess nach `/background` noch mit der alten ID führen).
     nonisolated static func runsInOtherForegroundProcess(
-        sessionID: String, ownProcessID: Int32?, records: [ClaudeSessionRecord]
+        sessionID: String,
+        ownProcessID: Int32?,
+        records: [ClaudeSessionRecord],
+        isBeingTerminated: (Int32) -> Bool = { _ in false }
     ) -> Bool {
         guard !sessionID.isEmpty, let ownProcessID else { return false }
         return records.contains {
-            !$0.isBackground && $0.pid != ownProcessID
+            !$0.isBackground && $0.pid != ownProcessID && !isBeingTerminated($0.pid)
                 && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
         }
     }
@@ -1136,7 +1145,7 @@ final class AgentSessionStatusCoordinator {
         let isReplacement = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
         let runsElsewhere = isReplacement && Self.runsInOtherForegroundProcess(
             sessionID: currentID ?? "", ownProcessID: terminalProcessID(localID),
-            records: foregroundRecordsLookup(currentID ?? ""))
+            records: foregroundRecordsLookup(currentID ?? ""), isBeingTerminated: isBeingTerminated)
         // Dateisystem nur befragen, wo die Regel es wirklich braucht.
         let needsFileCheck = isReplacement && !runsElsewhere
         let currentExists = needsFileCheck

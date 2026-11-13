@@ -262,6 +262,9 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200,
                                                       records: [record("cd00c6c0", pid: 100, kind: "bg")]), "/background")
         XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200, records: []))
+        XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200,
+                                                      records: [record("cd00c6c0", pid: 100)],
+                                                      isBeingTerminated: { $0 == 100 }), "wird gerade beendet")
         XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: nil,
                                                       records: [record("cd00c6c0", pid: 100)]),
                        "ohne eigene PID nie — der eigene Prozess ließe sich nicht ausnehmen")
@@ -336,6 +339,38 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.handleHookEvent(localID: ownerID, event: sessionStart("8a5a7119", source: "startup"))
 
         XCTAssertEqual(externalID(coordinator, ownerID), "ac020fd4")
+    }
+
+    /// Auflage Vic: Der eigene Vorgänger, den die App gerade beendet, ist kein
+    /// fremder Prozess. Tab-Neustart: alter Prozess (PID 100) läuft nach SIGTERM
+    /// noch mit der alten ID, der neue (PID 200) meldet eine neue Sitzung.
+    func testPredecessorBeingTerminatedOnTabRestartIsNotForeign() throws {
+        try assertPredecessorIsNotForeign(predecessor: ClaudeSessionRecord(
+            profileName: "main", pid: 100, sessionID: "cd00c6c0", kind: "interactive"))
+    }
+
+    /// Kontowechsel mit Stop-and-Resume: der Vorgänger läuft im alten Konto aus.
+    func testPredecessorBeingTerminatedOnAccountSwitchIsNotForeign() throws {
+        try assertPredecessorIsNotForeign(predecessor: ClaudeSessionRecord(
+            profileName: "altes-konto", pid: 100, sessionID: "cd00c6c0", kind: "interactive"))
+    }
+
+    private func assertPredecessorIsNotForeign(predecessor: ClaudeSessionRecord,
+                                               file: StaticString = #filePath, line: UInt = #line) throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        try setExternalID("cd00c6c0", for: sessionID)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+        coordinator.terminalProcessID = { _ in 200 }
+        coordinator.foregroundRecordsLookup = { $0 == "cd00c6c0" ? [predecessor] : [] }
+        coordinator.isBeingTerminated = { $0 == 100 }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("aa82d0ba", source: "startup"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "cd00c6c0", "Vorgänger als fremd gezählt", file: file, line: line)
+
+        // Gegenprobe: derselbe Eintrag ohne Beenden-Vermerk ist fremd.
+        coordinator.isBeingTerminated = { _ in false }
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bb000001", source: "startup"))
+        XCTAssertEqual(externalID(coordinator, sessionID), "bb000001", file: file, line: line)
     }
 
     /// Gegenprobe: führt der EIGENE Prozess die bisherige ID, gilt die alte Regel.
