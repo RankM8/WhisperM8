@@ -165,6 +165,23 @@ extension UISnapshotGallery {
         return black + [
             island(.writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))),
                    "schreiben", height: 230),
+            // Liste der Ausgabemodi am Controller, unter der Diktat-Pille aufgeklappt.
+            Fixture(name: "vereint-schwarz-modusliste", size: CGSize(width: 420, height: 330)) {
+                let controller = dictationPillController { $0.presentation = .pill; $0.levelModel.level = 0.45 }
+                return AnyView(UnifiedDesk {
+                    VStack(spacing: OutputModeListPlacement.gap) {
+                        RecordingPillView(controller: controller).padding(.horizontal, 20)
+                        OutputModeListView(
+                            modes: Array(controller.outputModes.prefix(6)), selectedID: controller.selectedOutputMode.id,
+                            unified: true)
+                            .pillGlassShadow()
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 32)
+                    .environment(\.colorScheme, .dark)
+                }
+                .environment(\.pillSolidBlackOverride, true))
+            },
             Fixture(name: "vereint-schwarz-einstellungen", size: CGSize(width: 700, height: 760),
                     storage: [PreferenceKeys.pillSolidBlackEnabled: true]) {
                 AnyView(ScrollView { PillSettingsSection().padding(24) })

@@ -139,6 +139,22 @@ final class PillSolidBlackTests: XCTestCase {
         XCTAssertEqual(on, off, "getrennte Diktat-Pille darf sich nicht ändern")
     }
 
+    func testOutputModeListAtTheUnifiedPillTurnsBlack() throws {
+        let modes = OutputMode.builtInModes
+        try assertBlackOnlyWhenOn(
+            OutputModeListView(modes: modes, selectedID: modes[0].id, unified: true),
+            size: CGSize(width: OutputModeListView.width, height: 300), "Liste der Ausgabemodi")
+    }
+
+    func testOutputModeListAtTheClassicPillStaysGlass() throws {
+        let modes = OutputMode.builtInModes
+        let view = OutputModeListView(modes: modes, selectedID: modes[0].id)
+        let size = CGSize(width: OutputModeListView.width, height: 300)
+        let on = try blackPixels(view, size: size, solidBlack: true)
+        let off = try blackPixels(view, size: size, solidBlack: false)
+        XCTAssertEqual(on, off, "Liste der getrennten Diktat-Pille darf sich nicht ändern")
+    }
+
     func testControllerIslandWithoutNotchTurnsBlack() throws {
         let model = ControllerIslandModel(
             target: ControllerIslandTarget(title: "Controller Insel", status: .idle),

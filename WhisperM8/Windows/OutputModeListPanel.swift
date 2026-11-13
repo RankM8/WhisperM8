@@ -38,10 +38,13 @@ final class OutputModeListPresenter {
     var isShown: Bool { panel?.isVisible == true }
 
     /// Zeigt die Liste über `pillFrame` (Bildschirm-Koordinaten) und plant das
-    /// Ausblenden 1,5 s nach diesem Wechsel.
-    func show(modes: [OutputMode], selectedID: String, pillFrame: NSRect, opensDownward: Bool = false) {
+    /// Ausblenden 1,5 s nach diesem Wechsel. `unified`: Liste an der
+    /// vereinten Pille (folgt dann deren Hintergrund).
+    func show(
+        modes: [OutputMode], selectedID: String, pillFrame: NSRect, opensDownward: Bool = false, unified: Bool = false
+    ) {
         guard !modes.isEmpty else { return }
-        let view = OutputModeListView(modes: modes, selectedID: selectedID)
+        let view = OutputModeListView(modes: modes, selectedID: selectedID, unified: unified)
         let panel = self.panel ?? makePanel()
         if let hostingView {
             hostingView.rootView = view

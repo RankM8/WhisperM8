@@ -54,9 +54,11 @@ Diktat, Insel). Haarstrich und Schatten bleiben, damit die Pille auf einem
 dunklen Schreibtisch ihren Umriss behält. Entschieden wird an einer Stelle
 (`PillSurface` in `PillGlass.swift`); den Wert hält `PillAppearance`, das bei
 Änderungen der Preferences neu liest, deshalb wirkt der Schalter sofort auf
-sichtbare Pillen. Nur mit vereinter Pille: Die getrennte Diktat-Pille
-(Kill-Switch) bleibt Glas, ebenso die Liste der Ausgabemodi am Controller und
-die Menükarte am Chat.
+sichtbare Pillen. Dazu gehört auch die Liste der Ausgabemodi, die beim
+Moduswechsel per Controller an der Diktat-Pille aufklappt. Nur mit vereinter
+Pille: Die getrennte Diktat-Pille (Kill-Switch) bleibt samt ihrer Liste Glas,
+ebenso die Menükarte des Controllers am Chat. Die Menüs von Modus und Kontext
+(mit den Vorschaubildern) sind Menüs von macOS und bleiben, wie sie sind.
 
 **Wo sie steht:**
 
@@ -522,8 +524,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   auch in Tiefschwarz.
 - `PillSolidBlackTests`: Tiefschwarz standardmäßig aus, nur mit vereinter
   Pille, Entscheidung `PillSurface`, Live-Wert meldet nur echte Wechsel; im
-  Bild schwarz bei Ruhe, Liste, Diktat und Insel, die getrennte Diktat-Pille
-  unverändert.
+  Bild schwarz bei Ruhe, Liste, Diktat, Insel und Liste der Ausgabemodi, die
+  getrennte Diktat-Pille samt Liste unverändert.
 - `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
   Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
   nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
@@ -536,7 +538,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   `ONLY=uebergang` zeigt den Übergang: Ruhe, Mitte, Diktat ohne Notch und an
   der Notch (aus dem Band und aus der Zeile mit Zählern).
   `ONLY=vereint-schwarz` zeigt dieselben Zustände ohne Notch in Tiefschwarz,
-  dazu die Insel und den Schalter in den Einstellungen.
+  dazu die Insel, die Liste der Ausgabemodi und den Schalter in den
+  Einstellungen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
