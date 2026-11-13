@@ -64,6 +64,8 @@ Ohne `--signing` gilt die Art, mit der `scripts/test-instance.sh build` das Bund
 | `secret-missing`, `secret-wrong` | Stellschraube `handoverSecretOverride` | Die App beendet den Aufbewahrer über die PID aus STATUS, statt die Frist abzuwarten; dann Fortsetzen |
 | `binary-swap` | Bundle unter dem laufenden Aufbewahrer ersetzt: neue Build-Nummer, gleiches Zertifikat, `rsync --delete` wie bei `make dev` | Übernahme klappt trotz ersetzter Datei |
 | `double-restart` | zweiter Neustart, während die Übernahme des ersten läuft | Übernahme, kein zweiter Prozess |
+| `router-switch` | Lauf mit Schalter aus (GPT-Router in der App), dann Schalter an und `restart --keep-chats` | Keine Übergabe, Hinweis „wirkt erst ab diesem Neustart“, klassischer Neustart, Fortsetzen |
+| `router-service` | gewöhnlicher `restart --keep-chats`, nach `router-switch` der zweite Neustart (Router als Dienst) | Übernahme mit denselben PIDs |
 
 Jedes Szenario prüft danach:
 
