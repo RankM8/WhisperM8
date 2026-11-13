@@ -18,12 +18,15 @@ import Foundation
 final class HandoverClient {
     enum ClientError: Error, Equatable, CustomStringConvertible {
         case refused(String)
+        /// Echte Ablehnung: falsches Geheimnis oder fremder Absender.
+        case rejected(String)
         case incompatible
         case unexpected(String)
 
         var description: String {
             switch self {
             case .refused(let text): return "abgelehnt: \(text)"
+            case .rejected(let reason): return "zurückgewiesen: \(reason)"
             case .incompatible: return "Protokoll unverträglich"
             case .unexpected(let text): return text
             }
@@ -72,6 +75,7 @@ final class HandoverClient {
         let reply = try connection.receive(timeout: timeout)
         if reply.message.type == .error {
             if let fd = reply.descriptor { Darwin.close(fd) }
+            if let reason = reply.message.rejection { throw ClientError.rejected(reason) }
             throw ClientError.refused(reply.message.message ?? "ohne Grund")
         }
         return reply

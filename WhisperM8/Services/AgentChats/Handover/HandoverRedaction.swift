@@ -31,6 +31,7 @@ enum HandoverLog {
         case let error as HandoverClient.ClientError:
             switch error {
             case .refused: return "client.refused"
+            case .rejected(let reason): return reason == "secret" || reason == "peer" ? "client.rejected.\(reason)" : "client.rejected"
             case .incompatible: return "client.incompatible"
             case .unexpected: return "client.unexpected"
             }

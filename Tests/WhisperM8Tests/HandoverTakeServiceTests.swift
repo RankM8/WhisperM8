@@ -336,14 +336,15 @@ final class HandoverTakeServiceTests: XCTestCase {
             _ = HandoverTestSupport.waitUntil(timeout: 5) { kill(keeper.pid, 0) != 0 }
             return adopt(taken, session)
         }
-        dependencies.takeDelay = { 1.5 }
+        dependencies.takeDelay = { 3 }
         let started = Date()
         let summary = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
         let seconds = Date().timeIntervalSince(started)
         XCTAssertEqual(summary.adopted.count, 1)
         XCTAssertEqual(summary.fallback.count, 3)
-        // Vorher: viermal 1,5 s. Jetzt: vor dem ersten und dem gescheiterten zweiten TAKE.
-        XCTAssertLessThan(seconds, 4.4, "wartete \(seconds) s")
+        // Vorher: viermal 3 s (12 s). Jetzt: vor dem ersten und dem
+        // gescheiterten zweiten TAKE (6 s); reichlich Luft für Last.
+        XCTAssertLessThan(seconds, 9.5, "wartete \(seconds) s")
     }
 
     /// Befund 4 (Dex): Während der Übernahme hält die App take.lock; danach nicht mehr.

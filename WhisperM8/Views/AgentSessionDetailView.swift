@@ -138,7 +138,6 @@ struct AgentSessionDetailView: View {
             }
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
-                    HandoverFallbackLaunchQueue.shared.forget(session.id)
                     launchAfterCacheWarmup()
                 }
                 // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
@@ -408,6 +407,9 @@ struct AgentSessionDetailView: View {
     }
 
     private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
+        // Jeder Start auf anderem Weg (Fokus-Pane, Tab, Knopf, `chats resume`)
+        // verwirft den Eintrag aus dem Rückfall: Er gilt genau einmal (Vic).
+        HandoverFallbackLaunchQueue.shared.forget(session.id)
         // Nach einer geglückten Abgabe nichts mehr vorbereiten (Hook-Datei).
         guard !terminalRegistry.refusesNewStarts else {
             focusLaunchInFlight = false

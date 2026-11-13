@@ -27,7 +27,7 @@ extension HandoverKeeper {
         if first.message.type == .hello || first.message.type == .release {
             guard hasValidSecret(first.message) else {
                 log("peer_rejected reason=secret type=\(first.message.type.rawValue)")
-                try? connection.send(.error("ohne gültigen Nachweis"), timeout: timeout)
+                try? connection.send(.rejected("ohne gültigen Nachweis", reason: "secret"), timeout: timeout)
                 return
             }
         }
@@ -75,7 +75,8 @@ extension HandoverKeeper {
         guard allowed else {
             if let fd = received.descriptor { close(fd) }
             log("peer_rejected type=\(received.message.type.rawValue) pid=\(peer?.pid.map(String.init) ?? "?") path=\(peer?.executablePath ?? "-")")
-            try? connection.send(.error("nur die App dieser Instanz darf das"), timeout: configuration.ioTimeout)
+            try? connection.send(.rejected("nur die App dieser Instanz darf das", reason: "peer"),
+                                 timeout: configuration.ioTimeout)
             throw HandoverWireError.unexpected("Gegenseite nicht berechtigt")
         }
         return received
@@ -227,7 +228,11 @@ extension HandoverKeeper {
                 takeConnectionActive = true
                 return nil
             }
-            guard admitted == "Abgabe noch nicht abgeschlossen", Date() < admissionEnd else { break }
+            // Auch „belegt“ kurz abwarten: Nach einer Zeitüberschreitung beim
+            // HELLO versucht die App es neu, bevor hier das Ende der ersten
+            // Verbindung bemerkt ist (Vic zu 027dd4e7).
+            guard admitted == "Abgabe noch nicht abgeschlossen" || admitted == "belegt",
+                  Date() < admissionEnd else { break }
             usleep(20_000)
         } while true
         if let admitted {

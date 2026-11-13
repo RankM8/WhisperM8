@@ -120,6 +120,9 @@ struct HandoverMessage: Codable, Equatable {
 
     // ERROR
     var message: String?
+    /// Nur bei echter Ablehnung des Anfragenden (falsches Geheimnis, fremder
+    /// Absender): `secret` oder `peer`. Fehlt bei „belegt“ und Ähnlichem.
+    var rejection: String?
 
     init(type: HandoverMessageType) {
         self.type = type
@@ -128,6 +131,12 @@ struct HandoverMessage: Codable, Equatable {
     static func error(_ text: String) -> HandoverMessage {
         var msg = HandoverMessage(type: .error)
         msg.message = text
+        return msg
+    }
+
+    static func rejected(_ text: String, reason: String) -> HandoverMessage {
+        var msg = error(text)
+        msg.rejection = reason
         return msg
     }
 
