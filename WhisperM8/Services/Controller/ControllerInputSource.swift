@@ -30,6 +30,8 @@ enum ControllerHapticPattern: String, CaseIterable, Sendable {
     case rejected
     /// Eingabe geleert (R3 halten): ein kurzer, leichter Impuls.
     case inputCleared
+    /// App-Schalter der R1-Insel umgeschaltet: ein kurzer, leichter Impuls.
+    case toggled
 }
 
 /// Quelle für Controller-Eingaben. Die Live-Fassung spricht mit dem

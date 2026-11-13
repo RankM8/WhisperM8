@@ -157,15 +157,15 @@ final class ControllerMenuModelTests: XCTestCase {
             .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
             .renameWorkspace, .gridCapacity,
             .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
-            .toggleNotes, .clipboardHistory, .showBindings, .pause,
+            .toggleNotes, .archiveMode, .clipboardHistory, .showBindings, .pause,
         ])
         let model = ControllerMenuModel(setup: setup())
         XCTAssertEqual(model.selected, .continueWork)
         // Was für diesen Chat nicht passt, fehlt: ohne Konten, Fork, Projekt,
         // Raster, Tab und laufenden Prozess bleibt das hier.
         XCTAssertEqual(visible(model), [.continueWork, .commands, .cycleMode, .redraw, .rename, .pin, .archive,
-                                        .closeChat, .clipboardHistory, .showBindings, .pause])
-        XCTAssertEqual(model.top.entries.map(\.id).filter(model.startsGroup), [.rename, .clipboardHistory])
+                                        .closeChat, .archiveMode, .clipboardHistory, .showBindings, .pause])
+        XCTAssertEqual(model.top.entries.map(\.id).filter(model.startsGroup), [.rename, .archiveMode])
         // Die Karte zeigt jede Gruppe mit Überschrift, auch die erste.
         XCTAssertEqual(model.top.entries.compactMap { model.groupStart($0.id) }, [.input, .chat, .controller])
     }
@@ -201,7 +201,7 @@ final class ControllerMenuModelTests: XCTestCase {
             .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
             .renameWorkspace, .gridCapacity,
             .restart,
-            .toggleNotes, .clipboardHistory, .showBindings, .pause,
+            .toggleNotes, .archiveMode, .clipboardHistory, .showBindings, .pause,
         ])
         // „Notizen überall an/aus“ gilt app-weit: Gruppe Steuerung, nicht Workspace.
         XCTAssertEqual(model.group(of: .toggleNotes), .controller)
@@ -220,7 +220,7 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(visible(model), [
             .continueWork, .commands, .cycleMode, .redraw,
             .rename, .pin, .archive, .closeChat, .addToWorkspace, .moveToNewWindow,
-            .clipboardHistory, .showBindings, .pause,
+            .archiveMode, .clipboardHistory, .showBindings, .pause,
         ])
         XCTAssertNil(model.groupStart(.addToWorkspace))
         XCTAssertFalse(model.top.entries.contains { model.group(of: $0.id) == .workspace })
@@ -291,7 +291,7 @@ final class ControllerMenuModelTests: XCTestCase {
         XCTAssertEqual(model.selected, .rename)
         XCTAssertFalse(ControllerMenuModel.isEnabled(.cycleMode, setup: setup(dialogOpen: true)))
         XCTAssertFalse(ControllerMenuModel.isEnabled(.redraw, setup: setup(dialogOpen: true)))
-        XCTAssertEqual(enabled(model), [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
+        XCTAssertEqual(enabled(model), [.rename, .pin, .archive, .closeChat, .archiveMode, .clipboardHistory, .showBindings, .pause])
     }
 
     func testRedrawOnlyInClaude() {
@@ -325,9 +325,9 @@ final class ControllerMenuModelTests: XCTestCase {
 
     func testWithoutLiveChatOrChatInfo() {
         XCTAssertEqual(visible(ControllerMenuModel(setup: setup(acceptsInput: false))),
-                       [.rename, .pin, .archive, .closeChat, .clipboardHistory, .showBindings, .pause])
+                       [.rename, .pin, .archive, .closeChat, .archiveMode, .clipboardHistory, .showBindings, .pause])
         XCTAssertEqual(visible(ControllerMenuModel(setup: setup(acceptsInput: false, chat: nil))),
-                       [.clipboardHistory, .showBindings, .pause])
+                       [.archiveMode, .clipboardHistory, .showBindings, .pause])
         XCTAssertFalse(visible(ControllerMenuModel(setup: setup(profile: .shell))).contains(.commands), "Shell: keine Befehle")
     }
 
