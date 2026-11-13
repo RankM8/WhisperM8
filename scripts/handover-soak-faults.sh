@@ -31,8 +31,10 @@
 #     keine fremde Datei im Ordner des Aufbewahrers, kein Claude-Prozess ohne Chat;
 #   - kein Schlüsselbund-Dialog (SecurityAgent) während des Szenarios, Ordner
 #     des Aufbewahrers 0700, Dateien darin 0600;
-#   - am Ende: Das Geheimnis (jede unbekannte kleine Datei im Ordner des
-#     Aufbewahrers) steht in keinem Log.
+#   - das Einmal-Geheimnis (`take-secret`, Option A) liegt nach dem Szenario
+#     nicht mehr da;
+#   - am Ende: Das Geheimnis (`take-secret` und jede unbekannte kleine Datei im
+#     Ordner des Aufbewahrers) steht in keinem Log.
 #
 # Signatur (Vics Auflage 4): `--signing dev` signiert das Test-Bundle mit
 # „WhisperM8 Local Dev“ wie `make dev`, `--signing adhoc` ad hoc wie die
@@ -60,10 +62,13 @@ SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap d
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
 SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
+# Einmal-Geheimnis als Datei (Option A, HandoverFileSecretStore): liegt nur
+# zwischen Abgabe und Übernahme, 0600, und muss danach weg sein.
+SECRET_FILE="take-secret"
 # Dateien aus Paket 2 (Aufbewahrer) und Paket 4 (last-take.json, take.lock: flock-Datei
-# der Übernahme, bleibt absichtlich liegen); alles andere gilt als
-# Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
-KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json take.lock"
+# der Übernahme, bleibt absichtlich liegen; take-secret, eigene Prüfung); alles
+# andere gilt als Geheimnis-Kandidat und muss danach weg sein.
+KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json take.lock $SECRET_FILE"
 
 # MARK: - Fähigkeiten (Paket 4)
 
@@ -172,14 +177,14 @@ signing_kind_from() { # codesign-ausgabe
 }
 
 # Rechte im Ordner des Aufbewahrers (Vics Auflage 2: Geheimnis als Datei 0600
-# im 0700-Ordner): Ordner 0700, jede Datei außer denen aus Paket 2 0600.
+# im 0700-Ordner): Ordner 0700, take-secret und jede unbekannte Datei 0600.
 # Ausgabe: je Abweichung eine Zeile, sonst nichts.
 handover_dir_issues() { # ordner
     [[ -d "$1" ]] || return 0
     local mode base
     mode=$(stat -f %Lp "$1" 2>/dev/null || echo '?')
     [[ "$mode" == 700 ]] || echo "Ordner $mode"
-    for base in $(unknown_handover_files "$1"); do
+    for base in $(secret_bearing_files "$1"); do
         [[ -f "$1/$base" ]] || continue
         mode=$(stat -f %Lp "$1/$base" 2>/dev/null || echo '?')
         [[ "$mode" == 600 ]] || echo "Datei $mode $base"
@@ -199,10 +204,18 @@ unknown_handover_files() { # ordner
     done
 }
 
-# Kleine unbekannte Dateien als Geheimnis-Kandidaten sichern (Name, Base64).
+# Dateien, die das Geheimnis tragen können: take-secret und jede unbekannte.
+secret_bearing_files() { # ordner
+    [[ -f "$1/$SECRET_FILE" ]] && echo "$SECRET_FILE"
+    unknown_handover_files "$1"
+}
+
+# take-secret und kleine unbekannte Dateien als Geheimnis-Kandidaten sichern
+# (Name, Base64). `<ziel>.seen` merkt, dass take-secret gerade dalag.
 capture_secret_candidates() { # ordner ziel
     local base size line
-    for base in $(unknown_handover_files "$1"); do
+    [[ -f "$1/$SECRET_FILE" ]] && : > "$2.seen"
+    for base in $(secret_bearing_files "$1"); do
         [[ -f "$1/$base" ]] || continue
         size=$(stat -f %z "$1/$base" 2>/dev/null || echo 99999)
         (( size > 0 && size <= 4096 )) || continue
@@ -347,6 +360,7 @@ sample_once() { # datei
 start_sampler() { # datei
     : > "$1"
     : > "$1.modes"
+    rm -f "$STATE/secret-candidates.seen"
     keychain_baseline "$1"
     ( while :; do sample_once "$1"; sleep 0.3; done ) &
     SAMPLER_PID=$!
@@ -502,17 +516,22 @@ check_no_leftovers() { # szenario verletzungen-datei
     else
         record "$scenario" leichen:dateien OK ""
     fi
+    if [[ -e "$HANDOVER_DIR/$SECRET_FILE" ]]; then
+        record "$scenario" geheimnis-datei FEHLER "$SECRET_FILE liegt nach dem Szenario noch da"
+    elif [[ -f "$STATE/secret-candidates.seen" ]]; then
+        record "$scenario" geheimnis-datei OK "lag während der Übergabe da, danach weg"
+    else
+        record "$scenario" geheimnis-datei OK "weg (vom Wächter nicht gesehen, er fragt alle 0,3 s)"
+    fi
     if [[ -s "$violations.keychain" ]]; then
         record "$scenario" schluesselbund-dialog FEHLER "SecurityAgent lief: $(head -2 "$violations.keychain" | tr '\n' ';') (kann auch eine fremde App sein, Bildschirm prüfen)"
     else
         record "$scenario" schluesselbund-dialog OK ""
     fi
-    if [[ -s "$violations.modes" && ! -s "$STATE/secret-candidates" ]]; then
-        record "$scenario" rechte-aufbewahrer FEHLT "noch kein Geheimnis als Datei (Paket 4), Befund bis dahin: $(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -2 | tr '\n' ';')"
-    elif [[ -s "$violations.modes" ]]; then
+    if [[ -s "$violations.modes" ]]; then
         record "$scenario" rechte-aufbewahrer FEHLER "$(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -3 | tr '\n' ';')"
     else
-        record "$scenario" rechte-aufbewahrer OK "Ordner 0700, Geheimnis-Kandidaten 0600 (oder kein Ordner)"
+        record "$scenario" rechte-aufbewahrer OK "Ordner 0700, $SECRET_FILE und Kandidaten 0600 (oder kein Ordner)"
     fi
     registry=$(registry_pids "$ROOT/home/.claude/sessions" || true)
     stray=$(orphans "$registry" "$(chat_pids_now)")
@@ -783,9 +802,9 @@ wait_until_running() {
 #     Hex-Wert (Lauf vom 13.11., 13:36: handover_take_plan schrieb den Anfang
 #     des Geheimnisses öffentlich ins System-Log). Greift auch bei Ablage im
 #     Schlüsselbund.
-#   - Kandidaten: Inhalt jeder unbekannten kleinen Datei im Ordner des
-#     Aufbewahrers (Ablage als Datei), roh, hex oder Base64 in keeper.log,
-#     Log der Test-Instanz und System-Log.
+#   - Kandidaten: Inhalt von take-secret und jeder unbekannten kleinen Datei im
+#     Ordner des Aufbewahrers, roh, hex oder Base64 in keeper.log, Log der
+#     Test-Instanz und System-Log.
 check_secret_not_logged() {
     local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits pattern
     # Mit --info --debug, sonst liefert log show nur Default-Meldungen.
@@ -801,7 +820,7 @@ check_secret_not_logged() {
         record ende geheimnis-muster FEHLT "System-Log der Test-App leer oder nicht lesbar"
     fi
     if [[ ! -s "$candidates" ]]; then
-        record ende geheimnis-im-log FEHLT "kein Geheimnis-Kandidat im Ordner des Aufbewahrers gesehen (Ablage als Datei aus Paket 4?)"
+        record ende geheimnis-im-log FEHLT "$SECRET_FILE nie gesehen (der Wächter fragt alle 0,3 s), Inhalt nicht prüfbar"
         return 0
     fi
     hits=$(secret_hits "$candidates" "$HANDOVER_DIR"/keeper.log* "$ROOT/instance.log" "$unified" | tr '\n' ' ')
@@ -835,7 +854,7 @@ cmd_fault_run() {
     trap on_fault_exit EXIT
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
-    rm -f "$STATE/unmeasurable-recorded" "$STATE/secret-candidates"
+    rm -f "$STATE/unmeasurable-recorded" "$STATE/secret-candidates" "$STATE/secret-candidates.seen"
     setup_chats
     if ! wait_until_running; then
         for scenario in $list; do
@@ -972,7 +991,23 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
     printf 'geheim-0123456789' > "$dir/h/secret"
     capture_secret_candidates "$dir/h" "$dir/cand3"; capture_secret_candidates "$dir/h" "$dir/cand3"
     expect_exact "1" "$(wc -l < "$dir/cand3" | tr -d ' ')" "Kandidat nur einmal gesichert"
-    rm -f "$dir/h/secret"; : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
+    rm -f "$dir/h/secret"
+    # take-secret: bekannt (keine fremde Datei), aber Kandidat mit Rechte-Prüfung.
+    chmod 700 "$dir/h"
+    printf 'abcdef0123456789abcdef0123456789' > "$dir/h/take-secret"; chmod 600 "$dir/h/take-secret"
+    expect_exact "" "$(unknown_handover_files "$dir/h")" "take-secret ist keine fremde Datei"
+    expect_exact "" "$(handover_dir_issues "$dir/h")" "take-secret mit 0600 in Ordnung"
+    chmod 644 "$dir/h/take-secret"
+    expect_exact "Datei 644 take-secret" "$(handover_dir_issues "$dir/h")" "take-secret mit 0644 gemeldet"
+    capture_secret_candidates "$dir/h" "$dir/cand4"
+    expect_exact "take-secret" "$(cut -f1 "$dir/cand4")" "take-secret als Kandidat gesichert"
+    expect_exact "ja" "$([[ -f "$dir/cand4.seen" ]] && echo ja || echo nein)" "take-secret als gesehen vermerkt"
+    printf 'x abcdef0123456789abcdef0123456789\n' > "$dir/ts.log"
+    expect_exact "$dir/ts.log " "$(secret_hits "$dir/cand4" "$dir/ts.log" "$dir/sauber.log" | tr '\n' ' ')" "take-secret im Log gefunden"
+    rm -f "$dir/h/take-secret"; : > "$dir/cand5"
+    capture_secret_candidates "$dir/h" "$dir/cand5"
+    expect_exact "nein" "$([[ -f "$dir/cand5.seen" ]] && echo ja || echo nein)" "ohne take-secret nichts vermerkt"
+    : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
     expect_exact "..doppel .versteckt" "$(unknown_handover_files "$dir/h" | sort | tr '\n' ' ' | sed 's/ $//')" "versteckte Dateien erkannt"
     rm -rf "$dir"
 
