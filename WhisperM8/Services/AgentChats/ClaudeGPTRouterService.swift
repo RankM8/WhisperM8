@@ -259,6 +259,8 @@ final class ClaudeGPTRouterService {
         source.setEventHandler { [weak self] in self?.acceptControlConnection(listenFD: fd) }
         source.setCancelHandler { close(fd) }
         stateQueue.sync {
+        // Vererbt sich auf jede angenommene Verbindung (siehe setNoSigPipe).
+        ClaudeGPTRouterSocketListener.setNoSigPipe(fd)
             controlFD = fd
             controlInode = inode
             controlSource = source
