@@ -94,4 +94,38 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
         XCTAssertEqual(sessions[owner.id]?.shouldLaunchOnOpen, true)
         XCTAssertNotEqual(sessions[wrong.id]?.shouldLaunchOnOpen, true)
     }
+
+    // MARK: Rückfall der Übernahme (Vic, 13.11.2026)
+
+    /// Ein übernommener (laufender) Chat führt seine Sitzung weiter, auch wenn
+    /// der vorgemerkte nach der Regel gewönne. Für Codex der einzige Schutz.
+    func testRunningChatKeepsItsSessionAgainstAFallbackChat() {
+        let adopted = chat("x", provider: .codex, created: 50), fallback = chat("X", provider: .codex, created: 0, manual: true)
+        let other = chat("y", provider: .codex)
+        let plan = AgentCollectiveStartPlanner.plan([fallback.id, other.id], sessions: [adopted, fallback, other],
+                                                    alreadyStarted: [adopted.id])
+        XCTAssertEqual(plan.start, [other.id])
+        XCTAssertEqual(plan.skipped, [fallback.id])
+        XCTAssertEqual(plan.keeperOf[fallback.id], adopted.id)
+    }
+
+    /// Zweiter Schub (nach dem Ende verwaister Prozesse): schon vorgemerkte
+    /// Chats zählen wie laufende; ein schon vorgemerkter startet nicht doppelt.
+    func testSecondBatchRespectsChatsScheduledInTheFirst() {
+        let first = chat("x", created: 0), second = chat("x", created: 9), unbound = chat(nil)
+        let plan = AgentCollectiveStartPlanner.plan([second.id, first.id, unbound.id], sessions: [first, second, unbound],
+                                                    alreadyStarted: [first.id])
+        XCTAssertEqual(plan.start, [unbound.id])
+        XCTAssertEqual(plan.skipped, [second.id, first.id], "Reihenfolge der Eingabe")
+        XCTAssertEqual(plan.keeperOf[second.id], first.id)
+    }
+
+    /// Ohne Laufende gilt die normale Regel, auch über Provider getrennt.
+    func testWithoutRunningChatsTheUsualRuleApplies() {
+        let older = chat("x", created: 0), newer = chat("x", created: 5), codex = chat("x", provider: .codex)
+        let plan = AgentCollectiveStartPlanner.plan([newer.id, older.id, codex.id], sessions: [older, newer, codex],
+                                                    alreadyStarted: [])
+        XCTAssertEqual(plan, AgentCollectiveStartPlanner.plan([newer.id, older.id, codex.id], sessions: [older, newer, codex]))
+        XCTAssertEqual(plan.start, [older.id, codex.id])
+    }
 }
