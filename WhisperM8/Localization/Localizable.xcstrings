@@ -19934,6 +19934,16 @@
         }
       }
     },
+    "WhisperM8 couldn't read your API key from the macOS Keychain. Click Try again and choose “Always Allow” in the Keychain dialog.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 konnte deinen API-Key nicht aus dem macOS-Schlüsselbund lesen. Klicke auf „Erneut versuchen“ und wähle im Schlüsselbund-Dialog „Immer erlauben“."
+          }
+        }
+      }
+    },
     "WhisperM8 does not mute Codex itself — it triggers Codex's own microphone toggle. That command ships without a default shortcut, so you have to assign one once:": {
       "localizations": {
         "de": {
