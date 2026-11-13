@@ -15,12 +15,14 @@ final class AgentTerminalRegistry: ObservableObject {
     private let sleep: (useconds_t) -> Void
     /// Was beim Ende eines Chat-Prozesses passiert (Store, Statuskoordinator).
     /// Lebt hier statt in der Ansicht, damit es auch für Chats ohne Ansicht
-    /// gilt. Tests bekommen `.inert` und schreiben nie in den echten Workspace.
+    /// gilt. Pflicht-Parameter ohne Standardwert (Review 13.11.2026): Eine
+    /// Registry, die das Ende still verschluckt, ließe Tabs auf „läuft“
+    /// stehen. Die App nimmt `.live`, Tests ausdrücklich `.inert`.
     private let termination: AgentChatTermination
 
     init(
         sleep: @escaping (useconds_t) -> Void = { usleep($0) },
-        termination: AgentChatTermination = .inert
+        termination: AgentChatTermination
     ) {
         self.sleep = sleep
         self.termination = termination

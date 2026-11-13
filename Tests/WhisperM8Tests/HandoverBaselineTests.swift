@@ -53,7 +53,7 @@ final class HandoverBaselineTests: XCTestCase {
         // Registry ist das ein Attach-Client (`arguments.first == "attach"`).
         let attach = try writeInterruptRecorder(named: "attach")
         let spy = SleepSpy()
-        let registry = AgentTerminalRegistry(sleep: { spy($0) })
+        let registry = AgentTerminalRegistry(sleep: { spy($0) }, termination: .inert)
         let chatID = UUID(), attachID = UUID()
         registry.startController(
             sessionID: chatID,
@@ -86,7 +86,7 @@ final class HandoverBaselineTests: XCTestCase {
     func testAppQuitWithOnlyAttachedTabsDoesNotWait() throws {
         _ = try writeInterruptRecorder(named: "attach")
         let spy = SleepSpy()
-        let registry = AgentTerminalRegistry(sleep: { spy($0) })
+        let registry = AgentTerminalRegistry(sleep: { spy($0) }, termination: .inert)
         registry.startController(
             sessionID: UUID(),
             command: AgentLaunchCommand(executablePath: "/bin/sh", arguments: ["attach"],
