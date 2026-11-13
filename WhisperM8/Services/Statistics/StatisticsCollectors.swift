@@ -101,6 +101,9 @@ enum StatisticsCollectors {
     private static var registered = false
     private static var activity: StatisticsActivityTracker?
     private static var agents: StatisticsAgentTracker?
+    /// Übernommene Chats, die beim Neustart arbeiteten (Zeitpunkt der Abgabe).
+    /// Die Übernahme läuft vor dem Start der Statistik; `activate` holt sie ab.
+    private static var handedOverWork: [UUID: Date] = [:]
     private static var systemEvents: StatisticsSystemEventObserver?
     private static var enabledObserver: StatisticsEnabledObserver?
 
@@ -157,6 +160,16 @@ enum StatisticsCollectors {
     // MARK: - Einhakstellen
 
     /// Status-Koordinator: Laufzeitstatus einer Session hat sich geändert.
+    /// Neustart ohne Chatverlust: Der Chat arbeitete bei der Abgabe; gezählt
+    /// wird ab `since`, nicht erst ab dem nächsten Statuswechsel.
+    static func noteHandedOverWork(since: Date, for sessionID: UUID) {
+        if let agents {
+            agents.setWorking(sessionID, working: true)
+        } else {
+            handedOverWork[sessionID] = since
+        }
+    }
+
     static func noteAgentStatus(_ status: AgentSessionRuntimeStatus?, for sessionID: UUID) {
         agents?.setWorking(sessionID, working: status == .working)
     }
@@ -202,7 +215,8 @@ enum StatisticsCollectors {
             agents.handle(event)
         }
         activity.start()
-        agents.start(workingSessionIDs: runningAgents)
+        agents.start(workingSessionIDs: runningAgents, workingSince: handedOverWork)
+        handedOverWork = [:]
         self.activity = activity
         self.agents = agents
         self.systemEvents = observer

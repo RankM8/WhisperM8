@@ -76,10 +76,13 @@ final class HandoverRestartService {
             return Result(kind: .classic, reason: reason.rawValue)
         case .restart(let handOver, _):
             let byID = Dictionary(running.map { ($0.sessionID, $0) }, uniquingKeysWith: { first, _ in first })
+            // Ein Zeitpunkt für alle Chats dieser Abgabe (Statistik zählt ab da).
+            let handoverTime = Date()
             let items = handOver.compactMap { id -> HandoverDepositCoordinator.Item? in
                 guard let controller = byID[id], let session = sessions[id] else { return nil }
                 return HandoverDepositCoordinator.Item(source: controller) { detached in
-                    HandoverManifestFactory.manifest(for: controller, session: session, detached: detached)
+                    HandoverManifestFactory.manifest(for: controller, session: session, detached: detached,
+                                                     handoverTime: handoverTime)
                 }
             }
             let result: Result
@@ -169,7 +172,8 @@ enum HandoverManifestFactory {
     static func manifest(
         for controller: AgentTerminalController,
         session: AgentChatSession,
-        detached: HandoverDetachedChat
+        detached: HandoverDetachedChat,
+        handoverTime: Date = Date()
     ) -> HandoverManifest {
         let kind = HandoverChatKind.of(kind: session.effectiveKind, provider: session.provider,
                                        command: controller.command) ?? .terminal
@@ -186,6 +190,11 @@ enum HandoverManifestFactory {
         manifest.title = session.title
         manifest.hookCursor = AgentSessionStatusCoordinator.shared.hookCursor(sessionID: session.id)
         manifest.hasComposerDraft = controller.composerDraft.fieldMayHaveText
+        // „Arbeitet seit“ (Review Paket 4, Befund 7): Arbeitet der Chat, zählt
+        // die neue App ab der Abgabe weiter; bis dahin zählt die alte App.
+        if AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id) == .working {
+            manifest.workingSince = handoverTime.timeIntervalSince1970
+        }
         if let pending = AccountSwitchCoordinator.shared.pending[session.id] {
             manifest.pendingAccountSwitch = try? HandoverJSONValue(encoding: HandoverPendingAccountSwitch(pending))
         }
