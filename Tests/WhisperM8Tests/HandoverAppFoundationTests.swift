@@ -396,3 +396,20 @@ final class HandoverTokenRegistryTests: XCTestCase {
         XCTAssertNil(AgentSessionTokenRegistry.shared.processID(for: id))
     }
 }
+
+final class HandoverProcessLivenessTests: XCTestCase {
+    func testZombieCountsAsEnded() throws {
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("/usr/bin/true"), nil]
+        defer { argv.forEach { free($0) } }
+        XCTAssertEqual(posix_spawn(&pid, "/usr/bin/true", nil, nil, argv, nil), 0)
+        XCTAssertGreaterThan(pid, 0)
+        defer { var status: Int32 = 0; waitpid(pid, &status, 0) }
+        // Kurz warten, bis das Kind beendet ist (Zombie, nicht abgeholt).
+        let end = Date().addingTimeInterval(5)
+        while HandoverPlanning.isRunningProcess(pid), Date() < end { usleep(10_000) }
+        XCTAssertFalse(HandoverPlanning.isRunningProcess(pid))
+        XCTAssertEqual(kill(pid, 0), 0, "der Zombie existiert noch")
+        XCTAssertTrue(HandoverPlanning.isRunningProcess(getpid()))
+    }
+}

@@ -1012,6 +1012,23 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         releaseEventMonitors()
     }
 
+    /// Übernommener Chat (Neustart ohne Chatverlust): gilt als gestartet und
+    /// laufend, ohne `forkpty`. Token und Startzeit kommen aus dem Manifest.
+    func markAdopted(token: String?, startedAt: Date?) {
+        hasStarted = true
+        isRunning = true
+        self.startedAt = startedAt ?? Date()
+        issuedControlToken = token
+    }
+
+    /// Chat endete in der Lücke: Bild ist da, der Prozess nicht mehr.
+    func markEndedInGap(exitCode: Int32?) {
+        hasStarted = true
+        isRunning = false
+        self.exitCode = exitCode
+        releaseEventMonitors()
+    }
+
     /// Nach `COMMIT`: Der Aufbewahrer hält den Chat. Die eigene Kopie der
     /// Leitung schließen, ohne Signal; der Controller gilt als nicht mehr
     /// laufend, damit der Quit-Pfad ihm kein Ctrl+C schickt.

@@ -220,16 +220,24 @@ enum AgentCrashRecoveryCoordinator {
     /// - Returns: die zum Fortsetzen vorgemerkten Sessions (für den Schutz
     ///   ihrer Event-Dateien beim Aufräumen, `pruneAtLaunch`).
     @discardableResult
+    /// - Parameters:
+    ///   - previousRun: Stand des vorigen Laufs, wenn die Übernahme beim
+    ///     Neustart den Marker schon gelesen hat; sonst liest ihn diese Funktion.
+    ///   - handledByHandover: übernommene oder anders versorgte Chats — die
+    ///     setzt die Wiederaufnahme nicht noch einmal fort.
     static func start(
         marker: AgentCrashRecoveryMarker = .shared,
         registry: AgentTerminalRegistry? = nil,
         windowStore: AgentWindowStore? = nil,
         store: AgentSessionStore = AgentSessionStore(),
-        isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled
+        isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled,
+        previousRun: AgentCrashRecoveryMarker.PreviousRun? = nil,
+        handledByHandover: Set<UUID> = []
     ) -> [UUID] {
         let registry = registry ?? .shared
         let windowStore = windowStore ?? .shared
-        let previouslyRunning = marker.beginRun()
+        let previouslyRunning = (previousRun?.runningSessionIDs ?? marker.beginRun())
+            .filter { !handledByHandover.contains($0) }
         registry.onRunningSetChanged = { marker.record(runningSessionIDs: $0) }
         marker.record(runningSessionIDs: registry.activeSessionIDs)
 

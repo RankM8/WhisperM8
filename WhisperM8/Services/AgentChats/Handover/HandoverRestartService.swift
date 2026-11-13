@@ -43,7 +43,7 @@ final class HandoverRestartService {
     var registry: AgentTerminalRegistry { .shared }
 
     func requestRestart(trigger: HandoverQuitTrigger, terminate: Bool = true) -> Result {
-        guard !isRunning, !isTerminatingAfterHandover else {
+        guard !isRunning, !isTerminatingAfterHandover, !HandoverTakeService.isTaking else {
             return Result(kind: .failed, reason: "busy")
         }
         isRunning = true

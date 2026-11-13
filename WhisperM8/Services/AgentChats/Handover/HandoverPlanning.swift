@@ -191,13 +191,24 @@ extension HandoverPlanning {
     static func isSameProcess(
         pid: Int32,
         expectedStartTime: Double?,
-        isAlive: (Int32) -> Bool = { kill($0, 0) == 0 || errno == EPERM },
+        isAlive: (Int32) -> Bool = { HandoverPlanning.isRunningProcess($0) },
         startTime: (Int32) -> Date? = { ProcessStartTime.of(pid: $0) }
     ) -> Bool {
         guard pid > 1, isAlive(pid) else { return false }
         guard let expectedStartTime else { return true }
         guard let current = startTime(pid) else { return true }
         return abs(current.timeIntervalSince1970 - expectedStartTime) < 0.001
+    }
+
+    /// Lebt der Prozess? Ein Zombie (beendet, noch nicht abgeholt) zählt als
+    /// beendet: Er schreibt nichts mehr in seine Sitzung.
+    static func isRunningProcess(_ pid: Int32) -> Bool {
+        guard pid > 0, kill(pid, 0) == 0 || errno == EPERM else { return false }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return true }
+        return info.kp_proc.p_stat != SZOMB
     }
 
     /// Sitzungsarten, die `--resume` kennen (wie die Absturz-Wiederaufnahme).

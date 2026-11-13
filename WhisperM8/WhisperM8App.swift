@@ -330,6 +330,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             CLISymlinkInstaller.installIfNeeded()
         }
 
+        // Neustart ohne Chatverlust: Chats vom Aufbewahrer zurückholen, bevor
+        // Wiederaufnahme, Aufräumen, Statusscan und Control-Server sie sehen
+        // (übernommene Chats gelten dann schon als laufend, ihre Tokens gelten).
+        // Ohne Marker „übergeben“ und ohne Aufbewahrer: ein Socket-Versuch.
+        // Vor dem Prewarm, damit kein Kindprozess die empfangenen Leitungen erbt.
+        let handoverTake = MainActor.assumeIsolated { HandoverTakeService.live().takeAtLaunch() }
+
         // Prewarm: Login-Shell-PATH (`zsh -l`, bei schwerer .zshrc bis zu
         // Sekunden) und die `which claude/codex`-Lookups einmalig off-main
         // auflösen. Beide Helfer cachen prozessweit (NSLock-geschützt) —
@@ -383,7 +390,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AgentPromptQueueStore.shared.reconcileOnLaunch()
         // Nach einem Absturz die damals laufenden Chats wieder hochfahren
         // (Resume beim Anzeigen des Tabs); Details in AgentCrashRecovery.
-        let resumingSessionIDs = MainActor.assumeIsolated { AgentCrashRecoveryCoordinator.start() }
+        let resumingSessionIDs = MainActor.assumeIsolated {
+            AgentCrashRecoveryCoordinator.start(previousRun: handoverTake.previous,
+                                                handledByHandover: handoverTake.handled)
+        } + handoverTake.adopted + handoverTake.fallback
         // Retention: verwaiste Hook-Files und alte Event-Dateien raeumen. Wird
         // nicht im UI-Thread blockierend, schreibt nur Logs. Hintergrund-Agenten
         // laufen ueber den App-Neustart weiter, ihre Event-Dateien bleiben;

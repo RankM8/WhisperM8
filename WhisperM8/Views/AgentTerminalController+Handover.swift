@@ -66,3 +66,41 @@ extension AgentTerminalController {
         return String(format: "#%02x%02x%02x", byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
     }
 }
+
+// MARK: - Neustart ohne Chatverlust: Übernahme
+
+extension AgentTerminalController {
+    /// Spielt das Bild in ein Terminal derselben Größe und übernimmt die
+    /// Leitung. Nur auf dem Main Thread und nie, während anderswo ein
+    /// `forkpty` läuft (close-on-exec der empfangenen Leitung).
+    /// `false`, wenn SwiftTerm die Leitung nicht nimmt; der Aufrufer schließt
+    /// sie dann und fällt auf `--resume` zurück.
+    func adoptHandedOver(descriptor: Int32, manifest: HandoverManifest, image: [UInt8]) -> Bool {
+        dispatchPrecondition(condition: .onQueue(.main))
+        loadImage(image, cols: manifest.cols, rows: manifest.rows)
+        let handle = LocalProcess.HandoverHandle(fileDescriptor: descriptor, pid: manifest.pid)
+        guard terminal.process.adopt(handle) else { return false }
+        markAdopted(token: manifest.controlToken,
+                    startedAt: manifest.pidStartTime.map(Date.init(timeIntervalSince1970:)))
+        if manifest.hasComposerDraft != false {
+            // Unbekannt zählt als „Entwurf vorhanden“: Queue und `chats send`
+            // schreiben sonst in einen halb getippten Text.
+            noteComposerTextInserted()
+        }
+        return true
+    }
+
+    /// Chat endete in der Lücke: letztes Bild zeigen, Status „beendet“.
+    func showEndedInGap(manifest: HandoverManifest, image: [UInt8], exitStatus: Int32?) {
+        loadImage(image, cols: manifest.cols, rows: manifest.rows)
+        markEndedInGap(exitCode: exitStatus)
+    }
+
+    private func loadImage(_ image: [UInt8], cols: Int, rows: Int) {
+        let core = terminal.getTerminal()
+        if core.cols != cols || core.rows != rows {
+            core.resize(cols: max(cols, 2), rows: max(rows, 1))
+        }
+        terminal.feed(byteArray: image[...])
+    }
+}

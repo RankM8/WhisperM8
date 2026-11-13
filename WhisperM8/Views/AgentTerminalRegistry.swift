@@ -62,6 +62,33 @@ final class AgentTerminalRegistry: ObservableObject {
         return controller
     }
 
+    /// Übernommener Chat (Neustart ohne Chatverlust): Controller ohne
+    /// `forkpty` und ohne View. `setUp` spielt das Bild ein und übernimmt die
+    /// Leitung; das Ende meldet `onTerminated` hier statt über eine View.
+    /// `nil`, wenn schon ein laufender Controller da ist oder `setUp` scheitert.
+    @discardableResult
+    func adoptController(
+        sessionID: UUID,
+        command: AgentLaunchCommand,
+        onTerminated: @escaping (Int32?) -> Void,
+        setUp: (AgentTerminalController) -> Bool
+    ) -> AgentTerminalController? {
+        guard controllers[sessionID]?.isRunning != true else { return nil }
+        let controller = AgentTerminalController(
+            sessionID: sessionID,
+            command: command,
+            onLaunched: {},
+            onTerminated: { [weak self] exitCode in
+                onTerminated(exitCode)
+                self?.notifyRunningSetChanged()
+            }
+        )
+        guard setUp(controller) else { return nil }
+        controllers[sessionID] = controller
+        notifyRunningSetChanged()
+        return controller
+    }
+
     func terminate(sessionID: UUID) {
         controllers[sessionID]?.terminate()
         controllers[sessionID] = nil

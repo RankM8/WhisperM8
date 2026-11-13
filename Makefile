@@ -259,14 +259,15 @@ GUI_PIDS = ps -axww -o pid=,args= | awk '$$2 ~ /\/$(APP_NAME)$$/ && $$0 !~ /agen
 # gibt ihre Chats an den Aufbewahrer ab und beendet sich selbst. Fragt das frisch
 # gebaute Binary, weil das installierte den Befehl vielleicht noch nicht kennt.
 # Lehnt die App ab (Schalter aus, Aufbewahrer hält noch Chats) oder scheitert die
-# Abgabe, macht `kill` danach weiter wie bisher. Belegt (zweites `make dev`,
-# während die neue App noch übernimmt): bis zu 15 s warten und erneut fragen.
+# Abgabe, macht `kill` danach weiter wie bisher. Belegt oder noch ohne
+# Control-Socket (zweites `make dev`, während die neue App noch startet und
+# übernimmt): bis zu 15 s warten und erneut fragen.
 _handover:
 	@if [ -n "$$($(GUI_PIDS))" ] && [ -x "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" ]; then \
 		i=0; \
 		while :; do \
 			out="$$("$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" app handover 2>&1)"; code=$$?; \
-			if [ $$code -eq 4 ] && echo "$$out" | grep -q busy && [ $$i -lt 15 ]; then sleep 1; i=$$((i+1)); continue; fi; \
+			if [ $$i -lt 15 ] && { [ $$code -eq 5 ] || { [ $$code -eq 4 ] && echo "$$out" | grep -q busy; }; }; then sleep 1; i=$$((i+1)); continue; fi; \
 			break; \
 		done; \
 		echo "$$out"; \
