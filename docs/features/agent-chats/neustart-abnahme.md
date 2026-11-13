@@ -102,6 +102,8 @@ Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschlä
 - **Wächter:** Er sieht eine Überschneidung erst, wenn sich der neue Claude-Prozess in der Registry eingetragen hat. Am Ende prüft `check_comeback` zusätzlich, dass der alte Prozess tot ist, wenn ein neuer läuft.
 - **Zurechnung durch den Kernel:** Er rechnet einen Unix-Socket dem Prozess zu, der ihn zuletzt benutzt hat, und schon `poll()` zählt dazu. Code-Prüfung und Absender-Bindung im Aufbewahrer sind deshalb Hürden, keine Garantien. Die Grenzen sind das Geheimnis und dass kein Kind den Socket erbt (Vics Urteil, Abschnitt „Wovor schützen wir“ in der Doku des Aufbewahrers).
 - **GPT-Chats:** Die Test-Instanz hat kein GPT-Login, GPT-Chats fehlen im Lauf.
+- **GPT-Router:** Ohne GPT-Backend startet die Test-Instanz nie einen Router. Der Router-Modus (`ClaudeGPTRouterMode.current`, ein `static let`) wird erst beim ersten Zugriff festgelegt, in der echten App beim Router-Start. `router-switch` legt ihn deshalb mit einer harmlosen Router-Anfrage über den Steuer-Socket fest, solange der Schalter aus ist (die App lehnt sie mit „Router-Dienst ist in diesem Lauf nicht aktiv“ ab). Ob laufende GPT-Antworten den Neustart über den Router-Dienst überstehen, prüft erst der Handtest.
+- **Kein Erbe nach Übernahme:** Übernommene Chats sind keine Kinder der neuen App; hat sie sonst keine Kinder, steht `kein-erbe` als FEHLT da.
 
 ## Handtest des Users (mit echten, angemeldeten Chats)
 
