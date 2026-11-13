@@ -49,7 +49,8 @@ Die Erfolgsmeldung nennt das Konto und woher es kommt
 (`Konto: RankM8 (aktiv in den Einstellungen)` bzw. `(--account)`), im
 `--json`-Modus stehen `session.account` (immer der Name, auch `main`) und
 `session.accountSource` (`active` · `explicit` · `killSwitch`). Codex-Chats
-haben kein Claude-Konto: dort fehlt das Feld, und `--account` zusammen mit
+haben kein Claude-Konto: dort ist `session.account` `null` (bis 13.11.2026
+stand dort fälschlich `main`), und `--account` zusammen mit
 `--provider codex` ist ein Bedienfehler (Exit 1).
 
 Der Befehl **scheitert mit Exit 3**, statt still auf den Haupt-Account
@@ -58,9 +59,23 @@ genannt oder in den Einstellungen aktiv ist:
 
 - das Profil existiert nicht (auch: `.active` nennt ein gelöschtes Profil),
 - es hat keine Kontodaten (`oauthAccount` fehlt in seiner `.claude.json`) oder
-  keinen Login im Keychain,
-- sein Login ist abgelaufen (30-Tage-Frist, siehe
+  keinen Login im Keychain (gilt nur für Zusatzprofile),
+- sein Login ist nachweislich abgelaufen (30-Tage-Frist, siehe
   [Claude-Konten](agent-chats/claude-konten.md#login-frist-und-erneuerung)).
+
+`main` sperrt nur ein nachweislich abgelaufener Login: dort läuft Claude auch
+mit API-Key, `apiKeyHelper` oder über einen Proxy, ganz ohne OAuth-Login.
+Die Liste „Angemeldet: …“ in der Meldung nennt nur Konten, die die Prüfung
+bestehen — abgelaufene fehlen.
+
+**Offen** (aus dem Review vom 13.11.2026, bewusst später):
+- Timeout für das Lesen des Keychains (`security` kann bei gesperrtem
+  Schlüsselbund hängen).
+- Exit-Codes trennen: Konto-Fehler und Projekt-Fehler von `new` sind beide 3.
+- `chats address` meldet das Konto aus Claudes Registry, `list`/`show` aus dem
+  Transcript-Ort — vereinheitlichen.
+- `move-account` sollte `AccountSwitchPlanner.decide` direkt nutzen statt die
+  Regeln über `AccountMoveStopResumePlanner` nachzubauen.
 
 Die Meldung nennt die angemeldeten Konten und den Ausweg (`--account <profil>`
 oder ein anderes Konto aktiv setzen bzw. den Login erneuern). Grund: eine im
