@@ -167,7 +167,7 @@ extension AgentChatsView {
 
     /// Singuläre Variante von `moveSelectionToNewWindow` — ignoriert eine
     /// eventuell bestehende Mehrfachauswahl (strikt-singuläre Kontexte).
-    private func moveSingleTabToNewWindow(_ session: AgentChatSession) {
+    func moveSingleTabToNewWindow(_ session: AgentChatSession) {
         guard openTabIDs.contains(session.id) else { return }
         let newWindowID = windowStore.detachToNewWindow(session.id, from: windowID)
         DispatchQueue.main.async {

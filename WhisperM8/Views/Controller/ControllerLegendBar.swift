@@ -16,7 +16,7 @@ struct ControllerLegendTarget: Equatable {
         switch context {
         case .paused:
             return .init(title: String(localized: "Controller paused"), detail: nil, tone: .neutral)
-        case let .recording(phase, targetIsChat):
+        case let .recording(phase, targetIsChat, _):
             let chatDetail = "→ \(title)"
             let detail = targetIsChat ? chatDetail : String(localized: "→ app in front")
             switch phase {

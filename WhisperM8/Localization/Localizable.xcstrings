@@ -1211,6 +1211,16 @@
         }
       }
     },
+    "Account · 5 h · week": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto · 5 Std. · Woche"
+          }
+        }
+      }
+    },
     "Account …%@": {
       "localizations": {
         "de": {
@@ -1487,6 +1497,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trag deine Abos ein, um zu sehen, wie viel mehr du aus ihnen herausholst."
+          }
+        }
+      }
+    },
+    "Add to another workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu anderem Workspace hinzufügen"
           }
         }
       }
@@ -2587,6 +2607,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hintergrund-Agenten"
+          }
+        }
+      }
+    },
+    "Background tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Aufgaben"
           }
         }
       }
@@ -3957,6 +3987,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Terminal schließen"
+          }
+        }
+      }
+    },
+    "Close view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht schließen"
           }
         }
       }
@@ -5601,6 +5641,16 @@
         }
       }
     },
+    "Dictation running — the text goes into its chat; nothing else goes into the field now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat läuft — der Text geht in seinen Chat; ins Feld geht jetzt nichts anderes."
+          }
+        }
+      }
+    },
     "Dictations": {
       "localizations": {
         "de": {
@@ -5987,6 +6037,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esc schließt"
+          }
+        }
+      }
+    },
+    "Escape once": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal Escape"
           }
         }
       }
@@ -6841,6 +6901,26 @@
         }
       }
     },
+    "Grid size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße"
+          }
+        }
+      }
+    },
+    "Grid size · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße · %@"
+          }
+        }
+      }
+    },
     "Grid · %@": {
       "localizations": {
         "de": {
@@ -7011,6 +7091,16 @@
         }
       }
     },
+    "Hide this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel ausblenden"
+          }
+        }
+      }
+    },
     "Hide typed key": {
       "localizations": {
         "de": {
@@ -7101,6 +7191,16 @@
         }
       }
     },
+    "Hold L1, then L3: undo (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann L3: rückgängig (Claude)"
+          }
+        }
+      }
+    },
     "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)": {
       "localizations": {
         "de": {
@@ -7111,12 +7211,52 @@
         }
       }
     },
+    "Hold L1, then ▲ ▼: line up or down in a draft with several lines, not from its first or last line": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ▲ ▼: eine Zeile hoch oder runter im mehrzeiligen Entwurf, nicht aus der ersten bzw. letzten Zeile"
+          }
+        }
+      }
+    },
     "Hold L1, then △: new line without sending (Claude and Codex)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "L1 halten, dann △: Zeilenumbruch, ohne zu senden (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ◀ ▶: jump a word back or forward (Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ◀ ▶: ein Wort zurück oder vor (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ○: send exactly one Escape — while the chat works it interrupts unless a view is open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ○: genau ein Escape — arbeitet der Chat, unterbricht es, wenn keine Ansicht offen ist"
+          }
+        }
+      }
+    },
+    "Hold L1, then ✕: paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ✕: neuesten Eintrag der Zwischenablage einfügen; Bilder kommen wie mit ⌘V an (Bilder nur in Claude und Codex)"
           }
         }
       }
@@ -7141,6 +7281,16 @@
         }
       }
     },
+    "Hold L2, then □: reopen the most recently closed chat; again for the one before": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann □: zuletzt geschlossenen Chat wieder öffnen; noch mal für den davor"
+          }
+        }
+      }
+    },
     "Hold L2, then △: next chat that is waiting for you": {
       "localizations": {
         "de": {
@@ -7157,6 +7307,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "L2 halten: wohin — hoch und runter öffnen die Liste der Chats und Workspaces, links und rechts wechseln den Reiter, Loslassen oder ✕ wechselt, ○ bricht ab"
+          }
+        }
+      }
+    },
+    "Hold R1, then L3: detailed transcript on and off (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann L3: ausführliches Transkript an und aus (Claude)"
           }
         }
       }
@@ -7481,6 +7641,16 @@
         }
       }
     },
+    "In Claude's views (tasks, workflows, transcript, rewind, footer selection) ○ closes the view, also while the chat works": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Claudes Ansichten (Aufgaben, Workflows, Transkript, Zurückspulen, Auswahl in der Fußzeile) schließt ○ die Ansicht, auch während der Chat arbeitet"
+          }
+        }
+      }
+    },
     "In addition to clicking, only while you are not dictating.": {
       "localizations": {
         "de": {
@@ -7747,6 +7917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Interne ChatGPT-Transkription über den GPT-Proxy"
+          }
+        }
+      }
+    },
+    "Into the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In den Chat"
           }
         }
       }
@@ -8171,6 +8351,16 @@
         }
       }
     },
+    "Lifecycle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lebenszyklus"
+          }
+        }
+      }
+    },
     "Light": {
       "localizations": {
         "de": {
@@ -8237,6 +8427,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limits aktualisiert."
+          }
+        }
+      }
+    },
+    "Line up / down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeile hoch / runter"
           }
         }
       }
@@ -10611,6 +10811,16 @@
         }
       }
     },
+    "Nothing to paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts zum Einfügen"
+          }
+        }
+      }
+    },
     "Nothing was recorded. Wait until the text is inserted, then press the hotkey again. Esc cancels the clean-up.": {
       "localizations": {
         "de": {
@@ -11394,6 +11604,36 @@
         }
       }
     },
+    "Paste image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen"
+          }
+        }
+      }
+    },
+    "Paste image · %lld × %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen · %lld × %lld"
+          }
+        }
+      }
+    },
+    "Paste newest": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes einfügen"
+          }
+        }
+      }
+    },
     "Paste original": {
       "localizations": {
         "de": {
@@ -11430,6 +11670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fügt ein, was du gesagt hast, bevor der Modus es umformuliert hat"
+          }
+        }
+      }
+    },
+    "Paste “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einfügen „%@“"
           }
         }
       }
@@ -12654,6 +12904,16 @@
         }
       }
     },
+    "Redraw": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu zeichnen"
+          }
+        }
+      }
+    },
     "Reduce system volume while recording": {
       "localizations": {
         "de": {
@@ -12820,6 +13080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vom Supervisor entfernen"
+          }
+        }
+      }
+    },
+    "Remove from this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus diesem Workspace nehmen"
           }
         }
       }
@@ -13014,6 +13284,16 @@
         }
       }
     },
+    "Rename workspace…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace umbenennen…"
+          }
+        }
+      }
+    },
     "Rename…": {
       "localizations": {
         "de": {
@@ -13130,6 +13410,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wieder öffnen"
+          }
+        }
+      }
+    },
+    "Reopen closed chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschlossenen Chat wieder öffnen"
           }
         }
       }
@@ -13610,6 +13900,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Lauf und archivierte Ausgabeberichte ansehen."
+          }
+        }
+      }
+    },
+    "Rewind": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurückspulen"
           }
         }
       }
@@ -14174,6 +14474,16 @@
         }
       }
     },
+    "Send now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt senden"
+          }
+        }
+      }
+    },
     "Send test notification": {
       "localizations": {
         "de": {
@@ -14664,6 +14974,16 @@
         }
       }
     },
+    "Show in Finder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Finder zeigen"
+          }
+        }
+      }
+    },
     "Show in recording overlay and Test Lab": {
       "localizations": {
         "de": {
@@ -14820,6 +15140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Modus bei der Aufnahme zeigen."
+          }
+        }
+      }
+    },
+    "Show this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel zeigen"
           }
         }
       }
@@ -15620,6 +15950,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxy stoppen"
+          }
+        }
+      }
+    },
+    "Stop this background agent?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Hintergrund-Agenten stoppen?"
+          }
+        }
+      }
+    },
+    "Stop this job?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Job stoppen?"
           }
         }
       }
@@ -17624,6 +17974,16 @@
         }
       }
     },
+    "Transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript"
+          }
+        }
+      }
+    },
     "Transcript + post-processing through an output mode": {
       "localizations": {
         "de": {
@@ -17720,6 +18080,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
+    "Turn notes off everywhere": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen überall aus"
+          }
+        }
+      }
+    },
+    "Turn notes on everywhere": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen überall an"
           }
         }
       }
@@ -17930,6 +18310,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Kontowechsel rückgängig machen"
+          }
+        }
+      }
+    },
+    "Undo last account switch (all chats it moved)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzten Kontowechsel rückgängig (alle betroffenen Chats)"
           }
         }
       }
@@ -18924,12 +19314,32 @@
         }
       }
     },
+    "Word back / forward": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wort zurück / vor"
+          }
+        }
+      }
+    },
     "Words": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Wörter"
+          }
+        }
+      }
+    },
+    "Workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows"
           }
         }
       }
@@ -18974,6 +19384,16 @@
         }
       }
     },
+    "Working: ○ interrupts if no view is open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet: ○ unterbricht, wenn keine Ansicht offen ist."
+          }
+        }
+      }
+    },
     "Works": {
       "localizations": {
         "de": {
@@ -18990,6 +19410,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeitsbereich"
+          }
+        }
+      }
+    },
+    "Workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace „%@“"
           }
         }
       }
@@ -19310,6 +19740,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Katalog vom %@"
+          }
+        }
+      }
+    },
+    "choose with the mouse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur mit der Maus"
           }
         }
       }
@@ -19764,6 +20204,16 @@
         }
       }
     },
+    "most free": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "am meisten frei"
+          }
+        }
+      }
+    },
     "muted": {
       "localizations": {
         "de": {
@@ -19850,6 +20300,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "nicht angemeldet"
+          }
+        }
+      }
+    },
+    "nothing closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nichts geschlossen"
           }
         }
       }
@@ -19990,6 +20450,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "loslassen: wechseln"
+          }
+        }
+      }
+    },
+    "reopen %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wieder öffnen: %@"
           }
         }
       }
@@ -20690,6 +21160,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "⚠️ %@"
+          }
+        }
+      }
+    },
+    "✕ select · ○ back · Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ zurück · Options schließt"
+          }
+        }
+      }
+    },
+    "✕ select · ○ or Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ oder Options schließt"
           }
         }
       }

@@ -122,10 +122,23 @@ extension ControllerBindingResolver {
     /// zurückgeholt, mit → übernommen; seit 12.11.2026 weniger streng). Im leeren Feld schickt ← die ganze Sitzung in
     /// Claudes Agent-Ansicht — so gingen am 12.11.2026 zwei Sitzungen
     /// verloren. Dieselbe Regel prüft `TerminalControlKey.controllerAllows`.
+    ///
+    /// Runde 5 (R2): Eine erkannte Ansicht fängt ← selbst ab. Sonst entscheidet
+    /// der Bildschirm, wenn das Feld ablesbar ist — gesperrt wird nur, wenn es
+    /// sichtbar leer ist; ist es nicht eindeutig, gilt die Schätzung.
     static func leftArrowAllowed(_ state: ControllerChatState) -> Bool {
         guard state.profile == .claude else { return true }
-        return state.status == .awaitingInput || choiceListActive(state)
-            || state.draftSuspected || state.fieldMayHaveText
+        if state.status == .awaitingInput || choiceListActive(state) { return true }
+        return ControllerScreenReading.fieldMayHaveText(
+            screen: ControllerScreenSnapshot(openView: state.openView, promptField: state.promptField),
+            tracker: state.draftSuspected || state.fieldMayHaveText)
+    }
+
+    /// In einer erkannten Claude-Ansicht (`/tasks`, `/workflows`, Transkript,
+    /// Zurückspulen, Auswahl in der Fußzeile) fängt die Ansicht Escape selbst
+    /// ab: schließen statt abbrechen (Runde 5, R2).
+    static func viewOpen(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.profile == .claude && state.openView != nil
     }
 
     /// Merker „Auswahl offen“ in der Belegung: bei Claude nur, solange der
@@ -165,7 +178,12 @@ extension ControllerBindingResolver {
     /// verschluckt, sonst öffnet Claude das Zurückspulen. Eine offene Auswahl
     /// des Menüs schließt Escape auch direkt nach dem Befehl, der sie geöffnet
     /// hat (der zählt als „gerade gesendet“).
+    ///
+    /// In einer erkannten Ansicht auch bei „arbeitet“ und gerade gesendet,
+    /// mit nur 0,3 s Sperre statt 1 s (Runde 5, R2): Escape schließt dort die
+    /// Ansicht; ein zweites, bevor sie zu ist, träfe den Hauptchat.
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
+        if viewOpen(state) { return !state.escapeSentJustNow }
         guard state.acceptsKeys, !state.escapeSentRecently else { return false }
         guard state.status == .idle || state.status == .awaitingInput else { return false }
         return !state.recentlySubmitted || choiceListActive(state)

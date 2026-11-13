@@ -18,6 +18,9 @@ extension ControllerBindingResolver {
         case .layerCancelled: return .islandClose
         default: break
         }
+        if case let .recording(phase, targetIsChat, navigation?) = context {
+            return recordingLayer(gesture, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
+        }
         guard case let .chat(state) = context else {
             if case let .inLayer(_, inner) = gesture { return action(for: inner, in: context) }
             return nil
@@ -28,8 +31,37 @@ extension ControllerBindingResolver {
             // Scrollen läuft nie über eine Ebene (der rechte Stick ist frei).
             switch layer {
             case .writing: return writingLayer(inner, state: state)
-            case .quickDraw: return quickDrawLayer(inner)
+            case .quickDraw: return quickDrawLayer(inner, state: state)
             case .whereTo: return whereToLayer(inner)
+            }
+        default: return nil
+        }
+    }
+
+    /// Ebenen während eines an einen Chat gebundenen Diktats (Runde 5, Punkt
+    /// 9): L2 „Wohin“ geht samt Wechsel, R1 zeigt die Raute, aber alles, was
+    /// ins Feld schriebe, ist aus („geht nicht“) — dorthin kommt gleich der
+    /// Diktattext. L1 „Schreiben“ bleibt aus. R2 bleibt in jeder Ebene „stopp“,
+    /// die übrigen Tasten unter L1 wirken wie ohne Ebene.
+    private static func recordingLayer(
+        _ gesture: ControllerGesture, phase: ControllerRecordingPhase, targetIsChat: Bool,
+        navigation: ControllerRecordingNavigation
+    ) -> ControllerAction? {
+        func plain(_ inner: ControllerGesture) -> ControllerAction? {
+            recording(inner, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
+        }
+        switch gesture {
+        case let .layerBegan(layer): return layer == .writing ? nil : .islandShow(layer)
+        case let .inLayer(layer, inner):
+            if inner == .press(.r2) { return plain(inner) }
+            switch layer {
+            case .writing: return plain(inner)
+            case .whereTo: return whereToLayer(inner)
+            case .quickDraw:
+                if case .press(let button) = inner, ControllerQuickDrawSlots.item(for: button) != nil || button == .l3 {
+                    return .rejected
+                }
+                return nil
             }
         default: return nil
         }
@@ -44,8 +76,10 @@ extension ControllerBindingResolver {
     }
 
     /// L1 gehalten. Viereck löscht sofort bis zum Zeilenanfang und gehalten
-    /// Zeile für Zeile; Dreieck setzt einen Zeilenumbruch. Kreuz und Kreis
-    /// bleiben frei. R2 diktiert wie ohne Ebene.
+    /// Zeile für Zeile; Dreieck setzt einen Zeilenumbruch. R2 diktiert wie
+    /// ohne Ebene. Runde 5: ◀ ▶ springen wortweise, ▲ ▼ zeilenweise im
+    /// mehrzeiligen Entwurf, Kreuz fügt den neuesten Eintrag der
+    /// Zwischenablage ein, Kreis schickt genau ein Escape, L3 macht rückgängig.
     private static func writingLayer(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         let allowed = layerWritingAllowed(state)
         switch gesture {
@@ -53,8 +87,65 @@ extension ControllerBindingResolver {
         case .holdRepeat(.square): return allowed ? .chatKey(.deleteToLineStart) : nil
         case .press(.triangle): return allowed ? .chatKey(.newline) : layerWritingRejected(state)
         case .press(.r2): return .dictationToggle
+        case let .move(direction, .dpad, isRepeat):
+            switch direction {
+            case .left, .right:
+                guard allowed else { return isRepeat ? nil : layerWritingRejected(state) }
+                return .chatKey(direction == .left ? .wordLeft : .wordRight)
+            case .up, .down:
+                guard allowed, lineMoveAllowed(direction, state: state) else {
+                    return isRepeat ? nil : layerWritingRejected(state)
+                }
+                return .chatKey(direction == .up ? .up : .down)
+            }
+        case .press(.cross): return pasteAllowed(state) ? .pasteNewest : layerWritingRejected(state)
+        case .press(.circle): return escapeOnceAllowed(state) ? .chatKey(.escape) : layerWritingRejected(state)
+        case .press(.l3): return undoAllowed(state) ? .chatKey(.undo) : layerWritingRejected(state)
         default: return nil
         }
+    }
+
+    /// ▲ ▼ unter L1 nur im sichtbar mehrzeiligen Entwurf und nur, wenn der
+    /// Cursor nicht schon in der ersten (▲) bzw. letzten (▼) Zeile steht: Dort
+    /// holte Claude den Verlauf ins Feld, und Kreuz schickte ihn ab. Ist das
+    /// Feld oder die Cursorzeile nicht ablesbar, geht es nicht.
+    static func lineMoveAllowed(_ direction: ControllerDirection, state: ControllerChatState) -> Bool {
+        guard let field = state.promptField, field.rows >= 2, let row = field.cursorRow else { return false }
+        switch direction {
+        case .up: return row > 0
+        case .down: return row < field.rows - 1
+        case .left, .right: return false
+        }
+    }
+
+    /// Einfügen (L1 + Kreuz): Claude und Codex außer bei offener Rückfrage;
+    /// in Shells nur an der Eingabezeile (nicht in nano, vim und Co.), nur
+    /// Text und nur mit eingeschaltetem Bracketed Paste — das prüft der
+    /// Ausführer (Review Runde 5, Befund 6).
+    static func pasteAllowed(_ state: ControllerChatState) -> Bool {
+        guard state.acceptsKeys, state.status != .awaitingInput else { return false }
+        switch state.profile {
+        case .claude, .codex: return true
+        case .shell: return state.shellAtPrompt
+        case .other: return false
+        }
+    }
+
+    /// Genau ein Escape (L1 + Kreis), unabhängig vom Status und ohne die
+    /// 1-s-Sperre — ausdrücklich gewollt. Nur Claude und Codex (L1-Regel).
+    static func escapeOnceAllowed(_ state: ControllerChatState) -> Bool {
+        writingKeysAllowed(state)
+    }
+
+    /// Rückgängig (L1 + L3): nur Claude (Ctrl+_), nicht in einer Rückfrage.
+    /// Codex hat im Standard-Editor kein Undo.
+    static func undoAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.profile == .claude && state.status != .awaitingInput
+    }
+
+    /// Ausführliches Transkript (R1 + L3): nur Claude (Ctrl+O).
+    static func transcriptToggleAllowed(_ state: ControllerChatState) -> Bool {
+        state.acceptsKeys && state.profile == .claude
     }
 
     /// „Geht nicht“ in einem lebenden Chat (Shell, Rückfrage); bei beendetem still.
@@ -64,8 +155,11 @@ extension ControllerBindingResolver {
 
     /// R1 gehalten: die Raute. Ob ein Eintrag geht, entscheidet der Ausführer
     /// mit denselben Regeln wie das Options-Menü (`ControllerMenuModel.isEnabled`).
-    private static func quickDrawLayer(_ gesture: ControllerGesture) -> ControllerAction? {
+    private static func quickDrawLayer(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         if gesture == .press(.r2) { return .dictationToggle }
+        if gesture == .press(.l3) {
+            return transcriptToggleAllowed(state) ? .chatKey(.toggleTranscript) : layerWritingRejected(state)
+        }
         guard case let .press(button) = gesture, let item = ControllerQuickDrawSlots.item(for: button) else {
             return nil
         }
@@ -88,6 +182,7 @@ extension ControllerBindingResolver {
         case .press(.cross): return .islandCommit
         case .press(.circle): return .islandCancel
         case .press(.triangle): return .islandNextWaiting
+        case .press(.square): return .islandReopenClosed
         case .press(.r2): return .islandCommitAndDictate
         case .press(.touchpad): return .clipboardToggle
         default: return nil
