@@ -10,7 +10,7 @@ extension HandoverTakeService {
         let store = AgentSessionStore()
         return HandoverTakeService(dependencies: .init(
             paths: paths,
-            secretStore: HandoverSecretStore.live(paths: paths),
+            secretStore: HandoverSecretStores.live(paths: paths),
             marker: marker,
             sessions: { store.loadWorkspace().sessions },
             adopt: { taken, session in adoptLive(taken, session: session, store: store) },

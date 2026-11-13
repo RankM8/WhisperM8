@@ -331,7 +331,7 @@ Grundlage: Pakete 1 bis 3 und das Dauerlauf-Skript sind gebaut. Paket 4 verbinde
 
 Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblendet. Eingeschaltet wird erst, wenn alles hier erledigt ist:
 
-1. **Geheimnis-Weg entschieden und gebaut.** Mit Schlüsselbund scheitert die Übernahme über zwei Builds (cdhash-Bindung ohne Team-ID, gemessen in der Test-Instanz). Vorschlag Option A: Datei 0600 im 0700-Ordner des Aufbewahrers, Schlüsselbund ganz aus dem Weg, Kontoname ohne Signatur; später C (Apple-Entwicklerkonto). Abnahme mit Dev-Build auf Dev-Build und ad hoc auf ad hoc. Abschnitt „Wovor schützen wir“ entsprechend zurückschneiden.
+1. **Geheimnis-Weg entschieden und gebaut.** (Option A vorbereitend gebaut auf `feat/handover-geheimnis-datei`, 13.11.2026; gemergt wird erst, wenn der User A gewählt hat.) Mit Schlüsselbund scheitert die Übernahme über zwei Builds (cdhash-Bindung ohne Team-ID, gemessen in der Test-Instanz). Vorschlag Option A: Datei 0600 im 0700-Ordner des Aufbewahrers, Schlüsselbund ganz aus dem Weg, Kontoname ohne Signatur; später C (Apple-Entwicklerkonto). Abnahme mit Dev-Build auf Dev-Build und ad hoc auf ad hoc. Abschnitt „Wovor schützen wir“ entsprechend zurückschneiden.
 2. **Kein Start mehr nach `COMMIT`.** Zwischen Abgabe und Beenden startet die alte App keinen Chat mehr.
 3. **Abgabe-Fehler mit Fortsetzen wie im Plan:** Chats, deren Abgabe scheiterte, werden nach dem Neustart fortgesetzt.
 4. **Aufbewahrer liest erst ab `COMMIT`** aus den Leitungen.

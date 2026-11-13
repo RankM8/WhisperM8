@@ -145,7 +145,7 @@ final class HandoverRestartService {
             paths: paths,
             keeperExecutable: executable,
             appBinaries: [executable.path],
-            secretStore: HandoverSecretStore.live(paths: paths),
+            secretStore: HandoverSecretStores.live(paths: paths),
             holdSeconds: HandoverTestKnobs.holdSeconds()))
     }
 
