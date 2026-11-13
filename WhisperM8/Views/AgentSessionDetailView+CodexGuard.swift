@@ -8,7 +8,9 @@ extension AgentSessionDetailView {
     /// Nur vor einem Codex-Resume, nicht auf dem Main Thread. `nil`, wenn die
     /// Prozessliste nicht lesbar ist (dann nicht sperren).
     nonisolated static func codexProcessesForLaunch(_ session: AgentChatSession) -> [CodexProcess]? {
-        guard session.provider == .codex, !session.isTerminal, session.hasLaunchedInitialPrompt else { return [] }
+        // Bewusst ohne `hasLaunchedInitialPrompt`: Der Stand kann veraltet sein
+        // (Job-Übernahme), und die Prüfung kostet nur etwa 0,4 ms.
+        guard session.provider == .codex, !session.isTerminal else { return [] }
         let start = DispatchTime.now().uptimeNanoseconds
         let processes = CodexSessionRunningGuard.liveCodexProcesses()
         let micros = (DispatchTime.now().uptimeNanoseconds - start) / 1000
@@ -30,16 +32,13 @@ extension AgentSessionDetailView {
     ) -> CodexRunningConflict? {
         let sessions = Dictionary(store.loadWorkspace().sessions.map { ($0.id, $0) },
                                   uniquingKeysWith: { first, _ in first })
-        let appChats = registry.runningControllers.compactMap { controller -> CodexSessionRunningGuard.AppChat? in
-            guard let session = sessions[controller.sessionID], session.provider == .codex else { return nil }
-            return CodexSessionRunningGuard.AppChat(
-                id: controller.sessionID,
-                title: session.title,
-                // Die beim Start fortgesetzte ID, sonst die gebundene.
-                sessionID: CodexSessionRunningGuard.resumedID(inLaunchArguments: controller.command.arguments)
-                    ?? session.externalSessionID,
-                processID: controller.processID)
-        }
+        // Alle laufenden Controller, auch Terminal-Tabs: Läuft dort `codex
+        // resume`, nennt die Meldung den Tab statt „außerhalb“.
+        let appChats = CodexSessionRunningGuard.appChats(
+            controllers: registry.runningControllers.map {
+                (sessionID: $0.sessionID, arguments: $0.command.arguments, processID: $0.processID)
+            },
+            sessions: sessions)
         return CodexSessionRunningGuard.conflict(
             sessionID: sessionID,
             localID: localID,

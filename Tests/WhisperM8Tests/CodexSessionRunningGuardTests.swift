@@ -16,9 +16,10 @@ final class CodexSessionRunningGuardTests: XCTestCase {
                    terminatingOwner: { terminating[$0] }, titleOf: { $0 == self.other ? "Anderer Chat" : "?" })
     }
 
-    private func tui(_ pid: Int32, parent: Int32 = 1, id: String? = nil) -> CodexProcess {
-        CodexProcess(pid: pid, parentPID: parent,
-                     arguments: ["resume", "-C", "/repo mit Leerzeichen", "-m", "gpt-5.5", id ?? thread])
+    private func tui(_ pid: Int32, leader: Int32? = nil, id: String? = nil, terminal: Bool = true) -> CodexProcess {
+        CodexProcess(pid: pid, sessionLeader: leader ?? pid,
+                     arguments: ["resume", "-C", "/repo mit Leerzeichen", "-m", "gpt-5.5", id ?? thread],
+                     hasTerminal: terminal)
     }
 
     // (a) Zwei Chats der App: der andere läuft schon.
@@ -27,33 +28,42 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         XCTAssertEqual(check([running], processes: []), .otherChat(title: "Anderer Chat"))
         XCTAssertEqual(check([running], processes: nil), .otherChat(title: "Anderer Chat"),
                        "die eigene Tabelle gilt auch ohne Prozessliste")
-        // Über den Prozess: Kind des Node-Wrappers eines anderen Chats.
+        // Über den Prozess: hinter Wrappern (Node, Volta) eines anderen Chats
+        // oder in einem Terminal-Tab — der PTY-Prozess ist Sitzungsführer.
         let unbound = G.AppChat(id: other, title: "Anderer Chat", sessionID: nil, processID: 500)
-        XCTAssertEqual(check([unbound], processes: [tui(501, parent: 500)]), .otherChat(title: "Anderer Chat"))
+        XCTAssertEqual(check([unbound], processes: [tui(503, leader: 500)]), .otherChat(title: "Anderer Chat"))
     }
 
     // (b) Codex im normalen Terminal.
     func testCodexInTerminalBlocksAsOutsideApp() {
-        XCTAssertEqual(check(processes: [tui(700)]), .outsideApp(pid: 700))
+        XCTAssertEqual(check(processes: [tui(700)]), .outsideApp(pid: 700, inTerminal: true))
         XCTAssertNil(check(processes: [tui(700, id: "anderer-thread")]), "andere Sitzung")
-        let fresh = CodexProcess(pid: 701, parentPID: 1, arguments: ["-C", "/repo", thread])
+        let fresh = CodexProcess(pid: 701, sessionLeader: 701, arguments: ["-C", "/repo", thread])
         XCTAssertNil(check(processes: [fresh]), "ohne resume kein Fortsetzen")
+        let prompt = CodexProcess(pid: 702, sessionLeader: 702, arguments: ["exec", "bitte resume \(thread) prüfen"])
+        XCTAssertNil(check(processes: [prompt]), "ID nur im Prompt-Text")
+        let configValue = CodexProcess(pid: 703, sessionLeader: 703, arguments: ["-c", "resume", thread + "x"])
+        XCTAssertNil(check(processes: [configValue]), "ID muss ein eigenes Argument sein")
+        let daemon = CodexProcess(pid: 704, sessionLeader: 704,
+                                  arguments: ["app-server", "--listen", "unix://", "--managed-daemon"])
+        XCTAssertNil(check(processes: [daemon]), "Hintergrunddienst")
     }
 
     // (c) Verwaister Subagent-Job nach gestorbenem Supervisor.
     func testOrphanedExecResumeBlocks() {
-        let job = CodexProcess(pid: 800, parentPID: 1,
-                               arguments: ["-a", "never", "exec", "resume", "--json", thread, "weiter"])
-        XCTAssertEqual(check(processes: [job]), .outsideApp(pid: 800))
+        let job = CodexProcess(pid: 800, sessionLeader: 800,
+                               arguments: ["-a", "never", "exec", "resume", "--json", thread, "weiter"],
+                               hasTerminal: false)
+        XCTAssertEqual(check(processes: [job]), .outsideApp(pid: 800, inTerminal: false))
     }
 
     // (d) Tab-Neustart: der eigene Vorgänger läuft aus und sperrt nicht.
     func testOwnTerminatingPredecessorDoesNotBlockButOtherChatsDoes() {
-        // Wrapper 900 wurde beendet, sein Kind 901 trägt die Argumente.
-        XCTAssertNil(check(processes: [tui(901, parent: 900)], terminating: [900: me]))
+        // PTY-Prozess 900 wurde beendet; codex 902 hängt hinter Wrappern.
+        XCTAssertNil(check(processes: [tui(902, leader: 900)], terminating: [900: me]))
         XCTAssertNil(check(processes: [tui(900)], terminating: [900: me]), "Programm direkt im PTY")
-        XCTAssertEqual(check(processes: [tui(901, parent: 900)], terminating: [900: other]),
-                       .otherChat(title: "Anderer Chat"), "ein anderer, gerade geschlossener Chat schreibt noch")
+        XCTAssertEqual(check(processes: [tui(902, leader: 900)], terminating: [900: other]),
+                       .otherChatEnding(title: "Anderer Chat"), "ein anderer, gerade geschlossener Chat schreibt noch")
     }
 
     func testUnreadableProcessListNeverBlocks() {
@@ -63,7 +73,7 @@ final class CodexSessionRunningGuardTests: XCTestCase {
 
     func testOwnRunningProcessIsIgnored() {
         let mine = G.AppChat(id: me, title: "Ich", sessionID: thread, processID: 950)
-        XCTAssertNil(check([mine], processes: [tui(951, parent: 950)]))
+        XCTAssertNil(check([mine], processes: [tui(951, leader: 950)]))
     }
 
     func testResumedIDFromLaunchArguments() {
@@ -82,6 +92,34 @@ final class CodexSessionRunningGuardTests: XCTestCase {
                        ["resume", "-C", "/a b", thread])
         XCTAssertNil(G.parseProcArgs([1, 0]))
         XCTAssertNil(G.parseProcArgs(Array(bytes(["codex", "resume"]).prefix(12))), "abgeschnitten")
+        XCTAssertEqual(G.parseProcArgs(bytes(["codex", "", "resume"])), ["", "resume"], "leeres Argument in der Mitte")
+    }
+
+    func testProcessNames() {
+        XCTAssertTrue(G.isCodexName("codex"))
+        XCTAssertTrue(G.isCodexName("codex-aarch64-apple-darwin"))
+        XCTAssertFalse(G.isCodexName("node"))
+        XCTAssertFalse(G.isCodexName("codexbar"))
+    }
+
+    /// Klebecode der Detailansicht: fortgesetzte ID vor gebundener, nur Codex
+    /// trägt eine Sitzung, Terminal-Tabs zählen für die PID-Zuordnung.
+    func testAppChatsFromControllers() {
+        let project = UUID()
+        let codex = AgentChatSession(provider: .codex, projectID: project, externalSessionID: "gebunden", title: "Codex")
+        let claude = AgentChatSession(provider: .claude, projectID: project, externalSessionID: thread, title: "Claude")
+        var shell = AgentChatSession(provider: .codex, projectID: project, title: "")
+        shell.kind = .terminal
+        let chats = G.appChats(
+            controllers: [(codex.id, ["resume", "-C", "/r", thread], 10), (claude.id, ["--resume", thread], 11),
+                          (shell.id, [], 12), (UUID(), [], 13)],
+            sessions: [codex.id: codex, claude.id: claude, shell.id: shell])
+        XCTAssertEqual(chats.count, 3, "unbekannter Controller fällt weg")
+        XCTAssertEqual(chats[0].sessionID, thread, "fortgesetzte ID vor gebundener")
+        XCTAssertNil(chats[1].sessionID, "Claude trägt keine Codex-Sitzung")
+        XCTAssertNil(chats[2].sessionID)
+        XCTAssertEqual(chats[2].processID, 12)
+        XCTAssertFalse(chats[2].title.isEmpty, "leerer Titel wird Kurz-ID")
     }
 
     func testLiveLookupIsOffOutsideTheApp() {
@@ -113,10 +151,18 @@ final class CodexSessionRunningGuardTests: XCTestCase {
                            .codexSessionRunning(title: "Ich", conflict: .otherChat(title: "Anderer Chat")))
             XCTAssertTrue($0.localizedDescription.contains("Anderer Chat"))
         }
-        blocked.codexRunningConflict = { _, _ in .outsideApp(pid: 4242) }
+        blocked.codexRunningConflict = { _, _ in .outsideApp(pid: 4242, inTerminal: true) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("4242"))
             XCTAssertTrue($0.localizedDescription.contains("WhisperM8"), "nennt: außerhalb der App")
+        }
+        blocked.codexRunningConflict = { _, _ in .outsideApp(pid: 4243, inTerminal: false) }
+        XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
+            XCTAssertTrue($0.localizedDescription.contains("kill 4243"), "Ausweg ohne Terminalfenster")
+        }
+        blocked.codexRunningConflict = { _, _ in .otherChatEnding(title: "Alter Chat") }
+        XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
+            XCTAssertTrue($0.localizedDescription.contains("Alter Chat"))
         }
     }
 

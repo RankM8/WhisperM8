@@ -274,8 +274,13 @@ etwa 0,4 ms bei 580 Prozessen). Für beide Anbieter gilt zusätzlich eine
 (`ClaudeSessionLaunchReservations`, Schlüssel bei Codex `codex:<id>`). Der
 eigene auslaufende Vorgänger nach einem Tab-Neustart sperrt nicht
 (`ProcessTerminationLedger`). Lässt sich die Prozessliste nicht lesen, startet
-der Chat ohne diese Prüfung; eine Notbremse gibt es deshalb nicht. Nicht
-erkennbar ist ein fremdes Codex, das in der TUI per `/resume` gewechselt hat.
+der Chat ohne diese Prüfung; eine Notbremse gibt es deshalb nicht. Prozesse
+werden über ihren Sitzungsführer (`getsid`) dem PTY eines Chats zugeordnet,
+auch hinter Wrappern wie Node oder Volta. Grenzen der Argumente: Ein fremdes
+Codex, das in der TUI per `/resume` auf die Sitzung gewechselt hat, bleibt
+unsichtbar; eines, das von ihr weggewechselt hat, sperrt weiter, bis es endet
+(die Meldung nennt seine PID). Threads im gemeinsamen Codex-Hintergrunddienst
+(Codex-App, IDE) sieht die Prüfung nicht.
 
 `AgentPromptRoutingService` routet Text in eine bereits existierende Session,
 zum Beispiel einen Subagent-Report in den Parent-Chat. Es fokussiert die

@@ -68,8 +68,12 @@ enum AgentCommandError: LocalizedError, Equatable {
             return String(localized: "Cannot resume \(title): this conversation is already running in another Claude process (PID \(String(pid))). Close that process first, a second start would run the same conversation twice.")
         case .codexSessionRunning(let title, .otherChat(let other)):
             return String(localized: "Cannot resume \(title): this conversation is already running in the chat “\(other)”. Close that chat first; a second Codex process would run the same conversation twice.")
-        case .codexSessionRunning(let title, .outsideApp(let pid)):
+        case .codexSessionRunning(let title, .otherChatEnding(let other)):
+            return String(localized: "Cannot resume \(title): the chat “\(other)” was just closed and its Codex process is still ending. Try again in a few seconds.")
+        case .codexSessionRunning(let title, .outsideApp(let pid, true)):
             return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process outside WhisperM8 (PID \(String(pid))). End that process first, for example by closing its terminal window; a second Codex process would run the same conversation twice.")
+        case .codexSessionRunning(let title, .outsideApp(let pid, false)):
+            return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process without a terminal (PID \(String(pid)), for example a leftover subagent job). End it first, for example with “kill \(String(pid))” in a terminal; a second Codex process would run the same conversation twice.")
         case .sessionStartingElsewhere(let title, let otherChat):
             return String(localized: "Cannot resume \(title): the chat “\(otherChat)” is starting this conversation right now. A second start would run the same conversation twice. Close one of the two chats, or try again in a few seconds.")
         }

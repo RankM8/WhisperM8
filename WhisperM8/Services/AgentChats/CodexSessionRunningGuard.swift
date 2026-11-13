@@ -4,15 +4,22 @@ import Foundation
 /// Ein laufender `codex`-Prozess mit seinen Startargumenten.
 struct CodexProcess: Equatable {
     let pid: Int32
-    let parentPID: Int32
+    /// Sitzungsführer (`getsid`): Der PTY-Prozess eines Chats ist per
+    /// `forkpty` Sitzungsführer, egal wie viele Wrapper (Node, Volta)
+    /// dazwischen liegen.
+    let sessionLeader: Int32
     /// `argv` ohne den Programmpfad.
     let arguments: [String]
+    /// Hängt an einem Terminal (sonst etwa ein verwaister Subagent-Job).
+    var hasTerminal: Bool = true
 }
 
 /// Wo eine Codex-Sitzung schon läuft.
 enum CodexRunningConflict: Equatable {
     case otherChat(title: String)
-    case outsideApp(pid: Int32)
+    /// Der Prozess eines gerade geschlossenen Chats läuft noch aus.
+    case otherChatEnding(title: String)
+    case outsideApp(pid: Int32, inTerminal: Bool)
 }
 
 /// Doppelstart-Sperre für Codex (nie zwei Prozesse auf einer Sitzung).
@@ -27,8 +34,12 @@ enum CodexRunningConflict: Equatable {
 ///    Argumenten; gelesen werden nur Prozesse dieses Namens.
 ///
 /// Im Zweifel wird nicht gesperrt: Lässt sich die Prozessliste nicht lesen,
-/// startet der Chat wie bisher. Nicht erkennbar ist ein fremdes Codex, das in
-/// der TUI per `/resume` gewechselt hat (die ID steht nicht in den Argumenten).
+/// startet der Chat wie bisher. Grenzen der Argumente: Ein fremdes Codex, das
+/// in der TUI per `/resume` auf diese Sitzung gewechselt hat, bleibt
+/// unsichtbar; eines, das von ihr weggewechselt hat (`/new`, `/resume`),
+/// sperrt weiter, bis es endet — die Meldung nennt seine PID. Threads, die im
+/// gemeinsamen Hintergrunddienst laufen (Codex-App, IDE), sieht die Prüfung
+/// nicht.
 enum CodexSessionRunningGuard {
     /// Setzt der Prozess diese Sitzung fort?
     static func resumes(_ process: CodexProcess, sessionID: String) -> Bool {
@@ -41,12 +52,29 @@ enum CodexSessionRunningGuard {
         arguments.first == "resume" ? arguments.last : nil
     }
 
-    /// Ein laufender Chat der App: lokale ID, Titel, Sitzung, PTY-Prozess.
+    /// Ein laufender Chat der App (jeder Anbieter, auch Terminal-Tabs):
+    /// lokale ID, Titel, Codex-Sitzung (nur bei Codex-Chats), PTY-Prozess.
     struct AppChat: Equatable {
         let id: UUID
         let title: String
         let sessionID: String?
         let processID: Int32?
+    }
+
+    /// Pur: die laufenden Controller als `AppChat`. Bei Codex-Chats zählt die
+    /// beim Start fortgesetzte ID vor der gebundenen.
+    static func appChats(
+        controllers: [(sessionID: UUID, arguments: [String], processID: Int32?)],
+        sessions: [UUID: AgentChatSession]
+    ) -> [AppChat] {
+        controllers.compactMap { controller in
+            guard let session = sessions[controller.sessionID] else { return nil }
+            let codexID = session.provider == .codex && !session.isTerminal
+                ? resumedID(inLaunchArguments: controller.arguments) ?? session.externalSessionID
+                : nil
+            let title = session.title.isEmpty ? String(session.id.uuidString.prefix(8)).lowercased() : session.title
+            return AppChat(id: controller.sessionID, title: title, sessionID: codexID, processID: controller.processID)
+        }
     }
 
     /// Pur: Läuft die Sitzung schon, und wo?
@@ -73,18 +101,18 @@ enum CodexSessionRunningGuard {
         let chatByPID = Dictionary(appChats.compactMap { chat in chat.processID.map { ($0, chat) } },
                                    uniquingKeysWith: { first, _ in first })
         for process in processes where resumes(process, sessionID: sessionID) {
-            // Prozess (oder Kind des Wrappers) eines Chats der App?
-            if let chat = chatByPID[process.pid] ?? chatByPID[process.parentPID] {
+            // Gerade beendet: der eigene Vorgänger (Tab-Neustart) läuft aus und
+            // sperrt nicht; der eines anderen Chats schreibt noch und sperrt.
+            if let owner = terminatingOwner(process.pid) ?? terminatingOwner(process.sessionLeader) {
+                if owner == localID { continue }
+                return .otherChatEnding(title: titleOf(owner))
+            }
+            // Prozess eines Chats der App (über den Sitzungsführer auch hinter Wrappern)?
+            if let chat = chatByPID[process.pid] ?? chatByPID[process.sessionLeader] {
                 if chat.id == localID { continue }
                 return .otherChat(title: chat.title)
             }
-            // Gerade beendet: der eigene Vorgänger (Tab-Neustart) läuft aus und
-            // sperrt nicht; der eines anderen Chats schreibt noch und sperrt.
-            if let owner = terminatingOwner(process.pid) ?? terminatingOwner(process.parentPID) {
-                if owner == localID { continue }
-                return .otherChat(title: titleOf(owner))
-            }
-            return .outsideApp(pid: process.pid)
+            return .outsideApp(pid: process.pid, inTerminal: process.hasTerminal)
         }
         return nil
     }
@@ -111,14 +139,22 @@ enum CodexSessionRunningGuard {
         var name = [CChar](repeating: 0, count: 64)
         for pid in pids.prefix(Int(count)) where pid > 0 {
             guard proc_name(pid, &name, UInt32(name.count)) > 0,
-                  String(cString: name) == "codex",
+                  isCodexName(String(cString: name)),
                   let arguments = arguments(of: pid) else { continue }
             var info = proc_bsdinfo()
             let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
-            let parent = size == Int32(MemoryLayout<proc_bsdinfo>.size) ? Int32(info.pbi_ppid) : 0
-            result.append(CodexProcess(pid: pid, parentPID: parent, arguments: arguments))
+            let hasTerminal = size == Int32(MemoryLayout<proc_bsdinfo>.size) ? info.e_tdev != UInt32(bitPattern: -1) : true
+            result.append(CodexProcess(pid: pid, sessionLeader: getsid(pid), arguments: arguments,
+                                       hasTerminal: hasTerminal))
         }
         return result
+    }
+
+    /// `codex` (npm-Symlink, Cask) oder umbenannte Builds wie
+    /// `codex-aarch64-apple-darwin`. Hilfsprozesse mit eigenem Namen tragen
+    /// kein `resume <id>` und fallen bei `resumes` heraus.
+    static func isCodexName(_ name: String) -> Bool {
+        name == "codex" || name.hasPrefix("codex-")
     }
 
     /// `argv` ohne Programmpfad aus `KERN_PROCARGS2`.
