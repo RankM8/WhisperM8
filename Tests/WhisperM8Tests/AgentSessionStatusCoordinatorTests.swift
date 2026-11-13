@@ -232,6 +232,70 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: true), .postpone, "leere Session")
     }
 
+    /// Befund 13.11.2026: Eine ID, die auch ein anderer Chat trägt, war nie
+    /// sicher die eigene — der SessionStart des eigenen Prozesses gewinnt sofort.
+    func testExternalIDBindingDecisionReplacesSharedID() {
+        typealias C = AgentSessionStatusCoordinator
+        func decide(_ source: String?, shared: Bool) -> C.ExternalIDBindingDecision {
+            C.externalIDBindingDecision(currentID: "cd00c6c0", newID: "aa82d0ba", source: source,
+                                        newTranscriptExists: false, currentTranscriptExists: true,
+                                        currentIDSharedWithOtherChat: shared)
+        }
+        XCTAssertEqual(decide("startup", shared: true), .bind, "fremde Sitzung, eigener Start")
+        XCTAssertEqual(decide("clear", shared: true), .bind, "auch nach /clear nicht auf der fremden bleiben")
+        XCTAssertEqual(decide("fork", shared: true), .ignoreFork, "Fork bleibt Fork")
+        XCTAssertEqual(decide("startup", shared: false), .postpone, "ohne Teilung unverändert")
+        XCTAssertEqual(C.externalIDBindingDecision(currentID: "x", newID: "x", source: "resume",
+                                                   newTranscriptExists: true, currentTranscriptExists: true,
+                                                   currentIDSharedWithOtherChat: true), .unchanged)
+    }
+
+    func testIsExternalIDSharedIgnoresOwnEntryAndCase() {
+        let project = UUID()
+        let own = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "a")
+        let other = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "CD00C6C0", title: "b")
+        typealias C = AgentSessionStatusCoordinator
+        XCTAssertFalse(C.isExternalIDShared("cd00c6c0", exceptLocalID: own.id, in: [own]))
+        XCTAssertTrue(C.isExternalIDShared("cd00c6c0", exceptLocalID: own.id, in: [own, other]))
+        XCTAssertFalse(C.isExternalIDShared("", exceptLocalID: own.id, in: [own, other]))
+    }
+
+    /// Der Fall aus der Test-Instanz, nachgestellt: „soak question“ trägt
+    /// schon die Sitzung von „soak bash“ (cd00c6c0, Transcript existiert), der
+    /// eigene SessionStart (aa82d0ba, noch ohne Transcript) kommt danach.
+    /// Vorher: zurückgestellt — ohne Turn (nicht angemeldet) für immer falsch.
+    func testOwnSessionStartReplacesSessionSharedWithAnotherChat() throws {
+        let (coordinator, questionID, _, _, _) = try makeCoordinator()
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
+        var bash = try store.createSession(provider: .claude, projectPath: tempDir.path, title: "soak bash")
+        bash.externalSessionID = "cd00c6c0"
+        _ = try store.upsertSession(bash)
+        var question = try XCTUnwrap(store.loadWorkspace().sessions.first(where: { $0.id == questionID }))
+        question.externalSessionID = "cd00c6c0"
+        _ = try store.upsertSession(question)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+
+        coordinator.handleHookEvent(localID: questionID, event: sessionStart("aa82d0ba", source: "startup"))
+
+        XCTAssertEqual(externalID(coordinator, questionID), "aa82d0ba")
+        XCTAssertEqual(externalID(coordinator, bash.id), "cd00c6c0", "der andere Chat behält seine Sitzung")
+    }
+
+    /// Gegenprobe: ohne Teilung bleibt die bekannte Regel (leere Session nach
+    /// /clear oder /background wird zurückgestellt).
+    func testUnsharedSessionStartIsStillPostponed() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
+        var session = try XCTUnwrap(store.loadWorkspace().sessions.first(where: { $0.id == sessionID }))
+        session.externalSessionID = "cd00c6c0"
+        _ = try store.upsertSession(session)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("aa82d0ba", source: "startup"))
+
+        XCTAssertEqual(externalID(coordinator, sessionID), "cd00c6c0")
+    }
+
     // MARK: Rückfragen + Notifications
 
     func testPermissionRequestNotifiesOnceAndClearsOnPostToolUse() throws {

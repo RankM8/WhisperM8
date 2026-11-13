@@ -735,20 +735,10 @@ struct AgentSessionStore {
                 return workspace.sessions[index]
             }
 
-            let standardizedPath = Self.canonicalProjectPath(projectPath)
-            let createdAt = workspace.sessions[index].createdAt
-            guard let indexed = indexedSessions
-                .filter({
-                    $0.provider == provider
-                        && !Self.isClaudeWorktreePath($0.cwd)
-                        && Self.canonicalProjectPath($0.cwd) == standardizedPath
-                        && $0.createdAt >= createdAt.addingTimeInterval(-5)
-                })
-                .sorted(by: { $0.lastActivityAt > $1.lastActivityAt })
-                .first
-            else {
-                return nil
-            }
+            guard let indexed = Self.fallbackBindingCandidate(
+                for: workspace.sessions[index], projectPath: projectPath, provider: provider,
+                workspace: workspace, indexedSessions: indexedSessions
+            ) else { return nil }
 
             workspace.sessions[index].externalSessionID = indexed.externalSessionID
             workspace.sessions[index].lastActivityAt = max(indexed.lastActivityAt, workspace.sessions[index].lastActivityAt)

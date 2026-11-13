@@ -1074,6 +1074,9 @@ final class AgentSessionStatusCoordinator {
     ///   garantiert).
     /// - Bisherige ID ohne Transcript → nichts zu verlieren, sofort.
     /// - Neue ID mit Transcript (`/resume` in der TUI) → sofort.
+    /// - Bisherige ID trägt auch ein anderer Chat → sie war nie sicher die
+    ///   eigene (Rückfall-Bindung an ein fremdes Transcript, Befund
+    ///   13.11.2026), sofort. Der Prozess dieses Chats meldet gerade seine ID.
     /// - Sonst (`/clear`, leere Session nach `/background`) → zurückstellen,
     ///   bis die neue ID einen Turn zeigt.
     nonisolated static func externalIDBindingDecision(
@@ -1081,14 +1084,27 @@ final class AgentSessionStatusCoordinator {
         newID: String,
         source: String?,
         newTranscriptExists: Bool,
-        currentTranscriptExists: Bool
+        currentTranscriptExists: Bool,
+        currentIDSharedWithOtherChat: Bool = false
     ) -> ExternalIDBindingDecision {
         guard let currentID, !currentID.isEmpty else { return .bind }
         if currentID == newID { return .unchanged }
         if source == "fork" { return .ignoreFork }
+        if currentIDSharedWithOtherChat { return .bind }
         if !currentTranscriptExists { return .bind }
         if newTranscriptExists { return .bind }
         return .postpone
+    }
+
+    /// Trägt ein anderer, nicht beendeter Chat dieselbe Claude-Sitzung?
+    nonisolated static func isExternalIDShared(
+        _ id: String, exceptLocalID localID: UUID, in sessions: [AgentChatSession]
+    ) -> Bool {
+        guard !id.isEmpty else { return false }
+        return sessions.contains {
+            $0.id != localID && !$0.isTerminal
+                && $0.externalSessionID?.caseInsensitiveCompare(id) == .orderedSame
+        }
     }
 
     /// Nimmt `id` aus der Fork-Merkliste des Chats (LR-AK-020).
@@ -1100,10 +1116,12 @@ final class AgentSessionStatusCoordinator {
 
     private func bindExternalSessionID(localID: UUID, event: ClaudeHookEvent) {
         guard let newID = event.sessionID, !newID.isEmpty else { return }
-        let currentID = store.loadWorkspace().sessions
-            .first(where: { $0.id == localID })?.externalSessionID
+        let sessions = store.loadWorkspace().sessions
+        let currentID = sessions.first(where: { $0.id == localID })?.externalSessionID
+        let shared = currentID.map { Self.isExternalIDShared($0, exceptLocalID: localID, in: sessions) } ?? false
         // Dateisystem nur befragen, wo die Regel es wirklich braucht.
-        let needsFileCheck = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
+        let needsFileCheck = !shared
+            && (currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false)
         let currentExists = needsFileCheck
             && transcriptExists(localID: localID, externalID: currentID ?? "", transcriptPath: nil)
         let newExists = currentExists
@@ -1113,8 +1131,12 @@ final class AgentSessionStatusCoordinator {
             newID: newID,
             source: event.source,
             newTranscriptExists: newExists,
-            currentTranscriptExists: currentExists
+            currentTranscriptExists: currentExists,
+            currentIDSharedWithOtherChat: shared
         )
+        if shared, decision == .bind {
+            Logger.claudeBinding.notice("binding_shared_id_replaced localID=\(localID.uuidString, privacy: .public) shared=\(currentID ?? "nil", privacy: .public) new=\(newID, privacy: .public)")
+        }
         switch decision {
         case .unchanged:
             pendingExternalIDs[localID] = nil
