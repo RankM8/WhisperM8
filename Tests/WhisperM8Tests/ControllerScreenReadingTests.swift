@@ -1,3 +1,4 @@
+import AppKit
 import SwiftTerm
 import XCTest
 @testable import WhisperM8
@@ -159,6 +160,42 @@ final class ControllerScreenReadingTests: XCTestCase {
         XCTAssertNotNil(footer.promptField)
     }
 
+    /// Hinweise wie „esc to cancel“ stehen auch in der Fußzeile unter dem
+    /// echten Feld, ausführlich und knapp: Das Feld bleibt.
+    func testCancelHintsInTheFooterKeepTheField() {
+        for footer in ["  opening… · esc to cancel", "  Continuing automatically in 3s · esc to cancel",
+                       "  enter save · esc cancel", "  Enter to select · Esc to cancel"] {
+            let snapshot = read([.plain(rule), prompt("hallo"), .plain(rule), .dimmed(footer)], cursor: (1, 7))
+            XCTAssertNotNil(snapshot.promptField, footer)
+        }
+    }
+
+    /// Dialog ohne Hinweiszeile (Claude Code 2.1.323 zeigt sie nicht immer)
+    /// unter einem vermeintlichen Feld: Die nummerierten Auswahlzeilen reichen.
+    func testOptionLinesBelowAFakeBoxWithoutHint() {
+        let lines: [ControllerScreenLine] = [
+            .plain(rule), .plain("> zitierte Zeile"), .plain(rule),
+            .plain(" Bash command"), .plain(" ❯ 1. Yes"), .plain("   2. No"),
+        ]
+        XCTAssertNil(read(lines).promptField)
+    }
+
+    /// Ein Dialog im runden Rahmen, dessen erste Zeile eine Auswahl ist, ist
+    /// kein Feld — auch nicht mit `>` statt `❯`.
+    func testOptionDirectlyUnderARoundedTopBorderIsNoField() {
+        let top = "╭" + rule + "╮", bottom = "╰" + rule + "╯"
+        XCTAssertNil(read([.plain(top), .plain("│ ❯ 1. Yes      │"), .plain("│   2. No       │"), .plain(bottom)]).promptField)
+        XCTAssertNil(read([.plain(rule), .plain("> 1. Yes"), .plain("  2. No"), .plain(rule)]).promptField)
+        // Ein echtes Feld im runden Rahmen bleibt eins.
+        XCTAssertNotNil(read([.plain(top), .plain("│ > hallo      │"), .plain(bottom)]).promptField)
+    }
+
+    /// Grenze: Ein Entwurf, der mit „1. “ beginnt, sieht aus wie eine Auswahl
+    /// und gilt nicht als Feld (nur vorsichtiger: Kreuz nach der alten Regel).
+    func testDraftStartingWithANumberIsNoField() {
+        XCTAssertNil(read([.plain(rule), prompt("1. erster Punkt"), .plain(rule)]).promptField)
+    }
+
     func testNoPromptBoxWithoutPromptCharacter() {
         XCTAssertNil(read([.plain(rule), .plain("  some table row"), .plain(rule)]).promptField)
     }
@@ -221,6 +258,36 @@ final class ControllerScreenCaptureTests: XCTestCase {
         XCTAssertEqual(tasks.openView, .tasks)
         let transcript = screen("⏺ Bash(ls)\n\n\(dim)Showing detailed transcript · ctrl+o to toggle\(reset)")
         XCTAssertEqual(transcript.openView, .transcript)
+    }
+
+    /// Echte ANSI-Folgen: abgeblendeter Abbruch-Hinweis in der Fußzeile lässt
+    /// das Feld stehen; ein Dialog mit Auswahl unter einer Linie aus der
+    /// Ausgabe macht es zunichte.
+    func testFooterHintAndDialogThroughRealTerminal() {
+        let field = screen("\(rule)\n\(dim)❯ \(reset)hallo\u{1b}[s\n\(rule)\n\(dim)  opening… · esc to cancel\(reset)\u{1b}[u")
+        XCTAssertEqual(field.promptField?.hasText, true)
+        let dialog = screen("\(rule)\n> zitiert\n\(rule)\n Do you want to proceed?\n \(dim)❯\(reset) 1. Yes\n   2. No")
+        XCTAssertNil(dialog.promptField)
+    }
+
+    /// Gedrosselte Pane (Raster ohne Fokus): Der Controller liest erst nach
+    /// dem Leeren des Puffers — sonst sähe er noch das alte Feld.
+    @MainActor
+    func testThrottledPaneIsFlushedBeforeReading() {
+        let view = QuietableTerminalView(frame: NSRect(x: 0, y: 0, width: 800, height: 400))
+        let rule = String(repeating: "─", count: 30)
+        func feed(_ text: String) {
+            view.dataReceived(slice: ArraySlice(Array(text.replacingOccurrences(of: "\n", with: "\r\n").utf8)))
+        }
+        // Unten am Bildschirm wie bei Claude: erst den Bildschirm füllen.
+        feed(String(repeating: "\n", count: view.getTerminal().rows))
+        feed("\(rule)\n\(dim)❯ \(reset)\n\(rule)\n")
+        XCTAssertNotNil(ControllerScreenReading.read(lines: view.controllerBottomLines().lines, cursor: nil, detectViews: true).promptField)
+        view.setOutputPriority(.backgroundVisible)
+        // Claude ersetzt das Feld durch einen Dialog; die Bytes liegen im Puffer.
+        feed("\u{1b}[3A\u{1b}[J Bash command\n Do you want to proceed?\n \(dim)❯\(reset) 1. Yes\n   2. No\n")
+        let capture = view.controllerBottomLines()
+        XCTAssertNil(ControllerScreenReading.read(lines: capture.lines, cursor: capture.cursor, detectViews: true).promptField)
     }
 
     /// Chat-Ausgabe, die die Hinweistexte zitiert (etwa diese Datei oder die

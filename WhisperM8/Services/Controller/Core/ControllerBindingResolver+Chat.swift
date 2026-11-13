@@ -193,6 +193,17 @@ extension ControllerBindingResolver {
     /// schickte ↑ + Kreuz den letzten Prompt erneut ab (Runde 5; R1 + Kreuz
     /// sperrt dort genauso). In der Fußzeilen-Auswahl öffnet Enter den
     /// Agenten, das Feld bleibt unberührt.
+    /// Lässt bei „arbeitet“ oder unklarem Zustand allein das sichtbare Feld
+    /// Kreuz zu (keine frische Eingabe, kein scharfer Pfeil, keine offene
+    /// Auswahl)? Dann schickt der Ausführer Enter erst nach einer Nachprüfung
+    /// (`ControllerActionDispatcher.confirmWhenSettled`): Zwischen Claudes
+    /// Umschalten auf einen Dialog und dessen erstem Bild steht das Feld noch da.
+    static func confirmRestsOnPromptField(_ state: ControllerChatState) -> Bool {
+        guard state.acceptsKeys, state.status == .working || state.status == .unknown else { return false }
+        return claudePromptVisible(state) && !state.recentDraftInput && !choiceListActive(state)
+            && !state.recentArrowNavigation
+    }
+
     static func claudePromptVisible(_ state: ControllerChatState) -> Bool {
         guard state.profile == .claude, state.promptField != nil else { return false }
         // Mit sichtbarem Feld kann nur die Fußzeilen-Auswahl erkannt sein;

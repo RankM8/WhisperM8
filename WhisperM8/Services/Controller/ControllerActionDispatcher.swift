@@ -38,6 +38,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var refreshAccountLimits: () -> Void = {}
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
+    /// Verzögert ausführen (Nachprüfung vor Enter); Tests feuern selbst.
+    var scheduleOnMain: (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(work) }
+    }
 
     /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
     var islandState: ControllerIslandSession?
@@ -240,7 +244,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .outputMode(step): dictation.stepOutputMode(step)
 
         // Chat
-        case let .chatKey(key): sendKey(key.terminalKey)
+        case let .chatKey(key):
+            if key == .enter, case let .chat(state) = context, ControllerBindingResolver.confirmRestsOnPromptField(state) {
+                confirmWhenSettled()
+            } else {
+                sendKey(key.terminalKey)
+            }
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()

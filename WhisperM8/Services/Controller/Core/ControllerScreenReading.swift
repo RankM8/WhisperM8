@@ -96,7 +96,7 @@ enum ControllerScreenReading {
     ///   - cursor: Cursor in diesen Zeilen (Zeile, Spalte), sofern bekannt.
     ///   - detectViews: nur bei Claude (Codex hat diese Ansichten nicht).
     static func read(lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, detectViews: Bool) -> ControllerScreenSnapshot {
-        // Steht unter dem vermeintlichen Feld ein Dialog-Hinweis, ist es kein
+        // Steht unter dem vermeintlichen Feld ein Dialog, ist es kein
         // Eingabefeld (etwa eine Trennlinie aus Tool-Ausgabe über einer Zeile
         // mit „>“ und darunter die obere Linie eines Freigabe-Dialogs). Kreuz
         // bei „arbeitet“ hängt am sichtbaren Feld (`claudePromptVisible`).
@@ -161,19 +161,27 @@ enum ControllerScreenReading {
         return nil
     }
 
-    /// Hinweise, die nur Claudes Dialoge zeigen (Freigabe, Rückfrage-Tool,
-    /// Zurückspulen, Plan freigeben), nie die Fußzeile unter dem Eingabefeld
-    /// (Claude Code 2.1.322). Gesucht im ganzen Text, nicht nur im
-    /// abgeblendeten: Ein Treffer macht nur vorsichtiger.
-    static let dialogMarkers = [
-        "esc to cancel", "esc cancel", "enter to select", "enter to confirm",
-        "do you want to proceed", "would you like to proceed",
-    ]
+    /// Zeichen eines Dialogs von Claude (Freigabe, Rückfrage-Tool, Plan
+    /// freigeben) unter einem vermeintlichen Feld: eine nummerierte
+    /// Auswahlzeile („❯ 1. Yes“, „  2. No“) oder die Frage dazu. Nicht dabei
+    /// sind Hinweise wie „esc to cancel“ oder „esc cancel“: Die stehen auch in
+    /// der Fußzeile unter dem echten Feld („opening… · esc to cancel“,
+    /// „Continuing automatically … · esc to cancel“, „enter save · esc
+    /// cancel“), und Dialoge zeigen ihre Hinweiszeile nicht immer (Claude Code
+    /// 2.1.323). Gesucht im ganzen Text: Ein Treffer macht nur vorsichtiger.
+    static let dialogQuestions = ["do you want to proceed", "would you like to proceed"]
 
     static func dialogBelow(_ lines: [String]) -> Bool {
+        if lines.contains(where: isOptionLine) { return true }
         let text = lines.map { $0.lowercased() }.joined(separator: " ")
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        return dialogMarkers.contains { text.contains($0) }
+        return dialogQuestions.contains { text.contains($0) }
+    }
+
+    /// Nummerierte Auswahlzeile eines Dialogs: „❯ 1. Yes“, „  2. No“, auch im
+    /// alten Rahmen („│ ❯ 1. Yes“).
+    static func isOptionLine(_ line: String) -> Bool {
+        line.range(of: #"^[\s│]*(?:[❯>]\s*)?\d+\.\s"#, options: .regularExpression) != nil
     }
 
     // MARK: - Eingabefeld
@@ -186,7 +194,10 @@ enum ControllerScreenReading {
 
     /// Sucht von unten das Feld: zwei Trennlinien, dazwischen mindestens eine
     /// Zeile, die erste beginnt mit dem Prompt (`❯` oder `>`, auch im alten
-    /// Rahmen mit `│`).
+    /// Rahmen mit `│`). Ist diese Zeile eine Auswahl („❯ 1. Yes“), ist das ein
+    /// Dialog im Rahmen und kein Feld; dann gibt es keins (die Suche geht nicht
+    /// weiter nach oben in die Ausgabe). Grenze: Ein Entwurf, der mit „1. “
+    /// beginnt, gilt so auch nicht als Feld — das macht nur vorsichtiger.
     static func promptBox(in lines: [String]) -> PromptBox? {
         let rules = lines.indices.filter { isRule(lines[$0]) }
         guard rules.count >= 2 else { return nil }
@@ -194,7 +205,8 @@ enum ControllerScreenReading {
             let lower = rules[index]
             let upper = rules[index - 1]
             guard lower - upper >= 2 else { continue }
-            if promptStart(lines[upper + 1]) != nil { return PromptBox(upper: upper, lower: lower) }
+            guard promptStart(lines[upper + 1]) != nil else { continue }
+            return isOptionLine(lines[upper + 1]) ? nil : PromptBox(upper: upper, lower: lower)
         }
         return nil
     }

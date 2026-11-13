@@ -231,6 +231,9 @@ final class ControllerRound5BindingTests: XCTestCase {
         XCTAssertNil(cross(recalled))
         recalled.openView = .footerSelection
         XCTAssertEqual(cross(recalled), .chatKey(.enter))
+        var recalledUnknown = state(.unknown, field: text)
+        recalledUnknown.onlyRecalledPrompt = true
+        XCTAssertNil(cross(recalledUnknown), "auch bei unklarem Zustand")
         // Nicht ablesbar oder kein Feld (Dialog, Ansicht, hochgescrollt): alte Regel.
         XCTAssertNil(cross(state(.working)))
         XCTAssertNil(cross(state(.working, view: .transcript)))
@@ -302,6 +305,8 @@ final class ControllerRound5DispatcherTests: XCTestCase {
     private var haptics: [ControllerHapticPattern] = []
     private var chat = UUID()
     private let now = Date(timeIntervalSince1970: 1_000)
+    /// Verzögerte Arbeit des Ausführers (Nachprüfung vor Enter), von Hand gefeuert.
+    private var scheduled: [(delay: TimeInterval, work: @MainActor () -> Void)] = []
 
     override func setUp() async throws {
         window = ControllerWindowFake()
@@ -315,6 +320,8 @@ final class ControllerRound5DispatcherTests: XCTestCase {
             chats: center, terminals: terminals, dictation: dictation,
             environment: ControllerEnvironmentSpy(), ui: ControllerUIModel(), island: island, now: { [now] in now })
         dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
+        scheduled = []
+        dispatcher.scheduleOnMain = { [unowned self] delay, work in scheduled.append((delay, work)) }
         dispatcher.islandChatRows = { order, current in
             order.map { ControllerIslandChatRow(id: $0, title: "Chat", project: nil, status: .idle, detail: "", isCurrent: $0 == current) }
         }
@@ -345,36 +352,91 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         }
     }
 
+    private func fireScheduled() {
+        let pending = scheduled
+        scheduled = []
+        pending.forEach { $0.work() }
+    }
+
+    private static let emptyField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+    private static let textField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+
     /// Kreuz bei „arbeitet“ liest den Bildschirm beim Druck, nicht beim Pfeil
     /// davor: Der erste ▼ in die Fußzeile kommt, bevor Claude neu zeichnet.
+    /// Enter geht erst nach der Nachprüfung raus.
     func testCrossReadsTheScreenAtPressTime() {
         setTerminal(.working)
         press(.move(.down, source: .dpad, isRepeat: false))
         XCTAssertEqual(terminals.keys, [.down])
         press(.press(.cross))
         XCTAssertEqual(terminals.keys, [.down], "Feld noch nicht ablesbar: alte Regel")
+        XCTAssertTrue(scheduled.isEmpty)
 
         // Claude hat neu gezeichnet: Feld sichtbar, Agent in der Fußzeile gewählt.
-        terminals.states[chat]?.screen = ControllerScreenSnapshot(
-            openView: .footerSelection,
-            promptField: ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true))
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(openView: .footerSelection, promptField: Self.emptyField)
         press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down], "erst nach der Nachprüfung")
+        XCTAssertEqual(scheduled.map(\.delay), [ControllerActionDispatcher.confirmSettleDelay])
+        fireScheduled()
         XCTAssertEqual(terminals.keys, [.down, .enter])
 
         // Jetzt ersetzt ein Freigabe-Dialog das Feld, Status noch „arbeitet“.
         terminals.states[chat]?.screen = ControllerScreenSnapshot()
         press(.press(.cross))
+        XCTAssertTrue(scheduled.isEmpty)
         XCTAssertEqual(terminals.keys, [.down, .enter], "ohne sichtbares Feld kein Enter")
 
         // Feld zeigt nur den mit ↑ zurückgeholten Prompt: nicht erneut abschicken.
-        terminals.states[chat]?.screen = ControllerScreenSnapshot(
-            promptField: ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false))
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(promptField: Self.textField)
         terminals.states[chat]?.onlyRecalledPrompt = true
         press(.press(.cross))
+        XCTAssertTrue(scheduled.isEmpty)
         XCTAssertEqual(terminals.keys, [.down, .enter], "zurückgeholter Prompt geht nicht erneut raus")
         terminals.states[chat]?.onlyRecalledPrompt = false
         press(.press(.cross))
+        fireScheduled()
         XCTAssertEqual(terminals.keys, [.down, .enter, .enter], "eigener Text im Feld geht raus")
+    }
+
+    /// Hat Claude im Moment des Drucks schon auf einen Dialog umgeschaltet,
+    /// steht er bei der Nachprüfung im Bild: kein Enter, „geht nicht“.
+    func testSettleCheckDropsEnterWhenADialogAppeared() {
+        setTerminal(.working)
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(promptField: Self.textField)
+        press(.press(.cross))
+        terminals.states[chat]?.screen = ControllerScreenSnapshot()
+        fireScheduled()
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Wechselt der Chat vor der Nachprüfung, geht nichts raus — auch nicht in
+    /// den neuen.
+    func testSettleCheckDropsEnterAfterChatSwitch() {
+        setTerminal(.working)
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(promptField: Self.textField)
+        press(.press(.cross))
+        let other = UUID()
+        terminals.states[other] = terminals.states[chat]
+        window.selected = other
+        fireScheduled()
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Erlaubt schon die alte Regel (frische Eingabe per Controller), geht
+    /// Enter sofort raus wie bisher; im Ruhezustand ohnehin.
+    func testCrossWithoutSettleCheckWhenTheOldRuleAllows() {
+        setTerminal(.working, draftAt: now.addingTimeInterval(-2))
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(promptField: Self.textField)
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.enter])
+        XCTAssertTrue(scheduled.isEmpty)
+        setTerminal(.idle)
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(promptField: Self.textField)
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.enter, .enter])
+        XCTAssertTrue(scheduled.isEmpty)
     }
 
     func testPasteTextGoesInAsBlockWithoutSending() {
