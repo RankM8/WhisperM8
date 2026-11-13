@@ -239,6 +239,8 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // Geerbt hielten sich claude und Hooks für dieses Terminal (Befund
         // 13.11.2026: iTerm-Hooks `it2 handle-agent-hook` warteten in jedem Chat).
         Self.removeStarterTerminalVariables(&env)
+        // Ebenso, was `make` und ein startender Agent mitgeben.
+        Self.removeStarterToolVariables(&env)
 
         env["PATH"] = path
 
@@ -318,6 +320,28 @@ final class LoginShellEnvironment: @unchecked Sendable {
         for key in env.keys
         where starterTerminalVariables.contains(key) || starterTerminalPrefixes.contains(where: key.hasPrefix) {
             env.removeValue(forKey: key)
+        }
+    }
+
+    /// Variablen von `make` und von einem Agenten, aus dem die App gestartet
+    /// wurde (`make dev` aus einer Claude-Sitzung). `ENABLE_TOOL_SEARCH` bleibt:
+    /// Es steht in den Einstellungen des Users (`settings.json`, Abschnitt `env`).
+    static let starterToolVariables: Set<String> = [
+        // Ein `FORCE=1` von der Kommandozeile reist in MAKEFLAGS mit und gälte
+        // sonst still für jeden späteren `make dev` aus einem Chat; die Sperre
+        // gegen `make dev` aus Chats (CLAUDE.md) wäre wirkungslos.
+        "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES",
+        // Kennung und Einstellungen der startenden Claude-Sitzung; Claude Code
+        // setzt sie für seine eigenen Werkzeuge selbst.
+        "AI_AGENT", "CLAUDE_EFFORT", "CLAUDE_PID", "COREPACK_ENABLE_AUTO_PIN",
+    ]
+
+    static func removeStarterToolVariables(_ env: inout [String: String]) {
+        for key in starterToolVariables { env.removeValue(forKey: key) }
+        // Claude Code setzt `GIT_EDITOR=true` für seine Bash-Aufrufe. Geerbt liefe
+        // `git commit` ohne `-m` im Terminal-Tab ohne Editor durch.
+        if env["GIT_EDITOR"] == "true" {
+            env.removeValue(forKey: "GIT_EDITOR")
         }
     }
 

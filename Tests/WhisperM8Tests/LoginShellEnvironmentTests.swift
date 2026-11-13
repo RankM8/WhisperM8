@@ -133,6 +133,28 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(result["TERM"], "xterm-256color")
     }
 
+    /// Vic, 13.11.2026: Die laufende App erbte auch von make und vom startenden Agenten.
+    func testStripsVariablesOfMakeAndTheStartingAgent() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let base: [String: String] = [
+            "MAKEFLAGS": "FORCE=1", "MFLAGS": "", "MAKELEVEL": "2", "MAKEOVERRIDES": "${-*-command-variables-*-}",
+            "AI_AGENT": "claude-code_2-1-323_agent", "CLAUDE_EFFORT": "high", "CLAUDE_PID": "87451",
+            "COREPACK_ENABLE_AUTO_PIN": "0", "GIT_EDITOR": "true",
+            "ENABLE_TOOL_SEARCH": "true",
+        ]
+        let result = env.processEnvironment(base: base)
+        for key in base.keys where key != "ENABLE_TOOL_SEARCH" {
+            XCTAssertNil(result[key], "\(key) darf nicht an Chats gehen")
+        }
+        XCTAssertEqual(result["ENABLE_TOOL_SEARCH"], "true", "Einstellung des Users bleibt")
+    }
+
+    /// Ein echter Editor in GIT_EDITOR bleibt, nur `true` (Claude Code) fällt.
+    func testKeepsRealGitEditor() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        XCTAssertEqual(env.processEnvironment(base: ["GIT_EDITOR": "vim"])["GIT_EDITOR"], "vim")
+    }
+
     /// `WINDOW` ohne screen-Sitzung ist nicht von screen und bleibt.
     func testKeepsWindowWithoutScreenSession() {
         let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
