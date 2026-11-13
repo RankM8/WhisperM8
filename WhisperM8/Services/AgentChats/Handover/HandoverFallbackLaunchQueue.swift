@@ -97,14 +97,23 @@ enum HandoverFallbackStart: Equatable {
         indexed: [IndexedAgentSession],
         boundIDs: Set<String>
     ) -> Bool {
+        // Claude-Worktrees zählen zum Projekt: canonicalProjectPath schneidet
+        // `/.claude/worktrees/<name>` ab.
         let path = AgentSessionStore.canonicalProjectPath(projectPath)
         return indexed.contains {
-            $0.provider == session.provider
-                && AgentSessionStore.canonicalProjectPath($0.cwd) == path
-                && $0.createdAt >= session.createdAt.addingTimeInterval(-5)
-                && !boundIDs.contains($0.externalSessionID.lowercased())
+            guard $0.provider == session.provider,
+                  AgentSessionStore.canonicalProjectPath($0.cwd) == path,
+                  $0.createdAt >= session.createdAt.addingTimeInterval(-5) else { return false }
+            guard boundIDs.contains($0.externalSessionID.lowercased()) else { return true }
+            // Altlast (Vic): Die alte Rückfall-Bindung nahm im Fenster um den
+            // Start den Verlauf eines Nachbarn. Ein an einen anderen Chat
+            // gebundener Verlauf aus diesem Fenster könnte unserer sein.
+            return abs($0.createdAt.timeIntervalSince(session.createdAt)) <= misboundWindow
         }
     }
+
+    /// Fenster um das Anlegen des Chats, in dem eine Fehlbindung möglich war.
+    static let misboundWindow: TimeInterval = 60
 
     /// Nachweis eines Turns: `lastTurnAt`, ein Übergang nach „working“ im
     /// Status-Journal oder `UserPromptSubmit` in der Hook-Ereignisdatei.
