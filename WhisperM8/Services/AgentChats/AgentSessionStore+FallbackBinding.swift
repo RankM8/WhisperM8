@@ -31,7 +31,8 @@ extension AgentSessionStore {
     /// Registry-Eintrag trägt die endgültige ID, dieselbe wie der
     /// SessionStart-Hook — frisch eine neue, bei `--resume` die fortgesetzte,
     /// bei `--fork-session` die neue Fork-ID, nie die Quelle oder eine
-    /// vorläufige ID (nach 0,25 bis 1,2 s). Ausgenommen bleibt `attach`: Das
+    /// vorläufige ID (nach 0,25 bis 1,2 s); der Hook meldet den Fork als
+    /// `source: fork`. Ausgenommen bleibt `attach`: Das
     /// führt einen Background-Agent. Dort und ohne Registry-Schalter gilt der
     /// bisherige Weg über Transcripts.
     static func claudeFallbackStep(
@@ -51,10 +52,24 @@ extension AgentSessionStore {
                    // Wiederverwendete PID: ein liegengebliebener Eintrag ist älter als unser Prozess.
                    && (record.startedAt == nil || processStartedAt == nil
                        || record.startedAt! >= processStartedAt!.addingTimeInterval(-2))
-           }) {
+           }),
+           registryIDFits(record.sessionID, arguments: launchArguments) {
             return .bind(record.sessionID)
         }
         return isLastAttempt ? .transcriptFallback : .wait
+    }
+
+    /// Absicherung, falls ein späteres CLI-Update die gemessene Reihenfolge
+    /// ändert: Ein Fork bindet nie seine Quelle (der SessionStart mit der
+    /// Fork-ID käme dann als `source: fork` und würde ignoriert — der Chat
+    /// bliebe still auf der Quelle). Ein reiner Resume bindet nur die
+    /// fortgesetzte ID.
+    static func registryIDFits(_ registryID: String, arguments: [String]) -> Bool {
+        guard let flag = arguments.firstIndex(where: { $0 == "--resume" || $0 == "-r" }),
+              flag + 1 < arguments.count else { return true }
+        let resumed = arguments[flag + 1]
+        let sameAsResumed = registryID.caseInsensitiveCompare(resumed) == .orderedSame
+        return arguments.contains("--fork-session") ? !sameAsResumed : sameAsResumed
     }
 
     static func isForegroundClaudeStart(arguments: [String]) -> Bool {

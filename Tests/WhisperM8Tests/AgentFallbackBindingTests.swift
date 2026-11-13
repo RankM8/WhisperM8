@@ -152,6 +152,18 @@ final class AgentFallbackBindingTests: XCTestCase {
                             records: [record("quelle", pid: 200)]), .bind("quelle"), "Resume")
     }
 
+    /// Opus-Review: Zeigt die Registry (nach einem CLI-Update) beim Fork kurz
+    /// die Quelle, darf der Poller sie nicht binden — der Fork-SessionStart
+    /// würde danach als `source: fork` ignoriert.
+    func testForkNeverBindsItsSourceAndResumeOnlyTheResumedID() {
+        let fork = ["--settings", "/x.json", "--resume", "quelle", "--fork-session"]
+        XCTAssertEqual(step(fork, records: [record("QUELLE", pid: 200)]), .wait)
+        XCTAssertEqual(step(fork, records: [record("quelle", pid: 200)], last: true), .transcriptFallback)
+        let resume = ["--settings", "/x.json", "--resume", "quelle"]
+        XCTAssertEqual(step(resume, records: [record("vorlaeufig", pid: 200)]), .wait)
+        XCTAssertTrue(AgentSessionStore.registryIDFits("neu", arguments: ["--settings", "/x.json"]), "frischer Start")
+    }
+
     func testClaudeStepSkipsRegistryForAttachAndWithoutSwitch() {
         let records = [record("quelle", pid: 200)]
         XCTAssertEqual(step(["attach", "abc"], records: records), .transcriptFallback, "Background-Agent")

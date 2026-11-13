@@ -8,14 +8,14 @@
 #
 # Läuft mit eigenem CLAUDE_CONFIG_DIR unter <leerer-ordner>, ohne Login und ohne
 # Turn: berührt weder ~/.claude noch die App. Nach CLI-Updates wiederholen.
-import json, os, pty, select, signal, sys, time
+import json, os, pty, re, select, shlex, signal, sys, time
 
 base = sys.argv[1]; mode = sys.argv[2]
 cfg = os.path.join(base, 'cfg'); work = os.path.join(base, 'work')
 os.makedirs(os.path.join(cfg, 'sessions'), exist_ok=True); os.makedirs(work, exist_ok=True)
 work = os.path.realpath(work)
 src = '11111111-2222-4333-8444-555555555555'
-proj = os.path.join(cfg, 'projects', work.replace('/', '-').replace('.', '-'))
+proj = os.path.join(cfg, 'projects', re.sub(r'[^A-Za-z0-9]', '-', work))
 os.makedirs(proj, exist_ok=True)
 now = '2026-11-13T12:00:00.000Z'
 lines = [
@@ -38,10 +38,10 @@ if not os.path.exists(cj):
 args = {'frisch': [], 'resume': ['--resume', src], 'fork': ['--resume', src, '--fork-session']}[mode]
 hooklog = os.path.join(base, 'hooks.jsonl')
 settings = os.path.join(base, 'settings.json')
-json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": f"cat >> {hooklog}; echo >> {hooklog}"}]}]}}, open(settings, 'w'))
+json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": f"cat >> {shlex.quote(hooklog)}; echo >> {shlex.quote(hooklog)}"}]}]}}, open(settings, 'w'))
 args = ['--settings', settings] + args
 env = {k: v for k, v in os.environ.items() if not k.startswith(('CLAUDE', 'ANTHROPIC', 'WHISPERM8', 'CCP_'))}
-env['CLAUDE_CONFIG_DIR'] = cfg; env['TERM'] = 'xterm-256color'
+env['CLAUDE_CONFIG_DIR'] = cfg; env['TERM'] = 'xterm-256color'; env['DISABLE_AUTOUPDATER'] = '1'
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(work); os.execvpe('claude', ['claude'] + args, env)
@@ -59,7 +59,7 @@ while time.time() - t0 < 12:
         if key not in seen:
             seen[key] = round(time.time() - t0, 3)
             print(f'{seen[key]:7.3f}s registry sessionId={d.get("sessionId")} status={d.get("status")} kind={d.get("kind")}', flush=True)
-os.kill(pid, signal.SIGTERM)
+os.killpg(pid, signal.SIGTERM)
 end = time.time() + 1.0
 while time.time() < end:
     r, _, _ = select.select([fd], [], [], 0.05)
@@ -67,8 +67,8 @@ while time.time() < end:
         try: os.read(fd, 65536)
         except OSError: break
 os.close(fd)
-try: os.kill(pid, signal.SIGKILL)
-except ProcessLookupError: pass
+try: os.killpg(pid, signal.SIGKILL)
+except (ProcessLookupError, PermissionError): pass  # Gruppe schon beendet
 try: os.waitpid(pid, 0)
 except ChildProcessError: pass
 files = sorted(os.listdir(proj))
