@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Fehler-Szenarien für „Neustart ohne Chatverlust“ — Abnahme der Rückfall-Wege.
 # Nur gegen die Test-Instanz; nutzt die Prüf-Funktionen aus handover-soak.sh.
+# Unter zsh oder sh liefe beim Einbinden sonst der Dauerlauf statt der Szenarien.
+[ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 # Hintergrund: docs/plans/neustart-zweite-meinung.md (Risiko 3: die Rückfall-
 # Wege sind die am wenigsten geübten und die gefährlichsten).
 #
@@ -191,6 +193,7 @@ unknown_handover_files() { # ordner
         base=$(basename "$f")
         [[ " $KNOWN_HANDOVER_FILES " == *" $base "* ]] && continue
         [[ "$base" == keeper.log.* ]] && continue
+        [[ "$base" == .last-take-*.tmp ]] && continue   # Zwischendatei vor rename
         echo "$base"
     done
 }
@@ -207,11 +210,27 @@ capture_secret_candidates() { # ordner ziel
     done
 }
 
-# Logzeilen (stdin) mit „secret“ und einem Hex-Wert ab 16 Zeichen. Ausgabe
-# gekürzt: Zeit und die ersten 6 Zeichen des Werts, nie der ganze Wert.
+# Logzeilen (stdin) mit „secret“ und einem Hex-Wert ab 7 Zeichen (erlaubt sind
+# höchstens 6). UUIDs zählen nicht. Ausgabe gekürzt: Zeit (falls die Zeile mit
+# einer beginnt) und die ersten 6 Zeichen des Werts, egal wie die Zeile aussieht.
+# Enthält die Ausgabe trotzdem 7 Hex-Zeichen am Stück, wird sie verworfen.
 secret_pattern_hits() {
-    grep -iE 'secret[^0-9a-f]{0,6}[0-9a-f]{16,}' 2>/dev/null \
-        | sed -E 's/^([0-9-]+ [0-9:.]+).*(secret[^0-9a-fA-F]{0,6})([0-9a-fA-F]{6})[0-9a-fA-F]*.*/\1 \2\3…/I' || true
+    "$PY" -I -c '
+import re, sys
+hit = re.compile(r"(secret[^0-9a-f]{0,6})([0-9a-f]{7,})(-[0-9a-f]{4}-)?", re.I)
+stamp = re.compile(r"^\s*\[?(\d{4}-\d\d-\d\d[ T][\d:.]+Z?)")
+uuid_tail = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-", re.I)
+for line in sys.stdin:
+    for m in hit.finditer(line):
+        if uuid_tail.match(line[m.start(2):]):
+            continue
+        s = stamp.match(line)
+        out = ((s.group(1) + " ") if s else "") + m.group(1) + m.group(2)[:6] + "…"
+        if re.search(r"[0-9a-f]{7,}", out[len(s.group(1)) if s else 0:], re.I):
+            out = "(Zeile verworfen, Wert nicht kürzbar)"
+        print(out)
+        break
+' 2>/dev/null || true
 }
 
 # In welchen Dateien steht ein Geheimnis-Kandidat (roh, hex oder Base64)?
@@ -407,12 +426,14 @@ await_pid() { # name pid_vorher erwartung frist(epoch) → pid oder leer
 # Das wird gemeldet; danach wählt das Skript ihn per `chats open` aus, damit
 # die übrigen Prüfungen und Szenarien laufen.
 START_WITHOUT_SELECT_SECONDS=20
-nudge_unstarted() { # szenario
-    local scenario="$1" name end missing
+nudge_unstarted() { # szenario vorher-datei
+    local scenario="$1" before="$2" name end missing
     end=$(( $(date +%s) + START_WITHOUT_SELECT_SECONDS ))
     while :; do
         missing=""
         for name in $(chat_names); do
+            # Nur Chats, die vorher einen Prozess hatten; der Rest ist FEHLT.
+            [[ -n "$(awk -F'\t' -v n="$name" '$1 == n {print $2}' "$before")" ]] || continue
             [[ -n "$(chat_pid "$name")" ]] || missing="$missing $name"
         done
         if [[ -z "$missing" ]]; then
@@ -503,8 +524,16 @@ run_scenario() { # name erwartung funktion
         clear_knobs
         return 0
     fi
-    nudge_unstarted "$name"
+    # Grid im Hauptprozess öffnen: Der Neustart lief im Hintergrund, ein
+    # Fehler beim Öffnen dort ginge im Bericht verloren.
+    [[ -n "$("$TI" status | awk '/^PID:/ {print $2}')" ]] && reopen_grid
+    rm -f "$STATE/pid-ambiguous.log"
+    nudge_unstarted "$name" "$before"
     check_comeback "$name" "$before" "$expect"
+    if [[ -s "$STATE/pid-ambiguous.log" ]]; then
+        record "$name" zwei-prozesse-umgebung FEHLER \
+            "mehrere oberste Prozesse je Sitzung: $(sort -u "$STATE/pid-ambiguous.log" | tr '\t\n' ': ' )"
+    fi
     stop_sampler
     clear_knobs
     check_no_leftovers "$name" "$violations"
@@ -745,13 +774,15 @@ wait_until_running() {
 #     Log der Test-Instanz und System-Log.
 check_secret_not_logged() {
     local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits pattern
-    /usr/bin/log show --style compact --start "$(cat "$STATE/started-at")" \
+    # Mit --info --debug, sonst liefert log show nur Default-Meldungen.
+    /usr/bin/log show --info --debug --style compact --start "$(cat "$STATE/started-at")" \
         --predicate 'processImagePath CONTAINS "WhisperM8Test.app"' > "$unified" 2>/dev/null || true
-    pattern=$(secret_pattern_hits < "$unified" | head -2 | tr '\n' ';')
+    pattern=$(cat "$unified" "$HANDOVER_DIR"/keeper.log* "$ROOT/instance.log" 2>/dev/null \
+        | secret_pattern_hits | head -2 | tr '\n' ';')
     if [[ -n "$pattern" ]]; then
         record ende geheimnis-muster FEHLER "Logzeile mit Geheimnis-Wert (gekürzt): $pattern"
     elif [[ -s "$unified" ]]; then
-        record ende geheimnis-muster OK "System-Log der Test-App ohne secret=<hex>"
+        record ende geheimnis-muster OK "System-Log (inkl. info/debug), keeper.log und instance.log ohne secret=<hex>"
     else
         record ende geheimnis-muster FEHLT "System-Log der Test-App leer oder nicht lesbar"
     fi
@@ -934,6 +965,10 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
     # Geheimnis-Muster im System-Log, Ausgabe gekürzt.
     expect_exact '2026-11-13 13:32:03.686 secret: "256d62…' "$(printf '%s\n' '2026-11-13 13:32:03.686 Df WhisperM8[1:2] [x] handover_take_plan plan=take(secret: "256d62b3860129aa5e2ef5c73d' | secret_pattern_hits)" "Geheimnis im Log erkannt, gekürzt"
     expect_exact "" "$(printf '%s\n' 'handover_take_plan plan=take secret=<redacted>' 'session=9D5AF90C-0A31-4E72-A8E8-09B1757C3284' | secret_pattern_hits)" "kein Fehlalarm ohne Hex-Wert"
+    expect_exact 'secret: "256d62…' "$(printf '%s\n' '    take(secret: "256d62b3860129aa5e2ef5c73d1111")' | secret_pattern_hits)" "Folgezeile ohne Zeitstempel gekürzt"
+    expect_exact '2026-11-13T13:32:03Z secret=256d62…' "$(printf '%s\n' '[2026-11-13T13:32:03Z] plan secret=256d62b3860129aa' | secret_pattern_hits)" "Zeitstempel in Klammern gekürzt"
+    expect_exact 'secret=abcdef…' "$(printf '%s\n' 'x secret=abcdef1' | secret_pattern_hits)" "schon 7 Hex-Zeichen sind ein Treffer"
+    expect_exact "" "$(printf '%s\n' 'x secret=abcdef' 'handover_secret_id=9D5AF90C-0A31-4E72-A8E8-09B1757C3284' | secret_pattern_hits)" "6 Hex-Zeichen und UUID neben secret ohne Fehlalarm"
 
     # Schlüsselbund-Wächter: nur neue SecurityAgent-Prozesse zählen.
     expect_exact "34" "$(printf '12\n34\n' | grep -vxF -f <(printf '12\n'))" "Vergleichsstand blendet Altes aus"
@@ -950,6 +985,8 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
 
 fault_main() {
     local cmd="${1:-}"
+    # Log-Kopie und Geheimnis-Kandidaten im Zustandsordner nur für den Nutzer.
+    umask 077
     [[ $# -gt 0 ]] && shift
     while [[ $# -gt 0 ]]; do
         case "$1" in

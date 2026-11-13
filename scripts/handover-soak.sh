@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Dauerlauf „Neustart ohne Chatverlust“ (Paket 6) — nur gegen die Test-Instanz.
+# Unter zsh oder sh liefe sonst beim Einbinden der falsche Einstieg.
+[ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 # Plan: docs/plans/neustart-ohne-chatverlust.md, Abschnitt „Pflichttest“.
 #
 #   scripts/handover-soak.sh capabilities        # welche Startbefehle aus Paket 4 schon da sind
@@ -565,7 +567,9 @@ set_offset() {
 # Oberster Prozess eines Chats nach seiner Umgebung (WHISPERM8_SESSION_ID und
 # Wurzel der Test-Instanz), aus `ps -E -ww -axo pid=,ppid=,command=` (stdin).
 # Rückfall, wenn die Registry die Sitzung (noch) nicht unter der gespeicherten
-# externen ID führt, etwa direkt nach dem Fortsetzen.
+# externen ID führt, etwa direkt nach dem Fortsetzen. Mehrere oberste Prozesse
+# sind zwei Prozesse auf einer Sitzung: dann keine PID, sondern
+# „mehrdeutig p1 p2“ auf stderr (nie still die kleinste PID nehmen).
 env_pid_from() { # chat-uuid wurzel
     "$PY" -I -c '
 import os, re, sys
@@ -580,7 +584,11 @@ for line in sys.stdin:
     if s and r and s.group(1).upper() == chat and os.path.normpath(r.group(1)) == root:
         rows[parts[0]] = parts[1]
 tops = sorted((int(p) for p, pp in rows.items() if pp not in rows))
-print(tops[0] if tops else "")
+if len(tops) > 1:
+    print("mehrdeutig " + " ".join(map(str, tops)), file=sys.stderr)
+    print("")
+else:
+    print(tops[0] if tops else "")
 ' "$1" "$2"
 }
 
@@ -593,9 +601,16 @@ chat_pid() {
     fi
     pid=$(chat_show "$1" | json_field '.get("runtime", {}).get("pid") or ""' 2>/dev/null || true)
     [[ -n "$pid" ]] && { echo "$pid"; return 0; }
-    chat=$(chat_show "$1" | json_field '.get("id") or ""' 2>/dev/null || true)
+    chat=$(chat_ref "$1")
     [[ -n "$chat" ]] || return 0
-    ps -E -ww -axo pid=,ppid=,command= 2>/dev/null | env_pid_from "$chat" "$ROOT" || true
+    local note
+    note=$(mktemp "${TMPDIR:-/tmp}/handover-soak-pid.XXXXXX")
+    pid=$(ps -E -ww -axo pid=,ppid=,command= 2>/dev/null | env_pid_from "$chat" "$ROOT" 2>"$note" || true)
+    if [[ -s "$note" && -n "${STATE:-}" && -d "$STATE" ]]; then
+        printf '%s\t%s\n' "$1" "$(head -1 "$note")" >> "$STATE/pid-ambiguous.log"
+    fi
+    rm -f "$note"
+    echo "${pid:-}"
 }
 
 # MARK: - Durchgang
@@ -858,7 +873,7 @@ cmd_run() {
     for round in $(seq 1 "$ROUNDS"); do
         snapshot "$STATE/before-$round.tsv"
         log "Durchgang $round/$ROUNDS: Neustart"
-        restart_instance "$round"
+        restart_instance "$round" || record "$round" neustart FEHLER "Exit $?"
         sleep 3
         check_round "$round" "$STATE/before-$round.tsv"
         sleep 5
@@ -975,6 +990,11 @@ cmd_self_test() {
         "300 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-2")
     expect_exact "200" "$(printf '%s\n' "$ps_fixture" | env_pid_from ABC-1 /r/)" "PID nach Umgebung: oberster Prozess, nur diese Wurzel"
     expect_exact "" "$(printf '%s\n' "$ps_fixture" | env_pid_from abc-9 /r)" "PID nach Umgebung: kein Treffer"
+    local amb_pid
+    amb_pid=$(printf '%s\n' "400 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-3" \
+        "401 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-3" | env_pid_from abc-3 /r 2>"$dir/amb")
+    expect_exact "|mehrdeutig 400 401" "$amb_pid|$(cat "$dir/amb")" \
+        "PID nach Umgebung: zwei oberste Prozesse sind mehrdeutig, keine PID"
 
     rm -rf "$dir"
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi

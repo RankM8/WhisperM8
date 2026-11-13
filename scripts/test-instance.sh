@@ -100,10 +100,12 @@ cmd_start() {
     # Versteckt starten (-j), außer die Fenster sollen sichtbar sein.
     local hide=(-j)
     [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && hide=()
-    # `open` reicht die Umgebung des Aufrufers durch: ohne -u erbte die Test-App
-    # Session-ID und Token des Produktiv-Chats, der sie startet (13.11.2026).
-    env -u WHISPERM8_SESSION_ID -u WHISPERM8_SESSION_TOKEN \
-        open -n -g ${hide[@]+"${hide[@]}"} "${env_args[@]}" --stdout "$LOG" --stderr "$LOG" "$APP"
+    # `open` reicht die Umgebung des Aufrufers durch: Die Test-App erbte sonst
+    # Session-ID und Token des Produktiv-Chats, der sie startet, und dessen
+    # ANTHROPIC_BASE_URL (Router der echten App). Deshalb nur eine Positivliste.
+    env -i HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-}" PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+        TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-en_US.UTF-8}" SHELL="${SHELL:-/bin/zsh}" \
+        /usr/bin/open -n -g ${hide[@]+"${hide[@]}"} "${env_args[@]}" --stdout "$LOG" --stderr "$LOG" "$APP"
     for _ in $(seq 1 50); do
         if cmd_cli debug state >/dev/null 2>&1; then echo "✅ Test-Instanz läuft (PID $(pids | tr '\n' ' '))"; return 0; fi
         sleep 0.2
