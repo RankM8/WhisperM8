@@ -40,6 +40,8 @@ final class StayAwakeController: ObservableObject {
     private var started = false
     private var cancellables: Set<AnyCancellable> = []
     private var timer: Timer?
+    /// Warten darauf, dass `start()` die Freigabe geprüft hat (`whenPermissionKnown`).
+    private var permissionWaiters: [@MainActor () -> Void] = []
 
     init(
         system: StayAwakeSystem = LiveStayAwakeSystem(),
@@ -56,8 +58,10 @@ final class StayAwakeController: ObservableObject {
         mode = preferences.stayAwakeWhileWorking ? .whileWorking : .off
     }
 
-    /// Einmal beim ersten Erscheinen der Sidebar. Räumt Reste eines Absturzes
-    /// auf und hört danach auf Chat-Status, Strom und Temperatur.
+    /// Einmal beim ersten Erscheinen der Sidebar (oder beim ersten Druck auf
+    /// den Wach-Schalter am Controller, siehe `whenPermissionKnown`). Räumt
+    /// Reste eines Absturzes auf und hört danach auf Chat-Status, Strom und
+    /// Temperatur.
     func start(workingPublisher: AnyPublisher<Bool, Never>? = nil) {
         guard !started else { return }
         started = true
@@ -80,6 +84,9 @@ final class StayAwakeController: ObservableObject {
                     self.setMode(.off)
                 }
                 self.evaluate()
+                let waiters = self.permissionWaiters
+                self.permissionWaiters = []
+                waiters.forEach { $0() }
             }
         }
 
@@ -110,6 +117,25 @@ final class StayAwakeController: ObservableObject {
             MainActor.assumeIsolated { self?.refreshPower() }
         }
         refreshPower()
+    }
+
+    /// Ruft `then`, sobald feststeht, ob die Freigabe da ist. Der Controller
+    /// (R1 + ▶) braucht das, wenn die Seitenleiste seit dem App-Start
+    /// verborgen war und `start()` deshalb noch nie lief: Das holt er hier
+    /// nach. Geprüft wird still (`sudo -n -l`), nie mit Dialog.
+    func whenPermissionKnown(
+        workingPublisher: AnyPublisher<Bool, Never>? = nil, _ then: @escaping @MainActor () -> Void
+    ) {
+        start(workingPublisher: workingPublisher)
+        guard permission == .unknown else { return then() }
+        permissionWaiters.append(then)
+    }
+
+    /// Bräuchte der nächste Klick die einmalige Admin-Freigabe, und fehlt
+    /// sie? Der Controller (R1 + ▶) öffnet dann keinen Dialog, sondern
+    /// verweist auf den Knopf in der Seitenleiste.
+    var nextStepNeedsPermission: Bool {
+        mode.next != .off && permission != .ready
     }
 
     /// Klick auf den Knopf: Aus → Bei Arbeit am Strom → Immer → Aus.

@@ -361,6 +361,16 @@
         }
       }
     },
+    "%lld active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aktiv"
+          }
+        }
+      }
+    },
     "%lld active · live view of the project": {
       "localizations": {
         "de": {
@@ -917,6 +927,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 fehlender Eintrag, hinzugefügt mit Claudes eigenem „claude mcp add-json -s user“. Entfernt nie etwas; Server mit OAuth-Anmeldung brauchen einmalig einen /mcp-Login pro Konto."
+          }
+        }
+      }
+    },
+    "5 h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Std."
+          }
+        }
+      }
+    },
+    "5 h %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Std. %@"
           }
         }
       }
@@ -1721,6 +1751,16 @@
         }
       }
     },
+    "Alerts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilungen"
+          }
+        }
+      }
+    },
     "All": {
       "localizations": {
         "de": {
@@ -1877,6 +1917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erst Bedienungshilfen für WhisperM8 erlauben"
+          }
+        }
+      }
+    },
+    "Allow it in the sidebar first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst in der Seitenleiste freigeben"
           }
         }
       }
@@ -2867,6 +2917,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tasten-Test"
+          }
+        }
+      }
+    },
+    "Buttons": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten"
           }
         }
       }
@@ -5067,6 +5127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Benutzerdefiniert — %lld"
+          }
+        }
+      }
+    },
+    "D-pad": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz"
           }
         }
       }
@@ -7301,6 +7371,16 @@
         }
       }
     },
+    "Hold L2: where to — the list starts on where you are, the previous place is one step away; up and down move, left and right switch between chats and workspaces & projects, release or ✕ switches after a move, ○ cancels": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten: Wohin — die Liste beginnt dort, wo du bist, der vorige Ort ist einen Schritt entfernt; hoch und runter bewegen, links und rechts wechseln zwischen Chats und Workspaces & Projekten, Loslassen oder ✕ wechselt nach einer Bewegung, ○ bricht ab"
+          }
+        }
+      }
+    },
     "Hold L2: where to — up and down open the list of chats and workspaces, left and right switch tabs, release or ✕ switches, ○ cancels": {
       "localizations": {
         "de": {
@@ -7331,12 +7411,52 @@
         }
       }
     },
+    "Hold R1, then ▲: limits of all Claude and GPT accounts while R1 is held; ✕ refreshes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▲: Limits aller Claude- und GPT-Konten, solange R1 gehalten ist; ✕ aktualisiert"
+          }
+        }
+      }
+    },
     "Hold R1, then △: switch mode (not while the agent asks a question)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "R1 halten, dann △: Modus wechseln (nicht während einer Rückfrage)"
+          }
+        }
+      }
+    },
+    "Hold R1, then ▶: stay awake one step further, like the stay-awake button": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▶: Wach bleiben eine Stufe weiter, wie der Wach-Knopf"
+          }
+        }
+      }
+    },
+    "Hold R1, then ▼: open and close the clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▼: Zwischenablage-Verlauf öffnen und schließen"
+          }
+        }
+      }
+    },
+    "Hold R1, then ◀: sound and notifications one step further, like the bell": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ◀: Ton und Mitteilungen eine Stufe weiter, wie die Glocke"
           }
         }
       }
@@ -8401,12 +8521,12 @@
         }
       }
     },
-    "Limits unavailable (token in the file is stale)": {
+    "Limits unavailable (live fetch failed)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limits nicht abrufbar (Token in der Datei veraltet)"
+            "value": "Limits nicht abrufbar (Live-Abruf fehlgeschlagen)"
           }
         }
       }
@@ -8497,6 +8617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live-Abruf fehlgeschlagen (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Live fetch failed — last known state": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Abruf fehlgeschlagen — letzter bekannter Stand"
           }
         }
       }
@@ -10101,6 +10231,16 @@
         }
       }
     },
+    "No account signed in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Konto angemeldet"
+          }
+        }
+      }
+    },
     "No active chats": {
       "localizations": {
         "de": {
@@ -10487,6 +10627,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Workspaces"
+          }
+        }
+      }
+    },
+    "No workspaces or projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Workspaces oder Projekte"
           }
         }
       }
@@ -14874,6 +15024,16 @@
         }
       }
     },
+    "Show archive": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiv zeigen"
+          }
+        }
+      }
+    },
     "Show button layout": {
       "localizations": {
         "de": {
@@ -15890,6 +16050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Statuszeile · %@"
+          }
+        }
+      }
+    },
+    "Stay awake": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wach bleiben"
           }
         }
       }
@@ -19444,6 +19614,16 @@
         }
       }
     },
+    "Workspaces & Projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspaces & Projekte"
+          }
+        }
+      }
+    },
     "Would have switched": {
       "localizations": {
         "de": {
@@ -19634,6 +19814,46 @@
         }
       }
     },
+    "again: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch mal: %@"
+          }
+        }
+      }
+    },
+    "all accounts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alle Konten"
+          }
+        }
+      }
+    },
+    "all off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles aus"
+          }
+        }
+      }
+    },
+    "all on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles an"
+          }
+        }
+      }
+    },
     "already in this account": {
       "localizations": {
         "de": {
@@ -19670,6 +19890,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "scharf"
+          }
+        }
+      }
+    },
+    "as of %lld h ago": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand vor %lld Std."
+          }
+        }
+      }
+    },
+    "as of %lld min ago": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand vor %lld min"
+          }
+        }
+      }
+    },
+    "as of just now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand gerade eben"
           }
         }
       }
@@ -19994,6 +20244,16 @@
         }
       }
     },
+    "history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        }
+      }
+    },
     "idle": {
       "localizations": {
         "de": {
@@ -20010,6 +20270,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "in %@"
+          }
+        }
+      }
+    },
+    "in %lld h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld Std."
+          }
+        }
+      }
+    },
+    "in %lld h %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld Std. %lld min"
+          }
+        }
+      }
+    },
+    "in %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld min"
           }
         }
       }
@@ -20344,12 +20634,32 @@
         }
       }
     },
+    "off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aus"
+          }
+        }
+      }
+    },
     "offline — showing last known state": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Offline. Letzter bekannter Stand wird angezeigt"
+          }
+        }
+      }
+    },
+    "one-time admin permission at the stay-awake button": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "einmalige Admin-Freigabe am Wach-Knopf"
           }
         }
       }
@@ -20440,6 +20750,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kürzlich angepingt. Nächster Versuch möglich um %@"
+          }
+        }
+      }
+    },
+    "refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktualisieren"
+          }
+        }
+      }
+    },
+    "refreshing …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktualisiere …"
+          }
+        }
+      }
+    },
+    "release: close": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "loslassen: zu"
           }
         }
       }
@@ -20554,6 +20894,16 @@
         }
       }
     },
+    "stick: scroll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stick: scrollen"
+          }
+        }
+      }
+    },
     "stopped": {
       "localizations": {
         "de": {
@@ -20610,6 +20960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "das neueste gelistete Modell"
+          }
+        }
+      }
+    },
+    "this chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dieser Chat"
           }
         }
       }
@@ -20690,6 +21050,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "wartet"
+          }
+        }
+      }
+    },
+    "while working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bei Arbeit"
           }
         }
       }
@@ -21034,12 +21404,32 @@
         }
       }
     },
+    "↑ %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑ %lld weitere"
+          }
+        }
+      }
+    },
     "→ app in front": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "→ Programm vorne"
+          }
+        }
+      }
+    },
+    "↓ %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↓ %lld weitere"
           }
         }
       }

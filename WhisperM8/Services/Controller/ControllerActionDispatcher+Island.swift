@@ -10,6 +10,13 @@ struct ControllerIslandSession: Equatable {
     var setup: ControllerMenuSetup?
     /// Bildschirm des Agent-Chats-Fensters, auf dem der Controller wirkt.
     var screenDisplayID: UInt32?
+    /// Konto für Kopf und Limits-Karte (nur R1), einmal beim Öffnen bestimmt:
+    /// während eines Diktats das seines Ziels, sonst das des Chats. Es bleibt,
+    /// auch wenn inzwischen ein anderer Chat ausgewählt ist.
+    var usageAccount: ControllerUsageAccount?
+    /// Konten der Limits-Karte, einmal beim Öffnen der Karte gelesen. Neue
+    /// Zahlen ordnen sich diesen Namen zu, ohne die Profile neu zu lesen.
+    var limitAccounts: ControllerLimitAccounts?
 }
 
 extension ControllerAction {
@@ -71,7 +78,7 @@ extension ControllerActionDispatcher {
         spendIsland()
     }
 
-    private func present() {
+    func present() {
         guard let islandState else { return }
         island.show(islandState.model, screenDisplayID: islandState.screenDisplayID)
     }
@@ -89,6 +96,7 @@ extension ControllerActionDispatcher {
             target = ControllerIslandTarget(title: "→ \(title)", status: islandStatus(dictationTarget))
         }
         var setup: ControllerMenuSetup?
+        var usageAccount: ControllerUsageAccount?
         let content: ControllerIslandModel.Content
         switch layer {
         case .writing:
@@ -96,12 +104,23 @@ extension ControllerActionDispatcher {
         case .quickDraw:
             let menuSetup = menuSetup(for: sessionID.map { .chat($0) })
             setup = menuSetup
-            content = .quickDraw(ControllerQuickDrawSlots(setup: menuSetup))
+            var slots = ControllerQuickDrawSlots(setup: menuSetup)
+            slots.app = environment.appToggles
+            // Der Kopf nennt während eines Diktats dessen Ziel, also auch dessen Konto.
+            // Einmal hier bestimmt und in der Sitzung gemerkt: Neue Zahlen
+            // ziehen Kopf und Karte nach, wechseln aber nie das Konto.
+            if dictation.phase != nil, let headChat = dictation.targetSessionID {
+                usageAccount = chats.chatActionInfo(headChat, in: targetWindowID)?.usageAccount
+            } else {
+                usageAccount = menuSetup.chat?.usageAccount
+            }
+            slots.account = accountBadge(usageAccount)
+            content = .quickDraw(slots)
         case .whereTo:
             // Reihenfolge wie die Liste links, jeder Chat einmal. Der vorige
-            // Chat steht immer darin, auch wenn die Liste ihn gerade nicht
-            // zeigt (Filter, Suche, eingeklappt): Loslassen soll dorthin
-            // führen wie Tippen.
+            // Chat steht immer darin, gleich unter dem aktuellen, auch wenn
+            // die Liste ihn weiter unten oder gar nicht zeigt (Filter, Suche,
+            // eingeklappt): ein Schritt bis dorthin.
             let previous = Self.whereToPrevious(window.backTarget)
             let order = ControllerWhereToState.chatOrder(
                 SidebarChatOrder.sessions(in: currentListRows().map(\.row)), current: sessionID, previous: previous)
@@ -114,11 +133,13 @@ extension ControllerActionDispatcher {
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
-            sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID)
+            sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID,
+            usageAccount: usageAccount)
     }
 
-    /// Voriger Ort des Fensters (Ziel von L2 getippt) als Startpunkt der
-    /// Markierung.
+    /// Voriger Ort des Fensters (Ziel von L2 getippt): Seine Zeile trägt
+    /// „vorher“. Eine Projekt-Ansicht ist als Workspace gemerkt; das Modell
+    /// ordnet sie ihrer Projekt-Zeile zu.
     static func whereToPrevious(_ target: ControllerBackTarget?) -> ControllerWhereToState.Destination {
         guard let target, let id = target.id else { return .stay }
         switch target.kind {
@@ -148,7 +169,7 @@ extension ControllerActionDispatcher {
             setup.chatBusy = busy
             setup.quickCross = cross
             state.setup = setup
-            state.model.content = .quickDraw(ControllerQuickDrawSlots(setup: setup, hit: slots.hit))
+            state.model.content = .quickDraw(slots.refreshed(setup: setup))
         case .whereTo:
             return
         }
@@ -174,8 +195,8 @@ extension ControllerActionDispatcher {
         present()
     }
 
-    /// L2 losgelassen: wie Kreuz — zum markierten Eintrag, wie Cmd-Tab.
-    /// Steht die Markierung auf dem aktuellen Eintrag, passiert nichts.
+    /// L2 losgelassen: wie Kreuz — zum markierten Eintrag. Die Markierung
+    /// beginnt auf dem aktuellen Eintrag; ohne Bewegung passiert also nichts.
     func releaseWhereTo() {
         defer { spentLayer = nil }
         guard let whereTo = islandState?.model.whereTo else { return closeIsland() }
@@ -185,14 +206,17 @@ extension ControllerActionDispatcher {
 
     /// Kreuz (`dictate == false`) oder R2. Steht die Markierung auf dem
     /// aktuellen Eintrag, schließt Kreuz nur, R2 diktiert in den aktuellen
-    /// Chat. Ein anderer Workspace ist kein Ziel für R2 („geht nicht“, die
-    /// Insel bleibt) — „hin und diktieren“ braucht einen Chat.
+    /// Chat. Ein anderer Workspace oder ein Projekt ist kein Ziel für R2
+    /// („geht nicht“, die Insel bleibt) — „hin und diktieren“ braucht einen Chat.
     func commitWhereTo(dictate: Bool) {
         guard spentLayer != .whereTo else { return }
         let whereTo = islandState?.model.whereTo
         let destination = whereTo?.destination ?? .stay
-        if dictate, case .workspace = destination {
-            return playHaptic(.rejected)
+        switch destination {
+        case .workspace, .project:
+            if dictate { return playHaptic(.rejected) }
+        case .stay, .chat:
+            break
         }
         spendIsland(.whereTo)
         let switched = go(to: destination, previous: whereTo?.previous ?? .stay)
@@ -235,6 +259,7 @@ extension ControllerActionDispatcher {
         case .stay: return true
         case let .chat(sessionID): return command(.selectSession(sessionID), orReject: false)
         case let .workspace(workspaceID): return command(.switchToWorkspace(workspaceID), orReject: false)
+        case let .project(projectID): return command(.switchToProject(projectID), orReject: false)
         }
     }
 
@@ -247,6 +272,11 @@ extension ControllerActionDispatcher {
     /// Unterseite.
     func performQuickDraw(_ item: ControllerMenuItem) {
         guard spentLayer != .quickDraw else { return }
+        // Offene Limits-Karte (Insel-Paket): ✕ holt die Zahlen frisch, die
+        // übrigen Tasten der Chat-Raute gehen dort nicht.
+        if quickDrawSlots?.card != nil {
+            return item == .continueWork ? refreshLimitsCard() : playHaptic(.rejected)
+        }
         var setup = islandState?.setup ?? menuSetup(for: selectedSessionID.map { .chat($0) })
         // Eine Rückfrage kann seit dem Öffnen erschienen sein, oder der Chat
         // hat zu arbeiten begonnen.
