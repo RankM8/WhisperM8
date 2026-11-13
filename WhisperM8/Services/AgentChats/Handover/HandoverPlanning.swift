@@ -200,6 +200,19 @@ extension HandoverPlanning {
         return abs(current.timeIntervalSince1970 - expectedStartTime) < 0.001
     }
 
+    /// Wie `isSameProcess`, aber ohne Zweifel zugunsten des Prozesses: Die
+    /// erwartete und die aktuelle Startzeit müssen bekannt sein und passen.
+    /// Für SIGKILL, wo ein Irrtum einen fremden Prozess träfe.
+    static func isCertainlySameProcess(
+        pid: Int32,
+        expectedStartTime: Double?,
+        isAlive: (Int32) -> Bool = { HandoverPlanning.isRunningProcess($0) },
+        startTime: (Int32) -> Date? = { ProcessStartTime.of(pid: $0) }
+    ) -> Bool {
+        guard pid > 1, isAlive(pid), let expectedStartTime, let current = startTime(pid) else { return false }
+        return abs(current.timeIntervalSince1970 - expectedStartTime) < 0.001
+    }
+
     /// Lebt der Prozess? Ein Zombie (beendet, noch nicht abgeholt) zählt als
     /// beendet: Er schreibt nichts mehr in seine Sitzung.
     static func isRunningProcess(_ pid: Int32) -> Bool {
@@ -270,5 +283,45 @@ struct HandoverTakeReport: Codable, Equatable {
             return false
         }
         return true
+    }
+}
+
+// MARK: - Rückfall: höchstens ein Chat je Sitzung
+
+extension AgentCollectiveStartPlanner {
+    /// Wie `plan(_:sessions:)` für den Rückfall der Übernahme. Zusätzlich
+    /// führt ein Chat, der schon läuft (übernommen) oder in diesem Start schon
+    /// vorgemerkt ist, seine Sitzung weiter: Ein vorgemerkter Chat mit derselben
+    /// Sitzung startet dann nicht, egal welcher nach der Regel gewönne. Für
+    /// Codex ist das der einzige Schutz; es gibt weder Registry-Sperre noch
+    /// Reservierung (Vic, 13.11.2026).
+    static func plan(_ ids: [UUID], sessions: [AgentChatSession], alreadyStarted: Set<UUID>) -> Plan {
+        let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func key(_ id: UUID) -> String? {
+            guard let session = byID[id],
+                  let external = session.externalSessionID?.lowercased(), !external.isEmpty else { return nil }
+            return "\(session.provider.rawValue):\(external)"
+        }
+        var holder: [String: UUID] = [:]
+        for id in alreadyStarted.sorted(by: { $0.uuidString < $1.uuidString }) {
+            if let key = key(id), holder[key] == nil { holder[key] = id }
+        }
+        var held = Plan(start: [], skipped: [])
+        var open: [UUID] = []
+        for id in ids {
+            if alreadyStarted.contains(id) {
+                held.skipped.append(id)
+            } else if let key = key(id), let owner = holder[key] {
+                held.skipped.append(id)
+                held.keeperOf[id] = owner
+            } else {
+                open.append(id)
+            }
+        }
+        let rest = plan(open, sessions: sessions)
+        let skipped = Set(held.skipped + rest.skipped)
+        return Plan(start: rest.start,
+                    skipped: ids.filter { skipped.contains($0) },
+                    keeperOf: held.keeperOf.merging(rest.keeperOf) { first, _ in first })
     }
 }

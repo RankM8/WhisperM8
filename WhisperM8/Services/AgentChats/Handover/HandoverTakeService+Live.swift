@@ -86,16 +86,31 @@ extension HandoverTakeService {
         AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: id, exitCode: taken.exitStatus)
     }
 
+    /// In diesem Start schon zum Fortsetzen vorgemerkt (der Rückfall kommt in
+    /// zwei Schüben: sofort und nach dem Ende verwaister Prozesse).
+    private static var scheduledThisLaunch: Set<UUID> = []
+
     /// Wie die Absturz-Wiederaufnahme: beim Anzeigen per `--resume` starten,
-    /// fehlender Tab kommt zurück, ohne die Auswahl zu ändern.
+    /// fehlender Tab kommt zurück, ohne die Auswahl zu ändern. Je Sitzung
+    /// höchstens ein Chat, laufende und schon vorgemerkte zählen mit
+    /// (`AgentCollectiveStartPlanner`).
     private static func scheduleResumeLive(_ ids: [UUID], store: AgentSessionStore) {
         let windowStore = AgentWindowStore.shared
-        for id in ids {
+        let plan = AgentCollectiveStartPlanner.plan(
+            ids, sessions: store.loadWorkspace().sessions,
+            alreadyStarted: AgentTerminalRegistry.shared.activeSessionIDs.union(scheduledThisLaunch))
+        for skipped in plan.skipped {
+            try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
+            Logger.agentStore.notice(
+                "handover_fallback_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")
+        }
+        for id in plan.start {
+            scheduledThisLaunch.insert(id)
             try? store.updateSession(id: id) { $0.shouldLaunchOnOpen = true }
             if windowStore.windowID(containingTab: id) == nil {
                 windowStore.openTab(id, in: windowStore.primaryWindowID, select: false)
             }
         }
-        Logger.agentStore.notice("handover_fallback_resume count=\(ids.count)")
+        Logger.agentStore.notice("handover_fallback_resume count=\(plan.start.count) skipped=\(plan.skipped.count)")
     }
 }
