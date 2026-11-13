@@ -137,4 +137,34 @@ final class UnifiedPillRestSnapshotTests: XCTestCase {
         controller.observeDictation()
         XCTAssertNotNil(hub.restSnapshot(2))
     }
+
+    /// Klick auf den Kern einer sich zurückziehenden Pille: über den Hub
+    /// derselbe Weg wie an der ruhenden Pille.
+    func testControllerRegistersDictationStartAtTheHub() {
+        let hub = UnifiedPillHub()
+        var started = 0
+        let controller = NotchStatusController(
+            statusStore: AgentSessionRuntimeStatusStore(), activityStore: AgentSessionActivityStore(),
+            workspaceProvider: { .empty }, appIsActive: { false }, focusSession: { _ in },
+            agentWindowDisplayID: { nil }, prefs: prefs, startDictation: { started += 1 }, hub: hub)
+        hub.startDictation()
+        XCTAssertEqual(started, 0)
+        controller.observeDictation()
+        hub.startDictation()
+        XCTAssertEqual(started, 1)
+    }
+
+    /// Review-Befund: Ohne Animation erscheint die Anzeige nur, wenn sie aus
+    /// dem Diktat zurückkommt, und nur auf dessen Bildschirm.
+    func testOnlyTheScreenOfTheEndingDictationReturnsWithoutAnimation() {
+        let controller = makeController()
+        controller.slots[.pill]?.screen = pillScreen
+        controller.slots[.notch]?.screen = notchScreen
+        controller.config.isActive = false  // ohne Fenster: nichts zeichnen
+        controller.dictationChanged(to: 2)
+        XCTAssertFalse(controller.slots[.pill]!.returnsFromDictation)
+        controller.dictationChanged(to: nil)
+        XCTAssertTrue(controller.slots[.pill]!.returnsFromDictation)
+        XCTAssertFalse(controller.slots[.notch]!.returnsFromDictation)
+    }
 }

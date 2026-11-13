@@ -30,16 +30,64 @@ extension OverlayController {
         return isNotch ? UnifiedPillRestSnapshot(look: .notchBand, center: nil) : nil
     }
 
-    /// Ein laufender Rückzug wird vom nächsten Diktat übernommen: dasselbe
-    /// Fenster wächst wieder, ohne neue Bildschirmsuche.
-    func adoptRetiringPanel() -> Bool {
-        guard morph.isRetiring, let panel, presentation.isUnified else { return false }
+    /// `show` direkt nach `hide` im selben Lauf (Wiederholen, Schnellaktion
+    /// nach dem Diktat): dieselbe Sitzung, dasselbe Fenster wächst sofort
+    /// wieder, ohne Bildschirmsuche, sofern sein Bildschirm noch genauso steht.
+    func adoptRetiringPanelInSameTurn() -> Bool {
+        guard retiredInCurrentTurn, morph.isRetiring, let screen = unifiedScreen else { return false }
+        let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
+        guard screens.contains(screen) else { return false }
+        adoptRetiringPanel()
+        return true
+    }
+
+    /// Nach der Bildschirmsuche: Zieht sich noch eine Pille zurück, übernimmt
+    /// das neue Diktat sie nur, wenn es auf genau ihren Bildschirm gehört
+    /// (`UnifiedPillMorph.canAdopt`). Sonst geht sie sofort zu und das
+    /// Diktat baut wie gewohnt an seiner Stelle auf.
+    func buildOrAdoptUnifiedPanel(_ placement: DictationPillPlacement, build: (DictationPillPlacement) -> Void) {
+        if morph.isRetiring {
+            let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
+            if UnifiedPillMorph.canAdopt(
+                retiringScreen: unifiedScreen, retiringIsNotch: presentation.isNotch,
+                placement: placement, screens: screens) {
+                return adoptRetiringPanel()
+            }
+            finishRetiringPanelNow()
+        }
+        build(placement)
+    }
+
+    /// Dasselbe Fenster wächst wieder ins Diktat.
+    private func adoptRetiringPanel() {
+        guard panel != nil else { return }
         Logger.info("unified_pill_morph_adopted")
         lastPillActionAt = Date()
-        panel.ignoresMouseEvents = false
         observeUnifiedBadge()
         applyMorph(morph.show(morph: true))
-        return true
+        // Hat sich der Bildschirm inzwischen geändert, baut die Pille neu auf.
+        relocateAfterScreenChange()
+    }
+
+    /// Bildschirme geändert, während sich die Pille zurückzieht: Steht ihr
+    /// Bildschirm nicht mehr genauso, geht sie sofort zu (die Status-Pille
+    /// kommt zurück), statt an falscher Stelle zu enden.
+    func retiringPanelScreenChanged() {
+        guard morph.isRetiring, let screen = unifiedScreen else { return }
+        let screens = NSScreen.screens.compactMap(NotchScreenInfo.init(screen:))
+        guard !screens.contains(screen) else { return }
+        Logger.info("unified_pill_morph_screen_changed")
+        finishRetiringPanelNow()
+    }
+
+    /// Klick beim Zurückziehen (Fensterkoordinaten): Die Knöpfe haben keine
+    /// Wege mehr, also landet er hier statt in der App darunter. Auf dem
+    /// Kern startet er ein Diktat wie an der ruhenden Pille, sonst nichts.
+    func retiringPillClicked(at point: CGPoint) {
+        guard morph.isRetiring, case .pill = restLook, let panel else { return }
+        let core = UnifiedPillGeometry.restCoreFrame(pill: panel.pillFrameInPanel)
+        guard UnifiedPillClickTarget.resolve(point: point, coreFrame: core) == .core else { return }
+        UnifiedPillHub.shared.startDictation()
     }
 
     /// Aus `hide`: Zieht sich die Pille ins Ruhebild zurück, bleibt das
@@ -58,6 +106,12 @@ extension OverlayController {
         let effects = morph.hide(morph: snapshot != nil)
         guard effects.contains(.shrink) else { return false }
         applyMorph(effects)
+        // Ein `show` im selben Lauf gehört zur selben Sitzung (siehe
+        // `adoptRetiringPanelInSameTurn`).
+        retiredInCurrentTurn = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.retiredInCurrentTurn = false }
+        }
         return true
     }
 
@@ -78,15 +132,13 @@ extension OverlayController {
                 if !showsRestLook { showsRestLook = true }
             case .grow:
                 beginMorphSignpost()
-                panel?.ignoresMouseEvents = false
+                setRetiringInput(false)
                 showsRestLook = false
             case .shrink:
                 beginMorphSignpost()
                 isHoverExpanded = false
                 showsRestLook = true
-                // Zurückziehen nimmt keine Klicks mehr an: Die Knöpfe haben
-                // keine Wege mehr, ein Ziehen soll keine Lage merken.
-                panel?.ignoresMouseEvents = true
+                setRetiringInput(true)
                 returnToRestCenter()
             case .hideStatus:
                 if let screen = unifiedScreen { UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID) }
@@ -99,7 +151,8 @@ extension OverlayController {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                     MainActor.assumeIsolated {
                         guard let self else { return }
-                        if step == .animationDone { self.endMorphSignpost() }
+                        // Nur die laufende Messung beenden, nicht eine überholte.
+                        if step == .animationDone, generation == self.morph.generation { self.endMorphSignpost() }
                         self.applyMorph(self.morph.step(step, generation: generation))
                     }
                 }
@@ -123,6 +176,15 @@ extension OverlayController {
         showsRestLook = false
         restLook = nil
         restCenter = nil
+    }
+
+    /// Beim Zurückziehen fängt das Fenster Klicks selbst ab, statt sie an
+    /// SwiftUI (Knöpfe ohne Wege) oder durch zur App darunter zu geben (das
+    /// könnte im Einfüge-Ziel den Fokus verschieben). Nicht ziehbar, keine
+    /// gemerkte Lage. Das Fenster bleibt nicht aktivierend.
+    private func setRetiringInput(_ retiring: Bool) {
+        panel?.isMovableByWindowBackground = !retiring && !presentation.isNotch
+        hostingView?.onInterceptedClick = retiring ? { [weak self] point in self?.retiringPillClicked(at: point) } : nil
     }
 
     /// Hat sich die Pille beim Diktat verschoben (am Bildschirmrand zur Mitte
@@ -156,7 +218,7 @@ extension OverlayController {
         morphSignpost = nil
     }
 
-    private func cancelMorphSignpost() {
+    func cancelMorphSignpost() {
         if let morphSignpost { PerfBudgets.unifiedPillMorph.cancel(morphSignpost) }
         morphSignpost = nil
     }

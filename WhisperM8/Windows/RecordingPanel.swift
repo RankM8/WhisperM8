@@ -288,6 +288,9 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     /// für SwiftUI — Buttons/Menüs konsumieren ihren ersten Klick selbst und
     /// erreichen diesen Pfad praktisch nie mit clickCount == 2.
     var onDoubleClick: (() -> Void)?
+    /// Vereinte Pille beim Zurückziehen: Klicks (Fensterkoordinaten) gehen
+    /// hierher statt an SwiftUI; Ziehen und Doppelklick entfallen.
+    var onInterceptedClick: ((CGPoint) -> Void)?
 
     private var hoverArea: NSTrackingArea?
 
@@ -298,11 +301,24 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if let onInterceptedClick {
+            return onInterceptedClick(event.locationInWindow)
+        }
         if event.clickCount == 2 {
             onDoubleClick?()
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard onInterceptedClick == nil else { return }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard onInterceptedClick == nil else { return }
+        super.mouseUp(with: event)
     }
 
     override func updateTrackingAreas() {
@@ -456,6 +472,8 @@ class OverlayController: ObservableObject {
     var restCenter: CGPoint?
     var morph = UnifiedPillMorph()
     var morphSignpost: PerformanceBudget.Token?
+    /// Das Zurückziehen begann in diesem Lauf (`show` direkt nach `hide`).
+    var retiredInCurrentTurn = false
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
@@ -546,9 +564,10 @@ class OverlayController: ObservableObject {
         // Bildschirm feststeht.
         if UnifiedPillHub.shared.isEnabled() {
             installPresentationObservers()
-            // Zieht sich die Pille gerade zurück, wächst dasselbe Fenster wieder.
-            if adoptRetiringPanel() { return }
-            finishRetiringPanelNow()
+            // `show` direkt nach `hide`: dasselbe Fenster wächst wieder. Sonst
+            // entscheidet die Bildschirmsuche, ob eine sich zurückziehende
+            // Pille übernommen wird.
+            if adoptRetiringPanelInSameTurn() { return }
             presentUnifiedPanel()
             return
         }
@@ -980,6 +999,8 @@ class OverlayController: ObservableObject {
     // MARK: - Hover (Mini-Stil)
 
     private func setHovering(_ hovering: Bool) {
+        // Beim Zurückziehen klappt nichts mehr auf.
+        if hovering, morph.isRetiring { return }
         if hovering {
             hoverCollapseWork?.cancel()
             hoverCollapseWork = nil

@@ -185,4 +185,52 @@ final class UnifiedPillMorphTests: XCTestCase {
         XCTAssertNil(overlay.restLook)
         XCTAssertEqual(overlay.morph.phase, .idle)
     }
+
+    // MARK: Übernahme beim Zurückziehen
+
+    private let screenA = NotchScreenInfo(
+        displayID: 2, frame: CGRect(x: 0, y: 0, width: 1600, height: 1000),
+        visibleFrame: CGRect(x: 0, y: 0, width: 1600, height: 975), safeAreaTop: 0,
+        auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false, uuid: "A")
+    private let notchB = NotchScreenInfo(
+        displayID: 1, frame: CGRect(x: -1512, y: 0, width: 1512, height: 982),
+        visibleFrame: CGRect(x: -1512, y: 0, width: 1512, height: 944), safeAreaTop: 38,
+        auxiliaryLeftWidth: 663.5, auxiliaryRightWidth: 663.5, isBuiltIn: true)
+
+    /// Review-Befund: Ein Diktat kurz nach dem Ende auf einem anderen
+    /// Bildschirm darf die alte Pille nicht übernehmen; ebenso nicht, wenn
+    /// ihr Bildschirm weg ist oder andere Maße hat.
+    func testRetiringPillIsAdoptedOnlyOnItsOwnUnchangedScreen() {
+        let screens = [screenA, notchB]
+        let onA = DictationPillPlacement.pill(screenA, center: CGPoint(x: 800, y: 950))
+        XCTAssertTrue(UnifiedPillMorph.canAdopt(
+            retiringScreen: screenA, retiringIsNotch: false, placement: onA, screens: screens))
+        XCTAssertFalse(UnifiedPillMorph.canAdopt(
+            retiringScreen: screenA, retiringIsNotch: false, placement: .notch(notchB), screens: screens),
+            "anderer Bildschirm")
+        XCTAssertFalse(UnifiedPillMorph.canAdopt(
+            retiringScreen: screenA, retiringIsNotch: false, placement: onA, screens: [notchB]),
+            "Bildschirm abgesteckt")
+        var resized = screenA
+        resized.frame.size.width = 1920
+        XCTAssertFalse(UnifiedPillMorph.canAdopt(
+            retiringScreen: screenA, retiringIsNotch: false, placement: .pill(resized, center: .zero),
+            screens: [resized, notchB]), "andere Maße")
+        XCTAssertFalse(UnifiedPillMorph.canAdopt(
+            retiringScreen: screenA, retiringIsNotch: true, placement: onA, screens: screens),
+            "andere Darstellung (Notch-Band auf Bildschirm ohne Notch)")
+        XCTAssertFalse(UnifiedPillMorph.canAdopt(
+            retiringScreen: nil, retiringIsNotch: false, placement: onA, screens: screens))
+        XCTAssertTrue(UnifiedPillMorph.canAdopt(
+            retiringScreen: notchB, retiringIsNotch: true, placement: .notch(notchB), screens: screens))
+    }
+
+    /// Klick beim Zurückziehen: nur der Kern startet ein Diktat.
+    func testRestCoreFrameSitsAtTheLeadingEdgeOfThePill() {
+        let pill = CGRect(x: 100, y: 20, width: 170, height: 40)
+        let core = UnifiedPillGeometry.restCoreFrame(pill: pill)
+        XCTAssertEqual(core, CGRect(x: 108, y: 26, width: PillMetrics.coreMinWidth, height: PillMetrics.coreHeight))
+        XCTAssertEqual(UnifiedPillClickTarget.resolve(point: CGPoint(x: 120, y: 40), coreFrame: core), .core)
+        XCTAssertEqual(UnifiedPillClickTarget.resolve(point: CGPoint(x: 220, y: 40), coreFrame: core), .status)
+    }
 }

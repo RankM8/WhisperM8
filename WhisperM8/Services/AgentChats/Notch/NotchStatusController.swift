@@ -135,6 +135,9 @@ final class NotchSlot {
     var lastCoreClickAt = Date.distantPast
     /// Verkleinern nach dem Zuklappen erst, wenn die Liste ausgeblendet ist.
     var shrinkTask: Task<Void, Never>?
+    /// Das Diktat auf diesem Bildschirm ist gerade gegangen: Beim
+    /// Wiedererscheinen den aktuellen Wert ohne Animation zeigen.
+    var returnsFromDictation = false
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -359,6 +362,7 @@ final class NotchStatusController {
         cachedPlacements = nil
         hub.updateBadge(nil)
         hub.restSnapshot = { _ in nil }
+        hub.startDictation = {}
         for slot in slots.values {
             slot.lastDisplay = nil
             slot.lastFrame = nil

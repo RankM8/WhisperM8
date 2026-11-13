@@ -60,7 +60,9 @@ extension OverlayController {
         beginUnifiedPresentation(
             screens: screens, mouseDisplayID: mouseDisplayID, mainDisplayID: CGMainDisplayID(),
             frontWindowLookup: lookup, timeout: Self.frontWindowTimeout,
-            build: { [weak self] placement in self?.buildUnifiedPanel(placement) })
+            build: { [weak self] placement in
+                self?.buildOrAdoptUnifiedPanel(placement) { self?.buildUnifiedPanel($0) }
+            })
     }
 
     /// Kern des asynchronen Aufbaus, ohne Fenster testbar: Die erste Antwort
@@ -81,7 +83,10 @@ extension OverlayController {
         let settle: @MainActor (UInt32?) -> Void = { [weak self] frontDisplayID in
             guard !settled else { return }
             settled = true
-            guard let self, self.isPresented, self.unifiedGeneration == generation, self.panel == nil else { return }
+            // Ein Fenster, das sich noch zurückzieht, hindert nicht: Es wird
+            // übernommen oder geschlossen (`buildOrAdoptUnifiedPanel`).
+            guard let self, self.isPresented, self.unifiedGeneration == generation,
+                  self.panel == nil || self.morph.isRetiring else { return }
             guard let placement = DictationPillPlacement.resolve(
                 frontWindowDisplayID: frontDisplayID,
                 mouseDisplayID: mouseDisplayID,
@@ -210,7 +215,10 @@ extension OverlayController {
         unifiedScreenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.relocateAfterScreenChange() }
+            MainActor.assumeIsolated {
+                self?.retiringPanelScreenChanged()
+                self?.relocateAfterScreenChange()
+            }
         }
     }
 
@@ -227,6 +235,7 @@ extension OverlayController {
             positions: AppPreferences.shared.notchPillPositions) else { return }
         Logger.info("unified_pill_relocated")
         closePanelForRebuild()
+        cancelMorphSignpost()
         morph.reset()
         buildUnifiedPanel(placement, allowMorph: false)
     }

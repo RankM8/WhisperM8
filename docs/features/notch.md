@@ -78,7 +78,9 @@ mit den Zählern nach unten in die Diktat-Zeile und schrumpft danach zurück;
 ist an der Notch nichts los, wächst die Zeile aus dem Band in der
 Aussparung. Ein Diktat auf einem anderen Bildschirm erscheint dort wie bisher
 direkt, die ruhende Pille auf dem anderen Bildschirm bleibt stehen. Ohne
-Übergang auch bei offener Liste, im Vollbild und mit ausgeschaltetem Status.
+Notch erscheint das Diktat auch bei offener Liste, im Vollbild und mit
+ausgeschaltetem Status direkt; an der Notch wächst es in diesen Fällen aus dem
+Band.
 Die Aufnahme wartet nie auf die Animation: Sie startet und endet sofort, nur
 das Bild folgt.
 
@@ -142,9 +144,18 @@ gleiche Bilder übereinander, nie keins. Der Ablauf ist rein und getestet
 (`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen, Übergabe;
 Unterbrechungen über eine Generation), ausgeführt in
 `RecordingPanel+PillMorph.swift`. Stopp im Wachsen zieht sich aus dem
-jetzigen Stand zurück, ein neues Diktat im Zurückziehen übernimmt dasselbe
-Fenster und wächst wieder. Beim Zurückziehen nimmt das Fenster keine Klicks
-an. Messpunkt `pill.morph` (Detail-Stufe, Budget 450 ms) meldet, wenn der
+jetzigen Stand zurück. Ein neues Diktat im Zurückziehen übernimmt dasselbe
+Fenster und wächst wieder, aber nur, wenn es auf genau diesen Bildschirm
+gehört (Bildschirmsuche wie sonst, `UnifiedPillMorph.canAdopt`; nur `show`
+direkt nach `hide` im selben Lauf übernimmt sofort). Sonst schließt die alte
+Pille sofort und das Diktat baut an seiner Stelle auf. Ändern sich die
+Bildschirme während des Zurückziehens, schließt die Pille ebenfalls sofort.
+Beim Zurückziehen fängt das Fenster Klicks selbst ab, statt sie an die App
+darunter durchzulassen (das Einfüge-Ziel behält den Fokus); ein Klick auf den
+Kern startet ein Diktat (über den Hub, derselbe Weg wie an der ruhenden
+Pille), alles andere wird geschluckt, gezogen wird nicht. Kommt die
+Status-Pille aus dem Diktat zurück, zeigt sie ihren Wert ohne Animation;
+andere Wiedererscheinen bleiben animiert. Messpunkt `pill.morph` (Detail-Stufe, Budget 450 ms) meldet, wenn der
 Main Thread den Übergang aufhält.
 
 ### Kill-Switch der vereinten Pille

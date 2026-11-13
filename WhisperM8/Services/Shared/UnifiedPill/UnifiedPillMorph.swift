@@ -176,6 +176,17 @@ struct UnifiedPillMorph: Equatable {
         enter(.idle)
     }
 
+    /// Darf ein neues Diktat eine Pille übernehmen, die sich gerade
+    /// zurückzieht? Nur auf genau ihrem Bildschirm (noch angeschlossen, gleiche
+    /// Maße) und in derselben Darstellung (Notch bzw. Pille).
+    static func canAdopt(
+        retiringScreen: NotchScreenInfo?, retiringIsNotch: Bool,
+        placement: DictationPillPlacement, screens: [NotchScreenInfo]
+    ) -> Bool {
+        guard let retiringScreen, screens.contains(retiringScreen) else { return false }
+        return placement.screen == retiringScreen && placement.isNotch == retiringIsNotch
+    }
+
     private mutating func enter(_ next: Phase) {
         phase = next
         generation += 1

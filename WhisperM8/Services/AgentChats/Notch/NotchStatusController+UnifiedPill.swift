@@ -23,6 +23,7 @@ extension NotchStatusController {
     func observeDictation() {
         dictationDisplayID = hub.dictationDisplayID
         hub.restSnapshot = { [weak self] displayID in self?.restSnapshot(onDisplay: displayID) }
+        hub.startDictation = { [weak self] in self?.startDictation() }
         hub.$dictationDisplayID
             .removeDuplicates()
             .dropFirst()
@@ -31,7 +32,13 @@ extension NotchStatusController {
     }
 
     func dictationChanged(to displayID: UInt32?) {
+        let previous = dictationDisplayID
         dictationDisplayID = displayID
+        // Hier zog sich das Diktat ins Ruhebild zurück: Die Anzeige erscheint
+        // genau mit dem aktuellen Wert, ohne vom alten Stand hinzuwachsen.
+        if let previous, previous != displayID {
+            for slot in slots.values where slot.screen?.displayID == previous { slot.returnsFromDictation = true }
+        }
         if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
         if displayID == nil { replayAlertAfterDictation() }
         render()
@@ -93,12 +100,12 @@ extension NotchStatusController {
         return alert
     }
 
-    /// Neuer Wert für die Ansicht. Kommt das Fenster gerade wieder (nach dem
-    /// Diktat), ohne Animation: Es soll genau das Ruhebild zeigen, aus dem
-    /// sich die Diktat-Pille zurückgezogen hat, nicht vom alten Stand aus
-    /// hinwachsen.
-    func setDisplay(_ display: NotchDisplay, on slot: NotchSlot, animated: Bool) {
-        guard !animated else { return slot.viewModel.display = display }
+    /// Neuer Wert für die Ansicht. Kommt das Fenster aus dem Diktat zurück
+    /// (`returnsFromDictation`, noch nicht sichtbar), ohne Animation: Es soll
+    /// genau das Ruhebild zeigen, aus dem sich die Diktat-Pille zurückgezogen
+    /// hat, nicht vom alten Stand aus hinwachsen. Sonst wie immer animiert.
+    func setDisplay(_ display: NotchDisplay, on slot: NotchSlot, wasVisible: Bool) {
+        guard !wasVisible, slot.returnsFromDictation else { return slot.viewModel.display = display }
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { slot.viewModel.display = display }
@@ -165,7 +172,7 @@ extension NotchStatusController {
         let wasVisible = panel.isVisible
         if display != slot.lastDisplay {
             slot.lastDisplay = display
-            setDisplay(display, on: slot, animated: wasVisible)
+            setDisplay(display, on: slot, wasVisible: wasVisible)
         }
         updatePillMouse(slot, display: display)
         if frame != slot.lastFrame, slot.dragOrigin == nil {
@@ -185,6 +192,7 @@ extension NotchStatusController {
             }
         }
         if !wasVisible { panel.orderFrontRegardless() }
+        slot.returnsFromDictation = false
     }
 
     /// Ziehen der vereinten Pille: ihren Mittelpunkt führen, die Pille selbst

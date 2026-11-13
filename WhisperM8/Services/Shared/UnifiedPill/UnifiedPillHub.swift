@@ -28,6 +28,9 @@ final class UnifiedPillHub: ObservableObject {
     /// `NotchStatusController`, solange er läuft; gefragt nur beim Ein- und
     /// Ausblenden des Diktats.
     var restSnapshot: (UInt32) -> UnifiedPillRestSnapshot? = { _ in nil }
+    /// Klick auf den Kern einer Pille, die sich gerade zurückzieht: Diktat
+    /// wie per Hotkey. Gesetzt vom `NotchStatusController` (sein Weg).
+    var startDictation: () -> Void = {}
 
     func dictationDidShow(onDisplay displayID: UInt32) {
         if dictationDisplayID != displayID { dictationDisplayID = displayID }
