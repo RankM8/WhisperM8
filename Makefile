@@ -266,7 +266,7 @@ _handover:
 	@if [ -n "$$($(GUI_PIDS))" ] && [ -x "$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" ]; then \
 		i=0; \
 		while :; do \
-			out="$$("$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" app handover 2>&1)"; code=$$?; \
+			out="$$("$(APP_BUNDLE)/Contents/MacOS/$(APP_NAME)" app handover --from-make-dev 2>&1)"; code=$$?; \
 			if [ $$i -lt 15 ] && { [ $$code -eq 5 ] || { [ $$code -eq 4 ] && echo "$$out" | grep -q busy; }; }; then sleep 1; i=$$((i+1)); continue; fi; \
 			break; \
 		done; \
