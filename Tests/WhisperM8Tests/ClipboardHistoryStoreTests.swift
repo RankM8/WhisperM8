@@ -232,6 +232,66 @@ final class ClipboardHistoryStoreTests: XCTestCase {
         XCTAssertTrue(ClipboardHistoryStore.loadIndex(directory: directory).isEmpty)
     }
 
+    /// Fußzeile „Clear History…“ und Löschen: Der Index auf der Platte ist
+    /// sofort ohne die Texte, nicht erst nach dem Debounce. Sonst kämen sie nach
+    /// einem Absturz in diesem Fenster beim nächsten Start zurück.
+    func testClearAndDeleteWriteTheIndexImmediately() throws {
+        let store = ClipboardHistoryStore(directory: directory, debounceSeconds: 60)
+        store.add(text("bleibt", at: 1), maxItems: 10)
+        store.add(ClipboardCapture(imageData: pngData(), imageIsPNG: true, date: Date(timeIntervalSince1970: 2)), maxItems: 10)
+        store.add(text("geheim-eins", at: 3), maxItems: 10)
+        store.add(text("geheim-zwei", at: 4), maxItems: 10)
+        let entries = store.snapshot()
+        let pinned = try XCTUnwrap(entries.first { $0.text == "bleibt" })
+        let image = try XCTUnwrap(entries.first { $0.kind == .image })
+        let imageFile = directory.appendingPathComponent(try XCTUnwrap(image.imageFile))
+        store.setPinned(id: pinned.id, pinned: true)
+        store.flush()
+
+        let deleted = try XCTUnwrap(entries.first { $0.text == "geheim-zwei" })
+        store.delete(id: deleted.id)
+        store.waitUntilIdle()
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).count, 3)
+
+        store.clear(keepPinned: true)
+        store.waitUntilIdle()
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).map(\.id), [pinned.id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imageFile.path))
+        let raw = String(decoding: try Data(contentsOf: directory.appendingPathComponent("index.json")), as: UTF8.self)
+        XCTAssertFalse(raw.contains("geheim"))
+    }
+
+    /// Gekürzte Einträge verlieren ihre Dateien erst, wenn der Index sie nicht
+    /// mehr nennt; sonst kämen sie nach einem Absturz ohne Dateien zurück.
+    func testTrimmedBlobsGoOnlyAfterTheIndexIsWritten() throws {
+        let store = ClipboardHistoryStore(directory: directory, debounceSeconds: 60)
+        store.add(ClipboardCapture(imageData: pngData(), imageIsPNG: true, date: Date(timeIntervalSince1970: 1)), maxItems: 1)
+        store.flush()
+        let image = try XCTUnwrap(store.snapshot().first?.imageFile)
+        let file = directory.appendingPathComponent(image)
+        store.add(text("neu", at: 2), maxItems: 1)
+        store.waitUntilIdle()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).first?.imageFile, image)
+        store.flush()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(ClipboardHistoryStore.loadIndex(directory: directory).map(\.text), ["neu"])
+    }
+
+    /// Nach `flush()` läuft kein geplantes Schreiben mehr nach (der Wackler in
+    /// `testClearWithoutPinsEmptiesTheFolder`: Temp-Datei beim Auflisten).
+    func testFlushCancelsThePendingWrite() throws {
+        let store = ClipboardHistoryStore(directory: directory, debounceSeconds: 0.05)
+        store.add(text("eins"), maxItems: 10)
+        store.flush()
+        let index = directory.appendingPathComponent("index.json")
+        let before = try FileManager.default.attributesOfItem(atPath: index.path)[.systemFileNumber] as? NSNumber
+        Thread.sleep(forTimeInterval: 0.25)
+        store.waitUntilIdle()
+        let after = try FileManager.default.attributesOfItem(atPath: index.path)[.systemFileNumber] as? NSNumber
+        XCTAssertEqual(before, after)
+    }
+
     func testArchiveIsStoredWithPermissionsAndDeletedWithTheEntry() throws {
         let store = makeStore()
         let archive = ClipboardArchive(items: [[

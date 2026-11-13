@@ -50,7 +50,8 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     private var entries: [ClipboardEntry] = []
     private var search: ClipboardSearchIndex
     private var loaded = false
-    private var flushPending = false
+    /// Geplantes gebündeltes Schreiben; sofortiges Schreiben verwirft es.
+    private var pendingFlush: DispatchWorkItem?
     /// Dateien, die erst nach dem nächsten Schreiben des Index weg dürfen.
     private var pendingBlobRemovals: [String] = []
     private var onChange: (@Sendable (ClipboardHistoryState) -> Void)?
@@ -163,7 +164,8 @@ final class ClipboardHistoryStore: @unchecked Sendable {
             )
             entries = trimmed.kept
             for removed in trimmed.removed {
-                removeBlobs(of: removed)
+                // Wie oben: Dateien erst weg, wenn der Index sie nicht mehr nennt.
+                pendingBlobRemovals.append(contentsOf: removed.blobFiles)
                 search.remove(id: removed.id)
             }
             search.enforceBudget(entries)
@@ -196,27 +198,32 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         queue.async { [self] in
             loadIfNeeded()
             guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
-            removeBlobs(of: entries.remove(at: index))
+            pendingBlobRemovals.append(contentsOf: entries.remove(at: index).blobFiles)
             search.remove(id: id)
-            changed()
+            changed(writeNow: true)
         }
     }
 
     /// Entfernt alles; `keepPinned` lässt Angepinnte stehen. Ohne Pins wird
     /// der Ordner komplett geleert, auch Reste nach einem Absturz.
+    ///
+    /// Leeren und Löschen schreiben den Index sofort statt gebündelt: Stürbe
+    /// die App im Debounce-Fenster, stünden die Texte sonst beim nächsten
+    /// Start wieder im Verlauf. Die Dateien gehen erst nach dem Index weg.
     func clear(keepPinned: Bool = false) {
         queue.async { [self] in
             loadIfNeeded()
             if keepPinned {
-                for entry in entries where !entry.isPinned { removeBlobs(of: entry) }
+                for entry in entries where !entry.isPinned { pendingBlobRemovals.append(contentsOf: entry.blobFiles) }
                 entries = entries.filter(\.isPinned)
                 search.retain(entries)
             } else {
                 entries = []
                 search = ClipboardSearchIndex(limits: limits.search)
+                pendingBlobRemovals.removeAll()
                 removeAllFiles()
             }
-            changed()
+            changed(writeNow: true)
         }
     }
 
@@ -224,7 +231,7 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     func flush() {
         queue.sync {
             loadIfNeeded()
-            writeIndex()
+            writeIndexNow()
         }
     }
 
@@ -258,18 +265,35 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         search.enforceBudget(entries)
     }
 
-    private func changed() {
+    private func changed(writeNow: Bool = false) {
         onChange?(ClipboardHistoryState(entries: entries, search: search))
-        scheduleFlush()
+        if writeNow {
+            // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
+            // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
+            if !writeIndexNow() { scheduleFlush() }
+            removePendingBlobs()
+        } else {
+            scheduleFlush()
+        }
     }
 
     private func scheduleFlush() {
-        guard !flushPending else { return }
-        flushPending = true
-        queue.asyncAfter(deadline: .now() + debounceSeconds) { [self] in
-            flushPending = false
+        guard pendingFlush == nil else { return }
+        let item = DispatchWorkItem { [self] in
+            pendingFlush = nil
             writeIndex()
         }
+        pendingFlush = item
+        queue.asyncAfter(deadline: .now() + debounceSeconds, execute: item)
+    }
+
+    /// Schreibt jetzt; ein geplantes Schreiben fällt weg, damit nach `flush()`
+    /// nichts mehr nachläuft.
+    @discardableResult
+    private func writeIndexNow() -> Bool {
+        pendingFlush?.cancel()
+        pendingFlush = nil
+        return writeIndex()
     }
 
     private func ensureDirectory() {
@@ -281,13 +305,20 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
     }
 
-    private func writeIndex() {
+    @discardableResult
+    private func writeIndex() -> Bool {
         ensureDirectory()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(IndexFile(schema: Self.schema, entries: entries)) else { return }
+        guard let data = try? encoder.encode(IndexFile(schema: Self.schema, entries: entries)) else { return false }
         let url = directory.appendingPathComponent(Self.indexFileName)
-        guard writeFile(data, to: url), !pendingBlobRemovals.isEmpty else { return }
+        guard writeFile(data, to: url) else { return false }
+        removePendingBlobs()
+        return true
+    }
+
+    private func removePendingBlobs() {
+        guard !pendingBlobRemovals.isEmpty else { return }
         let referenced = Set(entries.flatMap(\.blobFiles))
         for file in pendingBlobRemovals where !referenced.contains(file) { removeBlob(file) }
         pendingBlobRemovals.removeAll()
@@ -325,10 +356,6 @@ final class ClipboardHistoryStore: @unchecked Sendable {
 
     private func removeBlob(_ file: String) {
         try? FileManager.default.removeItem(at: directory.appendingPathComponent(file))
-    }
-
-    private func removeBlobs(of entry: ClipboardEntry) {
-        for file in entry.blobFiles { removeBlob(file) }
     }
 
     private func directoryContents() -> [String] {
