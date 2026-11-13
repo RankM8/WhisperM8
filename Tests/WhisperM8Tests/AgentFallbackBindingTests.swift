@@ -143,10 +143,29 @@ final class AgentFallbackBindingTests: XCTestCase {
         XCTAssertEqual(step(records: records, last: true), .transcriptFallback)
     }
 
-    func testClaudeStepUsesRegistryOnlyForFreshForegroundStarts() {
+    /// Messung 13.11.2026 (`scripts/measure-claude-registry.py`): Auch bei
+    /// Resume und Fork trägt der erste Registry-Eintrag die endgültige ID.
+    func testClaudeStepUsesRegistryForResumeAndFork() {
+        XCTAssertEqual(step(["--settings", "/x.json", "--resume", "quelle", "--fork-session"],
+                            records: [record("neue-fork-id", pid: 200)]), .bind("neue-fork-id"), "Fork")
+        XCTAssertEqual(step(["--settings", "/x.json", "--resume", "quelle"],
+                            records: [record("quelle", pid: 200)]), .bind("quelle"), "Resume")
+    }
+
+    /// Opus-Review: Zeigt die Registry (nach einem CLI-Update) beim Fork kurz
+    /// die Quelle, darf der Poller sie nicht binden — der Fork-SessionStart
+    /// würde danach als `source: fork` ignoriert.
+    func testForkNeverBindsItsSourceAndResumeOnlyTheResumedID() {
+        let fork = ["--settings", "/x.json", "--resume", "quelle", "--fork-session"]
+        XCTAssertEqual(step(fork, records: [record("QUELLE", pid: 200)]), .wait)
+        XCTAssertEqual(step(fork, records: [record("quelle", pid: 200)], last: true), .transcriptFallback)
+        let resume = ["--settings", "/x.json", "--resume", "quelle"]
+        XCTAssertEqual(step(resume, records: [record("vorlaeufig", pid: 200)]), .wait)
+        XCTAssertTrue(AgentSessionStore.registryIDFits("neu", arguments: ["--settings", "/x.json"]), "frischer Start")
+    }
+
+    func testClaudeStepSkipsRegistryForAttachAndWithoutSwitch() {
         let records = [record("quelle", pid: 200)]
-        XCTAssertEqual(step(["--resume", "quelle", "--fork-session"], records: records), .transcriptFallback, "Fork")
-        XCTAssertEqual(step(["--resume", "quelle"], records: records), .transcriptFallback, "Resume")
         XCTAssertEqual(step(["attach", "abc"], records: records), .transcriptFallback, "Background-Agent")
         XCTAssertEqual(step(nil, records: records), .transcriptFallback, "kein Controller")
         XCTAssertEqual(step(registry: false, records: records), .transcriptFallback, "Schalter aus")
