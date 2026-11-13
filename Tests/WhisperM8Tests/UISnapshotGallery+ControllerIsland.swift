@@ -90,11 +90,16 @@ extension UISnapshotGallery {
             limitRow(.claude, "konto-5", 3, 4 * hour, 15, 6 * 24 * hour),
             limitRow(.gpt, "gpt-main", 57, 3 * hour + 300, 47, 4 * 24 * hour, current: true),
             limitRow(.gpt, "gpt-2", 3, 4 * hour + 3480, 9, 6 * 24 * hour),
-            limitRow(.gpt, "gpt-3", nil, 0, nil, 0, problem: AccountLimitsStore.Problem.gptUnavailable.displayText),
+            limitRow(.gpt, "gpt-3", nil, 0, nil, 0, problem: AccountLimitsStore.Problem.gptFetchFailed.displayText),
         ]
         let card = quickDraw(
             account: mainBadge,
             card: ControllerLimitsCard(rows: fewAccounts, updatedAt: now.addingTimeInterval(-70), isLoading: false))
+        // Während eines Diktats: Karte ohne „✕ aktualisieren“ (dort „geht nicht“).
+        var dictatingCard = ControllerLimitsCard(rows: fewAccounts, updatedAt: now.addingTimeInterval(-70), isLoading: false)
+        dictatingCard.canRefresh = false
+        let cardDictating = quickDraw(
+            title: "→ Controller Insel", status: .working, setup: dictatingSetup, account: mainBadge, card: dictatingCard)
         let cardMany = quickDraw(
             title: "Lead Varianten", account: ControllerIslandAccountBadge(name: "gpt-main", fiveHourUsed: 57),
             card: ControllerLimitsCard(rows: manyAccounts, updatedAt: now, isLoading: true))
@@ -130,7 +135,9 @@ extension UISnapshotGallery {
             chats: chats, currentChatID: current, workspaces: places, gridActive: false, previous: .chat(previousChat))))
         var placesState = ControllerWhereToState(
             chats: chats, currentChatID: current, workspaces: places, gridActive: true, previous: .workspace(projectView))
-        placesState.move(2)
+        // Die Projekt-Ansicht ist der vorige Ort: Ihre Zeile rückt gleich unter
+        // den aktuellen Workspace, ein Schritt bis dorthin.
+        placesState.move(1)
         let wherePlaces = ControllerIslandModel(target: target, content: .whereTo(placesState))
 
         func island(_ model: ControllerIslandModel, style: ControllerIslandDisplay.Style = notch) -> AnyView {
@@ -152,6 +159,7 @@ extension UISnapshotGallery {
             Fixture(name: "controller-insel-paket-wach-pille", size: wideNote) { island(awakeConfirm, style: .pill) },
             Fixture(name: "controller-insel-paket-wach-freigabe", size: wideNote) { island(awakePermission) },
             Fixture(name: "controller-insel-paket-limits", size: tall) { island(card) },
+            Fixture(name: "controller-insel-paket-limits-diktat", size: tall) { island(cardDictating) },
             Fixture(name: "controller-insel-paket-limits-viele-pille", size: tall) { island(cardMany, style: .pill) },
             Fixture(name: "controller-insel-paket-wohin-aktuell", size: list) { island(whereChats) },
             Fixture(name: "controller-insel-paket-wohin-projekte", size: list) { island(wherePlaces) },

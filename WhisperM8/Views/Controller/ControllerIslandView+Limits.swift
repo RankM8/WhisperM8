@@ -44,8 +44,11 @@ extension ControllerIslandView {
 
             IslandFlow(spacing: 12, lineSpacing: 5) {
                 if card.canScroll { footItem("L", String(localized: "stick: scroll"), round: false) }
-                footItem(ControllerButton.cross.glyph,
-                         card.isLoading ? String(localized: "refreshing …") : String(localized: "refresh"))
+                // Während eines Diktats ist ✕ unter R1 „geht nicht“.
+                if card.canRefresh {
+                    footItem(ControllerButton.cross.glyph,
+                             card.isLoading ? String(localized: "refreshing …") : String(localized: "refresh"))
+                }
                 footItem(ControllerButton.r1.glyph, String(localized: "release: close"), round: false)
             }
             .font(.system(size: 11))

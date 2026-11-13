@@ -71,6 +71,10 @@ final class ControllerEnvironmentSpy: ControllerAppEnvironment {
     var appToggles = ControllerAppToggles()
     private(set) var alertCycles = 0
     var stayAwakeResult: ControllerStayAwakeResult = .changed(.whileWorking)
+    /// Hält die Antwort zurück wie die stille Prüfung der Freigabe;
+    /// `answerStayAwake()` liefert sie nach.
+    var deferStayAwake = false
+    private var pendingStayAwake: [@MainActor (ControllerStayAwakeResult) -> Void] = []
     func cycleAlertLevel() -> ControllerAlertStage {
         alertCycles += 1
         let order: [ControllerAlertStage] = [.all, .soundOff, .off]
@@ -78,9 +82,17 @@ final class ControllerEnvironmentSpy: ControllerAppEnvironment {
         appToggles.nextAlert = order[(order.firstIndex(of: appToggles.alert)! + 1) % 3]
         return appToggles.alert
     }
-    func cycleStayAwake() -> ControllerStayAwakeResult {
+    func cycleStayAwake(_ completion: @escaping @MainActor (ControllerStayAwakeResult) -> Void) {
+        guard !deferStayAwake else { return pendingStayAwake.append(completion) }
         if case let .changed(stage) = stayAwakeResult { appToggles.awake = stage }
-        return stayAwakeResult
+        completion(stayAwakeResult)
+    }
+
+    func answerStayAwake() {
+        let pending = pendingStayAwake
+        pendingStayAwake = []
+        deferStayAwake = false
+        for completion in pending { cycleStayAwake(completion) }
     }
 }
 
@@ -96,6 +108,8 @@ final class ControllerWindowFake {
     var hasMultiSelection = false
     var isNewChatPickerOpen = false
     var chatInfo: ControllerChatActionInfo? = ControllerChatActionInfo(title: "Chat")
+    /// Eigene Angaben je Chat; sonst gilt `chatInfo` für alle.
+    var chatInfoByID: [UUID: ControllerChatActionInfo] = [:]
     var rows: [AgentChatsListRow] = []
     var workspaces: [ControllerWorkspaceChoice] = []
     var backTarget: ControllerBackTarget?
@@ -135,7 +149,7 @@ final class ControllerWindowFake {
                     backTarget: backTarget)
             },
             listRows: { [unowned self] in rows },
-            chatActionInfo: { [unowned self] _ in chatInfo },
+            chatActionInfo: { [unowned self] id in chatInfoByID[id] ?? chatInfo },
             workspaceChoices: { [unowned self] in workspaces }
         )
     }

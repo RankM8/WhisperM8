@@ -29,21 +29,11 @@ extension ControllerActionDispatcher {
             setQuickDrawSlots(slots)
             playHaptic(.toggled)
         case .stayAwake:
-            switch environment.cycleStayAwake() {
-            case let .changed(stage):
-                slots.app = environment.appToggles
-                slots.confirmation = .awake(stage, next: stage.next)
-                slots.appHit = .stayAwake
-                setQuickDrawSlots(slots)
-                playHaptic(.toggled)
-            case .needsPermission:
-                slots.app = environment.appToggles
-                slots.confirmation = .awakeNeedsPermission
-                slots.appHit = nil
-                setQuickDrawSlots(slots)
-                playHaptic(.rejected)
-            case .busy:
-                playHaptic(.rejected)
+            // Meist sofort; nur wenn die Freigabe noch unbekannt ist, nach
+            // der stillen Prüfung. Ist die Insel bis dahin zu, nur der Impuls.
+            let generation = islandGeneration
+            environment.cycleStayAwake { [weak self] result in
+                self?.stayAwakeCycled(result, generation: generation)
             }
         case .clipboard:
             spendIsland(.quickDraw)
@@ -51,12 +41,36 @@ extension ControllerActionDispatcher {
         }
     }
 
+    private func stayAwakeCycled(_ result: ControllerStayAwakeResult, generation: Int) {
+        let open = islandGeneration == generation && spentLayer != .quickDraw
+        var slots = open ? quickDrawSlots : nil
+        switch result {
+        case let .changed(stage):
+            slots?.app = environment.appToggles
+            slots?.confirmation = .awake(stage, next: stage.next)
+            slots?.appHit = .stayAwake
+            playHaptic(.toggled)
+        case .needsPermission:
+            slots?.app = environment.appToggles
+            slots?.confirmation = .awakeNeedsPermission
+            slots?.appHit = nil
+            playHaptic(.rejected)
+        case .busy:
+            slots = nil
+            playHaptic(.rejected)
+        }
+        if let slots, slots.card == nil { setQuickDrawSlots(slots) }
+    }
+
     // MARK: - Limits-Karte (R1 + ▲)
 
     /// Öffnet die Karte im Inhalt der R1-Insel: sofort mit dem letzten
-    /// Stand, ein passiver Abruf nur, wenn er älter als eine Minute ist.
+    /// Stand, ein passiver Abruf nur, wenn er älter als eine Minute ist. Die
+    /// Konten werden hier einmal gelesen und in der Sitzung gemerkt.
     func openLimitsCard() {
-        guard var slots = quickDrawSlots else { return }
+        guard var slots = quickDrawSlots, var state = islandState else { return }
+        state.limitAccounts = limits.accounts()
+        islandState = state
         slots.card = makeLimitsCard()
         slots.confirmation = nil
         slots.appHit = nil
@@ -82,10 +96,10 @@ extension ControllerActionDispatcher {
     }
 
     /// Neue Zahlen oder ein Abruf beginnt bzw. endet: offene Karte und Kopf
-    /// nachziehen.
+    /// nachziehen — für das Konto und die Konten, die beim Öffnen galten.
     func limitsMayHaveChanged() {
         guard var slots = quickDrawSlots, spentLayer != .quickDraw else { return }
-        let usageAccount = islandState?.setup?.chat?.usageAccount
+        let usageAccount = islandState?.usageAccount
         var changed = false
         let badge = accountBadge(usageAccount)
         if slots.account != badge {
@@ -94,6 +108,7 @@ extension ControllerActionDispatcher {
         }
         if var card = slots.card {
             card.update(rows: limitRows(marking: usageAccount), updatedAt: limits.updatedAt(), isLoading: limits.isLoading())
+            card.canRefresh = dictation.phase == nil
             if card != slots.card {
                 slots.card = card
                 changed = true
@@ -102,14 +117,28 @@ extension ControllerActionDispatcher {
         if changed { setQuickDrawSlots(slots) }
     }
 
+    /// Ein Diktat beginnt oder endet bei offener Karte: Die Fußzeile bietet
+    /// ✕ nur an, wenn es auch geht. Aufgerufen beim Nachführen des
+    /// Zusammenhangs (`refreshContext`).
+    func limitsCardDictationMayHaveChanged() {
+        guard spentLayer != .quickDraw, var slots = quickDrawSlots, var card = slots.card else { return }
+        let canRefresh = dictation.phase == nil
+        guard card.canRefresh != canRefresh else { return }
+        card.canRefresh = canRefresh
+        slots.card = card
+        setQuickDrawSlots(slots)
+    }
+
     private func makeLimitsCard() -> ControllerLimitsCard {
-        ControllerLimitsCard(
-            rows: limitRows(marking: islandState?.setup?.chat?.usageAccount),
+        var card = ControllerLimitsCard(
+            rows: limitRows(marking: islandState?.usageAccount),
             updatedAt: limits.updatedAt(), isLoading: limits.isLoading())
+        card.canRefresh = dictation.phase == nil
+        return card
     }
 
     private func limitRows(marking account: ControllerUsageAccount?) -> [ControllerAccountLimitRow] {
-        limits.rows().map { row in
+        limits.rows(islandState?.limitAccounts ?? ControllerLimitAccounts()).map { row in
             var copy = row
             copy.isCurrentChat = account.map { $0.kind == row.kind && $0.name == row.name } ?? false
             return copy

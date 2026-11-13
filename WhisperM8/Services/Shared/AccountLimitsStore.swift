@@ -24,12 +24,24 @@ final class AccountLimitsStore {
 
     enum Problem: Equatable {
         case claude(ClaudeUsageFetchProblem)
-        /// GPT-Backend: keine Zahlen (Token in der Datei veraltet).
-        case gptUnavailable
+        /// GPT-Backend: Der Live-Abruf brachte keine Zahlen. Warum, sagt er
+        /// nicht (Token fehlt oder veraltet, offline, Zeitüberschreitung).
+        case gptFetchFailed
+
+        /// Ohne gültigen Login sagen alte Zahlen nichts mehr. Bei allen
+        /// anderen Problemen bleiben die letzten Zahlen stehen.
+        var replacesNumbers: Bool {
+            switch self {
+            case .claude(.loginExpired), .claude(.noCredentials): return true
+            case .claude, .gptFetchFailed: return false
+            }
+        }
     }
 
     private(set) var claude: [String: Limit] = [:]
     private(set) var gpt: [String: Limit] = [:]
+    /// Wann zuletzt echte Zahlen kamen (live abgerufen); ein gescheiterter
+    /// Abruf ändert das nicht.
     private(set) var updatedAt: Date?
     /// Letzter Abruf-Versuch, unabhängig vom Ergebnis: Auch nach Fehlern geht
     /// der nächste frühestens nach `maxAge` (sonst hieße jedes Öffnen
@@ -39,6 +51,11 @@ final class AccountLimitsStore {
     /// Neue Zahlen sind da oder ein Abruf beginnt bzw. endet (ein offenes
     /// Konto-Menü und eine offene Insel ziehen nach).
     var onChange: (() -> Void)?
+    private let now: () -> Date
+
+    init(now: @escaping () -> Date = Date.init) {
+        self.now = now
+    }
 
     func limit(kind: ControllerAccountChoice.Kind, name: String) -> Limit? {
         switch kind {
@@ -47,21 +64,43 @@ final class AccountLimitsStore {
         }
     }
 
+    /// Ein Claude-Abruf. Mit Problem (offline, Token abgelaufen …) bleiben
+    /// die letzten Zahlen samt Rücksetzzeiten stehen, wo der Abruf keine
+    /// eigenen bringt — außer das Problem macht sie wertlos (Login beendet).
     func record(claude name: String, usage: ClaudeAccountUsage) {
         guard usage.hasLimitData || usage.liveFetchProblem != nil else { return }
-        claude[name] = Self.limit(usage)
-        changed()
+        claude[name] = Self.merged(Self.limit(usage), previous: claude[name])
+        changed(freshNumbers: usage.liveFetchProblem == nil && usage.hasLimitData)
     }
 
     func record(gpt name: String, usage: CodexUsage) {
         gpt[name] = Self.limit(usage)
-        changed()
+        changed(freshNumbers: true)
     }
 
-    /// GPT-Konto ohne Zahlen (wie „Limits nicht verfügbar“ im Popover).
+    /// GPT-Abruf ohne Zahlen: Die letzten bleiben stehen (mit Hinweis), der
+    /// Stand-Zeitpunkt auch.
     func recordFailure(gpt name: String) {
-        gpt[name] = Limit(fiveHour: nil, week: nil, problem: .gptUnavailable)
-        changed()
+        var limit = gpt[name] ?? Limit(fiveHour: nil, week: nil)
+        limit.problem = .gptFetchFailed
+        gpt[name] = limit
+        changed(freshNumbers: false)
+    }
+
+    /// Neuer Stand über dem alten: Bringt er ein Problem, das die Zahlen
+    /// nicht ersetzt, füllen die alten Zahlen und Rücksetzzeiten seine Lücken.
+    static func merged(_ fresh: Limit, previous: Limit?) -> Limit {
+        guard let previous, let problem = fresh.problem, !problem.replacesNumbers else { return fresh }
+        var result = fresh
+        if result.fiveHour == nil {
+            result.fiveHour = previous.fiveHour
+            result.fiveHourResetsAt = previous.fiveHourResetsAt
+        }
+        if result.week == nil {
+            result.week = previous.week
+            result.weekResetsAt = previous.weekResetsAt
+        }
+        return result
     }
 
     static func limit(_ usage: ClaudeAccountUsage) -> Limit {
@@ -80,8 +119,8 @@ final class AccountLimitsStore {
             fiveHourResetsAt: fiveHour?.resetsAt, weekResetsAt: week?.resetsAt)
     }
 
-    private func changed() {
-        updatedAt = Date()
+    private func changed(freshNumbers: Bool) {
+        if freshNumbers { updatedAt = now() }
         onChange?()
     }
 
@@ -113,9 +152,9 @@ final class AccountLimitsStore {
     /// `maxAge` ist.
     func refreshIfStale(maxAge: TimeInterval = 60) {
         guard !isLoading else { return }
-        let now = Date()
-        if let updatedAt, now.timeIntervalSince(updatedAt) < maxAge { return }
-        if let lastAttemptAt, now.timeIntervalSince(lastAttemptAt) < maxAge { return }
+        let current = now()
+        if let updatedAt, current.timeIntervalSince(updatedAt) < maxAge { return }
+        if let lastAttemptAt, current.timeIntervalSince(lastAttemptAt) < maxAge { return }
         load(renewing: false)
     }
 
@@ -128,7 +167,7 @@ final class AccountLimitsStore {
     }
 
     private func load(renewing: Bool) {
-        lastAttemptAt = Date()
+        lastAttemptAt = now()
         isLoading = true
         onChange?()
         let claudeNames = Self.claudeAccountNames()
@@ -198,7 +237,22 @@ extension AccountLimitsStore.Problem {
     var displayText: String {
         switch self {
         case .claude(let problem): return problem.displayText
-        case .gptUnavailable: return String(localized: "Limits unavailable (token in the file is stale)")
+        case .gptFetchFailed: return Self.gptFetchFailedText(hasNumbers: false)
         }
+    }
+
+    /// Text für die Limits-Karte: Mit alten Zahlen sagt er, dass sie alt sind.
+    func displayText(hasNumbers: Bool) -> String {
+        switch self {
+        case .claude(let problem): return problem.displayText
+        case .gptFetchFailed: return Self.gptFetchFailedText(hasNumbers: hasNumbers)
+        }
+    }
+
+    /// Auch im GPT-Popover. Der Abruf nennt keinen Grund, der Text rät keinen.
+    static func gptFetchFailedText(hasNumbers: Bool) -> String {
+        hasNumbers
+            ? String(localized: "Live fetch failed — last known state")
+            : String(localized: "Limits unavailable (live fetch failed)")
     }
 }

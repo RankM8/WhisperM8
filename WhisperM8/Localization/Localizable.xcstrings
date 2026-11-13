@@ -8521,12 +8521,12 @@
         }
       }
     },
-    "Limits unavailable (token in the file is stale)": {
+    "Limits unavailable (live fetch failed)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limits nicht abrufbar (Token in der Datei veraltet)"
+            "value": "Limits nicht abrufbar (Live-Abruf fehlgeschlagen)"
           }
         }
       }
@@ -8617,6 +8617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live-Abruf fehlgeschlagen (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Live fetch failed — last known state": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Abruf fehlgeschlagen — letzter bekannter Stand"
           }
         }
       }

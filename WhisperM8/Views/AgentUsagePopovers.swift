@@ -468,7 +468,7 @@ private struct CodexUsagePopoverView: View {
             if let usage = usageByProfile[profile.name] {
                 usageRows(usage, showEmail: false)
             } else if failedProfiles.contains(profile.name) {
-                Text("Limits unavailable (token in the file is stale)")
+                Text(verbatim: AccountLimitsStore.Problem.gptFetchFailedText(hasNumbers: false))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             } else if !isLoading {

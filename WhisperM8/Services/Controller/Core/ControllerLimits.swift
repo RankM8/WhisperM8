@@ -43,6 +43,14 @@ struct ControllerAccountLimitRow: Equatable, Sendable, Identifiable {
     var hasNumbers: Bool { fiveHour != nil || week != nil }
 }
 
+/// Konten der Limits-Karte, wie die beiden Popovers sie zeigen. Einmal beim
+/// Öffnen der Karte gelesen (das Lesen der Profile ist Platten-I/O); neue
+/// Zahlen danach ordnen sich nur diesen Namen zu.
+struct ControllerLimitAccounts: Equatable, Sendable {
+    var claude: [String] = []
+    var gpt: [String] = []
+}
+
 /// Die Karte: oben Claude, darunter GPT, höchstens `maxVisibleRows` Konten
 /// sichtbar; der linke Stick (oder ▲▼) scrollt. Ohne Markierung, nur ein
 /// Fenster über den Zeilen.
@@ -55,6 +63,9 @@ struct ControllerLimitsCard: Equatable, Sendable {
     var updatedAt: Date?
     /// Ein Abruf läuft („aktualisiere …“).
     var isLoading: Bool
+    /// ✕ holt die Zahlen frisch. Während eines Diktats nicht: Dort ist ✕
+    /// unter R1 „geht nicht“, die Fußzeile bietet es dann nicht an.
+    var canRefresh = true
 
     /// - Parameter rows: Konten in der Reihenfolge der Popovers; die Karte
     ///   ordnet Claude vor GPT und scrollt so, dass das Konto des Chats zu

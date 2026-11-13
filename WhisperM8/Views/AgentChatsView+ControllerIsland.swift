@@ -51,22 +51,24 @@ extension AgentChatsView {
         return openProjectAsWorkspace(project, activeSessionIDs: active, reportConflicts: false)
     }
 
-    /// Wie der Archiv-Knopf unten in der Seitenleiste.
+    /// Wie der Archiv-Knopf unten in der Seitenleiste. Das Archiv steht in
+    /// der Seitenleiste; ist sie zu, geht sie dafür auf. Durch das Archiv
+    /// führt der Controller nicht (siehe Grenzen in controller.md).
     func toggleArchiveModeFromController() {
         if archiveModeActive {
             exitArchiveMode()
         } else {
             archiveModeActive = true
+            if !isSidebarVisible { isSidebarVisible = true }
         }
     }
 
-    /// Konto, dessen Limits der Chat belastet: GPT-Chats (über das GPT-Backend)
-    /// ihr GPT-Konto, Claude-Chats ihr Claude-Konto. Codex und Shells keins.
+    /// Konto, dessen Limits der Chat belastet (`ControllerUsageAccount.of`),
+    /// mit den Schaltern für GPT-Backend und GPT-Konten.
     func controllerUsageAccount(of session: AgentChatSession) -> ControllerUsageAccount? {
-        guard session.provider == .claude, !session.isTerminal else { return nil }
-        if session.claudeBackendModel != nil {
-            return ControllerUsageAccount(kind: .gpt, name: session.gptProfileName ?? GPTAccountProfiles.mainProfileName)
-        }
-        return ControllerUsageAccount(kind: .claude, name: session.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName)
+        let preferences = AppPreferences.shared
+        return ControllerUsageAccount.of(
+            session, gptBackendEnabled: preferences.claudeGPTBackendEnabled,
+            gptProfilesEnabled: preferences.isGPTAccountProfilesEnabled)
     }
 }

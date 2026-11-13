@@ -89,19 +89,110 @@ final class ControllerLimitsTests: XCTestCase {
             "main": .init(fiveHour: 42, week: 61),
             "alt": .init(fiveHour: 10, week: 5, problem: .claude(.network)),
             "gone": .init(fiveHour: 30, week: 30, problem: .claude(.loginExpired)),
-            "g": .init(fiveHour: nil, week: nil, problem: .gptUnavailable),
+            "g": .init(fiveHour: nil, week: nil, problem: .gptFetchFailed),
+            "g2": .init(fiveHour: 20, week: 40, problem: .gptFetchFailed),
         ]
         let rows = ControllerLimitRows.rows(
-            claude: ["main", "alt", "gone", "fresh"], gpt: ["g"], limit: { limits[$1] })
-        XCTAssertEqual(rows.map(\.name), ["main", "alt", "gone", "fresh", "g"])
+            claude: ["main", "alt", "gone", "fresh"], gpt: ["g", "g2"], limit: { limits[$1] })
+        XCTAssertEqual(rows.map(\.name), ["main", "alt", "gone", "fresh", "g", "g2"])
         XCTAssertEqual(rows[0].fiveHour, 42)
         XCTAssertNil(rows[0].problem)
         XCTAssertNotNil(rows[1].problem)
         XCTAssertFalse(rows[1].problemReplacesNumbers, "offline: letzte Zahlen bleiben")
         XCTAssertTrue(rows[2].problemReplacesNumbers, "Login beendet: Text statt Balken")
         XCTAssertFalse(rows[3].hasNumbers)
-        XCTAssertTrue(rows[4].problemReplacesNumbers)
+        XCTAssertFalse(rows[4].problemReplacesNumbers, "GPT ohne Zahlen: Text, weil keine da sind")
+        XCTAssertFalse(rows[4].hasNumbers)
+        XCTAssertEqual(rows[4].problem, AccountLimitsStore.Problem.gptFetchFailedText(hasNumbers: false))
         XCTAssertEqual(rows[4].kind, .gpt)
+        XCTAssertTrue(rows[5].hasNumbers, "GPT mit alten Zahlen: Balken bleiben")
+        XCTAssertEqual(rows[5].problem, AccountLimitsStore.Problem.gptFetchFailedText(hasNumbers: true))
+    }
+
+    // MARK: - Konto eines Chats
+
+    /// Review Insel-Paket, Befund 6: Ein GPT-Stempel zählt nur mit
+    /// eingeschaltetem GPT-Backend, das GPT-Konto nur mit eingeschalteten
+    /// GPT-Konten — dieselben Schalter wie beim Start.
+    @MainActor
+    func testUsageAccountFollowsTheGPTSwitches() {
+        let gpt = AgentChatSession(
+            provider: .claude, projectID: UUID(), title: "GPT", claudeProfileName: "work",
+            claudeBackendModel: "gpt-5.6-sol", gptProfileName: "gpt-2")
+        XCTAssertEqual(ControllerUsageAccount.of(gpt, gptBackendEnabled: true, gptProfilesEnabled: true),
+                       ControllerUsageAccount(kind: .gpt, name: "gpt-2"))
+        XCTAssertEqual(ControllerUsageAccount.of(gpt, gptBackendEnabled: true, gptProfilesEnabled: false),
+                       ControllerUsageAccount(kind: .gpt, name: GPTAccountProfiles.mainProfileName))
+        XCTAssertEqual(ControllerUsageAccount.of(gpt, gptBackendEnabled: false, gptProfilesEnabled: true),
+                       ControllerUsageAccount(kind: .claude, name: "work"), "Backend aus: läuft als Claude")
+        let claude = AgentChatSession(provider: .claude, projectID: UUID(), title: "Claude")
+        XCTAssertEqual(ControllerUsageAccount.of(claude, gptBackendEnabled: true, gptProfilesEnabled: true),
+                       ControllerUsageAccount(kind: .claude, name: ClaudeAccountProfiles.mainProfileName))
+        let codex = AgentChatSession(provider: .codex, projectID: UUID(), title: "Codex")
+        XCTAssertNil(ControllerUsageAccount.of(codex, gptBackendEnabled: true, gptProfilesEnabled: true))
+    }
+
+    // MARK: - Store: Fehlschläge behalten den letzten Stand
+
+    private func claudeUsage(
+        _ fiveHour: Double?, _ week: Double?, resets: Date? = nil, problem: ClaudeUsageFetchProblem? = nil
+    ) -> ClaudeAccountUsage {
+        ClaudeAccountUsage(
+            fiveHourPercent: fiveHour, fiveHourResetsAt: resets, sevenDayPercent: week, sevenDayResetsAt: resets,
+            fetchedAt: Date(timeIntervalSince1970: 0), isLive: problem == nil, liveFetchProblem: problem)
+    }
+
+    private func codexUsage(_ fiveHour: Double, resets: Date) -> CodexUsage {
+        CodexUsage(primary: CodexUsage.Window(usedPercent: fiveHour, windowMinutes: 300, resetsAt: resets), isLive: true)
+    }
+
+    /// Ein gescheiterter GPT-Abruf behält Zahlen und Rücksetzzeit, nennt
+    /// keinen erfundenen Grund und rückt den Stand-Zeitpunkt nicht vor.
+    @MainActor
+    func testGPTFailureKeepsTheLastNumbersAndTime() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let store = AccountLimitsStore(now: { clock })
+        let reset = Date(timeIntervalSince1970: 9_000)
+        store.record(gpt: "main", usage: codexUsage(30, resets: reset))
+        XCTAssertEqual(store.updatedAt, clock)
+        clock = clock.addingTimeInterval(600)
+        store.recordFailure(gpt: "main")
+        let limit = store.limit(kind: .gpt, name: "main")
+        XCTAssertEqual(limit?.fiveHour, 30)
+        XCTAssertEqual(limit?.fiveHourResetsAt, reset)
+        XCTAssertEqual(limit?.problem, .gptFetchFailed)
+        XCTAssertEqual(store.updatedAt, Date(timeIntervalSince1970: 1_000), "kein neuer Stand ohne Zahlen")
+        XCTAssertFalse(limit?.problem?.displayText(hasNumbers: true).contains("token") ?? true)
+
+        store.recordFailure(gpt: "new")
+        XCTAssertNil(store.limit(kind: .gpt, name: "new")?.fiveHour)
+        XCTAssertEqual(store.updatedAt, Date(timeIntervalSince1970: 1_000))
+        store.record(gpt: "main", usage: codexUsage(35, resets: reset))
+        XCTAssertNil(store.limit(kind: .gpt, name: "main")?.problem, "neue Zahlen räumen den Hinweis weg")
+        XCTAssertEqual(store.updatedAt, clock)
+    }
+
+    /// Claude offline: Die letzten Zahlen und Rücksetzzeiten bleiben, der
+    /// Grund kommt dazu. Login beendet: Die Zahlen gelten nichts mehr.
+    @MainActor
+    func testClaudeProblemKeepsNumbersUnlessTheLoginEnded() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let store = AccountLimitsStore(now: { clock })
+        let reset = Date(timeIntervalSince1970: 5_000)
+        store.record(claude: "main", usage: claudeUsage(42, 61, resets: reset))
+        clock = clock.addingTimeInterval(300)
+        store.record(claude: "main", usage: claudeUsage(nil, nil, problem: .network))
+        var limit = store.limit(kind: .claude, name: "main")
+        XCTAssertEqual(limit?.fiveHour, 42)
+        XCTAssertEqual(limit?.week, 61)
+        XCTAssertEqual(limit?.fiveHourResetsAt, reset)
+        XCTAssertEqual(limit?.problem, .claude(.network))
+        XCTAssertEqual(store.updatedAt, Date(timeIntervalSince1970: 1_000))
+
+        store.record(claude: "main", usage: claudeUsage(nil, nil, problem: .loginExpired))
+        limit = store.limit(kind: .claude, name: "main")
+        XCTAssertNil(limit?.fiveHour, "Login beendet: Text statt alter Zahlen")
+        XCTAssertEqual(limit?.problem, .claude(.loginExpired))
     }
 
     /// Die Store-Abbildung: Rücksetzzeiten und Problem aus dem Abruf.

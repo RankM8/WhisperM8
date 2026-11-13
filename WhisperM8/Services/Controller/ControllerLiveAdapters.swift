@@ -202,12 +202,16 @@ final class LiveControllerEnvironment: ControllerAppEnvironment {
 
     /// Wie der Wach-Knopf, aber ohne Admin-Dialog: Fehlt die Freigabe, sagt
     /// die Insel, wo sie zu erteilen ist.
-    func cycleStayAwake() -> ControllerStayAwakeResult {
+    func cycleStayAwake(_ completion: @escaping @MainActor (ControllerStayAwakeResult) -> Void) {
         let stayAwake = StayAwakeController.shared
-        guard !stayAwake.isAwaitingPermission else { return .busy }
-        guard !stayAwake.nextStepNeedsPermission else { return .needsPermission }
-        stayAwake.cycle()
-        return .changed(ControllerAwakeStage(stayAwake.mode))
+        // War die Seitenleiste seit dem Start verborgen, ist die Freigabe noch
+        // unbekannt: erst still prüfen (`sudo -n`, nie ein Dialog).
+        stayAwake.whenPermissionKnown {
+            guard !stayAwake.isAwaitingPermission else { return completion(.busy) }
+            guard !stayAwake.nextStepNeedsPermission else { return completion(.needsPermission) }
+            stayAwake.cycle()
+            completion(.changed(ControllerAwakeStage(stayAwake.mode)))
+        }
     }
 
     func openControllerSettings() {
@@ -318,7 +322,8 @@ final class ControllerRuntime {
             }
             dispatcher.refreshAccountLimits = { AccountLimitsStore.shared.refreshIfStale() }
             dispatcher.limits = ControllerLimitsAccess(
-                rows: { ControllerLimitRows.live() },
+                accounts: { ControllerLimitRows.liveAccounts() },
+                rows: { ControllerLimitRows.live($0) },
                 updatedAt: { AccountLimitsStore.shared.updatedAt },
                 isLoading: { AccountLimitsStore.shared.isLoading },
                 refreshIfStale: { AccountLimitsStore.shared.refreshIfStale() },

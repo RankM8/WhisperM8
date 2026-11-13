@@ -201,7 +201,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Nebenwirkung, auch bei Trockenläufen des Debug-Kanals.
     func refreshContext() {
         let snapshot = snapshot()
-        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
+        if islandState != nil {
+            islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID)
+            limitsCardDictationMayHaveChanged()
+        }
     }
 
     /// Schließt, was der Controller offen hat: Insel, Menü, Liste,
@@ -241,7 +244,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .outputMode(step): dictation.stepOutputMode(step)
 
         // Chat
-        case let .chatKey(key): sendKey(key.terminalKey)
+        case let .chatKey(key):
+            // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
+            if key == .toggleTranscript, quickDrawSlots?.card != nil {
+                playHaptic(.rejected)
+            } else {
+                sendKey(key.terminalKey)
+            }
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()
@@ -286,11 +295,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             closeIsland()
             spentLayer = nil
         case .islandRelease:
-            // Loslassen wechselt nur im Chat. Hat inzwischen etwas anderes die
-            // Eingaben (Aufnahme per Hotkey, Dialog, Sheet), nur schließen.
-            if case .chat = context {
+            // Loslassen wechselt im Chat und während eines an einen Chat
+            // gebundenen Diktats (das Diktat bleibt an seinem Ziel). Hat
+            // inzwischen etwas anderes die Eingaben (Aufnahme per Hotkey,
+            // Dialog, Sheet), nur schließen.
+            switch context {
+            case .chat, .recording(_, _, .some):
                 releaseWhereTo()
-            } else {
+            default:
                 closeIsland()
                 spentLayer = nil
             }

@@ -10,6 +10,13 @@ struct ControllerIslandSession: Equatable {
     var setup: ControllerMenuSetup?
     /// Bildschirm des Agent-Chats-Fensters, auf dem der Controller wirkt.
     var screenDisplayID: UInt32?
+    /// Konto für Kopf und Limits-Karte (nur R1), einmal beim Öffnen bestimmt:
+    /// während eines Diktats das seines Ziels, sonst das des Chats. Es bleibt,
+    /// auch wenn inzwischen ein anderer Chat ausgewählt ist.
+    var usageAccount: ControllerUsageAccount?
+    /// Konten der Limits-Karte, einmal beim Öffnen der Karte gelesen. Neue
+    /// Zahlen ordnen sich diesen Namen zu, ohne die Profile neu zu lesen.
+    var limitAccounts: ControllerLimitAccounts?
 }
 
 extension ControllerAction {
@@ -89,6 +96,7 @@ extension ControllerActionDispatcher {
             target = ControllerIslandTarget(title: "→ \(title)", status: islandStatus(dictationTarget))
         }
         var setup: ControllerMenuSetup?
+        var usageAccount: ControllerUsageAccount?
         let content: ControllerIslandModel.Content
         switch layer {
         case .writing:
@@ -99,16 +107,20 @@ extension ControllerActionDispatcher {
             var slots = ControllerQuickDrawSlots(setup: menuSetup)
             slots.app = environment.appToggles
             // Der Kopf nennt während eines Diktats dessen Ziel, also auch dessen Konto.
-            let headChat = dictation.phase != nil ? dictation.targetSessionID : nil
-            let usageAccount = headChat.flatMap { chats.chatActionInfo($0, in: targetWindowID) }?.usageAccount
-                ?? menuSetup.chat?.usageAccount
+            // Einmal hier bestimmt und in der Sitzung gemerkt: Neue Zahlen
+            // ziehen Kopf und Karte nach, wechseln aber nie das Konto.
+            if dictation.phase != nil, let headChat = dictation.targetSessionID {
+                usageAccount = chats.chatActionInfo(headChat, in: targetWindowID)?.usageAccount
+            } else {
+                usageAccount = menuSetup.chat?.usageAccount
+            }
             slots.account = accountBadge(usageAccount)
             content = .quickDraw(slots)
         case .whereTo:
             // Reihenfolge wie die Liste links, jeder Chat einmal. Der vorige
             // Chat steht immer darin, gleich unter dem aktuellen, auch wenn
-            // die Liste ihn gerade nicht zeigt (Filter, Suche, eingeklappt):
-            // ein Schritt bis dorthin.
+            // die Liste ihn weiter unten oder gar nicht zeigt (Filter, Suche,
+            // eingeklappt): ein Schritt bis dorthin.
             let previous = Self.whereToPrevious(window.backTarget)
             let order = ControllerWhereToState.chatOrder(
                 SidebarChatOrder.sessions(in: currentListRows().map(\.row)), current: sessionID, previous: previous)
@@ -121,7 +133,8 @@ extension ControllerActionDispatcher {
         }
         return ControllerIslandSession(
             model: ControllerIslandModel(target: target, content: content),
-            sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID)
+            sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID,
+            usageAccount: usageAccount)
     }
 
     /// Voriger Ort des Fensters (Ziel von L2 getippt): Seine Zeile trägt

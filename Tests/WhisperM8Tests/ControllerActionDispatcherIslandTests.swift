@@ -745,7 +745,11 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
     func testLimitsCardScrollsAndRefreshes() {
         var stale = 0, refreshed = 0
         dispatcher.limits = ControllerLimitsAccess(
-            rows: { (0..<9).map { ControllerAccountLimitRow(kind: $0 < 7 ? .claude : .gpt, name: "k\($0)", fiveHour: 10) } },
+            accounts: { ControllerLimitAccounts(claude: (0..<7).map { "k\($0)" }, gpt: ["k7", "k8"]) },
+            rows: { accounts in
+                accounts.claude.map { ControllerAccountLimitRow(kind: .claude, name: $0, fiveHour: 10) }
+                    + accounts.gpt.map { ControllerAccountLimitRow(kind: .gpt, name: $0, fiveHour: 10) }
+            },
             updatedAt: { nil }, isLoading: { false },
             refreshIfStale: { stale += 1 }, refresh: { refreshed += 1 })
         var info = ControllerChatActionInfo(title: "Chat")
@@ -774,6 +778,121 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(haptics.last, .rejected, "Chat-Raute geht bei offener Karte nicht")
         release(.r1, at: 1)
         XCTAssertFalse(island.isVisible, "Loslassen schließt")
+    }
+
+    /// Review Insel-Paket, Befunde 2 und 3: Kopf und Karte bleiben beim
+    /// Konto, das beim Öffnen galt — während eines Diktats dem seines Ziels,
+    /// auch wenn neue Zahlen kommen und ein anderer Chat ausgewählt ist. Die
+    /// Konten liest die Karte einmal beim Öffnen, neue Zahlen ordnen sich
+    /// nur noch zu.
+    func testIslandKeepsTheAccountItOpenedWithAndReadsAccountsOnce() {
+        var accountReads = 0, rowBuilds = 0
+        var fiveHour: Double = 10
+        dispatcher.limits = ControllerLimitsAccess(
+            accounts: {
+                accountReads += 1
+                return ControllerLimitAccounts(claude: ["main", "diktat"], gpt: [])
+            },
+            rows: { accounts in
+                rowBuilds += 1
+                return accounts.claude.map { ControllerAccountLimitRow(kind: .claude, name: $0, fiveHour: fiveHour) }
+            })
+        dispatcher.accountLimit = { _, _ in (fiveHour: fiveHour, week: nil) }
+        var selectedInfo = ControllerChatActionInfo(title: "Ausgewählt")
+        selectedInfo.usageAccount = ControllerUsageAccount(kind: .claude, name: "main")
+        var targetInfo = ControllerChatActionInfo(title: "Ziel")
+        targetInfo.usageAccount = ControllerUsageAccount(kind: .claude, name: "diktat")
+        window.chatInfo = selectedInfo
+        window.chatInfoByID[chats[2]] = targetInfo
+        dictation.start(target: .agentChat(sessionID: chats[2]), label: nil)
+        holdR1()
+        XCTAssertEqual(quickDraw?.account?.name, "diktat", "Kopf: Konto des Diktat-Ziels")
+        XCTAssertEqual(accountReads, 0, "R1 halten liest keine Konten")
+        press(.dpadUp, at: 0.4)
+        release(.dpadUp, at: 0.45)
+        XCTAssertEqual(accountReads, 1)
+        XCTAssertEqual(quickDraw?.card?.rows.first(where: \.isCurrentChat)?.name, "diktat")
+
+        fiveHour = 55
+        dispatcher.accountLimitsChanged()
+        dispatcher.accountLimitsChanged()
+        XCTAssertEqual(accountReads, 1, "neue Zahlen lesen die Profile nicht neu")
+        XCTAssertGreaterThan(rowBuilds, 1)
+        XCTAssertEqual(quickDraw?.account, ControllerIslandAccountBadge(name: "diktat", fiveHourUsed: 55))
+        XCTAssertEqual(quickDraw?.card?.rows.first(where: \.isCurrentChat)?.name, "diktat")
+        XCTAssertEqual(quickDraw?.card?.rows.first?.fiveHour, 55)
+    }
+
+    /// Review Insel-Paket, Befund 5: Bei offener Karte schickt R1 + L3 kein
+    /// Ctrl+O. Während eines Diktats bietet die Fußzeile ✕ nicht an (dort
+    /// „geht nicht“), nach dem Diktat wieder.
+    func testLimitsCardBlocksTranscriptToggleAndHidesRefreshWhileDictating() {
+        holdR1()
+        press(.dpadUp, at: 0.4)
+        release(.dpadUp, at: 0.45)
+        XCTAssertEqual(quickDraw?.card?.canRefresh, true)
+        press(.l3, at: 0.5)
+        XCTAssertEqual(haptics.last, .rejected)
+        XCTAssertFalse(terminals.keys.contains(.toggleTranscript), "kein Ctrl+O bei offener Karte")
+        release(.l3, at: 0.55)
+        release(.r1, at: 0.6)
+
+        dictation.start(target: .agentChat(sessionID: chats[1]), label: nil)
+        press(.r1, at: 1)
+        tick(1.3)
+        press(.dpadUp, at: 1.4)
+        release(.dpadUp, at: 1.45)
+        XCTAssertEqual(quickDraw?.card?.canRefresh, false, "✕ geht während des Diktats nicht")
+        press(.cross, at: 1.5)
+        XCTAssertEqual(haptics.last, .rejected)
+        release(.cross, at: 1.55)
+        dictation.cancel()
+        dispatcher.refreshContext()
+        XCTAssertEqual(quickDraw?.card?.canRefresh, true, "nach dem Diktat wieder")
+    }
+
+    /// Review Insel-Paket, Befund 7: Steht die Prüfung der Freigabe noch aus
+    /// (Seitenleiste seit dem Start verborgen), antwortet der Wach-Schalter
+    /// danach — ohne vorher „Erst in der Seitenleiste freigeben“ zu sagen.
+    func testStayAwakeAnswersAfterTheSilentPermissionCheck() {
+        let environment = ControllerEnvironmentSpy()
+        environment.deferStayAwake = true
+        rebuild(environment: environment)
+        holdR1()
+        press(.dpadRight, at: 0.4)
+        XCTAssertNil(quickDraw?.confirmation)
+        XCTAssertTrue(haptics.isEmpty)
+        environment.answerStayAwake()
+        XCTAssertEqual(quickDraw?.confirmation, .awake(.whileWorking, next: .always))
+        XCTAssertEqual(haptics, [.toggled])
+
+        // Ist die Insel bis zur Antwort zu, bleibt nur der Impuls.
+        release(.dpadRight, at: 0.45)
+        environment.deferStayAwake = true
+        press(.dpadRight, at: 0.5)
+        release(.r1, at: 0.6)
+        let shown = island.shown.count
+        environment.answerStayAwake()
+        XCTAssertEqual(island.shown.count, shown)
+        XCTAssertFalse(island.isVisible)
+        XCTAssertEqual(haptics, [.toggled, .toggled])
+    }
+
+    /// Review Insel-Paket, Befund 9: Auch während eines gebundenen Diktats
+    /// wechselt Loslassen von L2 nach einer Bewegung; das Diktat bleibt bei
+    /// seinem Ziel.
+    func testReleasingL2AfterAMoveSwitchesDuringBoundDictation() {
+        dictation.start(target: .agentChat(sessionID: chats[1]), label: nil)
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertNotNil(whereTo)
+        press(.dpadDown, at: 0.4)
+        release(.dpadDown, at: 0.45)
+        release(.l2, at: 0.5)
+        XCTAssertEqual(window.selected, chats[2], "Loslassen nach Bewegung wechselt")
+        XCTAssertEqual(dictation.targetSessionID, chats[1], "Diktat bleibt beim Ziel")
+        XCTAssertTrue(dictation.stopped.isEmpty)
+        XCTAssertFalse(island.isVisible)
     }
 
     private func rebuild(environment: ControllerEnvironmentSpy) {
