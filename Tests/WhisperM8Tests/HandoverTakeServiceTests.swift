@@ -70,6 +70,15 @@ final class HandoverTakeServiceTests: XCTestCase {
                          adoptSucceeds: Bool = true,
                          isSameProcess: ((Int32, Double?) -> Bool)? = nil,
                          onMainThread: Bool = true) -> HandoverTakeService {
+        HandoverTakeService(dependencies: serviceDependencies(
+            secrets: secrets, sessions: sessions, calls: calls, adoptSucceeds: adoptSucceeds,
+            isSameProcess: isSameProcess, onMainThread: onMainThread))
+    }
+
+    private func serviceDependencies(secrets: HandoverSecretStoring, sessions: [AgentChatSession], calls: Calls,
+                                     adoptSucceeds: Bool = true,
+                                     isSameProcess: ((Int32, Double?) -> Bool)? = nil,
+                                     onMainThread: Bool = true) -> HandoverTakeService.Dependencies {
         var dependencies = HandoverTakeService.Dependencies(
             paths: paths, secretStore: secrets, marker: marker(pid: 200),
             sessions: { sessions },
@@ -85,7 +94,7 @@ final class HandoverTakeServiceTests: XCTestCase {
         dependencies.signalWait = 1
         if let isSameProcess { dependencies.isSameProcess = isSameProcess }
         if !onMainThread { dependencies.isMainThread = { false } }
-        return HandoverTakeService(dependencies: dependencies)
+        return dependencies
     }
 
     func testNewAppAdoptsAllChatsAndClearsHandoverState() throws {
@@ -203,13 +212,9 @@ final class HandoverTakeServiceTests: XCTestCase {
     /// Befund kill-mid-take (Dex): Ein Chat, der SIGHUP und SIGTERM übersteht,
     /// bekommt SIGKILL und wird danach fortgesetzt, statt nie zurückzukommen.
     func testOrphanSurvivingSigtermIsKilledAndThenResumed() async throws {
-        let child = try HandoverPTYChild.spawn(script: """
-        trap '' HUP TERM
-        : > "$READY"
-        while true; do sleep 0.05; done
-        """, in: directory)
-        children.append(child)
-        let sources = [FakeDepositSource(child: child, detachable: true)]
+        let source = try stubbornChild()
+        let child = source.child
+        let sources = [source]
         _ = try handOver(sources, secrets: FakeSecretStore())
         let calls = Calls()
         // Ohne Geheimnis: Der Aufbewahrer wird beendet, der Chat überlebt das.
@@ -220,6 +225,80 @@ final class HandoverTakeServiceTests: XCTestCase {
         while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
         XCTAssertEqual(calls.resumed, sources.map(\.sessionID), "nach SIGKILL fortgesetzt")
         XCTAssertFalse(child.isAlive, "erst weg, dann fortgesetzt")
+    }
+
+    /// Übersteht Ctrl+C (das geordnete Ende des Aufbewahrers), SIGHUP und SIGTERM.
+    private func stubbornChild() throws -> FakeDepositSource {
+        let child = try HandoverPTYChild.spawn(script: """
+        trap '' HUP TERM INT
+        : > "$READY"
+        while true; do sleep 0.05; done
+        """, in: directory)
+        children.append(child)
+        return FakeDepositSource(child: child, detachable: true)
+    }
+
+    /// Vic zu 54a493b4 (1): Ein Terminal-Tab kommt nach dem Rückfall nie
+    /// zurück. Sein gegen HUP gesicherter Job bekommt kein SIGKILL.
+    func testTerminalTabSurvivingSigtermIsNotKilled() async throws {
+        let source = try stubbornChild()
+        _ = try handOver([source], secrets: FakeSecretStore())
+        var killed: [Int32] = []
+        var dependencies = serviceDependencies(secrets: FakeSecretStore(),
+                                               sessions: [session(for: source, kind: .terminal)], calls: Calls())
+        dependencies.killProcess = { killed.append($0) }
+        _ = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
+        try await Task.sleep(nanoseconds: 6_000_000_000)
+        XCTAssertTrue(killed.isEmpty, "kein SIGKILL für einen Terminal-Tab")
+        XCTAssertTrue(source.child.isAlive)
+    }
+
+    /// Vic zu 54a493b4 (2): Ohne bekannte Startzeit kein SIGKILL und kein
+    /// Fortsetzen (der Prozess unter der PID könnte ein fremder sein).
+    func testUnknownStartTimeMeansNoKillAndNoResume() async throws {
+        let source = try stubbornChild()
+        _ = try handOver([source], secrets: FakeSecretStore())
+        try dropStartTimesFromMarker()
+        var killed: [Int32] = []
+        let calls = Calls()
+        var dependencies = serviceDependencies(secrets: FakeSecretStore(), sessions: [session(for: source)], calls: calls)
+        dependencies.killProcess = { killed.append($0) }
+        let summary = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
+        XCTAssertEqual(summary.fallback, [source.sessionID])
+        try await Task.sleep(nanoseconds: 6_000_000_000)
+        XCTAssertTrue(killed.isEmpty, "ohne Startzeit kein SIGKILL")
+        XCTAssertTrue(calls.resumed.isEmpty, "und kein Fortsetzen, solange er lebt")
+        XCTAssertTrue(source.child.isAlive)
+    }
+
+    func testCertainlySameProcessNeedsBothStartTimes() {
+        let now = Date()
+        let alive: (Int32) -> Bool = { _ in true }
+        XCTAssertTrue(HandoverPlanning.isCertainlySameProcess(pid: 42, expectedStartTime: now.timeIntervalSince1970,
+                                                              isAlive: alive, startTime: { _ in now }))
+        XCTAssertFalse(HandoverPlanning.isCertainlySameProcess(pid: 42, expectedStartTime: nil,
+                                                               isAlive: alive, startTime: { _ in now }))
+        XCTAssertFalse(HandoverPlanning.isCertainlySameProcess(pid: 42, expectedStartTime: now.timeIntervalSince1970,
+                                                               isAlive: alive, startTime: { _ in nil }))
+        XCTAssertFalse(HandoverPlanning.isCertainlySameProcess(pid: 42, expectedStartTime: now.timeIntervalSince1970 - 5,
+                                                               isAlive: alive, startTime: { _ in now }))
+        // Die nachsichtige Variante bleibt für SIGTERM, wie gewollt.
+        XCTAssertTrue(HandoverPlanning.isSameProcess(pid: 42, expectedStartTime: nil, isAlive: alive, startTime: { _ in now }))
+    }
+
+    /// Marker wie von einer App, die keine Startzeit lesen konnte.
+    private func dropStartTimesFromMarker() throws {
+        let data = try Data(contentsOf: markerURL)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var handover = try XCTUnwrap(json["handover"] as? [String: Any])
+        let chats = try XCTUnwrap(handover["chats"] as? [[String: Any]])
+        handover["chats"] = chats.map { chat -> [String: Any] in
+            var chat = chat
+            chat.removeValue(forKey: "pidStartTime")
+            return chat
+        }
+        json["handover"] = handover
+        try JSONSerialization.data(withJSONObject: json).write(to: markerURL)
     }
 
     /// Befund kill-mid-take (Dex): Nach SIGKILL des Aufbewahrers blieb sein

@@ -27,6 +27,10 @@ final class HandoverTakeService {
         /// Fortsetzen per `--resume` beim Anzeigen (wie die Absturz-Wiederaufnahme).
         var scheduleResume: ([UUID]) -> Void
         var isSameProcess: (Int32, Double?) -> Bool = { HandoverPlanning.isSameProcess(pid: $0, expectedStartTime: $1) }
+        /// Strenger für SIGKILL: Startzeit bekannt und passend.
+        var isCertainlySameProcess: (Int32, Double?) -> Bool = {
+            HandoverPlanning.isCertainlySameProcess(pid: $0, expectedStartTime: $1)
+        }
         var terminateProcess: (Int32) -> Void = { kill($0, SIGTERM) }
         /// Letzte Stufe für Chats, die SIGHUP und SIGTERM überleben.
         var killProcess: (Int32) -> Void = { kill($0, SIGKILL) }
@@ -257,11 +261,21 @@ final class HandoverTakeService {
                     dependencies.terminateProcess(pid)
                     gone = await dependencies.waitUntilGone(pid, start, dependencies.signalWait)
                 }
-                if !gone, dependencies.isSameProcess(pid, start) {
-                    Logger.agentStore.notice(
-                        "handover_orphan_killed session=\(sessionID.uuidString, privacy: .public) pid=\(pid)")
-                    dependencies.killProcess(pid)
-                    gone = await dependencies.waitUntilGone(pid, start, dependencies.signalWait)
+                // SIGKILL nur für Chats, die danach fortgesetzt werden (ein
+                // Terminal-Tab kommt nie zurück, sein Job kann absichtlich
+                // gegen HUP gesichert sein), und nur bei bekannter, passender
+                // Startzeit — sonst träfe er womöglich einen fremden Prozess
+                // unter derselben PID (Vic zu 54a493b4).
+                if !gone, resumeAfter, dependencies.isSameProcess(pid, start) {
+                    if dependencies.isCertainlySameProcess(pid, start) {
+                        Logger.agentStore.notice(
+                            "handover_orphan_killed session=\(sessionID.uuidString, privacy: .public) pid=\(pid)")
+                        dependencies.killProcess(pid)
+                        gone = await dependencies.waitUntilGone(pid, start, dependencies.signalWait)
+                    } else {
+                        Logger.agentStore.error(
+                            "handover_orphan_kill_skipped session=\(sessionID.uuidString, privacy: .public) pid=\(pid) reason=start_time_unknown")
+                    }
                 }
                 if gone, resumeAfter {
                     resume.append(sessionID)

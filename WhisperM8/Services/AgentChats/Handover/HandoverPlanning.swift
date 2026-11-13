@@ -200,6 +200,19 @@ extension HandoverPlanning {
         return abs(current.timeIntervalSince1970 - expectedStartTime) < 0.001
     }
 
+    /// Wie `isSameProcess`, aber ohne Zweifel zugunsten des Prozesses: Die
+    /// erwartete und die aktuelle Startzeit müssen bekannt sein und passen.
+    /// Für SIGKILL, wo ein Irrtum einen fremden Prozess träfe.
+    static func isCertainlySameProcess(
+        pid: Int32,
+        expectedStartTime: Double?,
+        isAlive: (Int32) -> Bool = { HandoverPlanning.isRunningProcess($0) },
+        startTime: (Int32) -> Date? = { ProcessStartTime.of(pid: $0) }
+    ) -> Bool {
+        guard pid > 1, isAlive(pid), let expectedStartTime, let current = startTime(pid) else { return false }
+        return abs(current.timeIntervalSince1970 - expectedStartTime) < 0.001
+    }
+
     /// Lebt der Prozess? Ein Zombie (beendet, noch nicht abgeholt) zählt als
     /// beendet: Er schreibt nichts mehr in seine Sitzung.
     static func isRunningProcess(_ pid: Int32) -> Bool {
