@@ -336,7 +336,12 @@ Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblende
 3. **Abgabe-Fehler mit Fortsetzen wie im Plan:** Chats, deren Abgabe scheiterte, werden nach dem Neustart fortgesetzt.
 4. **Aufbewahrer liest erst ab `COMMIT`** aus den Leitungen.
 5. **`app handover` gegen Aufruf aus einem Chat sichern.**
-6. **Bindungs-Befund** (zwei Chats an derselben Claude-Sitzung): nach der Übernahme die Sitzungs-ID über die PID in Claudes Registry prüfen und korrigieren; vor jedem Sammel-Start auf doppelte IDs prüfen; Reservierung gegen gleichzeitigen Doppelstart; zurückgestellte IDs und Fork-Merkliste ins Manifest.
+6. **Bindungs-Befund** (zwei Chats an derselben Claude-Sitzung; Gus' Fix `fix/bindung-fremdes-transcript` bindet frische Starts über die Registry-PID). Wer was baut, entscheidet Jarvis nach Vics Urteil:
+   - a) **Reservierung gegen gleichzeitigen Doppelstart:** Eine ID, die gerade startet, bleibt gesperrt, bis ihr Prozess in der Registry steht. Die heutige Sperre erkennt gleichzeitige Starts (Wiederaufnahme, Grid, Rückfall von 4c) nicht.
+   - b) **Sammel-Starts vergleichen die IDs vorher** (Absturz-Wiederaufnahme, Rückfall von 4c) und starten bei einer Dopplung höchstens einen Chat; der andere bekommt einen Hinweis. Als reine Funktion mit Test neben den Entscheidungstabellen.
+   - c) **Zurückgestellte IDs und Fork-Merkliste ins Manifest** (`pendingExternalIDs` liegt nur im Speicher; nach `/clear` und Übergabe hinge der Chat sonst an der alten ID).
+   - d) nach der Übernahme die gespeicherte ID mit der Registry-PID abgleichen und korrigieren (heilt Altlasten bei übernommenen Chats).
+   - Abhängig, nicht hier: Bereinigung der Altlasten im Workspace (Prozess laut Registry gewinnt) und die Prüfung, wann Claude die Registry-Datei bei Resume und Fork schreibt.
 7. **Prüfungen gegen die Wirklichkeit:** Bild im echten Fenster samt Größe und Neuzeichnen nach der Übernahme (Vic, Befund 8: das Terminal bekommt erst die Manifest-Größe, die echte erst mit der Ansicht), Dauerlauf grün mit Dex' absichtlichen Fehlern, Dauer von Abgabe und Übernahme bei zehn Chats, Abnahme Dev-Build auf Dev-Build und ad hoc auf ad hoc, fünfmal `make dev`, der erste echte Lauf nur mit Chats, deren Verlust nicht schlimm wäre.
 9. **„Arbeitet seit“ ins Manifest** (Vic, Befund 7): Statistik und Wach-Knopf starten nach einer Übernahme sonst neu.
 10. **`make dev` ohne Steuer-Socket** (Vic, Befund 6): Läuft die App, ist ihr Socket aber nicht erreichbar (etwa `agentControlServerEnabled` aus), wartet `_handover` bis zu 15 s. Nur warten, wenn die App gerade startet.
