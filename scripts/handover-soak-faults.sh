@@ -758,6 +758,12 @@ fault_double_restart() {
     return 0
 }
 
+ROUTER_SWITCH_OFF=0
+switch_on() {
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    ROUTER_SWITCH_OFF=0
+}
+
 # Legt den Router-Modus dieses App-Laufs fest, wie es ein Router-Start täte:
 # `ClaudeGPTRouterMode.current` ist ein `static let` und wird erst beim ersten
 # Zugriff ausgewertet. Die Test-Instanz hat kein GPT-Backend und startet nie
@@ -766,7 +772,8 @@ fault_double_restart() {
 # die App sie ab und startet nichts. Ausgabe: Antwortzeile der App.
 pin_router_mode() {
     local sock
-    sock=$("$TI" status | awk '/^Socket:/ {print $2}')
+    # Direkt aus der Datei: Der Pfad kann Leerzeichen enthalten.
+    sock=$(head -1 "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null || true)
     "$PY" -I - "$sock" <<'PYEOF'
 import json, socket, sys, uuid
 s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -795,10 +802,12 @@ PYEOF
 fault_router_switch() {
     local scenario="$1" code=0 log="$STATE/fault-$1-handover.log"
     requires "$scenario" keep_chats || return "$SKIPPED"
-    # Ein Lauf mit Schalter aus: Router in der App.
+    # Ein Lauf mit Schalter aus: Router in der App. Bei einem Abbruch schaltet
+    # on_fault_exit ihn wieder ein.
+    ROUTER_SWITCH_OFF=1
     defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool NO
     if ! ti restart > "$STATE/fault-$scenario-aus.log" 2>&1; then
-        defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+        switch_on
         record "$scenario" ausgeloest FEHLER "Neustart mit Schalter aus gescheitert: $(tail -1 "$STATE/fault-$scenario-aus.log")"
         return 1
     fi
@@ -810,7 +819,7 @@ fault_router_switch() {
         cli chats resume "$(chat_ref "$name")" --json >/dev/null 2>&1 || true
     done
     if ! wait_until_running; then
-        defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+        switch_on
         record "$scenario" ausgeloest FEHLER "Chats nach dem Neustart mit Schalter aus auch per chats resume nicht zurück"
         return 1
     fi
@@ -826,7 +835,7 @@ fault_router_switch() {
     # Vergleichsstand neu: Gemessen wird nur der Neustart mit eingeschaltetem Schalter.
     snapshot "$STATE/fault-$scenario-before.tsv"
     # Jetzt einschalten, während die App läuft, und neu starten.
-    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    switch_on
     sleep 1
     ti restart --keep-chats > "$log" 2>&1 || code=$?
     if (( code == 2 )) && grep -q "wirkt erst ab diesem Neustart" "$log"; then
@@ -941,6 +950,7 @@ on_fault_exit() {
     local status=$?
     stop_sampler
     forget_secret_candidates
+    (( ROUTER_SWITCH_OFF )) && switch_on
     clear_knobs
     on_exit "$status"
 }
