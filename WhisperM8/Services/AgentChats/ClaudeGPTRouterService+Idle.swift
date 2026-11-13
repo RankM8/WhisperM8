@@ -9,12 +9,26 @@ import Foundation
 // Anfragen überlebender Chats (etwa während einer Übergabe) zählen als
 // Betrieb und halten den Dienst am Leben.
 extension ClaudeGPTRouterService {
-    /// Hält eine `attach`-Verbindung, bis die Gegenseite sie schließt.
+    /// Hält eine `attach`-Verbindung, bis die Gegenseite sie schließt. Ein
+    /// auslaufender Dienst lehnt ab (die App soll nicht an einem Dienst hängen,
+    /// der gleich endet). Höchstens `maximumAttachments` gleichzeitig: Jede
+    /// hält einen Thread, ohne Grenze könnte ein Prozess desselben Nutzers den
+    /// GCD-Pool erschöpfen.
     func holdAttachment(on client: Int32) {
-        let count: Int = stateQueue.sync {
+        guard attachSlots.wait(timeout: .now()) == .success else {
+            try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "busy"])
+            return
+        }
+        defer { attachSlots.signal() }
+        let count: Int? = stateQueue.sync {
+            guard state == .serving else { return nil }
             attachedClients += 1
             lastBusyAt = Date()
             return attachedClients
+        }
+        guard let count else {
+            try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "draining"])
+            return
         }
         log("app_attached count=\(count)")
         try? ClaudeGPTRouterWire.send(client, ["ok": true, "op": "attached"])
@@ -61,20 +75,26 @@ extension ClaudeGPTRouterService {
 
     private func checkIdle() {
         let active = router.activeConnectionCount
+        let lastRequest = router.lastActivityAt
         let now = Date()
+        // Entscheidung und Zustandswechsel in EINEM Schritt: Sonst könnten
+        // zwischen „abgelaufen“ und shutdown noch ein handover oder ein
+        // attach beginnen.
         let expired: Bool = stateQueue.sync {
             guard state == .serving else { return false }
             if attachedClients > 0 || active > 0 {
                 lastBusyAt = now
                 return false
             }
-            return Self.isIdleExpired(
+            guard Self.isIdleExpired(
                 attached: attachedClients, activeRequests: active,
-                lastBusyAt: lastBusyAt, now: now, idleLimit: configuration.idleLimit
-            )
+                lastBusyAt: max(lastBusyAt, lastRequest), now: now, idleLimit: configuration.idleLimit
+            ) else { return false }
+            state = .draining
+            return true
         }
         guard expired else { return }
         log("idle_limit_reached minutes=\(Int(configuration.idleLimit / 60))")
-        shutdown(reason: "idle")
+        drainAfterIdle()
     }
 }

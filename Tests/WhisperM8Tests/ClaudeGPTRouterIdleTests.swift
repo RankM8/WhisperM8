@@ -107,6 +107,88 @@ final class ClaudeGPTRouterIdleTests: XCTestCase {
         XCTAssertEqual(exited?.wait(timeout: .now() + 5), .success, "Dienst endet nach stop() nicht")
     }
 
+    // MARK: Befunde aus dem eigenen Review
+
+    /// Ein Neustart nach Absturz darf ein gleichzeitiges stop() nicht
+    /// verschlucken: Nach stop() startet der interne Weg nichts mehr.
+    func testRestartAfterCrashRespectsStop() throws {
+        var spawns = 0
+        let supervisor = ClaudeGPTRouterServiceSupervisor(
+            root: root, build: "b",
+            spawner: { [unowned self] _ in
+                spawns += 1
+                _ = try self.startService(idleLimit: 30)
+                return getpid()
+            },
+            readyTimeout: 3
+        )
+        try supervisor.ensureRunning(port: 0).get()
+        XCTAssertEqual(spawns, 1)
+        supervisor.stop()
+        XCTAssertNil(supervisor.restartIfStillWanted(port: 0), "Neustart trotz stop()")
+        XCTAssertEqual(spawns, 1)
+    }
+
+    /// Start direkt nach stop(): Der Dienst hat sein shutdown schon und läuft
+    /// aus — nicht behalten (sonst Lücke bis zum Neustart), sondern ersetzen.
+    func testStartRightAfterStopReplacesDrainingService() throws {
+        var spawns = 0
+        let supervisor = ClaudeGPTRouterServiceSupervisor(
+            root: root, build: "b",
+            spawner: { [unowned self] _ in
+                spawns += 1
+                _ = try self.startService(idleLimit: 30)
+                return getpid()
+            },
+            readyTimeout: 3
+        )
+        try supervisor.ensureRunning(port: 0).get()
+        supervisor.stop()
+        try supervisor.ensureRunning(port: 0).get()
+        XCTAssertEqual(spawns, 2, "auslaufender Dienst wurde behalten")
+        supervisor.stop()
+    }
+
+    /// Kurze Anfragen zwischen zwei Prüfungen der Uhr zählen trotzdem.
+    func testShortRequestsResetIdleClock() throws {
+        let quick = try SlowStreamUpstream(chunkCount: 1, chunkDelay: 0.01)
+        defer { quick.stop() }
+        let url = URL(string: "http://127.0.0.1:\(quick.port)")!
+        let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: .bsdSockets)
+        routers.append(router)
+        var configuration = ClaudeGPTRouterService.Configuration(root: root, port: 0, build: "b", takeOver: false)
+        configuration.idleLimit = 0.6
+        configuration.idleCheckInterval = 0.25
+        let exited = DispatchSemaphore(value: 0)
+        let service = ClaudeGPTRouterService(configuration: configuration, router: router) { _ in exited.signal() }
+        try service.start().get()
+        services.append(service)
+        let port = try XCTUnwrap(router.listeningPort)
+        for _ in 0..<6 {
+            _ = try GPTRouterTestClient.stream(port: port)
+            XCTAssertEqual(exited.wait(timeout: .now() + 0.3), .timedOut, "beendet trotz laufender kurzer Anfragen")
+        }
+        XCTAssertEqual(exited.wait(timeout: .now() + 5), .success, "danach endet der Dienst")
+    }
+
+    func testAttachmentsAreLimited() throws {
+        _ = try startService(idleLimit: 30)
+        var held: [Int32] = []
+        defer { held.forEach { close($0) } }
+        for _ in 0..<ClaudeGPTRouterService.maximumAttachments {
+            held.append(try XCTUnwrap(ClaudeGPTRouterServiceClient.attach(root: root)))
+        }
+        XCTAssertNil(ClaudeGPTRouterServiceClient.attach(root: root), "mehr attach als Plätze")
+        close(held.removeLast())
+        let deadline = Date().addingTimeInterval(3)
+        var again: Int32?
+        while again == nil, Date() < deadline {
+            again = ClaudeGPTRouterServiceClient.attach(root: root)
+            if again == nil { Thread.sleep(forTimeInterval: 0.05) }
+        }
+        held.append(try XCTUnwrap(again, "Platz wird nach dem Schließen nicht frei"))
+    }
+
     /// Hängt der Dienst (nimmt an, antwortet nie), darf `stop()` den Main
     /// Thread trotzdem nicht aufhalten.
     func testStopDoesNotWaitForHangingService() throws {

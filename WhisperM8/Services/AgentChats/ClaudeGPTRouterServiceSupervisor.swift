@@ -199,10 +199,32 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     func ensureRunning(port: Int) -> Result<Void, Error> {
         lock.lock()
         defer { lock.unlock() }
+        // Ein Start von außen (Chat, Backend an) hebt ein vorheriges stop()
+        // auf. War gerade gestoppt, hat der laufende Dienst sein shutdown
+        // schon bekommen und läuft aus: nicht behalten, sondern ersetzen.
+        let wasStopped = isStopRequested
         setStopRequested(false)
+        return ensureRunningLocked(port: port, replaceServing: wasStopped)
+    }
+
+    /// Neustart nach Absturz: nur, wenn noch gewollt — geprüft unter `lock`,
+    /// und ohne das Stop-Flag zurückzusetzen (sonst verschluckte ein Neustart
+    /// ein gleichzeitiges stop()).
+    func restartIfStillWanted(port: Int) -> Result<Void, Error>? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard desiredPort == port, watchedPID == nil, !isStopRequested else { return nil }
+        return ensureRunningLocked(port: port, replaceServing: false)
+    }
+
+    /// Nur unter `lock`.
+    private func ensureRunningLocked(port: Int, replaceServing: Bool) -> Result<Void, Error> {
         desiredPort = port
         if let status = settledStatus(), status.state == "serving" {
-            switch Self.takeOverPlan(status: status, port: port, ownExecutable: ownExecutable, build: build) {
+            let plan: TakeOverPlan = replaceServing
+                ? .replace
+                : Self.takeOverPlan(status: status, port: port, ownExecutable: ownExecutable, build: build)
+            switch plan {
             case .keepRunning:
                 watch(pid: status.pid)
                 return .success(())
@@ -226,8 +248,9 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
                     waitUntilPortFree(port)
                 }
             case .replace:
-                // Anderer Port oder anderer Programmort: alte Generation gibt
-                // den Port sofort frei und läuft aus, die neue startet frisch.
+                // Anderer Port, anderer Programmort oder gerade gestoppt: alte
+                // Generation gibt den Port sofort frei und läuft aus, die neue
+                // startet frisch.
                 ClaudeGPTRouterServiceClient.shutdown(root: root)
                 waitUntilPortFree(port)
             }
@@ -330,9 +353,27 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
 
     /// Nur unter `lock`. Hängt an der Generation, die gerade den Steuer-Socket
     /// hält (das ist die beobachtete).
+    ///
+    /// Scheitert `attach` (Frist, Steuer-Pfad wird gerade neu gebunden), folgt
+    /// ein zweiter Versuch — sonst endete der Dienst nach der Leerlauf-Frist,
+    /// obwohl die App läuft.
+    ///
+    /// Bekannte Grenze: `socket()` und close-on-exec sind zwei Aufrufe (macOS
+    /// kennt kein SOCK_CLOEXEC). Startet genau dazwischen ein Chat, erbt er
+    /// die Verbindung, und der Dienst zählt die App als verbunden, solange
+    /// dieser Chat lebt. Das Fenster ist Mikrosekunden kurz.
     private func attachToService() {
         closeAttachment()
         attachFD = ClaudeGPTRouterServiceClient.attach(root: root) ?? -1
+        guard attachFD < 0, let pid = watchedPID else { return }
+        Logger.claudeGPTRouter.notice("gpt_router_service_attach_failed_retrying pid=\(pid)")
+        queue.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            defer { self.lock.unlock() }
+            guard self.attachFD < 0, self.watchedPID == pid, !self.isStopRequested else { return }
+            self.attachFD = ClaudeGPTRouterServiceClient.attach(root: self.root) ?? -1
+        }
     }
 
     private func closeAttachment() {
@@ -349,6 +390,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         watchedPID = nil
         exitSource?.cancel()
         exitSource = nil
+        closeAttachment()
         // Nach einer Generationsübergabe endet die alte; dann lauscht schon die
         // neue — die wird beobachtet, kein Neustart.
         if let status = statusResolver(root), status.state == "serving", status.port == port {
@@ -362,12 +404,8 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         lock.unlock()
         Logger.claudeGPTRouter.error("gpt_router_service_exited pid=\(pid) restartIn=\(delay)")
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            self.lock.lock()
-            let stillWanted = self.desiredPort == port && self.watchedPID == nil && !self.isStopRequested
-            self.lock.unlock()
-            guard stillWanted else { return }
-            if case .failure(let error) = self.ensureRunning(port: port) {
+            guard let self, let result = self.restartIfStillWanted(port: port) else { return }
+            if case .failure(let error) = result {
                 Logger.claudeGPTRouter.error(
                     "gpt_router_service_restart_failed \(error.localizedDescription, privacy: .public)"
                 )
@@ -383,12 +421,8 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         restartAttempt += 1
         lock.unlock()
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            self.lock.lock()
-            let stillWanted = self.desiredPort == port && self.watchedPID == nil && !self.isStopRequested
-            self.lock.unlock()
-            guard stillWanted else { return }
-            if case .failure = self.ensureRunning(port: port) {
+            guard let self, let result = self.restartIfStillWanted(port: port) else { return }
+            if case .failure = result {
                 self.serviceRestartFailed(port: port)
             }
         }

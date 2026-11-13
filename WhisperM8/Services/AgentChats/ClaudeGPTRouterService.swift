@@ -90,6 +90,8 @@ final class ClaudeGPTRouterService {
     var attachedClients = 0
     var lastBusyAt = Date()
     var idleTimer: DispatchSourceTimer?
+    static let maximumAttachments = 8
+    let attachSlots = DispatchSemaphore(value: ClaudeGPTRouterService.maximumAttachments)
     /// Programm dieses Prozesses, beim Start gelesen (nach `make dev` ist die
     /// Datei ersetzt, der Pfad bleibt derselbe).
     private let ownExecutablePath = ClaudeGPTRouterService.executablePath(of: getpid())
@@ -428,6 +430,16 @@ final class ClaudeGPTRouterService {
             return true
         }
         guard shouldDrain else { return }
+        performShutdown(reason: reason)
+    }
+
+    /// Leerlauf-Frist: Der Zustand steht schon auf `.draining` (gesetzt in
+    /// derselben Entscheidung wie „abgelaufen“).
+    func drainAfterIdle() {
+        performShutdown(reason: "idle")
+    }
+
+    private func performShutdown(reason: String) {
         log("shutdown reason=\(reason) active=\(router.activeConnectionCount)")
         router.closeListenerKeepingConnections()
         closeControlSocket(unlinkPath: true)
