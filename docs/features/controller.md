@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-12
+updated: 2026-11-13
 description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
 ---
 
@@ -15,8 +15,12 @@ Der Controller löst **Aktionen** aus, keine Tastendrücke an das Fenster im Vor
 gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung.
 
 Plan mit Entscheidungen und Prüfprotokoll: [`../plans/controller-steuerung.md`](../plans/controller-steuerung.md).
-Entwürfe: [`../design/controller-steuerung.html`](../design/controller-steuerung.html), für die Insel
-[`../design/controller-insel.html`](../design/controller-insel.html).
+Entwürfe: [`../design/controller-steuerung.html`](../design/controller-steuerung.html), für die Dynamic Island
+[`../design/controller-insel.html`](../design/controller-insel.html) und
+[`../design/controller-runde5.html`](../design/controller-runde5.html) (zwei Rauten, Limits-Karte).
+
+**Name:** Die Anzeige, die beim Halten von L1, R1 oder L2 an der Notch bzw. aus der Pille wächst, heißt
+in Texten und Doku **Dynamic Island** (früher „Insel“). Im Code heißen die Typen weiter `ControllerIsland…`.
 
 ## Einschalten
 
@@ -60,7 +64,7 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 | Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | im Chat ein Leerzeichen (lebende Claude- und Codex-Chats, kein Wiederholen beim Halten; in Shells „geht nicht“); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
-| L1 / R1 tippen | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs. Gehalten sind sie Ebenen (siehe „Ebenen und Insel“), ein Durchlaufen beim Halten gibt es nicht |
+| L1 / R1 tippen | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs. Gehalten sind sie Ebenen (siehe „Ebenen und Dynamic Island“), ein Durchlaufen beim Halten gibt es nicht |
 | Steuerkreuz | in jedem lebenden Chat Pfeiltasten ins Terminal (Claude, Codex, Shell; ruhend, arbeitend oder fragend, auch im Raster), mit Wiederholung beim Halten. So erreicht man Subagenten-, Workflow- und Aufgabenansichten von Claude und jede Auswahlliste der CLI. Rechts übernimmt in Claude den grauen Vorschlag, Kreuz schickt ihn dann ab. **Ausnahme links:** Im vermutlich leeren Claude-Feld (direkt nach dem Absenden, seither nichts im Feld, keine Rückfrage, keine offene Auswahl) „geht nicht“, denn dort schickt ← die ganze Sitzung in Claudes Agent-Ansicht. Hoch holt den letzten Prompt zurück; er gilt dann als Rückleger, den „Weiter“, Menü-Befehle und `chats send` vorher leeren. In der App (Liste, Kacheln) bewegt nur der linke Stick. Ohne lebendes Terminal (beendeter Chat) wie der Stick. Entscheidung vom 12.11.2026; vorher gab es Pfeile nur in Rückfragen, offenen Listen und Codex |
 | Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
 
@@ -70,11 +74,11 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 |---|---|
 | Viereck | im Chat Rücktaste (ein Zeichen); halten: weiter löschen wie beim iPhone — ab 0,6 s Zeichen alle 60 ms, nach einer weiteren Sekunde ganze Wörter alle 150 ms (Ctrl+W; in Shells weiter Zeichen); in der Liste halten: Zeile schließen wie ihr „−“/„×“ |
 | Create | Projekt-Auswahl „Neuer Chat“ (wie ⌘N), aktuelles bzw. markiertes Projekt vorausgewählt — „Create, Kreuz“ startet dort |
-| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; ebenso L2 + Touchpad (überall) und „Zwischenablage-Verlauf“ im Options-Menü |
+| Touchpad-Klick | Zwischenablage-Verlauf auf und zu; ebenso L2 + Touchpad (überall), R1 + ▼ und „Zwischenablage-Verlauf“ im Options-Menü |
 | L3 | Kachel groß / zurück zum Raster |
 | R3 | tippen: gestoppten Chat starten (im Chat und auf der markierten Zeile der Liste), sonst ohne Wirkung, auch ohne Vibration; halten (0,6 s): ganze Eingabe leeren, mit kurzer Vibration — Claude und Codex, nicht während einer Rückfrage; in einer Shell nur an der Eingabezeile (nicht in nano, vim und anderen Vollbild-Programmen) |
 | Options | das eine Menü, siehe unten |
-| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ (wie Cmd-Tab: Loslassen ohne Bewegung führt zum selben Ziel) |
+| L2 tippen | zurück dorthin, wo du vorher warst — voriger Chat oder voriger Workspace als Raster (siehe „Zurück mit L2“); gehalten die Ebene „Wohin“ (Markierung auf dem aktuellen Ort, Loslassen ohne Bewegung tut nichts) |
 | L1 + R1 halten (1 s) | Controller pausieren und fortsetzen (in jedem Abstand gedrückt; weder Chatwechsel noch Ebene) |
 
 Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
@@ -100,7 +104,7 @@ nächsten Eingabe oder Statusänderung noch das alte Ziel.
 
 **Menü (Options):** eine dunkle Karte am Chat, für den sie gilt (Runde 5): in der Einzelansicht rechts
 direkt unter dem Chat-Kopf (beim „…“-Knopf), im Raster am Kopf der fokussierten Kachel, in der Liste rechts
-neben der markierten Zeile. Sie sieht aus wie Insel und Diktat-Pille (dunkles Glas, heller Rand, Markierung
+neben der markierten Zeile. Sie sieht aus wie die Dynamic Island und die Diktat-Pille (dunkles Glas, heller Rand, Markierung
 in Indigo) und zeigt jede Gruppe mit Überschrift; darunter steht, was ✕, ○ und Options tun. Am Rand kippt
 sie über den Anker (Kachel unten im Raster) oder rückt nach links bzw. oben; ist das Fenster zu klein,
 zeigt die Karte nur ganze Zeilen rund um die Markierung und rückt mit ihr (`ControllerMenuWindow`); an der
@@ -123,7 +127,7 @@ Kontextmenü des Chats bzw. Seitenleiste und Workspace-Kopf (je ein `AgentChatsC
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
 | Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Die Notiz der Kachel nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
 | Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
-| Steuerung | „Notizen überall an/aus“ (wie ⌥⌘N, gilt app-weit, nur bei sichtbarem Raster), „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
+| Steuerung | „Notizen überall an/aus“ (wie ⌥⌘N, gilt app-weit, nur bei sichtbarem Raster), „Archiv zeigen“ bzw. „Archiv verlassen“ (wie der Archiv-Knopf unten in der Seitenleiste; seit dem Insel-Paket hier statt auf R1 + ▼; ist die Seitenleiste zu, geht sie dafür auf), „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 
 **Konto wechseln ›** zeigt rechts den Verbrauch „5 Std. · Woche“ wie das Limits-Popover (Ampel: unter 50 %
 grün, ab 50 gelb, ab 80 rot) und markiert je Gruppe (Claude, GPT) das wählbare Konto mit dem kleinsten
@@ -145,13 +149,13 @@ das Raster verlässt. Läuft die Auswahl gerade, ist „Rastergröße“ aus.
 In der Liste wirken die Aktionen auf die markierte Chat-Zeile. Kreis geht eine Ebene zurück, Options
 schließt alles.
 
-## Ebenen und Insel
+## Ebenen und Dynamic Island
 
 L1, R1 und L2 sind **Ebenen-Tasten** (Runde 4). Tippen (kürzer als 0,3 s und ohne zweite Taste
 dazwischen, auch ohne Stoß von Stick oder Steuerkreuz und ohne Scrollen mit dem rechten Stick) löst beim Loslassen aus, was die Taste schon
 immer tat. Gehalten wird sie zur Ebene: Kombinationen wirken sofort beim Druck der zweiten Taste, die
-0,3 s bestimmen nur, wann die **Insel** erscheint. Loslassen nach Halten ohne Kombination tut nichts,
-außer bei L2: Dort wechselt Loslassen zum markierten Eintrag (siehe „Wohin“). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
+0,3 s bestimmen nur, wann die **Dynamic Island** erscheint. Loslassen nach Halten ohne Kombination tut nichts,
+außer bei L2: Dort wechselt Loslassen nach einer Bewegung zum markierten Eintrag (siehe „Wohin“). Es gilt immer nur eine Ebene; eine zweite Ebenen-Taste ist darin eine
 gewöhnliche Taste. Ebenen wirken im Chat und im Raster (auf den Chat der fokussierten Kachel). In der
 Liste, im Zwischenablage-Verlauf, im Menü, in Dialogen und während der Aufnahme wirken die Tasten wie
 ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren“).
@@ -162,51 +166,108 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Dreieck | Zeilenumbruch ohne Senden (Ctrl+J, siehe Schutzregeln) |
 | | Steuerkreuz ◀ ▶ | Wort zurück/vor (Ctrl+←/→ als vollständige CSI-Sequenz), mit Wiederholung — Claude und Codex |
 | | Steuerkreuz ▲ ▼ | Zeile hoch/runter, nur im sichtbar mehrzeiligen Entwurf und nicht aus der ersten (▲) bzw. letzten (▼) Zeile; dort holte Claude den Verlauf. Ist das Feld oder die Cursorzeile nicht ablesbar, „geht nicht“ |
-| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt. Die Insel zeigt vorher, was es ist |
-| | Kreis | genau ein Escape, unabhängig vom Status und ohne 1-s-Sperre. Arbeitet der Chat und ist keine Ansicht erkannt, warnt die Insel: es unterbricht |
+| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt. Die Dynamic Island zeigt vorher, was es ist |
+| | Kreis | genau ein Escape, unabhängig vom Status und ohne 1-s-Sperre. Arbeitet der Chat und ist keine Ansicht erkannt, warnt die Dynamic Island: es unterbricht |
 | | L3 | Rückgängig (Ctrl+_), nur Claude; Codex hat im Standard-Editor kein Undo |
 | R1 Schnellbefehle | Kreuz | „Weiter“; mit Text im Feld wie Ctrl+Enter: bei ruhendem Chat Enter („Senden“), bei arbeitendem Claude-Chat — oder wenn ein eigener Prompt in Claudes Warteschlange wartet — Ctrl+X Ctrl+S („Jetzt senden“). Arbeitender Codex-Chat: „geht nicht“ (Codex meldet nie „wartet“, Enter könnte eine Freigabe bestätigen). Steht nur ein zurückgelegter oder mit ↑ zurückgeholter Prompt im Feld: „geht nicht“. Leeres Feld bei arbeitendem Chat: „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
 | | L3 | ausführliches Transkript an/aus (Ctrl+O), nur Claude |
 | | Dreieck | Modus wechseln (Shift+Tab) |
 | | Viereck | Befehle › — öffnet das Options-Menü direkt auf dieser Unterseite |
 | | Kreis | Konto wechseln › — ebenso |
-| L2 Wohin | (halten) | die Liste steht sofort da, ohne Hinweiszeile davor; die Markierung steht auf dem vorigen Ort (siehe unten) |
+| | Steuerkreuz ▲ | Limits-Karte aller Konten, solange R1 gehalten ist (siehe „Limits-Karte“) |
+| | Steuerkreuz ◀ | Mitteilungen eine Stufe weiter, wie die Glocke in der Seitenleiste: alles an → Ton aus → alles aus („Ton aus“ fällt weg, wenn es nichts stumm zu schalten gibt) |
+| | Steuerkreuz ▶ | Wach bleiben eine Stufe weiter, wie der Wach-Knopf: aus → bei Arbeit am Strom → immer → aus. Fehlt die einmalige Admin-Freigabe, öffnet sich kein Dialog: Die Dynamic Island sagt „Erst in der Seitenleiste freigeben“, der Controller vibriert „geht nicht“ |
+| | Steuerkreuz ▼ | Zwischenablage-Verlauf auf und zu (schließt die Dynamic Island) |
+| L2 Wohin | (halten) | die Liste steht sofort da, die Markierung auf dem aktuellen Eintrag; der vorige Ort trägt „vorher“ (siehe unten) |
 | | Stick/Steuerkreuz hoch/runter | Markierung bewegen (mit Wiederholung) |
-| | links/rechts | Reiter Chats / Workspaces; die Markierung beginnt dort wieder auf dem vorigen Ort, wenn er in diesem Reiter steht, sonst auf dem aktuellen Eintrag |
-| | Loslassen, Kreuz | sofort zum markierten Eintrag wechseln, wie Cmd-Tab. Steht die Markierung auf dem aktuellen Eintrag, passiert nichts. Loslassen wechselt nur, solange der Chat die Eingaben hat; startet währenddessen eine Aufnahme per Hotkey oder geht ein Dialog oder Sheet auf, schließt es nur die Insel |
+| | links/rechts | Reiter „Chats“ / „Workspaces & Projekte“; die Markierung beginnt dort wieder auf dem aktuellen Eintrag |
+| | Loslassen, Kreuz | nach einer Bewegung zum markierten Eintrag wechseln. Ohne Bewegung (Markierung auf dem aktuellen Eintrag) passiert nichts. Loslassen wechselt nur, solange der Chat die Eingaben hat; startet währenddessen eine Aufnahme per Hotkey oder geht ein Dialog oder Sheet auf, schließt es nur die Dynamic Island |
 | | Kreis | abbrechen, nichts passiert |
-| | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Insel |
+| | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Dynamic Island |
 | | Viereck | zuletzt geschlossenen Chat dieses App-Starts wieder öffnen (wie `chats reopen`), an seine alte Stelle; noch mal für den davor. Die Fußzeile nennt ihn; ohne geschlossenen Chat „nichts geschlossen“ und „geht nicht“ |
-| | R2 | zum markierten Chat wechseln und diktieren; steht die Markierung auf dem aktuellen Chat oder Workspace, in den aktuellen Chat; ein anderer Workspace „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“). Weil die Markierung auf dem vorigen Chat beginnt, diktiert L2 halten + R2 ohne Bewegung in den vorigen Chat (die Fußzeile sagt im Reiter Workspaces „hier diktieren“) |
-| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Insel. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
+| | R2 | zum markierten Chat wechseln und diktieren; steht die Markierung auf dem aktuellen Chat, Workspace oder Projekt, in den aktuellen Chat; ein anderer Workspace oder ein Projekt „geht nicht“. Scheitert der Wechsel, wird nicht diktiert („geht nicht“). Ohne Bewegung diktiert L2 halten + R2 also in den aktuellen Chat (die Fußzeile sagt im Reiter „Workspaces & Projekte“ „hier diktieren“) |
+| | Touchpad drücken | Zwischenablage-Verlauf auf und zu; schließt die Dynamic Island. Gilt überall, auch außerhalb des Chats, im Verlauf selbst und außerhalb der App (mit Hintergrund-Empfang) — dort über die Belegung ohne Ebene |
 
-Ein Schnellbefehl oder Wechsel schließt die Insel; bis zum Loslassen der Taste kommt sie nicht wieder.
-Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen.
+Ein Schnellbefehl oder Wechsel schließt die Dynamic Island; bis zum Loslassen der Taste kommt sie nicht
+wieder. Ein Schnellbefehl, der gerade nicht geht, vibriert und lässt sie offen. **Ausnahme Schalter**
+(R1 + ◀ und ▶): Sie lassen die Dynamic Island offen, damit man mit mehreren Drücken bis zur gewünschten
+Stufe kommt. Das Feld wird kurz markiert, sein Stand wechselt, und unter den Rauten steht ausgeschrieben,
+was jetzt gilt, rechts daneben, was der nächste Druck bringt („Ton aus, Mitteilungen an · ◀ noch mal:
+alles aus“). Dazu ein kurzer, leichter Impuls (`ControllerHapticPattern.toggled`). Jeder Druck ist eine
+Stufe; gehaltenes Steuerkreuz schaltet nicht weiter.
 
-**Wohin wie Cmd-Tab** (Entscheidung vom 12.11.2026): Die Markierung beginnt auf dem vorigen Ort, also
-genau dem Ziel von L2 getippt (`ControllerBackTarget` mit ID, aus `AgentWindowStore+PlaceHistory`).
-Halten und Loslassen ohne Bewegung führt deshalb dorthin, wo auch Tippen hinführt; wer woanders hin
-will, bewegt vorher die Markierung. Die Zeile des vorigen Orts trägt rechts „vorher“. Der Start-Reiter
-folgt dem vorigen Ort: ein Workspace öffnet den Reiter Workspaces, ein Chat den Reiter Chats, auch wenn
-man gerade im Raster bzw. in der Einzelansicht ist (sonst täte Loslassen etwas anderes als Tippen).
-Ohne vorigen Ort gilt wie bisher: im Raster Workspaces, in der Einzelansicht Chats, und die Markierung
-steht auf dem aktuellen Eintrag, damit Loslassen nichts aus Versehen wechselt. Hat ein Reiter weder
-vorigen noch aktuellen Eintrag (Workspaces in der Einzelansicht ohne Workspace), gibt es dort zunächst
-keine Markierung; der erste Stoß markiert die erste Zeile. Die frühere Regel „Wechsel nur nach einer
-Bewegung im sichtbaren Reiter“ ist damit weg. Ist das Ziel der vorige Ort, geht der Wechsel denselben Weg
-wie L2 getippt (`lastChat`); Halten und Tippen enden also gleich, auch bei einem Fehlschlag. Die Chats
-stehen in der Reihenfolge der Liste links, jeder einmal; der vorige Chat steht immer darin, gleich
-hinter dem aktuellen, auch wenn die Seitenleiste ihn gerade nicht zeigt (Filter, Suche, eingeklappte
-Gruppe, Archiv-Ansicht); rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen
-„jetzt“). Die Workspaces sind die angelegten (ohne versteckte Projekt-Ansichten) in der Reihenfolge der
-Seitenleiste, mit Farbe, Name, Raute „wartet“ und Zahl der Chats. Höchstens sechs Zeilen, die Liste rückt
-mit der Markierung, darunter „+ n weitere“. Ein Chat wechselt wie der Klick in der Seitenleiste, ein
-Workspace wie der Klick auf seinen Kopf, aber still: Gehört er einem anderen Fenster oder laufen seine
-Chats dort, kommt kein Fenster nach vorn und kein Dialog, der Controller vibriert „geht nicht“
-(`switchToWorkspace`). Danach hat die Kachel den Fokus, auf der du dort zuletzt warst (gemerkt beim
-Verlassen, nur für den laufenden App-Start).
+**R1: zwei Rauten** (Insel-Paket, Entwurf `controller-runde5.html`, Zustände 1–5): links „App ·
+Steuerkreuz“ mit Limits, Mitteilungen, Wach bleiben und Zwischenablage, rechts „Chat · Tasten“ wie
+bisher. Beide Rauten sind verschränkt (vier halbe Spalten à 76 pt, Zeilen 44 pt), die Dynamic Island ist
+damit rund 700 pt breit (`ControllerIslandDisplay.bodyWidth`). Unter Mitteilungen und Wach bleiben steht
+ihr Stand, Symbole wie in der Seitenleiste. Die App-Raute hängt nicht am Chat und geht immer, auch bei
+offener Rückfrage und **während eines Diktats**; dann ist nur die Chat-Raute ausgegraut (Regel seit
+Runde 5). Glocke und Wach-Knopf teilen sich ihren Weg mit der Seitenleiste
+(`AgentAlertLevel.advance()`, `StayAwakeController.cycle()`), der Wach-Schalter prüft vorher
+`nextStepNeedsPermission`. War die Seitenleiste seit dem App-Start verborgen, kennt die App die Freigabe
+noch nicht: Der erste Druck holt das still nach (`whenPermissionKnown`, `sudo -n`, nie ein Dialog) und
+schaltet danach bzw. meldet „Erst in der Seitenleiste freigeben“ nur, wenn sie wirklich fehlt. Das Archiv (im Entwurf noch auf ▼) steht jetzt im Options-Menü.
 
-**Die Insel** ist ein eigenes, nicht aktivierendes Fenster ohne Maus (`ControllerIslandPresenter`),
+**Kopf mit Konto:** Neben dem Ziel-Chat steht sein Konto mit dem 5-Stunden-Stand, etwa „main · 5 h 42 %“,
+verbraucht und in der Ampel des Limits-Popovers (unter 50 % grün, ab 50 gelb, ab 80 rot). GPT-Chats
+(GPT-Backend) zeigen ihr GPT-Konto, Claude-Chats ihr Claude-Konto, Codex und Shells keins
+(`ControllerUsageAccount.of`). Dabei gelten dieselben Schalter wie beim Start: Ist das GPT-Backend aus,
+zählt ein GPT-Stempel nicht (der Chat läuft als Claude), sind GPT-Konten aus, gilt das GPT-Hauptkonto. Das
+Konto wird beim Öffnen der Dynamic Island einmal bestimmt (während eines Diktats das seines Ziels) und
+bleibt, auch wenn neue Zahlen kommen. Die Zahl kommt aus dem letzten Stand im `AccountLimitsStore`;
+der Kopf löst nie einen Abruf aus, ohne Stand steht „—“.
+
+**Limits-Karte** (R1 + ▲, Zustände 6 und 7): Statt der Rauten alle angemeldeten Claude-Konten, darunter
+die Konten des GPT-Backends — dieselben wie in den beiden Popovers unten links, ohne das Codex-CLI-Konto
+des Diktats, ohne Plan-Kürzel und ohne Wochenlimit je Modell. Je Konto 5-Stunden- und Wochenfenster mit
+Balken, Prozent verbraucht und Rücksetzzeit (unter einem Tag als Dauer „in 2 h 10 min“, sonst Wochentag
+und Uhrzeit). Das Konto des Chats ist markiert („dieser Chat“). Login beendet oder kein Token: Text aus dem
+Popover statt der Balken. Bei anderen Problemen (offline, Token wird gleich erneuert, GPT-Abruf
+gescheitert) bleiben die letzten Zahlen samt Rücksetzzeit stehen, mit Hinweis; nur ein Konto ganz ohne
+Zahlen zeigt den Text. Ein gescheiterter GPT-Abruf nennt keinen Grund („Live-Abruf fehlgeschlagen“), weil
+der Abruf keinen kennt. Der Stand-Zeitpunkt rückt nur mit echten, live abgerufenen Zahlen vor. Die
+Konten liest die Karte einmal beim Öffnen; neue Zahlen ordnen sich danach nur noch zu (kein erneutes
+Lesen der Profile im Main Thread). Höchstens sechs Konten sind zu sehen; der linke Stick und ▲ ▼
+scrollen, ein schmaler Balken rechts zeigt, dass es weitergeht. Kopf „Stand vor 1 min“ bzw. „aktualisiere
+…“. Kreuz holt die Zahlen frisch über denselben Weg wie ↻ im Popover (`AccountLimitsStore.refresh()`:
+Claude über den Update-Flow mit CLI-Ping für abgelaufene Tokens, GPT neu abgefragt); läuft schon ein
+Abruf, „geht nicht“. △ □ ○ und L3 (Ctrl+O) gehen bei offener Karte nicht, ◀ ▶ auch nicht. Während eines
+Diktats ist ✕ unter R1 „geht nicht“; die Fußzeile bietet „aktualisieren“ dann nicht an. Loslassen von R1
+schließt.
+Abrufe: Das Halten von R1 lädt nie etwas. Erst das Öffnen der Karte stößt den passiven Abruf an, und nur,
+wenn der Stand älter als eine Minute ist; der Zeitpunkt des letzten Versuchs zählt unabhängig vom
+Ergebnis (Drosselung aus Runde 5). Neue Zahlen ziehen Karte und Kopf nach (`onChange`).
+
+**Wohin** (Insel-Paket, 13.11.2026; kehrt die Cmd-Tab-Regel vom 12.11. um): Tippen (unter 0,3 s) führt
+wie bisher an den vorigen Ort. Halten zeigt sofort die Liste mit der Markierung auf dem **aktuellen**
+Eintrag; Loslassen ohne Bewegung tut deshalb nichts. Der vorige Ort (`ControllerBackTarget` mit ID, aus
+`AgentWindowStore+PlaceHistory`) trägt rechts „vorher“ und steht in beiden Reitern immer gleich unter dem
+aktuellen Eintrag (ohne aktuellen ganz oben), also einen Schritt entfernt — auch wenn die Seitenleiste ihn
+weiter unten führt; die übrigen Zeilen behalten ihre Reihenfolge. Erst nach einer Bewegung wechseln Loslassen und Kreuz. Start-Reiter: im
+Raster „Workspaces & Projekte“, in der Einzelansicht „Chats“, jeweils auf dem aktuellen Eintrag (ohne
+Workspace und Projekt im Reiter nur die Chats). Hat ein Reiter keinen aktuellen Eintrag (Workspaces in der
+Einzelansicht), gibt es dort zunächst keine Markierung; der erste Stoß markiert die erste Zeile. Ist das
+Ziel der vorige Ort, geht der Wechsel denselben Weg wie L2 getippt (`lastChat`). Die Chats stehen in der
+Reihenfolge der Liste links, jeder einmal; der vorige Chat steht immer darin, gleich hinter dem aktuellen,
+auch wenn die Seitenleiste ihn weiter unten oder gerade nicht zeigt (Filter, Suche, eingeklappte Gruppe, Archiv-Ansicht);
+rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen „jetzt“).
+
+Der Reiter **„Workspaces & Projekte“** zeigt oben die angelegten Workspaces (ohne versteckte
+Projekt-Ansichten) in der Reihenfolge der Seitenleiste, mit Farbe, Name, Raute „wartet“ und Zahl der
+Chats, darunter durch eine Linie abgesetzt die Projekte in der Reihenfolge der Seitenleiste — nur die mit
+aktiven Chats (laufend oder als Tab offen, dieselbe Ableitung wie der ⊞ am Projektkopf) und das, dessen
+Raster gerade zu sehen ist; mit Ordner in der Projektfarbe und „n aktiv“. Nur der vorige Ort steht außer
+der Reihe gleich unter dem aktuellen (ein voriges Projekt also auch zwischen den Workspaces); die Linie
+bleibt dort, wo die Projekte beginnen. Höchstens sechs Zeilen, die
+Liste rückt mit der Markierung, darunter „+ n weitere“. Ein Chat wechselt wie der Klick in der
+Seitenleiste, ein Workspace wie der Klick auf seinen Kopf, ein Projekt wie der ⊞ am Projektkopf (Raster
+seiner aktiven Chats) — beides still: Gehört die Ansicht einem anderen Fenster oder laufen ihre Chats
+dort, kommt kein Fenster nach vorn und kein Dialog, der Controller vibriert „geht nicht“
+(`switchToWorkspace`, `switchToProject`). Eine Projekt-Ansicht, die als voriger Ort gemerkt ist, trägt
+„vorher“ an ihrer Projekt-Zeile (`ControllerWorkspaceChoice.viewWorkspaceID`). Danach hat die Kachel den
+Fokus, auf der du dort zuletzt warst (gemerkt beim Verlassen, nur für den laufenden App-Start).
+
+**Die Dynamic Island** ist ein eigenes, nicht aktivierendes Fenster ohne Maus (`ControllerIslandPresenter`),
 einmal aufgebaut, danach nur ein- und ausgeblendet. Sie erscheint auf dem Bildschirm des
 Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Bildschirmwahl der
 Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
@@ -214,22 +275,23 @@ Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Kör
 (siehe [notch.md](notch.md)): genau an ihrer Stelle (ist sie sichtbar, zählt ihr tatsächlicher
 Mittelpunkt, auch bei automatisch ausgeblendeter Menüleiste), im dunklen Glas der Diktat-Pille
 (`PillGlassBackground`, gleicher Rand und Schatten), immer dunkel. Sitzt die Pille in der oberen
-Bildschirmhälfte, öffnet die Insel nach unten (gemeinsame Oberkante), in der unteren nach oben
-(gemeinsame Unterkante); sie bleibt immer ganz auf dem Bildschirm (`NotchPillPlacement.frame`). Sie
+Bildschirmhälfte, öffnet die Dynamic Island nach unten (gemeinsame Oberkante), in der unteren nach oben
+(gemeinsame Unterkante); sie bleibt immer ganz auf dem Bildschirm (`NotchPillPlacement.frame`), an
+der Notch ebenso (mittig unter der Notch, am Rand begrenzt). Sie
 liegt eine Ebene über der Notch-Anzeige (`mainMenu + 4`): Steht die Notch-Anzeige auf diesem
-Bildschirm, überdeckt die Insel sie und zeigt rechts im Kopf deren Zähler (arbeitet/wartet) — nur bei
+Bildschirm, überdeckt die Dynamic Island sie und zeigt rechts im Kopf deren Zähler (arbeitet/wartet) — nur bei
 „Wohin“; bei Schreiben und Schnellbefehlen steht dort immer der Ziel-Chat. Eine aufgeklappte
-Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Insel (`fullScreenAuxiliary`,
+Notch-Liste klappt zu. Auch über einem Vollbild-Fenster erscheint die Dynamic Island (`fullScreenAuxiliary`,
 nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst an der gemerkten Stelle der
 Pille (ohne Menüleiste oben am Bildschirmrand). Eine Bewegung beim Öffnen, eine beim Schließen
 (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur schließen sie
 für das laufende Halten.
 
-Mit der vereinten Pille (siehe [notch.md](notch.md)) ist die Pille, aus der die Insel wächst,
-dieselbe wie die Diktat-Pille; die Insel hat dort Vorrang vor allem anderen. Ihr Aussehen (Glas,
+Mit der vereinten Pille (siehe [notch.md](notch.md)) ist die Pille, aus der die Dynamic Island wächst,
+dieselbe wie die Diktat-Pille; die Dynamic Island hat dort Vorrang vor allem anderen. Ihr Aussehen (Glas,
 Rand, Schatten der Diktat-Pille) blieb gleich.
 
-Die Insel ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
+Die Dynamic Island ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
 Workspace-Auswahl unten im Fenster. Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
 einem Eintrag („L1 R1 L2 Halten: Ebenen“).
 
@@ -242,10 +304,11 @@ Aufnahme). Der rechte Stick scrollt weiter. Die Pill zeigt Ziel und Modus ohne H
 
 Ist das Diktat an einen Chat gebunden (per Controller in Chat oder Liste gestartet), geht die Steuerung
 weiter (Runde 5): Der linke Stick navigiert wie sonst (Liste, Kacheln, Markierung), L1/R1 tippen wechseln
-den Chat, L2 „Wohin“ geht samt Wechsel, R1 zeigt die Raute mit allem ausgegraut, was ins Feld schriebe
-(Hinweis „Diktat läuft“). L1 bleibt aus; R2 ist in jeder Ebene „stopp“, Kreuz, Kreis, Steuerkreuz und
+den Chat, L2 „Wohin“ geht samt Wechsel (Kreuz und Loslassen nach einer Bewegung, das Diktat bleibt an
+seinem Ziel), R1 zeigt beide Rauten: Die App-Raute (Limits, Mitteilungen, Wach
+bleiben, Zwischenablage) geht, die Chat-Raute ist ausgegraut (Hinweis „Diktat läuft“). L1 bleibt aus; R2 ist in jeder Ebene „stopp“, Kreuz, Kreis, Steuerkreuz und
 rechter Stick bleiben wie oben. Der Text geht in den Chat, in dem das Diktat begann
-(`RecordingCoordinator.pendingDeliveryTarget`, beim Start gesetzt); Legende und Insel nennen ihn
+(`RecordingCoordinator.pendingDeliveryTarget`, beim Start gesetzt); Legende und Dynamic Island nennen ihn
 („→ Chat“). Dasselbe gilt in Transkription und Nacharbeit, außer was die Aufnahme steuert; das Ziel
 kommt dann aus `RecordingCoordinator.inFlightDeliveryTarget` (beim Stopp eingefroren, nur zur Anzeige). Bei einem
 Diktat ins Programm vorne (Hotkey) ruht der linke Stick wie bisher: Der Text ginge per ⌘V dorthin, wo
@@ -301,7 +364,7 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
      und Shell gilt er als Entwurf. Und ↑ als erster Pfeil macht Kreuz bei arbeitendem Chat nicht scharf.
   3. Ein Pfeil macht Kreuz bei Claude nur in einer erkannten Ansicht, einer Rückfrage oder einer
      offenen Auswahl scharf (Runde 5): Im Hauptfeld holte ↑ den letzten Prompt, und Kreuz schickte ihn
-     bei „arbeitet“ erneut. Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
+     bei „arbeitet“ erneut. Ohne sichtbares Eingabefeld (siehe unten) Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
      oder ↑ nach einem scharfen Pfeil): kurz, wegen der Lücke vor einem Freigabe-Dialog, in der Enter
      die Vorauswahl bestätigte. Codex behält die 30-s-Regel (Freigaben ohne „wartet“).
      Ausnahme →: Es übernimmt den grauen Vorschlag ins Feld und zählt deshalb wie getippter Text
@@ -328,31 +391,62 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.
-- Arbeitet der Chat oder ist sein Zustand unklar, schickt Kreuz Enter nur, wenn in den letzten 30 s
-  per Controller getippt, gelöscht oder diktiert wurde und seitdem nichts abgeschickt wurde — auf
-  keinem Weg: Kreuz auch in einer Rückfrage, Enter der Tastatur, `chats send`, Diktat mit Senden,
-  Befehle aus dem Menü. Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt
-  eine Lücke, in der Enter sonst die Vorauswahl bestätigte. Der Entwurfs-Verdacht zählt dafür nicht,
-  und Tippen auf der Tastatur auch nicht.
+- Arbeitet ein Claude-Chat oder ist sein Zustand unklar, schickt Kreuz Enter, sobald Claudes
+  Eingabefeld sichtbar unten am Bildschirm steht (Entscheidung 13.11.2026, `claudePromptVisible`).
+  Abgelesen wird beim Druck selbst, nicht beim Pfeil davor. Ein Freigabe-Dialog ersetzt das Feld; ist
+  es zu sehen, ist also keiner offen. Enter schickt dann den Text ab oder reiht ihn ein (auch getippt
+  oder per Hotkey diktiert), öffnet den gewählten Agenten in der Fußzeile oder tut im leeren Feld
+  nichts. Steht unter dem vermeintlichen Feld ein Dialog (nummerierte Auswahl wie „❯ 1. Yes“ oder
+  „Do you want to proceed“), gilt es nicht als Feld, ebenso, wenn seine erste Zeile selbst eine
+  Auswahl ist (Dialog im Rahmen). Hinweise wie „esc to cancel“ oder „esc cancel“ zählen dafür nicht:
+  Sie stehen auch in der Fußzeile unter dem echten Feld („opening… · esc to cancel“, „enter save ·
+  esc cancel“), und Dialoge zeigen ihre Hinweiszeile nicht immer (2.1.323). Grenze: Ein Entwurf, der
+  mit „1. “ beginnt, gilt nicht als Feld; Kreuz folgt dann der vorsichtigen Regel. Steht nur ein mit
+  ↑ zurückgeholter oder nach einem Abbruch zurückgelegter Prompt im Feld, gilt ebenfalls die
+  vorsichtige Regel, sonst schickte ↑ + Kreuz den letzten Prompt noch einmal ab (in der
+  Fußzeilen-Auswahl nicht: dort öffnet Enter den Agenten). Vorher wirkte Kreuz bei arbeitendem Chat
+  kaum: Getippter Text zählte nicht, und der erste ▼ in die Fußzeile machte Kreuz nicht scharf, weil
+  der Bildschirm gelesen wurde, bevor Claude neu gezeichnet hatte.
+- Hängt Kreuz bei „arbeitet“ allein am sichtbaren Feld (keine frische Eingabe, kein scharfer Pfeil,
+  keine offene Auswahl), geht Enter erst nach einer Nachprüfung raus: 0,1 s nach dem Druck wird der
+  Bildschirm noch einmal gelesen (`confirmSettleDelay`). Steht das Feld dann noch da und ist derselbe
+  Chat ausgewählt, kommt Enter; ist inzwischen ein Dialog im Bild, „geht nicht“. Grund: Zwischen dem
+  Moment, in dem Claude auf einen Dialog umschaltet, und seinem ersten Bild steht noch das Feld da,
+  und das betrifft jeden Druck bei sichtbarem Feld. Claude zeichnet während eines Turns etwa alle
+  50 ms neu (Schimmer am Spinner, 2.1.323), danach ist der Dialog sicher im Bild. Eine Bedingung
+  „seit 150 ms keine Ausgabe“ ginge nicht, sie wäre während eines Turns nie erfüllt. Vor jedem
+  Ablesen leert der Controller den Puffer einer gedrosselten Pane (Raster ohne Fokus, Chat in zwei
+  Workspaces), sonst sähe er bis zu 80 ms alte Bytes.
+- Ist das Feld nicht zu sehen oder nicht ablesbar (Dialog, Transkript und andere Ansichten,
+  hochgescrollt, Codex, Shell), gilt die vorsichtige Regel: Kreuz schickt Enter nur, wenn in den
+  letzten 30 s per Controller getippt, gelöscht oder diktiert wurde und seitdem nichts abgeschickt
+  wurde — auf keinem Weg: Kreuz auch in einer Rückfrage, Enter der Tastatur, `chats send`, Diktat mit
+  Senden, Befehle aus dem Menü. Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status
+  „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl bestätigte. Der Entwurfs-Verdacht
+  zählt dafür nicht, und Tippen auf der Tastatur auch nicht.
+- Restrisiko der Feld-Regel: Ist Claude so beschäftigt, dass das erste Bild eines Dialogs länger als
+  0,1 s ausbleibt, sieht die Nachprüfung noch das Feld, und Enter bestätigte die Vorauswahl. Die
+  vorsichtige Regel hat dieselbe Lücke, solange eine Eingabe per Controller frisch ist (30 s); dort
+  gibt es keine Nachprüfung.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
 - Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
   Versand: Enter vom Controller oder der Tastatur, Diktat mit Senden, `chats send`) und unbekannter
   Status zählen als arbeitend — außer bei offener Auswahl des Menüs.
-- Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Insel, Menü und Liste.
+- Pause (L1 + R1, Sperre, Ruhezustand, Spiel), Trennung und Ausschalten schließen Dynamic Island, Menü und Liste.
   Ein per Tastatur geöffneter Ctrl+Tab-Umschalter schließt erst, wenn der Controller wirklich etwas
-  ausführt (das bloße Loslassen einer Ebene ohne offene Insel zählt nicht).
+  ausführt (das bloße Loslassen einer Ebene ohne offene Dynamic Island zählt nicht).
 - Die R1-Raute folgt den Regeln des Options-Menüs (`ControllerMenuModel.isEnabled`): Bei offener
   Rückfrage sind „Weiter“, „Modus wechseln“ und „Befehle“ aus, „Konto wechseln“ geht. Die Rückfrage wird
   beim Drücken frisch gelesen.
 - „Weiter“ und „Modus wechseln“ — in der Raute und im Options-Menü — nur, wenn der Chat ruht: nicht bei
   „arbeitet“, unbekanntem Status oder 3 s nach einem Absenden. Zwischen dem Erscheinen eines
   Freigabe-Dialogs und dem Status „wartet“ bestätigte „Weiter“ mit Enter die Vorauswahl, und Shift+Tab
-  heißt dort „alle Änderungen erlauben“; Codex meldet nie „wartet“. Ausgegraut mit Hinweis in der Insel,
-  ein Druck vibriert „geht nicht“; geprüft wird beim Auslösen frisch (`perform(_:setup:)`). Eingaben gehen an den Chat, der beim Öffnen der Insel ausgewählt war;
+  heißt dort „alle Änderungen erlauben“; Codex meldet nie „wartet“. Ausgegraut mit Hinweis in der Dynamic Island,
+  ein Druck vibriert „geht nicht“; geprüft wird beim Auslösen frisch (`perform(_:setup:)`). Eingaben gehen an den Chat, der beim Öffnen der Dynamic Island ausgewählt war;
   sonst „geht nicht“.
 - L1-Ebene: Bis Zeilenanfang löschen (Ctrl+U, 0x15) und Zeilenumbruch (Ctrl+J, 0x0A) nur bei Claude und
   Codex und nicht in einer Rückfrage — dieselben Regeln wie „Eingabe leeren“, auch in der Absicherung
-  `controllerAllows`. In einer Shell zeigt die Insel den Hinweis, und es passiert nichts außer „geht
+  `controllerAllows`. In einer Shell zeigt die Dynamic Island den Hinweis, und es passiert nichts außer „geht
   nicht“. Beides schließt „Auswahl offen“ und zählt als Eingabe per Controller für die 30-s-Regel.
 - Zeilenumbruch ist Ctrl+J, nicht Shift+Enter (kommt ohne Kitty-Protokoll im PTY als CR an und würde
   senden). Belegt: Claude Code, interactive mode, „Multiline input“: „Control sequence `Ctrl+J`: works
@@ -411,8 +505,9 @@ debug.controller (Skript) ──┤
 | Pumpe | `ControllerGesturePump` | Erkennung auf eigener Queue; `DispatchSourceTimer(.strict)` nur, solange etwas gedrückt ist, dann auch Aktivität gegen App Nap |
 | Manager | `ControllerManager` | Ein/Aus nach Schaltern, Pause, Hintergrund-Zustand (Systemwert wird zurückgelesen), Zähler je Taste |
 | Ausführer | `ControllerActionDispatcher` | Schnappschuss der App je Eingabe, Ausführung über Schnittstellen (`ControllerTerminalControlling`, `ControllerDictationControlling`, `ControllerAppEnvironment`) |
-| Rückmeldung | `ControllerFeedback` | Lichtleiste, Warte-Signal, automatische Pause, Maus/Tastatur geben Liste, Menü und Insel ab |
-| Insel | `Core/ControllerIsland.swift`, `ControllerActionDispatcher+Island.swift`, `ControllerIslandPresenter`, `Views/Controller/ControllerIslandView.swift` | Modell pur im Kern, gebaut im Ereignis-Pfad (`ControllerIslandRows` für die Chat-Zeilen); Fenster an der Notch bzw. als Pille; Signpost `controller.islandShow` (Budget 33 ms) |
+| Rückmeldung | `ControllerFeedback` | Lichtleiste, Warte-Signal, automatische Pause, Maus/Tastatur geben Liste, Menü und Dynamic Island ab |
+| Dynamic Island | `Core/ControllerIsland.swift`, `Core/ControllerIslandApp.swift` (App-Raute, Schalter, Konto im Kopf), `Core/ControllerLimits.swift` (Limits-Karte), `ControllerActionDispatcher+Island.swift`, `+AppDiamond.swift`, `ControllerIslandPresenter`, `Views/Controller/ControllerIslandView.swift` mit `+QuickDraw` und `+Limits` | Modell pur im Kern, gebaut im Ereignis-Pfad (`ControllerIslandRows` für die Chat-Zeilen, `ControllerLimitRows` für die Karte, `AgentChatsView+ControllerIsland` für Projekte und Konto); Fenster an der Notch bzw. als Pille; Signpost `controller.islandShow` (Budget 33 ms) |
+| Limits | `Services/Shared/AccountLimitsStore.swift` | letzter Stand je Konto (Prozent, Rücksetzzeit, Problem), passiver Abruf höchstens einmal je Minute, `refresh()` wie ↻; die Popovers tragen ein |
 | Katalog | `AgentChatsCommandCenter` | Befehle an das Key-Fenster (Token-Anmeldung je Fenster); Tastaturkürzel nutzen dieselben Funktionen |
 | Terminal | `TerminalControlKey`, `AgentTerminalController.sendKey` | feste Tastenliste; Entwurfs-Tracker und Abbruch-Verdacht wie bei der Tastatur |
 | Diktat-Ziel | `DictationDelivery`, `RecordingCoordinator+ChatDelivery` | Text als ein Block direkt ins Terminal; der Hotkey-Weg ins vordere Programm ist unverändert |
@@ -426,19 +521,27 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 
 - `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
   Kachel je Workspace, geschlossene Ziele, je Fenster); `--filter ControllerWorkspacePicker` die
-  Markierung von „Wohin“ (Start auf dem vorigen Ort, Reiterwechsel, ohne vorigen Ort);
-  `--filter NotchPillPlacement` die Lage von Pille und Insel ohne Notch.
+  Markierung von „Wohin“ (Start auf dem aktuellen Eintrag, „vorher“, Projekte, Reiterwechsel);
+  `--filter ControllerLimits` Limits-Karte, App-Raute und Konto eines Chats im Kern sowie den
+  `AccountLimitsStore` (Fehlschläge behalten den letzten Stand); `--filter StayAwake` auch die stille
+  Prüfung der Freigabe ohne Seitenleiste;
+  `--filter NotchPillPlacement` die Lage von Pille und Dynamic Island ohne Notch.
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
 - `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
   Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-menue-karte` die Menü-Karte am
   Chat (Einzelansicht, Raster mit Gruppe Workspace, Rastergröße, Liste, große Kachel, kleines Fenster mit
-  Scrollen); `ONLY=controller-insel` die Insel (Wohin:
-  Chats mit Markierung auf dem vorigen Chat, nach zwei Schritten, ohne vorigen Ort, Workspaces, mit
+  Scrollen); `ONLY=controller-insel` die Dynamic Island (Wohin:
+  Chats mit Markierung auf dem aktuellen Chat und „vorher“ gleich darunter, nach zwei Schritten, ohne
+  vorigen Ort, Workspaces, mit
   Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
-  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Insel nach unten, Pille unten mit
-  Insel nach oben);
+  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Dynamic Island nach unten, Pille unten
+  mit Dynamic Island nach oben); `ONLY=controller-insel-paket` das Insel-Paket (zwei Rauten an der Notch und als
+  Pille, Chat arbeitet, Diktat, Bestätigung von Glocke und Wach bleiben, fehlende Freigabe, Limits-Karte (auch während eines Diktats ohne „✕ aktualisieren“)
+  und viele Konten mit Fehlerzeilen als Pille, „Wohin“ mit Markierung auf dem aktuellen Chat und „vorher“,
+  Reiter „Workspaces & Projekte“ mit der Markierung auf dem vorigen Projekt gleich unter dem aktuellen
+  Workspace, an der Notch und als Pille);
   `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.
@@ -459,6 +562,10 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   sicher; dafür gibt es L1 + R1.
 - Die Tastatur-Brücke sichert Bestätigen und Abbrechen zu. Mehr als zwei Knöpfe in einem Dialog
   erreicht sie nur mit eingeschalteter Tastaturnavigation des Systems.
+- Durch das Archiv führt der Controller nicht: „Archiv zeigen“ im Options-Menü öffnet es in der
+  Seitenleiste (die dafür aufgeht), die Listen-Navigation bleibt dort leer. Wiederherstellen geht mit der
+  Maus, zurück über „Archiv verlassen“. Grund: Archiv-Zeilen stellen beim Klick wieder her, statt einen
+  Chat zu öffnen, und ihre Gruppen klappen nur in der Ansicht auf und zu.
 - Was eine Projektgruppe per „N weitere anzeigen“ zusätzlich aufgeklappt hat, erreicht die
   Listen-Navigation nicht; sie reicht bis zum Startlimit der Gruppe und immer bis zum gewählten Chat.
 - Zurück mit L2 folgt dem Workspace, den das Fenster referenziert, auch wenn der Bezug veraltet ist:
@@ -467,6 +574,8 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
 - **Runde 5, Bildschirm-Lesen:** Die Hinweistexte gelten für Claude Code 2.1.322; ändert Claude sie,
   erkennt der Controller die Ansicht nicht mehr (dann gilt die alte Regel, nichts wird gefährlicher).
+  Kreuz bei „arbeitet“ verlässt sich darauf, dass Claudes Dialoge das Eingabefeld ersetzen und nicht
+  darunter erscheinen; ändert sich das in einer neuen Version, die Regel neu prüfen.
   Ob SwiftTerms Cursor im eingebetteten PTY an der Schreibmarke steht (Grundlage für L1 ▲▼ und
   „sicher Text“), ist am Gerät zu bestätigen. Ein grauer Platzhalter, der nicht als abgeblendet markiert
   ist, zählt nicht als Text.
@@ -475,6 +584,7 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Ctrl+L zeichnet in Claude Code 2.1.322 nur neu (`chat:clearInput` und `chat:clearScreen` teilen den
   Handler `forceRedraw`); in Codex leert Ctrl+L die Oberfläche, deshalb „Neu zeichnen“ nur für Claude.
 - Ein mit ↑ zurückgeholter Prompt zählt nur, wenn der Controller das ↑ geschickt hat; ein ↑ auf der
-  Tastatur sieht der Entwurfs-Tracker nicht als Zurückholen.
+  Tastatur sieht der Entwurfs-Tracker nicht als Zurückholen. Bei „arbeitet“ schickt Kreuz einen so
+  geholten Prompt deshalb ab, sobald das Feld sichtbar ist (offen, Entscheidung beim User).
 - „Jetzt senden“ hängt an Claudes Warteschlange im Transcript (`queue-operation`); 2.1.322 nimmt
   Wartendes meist schon an der nächsten Tool-Grenze auf.

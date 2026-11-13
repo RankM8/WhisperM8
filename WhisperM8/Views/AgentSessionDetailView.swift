@@ -132,6 +132,7 @@ struct AgentSessionDetailView: View {
             }
         }
         .onAppear {
+            attachToAdoptedController()
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
                     launchAfterCacheWarmup()
@@ -735,6 +736,15 @@ struct AgentSessionDetailView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Übernommener Chat (Neustart ohne Chatverlust): Die Ansicht hat ihn nicht
+    /// gestartet und bekam deshalb keinen Teil der Ende-Meldung. Sie hängt ihn
+    /// hier an. Store und Status meldet die Registry ohnehin; `markLaunched`
+    /// wird bewusst nicht nachgeholt (Review Ende-Meldung).
+    private func attachToAdoptedController() {
+        guard let controller, controller.isAdopted, controller.isRunning else { return }
+        controller.viewTerminationHandler = { outcome in markTerminated(outcome) }
     }
 
     /// Store und Statuskoordinator hat die Registry beim Ende schon versorgt

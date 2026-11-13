@@ -198,6 +198,25 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
             table[.inLayer(.whereTo, gesture)] = action
         }
+        return table.merging(appDiamond) { old, _ in old }
+    }()
+
+    /// Insel-Paket: zweite Raute unter R1. Das Steuerkreuz schaltet die App
+    /// (ein Druck je Stufe), gehalten ▲ ▼ und der linke Stick hoch/runter
+    /// scrollen die Limits-Karte. Gilt auch während eines gebundenen Diktats.
+    static let appDiamond: Table = {
+        var table: Table = [
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: false)): .appSlot(.limits),
+            .inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)): .appSlot(.alerts),
+            .inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false)): .appSlot(.stayAwake),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: false)): .appSlot(.clipboard),
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: true)): .islandScroll(step: -1),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: true)): .islandScroll(step: 1),
+        ]
+        for isRepeat in [false, true] {
+            table[.inLayer(.quickDraw, .move(.up, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: -1)
+            table[.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: 1)
+        }
         return table
     }()
 
@@ -264,6 +283,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for button in [ControllerButton.cross, .triangle, .square, .circle, .l3] {
             table[.inLayer(.quickDraw, .press(button))] = .rejected
         }
+        table.merge(appDiamond) { old, _ in old }
         if recording {
             table[.inLayer(.whereTo, .press(.r2))] = .dictationToggle
             table[.inLayer(.quickDraw, .press(.r2))] = .dictationToggle
@@ -367,6 +387,10 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .tap(.r1): .bridgeKey(.tab),
         .press(.r2): .dictationToggle,
     ], pauseChord)
+
+    /// Am Bildschirm abgelesenes Eingabefeld: sichtbar leer bzw. mit Text.
+    private static let emptyField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+    private static let textField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
 
     private static func chatState(
         _ status: ControllerChatState.Status, _ configure: (inout ControllerChatState) -> Void = { _ in }
@@ -553,6 +577,48 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
+        // Entscheidung 13.11.2026: Ist Claudes Eingabefeld sichtbar (beim Druck
+        // abgelesen), schickt Kreuz auch bei „arbeitet“ oder unklarem Zustand
+        // Enter — leer, mit Text oder mit gewählter Fußzeile. Ohne ablesbares
+        // Feld bleibt „Chat arbeitet“ oben gültig.
+        ("Claude arbeitet, Feld sichtbar leer", chatState(.working) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Text im Feld", chatState(.working) { $0.promptField = textField },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude Zustand unklar, Feld sichtbar", chatState(.unknown) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Fußzeile gewählt",
+         chatState(.working) { $0.promptField = emptyField; $0.openView = .footerSelection },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .tap(.circle): .chatKey(.escape),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        // Codex: Das Feld zählt für Kreuz nicht (Freigaben ohne „wartet“).
+        ("Codex arbeitet, Feld sichtbar",
+         .chat(ControllerChatState(status: .working, profile: .codex, promptField: emptyField)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
         ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,

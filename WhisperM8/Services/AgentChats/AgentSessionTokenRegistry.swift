@@ -34,6 +34,19 @@ final class AgentSessionTokenRegistry: @unchecked Sendable {
         return token
     }
 
+    /// Übernommener Chat (Neustart ohne Chatverlust): Der Prozess läuft weiter
+    /// und hat sein Token in der Umgebung; die neue App trägt es samt PID aus
+    /// dem Manifest wieder ein. Sonst scheiterten alle `whisperm8 chats`-,
+    /// `board`- und `speak`-Aufrufe aus dem überlebenden Chat.
+    func register(token: String, for sessionID: UUID, pid: Int32, isAttach: Bool) {
+        guard !token.isEmpty else { return }
+        lock.lock()
+        tokensBySession[sessionID] = token
+        processIDsBySession[sessionID] = pid
+        if isAttach { attachSessions.insert(sessionID) } else { attachSessions.remove(sessionID) }
+        lock.unlock()
+    }
+
     /// `true`, wenn `token` das aktuelle Token dieser Session ist.
     func verify(sessionID: UUID, token: String?) -> Bool {
         guard let token, !token.isEmpty else { return false }

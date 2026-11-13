@@ -207,6 +207,7 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertEqual(sections[2].entries.map(\.label), [
             .deleteToLineStart, .newline, .wordJump, .lineMove, .pasteNewest, .escapeOnce, .undo,
             .continueWork, .cycleMode, .commands, .switchAccount, .transcript,
+            .limitsCard, .alertLevel, .stayAwake, .clipboardWithR1,
             .whereToHold, .nextWaiting, .reopenClosed, .clipboardWithL2, .pickAndDictate,
         ])
         XCTAssertTrue(sections[2].entries.contains {

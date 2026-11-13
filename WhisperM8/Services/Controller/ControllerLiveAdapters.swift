@@ -187,6 +187,33 @@ final class LiveControllerEnvironment: ControllerAppEnvironment {
         ControllerKeyboardBridge.post(key)
     }
 
+    var appToggles: ControllerAppToggles {
+        let stayAwake = StayAwakeController.shared
+        return ControllerAppToggles(
+            alert: ControllerAlertStage(AppPreferences.shared.agentAlertLevel),
+            nextAlert: ControllerAlertStage(AgentAlertLevel.nextLevel()),
+            awake: ControllerAwakeStage(stayAwake.mode),
+            awakeNeedsPermission: stayAwake.nextStepNeedsPermission)
+    }
+
+    func cycleAlertLevel() -> ControllerAlertStage {
+        ControllerAlertStage(AgentAlertLevel.advance())
+    }
+
+    /// Wie der Wach-Knopf, aber ohne Admin-Dialog: Fehlt die Freigabe, sagt
+    /// die Insel, wo sie zu erteilen ist.
+    func cycleStayAwake(_ completion: @escaping @MainActor (ControllerStayAwakeResult) -> Void) {
+        let stayAwake = StayAwakeController.shared
+        // War die Seitenleiste seit dem Start verborgen, ist die Freigabe noch
+        // unbekannt: erst still prüfen (`sudo -n`, nie ein Dialog).
+        stayAwake.whenPermissionKnown {
+            guard !stayAwake.isAwaitingPermission else { return completion(.busy) }
+            guard !stayAwake.nextStepNeedsPermission else { return completion(.needsPermission) }
+            stayAwake.cycle()
+            completion(.changed(ControllerAwakeStage(stayAwake.mode)))
+        }
+    }
+
     func openControllerSettings() {
         WindowRequestCenter.shared.requestSettings(routeID: SettingsPage.controller.rawValue)
     }
@@ -294,6 +321,13 @@ final class ControllerRuntime {
                 AccountLimitsStore.shared.limit(kind: kind, name: name).map { (fiveHour: $0.fiveHour, week: $0.week) }
             }
             dispatcher.refreshAccountLimits = { AccountLimitsStore.shared.refreshIfStale() }
+            dispatcher.limits = ControllerLimitsAccess(
+                accounts: { ControllerLimitRows.liveAccounts() },
+                rows: { ControllerLimitRows.live($0) },
+                updatedAt: { AccountLimitsStore.shared.updatedAt },
+                isLoading: { AccountLimitsStore.shared.isLoading },
+                refreshIfStale: { AccountLimitsStore.shared.refreshIfStale() },
+                refresh: { AccountLimitsStore.shared.refresh() })
             AccountLimitsStore.shared.onChange = { [weak dispatcher] in dispatcher?.accountLimitsChanged() }
             manager.performer = dispatcher
             let feedback = ControllerFeedback(manager: manager, dispatcher: dispatcher)

@@ -45,6 +45,7 @@ extension AgentChatsView {
             accounts: accounts
         )
         addControllerHeadActions(to: &info, session: session)
+        info.usageAccount = controllerUsageAccount(of: session)
         return info
     }
 

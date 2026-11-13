@@ -25,6 +25,11 @@ Konto-Menü mit Verbrauch, „am meisten frei“, Abbrechen/Rückgängig (3), Be
 `/rewind` (R5), „Neu zeichnen“ (R7), Steuerung während des Diktats (9). Die Insel zeigt die neuen Tasten
 nur über ihr Modell (Einträge, Beschriftungen), ohne neues Layout.
 
+**Insel-Paket (13.11.2026, Branch `feat/controller-insel-paket`):** 1, 2 und 4 sind gebaut, dazu „Wohin“
+neu (Markierung auf dem aktuellen Ort, „vorher“ am vorigen, Reiter „Workspaces & Projekte“). Abweichung
+vom Plan unten: R1 + ▼ öffnet den Zwischenablage-Verlauf statt das Archiv; „Archiv zeigen/verlassen“
+steht im Options-Menü unter Steuerung. Stand und Regeln: [`../features/controller.md`](../features/controller.md).
+
 Zurückgestellt (Insel-Paket, eigener Schritt nach Runde 5): 1 (zweite Raute mit App-Schaltern),
 2 (Limits-Karte), 4 (Konto und 5 Std. im R1-Kopf) und jede Layout-Änderung an `ControllerIslandView` und
 Presenter. Die vereinte Pille ist seit `83b46822` in main und hier gemergt. Der Limits-Stand

@@ -230,15 +230,16 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
             "101 \(app)",
             "102 \(app) gpt-router --root /x --port 18766",
             "103 \(app) agent-supervise abc",
+            "104 \(app) handover-keeper --root /x --run r",
         ].joined(separator: "\n")
         XCTAssertEqual(try awk(makeAwk, lines), ["101"])
 
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("!~ / gpt-router /"), "test-instance.sh nimmt den Router-Dienst nicht aus")
         let testApp = "/tmp/WhisperM8Test.app/Contents/MacOS/WhisperM8"
-        let testAwk = #"$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / {print $1}"#
+        let testAwk = #"$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / && $0 !~ / handover-keeper / {print $1}"#
         XCTAssertTrue(script.contains(testAwk))
-        XCTAssertEqual(try awk(testAwk, "201 \(testApp)\n202 \(testApp) gpt-router --root /y --port 28766"), ["201"])
+        XCTAssertEqual(try awk(testAwk, "201 \(testApp)\n202 \(testApp) gpt-router --root /y --port 28766\n203 \(testApp) handover-keeper --root /y --run r"), ["201"])
     }
 
     private func awk(_ program: String, _ input: String) throws -> [String] {

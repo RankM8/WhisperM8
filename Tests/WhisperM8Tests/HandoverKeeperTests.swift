@@ -374,7 +374,9 @@ final class HandoverKeeperTests: XCTestCase {
         XCTAssertEqual(code, 0)
         XCTAssertEqual(AppCLICommand.renderText(nil, now: Date()), "Kein Aufbewahrer aktiv.")
         XCTAssertTrue(AppCLICommand.renderJSON(nil).contains("\"active\" : false"))
-        let usage = await AppCLICommand.run(arguments: ["handover"], paths: HandoverPaths(directory: directory))
+        // `app handover` gibt es seit Paket 4 (Abgabe über den Control-Socket);
+        // ein unbekannter Unterbefehl bleibt ein Bedienfehler.
+        let usage = await AppCLICommand.run(arguments: ["handover-gibt-es-nicht"], paths: HandoverPaths(directory: directory))
         XCTAssertEqual(usage, 64)
     }
 }

@@ -30,6 +30,24 @@ whisperm8 app handover-status [--json]
 - `--app-binary`: Wer abgeben, übernehmen und freigeben darf. Ohne Angabe gilt das Binary, aus dem der Aufbewahrer selbst läuft. Nach `rsync` liegt die neue App unter demselben Pfad. Zusätzlich gilt das Designated Requirement des eigenen Codes, wenn der Aufbewahrer mit einem Zertifikat signiert ist. `make dev` signiert mit „WhisperM8 Local Dev“, die Anforderung „Kennung plus Zertifikat“ bleibt über Neubauten gleich. Ad hoc signierte Builds prüfen nur den Pfad.
 - Exit-Code 75: Ein anderer Aufbewahrer hält den Lock.
 
+## Wovor schützen wir, wovor nicht
+
+Maßstab für jede Review dieses Features (Beschluss 13.11.2026, zweite Meinung):
+
+- **Schutzziel:** Ein fremdes Programm unter demselben Nutzer bekommt keine Terminal-Leitung, kein Bild, kein Control-Token und keinen lauschenden Router-Socket.
+- **Kein Schutzziel:** Stören oder Beenden durch denselben Nutzer. Wer Signale schicken oder den Aufbewahrer belegen kann, kann auch die App beenden. Dann gilt der Rückfall per `--resume`.
+- **Kein Schutzziel:** Was über den vorhandenen Control-Socket der App ohnehin geht. `whisperm8 chats send` nimmt Aufrufe jedes Prozesses desselben Nutzers an, Aufrufe ohne Sitzungs-Kennung gelten als „extern“ (`AgentControlServer`, `AgentControlRequestHandler.rejectsUnverifiedActor`). Dieser Socket ist schwächer gesichert als der Aufbewahrer. Das ist bekannt und ein eigener, späterer Punkt, kein Auftrag für dieses Feature.
+- **Folge:** Weitere Härtung am Aufbewahrer nur, wenn sie ein Schutzziel oben trifft. Sie kostet sonst Zuverlässigkeit (Schlüsselbund, Fristen) ohne echten Gewinn.
+
+Welche Schicht was trägt (Urteil zur Absender-Bindung, 13.11.2026):
+
+| Schicht | Was sie leistet |
+|---|---|
+| Einmal-Geheimnis | **Grenze.** Ohne das Geheimnis gibt es keine Abgabe, keine Übernahme und keine Freigabe. Ein fremdes Programm mit eigener Verbindung scheitert hier. |
+| Kein Kind erbt den Socket | **Grenze.** Ein Kind, das die Verbindung der App erbt, könnte die Telegramme des Aufbewahrers mitlesen, samt Leitung, Bild und Token. Dagegen hilft keine Prüfung des Absenders, nur dass niemand erbt: Die App setzt close-on-exec sofort nach dem Anlegen, legt Socket und Leitungen nur auf dem Main Thread an (dort laufen auch die `forkpty`) und prüft das im Code; das Kind schließt vor `execve` alle Leitungen, die beim Start offen waren (Paket 1). |
+| Code-Prüfung je Telegramm | **Hürde, keine Garantie.** Der Kernel nennt den Prozess, der den Socket zuletzt angefasst hat, nicht den, der diese Bytes geschrieben hat. |
+| Absender-Bindung | **Hürde, keine Garantie,** aus demselben Grund. Beide bleiben, weil sie billig sind und Fälle aufhalten, in denen der gebundene Prozess gerade nicht am Socket ist. |
+
 ## Wer darf was
 
 `STATUS` darf jeder Prozess desselben Nutzers. Die Antwort enthält weder Tokens noch Terminal-Inhalte. Für alles andere gelten drei Prüfungen.
@@ -40,7 +58,7 @@ whisperm8 app handover-status [--json]
 
 Dazu nimmt der Aufbewahrer Nutzlast und Leitungen nur an `DEPOSIT` an. Bei jedem anderen Telegramm bricht er schon nach dem Kopf ab, bevor er die Nutzlast liest.
 
-Warum so viel (gemessen am 12.11.2026, Review): `LOCAL_PEERTOKEN` und `LOCAL_PEERPID` nennen den Prozess, der den Socket zuletzt benutzt hat, in seinem jetzigen Zustand, nicht den vom `connect`. Eine Prüfung nur beim `accept` lässt sich mit „verbinden, dann `exec` des App-Binarys“ umgehen. Auch eine Prüfung je Telegramm allein reicht nicht: Ein fremder Prozess kann den Anfang eines Telegramms schreiben und den Rest vom App-Binary schreiben lassen, etwa über die Ausgabe von `whisperm8 chats tail` aus einem Verlauf, den er selbst bestimmt. Dann gilt das App-Binary als letzter Absender. Dagegen helfen nur das Geheimnis und die Bindung (`HandoverKeeperHardeningTests`: `testPeerThatExecsAllowedBinaryAfterConnectIsNotTrusted`, `testParentSpeakingAfterChildHelloIsRefused`, `testInheritorIsRejectedWhileBoundProcessIsIdle`, `testTakeAndReleaseRequireSecret`).
+Warum so viel (gemessen am 12.11.2026, Review): `LOCAL_PEERTOKEN` und `LOCAL_PEERPID` nennen den Prozess, der den Socket zuletzt benutzt hat, in seinem jetzigen Zustand, nicht den vom `connect`. Eine Prüfung nur beim `accept` lässt sich mit „verbinden, dann `exec` des App-Binarys“ umgehen. Auch eine Prüfung je Telegramm allein reicht nicht: Ein fremder Prozess kann den Anfang eines Telegramms schreiben und den Rest vom App-Binary schreiben lassen, etwa über die Ausgabe von `whisperm8 chats tail` aus einem Verlauf, den er selbst bestimmt. Dann gilt das App-Binary als letzter Absender. Dagegen hilft das Geheimnis; die Bindung hält einen Teil der Fälle auf, ist aber nur eine Hürde (siehe Tabelle oben; Tests: `HandoverKeeperHardeningTests`: `testPeerThatExecsAllowedBinaryAfterConnectIsNotTrusted`, `testParentSpeakingAfterChildHelloIsRefused`, `testInheritorIsRejectedWhileBoundProcessIsIdle`, `testTakeAndReleaseRequireSecret`).
 
 Umgekehrt prüft die App den Aufbewahrer: bei der Abgabe PID (`LOCAL_PEERTOKEN` des Servers) und `runID`, bei der Übernahme auf Wunsch Pfad und Code-Anforderung (`HandoverClient.verifyServer`).
 
@@ -114,13 +132,19 @@ Je Chat ein SwiftTerm-`Terminal`. Es wird erst mit dem Bild gefüttert, dann mit
 
 Die Prozess-Tests brauchen das gebaute `WhisperM8`-Binary neben dem Test-Bundle. `swift test` linkt es mit; fehlt es, scheitern die Tests, statt still übersprungen zu werden.
 
-## Offen für Paket 4
+## Umsetzung in der App (Paket 4)
 
-- **Start:** den Aufbewahrer per `HandoverKeeperLauncher.launch(…, secret:)` starten. Bei der Abgabe `helloDeposit(secret:expectedRunID:expectedPID:)` benutzen. Vorher per `STATUS` klären, ob schon ein Aufbewahrer mit Chats lebt, die noch niemand übernommen hat.
-- **Geheimnis weiterreichen:** Die alte App legt das Geheimnis vor `COMMIT` in den Schlüsselbund, als Eintrag je Instanz, den nur die App lesen darf (Zugriff an ihre Code-Signatur gebunden). Die neue App liest es für `helloTake(secret:)` und `release(secret:)` und löscht es danach. Ohne Geheimnis kann die neue App nicht übernehmen; es gilt der Rückfall per `--resume`, nachdem der Aufbewahrer nach Frist beendet hat. Kann die App nicht übernehmen, beendet sie ihn deshalb per SIGTERM über die PID aus `STATUS`.
-- **Originale:** erst nach `commit()` schließen, Leitungen erst nach dem `OK` aus `take` benutzen.
-- **Prozesslisten:** `make kill` (`GUI_PIDS`, `Makefile` ~Z. 252) und `scripts/test-instance.sh` (`cmd_stop` ~Z. 97, `pids()`) treffen heute jeden Prozess des Binarys. Prozesse mit dem Argument `handover-keeper` müssen sie ausnehmen. `make clean-install` trifft ihn absichtlich.
-- **Farben:** `terminalColors` aus den Farben der Terminal-View füllen.
-- **close-on-exec:** Empfangene Leitungen bekommen close-on-exec erst nach `recvmsg`. Deshalb nicht übernehmen, während auf einem anderen Thread ein `forkpty` läuft; beides auf dem Main Thread löst das.
-- **Signatur:** Zwischen verschieden signierten Builds, etwa von `make dev` zur Brew-Version, passt die Code-Anforderung nicht. Die Übernahme scheitert dann, und es gilt der Rückfall per `--resume`. Das ist so gewollt.
-- **Lastgrenze:** 32 gleichzeitige Verbindungen, das erste Telegramm muss binnen 3 s kommen. Ein Prozess desselben Nutzers könnte den Aufbewahrer ohnehin per Signal beenden; Schutz gegen ihn ist hier nur, dass er keine Chats bekommt, nicht, dass er nichts stören kann.
+Stand 13.11.2026, Branch `feat/handover-app`. Was aus der früheren Liste „Offen für Paket 4“ wo erledigt ist:
+
+| Punkt | Umsetzung |
+|---|---|
+| Start mit Geheimnis, `STATUS` vorher | `HandoverRestartService` (Plan per `HandoverPlanning.quitPlan`), `HandoverDepositCoordinator`. Hält ein Aufbewahrer noch Chats, gibt die App nicht ab. |
+| Geheimnis weiterreichen | `HandoverSecretStore`: ein Eintrag je Instanz **und Signatur**, gelesen ohne Dialog mit 2 s Frist. Ein anders signierter Build findet keinen Eintrag. Gelöscht wird erst nach dem Ende der Übernahme. Ohne Geheimnis beendet die neue App den Aufbewahrer per SIGTERM (PID aus `STATUS`). |
+| Originale erst nach `COMMIT` schließen | `AgentTerminalController.completeHandover` läuft erst nach `commit()`; davor holt `reattachAfterFailedHandover` jede Leitung zurück. |
+| Prozesslisten | `GUI_PIDS` im Makefile und `pids()` in `scripts/test-instance.sh` nehmen `handover-keeper` aus. |
+| Farben | `terminalColors` aus Vorder- und Hintergrundfarbe der Terminal-View. |
+| close-on-exec, Main Thread | Abgabe, Übernahme und der Socket zum Aufbewahrer nur auf dem Main Thread, mit Prüfung zur Laufzeit; sonst keine Übergabe bzw. Rückfall. |
+| Signatur dev ↔ Brew | Rückfall per `--resume`, ohne Dialog (siehe Geheimnis). Die echte Prüfung mit zwei Builds steht noch aus. |
+| Startzeit | Vor jeder Übernahme prüft die App, ob unter der PID noch derselbe Prozess läuft. |
+
+Bedienung: `make dev` fragt vor dem Beenden `whisperm8 app handover`; Test-Instanz `restart --keep-chats` und `handover`; Labs-Schalter „Neustart ohne Chatverlust“. Offen: Pflichttests mit echtem `make dev`, Schlüsselbund mit zwei Dev-Builds, Bild im echten Fenster, Ansicht hängt sich an übernommene Chats an (Rückweg nach gescheitertem Andocken, Fehlertext).

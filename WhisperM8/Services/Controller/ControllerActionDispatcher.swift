@@ -38,6 +38,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var refreshAccountLimits: () -> Void = {}
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
+    /// Verzögert ausführen (Nachprüfung vor Enter); Tests feuern selbst.
+    var scheduleOnMain: (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(work) }
+    }
+    /// Limits aller Konten für Kopf und Limits-Karte der R1-Insel (Insel-Paket).
+    var limits = ControllerLimitsAccess()
 
     /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
     var islandState: ControllerIslandSession?
@@ -166,7 +172,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             shellAtPrompt: terminal.shellAtPrompt,
             backTarget: window.backTarget,
             openView: terminal.screen?.openView,
-            promptField: terminal.screen?.promptField
+            promptField: terminal.screen?.promptField,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt
         )
     }
 
@@ -199,7 +206,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Nebenwirkung, auch bei Trockenläufen des Debug-Kanals.
     func refreshContext() {
         let snapshot = snapshot()
-        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
+        if islandState != nil {
+            islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID)
+            limitsCardDictationMayHaveChanged()
+        }
     }
 
     /// Schließt, was der Controller offen hat: Insel, Menü, Liste,
@@ -239,7 +249,16 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .outputMode(step): dictation.stepOutputMode(step)
 
         // Chat
-        case let .chatKey(key): sendKey(key.terminalKey)
+        case let .chatKey(key):
+            // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
+            if key == .toggleTranscript, quickDrawSlots?.card != nil {
+                playHaptic(.rejected)
+            } else if key == .enter, case let .chat(state) = context,
+                      ControllerBindingResolver.confirmRestsOnPromptField(state) {
+                confirmWhenSettled()
+            } else {
+                sendKey(key.terminalKey)
+            }
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()
@@ -284,11 +303,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             closeIsland()
             spentLayer = nil
         case .islandRelease:
-            // Loslassen wechselt nur im Chat. Hat inzwischen etwas anderes die
-            // Eingaben (Aufnahme per Hotkey, Dialog, Sheet), nur schließen.
-            if case .chat = context {
+            // Loslassen wechselt im Chat und während eines an einen Chat
+            // gebundenen Diktats (das Diktat bleibt an seinem Ziel). Hat
+            // inzwischen etwas anderes die Eingaben (Aufnahme per Hotkey,
+            // Dialog, Sheet), nur schließen.
+            switch context {
+            case .chat, .recording(_, _, .some):
                 releaseWhereTo()
-            } else {
+            default:
                 closeIsland()
                 spentLayer = nil
             }
@@ -300,6 +322,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .islandNextWaiting: jumpToNextWaitingChat()
         case .islandReopenClosed: reopenClosedChat()
         case let .quickDraw(item): performQuickDraw(item)
+        case let .appSlot(slot): performAppSlot(slot)
+        case let .islandScroll(step): scrollLimitsCard(step)
 
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)
@@ -368,7 +392,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         switch action {
         case .holdProgress, .holdProgressCancelled, .rejected, .pauseToggle, .bringAppToFront,
              .clipboard, .clipboardToggle, .bridgeKey, .islandShow, .islandClose, .islandCancel,
-             .islandMove, .islandTab:
+             .islandMove, .islandTab, .appSlot, .islandScroll:
             return
         default:
             break
@@ -592,6 +616,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         // Während eines Diktats geht nichts ins Feld (Runde 5, Punkt 9).
         setup.dictationRunning = dictation.phase != nil
+        setup.archiveModeActive = targetWindowID.flatMap { chats.snapshot(of: $0) }?.isArchiveMode == true
         return setup
     }
 
@@ -701,6 +726,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             default:
                 if command(.closeListRow(setup.target ?? .chat(sessionID)), orReject: true) { refreshListMarker() }
             }
+        case .archiveMode:
+            command(.toggleArchiveMode, orReject: true)
         case .clipboardHistory:
             environment.toggleClipboardPanel()
         case .showBindings:

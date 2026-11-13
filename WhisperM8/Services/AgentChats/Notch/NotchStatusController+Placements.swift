@@ -119,6 +119,7 @@ extension NotchStatusController {
         // Immer dunkel: an der Notch schwarz, ohne Notch das Glas der Diktat-Pille.
         host.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = host
+        if let hidden = hub.statusContentHiddenDisplayID, slot.screen?.displayID == hidden { host.alphaValue = 0 }
         panel.sharingType = config.hideFromCapture ? .none : .readOnly
         panel.onCancel = { [weak self] in self?.collapse() }
         panel.onKeyDown = { [weak self] event in self?.handleListKey(event) ?? false }

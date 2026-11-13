@@ -153,6 +153,22 @@ final class ClaudeHookEventStore {
         )
     }
 
+    /// Gelesene Bytes einer Datei (nur vollständige Zeilen). Geht bei der
+    /// Übergabe im Manifest mit, damit die neue App genau dort weiterliest.
+    func cursorOffset(for url: URL) -> UInt64? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cursors[url]?.offset
+    }
+
+    /// Übernommener Chat: ab der übergebenen Stelle weiterlesen statt ab 0,
+    /// sonst kämen alte Ereignisse samt Fertig-Meldungen ein zweites Mal.
+    func setCursor(_ offset: UInt64, for url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        cursors[url] = Cursor(offset: offset)
+    }
+
     /// Reset Cursor fuer eine Datei (z. B. wenn die Session beendet ist und
     /// die naechste mit derselben localID einen frischen Stream beginnt).
     func resetCursor(for url: URL) {

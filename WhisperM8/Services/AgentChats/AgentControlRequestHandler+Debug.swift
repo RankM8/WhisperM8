@@ -12,7 +12,7 @@ import ScreenCaptureKit
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
         "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
-        "debug.context", "debug.record", "debug.controller",
+        "debug.context", "debug.record", "debug.controller", "debug.pill",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -27,6 +27,7 @@ extension AgentControlRequestHandler {
             case "debug.context": response = await debugContext(request)
             case "debug.record": response = await debugRecord(request)
             case "debug.controller": response = await debugController(request)
+            case "debug.pill": response = await debugPill(request)
             default: response = debugJob(request)
             }
         } else {
@@ -148,6 +149,23 @@ extension AgentControlRequestHandler {
 
     // MARK: state
 
+    static func restartDebugState(_ summary: HandoverTakeService.Summary?) -> [String: Any] {
+        var state: [String: Any] = [
+            "featureEnabled": AppPreferences.shared.isRestartKeepsChatsEnabled,
+            "previousRun": summary?.previous.kind ?? "unknown",
+            "previousChats": summary?.previous.runningSessionIDs.count ?? 0,
+        ]
+        if let summary, summary.previous.handover != nil {
+            state["take"] = [
+                "runID": summary.previous.handover?.runID ?? "",
+                "adopted": summary.adopted.map(\.uuidString),
+                "endedInGap": summary.endedInGap.map(\.uuidString),
+                "fallback": summary.fallback.map(\.uuidString),
+            ]
+        }
+        return state
+    }
+
     private func debugState(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let state = await MainActor.run { () -> [String: Any] in
             let appState = AppState.shared
@@ -185,6 +203,9 @@ extension AgentControlRequestHandler {
                     "sessions": workspace.sessions.count,
                     "runningPTYs": runningPTYs,
                 ],
+                // Neustart ohne Chatverlust: wie der vorige Lauf endete und was
+                // die Übernahme beim Start daraus machte.
+                "restart": Self.restartDebugState(HandoverTakeService.lastSummary),
             ]
         }
         return .success(requestID: request.requestID, result: .object(state))

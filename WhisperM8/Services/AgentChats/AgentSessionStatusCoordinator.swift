@@ -319,6 +319,26 @@ final class AgentSessionStatusCoordinator {
         hookBridge.startTracking(localSessionID: sessionID)
     }
 
+    /// Übernommener Chat: Event-Datei ab dem übergebenen Cursor weiterlesen,
+    /// ohne sie zu leeren (`prepareSettingsFile` läuft nicht). Der Satz der
+    /// Hooks wird wie beim Start bestimmt, ohne Versionsabfrage (die stand
+    /// beim ursprünglichen Start schon fest).
+    func hookTrackingAdopted(sessionID: UUID, cursor: UInt64, isBackground: Bool) {
+        guard loadPreferences().hooksEnabled else { return }
+        if Self.usesReducedHooks(registryEnabled: isRegistryStatusEnabled(), isBackground: isBackground,
+                                 cliSupportsRegistry: true) {
+            reducedHookSessions.insert(sessionID)
+        } else {
+            reducedHookSessions.remove(sessionID)
+        }
+        hookBridge.startTracking(localSessionID: sessionID, resumeAtOffset: cursor)
+    }
+
+    /// Cursor der Hook-Event-Datei für das Manifest der Übergabe.
+    func hookCursor(sessionID: UUID) -> UInt64? {
+        hookBridge.trackingCursor(localSessionID: sessionID)
+    }
+
     /// Prozess (PTY/Spawn) wurde gestartet: Zustand `launching`, Transcript-
     /// Watch anhängen, Grace-Timer für stumme Hooks armieren. Die Hook-
     /// Lebendigkeit wird zurückgesetzt — die neue Prozessinstanz muss erst
@@ -338,6 +358,19 @@ final class AgentSessionStatusCoordinator {
 
         attachWatch(sessionID: sessionID)
         scheduleLaunchGrace(sessionID: sessionID)
+    }
+
+    /// Übernommener Chat (Neustart ohne Chatverlust): Der Prozess läuft schon.
+    /// Anders als `sessionLaunched` keine Startphase und keine Startfrist —
+    /// der Chat steht sofort auf „bereit“, den echten Zustand liefern danach
+    /// Registry, Hooks (ab dem übergebenen Cursor) oder der Verlauf. Hook- und
+    /// Registry-Zustand dieses Laufs sind ohnehin leer; nichts wird verworfen.
+    func sessionAdopted(sessionID: UUID) {
+        apply(.processLaunched, to: sessionID)
+        apply(.launchGraceExpired, to: sessionID)
+        if !isTerminalSession(sessionID) {
+            attachWatch(sessionID: sessionID)
+        }
     }
 
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.

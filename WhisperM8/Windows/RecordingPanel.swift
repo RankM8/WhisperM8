@@ -493,6 +493,12 @@ class OverlayController: ObservableObject {
     var morphSignpost: PerformanceBudget.Token?
     /// Das Zurückziehen begann in diesem Lauf (`show` direkt nach `hide`).
     var retiredInCurrentTurn = false
+    /// Nur `whisperm8 debug pill`: meldet Fenster-Aufbau und Schritte des
+    /// Übergangs mit Namen, sonst `nil`.
+    var debugEvent: ((String) -> Void)?
+    /// Zählt jedes Zeigen (Diktat und Schnellaktion). `debug pill` erkennt
+    /// daran, ob die Pille noch seine eigene ist (`DebugPillOwnership`).
+    private(set) var presentationCount = 0
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
@@ -570,6 +576,7 @@ class OverlayController: ObservableObject {
     /// Baut die Pill auf und zeigt sie (Diktat und Schnellaktion).
     private func presentPanel() {
         isPresented = true
+        presentationCount += 1
         guard presentsWindow else { return }
         self.overlayStyle = OverlayPositionStore.loadStyle()
         self.isHoverExpanded = false
@@ -625,7 +632,8 @@ class OverlayController: ObservableObject {
     }
 
     /// Hängt die Pill-Ansicht ins Fenster und zeigt es (getrennte und vereinte Pille).
-    func installPanel(_ panel: RecordingPanel, safeAreaFree: Bool = false) {
+    /// `contentHidden`: Inhalt beginnt unsichtbar (Übergang der vereinten Pille).
+    func installPanel(_ panel: RecordingPanel, safeAreaFree: Bool = false, contentHidden: Bool = false) {
         // Create view with bindings (ONCE) - view will update via bindings
         let view = RecordingOverlayView(controller: self)
 
@@ -650,13 +658,23 @@ class OverlayController: ObservableObject {
         // schaltet Material, .primary/.secondary und die OverlayPalette
         // konsistent auf ihre Dark-Varianten.
         hostingView.appearance = NSAppearance(named: .darkAqua)
+        if contentHidden { hostingView.alphaValue = 0 }
 
         // Referenzen VOR contentView/orderFront setzen — der erste
         // Geometry-Report aus SwiftUI darf nicht an nil-Guards verpuffen.
         self.panel = panel
         self.hostingView = hostingView
         panel.contentView = hostingView
+        let intended = panel.frame.origin
         panel.orderFront(nil)
+        // Vereinte Pille: AppKit darf das Fenster beim Einblenden nicht
+        // verschieben (Menüleiste), sonst springt die Pille beim Start.
+        let shift = CGVector(dx: panel.frame.origin.x - intended.x, dy: panel.frame.origin.y - intended.y)
+        if presentation.isUnified, shift != .zero {
+            Logger.info("unified_pill_moved_on_order_front dx=\(shift.dx) dy=\(shift.dy)")
+        }
+        debugEvent?("installed:\(panel.windowNumber)")
+        debugEvent?("orderFrontShift:\(shift.dx),\(shift.dy)")
     }
 
     /// Beobachter, solange die Pill steht: Modusliste und offene Menüs.
@@ -852,7 +870,7 @@ class OverlayController: ObservableObject {
         let pillFrame = panel.pillFrameInPanel.offsetBy(dx: panel.frame.origin.x, dy: panel.frame.origin.y)
         modeList.show(
             modes: outputModes, selectedID: selectedOutputMode.id, pillFrame: pillFrame,
-            opensDownward: unifiedMenusOpenDownward)
+            opensDownward: unifiedMenusOpenDownward, unified: OutputModeListPresenter.followsUnifiedPill(presentation))
     }
 
     func addScreenshot() {

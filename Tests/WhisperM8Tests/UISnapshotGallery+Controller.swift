@@ -194,7 +194,7 @@ extension UISnapshotGallery {
             .padding(20)
             .environment(\.colorScheme, .dark))
         }
-        let extraFixtures: [Fixture] = islandFixtures() + [
+        let extraFixtures: [Fixture] = islandFixtures() + islandPackageFixtures() + [
             Fixture(name: "controller-pill-modusliste", size: CGSize(width: 520, height: 330)) { pillWithModeList() },
             Fixture(name: "controller-liste-markierung", size: CGSize(width: 340, height: 180)) { listWithMarker() },
             Fixture(name: "controller-pill-ziel", size: CGSize(width: 520, height: 80)) { pillWithTarget() },
@@ -248,8 +248,9 @@ extension UISnapshotGallery {
                                       hasWaitingChat: false, isCurrent: false),
         ]
         let target = ControllerIslandTarget(title: "Controller Insel", status: .working)
-        /// Wie Cmd-Tab: Die Liste steht sofort da, die Markierung auf dem
-        /// vorigen Ort (hier „Jarvis“ bzw. „ListM8“), sonst auf dem aktuellen.
+        /// Die Liste steht sofort da, die Markierung auf dem aktuellen Ort;
+        /// der vorige (hier „Jarvis“ bzw. „ListM8“) trägt „vorher“ und steht
+        /// gleich darunter.
         func whereTo(grid: Bool, previous: Bool = true, open: [Int] = []) -> ControllerIslandModel {
             let back: ControllerWhereToState.Destination = previous
                 ? (grid ? .workspace(workspaces[1].id) : .chat(chats[1].id)) : .stay

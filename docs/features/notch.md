@@ -1,6 +1,6 @@
 ---
 status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung
-stand: 2026-11-12
+stand: 2026-11-13
 feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
@@ -23,7 +23,7 @@ den 13 beantworteten Fragen: Branch `docs/pille-vereint-entwurf`,
 ruhenden Kern startet ein Diktat (derselbe Weg wie der Hotkey), ein Klick auf
 die Zähler oder den Rest der Pille öffnet die Liste.
 
-**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Insel vor Diktat vor
+**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Dynamic Island vor Diktat vor
 offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
 
 | Zustand | Ohne Notch | Mit Notch |
@@ -32,7 +32,7 @@ offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
 | Hinweis | Kern, Punkt, Chat-Name, Wort, „+ n“, einmal ca. 4 s | wie bisher |
 | Liste | wächst aus der Pille, Pillen-Zeile bleibt stehen; unten „Status in der Pille ausblenden“ | wie bisher |
 | Diktat | die Pille wächst in die Diktat-Pille hinein (Breite um die Mitte), links Raute bzw. Ring für wartende Chats und Fehler | das schwarze Band wächst nach unten in die Diktat-Zeile, Raute links |
-| Insel | wächst aus der Pille | wächst aus der Notch |
+| Dynamic Island (Controller) | wächst aus der Pille, mit zwei Rauten unter R1 rund 700 pt breit, immer ganz auf dem Bildschirm | wächst aus der Notch |
 
 **Aussehen:** Die Pille in Ruhe, beim Hinweis und mit Liste ist gezeichnet wie
 die Diktat-Pille: 40 pt hoch, Kapsel, `PillGlassBackground` (dünnes Material,
@@ -46,6 +46,21 @@ durchsichtig. Wie bei der Diktat-Pille fängt der Schattenhof dicht an der
 Pille Klicks ab (die Fensterverwaltung reicht nur völlig durchsichtige Pixel
 weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
 (28 pt hoch, mindestens 46 pt breit, fünf Balken), grau und flach.
+
+**Tiefschwarz statt Glas** (Einstellung „Solid black background“,
+`pillSolidBlackEnabled`, Standard aus): Die Pille ist dann auch ohne Notch
+deckend schwarz wie an der Notch, in jedem Zustand (Ruhe, Hinweis, Liste,
+Diktat, Insel samt Limits-Karte, Rauten und Reitern). Haarstrich und Schatten bleiben, damit die Pille auf einem
+dunklen Schreibtisch ihren Umriss behält. Entschieden wird an einer Stelle
+(`PillSurface` in `PillGlass.swift`); den Wert hält `PillAppearance`, das bei
+Änderungen der Preferences neu liest, deshalb wirkt der Schalter sofort auf
+sichtbare Pillen. Dazu gehört auch die Liste der Ausgabemodi, die beim
+Moduswechsel per Controller an der Diktat-Pille aufklappt, und zwar ohne
+Notch und an der Notch (dort passt sie dann zur ohnehin schwarzen Pille; mit
+Option aus bleibt sie auch an der Notch Glas). Nur mit vereinter
+Pille: Die getrennte Diktat-Pille (Kill-Switch) bleibt samt ihrer Liste Glas,
+ebenso die Menükarte des Controllers am Chat. Die Menüs von Modus und Kontext
+(mit den Vorschaubildern) sind Menüs von macOS und bleiben, wie sie sind.
 
 **Wo sie steht:**
 
@@ -108,12 +123,12 @@ sich die Pille dort nicht, die Raute erscheint links. Wartet der Chat nach dem
 Diktat noch, kommt die Verbreiterung einmal nach (`alertDuringDictation`).
 
 **Menüs und Listen:** In der oberen Bildschirmhälfte nach unten, in der
-unteren nach oben (Statusliste, Insel, Liste der Ausgabemodi am Controller;
+unteren nach oben (Statusliste, Dynamic Island, Liste der Ausgabemodi am Controller;
 die Menüs von Modus und Kontext legt macOS selbst passend).
 
-**Vollbild:** In Ruhe ausgeblendet, Diktat und Insel erscheinen trotzdem.
+**Vollbild:** In Ruhe ausgeblendet, Diktat und Dynamic Island erscheinen trotzdem.
 **Aus Bildschirmfotos ausblenden** gilt für die ganze Pille, auch das Diktat.
-**Status aus:** Die Pille erscheint nur beim Diktat und für die Insel.
+**Status aus:** Die Pille erscheint nur beim Diktat und für die Dynamic Island.
 
 **Technik:** Die Diktat-Logik ist unberührt (Coordinator, Aufnahme,
 Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
@@ -138,15 +153,37 @@ Ruhebild liefert die Status-Seite über den Hub
 (`NotchStatusController.restSnapshot`), aus ihrem Zustand gerechnet, nicht
 aus dem Fenster. Es wird aus denselben Bausteinen gezeichnet wie die
 Status-Pille (`PillRestCoreView`, `UnifiedPillRestStatus`, `NotchHeaderRow`);
-ein Pixeltest hält beide gleich. Hat das Diktat-Fenster sein erstes Bild
-gezeichnet (30 ms), tritt die Status-Pille zurück und die Pille wächst in
-einer SwiftUI-Animation ins Diktat (`showsRestLook`, Kern über
-`matchedGeometryEffect`). Am Ende umgekehrt: zurück ins Ruhebild, die
-Status-Pille erscheint wieder (ohne Animation, mit dem aktuellen Wert), ein
-Bild später schließt das Diktat-Fenster. Für diesen einen Moment liegen zwei
-gleiche Bilder übereinander, nie keins. Der Ablauf ist rein und getestet
-(`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen, Übergabe;
-Unterbrechungen über eine Generation), ausgeführt in
+ein Pixeltest hält beide gleich (drei Farbstufen Toleranz). Dazu ist die
+Diktat-Pille der vereinten Pille gebaut wie die Status-Pille: erst auf die
+Kapsel zugeschnitten, dann ein Schatten. Vorher warf jede Ebene einen
+eigenen Schatten unter das durchscheinende Glas, die Pille war im Fenster
+sichtbar dunkler (Körper 82 statt 91 von 255) und sprang beim Übergang im
+Ton. Die getrennte Diktat-Pille (Kill-Switch) bleibt, wie sie war.
+
+Das Diktat-Fenster erscheint zuerst **unsichtbar** über der Status-Pille
+(Inhalt mit Deckkraft 0). Hat der Main Thread dieses Bild abgegeben
+(Beobachter direkt nach der CATransaction am Ende des Run-Loop-Durchlaufs,
+`OverlayController.afterNextCommit`) und sind danach 50 ms vergangen, steht
+es sicher auf dem Bildschirm (gemessen: ein neues Fenster erscheint 18 bis
+33 ms nach dem Abgeben). Dann tauschen beide in **einer** CATransaction ihre
+Sichtbarkeit: Diktat-Inhalt sichtbar, Inhalt der Status-Pille unsichtbar
+(`UnifiedPillHub.setStatusContentHidden`). Im selben Durchlauf beginnt die
+Pille in einer SwiftUI-Animation ins Diktat zu wachsen (`showsRestLook`, Kern
+über `matchedGeometryEffect`); die Status-Pille geht erst aus dem Weg, wenn
+der Tausch auf dem Bildschirm ist, auch wenn das Wachsen schon durch ist.
+Läuft der Beobachter nie (anderer Run-Loop-Modus), geht es nach 300 ms über
+einen Ersatzweg weiter, damit das Diktat nicht unsichtbar bleibt. Wird die
+Pille im Diktat auf einen anderen Bildschirm gezogen, wandert die
+Unsichtbarkeit der Status-Pille mit (`UnifiedPillHub.dictationMoved`). Am Ende umgekehrt: zurück ins Ruhebild,
+die Status-Pille erscheint unsichtbar wieder (ohne Animation, mit dem
+aktuellen Wert), nach ihrem Bild der Rücktausch, danach schließt das
+Diktat-Fenster. So steht in jedem Bild genau eine Pille: keine Lücke, und
+keine zwei Glas-Pillen übereinander (die wären dunkler; vorher drei Bilder
+lang so, Körper 60 statt 91). Ein beschäftigter Main Thread verschiebt den
+Tausch nur nach hinten, vorher lief ein fester Zeitgeber ab dem Aufbau und
+konnte vor dem ersten Bild ablaufen. Der Ablauf ist rein und getestet
+(`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen,
+Übergabe, Schließen; Unterbrechungen über eine Generation), ausgeführt in
 `RecordingPanel+PillMorph.swift`. Stopp im Wachsen zieht sich aus dem
 jetzigen Stand zurück. Ein neues Diktat im Zurückziehen übernimmt dasselbe
 Fenster und wächst wieder, aber nur, wenn es auf genau diesen Bildschirm
@@ -160,7 +197,33 @@ Kern startet ein Diktat (über den Hub, derselbe Weg wie an der ruhenden
 Pille), alles andere wird geschluckt, gezogen wird nicht. Kommt die
 Status-Pille aus dem Diktat zurück, zeigt sie ihren Wert ohne Animation;
 andere Wiedererscheinen bleiben animiert. Messpunkt `pill.morph` (Detail-Stufe, Budget 450 ms) meldet, wenn der
-Main Thread den Übergang aufhält.
+Main Thread den Übergang aufhält. Verschiebt AppKit das Diktat-Fenster beim
+Einblenden doch (Menüleiste), steht im Log `unified_pill_moved_on_order_front`.
+
+**Prüfen ohne Hinsehen:** `whisperm8 debug pill [--busy <ms>]` spielt den
+Übergang ohne Aufnahme durch und schneidet die Fensterliste mit (Lücke,
+Versatz, Verschiebung beim Einblenden, Reihenfolge von Tausch und Fenstern),
+Doku in [ui-testing.md](ui-testing.md).
+
+**Messung vom 13.11.2026** (Aufnahme nur der Fenster der Test-Instanz, 60 Bilder
+je Sekunde, je Lage zwei Läufe hin und zurück: oben mittig, ganz oben unter der
+Menüleiste, frei in der Mitte, dazu 150 ms bzw. 60 ms beschäftigter Main
+Thread beim Start; MacBook-Bildschirm als Bildschirm ohne Notch über
+`WHISPERM8_TEST_NO_NOTCH`, ein Kontrolllauf oben mittig am 5120×1440-Bildschirm
+mit demselben Ergebnis):
+
+| | vorher | nachher |
+|---|---|---|
+| Bilder ohne Pille | 0 | 0 |
+| Versatz der Oberkante | 0 pt (Sprung nach unten schon behoben) | 0 pt |
+| zwei Pillen übereinander (dunkler) | 100 bis 717 ms je Lauf | 0 ms |
+| Ruhebild im anderen Ton | 167 bis 217 ms je Lauf | 0 ms |
+| größter Breitenschritt je Bild | 47 bis 150 pt | 31 bis 46 pt |
+| Abstand Diktat steht → Status weg | 4 bis 35 ms (beschäftigt: 4 und 9) | Tausch ≥ 49 ms danach |
+| Aufbau → Wachsen beginnt | 31 bis 43 ms | 65 bis 75 ms |
+
+Ohne die Ausnahme an der Menüleiste zeigt dieselbe Messung den alten Sprung:
+18 pt oben mittig, 24 pt ganz oben (`orderFrontShift` ebenso).
 
 ### Kill-Switch der vereinten Pille
 
@@ -272,8 +335,8 @@ Hosting-View (`NotchHostingView.pillMouse`), wie bei der Diktat-Pille
 Pille zugleich Knopf (Liste auf und zu), deshalb führt die Hosting-View das
 Fenster selbst mit der Maus mit und meldet einen Klick nur ohne Bewegung.
 
-Die Controller-Insel wächst ohne Notch aus genau dieser Pille (siehe
-[controller.md](controller.md)).
+Die Dynamic Island des Controllers (früher „Insel“) wächst ohne Notch aus genau
+dieser Pille (siehe [controller.md](controller.md)).
 
 **Ausschalten direkt in der Notch:** Unten links in der aufgeklappten Liste
 steht „Turn off notch“. Das setzt denselben Schalter wie die Einstellungen
@@ -285,7 +348,8 @@ einen selbst belegten Hotkey; ab Werk hat er keine Belegung).
 Vereinte Pille: Einstellungen, General, Abschnitt „Pille und Notch“
 (`PillSettingsSection`), mit Verweisen aus Recording und Agent Chats. Dort:
 Chat-Status in der Pille zeigen, Ausblenden aus Bildschirmfotos (ganze
-Pille), Fertige Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
+Pille), Tiefschwarzer Hintergrund (`pillSolidBlackEnabled`, aus), Fertige
+Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
 „Statusliste öffnen“ und Ein-/Ausblenden. Die Bildschirmwahl fällt weg.
 Recording behält Voll/Mini (nur beim Diktat) und „Ausgabemodus beim Diktat
 immer zeigen“ (`showModePickerInMiniOverlay`). Menüleiste: „Chat-Status in
@@ -353,11 +417,11 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 |---|---|
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
-| `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Controller-Insel |
+| `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
 | `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
 | `Windows/NotchPanel.swift` | Nicht aktivierendes `NSPanel`, Hosting-View mit erstem Klick und Klick/Ziehen/Doppelklick der Pille |
-| `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Insel |
+| `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Dynamic Island |
 | `Views/NotchStatusView.swift` | Darstellung aus einem fertigen `NotchDisplay`-Wert |
 | `Services/Shared/UnifiedPill/UnifiedPillModel.swift` | Rein: Priorität, Ort des Diktats, Raute, Geometrie (Mitte, Rechts-Anker beim Darüberfahren, Fenster mit Schattenrand), Klickziel, Aufklapprichtung |
 | `Services/Shared/UnifiedPill/UnifiedPillHub.swift` | Treffpunkt Diktat und Status: Bildschirm des Diktats, Raute |
@@ -447,7 +511,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   solange die Liste offen ist. Beide schlucken nichts (der globale kann es
   nicht, der lokale gibt das Ereignis immer zurück).
 - Keine Dateideskriptoren, keine Subprozesse.
-- Controller-Insel: Hält man am Controller L1, R1 oder L2, legt sich die Insel
+- Dynamic Island: Hält man am Controller L1, R1 oder L2, legt sich die Dynamic Island
   (eigenes Fenster, `mainMenu + 4`, dieselbe Band-Geometrie an der Notch,
   ohne Notch an der Stelle der Pille) über diese Anzeige und zeigt ihre Zähler
   im Kopf. Die Anzeige selbst ändert sich dafür
@@ -491,9 +555,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
-  sichtbaren Bereich, nach oben in der unteren Hälfte, Insel an derselben
+  sichtbaren Bereich, nach oben in der unteren Hälfte, Dynamic Island an derselben
   Stelle, Schlüssel ist die Display-UUID, Speichern und Zurücksetzen.
-- `UnifiedPillModelTests`: Priorität (Insel, Diktat, Liste, Hinweis, Ruhe;
+- `UnifiedPillModelTests`: Priorität (Dynamic Island, Diktat, Liste, Hinweis, Ruhe;
   Status aus, Vollbild), Ort des Diktats (vorderes Fenster, Maus,
   Hauptbildschirm, Notch, gemerkte Lage), Raute, Rechts-Anker beim
   Darüberfahren, Fenster mit Schattenrand, Liste nach oben und unten,
@@ -506,7 +570,12 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   gemerkte Lage, Notch nur mit Anzeige, nachgeholter Hinweis), kein Übergang
   bei offener Liste, Vollbild, Status aus, Kill-Switch.
 - `UnifiedPillRestLookPixelTests`: Ruhebild der Diktat-Pille Pixel für Pixel
-  wie die Status-Pille bzw. die Notch-Zeile, mit und ohne Hinweis.
+  wie die Status-Pille bzw. die Notch-Zeile, mit und ohne Hinweis, ohne Notch
+  auch in Tiefschwarz.
+- `PillSolidBlackTests`: Tiefschwarz standardmäßig aus, nur mit vereinter
+  Pille, Entscheidung `PillSurface`, Live-Wert meldet nur echte Wechsel; im
+  Bild schwarz bei Ruhe, Liste, Diktat, Insel und Liste der Ausgabemodi, die
+  getrennte Diktat-Pille samt Liste unverändert.
 - `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
   Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
   nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
@@ -518,6 +587,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Seite). `ONLY=diktatpille` zeigt die Diktat-Pille in allen Zuständen.
   `ONLY=uebergang` zeigt den Übergang: Ruhe, Mitte, Diktat ohne Notch und an
   der Notch (aus dem Band und aus der Zeile mit Zählern).
+  `ONLY=vereint-schwarz` zeigt dieselben Zustände ohne Notch in Tiefschwarz,
+  dazu alle Insel-Fixtures als Pille (Limits-Karte, Rauten, Reiter, Listen),
+  die Liste der Ausgabemodi und den Schalter in den Einstellungen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).

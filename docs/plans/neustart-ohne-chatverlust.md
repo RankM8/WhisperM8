@@ -298,6 +298,48 @@ Fork-Branch `whisperm8-handover` (auf `whisperm8-pty-cloexec`), Pin in `Package.
   - Das Kind schließt nur die tatsächlich offenen Deskriptoren, statt bis zu 61.440 `close()` (27 ms je Chat-Start).
 - **Befund für Aufbewahrer und App:** Ein Prozess, der mit ungelesener Ausgabe auf seinem Terminal endet, hängt in seinem Ende, bis jemand liest oder der letzte Master schließt. Wer eine Leitung hält, muss also mitlesen oder sie schließen; nur halten reicht nicht. Im Test äußerte sich das als `waitpid`, das nie zurückkam.
 
+### Bauplan Paket 4: App setzt zusammen (Stand 13.11.2026)
+
+Grundlage: Pakete 1 bis 3 und das Dauerlauf-Skript sind gebaut. Paket 4 verbindet sie in der App. Ist der Labs-Schalter `restartKeepsChatsEnabled` aus, ändert sich nichts; jeder Fehler endet im heutigen Weg plus Fortsetzen per `--resume`; nie zwei Prozesse auf einer Sitzung.
+
+**Vertrag mit dem Aufbewahrer** (Dex, 661373d3, `docs/features/agent-chats/neustart-aufbewahrer.md` „Offen für Paket 4“):
+1. Starten per `HandoverKeeperLauncher.launch(executable:arguments:secret:)`, das Einmal-Geheimnis geht über stdin. Vorher per `STATUS` klären, ob schon ein Aufbewahrer mit nicht übernommenen Chats lebt; dann keine neue Abgabe, sondern der heutige Weg mit Marker „fortsetzen“.
+2. Abgabe mit `helloDeposit(secret:expectedRunID:expectedPID:)`. Die App schließt ihre Originale erst, wenn `commit()` ohne Fehler zurückkommt. Scheitert `commit()`, schickt der Client dem Aufbewahrer selbst SIGTERM; die App endet auf dem heutigen Weg.
+3. Das Geheimnis legt die alte App vor `COMMIT` in den Schlüsselbund: ein Eintrag je Instanz, lesbar nur für die App (Zugriff an ihre Code-Signatur gebunden). Die neue App liest es für `helloTake(secret:)` beziehungsweise `release(secret:)` und löscht es danach. Ohne Geheimnis keine Übernahme: Die neue App beendet den Aufbewahrer per SIGTERM (PID aus `STATUS`), er schließt geordnet, danach `--resume`.
+4. Eine übernommene Leitung erst benutzen, wenn `take()` ohne Fehler zurückkommt (es wartet auf `OK {chatID}`). Leitungen nur auf dem Main Thread übernehmen, nie während eines `forkpty` auf einem anderen Thread.
+5. Manifest: `launchCommand` (das `AgentLaunchCommand` als JSON), `pendingAccountSwitch`, `terminalColors` aus der Palette der Terminal-View; die übrigen Felder wie im Plan.
+
+**Router und Proxy** (Gus, Paket 3): `ClaudeGPTBackendHandover.setRequested(true)` vor dem Beenden mit Übergabe, wirksam nur bei `ClaudeGPTRouterMode.current == .service`. Dann laufen Router-Dienst und Proxys weiter und werden über das Proxy-Register übernommen.
+
+**Schnitte** (je Schnitt Tests vor dem Umbau, eigener Commit):
+
+| Schnitt | Inhalt |
+|---|---|
+| 4a Fundament | Manifest aus dem Controller bauen und zurücklesen (Kommando, Token, Cursor der Hooks, Entwurf, Kontowechsel, Farben, „arbeitet seit“); Schlüsselbund-Ablage des Geheimnisses je Instanz; Marker-Zustand „übergeben“ in `AgentCrashRecovery`; Entscheidungstabellen als reine Funktionen (Beenden: Übergabe ja/nein, Rückfall; Start: übernehmen, fortsetzen, nichts). Kein geändertes Verhalten. |
+| 4b Abgabe | Controller-Weg „abgeben“ (`detachForHandover`, Drosselung leeren, `serializeScreen`, ohne Ctrl+C); Ablauf in einem `HandoverCoordinator`; Steuerbefehl und CLI `whisperm8 app handover`; Beenden-Weg bei SIGTERM mit Übergabe; Router/Proxy-Signal; Makefile (`app handover` vor `kill`, `GUI_PIDS` verschont `handover-keeper` und `gpt-router`); `test-instance.sh restart --keep-chats` und `stop` verschont dieselben. |
+| 4c Übernahme | früh in `applicationDidFinishLaunching`, vor Absturz-Wiederaufnahme, `markStaleRunningSessionsClosed`, Aufräumen der Event-Dateien und erstem Statusscan: Controller ohne View (`adoptController`, Ende über Registry/Koordinator statt View-Closures), Bild einspielen, Leitung übernehmen, Größe setzen; Token und PID wieder eintragen; Hooks ab Cursor ohne `prepareSettingsFile`; Registry-Status nachlesen; Queue anstoßen; Entwurf und Kontowechsel übernehmen; Statistik. Rückfall je Chat: lebt der Prozess nicht, `--resume`; lebt er und die Übernahme scheitert, erst geordnet beenden, dann `--resume`. Kennlinien-Punkt 9 (Registry-Eintrag nach dem Terminal) gehört hierher. |
+| 4d Bedienung | Labs-Schalter in den Einstellungen, Menüpunkt „Neu starten, Chats laufen weiter“, Hinweis nach `brew upgrade`, Sperrmeldung mit Ort und „Zum Chat wechseln“ (Nachtrag 2 aus Paket 0); Texte englisch und deutsch. |
+| 4e Messpunkte für den Dauerlauf | `chats new --provider terminal`, `chats new --background`, `debug terminal <ref> --text`, `runtime.pid` in `chats show`, Logzeile `session_notification_posted kind=turnCompleted session=<id>`. |
+| 4f Abnahme vor dem Einschalten | `scripts/handover-soak.sh run --rounds 5` in der Test-Instanz grün; Schlüsselbund-Prüfungen (unten); dann der Pflichttest mit echtem `make dev` durch Giuliano. |
+
+**Schlüsselbund-Prüfungen vor dem Einschalten** (Hinweis von Jarvis):
+- Zwei aufeinanderfolgende `make dev`-Builds, beide signiert mit „WhisperM8 Local Dev“: Die neue App liest das Geheimnis ohne Dialog.
+- Wechsel Brew-Build ↔ Dev-Build: Der Zugriff scheitert sauber, ohne Dialog und ohne Hängen. Es gilt der Rückfall (`--resume` nach geordnetem Ende des Aufbewahrers). Abfrage nur mit `kSecUseAuthenticationUIFail` beziehungsweise ohne Benutzerinteraktion, mit kurzer Frist.
+- Test-Instanz (eigene Bundle-ID): eigener Eintrag, berührt die Arbeits-App nie.
+
+### Vor dem Einschalten des Schalters (Stand 13.11.2026, nach Vics Review von Paket 4)
+
+Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblendet. Eingeschaltet wird erst, wenn alles hier erledigt ist:
+
+1. **Geheimnis-Weg entschieden und gebaut.** Mit Schlüsselbund scheitert die Übernahme über zwei Builds (cdhash-Bindung ohne Team-ID, gemessen in der Test-Instanz). Vorschlag Option A: Datei 0600 im 0700-Ordner des Aufbewahrers, Schlüsselbund ganz aus dem Weg, Kontoname ohne Signatur; später C (Apple-Entwicklerkonto). Abnahme mit Dev-Build auf Dev-Build und ad hoc auf ad hoc. Abschnitt „Wovor schützen wir“ entsprechend zurückschneiden.
+2. **Kein Start mehr nach `COMMIT`.** Zwischen Abgabe und Beenden startet die alte App keinen Chat mehr.
+3. **Abgabe-Fehler mit Fortsetzen wie im Plan:** Chats, deren Abgabe scheiterte, werden nach dem Neustart fortgesetzt.
+4. **Aufbewahrer liest erst ab `COMMIT`** aus den Leitungen.
+5. **`app handover` gegen Aufruf aus einem Chat sichern.**
+6. **Bindungs-Befund** (zwei Chats an derselben Claude-Sitzung): nach der Übernahme die Sitzungs-ID über die PID in Claudes Registry prüfen und korrigieren; vor jedem Sammel-Start auf doppelte IDs prüfen; Reservierung gegen gleichzeitigen Doppelstart; zurückgestellte IDs und Fork-Merkliste ins Manifest.
+7. **Prüfungen gegen die Wirklichkeit:** Bild im echten Fenster, Dauerlauf grün, fünfmal `make dev`, der erste echte Lauf nur mit Chats, deren Verlust nicht schlimm wäre.
+8. **Labs-Seite einhängen** (`RestartSettingsPage`, liegt samt Übersetzung bereit) und den Eintrag in `PreferenceBedienweg` streichen.
+
 ## Bau-Reihenfolge
 
 Jedes Paket hat einen eigenen Branch und Arbeitsordner, wird einzeln reviewt und geht erst nach grüner Suite in main. Ist der Labs-Schalter aus, ändert keins das heutige Verhalten. Ausnahme ist Paket 0, das sind Fehlerbehebungen.
