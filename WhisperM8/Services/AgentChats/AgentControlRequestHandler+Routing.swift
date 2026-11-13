@@ -15,6 +15,7 @@ extension AgentControlRequestHandler {
         case clipboard
         case gptRouter
         case handover
+        case order
 
         var methods: Set<String> {
             switch self {
@@ -24,6 +25,7 @@ extension AgentControlRequestHandler {
             case .clipboard: return AgentControlRequestHandler.clipboardMethods
             case .gptRouter: return [AgentControlRequestHandler.gptRouterStartProfileMethod]
             case .handover: return [AgentControlRequestHandler.appHandoverMethod]
+            case .order: return [AgentControlRequestHandler.sessionOrderMethod]
             }
         }
     }
@@ -42,6 +44,7 @@ extension AgentControlRequestHandler {
         case .clipboard: return await clipboardRequest(request)
         case .gptRouter: return gptRouterStartProfile(request)
         case .handover: return await appHandover(request)
+        case .order: return await sessionOrder(request)
         }
     }
 }

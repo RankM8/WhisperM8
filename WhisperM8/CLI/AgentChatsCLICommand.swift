@@ -80,6 +80,8 @@ enum AgentChatsCLICommand {
             return ChatsMoveCommand.run(rest)
         case "move-account":
             return ChatsMoveAccountCommand.run(rest)
+        case "order":
+            return ChatsOrderCommand.run(rest)
         case "window":
             return ChatsWindowCommand.run(rest)
         case "resume":
@@ -572,7 +574,8 @@ enum ChatsListCommand {
                 truncated: truncated,
                 countsCoverFullScope: plan.countsCoverFullScope,
                 queuedCounts: queuedCounts,
-                liveStatuses: live
+                liveStatuses: live,
+                orderInfo: ChatsOrderInfo.byID(workspace: context.view.workspace, uiState: context.view.uiState)
             )
             CLIIO.out(ChatsOutput.encodeJSON(payload))
             if truncated {
@@ -705,6 +708,7 @@ enum ChatsShowCommand {
             )
             payload["schemaVersion"] = 1
             payload["generatedAt"] = ChatsOutput.iso(context.now)
+            payload["order"] = ChatsOrderInfo.byID(workspace: context.view.workspace, uiState: context.view.uiState)[entry.session.id] ?? NSNull()
             payload["detail"] = ChatsOutput.detailJSON(entry: entry, transcriptModel: transcriptModel)
             let waiting = queued.filter(\.isOpen)
             var queueDict: [String: Any] = [
@@ -962,6 +966,12 @@ enum ChatsCLIHelp {
       whisperm8 chats close --others|--right <ref>       alle anderen / rechts vom Anker (dessen Fenster)
       whisperm8 chats reopen [--json]                    zuletzt geschlossenen Tab wiederherstellen
       whisperm8 chats pin <ref> [<ref>…] [--json]        Sidebar-Pin setzen (unpin: entfernen)
+      whisperm8 chats order <ref> [<ref>…] [--last <ref>]… [--dry-run] [--json]
+                           Reihenfolge der Chats eines Projekts in der Seitenleiste
+                           setzen; die Projekt-Ansicht folgt. Genannte Chats
+                           kommen in dieser Folge nach vorn, --last ans Ende, die
+                           übrigen behalten ihre Folge dazwischen. Alle Chats
+                           müssen im selben Projekt liegen. --dry-run: Vorschau.
       whisperm8 chats move <ref> --window <primary|id>   Tab in anderes (bestehendes) Fenster
       whisperm8 chats window list [--json]               Fenster-Inventar (IDs für move)
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
