@@ -11,6 +11,17 @@ struct AgentSessionUserNotification: Equatable {
         case subagentCompleted
         /// Codex-Subagent-Job fehlgeschlagen.
         case subagentFailed
+
+        /// Name im Log (`session_notification_posted kind=…`), feste Wörter
+        /// für den Dauerlauf (Dex zählt doppelte Fertig-Meldungen).
+        var logLabel: String {
+            switch self {
+            case .turnCompleted: return "turnCompleted"
+            case .inputRequested: return "inputRequested"
+            case .subagentCompleted: return "subagentCompleted"
+            case .subagentFailed: return "subagentFailed"
+            }
+        }
     }
 
     var kind: Kind

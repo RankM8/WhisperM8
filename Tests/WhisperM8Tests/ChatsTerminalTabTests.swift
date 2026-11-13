@@ -152,4 +152,30 @@ final class ChatsTerminalTabTests: XCTestCase {
         XCTAssertFalse(AppCLICommand.isUnknownMethod(.failure(requestID: "r", code: .conflict, message: "busy")))
         XCTAssertFalse(AppCLICommand.oldAppLine.contains("Unbekannte Methode"), "ruhige Zeile statt Fehler")
     }
+
+    /// Dex: feste Namen in `session_notification_posted kind=…`.
+    func testNotificationLogLabels() {
+        XCTAssertEqual(AgentSessionUserNotification.Kind.turnCompleted.logLabel, "turnCompleted")
+        XCTAssertEqual(AgentSessionUserNotification.Kind.subagentCompleted.logLabel, "subagentCompleted")
+        XCTAssertEqual(AgentSessionUserNotification.Kind.subagentFailed.logLabel, "subagentFailed")
+    }
+}
+
+/// Vic (Phase 2): Die Zähler-Prüfung verlangt jede Zahl rund um die Übergabe
+/// genau einmal und in Reihenfolge; die Stelle ist bei 5 Zahlen je Sekunde nach
+/// 10 s aus dem Bild. `debug terminal` muss deshalb den Rücklauf liefern.
+@MainActor
+final class ChatsTerminalScrollbackTests: XCTestCase {
+    func testPlainTextCarriesTheScrollbackCompleteAndInOrder() {
+        let controller = AgentTerminalController(
+            sessionID: UUID(),
+            command: AgentLaunchCommand(executablePath: "/bin/sh", arguments: [], workingDirectory: "/tmp",
+                                        keyboardProfile: .plainShell),
+            onLaunched: {}, onTerminated: { _ in })
+        let text = (1...300).map { "z\($0)" }.joined(separator: "\r\n") + "\r\n"
+        controller.terminal.feed(byteArray: Array(text.utf8)[...])
+        let lines = controller.plainText().components(separatedBy: "\n").filter { $0.hasPrefix("z") }
+        XCTAssertEqual(lines, (1...300).map { "z\($0)" }, "jede Zahl genau einmal, in Reihenfolge, auch aus dem Rücklauf")
+        XCTAssertEqual(controller.plainText(lastLines: 3).components(separatedBy: "\n"), ["z298", "z299", "z300"])
+    }
 }

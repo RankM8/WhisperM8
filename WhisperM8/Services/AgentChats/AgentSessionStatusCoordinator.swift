@@ -1161,7 +1161,15 @@ final class AgentSessionStatusCoordinator {
             title: session.title,
             projectName: project?.name
         )
-        guard notificationThrottle.shouldPost(notification, now: Date()) else { return }
+        guard notificationThrottle.shouldPost(notification, now: Date()) else {
+            Logger.agentStore.info(
+                "session_notification_throttled kind=\(kind.logLabel, privacy: .public) session=\(sessionID.uuidString, privacy: .public)")
+            return
+        }
+        // Nur echte Mitteilungen; der Dauerlauf zählt sie je Chat (doppelte
+        // Fertig-Meldung nach einer Übergabe = Fehler).
+        Logger.agentStore.notice(
+            "session_notification_posted kind=\(kind.logLabel, privacy: .public) session=\(sessionID.uuidString, privacy: .public)")
         notificationPoster.post(notification)
     }
 
