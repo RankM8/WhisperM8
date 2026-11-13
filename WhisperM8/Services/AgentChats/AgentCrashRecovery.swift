@@ -159,10 +159,16 @@ enum AgentCrashRecoveryCoordinator {
             Logger.agentStore.notice("crash_recovery_skipped reason=disabled previous=\(previouslyRunning.count)")
             return []
         }
-        let resumeIDs = AgentCrashRecoveryPlanner.sessionsToResume(
-            previouslyRunning: previouslyRunning,
-            sessions: store.loadWorkspace().sessions
+        let sessions = store.loadWorkspace().sessions
+        let plan = AgentCollectiveStartPlanner.plan(
+            AgentCrashRecoveryPlanner.sessionsToResume(previouslyRunning: previouslyRunning, sessions: sessions),
+            sessions: sessions
         )
+        for skipped in plan.skipped {
+            Logger.agentStore.notice(
+                "crash_recovery_duplicate_skipped session=\(skipped.uuidString, privacy: .public)")
+        }
+        let resumeIDs = plan.start
         for id in resumeIDs {
             try? store.updateSession(id: id) { $0.shouldLaunchOnOpen = true }
             // Ein Chat kann ohne offenen Tab gelaufen sein (`close` lässt das
