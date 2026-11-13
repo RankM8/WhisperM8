@@ -116,6 +116,12 @@ final class ChatsTerminalTabTests: XCTestCase {
         XCTAssertNil((detached["runtime"] as? [String: Any])?["pid"])
     }
 
+    /// Befund aus der Test-Instanz: Int32 kam als null an.
+    func testLivePIDSurvivesTheJSONBridge() {
+        XCTAssertEqual(ChatsControlJSON(any: AgentControlRequestHandler.livePID(4711)).intValue, 4711)
+        XCTAssertNil(ChatsControlJSON(any: AgentControlRequestHandler.livePID(nil)).intValue)
+    }
+
     // MARK: ruhige Zeile bei altem Build
 
     func testOldAppWithoutHandoverIsAClassicRestart() {

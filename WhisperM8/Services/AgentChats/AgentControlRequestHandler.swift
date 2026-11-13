@@ -140,7 +140,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     "runtimeStatus": runtime?.rawValue ?? "unknown",
                     "isAttachedPTY": isRunning,
                     "canSend": isRunning,
-                    "canInterrupt": isRunning && runtime == .working, "pid": (isRunning ? controller?.processID : nil) as Any? ?? NSNull(),
+                    "canInterrupt": isRunning && runtime == .working, "pid": Self.livePID(isRunning ? controller?.processID : nil),
                 ]
             }
         }

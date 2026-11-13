@@ -16,7 +16,10 @@ extension AgentControlRequestHandler {
             let ids = AgentWorkspaceUIModel.shared.workspace.sessions.map(\.id)
                 .filter { $0.uuidString.lowercased().hasPrefix(ref) }
             guard ids.count == 1, let id = ids.first else { return nil }
-            guard let controller = AgentTerminalRegistry.shared.controller(for: id) else { return .some(nil) }
+            // Ein Controller entsteht schon mit der Ansicht; gestartet ist er
+            // erst mit seinem Prozess. Ein beendeter Tab behält seinen Text.
+            guard let controller = AgentTerminalRegistry.shared.controller(for: id),
+                  controller.hasStarted else { return .some(nil) }
             return (id, controller.plainText(lastLines: lines))
         }
         switch found {
@@ -29,6 +32,14 @@ extension AgentControlRequestHandler {
                 "session": hit.id.uuidString, "text": hit.text,
             ]))
         }
+    }
+}
+
+extension AgentControlRequestHandler {
+    /// PID für `sessions.live`: als `Int`, denn die JSON-Brücke
+    /// (`ChatsControlJSON(any:)`) kennt `Int32` nicht und machte daraus null.
+    static func livePID(_ pid: Int32?) -> Any {
+        pid.map { Int($0) } ?? NSNull()
     }
 }
 
