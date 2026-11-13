@@ -35,4 +35,22 @@ extension AgentWindowStore {
         }
         return changes
     }
+
+    /// Setzt die Tab-Folge eines Fensters (`chats order --tabs`). Nur eine
+    /// Umordnung derselben Tabs; Auswahl und Fenster bleiben. Mit `dryRun`
+    /// nur die Vorschau. `nil`, wenn das Fenster fehlt oder `order` nicht
+    /// genau seine Tabs enthält.
+    @discardableResult
+    func setTabOrder(_ order: [UUID], in windowID: UUID, dryRun: Bool = false) -> (before: [UUID], after: [UUID])? {
+        guard hasWindow(windowID) else { return nil }
+        let before = openTabIDs(in: windowID)
+        guard before.count == order.count, Set(before) == Set(order) else { return nil }
+        guard !dryRun, before != order else { return (before, order) }
+        mutate { state in
+            var window = state.windowState(for: windowID)
+            window.openTabIDs = order
+            state.upsertWindow(window)
+        }
+        return (before, openTabIDs(in: windowID))
+    }
 }

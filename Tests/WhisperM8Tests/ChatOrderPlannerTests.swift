@@ -32,6 +32,14 @@ final class ChatOrderPlannerTests: XCTestCase {
                        [ids[2], ids[0], ids[1]], "einmal genannt zählt die erste Nennung")
     }
 
+    /// Tabs: Projekt-Tabs als Block an die Stelle des ersten, andere bleiben.
+    func testTabBlockReplacesTheFirstProjectTab() {
+        let (x, a, y, b, c, z) = (ids[0], ids[1], ids[2], ids[3], ids[4], ids[5])
+        let window = [x, a, y, b, z, c]
+        XCTAssertEqual(ChatOrderPlanner.tabBlockOrder(window: window, block: [c, a, b]), [x, c, a, b, y, z])
+        XCTAssertEqual(ChatOrderPlanner.tabBlockOrder(window: [x, y], block: [a]), [x, y], "Block nicht im Fenster: unverändert")
+    }
+
     func testSlotsFollowTheOrderAndEmptySlotsStay() {
         let (a, b, c, outsider) = (ids[0], ids[1], ids[2], ids[3])
         let slots: [UUID?] = [c, nil, a, outsider, b]
@@ -163,5 +171,47 @@ final class ChatsOrderInfoTests: XCTestCase {
         XCTAssertEqual(tabs?.first?["position"] as? Int, 2)
         XCTAssertEqual(tabs?.first?["windowID"] as? String, window.id.uuidString)
         XCTAssertEqual((info[old.id]?["tabs"] as? [[String: Any]])?.count, 0)
+    }
+}
+
+final class TabOrderPlanTests: XCTestCase {
+    private let projectA = AgentProject(name: "whisperm8", path: "/tmp/a")
+    private let projectB = AgentProject(name: "listm8", path: "/tmp/b")
+
+    private func chat(_ title: String, _ project: AgentProject) -> AgentChatSession {
+        AgentChatSession(provider: .claude, projectID: project.id, title: title, status: .running, createdManually: true)
+    }
+
+    func testOrdersTheProjectTabsOfOneWindow() throws {
+        let (jarvis, dex, ole, other) = (chat("Jarvis", projectA), chat("Dex", projectA), chat("Ole", projectA), chat("ListM8", projectB))
+        let window = UUID()
+        let workspace = AgentWorkspace(projects: [projectA, projectB], sessions: [jarvis, dex, ole, other])
+        let plan = try AgentControlRequestHandler.planTabOrder(
+            windows: [(id: window, tabs: [other.id, jarvis.id, dex.id, ole.id])], workspace: workspace,
+            first: [ole.id, dex.id], last: [jarvis.id]).get()
+        XCTAssertEqual(plan.windowID, window)
+        XCTAssertEqual(plan.after, [other.id, ole.id, dex.id, jarvis.id])
+    }
+
+    func testRejectsClosedTabsTwoWindowsAndTwoProjects() {
+        let (a, b, c) = (chat("a", projectA), chat("b", projectA), chat("c", projectB))
+        let workspace = AgentWorkspace(projects: [projectA, projectB], sessions: [a, b, c])
+        let w1 = (id: UUID(), tabs: [a.id, c.id])
+        let w2 = (id: UUID(), tabs: [b.id])
+        if case .failure(let error) = AgentControlRequestHandler.planTabOrder(windows: [w1], workspace: workspace, first: [b.id], last: []) {
+            XCTAssertEqual(error.code, .notFound)
+        } else { XCTFail("nicht offen") }
+        if case .failure(let error) = AgentControlRequestHandler.planTabOrder(windows: [w1, w2], workspace: workspace, first: [a.id, b.id], last: []) {
+            XCTAssertEqual(error.code, .invalid)
+            XCTAssertTrue(error.message.contains("Fenstern"))
+        } else { XCTFail("zwei Fenster") }
+        if case .failure(let error) = AgentControlRequestHandler.planTabOrder(windows: [w1], workspace: workspace, first: [a.id, c.id], last: []) {
+            XCTAssertEqual(error.code, .invalid)
+            XCTAssertTrue(error.message.contains("Projekten"))
+        } else { XCTFail("zwei Projekte") }
+    }
+
+    func testParsesTabsFlag() throws {
+        XCTAssertTrue(try ChatsOrderCommand.parse(["--tabs", "dex", "--last", "jarvis"]).tabs)
     }
 }

@@ -711,6 +711,11 @@ struct AgentSessionStore {
         workspaceStore.flush(reason: reason)
     }
 
+    /// Wartet, bis der Stand auf der Platte steht (siehe `AgentWorkspaceStore.flushToDisk`).
+    func flushToDisk(reason: String) async {
+        await workspaceStore.flushToDisk(reason: reason)
+    }
+
     @discardableResult
     func bindLatestIndexedSession(
         localSessionID: UUID,
