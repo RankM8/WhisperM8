@@ -55,6 +55,26 @@ final class XboxHIDReportBuilderTests: XCTestCase {
         XCTAssertEqual(Set(XboxHID.gamepadUsages), [0x04, 0x05, 0x08])
     }
 
+    /// Elite über Bluetooth LE (gemessen): GamePad, Pointer, Consumer und
+    /// Tastatur. Mit Tastatur-Paar nur bei erteilter Eingabeüberwachung öffnen.
+    func testKeyboardPairNeedsListenAccess() {
+        let elite: [(page: UInt32, usage: UInt32)] = [(0x01, 0x05), (0x01, 0x01), (0x0C, 0x01), (0x01, 0x06)]
+        XCTAssertFalse(XboxHID.mayOpen(usagePairs: elite, listenAccessGranted: false))
+        XCTAssertTrue(XboxHID.mayOpen(usagePairs: elite, listenAccessGranted: true))
+        XCTAssertFalse(XboxHID.mayOpen(usagePairs: [(0x01, 0x05), (0x01, 0x07)], listenAccessGranted: false), "Ziffernblock")
+        XCTAssertTrue(XboxHID.mayOpen(usagePairs: [(0x01, 0x05), (0x0C, 0x01)], listenAccessGranted: false))
+        XCTAssertTrue(XboxHID.mayOpen(usagePairs: [], listenAccessGranted: false))
+    }
+
+    func testMeasuredShoulderAndMenuUsages() {
+        XCTAssertEqual(XboxHIDButtons.table[0x07], .l1)
+        XCTAssertEqual(XboxHIDButtons.table[0x08], .r1)
+        XCTAssertEqual(XboxHIDButtons.table[0x0B], .create)
+        XCTAssertEqual(XboxHIDButtons.table[0x0C], .options)
+        XCTAssertEqual(XboxHIDButtons.table[0x0E], .l3)
+        XCTAssertEqual(XboxHIDButtons.table[0x0F], .r3)
+    }
+
     // MARK: - Debug-Schritt
 
     func testDebugScriptHIDStep() throws {

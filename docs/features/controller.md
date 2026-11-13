@@ -372,7 +372,8 @@ Abgleich der Schalter.
 Eingaben in einen Chat; im Verlauf nur Verlauf und Pause; in Menü, Dialogen und anderen Fenstern nur
 Pause. Nichts — auch ohne Vibration — in einer Ebene (L1, R1, L2 gehalten; die Ebene gilt als benutzt),
 während Aufnahme, Transkription und Nacharbeit und außerhalb der App. Paddles wecken WhisperM8 nie.
-Ausnahme: „Pause“ wirkt überall, wo L1 + R1 wirkt, auch in der Pause selbst.
+Ausnahme: „Pause“ wirkt überall, wo L1 + R1 wirkt, auch in der Pause selbst und in der Schnellaktion (dort
+gilt sonst die Regel des Menüs).
 
 **Weiche gegen die doppelte Taste.** Das Profil im Controller legt jedes Paddle zusätzlich auf eine
 Gesichtstaste; GameController meldet dann ein gewöhnliches A, B, X oder Y. HID meldet im selben Bericht
@@ -380,21 +381,31 @@ das Paddle-Bit (Consumer 0x0C, Usage 0x81) und die Taste. `ControllerPaddleGate`
 aus der Maske Paddle-Tasten und fällt für jeden Tastendruck im Bericht ein Urteil: „vom Paddle“, wenn
 im selben Bericht ein Paddle-Bit dazukam, sonst „direkt“ (gültig 100 ms). Ein Druck von GameController
 mit Urteil „vom Paddle“ wird verschluckt, samt seinem Loslassen; „direkt“ geht sofort durch; ohne Urteil
-hält die Weiche ihn zurück, bis es kommt, höchstens 40 ms, und alles Spätere wartet dahinter. Trigger
-und Sticks hält sie nie zurück. DualSense-Ereignisse und Xbox-Controller ohne lesbare Paddles laufen
+hält die Weiche ihn zurück, bis es kommt, höchstens 40 ms, und alles Spätere wartet dahinter. Das gilt
+nur für Tasten, die HID beurteilen kann (`XboxHIDButtons.judgeable`: A, B, X, Y, LB, RB, View, Menu, LS,
+RS); Steuerkreuz, Trigger und Sticks hält sie nie zurück. Kommen in einem Bericht mehr Tastendrücke als
+neue Paddle-Bits, entscheidet das gelernte Profil (Bit → Taste, aus eindeutigen Berichten gelernt), welche
+Taste zum Paddle gehört; die übrigen gelten als echter Druck. **Grenze:** Bevor die Weiche ein Paddle
+einmal allein gesehen hat, wird ein echter Druck im selben Bericht mitverschluckt (das trifft nur einen
+Druck, der genau mit dem Paddle in denselben HID-Bericht fällt). `reset()` behält die Maske, damit ein noch gehaltenes
+Paddle keinen Phantom-Druck erzeugt; fällt die Paddle-Quelle weg, werden gedrückte Paddles losgelassen. DualSense-Ereignisse und Xbox-Controller ohne lesbare Paddles laufen
 ohne Verzögerung durch. Paddles im Controller-Profil darum auf A, B, X oder Y lassen; auf Trigger oder
 Stick gelegt, wirken sie zusätzlich.
 
-**HID und Berechtigung.** `XboxPaddleHIDSource` öffnet nur Microsoft-Geräte mit Gamepad-Usage
-(Generic Desktop: GamePad, Joystick, MultiAxis — nie Tastatur oder Maus), ohne sie zu vereinnahmen,
-auf der Queue der Pumpe. Paddles erkennt sie am Element 0x0C/0x81, nicht an der Produkt-ID.
-„Eingabeüberwachung“ wird nur gelesen (`IOHIDCheckAccess`, im Log), nie von selbst angefragt. Scheitert
-das Öffnen, zeigt die Einstellungsseite „nicht lesbar“ mit dem Knopf „In den Systemeinstellungen
+**HID und Berechtigung.** `XboxPaddleHIDSource` findet nur Microsoft-Geräte, deren Haupt-Usage ein
+Gamepad ist (Generic Desktop: GamePad, Joystick, MultiAxis), über einen Manager, der nie geöffnet wird.
+Jedes Gerät wird einzeln geprüft und als eigenes `IOHIDDevice` geöffnet, ohne es zu vereinnahmen, auf der
+Queue der Pumpe. Tritt ein Gerät zusätzlich als Tastatur oder Ziffernblock auf (`DeviceUsagePairs` mit
+Generic Desktop 6 oder 7 — der Elite über Bluetooth LE tut das), öffnet sie es nur bei erteilter
+„Eingabeüberwachung“, sonst gilt es als „nicht lesbar“. Jeder Lauf ist ein eigenes Sitzungsobjekt; ein
+später Abbruch-Handler räumt nie einen neuen Lauf ab. Paddles erkennt sie am Element 0x0C/0x81, nicht an
+der Produkt-ID. „Eingabeüberwachung“ wird nur gelesen (`IOHIDCheckAccess`, im Log), nie von selbst
+angefragt. Fehlt sie oder scheitert das Öffnen, zeigt die Einstellungsseite „nicht lesbar“ mit dem Knopf „In den Systemeinstellungen
 erlauben…“ (wirkt nach einem Neustart der App); die Paddles wirken dann als die Gesichtstasten ihres
 Profils. Die Tabellen `XboxHIDButtons` (Usages der Tastenseite) und `XboxPaddleBits` (Bit ↔ Lage) stehen
 zentral in `Core/XboxHIDLayout.swift` und `Core/ControllerPaddles.swift`. Gemessen sind A = 1, B = 2,
-X = 4, Y = 5, Xbox-Knopf = 0x0D und die Bits 1, 2, 4, 8; Annahmen sind LB = 7, RB = 8, View = 0x0B,
-Menu = 0x0C, LS = 0x0E, RS = 0x0F und die Zuordnung Bit 1 = P1 … Bit 8 = P4.
+X = 4, Y = 5, Xbox-Knopf = 0x0D und die Bits 1, 2, 4, 8; gemessen 13.11.2026 sind LB = 7, RB = 8,
+View = 0x0B, Menu = 0x0C, LS = 0x0E, RS = 0x0F. Ungeprüft bleibt die Zuordnung Bit 1 = P1 … Bit 8 = P4.
 
 ## Schutzregeln
 

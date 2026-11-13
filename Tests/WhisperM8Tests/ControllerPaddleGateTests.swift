@@ -73,6 +73,22 @@ final class ControllerPaddleGateTests: XCTestCase {
                        [.stick(.right, x: 0, y: 1)])
     }
 
+    /// Das Steuerkreuz beurteilt HID nie (es ist kein Wert der Tastenseite):
+    /// Es geht sofort durch, ohne Zurückhalten und ohne abgelaufene Frist.
+    func testDpadIsNeverHeld() {
+        XCTAssertEqual(gc(.dpadUp, true, at: 0), [.button(.dpadUp, pressed: true)])
+        XCTAssertEqual(gc(.dpadUp, false, at: 0.1), [.button(.dpadUp, pressed: false)])
+        XCTAssertNil(gate.nextDeadline)
+        XCTAssertEqual(gate.tick(at: 1), [])
+        XCTAssertEqual(gate.stats.holds, 0)
+        XCTAssertEqual(gate.stats.holdsExpired, 0)
+    }
+
+    func testOnlyJudgeableButtonsAreHeld() {
+        XCTAssertEqual(XboxHIDButtons.judgeable, [.cross, .circle, .square, .triangle, .l1, .r1, .create, .options, .l3, .r3])
+        XCTAssertEqual(gc(.l1, true, at: 0), [], "LB beurteilt HID, also wartet es")
+    }
+
     // MARK: - Mehrere Paddles
 
     func testTwoPaddlesInOneReport() {
@@ -109,6 +125,28 @@ final class ControllerPaddleGateTests: XCTestCase {
         XCTAssertEqual(gc(.cross, false, at: 0.9), [.button(.cross, pressed: false)])
     }
 
+    /// Echter Druck auf X im selben Bericht wie das A-Paddle: Mit gelerntem
+    /// Profil gehört nur A zum Paddle, X geht durch.
+    func testRealPressInThePaddleReportWithLearnedProfile() {
+        // Lernen: P3 (Bit 4) schickt A.
+        _ = gate.hid(report(mask: 0x4, [(.cross, true)]), at: 0)
+        XCTAssertEqual(gc(.cross, true, at: 0.001), [])
+        _ = gate.hid(report(mask: 0, [(.cross, false)]), at: 0.2)
+        XCTAssertEqual(gc(.cross, false, at: 0.201), [])
+        // Jetzt P3 und X von Hand im selben Bericht.
+        XCTAssertEqual(gate.hid(report(mask: 0x4, [(.cross, true), (.square, true)]), at: 1),
+                       [.button(.paddleUpperLeft, pressed: true)])
+        XCTAssertEqual(gc(.cross, true, at: 1.001), [])
+        XCTAssertEqual(gc(.square, true, at: 1.002), [.button(.square, pressed: true)])
+    }
+
+    /// Ohne gelerntes Profil bleibt es beim Verschlucken (bekannte Grenze).
+    func testRealPressInThePaddleReportWithoutProfileIsSwallowed() {
+        _ = gate.hid(report(mask: 0x4, [(.cross, true), (.square, true)]), at: 0)
+        XCTAssertEqual(gc(.cross, true, at: 0.001), [])
+        XCTAssertEqual(gc(.square, true, at: 0.002), [])
+    }
+
     // MARK: - Durchgang, Reset, Verfall
 
     func testOtherFamiliesPassStraightThrough() {
@@ -130,13 +168,32 @@ final class ControllerPaddleGateTests: XCTestCase {
         XCTAssertNil(gate.nextDeadline)
     }
 
+    /// Fällt die Quelle weg, werden gedrückte Paddles losgelassen und die
+    /// Maske beginnt bei null.
+    func testSwitchingTheSourceOffReleasesPressedPaddles() {
+        _ = gate.hid(report(mask: 0x5), at: 0)
+        XCTAssertEqual(gate.setPaddleSource(available: false), [
+            .button(.paddleUpperRight, pressed: false), .button(.paddleUpperLeft, pressed: false),
+        ])
+        XCTAssertEqual(gate.stats.lastMask, 0)
+        _ = gate.setPaddleSource(available: true)
+        XCTAssertEqual(gate.hid(report(mask: 0x1), at: 1), [.button(.paddleUpperRight, pressed: true)])
+    }
+
     func testResetWhileHolding() {
         XCTAssertEqual(gc(.cross, true, at: 0), [])
         gate.reset()
         XCTAssertNil(gate.nextDeadline)
         XCTAssertEqual(gate.tick(at: 1), [])
-        // Nach dem Reset beginnt die Maske bei null.
         XCTAssertEqual(gate.hid(report(mask: 0x1), at: 2), [.button(.paddleUpperRight, pressed: true)])
+    }
+
+    /// P1 bleibt über den Reset gedrückt: Der nächste Bericht meldet nur P2,
+    /// keinen Phantom-Druck von P1.
+    func testResetKeepsTheMask() {
+        XCTAssertEqual(gate.hid(report(mask: 0x1), at: 0), [.button(.paddleUpperRight, pressed: true)])
+        gate.reset()
+        XCTAssertEqual(gate.hid(report(mask: 0x3), at: 1), [.button(.paddleLowerRight, pressed: true)])
     }
 
     func testVerdictsExpire() {
@@ -153,6 +210,18 @@ final class ControllerPaddleGateTests: XCTestCase {
     }
 
     // MARK: - Mit Erkenner
+
+    /// Nach einem Reset (Erkenner ebenfalls zurückgesetzt) wird das gehaltene
+    /// Paddle losgelassen: Das Loslassen ohne Druck erzeugt keine Geste.
+    func testReleaseAfterResetProducesNoGesture() {
+        var recognizer = ControllerGestureRecognizer()
+        for event in gate.hid(report(mask: 0x1), at: 0) { _ = recognizer.handle(event, at: 0) }
+        gate.reset()
+        _ = recognizer.reset(at: 0.1)
+        var gestures: [ControllerGesture] = []
+        for event in gate.hid(report(mask: 0), at: 0.2) { gestures += recognizer.handle(event, at: 0.2) }
+        XCTAssertEqual(gestures, [])
+    }
 
     func testGestureChainProducesOnlyThePaddle() {
         var recognizer = ControllerGestureRecognizer()

@@ -25,6 +25,10 @@ struct ControllerHIDReport: Equatable, Sendable {
 /// macht aus der Maske Paddle-Tasten und verschluckt die mitgeschickte Taste
 /// — nach dem Urteil des HID-Berichts, nicht nach einem Zeitfenster allein.
 ///
+/// Zurückgehalten werden nur Tasten, die HID beurteilen kann
+/// (`XboxHIDButtons.judgeable`); Steuerkreuz, Trigger und Sticks gehen sofort
+/// durch.
+///
 /// Pure Zustandsmaschine mit Uhr als Parameter, wie der Erkenner. Ohne
 /// HID-Paddles und für alle Nicht-Xbox-Geräte ist sie ein reiner Durchgang.
 struct ControllerPaddleGate: Sendable {
@@ -62,31 +66,41 @@ struct ControllerPaddleGate: Sendable {
     private var ownedByPaddle: Set<ControllerButton> = []
     /// Zurückgehaltene Ereignisse von GameController, in ihrer Reihenfolge.
     private var held: [Held] = []
+    /// Gelerntes Profil im Controller: Paddle-Bit → mitgeschickte Taste.
+    /// Gelernt aus Berichten mit genau einem neuen Bit und genau einer
+    /// gedrückten Taste; ein Profilwechsel am Controller überschreibt es beim
+    /// nächsten eindeutigen Bericht.
+    private var profileFace: [UInt32: ControllerButton] = [:]
 
     init() {}
 
     // MARK: - Eingaben
 
     /// Paddles über HID lesbar oder nicht. Wird es abgeschaltet, geht alles
-    /// Zurückgehaltene sofort durch.
+    /// Zurückgehaltene sofort durch, und gedrückte Paddles werden losgelassen
+    /// (sonst hinge ihr Druck im Erkenner).
     mutating func setPaddleSource(available: Bool) -> [ControllerInputEvent] {
         guard available != paddleSourceAvailable else { return [] }
         paddleSourceAvailable = available
         guard !available else { return [] }
         let pending = held.map(\.event)
+        let released = XboxPaddleBits.changes(from: mask, to: 0).map { ControllerInputEvent.button($0.paddle.button, pressed: false) }
         held = []
         verdicts = [:]
         ownedByPaddle = []
-        return pending
+        profileFace = [:]
+        mask = 0
+        stats.lastMask = 0
+        return pending + released
     }
 
     mutating func hid(_ report: ControllerHIDReport, at time: TimeInterval) -> [ControllerInputEvent] {
         purgeVerdicts(at: time)
         stats.reports += 1
         var out: [ControllerInputEvent] = []
-        var paddleAdded = false
+        var addedBits: UInt32 = 0
         if let newMask = report.paddleMask {
-            paddleAdded = newMask & ~mask != 0
+            addedBits = newMask & ~mask
             for change in XboxPaddleBits.changes(from: mask, to: newMask) {
                 out.append(.button(change.paddle.button, pressed: change.pressed))
             }
@@ -95,8 +109,10 @@ struct ControllerPaddleGate: Sendable {
         }
         // Jeder Tastendruck im Bericht wird zum Urteil für genau diese Taste.
         if paddleSourceAvailable {
-            for change in report.buttons where change.pressed {
-                verdicts[change.button] = Verdict(fromPaddle: paddleAdded, at: time)
+            let pressed = report.buttons.filter(\.pressed).map(\.button)
+            let fromPaddle = paddleFaces(pressed: pressed, addedBits: addedBits)
+            for button in pressed {
+                verdicts[button] = Verdict(fromPaddle: fromPaddle.contains(button), at: time)
             }
         }
         if let home = report.homeButton {
@@ -128,9 +144,12 @@ struct ControllerPaddleGate: Sendable {
         return flush(at: time)
     }
 
-    /// Trennung, Ruhezustand, Pause des Systems, Ausschalten.
+    /// Trennung, Ruhezustand, Pause des Systems, Ausschalten. Die Maske
+    /// bleibt: Ein Paddle kann noch gedrückt sein, und ein neuer Bericht soll
+    /// nur Wechsel melden, keinen Phantom-Druck. Nach einer Trennung meldet
+    /// der neue Bericht die Maske ohnehin vollständig (der Bündler beginnt
+    /// leer) und lässt Hängengebliebenes los.
     mutating func reset() {
-        mask = 0
         verdicts = [:]
         ownedByPaddle = []
         held = []
@@ -149,7 +168,9 @@ struct ControllerPaddleGate: Sendable {
     private mutating func decide(
         _ event: ControllerInputEvent, receivedAt: TimeInterval, at time: TimeInterval, mayHold: Bool
     ) -> [ControllerInputEvent]? {
-        guard case let .button(button, pressed) = event, !button.isTrigger, !button.isPaddle else {
+        // Nur Tasten, die HID beurteilt, warten auf ein Urteil; für alle
+        // anderen (Steuerkreuz, Trigger, Paddles) käme nie eines.
+        guard case let .button(button, pressed) = event, XboxHIDButtons.judgeable.contains(button) else {
             return [event]
         }
         if !pressed {
@@ -181,6 +202,20 @@ struct ControllerPaddleGate: Sendable {
             out += events
         }
         return out
+    }
+
+    /// Welche gedrückten Tasten eines Berichts das Paddle mitgeschickt hat.
+    /// Höchstens so viele Tasten wie neue Bits gehören zum Paddle; sind es
+    /// mehr, entscheidet das gelernte Profil. Ist es für ein neues Bit noch
+    /// unbekannt, zählen alle als „vom Paddle“ (Grenze in `controller.md`).
+    private mutating func paddleFaces(pressed: [ControllerButton], addedBits: UInt32) -> Set<ControllerButton> {
+        let bits = XboxPaddleBits.table.map(\.bit).filter { addedBits & $0 != 0 }
+        guard !bits.isEmpty, !pressed.isEmpty else { return [] }
+        if bits.count == 1, pressed.count == 1 { profileFace[bits[0]] = pressed[0] }
+        guard pressed.count > bits.count else { return Set(pressed) }
+        let learned = bits.compactMap { profileFace[$0] }
+        guard learned.count == bits.count else { return Set(pressed) }
+        return Set(learned).intersection(pressed)
     }
 
     private mutating func purgeVerdicts(at time: TimeInterval) {

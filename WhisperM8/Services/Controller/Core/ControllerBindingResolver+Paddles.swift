@@ -3,7 +3,8 @@ import Foundation
 // Belegung der Paddles (Plan `controller-xbox-paddles.md`, „Wo ein Paddle
 // wirkt“). Paddles wirken nur in der App, im Agent-Chats-Fenster; in einer
 // Ebene, während der Aufnahme und außerhalb der App tun sie nichts, auch
-// ohne Vibration. Ausnahme: „Pause“ wirkt überall, wo L1 + R1 wirkt.
+// ohne Vibration. Ausnahme: „Pause“ wirkt überall, wo L1 + R1 wirkt (auch in
+// der Schnellaktion; dort gilt sonst die Regel des Menüs).
 
 extension ControllerBindingResolver {
     /// Paddle eines Drucks, auch in einer Ebene. Andere Gesten bilden
@@ -31,11 +32,12 @@ extension ControllerBindingResolver {
             return binding == .pause ? action : nil
         case .outsideApp, .noWindow:
             return binding == .pause && chordAllowed(in: context) ? action : nil
-        case .recording, .quickAction:
+        case .recording:
             return nil
         case .clipboardPanel:
             return binding == .clipboardHistory || binding == .pause ? action : rejected
-        case .menu, .modal, .otherWindow:
+        case .menu, .modal, .otherWindow, .quickAction:
+            // Schnellaktion wie Menü: L1 + R1 pausiert dort auch.
             return binding == .pause ? action : rejected
         case .list:
             return binding.needsChat ? rejected : action

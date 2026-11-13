@@ -203,8 +203,8 @@ Series 2 needs a current firmware for Bluetooth LE.“ (deutsch übersetzt).
 | `.chat` (auch Raster, fokussierte Kachel) | jede Belegung; ob sie gerade geht, prüft der Ausführer frisch |
 | `.list` | `nextWaiting`, `answer`, `lastChat`, `clipboardHistory`, `pause`; Eingaben in einen Chat (`sendNow`, `cycleMode`, `pasteNewest`, `undo`, `/workflows`, `/tasks`) → „geht nicht“ |
 | `.clipboardPanel` | `clipboardHistory` schließt, `pause`; sonst „geht nicht“ |
-| `.menu`, `.modal`, `.otherWindow` | `pause`; sonst „geht nicht“ |
-| `.recording`, `.quickAction` | nichts, ohne Vibration |
+| `.menu`, `.modal`, `.otherWindow`, `.quickAction` | `pause`; sonst „geht nicht“ (in der Schnellaktion wirkt L1 + R1 auch) |
+| `.recording` | nichts, ohne Vibration |
 | `.paused` | nur `pause` (sonst bliebe man in der Pause gefangen) |
 | `.outsideApp`, `.noWindow` | nichts; `pause` nur, wo L1 + R1 wirkt (`chordAllowed`) |
 | in einer Ebene | nichts |
@@ -250,17 +250,17 @@ geprüft wird beim Ausführen frisch aus `terminals.state(of:)`; wo nichts passt
 Controller, als gewöhnliche Taste bei GameController. Ohne Weiche schickte das Paddle „Jetzt senden“ und
 zusätzlich A, also Enter.
 
-**Ein Takt für beide Wege.** `XboxPaddleHIDSource` hängt den `IOHIDManager` per
-`IOHIDManagerSetDispatchQueue(manager, pump.queue)` an dieselbe serielle Queue, auf der GameController seine
-Handler aufruft (`handlerQueue = queue`), dann `IOHIDManagerActivate`. Beide Wege kommen damit in einer
+**Ein Takt für beide Wege.** `XboxPaddleHIDSource` hängt den `IOHIDManager` (Finden) und jedes geöffnete
+Gerät (`IOHIDDeviceSetDispatchQueue`) an dieselbe serielle Queue `pump.queue`, auf der GameController seine
+Handler aufruft (`handlerQueue = queue`), dann `IOHIDManagerActivate` bzw. `IOHIDDeviceActivate`. Beide Wege kommen damit in einer
 festen Reihenfolge in der Pumpe an; welcher zuerst kommt, bleibt offen.
 
 **HID-Bericht bündeln.** Die Werte eines Berichts kommen als einzelne Rückrufe mit gleichem Zeitstempel
 (`IOHIDValueGetTimeStamp`) hintereinander im selben Block der Queue. Die Quelle sammelt sie und schickt sie
 mit einem `queue.async` am Ende als einen `ControllerHIDReport` weiter: neue Paddle-Maske (falls `0x81`
 dabei war) und die Tastenwechsel auf Seite `0x09`, übersetzt nach `XboxHIDButtons` (gemessen: Usage 1 = A,
-2 = B, 4 = X, 5 = Y; LB, RB, View, Menu, LS, RS werden im Gerätetest H1 nachgemessen; unbekannte Usages
-werden ignoriert).
+2 = B, 4 = X, 5 = Y; gemessen 13.11.2026: LB = 7, RB = 8, View = 0x0B, Menu = 0x0C, LS = 0x0E, RS = 0x0F;
+unbekannte Usages werden ignoriert).
 
 **Die Weiche** (`ControllerPaddleGate`, pur, im Kern, mit Uhr als Parameter):
 
@@ -269,11 +269,15 @@ werden ignoriert).
 - Aus einer Änderung der Maske werden `.button(.paddleX, pressed:)` (Bit ↔ Lage aus `XboxPaddleBits`),
   mehrere Bits in einem Bericht ergeben mehrere Ereignisse.
 - Jeder Tastendruck im HID-Bericht wird zu einem **Urteil** für genau diese Taste: „vom Paddle“, wenn im selben
-  Bericht ein Paddle-Bit dazukam, sonst „direkt“. Urteile verfallen nach 100 ms.
+  Bericht ein Paddle-Bit dazukam, sonst „direkt“. Urteile verfallen nach 100 ms. Höchstens so viele Tasten wie
+  neue Bits gehören zum Paddle; sind es mehr (echter Druck im selben Bericht), entscheidet das gelernte Profil
+  (Bit → Taste, gelernt aus eindeutigen Berichten mit einem Bit und einer Taste). Ohne gelerntes Profil zählen
+  alle als „vom Paddle“ (Grenze, siehe `controller.md`).
 - **Druck von GameController**, Herkunft Xbox und HID-Paddles verfügbar:
   - Urteil „vom Paddle“ liegt vor → verschlucken, Taste als „gehört dem Paddle“ merken.
   - Urteil „direkt“ liegt vor → sofort durchlassen.
-  - Noch kein Urteil (GameController war schneller) → zurückhalten, bis das Urteil kommt; spätestens nach
+  - Noch kein Urteil (GameController war schneller) → zurückhalten, nur bei Tasten, die HID beurteilen kann
+    (`XboxHIDButtons.judgeable`: A, B, X, Y, LB, RB, View, Menu, LS, RS), bis das Urteil kommt; spätestens nach
     40 ms durchlassen. Solange etwas zurückgehalten wird, warten alle späteren Ereignisse von GameController
     dahinter, damit die Reihenfolge stimmt (ein Stick-Ausschlag überholt nie einen Tastendruck).
 - **Loslassen von GameController:** Gehört die Taste dem Paddle, verschlucken und den Merker löschen; sonst
@@ -285,11 +289,13 @@ werden ignoriert).
 - **Ohne HID-Paddles** (kein Elite, keine Berechtigung, USB, Notbremse aus) ist die Weiche ein Durchgang:
   kein Zurückhalten, keine Verzögerung. Ereignisse vom DualSense oder einem anderen Gerät laufen immer direkt
   durch (`origin.family != .xbox`).
-- `reset()` (Trennung, Ruhezustand, Pause des Systems, Ausschalten) löscht Merker, Urteile und Zurückgehaltenes.
+- `reset()` (Trennung, Ruhezustand, Pause des Systems, Ausschalten) löscht Merker, Urteile und Zurückgehaltenes,
+  behält aber die Maske (ein Paddle kann noch gedrückt sein; sonst entstünde ein Phantom-Druck).
+- `setPaddleSource(available: false)` lässt alle gedrückten Paddles los und setzt die Maske auf null.
 - Zeit: Was zurückgehalten war, geht mit der Uhrzeit des Durchlassens in den Erkenner, nie mit einer älteren
   (der Erkenner verträgt keine rückwärts laufende Zeit). Die Verzögerung liegt nach der Messung bei 0 bis
   3 ms, schlimmstenfalls 40 ms, und nur bei Xbox-Controllern mit lesbaren Paddles.
-- Trigger und Sticks hält die Weiche nie zurück. Legt jemand im Controller-Profil ein Paddle auf einen
+- Trigger, Sticks und Steuerkreuz hält die Weiche nie zurück (HID fällt für sie kein Urteil). Legt jemand im Controller-Profil ein Paddle auf einen
   Trigger oder Stick, wirkt das wie heute zusätzlich; die Doku rät, Paddles auf Gesichtstasten oder auf
   „nicht belegt“ zu lassen.
 
@@ -308,7 +314,14 @@ kann.
 ## HID-Quelle und Berechtigung
 
 - **Abgleich nur auf Gamepads:** `IOHIDManagerSetDeviceMatchingMultiple` mit VendorID `0x045E` **und**
-  `DeviceUsagePage` 1 / `DeviceUsage` 5 (GamePad), zusätzlich 4 (Joystick). Nie nur nach VendorID wie im
+  `PrimaryUsagePage` 1 / `PrimaryUsage` 5 (GamePad), zusätzlich 4 (Joystick) und 8 (MultiAxis). Der Manager
+  dient nur dem Finden und wird nie geöffnet. Vor dem Öffnen prüft die Quelle die `DeviceUsagePairs` jedes
+  Geräts: Hat es auch ein Tastatur- oder Ziffernblock-Paar (Generic Desktop 6/7 — der Elite über BLE hat 6),
+  wird es nur bei erteilter Eingabeüberwachung geöffnet, sonst „nicht lesbar“. Geöffnet wird je Gerät ein
+  eigenes `IOHIDDevice` (`IOHIDDeviceCreate` aus dem Dienst des gefundenen Geräts, `IOHIDDeviceOpen`, eigener
+  Werte-Callback): Das Gerät des Managers ist schon an dessen Queue gebunden und nimmt keinen Werte-Callback
+  mehr an; ein Einzel-Öffnen des Manager-Geräts liefert keine Werte (beides am Gerät geprüft 13.11.2026).
+  Jeder Lauf ist ein eigenes Sitzungsobjekt, damit ein später Abbruch-Handler keinen neuen Lauf abräumt. Nie nur nach VendorID wie im
   Testwerkzeug: Microsoft baut auch Tastaturen und Mäuse, und das Öffnen einer Tastatur löst die Rückfrage
   nach „Eingabeüberwachung“ aus. SDL filtert aus genau diesem Grund nur Joystick, GamePad und
   MultiAxisController.
@@ -328,7 +341,7 @@ kann.
   ob WhisperM8 die Berechtigung schon hat (Tastatursperre mit Event-Tap), ist unklar. Deshalb:
   - Beim Start `IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)` lesen und loggen; **nie** von selbst
     `IOHIDRequestAccess` aufrufen (keine Rückfrage aus dem Nichts).
-  - `IOHIDManagerOpen` mit `kIOReturnNotPermitted` oder ein Elite ohne jeden `0x81`-Wert nach einem erkannten
+  - Tastatur-Paar ohne Freigabe, `IOHIDDeviceOpen` mit `kIOReturnNotPermitted` oder ein Elite ohne jeden `0x81`-Wert nach einem erkannten
     Paddle-Doppel (Weiche sieht Gesichtstasten ohne Urteil) → Zustand „Paddles nicht lesbar“.
   - Rückfall: Die Weiche wird zum Durchgang, Paddles wirken als die Gesichtstasten ihres Profils (wie heute).
   - Einstellungsseite: Zeile „Paddles: not readable“ mit Knopf „Allow in System Settings…“, der auf Klick
@@ -453,7 +466,7 @@ umbelegbar“ ändern. Nutzer-Doku der Einstellungsseite, falls `testUserGuideSe
 | Elite meldet sich auch als Tastatur, signierte App braucht „Eingabeüberwachung“ | Paddles nicht lesbar | Rückfall auf Gesichtstasten, Zustandszeile mit Freigabe-Knopf auf Klick, nie automatische Rückfrage; H8 |
 | Reihenfolge HID/GameController in der App anders als im Werkzeug | sonst verrutschte Taste | Weiche entscheidet nach Urteil, nicht nach Reihenfolge; Zurückhalten mit 40-ms-Frist |
 | Urteil kommt nie (HID-Bericht verloren) | Paddle-Taste ginge nach 40 ms als A durch | Zähler im Debug-Kanal; selten; dieselbe Wirkung wie heute |
-| HID-Usages für LB/RB/… anders als angenommen | Paddle auf Schultertaste wird nicht verschluckt | H1 misst nach; unbekannte Usages ergeben kein Urteil, dann gilt die Frist |
+| HID-Usages für LB/RB/… anders als angenommen | Paddle auf Schultertaste wird nicht verschluckt | gemessen 13.11.2026 (LB, RB, View, Menu, LS, RS bestätigt); unbekannte Usages ergeben kein Urteil, und die Taste wird nicht zurückgehalten |
 | Firmware-Update ändert `0x81`-Bericht | Paddles weg | Erkennung nach Element, Rückfall automatisch |
 | Profil legt Paddle auf Trigger/Stick | zusätzliche Wirkung | dokumentiert, Empfehlung Gesichtstasten |
 | Zwei Xbox-Controller gleichzeitig | Urteile lassen sich nicht sicher einem Gerät zuordnen | dokumentierte Grenze; Paddles nur am ersten Elite |

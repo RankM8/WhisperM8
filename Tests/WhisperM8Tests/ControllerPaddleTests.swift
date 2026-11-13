@@ -135,11 +135,13 @@ final class ControllerPaddleTests: XCTestCase {
             XCTAssertEqual(resolve(.pause, in: context), .pauseToggle, "\(context)")
             XCTAssertEqual(resolve(.sendNow, in: context), .rejected, "\(context)")
         }
-        // Aufnahme und Schnellaktion: nichts, auch keine Vibration.
-        for context in [ControllerContext.recording(phase: .recording, targetIsChat: true), .quickAction] {
-            XCTAssertNil(resolve(.pause, in: context))
-            XCTAssertNil(resolve(.sendNow, in: context))
-        }
+        // Aufnahme: nichts, auch keine Vibration.
+        let recording = ControllerContext.recording(phase: .recording, targetIsChat: true)
+        XCTAssertNil(resolve(.pause, in: recording))
+        XCTAssertNil(resolve(.sendNow, in: recording))
+        // Schnellaktion wie Menü: Pause wirkt wie L1 + R1, alles andere nicht.
+        XCTAssertEqual(resolve(.pause, in: .quickAction), .pauseToggle)
+        XCTAssertEqual(resolve(.sendNow, in: .quickAction), .rejected)
         // Pause: nur Pause, sonst bliebe man gefangen.
         XCTAssertEqual(resolve(.pause, in: .paused), .pauseToggle)
         XCTAssertNil(resolve(.nextWaiting, in: .paused))

@@ -14,6 +14,20 @@ enum XboxHID {
     static let usageGamePad: UInt32 = 0x05
     static let usageMultiAxis: UInt32 = 0x08
     static let gamepadUsages: [UInt32] = [usageJoystick, usageGamePad, usageMultiAxis]
+    /// Tastatur und Ziffernblock: Tritt ein Gerät auch so auf (der Elite tut
+    /// es über Bluetooth LE), braucht sein Öffnen „Eingabeüberwachung“.
+    static let usageKeyboard: UInt32 = 0x06
+    static let usageKeypad: UInt32 = 0x07
+
+    /// Darf ein Gerät mit diesen `DeviceUsagePairs` geöffnet werden? Mit
+    /// Tastatur- oder Ziffernblock-Paar nur bei erteilter Eingabeüberwachung:
+    /// Das Öffnen löste sonst die Rückfrage des Systems aus.
+    static func mayOpen(usagePairs: [(page: UInt32, usage: UInt32)], listenAccessGranted: Bool) -> Bool {
+        listenAccessGranted || !usagePairs.contains {
+            $0.page == pageGenericDesktop && ($0.usage == usageKeyboard || $0.usage == usageKeypad)
+        }
+    }
+
     /// Tastenseite (A, B, X, Y …).
     static let pageButton: UInt32 = 0x09
     /// Consumer-Seite: Paddle-Maske unter Usage 0x81 (Elite Series 2).
@@ -23,10 +37,8 @@ enum XboxHID {
 
 /// Tastenseite 0x09 ↔ logische Taste. Gemessen (12.11.2026, Elite Series 2
 /// über Bluetooth LE, Firmware 5.21): A = 1, B = 2, X = 4, Y = 5, Xbox-Knopf
-/// = 0x0D. **Annahmen** nach dem üblichen BLE-Layout der Xbox-Controller, im
-/// Gerätetest H1 nachzumessen: LB = 7, RB = 8, View = 0x0B, Menu = 0x0C,
-/// LS = 0x0E, RS = 0x0F. Unbekannte Usages werden ignoriert (kein Urteil,
-/// dann gilt die 40-ms-Frist der Weiche).
+/// = 0x0D; gemessen 13.11.2026: LB = 7, RB = 8, View = 0x0B, Menu = 0x0C,
+/// LS = 0x0E, RS = 0x0F. Unbekannte Usages werden ignoriert (kein Urteil).
 enum XboxHIDButtons {
     static let homeUsage: UInt32 = 0x0D
 
@@ -35,13 +47,17 @@ enum XboxHIDButtons {
         0x02: .circle,    // B (gemessen)
         0x04: .square,    // X (gemessen)
         0x05: .triangle,  // Y (gemessen)
-        0x07: .l1,        // LB (Annahme)
-        0x08: .r1,        // RB (Annahme)
-        0x0B: .create,    // View (Annahme)
-        0x0C: .options,   // Menu (Annahme)
-        0x0E: .l3,        // LS (Annahme)
-        0x0F: .r3,        // RS (Annahme)
+        0x07: .l1,        // LB (gemessen 13.11.2026)
+        0x08: .r1,        // RB (gemessen 13.11.2026)
+        0x0B: .create,    // View (gemessen 13.11.2026)
+        0x0C: .options,   // Menu (gemessen 13.11.2026)
+        0x0E: .l3,        // LS (gemessen 13.11.2026)
+        0x0F: .r3,        // RS (gemessen 13.11.2026)
     ]
+
+    /// Tasten, für die HID ein Urteil fällen kann. Nur sie hält die Weiche
+    /// zurück; die Gesichtstasten der Paddles (A, B, X, Y) gehören dazu.
+    static let judgeable: Set<ControllerButton> = Set(table.values)
 }
 
 /// Bündelt die einzelnen Werte eines HID-Berichts (gleicher Zeitstempel)
