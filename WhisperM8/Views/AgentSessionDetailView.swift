@@ -527,6 +527,9 @@ struct AgentSessionDetailView: View {
             builder.runningSessionProcessResolver = { sessionID in
                 ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords)
             }
+            builder.launchReservation = { sessionID, localID in
+                ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID)
+            }
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den
             // bisherigen Direktbetrieb ohne Router-Env.

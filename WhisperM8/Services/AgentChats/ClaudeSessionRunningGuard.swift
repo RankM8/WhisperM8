@@ -88,3 +88,52 @@ final class ProcessTerminationLedger: @unchecked Sendable {
         return now().timeIntervalSince(noted) < window
     }
 }
+
+/// Reservierung der Sitzungen, die die App gerade startet.
+///
+/// Die Registry kennt einen Prozess erst kurz nach dem Start (gemessen
+/// 0,2 bis 1,2 s, `scripts/measure-claude-registry.py`). Starten zwei Chats
+/// mit derselben Sitzungs-ID im selben Augenblick (Absturz-Wiederaufnahme,
+/// Grid, Wiederherstellen), sieht keiner den anderen in der Registry, und
+/// beide liefen auf einer Sitzung. Deshalb merkt sich die App, welcher Chat
+/// eine ID gerade fortsetzt: Ein zweiter Chat bekommt sie für `window`
+/// Sekunden nicht — danach steht der Prozess des ersten längst in der
+/// Registry, und die Sperre dort greift. Bewusst ohne Freigabe beim
+/// Prozessende: Gesperrt wird nur ein ANDERER Chat mit derselben ID, und den
+/// gibt es nur nach einer Fehlbindung. Eine Freigabe träfe dagegen beim
+/// Tab-Neustart die frische Reservierung desselben Chats (das Ende des alten
+/// Prozesses kommt nach dem neuen Start an).
+final class ClaudeSessionLaunchReservations: @unchecked Sendable {
+    static let shared = ClaudeSessionLaunchReservations()
+
+    private struct Entry {
+        let localID: UUID
+        let at: Date
+    }
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+    private let window: TimeInterval
+    private let now: () -> Date
+
+    init(window: TimeInterval = 30, now: @escaping () -> Date = Date.init) {
+        self.window = window
+        self.now = now
+    }
+
+    /// Reserviert `sessionID` für `localID`. Hält ein anderer Chat die ID
+    /// noch, bleibt dessen Reservierung, und seine ID kommt zurück. Derselbe
+    /// Chat darf neu reservieren (Neustart des Tabs).
+    func reserve(sessionID: String, for localID: UUID) -> UUID? {
+        let key = sessionID.lowercased()
+        lock.lock()
+        defer { lock.unlock() }
+        let current = now()
+        entries = entries.filter { current.timeIntervalSince($0.value.at) < window }
+        if let holder = entries[key], holder.localID != localID {
+            return holder.localID
+        }
+        entries[key] = Entry(localID: localID, at: current)
+        return nil
+    }
+}

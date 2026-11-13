@@ -3061,6 +3061,16 @@
         }
       }
     },
+    "Cannot resume %@: another chat is starting this conversation right now. A second start would run the same conversation twice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Ein anderer Chat startet diese Unterhaltung gerade. Ein zweiter Start würde dieselbe Unterhaltung doppelt führen."
+          }
+        }
+      }
+    },
     "Cannot resume %@: this conversation is already running in another Claude process (PID %@). Close that process first, a second start would run the same conversation twice.": {
       "localizations": {
         "de": {
