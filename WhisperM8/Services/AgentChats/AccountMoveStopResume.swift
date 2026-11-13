@@ -131,7 +131,7 @@ enum AccountMoveStopResumePlanner {
         mayScheduleAfterTurn: Bool
     ) -> TrustDecision {
         var decision = TrustDecision()
-        let trusts: (UUID) -> Bool = { targetTrusts(cwd: cwd($0), trustedPaths: trustedPaths) }
+        func trusts(_ id: UUID) -> Bool { targetTrusts(cwd: cwd(id), trustedPaths: trustedPaths) }
         for id in movable + selection.toStop.map(\.sessionID) where !trusts(id) {
             decision.trustMissing.insert(id)
         }
