@@ -109,7 +109,18 @@ enum AccountMoveStopResumePlanner {
         /// werden: der unbeobachtete Neustart landete in Claudes Trust-Dialog
         /// mit Vorauswahl „No, exit".
         var blockedByTrust: Set<UUID> = []
+        /// Ruhende Chats aus `selection.toStop`, die ohne `--force` NICHT
+        /// angehalten werden: die CLI läuft meist unbeobachtet, der Neustart
+        /// im Zielkonto bliebe im Trust-Dialog hängen. Die App (Kontextmenü)
+        /// wechselt ruhende Chats trotzdem — dort schaut der User gerade hin.
+        var stopHeldByTrust: Set<UUID> = []
     }
+
+    /// Text für Chats, die wegen fehlender Freigabe stehen bleiben — mit
+    /// dem Ausweg, damit der Aufrufer weiß, was zu tun ist.
+    static let trustMissingHint = "Ordner im Zielkonto nie freigegeben, Claude fragt beim Neustart danach "
+        + "(Vorauswahl „No, exit“). Einmal einen Chat in diesem Ordner im Zielkonto öffnen und die "
+        + "Freigabe bestätigen, dann erneut umziehen — oder --force"
 
     /// Unbekanntes Arbeitsverzeichnis zählt als „nicht freigegeben" —
     /// im Zweifel nicht unbeobachtet neu starten.
@@ -121,19 +132,25 @@ enum AccountMoveStopResumePlanner {
     /// - Parameters:
     ///   - movable: laufen nicht, ziehen sofort um.
     ///   - selection: Ergebnis von `select` (anzuhalten bzw. blockiert).
-    ///   - mayScheduleAfterTurn: echte Ausführung mit `--stop-and-resume` und
-    ///     eingeschaltetem Kontowechsel nach dem Turn.
+    ///   - force: `--force` — hält auch Chats ohne Freigabe an (wie bisher).
+    ///   - mayScheduleAfterTurn: `--stop-and-resume` bei eingeschaltetem
+    ///     Kontowechsel nach dem Turn (in der Vorschau nur angezeigt).
     static func trustDecision(
         movable: [UUID],
         selection: Selection,
         cwd: (UUID) -> String?,
         trustedPaths: Set<String>,
+        force: Bool,
         mayScheduleAfterTurn: Bool
     ) -> TrustDecision {
         var decision = TrustDecision()
         func trusts(_ id: UUID) -> Bool { targetTrusts(cwd: cwd(id), trustedPaths: trustedPaths) }
-        for id in movable + selection.toStop.map(\.sessionID) where !trusts(id) {
+        for id in movable where !trusts(id) {
             decision.trustMissing.insert(id)
+        }
+        for id in selection.toStop.map(\.sessionID) where !trusts(id) {
+            decision.trustMissing.insert(id)
+            if !force { decision.stopHeldByTrust.insert(id) }
         }
         for blocked in selection.blocked where blocked.reason != .ownSession {
             let id = blocked.candidate.sessionID

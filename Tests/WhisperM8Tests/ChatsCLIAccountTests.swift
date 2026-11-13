@@ -151,6 +151,44 @@ final class ChatsNewAccountResolutionTests: XCTestCase {
                     reason: .notLoggedIn("RankM8"), isActiveDefault: true)
     }
 
+    /// Befund 6: Nur eine fehlende `.active` heißt main. Ist sie da, aber
+    /// unlesbar, scheitert der Start — kein stiller Rückfall auf main.
+    func testUnreadableActiveFileFailsInsteadOfFallingBackToMain() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+        try home.profile("RankM8", loggedIn: true)
+        let active = home.url.appendingPathComponent(".claude-profiles/.active")
+        // Ordner statt Datei: Lesen scheitert, aber nicht mit „fehlt“.
+        try FileManager.default.createDirectory(at: active, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try resolve(home)) { error in
+            guard let error = error as? ClaudeAccountProfiles.NewChatAccountError,
+                  case .activeProfileUnreadable = error.reason else {
+                return XCTFail("erwartet activeProfileUnreadable, bekam \(error)")
+            }
+            XCTAssertTrue(error.isActiveDefault)
+            XCTAssertTrue(error.errorDescription?.contains(".active") == true)
+        }
+    }
+
+    func testActiveFileWithoutUTF8Fails() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+        try home.setActive("x")
+        try Data([0xFF, 0xFE, 0xFD]).write(to: home.url.appendingPathComponent(".claude-profiles/.active"))
+
+        expectError({ _ = try resolve(home) },
+                    reason: .activeProfileUnreadable("kein UTF-8-Text"), isActiveDefault: true)
+    }
+
+    func testEmptyActiveFileStillMeansMain() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+        try home.setActive("  \n")
+
+        XCTAssertEqual(try resolve(home), .init(profileName: nil, source: .active))
+    }
+
     func testUnreadableKeychainDoesNotBlock() throws {
         let home = try AccountHome(); defer { home.remove() }
         try home.profile("RankM8", loggedIn: true)
@@ -453,7 +491,7 @@ final class AccountMoveTrustDecisionTests: XCTestCase {
 
         let decision = AccountMoveStopResumePlanner.trustDecision(
             movable: [], selection: selection, cwd: { cwds[$0] },
-            trustedPaths: trustedPaths, mayScheduleAfterTurn: true)
+            trustedPaths: trustedPaths, force: false, mayScheduleAfterTurn: true)
 
         XCTAssertEqual(decision.scheduleAfterTurn, [approved.sessionID])
         XCTAssertEqual(decision.blockedByTrust, [foreign.sessionID, unknown.sessionID])
@@ -470,7 +508,7 @@ final class AccountMoveTrustDecisionTests: XCTestCase {
 
         let decision = AccountMoveStopResumePlanner.trustDecision(
             movable: [], selection: selection, cwd: { cwds[$0] },
-            trustedPaths: trustedPaths, mayScheduleAfterTurn: false)
+            trustedPaths: trustedPaths, force: false, mayScheduleAfterTurn: false)
 
         XCTAssertTrue(decision.scheduleAfterTurn.isEmpty)
         XCTAssertEqual(decision.blockedByTrust, [foreign.sessionID])
@@ -488,11 +526,46 @@ final class AccountMoveTrustDecisionTests: XCTestCase {
 
         let decision = AccountMoveStopResumePlanner.trustDecision(
             movable: [movableForeign], selection: selection, cwd: { cwds[$0] },
-            trustedPaths: trustedPaths, mayScheduleAfterTurn: true)
+            trustedPaths: trustedPaths, force: true, mayScheduleAfterTurn: true)
 
         XCTAssertEqual(decision.trustMissing, [stopForeign.sessionID, movableForeign])
         XCTAssertTrue(decision.blockedByTrust.isEmpty)
         XCTAssertTrue(decision.scheduleAfterTurn.isEmpty)
+        // Mit --force wird wie bisher angehalten.
+        XCTAssertTrue(decision.stopHeldByTrust.isEmpty)
+    }
+
+    /// Befund 2: Ein ruhender, laufender Chat ohne Freigabe im Zielkonto wird
+    /// ohne --force NICHT angehalten — die CLI läuft meist unbeobachtet, der
+    /// Neustart landete im Trust-Dialog mit Vorauswahl „No, exit“.
+    func testIdleChatWithoutApprovalIsNotStoppedWithoutForce() {
+        let idleForeign = candidate("Ruht, fremd")
+        let idleUnknown = candidate("Ruht, ohne Pfad")
+        let idleApproved = candidate("Ruht, frei")
+        let movableForeign = UUID()
+        let selection = AccountMoveStopResumePlanner.Selection(
+            toStop: [idleForeign, idleUnknown, idleApproved], blocked: [])
+        let cwds = [
+            idleForeign.sessionID: otherDir.path, idleApproved.sessionID: trustedDir.path,
+            movableForeign: otherDir.path,
+        ]
+
+        let decision = AccountMoveStopResumePlanner.trustDecision(
+            movable: [movableForeign], selection: selection, cwd: { cwds[$0] },
+            trustedPaths: trustedPaths, force: false, mayScheduleAfterTurn: true)
+
+        XCTAssertEqual(decision.stopHeldByTrust, [idleForeign.sessionID, idleUnknown.sessionID])
+        // Ein Chat, der nicht läuft, zieht weiter um (Start erst beim Öffnen
+        // des Tabs, also beobachtet) — er trägt nur den Hinweis.
+        XCTAssertFalse(decision.stopHeldByTrust.contains(movableForeign))
+        XCTAssertTrue(decision.trustMissing.contains(movableForeign))
+        XCTAssertTrue(decision.scheduleAfterTurn.isEmpty)
+    }
+
+    func testTrustHintNamesTheWayOut() {
+        let hint = AccountMoveStopResumePlanner.trustMissingHint
+        XCTAssertTrue(hint.contains("im Zielkonto öffnen"))
+        XCTAssertTrue(hint.contains("--force"))
     }
 }
 
@@ -517,5 +590,145 @@ final class SessionNewPayloadTests: XCTestCase {
             id: UUID(), title: "T", projectName: "p", provider: .codex, storedProfile: nil, account: nil)
         XCTAssertTrue(payload["account"] is NSNull)
         XCTAssertNil(payload["accountSource"])
+    }
+}
+
+// MARK: - Kontoentscheidung von `session.new` (Befund 1)
+
+final class SessionNewStartTests: XCTestCase {
+    private struct LaunchFailed: Error {}
+
+    private func launchResult() -> AgentChatLaunchService.ControlLaunchResult {
+        AgentChatLaunchService.ControlLaunchResult(
+            id: UUID(), title: "T", projectName: "p", profileName: "RankM8")
+    }
+
+    func testAccountErrorCreatesNoSession() async {
+        var launches = 0
+        let start = await AgentControlRequestHandler.startSessionNew(
+            provider: .claude, requestedAccount: nil,
+            resolveAccount: { _ in
+                throw ClaudeAccountProfiles.NewChatAccountError(
+                    reason: .loginEnded("RankM8"), isActiveDefault: true, usableProfiles: ["main"])
+            },
+            launch: { _ in launches += 1; return .success(self.launchResult()) })
+
+        XCTAssertEqual(launches, 0, "bei einem Kontofehler darf keine Session entstehen")
+        guard case .rejected(let code, let message, let auditOutcome) = start else {
+            return XCTFail("erwartet: abgelehnt")
+        }
+        XCTAssertEqual(code, .notFound)
+        XCTAssertEqual(auditOutcome, "account")
+        XCTAssertTrue(message.contains("abgelaufen"))
+    }
+
+    func testResolvedAccountIsPassedExplicitlyNeverAsActiveDefault() async {
+        for (requested, resolved) in [
+            (nil as String?, ClaudeAccountProfiles.NewChatAccount(profileName: "RankM8", source: .active)),
+            (nil, .init(profileName: nil, source: .active)),
+            ("main", .init(profileName: nil, source: .explicit)),
+            (nil, .init(profileName: nil, source: .killSwitch)),
+        ] {
+            var selections: [ClaudeProfileSelection] = []
+            var asked: [String?] = []
+            let start = await AgentControlRequestHandler.startSessionNew(
+                provider: .claude, requestedAccount: requested,
+                resolveAccount: { asked.append($0); return resolved },
+                launch: { selections.append($0); return .success(self.launchResult()) })
+
+            XCTAssertEqual(asked, [requested])
+            XCTAssertEqual(selections, [.explicit(resolved.profileName)])
+            XCTAssertFalse(selections.contains(.activeDefault))
+            guard case .launched(_, let account) = start else { return XCTFail("erwartet: gestartet") }
+            XCTAssertEqual(account, resolved)
+        }
+    }
+
+    func testCodexWithAccountIsRejectedWithoutLaunch() async {
+        var launches = 0
+        let start = await AgentControlRequestHandler.startSessionNew(
+            provider: .codex, requestedAccount: "main",
+            resolveAccount: { _ in XCTFail("Codex prüft kein Claude-Konto"); throw LaunchFailed() },
+            launch: { _ in launches += 1; return .success(self.launchResult()) })
+
+        XCTAssertEqual(launches, 0)
+        guard case .rejected(let code, _, let auditOutcome) = start else { return XCTFail("erwartet: abgelehnt") }
+        XCTAssertEqual(code, .invalid)
+        XCTAssertNil(auditOutcome)
+    }
+
+    func testCodexWithoutAccountLaunchesWithoutClaudeAccount() async {
+        var selections: [ClaudeProfileSelection] = []
+        let start = await AgentControlRequestHandler.startSessionNew(
+            provider: .codex, requestedAccount: nil,
+            resolveAccount: { _ in XCTFail("Codex prüft kein Claude-Konto"); throw LaunchFailed() },
+            launch: { selections.append($0); return .success(self.launchResult()) })
+
+        XCTAssertEqual(selections, [.explicit(nil)])
+        guard case .launched(_, let account) = start else { return XCTFail("erwartet: gestartet") }
+        XCTAssertNil(account)
+    }
+}
+
+// MARK: - Login-Prüfung beim Ausführen von `move-account` (Befund 1)
+
+final class MoveAccountExecutionLoginTests: XCTestCase {
+    func testMainWithoutOAuthAccountIsAllowed() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: false)
+
+        XCTAssertTrue(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: true, targetName: "main", profiles: home.profiles))
+    }
+
+    func testMainWithoutClaudeJSONIsAllowed() throws {
+        let home = try AccountHome(); defer { home.remove() }
+
+        XCTAssertTrue(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: true, targetName: "main", profiles: home.profiles))
+    }
+
+    func testProfileWithoutLoginIsBlocked() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.profile("RankM8", loggedIn: false)
+
+        XCTAssertFalse(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: true, targetName: "RankM8", profiles: home.profiles))
+    }
+
+    func testProfileWithLoginIsAllowed() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.profile("RankM8", loggedIn: true)
+
+        XCTAssertTrue(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: true, targetName: "RankM8", profiles: home.profiles))
+    }
+
+    func testFailedPlanningCheckWins() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+        try home.profile("RankM8", loggedIn: true)
+
+        XCTAssertFalse(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: false, targetName: "main", profiles: home.profiles))
+        XCTAssertFalse(AgentControlRequestHandler.executionTargetIsLoggedIn(
+            plannedLoggedIn: false, targetName: "RankM8", profiles: home.profiles))
+    }
+}
+
+// MARK: - Vorschau zeigt Vormerken (Befund 8)
+
+final class MoveAccountPreviewScheduleTests: XCTestCase {
+    func testPreviewLineAndSummaryForWouldSchedule() {
+        let item = ChatsMoveAccountResultItem(
+            id: UUID().uuidString, title: "Analyse", project: "whisperm8", fromProfile: "main",
+            outcome: "wouldSchedule", reason: "turnRunning", reasonLabel: "arbeitet")
+        XCTAssertEqual(
+            ChatsMoveAccountSupport.humanLine(for: item, toProfile: "RankM8", fallbackLabel: nil),
+            "⏱ würde vormerken: whisperm8/Analyse (main → RankM8) — arbeitet")
+        XCTAssertEqual(
+            ChatsMoveAccountSupport.summaryLine(for: [item], dryRun: true),
+            "0 würden umziehen · 1 würden vorgemerkt (wechseln nach dem Turn)")
+        XCTAssertEqual(ChatsMoveAccountSupport.exitCode(for: [item], dryRun: true), ChatsCLIExit.ok)
     }
 }

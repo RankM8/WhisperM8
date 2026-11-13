@@ -35,6 +35,50 @@ extension AgentControlRequestHandler {
         return session
     }
 
+    /// Ergebnis von `startSessionNew`.
+    enum SessionNewStart {
+        /// Abgelehnt, bevor irgendetwas angelegt wurde. `auditOutcome` = nil:
+        /// reiner Bedienfehler, kein Audit-Eintrag.
+        case rejected(ChatsControlErrorCode, String, auditOutcome: String?)
+        /// `launch` wurde (genau einmal) aufgerufen.
+        case launched(
+            Result<AgentChatLaunchService.ControlLaunchResult, ControlLaunchError>,
+            account: ClaudeAccountProfiles.NewChatAccount?)
+    }
+
+    /// Kontoentscheidung von `session.new`, getrennt vom Anlegen.
+    ///
+    /// Das Konto wird VOR dem Anlegen festgelegt und geprüft: eine Session,
+    /// die im falschen Konto entstanden ist, lässt sich nur noch per
+    /// Transcript-Umzug korrigieren — der Fehler gehört vor die Erstellung.
+    /// Scheitert die Kontowahl, wird `launch` nie aufgerufen. Gelingt sie,
+    /// bekommt `launch` immer eine ausdrückliche Wahl (`.explicit`), nie
+    /// `.activeDefault` — sonst könnte der Store still ein anderes Konto
+    /// nehmen als das geprüfte.
+    static func startSessionNew(
+        provider: AgentProvider,
+        requestedAccount: String?,
+        resolveAccount: (String?) throws -> ClaudeAccountProfiles.NewChatAccount,
+        launch: (ClaudeProfileSelection) async -> Result<AgentChatLaunchService.ControlLaunchResult, ControlLaunchError>
+    ) async -> SessionNewStart {
+        var account: ClaudeAccountProfiles.NewChatAccount?
+        switch provider {
+        case .codex:
+            if let requestedAccount, !requestedAccount.trimmingCharacters(in: .whitespaces).isEmpty {
+                return .rejected(.invalid,
+                                 "--account gilt nur für Claude-Chats (Codex kennt keine Claude-Konten)",
+                                 auditOutcome: nil)
+            }
+        case .claude:
+            do {
+                account = try resolveAccount(requestedAccount)
+            } catch {
+                return .rejected(.notFound, error.localizedDescription, auditOutcome: "account")
+            }
+        }
+        return .launched(await launch(.explicit(account?.profileName)), account: account)
+    }
+
     func sessionNew(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         guard let projectRef = request.params["project"]?.stringValue, !projectRef.isEmpty else {
             return .failure(requestID: request.requestID, code: .invalid, message: "project fehlt")
@@ -47,32 +91,28 @@ extension AgentControlRequestHandler {
         let prompt = request.params["prompt"]?.stringValue
         let requestedAccount = request.params["account"]?.stringValue
 
-        // Konto VOR dem Anlegen festlegen und prüfen: eine Session, die im
-        // falschen Konto entstanden ist, lässt sich nur noch per
-        // Transcript-Umzug korrigieren — der Fehler gehört vor die Erstellung.
-        var account: ClaudeAccountProfiles.NewChatAccount?
-        switch provider {
-        case .codex:
-            if let requestedAccount, !requestedAccount.trimmingCharacters(in: .whitespaces).isEmpty {
-                return .failure(requestID: request.requestID, code: .invalid,
-                                message: "--account gilt nur für Claude-Chats (Codex kennt keine Claude-Konten)")
-            }
-        case .claude:
-            do {
-                account = try Self.resolveNewChatAccount(requested: requestedAccount)
-            } catch {
+        let start = await Self.startSessionNew(
+            provider: provider, requestedAccount: requestedAccount,
+            resolveAccount: Self.resolveNewChatAccount(requested:),
+            launch: { selection in
+                await MainActor.run {
+                    AgentChatLaunchService().openChatViaControl(
+                        provider: provider, projectRef: projectRef, title: title, prompt: prompt,
+                        claudeProfile: selection)
+                }
+            })
+        let account: ClaudeAccountProfiles.NewChatAccount?
+        let result: Result<AgentChatLaunchService.ControlLaunchResult, ControlLaunchError>
+        switch start {
+        case .rejected(let code, let message, let auditOutcome):
+            if let auditOutcome {
                 await audit(request.actor, method: "new", target: projectRef,
-                            outcome: "account", prompt: nil)
-                return .failure(requestID: request.requestID, code: .notFound,
-                                message: error.localizedDescription)
+                            outcome: auditOutcome, prompt: nil)
             }
-        }
-
-        let selection: ClaudeProfileSelection = .explicit(account?.profileName)
-        let result = await MainActor.run {
-            AgentChatLaunchService().openChatViaControl(
-                provider: provider, projectRef: projectRef, title: title, prompt: prompt,
-                claudeProfile: selection)
+            return .failure(requestID: request.requestID, code: code, message: message)
+        case .launched(let launchResult, let resolved):
+            account = resolved
+            result = launchResult
         }
         switch result {
         case .failure(let error):

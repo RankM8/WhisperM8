@@ -29,10 +29,13 @@ extension ClaudeAccountProfiles {
 
     /// Warum ein Konto für einen neuen Chat (oder als Umzugsziel) nicht taugt.
     struct NewChatAccountError: LocalizedError, Equatable {
-        enum Reason: Equatable {
+        enum Reason: Error, Equatable {
             case unknownProfile(String)
             /// `.active` nennt ein Profil, das es nicht mehr gibt.
             case activeProfileMissing(String)
+            /// `.active` ist da, lässt sich aber nicht lesen (Rechte, Ordner
+            /// statt Datei, kein UTF-8). Wert: Beschreibung des Fehlers.
+            case activeProfileUnreadable(String)
             case notLoggedIn(String)
             case loginEnded(String)
         }
@@ -58,6 +61,9 @@ extension ClaudeAccountProfiles {
                 return "Claude-Konto „\(name)“ existiert nicht." + hint
             case .activeProfileMissing(let name):
                 return "Das in den Einstellungen aktive Claude-Konto „\(name)“ existiert nicht mehr." + hint
+            case .activeProfileUnreadable(let detail):
+                return "Das in den Einstellungen aktive Claude-Konto lässt sich nicht lesen "
+                    + "(~/.claude-profiles/.active: \(detail))." + hint
             case .notLoggedIn(let name):
                 return "\(subject(name)) ist nicht angemeldet." + hint
             case .loginEnded(let name):
@@ -82,8 +88,22 @@ extension ClaudeAccountProfiles {
 
     /// Roher Inhalt von `.active`; `nil`, wenn die Datei fehlt oder leer ist
     /// (dann ist `main` aktiv — so legt auch die Konten-Seite es aus).
-    func activeProfileFileValue() -> String? {
-        guard let raw = try? String(contentsOf: activeFileURL, encoding: .utf8) else { return nil }
+    ///
+    /// Nur „Datei fehlt“ heißt main. Jeder andere Lesefehler wirft: wer ein
+    /// Konto aktiv gesetzt hat, soll bei einer kaputten Datei nicht still in
+    /// main landen.
+    func activeProfileFileValue() throws -> String? {
+        let data: Data
+        do {
+            data = try Data(contentsOf: activeFileURL)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return nil
+        } catch {
+            throw NewChatAccountError.Reason.activeProfileUnreadable(error.localizedDescription)
+        }
+        guard let raw = String(data: data, encoding: .utf8) else {
+            throw NewChatAccountError.Reason.activeProfileUnreadable("kein UTF-8-Text")
+        }
         let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }
@@ -157,7 +177,15 @@ extension ClaudeAccountProfiles {
             name = Self.mainProfileName
         } else {
             source = .active
-            if let raw = activeProfileFileValue() {
+            let activeValue: String?
+            do {
+                activeValue = try activeProfileFileValue()
+            } catch let reason as NewChatAccountError.Reason {
+                throw NewChatAccountError(
+                    reason: reason, isActiveDefault: true,
+                    usableProfiles: usableProfiles(loginReading: loginReading, now: now))
+            }
+            if let raw = activeValue {
                 guard let canonical = canonicalProfileName(raw) else {
                     throw NewChatAccountError(
                         reason: .activeProfileMissing(raw), isActiveDefault: true,

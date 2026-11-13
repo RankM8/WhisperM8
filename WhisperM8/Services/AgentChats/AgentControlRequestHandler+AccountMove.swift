@@ -22,7 +22,7 @@ extension AgentControlRequestHandler {
         var title: String?
         var project: String?
         var fromProfile: String?
-        /// moved | wouldMove | scheduled | skipped | failed | notFound
+        /// moved | wouldMove | scheduled | wouldSchedule (Vorschau) | skipped | failed | notFound
         var outcome: String
         /// Skip-Grund des Planers (`AccountMovePlanner.SkipReason.rawValue`)
         /// oder Fehlerart (`stopTimeout`, `moveFailed`, `projectPathMissing`).
@@ -189,7 +189,6 @@ extension AgentControlRequestHandler {
                     registry.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
                 }
             )
-            let stoppableIDs = Set(selection.toStop.map(\.sessionID))
             let blockedByID = Dictionary(
                 selection.blocked.map { ($0.candidate.sessionID, $0.reason) },
                 uniquingKeysWith: { first, _ in first }
@@ -199,8 +198,11 @@ extension AgentControlRequestHandler {
             // nur mit --force" merkt sich die App den Chat vor und wechselt ihn,
             // sobald sein Turn fertig ist. Nicht, wenn das Zielkonto den Ordner
             // nie freigegeben hat — ein unbeobachteter Neustart landete im
-            // Trust-Dialog mit Vorauswahl „No, exit".
+            // Trust-Dialog mit Vorauswahl „No, exit". Aus demselben Grund hält
+            // die CLI ohne --force auch ruhende Chats ohne Freigabe nicht an.
+            // Die Vorschau rechnet genauso, merkt aber nichts vor.
             let switchCoordinator = AccountSwitchCoordinator.shared
+            let afterTurnEnabled = switchCoordinator.isEnabled
             let trust = AccountMoveStopResumePlanner.trustDecision(
                 movable: plan.movable.map(\.sessionID),
                 selection: selection,
@@ -209,7 +211,9 @@ extension AgentControlRequestHandler {
                         .flatMap { AccountMoveFacts.cwd(for: $0, projects: workspace.projects) }
                 },
                 trustedPaths: trustedPaths,
-                mayScheduleAfterTurn: stopAndResume && !dryRun && switchCoordinator.isEnabled)
+                force: stopAndResume && force,
+                mayScheduleAfterTurn: stopAndResume && afterTurnEnabled)
+            let stoppableIDs = Set(selection.toStop.map(\.sessionID)).subtracting(trust.stopHeldByTrust)
 
             for candidate in plan.movable {
                 items[candidate.sessionID]?.outcome = "wouldMove"
@@ -231,6 +235,15 @@ extension AgentControlRequestHandler {
                 } else if stoppableIDs.contains(id) {
                     items[id]?.stopAndResumePossible = true
                     items[id]?.targetTrustMissing = trust.trustMissing.contains(id)
+                } else if trust.stopHeldByTrust.contains(id) {
+                    // Ruht, würde aber im Trust-Dialog neu starten — ohne
+                    // --force nicht anhalten.
+                    items[id]?.stopBlocked = AccountSwitchPlanner.BlockReason.trustMissing.rawValue
+                    items[id]?.targetTrustMissing = true
+                    if stopAndResume {
+                        items[id]?.reasonLabel = "\(skip.reason.label) — nicht angehalten: "
+                            + AccountMoveStopResumePlanner.trustMissingHint
+                    }
                 } else if let blocked = blockedByID[id] {
                     // Ein beschäftigter Chat wird nur vorgemerkt, wenn das
                     // Zielkonto den Ordner freigegeben hat — das sagt die
@@ -239,8 +252,15 @@ extension AgentControlRequestHandler {
                         items[id]?.stopBlocked = AccountSwitchPlanner.BlockReason.trustMissing.rawValue
                         items[id]?.targetTrustMissing = true
                         if stopAndResume {
+                            // Nur von „kein Wechsel nach dem Turn“ sprechen,
+                            // wenn es den sonst gäbe (Notbremse nicht gezogen).
+                            let consequence = afterTurnEnabled
+                                ? "deshalb kein Wechsel nach dem Turn. "
+                                : ""
                             items[id]?.reasonLabel = "\(skip.reason.label) — \(blocked.label); "
-                                + "Ordner im Zielkonto nicht freigegeben, deshalb kein Wechsel nach dem Turn"
+                                + "Ordner im Zielkonto nicht freigegeben, \(consequence)"
+                                + "Ausweg: einmal einen Chat in diesem Ordner im Zielkonto öffnen und die "
+                                + "Freigabe bestätigen, dann erneut umziehen"
                         }
                     } else {
                         items[id]?.stopBlocked = blocked.rawValue
@@ -260,18 +280,22 @@ extension AgentControlRequestHandler {
                         openBackgroundTasks: ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: id)
                     ) ?? .turnRunning
                     toSchedule.append((id, reason))
-                    items[id]?.outcome = "scheduled"
+                    // Vorschau: zeigen, was der echte Lauf täte, ohne
+                    // vorzumerken.
+                    items[id]?.outcome = dryRun ? "wouldSchedule" : "scheduled"
                     items[id]?.reason = reason.rawValue
                     items[id]?.reasonLabel = reason.label
                     items[id]?.stopBlocked = nil
                 }
-                switchCoordinator.schedule(toSchedule, targetProfile: target, targetName: targetName)
+                if !dryRun {
+                    switchCoordinator.schedule(toSchedule, targetProfile: target, targetName: targetName)
+                }
             }
 
             var stopped: [(id: UUID, pid: pid_t?)] = []
             if stopAndResume, !dryRun {
                 let store = AgentSessionStore()
-                let ids = selection.toStop.map(\.sessionID)
+                let ids = selection.toStop.map(\.sessionID).filter { stoppableIDs.contains($0) }
                 // PIDs vor dem Anhalten sichern — danach ist der Controller weg.
                 stopped = ids.map { ($0, registry.controller(for: $0)?.processID) }
                 // Graceful wie `close --stop` (2× Ctrl+C, letzter Flush, dann
@@ -341,12 +365,9 @@ extension AgentControlRequestHandler {
             let registry = AgentTerminalRegistry.shared
             let profiles = ClaudeAccountProfiles()
             let sessions = workspace.sessions.filter { attemptIDs.contains($0.id) }
-            // main ohne Kontodaten bleibt erlaubt (API-Key, Proxy) — wie in
-            // Phase 1 (`loginProblem`). Nur Zusatzprofile brauchen weiter
-            // ihre Kontodaten; main wird hier gar nicht gelesen, seine
-            // `.claude.json` ist schnell mehrere MB groß (Main Thread).
-            let targetIsLoggedIn = prepared.targetIsLoggedIn
-                && (prepared.target == nil || profiles.profile(named: prepared.targetName).isLoggedIn)
+            let targetIsLoggedIn = Self.executionTargetIsLoggedIn(
+                plannedLoggedIn: prepared.targetIsLoggedIn,
+                targetName: prepared.targetName, profiles: profiles)
             let plan = AccountMovePlanner.plan(
                 candidates: AccountMoveFacts.candidates(
                     for: sessions, projects: workspace.projects, target: prepared.target,
@@ -461,10 +482,27 @@ extension AgentControlRequestHandler {
             loginProblem: profiles.loginProblem(forProfile: name, loginReading: reading, now: now))
     }
 
+    /// Login-Prüfung kurz vor dem Umzug (Phase 3). Die Planung hat den Login
+    /// schon samt Keychain geprüft (`plannedLoggedIn`); hier nur noch, ob ein
+    /// Zusatzprofil inzwischen seine Kontodaten verloren hat (abgemeldet).
+    /// main bleibt ohne Kontodaten erlaubt (API-Key, Proxy) — wie in der
+    /// Planung (`loginProblem`) — und wird gar nicht gelesen: seine
+    /// `.claude.json` ist schnell mehrere MB groß, und das hier läuft auf
+    /// dem Main Thread.
+    static func executionTargetIsLoggedIn(
+        plannedLoggedIn: Bool,
+        targetName: String,
+        profiles: ClaudeAccountProfiles
+    ) -> Bool {
+        guard plannedLoggedIn else { return false }
+        guard AccountMovePlanner.normalize(targetName) != nil else { return true }
+        return profiles.profile(named: targetName).isLoggedIn
+    }
+
     static func targetLoginCode(_ reason: ClaudeAccountProfiles.NewChatAccountError.Reason) -> String {
         switch reason {
         case .loginEnded: return "loginEnded"
-        case .notLoggedIn, .unknownProfile, .activeProfileMissing: return "notLoggedIn"
+        case .notLoggedIn, .unknownProfile, .activeProfileMissing, .activeProfileUnreadable: return "notLoggedIn"
         }
     }
 
@@ -472,7 +510,7 @@ extension AgentControlRequestHandler {
         switch reason {
         case .loginEnded:
             return "Login des Zielkontos abgelaufen — in Einstellungen → Konten erneuern"
-        case .notLoggedIn, .unknownProfile, .activeProfileMissing:
+        case .notLoggedIn, .unknownProfile, .activeProfileMissing, .activeProfileUnreadable:
             return "Zielkonto ist nicht angemeldet"
         }
     }
@@ -493,6 +531,7 @@ extension AgentControlRequestHandler {
             "movedCount": count("moved"),
             "wouldMoveCount": count("wouldMove"),
             "scheduledCount": count("scheduled"),
+            "wouldScheduleCount": count("wouldSchedule"),
             "skippedCount": count("skipped"),
             "failedCount": count("failed"),
             "journal": AccountMoveJournal.defaultFileURL().path,
