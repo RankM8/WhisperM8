@@ -302,7 +302,10 @@ enum AppCLICommand {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             CLIIO.out(String(decoding: (try? encoder.encode(result)) ?? Data(), as: UTF8.self))
         }
-        return exitCode(outcome: outcome, reason: reason, result: result, quiet: json)
+        // Vic (Gesamt-Review Teil 1): Mit ausgeschaltetem Schalter bleibt
+        // `make dev` still, statt jedes Mal „Keine Übergabe“ zu melden.
+        return exitCode(outcome: outcome, reason: reason, result: result, quiet: json,
+                        silentWhenDisabled: fromMakeDev)
     }
 
     /// Befund 4 (Dex): Übernimmt die App gerade (Sperre gehalten), läuft ihr
@@ -330,7 +333,22 @@ enum AppCLICommand {
         }
     }
 
-    static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool) -> Int32 {
+    /// Zeile für die Ausgabe von `make dev` bei klassischem Neustart.
+    static func classicLine(reason: String?) -> String {
+        if reason == "routerInApp" {
+            return "Keine Übergabe: Der Schalter „Neustart ohne Chatverlust“ wirkt erst ab diesem Neustart "
+                + "(der GPT-Router lief noch in der App). Diesmal enden die Chats wie bisher und werden fortgesetzt."
+        }
+        return "Keine Übergabe: \(reason ?? "ohne Grund")"
+    }
+
+    /// `make dev` bei ausgeschaltetem Schalter: still bleiben.
+    static func reportsClassic(reason: String?, silentWhenDisabled: Bool) -> Bool {
+        !(silentWhenDisabled && reason == "featureDisabled")
+    }
+
+    static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool,
+                         silentWhenDisabled: Bool = false) -> Int32 {
         switch outcome {
         case "handedOver":
             if !quiet {
@@ -340,7 +358,9 @@ enum AppCLICommand {
             }
             return HandoverExit.handedOver
         case "classic":
-            CLIIO.err("Keine Übergabe: \(reason ?? "ohne Grund")")
+            if reportsClassic(reason: reason, silentWhenDisabled: silentWhenDisabled) {
+                CLIIO.err(classicLine(reason: reason))
+            }
             return HandoverExit.classic
         default:
             CLIIO.err("Übergabe gescheitert: \(reason ?? "ohne Grund")")

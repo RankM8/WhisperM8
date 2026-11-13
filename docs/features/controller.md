@@ -172,7 +172,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt. Die Dynamic Island zeigt vorher, was es ist |
 | | Kreis | genau ein Escape, unabhängig vom Status und ohne 1-s-Sperre. Arbeitet der Chat und ist keine Ansicht erkannt, warnt die Dynamic Island: es unterbricht |
 | | L3 | Rückgängig (Ctrl+_), nur Claude; Codex hat im Standard-Editor kein Undo |
-| R1 Schnellbefehle | Kreuz | „Weiter“; mit Text im Feld wie Ctrl+Enter: bei ruhendem Chat Enter („Senden“), bei arbeitendem Claude-Chat — oder wenn ein eigener Prompt in Claudes Warteschlange wartet — Ctrl+X Ctrl+S („Jetzt senden“). Arbeitender Codex-Chat: „geht nicht“ (Codex meldet nie „wartet“, Enter könnte eine Freigabe bestätigen). Steht nur ein zurückgelegter oder mit ↑ zurückgeholter Prompt im Feld: „geht nicht“. Leeres Feld bei arbeitendem Chat: „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
+| R1 Schnellbefehle | Kreuz | Claude: immer „Jetzt senden“ (Ctrl+X Ctrl+S, wie Ctrl+Enter), ohne Erkennung des Feldinhalts; schickt den Entwurf sofort ab bzw. die Warteschlange, bei leerem Feld passiert nichts (seit 13.11.2026, vorher konnte eine falsche Erkennung „Weiter“ in einen fertigen Prompt tippen). Codex: mit Text im ruhenden Chat Enter, leeres Feld „Weiter“, arbeitend oder nur mit ↑ zurückgeholter Prompt „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
 | | L3 | ausführliches Transkript an/aus (Ctrl+O), nur Claude |
 | | Dreieck | Modus wechseln (Shift+Tab) |
 | | Viereck | Befehle › — öffnet das Options-Menü direkt auf dieser Unterseite |
@@ -364,7 +364,7 @@ Abgleich der Schalter.
 |---|---|
 | Nächster wartender Chat | derselbe Weg wie ⌃⌥Tab, ohne Dynamic Island; ohne wartenden Chat „geht nicht“ |
 | Antworten | zum jüngsten frisch fertigen Chat (ruht, Turn vor höchstens 15 min beendet, nicht der aktuelle; Einteilung wie Notch und `chats`-Board) und dort diktieren. Gibt es keinen, zum nächsten wartenden Chat, nur springen. Ist der aktuelle Chat der einzige Kandidat und ruht er, diktiert es hier. Scheitert der Wechsel, wird nicht diktiert; in eine Rückfrage läuft nie ein Diktat |
-| Jetzt senden / Weiter | dieselbe Entscheidung wie R1 + Kreuz (`sendOrContinue`); in Shells „geht nicht“ |
+| Jetzt senden / Weiter | dieselbe Entscheidung wie R1 + Kreuz (`sendOrContinue`): im Claude-Chat immer „Jetzt senden“, in Codex Enter oder „Weiter“; in Shells „geht nicht“ |
 | Modus wechseln | Shift+Tab mit den Regeln des Menüs (nur ruhend, nicht in einer Rückfrage) |
 | `/workflows`, `/tasks` | wie aus „Befehle ›“, nur in Claude-Chats |
 

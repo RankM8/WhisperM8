@@ -25,7 +25,12 @@ extension AgentTerminalController {
     func detachForHandover(
         serializer: HandoverScreenSerializing = HandoverTerminalSerializer()
     ) -> HandoverDetachedChat? {
-        dispatchPrecondition(condition: .onQueue(.main))
+        // Prüfung mit Rückfall statt Absturz (Vic): abseits des Main Threads
+        // läuft der Chat unverändert weiter und endet auf dem heutigen Weg.
+        guard isMainThread() else {
+            Logger.agentStore.error("handover_detach_not_on_main_thread session=\(self.sessionID.uuidString, privacy: .public)")
+            return nil
+        }
         guard isRunning, !isHandedOver, handoverHandle == nil,
               let handle = terminal.process.detachForHandover() else { return nil }
         handoverHandle = handle
@@ -76,7 +81,12 @@ extension AgentTerminalController {
     /// `false`, wenn SwiftTerm die Leitung nicht nimmt; der Aufrufer schließt
     /// sie dann und fällt auf `--resume` zurück.
     func adoptHandedOver(descriptor: Int32, manifest: HandoverManifest, image: [UInt8]) -> Bool {
-        dispatchPrecondition(condition: .onQueue(.main))
+        // Wie oben: `false` heißt für den Aufrufer Leitung schließen und
+        // per `--resume` fortsetzen.
+        guard isMainThread() else {
+            Logger.agentStore.error("handover_adopt_not_on_main_thread session=\(self.sessionID.uuidString, privacy: .public)")
+            return false
+        }
         loadImage(image, cols: manifest.cols, rows: manifest.rows)
         let handle = LocalProcess.HandoverHandle(fileDescriptor: descriptor, pid: manifest.pid)
         guard terminal.process.adopt(handle) else { return false }
@@ -103,4 +113,11 @@ extension AgentTerminalController {
         }
         terminal.feed(byteArray: image[...])
     }
+}
+
+extension AgentTerminalController {
+    /// Für Tests ersetzbar; sonst `Thread.isMainThread`.
+    nonisolated(unsafe) static var isMainThreadCheck: () -> Bool = { Thread.isMainThread }
+
+    fileprivate func isMainThread() -> Bool { Self.isMainThreadCheck() }
 }

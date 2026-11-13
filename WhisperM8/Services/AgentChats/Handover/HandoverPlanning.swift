@@ -47,6 +47,9 @@ enum HandoverQuitPlan: Equatable {
         case notARestart
         case keeperStillHolding
         case keeperUnknown
+        /// Schalter erst in diesem App-Lauf eingeschaltet: Der GPT-Router
+        /// steckt noch in der App, eine Abgabe risse laufende Antworten ab.
+        case routerInApp
     }
 
     enum Exclusion: String, Equatable {
@@ -66,10 +69,15 @@ extension HandoverPlanning {
         featureEnabled: Bool,
         trigger: HandoverQuitTrigger,
         keeper: HandoverKeeperPresence,
-        candidates: [HandoverQuitCandidate]
+        candidates: [HandoverQuitCandidate],
+        routerRunsAsService: Bool = true
     ) -> HandoverQuitPlan {
         guard featureEnabled else { return .classic(.featureDisabled) }
         guard trigger == .restartRequest else { return .classic(.notARestart) }
+        // Vic, Gesamt-Review Teil 2: Der Schalter wird live geprüft, der
+        // Router-Modus steht aber nur einmal je Lauf fest. Wurde der Schalter
+        // erst in diesem Lauf eingeschaltet, gibt es noch keinen Router-Dienst.
+        guard routerRunsAsService else { return .classic(.routerInApp) }
         switch keeper {
         case .holdingUntakenChats: return .classic(.keeperStillHolding)
         case .unknown: return .classic(.keeperUnknown)

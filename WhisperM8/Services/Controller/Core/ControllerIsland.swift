@@ -372,18 +372,18 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         [ControllerButton.cross, .triangle, .square, .circle].first { self.item(for: $0) == item }
     }
 
-    /// Was R1 + Kreuz tut (Runde 5, R1; Präzisierung des Nutzers: „wie
-    /// Ctrl+Enter, im Prompt direkt nachschießen“):
-    /// - Claude, Text im Feld oder eigener Prompt in der Warteschlange, Chat
-    ///   arbeitet (oder unklar, gerade gesendet): „Jetzt senden“ (Ctrl+X Ctrl+S).
-    /// - Claude, Text im Feld, Chat ruht: Enter („Senden“).
+    /// Was R1 + Kreuz tut (Runde 5, R1; seit 13.11.2026 auf Wunsch des
+    /// Nutzers fest „Jetzt senden“, ohne Raten am Feldinhalt):
+    /// - Claude: immer „Jetzt senden“ (Ctrl+X Ctrl+S, wie Ctrl+Enter). Claude
+    ///   schickt damit den Entwurf sofort ab bzw. die Warteschlange; bei
+    ///   leerem Feld passiert nichts. Früher entschied die Erkennung des
+    ///   Feldinhalts zwischen „Senden“, „Jetzt senden“ und „Weiter“ — lag sie
+    ///   daneben, tippte R1 + Kreuz „Weiter“ in einen fertigen Prompt.
     /// - Codex, Text im Feld, Chat ruht: Enter. Arbeitet Codex, „geht nicht“:
     ///   Codex meldet nie „wartet“, Enter könnte eine Freigabe bestätigen
-    ///   (Review Runde 5, Befund 2).
-    /// - Steht nur ein zurückgelegter oder mit ↑ zurückgeholter Prompt im
-    ///   Feld, „geht nicht“ — er ginge sonst ungewollt erneut raus (Befund 3).
-    /// - Feld leer, Chat ruht: „Weiter“ wie bisher (`.continueWork`).
-    /// - Feld leer, nichts wartet, Chat arbeitet: `nil` („geht nicht“).
+    ///   (Review Runde 5, Befund 2). Steht nur ein mit ↑ zurückgeholter Prompt
+    ///   im Feld, „geht nicht“ (Befund 3).
+    /// - Codex, Feld leer, Chat ruht: „Weiter“ wie bisher (`.continueWork`).
     /// Nie in einer offenen Rückfrage oder bei offener Ansicht (`nil`; dort
     /// gilt die bisherige Regel, also aus) und nie in Shells (`.continueWork`
     /// mit den bisherigen Regeln).
@@ -392,13 +392,12 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         fieldHasText: Bool, queuedOwnPrompts: Int, onlyRecalledPrompt: Bool = false
     ) -> ControllerQuickDrawCross? {
         guard !dialogOpen, !viewOpen else { return nil }
-        if fieldHasText, onlyRecalledPrompt, profile == .claude || profile == .codex { return nil }
         switch profile {
         case .claude:
-            if busy { return fieldHasText || queuedOwnPrompts > 0 ? .sendNow : nil }
-            return fieldHasText ? .send : .continueWork
+            return .sendNow
         case .codex:
             if busy { return nil }
+            if fieldHasText, onlyRecalledPrompt { return nil }
             return fieldHasText ? .send : .continueWork
         case .shell, .other, nil:
             return .continueWork

@@ -204,8 +204,10 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         }
     }
 
-    /// Entfernt alles; `keepPinned` lässt Angepinnte stehen. Ohne Pins wird
-    /// der Ordner komplett geleert, auch Reste nach einem Absturz.
+    /// Entfernt alles; `keepPinned` lässt Angepinnte und ihre Dateien stehen.
+    /// In beiden Fällen gehen ein beiseitegelegter kaputter Index und Dateien
+    /// ohne Eintrag mit weg: Was er enthielt, auch Pins, lädt die App nie
+    /// wieder, und wer leert, erwartet, dass die Texte weg sind.
     ///
     /// Leeren und Löschen schreiben den Index sofort statt gebündelt: Stürbe
     /// die App im Debounce-Fenster, stünden die Texte sonst beim nächsten
@@ -217,13 +219,19 @@ final class ClipboardHistoryStore: @unchecked Sendable {
                 for entry in entries where !entry.isPinned { pendingBlobRemovals.append(contentsOf: entry.blobFiles) }
                 entries = entries.filter(\.isPinned)
                 search.retain(entries)
+                // Nur wenn der neue Index steht: Sonst schützte nach einem
+                // Neustart nichts mehr die Dateien der Pins vor dem Aufräumen.
+                if changed(writeNow: true) {
+                    removeBrokenIndexes()
+                    removeOrphans()
+                }
             } else {
                 entries = []
                 search = ClipboardSearchIndex(limits: limits.search)
                 pendingBlobRemovals.removeAll()
                 removeAllFiles()
+                changed(writeNow: true)
             }
-            changed(writeNow: true)
         }
     }
 
@@ -265,16 +273,20 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         search.enforceBudget(entries)
     }
 
-    private func changed(writeNow: Bool = false) {
+    /// `true`, wenn der Index sofort geschrieben wurde.
+    @discardableResult
+    private func changed(writeNow: Bool = false) -> Bool {
         onChange?(ClipboardHistoryState(entries: entries, search: search))
-        if writeNow {
-            // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
-            // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
-            if !writeIndexNow() { scheduleFlush() }
-            removePendingBlobs()
-        } else {
+        guard writeNow else {
             scheduleFlush()
+            return false
         }
+        // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
+        // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
+        let written = writeIndexNow()
+        if !written { scheduleFlush() }
+        removePendingBlobs()
+        return written
     }
 
     private func scheduleFlush() {
@@ -365,6 +377,10 @@ final class ClipboardHistoryStore: @unchecked Sendable {
     /// „Verlauf leeren“: alles weg, auch ein beiseitegelegter kaputter Index.
     private func removeAllFiles() {
         for name in directoryContents() { removeBlob(name) }
+    }
+
+    private func removeBrokenIndexes() {
+        for name in directoryContents() where name.hasPrefix(Self.brokenIndexPrefix) { removeBlob(name) }
     }
 
     /// Blob- und Temp-Dateien ohne Eintrag (Absturz zwischen Blob und Index)

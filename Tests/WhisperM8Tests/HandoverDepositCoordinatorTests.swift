@@ -301,6 +301,16 @@ final class HandoverRestartCLITests: XCTestCase {
         XCTAssertLessThanOrEqual(scenario.clock.timeIntervalSince1970, 0.4 + 5.4)
     }
 
+    /// Vic (Gesamt-Review Teil 1): make dev bleibt bei ausgeschaltetem
+    /// Schalter still; andere Gründe und andere Aufrufer melden weiter.
+    func testMakeDevStaysSilentWhenTheFeatureIsOff() {
+        XCTAssertFalse(AppCLICommand.reportsClassic(reason: "featureDisabled", silentWhenDisabled: true))
+        XCTAssertTrue(AppCLICommand.reportsClassic(reason: "featureDisabled", silentWhenDisabled: false))
+        XCTAssertTrue(AppCLICommand.reportsClassic(reason: "notARestart", silentWhenDisabled: true))
+        XCTAssertEqual(AppCLICommand.exitCode(outcome: "classic", reason: "featureDisabled", result: .object([:]),
+                                              quiet: false, silentWhenDisabled: true), 2, "Exit bleibt 2")
+    }
+
     func testOutcomeMapsToExitCodes() {
         let empty = ChatsControlJSON.object([:])
         XCTAssertEqual(AppCLICommand.exitCode(outcome: "handedOver", reason: nil, result: empty, quiet: true), 0)
@@ -535,6 +545,24 @@ final class HandoverTerminalControllerTests: XCTestCase {
         XCTAssertTrue(spin(until: 3) { childSize() == (core.cols, core.rows) },
                       "Prozess kennt die echte Größe: \(childSize()) statt \((core.cols, core.rows))")
         XCTAssertTrue(adopted.isRunning)
+    }
+
+    /// Vic (Gesamt-Review Teil 1): Abseits des Main Threads fällt der
+    /// Controller zurück, statt abzustürzen; der Chat läuft unverändert weiter.
+    func testWrongThreadFallsBackInsteadOfCrashing() throws {
+        let (controller, marker) = try startTicking()
+        let pid = try XCTUnwrap(controller.processID)
+        defer { kill(pid, SIGKILL) }
+        XCTAssertTrue(spin(until: 5) { screenText(controller).contains("tick 2") })
+        AgentTerminalController.isMainThreadCheck = { false }
+        defer { AgentTerminalController.isMainThreadCheck = { Thread.isMainThread } }
+        XCTAssertNil(controller.detachForHandover(), "kein Ablösen abseits des Main Threads")
+        XCTAssertTrue(controller.isRunning)
+        let manifest = HandoverManifest(chatID: "x", kind: "terminal", pid: pid, cols: 80, rows: 24,
+                                        sendsInterruptOnStop: false)
+        XCTAssertFalse(controller.adoptHandedOver(descriptor: -1, manifest: manifest, image: []))
+        XCTAssertEqual(kill(pid, 0), 0, "Prozess lebt weiter")
+        XCTAssertEqual((try? String(contentsOf: marker, encoding: .utf8)) ?? "", "", "weder Ctrl+C noch SIGHUP")
     }
 
     /// Review Paket 4, Befund 2: Nach der Abgabe startet die Registry nichts mehr.

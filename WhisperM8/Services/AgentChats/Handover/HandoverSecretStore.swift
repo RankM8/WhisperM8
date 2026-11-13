@@ -217,3 +217,26 @@ enum HandoverCodeSignature {
         return text as String?
     }
 }
+
+/// Baut die eigentliche Ablage erst beim ersten Zugriff (Vic, Gesamt-Review
+/// Teil 1): `HandoverSecretStore.live` liest die Code-Anforderung der Signatur.
+/// Jeder App-Start legt die Abhängigkeiten der Übernahme an, liest das
+/// Geheimnis aber nur nach einer Übergabe; mit Schalter aus kostet so nichts.
+final class HandoverLazySecretStore: HandoverSecretStoring {
+    private let make: () -> HandoverSecretStoring
+    private lazy var inner: HandoverSecretStoring = make()
+    private(set) var isBuilt = false
+
+    init(_ make: @escaping () -> HandoverSecretStoring) {
+        self.make = make
+    }
+
+    private var resolved: HandoverSecretStoring {
+        isBuilt = true
+        return inner
+    }
+
+    func store(_ secret: String) -> Bool { resolved.store(secret) }
+    func load() -> HandoverSecretLookup { resolved.load() }
+    func remove() { resolved.remove() }
+}
