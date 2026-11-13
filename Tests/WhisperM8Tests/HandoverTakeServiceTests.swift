@@ -447,6 +447,18 @@ final class HandoverTakeServiceTests: XCTestCase {
         XCTAssertFalse(HandoverKeeperLock.isHeld(paths: paths))
     }
 
+    /// Vic (Gesamt-Review Teil 1): Ein normaler Start baut die Ablage des
+    /// Geheimnisses gar nicht erst (die Signatur zu lesen kostet).
+    func testNormalStartDoesNotBuildTheSecretStore() {
+        var built = 0
+        let lazy = HandoverLazySecretStore { built += 1; return FakeSecretStore() }
+        _ = service(secrets: lazy, sessions: [], calls: Calls()).takeAtLaunch()
+        XCTAssertEqual(built, 0)
+        XCTAssertFalse(lazy.isBuilt)
+        _ = lazy.load()
+        XCTAssertEqual(built, 1, "erst beim ersten Zugriff")
+    }
+
     func testNormalStartWithoutHandoverDoesNothing() {
         let calls = Calls()
         let summary = service(secrets: FakeSecretStore(), sessions: [], calls: calls).takeAtLaunch()
