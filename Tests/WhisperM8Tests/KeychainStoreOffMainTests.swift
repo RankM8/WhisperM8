@@ -148,8 +148,9 @@ final class KeychainStoreOffMainTests: XCTestCase {
         await awaitReadStarted(backend)
         XCTAssertEqual(store.save(key: "k", value: "fresh"), .saved)
         backend.release.signal()
-        _ = await pending
+        let delivered = await pending
 
+        XCTAssertEqual(delivered, "fresh", "auch der Wartende bekommt den neuen Key")
         XCTAssertEqual(store.load(key: "k"), "fresh")
     }
 
@@ -160,12 +161,14 @@ final class KeychainStoreOffMainTests: XCTestCase {
         async let pending = store.loadOffMain(key: "k")
         await awaitReadStarted(backend)
         store.delete(key: "k")
-        backend.release.signal()
-        _ = await pending
-
+        // Das Backend steht hier für den Stand nach dem Löschen.
         backend.value = "after-delete"
         backend.release.signal()
-        XCTAssertEqual(store.load(key: "k"), "after-delete", "nach dem Löschen wird neu gelesen, nicht der alte Wert aus dem Speicher")
+        backend.release.signal()
+        let delivered = await pending
+
+        XCTAssertEqual(delivered, "after-delete", "der Wartende bekommt den Stand nach dem Löschen, nicht den alten Key")
+        XCTAssertEqual(backend.reads, 2)
     }
 
     /// Dialog abgelehnt: nichts im Cache, und eine alte UserDefaults-Kopie wird

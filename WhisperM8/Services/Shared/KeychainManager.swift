@@ -173,7 +173,14 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
             let started = PendingKeychainRead()
             inFlight[key] = started
             DispatchQueue.global(qos: .userInitiated).async { [self] in
-                let value = load(key: key)
+                let startGeneration = currentGeneration(for: key)
+                var value = load(key: key)
+                // Während des Lesens gespeichert oder gelöscht: Wartende sollen
+                // den neuen Stand bekommen, nicht den alten. Ein zweites `load`
+                // trifft den Cache oder liest den geänderten Eintrag.
+                if currentGeneration(for: key) != startGeneration {
+                    value = load(key: key)
+                }
                 cacheLock.withLock {
                     if inFlight[key] === started { inFlight[key] = nil }
                 }
