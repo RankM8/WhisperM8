@@ -527,12 +527,18 @@ final class ClaudeRegistryStatusTests: XCTestCase {
             let json = "{\"pid\": \(pid), \"sessionId\": \"s\(index)\", \"status\": \"busy\", \"procStart\": \"Sat Oct 17 10:12:17 2026\", \"cwd\": \"/x\", \"name\": \"x-\(index)\"}"
             try Data(json.utf8).write(to: dir.appendingPathComponent("\(100 + index).json"))
         }
-        let started = Date()
-        let records = ClaudeSessionRegistry.scan(roots: [.init(profileName: "main", url: dir)],
-                                                 isAlive: ClaudeSessionRegistry.isProcessAlive)
-        let perFileMs = Date().timeIntervalSince(started) * 1000 / 20
-        XCTAssertEqual(records.count, 0, "Startzeit passt nicht → kein lebender Eintrag")
-        XCTAssertLessThan(perFileMs, 1, "Budget: < 1 ms pro Datei inkl. sysctl")
+        // Wanduhr-Messung: Unter Last (parallele Suiten, Builds) kippte ein
+        // einzelner Durchlauf. Das Budget gilt für den besten von mehreren
+        // Durchläufen — der misst die Arbeit, nicht die Wartezeit auf eine CPU.
+        var bestPerFileMs = Double.infinity
+        for _ in 0..<7 {
+            let started = Date()
+            let records = ClaudeSessionRegistry.scan(roots: [.init(profileName: "main", url: dir)],
+                                                     isAlive: ClaudeSessionRegistry.isProcessAlive)
+            bestPerFileMs = min(bestPerFileMs, Date().timeIntervalSince(started) * 1000 / 20)
+            XCTAssertEqual(records.count, 0, "Startzeit passt nicht → kein lebender Eintrag")
+        }
+        XCTAssertLessThan(bestPerFileMs, 1, "Budget: < 1 ms pro Datei inkl. sysctl (bester von 7 Durchläufen)")
     }
 
     // MARK: CLI
