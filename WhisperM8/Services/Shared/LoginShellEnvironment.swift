@@ -232,6 +232,13 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // wegen des führenden Unterstrichs nicht.
         env.removeValue(forKey: "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
 
+        // Variablen des Terminals, aus dem die App gestartet wurde (`make dev`
+        // aus iTerm: `open` reicht die Umgebung des Aufrufers durch). Unsere
+        // Chats laufen in SwiftTerm, nicht in iTerm, Ghostty oder VS Code.
+        // Geerbt hielten sich claude und Hooks für dieses Terminal (Befund
+        // 13.11.2026: iTerm-Hooks `it2 handle-agent-hook` warteten in jedem Chat).
+        Self.removeStarterTerminalVariables(&env)
+
         env["PATH"] = path
 
         // Proxy und Zertifikate aus der Login-Shell (LR-SH-012): Im Terminal
@@ -252,12 +259,12 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env[key] = value
         }
 
-        if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
-            env["TERM"] = "xterm-256color"
-        }
-        if (env["COLORTERM"]?.isEmpty ?? true) {
-            env["COLORTERM"] = "truecolor"
-        }
+        // Immer setzen, nie erben: launchd liefert kein TERM, ein vorhandener
+        // Wert stammt also vom startenden Terminal (`xterm-kitty`,
+        // `xterm-ghostty`, `dumb` aus Codex). SwiftTerm ist ein
+        // xterm-256color-Terminal mit Truecolor.
+        env["TERM"] = "xterm-256color"
+        env["COLORTERM"] = "truecolor"
         if (env["CLICOLOR"]?.isEmpty ?? true) {
             env["CLICOLOR"] = "1"
         }
@@ -267,6 +274,41 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env["LANG"] = "en_US.UTF-8"
         }
         return env
+    }
+
+    /// Variablen fremder Terminals, die nie an unsere Kindprozesse gehen.
+    /// Die App setzt für ihre PTYs selbst nur `TERM`, `COLORTERM`, `CLICOLOR`
+    /// und `LANG` (unten); davon steht hier nichts.
+    static let starterTerminalVariables: Set<String> = [
+        // macOS Terminal, iTerm2, Warp, VS Code, Hyper u. a.
+        "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "SHELL_SESSION_ID",
+        // iTerm2
+        "LC_TERMINAL", "LC_TERMINAL_VERSION",
+        // terminfo eines anderen Terminals (kitty und Ghostty zeigen in ihr Bundle)
+        "TERMINFO",
+        // tmux, screen, zellij: Programme hielten sich sonst für eine Sitzung darin
+        "TMUX", "TMUX_PANE", "STY", "WINDOW",
+        // Alacritty
+        "ALACRITTY_SOCKET", "ALACRITTY_LOG", "ALACRITTY_WINDOW_ID",
+        // Konsole, GNOME, xterm-Abkömmlinge
+        "KONSOLE_VERSION", "VTE_VERSION", "WINDOWID",
+    ]
+
+    /// Präfixe derselben Art (je Terminal eine Familie).
+    static let starterTerminalPrefixes = [
+        "ITERM_", "KITTY_", "GHOSTTY_", "WEZTERM_", "WARP_", "VSCODE_", "ZELLIJ", "TABBY_",
+    ]
+
+    static func removeStarterTerminalVariables(_ env: inout [String: String]) {
+        // VS Code setzt `GIT_ASKPASS` auf sein eigenes Skript, das nur mit seinem
+        // IPC-Kanal (`VSCODE_GIT_IPC_HANDLE`) funktioniert: nur dann mit weg.
+        if env.keys.contains(where: { $0.hasPrefix("VSCODE_GIT_") }) {
+            env.removeValue(forKey: "GIT_ASKPASS")
+        }
+        for key in env.keys
+        where starterTerminalVariables.contains(key) || starterTerminalPrefixes.contains(where: key.hasPrefix) {
+            env.removeValue(forKey: key)
+        }
     }
 
     static let localNoProxyEntries = ["127.0.0.1", "localhost", "::1"]

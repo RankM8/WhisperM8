@@ -85,19 +85,56 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertNil(envDict["NO_COLOR"])
     }
 
-    func testLoginShellEnvironmentRespectsExistingTerminalVars() {
-        // User-Profile (z. B. iTerm-User mit TERM=xterm-kitty) sollen nicht
-        // überschrieben werden — wir füllen nur Lücken.
+    func testLoginShellEnvironmentReplacesStarterTerminalTypeButKeepsLocale() {
+        // TERM kommt nie aus dem User-Profil (nur PATH und Netzwerk-Variablen
+        // werden aus der Login-Shell übernommen), sondern vom Terminal, aus dem
+        // die App gestartet wurde. Unsere Chats laufen in SwiftTerm.
         let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
         let envDict = env.processEnvironment(base: [
             "TERM": "xterm-kitty",
             "COLORTERM": "24bit",
             "LC_ALL": "de_DE.UTF-8"
         ])
-        XCTAssertEqual(envDict["TERM"], "xterm-kitty")
-        XCTAssertEqual(envDict["COLORTERM"], "24bit")
+        XCTAssertEqual(envDict["TERM"], "xterm-256color")
+        XCTAssertEqual(envDict["COLORTERM"], "truecolor")
         XCTAssertEqual(envDict["LC_ALL"], "de_DE.UTF-8")
         XCTAssertNil(envDict["LANG"], "LANG nicht gesetzt, weil LC_ALL bereits eine Locale liefert")
+    }
+
+    /// Befund 13.11.2026: `make dev` aus iTerm, alle Chats erbten die
+    /// iTerm-Variablen, iTerm-Hooks griffen in jedem Chat.
+    func testStripsVariablesOfTheStartingTerminal() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let base: [String: String] = [
+            "ITERM_SESSION_ID": "w0t0p0:ABC", "ITERM_PROFILE": "Default",
+            "TERM_PROGRAM": "iTerm.app", "TERM_PROGRAM_VERSION": "3.7.7",
+            "TERM_SESSION_ID": "w0t0p0:ABC", "LC_TERMINAL": "iTerm2", "LC_TERMINAL_VERSION": "3.7.7",
+            "SHELL_SESSION_ID": "x", "TERMINFO": "/Applications/Ghostty.app/Contents/Resources/terminfo",
+            "GHOSTTY_RESOURCES_DIR": "/Applications/Ghostty.app", "KITTY_WINDOW_ID": "1", "KITTY_PID": "2",
+            "WEZTERM_PANE": "0", "WARP_IS_LOCAL_SHELL_SESSION": "1", "TMUX": "/tmp/tmux-501/default,1,0",
+            "TMUX_PANE": "%1", "STY": "1.tty", "ZELLIJ": "0", "ZELLIJ_SESSION_NAME": "s",
+            "ALACRITTY_WINDOW_ID": "1", "VTE_VERSION": "7000",
+            "VSCODE_GIT_IPC_HANDLE": "/tmp/vscode-git.sock", "VSCODE_INJECTION": "1",
+            "GIT_ASKPASS": "/Applications/Visual Studio Code.app/askpass.sh",
+            // bleiben:
+            "HOME": "/Users/u", "SSH_AUTH_SOCK": "/tmp/agent", "LANG": "de_DE.UTF-8", "EDITOR": "vim",
+        ]
+        let result = env.processEnvironment(base: base)
+        for key in base.keys where !["HOME", "SSH_AUTH_SOCK", "LANG", "EDITOR"].contains(key) {
+            XCTAssertNil(result[key], "\(key) darf nicht an Chats gehen")
+        }
+        XCTAssertEqual(result["HOME"], "/Users/u")
+        XCTAssertEqual(result["SSH_AUTH_SOCK"], "/tmp/agent")
+        XCTAssertEqual(result["LANG"], "de_DE.UTF-8")
+        XCTAssertEqual(result["EDITOR"], "vim")
+        XCTAssertEqual(result["TERM"], "xterm-256color")
+    }
+
+    /// Ein eigenes `GIT_ASKPASS` (ohne VS Code) bleibt.
+    func testKeepsOwnGitAskpassWithoutVSCode() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let result = env.processEnvironment(base: ["GIT_ASKPASS": "/usr/local/bin/my-askpass"])
+        XCTAssertEqual(result["GIT_ASKPASS"], "/usr/local/bin/my-askpass")
     }
 
     func testFallbackPathContainsCommonLocations() {
