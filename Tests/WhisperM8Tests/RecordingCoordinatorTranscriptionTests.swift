@@ -144,6 +144,38 @@ final class RecordingCoordinatorTranscriptionTests: XCTestCase {
         XCTAssertFalse(factoryCalled)
     }
 
+    /// ESC bei offenem Schlüsselbund-Dialog: Der Resolver kehrt abgebrochen mit
+    /// nil zurück. Das ist ein Abbruch, kein fehlender Schlüssel (kein Alert).
+    func testCancelWhileKeyLoadsIsCancellationNotMissingKey() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        var factoryCalled = false
+        let coordinator = RecordingCoordinator(
+            appState: .shared,
+            providerResolver: { .groq },
+            modelResolver: { .groq_whisper_v3 },
+            apiKeyResolver: { _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+                return nil
+            },
+            transcriberFactory: { _, _, _ in
+                factoryCalled = true
+                return ThrowingTranscriptionService()
+            }
+        )
+
+        do {
+            try await coordinator.transcribeAndDeliver(
+                audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+            )
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // erwartet
+        }
+        XCTAssertFalse(factoryCalled)
+    }
+
     /// Lehnt der Anbieter den Schlüssel ab, wird die Kopie im Speicher verworfen;
     /// andere Fehler lassen sie stehen.
     func testRejectedKeyIsForgottenOnlyOn401() async throws {

@@ -150,7 +150,7 @@ ist doppelt so hoch.
 - `gpt-4o-transcribe` gilt im CLI-Code als nicht segmentfähig; SRT/VTT brauchen Whisper-Modelle.
 - Post-Processing im CLI-Pfad verwirft Segmente nur bei Modes mit `usesPostProcessing`; Raw-Modes ohne Post-Processing behalten Segmente.
 - `KeychainManager.exists` kann bei `errSecInteractionNotAllowed` trotzdem `true` liefern, weil ein Key vorhanden sein kann, obwohl gerade keine UI-Interaktion erlaubt ist.
-- `KeychainManager.load` hat einen In-Memory-Cache und migriert alte UserDefaults-Keys beim ersten erfolgreichen Lesen. Es blockiert, solange ein Schlüsselbund-Dialog offen ist; Aufrufer auf dem Main Thread nehmen `loadOffMain`. Gleichzeitige Aufrufe teilen sich einen Lesevorgang, und ein Lesevorgang, der ein Speichern oder Löschen überholt, legt seinen alten Wert nicht in den Cache.
+- `KeychainManager.load` hat einen In-Memory-Cache und migriert alte UserDefaults-Keys beim ersten erfolgreichen Lesen. Es blockiert, solange ein Schlüsselbund-Dialog offen ist; Aufrufer auf dem Main Thread nehmen `loadOffMain`: Dort teilen sich gleichzeitige Aufrufe einen Lesevorgang auf einer Dispatch-Queue, ein abgebrochener Aufrufer kehrt sofort mit `nil` zurück (das Diktat wertet das als Abbruch, nicht als fehlenden Key), und ein Lesevorgang, der ein Speichern oder Löschen überholt, legt seinen alten Wert nicht in den Cache.
 
 ## Schlüsseldateien
 

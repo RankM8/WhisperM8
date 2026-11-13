@@ -24,6 +24,9 @@ extension RecordingCoordinator {
         // Tests unverändert injizieren können; `createService` ignoriert den
         // Key für `.chatgpt`.
         let resolvedKey = provider.requiresAPIKey ? (await apiKeyResolver(provider) ?? "") : ""
+        // ESC, während der Schlüsselbund-Dialog offen ist: der Resolver kehrt
+        // mit nil zurück. Das ist ein Abbruch, kein fehlender Schlüssel.
+        try Task.checkCancellation()
         guard TranscriptionCredentialGate.isSatisfied(
             provider: provider,
             typedKey: resolvedKey,

@@ -24,7 +24,10 @@ final class KeychainStoreOffMainTests: XCTestCase {
                 if Thread.isMainThread { _readOnMainThread = true }
             }
             readStarted.signal()
-            release.wait()
+            // Timeout statt ewig: ein Rückfall soll rot werden, nicht hängen.
+            guard release.wait(timeout: .now() + 5) == .success else {
+                return (errSecInteractionNotAllowed, nil)
+            }
             return (errSecSuccess, value.data(using: .utf8))
         }
 
@@ -32,6 +35,12 @@ final class KeychainStoreOffMainTests: XCTestCase {
         func add(service: String, account: String, data: Data) -> OSStatus { errSecSuccess }
         func probe(service: String, account: String) -> OSStatus { errSecSuccess }
         func delete(service: String, account: String) -> OSStatus { errSecSuccess }
+    }
+
+    /// Wartet abseits des Main Threads, bis der Lesevorgang angelaufen ist.
+    private func awaitReadStarted(_ backend: GatedBackend, file: StaticString = #filePath, line: UInt = #line) async {
+        let started = await Task.detached { backend.readStarted.wait(timeout: .now() + 5) == .success }.value
+        if !started { XCTFail("Lesevorgang ist nicht angelaufen", file: file, line: line) }
     }
 
     private var defaults: UserDefaults!
@@ -53,10 +62,9 @@ final class KeychainStoreOffMainTests: XCTestCase {
         let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
 
         let reading = Task { @MainActor in await store.loadOffMain(key: "k") }
-        // Warten, ohne den Main Thread zu blockieren: Der Lesevorgang muss
-        // anlaufen, während dieser Test selbst auf dem Main Actor läuft.
-        await Task.detached { backend.readStarted.wait() }.value
-        XCTAssertTrue(Thread.isMainThread, "der Main Actor läuft weiter, während der Dialog offen ist")
+        // Der Lesevorgang hängt, während dieser Test selbst auf dem Main Actor
+        // weiterläuft. Läse `loadOffMain` auf dem Main Thread, käme er nie an.
+        await awaitReadStarted(backend)
         backend.release.signal()
 
         let value = await reading.value
@@ -82,14 +90,37 @@ final class KeychainStoreOffMainTests: XCTestCase {
         let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
 
         async let a = store.loadOffMain(key: "k")
-        await Task.detached { backend.readStarted.wait() }.value
+        await awaitReadStarted(backend)
         async let b = store.loadOffMain(key: "k")
-        // Dem zweiten Aufruf Zeit geben, sich an den laufenden Lesevorgang zu hängen.
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        // Erst freigeben, wenn beide am selben Lesevorgang hängen.
+        let deadline = Date().addingTimeInterval(5)
+        while store.waitingReaders(for: "k") < 2, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTAssertEqual(store.waitingReaders(for: "k"), 2)
         backend.release.signal()
 
         let values = await [a, b]
         XCTAssertEqual(values, ["secret", "secret"])
+        XCTAssertEqual(backend.reads, 1)
+    }
+
+    /// ESC bei offenem Dialog: der Wartende kehrt sofort zurück, der
+    /// Lesevorgang läuft weiter und füllt den Cache fürs nächste Diktat.
+    func testCancelledWaiterReturnsAtOnceAndReadStillFillsCache() async {
+        let backend = GatedBackend()
+        let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
+
+        let waiting = Task { await store.loadOffMain(key: "k") }
+        await awaitReadStarted(backend)
+        waiting.cancel()
+        let cancelledValue = await waiting.value
+        XCTAssertNil(cancelledValue, "kehrt zurück, obwohl der Dialog noch offen ist")
+
+        backend.release.signal()
+        // Hängt sich an den noch laufenden Lesevorgang oder liest aus dem Cache.
+        let next = await store.loadOffMain(key: "k")
+        XCTAssertEqual(next, "secret")
         XCTAssertEqual(backend.reads, 1)
     }
 
@@ -114,7 +145,7 @@ final class KeychainStoreOffMainTests: XCTestCase {
         let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
 
         async let pending = store.loadOffMain(key: "k")
-        await Task.detached { backend.readStarted.wait() }.value
+        await awaitReadStarted(backend)
         XCTAssertEqual(store.save(key: "k", value: "fresh"), .saved)
         backend.release.signal()
         _ = await pending
@@ -127,7 +158,7 @@ final class KeychainStoreOffMainTests: XCTestCase {
         let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
 
         async let pending = store.loadOffMain(key: "k")
-        await Task.detached { backend.readStarted.wait() }.value
+        await awaitReadStarted(backend)
         store.delete(key: "k")
         backend.release.signal()
         _ = await pending

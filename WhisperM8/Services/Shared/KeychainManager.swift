@@ -91,7 +91,7 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
     private var generation: [String: Int] = [:]
     /// Laufende Hintergrund-Lesevorgänge: zwei Diktate während eines offenen
     /// Dialogs lösen nur einen Keychain-Zugriff aus.
-    private var inFlight: [String: Task<String?, Never>] = [:]
+    private var inFlight: [String: PendingKeychainRead] = [:]
     private let cacheLock = NSLock()
 
     init(service: String, backend: KeychainBackend, defaults: UserDefaults = .standard) {
@@ -155,26 +155,35 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
         return nil
     }
 
-    /// Wie `load`, aber der Keychain-Zugriff läuft auf einem Hintergrund-Thread.
-    /// Aus dem Cache kommt der Wert sofort; gleichzeitige Aufrufe teilen sich
-    /// einen Lesevorgang.
+    /// Wie `load`, aber der Keychain-Zugriff läuft auf einer Dispatch-Queue statt
+    /// auf dem Aufrufer-Thread (und nicht im Swift-Concurrency-Pool, den ein
+    /// offener Dialog sonst beliebig lange belegt). Aus dem Cache kommt der Wert
+    /// sofort; gleichzeitige Aufrufe teilen sich einen Lesevorgang. Wird der
+    /// wartende Task abgebrochen (ESC im Diktat), kehrt der Aufruf sofort mit
+    /// `nil` zurück; der Lesevorgang läuft weiter und füllt den Cache.
     func loadOffMain(key: String) async -> String? {
         if let cachedValue = cachedValue(for: key) {
             return cachedValue
         }
-        let task: Task<String?, Never> = cacheLock.withLock {
+        let read: PendingKeychainRead = cacheLock.withLock {
             if let running = inFlight[key] { return running }
-            let started = Task.detached(priority: .userInitiated) { [self] in
-                load(key: key)
-            }
+            let started = PendingKeychainRead()
             inFlight[key] = started
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                let value = load(key: key)
+                cacheLock.withLock {
+                    if inFlight[key] === started { inFlight[key] = nil }
+                }
+                started.finish(value)
+            }
             return started
         }
-        let value = await task.value
-        cacheLock.withLock {
-            if inFlight[key] == task { inFlight[key] = nil }
-        }
-        return value
+        return await read.value()
+    }
+
+    /// Nur für Tests: wie viele Aufrufer gerade auf den laufenden Lesevorgang warten.
+    func waitingReaders(for key: String) -> Int {
+        cacheLock.withLock { inFlight[key]?.waiterCount ?? 0 }
     }
 
     /// Verwirft nur die Kopie im Speicher (etwa nach 401 vom Anbieter); der
@@ -224,6 +233,9 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
         defer { cacheLock.unlock() }
         cache[key] = value
         generation[key, default: 0] += 1
+        // Ein noch laufender Lesevorgang liefert den alten Stand; neue Aufrufer
+        // hängen sich nicht mehr daran.
+        inFlight[key] = nil
     }
 
     /// Legt einen gelesenen Wert nur ab, wenn seit dem Lesebeginn niemand
@@ -240,6 +252,60 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
         defer { cacheLock.unlock() }
         cache.removeValue(forKey: key)
         generation[key, default: 0] += 1
+        inFlight[key] = nil
+    }
+}
+
+/// Ein laufender Hintergrund-Lesevorgang mit beliebig vielen Wartenden. Jeder
+/// Wartende kann einzeln abbrechen, ohne den Lesevorgang zu beenden.
+final class PendingKeychainRead: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isFinished = false
+    private var result: String?
+    private var waiters: [UUID: CheckedContinuation<String?, Never>] = [:]
+    /// Abbrüche, die vor dem Einhängen der Continuation ankamen.
+    private var cancelledEarly: Set<UUID> = []
+
+    var waiterCount: Int { lock.withLock { waiters.count } }
+
+    func value() async -> String? {
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+                lock.lock()
+                if isFinished {
+                    let value = result
+                    lock.unlock()
+                    continuation.resume(returning: value)
+                } else if cancelledEarly.remove(id) != nil {
+                    lock.unlock()
+                    continuation.resume(returning: nil)
+                } else {
+                    waiters[id] = continuation
+                    lock.unlock()
+                }
+            }
+        } onCancel: {
+            lock.lock()
+            if let continuation = waiters.removeValue(forKey: id) {
+                lock.unlock()
+                continuation.resume(returning: nil)
+            } else {
+                if !isFinished { cancelledEarly.insert(id) }
+                lock.unlock()
+            }
+        }
+    }
+
+    func finish(_ value: String?) {
+        lock.lock()
+        isFinished = true
+        result = value
+        let pending = Array(waiters.values)
+        waiters.removeAll()
+        cancelledEarly.removeAll()
+        lock.unlock()
+        for continuation in pending { continuation.resume(returning: value) }
     }
 }
 
