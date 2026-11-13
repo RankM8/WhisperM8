@@ -71,7 +71,7 @@ Jedes Szenario prüft danach:
 - Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
 - Kein Kind erbt einen Socket.
 - Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
-- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 (`keeper.lock`, `keeper.log`, Socket) 0600, solange sie existiert.
+- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`) 0600, solange sie existiert.
 
 Am Ende des Laufs prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidat ist jede kleine Datei im Ordner des Aufbewahrers, die nicht zu Paket 2 gehört. Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Ohne Kandidat steht der Punkt als FEHLT da.
 

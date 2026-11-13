@@ -58,9 +58,9 @@ SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap d
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
 SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
-# Dateien, die der Aufbewahrer aus Paket 2 anlegt; alles andere gilt als
+# Dateien aus Paket 2 (Aufbewahrer) und Paket 4 (last-take.json); alles andere gilt als
 # Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
-KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock"
+KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json"
 
 # MARK: - Fähigkeiten (Paket 4)
 
