@@ -66,7 +66,11 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
         manager.storedAccountIDResolver = { _ in "acct" }
         manager.mainPortResolver = { 18_765 }
         manager.portAvailabilityResolver = { _ in true }
-        manager.proxyRegister = ClaudeCodeProxyRegister(fileURL: root.appendingPathComponent("r.json"))
+        // Eigene Datei im Temp-Ordner des Nutzers: Ein verspäteter Schreibvorgang
+        // des Hintergrundstarts legt so keinen Ordner unter /private/tmp neu an.
+        let registerURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("gpt-proxies-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: registerURL) }
+        manager.proxyRegister = ClaudeCodeProxyRegister(fileURL: registerURL)
 
         manager.routerModeResolver = { .inApp }
         manager.profilesEnabledResolver = { true }
@@ -83,7 +87,7 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
         // Das Register schreibt der Start im Hintergrund kurz danach; erst
         // abwarten, sonst legt er den gelöschten Testordner neu an.
         let registered = Date().addingTimeInterval(5)
-        while !FileManager.default.fileExists(atPath: root.appendingPathComponent("r.json").path), Date() < registered {
+        while !FileManager.default.fileExists(atPath: registerURL.path), Date() < registered {
             Thread.sleep(forTimeInterval: 0.02)
         }
         XCTAssertEqual(launches.count, 1)
