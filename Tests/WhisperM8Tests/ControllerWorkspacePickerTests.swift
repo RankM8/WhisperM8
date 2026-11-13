@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-/// Workspaces am Controller (seit Runde 4 der Reiter „Workspaces“ der Insel):
+/// Workspaces und Projekte am Controller (Reiter „Workspaces & Projekte“ der Insel):
 /// Liste, Einträge aus dem Store und die gemerkte Kachel je Workspace.
 @MainActor
 final class ControllerWorkspacePickerTests: XCTestCase {
@@ -41,61 +41,99 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         }
     }
 
-    /// Cmd-Tab: Die Markierung beginnt auf dem vorigen Ort, Loslassen ohne
-    /// Bewegung führt dorthin — wie L2 getippt.
-    func testMarkerStartsOnThePreviousChat() {
+    /// Insel-Paket: Die Markierung beginnt auf dem aktuellen Chat, nicht auf
+    /// dem vorigen. Loslassen ohne Bewegung tut nichts; der vorige Chat trägt
+    /// „vorher“ und ist einen Schritt entfernt.
+    func testMarkerStartsOnTheCurrentChatAndPreviousIsOneStepAway() {
         let chats = chatRows(3, current: 1)
-        let state = ControllerWhereToState(
+        var state = ControllerWhereToState(
             chats: chats, currentChatID: chats[1].id, workspaces: [], gridActive: false,
             previous: .chat(chats[2].id))
         XCTAssertEqual(state.tab, .chats)
-        XCTAssertEqual(state.chats.selected?.id, chats[2].id)
-        XCTAssertEqual(state.destination, .chat(chats[2].id))
-        XCTAssertTrue(state.isPrevious(chat: chats[2].id))
+        XCTAssertEqual(state.chats.selected?.id, chats[1].id, "Start auf dem aktuellen")
+        XCTAssertEqual(state.destination, .stay, "Loslassen ohne Bewegung tut nichts")
+        XCTAssertTrue(state.isPrevious(chat: chats[2].id), "„vorher“ an der Zeile")
+        state.move(1)
+        XCTAssertEqual(state.destination, .chat(chats[2].id), "ein Schritt bis zum vorigen")
     }
 
-    func testMarkerStartsOnThePreviousWorkspaceInTheGrid() {
-        let chats = chatRows(2, current: 0)
-        let choices = [choice("A", current: true), choice("B"), choice("C")]
-        let state = ControllerWhereToState(
-            chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: true,
-            previous: .workspace(choices[2].id))
-        XCTAssertEqual(state.tab, .workspaces)
-        XCTAssertEqual(state.destination, .workspace(choices[2].id))
-    }
-
-    /// Der Start-Reiter folgt dem vorigen Ort: In der Einzelansicht mit einem
-    /// Workspace als vorigem Ort öffnet der Reiter Workspaces.
-    func testStartTabFollowsThePreviousPlace() {
+    /// Start-Reiter: im Raster „Workspaces & Projekte“, in der Einzelansicht
+    /// „Chats“ — unabhängig vom vorigen Ort, jeweils auf dem aktuellen Eintrag.
+    func testStartTabFollowsTheViewNotThePreviousPlace() {
         let chats = chatRows(2, current: 0)
         let choices = [choice("A"), choice("B")]
         let single = ControllerWhereToState(
             chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: false,
             previous: .workspace(choices[1].id))
-        XCTAssertEqual(single.tab, .workspaces)
-        XCTAssertEqual(single.destination, .workspace(choices[1].id))
+        XCTAssertEqual(single.tab, .chats)
+        XCTAssertEqual(single.destination, .stay)
+        XCTAssertTrue(single.isPrevious(choices[1]))
 
+        let current = [choice("A", current: true), choice("B")]
         let grid = ControllerWhereToState(
-            chats: chats, currentChatID: chats[0].id, workspaces: [choice("A", current: true)], gridActive: true,
+            chats: chats, currentChatID: chats[0].id, workspaces: current, gridActive: true,
             previous: .chat(chats[1].id))
-        XCTAssertEqual(grid.tab, .chats)
-        XCTAssertEqual(grid.destination, .chat(chats[1].id))
+        XCTAssertEqual(grid.tab, .workspaces)
+        XCTAssertEqual(grid.workspaces.selected?.name, "A")
+        XCTAssertEqual(grid.destination, .stay)
     }
 
-    /// Ohne vorigen Ort steht die Markierung auf dem aktuellen Eintrag:
-    /// Loslassen tut nichts.
-    func testWithoutPreviousPlaceReleaseStays() {
-        let chats = chatRows(3, current: 1)
-        let choices = [choice("A", current: true), choice("B")]
-        let single = ControllerWhereToState(
-            chats: chats, currentChatID: chats[1].id, workspaces: choices, gridActive: false)
-        XCTAssertEqual(single.tab, .chats)
-        XCTAssertEqual(single.chats.selected?.id, chats[1].id)
-        XCTAssertEqual(single.destination, .stay)
-        let grid = ControllerWhereToState(
-            chats: chats, currentChatID: chats[1].id, workspaces: choices, gridActive: true)
-        XCTAssertEqual(grid.tab, .workspaces)
-        XCTAssertEqual(grid.destination, .stay)
+    /// Ohne angelegten Workspace und ohne Projekt gibt es im Raster nur Chats.
+    func testGridWithoutWorkspacesStartsOnChats() {
+        let chats = chatRows(2, current: 0)
+        let state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: [], gridActive: true)
+        XCTAssertEqual(state.tab, .chats)
+        XCTAssertEqual(state.destination, .stay)
+    }
+
+    /// Projekte stehen unter den Workspaces; ein Projekt ist ein eigenes Ziel,
+    /// und eine als Workspace gemerkte Projekt-Ansicht trägt „vorher“ an der
+    /// Projekt-Zeile.
+    func testProjectsAreDestinationsAndMatchTheirViewAsPrevious() {
+        let chats = chatRows(1, current: 0)
+        let view = UUID()
+        var project = choice("WhisperM8")
+        project.kind = .project
+        project.viewWorkspaceID = view
+        let rows = [choice("A", current: true), project]
+        var state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: rows, gridActive: true,
+            previous: .workspace(view))
+        XCTAssertEqual(state.previous, .project(project.id))
+        XCTAssertTrue(state.isPrevious(project))
+        XCTAssertFalse(state.isPrevious(rows[0]))
+        state.move(1)
+        XCTAssertEqual(state.destination, .project(project.id))
+    }
+
+    /// Ein aktuell gezeigtes Projekt ist der aktuelle Eintrag (keine Bewegung,
+    /// kein Wechsel).
+    func testCurrentProjectViewIsTheCurrentEntry() {
+        let chats = chatRows(1, current: 0)
+        var project = choice("WhisperM8", current: true)
+        project.kind = .project
+        let state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[0].id, workspaces: [choice("A"), project], gridActive: true)
+        XCTAssertEqual(state.workspaces.selected?.id, project.id)
+        XCTAssertEqual(state.destination, .stay)
+        XCTAssertEqual(state.currentWorkspaceName, "WhisperM8")
+    }
+
+    /// Einträge für Projekte: Reihenfolge der Seitenleiste, nur mit aktiven
+    /// Chats oder wenn ihr Raster gerade sichtbar ist.
+    func testProjectChoicesNeedActiveChatsOrTheirVisibleGrid() {
+        let p1 = UUID(), p2 = UUID(), p3 = UUID(), a = UUID(), b = UUID(), view = UUID()
+        let choices = ControllerWorkspaceChoice.projectChoices(
+            from: [(p1, "Eins", "#111111"), (p2, "Zwei", "#222222"), (p3, "Drei", "#333333")],
+            active: [p1: [a, b]], shownProjectID: p3, views: [p1: view],
+            status: { $0 == b ? .awaitingInput : .idle })
+        XCTAssertEqual(choices.map(\.name), ["Eins", "Drei"])
+        XCTAssertEqual(choices.map(\.chatCount), [2, 0])
+        XCTAssertEqual(choices.map(\.hasWaitingChat), [true, false])
+        XCTAssertEqual(choices.map(\.isCurrent), [false, true])
+        XCTAssertEqual(choices.map(\.kind), [.project, .project])
+        XCTAssertEqual(choices.first?.viewWorkspaceID, view)
     }
 
     /// Der vorige Chat kommt in die Liste, wenn die Seitenleiste ihn nicht
@@ -117,16 +155,15 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         XCTAssertEqual(state.destination, .stay)
     }
 
-    /// Reiterwechsel: Die Markierung beginnt dort neu — auf dem vorigen Ort,
-    /// wenn er in diesem Reiter steht, sonst auf dem aktuellen. Ohne beides
-    /// gibt es keine Markierung, Loslassen tut nichts.
-    func testSwitchingTabsResetsTheMarker() {
+    /// Reiterwechsel: Die Markierung beginnt dort neu auf dem aktuellen
+    /// Eintrag. Ohne aktuellen gibt es keine Markierung, Loslassen tut nichts.
+    func testSwitchingTabsResetsTheMarkerToCurrent() {
         let chats = chatRows(3, current: 0)
         let choices = [choice("A"), choice("B", current: true), choice("C")]
         var state = ControllerWhereToState(
             chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: false,
             previous: .chat(chats[2].id))
-        state.move(-1)
+        state.move(1)
         XCTAssertEqual(state.destination, .chat(chats[1].id))
         XCTAssertTrue(state.switchTab(1))
         XCTAssertEqual(state.workspaces.selected?.name, "B", "Workspaces: der aktuelle")
@@ -135,7 +172,7 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         XCTAssertEqual(state.destination, .workspace(choices[2].id))
         XCTAssertFalse(state.switchTab(1), "kein Umlauf")
         XCTAssertTrue(state.switchTab(-1))
-        XCTAssertEqual(state.destination, .chat(chats[2].id), "zurück: wieder auf dem vorigen Chat")
+        XCTAssertEqual(state.destination, .stay, "zurück: wieder auf dem aktuellen Chat")
 
         let noCurrent = [choice("A"), choice("B")]
         var bare = ControllerWhereToState(

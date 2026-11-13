@@ -66,6 +66,22 @@ final class ControllerEnvironmentSpy: ControllerAppEnvironment {
     func bringAgentChatsToFront() { broughtToFront += 1 }
     func postBridgeKey(_ key: ControllerBridgeKey) { bridgeKeys.append(key) }
     func openControllerSettings() { openedSettings += 1 }
+
+    // Insel-Paket: App-Raute
+    var appToggles = ControllerAppToggles()
+    private(set) var alertCycles = 0
+    var stayAwakeResult: ControllerStayAwakeResult = .changed(.whileWorking)
+    func cycleAlertLevel() -> ControllerAlertStage {
+        alertCycles += 1
+        let order: [ControllerAlertStage] = [.all, .soundOff, .off]
+        appToggles.alert = order[(order.firstIndex(of: appToggles.alert)! + 1) % 3]
+        appToggles.nextAlert = order[(order.firstIndex(of: appToggles.alert)! + 1) % 3]
+        return appToggles.alert
+    }
+    func cycleStayAwake() -> ControllerStayAwakeResult {
+        if case let .changed(stage) = stayAwakeResult { appToggles.awake = stage }
+        return stayAwakeResult
+    }
 }
 
 /// Fenster-Attrappe am Befehls-Katalog.
@@ -100,6 +116,7 @@ final class ControllerWindowFake {
                 case .selectSession(let id): selected = id
                 case .selectWorkspaceChat(let id, _): selected = id
                 case .showNewChatPicker: isNewChatPickerOpen = true
+                case .switchToProject: break
                 case .lastChat:
                     // Wie `goBack`: ein voriger Chat wird ausgewählt.
                     if let target = backTarget, target.kind == .chat, let id = target.id { selected = id }

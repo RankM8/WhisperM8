@@ -68,6 +68,10 @@ extension ControllerLegendLabel {
         case .undo: return String(localized: "Undo")
         case .transcript: return String(localized: "Transcript")
         case .reopenClosed: return String(localized: "Reopen closed chat")
+        case .limitsCard: return String(localized: "Limits")
+        case .alertLevel: return String(localized: "Alerts")
+        case .stayAwake: return String(localized: "Stay awake")
+        case .clipboardWithR1: return String(localized: "Clipboard")
         }
     }
 
@@ -100,7 +104,7 @@ extension ControllerLegendLabel {
         case .cycleMode: return String(localized: "Hold R1, then △: switch mode (not while the agent asks a question)")
         case .commands: return String(localized: "Hold R1, then □: open the commands in the menu")
         case .switchAccount: return String(localized: "Hold R1, then ○: open the accounts in the menu")
-        case .whereToHold: return String(localized: "Hold L2: where to — up and down open the list of chats and workspaces, left and right switch tabs, release or ✕ switches, ○ cancels")
+        case .whereToHold: return String(localized: "Hold L2: where to — the list starts on where you are, the previous place is one step away; up and down move, left and right switch between chats and workspaces & projects, release or ✕ switches after a move, ○ cancels")
         case .nextWaiting: return String(localized: "Hold L2, then △: next chat that is waiting for you")
         case .pauseHold: return String(localized: "Hold both: pause and resume the controller")
         case .clipboardWithL2: return String(localized: "Hold L2, then press the touchpad: open and close the clipboard history")
@@ -112,6 +116,10 @@ extension ControllerLegendLabel {
         case .undo: return String(localized: "Hold L1, then L3: undo (Claude)")
         case .transcript: return String(localized: "Hold R1, then L3: detailed transcript on and off (Claude)")
         case .reopenClosed: return String(localized: "Hold L2, then □: reopen the most recently closed chat; again for the one before")
+        case .limitsCard: return String(localized: "Hold R1, then ▲: limits of all Claude and GPT accounts while R1 is held; ✕ refreshes")
+        case .alertLevel: return String(localized: "Hold R1, then ◀: sound and notifications one step further, like the bell")
+        case .stayAwake: return String(localized: "Hold R1, then ▶: stay awake one step further, like the stay-awake button")
+        case .clipboardWithR1: return String(localized: "Hold R1, then ▼: open and close the clipboard history")
         default: return title
         }
     }

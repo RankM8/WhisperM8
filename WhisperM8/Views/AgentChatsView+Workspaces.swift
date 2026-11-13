@@ -551,12 +551,19 @@ extension AgentChatsView {
     /// verwaltet (`syncActiveProjectGridWorkspaces` hält sie danach live).
     /// Single-Owner-Konflikte wie beim Workspace-Header: Besitzerfenster
     /// nach vorn statt Terminals zu stehlen.
-    func openProjectAsWorkspace(_ project: AgentProject, activeSessionIDs: Set<UUID>) {
+    /// - Parameter reportConflicts: `false` für den Controller (Insel, L2
+    ///   „Wohin“): Bei einem Konflikt kommt kein Fenster nach vorn und keine
+    ///   Meldung, wie bei `activateWorkspaceFromSidebar`.
+    /// - Returns: `true`, wenn das Raster jetzt hier steht.
+    @discardableResult
+    func openProjectAsWorkspace(
+        _ project: AgentProject, activeSessionIDs: Set<UUID>, reportConflicts: Bool = true
+    ) -> Bool {
         // Leere Aktiv-Menge: nur der ERSTE Klick braucht Chats — existiert
         // die View schon, ist ⊞ der Rücksprung-Anker und muss auch ein
         // leeres Grid wieder anzeigen können.
         let existing = windowStore.gridWorkspaces.first { $0.sourceProjectID == project.id }
-        guard !activeSessionIDs.isEmpty || existing != nil else { return }
+        guard !activeSessionIDs.isEmpty || existing != nil else { return false }
         let wasVisibleHere = isGridActive
             && activeGridWorkspaceEntity?.sourceProjectID == project.id
         switch windowStore.activateProjectGridWorkspace(
@@ -573,12 +580,17 @@ extension AgentChatsView {
                 beginGridBuildMeasurement(for: entity)
             }
             multiSelection = []
+            return true
         case .alreadyActive(let owner):
-            focusWindow(owner)
+            if reportConflicts { focusWindow(owner) }
+            return false
         case .blockedByWindowOwnership(let conflicts):
-            errorMessage = String(localized: "“\(project.name)” cannot open as a workspace here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
+            if reportConflicts {
+                errorMessage = String(localized: "“\(project.name)” cannot open as a workspace here: \(ChatsUIStrings.runningInOtherWindow(count: conflicts.count)).")
+            }
+            return false
         case .rejected:
-            break
+            return false
         }
     }
 

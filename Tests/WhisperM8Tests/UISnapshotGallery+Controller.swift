@@ -194,7 +194,7 @@ extension UISnapshotGallery {
             .padding(20)
             .environment(\.colorScheme, .dark))
         }
-        let extraFixtures: [Fixture] = islandFixtures() + [
+        let extraFixtures: [Fixture] = islandFixtures() + islandPackageFixtures() + [
             Fixture(name: "controller-pill-modusliste", size: CGSize(width: 520, height: 330)) { pillWithModeList() },
             Fixture(name: "controller-liste-markierung", size: CGSize(width: 340, height: 180)) { listWithMarker() },
             Fixture(name: "controller-pill-ziel", size: CGSize(width: 520, height: 80)) { pillWithTarget() },

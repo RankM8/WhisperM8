@@ -198,6 +198,25 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
             table[.inLayer(.whereTo, gesture)] = action
         }
+        return table.merging(appDiamond) { old, _ in old }
+    }()
+
+    /// Insel-Paket: zweite Raute unter R1. Das Steuerkreuz schaltet die App
+    /// (ein Druck je Stufe), gehalten ▲ ▼ und der linke Stick hoch/runter
+    /// scrollen die Limits-Karte. Gilt auch während eines gebundenen Diktats.
+    static let appDiamond: Table = {
+        var table: Table = [
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: false)): .appSlot(.limits),
+            .inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)): .appSlot(.alerts),
+            .inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false)): .appSlot(.stayAwake),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: false)): .appSlot(.clipboard),
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: true)): .islandScroll(step: -1),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: true)): .islandScroll(step: 1),
+        ]
+        for isRepeat in [false, true] {
+            table[.inLayer(.quickDraw, .move(.up, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: -1)
+            table[.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: 1)
+        }
         return table
     }()
 
@@ -264,6 +283,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for button in [ControllerButton.cross, .triangle, .square, .circle, .l3] {
             table[.inLayer(.quickDraw, .press(button))] = .rejected
         }
+        table.merge(appDiamond) { old, _ in old }
         if recording {
             table[.inLayer(.whereTo, .press(.r2))] = .dictationToggle
             table[.inLayer(.quickDraw, .press(.r2))] = .dictationToggle

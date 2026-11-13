@@ -112,6 +112,13 @@ final class StayAwakeController: ObservableObject {
         refreshPower()
     }
 
+    /// Bräuchte der nächste Klick die einmalige Admin-Freigabe, und fehlt
+    /// sie? Der Controller (R1 + ▶) öffnet dann keinen Dialog, sondern
+    /// verweist auf den Knopf in der Seitenleiste.
+    var nextStepNeedsPermission: Bool {
+        mode.next != .off && permission != .ready
+    }
+
     /// Klick auf den Knopf: Aus → Bei Arbeit am Strom → Immer → Aus.
     func cycle() {
         guard !isAwaitingPermission else { return }

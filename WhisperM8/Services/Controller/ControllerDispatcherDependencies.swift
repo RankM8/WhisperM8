@@ -116,6 +116,26 @@ protocol ControllerAppEnvironment: AnyObject {
     func bringAgentChatsToFront()
     func postBridgeKey(_ key: ControllerBridgeKey)
     func openControllerSettings()
+    /// Stand der App-Schalter der R1-Insel (Glocke, Wach bleiben).
+    var appToggles: ControllerAppToggles { get }
+    /// Glocke eine Stufe weiter, derselbe Weg wie ihr Klick. Liefert die neue Stufe.
+    func cycleAlertLevel() -> ControllerAlertStage
+    /// Wach-Knopf eine Stufe weiter, aber nie mit Admin-Dialog.
+    func cycleStayAwake() -> ControllerStayAwakeResult
+}
+
+/// Limits aller Konten für Kopf und Limits-Karte der Dynamic Island
+/// (Insel-Paket). Closures statt Protokoll, damit Tests synchron antworten.
+@MainActor
+struct ControllerLimitsAccess {
+    /// Angemeldete Claude- und GPT-Backend-Konten mit dem letzten Stand.
+    var rows: () -> [ControllerAccountLimitRow] = { [] }
+    var updatedAt: () -> Date? = { nil }
+    var isLoading: () -> Bool = { false }
+    /// Passiver Abruf, höchstens einmal je Minute (Öffnen der Karte).
+    var refreshIfStale: () -> Void = {}
+    /// Derselbe Weg wie ↻ im Popover (✕ in der Karte).
+    var refresh: () -> Void = {}
 }
 
 /// Anzeige der Controller-Insel (eigenes Fenster an der Notch bzw. als Pille

@@ -230,7 +230,7 @@ private struct ClaudeUsagePopoverView: View {
                             }
                         }
                         if let problem = usage.liveFetchProblem {
-                            Text(Self.problemText(problem))
+                            Text(verbatim: problem.displayText)
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(AppTheme.statusAwaiting)
                         }
@@ -286,27 +286,6 @@ private struct ClaudeUsagePopoverView: View {
         guard usage.modelWeeklyPercent != nil, let modelDate = usage.modelWeeklyFetchedAt,
               usage.fetchedAt.timeIntervalSince(modelDate) >= 60 else { return nil }
         return (usage.modelWeeklyLabel ?? "model") + " · " + age(modelDate)
-    }
-
-    private static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
-        switch problem {
-        case .noCredentials:
-            return String(localized: "No login token — sign in again in the account settings")
-        case .loginExpired:
-            return String(localized: "Login expired — sign in again in the account settings")
-        case .refreshBlockedBySession:
-            return String(localized: "Token expired — the running session will renew it shortly")
-        case .tokenExpired:
-            return String(localized: "Token expired — ↻ renews it via CLI ping")
-        case .refreshCoolingDown(let until):
-            return String(localized: "Just pinged — next attempt from \(AgentChatsClaudeAccountsTab.timeText(until))")
-        case .httpStatus(429):
-            return String(localized: "Rate limit from Anthropic — try again shortly")
-        case .httpStatus(let status):
-            return String(localized: "Live fetch failed (HTTP \(status))")
-        case .network:
-            return String(localized: "Offline — last known state")
-        }
     }
 
     /// Passiv (onAppear): nur lesen, nie Tokens anfassen.
@@ -585,6 +564,7 @@ private struct CodexUsagePopoverView: View {
                     } else {
                         usageByProfile[name] = nil
                         failedProfiles.insert(name)
+                        AccountLimitsStore.shared.recordFailure(gpt: name)
                     }
                 }
                 cliUsage = cli
