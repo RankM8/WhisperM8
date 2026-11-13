@@ -345,6 +345,10 @@ final class HandoverTakeServiceTests: XCTestCase {
         // Vorher: viermal 3 s (12 s). Jetzt: vor dem ersten und dem
         // gescheiterten zweiten TAKE (6 s); reichlich Luft für Last.
         XCTAssertLessThan(seconds, 9.5, "wartete \(seconds) s")
+        // Dex, Befund 5: Socket und socket-path des toten Aufbewahrers sind
+        // schon nach dieser Übernahme weg, nicht erst beim nächsten Start.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.preferredSocketURL.path), "keeper.sock entfernt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.discoveryFileURL.path), "socket-path entfernt")
     }
 
     /// Befund 4 (Dex): Während der Übernahme hält die App take.lock; danach nicht mehr.

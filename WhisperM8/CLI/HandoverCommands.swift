@@ -261,7 +261,23 @@ enum AppCLICommand {
         var settle: TimeInterval = 5
         var sleep: (TimeInterval) -> Void = { usleep(useconds_t($0 * 1_000_000)) }
         var now: () -> Date = Date.init
-        var notice: (String) -> Void = { CLIIO.err($0) }
+        var notice: (String) -> Void = { AppCLICommand.noticeLive($0) }
+    }
+
+    /// Meldung, die auch dann sofort zu sehen ist, wenn der Aufrufer stderr
+    /// auffängt (`make dev` liest die Ausgabe in eine Variable): dann direkt
+    /// ans Terminal, sonst auf stderr (Dex, Nachlauf 13.11.2026).
+    static func noticeLive(_ text: String) {
+        if isatty(STDERR_FILENO) == 0 {
+            let tty = open("/dev/tty", O_WRONLY | O_NOCTTY | O_CLOEXEC)
+            if tty >= 0 {
+                let line = Array((text + "\n").utf8)
+                _ = line.withUnsafeBytes { write(tty, $0.baseAddress, $0.count) }
+                close(tty)
+                return
+            }
+        }
+        CLIIO.err(text)
     }
 
     static func handover(json: Bool, fromMakeDev: Bool = false, wait: TakeWait = TakeWait()) -> Int32 {
