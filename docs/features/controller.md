@@ -127,7 +127,7 @@ Kontextmenü des Chats bzw. Seitenleiste und Workspace-Kopf (je ein `AgentChatsC
 | Projekt | „In PhpStorm öffnen“ (bzw. das gemerkte Ziel des Kopf-Knopfs), „Im Finder zeigen“ |
 | Workspace „Name“ | nur, wenn der Chat in einem Workspace gezeigt wird (sichtbares Raster, auch für eine markierte Zeile der Liste, oder eine groß gemachte Kachel). Erst der Chat: „Aus diesem Workspace nehmen“, „Zu anderem Workspace hinzufügen ›“, „Notiz dieser Kachel zeigen/ausblenden“ (Kachel mit Notiz), „In neues Fenster verschieben“; dann der Workspace: „Workspace umbenennen…“ (dasselbe Sheet wie in der Seitenleiste), „Rastergröße ›“. Die Notiz der Kachel nur im sichtbaren Raster; Umbenennen, Rastergröße und Herausnehmen nur bei angelegten Workspaces (keine Projekt-Ansicht) |
 | Lebenszyklus | „Neu starten“ (laufender Chat, mit der bestehenden Rückfrage, Kreuz bestätigt sie), bei Hintergrund-Chats „Logs“, „Stoppen“ (mit Rückfrage), „Respawn“, bei Subagent-Jobs „Job stoppen“ (mit Rückfrage, `ControllerConfirmationDialog`) |
-| Steuerung | „Notizen überall an/aus“ (wie ⌥⌘N, gilt app-weit, nur bei sichtbarem Raster), „Archiv zeigen“ bzw. „Archiv verlassen“ (wie der Archiv-Knopf unten in der Seitenleiste; seit dem Insel-Paket hier statt auf R1 + ▼), „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
+| Steuerung | „Notizen überall an/aus“ (wie ⌥⌘N, gilt app-weit, nur bei sichtbarem Raster), „Archiv zeigen“ bzw. „Archiv verlassen“ (wie der Archiv-Knopf unten in der Seitenleiste; seit dem Insel-Paket hier statt auf R1 + ▼; ist die Seitenleiste zu, geht sie dafür auf), „Zwischenablage-Verlauf“, „Belegung anzeigen“, „Controller pausieren“ |
 
 **Konto wechseln ›** zeigt rechts den Verbrauch „5 Std. · Woche“ wie das Limits-Popover (Ampel: unter 50 %
 grün, ab 50 gelb, ab 80 rot) und markiert je Gruppe (Claude, GPT) das wählbare Konto mit dem kleinsten
@@ -204,25 +204,36 @@ ihr Stand, Symbole wie in der Seitenleiste. Die App-Raute hängt nicht am Chat u
 offener Rückfrage und **während eines Diktats**; dann ist nur die Chat-Raute ausgegraut (Regel seit
 Runde 5). Glocke und Wach-Knopf teilen sich ihren Weg mit der Seitenleiste
 (`AgentAlertLevel.advance()`, `StayAwakeController.cycle()`), der Wach-Schalter prüft vorher
-`nextStepNeedsPermission`. Das Archiv (im Entwurf noch auf ▼) steht jetzt im Options-Menü.
+`nextStepNeedsPermission`. War die Seitenleiste seit dem App-Start verborgen, kennt die App die Freigabe
+noch nicht: Der erste Druck holt das still nach (`whenPermissionKnown`, `sudo -n`, nie ein Dialog) und
+schaltet danach bzw. meldet „Erst in der Seitenleiste freigeben“ nur, wenn sie wirklich fehlt. Das Archiv (im Entwurf noch auf ▼) steht jetzt im Options-Menü.
 
 **Kopf mit Konto:** Neben dem Ziel-Chat steht sein Konto mit dem 5-Stunden-Stand, etwa „main · 5 h 42 %“,
 verbraucht und in der Ampel des Limits-Popovers (unter 50 % grün, ab 50 gelb, ab 80 rot). GPT-Chats
 (GPT-Backend) zeigen ihr GPT-Konto, Claude-Chats ihr Claude-Konto, Codex und Shells keins
-(`ControllerChatActionInfo.usageAccount`). Die Zahl kommt aus dem letzten Stand im `AccountLimitsStore`;
+(`ControllerUsageAccount.of`). Dabei gelten dieselben Schalter wie beim Start: Ist das GPT-Backend aus,
+zählt ein GPT-Stempel nicht (der Chat läuft als Claude), sind GPT-Konten aus, gilt das GPT-Hauptkonto. Das
+Konto wird beim Öffnen der Dynamic Island einmal bestimmt (während eines Diktats das seines Ziels) und
+bleibt, auch wenn neue Zahlen kommen. Die Zahl kommt aus dem letzten Stand im `AccountLimitsStore`;
 der Kopf löst nie einen Abruf aus, ohne Stand steht „—“.
 
 **Limits-Karte** (R1 + ▲, Zustände 6 und 7): Statt der Rauten alle angemeldeten Claude-Konten, darunter
 die Konten des GPT-Backends — dieselben wie in den beiden Popovers unten links, ohne das Codex-CLI-Konto
 des Diktats, ohne Plan-Kürzel und ohne Wochenlimit je Modell. Je Konto 5-Stunden- und Wochenfenster mit
 Balken, Prozent verbraucht und Rücksetzzeit (unter einem Tag als Dauer „in 2 h 10 min“, sonst Wochentag
-und Uhrzeit). Das Konto des Chats ist markiert („dieser Chat“). Login beendet, kein Token oder GPT ohne
-Zahlen: Text aus dem Popover statt der Balken; bei anderen Problemen (offline, Token wird gleich erneuert)
-bleiben die letzten Zahlen stehen. Höchstens sechs Konten sind zu sehen; der linke Stick und ▲ ▼
+und Uhrzeit). Das Konto des Chats ist markiert („dieser Chat“). Login beendet oder kein Token: Text aus dem
+Popover statt der Balken. Bei anderen Problemen (offline, Token wird gleich erneuert, GPT-Abruf
+gescheitert) bleiben die letzten Zahlen samt Rücksetzzeit stehen, mit Hinweis; nur ein Konto ganz ohne
+Zahlen zeigt den Text. Ein gescheiterter GPT-Abruf nennt keinen Grund („Live-Abruf fehlgeschlagen“), weil
+der Abruf keinen kennt. Der Stand-Zeitpunkt rückt nur mit echten, live abgerufenen Zahlen vor. Die
+Konten liest die Karte einmal beim Öffnen; neue Zahlen ordnen sich danach nur noch zu (kein erneutes
+Lesen der Profile im Main Thread). Höchstens sechs Konten sind zu sehen; der linke Stick und ▲ ▼
 scrollen, ein schmaler Balken rechts zeigt, dass es weitergeht. Kopf „Stand vor 1 min“ bzw. „aktualisiere
 …“. Kreuz holt die Zahlen frisch über denselben Weg wie ↻ im Popover (`AccountLimitsStore.refresh()`:
 Claude über den Update-Flow mit CLI-Ping für abgelaufene Tokens, GPT neu abgefragt); läuft schon ein
-Abruf, „geht nicht“. △ □ ○ gehen bei offener Karte nicht, ◀ ▶ auch nicht. Loslassen von R1 schließt.
+Abruf, „geht nicht“. △ □ ○ und L3 (Ctrl+O) gehen bei offener Karte nicht, ◀ ▶ auch nicht. Während eines
+Diktats ist ✕ unter R1 „geht nicht“; die Fußzeile bietet „aktualisieren“ dann nicht an. Loslassen von R1
+schließt.
 Abrufe: Das Halten von R1 lädt nie etwas. Erst das Öffnen der Karte stößt den passiven Abruf an, und nur,
 wenn der Stand älter als eine Minute ist; der Zeitpunkt des letzten Versuchs zählt unabhängig vom
 Ergebnis (Drosselung aus Runde 5). Neue Zahlen ziehen Karte und Kopf nach (`onChange`).
@@ -230,21 +241,24 @@ Ergebnis (Drosselung aus Runde 5). Neue Zahlen ziehen Karte und Kopf nach (`onCh
 **Wohin** (Insel-Paket, 13.11.2026; kehrt die Cmd-Tab-Regel vom 12.11. um): Tippen (unter 0,3 s) führt
 wie bisher an den vorigen Ort. Halten zeigt sofort die Liste mit der Markierung auf dem **aktuellen**
 Eintrag; Loslassen ohne Bewegung tut deshalb nichts. Der vorige Ort (`ControllerBackTarget` mit ID, aus
-`AgentWindowStore+PlaceHistory`) trägt rechts „vorher“; bei den Chats steht er gleich unter dem aktuellen,
-also einen Schritt entfernt. Erst nach einer Bewegung wechseln Loslassen und Kreuz. Start-Reiter: im
+`AgentWindowStore+PlaceHistory`) trägt rechts „vorher“ und steht in beiden Reitern immer gleich unter dem
+aktuellen Eintrag (ohne aktuellen ganz oben), also einen Schritt entfernt — auch wenn die Seitenleiste ihn
+weiter unten führt; die übrigen Zeilen behalten ihre Reihenfolge. Erst nach einer Bewegung wechseln Loslassen und Kreuz. Start-Reiter: im
 Raster „Workspaces & Projekte“, in der Einzelansicht „Chats“, jeweils auf dem aktuellen Eintrag (ohne
 Workspace und Projekt im Reiter nur die Chats). Hat ein Reiter keinen aktuellen Eintrag (Workspaces in der
 Einzelansicht), gibt es dort zunächst keine Markierung; der erste Stoß markiert die erste Zeile. Ist das
 Ziel der vorige Ort, geht der Wechsel denselben Weg wie L2 getippt (`lastChat`). Die Chats stehen in der
 Reihenfolge der Liste links, jeder einmal; der vorige Chat steht immer darin, gleich hinter dem aktuellen,
-auch wenn die Seitenleiste ihn gerade nicht zeigt (Filter, Suche, eingeklappte Gruppe, Archiv-Ansicht);
+auch wenn die Seitenleiste ihn weiter unten oder gerade nicht zeigt (Filter, Suche, eingeklappte Gruppe, Archiv-Ansicht);
 rechts Wort und Dauer wie Tab-Switcher und Notch („wartet · 2 min“, „bereit“, beim aktuellen „jetzt“).
 
 Der Reiter **„Workspaces & Projekte“** zeigt oben die angelegten Workspaces (ohne versteckte
 Projekt-Ansichten) in der Reihenfolge der Seitenleiste, mit Farbe, Name, Raute „wartet“ und Zahl der
 Chats, darunter durch eine Linie abgesetzt die Projekte in der Reihenfolge der Seitenleiste — nur die mit
 aktiven Chats (laufend oder als Tab offen, dieselbe Ableitung wie der ⊞ am Projektkopf) und das, dessen
-Raster gerade zu sehen ist; mit Ordner in der Projektfarbe und „n aktiv“. Höchstens sechs Zeilen, die
+Raster gerade zu sehen ist; mit Ordner in der Projektfarbe und „n aktiv“. Nur der vorige Ort steht außer
+der Reihe gleich unter dem aktuellen (ein voriges Projekt also auch zwischen den Workspaces); die Linie
+bleibt dort, wo die Projekte beginnen. Höchstens sechs Zeilen, die
 Liste rückt mit der Markierung, darunter „+ n weitere“. Ein Chat wechselt wie der Klick in der
 Seitenleiste, ein Workspace wie der Klick auf seinen Kopf, ein Projekt wie der ⊞ am Projektkopf (Raster
 seiner aktiven Chats) — beides still: Gehört die Ansicht einem anderen Fenster oder laufen ihre Chats
@@ -290,7 +304,8 @@ Aufnahme). Der rechte Stick scrollt weiter. Die Pill zeigt Ziel und Modus ohne H
 
 Ist das Diktat an einen Chat gebunden (per Controller in Chat oder Liste gestartet), geht die Steuerung
 weiter (Runde 5): Der linke Stick navigiert wie sonst (Liste, Kacheln, Markierung), L1/R1 tippen wechseln
-den Chat, L2 „Wohin“ geht samt Wechsel, R1 zeigt beide Rauten: Die App-Raute (Limits, Mitteilungen, Wach
+den Chat, L2 „Wohin“ geht samt Wechsel (Kreuz und Loslassen nach einer Bewegung, das Diktat bleibt an
+seinem Ziel), R1 zeigt beide Rauten: Die App-Raute (Limits, Mitteilungen, Wach
 bleiben, Zwischenablage) geht, die Chat-Raute ist ausgegraut (Hinweis „Diktat läuft“). L1 bleibt aus; R2 ist in jeder Ebene „stopp“, Kreuz, Kreis, Steuerkreuz und
 rechter Stick bleiben wie oben. Der Text geht in den Chat, in dem das Diktat begann
 (`RecordingCoordinator.pendingDeliveryTarget`, beim Start gesetzt); Legende und Dynamic Island nennen ihn
@@ -476,7 +491,9 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
   Kachel je Workspace, geschlossene Ziele, je Fenster); `--filter ControllerWorkspacePicker` die
   Markierung von „Wohin“ (Start auf dem aktuellen Eintrag, „vorher“, Projekte, Reiterwechsel);
-  `--filter ControllerLimits` Limits-Karte und App-Raute im Kern;
+  `--filter ControllerLimits` Limits-Karte, App-Raute und Konto eines Chats im Kern sowie den
+  `AccountLimitsStore` (Fehlschläge behalten den letzten Stand); `--filter StayAwake` auch die stille
+  Prüfung der Freigabe ohne Seitenleiste;
   `--filter NotchPillPlacement` die Lage von Pille und Dynamic Island ohne Notch.
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
@@ -485,13 +502,15 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-menue-karte` die Menü-Karte am
   Chat (Einzelansicht, Raster mit Gruppe Workspace, Rastergröße, Liste, große Kachel, kleines Fenster mit
   Scrollen); `ONLY=controller-insel` die Dynamic Island (Wohin:
-  Chats mit Markierung auf dem vorigen Chat, nach zwei Schritten, ohne vorigen Ort, Workspaces, mit
+  Chats mit Markierung auf dem aktuellen Chat und „vorher“ gleich darunter, nach zwei Schritten, ohne
+  vorigen Ort, Workspaces, mit
   Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
-  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Insel nach unten, Pille unten mit
-  Insel nach oben); `ONLY=controller-insel-paket` das Insel-Paket (zwei Rauten an der Notch und als
-  Pille, Chat arbeitet, Diktat, Bestätigung von Glocke und Wach bleiben, fehlende Freigabe, Limits-Karte
+  arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Dynamic Island nach unten, Pille unten
+  mit Dynamic Island nach oben); `ONLY=controller-insel-paket` das Insel-Paket (zwei Rauten an der Notch und als
+  Pille, Chat arbeitet, Diktat, Bestätigung von Glocke und Wach bleiben, fehlende Freigabe, Limits-Karte (auch während eines Diktats ohne „✕ aktualisieren“)
   und viele Konten mit Fehlerzeilen als Pille, „Wohin“ mit Markierung auf dem aktuellen Chat und „vorher“,
-  Reiter „Workspaces & Projekte“ an der Notch und als Pille);
+  Reiter „Workspaces & Projekte“ mit der Markierung auf dem vorigen Projekt gleich unter dem aktuellen
+  Workspace, an der Notch und als Pille);
   `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf.
 - `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
   Hintergrund), zuletzt aufgelöste Gesten.
@@ -512,6 +531,10 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   sicher; dafür gibt es L1 + R1.
 - Die Tastatur-Brücke sichert Bestätigen und Abbrechen zu. Mehr als zwei Knöpfe in einem Dialog
   erreicht sie nur mit eingeschalteter Tastaturnavigation des Systems.
+- Durch das Archiv führt der Controller nicht: „Archiv zeigen“ im Options-Menü öffnet es in der
+  Seitenleiste (die dafür aufgeht), die Listen-Navigation bleibt dort leer. Wiederherstellen geht mit der
+  Maus, zurück über „Archiv verlassen“. Grund: Archiv-Zeilen stellen beim Klick wieder her, statt einen
+  Chat zu öffnen, und ihre Gruppen klappen nur in der Ansicht auf und zu.
 - Was eine Projektgruppe per „N weitere anzeigen“ zusätzlich aufgeklappt hat, erreicht die
   Listen-Navigation nicht; sie reicht bis zum Startlimit der Gruppe und immer bis zum gewählten Chat.
 - Zurück mit L2 folgt dem Workspace, den das Fenster referenziert, auch wenn der Bezug veraltet ist:
