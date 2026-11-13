@@ -11,7 +11,8 @@ import Foundation
 final class AgentDirectoryEventMonitor {
     static let shared = AgentDirectoryEventMonitor()
 
-    private var stream: FSEventStreamRef?
+    /// Endet mit dem Besitzer (deinit der Subscription), auch ohne stop().
+    private var subscription: FSEventsSubscription?
     private var debounceTask: Task<Void, Never>?
     private var settleTask: Task<Void, Never>?
     private let debounceInterval: TimeInterval
@@ -98,54 +99,35 @@ final class AgentDirectoryEventMonitor {
     }
 
     func start() {
-        guard stream == nil else { return }
+        guard subscription == nil else { return }
 
-        var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
-
-        let callback: FSEventStreamCallback = { _, info, eventCount, eventPaths, eventFlags, _ in
-            guard let info else { return }
-            let monitor = Unmanaged<AgentDirectoryEventMonitor>.fromOpaque(info).takeUnretainedValue()
-            guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else {
-                return
+        guard let subscription = FSEventsSubscription(
+            paths: rootURLs.map(\.path),
+            latency: 2.0,
+            flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
+            queue: DispatchQueue(label: "com.whisperm8.app.fsevents", qos: .utility),
+            handler: { [weak self] paths, flags in
+                // Nur Pfade mit strukturellem Flag weiterreichen (siehe `triggersScan`).
+                var structuralPaths: [String] = []
+                for (path, flag) in zip(paths, flags)
+                where AgentDirectoryEventMonitor.triggersScan(flags: UInt32(flag)) {
+                    structuralPaths.append(path)
+                }
+                guard !structuralPaths.isEmpty else { return }
+                Task { @MainActor [weak self] in self?.handleEvents(paths: structuralPaths) }
             }
-            // Nur Pfade mit strukturellem Flag weiterreichen (siehe `triggersScan`).
-            var structuralPaths: [String] = []
-            for index in 0..<min(eventCount, paths.count)
-            where AgentDirectoryEventMonitor.triggersScan(flags: UInt32(eventFlags[index])) {
-                structuralPaths.append(paths[index])
-            }
-            guard !structuralPaths.isEmpty else { return }
-            Task { @MainActor in
-                monitor.handleEvents(paths: structuralPaths)
-            }
-        }
-
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            callback,
-            &context,
-            rootURLs.map(\.path) as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            2.0,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
         ) else {
             Logger.agentPerformance.error("agent_fsevents_start_failed")
             return
         }
-
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue(label: "com.whisperm8.app.fsevents", qos: .utility))
-        FSEventStreamStart(stream)
-        self.stream = stream
+        self.subscription = subscription
         Logger.agentPerformance.info("agent_fsevents_started roots=\(self.rootURLs.map(\.path).joined(separator: ","), privacy: .public)")
     }
 
     func stop() {
-        guard let stream else { return }
-        FSEventStreamStop(stream)
-        FSEventStreamInvalidate(stream)
-        FSEventStreamRelease(stream)
-        self.stream = nil
+        guard let subscription else { return }
+        subscription.cancel()
+        self.subscription = nil
         debounceTask?.cancel()
         debounceTask = nil
         settleTask?.cancel()

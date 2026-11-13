@@ -55,6 +55,9 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// Standard „Notizen an/aus“ für alle Kacheln (wie ⌥⌘N). Gilt app-weit,
     /// nicht je Workspace — deshalb nicht in der Gruppe Workspace.
     case toggleNotes
+    /// Archiv der Seitenleiste zeigen bzw. verlassen, wie der Archiv-Knopf
+    /// unten (Insel-Paket: von R1 + ▼ hierher gewandert).
+    case archiveMode
     // Steuerung
     /// Zwischenablage-Verlauf öffnen (wie Touchpad bzw. L2 + Touchpad).
     case clipboardHistory
@@ -75,7 +78,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
         case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
              .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
-        case .toggleNotes, .clipboardHistory, .showBindings, .pause: return .controller
+        case .toggleNotes, .archiveMode, .clipboardHistory, .showBindings, .pause: return .controller
         }
     }
 
@@ -192,6 +195,9 @@ struct ControllerChatActionInfo: Equatable, Sendable {
     /// Vorgemerkter Kontowechsel (Ziel), den man abbrechen kann.
     var pendingAccountSwitchTarget: String?
     var canUndoAccountSwitch = false
+    /// Konto, dessen Limits der Chat belastet (Kopf der R1-Insel und
+    /// „dieser Chat“ in der Limits-Karte); `nil` bei Codex und Shells.
+    var usageAccount: ControllerUsageAccount?
 }
 
 /// „Am meisten frei“ im Konto-Menü (Runde 5, Punkt 3): je Gruppe das
@@ -245,6 +251,8 @@ struct ControllerMenuSetup: Equatable, Sendable {
     /// Ein Diktat läuft (Runde 5, Punkt 9): Eingaben in den Chat und „Konto
     /// wechseln“ sind aus — ins Feld kommt gleich der Diktattext.
     var dictationRunning = false
+    /// Das Fenster zeigt gerade das Archiv der Seitenleiste.
+    var archiveModeActive = false
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten, Workspaces). Pur.
@@ -351,7 +359,7 @@ struct ControllerMenuModel: Equatable, Sendable {
         case .restart: return chat?.canRestart == true
         case .backgroundLogs, .backgroundStop, .backgroundRestart: return chat?.isBackgroundChat == true
         case .stopJob: return chat?.canStopJob == true
-        case .clipboardHistory, .showBindings, .pause: return true
+        case .archiveMode, .clipboardHistory, .showBindings, .pause: return true
         }
     }
 

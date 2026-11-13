@@ -26,7 +26,8 @@ final class ClaudeRegistryStatusSource {
     private let rescanInterval: TimeInterval
     private let queue = DispatchQueue(label: "com.whisperm8.app.claude-registry", qos: .utility)
 
-    private var stream: FSEventStreamRef?
+    /// Endet mit der Quelle (`deinit` der Subscription), auch ohne `stop()`.
+    private var subscription: FSEventsSubscription?
     /// Die Ordner, die der laufende Stream tatsächlich beobachtet.
     private(set) var watchedPaths: [String] = []
     private var watchedRoots: [ClaudeSessionRegistry.Root] = [] {
@@ -153,26 +154,17 @@ final class ClaudeRegistryStatusSource {
         watchedPaths = paths
         guard !paths.isEmpty else { return }
 
-        var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
-        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
-            guard let info,
-                  let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
-            let source = Unmanaged<ClaudeRegistryStatusSource>.fromOpaque(info).takeUnretainedValue()
-            source.handleEventsOffMain(paths: paths)
-        }
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault, callback, &context, paths as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.05,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
+        guard let subscription = FSEventsSubscription(
+            paths: paths,
+            latency: 0.05,
+            flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
+            queue: queue,
+            handler: { [weak self] paths, _ in self?.handleEventsOffMain(paths: paths) }
         ) else {
             Logger.agentPerformance.error("claude_registry_fsevents_start_failed")
             return
         }
-        FSEventStreamSetDispatchQueue(stream, queue)
-        FSEventStreamStart(stream)
-        self.stream = stream
+        self.subscription = subscription
     }
 
     nonisolated static func existingPaths(of roots: [ClaudeSessionRegistry.Root]) -> [String] {
@@ -180,11 +172,8 @@ final class ClaudeRegistryStatusSource {
     }
 
     private func stopStream() {
-        guard let stream else { return }
-        FSEventStreamStop(stream)
-        FSEventStreamInvalidate(stream)
-        FSEventStreamRelease(stream)
-        self.stream = nil
+        subscription?.cancel()
+        subscription = nil
     }
 
     /// Ordner → Profil. FSEvents liefert KANONISCHE Pfade (Symlinks und

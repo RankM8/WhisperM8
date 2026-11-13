@@ -25,4 +25,26 @@ extension ControllerWorkspaceChoice {
                 )
             }
     }
+
+    /// Projekte für den Reiter „Workspaces & Projekte“: in der Reihenfolge
+    /// der Seitenleiste, nur mit aktiven Chats (sonst öffnete der ⊞ dort
+    /// nichts) oder wenn ihr Raster gerade sichtbar ist.
+    static func projectChoices(
+        from projects: [(id: UUID, name: String, colorHex: String)],
+        active: [UUID: Set<UUID>],
+        shownProjectID: UUID?,
+        views: [UUID: UUID],
+        status: (UUID) -> AgentSessionRuntimeStatus?
+    ) -> [ControllerWorkspaceChoice] {
+        projects.compactMap { project in
+            let sessionIDs = active[project.id] ?? []
+            let isCurrent = project.id == shownProjectID
+            guard !sessionIDs.isEmpty || isCurrent else { return nil }
+            return ControllerWorkspaceChoice(
+                id: project.id, name: project.name, colorHex: project.colorHex,
+                chatCount: sessionIDs.count,
+                hasWaitingChat: sessionIDs.contains { status($0) == .awaitingInput },
+                isCurrent: isCurrent, kind: .project, viewWorkspaceID: views[project.id])
+        }
+    }
 }

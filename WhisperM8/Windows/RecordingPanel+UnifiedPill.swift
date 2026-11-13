@@ -147,7 +147,9 @@ extension OverlayController {
             guard let self, !self.isResettingPosition else { return }
             self.rememberUnifiedPosition(anchor)
         }
-        installPanel(panel, safeAreaFree: placement.isNotch)
+        // Mit Übergang zuerst unsichtbar über der ruhenden Pille; sichtbar
+        // wird es im selben Bild, in dem die Status-Pille unsichtbar wird.
+        installPanel(panel, safeAreaFree: placement.isNotch, contentHidden: snapshot != nil)
         observeScreenChanges()
         observeUnifiedBadge()
         // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
@@ -199,7 +201,7 @@ extension OverlayController {
         AppPreferences.shared.notchPillPositions = positions
         if screen.displayID != unifiedScreen?.displayID {
             unifiedScreen = screen
-            UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID)
+            UnifiedPillHub.shared.dictationMoved(toDisplay: screen.displayID)
         }
     }
 
@@ -247,10 +249,17 @@ extension OverlayController {
             screens: screens,
             positions: AppPreferences.shared.notchPillPositions) else { return }
         Logger.info("unified_pill_relocated")
+        resetForRebuild()
+        buildUnifiedPanel(placement, allowMorph: false)
+    }
+
+    /// Vor dem Neuaufbau an anderer Stelle: altes Fenster zu, Übergang auf
+    /// Anfang, die Status-Pille wieder sichtbar (das neue Diktat steht direkt).
+    func resetForRebuild() {
         closePanelForRebuild()
         cancelMorphSignpost()
         morph.reset()
-        buildUnifiedPanel(placement, allowMorph: false)
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
     }
 
     /// Aufräumen beim Ausblenden (aus `hide`). `keepingWindow`: Die Pille
@@ -272,6 +281,7 @@ extension OverlayController {
         restLook = nil
         restCenter = nil
         UnifiedPillHub.shared.dictationDidHide()
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
     }
 
     /// Klappen Listen an der Pille nach unten auf (obere Bildschirmhälfte)?

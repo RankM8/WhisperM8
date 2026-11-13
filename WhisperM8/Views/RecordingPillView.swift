@@ -239,13 +239,26 @@ private struct PillChrome: ViewModifier {
 
     func body(content: Content) -> some View {
         switch presentation {
-        case .classic, .pill:
+        case .classic:
             content
                 .background {
                     // Dunkles Glas wie im Prototyp, geteilt mit der Pille der
-                    // Notch-Anzeige (`PillGlassBackground`).
+                    // Notch-Anzeige (`PillGlassBackground`). Getrennte
+                    // Diktat-Pille: immer Glas, auch mit „Tiefschwarz“.
                     PillGlassBackground(shape: Capsule())
                 }
+                .pillGlassShadow()
+        case .pill:
+            // Vereinte Pille: gebaut wie die Status-Pille, erst auf die Kapsel
+            // zugeschnitten, dann EIN Schatten. Ohne Zuschnitt wirft jede
+            // Ebene (Glas, Tönung, Kern) ihren eigenen Schatten unter das
+            // durchscheinende Glas; die Pille war im Fenster dadurch dunkler
+            // als die Status-Pille (Aufnahme 13.11.2026: Körper 82 statt 91,
+            // Schatten 204 statt 221 von 255) und sprang beim Übergang im Ton.
+            // `unified`: folgt der Einstellung „Tiefschwarzer Hintergrund“.
+            content
+                .background { PillGlassBackground(shape: Capsule(), unified: true) }
+                .clipShape(Capsule())
                 .pillGlassShadow()
         case .notch(let width, let height):
             content

@@ -17,6 +17,8 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Controller/ControllerLegendBar.swift",
         "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
         "WhisperM8/Views/Controller/ControllerIslandView.swift",
+        "WhisperM8/Views/Controller/ControllerIslandView+QuickDraw.swift",
+        "WhisperM8/Views/Controller/ControllerIslandView+Limits.swift",
         "WhisperM8/Views/Settings/Pages/ControllerSettingsPage.swift",
         "WhisperM8/Views/Transcript/TranscriptEmptyStateView.swift",
         "WhisperM8/Views/OnboardingView.swift",
@@ -200,6 +202,8 @@ final class LocalizationCatalogTests: XCTestCase {
     static let chatsLocalizedFiles: [String] = [
         "WhisperM8/Views/Controller/ControllerLegendBar.swift",
         "WhisperM8/Views/Controller/ControllerIslandView.swift",
+        "WhisperM8/Views/Controller/ControllerIslandView+QuickDraw.swift",
+        "WhisperM8/Views/Controller/ControllerIslandView+Limits.swift",
         "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
         "WhisperM8/Views/Controller/ControllerLabels.swift",
         "WhisperM8/Views/Controller/ControllerListMarker.swift",

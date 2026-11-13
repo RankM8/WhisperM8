@@ -27,7 +27,9 @@
 # `make kill`, nie ein Prozess außerhalb von $APP.
 #
 # WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster
-# (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
+# (=pill: nur die Pillen an ihrem Platz, für Aufnahmen des Übergangs;
+# =front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
+# WHISPERM8_TEST_NO_NOTCH=1 behandelt jeden Bildschirm als ohne Notch (Pille statt Notch),
 # WHISPERM8_TEST_LANG=en|de setzt die Sprache.
 set -euo pipefail
 
@@ -94,6 +96,7 @@ cmd_start() {
     seed_defaults
     local env_args=(--env "WHISPERM8_INSTANCE_ROOT=$ROOT")
     [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && env_args+=(--env "WHISPERM8_TEST_VISIBLE=$WHISPERM8_TEST_VISIBLE")
+    [[ -n "${WHISPERM8_TEST_NO_NOTCH:-}" ]] && env_args+=(--env "WHISPERM8_TEST_NO_NOTCH=$WHISPERM8_TEST_NO_NOTCH")
     # Versteckt starten (-j), außer die Fenster sollen sichtbar sein.
     local hide=(-j)
     [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && hide=()

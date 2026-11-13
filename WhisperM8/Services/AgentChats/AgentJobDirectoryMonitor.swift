@@ -10,7 +10,8 @@ import Foundation
 /// in der Sidebar sehen.
 @MainActor
 final class AgentJobDirectoryMonitor {
-    private var stream: FSEventStreamRef?
+    /// Endet mit dem Besitzer (deinit der Subscription), auch ohne stop().
+    private var subscription: FSEventsSubscription?
     private var debounceTask: Task<Void, Never>?
     private let debounceInterval: TimeInterval
     private let rootURL: URL
@@ -40,52 +41,32 @@ final class AgentJobDirectoryMonitor {
     }
 
     func start() {
-        guard stream == nil else { return }
+        guard subscription == nil else { return }
 
         // Das Root-Verzeichnis kann vor dem ersten CLI-Job fehlen — FSEvents
         // braucht einen existierenden Pfad, sonst kommen nie Events.
         try? FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
 
-        var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
-
-        let callback: FSEventStreamCallback = { _, info, eventCount, eventPaths, _, _ in
-            guard let info else { return }
-            let monitor = Unmanaged<AgentJobDirectoryMonitor>.fromOpaque(info).takeUnretainedValue()
-            guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else {
-                return
+        guard let subscription = FSEventsSubscription(
+            paths: [rootURL.path],
+            latency: 0.3,
+            flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
+            queue: DispatchQueue(label: "com.whisperm8.app.job-fsevents", qos: .utility),
+            handler: { [weak self] paths, _ in
+                Task { @MainActor [weak self] in self?.handleEvents(paths: paths) }
             }
-            _ = eventCount
-            Task { @MainActor in
-                monitor.handleEvents(paths: paths)
-            }
-        }
-
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            callback,
-            &context,
-            [rootURL.path] as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.3,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
         ) else {
             Logger.agentPerformance.error("agent_job_fsevents_start_failed")
             return
         }
-
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue(label: "com.whisperm8.app.job-fsevents", qos: .utility))
-        FSEventStreamStart(stream)
-        self.stream = stream
+        self.subscription = subscription
         Logger.agentPerformance.info("agent_job_fsevents_started root=\(self.rootURL.path, privacy: .public)")
     }
 
     func stop() {
-        guard let stream else { return }
-        FSEventStreamStop(stream)
-        FSEventStreamInvalidate(stream)
-        FSEventStreamRelease(stream)
-        self.stream = nil
+        guard let subscription else { return }
+        subscription.cancel()
+        self.subscription = nil
         debounceTask?.cancel()
         debounceTask = nil
     }

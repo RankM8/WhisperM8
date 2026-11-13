@@ -29,6 +29,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case closeView, wordJump, lineMove, pasteNewest, escapeOnce, undo, transcript, reopenClosed
     /// L2 + Touchpad: Verlauf, in jedem Zusammenhang.
     case clipboardWithL2
+    // Insel-Paket: App-Raute unter R1
+    case limitsCard, alertLevel, stayAwake, clipboardWithR1
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -117,6 +119,10 @@ enum ControllerLegend {
                 combination(.r1, .square, .commands),
                 combination(.r1, .circle, .switchAccount),
                 combination(.r1, .l3, .transcript),
+                combination(.r1, .dpadUp, .limitsCard),
+                combination(.r1, .dpadLeft, .alertLevel),
+                combination(.r1, .dpadRight, .stayAwake),
+                combination(.r1, .dpadDown, .clipboardWithR1),
                 entry(.button(.l2), .whereToHold),
                 combination(.l2, .triangle, .nextWaiting),
                 combination(.l2, .square, .reopenClosed),
