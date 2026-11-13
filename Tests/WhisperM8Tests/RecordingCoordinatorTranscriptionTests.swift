@@ -144,7 +144,35 @@ final class RecordingCoordinatorTranscriptionTests: XCTestCase {
         XCTAssertFalse(factoryCalled)
     }
 
-    /// ESC bei offenem Schlüsselbund-Dialog: Der Resolver kehrt abgebrochen mit
+    /// Dialog abgelehnt: Der Schlüssel liegt im Schlüsselbund, war aber nicht
+    /// lesbar. Eigene Meldung statt „No API key configured“.
+    func testUnreadableStoredKeyReportsKeychainAccessDenied() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        for (stored, expectDenied) in [(true, true), (false, false)] {
+            let coordinator = RecordingCoordinator(
+                appState: .shared,
+                providerResolver: { .groq },
+                modelResolver: { .groq_whisper_v3 },
+                apiKeyResolver: { _ in nil },
+                apiKeyStored: { _ in stored },
+                transcriberFactory: { _, _, _ in ThrowingTranscriptionService() }
+            )
+            do {
+                try await coordinator.transcribeAndDeliver(
+                    audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+                )
+                XCTFail("Expected an error")
+            } catch TranscriptionError.keychainAccessDenied {
+                XCTAssertTrue(expectDenied)
+            } catch TranscriptionError.missingAPIKey {
+                XCTAssertFalse(expectDenied)
+            }
+        }
+    }
+
+    /// Abbruch über die Pille bei offenem Schlüsselbund-Dialog: Der Resolver kehrt abgebrochen mit
     /// nil zurück. Das ist ein Abbruch, kein fehlender Schlüssel (kein Alert).
     func testCancelWhileKeyLoadsIsCancellationNotMissingKey() async throws {
         let audio = try tempAudio()

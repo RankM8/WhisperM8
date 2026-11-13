@@ -119,6 +119,7 @@ final class RecordingCoordinator {
     let providerResolver: () -> TranscriptionProvider
     let modelResolver: () -> TranscriptionModel
     let apiKeyResolver: (TranscriptionProvider) async -> String?
+    let apiKeyStored: (TranscriptionProvider) -> Bool
     let apiKeyRejected: (TranscriptionProvider) -> Void
     let transcriberFactory: (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol
     /// Wärmt beim Aufnahmestart den Anbieter vor (ChatGPT-Abo: Proxy des
@@ -177,6 +178,13 @@ final class RecordingCoordinator {
             guard let keychainKey = provider.keychainKey else { return nil }
             return await KeychainManager.loadOffMain(key: keychainKey)
         },
+        // Liegt ein Schlüssel im Schlüsselbund, auch wenn er nicht lesbar war?
+        // Prüft nur die Attribute, ohne Dialog.
+        apiKeyStored: @escaping (TranscriptionProvider) -> Bool = { provider in
+            // Unter `swift test` nie den echten Schlüsselbund befragen.
+            guard AppInstance.isAppBundleProcess else { return false }
+            return provider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+        },
         // Lehnt der Anbieter den Schlüssel ab (401), nächstes Mal neu lesen.
         apiKeyRejected: @escaping (TranscriptionProvider) -> Void = { provider in
             provider.keychainKey.map { KeychainManager.forgetCached(key: $0) }
@@ -224,6 +232,7 @@ final class RecordingCoordinator {
         self.providerResolver = providerResolver
         self.modelResolver = modelResolver
         self.apiKeyResolver = apiKeyResolver
+        self.apiKeyStored = apiKeyStored
         self.apiKeyRejected = apiKeyRejected
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer

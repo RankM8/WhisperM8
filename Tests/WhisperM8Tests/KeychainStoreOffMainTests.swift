@@ -167,4 +167,30 @@ final class KeychainStoreOffMainTests: XCTestCase {
         backend.release.signal()
         XCTAssertEqual(store.load(key: "k"), "after-delete", "nach dem Löschen wird neu gelesen, nicht der alte Wert aus dem Speicher")
     }
+
+    /// Dialog abgelehnt: nichts im Cache, und eine alte UserDefaults-Kopie wird
+    /// weder zurückgegeben noch über den echten Eintrag geschrieben.
+    func testDeniedReadCachesNothingAndSkipsLegacyMigration() {
+        final class DeniedBackend: KeychainBackend {
+            var reads = 0
+            var writes = 0
+            func copyData(service: String, account: String) -> (status: OSStatus, data: Data?) {
+                reads += 1
+                return (errSecUserCanceled, nil)
+            }
+            func update(service: String, account: String, data: Data) -> OSStatus { writes += 1; return errSecSuccess }
+            func add(service: String, account: String, data: Data) -> OSStatus { writes += 1; return errSecSuccess }
+            func probe(service: String, account: String) -> OSStatus { errSecSuccess }
+            func delete(service: String, account: String) -> OSStatus { errSecSuccess }
+        }
+        defaults.set("legacy", forKey: "k")
+        let backend = DeniedBackend()
+        let store = KeychainStore(service: "t", backend: backend, defaults: defaults)
+
+        XCTAssertNil(store.load(key: "k"))
+        XCTAssertNil(store.load(key: "k"))
+        XCTAssertEqual(backend.reads, 2, "kein Cache nach Ablehnung: nächster Versuch fragt erneut")
+        XCTAssertEqual(backend.writes, 0)
+        XCTAssertEqual(defaults.string(forKey: "k"), "legacy")
+    }
 }

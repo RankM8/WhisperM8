@@ -142,7 +142,10 @@ final class KeychainStore: KeychainStoring, @unchecked Sendable {
         // Migration: alte Versionen hielten den Key in UserDefaults. Die einzige
         // Kopie wird NUR entfernt, wenn der Keychain-Write bestätigt ist
         // (LR-SH-003) — sonst bleibt sie für den nächsten Versuch erhalten.
-        if let oldValue = defaults.string(forKey: key), !oldValue.isEmpty {
+        // Nur wenn der Eintrag fehlt: Nach einem abgelehnten Dialog stünde sonst
+        // eine veraltete Kopie bereit, und `save` überschriebe den echten Key.
+        if read.status == errSecItemNotFound,
+           let oldValue = defaults.string(forKey: key), !oldValue.isEmpty {
             Logger.permission.info("Migrating API key from UserDefaults to Keychain")
             if save(key: key, value: oldValue).succeeded {
                 defaults.removeObject(forKey: key)

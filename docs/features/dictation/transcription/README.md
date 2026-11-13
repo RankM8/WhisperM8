@@ -77,7 +77,10 @@ nur, wenn das Speichern in der Keychain geklappt hat.
 Das GUI-Diktat lädt den Key über den Provider-Keychain-Key, und zwar abseits
 des Main Threads: Nach einem neuen Build zeigt macOS beim ersten Zugriff einen
 Schlüsselbund-Dialog, und die App soll währenddessen bedienbar bleiben. Danach
-bleibt der Key für den App-Lauf im Speicher. Fehlt er, endet der
+bleibt der Key für den App-Lauf im Speicher. Lehnt der User den Dialog ab
+(auch ESC schließt ihn so), kommt die Meldung, dass der Schlüsselbund nicht
+lesbar war, mit „Erneut versuchen“; nichts landet im Speicher, und der
+nächste Versuch fragt wieder. Fehlt der Key wirklich, endet der
 Lauf mit `TranscriptionError.missingAPIKey` — außer beim ChatGPT-Abo, das keinen
 Key braucht (die Factory bekommt `""`). Die CLI sucht in dieser
 Reihenfolge: `--api-key`, `GROQ_API_KEY` beziehungsweise `OPENAI_API_KEY`,
