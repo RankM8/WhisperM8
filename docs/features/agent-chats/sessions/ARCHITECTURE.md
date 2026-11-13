@@ -261,6 +261,22 @@ Login-Shell gestartet. CLI-Pfade werden nicht aus dem rohen GUI-Environment
 genommen, sondern über `commandPath(_:)`, `which` mit korrigiertem
 Login-Shell-Environment und Fallback-Verzeichnisse aufgelöst.
 
+**Nie zwei Prozesse auf einer Sitzung.** Vor jedem Fortsetzen prüft der
+Builder, ob die Sitzung schon läuft, und lehnt sonst mit einer Meldung ab, die
+den anderen Chat oder „außerhalb von WhisperM8“ nennt. Bei Claude liest er dafür
+Claudes Registry (`ClaudeSessionRunningGuard`). Codex führt keine solche
+Registry, deshalb prüft `CodexSessionRunningGuard` zwei Dinge: die laufenden
+Chats der App und die Startargumente aller Prozesse namens `codex`
+(`resume … <id>`, auch `exec resume` verwaister Subagent-Jobs, gelesen per
+`proc_listallpids` und `KERN_PROCARGS2` im Hintergrund vor dem Start, gemessen
+etwa 0,4 ms bei 580 Prozessen). Für beide Anbieter gilt zusätzlich eine
+30-Sekunden-Reservierung gegen gleichzeitige Starts
+(`ClaudeSessionLaunchReservations`, Schlüssel bei Codex `codex:<id>`). Der
+eigene auslaufende Vorgänger nach einem Tab-Neustart sperrt nicht
+(`ProcessTerminationLedger`). Lässt sich die Prozessliste nicht lesen, startet
+der Chat ohne diese Prüfung; eine Notbremse gibt es deshalb nicht. Nicht
+erkennbar ist ein fremdes Codex, das in der TUI per `/resume` gewechselt hat.
+
 `AgentPromptRoutingService` routet Text in eine bereits existierende Session,
 zum Beispiel einen Subagent-Report in den Parent-Chat. Es fokussiert die
 Session, sendet sofort an ein laufendes PTY oder staged den Send mit

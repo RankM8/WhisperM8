@@ -463,6 +463,8 @@ struct AgentSessionDetailView: View {
             let runningRecords = launchSession.provider == .claude
                 && !launchSession.isTerminal && !launchSession.isAgentView
                 ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
+            // Codex-Sperre: Prozessliste ebenfalls hier, nicht auf dem Main Thread.
+            let codexProcesses = Self.codexProcessesForLaunch(launchSession)
 
             await MainActor.run {
                 // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
@@ -483,6 +485,7 @@ struct AgentSessionDetailView: View {
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult,
                     runningRecords: runningRecords,
+                    codexProcesses: codexProcesses,
                     allowsBackgroundAttach: allowsBackgroundAttach,
                     // Rückweg: den gespeicherten Stand nehmen, nicht den
                     // Snapshot aus der Closure des beendeten Laufs (ein Attach
@@ -497,6 +500,7 @@ struct AgentSessionDetailView: View {
         resumeRepairPreparation: ResumeRepairPreparation,
         launchGuardResult: ClaudeGPTLaunchGuardResult,
         runningRecords: [ClaudeSessionRecord] = [],
+        codexProcesses: [CodexProcess]? = [],
         allowsBackgroundAttach: Bool = true,
         storedSession: AgentChatSession? = nil
     ) {
@@ -539,6 +543,10 @@ struct AgentSessionDetailView: View {
             let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
                 ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
+            }
+            builder.codexRunningConflict = { [store, terminalRegistry] sessionID, localID in
+                Self.codexConflict(sessionID: sessionID, localID: localID, processes: codexProcesses,
+                                   store: store, registry: terminalRegistry)
             }
             builder.launchReservation = { [store] sessionID, localID in
                 ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID).map { holder in

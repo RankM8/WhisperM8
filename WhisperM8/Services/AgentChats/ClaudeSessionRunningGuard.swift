@@ -92,6 +92,14 @@ final class ProcessTerminationLedger: @unchecked Sendable {
         entries[pid] = Entry(at: current, localID: localID)
     }
 
+    /// Der Chat, dessen Prozess die App gerade beendet (nur mit vermerktem Chat).
+    func owner(ofTerminating pid: Int32) -> UUID? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let noted = entries[pid], now().timeIntervalSince(noted.at) < window else { return nil }
+        return noted.localID
+    }
+
     /// Mit `forLocalID` zählt nur der Prozess desselben Chats (oder einer
     /// ohne vermerkten Chat) als auslaufend.
     func isBeingTerminated(pid: Int32, forLocalID localID: UUID? = nil) -> Bool {
