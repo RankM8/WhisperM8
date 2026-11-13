@@ -53,6 +53,9 @@ enum TranscriptionError: LocalizedError {
     case invalidResponse
     case apiError(statusCode: Int, message: String)
     case missingAPIKey
+    /// Der Schlüssel liegt im Schlüsselbund, aber macOS hat den Zugriff nicht
+    /// erlaubt (Dialog abgelehnt oder mit ESC geschlossen).
+    case keychainAccessDenied
     case fileTooLarge(sizeMB: Double)
     case timeout
 
@@ -71,6 +74,8 @@ enum TranscriptionError: LocalizedError {
             return "API error (\(statusCode)): \(message)"
         case .missingAPIKey:
             return "No API key configured. Please enter your API key in settings."
+        case .keychainAccessDenied:
+            return String(localized: "WhisperM8 couldn't read your API key from the macOS Keychain. Click Try again and choose “Always Allow” in the Keychain dialog.")
         case .fileTooLarge(let sizeMB):
             return "Audio file too large (\(String(format: "%.1f", sizeMB)) MB). Maximum is 25 MB."
         case .timeout:

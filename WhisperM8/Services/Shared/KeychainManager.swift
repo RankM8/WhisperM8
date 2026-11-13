@@ -76,11 +76,22 @@ protocol KeychainStoring {
 }
 
 /// Keychain-Speicher mit injizierbarem Backend, Defaults und Cache.
-final class KeychainStore: KeychainStoring {
+///
+/// Der Cache gilt je App-Lauf: Nach einem neuen Build (neuer cdhash) fragt macOS
+/// beim ersten Lesen per Dialog nach. `load` blockiert so lange; vom Main Thread
+/// aus stünde die ganze App samt Terminals (5-s-Hänger 13.11.2026). Wer auf dem
+/// Main Thread läuft, liest deshalb über `loadOffMain`.
+final class KeychainStore: KeychainStoring, @unchecked Sendable {
     private let service: String
     private let backend: KeychainBackend
     private let defaults: UserDefaults
     private var cache: [String: String] = [:]
+    /// Zählt Schreib- und Löschvorgänge je Schlüssel. Ein Lesevorgang, der
+    /// währenddessen lief, legt seinen alten Wert nicht mehr in den Cache.
+    private var generation: [String: Int] = [:]
+    /// Laufende Hintergrund-Lesevorgänge: zwei Diktate während eines offenen
+    /// Dialogs lösen nur einen Keychain-Zugriff aus.
+    private var inFlight: [String: PendingKeychainRead] = [:]
     private let cacheLock = NSLock()
 
     init(service: String, backend: KeychainBackend, defaults: UserDefaults = .standard) {
@@ -118,11 +129,12 @@ final class KeychainStore: KeychainStoring {
             return cachedValue
         }
 
+        let startGeneration = currentGeneration(for: key)
         let read = backend.copyData(service: service, account: key)
         if read.status == errSecSuccess, let data = read.data {
             let value = String(data: data, encoding: .utf8)
             if let value, !value.isEmpty {
-                setCached(value, for: key)
+                setCached(value, for: key, ifGeneration: startGeneration)
             }
             return value
         }
@@ -130,7 +142,10 @@ final class KeychainStore: KeychainStoring {
         // Migration: alte Versionen hielten den Key in UserDefaults. Die einzige
         // Kopie wird NUR entfernt, wenn der Keychain-Write bestätigt ist
         // (LR-SH-003) — sonst bleibt sie für den nächsten Versuch erhalten.
-        if let oldValue = defaults.string(forKey: key), !oldValue.isEmpty {
+        // Nur wenn der Eintrag fehlt: Nach einem abgelehnten Dialog stünde sonst
+        // eine veraltete Kopie bereit, und `save` überschriebe den echten Key.
+        if read.status == errSecItemNotFound,
+           let oldValue = defaults.string(forKey: key), !oldValue.isEmpty {
             Logger.permission.info("Migrating API key from UserDefaults to Keychain")
             if save(key: key, value: oldValue).succeeded {
                 defaults.removeObject(forKey: key)
@@ -141,6 +156,50 @@ final class KeychainStore: KeychainStoring {
         }
 
         return nil
+    }
+
+    /// Wie `load`, aber der Keychain-Zugriff läuft auf einer Dispatch-Queue statt
+    /// auf dem Aufrufer-Thread (und nicht im Swift-Concurrency-Pool, den ein
+    /// offener Dialog sonst beliebig lange belegt). Aus dem Cache kommt der Wert
+    /// sofort; gleichzeitige Aufrufe teilen sich einen Lesevorgang. Wird der
+    /// wartende Task abgebrochen (ESC im Diktat), kehrt der Aufruf sofort mit
+    /// `nil` zurück; der Lesevorgang läuft weiter und füllt den Cache.
+    func loadOffMain(key: String) async -> String? {
+        if let cachedValue = cachedValue(for: key) {
+            return cachedValue
+        }
+        let read: PendingKeychainRead = cacheLock.withLock {
+            if let running = inFlight[key] { return running }
+            let started = PendingKeychainRead()
+            inFlight[key] = started
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                let startGeneration = currentGeneration(for: key)
+                var value = load(key: key)
+                // Während des Lesens gespeichert oder gelöscht: Wartende sollen
+                // den neuen Stand bekommen, nicht den alten. Ein zweites `load`
+                // trifft den Cache oder liest den geänderten Eintrag.
+                if currentGeneration(for: key) != startGeneration {
+                    value = load(key: key)
+                }
+                cacheLock.withLock {
+                    if inFlight[key] === started { inFlight[key] = nil }
+                }
+                started.finish(value)
+            }
+            return started
+        }
+        return await read.value()
+    }
+
+    /// Nur für Tests: wie viele Aufrufer gerade auf den laufenden Lesevorgang warten.
+    func waitingReaders(for key: String) -> Int {
+        cacheLock.withLock { inFlight[key]?.waiterCount ?? 0 }
+    }
+
+    /// Verwirft nur die Kopie im Speicher (etwa nach 401 vom Anbieter); der
+    /// nächste Zugriff liest wieder aus dem Schlüsselbund.
+    func forgetCached(key: String) {
+        removeCachedValue(for: key)
     }
 
     func exists(key: String) -> Bool {
@@ -173,9 +232,28 @@ final class KeychainStore: KeychainStoring {
         return cache[key]
     }
 
+    private func currentGeneration(for key: String) -> Int {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return generation[key, default: 0]
+    }
+
     private func setCached(_ value: String, for key: String) {
         cacheLock.lock()
         defer { cacheLock.unlock() }
+        cache[key] = value
+        generation[key, default: 0] += 1
+        // Ein noch laufender Lesevorgang liefert den alten Stand; neue Aufrufer
+        // hängen sich nicht mehr daran.
+        inFlight[key] = nil
+    }
+
+    /// Legt einen gelesenen Wert nur ab, wenn seit dem Lesebeginn niemand
+    /// gespeichert oder gelöscht hat.
+    private func setCached(_ value: String, for key: String, ifGeneration expected: Int) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        guard generation[key, default: 0] == expected else { return }
         cache[key] = value
     }
 
@@ -183,6 +261,61 @@ final class KeychainStore: KeychainStoring {
         cacheLock.lock()
         defer { cacheLock.unlock() }
         cache.removeValue(forKey: key)
+        generation[key, default: 0] += 1
+        inFlight[key] = nil
+    }
+}
+
+/// Ein laufender Hintergrund-Lesevorgang mit beliebig vielen Wartenden. Jeder
+/// Wartende kann einzeln abbrechen, ohne den Lesevorgang zu beenden.
+final class PendingKeychainRead: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isFinished = false
+    private var result: String?
+    private var waiters: [UUID: CheckedContinuation<String?, Never>] = [:]
+    /// Abbrüche, die vor dem Einhängen der Continuation ankamen.
+    private var cancelledEarly: Set<UUID> = []
+
+    var waiterCount: Int { lock.withLock { waiters.count } }
+
+    func value() async -> String? {
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+                lock.lock()
+                if isFinished {
+                    let value = result
+                    lock.unlock()
+                    continuation.resume(returning: value)
+                } else if cancelledEarly.remove(id) != nil {
+                    lock.unlock()
+                    continuation.resume(returning: nil)
+                } else {
+                    waiters[id] = continuation
+                    lock.unlock()
+                }
+            }
+        } onCancel: {
+            lock.lock()
+            if let continuation = waiters.removeValue(forKey: id) {
+                lock.unlock()
+                continuation.resume(returning: nil)
+            } else {
+                if !isFinished { cancelledEarly.insert(id) }
+                lock.unlock()
+            }
+        }
+    }
+
+    func finish(_ value: String?) {
+        lock.lock()
+        isFinished = true
+        result = value
+        let pending = Array(waiters.values)
+        waiters.removeAll()
+        cancelledEarly.removeAll()
+        lock.unlock()
+        for continuation in pending { continuation.resume(returning: value) }
     }
 }
 
@@ -195,6 +328,9 @@ enum KeychainManager {
     }
 
     static func load(key: String) -> String? { KeychainStore.live.load(key: key) }
+    /// Für Aufrufer auf dem Main Thread: liest abseits davon (siehe `KeychainStore`).
+    static func loadOffMain(key: String) async -> String? { await KeychainStore.live.loadOffMain(key: key) }
+    static func forgetCached(key: String) { KeychainStore.live.forgetCached(key: key) }
     static func exists(key: String) -> Bool { KeychainStore.live.exists(key: key) }
     static func delete(key: String) { KeychainStore.live.delete(key: key) }
 }

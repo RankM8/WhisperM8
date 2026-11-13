@@ -23,12 +23,22 @@ extension RecordingCoordinator {
         // (ChatGPT-Abo) bekommen "" — die Factory-Signatur bleibt, damit die
         // Tests unverändert injizieren können; `createService` ignoriert den
         // Key für `.chatgpt`.
-        let resolvedKey = provider.requiresAPIKey ? (apiKeyResolver(provider) ?? "") : ""
+        let resolvedKey = provider.requiresAPIKey ? (await apiKeyResolver(provider) ?? "") : ""
+        // Abbruch über das ✕ der Pille, während der Schlüsselbund-Dialog offen
+        // ist: der Resolver kehrt mit nil zurück. Das ist ein Abbruch, kein
+        // fehlender Schlüssel. (ESC geht dann an den Dialog und lehnt ab.)
+        try Task.checkCancellation()
         guard TranscriptionCredentialGate.isSatisfied(
             provider: provider,
             typedKey: resolvedKey,
             hasSavedKey: false
         ) else {
+            // Schlüssel vorhanden, aber nicht lesbar: der Schlüsselbund-Dialog
+            // wurde abgelehnt. Nicht in die Einstellungen schicken.
+            if provider.requiresAPIKey, apiKeyStored(provider) {
+                Logger.debug("ERROR: Keychain access denied for \(provider.keychainKey ?? provider.rawValue)")
+                throw TranscriptionError.keychainAccessDenied
+            }
             Logger.debug("ERROR: No API key found for \(provider.keychainKey ?? provider.rawValue)")
             throw TranscriptionError.missingAPIKey
         }
@@ -43,11 +53,19 @@ extension RecordingCoordinator {
         let service = transcriberFactory(provider, model, apiKey)
         Logger.debug(" Starting transcription...")
 
-        let rawText = try await service.transcribe(
-            audioURL: audioURL,
-            language: language.isEmpty ? nil : language,
-            audioDuration: audioDuration
-        )
+        let rawText: String
+        do {
+            rawText = try await service.transcribe(
+                audioURL: audioURL,
+                language: language.isEmpty ? nil : language,
+                audioDuration: audioDuration
+            )
+        } catch {
+            if provider.requiresAPIKey, case TranscriptionError.apiError(statusCode: 401, _) = error {
+                apiKeyRejected(provider)
+            }
+            throw error
+        }
 
         // Später Abbruch (Cancel/ESC exakt beim Eintreffen der Response) soll
         // sauber im Preserve-Pfad landen statt mit gesetztem Cancel-Flag in
