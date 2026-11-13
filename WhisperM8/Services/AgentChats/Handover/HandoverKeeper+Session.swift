@@ -27,7 +27,7 @@ extension HandoverKeeper {
         if first.message.type == .hello || first.message.type == .release {
             guard hasValidSecret(first.message) else {
                 log("peer_rejected reason=secret type=\(first.message.type.rawValue)")
-                try? connection.send(.error("ohne gültigen Nachweis"), timeout: timeout)
+                try? connection.send(.rejected("ohne gültigen Nachweis", reason: "secret"), timeout: timeout)
                 return
             }
         }
@@ -75,7 +75,8 @@ extension HandoverKeeper {
         guard allowed else {
             if let fd = received.descriptor { close(fd) }
             log("peer_rejected type=\(received.message.type.rawValue) pid=\(peer?.pid.map(String.init) ?? "?") path=\(peer?.executablePath ?? "-")")
-            try? connection.send(.error("nur die App dieser Instanz darf das"), timeout: configuration.ioTimeout)
+            try? connection.send(.rejected("nur die App dieser Instanz darf das", reason: "peer"),
+                                 timeout: configuration.ioTimeout)
             throw HandoverWireError.unexpected("Gegenseite nicht berechtigt")
         }
         return received

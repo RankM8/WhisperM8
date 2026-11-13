@@ -100,7 +100,18 @@ final class HandoverTakeService {
         // nicht. Ein zweiter Neustart sah „App nicht erreichbar“ und startete
         // klassisch neu; die gerade übernommenen Chats endeten. Die Sperre sagt
         // `app handover`, dass es warten soll.
-        let takeLock = mayHaveKeeper ? HandoverTakeLock.acquire(paths: dependencies.paths) : nil
+        var takeLock: Int32?
+        if mayHaveKeeper {
+            switch HandoverTakeLock.acquire(paths: dependencies.paths) {
+            case .acquired(let fd): takeLock = fd
+            case .unavailable: break
+            case .heldByOther:
+                // Vic: Eine zweite Instanz beim Start (übernimmt gerade die
+                // erste) übernimmt nichts und beendet nichts.
+                Logger.agentStore.notice("handover_take_skipped reason=take_in_progress")
+                return summary
+            }
+        }
         defer { HandoverTakeLock.release(takeLock) }
         let keeperStatus = onMain && mayHaveKeeper ? Self.status(paths: dependencies.paths) : nil
         guard previous.handover != nil || keeperStatus != nil else { return summary }
@@ -185,31 +196,50 @@ final class HandoverTakeService {
 
     // MARK: Schritte
 
+    /// Verbindung, Prüfung des Gegenübers und HELLO. Nach einer
+    /// Zeitüberschreitung (etwa unter Last) genau ein neuer Versuch.
+    private func openTakeSession(secret: String, keeperPID: Int32?) -> HandoverClient? {
+        for attempt in 1...2 {
+            guard let client = try? HandoverClient.connect(paths: dependencies.paths, timeout: 1) else { return nil }
+            client.timeout = dependencies.ioTimeout
+            do {
+                try client.verifyServer(expectedPID: keeperPID)
+            } catch {
+                // Fremder oder falscher Prozess am Socket: nichts beenden.
+                Logger.agentStore.error("handover_take_verify_failed error=\(HandoverLog.label(error), privacy: .public)")
+                client.close()
+                return nil
+            }
+            do {
+                _ = try client.helloTake(secret: secret)
+                return client
+            } catch HandoverWireError.timedOut where attempt == 1 {
+                Logger.agentStore.notice("handover_take_hello_timeout_retry")
+                client.close()
+                continue
+            } catch HandoverClient.ClientError.incompatible {
+                try? client.release(secret: secret)
+            } catch HandoverClient.ClientError.rejected {
+                // Befund 2 (Dex), eng gefasst (Vic): Nur eine echte Ablehnung
+                // (falsches Geheimnis, fremder Absender) beendet den
+                // Aufbewahrer; er hielte seine gleich beendeten Chats sonst bis
+                // zur Frist und blockierte jede weitere Übergabe. PID ist oben geprüft.
+                Logger.agentStore.error("handover_take_hello_rejected")
+                if let keeperPID { dependencies.terminateProcess(keeperPID) }
+            } catch {
+                // Zweite Zeitüberschreitung, „belegt“ und Ähnliches: nichts
+                // beenden; der Rückfall setzt die Chats erst nach ihrem Ende fort.
+                Logger.agentStore.error("handover_take_hello_failed error=\(HandoverLog.label(error), privacy: .public)")
+            }
+            client.close()
+            return nil
+        }
+        return nil
+    }
+
     private func take(secret: String, keeperPID: Int32?, sessions: [String: AgentChatSession]) -> [String: HandoverTakeOutcome] {
-        guard let client = try? HandoverClient.connect(paths: dependencies.paths, timeout: 1) else { return [:] }
-        client.timeout = dependencies.ioTimeout
+        guard let client = openTakeSession(secret: secret, keeperPID: keeperPID) else { return [:] }
         defer { client.close() }
-        do {
-            try client.verifyServer(expectedPID: keeperPID)
-        } catch {
-            // Fremder oder falscher Prozess am Socket: nichts beenden.
-            Logger.agentStore.error("handover_take_verify_failed error=\(HandoverLog.label(error), privacy: .public)")
-            return [:]
-        }
-        do {
-            _ = try client.helloTake(secret: secret)
-        } catch HandoverClient.ClientError.incompatible {
-            try? client.release(secret: secret)
-            return [:]
-        } catch {
-            // Befund 2 (Dex): Lehnt der Aufbewahrer das Geheimnis ab, hielte er
-            // seine (gleich beendeten) Chats bis zur Frist und blockierte jede
-            // weitere Übergabe. Wie bei fehlendem Geheimnis beenden; seine
-            // PID ist oben geprüft.
-            Logger.agentStore.error("handover_take_hello_failed error=\(HandoverLog.label(error), privacy: .public)")
-            if let keeperPID { dependencies.terminateProcess(keeperPID) }
-            return [:]
-        }
         var outcomes: [String: HandoverTakeOutcome] = [:]
         let held = (try? client.list()) ?? []
         for summary in held {
@@ -333,14 +363,23 @@ final class HandoverTakeService {
 /// Die App hält `take.lock`, solange sie beim Start übernimmt. `app handover`
 /// wartet, statt „nicht erreichbar“ zu melden (Befund 4, Dex).
 enum HandoverTakeLock {
-    static func acquire(paths: HandoverPaths) -> Int32? {
+    enum Acquisition: Equatable {
+        case acquired(Int32)
+        /// Eine andere Instanz übernimmt gerade.
+        case heldByOther
+        /// Keine Sperrdatei möglich (Ordner fehlt): ohne Sperre weiter.
+        case unavailable
+    }
+
+    static func acquire(paths: HandoverPaths) -> Acquisition {
         let fd = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
-        guard fd >= 0 else { return nil }
+        guard fd >= 0 else { return .unavailable }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            let busy = errno == EWOULDBLOCK
             close(fd)
-            return nil
+            return busy ? .heldByOther : .unavailable
         }
-        return fd
+        return .acquired(fd)
     }
 
     static func release(_ fd: Int32?) {

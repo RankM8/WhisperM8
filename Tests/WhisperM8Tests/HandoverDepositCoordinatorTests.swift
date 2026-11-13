@@ -285,7 +285,8 @@ final class HandoverRestartCLITests: XCTestCase {
         let directory = try HandoverTestSupport.makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let paths = HandoverPaths(directory: directory)
-        let fd = try XCTUnwrap(HandoverTakeLock.acquire(paths: paths))
+        guard case .acquired(let fd) = HandoverTakeLock.acquire(paths: paths) else { return XCTFail("Sperre nicht bekommen") }
+        XCTAssertEqual(HandoverTakeLock.acquire(paths: paths), .heldByOther, "zweiter Versuch sieht die gehaltene Sperre")
         XCTAssertTrue(HandoverTakeLock.isHeld(paths: paths))
         HandoverTakeLock.release(fd)   // wie das Ende des Prozesses
         XCTAssertTrue(FileManager.default.fileExists(atPath: paths.takeLockFileURL.path))

@@ -130,4 +130,16 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
         XCTAssertEqual(resumed, [other.id], "der ältere, nicht abgegebene Chat startet trotzdem nicht")
         XCTAssertNotEqual(store.loadWorkspace().sessions.first { $0.id == notHandedOver.id }?.shouldLaunchOnOpen, true)
     }
+
+    /// Vic (3): Jeder Start der Ansicht verwirft den Eintrag, nicht nur der
+    /// aus der unterdrückten Pane. Alle Startwege laufen über launchAfterCacheWarmup.
+    func testEveryLaunchOfTheViewForgetsTheQueueEntry() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let text = try String(contentsOf: root.appendingPathComponent("WhisperM8/Views/AgentSessionDetailView.swift"),
+                              encoding: .utf8)
+        let start = try XCTUnwrap(text.range(of: "private func launchAfterCacheWarmup("))
+        let body = text[start.upperBound...].prefix(400)
+        XCTAssertTrue(body.contains("HandoverFallbackLaunchQueue.shared.forget(session.id)"))
+    }
 }
