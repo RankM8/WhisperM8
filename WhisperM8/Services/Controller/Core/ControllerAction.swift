@@ -146,6 +146,19 @@ enum ControllerAction: Equatable, Sendable {
     /// offene Limits-Karte scrollen, sonst ohne Wirkung.
     case islandScroll(step: Int)
 
+    // Paddles (Xbox Elite)
+    /// Nächster wartender Chat, ohne Insel (derselbe Weg wie ⌃⌥Tab).
+    case nextWaitingChat
+    /// Antworten: zum nächsten frisch fertigen Chat und dort diktieren, sonst
+    /// zum nächsten wartenden springen (nur springen).
+    case answerNextWaiting
+    /// Dieselbe Entscheidung wie R1 + Kreuz: Senden, Jetzt senden oder „Weiter“.
+    case sendNowOrContinue
+    /// Modus wechseln (Shift+Tab) nach den Regeln des Menüs.
+    case cycleMode
+    /// Befehl der CLI wie aus „Befehle ›“ (nur Claude).
+    case slashCommand(String)
+
     // Sonstiges
     case bridgeKey(ControllerBridgeKey)
     case pauseToggle

@@ -10,10 +10,12 @@ final class ControllerIslandViewModel: ObservableObject {
 
 private struct ControllerIslandHostView: View {
     @ObservedObject var model: ControllerIslandViewModel
+    @State private var status = ControllerManager.shared.status
 
     var body: some View {
         if let display = model.display {
             ControllerIslandView(display: display, revealed: model.revealed)
+                .environment(\.controllerFamily, status.device?.family ?? .playStation)
                 // Ohne Notch der Schatten der Diktat-Pille; das Fenster hat
                 // dafür Rand rundum (es nimmt keine Maus an).
                 .shadow(color: .black.opacity(display.isNotch ? 0 : 0.3), radius: 12, x: 0, y: 3)
@@ -21,6 +23,16 @@ private struct ControllerIslandHostView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: display.opensUpward ? .bottom : .top)
                 .ignoresSafeArea()
         }
+    }
+}
+
+/// Misst die Insel mit den Tastenzeichen, die sie gleich zeigt.
+private struct ControllerIslandMeasureView: View {
+    let display: ControllerIslandDisplay
+    let family: ControllerFamily
+
+    var body: some View {
+        ControllerIslandView(display: display).environment(\.controllerFamily, family)
     }
 }
 
@@ -99,7 +111,7 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
     private var panel: NotchPanel?
     /// Misst die Höhe; eine eigene Ansicht, weil die sichtbare erst im
     /// nächsten Durchlauf den neuen Wert zeichnet.
-    private var measuringHost: NSHostingView<ControllerIslandView>?
+    private var measuringHost: NSHostingView<ControllerIslandMeasureView>?
     private var lastFrame: CGRect?
     /// Zählt Schließ-Vorgänge, damit ein spätes `orderOut` eine neu
     /// geöffnete Insel nicht trifft.
@@ -168,12 +180,13 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
     /// Höhe aus der Ansicht selbst (feste Breite je Zustand), damit Fenster
     /// und Inhalt nie auseinanderlaufen.
     private func measure(_ display: ControllerIslandDisplay) -> CGSize {
-        let measuring: NSHostingView<ControllerIslandView>
+        let measuring: NSHostingView<ControllerIslandMeasureView>
+        let root = ControllerIslandMeasureView(display: display, family: ControllerManager.shared.status.device?.family ?? .playStation)
         if let measuringHost {
             measuring = measuringHost
-            measuring.rootView = ControllerIslandView(display: display)
+            measuring.rootView = root
         } else {
-            measuring = NSHostingView(rootView: ControllerIslandView(display: display))
+            measuring = NSHostingView(rootView: root)
             measuringHost = measuring
         }
         return CGSize(width: display.bodyWidth, height: max(40, measuring.fittingSize.height))

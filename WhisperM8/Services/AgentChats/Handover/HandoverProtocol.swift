@@ -334,6 +334,8 @@ struct HandoverPaths: Equatable {
     var lockFileURL: URL { directory.appendingPathComponent("keeper.lock") }
     /// Hält die App, solange sie beim Start übernimmt (Befund 4, Dex).
     var takeLockFileURL: URL { directory.appendingPathComponent("take.lock") }
+    /// Einmal-Geheimnis zwischen Abgabe und Übernahme (Option A).
+    var secretFileURL: URL { directory.appendingPathComponent("take-secret") }
     var logFileURL: URL { directory.appendingPathComponent("keeper.log") }
     /// Enthält genau eine Zeile: den realen Socket-Pfad.
     var discoveryFileURL: URL { directory.appendingPathComponent("socket-path") }

@@ -174,18 +174,17 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
 bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
 Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
-`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`,
+`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `codexStartGuardEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`,
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs „Neustart ohne Chatverlust“, im Bau und noch nicht einschaltbar, UI-Seite ausgeblendet: `make dev` gibt Chats
-an den Aufbewahrer ab, die neue App übernimmt sie; GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem nächsten
-App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
+(Labs „Neustart ohne Chatverlust“, im Bau, noch nicht einschaltbar; wirkt ab dem nächsten App-Start; Plan
+[neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 

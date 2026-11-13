@@ -23,7 +23,7 @@ WhisperM8 handover-keeper --root <ordner> --run <id> [--hold-seconds N] [--depos
 whisperm8 app handover-status [--json]
 ```
 
-- **Geheimnis:** Die App erzeugt je Start ein Einmal-Geheimnis (`HandoverSecret.make()`, 32 Byte hex) und gibt es dem Aufbewahrer als erste Zeile auf stdin (`HandoverKeeperLauncher.launch(…, secret:)`). Ohne gültiges Geheimnis startet er nicht (Exit 64). Als Argument geht es nie mit, weil es dann in `ps` stünde. Jedes `HELLO` (Abgabe und Übernahme) und ein `RELEASE` ohne vorheriges `HELLO` muss es nennen. Die neue App bekommt es von der alten über den Schlüsselbund, mit Zugriff nur für die App selbst (Paket 4).
+- **Geheimnis:** Die App erzeugt je Start ein Einmal-Geheimnis (`HandoverSecret.make()`, 32 Byte hex) und gibt es dem Aufbewahrer als erste Zeile auf stdin (`HandoverKeeperLauncher.launch(…, secret:)`). Ohne gültiges Geheimnis startet er nicht (Exit 64). Als Argument geht es nie mit, weil es dann in `ps` stünde. Jedes `HELLO` (Abgabe und Übernahme) und ein `RELEASE` ohne vorheriges `HELLO` muss es nennen. Die neue App bekommt es von der alten über eine Datei `take-secret` (0600) im 0700-Ordner des Aufbewahrers (Option A, `HandoverFileSecretStore`): Die alte App legt sie exklusiv an, die neue löscht sie nach dem Lesen, der Aufbewahrer bei seinem Ende. Kein Schlüsselbund-Aufruf im Übergabe-Weg: Ohne Team-ID band macOS den Eintrag an den cdhash des Builds, über zwei Builds (`make dev`, Brew-Update) ging die Übernahme so nie, und ein Dialog war nicht sicher zu verhindern. Der Schlüsselbund-Weg (`HandoverSecretStore`) bleibt für eine Signatur mit Team-ID (Option C) im Code; gewählt wird in `HandoverSecretStores.live`.
 - `--root`: Standard `Application Support/WhisperM8/handover/` der Instanz (die Test-Instanz hat ihren eigenen). Darin liegen `keeper.lock` (`flock`, höchstens ein Aufbewahrer je Instanz), `keeper.sock` (0600 in einem 0700-Ordner), `keeper.log` (rotiert ab 1 MB) und `socket-path`. Ist der Socket-Pfad zu lang für `sun_path`, weicht er nach `/private/tmp/whisperm8-<uid>-h<hash>/keeper.sock` aus, und `socket-path` nennt den echten Pfad.
 - `--hold-seconds`: Haltefrist, höchstens 600 (Entscheidung 2), auch per Argument nicht mehr.
 - `--deposit-seconds`: Abgabefrist, Standard 30. Sie läuft vom Start bis zum `HELLO` und danach jeweils ab dem letzten `HELLO` oder `DEPOSIT` bis zum `COMMIT`.
@@ -34,7 +34,8 @@ whisperm8 app handover-status [--json]
 
 Maßstab für jede Review dieses Features (Beschluss 13.11.2026, zweite Meinung):
 
-- **Schutzziel:** Ein fremdes Programm unter demselben Nutzer bekommt keine Terminal-Leitung, kein Bild, kein Control-Token und keinen lauschenden Router-Socket.
+- **Schutzziel:** Andere Benutzer des Macs bekommen keine Terminal-Leitung, kein Bild, kein Control-Token und keinen lauschenden Router-Socket. Instanzen werden nicht verwechselt (Test-Instanz, alter Aufbewahrer, falscher Lauf), und zufällige oder ungezielte Zugriffe scheitern.
+- **Kein Schutzziel (Urteil Vic, 13.11.2026):** Ein gezieltes Programm desselben Benutzers. Es kann die Datei mit dem Geheimnis lesen, solange sie liegt. Das galt auch mit Schlüsselbund: Ohne gehärtete Laufzeit kann ein Programm desselben Benutzers eigenen Code in das App-Programm laden lassen (`DYLD_INSERT_LIBRARIES`) und den Eintrag mit der Identität der App lesen. Eine echte Grenze bräuchte eine Signatur mit Team-ID samt gehärteter Laufzeit (Option C) oder eine geerbte Verbindung (Option B). Die Übergabe öffnet einem solchen Programm keine neue Art von Zugriff, nur einen zweiten Weg zu dem, was über den Steuer-Socket ohnehin geht.
 - **Kein Schutzziel:** Stören oder Beenden durch denselben Nutzer. Wer Signale schicken oder den Aufbewahrer belegen kann, kann auch die App beenden. Dann gilt der Rückfall per `--resume`.
 - **Kein Schutzziel:** Was über den vorhandenen Control-Socket der App ohnehin geht. `whisperm8 chats send` nimmt Aufrufe jedes Prozesses desselben Nutzers an, Aufrufe ohne Sitzungs-Kennung gelten als „extern“ (`AgentControlServer`, `AgentControlRequestHandler.rejectsUnverifiedActor`). Dieser Socket ist schwächer gesichert als der Aufbewahrer. Das ist bekannt und ein eigener, späterer Punkt, kein Auftrag für dieses Feature.
 - **Folge:** Weitere Härtung am Aufbewahrer nur, wenn sie ein Schutzziel oben trifft. Sie kostet sonst Zuverlässigkeit (Schlüsselbund, Fristen) ohne echten Gewinn.
@@ -43,9 +44,9 @@ Welche Schicht was trägt (Urteil zur Absender-Bindung, 13.11.2026):
 
 | Schicht | Was sie leistet |
 |---|---|
-| Einmal-Geheimnis | **Grenze.** Ohne das Geheimnis gibt es keine Abgabe, keine Übernahme und keine Freigabe. Ein fremdes Programm mit eigener Verbindung scheitert hier. |
+| Einmal-Geheimnis | **Grenze gegen andere Benutzer und Verwechslungen, Hürde gegen ein gezieltes Programm desselben Benutzers** (es kann die Datei lesen, solange sie liegt). Ohne das Geheimnis gibt es keine Abgabe, keine Übernahme und keine Freigabe. |
 | Kein Kind erbt den Socket | **Grenze.** Ein Kind, das die Verbindung der App erbt, könnte die Telegramme des Aufbewahrers mitlesen, samt Leitung, Bild und Token. Dagegen hilft keine Prüfung des Absenders, nur dass niemand erbt: Die App setzt close-on-exec sofort nach dem Anlegen, legt Socket und Leitungen nur auf dem Main Thread an (dort laufen auch die `forkpty`) und prüft das im Code; das Kind schließt vor `execve` alle Leitungen, die beim Start offen waren (Paket 1). |
-| Code-Prüfung je Telegramm | **Hürde, keine Garantie.** Der Kernel nennt den Prozess, der den Socket zuletzt angefasst hat, nicht den, der diese Bytes geschrieben hat. |
+| Code-Prüfung je Telegramm | **Hürde, keine Garantie.** Der Kernel nennt den Prozess, der den Socket zuletzt angefasst hat, nicht den, der diese Bytes geschrieben hat. Bei ad hoc signierten Builds (alle Brew-Releases) prüft sie nur den Pfad. |
 | Absender-Bindung | **Hürde, keine Garantie,** aus demselben Grund. Beide bleiben, weil sie billig sind und Fälle aufhalten, in denen der gebundene Prozess gerade nicht am Socket ist. |
 
 ## Wer darf was
@@ -147,4 +148,4 @@ Stand 13.11.2026, Branch `feat/handover-app`. Was aus der früheren Liste „Off
 | Signatur dev ↔ Brew | Rückfall per `--resume`, ohne Dialog (siehe Geheimnis). Die echte Prüfung mit zwei Builds steht noch aus. |
 | Startzeit | Vor jeder Übernahme prüft die App, ob unter der PID noch derselbe Prozess läuft. |
 
-Bedienung: `make dev` fragt vor dem Beenden `whisperm8 app handover`; Test-Instanz `restart --keep-chats` und `handover`; Labs-Schalter „Neustart ohne Chatverlust“. Offen: Pflichttests mit echtem `make dev`, Schlüsselbund mit zwei Dev-Builds, Bild im echten Fenster, Ansicht hängt sich an übernommene Chats an (Rückweg nach gescheitertem Andocken, Fehlertext).
+Bedienung: `make dev` fragt vor dem Beenden `whisperm8 app handover`; Test-Instanz `restart --keep-chats` und `handover`; Labs-Schalter „Neustart ohne Chatverlust“. Offen: Pflichttests mit echtem `make dev`, Abnahme Dev auf Dev und ad hoc auf ad hoc mit der Datei-Ablage, Bild im echten Fenster, Ansicht hängt sich an übernommene Chats an (Rückweg nach gescheitertem Andocken, Fehlertext).

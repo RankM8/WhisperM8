@@ -29,6 +29,7 @@ enum PreferenceBedienweg {
     static let killSwitches: [Entry] = [
         Entry(key: "agentEventDrivenWatchEnabled", reason: "Notbremse: zurück zum reinen 1,5-s-Polling des Transcript-Watchers."),
         Entry(key: "claudeRegistryStatusEnabled", reason: "Notbremse: Claude-Status wieder aus Hooks und Transcript statt aus Claudes Registry."),
+        Entry(key: "codexStartGuardEnabled", reason: "Notbremse: Codex-Chats setzen wieder ohne Doppelstart-Prüfung fort, falls eine künftige Codex-Version einen langlebigen Prozess mit resume <id> hält und so jedes Fortsetzen sperrt."),
         Entry(key: "claudeSharedMemoryEnabled", reason: "Notbremse: jedes Claude-Profil nutzt wieder sein eigenes Auto-Memory."),
         Entry(key: "accountSwitchAfterTurnEnabled", reason: "Notbremse: Kontowechsel überspringt laufende Chats wieder, statt nach dem Turn zu wechseln."),
         Entry(key: "accountBulkMoveEnabled", reason: "Notbremse: blendet den Mehrfach-Kontowechsel aus; der Einzel-Umzug bleibt."),
@@ -42,6 +43,7 @@ enum PreferenceBedienweg {
         Entry(key: "chatGPTTranscriptionEnabled", reason: "Notbremse: blendet den Anbieter ChatGPT-Abo aus allen Pickern aus (gespeicherter Wert bleibt)."),
         Entry(key: "claudePluginEnabled", reason: "Notbremse: kein Claude-Code-Plugin, Skills wieder lose in ~/.claude/skills (die Seite CLI & Skills zeigt den Modus nur an)."),
         Entry(key: "controllerFeatureEnabled", reason: "Notbremse: nimmt die Controller-Steuerung komplett aus dem Betrieb, ohne Zugriff auf das GameController-Framework (der Schalter in den Einstellungen wirkt dann nicht)."),
+        Entry(key: "controllerPaddleHIDEnabled", reason: "Notbremse: kein rohes HID für Paddles und Xbox-Knopf des Xbox-Controllers; die Paddles wirken dann als die Gesichtstasten ihres Controller-Profils."),
         Entry(key: "notchStatusFeatureEnabled", reason: "Notbremse: nimmt die Statusanzeige an der Notch komplett aus dem Betrieb (der Schalter in den Einstellungen wirkt dann nicht)."),
         Entry(key: "unifiedPillEnabled", reason: "Notbremse: trennt Diktat-Pille und Status-Pille wieder wie vor der vereinten Pille (eigene Lage unten mittig, Status-Pille mit Fensterschatten, Einstellungen an den alten Stellen)."),
         Entry(key: "agentStatusSoftPulseEnabled", reason: "Notbremse: schaltet den sanften Status-Puls ab (Render-Last)."),

@@ -10,7 +10,10 @@ extension HandoverTakeService {
         let store = AgentSessionStore()
         return HandoverTakeService(dependencies: .init(
             paths: paths,
-            secretStore: HandoverLazySecretStore { HandoverSecretStore.live(paths: paths) },
+            // Lazy: Die Datei-Ablage kostet nichts, aber mit dem späteren Wechsel
+            // zurück in den Schlüsselbund (Apple-Konto) läse jeder Start sonst
+            // wieder die Signatur.
+            secretStore: HandoverLazySecretStore { HandoverSecretStores.live(paths: paths) },
             marker: marker,
             sessions: { store.loadWorkspace().sessions },
             adopt: { taken, session in adoptLive(taken, session: session, store: store) },

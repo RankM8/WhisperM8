@@ -102,6 +102,7 @@ struct ControllerMenuCard: View {
     /// Die gezeigten Zeilen selbst sind immer ganz zu sehen.
     var peekAbove: ControllerMenuRow? = nil
     var peekBelow: ControllerMenuRow? = nil
+    @Environment(\.controllerFamily) private var family
 
     private var palette: IslandPalette { .notch }
     private typealias Metrics = ControllerMenuCardMetrics
@@ -174,7 +175,7 @@ struct ControllerMenuCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
-            Text(verbatim: "Options")
+            Text(verbatim: ControllerButton.options.glyph(family))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(palette.hint)
                 .padding(.horizontal, 6)
@@ -272,9 +273,11 @@ struct ControllerMenuCard: View {
     }
 
     private var footer: some View {
-        Text(verbatim: isSubmenu
-            ? String(localized: "✕ select · ○ back · Options closes")
-            : String(localized: "✕ select · ○ or Options closes"))
+        let cross = ControllerButton.cross.glyph(family), circle = ControllerButton.circle.glyph(family)
+        let options = ControllerButton.options.glyph(family)
+        return Text(verbatim: isSubmenu
+            ? String(localized: "\(cross) select · \(circle) back · \(options) closes")
+            : String(localized: "\(cross) select · \(circle) or \(options) closes"))
             .font(.system(size: 11))
             .foregroundStyle(palette.secondary)
             .lineLimit(1)
@@ -291,6 +294,7 @@ struct ControllerMenuCardHost: View {
     let anchors: [ControllerMenuPlacement.Anchor: Anchor<CGRect>]
     @State private var model = ControllerUIModel.shared
     @State private var windows = AgentWindowStore.shared
+    @State private var status = ControllerManager.shared.status
     @AppStorage(PreferenceKeys.controllerLegendEnabled) private var legendEnabled = true
 
     var body: some View {
@@ -298,6 +302,7 @@ struct ControllerMenuCardHost: View {
             ControllerMenuCardResolver(
                 menu: menu, fallbackTitle: model.targetTitle, anchors: anchors,
                 bottomInset: legendEnabled ? ControllerLegendBar.height : 0)
+                .environment(\.controllerFamily, status.device?.family ?? .playStation)
                 .transition(.opacity)
         }
     }
