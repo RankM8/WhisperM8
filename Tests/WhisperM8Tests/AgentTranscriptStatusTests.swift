@@ -81,7 +81,7 @@ final class AgentTranscriptStatusTests: XCTestCase {
             }
         }
         // Offener Tool-Aufruf: eigener Fall (läuft oder wartet auf Freigabe).
-        guard case .toolCallPending(_, false) = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCall, provider: .codex) else {
+        guard case .toolCallPending(_, .command) = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCall, provider: .codex) else {
             return XCTFail("function_call muss ein offener Tool-Aufruf sein")
         }
         guard case .toolResult = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCallOutput, provider: .codex) else {

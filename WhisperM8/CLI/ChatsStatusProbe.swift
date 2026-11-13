@@ -77,7 +77,9 @@ enum ChatsStatusProbe {
     static let codexProcessCache = ChatsTimedCache<[UUID: Date?]?> { CodexChatProcessIndex.scan() }
 
     /// Prozesswissen für den Decider: nur Codex-Chats im PTY der App. Subagent-
-    /// Jobs (`codex exec`) tragen die Chat-ID nicht und bleiben `.unknown`.
+    /// Jobs (`codex exec`) haben keinen eigenen Chat-Prozess und bleiben
+    /// `.unknown`; erben sie die ID ihres Eltern-Chats, zählt der Index sie
+    /// nicht mit (`CodexChatProcessIndex.isInteractiveRun`).
     static var codexLiveness: (AgentChatSession, Date) -> CodexProcessLiveness = { session, now in
         guard session.provider == .codex, session.effectiveKind == .chat else { return .unknown }
         return CodexProcessLiveness.of(sessionID: session.id, index: codexProcessCache.index(now: now))

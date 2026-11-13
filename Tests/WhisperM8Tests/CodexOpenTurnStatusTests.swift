@@ -65,14 +65,58 @@ final class CodexOpenTurnStatusTests: XCTestCase {
 
     // MARK: - Freigabe und Rückfrage: Grün heißt nur „arbeitet“
 
-    func testUserQuestionToolIsNeverWorking() {
+    func testUserQuestionToolsAreNeverWorking() {
+        // Codex 0.169 nennt die Rückfrage `request_user_input_async`.
+        for name in ["request_user_input", "request_user_input_async", "request_permissions"] {
+            let event = AgentTranscriptParser.parseLine(
+                line("response_item", #"{"type":"function_call","name":"\#(name)","arguments":"{}","call_id":"c"}"#,
+                     at: turnStart),
+                provider: .codex)
+            guard case .toolCallPending(_, .question) = event else {
+                return XCTFail("Rückfrage erwartet für \(name): \(String(describing: event))")
+            }
+            // Sofort, auch bei frischer Datei und lebendem Prozess.
+            XCTAssertEqual(decide(event!, mtime: now, process: .running(since: processStart))?.status, .idle, name)
+        }
+    }
+
+    func testCommandUnderApprovalPolicyNeverFollowsTheProcess() {
+        // `approval_policy: never`: ein Befehl kann nicht auf eine Freigabe
+        // warten — ein langer Build bleibt grün, solange Codex lebt.
+        let tail = [
+            line("turn_context", #"{"turn_id":"t","approval_policy":"never"}"#, at: turnStart),
+            line("response_item", #"{"type":"custom_tool_call","name":"exec","input":"swift test","call_id":"c"}"#,
+                 at: turnStart.addingTimeInterval(3)),
+        ].joined(separator: "\n")
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        guard case .toolCallPending(_, .commandUnattended) = event else {
+            return XCTFail("Befehl ohne Freigabe erwartet: \(String(describing: event))")
+        }
+        XCTAssertEqual(decide(event!, mtime: silentMTime, process: .running(since: processStart))?.status, .working)
+        XCTAssertEqual(decide(event!, mtime: silentMTime, process: .notRunning)?.status, .idle)
+        XCTAssertEqual(decide(event!, mtime: silentMTime, process: .unknown)?.status, .idle)
+    }
+
+    func testCommandUnderGranularPolicyKeepsTheTwoMinuteLimit() {
+        // Granular mit `request_permissions`: Der Befehl kann auf den Nutzer
+        // warten. Ohne `turn_context` im Tail gilt dieselbe vorsichtige Regel.
+        let granular = #"{"turn_id":"t","approval_policy":{"granular":{"request_permissions":true,"rules":false,"sandbox_approval":false}}}"#
+        let call = line("response_item", #"{"type":"custom_tool_call","name":"exec","input":"x","call_id":"c"}"#,
+                        at: turnStart.addingTimeInterval(3))
+        for tail in [[line("turn_context", granular, at: turnStart), call], [call]] {
+            let event = AgentTranscriptParser.lastEvent(in: tail.joined(separator: "\n"), provider: .codex)
+            guard case .toolCallPending(_, .command) = event else { return XCTFail("\(String(describing: event))") }
+            XCTAssertEqual(decide(event!, mtime: silentMTime, process: .running(since: processStart))?.status, .idle)
+        }
+    }
+
+    func testOtherToolsMayAwaitApproval() {
         let event = AgentTranscriptParser.parseLine(
-            line("response_item", #"{"type":"function_call","name":"request_user_input","arguments":"{}","call_id":"c"}"#,
+            line("response_item", #"{"type":"function_call","name":"mcp__x__y","arguments":"{}","call_id":"c"}"#,
                  at: turnStart),
             provider: .codex)
-        guard case .toolCallPending(_, true) = event else { return XCTFail("Rückfrage erwartet: \(String(describing: event))") }
-        // Sofort, auch bei frischer Datei und lebendem Prozess.
-        XCTAssertEqual(decide(event!, mtime: now, process: .running(since: processStart))?.status, .idle)
+        guard case .toolCallPending(_, .other) = event else { return XCTFail("\(String(describing: event))") }
+        XCTAssertEqual(decide(event!, mtime: silentMTime, process: .running(since: processStart))?.status, .idle)
     }
 
     func testPendingToolCallKeepsTheTwoMinuteLimitDespiteLiveProcess() {
@@ -81,7 +125,7 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         let event = AgentTranscriptParser.parseLine(
             line("response_item", #"{"type":"custom_tool_call","name":"exec","input":"ls","call_id":"c"}"#, at: turnStart),
             provider: .codex)
-        guard case .toolCallPending(_, false) = event else { return XCTFail("offener Aufruf erwartet") }
+        guard case .toolCallPending(_, .command) = event else { return XCTFail("offener Befehl erwartet") }
         XCTAssertEqual(decide(event!, mtime: now.addingTimeInterval(-30), process: .running(since: processStart))?.status,
                        .working)
         XCTAssertEqual(decide(event!, mtime: silentMTime, process: .running(since: processStart))?.status, .idle)
@@ -90,7 +134,7 @@ final class CodexOpenTurnStatusTests: XCTestCase {
     func testLocalShellCallIsAPendingToolCall() {
         let event = AgentTranscriptParser.parseLine(
             line("response_item", #"{"type":"local_shell_call","call_id":"c"}"#, at: turnStart), provider: .codex)
-        guard case .toolCallPending(_, false) = event else { return XCTFail("offener Aufruf erwartet") }
+        guard case .toolCallPending(_, .command) = event else { return XCTFail("offener Befehl erwartet") }
     }
 
     // MARK: - Prozess tot, früherer Lauf, Hänger
@@ -98,7 +142,7 @@ final class CodexOpenTurnStatusTests: XCTestCase {
     func testDeadProcessWithOpenTurnIsNotWorking() {
         for event: AgentTranscriptEvent in [
             .userMessage(timestamp: now), .assistantMessageOngoing(timestamp: now),
-            .toolResult(timestamp: now), .toolCallPending(timestamp: now, waitsForUser: false),
+            .toolResult(timestamp: now), .toolCallPending(timestamp: now, kind: .command),
         ] {
             XCTAssertEqual(decide(event, mtime: now, process: .notRunning)?.status, .idle, "\(event)")
         }
@@ -111,7 +155,7 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         let resumed = CodexProcessLiveness.running(since: now.addingTimeInterval(-20))
         let oldTurn = now.addingTimeInterval(-3 * 3600)
         XCTAssertEqual(decide(.assistantMessageOngoing(timestamp: oldTurn), mtime: now, process: resumed)?.status, .idle)
-        XCTAssertEqual(decide(.toolCallPending(timestamp: oldTurn, waitsForUser: false), mtime: now,
+        XCTAssertEqual(decide(.toolCallPending(timestamp: oldTurn, kind: .commandUnattended), mtime: now,
                               process: resumed)?.status, .idle)
         // Ein neuer Turn nach dem Resume arbeitet wieder.
         XCTAssertEqual(decide(.userMessage(timestamp: now.addingTimeInterval(-5)), mtime: now.addingTimeInterval(-5),
@@ -186,6 +230,43 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         XCTAssertNil(CodexChatProcessIndex.sessionID(inEnvironment: ["WHISPERM8_SESSION_ID=kaputt"]))
     }
 
+    func testSubcommandRunsAreNotTheChatProcess() {
+        // Ein Codex-Chat, der `whisperm8 agent` startet, vererbt seine
+        // Chat-ID an `codex -a never exec …` (CodexExecRunner).
+        XCTAssertFalse(CodexChatProcessIndex.isInteractiveRun(arguments: ["-a", "never", "exec", "--json", "-"]))
+        XCTAssertFalse(CodexChatProcessIndex.isInteractiveRun(arguments: ["e", "hallo"]))
+        XCTAssertFalse(CodexChatProcessIndex.isInteractiveRun(arguments: ["app-server", "--listen", "unix://"]))
+        XCTAssertTrue(CodexChatProcessIndex.isInteractiveRun(arguments: []))
+        XCTAssertTrue(CodexChatProcessIndex.isInteractiveRun(arguments: ["-c", "model=x", "resume", "019f"]))
+        XCTAssertTrue(CodexChatProcessIndex.isInteractiveRun(arguments: ["--model", "gpt", "Bau das Feature"]))
+        XCTAssertTrue(CodexChatProcessIndex.isInteractiveRun(arguments: ["--", "exec"]))
+    }
+
+    func testParseProcEnvironmentOfTheRealOwnProcess() throws {
+        let bytes = try XCTUnwrap(CodexSessionRunningGuard.procArgs(pid: getpid()))
+        let environment = CodexChatProcessIndex.parseProcEnvironment(bytes)
+        XCTAssertTrue(environment.contains { $0.hasPrefix("PATH=") || $0.hasPrefix("HOME=") }, "\(environment.prefix(3))")
+    }
+
+    func testZombieCodexDoesNotDisableTheIndex() throws {
+        // Ein beendeter, nicht abgeholter `codex`: KERN_PROCARGS2 schlägt
+        // fehl, kill(pid, 0) nicht. Er darf den Index nicht unbrauchbar machen.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("codex-zombie-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let binary = dir.appendingPathComponent("codex")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: binary)
+        var pid: pid_t = 0
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup(binary.path), nil]
+        defer { argv.forEach { free($0) } }
+        XCTAssertEqual(posix_spawn(&pid, binary.path, nil, nil, argv, nil), 0)
+        // Warten, bis er beendet ist, aber NICHT abholen.
+        for _ in 0..<100 where !CodexChatProcessIndex.isZombie(pid) { usleep(20_000) }
+        defer { var status: Int32 = 0; waitpid(pid, &status, 0) }
+        XCTAssertTrue(CodexChatProcessIndex.isZombie(pid))
+        XCTAssertNotNil(CodexChatProcessIndex.scan())
+    }
+
     func testParseProcEnvironmentSkipsPathAndArguments() {
         // argc=2, Programmpfad, Füll-Nullen, argv[0..1], Umgebung, Abschluss.
         var bytes: [UInt8] = []
@@ -212,12 +293,22 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         try process.run()
         defer { process.terminate(); process.waitUntilExit() }
 
+        // Ein Subagent desselben Chats mit geerbter ID zählt nicht.
+        let child = Process()
+        child.executableURL = binary
+        child.arguments = ["-a", "never", "exec", "30"]
+        child.environment = ["WHISPERM8_SESSION_ID": chat.uuidString]
+        try child.run()
+        defer { child.terminate(); child.waitUntilExit() }
+
         let index = CodexChatProcessIndex.scan()
         XCTAssertNotNil(index)
         guard case .running(let since) = CodexProcessLiveness.of(sessionID: chat, index: index) else {
             return XCTFail("Codex-Prozess des Chats nicht gefunden")
         }
-        XCTAssertNotNil(since)
+        XCTAssertEqual(try XCTUnwrap(since).timeIntervalSince1970,
+                       try XCTUnwrap(ProcessStartTime.of(pid: process.processIdentifier)).timeIntervalSince1970,
+                       accuracy: 0.001, "der Subagent (jünger) darf den Chat-Prozess nicht verdrängen")
         XCTAssertEqual(CodexProcessLiveness.of(sessionID: UUID(), index: index), .notRunning)
     }
 }
@@ -326,5 +417,28 @@ final class CodexOpenTurnWatcherTests: XCTestCase {
         XCTAssertEqual(poll(.running(since: now.addingTimeInterval(-600))), .working)
         XCTAssertEqual(poll(.notRunning), .idle)
         XCTAssertEqual(poll(.unknown), .idle)
+    }
+
+    func testStatFirstPathUsesFreshLivenessWithTheCachedEvent() {
+        // Stiller Codex: Datei unverändert, kein Tail-Read — der Prozess wird
+        // trotzdem bei jedem Tick neu gefragt.
+        let now = Date()
+        let url = URL(fileURLWithPath: "/tmp/whisperm8-codex-open-turn.jsonl")
+        let stat = AgentTranscriptFileStat(mtime: now.addingTimeInterval(-286), size: 10)
+        var entry = WatchedSession(id: UUID(), provider: .codex, cwd: "/tmp", externalSessionID: "x",
+                                   transcriptURL: url, lastTurnFinishedAt: nil)
+        entry.lastStat = stat
+        entry.cachedLastEvent = .assistantMessageOngoing(timestamp: now.addingTimeInterval(-300))
+        func poll(_ process: CodexProcessLiveness) -> AgentSessionRuntimeStatus? {
+            AgentSessionRuntimeWatcher.pollSnapshot(
+                for: entry, now: now,
+                statProvider: { _ in stat },
+                tailProvider: { _, _ in XCTFail("kein Tail-Read bei unveränderter Datei"); return nil },
+                urlResolver: { _ in url },
+                codexProcess: process
+            ).decision?.status
+        }
+        XCTAssertEqual(poll(.running(since: now.addingTimeInterval(-600))), .working)
+        XCTAssertEqual(poll(.notRunning), .idle)
     }
 }

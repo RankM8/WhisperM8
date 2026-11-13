@@ -47,13 +47,57 @@ enum CodexChatProcessIndex {
             guard proc_name(pid, &name, UInt32(name.count)) > 0,
                   CodexSessionRunningGuard.isCodexName(String(cString: name)) else { continue }
             guard let bytes = CodexSessionRunningGuard.procArgs(pid: pid) else {
-                if kill(pid, 0) == 0 { return nil } // lebt, aber nicht lesbar
+                // Lebt, aber nicht lesbar → Index unbrauchbar. Zombies (schon
+                // beendet, noch nicht abgeholt) sind lesbar tot: überspringen.
+                if kill(pid, 0) == 0, !isZombie(pid) { return nil }
                 continue
             }
-            guard let id = sessionID(inEnvironment: parseProcEnvironment(bytes)) else { continue }
+            // Ein `codex exec`, den der Chat selbst startet (Subagent), erbt
+            // dessen Chat-ID; er ist nicht der Chat-Prozess.
+            guard isInteractiveRun(arguments: CodexSessionRunningGuard.parseProcArgs(bytes) ?? []),
+                  let id = sessionID(inEnvironment: parseProcEnvironment(bytes)) else { continue }
             processes.append((id, ProcessStartTime.of(pid: pid)))
         }
         return index(processes)
+    }
+
+    /// Codex-Unterbefehle, die keine Chat-Oberfläche sind.
+    static let nonInteractiveSubcommands: Set<String> = [
+        "exec", "e", "app-server", "mcp-server", "mcp", "apply", "a", "login", "logout",
+        "sandbox", "debug", "completion", "cloud", "features",
+    ]
+    /// Optionen mit eigenem Wert (`-a never exec` → Unterbefehl `exec`).
+    static let optionsWithValue: Set<String> = [
+        "-c", "--config", "-m", "--model", "-p", "--profile", "-s", "--sandbox",
+        "-a", "--ask-for-approval", "-C", "--cd", "-i", "--image", "--add-dir",
+        "--enable", "--disable", "--local-provider",
+    ]
+
+    /// Pur: Ist das die Chat-Oberfläche (`codex`, `codex resume <id>`,
+    /// `codex <prompt>`) und kein Unterbefehl wie `exec`? Entscheidet das erste
+    /// Argument, das keine Option und kein Optionswert ist.
+    static func isInteractiveRun(arguments: [String]) -> Bool {
+        var skipValue = false
+        for argument in arguments {
+            if skipValue { skipValue = false; continue }
+            if argument == "--" { return true }
+            if argument.hasPrefix("-") {
+                skipValue = optionsWithValue.contains(argument)
+                continue
+            }
+            return !nonInteractiveSubcommands.contains(argument)
+        }
+        return true
+    }
+
+    /// `KERN_PROCARGS2` schlägt für Zombies fehl, `kill(pid, 0)` aber nicht.
+    /// `proc_pidinfo` liefert für Zombies nichts, `sysctl` mit `p_stat` schon.
+    static func isZombie(_ pid: pid_t) -> Bool {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return false }
+        return info.kp_proc.p_stat == SZOMB
     }
 
     /// Pur: je Chat der jüngste Prozess (ein auslaufender Vorgänger beim

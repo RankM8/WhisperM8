@@ -14,9 +14,9 @@ enum AgentTranscriptEvent: Equatable {
     case toolResult(timestamp: Date?)
     /// Nur Codex: Tool-Aufruf ohne Ergebnis. Codex führt das Tool gerade aus
     /// ODER wartet auf die Freigabe des Nutzers — im Rollout ist beides gleich
-    /// (Freigabe-Anfragen schreibt Codex nicht mit). `waitsForUser`: der
-    /// Aufruf selbst ist eine Rückfrage an den Nutzer (`request_user_input`).
-    case toolCallPending(timestamp: Date?, waitsForUser: Bool)
+    /// (Freigabe-Anfragen schreibt Codex nicht mit). `kind` sagt, was der
+    /// Aufruf sein kann.
+    case toolCallPending(timestamp: Date?, kind: CodexPendingTool)
     /// User hat den Turn per ESC abgebrochen — Claude schreibt dann eine
     /// user-Zeile `[Request interrupted by user]` (ggf. „… for tool use").
     /// Eigener Fall statt `.userMessage`, weil ein Abbruch das GEGENTEIL
@@ -29,6 +29,20 @@ enum AgentTranscriptEvent: Equatable {
     /// Zeile — sie als „letztes Event" zu werten stufte arbeitende Chats über
     /// die 30-s-mtime-Heuristik fälschlich auf idle herab.
     case meta
+    case other
+}
+
+/// Was ein offener Codex-Tool-Aufruf sein kann.
+enum CodexPendingTool: Equatable {
+    /// Eine Frage an den Nutzer (`request_user_input…`, `request_permissions`):
+    /// bis zur Antwort arbeitet Codex nicht.
+    case question
+    /// Ein Befehl (`exec`, Shell); wartet je nach Freigabe-Regel auf den Nutzer.
+    case command
+    /// Ein Befehl in einem Turn mit `approval_policy: never`: Er kann nicht auf
+    /// eine Freigabe warten, läuft also, solange Codex lebt.
+    case commandUnattended
+    /// Anderes Werkzeug (MCP und Co.), kann auf eine Freigabe warten.
     case other
 }
 
@@ -56,13 +70,33 @@ enum AgentTranscriptParser {
     /// den Status sonst verwässern. Nur-Meta-Tail → `nil` („keine Meinung").
     static func lastEvent(in tailText: String, provider: AgentProvider) -> AgentTranscriptEvent? {
         let lines = tailText.split(omittingEmptySubsequences: true) { $0.isNewline }
-        for line in lines.reversed() {
+        for (index, line) in lines.enumerated().reversed() {
             if let event = parseLine(String(line), provider: provider) {
                 if case .meta = event { continue }
+                // Offener Befehl: Steht die Freigabe-Regel des Turns auf
+                // `never`, kann er nicht auf den Nutzer warten.
+                if case .toolCallPending(let timestamp, .command) = event,
+                   codexApprovalPolicyIsNever(before: index, in: lines) {
+                    return .toolCallPending(timestamp: timestamp, kind: .commandUnattended)
+                }
                 return event
             }
         }
         return nil
+    }
+
+    /// Freigabe-Regel aus dem letzten `turn_context` vor der Zeile `index`.
+    /// Fehlt er im Tail (langer Turn), gilt die vorsichtige Annahme: Der
+    /// Befehl kann auf eine Freigabe warten.
+    static func codexApprovalPolicyIsNever(before index: Int, in lines: [Substring]) -> Bool {
+        for line in lines[..<index].reversed() where line.contains("\"turn_context\"") {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["type"] as? String == "turn_context" else { continue }
+            let payload = object["payload"] as? [String: Any]
+            return payload?["approval_policy"] as? String == "never"
+        }
+        return false
     }
 
     // MARK: - Claude
@@ -168,8 +202,18 @@ enum AgentTranscriptParser {
     }
 
     /// Codex-Werkzeuge, deren Aufruf eine Frage an den Nutzer ist: Bis zur
-    /// Antwort arbeitet Codex nicht.
-    static let codexUserQuestionTools: Set<String> = ["request_user_input"]
+    /// Antwort arbeitet Codex nicht. Präfix-Vergleich, Codex 0.169 nennt die
+    /// Rückfrage `request_user_input_async`.
+    static let codexUserQuestionToolPrefixes = ["request_user_input", "request_permissions"]
+    /// Befehls-Werkzeuge: `exec` (Code-Modus), `exec_command`, `shell`.
+    static let codexCommandTools: Set<String> = ["exec", "exec_command", "shell", "local_shell"]
+
+    static func codexPendingToolKind(type: String, name: String?) -> CodexPendingTool {
+        if type == "local_shell_call" { return .command }
+        guard let name else { return .other }
+        if codexUserQuestionToolPrefixes.contains(where: name.hasPrefix) { return .question }
+        return codexCommandTools.contains(name) ? .command : .other
+    }
 
     /// Übersetzt eine Zeile des echten Codex-Rollouts. `nil` = kein Rollout-Typ
     /// (dann greifen die Alt-Formate).
@@ -213,9 +257,9 @@ enum AgentTranscriptParser {
                 return .meta
             case "function_call", "custom_tool_call", "local_shell_call":
                 // Offener Tool-Aufruf: läuft oder wartet auf eine Freigabe.
-                let name = payload?["name"] as? String
-                return .toolCallPending(timestamp: timestamp,
-                                        waitsForUser: name.map(codexUserQuestionTools.contains) ?? false)
+                return .toolCallPending(
+                    timestamp: timestamp,
+                    kind: codexPendingToolKind(type: payloadType ?? "", name: payload?["name"] as? String))
             case "reasoning", "web_search_call", "tool_search_call":
                 // Suchen laufen ohne Freigabe auf dem Server bzw. sofort.
                 return .assistantMessageOngoing(timestamp: timestamp)
@@ -350,14 +394,19 @@ enum AgentTranscriptStatusDecider {
         case .userMessage(let timestamp):
             return openTurn(timestamp)
 
-        case .toolCallPending(let timestamp, let waitsForUser):
+        case .toolCallPending(let timestamp, let kind):
             // Eine Frage an den Nutzer ist keine Arbeit (Grün heißt nur
-            // „arbeitet“). Ein anderes offenes Tool läuft gerade ODER wartet
-            // auf eine Freigabe — das Rollout zeigt keinen Unterschied. Darum
-            // hier weiter die 120-s-Sicherung und kein Prozess-Vorrang: eine
-            // Freigabe-Wartezeit wird höchstens 2 min grün, nie dauerhaft.
-            if waitsForUser || codexProcess == .notRunning {
+            // „arbeitet“). Ein Befehl unter `approval_policy: never` kann
+            // nicht warten und folgt dem Prozess wie ein offener Turn. Jedes
+            // andere offene Tool läuft gerade ODER wartet auf eine Freigabe —
+            // das Rollout zeigt keinen Unterschied. Darum dort weiter die
+            // 120-s-Sicherung und kein Prozess-Vorrang: eine Freigabe-
+            // Wartezeit wird höchstens 2 min grün, nie dauerhaft.
+            if kind == .question || codexProcess == .notRunning {
                 return Decision(status: .idle, turnFinished: false)
+            }
+            if kind == .commandUnattended {
+                return openTurn(timestamp)
             }
             if case .running(let since?) = codexProcess,
                (timestamp ?? mtime) < since.addingTimeInterval(-codexProcessStartTolerance) {

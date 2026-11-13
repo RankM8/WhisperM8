@@ -163,12 +163,16 @@ einem abgestürzten Lauf und ist `idle`, ein toter Prozess arbeitet nie. Gegen
 einen hängenden Prozess bleibt eine Obergrenze von 30 Minuten ohne Schreiben.
 Ein offener Tool-Aufruf behält die 120-s-Grenze, weil Codex Freigabe-Anfragen
 nicht ins Rollout schreibt: Ein wartender Aufruf sieht aus wie ein laufender
-und darf höchstens kurz grün sein. Eine Rückfrage per `request_user_input` ist
-sofort `idle`. Die App liest den Prozess über die PID im PTY
+und darf höchstens kurz grün sein. Ausnahme: Steht im `turn_context` des Turns
+`approval_policy: never`, kann ein Befehl (`exec`, Shell) nicht warten und
+folgt dem Prozess. Eine Rückfrage (`request_user_input…`,
+`request_permissions`) ist sofort `idle`. Die App liest den Prozess über die PID im PTY
 (`kill(pid, 0)` plus Startzeit, im Poll außerhalb des Main Threads). Die CLI
 (`ChatsStatusProbe`) kennt keine PTYs und sucht Codex-Prozesse mit
 `WHISPERM8_SESSION_ID=<Chat-ID>` in der Umgebung (`CodexChatProcessIndex`,
 ein Scan je Sekunde CLI-Laufzeit); so urteilen beide über denselben Prozess.
+Unterbefehle wie `codex exec` erben die Chat-ID ihres Eltern-Chats und zählen
+nicht, Zombies werden übersprungen.
 Claude-Chats, Subagent-Jobs und alle Aufrufer ohne Prozesswissen bleiben beim
 alten Verhalten.
 
