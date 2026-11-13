@@ -153,15 +153,37 @@ Ruhebild liefert die Status-Seite über den Hub
 (`NotchStatusController.restSnapshot`), aus ihrem Zustand gerechnet, nicht
 aus dem Fenster. Es wird aus denselben Bausteinen gezeichnet wie die
 Status-Pille (`PillRestCoreView`, `UnifiedPillRestStatus`, `NotchHeaderRow`);
-ein Pixeltest hält beide gleich. Hat das Diktat-Fenster sein erstes Bild
-gezeichnet (30 ms), tritt die Status-Pille zurück und die Pille wächst in
-einer SwiftUI-Animation ins Diktat (`showsRestLook`, Kern über
-`matchedGeometryEffect`). Am Ende umgekehrt: zurück ins Ruhebild, die
-Status-Pille erscheint wieder (ohne Animation, mit dem aktuellen Wert), ein
-Bild später schließt das Diktat-Fenster. Für diesen einen Moment liegen zwei
-gleiche Bilder übereinander, nie keins. Der Ablauf ist rein und getestet
-(`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen, Übergabe;
-Unterbrechungen über eine Generation), ausgeführt in
+ein Pixeltest hält beide gleich (drei Farbstufen Toleranz). Dazu ist die
+Diktat-Pille der vereinten Pille gebaut wie die Status-Pille: erst auf die
+Kapsel zugeschnitten, dann ein Schatten. Vorher warf jede Ebene einen
+eigenen Schatten unter das durchscheinende Glas, die Pille war im Fenster
+sichtbar dunkler (Körper 82 statt 91 von 255) und sprang beim Übergang im
+Ton. Die getrennte Diktat-Pille (Kill-Switch) bleibt, wie sie war.
+
+Das Diktat-Fenster erscheint zuerst **unsichtbar** über der Status-Pille
+(Inhalt mit Deckkraft 0). Hat der Main Thread dieses Bild abgegeben
+(Beobachter direkt nach der CATransaction am Ende des Run-Loop-Durchlaufs,
+`OverlayController.afterNextCommit`) und sind danach 50 ms vergangen, steht
+es sicher auf dem Bildschirm (gemessen: ein neues Fenster erscheint 18 bis
+33 ms nach dem Abgeben). Dann tauschen beide in **einer** CATransaction ihre
+Sichtbarkeit: Diktat-Inhalt sichtbar, Inhalt der Status-Pille unsichtbar
+(`UnifiedPillHub.setStatusContentHidden`). Im selben Durchlauf beginnt die
+Pille in einer SwiftUI-Animation ins Diktat zu wachsen (`showsRestLook`, Kern
+über `matchedGeometryEffect`); die Status-Pille geht erst aus dem Weg, wenn
+der Tausch auf dem Bildschirm ist, auch wenn das Wachsen schon durch ist.
+Läuft der Beobachter nie (anderer Run-Loop-Modus), geht es nach 300 ms über
+einen Ersatzweg weiter, damit das Diktat nicht unsichtbar bleibt. Wird die
+Pille im Diktat auf einen anderen Bildschirm gezogen, wandert die
+Unsichtbarkeit der Status-Pille mit (`UnifiedPillHub.dictationMoved`). Am Ende umgekehrt: zurück ins Ruhebild,
+die Status-Pille erscheint unsichtbar wieder (ohne Animation, mit dem
+aktuellen Wert), nach ihrem Bild der Rücktausch, danach schließt das
+Diktat-Fenster. So steht in jedem Bild genau eine Pille: keine Lücke, und
+keine zwei Glas-Pillen übereinander (die wären dunkler; vorher drei Bilder
+lang so, Körper 60 statt 91). Ein beschäftigter Main Thread verschiebt den
+Tausch nur nach hinten, vorher lief ein fester Zeitgeber ab dem Aufbau und
+konnte vor dem ersten Bild ablaufen. Der Ablauf ist rein und getestet
+(`UnifiedPillMorph`: Ruhe, Übergabe, Wachsen, Diktat, Zurückziehen,
+Übergabe, Schließen; Unterbrechungen über eine Generation), ausgeführt in
 `RecordingPanel+PillMorph.swift`. Stopp im Wachsen zieht sich aus dem
 jetzigen Stand zurück. Ein neues Diktat im Zurückziehen übernimmt dasselbe
 Fenster und wächst wieder, aber nur, wenn es auf genau diesen Bildschirm
@@ -175,7 +197,33 @@ Kern startet ein Diktat (über den Hub, derselbe Weg wie an der ruhenden
 Pille), alles andere wird geschluckt, gezogen wird nicht. Kommt die
 Status-Pille aus dem Diktat zurück, zeigt sie ihren Wert ohne Animation;
 andere Wiedererscheinen bleiben animiert. Messpunkt `pill.morph` (Detail-Stufe, Budget 450 ms) meldet, wenn der
-Main Thread den Übergang aufhält.
+Main Thread den Übergang aufhält. Verschiebt AppKit das Diktat-Fenster beim
+Einblenden doch (Menüleiste), steht im Log `unified_pill_moved_on_order_front`.
+
+**Prüfen ohne Hinsehen:** `whisperm8 debug pill [--busy <ms>]` spielt den
+Übergang ohne Aufnahme durch und schneidet die Fensterliste mit (Lücke,
+Versatz, Verschiebung beim Einblenden, Reihenfolge von Tausch und Fenstern),
+Doku in [ui-testing.md](ui-testing.md).
+
+**Messung vom 13.11.2026** (Aufnahme nur der Fenster der Test-Instanz, 60 Bilder
+je Sekunde, je Lage zwei Läufe hin und zurück: oben mittig, ganz oben unter der
+Menüleiste, frei in der Mitte, dazu 150 ms bzw. 60 ms beschäftigter Main
+Thread beim Start; MacBook-Bildschirm als Bildschirm ohne Notch über
+`WHISPERM8_TEST_NO_NOTCH`, ein Kontrolllauf oben mittig am 5120×1440-Bildschirm
+mit demselben Ergebnis):
+
+| | vorher | nachher |
+|---|---|---|
+| Bilder ohne Pille | 0 | 0 |
+| Versatz der Oberkante | 0 pt (Sprung nach unten schon behoben) | 0 pt |
+| zwei Pillen übereinander (dunkler) | 100 bis 717 ms je Lauf | 0 ms |
+| Ruhebild im anderen Ton | 167 bis 217 ms je Lauf | 0 ms |
+| größter Breitenschritt je Bild | 47 bis 150 pt | 31 bis 46 pt |
+| Abstand Diktat steht → Status weg | 4 bis 35 ms (beschäftigt: 4 und 9) | Tausch ≥ 49 ms danach |
+| Aufbau → Wachsen beginnt | 31 bis 43 ms | 65 bis 75 ms |
+
+Ohne die Ausnahme an der Menüleiste zeigt dieselbe Messung den alten Sprung:
+18 pt oben mittig, 24 pt ganz oben (`orderFrontShift` ebenso).
 
 ### Kill-Switch der vereinten Pille
 

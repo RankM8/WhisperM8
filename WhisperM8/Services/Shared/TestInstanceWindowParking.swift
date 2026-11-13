@@ -17,7 +17,9 @@ enum AppActivation {
 /// nichts über die Arbeitsfenster des Nutzers und nimmt ihm keine Tastatur.
 /// Gerendert wird trotzdem — ScreenCaptureKit (`whisperm8 debug snapshot`)
 /// erfasst das Fenster auch verdeckt. Alpha 0 ginge nicht: dann ist das Foto leer.
-/// `WHISPERM8_TEST_VISIBLE=1` schaltet das ab.
+/// `WHISPERM8_TEST_VISIBLE=1` schaltet das ab, `=pill` lässt nur die Pillen
+/// (Status und Diktat) an ihrem Platz, etwa für eine Aufnahme des Übergangs
+/// (`whisperm8 debug pill`).
 @MainActor
 enum TestInstanceWindowParking {
     static let parkedOriginX: CGFloat = -30_000
@@ -42,6 +44,7 @@ enum TestInstanceWindowParking {
             return
         }
         guard environment["WHISPERM8_TEST_VISIBLE"] != "1" else { return }
+        let sparesPills = environment["WHISPERM8_TEST_VISIBLE"] == "pill"
         let ownPID = ProcessInfo.processInfo.processIdentifier
         if let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != ownPID {
             lastForeignFrontmost = front
@@ -49,7 +52,7 @@ enum TestInstanceWindowParking {
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didUpdateNotification, object: nil, queue: .main
         ) { _ in
-            MainActor.assumeIsolated { parkWindows() }
+            MainActor.assumeIsolated { parkWindows(sparingPills: sparesPills) }
         })
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -66,12 +69,13 @@ enum TestInstanceWindowParking {
         })
     }
 
-    static func parkWindows() {
+    static func parkWindows(sparingPills: Bool = false) {
         // Auch unsichtbare Fenster: `scripts/test-instance.sh` startet die App
         // versteckt (`open -j`), eingeblendet wird erst danach, ohne Aktivierung.
         for window in NSApp.windows where window.level != parkedLevel {
             // Statusleisten-Fenster (MenuBarExtra) bleiben, wie sie sind.
             guard window.level != .statusBar, !window.className.contains("StatusBar") else { continue }
+            if sparingPills, window is NotchPanel || window is RecordingPanel { continue }
             window.level = parkedLevel
             window.ignoresMouseEvents = true
             // Titelfenster hält AppKit mit einem Rest auf dem Bildschirm — der liegt hinter dem Schreibtisch.

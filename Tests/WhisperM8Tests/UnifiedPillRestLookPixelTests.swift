@@ -32,11 +32,12 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
     }
 
     /// Anteil abweichender Pixel zwischen linker und rechter Zelle einer
-    /// Zeile. Toleranz zwölf Farbstufen: Die Status-Pille schneidet ihren
-    /// Inhalt vor dem Schatten auf die Kapsel zu, die Diktat-Pille nicht; ihr
-    /// Schatten weicht deshalb um bis zu zehn Stufen ab (schon vor dem
-    /// Übergang so, im Fenster nicht zu sehen). Das Innere der Pille ist gleich.
-    private func mismatch(_ image: NSBitmapImageRep, row: Int) -> Double {
+    /// Zeile, Toleranz drei Farbstufen (Kantenglättung). Früher zwölf: Die
+    /// Diktat-Pille schnitt ihren Inhalt nicht vor dem Schatten zu und warf
+    /// je Ebene einen Schatten; im Fenster, über dem echten Hintergrund, war
+    /// sie dadurch sichtbar dunkler (Aufnahme 13.11.2026). Seitdem sind beide
+    /// gleich gebaut.
+    private func mismatch(_ image: NSBitmapImageRep, row: Int, tolerance: Int = 3) -> Double {
         guard let data = image.bitmapData else { return 1 }
         let bytesPerPixel = image.bitsPerPixel / 8
         let cellWidth = image.pixelsWide / 2
@@ -46,7 +47,7 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
             for x in 0..<cellWidth {
                 let left = y * image.bytesPerRow + x * bytesPerPixel
                 let right = left + cellWidth * bytesPerPixel
-                for channel in 0..<bytesPerPixel where abs(Int(data[left + channel]) - Int(data[right + channel])) > 12 {
+                for channel in 0..<bytesPerPixel where abs(Int(data[left + channel]) - Int(data[right + channel])) > tolerance {
                     differing += 1
                     break
                 }
