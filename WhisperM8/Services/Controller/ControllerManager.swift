@@ -154,9 +154,9 @@ final class ControllerManager {
         self.preferences = preferences
 
         let counters = self.counters
-        source.onEvent = { [pump] event in
+        source.onEvent = { [pump] event, origin in
             counters.record(event)
-            pump.ingest(event)
+            pump.ingest(event, origin: origin)
         }
         source.onReset = { [pump] in pump.reset() }
         source.onDeviceChange = { [weak self] info in self?.deviceChanged(info) }
@@ -365,10 +365,20 @@ final class ControllerManager {
     /// sonst stellte einer den Trockenlauf des anderen zurück.
     private(set) var isDebugRunActive = false
 
-    /// Speist künstliche Roh-Ereignisse in dieselbe Kette wie echte Hardware.
+    /// Speist künstliche Roh-Ereignisse in dieselbe Kette wie echte Hardware,
+    /// mit der Familie des verbundenen Controllers (so greift bei einem Xbox
+    /// Elite auch die Weiche der Paddles).
     func inject(_ event: ControllerInputEvent) {
-        pump.ingest(event)
+        pump.ingest(event, origin: status.device?.family ?? .playStation)
     }
+
+    /// Künstlicher HID-Bericht (Debug-Schritt `hid:`), durch die Weiche.
+    func injectHID(_ report: ControllerHIDReport) {
+        pump.ingestHID(report)
+    }
+
+    /// Zahlen der Weiche der Paddles (Debug-Kanal).
+    var paddleGateStats: ControllerPaddleGate.Stats { pump.paddleGateStats }
 
     /// Klammert einen Lauf des Debug-Kanals: setzt Trockenlauf und Angaben,
     /// führt die Schritte aus, löst danach alles Gehaltene, wartet, bis die

@@ -10,7 +10,7 @@ import GameController
 /// macOS (`preferredSystemGestureState` wird bewusst nicht verändert).
 /// `GCKeyboard` und `GCMouse` fasst diese Klasse nicht an.
 final class GameControllerInputSource: NSObject, ControllerInputSource, @unchecked Sendable {
-    var onEvent: (@Sendable (ControllerInputEvent) -> Void)?
+    var onEvent: (@Sendable (ControllerInputEvent, ControllerFamily) -> Void)?
     var onReset: (@Sendable () -> Void)?
     var onDeviceChange: (@MainActor (ControllerDeviceInfo?) -> Void)?
 
@@ -19,6 +19,9 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
     /// Controller, von dem das letzte Ereignis kam. Nur auf `queue` gelesen
     /// und geschrieben.
     private var lastSource: ObjectIdentifier?
+    /// Familie je verdrahtetem Controller, für die Herkunft der Ereignisse.
+    /// Nur auf `queue` gelesen und geschrieben.
+    private var families: [ObjectIdentifier: ControllerFamily] = [:]
     /// Haptik-Engine je Controller. Nur auf dem Main Thread.
     private var hapticEngines: [ObjectIdentifier: CHHapticEngine] = [:]
     /// Alle Controller, an denen Handler hängen — auch solche, die
@@ -95,6 +98,8 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         controller.handlerQueue = queue
         let id = ObjectIdentifier(controller)
         wiredControllers[id] = controller
+        let family = Self.family(of: controller)
+        queue.async { [weak self] in self?.families[id] = family }
 
         for (input, button) in Self.buttons(of: pad) {
             input.pressedChangedHandler = { [weak self] _, _, pressed in
@@ -170,7 +175,7 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
                 self.announceDevice()
             }
         }
-        onEvent?(event)
+        onEvent?(event, families[id] ?? .generic)
     }
 
     // MARK: - Gerät

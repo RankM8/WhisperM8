@@ -43,8 +43,10 @@ enum ControllerHapticPattern: String, CaseIterable, Sendable {
 /// GameController-Framework; Tests und der Debug-Kanal speisen dieselbe Kette
 /// ohne Hardware.
 protocol ControllerInputSource: AnyObject {
-    /// Roh-Ereignisse. Aufgerufen auf der Queue aus `start(queue:)`.
-    var onEvent: (@Sendable (ControllerInputEvent) -> Void)? { get set }
+    /// Roh-Ereignisse samt Familie des Geräts, von dem sie kamen (die Weiche
+    /// der Paddles prüft nur Xbox-Ereignisse). Aufgerufen auf der Queue aus
+    /// `start(queue:)`.
+    var onEvent: (@Sendable (ControllerInputEvent, ControllerFamily) -> Void)? { get set }
     /// Alles Gehaltene gilt als losgelassen (Trennung, Wechsel des Controllers).
     /// Aufgerufen auf der Queue aus `start(queue:)`.
     var onReset: (@Sendable () -> Void)? { get set }
