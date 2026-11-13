@@ -174,8 +174,10 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
     /// vom Controller aus dem SwiftUI-Layout gemeldet.
     var pillFrameInPanel: NSRect = .zero
     private var suppressMoveCallback = false
-    /// An der Notch liegt die Pille über der Menüleiste: AppKit darf den
-    /// Rahmen dann nicht unter die Leiste schieben (vereinte Pille).
+    /// Vereinte Pille: AppKit darf den Rahmen nicht unter die Menüleiste
+    /// schieben. An der Notch liegt die Pille selbst über der Leiste, ohne
+    /// Notch ragt nur der durchsichtige Schattenrand hinein. Die getrennte
+    /// Diktat-Pille (unten) bleibt bei der Regel von AppKit.
     var allowsAboveMenuBar = false
 
     init(initialOrigin: NSPoint, size: NSSize = OverlayFrameResolver.panelSize) {

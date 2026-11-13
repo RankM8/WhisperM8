@@ -238,6 +238,34 @@ final class UnifiedPillControllerTests: XCTestCase {
         XCTAssertFalse(OverlayPresentation.pill.isNotch)
     }
 
+    /// Oben unter der Menüleiste ragt der Schattenrand des Diktat-Fensters in
+    /// die Leiste. AppKit schöbe das Fenster sonst darunter, und die Pille
+    /// spränge beim Start des Diktats nach unten (Standardlage 18 pt, ganz
+    /// oben 24 pt).
+    func testUnifiedPillPanelStaysOverTheRestingPillUnderTheMenuBar() {
+        let screen = NSScreen.screens.first
+        let frame = screen?.frame ?? CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let visible = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1600, height: 975)
+        // Pille bündig unter der Leiste: höher lässt die Status-Pille sie nicht.
+        let center = CGPoint(x: frame.midX, y: visible.maxY - PillMetrics.height / 2)
+        let panel = OverlayController.makeUnifiedPillPanel(center: center)
+        defer { panel.close() }
+        let wanted = CGRect(
+            origin: UnifiedPillGeometry.pillDictationPanelOrigin(center: center, panelSize: OverlayFrameResolver.panelSize),
+            size: OverlayFrameResolver.panelSize)
+        XCTAssertGreaterThan(wanted.maxY, visible.maxY, "Der Schattenrand ragt in die Menüleiste")
+        XCTAssertEqual(panel.frame, wanted)
+        XCTAssertEqual(panel.constrainFrameRect(wanted, to: screen), wanted)
+        XCTAssertEqual(panel.frame.midY, center.y, accuracy: 0.5)
+    }
+
+    /// Die getrennte Diktat-Pille überlässt die Lage weiter AppKit.
+    func testClassicPanelKeepsTheAppKitConstraint() {
+        let panel = RecordingPanel(initialOrigin: .zero)
+        defer { panel.close() }
+        XCTAssertFalse(panel.allowsAboveMenuBar)
+    }
+
     // MARK: Asynchroner Aufbau der Diktat-Pille
 
     private let pillScreen = NotchScreenInfo(

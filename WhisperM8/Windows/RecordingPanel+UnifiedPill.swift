@@ -132,12 +132,8 @@ extension OverlayController {
             hasCustomPosition = true
         case .pill(let screen, let center):
             presentation = .pill
-            let size = OverlayFrameResolver.panelSize
             // Genau über der ruhenden Pille, auch wenn die am Rand verschoben steht.
-            let pillCenter = snapshot?.center ?? center
-            panel = RecordingPanel(
-                initialOrigin: UnifiedPillGeometry.pillDictationPanelOrigin(center: pillCenter, panelSize: size),
-                size: size)
+            panel = Self.makeUnifiedPillPanel(center: snapshot?.center ?? center)
             hasCustomPosition = AppPreferences.shared.notchPillPositions[screen.pillStorageKey] != nil
         }
         pillAlignment = .center
@@ -157,6 +153,22 @@ extension OverlayController {
         // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
         // Status-Pille dort tritt zurück), mit Übergang erst nach dem ersten Bild.
         applyMorph(morph.show(morph: snapshot != nil))
+    }
+
+    /// Fenster der vereinten Pille ohne Notch, mittig um den Mittelpunkt der
+    /// Pille. Steht die Pille oben unter der Menüleiste, ragt der Schattenrand
+    /// des Fensters in die Leiste; AppKit schöbe das ganze Fenster sonst beim
+    /// Einblenden darunter (bis zu 24 pt), und die Pille spränge beim Start des
+    /// Diktats nach unten, statt aus der ruhenden Pille zu wachsen. Die
+    /// sichtbare Pille halten wir selbst im Bildschirm
+    /// (`OverlayFrameResolver.clampedPanelOrigin`), wie die Status-Pille.
+    static func makeUnifiedPillPanel(center: CGPoint) -> RecordingPanel {
+        let size = OverlayFrameResolver.panelSize
+        let panel = RecordingPanel(
+            initialOrigin: UnifiedPillGeometry.pillDictationPanelOrigin(center: center, panelSize: size),
+            size: size)
+        panel.allowsAboveMenuBar = true
+        return panel
     }
 
     /// Raute für wartende Chats und Fehler, solange das Diktat steht.
