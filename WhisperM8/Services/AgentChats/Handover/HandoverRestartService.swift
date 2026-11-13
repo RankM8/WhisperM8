@@ -69,6 +69,10 @@ final class HandoverRestartService {
         switch plan {
         case .classic(let reason):
             Logger.agentStore.notice("handover_restart_classic reason=\(reason.rawValue, privacy: .public)")
+            // Mit Schalter: Ein Neustart war gewollt, nur eben ohne Übergabe.
+            // Das folgende SIGTERM merkt die Chats zum Fortsetzen vor, wie der
+            // Plan es für „heutiger Weg“ vorsieht.
+            if reason != .featureDisabled, reason != .notARestart { noteResumeOnSignalQuit() }
             return Result(kind: .classic, reason: reason.rawValue)
         case .restart(let handOver, _):
             let byID = Dictionary(running.map { ($0.sessionID, $0) }, uniquingKeysWith: { first, _ in first })
@@ -88,6 +92,10 @@ final class HandoverRestartService {
                     AgentCrashRecoveryMarker.shared.endRunCleanly()
                     result = Result(kind: .handedOver, reason: "noChats")
                 case .failed(let reason):
+                    // Review Paket 4, Befund 3: Gescheiterte Abgabe heißt
+                    // „heutiger Weg plus Fortsetzen“. Das Makefile beendet die
+                    // App gleich per SIGTERM; dabei werden die Chats vorgemerkt.
+                    noteResumeOnSignalQuit()
                     return Result(kind: .failed, reason: reason)
                 case let .handedOver(runID, keeperPID, keeperStartTime, chats, notHandedOver):
                     AgentCrashRecoveryMarker.shared.markHandedOver(
@@ -102,12 +110,29 @@ final class HandoverRestartService {
             // Router-Dienst und Proxys laufen weiter (Paket 3).
             ClaudeGPTBackendHandover.setRequested(true)
             isTerminatingAfterHandover = true
+            registry.refuseNewStarts()
             if terminate {
                 // Erst die Antwort an die CLI rausgehen lassen, dann beenden.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
             }
             return result
         }
+    }
+
+    /// Bis wann ein SIGTERM die laufenden Chats zum Fortsetzen vormerkt statt
+    /// sie sauber zu beenden. Nur kurz nach einer Neustart-Anfrage ohne
+    /// Übergabe, damit ein späteres, unabhängiges Beenden nichts erbt.
+    private(set) var resumeOnSignalQuitUntil: Date?
+    var now: () -> Date = Date.init
+
+    func noteResumeOnSignalQuit() {
+        resumeOnSignalQuitUntil = now().addingTimeInterval(60)
+    }
+
+    /// Für `applicationShouldTerminate` bei SIGTERM.
+    func resumesOnSignalQuit() -> Bool {
+        guard let until = resumeOnSignalQuitUntil else { return false }
+        return now() <= until
     }
 
     private func makeCoordinator() -> HandoverDepositCoordinator {

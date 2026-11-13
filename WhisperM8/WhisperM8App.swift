@@ -557,6 +557,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             case .quit:
                 AgentCrashRecoveryMarker.shared.endRunCleanly()
             }
+        } else if terminatingViaSignal,
+                  MainActor.assumeIsolated({ HandoverRestartService.shared.resumesOnSignalQuit() }) {
+            // `make dev` mit Schalter, aber ohne Übergabe (abgelehnt oder
+            // gescheitert): heutiger Weg plus Fortsetzen.
+            AgentCrashRecoveryMarker.shared.keepForResume(runningSessionIDs: running)
         } else {
             // Sauberes Ende (Cmd+Q ohne Arbeit, SIGTERM von `make dev`):
             // Absturz-Marker weg, BEVOR die PTYs beim Quit sterben — der
