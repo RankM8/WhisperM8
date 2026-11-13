@@ -126,6 +126,7 @@ extension OverlayController {
 
     func applyMorph(_ effects: [UnifiedPillMorph.Effect]) {
         for effect in effects {
+            debugEvent?("\(effect)")
             switch effect {
             case .showRestLook:
                 // Schon vor dem Aufbau gesetzt (ohne Animation), hier nur zur Sicherheit.

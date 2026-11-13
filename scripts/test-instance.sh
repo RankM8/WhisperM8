@@ -18,6 +18,7 @@
 # `make kill`, nie ein Prozess außerhalb von $APP.
 #
 # WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster
+# (=pill: nur die Pillen an ihrem Platz, für Aufnahmen des Übergangs)
 # (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
 # WHISPERM8_TEST_LANG=en|de setzt die Sprache.
 set -euo pipefail

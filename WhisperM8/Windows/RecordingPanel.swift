@@ -476,6 +476,9 @@ class OverlayController: ObservableObject {
     var morphSignpost: PerformanceBudget.Token?
     /// Das Zurückziehen begann in diesem Lauf (`show` direkt nach `hide`).
     var retiredInCurrentTurn = false
+    /// Nur `whisperm8 debug pill`: meldet Fenster-Aufbau und Schritte des
+    /// Übergangs mit Namen, sonst `nil`.
+    var debugEvent: ((String) -> Void)?
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
@@ -640,6 +643,7 @@ class OverlayController: ObservableObject {
         self.hostingView = hostingView
         panel.contentView = hostingView
         panel.orderFront(nil)
+        debugEvent?("installed:\(panel.windowNumber)")
     }
 
     /// Beobachter, solange die Pill steht: Modusliste und offene Menüs.

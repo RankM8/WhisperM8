@@ -121,6 +121,9 @@ final class AppState {
         return recordingCoordinator.lastStartReport
     }
 
+    /// `whisperm8 debug pill`: die Pille ohne Aufnahme ein- und ausblenden.
+    var overlayControllerForDebug: OverlayController { recordingCoordinator.overlayController }
+
     func cancelRecording() {
         recordingCoordinator.cancelRecording()
     }
