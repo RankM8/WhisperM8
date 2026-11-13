@@ -122,3 +122,70 @@ extension HandoverKeeper.Configuration: CustomStringConvertible, CustomDebugStri
 
     var debugDescription: String { description }
 }
+
+// MARK: - Nacharbeit (Vic, 13.11.2026)
+
+extension HandoverLaunchCommandSnapshot: CustomStringConvertible, CustomDebugStringConvertible {
+    /// Programm und Ordner; Argumente und Umgebung (Konto-Pfade, Header,
+    /// Control-Token) nie.
+    var description: String {
+        "HandoverLaunchCommandSnapshot(executable: \((executablePath as NSString).lastPathComponent), "
+            + "arguments: \(arguments.count), environment: \(HandoverLog.redacted))"
+    }
+
+    var debugDescription: String { description }
+}
+
+extension HandoverJSONValue: CustomStringConvertible, CustomDebugStringConvertible {
+    /// Nur die Form, nie Werte: Das Startkommando im Manifest trägt die Umgebung.
+    var description: String {
+        switch self {
+        case .null: return "null"
+        case .bool: return "bool"
+        case .number: return "number"
+        case .string: return "string(\(HandoverLog.redacted))"
+        case .array(let values): return "array(\(values.count))"
+        case .object(let values): return "object(\(values.count) keys)"
+        }
+    }
+
+    var debugDescription: String { description }
+}
+
+// `dump` und `Mirror` gehen an `description` vorbei und listen alle Felder.
+// Für die Träger von Geheimnis und Token gibt es deshalb keine Kinder.
+extension HandoverLaunchPlan: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .enum) }
+}
+
+extension HandoverSecretLookup: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .enum) }
+}
+
+extension HandoverMessage: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: ["type": type.rawValue], displayStyle: .struct) }
+}
+
+extension HandoverManifest: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: ["chatID": chatID, "kind": kind, "pid": pid], displayStyle: .struct) }
+}
+
+extension HandoverChatSummary: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
+}
+
+extension HandoverClient.TakenChat: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
+}
+
+extension HandoverKeeper.Configuration: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: ["runID": runID], displayStyle: .struct) }
+}
+
+extension HandoverLaunchCommandSnapshot: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .struct) }
+}
+
+extension HandoverJSONValue: CustomReflectable {
+    var customMirror: Mirror { Mirror(self, children: [], displayStyle: .enum) }
+}
