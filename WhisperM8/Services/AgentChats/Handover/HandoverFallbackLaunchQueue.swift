@@ -20,6 +20,8 @@ final class HandoverFallbackLaunchQueue {
     /// Danach zählt ein Eintrag nicht mehr (Pane erst viel später geöffnet).
     let lifetime: TimeInterval
     private var queued: [UUID: Date] = [:]
+    /// Hinweise aus dem Rückfall für das Meldungsbanner (Punkt 11).
+    fileprivate var notices: [UUID: String] = [:]
     private var nextSlot = Date.distantPast
     /// In diesem Start zum Fortsetzen vorgemerkt (der Rückfall kommt in zwei
     /// Schüben); zählt für den Sammelstart-Planer wie ein laufender Chat.
@@ -55,4 +57,66 @@ final class HandoverFallbackLaunchQueue {
     func forget(_ id: UUID) {
         queued[id] = nil
     }
+}
+
+// MARK: - Rückfall für Chats ohne Sitzungs-ID (Punkt 11)
+
+/// Was der Rückfall der Übernahme mit einem Chat tut (Entscheidung Jarvis,
+/// 13.11.2026). Ein gestarteter Chat ohne gebundene Sitzungs-ID lässt sich
+/// nicht fortsetzen (`missingExternalSessionID`). Hatte er nachweislich noch
+/// keinen Turn, ist nichts zu verlieren: frisch starten. Hatte er Turns,
+/// bliebe sein Verlauf ohne Tab: gestoppt lassen. Beides mit Hinweis.
+/// Nur im Rückfall der Übernahme; normaler Resume-Weg und
+/// Absturz-Wiederaufnahme bleiben unverändert.
+enum HandoverFallbackStart: Equatable {
+    case resume
+    case startFresh
+    case keepStopped
+
+    static func decide(for session: AgentChatSession, hadTurn: Bool, claudeRecoverable: Bool) -> HandoverFallbackStart {
+        let hasID = !(session.externalSessionID?.isEmpty ?? true)
+        guard session.hasLaunchedInitialPrompt, !hasID, !session.isTerminal else { return .resume }
+        // Claude-Fork setzt von der Quelle fort; ein Claude-Chat, dessen
+        // Hook-Ereignisse die Sitzung nennen, wird über sie fortgesetzt.
+        if session.provider == .claude,
+           claudeRecoverable || !(session.forkSourceSessionID?.isEmpty ?? true) {
+            return .resume
+        }
+        return hadTurn ? .keepStopped : .startFresh
+    }
+
+    /// Nachweis eines Turns: `lastTurnAt`, ein Übergang nach „working“ im
+    /// Status-Journal oder `UserPromptSubmit` in der Hook-Ereignisdatei.
+    static func hadTurn(_ session: AgentChatSession, journal: [ChatsStatusJournalEntry], hookEvents: Data?) -> Bool {
+        if session.lastTurnAt != nil { return true }
+        if journal.contains(where: { $0.to == "working" }) { return true }
+        if let hookEvents, hookEvents.range(of: Data("UserPromptSubmit".utf8)) != nil { return true }
+        return false
+    }
+
+    var notice: String? {
+        switch self {
+        case .resume:
+            return nil
+        case .startFresh:
+            return String(localized: "Restarted as a new session after the restart: this chat had no session to continue yet.")
+        case .keepStopped:
+            return String(localized: "Not continued after the restart: this chat has no bound session ID yet, although it already had turns. Its history is kept; start it again once the session is bound, or start a new chat.")
+        }
+    }
+}
+
+extension HandoverFallbackLaunchQueue {
+    /// Hinweis für das Meldungsbanner der Chat-Ansicht, genau einmal.
+    func takeNotice(for id: UUID) -> String? {
+        notices.removeValue(forKey: id)
+    }
+
+    func setNotice(_ text: String, for id: UUID) {
+        notices[id] = text
+        // Schon angezeigte Ansichten holen den Hinweis sofort ab.
+        NotificationCenter.default.post(name: Self.noticeDidChange, object: id)
+    }
+
+    static let noticeDidChange = Notification.Name("HandoverFallbackLaunchQueue.noticeDidChange")
 }
