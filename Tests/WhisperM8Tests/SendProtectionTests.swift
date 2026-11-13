@@ -228,7 +228,7 @@ final class ControlFeatureRoutingTests: XCTestCase {
             (AgentControlRequestHandler.debugMethods, .debug),
             (AgentControlRequestHandler.speechMethods, .speech),
             (AgentControlRequestHandler.clipboardMethods, .clipboard),
-            ([AgentControlRequestHandler.sessionOrderMethod], .order),
+            ([AgentControlRequestHandler.sessionOrderMethod, AgentControlRequestHandler.tabOrderMethod], .order),
         ]
         for (methods, route) in expected {
             XCTAssertFalse(methods.isEmpty)

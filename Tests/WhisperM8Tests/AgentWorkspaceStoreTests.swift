@@ -303,6 +303,22 @@ final class AgentWorkspaceStoreTests: XCTestCase {
         XCTAssertEqual(spy.savedWorkspaces.last?.sessions.count, 5)
     }
 
+    /// `chats order` (Befund 13.11.2026): nach `flushToDisk` steht der Stand
+    /// schon auf der Platte, ohne auf das Debounce-Intervall zu warten.
+    func testFlushToDiskReturnsOnlyAfterTheWrite() async throws {
+        let spy = PersistSpy()
+        let store = AgentWorkspaceStore(
+            loadInitial: { .empty },
+            persist: { try spy.persist($0) },
+            policy: .debounced(10)
+        )
+        try store.mutate { $0.sessions.append(self.makeSession(title: "neu")) }
+        XCTAssertEqual(spy.saveCount, 0)
+        await store.flushToDisk(reason: "order")
+        XCTAssertEqual(spy.saveCount, 1)
+        XCTAssertEqual(spy.savedWorkspaces.last?.sessions.map(\.title), ["neu"])
+    }
+
     func testFlushReturnsWithoutWaitingForPersistAndWritesAsynchronously() throws {
         let spy = PersistSpy()
         let persistStarted = expectation(description: "Asynchroner Persist hat begonnen")

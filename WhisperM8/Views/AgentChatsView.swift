@@ -475,15 +475,8 @@ struct AgentChatsView: View {
     /// Tab-Herkunft gewinnt deterministisch der erste — und jeder Workspace
     /// gewinnt vor der Projektzugehörigkeit.
     private var tabWorkspaceBySession: [UUID: UUID] {
-        var result: [UUID: UUID] = [:]
-        // Projekt-Views zählen nicht als Tab-Herkunft — sonst trüge jeder
-        // aktive Chat plötzlich eine „Workspace"-Färbung.
-        for entity in windowStore.gridWorkspaces where entity.sourceProjectID == nil {
-            for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
-                result[sessionID] = entity.id
-            }
-        }
-        return result
+        // Gleiche Quelle wie `chats order --tabs`.
+        windowStore.tabGroupWorkspaceBySession
     }
 
     private var tabGroupingItems: [AgentTabGroupingItem] {

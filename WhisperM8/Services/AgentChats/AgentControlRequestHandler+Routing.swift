@@ -23,7 +23,7 @@ extension AgentControlRequestHandler {
             case .speech: return AgentControlRequestHandler.speechMethods
             case .clipboard: return AgentControlRequestHandler.clipboardMethods
             case .gptRouter: return [AgentControlRequestHandler.gptRouterStartProfileMethod]
-            case .order: return [AgentControlRequestHandler.sessionOrderMethod]
+            case .order: return [AgentControlRequestHandler.sessionOrderMethod, AgentControlRequestHandler.tabOrderMethod]
             }
         }
     }
@@ -41,7 +41,8 @@ extension AgentControlRequestHandler {
         case .speech: return await speechRequest(request)
         case .clipboard: return await clipboardRequest(request)
         case .gptRouter: return gptRouterStartProfile(request)
-        case .order: return await sessionOrder(request)
+        case .order:
+            return request.method == Self.tabOrderMethod ? await tabOrder(request) : await sessionOrder(request)
         }
     }
 }

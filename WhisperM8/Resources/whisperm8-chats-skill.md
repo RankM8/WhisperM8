@@ -78,6 +78,7 @@ whisperm8 chats order <ref>… [--last <ref>]… [--dry-run]  # Folge der Chats 
                                                      # setzen (Projekt-Ansicht folgt); genannte nach vorn,
                                                      # --last ans Ende, Rest behält seine Folge; alle Chats
                                                      # im selben Projekt. Lesen: Feld order in list/show --json
+whisperm8 chats order --tabs <ref>… [--last <ref>]…    # dasselbe für die Tabs eines Fensters (Projekt-Tabs als Block)
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
 whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
