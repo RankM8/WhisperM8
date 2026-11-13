@@ -151,6 +151,50 @@ statusrelevante Event: laufende User-, Assistant- oder Tool-Events ergeben
 `working`, echte Assistant-Stopps ergeben `idle` und optional `turnFinished`,
 lange stille Aktivität wird nach dem Stall-Timeout auf `idle` heruntergestuft.
 
+Codex schreibt während einer Antwort oder eines Denkschritts nichts ins
+Rollout, erst das fertige Element (Testlauf 13.11.2026: 4 min 46 s Stille bei
+einer 300-Zeilen-Antwort). Mit dem 120-s-Stall-Timeout stand ein schreibender
+Codex-Chat deshalb auf `idle`, und der Schutz von `close --stop` griff nicht.
+Für Codex-Chats bekommt der Decider deshalb ein Prozesswissen
+(`CodexProcessLiveness`): Ein offener Turn (Prompt, Antwort, Denkschritt,
+Tool-Ergebnis) gilt als `working`, solange der Prozess lebt und der Turn nach
+dessen Start begann. Ein offener Turn von vor dem Prozessstart stammt aus
+einem abgestürzten Lauf und ist `idle`, ein toter Prozess arbeitet nie. Gegen
+einen hängenden Prozess bleibt eine Obergrenze von 30 Minuten ohne Schreiben.
+Ein offener Tool-Aufruf behält die 120-s-Grenze, weil Codex Freigabe-Anfragen
+nicht ins Rollout schreibt: Ein wartender Aufruf sieht aus wie ein laufender
+und darf höchstens kurz grün sein. Ausnahme: Steht im `turn_context` des Turns
+`approval_policy: never`, kann ein Befehl (`exec`, Shell) nicht warten und
+folgt dem Prozess. Eine Rückfrage (`request_user_input…`,
+`request_permissions`) ist sofort `idle`. Die App liest den Prozess über die PID im PTY
+(`kill(pid, 0)` plus Startzeit, im Poll außerhalb des Main Threads). Die CLI
+(`ChatsStatusProbe`) kennt keine PTYs und sucht Codex-Prozesse mit
+`WHISPERM8_SESSION_ID=<Chat-ID>` in der Umgebung (`CodexChatProcessIndex`,
+ein Scan je Sekunde CLI-Laufzeit); so urteilen beide über denselben Prozess.
+Unterbefehle wie `codex exec` erben die Chat-ID ihres Eltern-Chats und zählen
+nicht, Zombies werden übersprungen.
+Claude-Chats, Subagent-Jobs und alle Aufrufer ohne Prozesswissen bleiben beim
+alten Verhalten.
+
+Beleg für die Freigabe-Regel (Versuch 13.11.2026, codex-cli 0.160.1,
+`-a on-request -s read-only`, Befehl `touch`): Codex schreibt den
+`custom_tool_call exec` ins Rollout, bevor der Freigabe-Dialog erscheint (beides
+22:34:57), danach nichts mehr, solange der Dialog offen ist. Der Decider
+liefert nach 60 s `working` und nach 120 s `idle`.
+
+Bekannte Grenzen:
+
+- Ein langer Befehl ohne Freigabe (Build, Tests) steht bei jeder Regel außer
+  `never` weiter nach 120 s auf `idle`, weil er von einem wartenden Befehl nicht
+  zu unterscheiden ist.
+- Hängt Codex mit offenem Turn bei lebendem Prozess (Limit, Netz), ohne den
+  Turn zu beenden, bleibt der Chat bis zur 30-min-Grenze grün.
+- Ein Codex-Prozess außerhalb des PTY der App: Die App sagt `unknown` (alte
+  120-s-Regel), die CLI sagt `notRunning` (sofort `idle`).
+- Mögliche nächste Schritte: Rückfragen als `awaitingInput` statt `idle`
+  melden; die PTY-Ausgabe als Arbeitssignal nutzen; ein echtes Freigabe-Signal
+  über Codex-Hooks oder die OSC-9-Meldungen der TUI.
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu
