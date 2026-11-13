@@ -43,8 +43,17 @@ BIN="$REPO/.build-test/WhisperM8Test.app/Contents/MacOS/WhisperM8"
 PY=/usr/bin/python3
 SOAK="$ROOT/soak"
 STATE="$SOAK/state"
-PROJECT="$SOAK/project"
+# Projektordner außerhalb des echten Home: Claude Code sucht `.mcp.json` auch in
+# übergeordneten Ordnern und fand unter ~/.whisperm8-test-instance die
+# ~/.mcp.json des Nutzers — der Chat blieb im Dialog „new MCP servers found“
+# stehen (Lauf vom 13.11.). /private/tmp statt /tmp: Claude sieht den echten Pfad.
+PROJECT="/private/tmp/whisperm8-soak-$(id -u)/project"
 COUNTER_FILE="$SOAK/counter.log"
+ECHO_FILE="$SOAK/echo.log"
+# Ohne Claude-Login in der Test-Instanz (Entscheidung des Users 13.11.2026)
+# entfallen die Inhaltsprüfungen der Claude- und Codex-Chats; Prozess, PID und
+# Doppelstart-Sperre werden weiter geprüft. Den Inhalt messen die Ersatz-Chats.
+NO_LOGIN=0
 ROUNDS=5
 KEEP=0
 REPORT=""
@@ -59,14 +68,32 @@ PROMPT_STREAM='Schreibe ohne Werkzeuge 400 nummerierte Zeilen im Format „Zeile
 PROMPT_CODEX='Führe nacheinander 30 Shell-Befehle einzeln aus: `echo SOAK-CODEX-<n>; sleep 3` mit n von 1 bis 30. Schreibe am Ende genau das Wort SOAK-CODEX, direkt gefolgt von -ENDE.'
 PROMPT_QUESTION='Stell mir mit dem Werkzeug AskUserQuestion genau eine Frage: „Welche Farbe soll der Test haben?“ mit den Optionen Rot und Blau. Warte dann auf meine Antwort und tu sonst nichts.'
 PROMPT_ATTACHED='Führe nacheinander 30 Bash-Befehle einzeln aus: `echo SOAK-BG-<n>; sleep 4`. Schreibe am Ende genau das Wort SOAK-BG, direkt gefolgt von -ENDE.'
-COUNTER_COMMAND="i=0; while :; do i=\$((i+1)); echo \$i >> '$COUNTER_FILE'; echo \"zähler \$i\"; sleep 1; done"
+# Ersatz-Chats (Terminal-Tabs, brauchen `chats new --provider terminal --command`
+# aus Paket 4): ein Zähler mit Zeitstempel und ein Echo, das Eingaben nummeriert
+# zurückgibt. Die Skripte legt prepare_instance unter $SOAK ab.
+COUNTER_COMMAND="/bin/sh '$SOAK/counter.sh' '$COUNTER_FILE'"
+ECHO_COMMAND="/bin/sh '$SOAK/echo.sh' '$ECHO_FILE'"
 
 # Chats, deren Antwort am Ende vollständig sein muss: name endmarke zeilen
 ANSWERS="bash SOAK-BASH-ENDE 0
 stream SOAK-STREAM-ENDE 400
 codex SOAK-CODEX-ENDE 0"
 
-ti() { "$TI" "$@"; }
+# Nach jedem Start oder Neustart das Grid wieder öffnen (solange Chats nur
+# über die Anzeige starten), sonst starten fortgesetzte Chats nicht.
+ti() {
+    local rc=0
+    "$TI" "$@" || rc=$?
+    if (( rc == 0 )) && [[ "${1:-}" == start || "${1:-}" == restart ]]; then reopen_grid; fi
+    return "$rc"
+}
+reopen_grid() {
+    [[ -f "${STATE:-/nonexistent}/grid-name" ]] || return 0
+    local name
+    name=$(cat "$STATE/grid-name")
+    cli chats workspace open "$name" --json >/dev/null 2>&1 \
+        || record grid wieder-offen FEHLER "Grid „${name}“ nach dem Neustart nicht geöffnet"
+}
 cli() { "$TI" cli "$@"; }
 log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
 
@@ -92,6 +119,9 @@ record_verdict() { # runde prüfung befund
 # sobald grep früh aufhört und der Schreiber SIGPIPE bekommt.
 contains() { grep -qE -- "$2" <<< "$1"; }
 has_keep_chats() { grep -q -- '--keep-chats' "$TI"; }
+# Chat ohne Anzeige starten (Paket 4). Heute startet ein Chat erst, wenn sein
+# Tab angezeigt wird — in der versteckten Test-Instanz also nie (Lauf 13.11.).
+has_chat_start() { contains "$(cli chats help 2>/dev/null || true)" '--start([^-a-z]|$)'; }
 has_terminal_tabs() { contains "$(cli chats help 2>/dev/null || true)" '--provider [^ ]*terminal'; }
 has_background_chats() { contains "$(cli chats help 2>/dev/null || true)" '--background'; }
 has_terminal_text() { contains "$(cli debug help 2>/dev/null || true)" '^  terminal'; }
@@ -107,7 +137,7 @@ cmd_capabilities() {
     if [[ ! -x "$BIN" ]]; then
         echo "unbekannt: kein Test-Bundle ($BIN) — erst scripts/test-instance.sh build" >&2
     fi
-    for name in keep_chats terminal_tabs background_chats terminal_text notification_log; do
+    for name in chat_start keep_chats terminal_tabs background_chats terminal_text notification_log; do
         check="has_$name"
         if "$check"; then echo "da     $name"; else echo "fehlt  $name"; fi
     done
@@ -119,12 +149,15 @@ cmd_capabilities() {
 check_counter_file() {
     "$PY" -I - "$1" <<'PYEOF'
 import sys
-nums = []
+nums, stamps = [], []
 try:
     for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if line.isdigit():
-            nums.append(int(line))
+        parts = line.split()
+        if parts and parts[0].isdigit():
+            nums.append(int(parts[0]))
+            if len(parts) > 1:
+                try: stamps.append(float(parts[1]))
+                except ValueError: pass
 except FileNotFoundError:
     pass
 if not nums:
@@ -132,7 +165,37 @@ if not nums:
 for a, b in zip(nums, nums[1:]):
     if b != a + 1:
         print(f"FEHLER Sprung {a} -> {b}"); sys.exit(0)
-print(f"OK {nums[0]}..{nums[-1]}")
+if len(stamps) == len(nums) and len(stamps) > 1:
+    for a, b in zip(stamps, stamps[1:]):
+        if b < a:
+            print(f"FEHLER Zeit rückwärts {a:.3f} -> {b:.3f}"); sys.exit(0)
+    gap = max(b - a for a, b in zip(stamps, stamps[1:]))
+    print(f"OK {nums[0]}..{nums[-1]}, längste Lücke {gap:.1f} s")
+else:
+    print(f"OK {nums[0]}..{nums[-1]}")
+PYEOF
+}
+
+# Echo-Probe: Kam die Zeile im Echo-Protokoll an (mit lückenloser Nummer)?
+check_echo_file() { # datei probe
+    "$PY" -I - "$1" "$2" <<'PYEOF'
+import sys
+path, probe = sys.argv[1], sys.argv[2]
+rows = []
+try:
+    for line in open(path, encoding="utf-8", errors="replace"):
+        n, _, text = line.rstrip("\n").partition(" ")
+        if n.isdigit():
+            rows.append((int(n), text))
+except FileNotFoundError:
+    pass
+nums = [n for n, _ in rows]
+if nums != list(range(1, len(nums) + 1)):
+    print(f"FEHLER Nummern nicht lückenlos: {nums[-5:]}"); sys.exit(0)
+hits = [n for n, text in rows if text == probe]
+if len(hits) == 1: print(f"OK als Nummer {hits[0]}")
+elif hits: print(f"FEHLER {len(hits)}-mal angekommen")
+else: print("FEHLER nicht angekommen")
 PYEOF
 }
 
@@ -258,6 +321,40 @@ chat_identity() {
         | grep -E '^WHISPERM8_SESSION_(ID|TOKEN)=' | tr '\n' ' ' || true
 }
 
+# Kernel-Adressen der Unix-Sockets aus `lsof -nP -a -U -p PID -F pfdn` (stdin).
+unix_socket_addresses() { awk '/^d0x/ {print substr($0, 2)}' | sort -u; }
+
+# Adressen, die in beiden Listen stehen: ein vom Kind geerbter Socket der App.
+shared_sockets() { # adressen-app adressen-kind
+    comm -12 <(printf '%s\n' "$1" | grep -v '^$' | sort -u) <(printf '%s\n' "$2" | grep -v '^$' | sort -u) || true
+}
+
+# „Kein Kind erbt einen Socket der App“ — laut Review (Vic, 13.11.2026) neben
+# dem Geheimnis die zweite echte Grenze der Übergabe. Prüft jedes Kind der
+# Test-App: per `Process` gestartete Helfer (ohne Terminal) und Chats aus
+# forkpty (mit Terminal).
+check_no_inherited_sockets() { # runde
+    local round="$1" app_pid app_addrs kid tty kid_addrs shared checked=0 helpers=0 ptys=0 found=""
+    app_pid=$("$TI" status | awk '/^PID:/ {print $2}')
+    if [[ -z "$app_pid" ]]; then record "$round" kein-erbe FEHLT "Test-App läuft nicht"; return 0; fi
+    app_addrs=$(lsof -nP -a -U -p "$app_pid" -F pfdn 2>/dev/null | unix_socket_addresses || true)
+    while read -r kid tty; do
+        [[ -n "$kid" ]] || continue
+        kid_addrs=$(lsof -nP -a -U -p "$kid" -F pfdn 2>/dev/null | unix_socket_addresses || true)
+        shared=$(shared_sockets "$app_addrs" "$kid_addrs")
+        checked=$((checked + 1))
+        if [[ "$tty" == "??" ]]; then helpers=$((helpers + 1)); else ptys=$((ptys + 1)); fi
+        [[ -z "$shared" ]] || found="$found $kid($tty):$(printf '%s' "$shared" | tr '\n' ',')"
+    done <<< "$(ps -axo pid=,ppid=,tty= | awk -v p="$app_pid" '$2 == p {print $1, $3}')"
+    if [[ -n "$found" ]]; then
+        record "$round" kein-erbe FEHLER "Kinder halten Sockets der App:$found"
+    elif (( checked == 0 )); then
+        record "$round" kein-erbe FEHLT "die Test-App hat gerade keine Kinder"
+    else
+        record "$round" kein-erbe OK "$checked Kinder ($helpers per Process, $ptys mit Terminal) ohne geerbten Socket"
+    fi
+}
+
 json_field() { "$PY" -I -c 'import json,sys; d=json.load(sys.stdin); print(eval("d"+sys.argv[1]))' "$1"; }
 
 # MARK: - Test-Instanz vorbereiten
@@ -273,13 +370,35 @@ prepare_instance() {
         exit 1
     fi
     mkdir -p "$STATE" "$PROJECT"
+    rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
+    : > "$ECHO_FILE"
+    cat > "$SOAK/counter.sh" <<'SH'
+# Ersatz-Chat: nummerierte Zeilen mit Zeitstempel, alle 0,2 s.
+i=0
+while :; do
+    i=$((i + 1))
+    t=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+    echo "$i $t" >> "$1"
+    echo "zaehler $i $t"
+    sleep 0.2
+done
+SH
+    cat > "$SOAK/echo.sh" <<'SH'
+# Ersatz-Chat: wartet auf Eingabe und gibt sie nummeriert zurück.
+i=0
+while IFS= read -r line; do
+    i=$((i + 1))
+    printf '%s %s\n' "$i" "$line" >> "$1"
+    printf 'echo %s: %s\n' "$i" "$line"
+done
+SH
     # Codex in der Test-Instanz: nie ein Update-Dialog, den ein Enter bestätigt.
     mkdir -p "$ROOT/home/.codex"
     grep -q '^check_for_update_on_startup' "$ROOT/home/.codex/config.toml" 2>/dev/null \
         || echo 'check_for_update_on_startup = false' >> "$ROOT/home/.codex/config.toml"
-    # Claude: Ordner als vertraut eintragen — in der .claude.json der Test-Instanz
+    # Claude: Ordner als vertraut eintragen und Einrichtung als erledigt — in der .claude.json der Test-Instanz
     # ($ROOT/home), nie in der echten. Sonst landet der Prompt im Trust-Dialog.
     "$PY" -I - "$ROOT/home/.claude.json" "$PROJECT" <<'PYEOF'
 import json, os, sys
@@ -288,11 +407,44 @@ data = {}
 if os.path.exists(path):
     data = json.load(open(path))
 data.setdefault("projects", {}).setdefault(project, {})["hasTrustDialogAccepted"] = True
+# Frische Test-Wurzel: sonst zeigt Claude Code zuerst den Einrichtungsdialog
+# (Theme-Auswahl), und der Prompt des Chats landet dort.
+data["hasCompletedOnboarding"] = True
 tmp = path + ".soak-tmp"
 json.dump(data, open(tmp, "w"), indent=2)
 os.replace(tmp, path)
 PYEOF
-    if [[ -n "$running" ]]; then log "benutze die laufende Test-Instanz (--use-running)"; else ti start; fi
+    if [[ -n "$running" ]]; then
+        log "benutze die laufende Test-Instanz (--use-running)"
+    else
+        # Bis Paket 4 Chats ohne Anzeige starten kann: sichtbar starten, damit
+        # die Panes im Grid angezeigt werden und ihre Chats starten (show_in_grid).
+        # Gilt auch für jeden Neustart in diesem Lauf (exportiert).
+        has_chat_start || export WHISPERM8_TEST_VISIBLE=1
+        ti start
+    fi
+}
+
+# Bis Paket 4 `--start` anbietet, startet ein Chat erst, wenn sein Pane oder
+# Tab angezeigt wird (Lauf vom 13.11.: versteckte Instanz, kein Chat gestartet).
+# Deshalb alle Chats in einen eigenen Grid-Workspace legen und ihn öffnen.
+show_in_grid() {
+    local name refs=() out
+    for name in $(chat_names); do refs+=("$(chat_ref "$name")"); done
+    name="soak $(date +%H%M%S)"
+    if ! out=$(cli chats workspace create "$name" "${refs[@]}" --json 2>&1); then
+        record setup grid FEHLER "Grid-Workspace nicht angelegt: $(printf '%s' "$out" | tail -1)"
+        return 1
+    fi
+    if ! out=$(cli chats workspace open "$name" --json 2>&1); then
+        record setup grid FEHLER "Grid-Workspace nicht geöffnet: $(printf '%s' "$out" | tail -1)"
+        return 1
+    fi
+    printf '%s' "$name" > "$STATE/grid-name"
+    record setup grid OK "${#refs[@]} Chats im Grid „${name}“ geöffnet (bis Paket 4 --start bietet)"
+    if (( USE_RUNNING )); then
+        record setup grid-sichtbar FEHLT "laufende Instanz (--use-running): ob sie sichtbar läuft, ist unbekannt; versteckt starten die Chats nicht"
+    fi
 }
 
 new_chat() { # name provider prompt [extra…]
@@ -311,22 +463,32 @@ new_chat() { # name provider prompt [extra…]
 setup_chats() {
     : > "$STATE/chats.tsv"
     : > "$STATE/offsets.tsv"
-    new_chat bash claude "$PROMPT_BASH"
-    new_chat stream claude "$PROMPT_STREAM"
-    new_chat codex codex "$PROMPT_CODEX"
-    new_chat question claude "$PROMPT_QUESTION"
-    if has_terminal_tabs; then
-        new_chat counter terminal "" --command "$COUNTER_COMMAND"
+    local start=() grid=0
+    rm -f "$STATE/grid-name"
+    if has_chat_start; then
+        start=(--start)
     else
-        record setup counter FEHLT "Terminal-Tab per CLI (Paket 4: chats new --provider terminal)"
+        grid=1
+        record setup chat-start FEHLT "Chat ohne Anzeige starten (Paket 4: chats new --start); bis dahin über das Grid"
+    fi
+    new_chat bash claude "$PROMPT_BASH" ${start[@]+"${start[@]}"}
+    new_chat stream claude "$PROMPT_STREAM" ${start[@]+"${start[@]}"}
+    new_chat codex codex "$PROMPT_CODEX" ${start[@]+"${start[@]}"}
+    new_chat question claude "$PROMPT_QUESTION" ${start[@]+"${start[@]}"}
+    if has_terminal_tabs; then
+        new_chat counter terminal "" --command "$COUNTER_COMMAND" ${start[@]+"${start[@]}"}
+        new_chat echo terminal "" --command "$ECHO_COMMAND" ${start[@]+"${start[@]}"}
+    else
+        record setup ersatz-chats FEHLT "Zähler und Echo als Terminal-Tabs (Paket 4: chats new --provider terminal --command)"
     fi
     if has_background_chats; then
-        new_chat attached claude "$PROMPT_ATTACHED" --background
+        new_chat attached claude "$PROMPT_ATTACHED" --background ${start[@]+"${start[@]}"}
         ANSWERS="$ANSWERS
 attached SOAK-BG-ENDE 0"
     else
         record setup attached FEHLT "Hintergrund-Chat per CLI (Paket 4: chats new --background)"
     fi
+    if (( grid )); then show_in_grid || true; fi
 }
 
 chat_names() { cut -f1 "$STATE/chats.tsv"; }
@@ -405,8 +567,8 @@ check_round() { # runde vorher-datei
             record "$round" "pid:$name" FEHLER "vorher $pid_before, jetzt ${pid_now:-keiner}"
         fi
 
-        # Terminal-Tabs haben weder Transcript noch API.
-        if [[ "$(chat_provider "$name")" != terminal ]]; then
+        # Terminal-Tabs haben weder Transcript noch API; ohne Login gibt es keinen Inhalt.
+        if [[ "$(chat_provider "$name")" != terminal ]] && (( ! NO_LOGIN )); then
             path=$(transcript_path "$name")
             if [[ -z "$path" || ! -f "$path" ]]; then
                 record "$round" "api-fehler:$name" FEHLER "kein Transcript gefunden"
@@ -454,7 +616,9 @@ check_round() { # runde vorher-datei
     fi
 
     path=$(transcript_path question)
-    if [[ -z "$path" ]]; then
+    if (( NO_LOGIN )); then
+        record "$round" inhalt FEHLT "ohne Login: API-Fehler, Rückfrage und Antworten nicht prüfbar (Handtest des Users)"
+    elif [[ -z "$path" ]]; then
         record "$round" rueckfrage FEHLER "kein Transcript des Rückfrage-Chats"
     else
         record_verdict "$round" rueckfrage "$(check_question_open "$path")"
@@ -462,7 +626,10 @@ check_round() { # runde vorher-datei
 
     if has_terminal_tabs; then
         record_verdict "$round" zaehler "$(check_counter_file "$COUNTER_FILE")"
+        echo_probe "$round"
     fi
+
+    check_no_inherited_sockets "$round"
 
     if pgrep -f "handover-keeper --root $ROOT" >/dev/null 2>&1; then
         record "$round" aufbewahrer-weg FEHLER "läuft noch"
@@ -473,8 +640,27 @@ check_round() { # runde vorher-datei
     fi
 }
 
+# Eingabe nach dem Neustart: eine Zeile an den Echo-Tab schicken und prüfen,
+# dass sie genau einmal und lückenlos nummeriert zurückkommt.
+echo_probe() { # runde
+    local probe="soak-probe-$1" end verdict=""
+    cli chats send "$(chat_ref echo)" -- "$probe" >/dev/null 2>&1 \
+        || { record "$1" eingabe FEHLER "chats send an den Echo-Tab gescheitert"; return 0; }
+    end=$(( $(date +%s) + 15 ))
+    while (( $(date +%s) < end )); do
+        verdict=$(check_echo_file "$ECHO_FILE" "$probe")
+        [[ "$verdict" == OK* ]] && break
+        sleep 1
+    done
+    record_verdict "$1" eingabe "$verdict"
+}
+
 final_checks() {
     local path name marker lines
+    if (( NO_LOGIN )); then
+        record ende inhalt FEHLT "ohne Login: Vollständigkeit und Fertig-Meldungen nicht prüfbar (Handtest des Users)"
+        return 0
+    fi
     while read -r name marker lines; do
         [[ -n "$name" ]] || continue
         path=$(transcript_path "$name")
@@ -508,6 +694,11 @@ wait_until_working() {
     while (( tries < 60 )); do
         path=$(transcript_path bash)
         if [[ -n "$path" ]] && grep -q 'SOAK-STEP-2' "$path" 2>/dev/null; then return 0; fi
+        if [[ -n "$path" ]] && grep -q 'Not logged in' "$path" 2>/dev/null; then
+            NO_LOGIN=1
+            record setup claude-login FEHLT "nicht angemeldet (Entscheidung des Users: kein Login in der Test-Instanz); Inhaltsprüfungen von Claude und Codex entfallen, Prozess und PID werden geprüft"
+            return 0
+        fi
         sleep 2; tries=$((tries + 1))
     done
     record setup arbeitet FEHLER "Bash-Chat zeigt nach 2 min keine Schritte"
@@ -557,15 +748,17 @@ report() {
 
 # Bricht der Lauf ab (gescheiterter Neustart, `chats new` …): trotzdem Chats
 # beenden und einen Bericht schreiben, statt Chats laufen zu lassen.
-on_exit() {
-    local status=$?
+# Ob abgebrochen wurde, sagt der Merker RUN_STARTED, nicht der Exit-Status:
+# bash 3.2 beendet bei `set -u` innerhalb von `f || true` mit Status 0 (Lauf
+# vom 13.11.: Abbruch, kein Bericht, Exit 0).
+on_exit() { # [exit-status] — ohne Argument der Status beim Aufruf als Trap
+    local status=${1:-$?}
     (( RUN_STARTED )) || return 0
     RUN_STARTED=0
-    if (( status != 0 )); then
-        record abbruch skript FEHLER "Lauf abgebrochen (Exit $status)"
-        (( KEEP )) || cleanup_chats
-        report || true
-    fi
+    record abbruch skript FEHLER "Lauf abgebrochen (Exit $status)"
+    (( KEEP )) || cleanup_chats
+    report || true
+    (( status != 0 )) || exit 1
 }
 
 cmd_run() {
@@ -575,6 +768,7 @@ cmd_run() {
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     setup_chats
     wait_until_working
+    check_no_inherited_sockets setup
     local round
     for round in $(seq 1 "$ROUNDS"); do
         snapshot "$STATE/before-$round.tsv"
@@ -584,7 +778,7 @@ cmd_run() {
         check_round "$round" "$STATE/before-$round.tsv"
         sleep 5
     done
-    if has_keep_chats; then
+    if has_keep_chats && (( ! NO_LOGIN )); then
         log "warte auf vollständige Antworten (höchstens 15 min)"
         wait_for_answers
     else
@@ -614,6 +808,17 @@ cmd_self_test() {
     printf '1\n2\n4\n' > "$dir/c2"; expect_exact "FEHLER Sprung 2 -> 4" "$(check_counter_file "$dir/c2")" "Zähler mit Lücke"
     printf '7\n8\n1\n2\n' > "$dir/c3"; expect_exact "FEHLER Sprung 8 -> 1" "$(check_counter_file "$dir/c3")" "Zähler neu gestartet"
     expect_exact "FEHLER leer" "$(check_counter_file "$dir/fehlt")" "Zähler-Datei fehlt"
+    printf '1 100.000\n2 100.200\n3 102.700\n' > "$dir/c4"
+    expect_exact "OK 1..3, längste Lücke 2.5 s" "$(check_counter_file "$dir/c4")" "Zähler mit Zeitstempel und Lücke"
+    printf '1 100.000\n2 99.000\n' > "$dir/c5"
+    expect "FEHLER Zeit rückwärts" "$(check_counter_file "$dir/c5")" "Zeit läuft rückwärts"
+    printf '1 hallo\n2 soak-probe-1\n' > "$dir/e1"
+    expect_exact "OK als Nummer 2" "$(check_echo_file "$dir/e1" soak-probe-1)" "Echo-Probe angekommen"
+    expect_exact "FEHLER nicht angekommen" "$(check_echo_file "$dir/e1" soak-probe-2)" "Echo-Probe fehlt"
+    printf '1 a\n3 soak-probe-1\n' > "$dir/e2"
+    expect "FEHLER Nummern" "$(check_echo_file "$dir/e2" soak-probe-1)" "Echo mit Lücke"
+    printf '1 soak-probe-1\n2 soak-probe-1\n' > "$dir/e3"
+    expect_exact "FEHLER 2-mal angekommen" "$(check_echo_file "$dir/e3" soak-probe-1)" "Echo doppelt"
 
     mkdir -p "$dir/sessions"
     echo "{\"pid\": $$, \"sessionId\": \"s1\"}" > "$dir/sessions/$$.json"
@@ -652,6 +857,14 @@ cmd_self_test() {
     expect_exact "FEHLER Rückfrage beantwortet" "$(check_question_open "$dir/t3.jsonl")" "Rückfrage beantwortet"
     expect_exact "FEHLER keine Rückfrage gestellt" "$(check_question_open "$dir/t1.jsonl")" "keine Rückfrage"
 
+    local lsof_app lsof_kid
+    lsof_app=$(printf 'p100\nf3\nd0xaaa\nn->0x1\nf4\nd0xbbb\nn/x.sock\n' | unix_socket_addresses)
+    lsof_kid=$(printf 'p200\nf5\nd0xbbb\nn/x.sock\nf6\nd0xccc\nn->0x2\n' | unix_socket_addresses)
+    expect_exact "0xaaa
+0xbbb" "$lsof_app" "Socket-Adressen aus lsof"
+    expect_exact "0xbbb" "$(shared_sockets "$lsof_app" "$lsof_kid")" "geerbter Socket erkannt"
+    expect_exact "" "$(shared_sockets "$lsof_app" "")" "Kind ohne Sockets"
+
     RESULTS=""
     record_verdict 1 probe "OK" 2>/dev/null
     record_verdict 1 probe2 "FEHLER Sprung 2 -> 4" 2>/dev/null
@@ -688,4 +901,7 @@ main() {
     esac
 }
 
-main "$@"
+# Als Bibliothek ladbar (scripts/handover-soak-faults.sh), dann ohne main.
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main "$@"
+fi
