@@ -189,7 +189,8 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// SwiftTerm setzt diese Defaults nur, wenn man `environment: nil` an
     /// `startProcess` übergibt — wir übergeben aber ein eigenes Env (für PATH),
     /// also fallen die Defaults weg und Ink rendert monochrom.
-    /// Wir setzen nur, was nicht ohnehin schon vom User-Profil definiert wurde.
+    /// `TERM` und `COLORTERM` setzen wir immer (siehe unten), `CLICOLOR` und
+    /// `LANG` nur, wenn sie fehlen.
     func processEnvironment(base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
         var env = base
 
@@ -232,6 +233,15 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // wegen des führenden Unterstrichs nicht.
         env.removeValue(forKey: "_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL")
 
+        // Variablen des Terminals, aus dem die App gestartet wurde (`make dev`
+        // aus iTerm: `open` reicht die Umgebung des Aufrufers durch). Unsere
+        // Chats laufen in SwiftTerm, nicht in iTerm, Ghostty oder VS Code.
+        // Geerbt hielten sich claude und Hooks für dieses Terminal (Befund
+        // 13.11.2026: iTerm-Hooks `it2 handle-agent-hook` warteten in jedem Chat).
+        Self.removeStarterTerminalVariables(&env)
+        // Ebenso, was `make` und ein startender Agent mitgeben.
+        Self.removeStarterToolVariables(&env)
+
         env["PATH"] = path
 
         // Proxy und Zertifikate aus der Login-Shell (LR-SH-012): Im Terminal
@@ -252,12 +262,12 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env[key] = value
         }
 
-        if (env["TERM"]?.isEmpty ?? true) || env["TERM"] == "dumb" {
-            env["TERM"] = "xterm-256color"
-        }
-        if (env["COLORTERM"]?.isEmpty ?? true) {
-            env["COLORTERM"] = "truecolor"
-        }
+        // Immer setzen, nie erben: launchd liefert kein TERM, ein vorhandener
+        // Wert stammt also vom startenden Terminal (`xterm-kitty`,
+        // `xterm-ghostty`, `dumb` aus Codex). SwiftTerm ist ein
+        // xterm-256color-Terminal mit Truecolor.
+        env["TERM"] = "xterm-256color"
+        env["COLORTERM"] = "truecolor"
         if (env["CLICOLOR"]?.isEmpty ?? true) {
             env["CLICOLOR"] = "1"
         }
@@ -267,6 +277,72 @@ final class LoginShellEnvironment: @unchecked Sendable {
             env["LANG"] = "en_US.UTF-8"
         }
         return env
+    }
+
+    /// Variablen fremder Terminals, die nie an unsere Kindprozesse gehen.
+    /// Die App setzt für ihre PTYs selbst nur `TERM`, `COLORTERM`, `CLICOLOR`
+    /// und `LANG` (unten); davon steht hier nichts.
+    static let starterTerminalVariables: Set<String> = [
+        // macOS Terminal, iTerm2, Warp, VS Code, Hyper u. a.
+        "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID",
+        // iTerm2 (TERM_FEATURES ab 3.5: Fähigkeiten, die SwiftTerm nicht hat)
+        "LC_TERMINAL", "LC_TERMINAL_VERSION", "TERM_FEATURES",
+        // Hintergrundfarbe des Starters (iTerm2, Konsole, rxvt); widerspräche dem Theme der App
+        "COLORFGBG",
+        // terminfo und termcap eines anderen Terminals (kitty und Ghostty zeigen in ihr Bundle, screen exportiert TERMCAP)
+        "TERMINFO", "TERMCAP",
+        // tmux, screen, zellij: Programme hielten sich sonst für eine Sitzung darin
+        "TMUX", "TMUX_PANE", "STY", "ZELLIJ", "ZELLIJ_SESSION_NAME", "ZELLIJ_PANE_ID",
+        // Alacritty
+        "ALACRITTY_SOCKET", "ALACRITTY_LOG", "ALACRITTY_WINDOW_ID",
+        // Editoren mit eingebautem Terminal (JetBrains, Zed, Emacs, Cursor)
+        "TERMINAL_EMULATOR", "ZED_TERM", "INSIDE_EMACS", "CURSOR_TRACE_ID",
+        // Konsole, GNOME, xterm-Abkömmlinge
+        "SHELL_SESSION_ID", "PROFILEHOME", "VTE_VERSION", "WINDOWID",
+    ]
+
+    /// Präfixe derselben Art (je Terminal eine Familie). `ITERM` ohne
+    /// Unterstrich, damit auch `ITERM2_*` fällt.
+    static let starterTerminalPrefixes = [
+        "ITERM", "KITTY_", "GHOSTTY_", "WEZTERM_", "WARP_", "VSCODE_", "TABBY_", "KONSOLE_",
+    ]
+
+    static func removeStarterTerminalVariables(_ env: inout [String: String]) {
+        // VS Code (und Cursor) setzen `GIT_ASKPASS` auf ihr eigenes Skript, das
+        // nur mit ihrem IPC-Kanal (`VSCODE_GIT_IPC_HANDLE`) funktioniert: nur dann mit weg.
+        if env.keys.contains(where: { $0.hasPrefix("VSCODE_GIT_") }) {
+            env.removeValue(forKey: "GIT_ASKPASS")
+        }
+        // `WINDOW` ist ein allgemeiner Name; von screen nur zusammen mit `STY`.
+        if env["STY"] != nil {
+            env.removeValue(forKey: "WINDOW")
+        }
+        for key in env.keys
+        where starterTerminalVariables.contains(key) || starterTerminalPrefixes.contains(where: key.hasPrefix) {
+            env.removeValue(forKey: key)
+        }
+    }
+
+    /// Variablen von `make` und von einem Agenten, aus dem die App gestartet
+    /// wurde (`make dev` aus einer Claude-Sitzung). `ENABLE_TOOL_SEARCH` bleibt:
+    /// Es steht in den Einstellungen des Users (`settings.json`, Abschnitt `env`).
+    static let starterToolVariables: Set<String> = [
+        // Ein `FORCE=1` von der Kommandozeile reist in MAKEFLAGS mit und gälte
+        // sonst still für jeden späteren `make dev` aus einem Chat; die Sperre
+        // gegen `make dev` aus Chats (CLAUDE.md) wäre wirkungslos.
+        "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES",
+        // Kennung und Einstellungen der startenden Claude-Sitzung; Claude Code
+        // setzt sie für seine eigenen Werkzeuge selbst.
+        "AI_AGENT", "CLAUDE_EFFORT", "CLAUDE_PID", "COREPACK_ENABLE_AUTO_PIN",
+    ]
+
+    static func removeStarterToolVariables(_ env: inout [String: String]) {
+        for key in starterToolVariables { env.removeValue(forKey: key) }
+        // Claude Code setzt `GIT_EDITOR=true` für seine Bash-Aufrufe. Geerbt liefe
+        // `git commit` ohne `-m` im Terminal-Tab ohne Editor durch.
+        if env["GIT_EDITOR"] == "true" {
+            env.removeValue(forKey: "GIT_EDITOR")
+        }
     }
 
     static let localNoProxyEntries = ["127.0.0.1", "localhost", "::1"]

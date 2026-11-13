@@ -118,7 +118,9 @@ final class RecordingCoordinator {
     // injizieren Fakes (kein Keychain/Settings/Netzwerk im Test).
     let providerResolver: () -> TranscriptionProvider
     let modelResolver: () -> TranscriptionModel
-    let apiKeyResolver: (TranscriptionProvider) -> String?
+    let apiKeyResolver: (TranscriptionProvider) async -> String?
+    let apiKeyStored: (TranscriptionProvider) -> Bool
+    let apiKeyRejected: (TranscriptionProvider) -> Void
     let transcriberFactory: (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol
     /// Wärmt beim Aufnahmestart den Anbieter vor (ChatGPT-Abo: Proxy des
     /// aktiven Profils hochfahren). Darf nicht blockieren — der Default
@@ -169,8 +171,23 @@ final class RecordingCoordinator {
             return TranscriptionSettings.loadProvider()
         },
         modelResolver: @escaping () -> TranscriptionModel = { TranscriptionSettings.loadModel() },
-        apiKeyResolver: @escaping (TranscriptionProvider) -> String? = { provider in
-            provider.keychainKey.flatMap { KeychainManager.load(key: $0) }
+        // Liest abseits des Main Threads: Nach einem neuen Build zeigt macOS
+        // beim ersten Zugriff einen Schlüsselbund-Dialog, der sonst die ganze
+        // App anhält. Der Wert bleibt danach für den App-Lauf im Speicher.
+        apiKeyResolver: @escaping (TranscriptionProvider) async -> String? = { provider in
+            guard let keychainKey = provider.keychainKey else { return nil }
+            return await KeychainManager.loadOffMain(key: keychainKey)
+        },
+        // Liegt ein Schlüssel im Schlüsselbund, auch wenn er nicht lesbar war?
+        // Prüft nur die Attribute, ohne Dialog.
+        apiKeyStored: @escaping (TranscriptionProvider) -> Bool = { provider in
+            // Unter `swift test` nie den echten Schlüsselbund befragen.
+            guard AppInstance.isAppBundleProcess else { return false }
+            return provider.keychainKey.map { KeychainManager.exists(key: $0) } ?? false
+        },
+        // Lehnt der Anbieter den Schlüssel ab (401), nächstes Mal neu lesen.
+        apiKeyRejected: @escaping (TranscriptionProvider) -> Void = { provider in
+            provider.keychainKey.map { KeychainManager.forgetCached(key: $0) }
         },
         transcriberFactory: @escaping (TranscriptionProvider, TranscriptionModel, String) -> TranscriptionServiceProtocol = { provider, model, apiKey in
             provider.createService(apiKey: apiKey, model: model)
@@ -215,6 +232,8 @@ final class RecordingCoordinator {
         self.providerResolver = providerResolver
         self.modelResolver = modelResolver
         self.apiKeyResolver = apiKeyResolver
+        self.apiKeyStored = apiKeyStored
+        self.apiKeyRejected = apiKeyRejected
         self.transcriberFactory = transcriberFactory
         self.transcriptionPrewarmer = transcriptionPrewarmer
         self.dictationHistoryRecorder = dictationHistoryRecorder
