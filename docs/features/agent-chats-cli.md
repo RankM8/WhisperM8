@@ -468,8 +468,9 @@ bewusst schwache Schwester von `archive`. Contract:
   Reihenfolge der Chats eines Projekts in der Seitenleiste (Methode
   `session.order`, seit 13.11.2026). Genannte Chats kommen in dieser Folge nach
   vorn, `--last` ans Ende, alle übrigen behalten ihre relative Folge dazwischen.
-  Alle Chats müssen im selben Projekt liegen und dürfen nicht archiviert sein,
-  sonst Exit 1 bzw. 3. Geschrieben wird über
+  Alle Chats müssen im selben Projekt liegen und in dessen Gruppe der
+  Seitenleiste stehen (nicht gepinnt, kein Subagent-Kind), sonst Exit 1;
+  unbekannte oder archivierte Chats Exit 3. Geschrieben wird über
   `AgentSessionStore.reorderSessions` (`lastActivityAt` bleibt stehen).
   Die Projekt-Ansicht (Raster) hält ihre Plätze sonst absichtlich stabil, auch
   beim Umsortieren mit der Maus; `order` setzt die belegten Plätze bewusst mit
@@ -719,9 +720,11 @@ Agent braucht, um vor einer Aussage zu **prüfen** statt zu **vermuten**:
           "tabs": [{"windowID": "…", "position": 5}]}   // je Fenster, 1-basiert
 ```
 
-`sidebarPosition` ist die Folge der nicht archivierten Chats des Projekts nach
-`sortIndex` (wie `AgentSessionStore.sortedSessions`). Gepinnte Chats stehen in
-der App sichtbar in der Gepinnt-Sektion, behalten hier aber ihre Projektfolge.
+`sidebarPosition` ist die Position in der Projektgruppe der Seitenleiste, mit
+demselben Filter wie die App (`AgentSidebarModelBuilder.sessionsByProject`):
+`null` für archivierte, gepinnte (eigene Sektion), Subagent-Kinder und nicht von
+Hand angelegte Chats. `chats order` ordnet genau diese Gruppe und lehnt
+Chats außerhalb davon mit Exit 1 ab.
 
 **Bewusst kein Feld `isVisible`.** `activeWorkspaceID` ist doppelt belegt: Es
 bezeichnet das aktive Grid **oder** nur das Rücksprungziel der Einzelansicht —

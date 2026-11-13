@@ -51,7 +51,7 @@ final class SessionOrderPlanTests: XCTestCase {
 
     private func session(_ title: String, _ index: Int, project: AgentProject? = nil, archived: Bool = false) -> AgentChatSession {
         AgentChatSession(provider: .claude, projectID: (project ?? projectA).id, title: title,
-                         status: archived ? .archived : .running, sortIndex: index)
+                         status: archived ? .archived : .running, sortIndex: index, createdManually: true)
     }
 
     func testPlansNumberOrderWithJarvisLast() throws {
@@ -94,6 +94,27 @@ final class SessionOrderPlanTests: XCTestCase {
         } else { XCTFail("vorn und hinten") }
     }
 
+    func testRejectsPinnedAndHiddenChatsButIgnoresThemInThePlan() throws {
+        let a = session("a", 0)
+        let pinned = session("gepinnt", 1)
+        var job = session("job", 2)
+        job.createdManually = false
+        let b = session("b", 3)
+        let workspace = AgentWorkspace(projects: [projectA], sessions: [a, pinned, job, b])
+        if case .failure(let error) = AgentControlRequestHandler.planSessionOrder(
+            workspace: workspace, pinnedIDs: [pinned.id], first: [pinned.id], last: []) {
+            XCTAssertEqual(error.code, .invalid)
+            XCTAssertTrue(error.message.contains("gepinnt"))
+        } else { XCTFail("gepinnt") }
+        if case .failure(let error) = AgentControlRequestHandler.planSessionOrder(
+            workspace: workspace, pinnedIDs: [pinned.id], first: [job.id], last: []) {
+            XCTAssertEqual(error.code, .invalid)
+        } else { XCTFail("nicht von Hand angelegt") }
+        let plan = try AgentControlRequestHandler.planSessionOrder(
+            workspace: workspace, pinnedIDs: [pinned.id], first: [b.id], last: []).get()
+        XCTAssertEqual(plan.after, [b.id, a.id], "nur die sichtbare Projektgruppe")
+    }
+
     func testArchivedChatsStayOutOfThePlan() throws {
         let a = session("a", 0)
         let old = session("alt", 1, archived: true)
@@ -126,9 +147,9 @@ final class ChatsOrderCommandParseTests: XCTestCase {
 final class ChatsOrderInfoTests: XCTestCase {
     func testSidebarPositionSortIndexAndTabs() {
         let project = AgentProject(name: "whisperm8", path: "/tmp/a")
-        let a = AgentChatSession(provider: .claude, projectID: project.id, title: "a", status: .running, sortIndex: 1)
-        let b = AgentChatSession(provider: .claude, projectID: project.id, title: "b", status: .running, sortIndex: 0)
-        let old = AgentChatSession(provider: .claude, projectID: project.id, title: "alt", status: .archived, sortIndex: 2)
+        let a = AgentChatSession(provider: .claude, projectID: project.id, title: "a", status: .running, sortIndex: 1, createdManually: true)
+        let b = AgentChatSession(provider: .claude, projectID: project.id, title: "b", status: .running, sortIndex: 0, createdManually: true)
+        let old = AgentChatSession(provider: .claude, projectID: project.id, title: "alt", status: .archived, sortIndex: 2, createdManually: true)
         var ui = AgentUIState()
         let window = AgentChatWindowState(openTabIDs: [a.id, b.id], isPrimary: true)
         ui.windows = [window]

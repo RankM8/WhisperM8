@@ -14,11 +14,25 @@ extension AgentControlRequestHandler {
         var titles: [UUID: String]
     }
 
+    /// Chats eines Projekts, wie die Seitenleiste sie in der Projektgruppe
+    /// zeigt: manuell angelegt, nicht archiviert, nicht gepinnt (eigene
+    /// Sektion), kein Subagent-Kind unter seinem Parent. Gleiche Menge wie
+    /// beim Umsortieren mit der Maus.
+    static func sidebarSessions(
+        workspace: AgentWorkspace, pinnedIDs: Set<UUID>
+    ) -> [UUID: [AgentChatSession]] {
+        let childIDs = Set(AgentSidebarModelBuilder.subagentChildren(workspaceSessions: workspace.sessions)
+            .byParentLocalID.values.flatMap { $0.map(\.id) })
+        return AgentSidebarModelBuilder.sessionsByProject(
+            workspaceSessions: workspace.sessions, pinnedSessionIDs: pinnedIDs, subagentChildIDs: childIDs)
+    }
+
     /// Prüft die Anfrage gegen den Workspace und plant die neue Folge (pure).
-    /// Alle Chats müssen existieren, nicht archiviert sein und im selben
-    /// Projekt liegen; ein Chat darf nicht zugleich vorn und hinten stehen.
+    /// Alle Chats müssen existieren, nicht archiviert sein, im selben Projekt
+    /// liegen und in dessen Gruppe der Seitenleiste stehen; ein Chat darf
+    /// nicht zugleich vorn und hinten stehen.
     static func planSessionOrder(
-        workspace: AgentWorkspace, first: [UUID], last: [UUID]
+        workspace: AgentWorkspace, pinnedIDs: Set<UUID> = [], first: [UUID], last: [UUID]
     ) -> Result<SessionOrderPlan, ChatsControlErrorKind> {
         let named = first + last
         guard !named.isEmpty else { return .failure(.init(.invalid, "Mindestens einen Chat nennen.")) }
@@ -37,8 +51,14 @@ extension AgentControlRequestHandler {
             let names = projectIDs.compactMap { id in workspace.projects.first { $0.id == id }?.name }.sorted()
             return .failure(.init(.invalid, "Die Chats liegen in verschiedenen Projekten (\(names.joined(separator: ", "))); chats order ordnet nur innerhalb eines Projekts."))
         }
-        let projectSessions = AgentSessionStore.sortedSessions(
-            workspace.sessions.filter { $0.projectID == projectID && $0.status != .archived })
+        let projectSessions = sidebarSessions(workspace: workspace, pinnedIDs: pinnedIDs)[projectID] ?? []
+        let visible = Set(projectSessions.map(\.id))
+        if let hidden = named.first(where: { !visible.contains($0) }), let session = byID[hidden] {
+            let reason = pinnedIDs.contains(hidden)
+                ? "ist gepinnt und steht in der Gepinnt-Sektion"
+                : "steht nicht in der Projektgruppe der Seitenleiste (Subagent-Job oder nicht von Hand angelegt)"
+            return .failure(.init(.invalid, "\(session.title) \(reason); chats order ordnet nur die Projektgruppe."))
+        }
         let before = projectSessions.map(\.id)
         let after = ChatOrderPlanner.plannedOrder(current: before, first: first, last: last)
         return .success(SessionOrderPlan(
@@ -71,8 +91,11 @@ extension AgentControlRequestHandler {
         let dryRun = request.params["dryRun"]?.boolValue ?? false
 
         let outcome: Result<(SessionOrderPlan, [ProjectViewOrderChange]), ChatsControlErrorKind> = await MainActor.run {
-            let workspace = AgentWorkspaceUIModel.shared.workspace
-            switch Self.planSessionOrder(workspace: workspace, first: first, last: last) {
+            // Aktueller Store-Stand (aus dem Speicher), nicht die UI-Kopie, die
+            // nach Änderungen abseits des Main Threads kurz hinterherhinkt.
+            let workspace = AgentSessionStore().loadWorkspace()
+            let pinned = Set(AgentWindowStore.shared.pinnedSessionIDs)
+            switch Self.planSessionOrder(workspace: workspace, pinnedIDs: pinned, first: first, last: last) {
             case .failure(let error):
                 return .failure(error)
             case .success(let plan):

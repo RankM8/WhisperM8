@@ -26,8 +26,10 @@ enum ChatsLiveSupport {
     /// DURCHGEREICHT: Der Server validiert ohnehin autoritativ gegen seinen
     /// In-Memory-Workspace und antwortet mit notFound, falls es sie wirklich
     /// nicht gibt. Gilt nur für Voll-UUIDs (eindeutig), nie für Fuzzy-Refs.
-    static func resolveTarget(ref: String, includeArchived: Bool = false) -> TargetResolution {
-        let context = ChatsCommandContext.load()
+    /// `context`: einmal geladen mitgeben, wenn mehrere Refs aufzulösen sind.
+    static func resolveTarget(ref: String, includeArchived: Bool = false,
+                              context loaded: ChatsCommandContext? = nil) -> TargetResolution {
+        let context = loaded ?? ChatsCommandContext.load()
         // Voll-UUID zuerst (still, ohne stderr): auf Disk gefunden → mit Label;
         // sonst durchreichen (Debounce-Race), Server entscheidet.
         if let uuid = UUID(uuidString: ref.trimmingCharacters(in: .whitespacesAndNewlines)) {

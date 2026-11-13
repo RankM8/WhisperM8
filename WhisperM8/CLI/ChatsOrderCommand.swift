@@ -52,10 +52,11 @@ enum ChatsOrderCommand {
             CLIIO.err(usage)
             return ChatsCLIExit.usage
         }
+        let context = ChatsCommandContext.load()
         func resolve(_ refs: [String]) -> Result<[UUID], ChatsOrderFailure> {
             var ids: [UUID] = []
             for ref in refs {
-                switch ChatsLiveSupport.resolveTarget(ref: ref) {
+                switch ChatsLiveSupport.resolveTarget(ref: ref, context: context) {
                 case .resolved(let id, _): ids.append(id)
                 case .failed(let code): return .failure(ChatsOrderFailure(code: code))
                 }
