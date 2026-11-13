@@ -10,6 +10,11 @@ struct ControllerDeviceInfo: Equatable, Sendable {
     var batteryLevel: Float?
     var hasLight: Bool
     var hasHaptics: Bool
+    /// Tastennamen und vorhandene Eingaben (Xbox: A B X Y, kein Touchpad).
+    var family: ControllerFamily = .playStation
+
+    /// Was Legende, Insel und Einstellungen zeigen.
+    var traits: ControllerInputTraits { ControllerInputTraits(family: family) }
 }
 
 struct ControllerLightColor: Equatable, Sendable {

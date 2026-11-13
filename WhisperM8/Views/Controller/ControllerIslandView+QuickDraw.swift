@@ -40,7 +40,7 @@ extension ControllerIslandView {
                 .padding(.top, 2)
                 .padding(.bottom, slots.note == nil && slots.confirmation == nil ? 14 : 8)
                 if let confirmation = slots.confirmation { self.confirmation(confirmation, app: slots.app) }
-                if let note = slots.note { self.note(note.text) }
+                if let note = slots.note { self.note(note.text(family)) }
             }
         }
     }
@@ -126,7 +126,7 @@ extension ControllerIslandView {
     private func chatSlot(_ item: ControllerMenuItem, _ slots: ControllerQuickDrawSlots) -> some View {
         slotFrame(hit: slots.hit == item, on: slots.enabled.contains(item)) {
             if let button = ControllerQuickDrawSlots.button(for: item) {
-                IslandGlyph(text: button.glyph, round: true, palette: palette)
+                IslandGlyph(text: button.glyph(family), round: true, palette: palette)
             }
             Text(verbatim: item == .continueWork ? slots.crossTitle : item.islandTitle)
                 .font(.system(size: 12))
