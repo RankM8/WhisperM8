@@ -30,6 +30,15 @@ whisperm8 app handover-status [--json]
 - `--app-binary`: Wer abgeben, übernehmen und freigeben darf. Ohne Angabe gilt das Binary, aus dem der Aufbewahrer selbst läuft. Nach `rsync` liegt die neue App unter demselben Pfad. Zusätzlich gilt das Designated Requirement des eigenen Codes, wenn der Aufbewahrer mit einem Zertifikat signiert ist. `make dev` signiert mit „WhisperM8 Local Dev“, die Anforderung „Kennung plus Zertifikat“ bleibt über Neubauten gleich. Ad hoc signierte Builds prüfen nur den Pfad.
 - Exit-Code 75: Ein anderer Aufbewahrer hält den Lock.
 
+## Wovor schützen wir, wovor nicht
+
+Maßstab für jede Review dieses Features (Beschluss 13.11.2026, zweite Meinung):
+
+- **Schutzziel:** Ein fremdes Programm unter demselben Nutzer bekommt keine Terminal-Leitung, kein Bild, kein Control-Token und keinen lauschenden Router-Socket.
+- **Kein Schutzziel:** Stören oder Beenden durch denselben Nutzer. Wer Signale schicken oder den Aufbewahrer belegen kann, kann auch die App beenden. Dann gilt der Rückfall per `--resume`.
+- **Kein Schutzziel:** Was über den vorhandenen Control-Socket der App ohnehin geht. `whisperm8 chats send` nimmt Aufrufe jedes Prozesses desselben Nutzers an, Aufrufe ohne Sitzungs-Kennung gelten als „extern“ (`AgentControlServer`, `AgentControlRequestHandler.rejectsUnverifiedActor`). Dieser Socket ist schwächer gesichert als der Aufbewahrer. Das ist bekannt und ein eigener, späterer Punkt, kein Auftrag für dieses Feature.
+- **Folge:** Weitere Härtung am Aufbewahrer nur, wenn sie ein Schutzziel oben trifft. Sie kostet sonst Zuverlässigkeit (Schlüsselbund, Fristen) ohne echten Gewinn.
+
 ## Wer darf was
 
 `STATUS` darf jeder Prozess desselben Nutzers. Die Antwort enthält weder Tokens noch Terminal-Inhalte. Für alles andere gelten drei Prüfungen.
