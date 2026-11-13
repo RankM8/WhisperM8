@@ -96,7 +96,9 @@ extension HandoverTakeService {
         store: AgentSessionStore,
         windowStore: AgentWindowStore? = nil,
         runningSessionIDs: Set<UUID>? = nil,
-        queue: HandoverFallbackLaunchQueue? = nil
+        queue: HandoverFallbackLaunchQueue? = nil,
+        hadTurn: ((AgentChatSession) -> Bool)? = nil,
+        claudeRecoverable: ((AgentChatSession) -> Bool)? = nil
     ) {
         let windowStore = windowStore ?? .shared
         let runningSessionIDs = runningSessionIDs ?? AgentTerminalRegistry.shared.activeSessionIDs
@@ -112,14 +114,54 @@ extension HandoverTakeService {
             Logger.agentStore.notice(
                 "handover_fallback_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")
         }
-        // Vor dem Flag: Dessen Änderung startet die Pane schon.
-        queue.schedule(plan.start)
+        // Punkt 11: Chats ohne Sitzungs-ID frisch starten oder gestoppt lassen.
+        let sessions = Dictionary(store.loadWorkspace().sessions.map { ($0.id, $0) },
+                                  uniquingKeysWith: { first, _ in first })
+        var starting: [UUID] = []
         for id in plan.start {
+            guard let session = sessions[id] else { starting.append(id); continue }
+            let decision = HandoverFallbackStart.decide(
+                for: session,
+                hadTurn: (hadTurn ?? liveHadTurn)(session),
+                claudeRecoverable: claudeRecoverable.map { $0(session) } ?? liveClaudeRecoverable(session, store: store))
+            if let notice = decision.notice { queue.setNotice(notice, for: id) }
+            switch decision {
+            case .resume:
+                starting.append(id)
+            case .startFresh:
+                try? store.updateSession(id: id) { $0.hasLaunchedInitialPrompt = false }
+                Logger.agentStore.notice("handover_fallback_start_fresh session=\(id.uuidString, privacy: .public)")
+                starting.append(id)
+            case .keepStopped:
+                try? store.updateSession(id: id) { $0.shouldLaunchOnOpen = false }
+                Logger.agentStore.notice("handover_fallback_kept_stopped session=\(id.uuidString, privacy: .public)")
+            }
+        }
+        // Vor dem Flag: Dessen Änderung startet die Pane schon.
+        queue.schedule(starting)
+        for id in starting {
             try? store.updateSession(id: id) { $0.shouldLaunchOnOpen = true }
             if windowStore.windowID(containingTab: id) == nil {
                 windowStore.openTab(id, in: windowStore.primaryWindowID, select: false)
             }
         }
-        Logger.agentStore.notice("handover_fallback_resume count=\(plan.start.count) skipped=\(plan.skipped.count)")
+        Logger.agentStore.notice("handover_fallback_resume count=\(starting.count) skipped=\(plan.skipped.count)")
+    }
+
+    private static func liveHadTurn(_ session: AgentChatSession) -> Bool {
+        let events = ClaudeExternalIDRecovery.tailData(
+            of: ClaudeHookPaths().eventFileURL(localSessionID: session.id),
+            maxBytes: ClaudeExternalIDRecovery.unboundResumeTailBytes)
+        return HandoverFallbackStart.hadTurn(
+            session, journal: ChatsStatusJournal.recent(sessionID: session.id, limit: 50), hookEvents: events)
+    }
+
+    /// Wie der Start-Pfad (`AgentCommandBuilder.unboundResumeResolver`):
+    /// nennen die Hook-Ereignisse eine Sitzung, wird über sie fortgesetzt.
+    private static func liveClaudeRecoverable(_ session: AgentChatSession, store: AgentSessionStore) -> Bool {
+        guard session.provider == .claude,
+              let project = store.loadWorkspace().projects.first(where: { $0.id == session.projectID })
+        else { return false }
+        return AgentCommandBuilder().unboundResumeResolver(session, project) != nil
     }
 }

@@ -40,6 +40,9 @@ struct AgentSessionDetailView: View {
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
+    /// Hinweis aus dem Rückfall der Übernahme (Punkt 11): steht im selben
+    /// Banner, übersteht aber den erfolgreichen Start, bis man ihn schließt.
+    @State private var fallbackNotice: String?
     @State private var showRestartConfirmation = false
     /// Launch scheiterte an fehlender CLI: geführter Leerzustand statt Balken (LR-AU-022).
     @State private var missingCLI: AgentCLI?
@@ -81,17 +84,17 @@ struct AgentSessionDetailView: View {
             // Launch-/Repair-Fehler sichtbar machen (Review-Befund 2026-07-13:
             // errorMessage wurde gesetzt, aber nie gerendert — abgebrochene
             // Launches wirkten wie ein No-op bzw. verschwundener Verlauf).
-            if let errorMessage {
+            if let bannerText = errorMessage ?? fallbackNotice {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.yellow)
-                    Text(errorMessage)
+                    Text(bannerText)
                         .font(.system(size: 12))
                         .foregroundStyle(AgentTheme.textPrimary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button {
-                        self.errorMessage = nil
+                        if self.errorMessage != nil { self.errorMessage = nil } else { self.fallbackNotice = nil }
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 10, weight: .bold))
@@ -133,6 +136,10 @@ struct AgentSessionDetailView: View {
         }
         .onAppear {
             attachToAdoptedController()
+            // Punkt 11: Hinweis aus dem Rückfall der Übernahme.
+            if let notice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id) {
+                fallbackNotice = notice
+            }
             if suppressesAutoActivation, session.shouldLaunchOnOpen == true {
                 launchFromHandoverFallbackIfQueued()
             }
@@ -150,6 +157,7 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
+            fallbackNotice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id)
             cachedTranscript = nil
             isLoadingTranscript = false
             transcriptTailBytes = Self.initialTailBytes
@@ -166,6 +174,11 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: HandoverFallbackLaunchQueue.noticeDidChange)) { note in
+            guard (note.object as? UUID) == session.id,
+                  let notice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id) else { return }
+            fallbackNotice = notice
         }
         .confirmationDialog(
             String(localized: "Restart this chat?"),
