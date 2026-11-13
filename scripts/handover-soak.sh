@@ -43,7 +43,11 @@ BIN="$REPO/.build-test/WhisperM8Test.app/Contents/MacOS/WhisperM8"
 PY=/usr/bin/python3
 SOAK="$ROOT/soak"
 STATE="$SOAK/state"
-PROJECT="$SOAK/project"
+# Projektordner außerhalb des echten Home: Claude Code sucht `.mcp.json` auch in
+# übergeordneten Ordnern und fand unter ~/.whisperm8-test-instance die
+# ~/.mcp.json des Nutzers — der Chat blieb im Dialog „new MCP servers found“
+# stehen (Lauf vom 13.11.). /private/tmp statt /tmp: Claude sieht den echten Pfad.
+PROJECT="/private/tmp/whisperm8-soak-$(id -u)/project"
 COUNTER_FILE="$SOAK/counter.log"
 ROUNDS=5
 KEEP=0
