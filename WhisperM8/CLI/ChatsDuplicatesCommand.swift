@@ -9,7 +9,11 @@ enum ChatsDuplicatesCommand {
             CLIIO.err("Usage: whisperm8 chats duplicates [--json]")
             return ChatsCLIExit.usage
         }
-        let groups = AgentSessionDuplicateGroup.groups(in: ChatsWorkspaceReader().load().workspace)
+        // Dieselbe Ordnung wie die Wiederaufnahme: Beleg aus der Hook-Event-Datei zuerst.
+        let hookPaths = ClaudeHookPaths()
+        let groups = AgentSessionDuplicateGroup.groups(
+            in: ChatsWorkspaceReader().load().workspace,
+            evidence: { AgentSessionOwnershipEvidence.live(for: $0, hookPaths: hookPaths) })
         if json {
             let payload: [[String: Any]] = groups.map { group in
                 [

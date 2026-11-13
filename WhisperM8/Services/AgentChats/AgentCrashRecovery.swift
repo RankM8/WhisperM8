@@ -166,15 +166,17 @@ enum AgentCrashRecoveryCoordinator {
         let plan = AgentCollectiveStartPlanner.plan(
             AgentCrashRecoveryPlanner.sessionsToResume(previouslyRunning: previouslyRunning, sessions: sessions),
             sessions: sessions,
-            evidence: { chat, sessionID in
-                AgentSessionOwnershipEvidence.read(
-                    eventFile: hookPaths.eventFileURL(localSessionID: chat), sessionID: sessionID)
-            }
+            evidence: { AgentSessionOwnershipEvidence.live(for: $0, hookPaths: hookPaths) }
         )
         let titles = Dictionary(sessions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         for skipped in plan.skipped {
             if let keeper = plan.keeperOf[skipped] {
-                notices.note(skipped: skipped, keeperTitle: titles[keeper] ?? String(keeper.uuidString.prefix(8)))
+                let title = titles[keeper].flatMap { $0.isEmpty ? nil : $0 }
+                notices.note(skipped: skipped, keeperTitle: title ?? String(keeper.uuidString.prefix(8)).lowercased())
+            }
+            // Ohne Tab sähe niemand den Hinweis: zurückholen, ohne Auswahlwechsel.
+            if windowStore.windowID(containingTab: skipped) == nil {
+                windowStore.openTab(skipped, in: windowStore.primaryWindowID, select: false)
             }
             // Ein altes Flag darf den übersprungenen Chat nicht doch starten.
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }

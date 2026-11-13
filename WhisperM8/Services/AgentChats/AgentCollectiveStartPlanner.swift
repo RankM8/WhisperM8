@@ -22,17 +22,17 @@ enum AgentCollectiveStartPlanner {
     }
 
     /// Je Sitzung (Provider + ID, ohne Groß-/Kleinschreibung) startet nur der
-    /// Chat, der sie führt. Zuerst zählt der Beleg aus der eigenen
-    /// Hook-Event-Datei (`AgentSessionOwnershipEvidence`, nur bei echter
-    /// Dopplung gefragt): angelegt vor nur genutzt vor keinem Beleg. Erst
-    /// danach von Hand angelegt, sonst der älteste. Bewusst nicht der zuletzt
+    /// Chat, der sie führt (`AgentSessionDuplicateGroup.keeperOrder`, dieselbe
+    /// Ordnung wie `whisperm8 chats duplicates`): zuerst der Beleg aus der
+    /// eigenen Hook-Event-Datei vom letzten Start, nur bei echter Dopplung
+    /// gelesen, danach von Hand angelegt, sonst der älteste. Bewusst nicht der zuletzt
     /// aktive — `lastActivityAt` setzt jede Änderung am Eintrag, auch der
     /// Start des falsch gebundenen Chats. Chats ohne ID (noch ungebunden)
     /// starten immer.
     static func plan(
         _ ids: [UUID],
         sessions: [AgentChatSession],
-        evidence: (_ chat: UUID, _ sessionID: String) -> AgentSessionOwnershipEvidence = { _, _ in .none }
+        evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence = { _ in .noEvidence }
     ) -> Plan {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         func key(_ id: UUID) -> String? {
@@ -52,14 +52,7 @@ enum AgentCollectiveStartPlanner {
                 winner[key] = members.first?.id
                 continue
             }
-            let proof = Dictionary(uniqueKeysWithValues: members.map { member in
-                (member.id, evidence(member.id, member.externalSessionID ?? ""))
-            })
-            winner[key] = members.sorted { lhs, rhs in
-                let left = proof[lhs.id] ?? .none, right = proof[rhs.id] ?? .none
-                if left != right { return left > right }
-                return AgentSessionDuplicateGroup.keeperPrecedes(lhs, rhs)
-            }.first?.id
+            winner[key] = AgentSessionDuplicateGroup.keeperOrder(members, evidence: evidence).first?.id
         }
         var plan = Plan(start: [], skipped: [])
         for id in ids {
