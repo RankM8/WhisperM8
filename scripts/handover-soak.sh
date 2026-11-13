@@ -382,14 +382,29 @@ release_instance_lock() {
         echo "Hinweis: --keep, Test-Instanz und Sperre bleiben stehen — danach selbst beenden und $INSTANCE_LOCK löschen" >&2
         return 0
     fi
-    "$TI" stop >/dev/null 2>&1 || true
+    # Eine mit --use-running übernommene Instanz gehört vielleicht einem anderen Chat.
+    if (( INSTANCE_STARTED || ! USE_RUNNING )); then "$TI" stop >/dev/null 2>&1 || true; fi
     rm -rf "$INSTANCE_LOCK"
     LOCK_HELD=0
 }
 
+# Scheitert die Vorbereitung nach dem Nehmen der Sperre, Sperre wieder
+# freigeben; eine schon laufende, fremde Instanz bleibt unangetastet.
+INSTANCE_STARTED=0
+abort_prepare() {
+    (( LOCK_HELD )) || return 0
+    if (( INSTANCE_STARTED )); then "$TI" stop >/dev/null 2>&1 || true; fi
+    rm -rf "$INSTANCE_LOCK"
+    LOCK_HELD=0
+}
+
+# Haken für handover-soak-faults.sh (Signaturart des Test-Bundles); hier nichts.
+prepare_bundle() { :; }
+
 prepare_instance() {
     [[ -x "$BIN" ]] || { echo "Kein Test-Bundle — erst: scripts/test-instance.sh build" >&2; exit 1; }
     take_instance_lock || exit 1
+    trap abort_prepare EXIT
     # Zuerst: Läuft die Test-Instanz schon (vielleicht für einen anderen Chat),
     # nichts anfassen — der Dauerlauf würde deren Chats mit neu starten.
     local running
@@ -400,6 +415,7 @@ prepare_instance() {
     fi
     mkdir -p "$STATE" "$PROJECT"
     rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
+    prepare_bundle "$running" || exit 1
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
     : > "$ECHO_FILE"
@@ -450,6 +466,7 @@ PYEOF
         # die Panes im Grid angezeigt werden und ihre Chats starten (show_in_grid).
         # Gilt auch für jeden Neustart in diesem Lauf (exportiert).
         has_chat_start || export WHISPERM8_TEST_VISIBLE=1
+        INSTANCE_STARTED=1
         ti start
     fi
 }
