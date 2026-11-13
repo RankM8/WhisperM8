@@ -75,6 +75,14 @@ struct AgentSessionDetailView: View {
     /// Transcript-Load aufgeschoben werden darf (Terminal-Modus braucht
     /// kein JSONL) und wird beim Umschalten nachgeholt.
 
+    /// Bei der Wiederaufnahme übersprungen (zweiter Chat auf derselben
+    /// Sitzung): sagen, welcher Chat die Unterhaltung führt.
+    private func showCollectiveStartNotice() {
+        if let notice = AgentCollectiveStartNotices.shared.takeMessage(for: session.id) {
+            errorMessage = notice
+        }
+    }
+
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
     }
@@ -136,6 +144,7 @@ struct AgentSessionDetailView: View {
         }
         .onAppear {
             attachToAdoptedController()
+            showCollectiveStartNotice()
             // Punkt 11: Hinweis aus dem Rückfall der Übernahme.
             if let notice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id) {
                 fallbackNotice = notice
@@ -158,6 +167,7 @@ struct AgentSessionDetailView: View {
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
             fallbackNotice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id)
+            showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
             transcriptTailBytes = Self.initialTailBytes

@@ -295,7 +295,12 @@ extension AgentCollectiveStartPlanner {
     /// Sitzung startet dann nicht, egal welcher nach der Regel gewönne. Für
     /// Codex ist das der einzige Schutz; es gibt weder Registry-Sperre noch
     /// Reservierung (Vic, 13.11.2026).
-    static func plan(_ ids: [UUID], sessions: [AgentChatSession], alreadyStarted: Set<UUID>) -> Plan {
+    static func plan(
+        _ ids: [UUID],
+        sessions: [AgentChatSession],
+        alreadyStarted: Set<UUID>,
+        evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence = { _ in .noEvidence }
+    ) -> Plan {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         func key(_ id: UUID) -> String? {
             guard let session = byID[id],
@@ -318,7 +323,7 @@ extension AgentCollectiveStartPlanner {
                 open.append(id)
             }
         }
-        let rest = plan(open, sessions: sessions)
+        let rest = plan(open, sessions: sessions, evidence: evidence)
         let skipped = Set(held.skipped + rest.skipped)
         return Plan(start: rest.start,
                     skipped: ids.filter { skipped.contains($0) },
