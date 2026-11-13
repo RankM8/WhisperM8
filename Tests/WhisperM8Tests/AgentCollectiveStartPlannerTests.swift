@@ -51,6 +51,23 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
         XCTAssertEqual(plan.skipped, [second.id])
     }
 
+    /// Altlasten-Vorschau 13.11.2026: Agent-View-Einträge tragen teils die ID
+    /// eines Chats, setzen sie aber nicht fort — kein Doppel.
+    func testAgentViewIsNeverADuplicate() {
+        var agentView = chat("x", created: 0, manual: true)
+        agentView.kind = .agentView
+        let claudeChat = chat("x", created: 50)
+        let workspace = AgentWorkspace(projects: [], sessions: [agentView, claudeChat])
+        XCTAssertTrue(AgentSessionDuplicateGroup.groups(in: workspace).isEmpty, "chats duplicates")
+        let plan = AgentCollectiveStartPlanner.plan([agentView.id, claudeChat.id], sessions: [agentView, claudeChat])
+        XCTAssertEqual(plan.start, [agentView.id, claudeChat.id])
+        XCTAssertTrue(plan.skipped.isEmpty)
+        // Zwei echte Chats neben der Agent View bleiben ein Doppel.
+        let twin = chat("x", created: 60)
+        XCTAssertEqual(AgentSessionDuplicateGroup.groups(
+            in: AgentWorkspace(projects: [], sessions: [agentView, claudeChat, twin])).first?.duplicates.map(\.id), [twin.id])
+    }
+
     func testSameIDUnderDifferentProvidersIsNoConflict() {
         let claude = chat("x"), codex = chat("x", provider: .codex)
         let plan = AgentCollectiveStartPlanner.plan([claude.id, codex.id], sessions: [claude, codex])
