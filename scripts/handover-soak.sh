@@ -59,6 +59,11 @@ KEEP=0
 REPORT=""
 USE_RUNNING=0
 RUN_STARTED=0
+# Eine Test-Instanz für alle Chats (Regel von Jarvis, 13.11.2026): vor jeder
+# Nutzung die Sperre nehmen, danach Instanz beenden und Sperre freigeben.
+INSTANCE_LOCK="${WHISPERM8_TESTINSTANZ_LOCK:-/private/tmp/whisperm8-testinstanz.lock}"
+SOAK_OWNER="${WHISPERM8_SOAK_OWNER:-Dauerlauf}"
+LOCK_HELD=0
 
 # Prompts: Die Endmarke steht zerlegt im Prompt („SOAK-BASH“ + „-ENDE“), damit
 # sie im Transcript erst mit der Antwort vorkommt. Geprüft wird ohnehin nur
@@ -359,8 +364,32 @@ json_field() { "$PY" -I -c 'import json,sys; d=json.load(sys.stdin); print(eval(
 
 # MARK: - Test-Instanz vorbereiten
 
+take_instance_lock() {
+    if mkdir "$INSTANCE_LOCK" 2>/dev/null; then
+        echo "$SOAK_OWNER $(date +%H:%M) $(basename "$0")" > "$INSTANCE_LOCK/owner"
+        LOCK_HELD=1
+        return 0
+    fi
+    echo "Test-Instanz belegt: $(cat "$INSTANCE_LOCK/owner" 2>/dev/null || echo '?') — warten, nicht starten" >&2
+    return 1
+}
+
+# Am Ende (auch bei Abbruch): Instanz beenden und Sperre freigeben. Mit --keep
+# bleiben Chats, Instanz und Sperre stehen; dann selbst freigeben.
+release_instance_lock() {
+    (( LOCK_HELD )) || return 0
+    if (( KEEP )); then
+        echo "Hinweis: --keep, Test-Instanz und Sperre bleiben stehen — danach selbst beenden und $INSTANCE_LOCK löschen" >&2
+        return 0
+    fi
+    "$TI" stop >/dev/null 2>&1 || true
+    rm -rf "$INSTANCE_LOCK"
+    LOCK_HELD=0
+}
+
 prepare_instance() {
     [[ -x "$BIN" ]] || { echo "Kein Test-Bundle — erst: scripts/test-instance.sh build" >&2; exit 1; }
+    take_instance_lock || exit 1
     # Zuerst: Läuft die Test-Instanz schon (vielleicht für einen anderen Chat),
     # nichts anfassen — der Dauerlauf würde deren Chats mit neu starten.
     local running
@@ -758,6 +787,7 @@ on_exit() { # [exit-status] — ohne Argument der Status beim Aufruf als Trap
     record abbruch skript FEHLER "Lauf abgebrochen (Exit $status)"
     (( KEEP )) || cleanup_chats
     report || true
+    release_instance_lock
     (( status != 0 )) || exit 1
 }
 
@@ -790,6 +820,7 @@ cmd_run() {
     RUN_STARTED=0
     local status=0
     report || status=$?
+    release_instance_lock
     exit "$status"
 }
 
@@ -864,6 +895,14 @@ cmd_self_test() {
 0xbbb" "$lsof_app" "Socket-Adressen aus lsof"
     expect_exact "0xbbb" "$(shared_sockets "$lsof_app" "$lsof_kid")" "geerbter Socket erkannt"
     expect_exact "" "$(shared_sockets "$lsof_app" "")" "Kind ohne Sockets"
+
+    # Sperre der Test-Instanz: nehmen, belegt erkennen, freigeben.
+    expect_exact "frei-genommen|belegt|frei" "$(
+        INSTANCE_LOCK="$dir/lock"; TI=/usr/bin/true; KEEP=0; LOCK_HELD=0
+        take_instance_lock && printf 'frei-genommen'
+        ( LOCK_HELD=0; take_instance_lock 2>/dev/null ) || printf '|belegt'
+        release_instance_lock; [[ -d "$dir/lock" ]] || printf '|frei'
+    )" "Sperre nehmen, belegt erkennen, freigeben"
 
     RESULTS=""
     record_verdict 1 probe "OK" 2>/dev/null
