@@ -73,6 +73,14 @@ struct AgentSessionDetailView: View {
     /// Transcript-Load aufgeschoben werden darf (Terminal-Modus braucht
     /// kein JSONL) und wird beim Umschalten nachgeholt.
 
+    /// Bei der Wiederaufnahme übersprungen (zweiter Chat auf derselben
+    /// Sitzung): sagen, welcher Chat die Unterhaltung führt.
+    private func showCollectiveStartNotice() {
+        if let notice = AgentCollectiveStartNotices.shared.takeMessage(for: session.id) {
+            errorMessage = notice
+        }
+    }
+
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
     }
@@ -133,6 +141,7 @@ struct AgentSessionDetailView: View {
             }
         }
         .onAppear {
+            showCollectiveStartNotice()
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
                     launchAfterCacheWarmup()
@@ -147,6 +156,7 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
+            showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
             transcriptTailBytes = Self.initialTailBytes
@@ -426,12 +436,6 @@ struct AgentSessionDetailView: View {
                 launchGuardResult = .notNeeded
             }
 
-            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
-            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten).
-            let runningRecords = launchSession.provider == .claude
-                && !launchSession.isTerminal && !launchSession.isAgentView
-                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
-
             let resumeRepairPreparation: ResumeRepairPreparation
             if !launchSession.isAgentView,
                !launchSession.isTerminal,
@@ -452,6 +456,16 @@ struct AgentSessionDetailView: View {
                 resumeRepairPreparation = .noRepairNeeded
             }
 
+            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
+            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten) —
+            // und als letzten Schritt, nach dem Index-Scan: So liegt das Lesen
+            // sicher im Fenster der Start-Reservierung eines anderen Chats.
+            let runningRecords = launchSession.provider == .claude
+                && !launchSession.isTerminal && !launchSession.isAgentView
+                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
+            // Codex-Sperre: Prozessliste ebenfalls hier, nicht auf dem Main Thread.
+            let codexProcesses = Self.codexProcessesForLaunch(launchSession)
+
             await MainActor.run {
                 // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
                 // Session inzwischen gelöscht oder archiviert, darf KEIN
@@ -471,6 +485,7 @@ struct AgentSessionDetailView: View {
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult,
                     runningRecords: runningRecords,
+                    codexProcesses: codexProcesses,
                     allowsBackgroundAttach: allowsBackgroundAttach,
                     // Rückweg: den gespeicherten Stand nehmen, nicht den
                     // Snapshot aus der Closure des beendeten Laufs (ein Attach
@@ -485,6 +500,7 @@ struct AgentSessionDetailView: View {
         resumeRepairPreparation: ResumeRepairPreparation,
         launchGuardResult: ClaudeGPTLaunchGuardResult,
         runningRecords: [ClaudeSessionRecord] = [],
+        codexProcesses: [CodexProcess]? = [],
         allowsBackgroundAttach: Bool = true,
         storedSession: AgentChatSession? = nil
     ) {
@@ -524,8 +540,20 @@ struct AgentSessionDetailView: View {
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
             builder.backgroundAttachAllowed = allowsBackgroundAttach
+            let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
-                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords)
+                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
+            }
+            builder.codexStartGuardEnabled = AppPreferences.shared.isCodexStartGuardEnabled
+            builder.codexRunningConflict = { [store, terminalRegistry] sessionID, localID in
+                Self.codexConflict(sessionID: sessionID, localID: localID, processes: codexProcesses,
+                                   store: store, registry: terminalRegistry)
+            }
+            builder.launchReservation = { [store] sessionID, localID in
+                ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID).map { holder in
+                    store.loadWorkspace().sessions.first(where: { $0.id == holder })?.title
+                        ?? String(holder.uuidString.prefix(8))
+                }
             }
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den
@@ -817,6 +845,7 @@ struct AgentSessionDetailView: View {
         let store = store
         let onExternalSessionIDBound = onExternalSessionIDBound
         let onStateChanged = onStateChanged
+        let terminalRegistry = terminalRegistry
 
         Task.detached(priority: .utility) {
             let retryDelays: [UInt64] = [
@@ -840,6 +869,42 @@ struct AgentSessionDetailView: View {
                     .first(where: { $0.id == localSessionID })
                 guard let currentSession,
                       currentSession.externalSessionID == nil else { return }
+
+                if provider == .claude, !currentSession.isBackgroundChat {
+                    // Exakt über Claudes Registry und die PID des Chats.
+                    let launch = await MainActor.run { () -> (arguments: [String]?, pid: Int32?, startedAt: Date?, registry: Bool) in
+                        let controller = terminalRegistry.controller(for: localSessionID)
+                        return (controller?.command.arguments, controller?.processID, controller?.startedAt,
+                                AppPreferences.shared.isClaudeRegistryStatusEnabled)
+                    }
+                    let registryEnabled = launch.registry
+                    let records = launch.pid == nil || !registryEnabled
+                        ? [] : ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots())
+                    switch AgentSessionStore.claudeFallbackStep(
+                        launchArguments: launch.arguments, registryEnabled: registryEnabled,
+                        processID: launch.pid, processStartedAt: launch.startedAt,
+                        records: records, isLastAttempt: delay == retryDelays.last) {
+                    case .bind(let externalID):
+                        // Hat der Hook inzwischen gebunden, bindet das hier nichts mehr.
+                        await MainActor.run {
+                            do {
+                                guard try store.bindRegistryExternalSessionID(
+                                    localSessionID: localSessionID, externalSessionID: externalID) != nil else { return }
+                                Logger.claudeBinding.notice(
+                                    "binding_by_registry_pid localID=\(localSessionID.uuidString, privacy: .public) id=\(externalID, privacy: .public)")
+                                onExternalSessionIDBound(localSessionID)
+                                onStateChanged()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                        return
+                    case .wait:
+                        continue
+                    case .transcriptFallback:
+                        break
+                    }
+                }
 
                 let indexedSessions: [IndexedAgentSession]
                 switch provider {

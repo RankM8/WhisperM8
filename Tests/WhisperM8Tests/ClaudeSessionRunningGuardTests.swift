@@ -141,3 +141,123 @@ final class ClaudeSessionRunningGuardTests: XCTestCase {
         XCTAssertFalse(ledger.isBeingTerminated(pid: 0))
     }
 }
+
+/// Was die Sperre tut, wenn zwei Chats dieselbe Sitzung tragen (Befund
+/// 13.11.2026, „soak bash“/„soak question“ auf cd00c6c0). Der Builder sieht nur
+/// die Registry: Läuft die Sitzung schon, verweigert er den zweiten Resume.
+/// Starten beide im selben Augenblick (Wiederaufnahme, Grid), steht der erste
+/// Prozess noch nicht in der Registry — dann greift die Reservierung der App
+/// (`ClaudeSessionLaunchReservations`, Paket a).
+final class ClaudeSessionRunningGuardSharedBindingTests: XCTestCase {
+    private let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+
+    private func builder(registry: [ClaudeSessionRecord],
+                         reservations: ClaudeSessionLaunchReservations? = nil) -> AgentCommandBuilder {
+        var builder = AgentCommandBuilder(commandResolver: { "/usr/local/bin/\($0)" })
+        if let reservations {
+            builder.launchReservation = { reservations.reserve(sessionID: $0, for: $1)?.uuidString }
+        }
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.backgroundWorkerResolver = { _, _ in nil }
+        builder.runningSessionProcessResolver = { id in registry.first(where: { $0.sessionID == id }) }
+        return builder
+    }
+
+    private func chat(_ title: String) -> AgentChatSession {
+        AgentChatSession(provider: .claude, projectID: project.id, externalSessionID: "cd00c6c0",
+                         title: title, hasLaunchedInitialPrompt: true)
+    }
+
+    func testSecondResumeOfSharedSessionIsRefusedOnceTheFirstRuns() {
+        let running = ClaudeSessionRecord(profileName: "main", pid: 777, sessionID: "cd00c6c0", kind: "interactive")
+        XCTAssertThrowsError(try builder(registry: [running]).command(for: chat("soak question"), project: project)) {
+            XCTAssertEqual($0 as? AgentCommandError, .sessionAlreadyRunning(title: "soak question", pid: 777))
+        }
+    }
+
+    func testSimultaneousResumesOfSharedSessionStartOnlyOnce() throws {
+        // Leere Registry beim Start beider — früher bauten beide `--resume`.
+        let empty = builder(registry: [], reservations: ClaudeSessionLaunchReservations())
+        let bash = chat("soak bash")
+        XCTAssertEqual(try empty.command(for: bash, project: project).arguments, ["--resume", "cd00c6c0"])
+        XCTAssertThrowsError(try empty.command(for: chat("soak question"), project: project)) {
+            XCTAssertEqual($0 as? AgentCommandError,
+                           .sessionStartingElsewhere(title: "soak question", otherChat: bash.id.uuidString))
+            XCTAssertTrue($0.localizedDescription.contains("soak question"))
+            XCTAssertTrue($0.localizedDescription.contains(bash.id.uuidString), "nennt den anderen Chat")
+        }
+        // Derselbe Chat darf sofort neu starten (Tab-Neustart).
+        XCTAssertEqual(try empty.command(for: bash, project: project).arguments, ["--resume", "cd00c6c0"])
+    }
+
+    func testRecoveredUnboundResumeIsReservedToo() throws {
+        let reservations = ClaudeSessionLaunchReservations()
+        var recovering = builder(registry: [], reservations: reservations)
+        recovering.unboundResumeResolver = { _, _ in "cd00c6c0" }
+        let unbound = AgentChatSession(provider: .claude, projectID: project.id, title: "ohne Bindung",
+                                       hasLaunchedInitialPrompt: true)
+        XCTAssertEqual(try recovering.command(for: unbound, project: project).arguments, ["--resume", "cd00c6c0"])
+        XCTAssertEqual(reservations.reserve(sessionID: "cd00c6c0", for: UUID()), unbound.id)
+    }
+
+    func testBackgroundAttachNeitherBlocksNorReserves() throws {
+        let reservations = ClaudeSessionLaunchReservations()
+        _ = reservations.reserve(sessionID: "cd00c6c0", for: UUID())
+        var attaching = builder(registry: [], reservations: reservations)
+        attaching.backgroundWorkerResolver = { id, _ in .init(shortID: "cd00c6c0", sessionID: id) }
+        let command = try attaching.command(for: chat("angedockt"), project: project)
+        XCTAssertEqual(command.arguments.first, "attach")
+    }
+
+    func testRegistryBlockComesFirstAndForkIsNeverReserved() throws {
+        let reservations = ClaudeSessionLaunchReservations()
+        let running = ClaudeSessionRecord(profileName: "main", pid: 777, sessionID: "cd00c6c0", kind: "interactive")
+        XCTAssertThrowsError(try builder(registry: [running], reservations: reservations)
+            .command(for: chat("soak bash"), project: project)) {
+            XCTAssertEqual($0 as? AgentCommandError, .sessionAlreadyRunning(title: "soak bash", pid: 777))
+        }
+        XCTAssertNil(reservations.reserve(sessionID: "cd00c6c0", for: UUID()), "abgelehnter Start reserviert nichts")
+
+        let fresh = ClaudeSessionLaunchReservations()
+        _ = fresh.reserve(sessionID: "quelle", for: UUID())
+        var fork = AgentChatSession(provider: .claude, projectID: project.id, title: "Abzweig", hasLaunchedInitialPrompt: true)
+        fork.forkSourceSessionID = "quelle"
+        XCTAssertEqual(try builder(registry: [], reservations: fresh).command(for: fork, project: project).arguments,
+                       ["--resume", "quelle", "--fork-session"], "Abzweig bekommt eine neue ID")
+    }
+}
+
+final class ClaudeSessionLaunchReservationsTests: XCTestCase {
+    func testOtherChatIsRefusedSameChatMayRestart() {
+        let reservations = ClaudeSessionLaunchReservations()
+        let first = UUID(), second = UUID()
+        XCTAssertNil(reservations.reserve(sessionID: "cd00c6c0", for: first))
+        XCTAssertNil(reservations.reserve(sessionID: "cd00c6c0", for: first), "Tab-Neustart desselben Chats")
+        XCTAssertEqual(reservations.reserve(sessionID: "CD00C6C0", for: second), first)
+        XCTAssertNil(reservations.reserve(sessionID: "aa82d0ba", for: second), "andere Sitzung unberührt")
+    }
+
+    /// Opus-Review: Nur der auslaufende Vorgänger DESSELBEN Chats ist ausgenommen.
+    func testLedgerExemptsOnlyTheSameChat() {
+        let ledger = ProcessTerminationLedger()
+        let closing = UUID(), other = UUID()
+        ledger.noteTerminating(pid: 4242, localID: closing)
+        XCTAssertTrue(ledger.isBeingTerminated(pid: 4242, forLocalID: closing), "Tab-Neustart")
+        XCTAssertFalse(ledger.isBeingTerminated(pid: 4242, forLocalID: other), "anderer Chat: sperrt weiter")
+        XCTAssertTrue(ledger.isBeingTerminated(pid: 4242), "ohne Chat-Angabe wie bisher")
+        ledger.noteTerminating(pid: 4343)
+        XCTAssertTrue(ledger.isBeingTerminated(pid: 4343, forLocalID: other), "ohne vermerkten Chat wie bisher")
+    }
+
+    func testReservationEndsAfterWindow() {
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        let reservations = ClaudeSessionLaunchReservations(window: 30, now: { clock })
+        let first = UUID(), second = UUID()
+        XCTAssertNil(reservations.reserve(sessionID: "cd00c6c0", for: first))
+        clock = clock.addingTimeInterval(29)
+        XCTAssertEqual(reservations.reserve(sessionID: "cd00c6c0", for: second), first)
+        clock = clock.addingTimeInterval(2)
+        XCTAssertNil(reservations.reserve(sessionID: "cd00c6c0", for: second), "danach entscheidet die Registry")
+    }
+}

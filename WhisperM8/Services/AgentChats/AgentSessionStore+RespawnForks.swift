@@ -157,18 +157,22 @@ struct AgentSessionDuplicateGroup: Equatable {
     /// Kandidaten zum Archivieren.
     var duplicates: [AgentChatSession]
 
-    static func groups(in workspace: AgentWorkspace) -> [AgentSessionDuplicateGroup] {
+    /// `evidence`: Beleg aus der eigenen Hook-Event-Datei, nur für echte
+    /// Doppel gefragt (siehe `keeperOrder`).
+    static func groups(
+        in workspace: AgentWorkspace,
+        evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence = { _ in .noEvidence }
+    ) -> [AgentSessionDuplicateGroup] {
         var byKey: [String: [AgentChatSession]] = [:]
-        for session in workspace.sessions where session.status != .archived {
+        // Agent View setzt keine Sitzung fort, auch wenn ihr Eintrag eine ID
+        // trägt: kein Doppel (Altlasten-Vorschau 13.11.2026, 3 Paare).
+        for session in workspace.sessions where session.status != .archived && !session.isAgentView {
             guard let id = session.externalSessionID, !id.isEmpty else { continue }
             byKey["\(session.provider.rawValue)|\(id.lowercased())", default: []].append(session)
         }
         return byKey.values.compactMap { sessions -> AgentSessionDuplicateGroup? in
             guard sessions.count > 1 else { return nil }
-            let sorted = sessions.sorted { lhs, rhs in
-                if lhs.isManuallyCreated != rhs.isManuallyCreated { return lhs.isManuallyCreated }
-                return lhs.createdAt < rhs.createdAt
-            }
+            let sorted = keeperOrder(sessions, evidence: evidence)
             return AgentSessionDuplicateGroup(
                 externalSessionID: sorted[0].externalSessionID ?? "",
                 keeper: sorted[0],
@@ -176,5 +180,33 @@ struct AgentSessionDuplicateGroup: Equatable {
             )
         }
         .sorted { $0.keeper.createdAt < $1.keeper.createdAt }
+    }
+
+    /// Reihenfolge der Kandidaten, der Halter zuerst: zuerst der Beleg aus der
+    /// eigenen Hook-Event-Datei (`AgentSessionOwnershipEvidence`, angelegt vor
+    /// genutzt vor keinem), dann `keeperPrecedes`. Gemeinsam für die
+    /// Wiederaufnahme und `whisperm8 chats duplicates`, damit die CLI nie den
+    /// Chat zum Archivieren vorschlägt, der nach einem Neustart läuft.
+    static func keeperOrder(
+        _ sessions: [AgentChatSession],
+        evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence
+    ) -> [AgentChatSession] {
+        let proof = Dictionary(sessions.map { ($0.id, evidence($0)) }, uniquingKeysWith: { first, _ in first })
+        return sessions.sorted { lhs, rhs in
+            let left = proof[lhs.id]!, right = proof[rhs.id]!
+            if left != right { return left > right }
+            return keeperPrecedes(lhs, rhs)
+        }
+    }
+
+    /// Wer von mehreren Chats derselben Sitzung sie führt: der von Hand
+    /// angelegte, sonst der älteste (eine Fehlbindung trifft den später
+    /// angelegten: Fork auf Quelle, Rückfall auf ein fremdes Transcript),
+    /// bei Gleichstand fest nach UUID. Nachrangig nach dem Beleg aus der
+    /// Hook-Event-Datei (`keeperOrder`).
+    static func keeperPrecedes(_ lhs: AgentChatSession, _ rhs: AgentChatSession) -> Bool {
+        if lhs.isManuallyCreated != rhs.isManuallyCreated { return lhs.isManuallyCreated }
+        if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }

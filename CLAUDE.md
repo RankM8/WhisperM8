@@ -174,7 +174,7 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
 bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
 Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
-`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`,
+`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `codexStartGuardEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,

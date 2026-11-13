@@ -49,6 +49,10 @@ enum AgentCommandError: LocalizedError, Equatable {
     case missingBackgroundShortID(String)
     /// Die Sitzung läuft schon in einem anderen Claude-Prozess (Registry).
     case sessionAlreadyRunning(title: String, pid: Int32)
+    /// Ein anderer Chat startet dieselbe Sitzung gerade (noch nicht in der Registry).
+    case sessionStartingElsewhere(title: String, otherChat: String)
+    /// Die Codex-Sitzung läuft schon (`CodexSessionRunningGuard`).
+    case codexSessionRunning(title: String, conflict: CodexRunningConflict)
 
     var errorDescription: String? {
         switch self {
@@ -62,6 +66,18 @@ enum AgentCommandError: LocalizedError, Equatable {
             return "Cannot attach to background agent \(title): no short ID stored yet. Spawn the agent first."
         case .sessionAlreadyRunning(let title, let pid):
             return String(localized: "Cannot resume \(title): this conversation is already running in another Claude process (PID \(String(pid))). Close that process first, a second start would run the same conversation twice.")
+        case .codexSessionRunning(let title, .otherChat(let other)):
+            return String(localized: "Cannot resume \(title): this conversation is already running in the chat “\(other)”. Close that chat first; a second Codex process would run the same conversation twice.")
+        case .codexSessionRunning(let title, .otherChatEnding(let other)):
+            return String(localized: "Cannot resume \(title): the chat “\(other)” was just closed and its Codex process is still ending. Try again in a few seconds.")
+        case .codexSessionRunning(let title, .ownPreviousRun(let pid)):
+            return String(localized: "Cannot resume \(title): the previous run of this chat is still ending (Codex process PID \(String(pid))). Wait a few seconds and try again; if it does not end, quit it with “kill \(String(pid))” in a terminal.")
+        case .codexSessionRunning(let title, .outsideApp(let pid, true)):
+            return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process outside WhisperM8 (PID \(String(pid))). End that process first, for example by closing its terminal window; a second Codex process would run the same conversation twice.")
+        case .codexSessionRunning(let title, .outsideApp(let pid, false)):
+            return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process without a terminal (PID \(String(pid)), for example a leftover subagent job). End it first, for example with “kill \(String(pid))” in a terminal; a second Codex process would run the same conversation twice.")
+        case .sessionStartingElsewhere(let title, let otherChat):
+            return String(localized: "Cannot resume \(title): the chat “\(otherChat)” is starting this conversation right now. A second start would run the same conversation twice. Close one of the two chats, or try again in a few seconds.")
         }
     }
 }
@@ -264,6 +280,26 @@ struct AgentCommandBuilder {
     var runningSessionProcessResolver: (String) -> ClaudeSessionRecord? = { sessionID in
         ClaudeSessionRunningGuard.liveLookup(sessionID: sessionID)
     }
+
+    /// Reserviert die fortzusetzende Sitzung für den Chat; liefert den Namen
+    /// des Chats, der sie gerade selbst startet (`ClaudeSessionLaunchReservations`).
+    /// Standard: keine Reservierung — nur der echte Startpfad bindet sie an,
+    /// damit Builder-Aufrufe ohne Start (Tests, Vorschau) nichts belegen.
+    /// Jeder weitere Startpfad mit `--resume` muss sie ebenfalls anbinden
+    /// (heute nur `AgentSessionDetailView.prepareCommand`). Der Attach-Pfad
+    /// kehrt vorher zurück: `claude attach` startet keinen zweiten Prozess
+    /// auf der Sitzung, der Rückweg mit `--resume` läuft wieder hier durch.
+    var launchReservation: (_ sessionID: String, _ localID: UUID) -> String? = { _, _ in nil }
+
+    /// Läuft die Codex-Sitzung schon (anderer Chat der App oder fremder
+    /// Prozess)? Standard: keine Prüfung — nur der echte Startpfad bindet sie
+    /// an (`CodexSessionRunningGuard`), mit vorher abseits des Main Threads
+    /// gelesener Prozessliste.
+    var codexRunningConflict: (_ sessionID: String, _ localID: UUID) -> CodexRunningConflict? = { _, _ in nil }
+
+    /// Notbremse `codexStartGuardEnabled`: aus = Codex setzt ohne
+    /// Doppelstart-Prüfung und ohne Reservierung fort.
+    var codexStartGuardEnabled = true
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
     /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
@@ -521,6 +557,20 @@ struct AgentCommandBuilder {
         if session.hasLaunchedInitialPrompt {
             guard let externalSessionID = session.externalSessionID else {
                 throw AgentCommandError.missingExternalSessionID(session.title)
+            }
+            // Nie zwei Prozesse auf einer Sitzung: erst ein laufender Prozess,
+            // dann ein gleichzeitiger Start (Reservierung, eigener Schlüssel).
+            if codexStartGuardEnabled, let conflict = codexRunningConflict(externalSessionID, session.id) {
+                Logger.agentStore.error(
+                    "codex_resume_blocked session=\(externalSessionID, privacy: .public) conflict=\(String(describing: conflict), privacy: .private)"
+                )
+                throw AgentCommandError.codexSessionRunning(title: session.title, conflict: conflict)
+            }
+            if codexStartGuardEnabled, let holder = launchReservation("codex:\(externalSessionID)", session.id) {
+                Logger.agentStore.error(
+                    "codex_resume_blocked_starting session=\(externalSessionID, privacy: .public)"
+                )
+                throw AgentCommandError.sessionStartingElsewhere(title: session.title, otherChat: holder)
             }
             var arguments: [String] = ["resume"]
             arguments.append(contentsOf: extra)
@@ -822,6 +872,14 @@ struct AgentCommandBuilder {
                 "resume_blocked_session_running session=\(resumeSessionID, privacy: .public) pid=\(running.pid) profile=\(running.profileName, privacy: .public)"
             )
             throw AgentCommandError.sessionAlreadyRunning(title: session.title, pid: running.pid)
+        }
+        // Gleichzeitiger Start: der andere Prozess steht noch nicht in der Registry.
+        if !isFork, let resumeSessionID,
+           let holder = launchReservation(resumeSessionID, session.id) {
+            Logger.agentStore.error(
+                "resume_blocked_session_starting session=\(resumeSessionID, privacy: .public) holder=\(holder, privacy: .private)"
+            )
+            throw AgentCommandError.sessionStartingElsewhere(title: session.title, otherChat: holder)
         }
 
         if let resumeSessionID {
