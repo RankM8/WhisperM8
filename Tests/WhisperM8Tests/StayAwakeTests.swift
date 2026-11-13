@@ -178,6 +178,29 @@ final class StayAwakeTests: XCTestCase {
         XCTAssertFalse(prefs.stayAwakeWhileWorking)
     }
 
+    /// Review Insel-Paket, Befund 7: War die Seitenleiste nie zu sehen, lief
+    /// `start()` nie. Der Controller holt das nach und prüft still — ohne
+    /// Dialog, und erst danach entscheidet er.
+    @MainActor
+    func testControllerResolvesThePermissionSilentlyWithoutTheSidebar() {
+        let system = FakeStayAwakeSystem(installed: true)
+        let (controller, _, working) = makeController(system)
+        XCTAssertEqual(controller.permission, .unknown)
+        var answered = false
+        controller.whenPermissionKnown(workingPublisher: working.eraseToAnyPublisher()) {
+            answered = true
+            XCTAssertEqual(controller.permission, .ready)
+            XCTAssertFalse(controller.nextStepNeedsPermission)
+        }
+        XCTAssertFalse(answered, "erst nach der Prüfung")
+        waitUntil { answered }
+        XCTAssertEqual(system.installCalls, 0, "nie ein Dialog")
+
+        var again = false
+        controller.whenPermissionKnown(workingPublisher: working.eraseToAnyPublisher()) { again = true }
+        XCTAssertTrue(again, "bekannt: sofort")
+    }
+
     @MainActor
     func testStaleMarkerFromCrashIsResetOnStart() throws {
         let system = FakeStayAwakeSystem(installed: true)

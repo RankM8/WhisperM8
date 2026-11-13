@@ -191,6 +191,11 @@ extension AgentChatsView {
             guard let project = workspace.projects.first(where: { $0.id == projectID }) else { return false }
             openProjectAsWorkspace(project, activeSessionIDs: activeSessionIDs)
             return true
+        case .switchToProject(let projectID):
+            return switchToProjectFromController(projectID)
+        case .toggleArchiveMode:
+            toggleArchiveModeFromController()
+            return true
         case .setSidebarVisible(let visible):
             guard isSidebarVisible != visible else { return false }
             isSidebarVisible = visible

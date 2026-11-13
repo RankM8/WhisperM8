@@ -49,8 +49,13 @@ enum ControllerIslandGeometry {
         if screen.hasNotch {
             // `bodySize` enthält das Band schon (die Ansicht zeichnet es mit).
             // An der Notch liegt das Band auch im Vollbild in der Aussparung.
+            // Mittig unter der Notch; ist die Insel breiter als der Platz bis
+            // zum Rand (zwei Rauten, rund 700 pt), bleibt sie ganz auf dem
+            // Bildschirm.
+            let centered = screen.notchCenterX - bodySize.width / 2
+            let x = max(screen.frame.minX, min(centered, screen.frame.maxX - bodySize.width))
             return CGRect(
-                x: screen.notchCenterX - bodySize.width / 2, y: screen.frame.maxY - bodySize.height,
+                x: x, y: screen.frame.maxY - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
         }
         let center = pillCenter(screen: screen, stored: stored, visible: visiblePill)
