@@ -168,9 +168,16 @@ final class HandoverTakeService {
                 Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(String(describing: error), privacy: .public)")
                 continue
             }
+            // Review Paket 1, Befund 3: SwiftTerm prüft die Startzeit nicht.
+            // Lebt unter der PID ein anderer Prozess (PID neu vergeben), wird
+            // nicht übernommen; der Rückfall setzt den Chat fort.
+            let sameProcess = dependencies.isSameProcess(taken.manifest.pid, taken.manifest.pidStartTime)
             if taken.exited || taken.descriptor == nil {
                 dependencies.showEnded(taken, session)
                 outcomes[chatID] = .endedInGap(exitStatus: taken.exitStatus)
+            } else if !sameProcess {
+                Logger.agentStore.error("handover_take_pid_mismatch chat=\(chatID, privacy: .public) pid=\(taken.manifest.pid)")
+                if let fd = taken.descriptor { Darwin.close(fd) }
             } else if dependencies.adopt(taken, session) {
                 outcomes[chatID] = .adopted
             } else if let fd = taken.descriptor {

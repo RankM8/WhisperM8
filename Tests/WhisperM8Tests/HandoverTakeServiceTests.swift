@@ -67,8 +67,9 @@ final class HandoverTakeServiceTests: XCTestCase {
     }
 
     private func service(secrets: HandoverSecretStoring, sessions: [AgentChatSession], calls: Calls,
-                         adoptSucceeds: Bool = true) -> HandoverTakeService {
-        HandoverTakeService(dependencies: .init(
+                         adoptSucceeds: Bool = true,
+                         isSameProcess: ((Int32, Double?) -> Bool)? = nil) -> HandoverTakeService {
+        var dependencies = HandoverTakeService.Dependencies(
             paths: paths, secretStore: secrets, marker: marker(pid: 200),
             sessions: { sessions },
             adopt: { [weak self] taken, session in
@@ -79,7 +80,9 @@ final class HandoverTakeServiceTests: XCTestCase {
             },
             showEnded: { _, session in calls.ended.append(session.id) },
             scheduleResume: { calls.resumed.append(contentsOf: $0) },
-            gracePeriod: 3))
+            gracePeriod: 3)
+        if let isSameProcess { dependencies.isSameProcess = isSameProcess }
+        return HandoverTakeService(dependencies: dependencies)
     }
 
     func testNewAppAdoptsAllChatsAndClearsHandoverState() throws {
@@ -154,6 +157,22 @@ final class HandoverTakeServiceTests: XCTestCase {
         while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
         XCTAssertEqual(calls.resumed, sources.map(\.sessionID))
         XCTAssertFalse(sources[0].child.isAlive)
+    }
+
+    /// Review Paket 1, Befund 3: Passt die Startzeit nicht (PID neu
+    /// vergeben), übernimmt die App die Leitung nicht.
+    func testReusedPIDIsNotAdopted() throws {
+        let secrets = FakeSecretStore()
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: secrets)
+        let calls = Calls()
+        var checks = 0
+        let summary = service(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: calls,
+                              isSameProcess: { _, _ in checks += 1; return false }).takeAtLaunch()
+        XCTAssertTrue(calls.adopted.isEmpty, "keine Übernahme bei fremdem Prozess unter der PID")
+        XCTAssertTrue(summary.adopted.isEmpty)
+        XCTAssertEqual(summary.fallback, sources.map(\.sessionID))
+        XCTAssertGreaterThanOrEqual(checks, 1)
     }
 
     func testTerminalTabIsEndedButNotResumed() async throws {
