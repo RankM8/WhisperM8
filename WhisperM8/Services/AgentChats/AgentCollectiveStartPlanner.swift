@@ -22,25 +22,38 @@ enum AgentCollectiveStartPlanner {
     }
 
     /// Je Sitzung (Provider + ID, ohne Groß-/Kleinschreibung) startet nur der
-    /// Chat, der sie führt: von Hand angelegt, sonst der älteste. Bewusst nicht
-    /// der zuletzt aktive — `lastActivityAt` setzt jede Änderung am Eintrag,
-    /// auch der Start des falsch gebundenen Chats. Chats ohne ID (noch
-    /// ungebunden) starten immer.
-    static func plan(_ ids: [UUID], sessions: [AgentChatSession]) -> Plan {
+    /// Chat, der sie führt (`AgentSessionDuplicateGroup.keeperOrder`, dieselbe
+    /// Ordnung wie `whisperm8 chats duplicates`): zuerst der Beleg aus der
+    /// eigenen Hook-Event-Datei vom letzten Start, nur bei echter Dopplung
+    /// gelesen, danach von Hand angelegt, sonst der älteste. Bewusst nicht der zuletzt
+    /// aktive — `lastActivityAt` setzt jede Änderung am Eintrag, auch der
+    /// Start des falsch gebundenen Chats. Chats ohne ID (noch ungebunden)
+    /// starten immer.
+    static func plan(
+        _ ids: [UUID],
+        sessions: [AgentChatSession],
+        evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence = { _ in .noEvidence }
+    ) -> Plan {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         func key(_ id: UUID) -> String? {
-            guard let session = byID[id],
+            // Agent View setzt keine Sitzung fort: nie ein Doppel.
+            guard let session = byID[id], !session.isAgentView,
                   let external = session.externalSessionID?.lowercased(), !external.isEmpty else { return nil }
             return "\(session.provider.rawValue):\(external)"
         }
-        var winner: [String: UUID] = [:]
+        var groups: [String: [AgentChatSession]] = [:]
         for id in ids {
-            guard let key = key(id), let candidate = byID[id] else { continue }
-            if let current = winner[key].flatMap({ byID[$0] }),
-               !AgentSessionDuplicateGroup.keeperPrecedes(candidate, current) {
+            guard let key = key(id), let session = byID[id],
+                  groups[key]?.contains(where: { $0.id == id }) != true else { continue }
+            groups[key, default: []].append(session)
+        }
+        var winner: [String: UUID] = [:]
+        for (key, members) in groups {
+            guard members.count > 1 else {
+                winner[key] = members.first?.id
                 continue
             }
-            winner[key] = id
+            winner[key] = AgentSessionDuplicateGroup.keeperOrder(members, evidence: evidence).first?.id
         }
         var plan = Plan(start: [], skipped: [])
         for id in ids {
@@ -52,5 +65,29 @@ enum AgentCollectiveStartPlanner {
             }
         }
         return plan
+    }
+}
+
+/// Hinweis am übersprungenen Chat (Vic): Statt still gestoppt zu bleiben,
+/// zeigt er beim Öffnen, welcher Chat seine Unterhaltung führt. Nur für diesen
+/// App-Lauf, angezeigt einmal im Meldungsbanner der Detailansicht.
+@MainActor
+final class AgentCollectiveStartNotices {
+    static let shared = AgentCollectiveStartNotices()
+
+    private var keeperTitles: [UUID: String] = [:]
+
+    func note(skipped: UUID, keeperTitle: String) {
+        keeperTitles[skipped] = keeperTitle
+    }
+
+    /// Die Meldung für den Chat, einmalig (danach ist sie verbraucht).
+    func takeMessage(for chat: UUID) -> String? {
+        guard let keeper = keeperTitles.removeValue(forKey: chat) else { return nil }
+        return Self.message(keeperTitle: keeper)
+    }
+
+    nonisolated static func message(keeperTitle: String) -> String {
+        String(localized: "Not resumed: this conversation continues in the chat “\(keeperTitle)”. Both chats were bound to the same session, and only one may run it.")
     }
 }

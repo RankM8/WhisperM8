@@ -73,6 +73,14 @@ struct AgentSessionDetailView: View {
     /// Transcript-Load aufgeschoben werden darf (Terminal-Modus braucht
     /// kein JSONL) und wird beim Umschalten nachgeholt.
 
+    /// Bei der Wiederaufnahme übersprungen (zweiter Chat auf derselben
+    /// Sitzung): sagen, welcher Chat die Unterhaltung führt.
+    private func showCollectiveStartNotice() {
+        if let notice = AgentCollectiveStartNotices.shared.takeMessage(for: session.id) {
+            errorMessage = notice
+        }
+    }
+
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
     }
@@ -133,6 +141,7 @@ struct AgentSessionDetailView: View {
             }
         }
         .onAppear {
+            showCollectiveStartNotice()
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
                     launchAfterCacheWarmup()
@@ -147,6 +156,7 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
+            showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
             transcriptTailBytes = Self.initialTailBytes
@@ -453,6 +463,8 @@ struct AgentSessionDetailView: View {
             let runningRecords = launchSession.provider == .claude
                 && !launchSession.isTerminal && !launchSession.isAgentView
                 ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
+            // Codex-Sperre: Prozessliste ebenfalls hier, nicht auf dem Main Thread.
+            let codexProcesses = Self.codexProcessesForLaunch(launchSession)
 
             await MainActor.run {
                 // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
@@ -473,6 +485,7 @@ struct AgentSessionDetailView: View {
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult,
                     runningRecords: runningRecords,
+                    codexProcesses: codexProcesses,
                     allowsBackgroundAttach: allowsBackgroundAttach,
                     // Rückweg: den gespeicherten Stand nehmen, nicht den
                     // Snapshot aus der Closure des beendeten Laufs (ein Attach
@@ -487,6 +500,7 @@ struct AgentSessionDetailView: View {
         resumeRepairPreparation: ResumeRepairPreparation,
         launchGuardResult: ClaudeGPTLaunchGuardResult,
         runningRecords: [ClaudeSessionRecord] = [],
+        codexProcesses: [CodexProcess]? = [],
         allowsBackgroundAttach: Bool = true,
         storedSession: AgentChatSession? = nil
     ) {
@@ -529,6 +543,11 @@ struct AgentSessionDetailView: View {
             let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
                 ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
+            }
+            builder.codexStartGuardEnabled = AppPreferences.shared.isCodexStartGuardEnabled
+            builder.codexRunningConflict = { [store, terminalRegistry] sessionID, localID in
+                Self.codexConflict(sessionID: sessionID, localID: localID, processes: codexProcesses,
+                                   store: store, registry: terminalRegistry)
             }
             builder.launchReservation = { [store] sessionID, localID in
                 ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID).map { holder in

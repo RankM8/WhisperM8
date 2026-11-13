@@ -29,6 +29,7 @@ enum PreferenceBedienweg {
     static let killSwitches: [Entry] = [
         Entry(key: "agentEventDrivenWatchEnabled", reason: "Notbremse: zurück zum reinen 1,5-s-Polling des Transcript-Watchers."),
         Entry(key: "claudeRegistryStatusEnabled", reason: "Notbremse: Claude-Status wieder aus Hooks und Transcript statt aus Claudes Registry."),
+        Entry(key: "codexStartGuardEnabled", reason: "Notbremse: Codex-Chats setzen wieder ohne Doppelstart-Prüfung fort, falls eine künftige Codex-Version einen langlebigen Prozess mit resume <id> hält und so jedes Fortsetzen sperrt."),
         Entry(key: "claudeSharedMemoryEnabled", reason: "Notbremse: jedes Claude-Profil nutzt wieder sein eigenes Auto-Memory."),
         Entry(key: "accountSwitchAfterTurnEnabled", reason: "Notbremse: Kontowechsel überspringt laufende Chats wieder, statt nach dem Turn zu wechseln."),
         Entry(key: "accountBulkMoveEnabled", reason: "Notbremse: blendet den Mehrfach-Kontowechsel aus; der Einzel-Umzug bleibt."),
