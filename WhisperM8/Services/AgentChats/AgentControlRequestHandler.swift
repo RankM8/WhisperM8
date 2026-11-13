@@ -591,12 +591,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// oder gelöscht wurden, überspringt die Store-Logik.
     private func sessionReopen(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let outcome: SendOutcome = await MainActor.run {
-            let workspace = AgentWorkspaceUIModel.shared.workspace
-            let reopened = AgentWindowStore.shared.reopenLastClosedTab { id in
-                workspace.sessions.contains { $0.id == id && $0.status != .archived }
-            }
-            guard let reopened,
-                  let session = workspace.sessions.first(where: { $0.id == reopened.sessionID }) else {
+            guard let session = ClosedChatReopener.reopen() else {
                 return .failure(.notFound, "Keine zuletzt geschlossenen Tabs (die Liste ist ephemer und nach App-Neustart leer)")
             }
             return .success(session)

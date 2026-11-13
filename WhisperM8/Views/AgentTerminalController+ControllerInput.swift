@@ -13,7 +13,16 @@ extension AgentTerminalController {
         TerminalControlKey.controllerAllows(
             key, status: status, profile: command.keyboardProfile,
             choiceListOpen: controllerChoiceListOpen(status: status, at: now),
-            composerMayHaveText: composerDraft.fieldMayHaveText)
+            composerMayHaveText: key == .left ? controllerFieldMayHaveText() : composerDraft.fieldMayHaveText)
+    }
+
+    /// Steht vermutlich etwas im Feld, sodass ← es nicht leer trifft? Eine
+    /// erkannte Ansicht fängt ← selbst ab. Sonst entscheidet der Bildschirm:
+    /// sichtbar leer sperrt, sichtbar Text gibt frei; ist das Feld nicht
+    /// eindeutig ablesbar, gilt die Schätzung des Entwurfs-Trackers (Runde 5).
+    func controllerFieldMayHaveText() -> Bool {
+        let screen = controllerScreenSnapshot()
+        return ControllerScreenReading.fieldMayHaveText(screen: screen, tracker: composerDraft.fieldMayHaveText)
     }
 
     /// Ist eine Auswahlliste, die das Controller-Menü geöffnet hat, vermutlich
@@ -40,8 +49,14 @@ extension AgentTerminalController {
     /// Merker nach einer Taste vom Controller (aus `sendKey`, nach der
     /// Absicherung); Regeln in `ControllerTerminalMarks.recordControllerKey`.
     func noteControllerKey(_ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, now: Date) {
+        let isClaude = command.keyboardProfile == .claudeCodeChat
+        var choosing: Bool?
+        if isClaude, [TerminalControlKey.up, .down, .left, .right].contains(key) {
+            choosing = status == .awaitingInput || controllerChoiceListOpen(status: status, at: now)
+                || controllerScreenSnapshot()?.openView != nil
+        }
         controllerMarks.recordControllerKey(
-            key, status: status, isCodex: command.keyboardProfile == .codexChat, at: now)
+            key, status: status, isCodex: command.keyboardProfile == .codexChat, choosing: choosing, at: now)
     }
 
     /// Taste der echten Tastatur an dieses Terminal: Enter zählt als Absenden

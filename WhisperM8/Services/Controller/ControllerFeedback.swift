@@ -87,7 +87,7 @@ final class ControllerFeedback {
         var phase: ControllerRecordingPhase?
         var status: ControllerChatState.Status?
         switch dispatcher.ui.context {
-        case let .recording(recordingPhase, _): phase = recordingPhase
+        case let .recording(recordingPhase, _, _): phase = recordingPhase
         case let .chat(state): status = state.status
         default: break
         }

@@ -51,9 +51,13 @@ Seit 12.11.2026 ist die Pill Teil der **vereinten Pille** (Diktat und
 Chat-Status in einer Pille, [notch.md](../../notch.md#vereinte-pille-standard-seit-12112026)):
 Sie erscheint auf dem Bildschirm, auf dem getippt wird, ohne Notch an der
 gemerkten Lage dieses Bildschirms (Standard oben mittig), mit Notch schwarz
-unter der Notch. Wartende Chats stehen als Raute links. Zustandswechsel wachsen
+unter der Notch. Steht dort die ruhende Pille, wächst sie selbst in die
+Diktat-Pille hinein und zieht sich danach wieder zurück (an der Notch wächst
+das Band nach unten); die Aufnahme wartet dabei nie auf die Animation.
+Wartende Chats stehen als Raute links. Zustandswechsel wachsen
 um die Mitte, nur das Hover-Expand klappt nach links auf. Nur die Darstellung
-ist neu (`OverlayPresentation`, `RecordingPanel+UnifiedPill.swift`); Start,
+ist neu (`OverlayPresentation`, `RecordingPanel+UnifiedPill.swift`,
+Übergang in `RecordingPanel+PillMorph.swift`); Start,
 Stop, Abbruch, Transkription und Auslieferung laufen unverändert. Kill-Switch
 `unifiedPillEnabled` stellt die getrennte Pill (unten mittig) wieder her.
 

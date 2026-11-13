@@ -197,4 +197,24 @@ final class TerminalKeyboardShortcutTests: XCTestCase {
             characters: "z"
         ))
     }
+
+    // MARK: - Ctrl+Return (Runde 5, R8)
+
+    func testControlReturnInClaudeSendsNow() {
+        let bytes = TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey, modifiers: [.control], characters: "\r",
+            profile: .claudeCodeChat)
+        XCTAssertEqual(bytes, [0x18, 0x13])
+    }
+
+    func testControlReturnOutsideClaudeIsNotIntercepted() {
+        for profile in [TerminalKeyboardProfile.codexChat, .plainShell, .claudeAgentsView] {
+            XCTAssertNil(TerminalShortcut.bytes(
+                keyCode: TerminalShortcut.KeyCode.returnKey, modifiers: [.control], characters: "\r",
+                profile: profile), "\(profile)")
+        }
+        XCTAssertNil(TerminalShortcut.bytes(
+            keyCode: TerminalShortcut.KeyCode.returnKey, modifiers: [.control, .shift], characters: "\r",
+            profile: .claudeCodeChat))
+    }
 }

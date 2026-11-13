@@ -447,8 +447,10 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.triangle, at: 1.1)
         press(.cross, at: 1.2)
         press(.circle, at: 1.3)
-        XCTAssertEqual(terminals.keys, [.killLineStart, .killLineStart, .killLineStart, .newline],
-                       "Kreuz und Kreis bleiben frei")
+        // Runde 5: Kreuz fügt ein (hier ist die Zwischenablage leer: „geht
+        // nicht“), Kreis schickt genau ein Escape.
+        XCTAssertEqual(terminals.keys, [.killLineStart, .killLineStart, .killLineStart, .newline, .escape])
+        XCTAssertEqual(haptics, [.rejected])
         release(.l1, at: 1.5)
         XCTAssertFalse(island.isVisible)
         XCTAssertEqual(window.selected, chats[1])
