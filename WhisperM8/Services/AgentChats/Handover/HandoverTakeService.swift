@@ -81,8 +81,11 @@ final class HandoverTakeService {
         // seiner Frist, auch wenn kein Socket da ist — beim normalen Start kostete
         // das 525 ms auf dem Main Thread. Gefragt wird deshalb nur, wenn es einen
         // Grund gibt: Marker „übergeben“ oder Discovery-Eintrag eines Aufbewahrers.
+        // Ein Discovery-Eintrag zählt nur, wenn ein Aufbewahrer die Sperre hält.
+        // Nach Absturz oder SIGKILL bleibt der Eintrag liegen; ohne diese
+        // Prüfung kostete dann wieder jeder Start die volle Frist (Vic).
         let mayHaveKeeper = previous.handover != nil
-            || FileManager.default.fileExists(atPath: dependencies.paths.discoveryFileURL.path)
+            || HandoverKeeperLock.liveDiscovery(paths: dependencies.paths)
         let keeperStatus = onMain && mayHaveKeeper ? Self.status(paths: dependencies.paths) : nil
         guard previous.handover != nil || keeperStatus != nil else { return summary }
         Self.isTaking = true
@@ -260,5 +263,33 @@ final class HandoverTakeService {
         defer { client.close() }
         client.timeout = 2
         return try? client.status()
+    }
+}
+
+
+// MARK: - Sperre des Aufbewahrers ohne Warten prüfen
+
+enum HandoverKeeperLock {
+    /// Hält gerade ein Aufbewahrer die Sperre `keeper.lock`? Prüft ohne zu
+    /// warten mit einer geteilten Sperre: Der Aufbewahrer hält sie exklusiv.
+    static func isHeld(paths: HandoverPaths) -> Bool {
+        let fd = open(paths.lockFileURL.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        if flock(fd, LOCK_SH | LOCK_NB) == 0 {
+            flock(fd, LOCK_UN)
+            return false
+        }
+        return errno == EWOULDBLOCK
+    }
+
+    /// `true`, wenn ein Discovery-Eintrag da ist und ein Aufbewahrer lebt.
+    /// Einen veralteten Eintrag (niemand hält die Sperre) entfernt sie.
+    static func liveDiscovery(paths: HandoverPaths) -> Bool {
+        guard FileManager.default.fileExists(atPath: paths.discoveryFileURL.path) else { return false }
+        if isHeld(paths: paths) { return true }
+        try? FileManager.default.removeItem(at: paths.discoveryFileURL)
+        Logger.agentStore.notice("handover_stale_discovery_removed")
+        return false
     }
 }

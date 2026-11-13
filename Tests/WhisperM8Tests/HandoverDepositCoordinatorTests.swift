@@ -267,13 +267,49 @@ final class HandoverRestartCLITests: XCTestCase {
         XCTAssertEqual(AppCLICommand.waitForTake(runID: "r1", timeout: 0.3, paths: paths), 3, "Rückfall")
     }
 
+    /// Review Paket 4, Befund 5: Aus einem Chat nur über `make dev`.
+    func testHandoverFromAChatNeedsMakeDev() {
+        typealias H = AgentControlRequestHandler
+        XCTAssertFalse(H.refusesHandoverFromChat(sessionID: nil, fromMakeDev: false), "Terminal, Skript")
+        XCTAssertFalse(H.refusesHandoverFromChat(sessionID: "", fromMakeDev: false))
+        XCTAssertTrue(H.refusesHandoverFromChat(sessionID: UUID().uuidString, fromMakeDev: false), "aus einem Chat")
+        XCTAssertFalse(H.refusesHandoverFromChat(sessionID: UUID().uuidString, fromMakeDev: true), "make dev aus einem Chat")
+    }
+
+    /// Hinweis von Dex: Der Bericht nutzt den geprüften Ordner des Aufbewahrers,
+    /// die Datei hat 0600, ein Symlink als Ordner wird nicht beschrieben.
+    func testTakeReportUsesTheCheckedDirectoryAndPrivateFile() throws {
+        let base = try HandoverTestSupport.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let report = HandoverTakeReport(runID: "r", finishedAt: 1, adopted: [], endedInGap: [], fallback: [])
+
+        let open = HandoverPaths(directory: base.appendingPathComponent("weit"))
+        try FileManager.default.createDirectory(at: open.directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        XCTAssertTrue(report.write(paths: open))
+        let dirMode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: open.directory.path)[.posixPermissions] as? Int)
+        XCTAssertEqual(dirMode & 0o777, 0o700, "Ordner auf 0700 gezogen")
+        let fileMode = try XCTUnwrap(FileManager.default.attributesOfItem(
+            atPath: HandoverTakeReport.fileURL(paths: open).path)[.posixPermissions] as? Int)
+        XCTAssertEqual(fileMode & 0o777, 0o600)
+        XCTAssertEqual(HandoverTakeReport.read(paths: open), report)
+
+        let target = base.appendingPathComponent("ziel")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let link = base.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        XCTAssertFalse(report.write(paths: HandoverPaths(directory: link)), "Symlink als Ordner wird abgelehnt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.appendingPathComponent("last-take.json").path))
+    }
+
     func testMakefileTriesHandoverBeforeKillAndSparesKeeper() throws {
         let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let makefile = try String(contentsOf: repo.appendingPathComponent("Makefile"), encoding: .utf8)
         let finish = try XCTUnwrap(makefile.range(of: "_dev_finish:\n")).upperBound
         let body = makefile[finish...].prefix(80)
         XCTAssertTrue(body.hasPrefix("\t@$(MAKE) _handover\n\t@$(MAKE) kill"), "Übergabe vor kill: \(body)")
-        XCTAssertTrue(makefile.contains("app handover"))
+        XCTAssertTrue(makefile.contains("app handover --from-make-dev"), "make dev weist sich aus (Befund 5)")
+        XCTAssertTrue(makefile.contains("[ \"$$young\" = ja ]"), "ohne Socket nur warten, wenn die App gerade startet (Befund 6)")
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("--keep-chats"))
         XCTAssertTrue(script.contains("--wait-take"))
@@ -384,6 +420,37 @@ final class HandoverTerminalControllerTests: XCTestCase {
         XCTAssertEqual(log, ["store", "status", "view"])
         XCTAssertFalse(adopted.isRunning)
         XCTAssertTrue(registry.activeSessionIDs.isEmpty)
+    }
+
+    /// Review Paket 4, Befund 2: Nach der Abgabe startet die Registry nichts mehr.
+    func testRegistryRefusesStartsAfterHandover() throws {
+        let registry = AgentTerminalRegistry(sleep: { _ in }, termination: .inert)
+        registry.refuseNewStarts()
+        let id = UUID()
+        var launched = false
+        let controller = registry.startController(
+            sessionID: id,
+            command: AgentLaunchCommand(executablePath: "/bin/sh", arguments: ["-c", "sleep 30"],
+                                        workingDirectory: NSTemporaryDirectory(), keyboardProfile: .plainShell),
+            onLaunched: { launched = true }, onTerminated: { _ in })
+        XCTAssertFalse(controller.isRunning)
+        XCTAssertFalse(launched)
+        XCTAssertNil(registry.controller(for: id), "nicht eingetragen")
+        XCTAssertNil(registry.adoptController(sessionID: id, command: controller.command, setUp: { _ in true }))
+        XCTAssertTrue(registry.activeSessionIDs.isEmpty)
+    }
+
+    /// Review Paket 4, Befund 3: Ohne Übergabe merkt das folgende SIGTERM die
+    /// Chats zum Fortsetzen vor, aber nur kurz nach der Anfrage.
+    func testResumeOnSignalQuitOnlyShortlyAfterARefusedRestart() {
+        let service = HandoverRestartService()
+        var clock = Date(timeIntervalSince1970: 1_000)
+        service.now = { clock }
+        XCTAssertFalse(service.resumesOnSignalQuit())
+        service.noteResumeOnSignalQuit()
+        XCTAssertTrue(service.resumesOnSignalQuit())
+        clock = clock.addingTimeInterval(61)
+        XCTAssertFalse(service.resumesOnSignalQuit(), "ein späteres, unabhängiges Beenden erbt nichts")
     }
 
     func testCompletedHandoverIsNotRunningAndGetsNoInterruptOnQuit() throws {

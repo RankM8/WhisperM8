@@ -163,7 +163,7 @@ enum AppCLICommand {
     static let usage = """
     Usage: whisperm8 app handover-status [--json]
            whisperm8 app handover-status --wait-take <runID> [--timeout <s>]
-           whisperm8 app handover [--json]
+           whisperm8 app handover [--json] [--from-make-dev]
     """
 
     enum HandoverExit {
@@ -195,11 +195,11 @@ enum AppCLICommand {
             return handoverStatus(json: rest.contains("--json"), paths: paths)
         case "handover":
             let rest = Array(arguments.dropFirst())
-            guard rest.allSatisfy({ $0 == "--json" }) else {
+            guard rest.allSatisfy({ $0 == "--json" || $0 == "--from-make-dev" }) else {
                 CLIIO.err(usage)
                 return 64
             }
-            return handover(json: rest.contains("--json"))
+            return handover(json: rest.contains("--json"), fromMakeDev: rest.contains("--from-make-dev"))
         case "help", "--help", "-h":
             CLIIO.out(usage)
             return 0
@@ -252,10 +252,11 @@ enum AppCLICommand {
         return 3
     }
 
-    static func handover(json: Bool) -> Int32 {
+    static func handover(json: Bool, fromMakeDev: Bool = false) -> Int32 {
         let response: ChatsControlResponse
         do {
-            response = try ChatsControlClient.send(method: "app.handover", params: [:])
+            response = try ChatsControlClient.send(method: "app.handover",
+                                                   params: fromMakeDev ? ["fromMakeDev": true] : [:])
         } catch {
             CLIIO.err("App nicht erreichbar: \(error)")
             return HandoverExit.appUnreachable

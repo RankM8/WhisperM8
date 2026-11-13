@@ -44,6 +44,9 @@ extension HandoverTakeService {
         // Nicht `sessionLaunched` (Review Ende-Meldung): das setzte „startet
         // gerade“ samt Startfrist für einen Prozess, der längst läuft.
         coordinator.sessionAdopted(sessionID: id)
+        if let since = manifest.workingSince {
+            StatisticsCollectors.noteHandedOverWork(since: Date(timeIntervalSince1970: since), for: id)
+        }
         if let cursor = manifest.hookCursor {
             coordinator.hookTrackingAdopted(sessionID: id, cursor: cursor, isBackground: session.isBackgroundChat)
         }

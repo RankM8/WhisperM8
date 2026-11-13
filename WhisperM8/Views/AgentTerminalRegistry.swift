@@ -28,6 +28,14 @@ final class AgentTerminalRegistry: ObservableObject {
         self.termination = termination
     }
 
+    /// Nach einer geglückten Abgabe (Neustart ohne Chatverlust): Die App endet
+    /// gleich und startet keinen Chat mehr.
+    private(set) var refusesNewStarts = false
+
+    func refuseNewStarts() {
+        refusesNewStarts = true
+    }
+
     /// Meldet jede Änderung des Satzes laufender PTYs — Quelle des
     /// Absturz-Markers (`AgentCrashRecoveryMarker`).
     var onRunningSetChanged: ((Set<UUID>) -> Void)?
@@ -55,6 +63,16 @@ final class AgentTerminalRegistry: ObservableObject {
     ) -> AgentTerminalController {
         if let controller = controllers[sessionID], controller.isRunning {
             return controller
+        }
+        // Nach einer geglückten Abgabe hält der Aufbewahrer die Chats. Ein
+        // Start in den letzten Augenblicken der alten App gäbe einen zweiten
+        // Prozess auf derselben Sitzung (Review Paket 4, Befund 2). Der
+        // Controller wird deshalb weder gestartet noch eingetragen.
+        guard !refusesNewStarts else {
+            Logger.agentStore.notice(
+                "handover_start_refused_after_commit session=\(sessionID.uuidString, privacy: .public)")
+            return AgentTerminalController(sessionID: sessionID, command: command,
+                                           onLaunched: {}, onTerminated: { _ in })
         }
 
         let controller = AgentTerminalController(
@@ -90,7 +108,7 @@ final class AgentTerminalRegistry: ObservableObject {
         command: AgentLaunchCommand,
         setUp: (AgentTerminalController) -> Bool
     ) -> AgentTerminalController? {
-        guard controllers[sessionID]?.isRunning != true else { return nil }
+        guard !refusesNewStarts, controllers[sessionID]?.isRunning != true else { return nil }
         let box = ControllerBox()
         let controller = AgentTerminalController(
             sessionID: sessionID,

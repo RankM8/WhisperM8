@@ -231,6 +231,29 @@ final class HandoverKeeperTests: XCTestCase {
         XCTAssertEqual(child.marker, "", "kein Ctrl+C, kein SIGHUP")
     }
 
+    /// Review Paket 4, Befund 4: Vor COMMIT liest der Aufbewahrer nichts.
+    /// Bricht die App danach ab, findet sie alles seit dem Ablösen noch vor.
+    func testKeeperReadsOnlyAfterCommitSoAnAbortLosesNoOutput() throws {
+        let child = try child { try .ticking(in: directory) }
+        let keeper = try makeKeeper()
+        let app = HandoverAppDouble(fd: child.master, image: [])
+        app.read(for: 0.2)
+        let before = HandoverTestSupport.ticks(in: app.text)
+        let client = try connect()
+        try client.helloDeposit(secret: nil)
+        try client.deposit(manifest: child.manifest(chatID: "a"), descriptor: child.master, image: app.image)
+        usleep(300_000)   // der Chat schreibt weiter, niemand liest
+        XCTAssertEqual(keeper.queue.sync { keeper.chats["a"]?.gapBytes }, 0, "vor COMMIT liest der Aufbewahrer nicht")
+        try client.abort()
+        client.close()
+        // Die App liest weiter auf ihrer eigenen Leitung: keine Lücke.
+        app.read(for: 0.4)
+        let ticks = HandoverTestSupport.ticks(in: app.text)
+        XCTAssertGreaterThan(ticks.count, before.count)
+        XCTAssertTrue(HandoverTestSupport.isContinuous(ticks), "Ausgabe nach ABORT lückenlos: \(ticks.suffix(8))")
+        app.close()
+    }
+
     func testLostDepositConnectionReleasesCopiesSilently() throws {
         let child = try child { try .ticking(in: directory) }
         let finished = expectation(description: "Ende")
