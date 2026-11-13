@@ -66,7 +66,9 @@ extension AgentChatsView {
         do {
             try store.markStaleRunningSessionsClosed(excluding: terminalRegistry.activeSessionIDs)
             if let appLaunch = AgentSessionStore.appLaunchedAt {
-                try store.expirePendingTerminalCommands(createdBefore: appLaunch)
+                try AgentSessionStore.pendingTerminalCommandExpiry.run {
+                    try store.expirePendingTerminalCommands(createdBefore: appLaunch)
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
