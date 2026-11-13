@@ -689,6 +689,21 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
     }
 
+    /// Notbremse für das Lesen der Paddles und des Xbox-Knopfs über rohes HID
+    /// (Xbox Elite). Aus: kein `IOHIDManager`, Paddles wirken als die
+    /// Gesichtstasten ihres Controller-Profils.
+    /// `defaults write com.whisperm8.app controllerPaddleHIDEnabled -bool NO`
+    var isControllerPaddleHIDEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerPaddleHIDEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerPaddleHIDEnabled) }
+    }
+
+    /// Belegung der vier Paddles (Rohwerte von `ControllerPaddleBinding`);
+    /// fehlende oder unbekannte Werte gelten als Standard des Paddles.
+    var paddleBindings: ControllerPaddleBindings {
+        ControllerPaddleBindings(rawValues: { defaults.string(forKey: $0.preferenceKey) })
+    }
+
     /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
     var controllerConnectHintShown: Bool {
         get { defaults.bool(forKey: Keys.controllerConnectHintShown) }
@@ -1172,6 +1187,11 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let controllerPaddleHIDEnabled = "controllerPaddleHIDEnabled"
+    static let controllerPaddleUpperLeft = "controllerPaddleUpperLeft"
+    static let controllerPaddleLowerLeft = "controllerPaddleLowerLeft"
+    static let controllerPaddleUpperRight = "controllerPaddleUpperRight"
+    static let controllerPaddleLowerRight = "controllerPaddleLowerRight"
     static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
@@ -1218,3 +1238,15 @@ enum PreferenceKeys {
 }
 
 private typealias Keys = PreferenceKeys
+
+extension ControllerPaddle {
+    /// Einstellungs-Schlüssel der Belegung dieses Paddles.
+    var preferenceKey: String {
+        switch self {
+        case .upperLeft: return PreferenceKeys.controllerPaddleUpperLeft
+        case .lowerLeft: return PreferenceKeys.controllerPaddleLowerLeft
+        case .upperRight: return PreferenceKeys.controllerPaddleUpperRight
+        case .lowerRight: return PreferenceKeys.controllerPaddleLowerRight
+        }
+    }
+}

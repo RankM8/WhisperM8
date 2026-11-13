@@ -10,6 +10,8 @@ enum ControllerButton: String, CaseIterable, Sendable {
     case dpadUp, dpadDown, dpadLeft, dpadRight
     case l1, r1, l2, r2, l3, r3
     case create, options, touchpad
+    /// Paddles des Xbox Elite (Rückseite), Sofort-Tasten ohne Halten.
+    case paddleUpperLeft, paddleLowerLeft, paddleUpperRight, paddleLowerRight
 
     /// Richtung, falls es eine Taste des Steuerkreuzes ist.
     var dpadDirection: ControllerDirection? {

@@ -66,8 +66,14 @@ enum ControllerLegend {
         var probes: [ControllerGesture]
     }
 
-    static func entries(for context: ControllerContext) -> [ControllerLegendEntry] {
+    /// `traits`: Was das Gerät der letzten Eingabe hat. Einträge mit einer
+    /// Eingabe, die es nicht gibt (Touchpad am Xbox-Controller ohne lesbaren
+    /// Xbox-Knopf), fallen weg; die Belegung selbst bleibt gleich.
+    static func entries(
+        for context: ControllerContext, traits: ControllerInputTraits = .standard
+    ) -> [ControllerLegendEntry] {
         candidates(for: context)
+            .filter { traits.supports($0.entry) }
             .filter { candidate in
                 candidate.probes.contains { probe in
                     guard let action = ControllerBindingResolver.action(for: probe, in: context) else { return false }
@@ -80,8 +86,8 @@ enum ControllerLegend {
     /// Belegung für die Einstellungsseite, getrennt nach Kern, Zusatz und den
     /// drei Ebenen der Insel. L2 + Touchpad (Verlauf) gilt überall und steht
     /// bei den Ebenen.
-    static func allBindings() -> [ControllerLegendSection] {
-        [
+    static func allBindings(traits: ControllerInputTraits = .standard) -> [ControllerLegendSection] {
+        let sections = [
             ControllerLegendSection(kind: .core, entries: [
                 entry(.leftStick, .move),
                 entry(.button(.cross), .confirm),
@@ -130,6 +136,9 @@ enum ControllerLegend {
                 combination(.l2, .r2, .pickAndDictate),
             ]),
         ]
+        return sections.map { section in
+            ControllerLegendSection(kind: section.kind, entries: section.entries.filter(traits.supports))
+        }
     }
 
     private static func combination(
@@ -362,5 +371,12 @@ enum ControllerLegend {
 
     private static func entry(_ input: ControllerLegendInput, _ label: ControllerLegendLabel) -> ControllerLegendEntry {
         ControllerLegendEntry(inputs: [input], label: label)
+    }
+}
+
+extension ControllerInputTraits {
+    /// Gibt es alle Eingaben dieses Eintrags am Gerät?
+    func supports(_ entry: ControllerLegendEntry) -> Bool {
+        hasTouchpad || !entry.inputs.contains(.button(.touchpad))
     }
 }

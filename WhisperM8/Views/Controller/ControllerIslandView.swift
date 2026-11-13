@@ -87,6 +87,8 @@ struct ControllerIslandView: View {
     let display: ControllerIslandDisplay
     /// Aufgeklappt; zu ist nur der Umriss der Notch sichtbar.
     var revealed = true
+    /// Tastenzeichen nach dem Controller der letzten Eingabe (Xbox: A B X Y).
+    @Environment(\.controllerFamily) var family
 
     var palette: IslandPalette { .notch }
 
@@ -150,7 +152,7 @@ struct ControllerIslandView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            IslandGlyph(text: display.model.layer.key.glyph, round: false, palette: palette)
+            IslandGlyph(text: display.model.layer.key.glyph(family), round: false, palette: palette)
             Text(verbatim: limitsCard == nil ? display.model.layer.title : String(localized: "Limits"))
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.2)
@@ -236,7 +238,7 @@ struct ControllerIslandView: View {
             .padding(.horizontal, 14)
             .padding(.top, 2)
             .padding(.bottom, 12)
-            if let note = slots.note { self.note(note.text) }
+            if let note = slots.note { self.note(note.text(family)) }
         }
     }
 
@@ -423,15 +425,15 @@ struct ControllerIslandView: View {
         IslandFlow(spacing: 12, lineSpacing: 5) {
             footItem("▲▼", String(localized: "select"))
             footItem("◀▶", String(localized: "tabs"))
-            footItem(ControllerButton.l2.glyph, String(localized: "release: switch"), round: false)
-            footItem(ControllerButton.circle.glyph, String(localized: "cancel"))
-            footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
-            footItem(ControllerButton.square.glyph,
+            footItem(ControllerButton.l2.glyph(family), String(localized: "release: switch"), round: false)
+            footItem(ControllerButton.circle.glyph(family), String(localized: "cancel"))
+            footItem(ControllerButton.triangle.glyph(family), String(localized: "next waiting"))
+            footItem(ControllerButton.square.glyph(family),
                      reopenTitle.map { String(localized: "reopen \($0)") } ?? String(localized: "nothing closed"),
                      round: false)
             // Im Reiter Workspaces diktiert R2 nur, wenn die Markierung auf
             // dem aktuellen Workspace steht (in den aktuellen Chat).
-            footItem(ControllerButton.r2.glyph,
+            footItem(ControllerButton.r2.glyph(family),
                      tab == .chats ? String(localized: "go + dictate") : String(localized: "dictate here"),
                      round: false)
         }
@@ -456,7 +458,7 @@ struct ControllerIslandView: View {
 
     private func hint(_ button: ControllerButton, _ label: String, on: Bool, glyph: String? = nil) -> some View {
         HStack(spacing: 6) {
-            IslandGlyph(text: glyph ?? button.glyph, round: button.isRoundGlyph, palette: palette)
+            IslandGlyph(text: glyph ?? button.glyph(family), round: button.isRoundGlyph, palette: palette)
             Text(verbatim: label)
                 .font(.system(size: 12))
                 .foregroundStyle(palette.hint)
@@ -477,19 +479,21 @@ struct ControllerIslandView: View {
 }
 
 extension ControllerWritingSlots.Note {
-    var text: String {
+    func text(_ family: ControllerFamily) -> String {
         switch self {
         case .shell: return String(localized: "Not in a shell — a program there could read the keys differently.")
         case .question: return String(localized: "Question open — nothing goes into the chat right now.")
-        case .escapeInterrupts: return String(localized: "Working: ○ interrupts if no view is open.")
+        case .escapeInterrupts:
+            let circle = ControllerButton.circle.glyph(family)
+            return String(localized: "Working: \(circle) interrupts if no view is open.")
         }
     }
 }
 
 extension ControllerQuickDrawSlots.Note {
-    var text: String {
+    func text(_ family: ControllerFamily) -> String {
         switch self {
-        case .question: return ControllerWritingSlots.Note.question.text
+        case .question: return ControllerWritingSlots.Note.question.text(family)
         case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
         case .dictating: return String(localized: "Dictation running — the text goes into its chat; nothing else goes into the field now.")
         }
