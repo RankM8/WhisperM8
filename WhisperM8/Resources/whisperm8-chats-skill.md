@@ -74,6 +74,10 @@ whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (k
 whisperm8 chats close --others|--right <ref>         # alle anderen / rechts vom Anker (dessen Fenster)
 whisperm8 chats reopen                               # zuletzt geschlossenen Tab wiederherstellen
 whisperm8 chats pin <ref> [<ref>…] | unpin …         # Sidebar-Pin setzen/entfernen (idempotent)
+whisperm8 chats order <ref>… [--last <ref>]… [--dry-run]  # Folge der Chats eines Projekts in der Seitenleiste
+                                                     # setzen (Projekt-Ansicht folgt); genannte nach vorn,
+                                                     # --last ans Ende, Rest behält seine Folge; alle Chats
+                                                     # im selben Projekt. Lesen: Feld order in list/show --json
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
 whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
 whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
