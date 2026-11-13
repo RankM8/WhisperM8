@@ -32,6 +32,14 @@ Läuft doch ein echter Chat mit, passiert im schlimmsten Fall dasselbe wie bei j
 
 Stand 13.11.2026, nach dem ersten echten Lauf (3 von 3 Übergaben mit einem Claude- und einem Codex-Testchat). Phase 2 prüft, was dort fehlte, in der Reihenfolge von Vic. Erst wenn alle Schritte grün sind, kommen echte Chats dazu, zuerst ein entbehrlicher.
 
+> **Zuerst lesen: Schalter erst NACH dem Schließen der echten Chats einschalten.** Ob ein `make dev` übergibt, entscheidet der Schalter zum Zeitpunkt des Neustarts, nicht beim Start der App. Läuft die App schon mit Router als Dienst (sie wurde mit Schalter an gestartet, wie nach Lauf 1), übergibt der nächste `make dev` sofort ALLE laufenden Chats, sobald der Schalter auf YES steht. Die Zeile „wirkt erst ab diesem Neustart“ schützt dann nicht. Reihenfolge deshalb immer: echte Chats schließen, prüfen (Befehl oben unter „Wichtig vorab“), erst dann `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool YES`. Nicht voraussetzen, dass der erste `make dev` klassisch ist.
+
+### Abbruchregel und Aufräumen
+
+- **Beim ersten Fehlschlag anhalten**, kein weiterer `make dev`. Belege sichern (Log der letzten 15 Minuten mit `/usr/bin/log show --last 15m --predicate 'subsystem == "com.whisperm8.app"' > …`, `keeper.log`, Messung je Chat, Fotos), Jarvis Bescheid geben, auf seine Antwort warten.
+- **Kein `make dev`, solange ein Schlüsselbund-Dialog offen ist.** Ein blockierter Main Thread beantwortet `app handover` nicht (Frist 30 s); `make dev` fiele auf den klassischen Weg zurück, und die Runde sähe aus wie ein Übergabe-Fehler.
+- **Aufräumen am Ende** (wie in Lauf 1): Schalter wieder so wie vorher, Testchats mit `chats close <ref> --stop` schließen und archivieren, Test-Grid löschen, Wegwerf-Ordner und Wegwerf-Branch löschen, `/tmp/wm8-zaehler.txt` löschen, Freigabe-Datei umbenennen. Vor jedem `close --stop` eines Codex-Chats selbst hinsehen, ob er noch schreibt: Sein Status kann `idle` zeigen, während er arbeitet (Befund 2 aus Lauf 1, bis Gus' Fix da ist).
+
 ### Vorab auf dem Teststand (fährt Dex, ohne Login)
 
 Sobald Oles CLI-Paket (Terminal-Tab per `chats new --provider terminal --command`, `debug terminal <ref> --text`, wenn möglich `runtime.pid` und `chats send` an den Terminal-Tab) im Sammel-Branch ist, fährt Dex auf der Test-Instanz `scripts/handover-soak-faults.sh run` (dev und ad hoc) und `scripts/handover-soak.sh run --rounds 5`. Was das abdeckt, muss an der echten App nicht mehr einzeln bewiesen werden, nur noch einmal im Zusammenspiel:
@@ -48,6 +56,7 @@ Sobald Oles CLI-Paket (Terminal-Tab per `chats new --provider terminal --command
 | GPT-Chat, Kontowechsel, Rückfrage beantworten, Bash-Schritte mit Inhalt | nein (kein Login, kein GPT) | ja |
 | Hintergrund-Chat | nein (`--background` fehlt im CLI) | ja, von Hand angelegt |
 | Fertig-Meldung genau einmal | erst mit Logzeile `session_notification_posted` (Ole) | ja |
+| Schlüsselbund-Dialog beim Diktat | nein (Test-Instanz hat eigenen Schlüsselbund-Dienst) | ja, per Hotkey |
 | Scrollback, Fenstergröße, `/exit` | nein | ja |
 
 ### Vor dem Start (Lehren aus Lauf 1)
@@ -55,67 +64,79 @@ Sobald Oles CLI-Paket (Terminal-Tab per `chats new --provider terminal --command
 - Der Skill `whisperm8:whisperm8-chats` kann in der Sitzung des Testpiloten fehlen: Dann gilt die Hilfe der CLI (`whisperm8 chats help`, `whisperm8 debug help`).
 - `whisperm8` liegt nicht immer im Suchpfad: dann `~/.local/bin/whisperm8` aufrufen.
 - In zsh ist `log` ein eingebauter Befehl: immer `/usr/bin/log show …` schreiben.
-- Der Testpilot läuft außerhalb der App (eigenes Terminal), weil er `make dev` auslöst. Echte Chats sind geschlossen, nicht nur angehalten (Befehl oben im Abschnitt „Wichtig vorab“).
-- Schalter an (Schritt 1 und 2 oben). Vor jedem Schritt: `whisperm8 app handover-status` zeigt „Kein Aufbewahrer aktiv“.
-- Belege je Schritt in einen eigenen Ordner, Name wie in Lauf 1 (`r<n>-vor.json`, `r<n>-nach.json`, Log, Foto).
+- Der Testpilot läuft außerhalb der App (eigenes Terminal), weil er `make dev` auslöst. Echte Chats sind geschlossen, nicht nur angehalten.
+- Vor jedem Schritt: `whisperm8 app handover-status` zeigt „Kein Aufbewahrer aktiv“.
+- Belege je Schritt in einen eigenen Ordner, Namen wie in Lauf 1 (`r<n>-vor.json`, `r<n>-nach.json`, Log, Foto).
 
-**Fester Messpunkt je Runde: einmal diktieren (Vic).** Lauf 1 hat „kein Dialog“ nur direkt nach dem Start gemessen. Der Schlüsselbund fragt aber erst beim ersten Diktat nach einem neuen Build nach dem API-Schlüssel, und bis Fins Fix hält das den Main Thread an (Lauf 1: `main_thread_freeze durationMs=5011`, 20:21:49). Deshalb nach jeder Übergabe, sobald die App wieder da ist, ein kurzes Diktat in ein leeres Textfeld außerhalb der App (etwa TextEdit), vor allem in Schritt 2, wo sich die Signatur ändert. Messen: Erscheint ein Schlüsselbund-Dialog (dann Foto mit dem Namen des Eintrags, „Immer erlauben“ klicken und die Sekunden bis zum Klick notieren), und steht danach im Log `main_thread_freeze` oder `main_thread_blocked_ongoing` (`/usr/bin/log show --last 2m --predicate 'eventMessage CONTAINS "main_thread"'`)? In der Notiz steht, ob Fins Fix (`fix/diktat-schluesselbund-main-thread`) im gebauten Stand ist (`git -C <ordner> merge-base --is-ancestor <fix-commit> HEAD`, den Commit nennt Jarvis). So liest sich das Ergebnis:
+### Messung je Runde
 
-| Fins Fix im Build | Dialog nach neuem Build | Freeze | Bewertung |
-|---|---|---|---|
-| nein | ja, Eintrag des API-Schlüssels | ja, so lange der Dialog offen ist | bekannt, kein Übergabe-Befund |
-| ja | ja, Eintrag des API-Schlüssels | nein | erwartet: der Dialog bleibt, bis die App eine Team-ID hat |
-| ja | ja | ja | Befund an Fin: der Fix greift nicht |
-| egal | Dialog für einen anderen Eintrag, oder ohne Diktat | – | Befund, Foto an Jarvis |
-| egal | kein Dialog bei gleichem Build | nein | erwartet |
+Reihenfolge in jeder Runde fest: **erst die Übergabe messen, dann diktieren, dann der nächste `make dev`.**
 
-Für jeden Chat gilt dieselbe Messung vor und nach jedem `make dev`: `whisperm8 chats show <ref> --json` (Status, PID, Startzeit des Prozesses per `ps -o lstart= -p <pid>`). **Erfolg** heißt: gleiche PID, gleiche Startzeit, kein „Starten“ im Tab, `make dev` meldet „Übergeben: N Chats“ mit dem erwarteten N. **Fehlschlag** heißt: neue PID, „Starten“, kleineres N, eine Zeile „Keine Übergabe“ oder „Übergabe gescheitert“.
+1. **Vor `make dev`:** je Chat `whisperm8 chats show <ref> --json` (Status, externe ID) und die PID. Die PID steht dort noch nicht; bis `runtime.pid` da ist, wie in Lauf 1 über die Prozessumgebung: `ps -E -ww -axo pid=,ppid=,command= | grep "WHISPERM8_SESSION_ID=<lokale Chat-UUID>" | grep -v grep` (der oberste Prozess, also der, dessen `ppid` nicht selbst in der Liste steht). Startzeit dazu: `ps -o lstart= -p <pid>`.
+2. **Nach `make dev`:** dieselbe Messung, sobald im Log `handover_take_finished` steht. **Erfolg:** „Übergeben: N Chats“ mit dem erwarteten N, je Chat gleiche PID und gleiche Startzeit, `handover_take_finished adopted=N ended=0 fallback=0`, in `keeper.log` je Chat `dropped_bytes=0`, kein „Starten“ im Tab, kein Schlüsselbund-Dialog ohne Diktat (`pgrep -x SecurityAgent` direkt nach dem Start leer). **Fehlschlag:** neue PID, „Starten“, kleineres N, „Keine Übergabe“ oder „Übergabe gescheitert“, `fallback` größer 0, ein Dialog, bevor diktiert wurde.
+3. **Dann diktieren (Vic, fester Messpunkt).** Lauf 1 hat „kein Dialog“ nur direkt nach dem Start gemessen. Der Schlüsselbund fragt aber erst beim ersten Diktat nach einem neuen Build nach dem API-Schlüssel, und bis Fins Fix hält das den Main Thread an (Lauf 1: `main_thread_freeze durationMs=5011` um 20:21:49).
+   - **Wer:** Das Diktat macht der User von Hand per Hotkey in ein leeres Textfeld außerhalb der App (etwa TextEdit). Den Dialog bestätigt nur der User, „Immer erlauben“ verlangt sein Mac-Passwort; der Testpilot fasst den Schlüsselbund nicht an. `whisperm8 debug dictate` taugt hier nicht: Es liest den Schlüssel schon in `Task.detached` (DebugControl, Zeile 254) und nimmt einen anderen Weg als der Hotkey, misst den Hänger also nicht.
+   - **Erwarteter Eintrag:** Der Dialog nennt den Schlüsselbund-Eintrag „com.whisperm8.app“ (Konto `openai_apikey` oder `groq_apikey`, je nach Anbieter; mit ChatGPT-Abo gibt es keinen Schlüssel und keinen Dialog).
+   - **Messen:** Dialog ja oder nein (Foto mit dem Text), Sekunden bis zum Klick, danach `/usr/bin/log show --last 2m --predicate 'eventMessage CONTAINS "main_thread"'`.
+   - **Fins Fix:** In der Notiz steht, ob `fix/diktat-schluesselbund-main-thread` im gebauten Stand ist (`git -C <ordner> merge-base --is-ancestor <fix-commit> HEAD`, den Commit nennt Jarvis).
+
+   | Fins Fix im Build | Dialog beim Diktat | Freeze | Bewertung |
+   |---|---|---|---|
+   | nein | ja, Eintrag „com.whisperm8.app“ | ja, so lange der Dialog offen ist | bekannt, kein Übergabe-Befund |
+   | ja | ja, Eintrag „com.whisperm8.app“ | nein | erwartet: Der Dialog bleibt, bis die App eine Team-ID hat |
+   | ja | ja | ja | Befund an Fin: Der Fix greift nicht |
+   | egal | Dialog für einen anderen Eintrag, oder schon vor dem Diktat | – | Befund, Foto an Jarvis |
+   | egal | kein Dialog, obwohl neuer Build | nein | kein Befund, nur notieren |
+   | egal | kein Dialog bei gleichem Build | nein | erwartet |
+
+4. **Erst wenn kein Dialog mehr offen ist:** nächster `make dev`.
 
 ### Schritt 1: Terminal-Tab mit Zähler
 
-- **Tun:** Ein Terminal-Tab mit einem Zähler, der in eine Datei UND ins Terminal schreibt, damit die Prüfung nicht vom Prüfling abhängt. Mit Oles Befehl: `whisperm8 chats new --provider terminal --project <testordner> --title "Zaehler" --command "/bin/sh -c 'i=0; while :; do i=\$((i+1)); echo \$i | tee -a /tmp/wm8-zaehler.txt; sleep 0.2; done'" --json`. Fehlt der Befehl noch: Terminal-Tab von Hand öffnen und dieselbe Schleife eintippen. Dann dreimal `make dev` wie oben.
-- **Erfolg:** `awk 'NR>1 && $1!=p+1 {print "Lücke nach", p} {p=$1}' /tmp/wm8-zaehler.txt` gibt nichts aus (keine Lücke, keine doppelte Zahl), die Zahl zählt nach jeder Runde weiter, gleiche PID.
-- **Byte-Vollständigkeit am Terminal (Vic):** Mit `whisperm8 debug terminal <ref> --text` (oder Foto) die letzten 50 Zahlen im Terminal mit der Datei vergleichen. Stehen in der Datei Zahlen, die im Terminal fehlen, gingen Bytes in der Lücke verloren. Zusätzlich im Log: `dropped_bytes=0` bei jeder Übernahme (`/usr/bin/log show --last 5m --predicate 'eventMessage CONTAINS "dropped_bytes"'`).
+- **Tun:** `/tmp/wm8-zaehler.txt` vorher löschen. Ein Terminal-Tab mit einem Zähler, der in eine Datei UND ins Terminal schreibt. Mit Oles Befehl: `whisperm8 chats new --provider terminal --project <testordner> --title "Zaehler" --command "/bin/sh -c 'i=0; while :; do i=\$((i+1)); echo \$i | tee -a /tmp/wm8-zaehler.txt; sleep 0.2; done'" --json`. Fehlt der Befehl noch: Terminal-Tab von Hand öffnen und dieselbe Schleife eintippen. Dann dreimal `make dev` wie oben.
+- **Die Datei allein beweist nur, dass der Prozess lief** (sie schreibt `tee`, nicht das Terminal). Hart wird die Prüfung am Terminaltext: Zählerstand direkt vor `make dev` notieren (z1, letzte Zeile der Datei) und direkt nach `handover_take_finished` (z2). Dann im Terminaltext jede Zahl von z1−20 bis z2+20 genau einmal und in Reihenfolge verlangen. Bei fünf Zahlen je Sekunde ist die Übergabe-Stelle nach zehn Sekunden aus dem sichtbaren Bild gelaufen: `whisperm8 debug terminal <ref> --text` muss dafür den Scrollback liefern, oder die Prüfung läuft sofort nach `handover_take_finished`.
+- **Erfolg:** Alle Zahlen von z1−20 bis z2+20 stehen genau einmal und in Reihenfolge im Terminal. Die Datei hat keine Lücke und keine doppelte Zahl (`awk 'NR>1 && $1!=p+1 {print "Lücke nach", p} {p=$1}' /tmp/wm8-zaehler.txt` gibt nichts aus). Gleiche PID, `dropped_bytes=0`.
 - **Eingabe danach:** Einen Echo-Tab (`--command "/bin/sh -c 'while read l; do echo got:\$l; done'"`) mit `whisperm8 chats send <ref> -- probe-1` füttern. Erfolg: genau eine Zeile `got:probe-1`.
-- **Beleg:** `/tmp/wm8-zaehler.txt`, Terminaltext vor und nach jeder Runde, Log mit `dropped_bytes`.
+- **Beleg:** z1 und z2 je Runde, Terminaltext je Runde, `/tmp/wm8-zaehler.txt`, `keeper.log`.
 
 ### Schritt 2: Übergabe über zwei verschiedene Builds, mindestens zweimal
 
-- **Tun:** Jarvis legt zwei Ordner an: A (Sammel-Branch) und B (A plus eine harmlose Code-Änderung, etwa ein geänderter Logtext, damit der Build sich wirklich unterscheidet). Der Testpilot wechselt A → B → A → B, jedes Mal `make dev` im jeweiligen Ordner, während Claude-, Codex- und Terminal-Testchat arbeiten.
+- **Tun:** Jarvis legt zwei Ordner an: A auf dem Sammel-Branch und B auf einem Wegwerf-Branch mit einem eigenen Commit über A (eine harmlose Code-Änderung, etwa ein geänderter Logtext, damit der Build sich wirklich unterscheidet; ohne Commit schlägt die Prüfung „Arbeitsbaum sauber, Hash aus der Freigabe“ an). Die Freigabe nennt beide Hashes. Der Testpilot wechselt A → B → A → B, jedes Mal `make dev` im jeweiligen Ordner, während Claude-, Codex- und Terminal-Testchat arbeiten.
 - **Befehl vor und nach jedem `make dev`:** `codesign -dvvv /Applications/WhisperM8.app 2>&1 | grep CDHash`.
-- **Erfolg:** Der CDHash wechselt bei jeder Runde, und trotzdem „Übergeben: 3 Chats“, gleiche PIDs, kein Schlüsselbund-Dialog (`pgrep -x SecurityAgent` direkt nach dem Start leer). Seit Option A hängt die Übergabe an keiner Signatur mehr.
-- **Fehlschlag:** „Keine Übergabe“ oder Rückfall (`handover_fallback_resume` im Log), ein Dialog, gleicher CDHash (dann war der Build nicht verschieden und die Runde zählt nicht).
-- **Diktat je Runde:** Hier zählt der feste Messpunkt oben besonders, weil jeder Wechsel A ↔ B einen neuen CDHash bringt. Erwartet ist je Wechsel ein Dialog für den API-Schlüssel; ob dabei der Main Thread hängt, hängt an Fins Fix (Tabelle oben).
+- **Erfolg:** Der CDHash wechselt bei jeder Runde, trotzdem gilt alles aus „Messung je Runde“, Punkt 2. Seit Option A hängt die Übergabe an keiner Signatur mehr.
+- **Fehlschlag:** wie in „Messung je Runde“; dazu: gleicher CDHash heißt, der Build war nicht verschieden, die Runde zählt nicht.
+- **Diktat:** Hier zählt der Messpunkt besonders. Je Wechsel A ↔ B ist beim Diktat ein Dialog für „com.whisperm8.app“ zu erwarten (neuer CDHash); ob dabei der Main Thread hängt, hängt an Fins Fix. Ein Dialog OHNE Diktat, direkt nach dem Start, ist dagegen ein Fehlschlag.
 - **Beleg:** CDHash je Runde, `make dev`-Ausgabe, Messung je Chat, Foto jedes Dialogs, `main_thread`-Zeilen aus dem Log.
 
 ### Schritt 3: Die anderen Chat-Arten
 
 Jede Art einzeln dazunehmen, je zwei Runden `make dev`, dann wieder schließen.
 
-- **GPT-Chat:** Über „Neuer GPT-Chat“ in der App, Aufgabe „schreibe 300 nummerierte Zeilen“. Vorher und nachher `pgrep -fl "WhisperM8 gpt-router"`. Erfolg: dieselbe PID des Router-Dienstes, im Log `gpt_backend_kept_for_handover` und `gpt_router_service handover_done … active=1`, die Antwort läuft ohne Sprung weiter, kein `401`, kein `API Error`. Fehlschlag: neuer Router-Prozess, abgerissene Antwort.
-- **Angedockter Hintergrund-Chat:** Von Hand einen Hintergrund-Chat (`claude --bg`) in der App starten und andocken; `--background` gibt es im CLI noch nicht. Erfolg: nach der Übergabe derselbe Hintergrund-Agent (gleiche Sitzungs-ID in `chats show`), Andocken klappt weiter, nur ein Prozess je Sitzung. Fehlschlag: zweiter Agent oder „Starten“.
-- **Offene Rückfrage:** Claude-Chat bis zu einer offenen Rückfrage bringen (etwa „Frag mich mit AskUserQuestion, welche Farbe ich will, und warte“). Übergabe, dann die Frage beantworten. Erfolg: Die Frage steht nach der Übergabe noch da, die Antwort kommt genau einmal an, der Chat arbeitet weiter.
-- **Claude mit Bash-Schritten:** „führe nacheinander 20× `echo n; sleep 3` aus“. Übergabe mitten in den Schritten. Erfolg: Die Zahlen laufen ohne Lücke und ohne doppelten Schritt weiter, kein „Retrying“.
-- **Vorgemerkter Kontowechsel:** Während ein Claude-Chat arbeitet: `whisperm8 chats move-account <ref> --to <zweites-profil> --stop-and-resume` (ein arbeitender Chat wird nur vorgemerkt). Dann `make dev`, Turn zu Ende laufen lassen. Erfolg: Der Wechsel passiert genau einmal nach dem Turn, `chats show` nennt danach das neue Konto, der Verlauf ist vollständig. Fehlschlag: Wechsel verloren, doppelt oder mitten im Turn.
+- **GPT-Chat:** Über „Neuer GPT-Chat“ in der App, Aufgabe „schreibe 300 nummerierte Zeilen“. Der Router-Dienst wird bei jedem `make dev` durch eine neue Generation ersetzt, weil sich der Build-Stempel ändert (Lauf 1: PIDs 74166, 80342, 83589, 84231). Eine neue Router-PID ist deshalb KEIN Fehlschlag. **Erfolg:** gleicher Port; im Log des Router-Dienstes (`/usr/bin/log show --last 5m --predicate 'eventMessage CONTAINS "gpt_router_service"'`) `took_over … generation=<alte+1>` und `handover_done … active=1`; die alte Generation endet mit `exit code=0` erst NACH dem Ende der laufenden Antwort; die Antwort läuft ohne Sprung weiter; kein `401`, kein `API Error`. **Fehlschlag:** abgerissene Antwort, `exit` der alten Generation vor dem Antwortende, `401`.
+- **Angedockter Hintergrund-Chat:** Von Hand einen Hintergrund-Chat (`claude --bg`) in der App starten und andocken; `--background` gibt es im CLI noch nicht. **Erfolg:** nach der Übergabe derselbe Hintergrund-Agent (gleiche Sitzungs-ID in `chats show`), Andocken klappt weiter, nur ein Prozess je Sitzung. **Fehlschlag:** zweiter Agent oder „Starten“.
+- **Offene Rückfrage:** Claude-Chat bis zu einer offenen Rückfrage bringen (etwa „Frag mich mit AskUserQuestion, welche Farbe ich will, und warte“). Übergabe, dann die Frage beantworten. **Erfolg:** Die Frage steht nach der Übergabe noch da, die Antwort kommt genau einmal an, der Chat arbeitet weiter.
+- **Claude mit Bash-Schritten:** „führe nacheinander 20× `echo n; sleep 3` aus“. Übergabe mitten in den Schritten. **Erfolg:** Die Zahlen laufen ohne Lücke und ohne doppelten Schritt weiter, kein „Retrying“.
+- **Codex-Text über mehrere Runden:** In Lauf 1 unbelegt, weil die Antwort unterbrochen wurde. Codex eine lange nummerierte Antwort geben („schreibe 600 nummerierte Zeilen“), zwei Runden `make dev` mitten darin, die Antwort NICHT unterbrechen und zu Ende laufen lassen. **Erfolg:** Im Verlauf (Rollout unter `~/.codex/sessions`, nur lesen) stehen alle Zahlen von 1 bis 600 genau einmal und in Reihenfolge. **Fehlschlag:** Lücke, Doppel, abgebrochene Antwort.
+- **Vorgemerkter Kontowechsel:** Hat das Zielkonto den Testordner nie freigegeben, wird ein arbeitender Chat nicht vorgemerkt, und der Schritt scheitert aus fremdem Grund. Deshalb vorher einmal einen Chat des Zielkontos in diesem Ordner öffnen und „Trust“ bestätigen. Dann während ein Claude-Chat arbeitet: erst `whisperm8 chats move-account <ref> --to <zweites-profil> --stop-and-resume --dry-run` (muss `wouldSchedule` zeigen), dann ohne `--dry-run` (zeigt `scheduled`). Dann `make dev`, Turn zu Ende laufen lassen. **Erfolg:** Der Wechsel passiert genau einmal nach dem Turn, `chats show` nennt danach das neue Konto, der Verlauf ist vollständig. **Fehlschlag:** Wechsel verloren, doppelt oder mitten im Turn.
 - **Fertig-Meldung:** Sobald Oles Logzeile `session_notification_posted` im Build ist, nach jedem Turnende zählen: genau eine Zeile je Chat und Turn (`/usr/bin/log show --last 10m --predicate 'eventMessage CONTAINS "session_notification_posted"'`). Bis dahin: sichtbare Mitteilungen zählen.
 - **Beleg:** Messung je Chat, Log, Foto.
 
 ### Schritt 4: Notausgänge, Schalter aus, und was nach der Übernahme noch gehen muss
 
-- **Notausgang 9:** Statt `make dev` nur `whisperm8 app handover` aufrufen: Die App gibt die Chats ab und beendet sich, eine neue startet nicht. Dann wie in Notausgang 9 beschrieben: `whisperm8 app handover-status`, `kill <pid>` des Aufbewahrers, App von Hand aus dem Programme-Ordner öffnen. Erfolg: Die Chats stehen mit „Starten“ in den Tabs und setzen nach Klick fort; danach `handover-status` „Kein Aufbewahrer aktiv“, im Ordner `…/WhisperM8/handover/` kein `take-secret`, kein Socket.
-- **Notausgang 10:** In einem übernommenen Chat auf den Kreispfeil „Neu starten“ klicken. Erfolg: Der Chat startet neu (neue PID) und setzt seinen Verlauf fort, nur ein Prozess je Sitzung.
-- **Schalter aus, klassischer Neustart:** `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool NO`, dann `make dev`. Erfolg: keine Zeile „Übergeben“, die Chats enden wie früher, danach läuft **kein** `WhisperM8 gpt-router` mehr (`pgrep -fl "WhisperM8 gpt-router"` leer), der Router lauscht wieder in der App (`lsof -nP -iTCP -sTCP:LISTEN | grep WhisperM8`; falls ein alter Dienst noch da war, steht im Log `gpt_router_service_retired_for_in_app_router`), ein GPT-Chat antwortet danach normal. Danach Schalter wieder an und einmal klassisch `make dev`.
-- **Scrollback (Vic):** Nach drei Übergaben im Claude-Chat ganz nach oben scrollen. Erfolg: Der Verlauf von vor der ersten Übergabe ist da, ohne Lücke an den Übergabe-Stellen.
-- **Fenstergröße (Vic):** Nach einer Übergabe das Fenster deutlich kleiner und wieder größer ziehen und einen Chat im Grid vergrößern. Erfolg: Die Programme zeichnen sauber neu (keine verschobenen Zeilen, kein Rest alter Zeichen), Eingaben gehen weiter.
-- **`/exit` eines übernommenen Chats (Vic):** In einem übernommenen Claude-Chat `/exit` eingeben. Erfolg: Der Prozess endet, der Tab zeigt den Chat als beendet, kein Neustart von selbst, kein verwaister Prozess (`ps -E -ww -axo pid=,command= | grep WHISPERM8_SESSION_ID=<id>` leer), der nächste `make dev` meldet einen Chat weniger.
+- **Notausgang 9:** Statt `make dev` nur `whisperm8 app handover` aufrufen: Die App gibt die Chats ab und beendet sich, eine neue startet nicht. Dann wie in Notausgang 9 beschrieben: `whisperm8 app handover-status`, `kill <pid>` des Aufbewahrers, App von Hand aus dem Programme-Ordner öffnen. Nach dem `kill` sind die Chat-Prozesse tot; die App setzt fortsetzbare Chats dann **von selbst** fort, mit gelbem Hinweis (Log: `handover_take_plan plan=keeperGone` und `handover_fallback_resume count=N`). Nur der Terminal-Tab bleibt beendet. **Erfolg:** je Chat neue PID, gleiche externe ID, alte PID vorher tot, ein Prozess je Sitzung; danach `handover-status` „Kein Aufbewahrer aktiv“, im Ordner `…/WhisperM8/handover/` kein `take-secret`, kein Socket. **Gegenprobe ohne `kill`:** noch einmal `whisperm8 app handover`, dann die App von Hand öffnen. Sie muss normal übernehmen (gleiche PIDs).
+- **Notausgang 10:** In einem übernommenen Chat auf den Kreispfeil „Neu starten“ klicken. **Erfolg:** Der Chat startet neu (neue PID) und setzt seinen Verlauf fort, nur ein Prozess je Sitzung.
+- **Schalter aus, klassischer Neustart:** `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool NO`, dann `make dev`. **Erfolg:** keine Zeile „Übergeben“, die Chats enden wie früher. Danach läuft **kein** `WhisperM8 gpt-router` mehr (`pgrep -fl "WhisperM8 gpt-router"` leer), und der Router lauscht wieder in der App (`lsof -nP -iTCP -sTCP:LISTEN | grep WhisperM8`). War noch ein alter Dienst da, steht im Log `gpt_router_service_retired_for_in_app_router`. Ein GPT-Chat antwortet danach normal. Danach Schalter erst wieder an, wenn keine echten Chats laufen (siehe Kasten oben), und einmal klassisch `make dev`.
+- **Scrollback (Vic):** Nach drei Übergaben im Claude-Chat ganz nach oben scrollen. **Erfolg:** Der Verlauf von vor der ersten Übergabe ist da, ohne Lücke an den Übergabe-Stellen.
+- **Fenstergröße (Vic):** Nach einer Übergabe das Fenster deutlich kleiner und wieder größer ziehen und einen Chat im Grid vergrößern. **Erfolg:** Die Programme zeichnen sauber neu (keine verschobenen Zeilen, kein Rest alter Zeichen), Eingaben gehen weiter.
+- **`/exit` eines übernommenen Chats (Vic):** In einem übernommenen Claude-Chat `/exit` eingeben. **Erfolg:** Der Prozess endet, der Tab zeigt den Chat als beendet, kein Neustart von selbst, kein verwaister Prozess (`ps -E -ww -axo pid=,command= | grep "WHISPERM8_SESSION_ID=<lokale Chat-UUID>" | grep -v grep` gibt nichts aus), der nächste `make dev` meldet einen Chat weniger.
 - **Beleg:** Fotos vor und nach, `ps`- und `lsof`-Ausgaben, Log.
 
 ### Schritt 5: Acht bis zehn Chats gleichzeitig
 
 - **Tun:** Acht bis zehn Testchats aller Arten aus Schritt 1 bis 3, die meisten arbeiten gerade, mehrere im Grid sichtbar. Zwei Runden `make dev`.
-- **Erfolg:** „Übergeben: N Chats“ mit N gleich der Zahl laufender Chats, alle mit gleicher PID, Übernahme fertig (`handover_take_finished adopted=N ended=0 fallback=0`) in wenigen Sekunden, die App ist danach sofort bedienbar (kein `main_thread_freeze` im Log), kein `perf_budget_exceeded` über einer Sekunde.
-- **Fehlschlag:** kleineres N, `fallback` größer 0, App hängt, ein Chat zweimal.
-- **Beleg:** Dauer von `make dev` bis `handover_take_finished`, Log mit `main_thread`- und `perf_budget`-Zeilen.
+- **Erfolg:** „Übergeben: N Chats“ mit N gleich der Zahl laufender Chats, alle mit gleicher PID, `handover_take_finished adopted=N ended=0 fallback=0`. Von `committed` in `keeper.log` bis `handover_take_finished` im Log höchstens **5 s** (Lauf 1: 1,7 s mit zwei Chats). Kein `main_thread_blocked_ongoing` und kein `main_thread_freeze` zwischen Start und einer Minute danach.
+- **Fehlschlag:** kleineres N, `fallback` größer 0, mehr als 5 s, App hängt, ein Chat zweimal.
+- **Beleg:** Zeitstempel `committed` und `handover_take_finished`, Log mit `main_thread`- und `perf_budget`-Zeilen.
 
 ### Danach: echte Chats
 
