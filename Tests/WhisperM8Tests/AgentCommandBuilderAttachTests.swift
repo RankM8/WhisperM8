@@ -108,6 +108,10 @@ final class AgentCommandBuilderAttachTests: XCTestCase {
         XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: nil), "kein Controller")
         XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: false), "beendeter Controller (toter Tab)")
         XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: true), "laufender Prozess bleibt")
+        // Nach einer geglückten Abgabe startet nichts mehr, auch kein toter Tab
+        // (Vic zu Befund 2: vor dem Leeren der Hook-Datei prüfen).
+        XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: nil, refusesNewStarts: true))
+        XCTAssertFalse(AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: false, refusesNewStarts: true))
     }
 
     // MARK: - Kein Ctrl+C an angedockte Hintergrund-Agents

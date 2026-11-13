@@ -232,8 +232,12 @@ struct AgentCommandBuilder {
     /// Darf ein Auslöser (`chats resume`, Grid-Fokus) den Tab starten? Ja,
     /// solange kein Prozess läuft — auch wenn ein beendeter Controller noch
     /// den letzten Terminal-Stand zeigt.
-    static func allowsTriggeredLaunch(controllerIsRunning: Bool?) -> Bool {
-        controllerIsRunning != true
+    /// - Parameter refusesNewStarts: Nach einer geglückten Abgabe (Neustart ohne
+    ///   Chatverlust) startet die App nichts mehr. Geprüft am Anfang des
+    ///   Start-Wegs, also bevor die Hook-Event-Datei des Chats geleert wird
+    ///   (Vic zu Befund 2).
+    static func allowsTriggeredLaunch(controllerIsRunning: Bool?, refusesNewStarts: Bool = false) -> Bool {
+        !refusesNewStarts && controllerIsRunning != true
     }
 
     /// Argumente für `claude attach`: nur die Short-ID, nie Startoptionen.

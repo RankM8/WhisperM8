@@ -214,6 +214,13 @@ struct HandoverManifest: Codable, Equatable {
     /// Farben, die die App auf OSC 10/11 meldet. Ergänzung von Paket 2: Ohne
     /// sie nennt der Aufbewahrer den TUIs in der Lücke andere Farben als die App.
     var terminalColors: HandoverTerminalColors?
+    /// Zurückgestellte SessionStart-ID (`/clear`, frische Sitzung nach
+    /// `/background`), die erst mit dem ersten echten Turn gebunden wird. Liegt
+    /// in der App nur im Speicher; ohne Manifest hinge der Chat nach der
+    /// Übergabe an der alten ID (Bindungs-Befund, Punkt c).
+    var pendingExternalSessionID: String?
+    /// IDs der Background-Forks dieses Chats, die nie gebunden werden.
+    var forkExternalSessionIDs: [String]?
 
     init(
         chatID: String,

@@ -134,6 +134,30 @@ final class AgentSessionStatusCoordinator {
     /// IDs der Background-Forks pro lokaler Session — werden nie gebunden.
     private var forkExternalIDs: [UUID: Set<String>] = [:]
 
+    /// Bindungs-Zustand, der nur im Speicher liegt: zurückgestellte ID und
+    /// Fork-Merkliste. Geht bei einem Neustart ohne Chatverlust im Manifest mit.
+    struct PendingBinding: Equatable {
+        var pendingExternalID: String?
+        var forkExternalIDs: [String]
+    }
+
+    func pendingBinding(for sessionID: UUID) -> PendingBinding {
+        PendingBinding(pendingExternalID: pendingExternalIDs[sessionID],
+                       forkExternalIDs: (forkExternalIDs[sessionID] ?? []).sorted())
+    }
+
+    /// Übernommener Chat: Zustand aus dem Manifest wieder eintragen. Eine
+    /// zurückgestellte ID wird wie bisher erst mit dem ersten echten Turn
+    /// gebunden (Hook oder Registry), eine Fork-ID nie.
+    func restorePendingBinding(_ binding: PendingBinding, for sessionID: UUID) {
+        if let pending = binding.pendingExternalID, !pending.isEmpty {
+            pendingExternalIDs[sessionID] = pending
+        }
+        if !binding.forkExternalIDs.isEmpty {
+            forkExternalIDs[sessionID, default: []].formUnion(binding.forkExternalIDs)
+        }
+    }
+
     // MARK: Registry-Zustand (Plan claude-status-aus-registry.md)
 
     /// Sessions, deren Status aus Claudes eigener Registry kommt
@@ -379,6 +403,7 @@ final class AgentSessionStatusCoordinator {
     /// Registry, Hooks (ab dem übergebenen Cursor) oder der Verlauf. Hook- und
     /// Registry-Zustand dieses Laufs sind ohnehin leer; nichts wird verworfen.
     func sessionAdopted(sessionID: UUID) {
+        adoptedSessions.insert(sessionID)
         apply(.processLaunched, to: sessionID)
         apply(.launchGraceExpired, to: sessionID)
         if !isTerminalSession(sessionID) {
@@ -397,6 +422,7 @@ final class AgentSessionStatusCoordinator {
 
     func sessionTerminated(sessionID: UUID, exitCode: Int32?) {
         cancelLaunchGrace(sessionID: sessionID)
+        adoptedSessions.remove(sessionID)
 
         // Background-Agents: Der PTY ist nur ein `claude attach`-Fenster in
         // den Supervisor-Job — sein Exit beendet NICHT den Agenten. Hook-
@@ -645,9 +671,16 @@ final class AgentSessionStatusCoordinator {
         // Supervisor weiter, trägt sie dieselbe Session-ID — ihr Eintrag
         // belebte sonst den gestoppten PTY-Chat (Status „arbeitet“ ohne
         // Terminal, Fertig-Meldung für einen Chat ohne Prozess).
-        guard isRegistryStatusEnabled(), !record.isBackground,
-              let sessionID = registrySessionID(forExternalID: record.sessionID)
-                ?? bindPendingExternalID(from: record) else { return }
+        guard isRegistryStatusEnabled(), !record.isBackground else { return }
+        let resolved: UUID?
+        if let adopted = adoptedOwner(of: record) {
+            // Übernommener Chat: Der Eintrag seines eigenen Prozesses zählt,
+            // auch wenn eine andere Sitzung dieselbe ID trägt (Altlast).
+            resolved = reconcileAdoptedBinding(localID: adopted, record: record)
+        } else {
+            resolved = registrySessionID(forExternalID: record.sessionID) ?? bindPendingExternalID(from: record)
+        }
+        guard let sessionID = resolved else { return }
         // Ohne eigenes PTY gehört der Prozess nicht zu diesem Chat (fremdes
         // Terminal, Headless-Lauf): sonst kämen Ton und Meldungen für einen
         // Lauf außerhalb der App, und endete er mitten im Turn, bliebe der
@@ -1162,6 +1195,43 @@ final class AgentSessionStatusCoordinator {
             !$0.isBackground && $0.pid != ownProcessID && !isBeingTerminated($0.pid)
                 && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame
         }
+    }
+
+    // MARK: Bindung übernommener Chats (Bindungs-Befund, Punkt d)
+
+    /// Übernommene Chats dieses Laufs (Neustart ohne Chatverlust).
+    private var adoptedSessions: Set<UUID> = []
+
+    /// Gehört der Registry-Eintrag zum Prozess eines übernommenen Chats?
+    private func adoptedOwner(of record: ClaudeSessionRecord) -> UUID? {
+        adoptedSessions.first { terminalProcessID($0) == record.pid }
+    }
+
+    /// Nach der Übernahme kennt Claudes Registry die Sitzung des Prozesses
+    /// genau. Weicht die gespeicherte ID ab, gilt dieselbe Regel wie beim
+    /// SessionStart: Läuft die gespeicherte ID in einem anderen
+    /// Vordergrund-Prozess, war sie nie die eigene (Altlast der
+    /// Rückfall-Bindung) und wird sofort ersetzt; sonst ist die neue ID wie nach
+    /// `/clear` zurückgestellt und bindet mit dem ersten echten Turn. Eine
+    /// Fork-ID bindet nie. `localID`, wenn der Eintrag jetzt zum Chat gehört.
+    private func reconcileAdoptedBinding(localID: UUID, record: ClaudeSessionRecord) -> UUID? {
+        let currentID = store.loadWorkspace().sessions.first { $0.id == localID }?.externalSessionID
+        if let currentID, currentID.caseInsensitiveCompare(record.sessionID) == .orderedSame { return localID }
+        guard forkExternalIDs[localID]?.contains(record.sessionID) != true else { return nil }
+        let runsElsewhere = currentID.map {
+            Self.runsInOtherForegroundProcess(sessionID: $0, ownProcessID: record.pid,
+                                              records: foregroundRecordsLookup($0),
+                                              isBeingTerminated: isBeingTerminated)
+        } ?? false
+        if currentID?.isEmpty != false || runsElsewhere {
+            pendingExternalIDs[localID] = nil
+            Logger.claudeBinding.notice(
+                "binding_adopted_corrected localID=\(localID.uuidString, privacy: .public) old=\(currentID ?? "nil", privacy: .public) new=\(record.sessionID, privacy: .public)")
+            setExternalSessionID(localID: localID, newID: record.sessionID)
+            return localID
+        }
+        pendingExternalIDs[localID] = record.sessionID
+        return bindPendingExternalID(from: record) == nil ? nil : localID
     }
 
     /// Nimmt `id` aus der Fork-Merkliste des Chats (LR-AK-020).

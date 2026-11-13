@@ -9,9 +9,12 @@ final class HandoverRedactionTests: XCTestCase {
     private let secret = HandoverSecret.make()
     private let token = "TOKEN-geheim-1234567890"
 
-    /// Alle Formen, in denen ein Wert in einer Logzeile landen kann.
+    /// Alle Formen, in denen ein Wert in einer Logzeile landen kann, auch
+    /// `dump` (geht an `description` vorbei über `Mirror`).
     private func renderings(_ value: Any) -> [String] {
-        [String(describing: value), String(reflecting: value), "\(value)"]
+        var dumped = ""
+        dump(value, to: &dumped)
+        return [String(describing: value), String(reflecting: value), "\(value)", dumped]
     }
 
     private func assertNothingLeaks(_ value: Any, file: StaticString = #filePath, line: UInt = #line) {
@@ -43,7 +46,7 @@ final class HandoverRedactionTests: XCTestCase {
         }
     }
 
-    func testTypesCarryingSecretOrTokenDescribeThemselvesRedacted() {
+    func testTypesCarryingSecretOrTokenDescribeThemselvesRedacted() throws {
         assertNothingLeaks(HandoverSecretLookup.found(secret))
         var hello = HandoverMessage(type: .hello)
         hello.secret = secret
@@ -59,6 +62,13 @@ final class HandoverRedactionTests: XCTestCase {
         // Auch eingebettet in Sammlungen und Optionale (Standard-Beschreibung).
         assertNothingLeaks([HandoverSecretLookup.found(secret)])
         assertNothingLeaks(Optional(manifest) as Any)
+        // Nacharbeit Vic: Startkommando und JSON-Wert allein.
+        let command = AgentLaunchCommand(executablePath: "/opt/claude", arguments: ["--resume", "x"],
+                                         workingDirectory: "/repo",
+                                         environmentOverrides: ["WHISPERM8_SESSION_TOKEN": token])
+        assertNothingLeaks(HandoverLaunchCommandSnapshot(command))
+        assertNothingLeaks(try XCTUnwrap(manifest.launchCommand))
+        assertNothingLeaks(HandoverJSONValue.string(token))
     }
 
     func testErrorLabelsCarryNoFreeText() {
@@ -73,26 +83,70 @@ final class HandoverRedactionTests: XCTestCase {
         XCTAssertEqual(HandoverLog.label(HandoverWireError.io(ENOENT)), "wire.io(\(ENOENT))")
     }
 
-    /// Quellprüfung: In Logzeilen des Moduls nie `String(describing:` und nie
-    /// ein `\(error)` ohne `HandoverLog.label`.
+    /// Quellprüfung über das Handover-Modul und die Handover-Dateien außerhalb:
+    /// In Log-Aufrufen (auch mehrzeiligen) nie `String(describing:` und nie ein
+    /// rohes `\(error)`; im ganzen Code nie `dump(` oder `Mirror(` außer in
+    /// den Schwärzungen selbst.
     func testHandoverSourcesNeverLogRawDescriptions() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let directory = root.appendingPathComponent("WhisperM8/Services/AgentChats/Handover")
-        let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }
-        XCTAssertFalse(files.isEmpty)
+        var files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasSuffix(".swift") }
+            .map { directory.appendingPathComponent($0) }
+        files += [
+            "WhisperM8/CLI/HandoverCommands.swift",
+            "WhisperM8/Views/AgentTerminalController+Handover.swift",
+            "WhisperM8/Services/AgentChats/AgentControlRequestHandler+Handover.swift",
+        ].map { root.appendingPathComponent($0) }
+        XCTAssertGreaterThan(files.count, 10)
         var offenders: [String] = []
-        for file in files {
-            let text = try String(contentsOf: directory.appendingPathComponent(file), encoding: .utf8)
-            for (index, line) in text.components(separatedBy: "\n").enumerated() {
-                let isLog = line.contains("Logger.") || line.contains("log(\"") || line.contains("fail(\"")
-                    || line.contains("rollback(\"")
-                guard isLog else { continue }
-                if line.contains("String(describing:") || line.contains("\\(error)") {
-                    offenders.append("\(file):\(index + 1)")
-                }
+        for url in files {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            for call in Self.logCalls(in: text)
+            where call.contains("String(describing:") || call.contains("\\(error)") {
+                offenders.append("\(url.lastPathComponent): \(call.prefix(80))")
+            }
+            if url.lastPathComponent != "HandoverRedaction.swift",
+               text.contains("dump(") || text.contains("Mirror(") {
+                offenders.append("\(url.lastPathComponent): dump/Mirror")
             }
         }
-        XCTAssertTrue(offenders.isEmpty, "rohe Beschreibung in Logzeilen: \(offenders)")
+        XCTAssertTrue(offenders.isEmpty, "rohe Beschreibung: \(offenders)")
+    }
+
+    /// Log-Aufrufe samt Fortsetzungszeilen: ab `Logger.`, `log(\"`, `fail(\"`
+    /// oder `rollback(\"` bis die Klammern ausgeglichen sind.
+    static func logCalls(in text: String) -> [String] {
+        let starts = ["Logger.", "log(\"", "fail(\"", "rollback(\""]
+        var calls: [String] = []
+        let chars = Array(text)
+        var index = 0
+        while index < chars.count {
+            let rest = String(chars[index..<min(chars.count, index + 12)])
+            guard starts.contains(where: { rest.hasPrefix($0) }) else { index += 1; continue }
+            var depth = 0
+            var end = index
+            var opened = false
+            while end < chars.count {
+                if chars[end] == "(" { depth += 1; opened = true }
+                if chars[end] == ")" { depth -= 1 }
+                end += 1
+                if opened && depth == 0 { break }
+            }
+            calls.append(String(chars[index..<end]))
+            index = end
+        }
+        return calls
+    }
+
+    func testLogCallScannerFindsMultilineCalls() {
+        let source = """
+        Logger.agentStore.error(
+            "x=\\(String(describing: plan))")
+        let a = 1
+        """
+        XCTAssertEqual(Self.logCalls(in: source).count, 1)
+        XCTAssertTrue(Self.logCalls(in: source)[0].contains("String(describing:"))
     }
 }

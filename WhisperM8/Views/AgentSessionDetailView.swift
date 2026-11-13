@@ -185,7 +185,8 @@ struct AgentSessionDetailView: View {
             // auch diesen Tab neu starten (Befund 11.11.2026).
             guard isSet == true, wasSet != true,
                   !suppressesAutoActivation,
-                  AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
+                  AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning,
+                                                             refusesNewStarts: terminalRegistry.refusesNewStarts),
                   !focusLaunchInFlight else { return }
             focusLaunchInFlight = true
             launchAfterCacheWarmup()
@@ -202,7 +203,8 @@ struct AgentSessionDetailView: View {
         .onChange(of: suppressesAutoActivation) { wasSuppressed, isSuppressed in
             guard wasSuppressed, !isSuppressed else { return }
             if session.shouldLaunchOnOpen == true,
-               AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
+               AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning,
+                                                             refusesNewStarts: terminalRegistry.refusesNewStarts),
                !focusLaunchInFlight {
                 focusLaunchInFlight = true
                 launchAfterCacheWarmup()
@@ -385,6 +387,11 @@ struct AgentSessionDetailView: View {
     /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
     /// dem MainActor frei von blockierendem Datei-I/O.
     private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
+        // Nach einer geglückten Abgabe nichts mehr vorbereiten (Hook-Datei).
+        guard !terminalRegistry.refusesNewStarts else {
+            focusLaunchInFlight = false
+            return
+        }
         let commandName: String? = session.isTerminal
             ? nil
             : (session.provider == .claude ? "claude" : "codex")
@@ -494,7 +501,8 @@ struct AgentSessionDetailView: View {
         // nur die Doppelstart-Sperre auslösen („läuft schon in PID …“),
         // obwohl es der eigene Prozess ist.
         guard AgentCommandBuilder.allowsTriggeredLaunch(
-            controllerIsRunning: terminalRegistry.controller(for: session.id)?.isRunning
+            controllerIsRunning: terminalRegistry.controller(for: session.id)?.isRunning,
+            refusesNewStarts: terminalRegistry.refusesNewStarts
         ) else {
             focusLaunchInFlight = false
             return
