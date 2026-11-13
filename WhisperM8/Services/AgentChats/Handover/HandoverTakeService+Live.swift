@@ -132,11 +132,16 @@ extension HandoverTakeService {
         let sessions = Dictionary(store.loadWorkspace().sessions.map { ($0.id, $0) },
                                   uniquingKeysWith: { first, _ in first })
         var starting: [UUID] = []
+        // Der Beleg kostet einen Blick in die Verläufe; nur für Chats ohne ID.
+        let needsEvidence = { (session: AgentChatSession) in
+            session.hasLaunchedInitialPrompt && (session.externalSessionID?.isEmpty ?? true) && !session.isTerminal
+        }
         for id in plan.start {
             guard let session = sessions[id] else { starting.append(id); continue }
             let decision = HandoverFallbackStart.decide(
                 for: session,
-                hadTurn: (hadTurn ?? liveHadTurn)(session),
+                hadTurn: needsEvidence(session)
+                    && (hadTurn ?? { liveHadTurn($0, store: store) })(session),
                 claudeRecoverable: claudeRecoverable.map { $0(session) } ?? liveClaudeRecoverable(session, store: store))
             if let notice = decision.notice { queue.setNotice(notice, for: id) }
             switch decision {
@@ -162,12 +167,26 @@ extension HandoverTakeService {
         Logger.agentStore.notice("handover_fallback_resume count=\(starting.count) skipped=\(plan.skipped.count)")
     }
 
-    private static func liveHadTurn(_ session: AgentChatSession) -> Bool {
+    private static func liveHadTurn(_ session: AgentChatSession, store: AgentSessionStore) -> Bool {
         let events = ClaudeExternalIDRecovery.tailData(
             of: ClaudeHookPaths().eventFileURL(localSessionID: session.id),
             maxBytes: ClaudeExternalIDRecovery.unboundResumeTailBytes)
-        return HandoverFallbackStart.hadTurn(
-            session, journal: ChatsStatusJournal.recent(sessionID: session.id, limit: 50), hookEvents: events)
+        if HandoverFallbackStart.hadTurn(
+            session, journal: ChatsStatusJournal.recent(sessionID: session.id, limit: 50), hookEvents: events) {
+            return true
+        }
+        // Unabhängiger Beleg: ein ungebundener Verlauf im Projektordner.
+        let workspace = store.loadWorkspace()
+        guard let project = workspace.projects.first(where: { $0.id == session.projectID }) else { return true }
+        var cache = AgentSessionIndexCacheStore().load()
+        let indexed: [IndexedAgentSession]
+        switch session.provider {
+        case .claude: indexed = ClaudeSessionIndexer().indexedSessionResult(limit: 50, cache: &cache).sessions
+        case .codex: indexed = CodexSessionIndexer().indexedSessionResult(limit: 50, cache: &cache).sessions
+        }
+        return HandoverFallbackStart.hasUnboundTranscript(
+            for: session, projectPath: project.path, indexed: indexed,
+            boundIDs: AgentSessionStore.externalIDsBound(in: workspace, except: session.id))
     }
 
     /// Wie der Start-Pfad (`AgentCommandBuilder.unboundResumeResolver`):
