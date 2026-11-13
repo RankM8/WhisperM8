@@ -653,8 +653,10 @@ final class AgentSessionStatusCoordinator {
             "binding_resolved_by_registry localID=\(localID.uuidString, privacy: .public) id=\(record.sessionID, privacy: .public)")
         setExternalSessionID(localID: localID, newID: record.sessionID)
         // Genau dieser Chat — eine Suche nach der ID fände bei doppelt
-        // vergebenen IDs womöglich einen anderen.
-        return localID
+        // vergebenen IDs womöglich einen anderen. Nur, wenn die Bindung
+        // wirklich gespeichert ist.
+        let bound = store.loadWorkspace().sessions.first { $0.id == localID }?.externalSessionID
+        return bound?.caseInsensitiveCompare(record.sessionID) == .orderedSame ? localID : nil
     }
 
     /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
@@ -782,7 +784,8 @@ final class AgentSessionStatusCoordinator {
     private func adoptRegistryRecord(sessionID: UUID) {
         guard isRegistryStatusEnabled(),
               let ext = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID,
-              let record = registryRecordLookup(ext) else { return }
+              let record = ownRegistryRecord(sessionID: sessionID, externalID: ext) ?? registryRecordLookup(ext)
+        else { return }
         handleRegistryRecord(record)
     }
 
@@ -795,9 +798,19 @@ final class AgentSessionStatusCoordinator {
         terminatedAt[sessionID] = nil
     }
 
+    /// Der Eintrag des eigenen Prozesses zur ID — bei doppelt vergebenen IDs
+    /// oder nach `/background` nicht der eines anderen Prozesses.
+    private func ownRegistryRecord(sessionID: UUID, externalID: String) -> ClaudeSessionRecord? {
+        guard let pid = terminalProcessID(sessionID) else { return nil }
+        return foregroundRecordsLookup(externalID).first { $0.pid == pid && !$0.isBackground }
+    }
+
     /// Chat zu einem Registry-Eintrag. Tragen mehrere Chats dieselbe ID (nach
     /// einer Fehlbindung), gehört der Eintrag dem, dessen PTY-Prozess ihn
-    /// schreibt (PID); sonst wie bisher dem ersten mit dieser ID.
+    /// schreibt (PID). Ein Chat mit bekannter, anderer PID ist sicher nicht der
+    /// Schreiber; ohne passenden Kandidaten dann der erste ohne bekannte PID
+    /// (etwa ein archivierter Doppel-Eintrag, den der Terminal-Guard verwirft),
+    /// sonst niemand — der Prozess gehört keinem dieser Chats.
     private func registrySessionID(for record: ClaudeSessionRecord) -> UUID? {
         Self.registryOwner(of: record, sessions: store.loadWorkspace().sessions, processID: terminalProcessID)
     }
@@ -810,12 +823,13 @@ final class AgentSessionStatusCoordinator {
     ) -> UUID? {
         let candidates = sessions.filter { session in
             session.provider == .claude
-                && session.externalSessionID == record.sessionID
+                && session.externalSessionID?.caseInsensitiveCompare(record.sessionID) == .orderedSame
                 && !session.isBackgroundChat
                 && !session.isTerminal
         }
         guard candidates.count > 1 else { return candidates.first?.id }
-        return candidates.first(where: { processID($0.id) == record.pid })?.id ?? candidates.first?.id
+        return candidates.first(where: { processID($0.id) == record.pid })?.id
+            ?? candidates.first(where: { processID($0.id) == nil })?.id
     }
 
     // MARK: Schatten des alten Wegs (nur Log)
