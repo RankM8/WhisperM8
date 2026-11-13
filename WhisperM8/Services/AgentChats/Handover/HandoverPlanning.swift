@@ -242,14 +242,33 @@ struct HandoverTakeReport: Codable, Equatable {
     }
 
     static func read(paths: HandoverPaths) -> HandoverTakeReport? {
-        guard let data = try? Data(contentsOf: fileURL(paths: paths)) else { return nil }
+        // Nur eine eigene, normale Datei (kein Symlink).
+        var st = stat()
+        let url = fileURL(paths: paths)
+        guard lstat(url.path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG, st.st_uid == getuid(),
+              let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(HandoverTakeReport.self, from: data)
     }
 
-    func write(paths: HandoverPaths) {
-        try? FileManager.default.createDirectory(at: paths.directory, withIntermediateDirectories: true,
-                                                 attributes: [.posixPermissions: 0o700])
-        guard let data = try? JSONEncoder().encode(self) else { return }
-        try? data.write(to: Self.fileURL(paths: paths), options: .atomic)
+    /// Schreibt in den geprüften Ordner des Aufbewahrers (kein Symlink, eigener
+    /// Besitzer, 0700 — derselbe Weg wie beim Aufbewahrer), die Datei exklusiv
+    /// mit 0600 und danach per Umbenennen eingetauscht. `false`, wenn der
+    /// Ordner die Prüfung nicht besteht; dann wird nichts geschrieben.
+    @discardableResult
+    func write(paths: HandoverPaths) -> Bool {
+        try? FileManager.default.createDirectory(at: paths.directory.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        guard AgentControlServer.prepareOwnedDirectory(at: paths.directory),
+              let data = try? JSONEncoder().encode(self) else { return false }
+        let temp = paths.directory.appendingPathComponent(".last-take-\(UUID().uuidString).tmp")
+        let fd = open(temp.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { return false }
+        let written = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+        close(fd)
+        guard written == data.count, rename(temp.path, Self.fileURL(paths: paths).path) == 0 else {
+            unlink(temp.path)
+            return false
+        }
+        return true
     }
 }

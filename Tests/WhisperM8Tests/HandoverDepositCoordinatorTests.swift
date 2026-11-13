@@ -276,6 +276,32 @@ final class HandoverRestartCLITests: XCTestCase {
         XCTAssertFalse(H.refusesHandoverFromChat(sessionID: UUID().uuidString, fromMakeDev: true), "make dev aus einem Chat")
     }
 
+    /// Hinweis von Dex: Der Bericht nutzt den geprüften Ordner des Aufbewahrers,
+    /// die Datei hat 0600, ein Symlink als Ordner wird nicht beschrieben.
+    func testTakeReportUsesTheCheckedDirectoryAndPrivateFile() throws {
+        let base = try HandoverTestSupport.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: base) }
+        let report = HandoverTakeReport(runID: "r", finishedAt: 1, adopted: [], endedInGap: [], fallback: [])
+
+        let open = HandoverPaths(directory: base.appendingPathComponent("weit"))
+        try FileManager.default.createDirectory(at: open.directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        XCTAssertTrue(report.write(paths: open))
+        let dirMode = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: open.directory.path)[.posixPermissions] as? Int)
+        XCTAssertEqual(dirMode & 0o777, 0o700, "Ordner auf 0700 gezogen")
+        let fileMode = try XCTUnwrap(FileManager.default.attributesOfItem(
+            atPath: HandoverTakeReport.fileURL(paths: open).path)[.posixPermissions] as? Int)
+        XCTAssertEqual(fileMode & 0o777, 0o600)
+        XCTAssertEqual(HandoverTakeReport.read(paths: open), report)
+
+        let target = base.appendingPathComponent("ziel")
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let link = base.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        XCTAssertFalse(report.write(paths: HandoverPaths(directory: link)), "Symlink als Ordner wird abgelehnt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.appendingPathComponent("last-take.json").path))
+    }
+
     func testMakefileTriesHandoverBeforeKillAndSparesKeeper() throws {
         let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let makefile = try String(contentsOf: repo.appendingPathComponent("Makefile"), encoding: .utf8)
@@ -283,6 +309,7 @@ final class HandoverRestartCLITests: XCTestCase {
         let body = makefile[finish...].prefix(80)
         XCTAssertTrue(body.hasPrefix("\t@$(MAKE) _handover\n\t@$(MAKE) kill"), "Übergabe vor kill: \(body)")
         XCTAssertTrue(makefile.contains("app handover --from-make-dev"), "make dev weist sich aus (Befund 5)")
+        XCTAssertTrue(makefile.contains("[ \"$$young\" = ja ]"), "ohne Socket nur warten, wenn die App gerade startet (Befund 6)")
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("--keep-chats"))
         XCTAssertTrue(script.contains("--wait-take"))
