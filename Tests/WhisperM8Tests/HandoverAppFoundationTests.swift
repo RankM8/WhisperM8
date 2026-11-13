@@ -413,3 +413,62 @@ final class HandoverProcessLivenessTests: XCTestCase {
         XCTAssertTrue(HandoverPlanning.isRunningProcess(getpid()))
     }
 }
+
+// MARK: - Stellschrauben und debug state
+
+final class HandoverTestKnobsTests: XCTestCase {
+    private func defaults() -> UserDefaults {
+        UserDefaults(suiteName: "handover-knobs-\(UUID().uuidString)")!
+    }
+
+    func testKnobsOnlyWorkInTheTestInstance() {
+        let d = defaults()
+        d.set(5.0, forKey: HandoverTestKnobs.holdSecondsKey)
+        d.set(250, forKey: HandoverTestKnobs.takeDelayKey)
+        d.set("missing", forKey: HandoverTestKnobs.secretOverrideKey)
+        let secret = HandoverSecret.make()
+
+        XCTAssertNil(HandoverTestKnobs.holdSeconds(defaults: d, active: false))
+        XCTAssertEqual(HandoverTestKnobs.takeDelay(defaults: d, active: false), 0)
+        XCTAssertEqual(HandoverTestKnobs.secret(.found(secret), defaults: d, active: false), .found(secret))
+
+        XCTAssertEqual(HandoverTestKnobs.holdSeconds(defaults: d, active: true), 5)
+        XCTAssertEqual(HandoverTestKnobs.takeDelay(defaults: d, active: true), 0.25)
+        XCTAssertEqual(HandoverTestKnobs.secret(.found(secret), defaults: d, active: true), .missing)
+        d.set("wrong", forKey: HandoverTestKnobs.secretOverrideKey)
+        guard case .found(let wrong) = HandoverTestKnobs.secret(.found(secret), defaults: d, active: true) else {
+            return XCTFail("falsches Geheimnis erwartet")
+        }
+        XCTAssertNotEqual(wrong, secret)
+    }
+
+    func testUnsetKnobsChangeNothing() {
+        let d = defaults()
+        XCTAssertNil(HandoverTestKnobs.holdSeconds(defaults: d, active: true))
+        XCTAssertEqual(HandoverTestKnobs.takeDelay(defaults: d, active: true), 0)
+        XCTAssertEqual(HandoverTestKnobs.secret(.missing, defaults: d, active: true), .missing)
+    }
+
+    func testPreviousRunKinds() {
+        typealias M = AgentCrashRecoveryMarker
+        XCTAssertEqual(M.PreviousRun.none.kind, "clean")
+        XCTAssertEqual(M.PreviousRun(runningSessionIDs: [UUID()], handover: nil).kind, "resume")
+        let handover = M.HandedOver(keeperPID: 1, keeperStartTime: nil, runID: "r", chats: [])
+        XCTAssertEqual(M.PreviousRun(runningSessionIDs: [], handover: handover).kind, "handedOver")
+    }
+
+    func testDebugStateNamesPreviousRunAndTake() {
+        typealias M = AgentCrashRecoveryMarker
+        let adopted = UUID()
+        var summary = HandoverTakeService.Summary(previous: M.PreviousRun(
+            runningSessionIDs: [adopted],
+            handover: M.HandedOver(keeperPID: 1, keeperStartTime: nil, runID: "r9", chats: [])))
+        summary.adopted = [adopted]
+        let state = AgentControlRequestHandler.restartDebugState(summary)
+        XCTAssertEqual(state["previousRun"] as? String, "handedOver")
+        let take = state["take"] as? [String: Any]
+        XCTAssertEqual(take?["runID"] as? String, "r9")
+        XCTAssertEqual(take?["adopted"] as? [String], [adopted.uuidString])
+        XCTAssertEqual(AgentControlRequestHandler.restartDebugState(nil)["previousRun"] as? String, "unknown")
+    }
+}

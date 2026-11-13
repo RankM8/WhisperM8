@@ -55,6 +55,14 @@ final class AgentCrashRecoveryMarker {
         var handover: HandedOver?
 
         static let none = PreviousRun(runningSessionIDs: [], handover: nil)
+
+        /// Wie der vorige Lauf endete: `clean` (sauber oder erster Start),
+        /// `resume` (fortsetzen: Absturz, Abmelden, „Beenden und fortsetzen“)
+        /// oder `handedOver` (Chats beim Aufbewahrer).
+        var kind: String {
+            if handover != nil { return "handedOver" }
+            return runningSessionIDs.isEmpty ? "clean" : "resume"
+        }
     }
 
     static let shared = AgentCrashRecoveryMarker()

@@ -57,6 +57,8 @@ final class HandoverTakeService {
     private let dependencies: Dependencies
     /// Läuft gerade eine Übernahme? `app handover` antwortet dann „busy“.
     private(set) static var isTaking = false
+    /// Ergebnis der Übernahme beim letzten Start, für `debug state`.
+    private(set) static var lastSummary: Summary?
 
     init(dependencies: Dependencies) {
         self.dependencies = dependencies
@@ -65,6 +67,7 @@ final class HandoverTakeService {
     func takeAtLaunch() -> Summary {
         let previous = dependencies.marker.beginRunDetailed()
         var summary = Summary(previous: previous)
+        Self.lastSummary = summary
         let keeperStatus = Self.status(paths: dependencies.paths)
         guard previous.handover != nil || keeperStatus != nil else { return summary }
         Self.isTaking = true
@@ -77,7 +80,7 @@ final class HandoverTakeService {
                     && HandoverProtocol.negotiate(client: $0.protocolRange[0]...$0.protocolRange[1]) != nil)
         }
         let secret = previous.handover != nil && keeperStatus != nil
-            ? dependencies.secretStore.load() : .missing
+            ? HandoverTestKnobs.secret(dependencies.secretStore.load()) : .missing
         let plan = HandoverPlanning.launchPlan(
             markerHandover: previous.handover, keeper: observation, secret: secret)
         Logger.agentStore.notice("handover_take_plan plan=\(String(describing: plan).prefix(40), privacy: .public)")
@@ -133,6 +136,7 @@ final class HandoverTakeService {
             ).write(paths: dependencies.paths)
         }
         dependencies.marker.finishHandoverTake()
+        Self.lastSummary = summary
         Logger.agentStore.notice(
             "handover_take_finished adopted=\(summary.adopted.count) ended=\(summary.endedInGap.count) fallback=\(summary.fallback.count)")
         return summary
@@ -161,6 +165,8 @@ final class HandoverTakeService {
             // Unbekannte Chats (gelöscht) bleiben beim Aufbewahrer; `DONE`
             // beendet sie geordnet.
             guard let session = sessions[chatID] else { continue }
+            let delay = HandoverTestKnobs.takeDelay()
+            if delay > 0 { Thread.sleep(forTimeInterval: delay) }
             let taken: HandoverClient.TakenChat
             do {
                 taken = try client.take(chatID: chatID)

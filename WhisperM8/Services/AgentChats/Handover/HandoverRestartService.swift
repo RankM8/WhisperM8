@@ -116,7 +116,7 @@ final class HandoverRestartService {
             keeperExecutable: executable,
             appBinaries: [executable.path],
             secretStore: HandoverSecretStore.live(paths: paths),
-            holdSeconds: nil))
+            holdSeconds: HandoverTestKnobs.holdSeconds()))
     }
 
     /// Lebt schon ein Aufbewahrer mit Chats, die keiner übernommen hat?

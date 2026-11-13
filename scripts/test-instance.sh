@@ -12,6 +12,9 @@
 #                                      # übernommen, 2 = keine Übergabe (heutiger Weg, Grund auf
 #                                      # stderr), 3 = übergeben, Übernahme unvollständig oder Frist,
 #                                      # 1 = sonstiger Fehler
+#   scripts/test-instance.sh handover  # Chats abgeben und beenden, KEINE neue Instanz starten;
+#                                      # ein späteres `start` übernimmt. Exit wie `restart --keep-chats`
+#                                      # ohne die Übernahme: 0 abgegeben, 2 keine Übergabe, 1 Fehler
 #   scripts/test-instance.sh cli …     # whisperm8-CLI gegen die Test-Instanz, z. B. `cli debug state`
 #   scripts/test-instance.sh status    # läuft sie? PID, Wurzel, Socket
 #   scripts/test-instance.sh reset     # stop + Test-Daten, Test-Defaults und Test-Keychain löschen
@@ -140,6 +143,23 @@ cmd_restart_keep_chats() {
     exit 3
 }
 
+cmd_handover() {
+    [[ -x "$BIN" ]] || { echo "Kein Test-Bundle — erst: $0 build" >&2; exit 1; }
+    local old out code
+    old=$(pids)
+    [[ -z "$old" ]] && { echo "läuft nicht" >&2; exit 1; }
+    set +e
+    out=$(cmd_cli app handover --json 2>&1); code=$?
+    set -e
+    if [[ $code -ne 0 ]]; then
+        echo "keine Übergabe (app handover: Exit $code): $out" >&2
+        exit 2
+    fi
+    for _ in $(seq 1 100); do [[ -z "$(pids)" ]] && break; sleep 0.1; done
+    [[ -n "$(pids)" ]] && { echo "Instanz endet nicht (PID $old)" >&2; exit 1; }
+    printf '%s\n' "$out"
+}
+
 cmd_cli() {
     # Ohne die Session-Identität des aufrufenden Produktiv-Chats: die
     # Test-Instanz kennt dessen Token nicht und lehnt mutierende Befehle sonst ab.
@@ -168,9 +188,10 @@ case "${1:-}" in
     stop) cmd_stop ;;
     restart)
         if [[ "${2:-}" == "--keep-chats" ]]; then cmd_restart_keep_chats; else cmd_stop; cmd_start; fi ;;
+    handover) cmd_handover ;;
     cli) shift; cmd_cli "$@" ;;
     status) cmd_status ;;
     reset) cmd_reset ;;
     log) tail -n "${2:-80}" "$LOG" ;;
-    *) sed -n '2,19p' "$0"; exit 64 ;;
+    *) sed -n '2,22p' "$0"; exit 64 ;;
 esac
