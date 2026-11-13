@@ -240,7 +240,8 @@ enum AgentCrashRecoveryCoordinator {
         store: AgentSessionStore = AgentSessionStore(),
         isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled,
         previousRun: AgentCrashRecoveryMarker.PreviousRun? = nil,
-        handledByHandover: Set<UUID> = []
+        handledByHandover: Set<UUID> = [],
+        alreadyStarted: Set<UUID>? = nil
     ) -> [UUID] {
         let registry = registry ?? .shared
         let windowStore = windowStore ?? .shared
@@ -255,11 +256,18 @@ enum AgentCrashRecoveryCoordinator {
             return []
         }
         let sessions = store.loadWorkspace().sessions
+        // Übernommene (laufende) und vom Rückfall der Übernahme vorgemerkte
+        // Chats führen ihre Sitzung weiter. Für Codex der einzige Schutz,
+        // Claude fängt zusätzlich die Registry-Sperre ab (Vic, 13.11.2026).
         let plan = AgentCollectiveStartPlanner.plan(
             AgentCrashRecoveryPlanner.sessionsToResume(previouslyRunning: previouslyRunning, sessions: sessions),
-            sessions: sessions
+            sessions: sessions,
+            alreadyStarted: alreadyStarted
+                ?? registry.activeSessionIDs.union(HandoverFallbackLaunchQueue.shared.scheduledThisLaunch)
         )
         for skipped in plan.skipped {
+            // Läuft der Chat selbst schon (übernommen), bleibt sein Flag.
+            guard let keeper = plan.keeperOf[skipped], keeper != skipped else { continue }
             // Ein altes Flag darf den übersprungenen Chat nicht doch starten.
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(

@@ -105,6 +105,9 @@ extension HandoverTakeService {
             ids, sessions: store.loadWorkspace().sessions,
             alreadyStarted: runningSessionIDs.union(queue.scheduledThisLaunch))
         for skipped in plan.skipped {
+            // Nur zurücksetzen, wenn ein ANDERER Chat die Sitzung führt; ein
+            // selbst schon vorgemerkter oder laufender behält sein Flag (Vic).
+            guard let keeper = plan.keeperOf[skipped], keeper != skipped else { continue }
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(
                 "handover_fallback_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")

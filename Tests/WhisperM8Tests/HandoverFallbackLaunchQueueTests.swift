@@ -83,4 +83,51 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
         XCTAssertEqual(resumed, [chat.id])
         XCTAssertNil(HandoverFallbackLaunchQueue.shared.takeLaunchSlot(for: chat.id))
     }
+
+    // MARK: Reste aus Vics Review (13.11.2026)
+
+    /// (1) Ein Chat, der selbst schon vorgemerkt ist, behält sein Flag; nur
+    /// ein Chat, dessen Sitzung ein ANDERER führt, wird zurückgesetzt.
+    func testAlreadyScheduledChatKeepsItsFlag() throws {
+        let store = AgentSessionStore(fileURL: tempURL("ws"), uiStateFileURL: tempURL("ui"))
+        let windowStore = AgentWindowStore(persistence: store)
+        let chat = try store.upsertSession(AgentChatSession(provider: .codex, projectID: UUID(),
+                                                            externalSessionID: "x", title: "a", status: .running))
+        let queue = queue()
+        HandoverTakeService.scheduleFallbackResume([chat.id], store: store, windowStore: windowStore,
+                                                   runningSessionIDs: [], queue: queue)
+        // Zweiter Schub mit demselben Chat (heute nicht möglich, Falle für später).
+        HandoverTakeService.scheduleFallbackResume([chat.id], store: store, windowStore: windowStore,
+                                                   runningSessionIDs: [], queue: queue)
+        XCTAssertEqual(store.loadWorkspace().sessions.first { $0.id == chat.id }?.shouldLaunchOnOpen, true)
+        let plan = AgentCollectiveStartPlanner.plan([chat.id], sessions: store.loadWorkspace().sessions,
+                                                    alreadyStarted: [chat.id])
+        XCTAssertNil(plan.keeperOf[chat.id], "kein anderer Halter")
+    }
+
+    /// (2) Die Absturz-Wiederaufnahme im selben Start startet keinen Codex-Chat
+    /// auf der Sitzung eines übernommenen Chats.
+    func testCrashRecoverySkipsADoubleOfAnAdoptedChat() throws {
+        let store = AgentSessionStore(fileURL: tempURL("ws"), uiStateFileURL: tempURL("ui"))
+        let windowStore = AgentWindowStore(persistence: store)
+        let project = UUID()
+        let adopted = try store.upsertSession(AgentChatSession(provider: .codex, projectID: project,
+                                                               externalSessionID: "x", title: "übernommen",
+                                                               status: .running, createdAt: Date().addingTimeInterval(60)))
+        let notHandedOver = try store.upsertSession(AgentChatSession(provider: .codex, projectID: project,
+                                                                     externalSessionID: "X", title: "nicht abgegeben",
+                                                                     status: .running))
+        let other = try store.upsertSession(AgentChatSession(provider: .codex, projectID: project,
+                                                             externalSessionID: "y", title: "anderer", status: .running))
+        let markerURL = tempURL("marker")
+        let crashed = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 100, isProcessAlive: { _ in false })
+        _ = crashed.beginRun()
+        crashed.record(runningSessionIDs: [adopted.id, notHandedOver.id, other.id])
+        let resumed = AgentCrashRecoveryCoordinator.start(
+            marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
+            registry: AgentTerminalRegistry(termination: .inert), windowStore: windowStore, store: store,
+            isEnabled: true, handledByHandover: [adopted.id], alreadyStarted: [adopted.id])
+        XCTAssertEqual(resumed, [other.id], "der ältere, nicht abgegebene Chat startet trotzdem nicht")
+        XCTAssertNotEqual(store.loadWorkspace().sessions.first { $0.id == notHandedOver.id }?.shouldLaunchOnOpen, true)
+    }
 }
