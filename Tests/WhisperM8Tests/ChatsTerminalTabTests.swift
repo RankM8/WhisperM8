@@ -106,6 +106,39 @@ final class ChatsTerminalTabTests: XCTestCase {
         XCTAssertNil(chat.terminalCommand, "nur Terminal-Tabs führen einen Befehl aus")
     }
 
+    // MARK: Auflagen Vic (Gate, Verfall)
+
+    /// `--command` nur mit dem Debug-Steuerkanal; ein Tab ohne Befehl bleibt frei.
+    func testCommandNeedsDebugControl() {
+        XCTAssertNotNil(AgentControlRequestHandler.terminalCommandRefusal(command: "echo hi", debugControlEnabled: false))
+        XCTAssertTrue(AgentControlRequestHandler.terminalCommandRefusal(command: "echo hi", debugControlEnabled: false)?
+            .contains("debugControlEnabled") == true)
+        XCTAssertNil(AgentControlRequestHandler.terminalCommandRefusal(command: "echo hi", debugControlEnabled: true))
+        XCTAssertNil(AgentControlRequestHandler.terminalCommandRefusal(command: nil, debugControlEnabled: false))
+        XCTAssertNil(AgentControlRequestHandler.terminalCommandRefusal(command: "", debugControlEnabled: false))
+        XCTAssertTrue(ChatsNewArguments.usage.contains("debugControlEnabled"))
+    }
+
+    /// Nie gestarteter Befehls-Tab aus einem früheren App-Lauf startet nicht
+    /// mehr von selbst; ein frisch angelegter schon.
+    func testNeverStartedCommandTabFromAnEarlierRunExpires() {
+        let launch = Date(timeIntervalSince1970: 2_000_000)
+        func tab(created: TimeInterval, started: Bool = false, command: String? = "echo hi",
+                 kind: AgentSessionKind = .terminal) -> AgentChatSession {
+            var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "t", shouldLaunchOnOpen: true,
+                                           createdAt: Date(timeIntervalSince1970: created), kind: kind)
+            session.terminalCommand = command
+            session.hasLaunchedInitialPrompt = started
+            return session
+        }
+        XCTAssertTrue(AgentSessionStore.terminalCommandExpires(tab(created: 1_000_000), appLaunch: launch))
+        XCTAssertFalse(AgentSessionStore.terminalCommandExpires(tab(created: 3_000_000), appLaunch: launch), "in diesem Lauf angelegt")
+        XCTAssertFalse(AgentSessionStore.terminalCommandExpires(tab(created: 1_000_000, started: true), appLaunch: launch))
+        XCTAssertFalse(AgentSessionStore.terminalCommandExpires(tab(created: 1_000_000, command: nil), appLaunch: launch),
+                       "Login-Shell-Tab")
+        XCTAssertFalse(AgentSessionStore.terminalCommandExpires(tab(created: 1_000_000, kind: .chat), appLaunch: launch))
+    }
+
     // MARK: debug terminal
 
     func testDebugTerminalParsing() throws {

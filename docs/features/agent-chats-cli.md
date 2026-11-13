@@ -46,7 +46,12 @@ whisperm8 chats new --project whisperm8 --title "Analyse" --account PowerUser # 
 ```
 
 **Terminal-Tab:** `whisperm8 chats new --project <ordner> --provider terminal [--title T] [--command "…"]`
-legt einen Terminal-Tab an wie das Menü. Mit `--command` läuft statt der Login-Shell `/bin/sh -c "<befehl>"`
+legt einen Terminal-Tab an wie das Menü. `--command` ist für Tests gedacht und braucht den Debug-Steuerkanal
+(`debugControlEnabled`): Wer `whisperm8 chats` pauschal erlaubt, gäbe sonst jedem Agenten eine Shell an den
+Rechte-Abfragen von Claude Code vorbei. Ohne Schalter bricht der Befehl mit Exit 1 und einer Meldung ab und legt
+nichts an; ein Terminal-Tab ohne Befehl geht immer. Ein Befehls-Tab, der in einem früheren App-Lauf angelegt und nie
+angezeigt wurde, startet nicht mehr von selbst: Er zeigt „Befehl noch nicht gestartet“ samt Befehl und den Knopf
+„Befehl ausführen“. Mit `--command` läuft statt der Login-Shell `/bin/sh -c "<befehl>"`
 im Projektordner (Umgebung wie in Terminal-Tabs, PATH aus der Login-Shell, aber ohne `.zshrc`, Aliase und
 Shell-Funktionen). Endet der Befehl, endet sein Prozess; der Tab bleibt mit „Befehl beendet“ stehen, und sein Knopf
 „Befehl erneut ausführen“ startet ihn noch einmal, von selbst läuft er nie erneut. Läuft der Befehl, fragt das

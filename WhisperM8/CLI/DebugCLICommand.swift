@@ -187,7 +187,8 @@ enum DebugCLICommand {
                                     von Status-Punkten; der nächste echte Wechsel überschreibt ihn
       terminal <ref> [--text]       Text eines laufenden Terminals (Bildschirm plus Rücklauf,
                [--lines <n>]        ohne Farben); --text gibt nur den Text aus, sonst JSON.
-                                    Exit 4 ohne laufendes Terminal. Nie im Log.
+                                    Exit 4, solange der Tab nie gestartet wurde. Nie im Log.
+                                    Im Vollbild einer TUI (Alternativ-Bildschirm) nur das Bild.
       context                       Clipboard-Fallback des Diktatstarts durchlaufen (private
                                     Zwischenablage, kein Tastendruck) — Tastencodes für Cmd+C/V
       record [<sekunden>]           Echten Aufnahmestart wie per Hotkey messen (Default 1 s,

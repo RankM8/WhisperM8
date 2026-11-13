@@ -134,11 +134,25 @@ extension AgentControlRequestHandler {
         }
     }
 
+    /// Vic: `--command` gibt dem Aufrufer eine Shell an den Rechte-Abfragen
+    /// von Claude Code vorbei (wer `whisperm8 chats` pauschal erlaubt hat).
+    /// Zweck ist der Test, deshalb nur mit dem Debug-Steuerkanal. Ein
+    /// Terminal-Tab ohne Befehl bleibt frei. `nil` = erlaubt.
+    static func terminalCommandRefusal(command: String?, debugControlEnabled: Bool) -> String? {
+        guard let command, !command.isEmpty, !debugControlEnabled else { return nil }
+        return "--command ist nur für Tests freigeschaltet: erst `defaults write com.whisperm8.app "
+            + "debugControlEnabled -bool YES`. Ohne --command entsteht ein normaler Terminal-Tab."
+    }
+
     /// `chats new --provider terminal [--command "…"]`: Terminal-Tab wie aus dem
     /// Menü, mit Befehl als `/bin/sh -c` statt Login-Shell. Gestartet wird
     /// beim Anzeigen des Tabs (wie jeder Chat); die CLI meldet, ob er schon läuft.
     private func terminalNew(_ request: ChatsControlRequest, projectRef: String, title: String?) async -> ChatsControlResponse {
         let command = request.params["command"]?.stringValue
+        if let refusal = Self.terminalCommandRefusal(command: command,
+                                                     debugControlEnabled: AppPreferences.shared.isDebugControlEnabled) {
+            return .failure(requestID: request.requestID, code: .unsupported, message: refusal)
+        }
         if request.params["account"]?.stringValue?.isEmpty == false {
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "--account gilt nur für Claude-Chats")

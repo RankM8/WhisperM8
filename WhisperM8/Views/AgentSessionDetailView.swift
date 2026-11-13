@@ -431,9 +431,15 @@ struct AgentSessionDetailView: View {
             // Tab mit festem Befehl: Der Knopf führt GENAU diesen Befehl noch
             // einmal aus, deshalb steht er dabei (Opus-Review).
             if let command = session.terminalCommand, !command.isEmpty {
-                Text("Command ended")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AgentTheme.textSecondary)
+                Group {
+                    if session.hasLaunchedInitialPrompt {
+                        Text("Command ended")
+                    } else {
+                        Text("Command not started yet")
+                    }
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
                 Text(command)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
@@ -453,8 +459,11 @@ struct AgentSessionDetailView: View {
             Button {
                 launchAfterCacheWarmup()
             } label: {
-                if session.terminalCommand?.isEmpty == false {
+                if session.terminalCommand?.isEmpty == false, session.hasLaunchedInitialPrompt {
                     Label("Run command again", systemImage: "play.fill")
+                        .font(.system(size: 11, weight: .medium))
+                } else if session.terminalCommand?.isEmpty == false {
+                    Label("Run command", systemImage: "play.fill")
                         .font(.system(size: 11, weight: .medium))
                 } else {
                     Label("Start new shell", systemImage: "play.fill")

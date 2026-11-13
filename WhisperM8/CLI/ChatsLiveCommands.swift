@@ -601,6 +601,7 @@ struct ChatsNewArguments: Equatable {
 
     static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex|terminal] [--title T] [--prompt \"…\"] [--command \"…\"] [--account <profil>]\n"
         + "  --provider terminal legt einen Terminal-Tab an; mit --command führt er den Befehl per /bin/sh -c im Projektordner aus.\n"
+        + "  --command ist nur für Tests und braucht debugControlEnabled; keine Geheimnisse hineinschreiben (steht im Klartext im Workspace).\n"
         + "  Ohne --account startet ein Claude-Chat im Konto, das in WhisperM8 unter Einstellungen → Konten aktiv ist.\n"
         + "  Ist es abgemeldet oder abgelaufen, bricht der Befehl ab (kein Ausweichen auf main). --account main wählt das Hauptkonto."
 
