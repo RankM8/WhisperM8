@@ -200,6 +200,30 @@ final class StatisticsCollectorsTests: XCTestCase {
         XCTAssertEqual(after.first.map { $0.end.timeIntervalSince($0.start) }, 30)
     }
 
+    /// Neustart ohne Chatverlust: Ein übernommener Chat, der bei der Abgabe
+    /// arbeitete, zählt ab der Abgabe weiter (Review Paket 4, Befund 7).
+    func testAgentTrackerCountsHandedOverWorkFromTheHandover() {
+        let store = makeStore()
+        let clock = Clock(date(2026, 11, 5, 10, 1))
+        let tracker = agentTracker(store: store, clock: clock)
+        let id = UUID()
+        tracker.start(workingSince: [id: date(2026, 11, 5, 10, 0)])
+        clock.now = date(2026, 11, 5, 10, 2)
+        tracker.setWorking(id, working: false)
+        XCTAssertEqual(store.snapshotSync().days["2026-11-05"]?.agentWorkingSeconds, 120, "Lücke von einer Minute mitgezählt")
+    }
+
+    func testHandedOverWorkNeverStartsInTheFuture() {
+        let store = makeStore()
+        let clock = Clock(date(2026, 11, 5, 10, 0))
+        let tracker = agentTracker(store: store, clock: clock)
+        let id = UUID()
+        tracker.start(workingSince: [id: date(2026, 11, 5, 10, 5)])
+        clock.now = date(2026, 11, 5, 10, 1)
+        tracker.setWorking(id, working: false)
+        XCTAssertEqual(store.snapshotSync().days["2026-11-05"]?.agentWorkingSeconds, 60)
+    }
+
     func testAgentTrackerWritesWhenLastChatStops() {
         let store = makeStore()
         let clock = Clock(date(2026, 11, 5, 10))

@@ -141,3 +141,41 @@ final class ClaudeSessionRunningGuardTests: XCTestCase {
         XCTAssertFalse(ledger.isBeingTerminated(pid: 0))
     }
 }
+
+/// Was die Sperre tut, wenn zwei Chats dieselbe Sitzung tragen (Befund
+/// 13.11.2026, „soak bash“/„soak question“ auf cd00c6c0). Der Builder sieht nur
+/// die Registry: Läuft die Sitzung schon, verweigert er den zweiten Resume.
+/// Starten beide im selben Augenblick (Wiederaufnahme, Grid), steht der erste
+/// Prozess noch nicht in der Registry — dann bauen beide `--resume`. Deshalb
+/// darf die geteilte Bindung gar nicht erst entstehen.
+final class ClaudeSessionRunningGuardSharedBindingTests: XCTestCase {
+    private let project = AgentProject(name: "Repo", path: FileManager.default.temporaryDirectory.path)
+
+    private func builder(registry: [ClaudeSessionRecord]) -> AgentCommandBuilder {
+        var builder = AgentCommandBuilder(commandResolver: { "/usr/local/bin/\($0)" })
+        builder.gptFastModeEnabledResolver = { false }
+        builder.extraArgumentsResolver = { _ in [] }
+        builder.backgroundWorkerResolver = { _, _ in nil }
+        builder.runningSessionProcessResolver = { id in registry.first(where: { $0.sessionID == id }) }
+        return builder
+    }
+
+    private func chat(_ title: String) -> AgentChatSession {
+        AgentChatSession(provider: .claude, projectID: project.id, externalSessionID: "cd00c6c0",
+                         title: title, hasLaunchedInitialPrompt: true)
+    }
+
+    func testSecondResumeOfSharedSessionIsRefusedOnceTheFirstRuns() {
+        let running = ClaudeSessionRecord(profileName: "main", pid: 777, sessionID: "cd00c6c0", kind: "interactive")
+        XCTAssertThrowsError(try builder(registry: [running]).command(for: chat("soak question"), project: project)) {
+            XCTAssertEqual($0 as? AgentCommandError, .sessionAlreadyRunning(title: "soak question", pid: 777))
+        }
+    }
+
+    func testSimultaneousResumesOfSharedSessionAreNotCaught() throws {
+        // Grenze der Sperre, festgehalten: leere Registry beim Start beider.
+        let empty = builder(registry: [])
+        XCTAssertEqual(try empty.command(for: chat("soak bash"), project: project).arguments, ["--resume", "cd00c6c0"])
+        XCTAssertEqual(try empty.command(for: chat("soak question"), project: project).arguments, ["--resume", "cd00c6c0"])
+    }
+}

@@ -121,11 +121,19 @@ final class StatisticsAgentTracker {
     var workingCount: Int { integrator.count }
 
     /// - Parameter workingSessionIDs: Chats, die beim Einschalten schon arbeiten.
-    func start(workingSessionIDs: Set<UUID> = []) {
+    /// - Parameter workingSince: Chats, die über einen Neustart ohne
+    ///   Chatverlust weiterarbeiten, mit dem Zeitpunkt der Abgabe. Bis dahin
+    ///   hat die alte App gezählt; ab da zählt diese, sonst fehlte die Lücke.
+    func start(workingSessionIDs: Set<UUID> = [], workingSince: [UUID: Date] = [:]) {
         guard !running else { return }
         running = true
         let now = env.now()
-        for id in workingSessionIDs {
+        // Älteste zuerst, damit kein Abschnitt rückwärts läuft; nie in der
+        // Zukunft, nie länger zurück als die Haltefrist des Aufbewahrers.
+        for (id, since) in workingSince.sorted(by: { $0.value < $1.value }) {
+            integrator.set(id, working: true, at: min(now, max(since, now.addingTimeInterval(-15 * 60))))
+        }
+        for id in workingSessionIDs where workingSince[id] == nil {
             integrator.set(id, working: true, at: now)
         }
         updateTimer()
