@@ -164,7 +164,9 @@ struct AgentSessionDuplicateGroup: Equatable {
         evidence: (AgentChatSession) -> AgentSessionOwnershipEvidence = { _ in .noEvidence }
     ) -> [AgentSessionDuplicateGroup] {
         var byKey: [String: [AgentChatSession]] = [:]
-        for session in workspace.sessions where session.status != .archived {
+        // Agent View setzt keine Sitzung fort, auch wenn ihr Eintrag eine ID
+        // trägt: kein Doppel (Altlasten-Vorschau 13.11.2026, 3 Paare).
+        for session in workspace.sessions where session.status != .archived && !session.isAgentView {
             guard let id = session.externalSessionID, !id.isEmpty else { continue }
             byKey["\(session.provider.rawValue)|\(id.lowercased())", default: []].append(session)
         }
