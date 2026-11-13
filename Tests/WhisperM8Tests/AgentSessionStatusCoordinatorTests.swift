@@ -362,13 +362,13 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
         coordinator.terminalProcessID = { _ in 200 }
         coordinator.foregroundRecordsLookup = { $0 == "cd00c6c0" ? [predecessor] : [] }
-        coordinator.isBeingTerminated = { $0 == 100 }
+        coordinator.isBeingTerminated = { pid, _ in pid == 100 }
 
         coordinator.handleHookEvent(localID: sessionID, event: sessionStart("aa82d0ba", source: "startup"))
         XCTAssertEqual(externalID(coordinator, sessionID), "cd00c6c0", "Vorgänger als fremd gezählt", file: file, line: line)
 
         // Gegenprobe: derselbe Eintrag ohne Beenden-Vermerk ist fremd.
-        coordinator.isBeingTerminated = { _ in false }
+        coordinator.isBeingTerminated = { _, _ in false }
         coordinator.handleHookEvent(localID: sessionID, event: sessionStart("bb000001", source: "startup"))
         XCTAssertEqual(externalID(coordinator, sessionID), "bb000001", file: file, line: line)
     }
