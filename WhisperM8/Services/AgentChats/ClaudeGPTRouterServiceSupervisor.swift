@@ -9,6 +9,8 @@ struct ClaudeGPTRouterServiceStatus: Equatable {
     var generation: Int
     var state: String
     var active: Int
+    /// Verbundene Apps (`attach`).
+    var attached: Int
     /// Programmpfad des Dienstes (leer bei älteren Generationen).
     var executable: String
 
@@ -23,6 +25,7 @@ struct ClaudeGPTRouterServiceStatus: Equatable {
         generation = payload["generation"] as? Int ?? 0
         state = payload["state"] as? String ?? ""
         active = payload["active"] as? Int ?? 0
+        attached = payload["attached"] as? Int ?? 0
         executable = payload["executable"] as? String ?? ""
     }
 }
@@ -54,6 +57,33 @@ enum ClaudeGPTRouterServiceClient {
     @discardableResult
     static func shutdown(root: URL, timeout: TimeInterval = 2) -> Bool {
         request(root: root, ["op": "shutdown"], timeout: timeout)?["ok"] as? Bool == true
+    }
+
+    /// Wie `shutdown`, aber ohne auf die Antwort zu warten — für den Main
+    /// Thread (Stop-Knopf, `willTerminate`). Die Nachricht liegt nach dem
+    /// Schreiben im Socket; der Dienst liest sie auch nach unserem `close`.
+    static func requestShutdownWithoutWaiting(root: URL) {
+        let path = ClaudeGPTRouterService.socketURL(root: root).path
+        guard FileManager.default.fileExists(atPath: path),
+              let fd = try? ClaudeGPTRouterWire.connect(path: path, timeout: 0.2) else { return }
+        defer { close(fd) }
+        try? ClaudeGPTRouterWire.send(fd, ["op": "shutdown"])
+    }
+
+    /// Dauerverbindung „App lebt“ für die Leerlauf-Frist des Dienstes. Der
+    /// Kernel schließt sie, wenn die App endet. `nil` = kein Dienst erreichbar.
+    static func attach(root: URL, timeout: TimeInterval = 1) -> Int32? {
+        let path = ClaudeGPTRouterService.socketURL(root: root).path
+        guard FileManager.default.fileExists(atPath: path),
+              let fd = try? ClaudeGPTRouterWire.connect(path: path, timeout: timeout) else { return nil }
+        guard (try? ClaudeGPTRouterWire.send(fd, ["op": "attach"])) != nil,
+              let reply = try? ClaudeGPTRouterWire.receive(fd),
+              reply.message["op"] as? String == "attached" else {
+            close(fd)
+            return nil
+        }
+        reply.descriptor.map { _ = close($0) }
+        return fd
     }
 
     private static func request(root: URL, _ message: [String: Any], timeout: TimeInterval) -> [String: Any]? {
@@ -104,6 +134,24 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     private var desiredPort: Int?
     private var restartAttempt = 0
     private var lastHealthyStart: Date?
+    /// `attach`-Verbindung zur beobachteten Generation (Leerlauf-Frist).
+    private var attachFD: Int32 = -1
+    /// `stop()` angefordert: kein Neustart mehr. Eigener kleiner Lock, damit
+    /// `stop()` nie auf ein laufendes `ensureRunning` wartet.
+    private let stopLock = NSLock()
+    private var stopRequestedStorage = false
+
+    private var isStopRequested: Bool {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return stopRequestedStorage
+    }
+
+    private func setStopRequested(_ value: Bool) {
+        stopLock.lock()
+        stopRequestedStorage = value
+        stopLock.unlock()
+    }
     private let ownExecutable: String
     private let portReaper: (Int) -> Bool
     private let deadControlSocket: (URL) -> Bool
@@ -151,6 +199,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     func ensureRunning(port: Int) -> Result<Void, Error> {
         lock.lock()
         defer { lock.unlock() }
+        setStopRequested(false)
         desiredPort = port
         if let status = settledStatus(), status.state == "serving" {
             switch Self.takeOverPlan(status: status, port: port, ownExecutable: ownExecutable, build: build) {
@@ -262,9 +311,13 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
     /// Beobachtet das Ende des Dienstes per kqueue (auch ohne Elternbeziehung,
     /// der Dienst kann aus einem früheren App-Lauf stammen).
     private func watch(pid: Int32) {
-        guard watchedPID != pid else { return }
+        guard watchedPID != pid else {
+            if attachFD < 0 { attachToService() }
+            return
+        }
         exitSource?.cancel()
         watchedPID = pid
+        attachToService()
         let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: queue)
         source.setEventHandler { [weak self] in self?.serviceExited(pid: pid) }
         exitSource = source
@@ -275,9 +328,21 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         }
     }
 
+    /// Nur unter `lock`. Hängt an der Generation, die gerade den Steuer-Socket
+    /// hält (das ist die beobachtete).
+    private func attachToService() {
+        closeAttachment()
+        attachFD = ClaudeGPTRouterServiceClient.attach(root: root) ?? -1
+    }
+
+    private func closeAttachment() {
+        if attachFD >= 0 { close(attachFD) }
+        attachFD = -1
+    }
+
     private func serviceExited(pid: Int32) {
         lock.lock()
-        guard watchedPID == pid, let port = desiredPort else {
+        guard watchedPID == pid, let port = desiredPort, !isStopRequested else {
             lock.unlock()
             return
         }
@@ -299,7 +364,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             self.lock.lock()
-            let stillWanted = self.desiredPort == port && self.watchedPID == nil
+            let stillWanted = self.desiredPort == port && self.watchedPID == nil && !self.isStopRequested
             self.lock.unlock()
             guard stillWanted else { return }
             if case .failure(let error) = self.ensureRunning(port: port) {
@@ -320,7 +385,7 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             self.lock.lock()
-            let stillWanted = self.desiredPort == port && self.watchedPID == nil
+            let stillWanted = self.desiredPort == port && self.watchedPID == nil && !self.isStopRequested
             self.lock.unlock()
             guard stillWanted else { return }
             if case .failure = self.ensureRunning(port: port) {
@@ -333,14 +398,30 @@ final class ClaudeGPTRouterServiceSupervisor: @unchecked Sendable {
 
     /// GPT-Backend aus oder echtes Beenden der App: Dienst auslaufen lassen,
     /// nicht neu starten.
+    ///
+    /// Läuft auf dem Main Thread (Stop-Knopf, `willTerminate`): wartet weder
+    /// auf die Antwort des Dienstes noch auf ein laufendes `ensureRunning`.
+    /// Das Aufräumen folgt im Hintergrund; hat ein gleichzeitiges
+    /// `ensureRunning` noch einen Dienst gestartet, bekommt der dort ebenfalls
+    /// sein `shutdown` (sonst endet er spätestens nach der Leerlauf-Frist).
     func stop() {
+        setStopRequested(true)
+        ClaudeGPTRouterServiceClient.requestShutdownWithoutWaiting(root: root)
+        queue.async { [weak self] in self?.finishStop() }
+    }
+
+    private func finishStop() {
         lock.lock()
+        defer { lock.unlock() }
+        guard isStopRequested else { return }
         desiredPort = nil
         watchedPID = nil
         exitSource?.cancel()
         exitSource = nil
-        lock.unlock()
-        ClaudeGPTRouterServiceClient.shutdown(root: root)
+        closeAttachment()
+        if statusResolver(root) != nil {
+            ClaudeGPTRouterServiceClient.shutdown(root: root)
+        }
     }
 
     /// PID des beobachteten Dienstes (Tests, Diagnose).

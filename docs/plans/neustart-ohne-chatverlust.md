@@ -324,9 +324,9 @@ Die Test-Instanz deckt alles außer dem GPT-Chat ab (kein GPT-Login, Logins werd
 Behoben vor dem Merge: `gptRouter.startProfile` nur im Dienst-Modus und nur der Profilpfad; Socket-Übergabe nur an dasselbe Programm (Code-Signatur über `LOCAL_PEERTOKEN`, bei jeder Nachricht), Test-Upstreams nur im Debug-Build, `--root` nur der Ordner der App; verwaister Dienst ohne `router.sock` wird vom Port geräumt; ohne `released` gibt die neue Generation auf; anderer Programmort startet frisch, statt bei jedem Chat-Start eine Übernahme zu versuchen.
 
 Später:
-- **Main Thread:** Stop-Knopf und `willTerminate` warten bis zu 2 s auf den Steuer-Socket des Dienstes. Den Aufruf vom Main Thread lösen.
+- ~~**Main Thread:** Stop-Knopf und `willTerminate` warten bis zu 2 s auf den Steuer-Socket des Dienstes.~~ Erledigt 13.11.2026: `stop()` schickt `shutdown`, ohne auf Antwort oder ein laufendes `ensureRunning` zu warten; aufgeräumt wird im Hintergrund.
 - **Tests:** feste Sleeps durch Bedingungen ersetzen; Prozess-Tests werden still übersprungen, wenn das Binary fehlt (in der CI sichtbar machen); Router-Dienste nach einem Absturz von xctest bleiben als Waisen (Aufräumen per Prozessgruppe).
-- **Offene Entscheidung (User):** Leerlauf-Frist für den Dienst — er beendet sich geordnet, wenn 30 Minuten lang keine App verbunden war und keine Anfrage läuft. Noch nicht gebaut.
+- **Leerlauf-Frist** (Entscheidung des Users 13.11.2026, umgesetzt): Der Dienst beendet sich geordnet, wenn 30 Minuten lang keine App verbunden war (`attach`-Verbindung der Aufsicht) und keine Anfrage lief. Anfragen überlebender Chats zählen als Betrieb.
 
 ## Entscheidungen
 
