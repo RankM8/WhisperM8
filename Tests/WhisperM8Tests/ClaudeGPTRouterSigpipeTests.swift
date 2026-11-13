@@ -27,7 +27,7 @@ final class ClaudeGPTRouterSigpipeTests: XCTestCase {
 
         for _ in 0..<10 {
             let root = GPTRouterTestClient.makeRoot()
-            defer { try? FileManager.default.removeItem(at: root) }
+            defer { GPTRouterTestClient.removeRoot(root) }
             let target = URL(string: "http://127.0.0.1:9")!
             let router = ClaudeGPTMixRouter(codexProxyURL: target, anthropicURL: target, listenerKind: .bsdSockets)
             defer { router.stop() }

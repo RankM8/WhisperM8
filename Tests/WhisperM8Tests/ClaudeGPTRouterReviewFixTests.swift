@@ -12,7 +12,7 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
     }
 
     override func tearDown() {
-        try? FileManager.default.removeItem(at: root)
+        GPTRouterTestClient.removeRoot(root)
     }
 
     // MARK: 1 — gptRouter.startProfile nur im Dienst-Modus, nur Profilpfad
@@ -80,6 +80,12 @@ final class ClaudeGPTRouterReviewFixTests: XCTestCase {
 
         XCTAssertTrue(manager.startProfileInstanceForRouterService(profile: "work"))
         wait(for: [started], timeout: 5)
+        // Das Register schreibt der Start im Hintergrund kurz danach; erst
+        // abwarten, sonst legt er den gelöschten Testordner neu an.
+        let registered = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: root.appendingPathComponent("r.json").path), Date() < registered {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
         XCTAssertEqual(launches.count, 1)
         XCTAssertNotEqual(launches.first?.last, "18765", "nie der main-Port")
     }

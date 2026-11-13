@@ -22,7 +22,7 @@ final class ClaudeGPTRouterIdleTests: XCTestCase {
         routers.forEach { $0.stop() }
         services.removeAll()
         upstream.stop()
-        try? FileManager.default.removeItem(at: root)
+        GPTRouterTestClient.removeRoot(root)
     }
 
     private func startService(idleLimit: TimeInterval) throws -> (ClaudeGPTRouterService, DispatchSemaphore) {
