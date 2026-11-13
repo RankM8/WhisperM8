@@ -214,6 +214,7 @@ enum CLIHelp {
       whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
       whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
       whisperm8 app handover-status [--json]      (Stand des Aufbewahrers beim Neustart ohne Chatverlust)
+      whisperm8 app handover [--json]             (Neustart, Chats laufen weiter: Chats abgeben, App beendet sich)
       whisperm8 --help | --version
 
     TRANSCRIBE

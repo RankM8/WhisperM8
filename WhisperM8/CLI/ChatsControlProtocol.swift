@@ -54,6 +54,9 @@ enum ChatsControlProtocol {
     static func handlerTimeoutSeconds(for method: String) -> Int {
         switch method {
         case "session.moveAccount", "session.close", "workspace.archive": return 90
+        // Abgabe beim Neustart: Aufbewahrer starten, je Chat ablösen und
+        // abgeben, Schlüsselbund, COMMIT. Die App hat eigene Fristen darunter.
+        case "app.handover": return 30
         default: return 10
         }
     }

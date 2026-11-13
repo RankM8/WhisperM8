@@ -3331,6 +3331,16 @@
         }
       }
     },
+    "Chats during a restart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats beim Neustart"
+          }
+        }
+      }
+    },
     "Chats on “%@” then continue through the main account, and the profile disappears. The main account’s proxy restarts briefly for this.": {
       "localizations": {
         "de": {
@@ -8221,6 +8231,16 @@
         }
       }
     },
+    "Keep chats running across a restart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats laufen beim Neustart weiter"
+          }
+        }
+      }
+    },
     "Keyboard Cleaning": {
       "localizations": {
         "de": {
@@ -11134,6 +11154,16 @@
         }
       }
     },
+    "On a restart through make dev, running chats and terminal tabs are handed to a small helper process and taken back by the new app. If anything goes wrong, the chats are resumed as before. Quitting with Cmd+Q still ends all chats. The GPT router then runs as its own service; the change takes effect at the next app start.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei einem Neustart über make dev gehen laufende Chats und Terminal-Tabs an einen kleinen Hilfsprozess und kommen in der neuen App zurück. Geht dabei etwas schief, werden die Chats wie bisher fortgesetzt. Beenden mit Cmd+Q beendet weiterhin alle Chats. Der GPT-Router läuft dann als eigener Dienst; die Änderung wirkt ab dem nächsten App-Start."
+          }
+        }
+      }
+    },
     "On power, the Mac stays awake while a chat works, even with the lid closed, and for two more minutes after. The sidebar button also has “Always awake” for battery, which ends at 20 % battery, when the Mac gets hot, or after 4 hours.": {
       "localizations": {
         "de": {
@@ -13964,6 +13994,16 @@
         }
       }
     },
+    "Restart without losing chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neustart ohne Chatverlust"
+          }
+        }
+      }
+    },
     "Restart — restart the terminal": {
       "localizations": {
         "de": {
@@ -14160,6 +14200,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laufende Chats werden angehalten, umgezogen und im Tab fortgesetzt — das dauert wenige Sekunden."
+          }
+        }
+      }
+    },
+    "Running chats keep working while WhisperM8 restarts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Chats arbeiten weiter, während WhisperM8 neu startet."
           }
         }
       }
@@ -16100,6 +16150,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bleibt · Slot %lld"
+          }
+        }
+      }
+    },
+    "Still being built and tested. Try it only with chats you could afford to lose. Off by default.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch im Bau und im Test. Nur mit Chats ausprobieren, deren Verlust nicht schlimm wäre. Ab Werk aus."
           }
         }
       }

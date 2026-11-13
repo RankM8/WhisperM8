@@ -582,8 +582,23 @@ final class TerminalKeyboardShortcutHandler {
 final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @preconcurrency LocalProcessTerminalViewDelegate {
     let id = UUID()
     let sessionID: UUID
-    /// Control-Token dieses PTY-Laufs (für den Widerruf beim Ende).
-    private var issuedControlToken: String?
+    /// Control-Token dieses PTY-Laufs (für den Widerruf beim Ende; geht bei
+    /// der Übergabe im Manifest mit).
+    var issuedControlToken: String?
+    /// Neustart ohne Chatverlust: abgelöste Leitung, bis `COMMIT` durch ist
+    /// (`AgentTerminalController+Handover`). Solange gehört die Kopie der App.
+    var handoverHandle: LocalProcess.HandoverHandle?
+    /// Übergeben: der Prozess läuft beim Aufbewahrer weiter. Kein Ctrl+C,
+    /// kein Ende melden, kein Token widerrufen.
+    private(set) var isHandedOver = false
+    /// Vom Aufbewahrer übernommen statt selbst gestartet. Eine Ansicht, die so
+    /// einen Chat zeigt, hängt ihren Teil der Ende-Meldung an
+    /// (`viewTerminationHandler`), weil sie ihn nicht selbst gestartet hat.
+    private(set) var isAdopted = false
+    /// Teil der Ende-Meldung, den die Ansicht braucht (Rückweg nach
+    /// gescheitertem Andocken, Fehlertext, Auffrischen). Für übernommene Chats;
+    /// gestartete Chats bekommen ihn beim Start über die Registry.
+    var viewTerminationHandler: ((AgentChatTermination.Outcome) -> Void)?
     let terminal = QuietableTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
@@ -1013,6 +1028,36 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // SwiftTerm ruft nach terminate() kein waitpid mehr — ohne Abholen
         // bliebe der Prozess bis zum App-Ende ein Zombie.
         if let pid { ChildProcessReaper.reap(pid: pid) }
+        isRunning = false
+        releaseEventMonitors()
+    }
+
+    /// Übernommener Chat (Neustart ohne Chatverlust): gilt als gestartet und
+    /// laufend, ohne `forkpty`. Token und Startzeit kommen aus dem Manifest.
+    func markAdopted(token: String?, startedAt: Date?) {
+        isAdopted = true
+        hasStarted = true
+        isRunning = true
+        self.startedAt = startedAt ?? Date()
+        issuedControlToken = token
+    }
+
+    /// Chat endete in der Lücke: Bild ist da, der Prozess nicht mehr.
+    func markEndedInGap(exitCode: Int32?) {
+        hasStarted = true
+        isRunning = false
+        self.exitCode = exitCode
+        releaseEventMonitors()
+    }
+
+    /// Nach `COMMIT`: Der Aufbewahrer hält den Chat. Die eigene Kopie der
+    /// Leitung schließen, ohne Signal; der Controller gilt als nicht mehr
+    /// laufend, damit der Quit-Pfad ihm kein Ctrl+C schickt.
+    func completeHandover() {
+        guard let handle = handoverHandle else { return }
+        handoverHandle = nil
+        Darwin.close(handle.fileDescriptor)
+        isHandedOver = true
         isRunning = false
         releaseEventMonitors()
     }

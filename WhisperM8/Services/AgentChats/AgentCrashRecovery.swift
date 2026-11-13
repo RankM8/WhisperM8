@@ -25,6 +25,44 @@ final class AgentCrashRecoveryMarker {
         var pid: Int32
         var runningSessionIDs: [UUID]
         var updatedAt: Date
+        /// Dritter Zustand „übergeben“ (Neustart ohne Chatverlust): Die Chats
+        /// liegen beim Aufbewahrer. Fehlt das Feld, gilt der Marker wie
+        /// bisher als „fortsetzen“; ältere Apps ignorieren es.
+        var handover: HandedOver?
+    }
+
+    /// Wem die App ihre Chats übergeben hat. Je Chat PID samt Startzeit: Lebt
+    /// beim nächsten Start unter der PID ein anderer Prozess, wird er nicht
+    /// beendet, sondern der Chat gilt als tot.
+    struct HandedOver: Codable, Equatable {
+        var keeperPID: Int32
+        var keeperStartTime: Double?
+        var runID: String
+        var chats: [Chat]
+
+        struct Chat: Codable, Equatable {
+            var sessionID: UUID
+            var pid: Int32
+            var pidStartTime: Double?
+        }
+    }
+
+    /// Was der vorige Lauf hinterlassen hat.
+    struct PreviousRun: Equatable {
+        /// Beim unsauberen Ende laufende Chats; nach einer Übergabe die
+        /// abgegebenen plus die, deren Abgabe scheiterte.
+        var runningSessionIDs: [UUID]
+        var handover: HandedOver?
+
+        static let none = PreviousRun(runningSessionIDs: [], handover: nil)
+
+        /// Wie der vorige Lauf endete: `clean` (sauber oder erster Start),
+        /// `resume` (fortsetzen: Absturz, Abmelden, „Beenden und fortsetzen“)
+        /// oder `handedOver` (Chats beim Aufbewahrer).
+        var kind: String {
+            if handover != nil { return "handedOver" }
+            return runningSessionIDs.isEmpty ? "clean" : "resume"
+        }
     }
 
     static let shared = AgentCrashRecoveryMarker()
@@ -37,6 +75,13 @@ final class AgentCrashRecoveryMarker {
     /// Quits) dürfen den Marker nicht wieder anlegen.
     private var isFinished = false
     private var isOwner = false
+    /// Übergabe des vorigen Laufs, solange die Übernahme nicht abgeschlossen
+    /// ist. Bleibt im Marker stehen: Stürzt diese App vor oder während der
+    /// Übernahme ab, findet die nächste den Aufbewahrer noch.
+    private var pendingHandover: HandedOver?
+    /// Marker absichtlich stehen gelassen („fortsetzen“ oder „übergeben“):
+    /// ein späteres `endRunCleanly` darf ihn nicht mehr löschen.
+    private var keepsMarker = false
 
     init(
         fileURL: URL = AppInstance.applicationSupport
@@ -56,15 +101,31 @@ final class AgentCrashRecoveryMarker {
     /// noch (zweite Instanz, die sich gleich wieder beendet), bleibt er
     /// unangetastet.
     func beginRun() -> [UUID] {
+        beginRunDetailed().runningSessionIDs
+    }
+
+    /// Wie `beginRun`, liefert aber auch den Zustand „übergeben“.
+    func beginRunDetailed() -> PreviousRun {
         lock.lock(); defer { lock.unlock() }
         let previous = read()
         if let previous, previous.pid != ownPID, isProcessAlive(previous.pid) {
-            return []
+            return .none
         }
         isOwner = true
-        write(Contents(pid: ownPID, runningSessionIDs: [], updatedAt: Date()))
-        guard let previous, previous.pid != ownPID else { return [] }
-        return previous.runningSessionIDs
+        pendingHandover = previous?.pid != ownPID ? previous?.handover : nil
+        write(Contents(pid: ownPID, runningSessionIDs: [], updatedAt: Date(), handover: pendingHandover))
+        guard let previous, previous.pid != ownPID else { return .none }
+        return PreviousRun(runningSessionIDs: previous.runningSessionIDs, handover: previous.handover)
+    }
+
+    /// Übernahme abgeschlossen (übernommen, freigegeben oder aufgegeben): der
+    /// Zustand „übergeben“ verschwindet aus dem Marker.
+    func finishHandoverTake() {
+        lock.lock(); defer { lock.unlock() }
+        guard isOwner, !isFinished, pendingHandover != nil else { return }
+        pendingHandover = nil
+        let current = read()
+        write(Contents(pid: ownPID, runningSessionIDs: current?.runningSessionIDs ?? [], updatedAt: Date()))
     }
 
     /// Aktuellen Satz laufender PTYs festhalten.
@@ -73,7 +134,7 @@ final class AgentCrashRecoveryMarker {
         guard isOwner, !isFinished else { return }
         let sorted = runningSessionIDs.sorted { $0.uuidString < $1.uuidString }
         if read()?.runningSessionIDs == sorted { return }
-        write(Contents(pid: ownPID, runningSessionIDs: sorted, updatedAt: Date()))
+        write(Contents(pid: ownPID, runningSessionIDs: sorted, updatedAt: Date(), handover: pendingHandover))
     }
 
     /// Beenden mit „beim nächsten Start fortsetzen“ (Cmd+Q-Dialog, D4): der
@@ -84,8 +145,26 @@ final class AgentCrashRecoveryMarker {
         lock.lock(); defer { lock.unlock() }
         guard isOwner, !isFinished else { return }
         write(Contents(pid: ownPID, runningSessionIDs: runningSessionIDs.sorted { $0.uuidString < $1.uuidString },
-                       updatedAt: Date()))
+                       updatedAt: Date(), handover: pendingHandover))
         isFinished = true
+        keepsMarker = true
+    }
+
+    /// Beenden mit Übergabe: Die Chats liegen beim Aufbewahrer. Erst nach
+    /// `commit()` aufrufen. Der Marker bleibt stehen und wird nicht mehr
+    /// fortgeschrieben; die neue App übernimmt oder setzt fort.
+    /// `alsoResume`: laufende Chats, die nicht übergeben wurden (Abgabe
+    /// gescheitert) — sie enden auf dem heutigen Weg und werden fortgesetzt.
+    func markHandedOver(_ handover: HandedOver, alsoResume: Set<UUID> = []) {
+        lock.lock(); defer { lock.unlock() }
+        guard isOwner, !isFinished else { return }
+        let all = alsoResume.union(handover.chats.map(\.sessionID))
+        write(Contents(pid: ownPID,
+                       runningSessionIDs: all.sorted { $0.uuidString < $1.uuidString },
+                       updatedAt: Date(),
+                       handover: handover))
+        isFinished = true
+        keepsMarker = true
     }
 
     /// Sauberes Ende: Marker entfernen. Nur der eigene — eine zweite Instanz,
@@ -94,7 +173,15 @@ final class AgentCrashRecoveryMarker {
     func endRunCleanly() {
         lock.lock(); defer { lock.unlock() }
         isFinished = true
-        guard isOwner, read()?.pid == ownPID else { return }
+        guard isOwner, !keepsMarker, read()?.pid == ownPID else { return }
+        // Übernahme nicht abgeschlossen: der Zustand „übergeben“ muss für den
+        // nächsten Start stehen bleiben, sonst hielte der Aufbewahrer Chats,
+        // die keiner mehr kennt.
+        if let pendingHandover {
+            write(Contents(pid: ownPID, runningSessionIDs: pendingHandover.chats.map(\.sessionID),
+                           updatedAt: Date(), handover: pendingHandover))
+            return
+        }
         try? FileManager.default.removeItem(at: fileURL)
     }
 
@@ -141,16 +228,24 @@ enum AgentCrashRecoveryCoordinator {
     /// - Returns: die zum Fortsetzen vorgemerkten Sessions (für den Schutz
     ///   ihrer Event-Dateien beim Aufräumen, `pruneAtLaunch`).
     @discardableResult
+    /// - Parameters:
+    ///   - previousRun: Stand des vorigen Laufs, wenn die Übernahme beim
+    ///     Neustart den Marker schon gelesen hat; sonst liest ihn diese Funktion.
+    ///   - handledByHandover: übernommene oder anders versorgte Chats — die
+    ///     setzt die Wiederaufnahme nicht noch einmal fort.
     static func start(
         marker: AgentCrashRecoveryMarker = .shared,
         registry: AgentTerminalRegistry? = nil,
         windowStore: AgentWindowStore? = nil,
         store: AgentSessionStore = AgentSessionStore(),
-        isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled
+        isEnabled: Bool = AppPreferences.shared.isAgentCrashRecoveryEnabled,
+        previousRun: AgentCrashRecoveryMarker.PreviousRun? = nil,
+        handledByHandover: Set<UUID> = []
     ) -> [UUID] {
         let registry = registry ?? .shared
         let windowStore = windowStore ?? .shared
-        let previouslyRunning = marker.beginRun()
+        let previouslyRunning = (previousRun?.runningSessionIDs ?? marker.beginRun())
+            .filter { !handledByHandover.contains($0) }
         registry.onRunningSetChanged = { marker.record(runningSessionIDs: $0) }
         marker.record(runningSessionIDs: registry.activeSessionIDs)
 
