@@ -26,3 +26,30 @@ extension AgentSessionStore {
             && session.shouldLaunchOnOpen == true && session.createdAt < appLaunch
     }
 }
+
+/// Führt eine Arbeit genau einmal aus, solange sie gelingt (scheitert sie,
+/// darf der nächste Aufruf es erneut versuchen).
+final class OncePerLaunch: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    var hasRun: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return done
+    }
+
+    func run(_ work: () throws -> Void) rethrows {
+        lock.lock()
+        if done { lock.unlock(); return }
+        lock.unlock()
+        try work()
+        lock.lock(); done = true; lock.unlock()
+    }
+}
+
+extension AgentSessionStore {
+    /// Vic: Der Verfall lief bei jedem schnellen Laden unter dem Store-Lock über
+    /// alle Sitzungen. Nach dem ersten Durchgang je App-Lauf kann nichts mehr
+    /// verfallen (neue Tabs sind jünger als der App-Start), also einmal.
+    static let pendingTerminalCommandExpiry = OncePerLaunch()
+}

@@ -139,6 +139,20 @@ final class ChatsTerminalTabTests: XCTestCase {
         XCTAssertFalse(AgentSessionStore.terminalCommandExpires(tab(created: 1_000_000, kind: .chat), appLaunch: launch))
     }
 
+    /// Vic: Der Verfall läuft einmal je App-Lauf, nicht bei jedem schnellen Laden.
+    func testExpiryRunsOncePerLaunchAndRetriesAfterAFailure() {
+        struct Boom: Error {}
+        let once = OncePerLaunch()
+        var calls = 0
+        XCTAssertThrowsError(try once.run { calls += 1; throw Boom() })
+        XCTAssertFalse(once.hasRun, "gescheitert: nächster Aufruf versucht es erneut")
+        try? once.run { calls += 1 }
+        try? once.run { calls += 1 }
+        try? once.run { calls += 1 }
+        XCTAssertEqual(calls, 2)
+        XCTAssertTrue(once.hasRun)
+    }
+
     // MARK: debug terminal
 
     func testDebugTerminalParsing() throws {
