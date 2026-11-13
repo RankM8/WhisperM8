@@ -821,15 +821,59 @@ final class AgentSessionStatusCoordinator {
         sessions: [AgentChatSession],
         processID: (UUID) -> Int32?
     ) -> UUID? {
-        let candidates = sessions.filter { session in
-            session.provider == .claude
-                && session.externalSessionID?.caseInsensitiveCompare(record.sessionID) == .orderedSame
-                && !session.isBackgroundChat
-                && !session.isTerminal
+        // Erst exakt (Claude schreibt die IDs klein), nur ohne Treffer ohne Groß/Klein.
+        let wanted = record.sessionID
+        var candidates = sessions.filter { session in
+            session.provider == .claude && session.externalSessionID == wanted
+                && !session.isBackgroundChat && !session.isTerminal
+        }
+        if candidates.isEmpty {
+            candidates = sessions.filter { session in
+                guard session.provider == .claude, let id = session.externalSessionID,
+                      sameSessionID(id, wanted) else { return false }
+                return !session.isBackgroundChat && !session.isTerminal
+            }
         }
         guard candidates.count > 1 else { return candidates.first?.id }
         return candidates.first(where: { processID($0.id) == record.pid })?.id
             ?? candidates.first(where: { processID($0.id) == nil })?.id
+    }
+
+    /// Gleiche Sitzungs-ID ohne Rücksicht auf Groß/Klein, aber billig: Läuft je
+    /// Registry-Ereignis über alle Sitzungen auf dem Main Thread (echter
+    /// Workspace 5.824). `caseInsensitiveCompare` kostete dort rund 227 µs je
+    /// Aufruf statt 18 µs (Vic, 13.11.2026). Deshalb erst `==`, dann nur bei
+    /// gleicher Länge ein Byte-Vergleich, der ASCII-Buchstaben gleich behandelt
+    /// (`registryOwner` fragt ihn ohnehin nur, wenn `==` nichts findet).
+    nonisolated static func sameSessionID(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return true }
+        guard lhs.utf8.count == rhs.utf8.count else { return false }
+        // Billige Vorprüfung: Bei UUIDs weicht fast immer schon das erste Byte ab.
+        if let a = lhs.utf8.first, let b = rhs.utf8.first, a | 0x20 != b | 0x20 { return false }
+        // Native Strings liegen zusammenhängend im Speicher: direkt die Bytes
+        // vergleichen (bei UUIDs weicht fast immer schon das erste ab).
+        let fast = lhs.utf8.withContiguousStorageIfAvailable { left in
+            rhs.utf8.withContiguousStorageIfAvailable { right in foldedEqual(left, right) }
+        }
+        if let result = fast ?? nil { return result }
+        return foldedEqual(Array(lhs.utf8), Array(rhs.utf8))
+    }
+
+    /// Nur A–Z/a–z dürfen sich unterscheiden, und nur im Bit 0x20.
+    private nonisolated static func foldedEqual<C: RandomAccessCollection>(_ left: C, _ right: C) -> Bool
+    where C.Element == UInt8 {
+        guard left.count == right.count else { return false }
+        var l = left.startIndex, r = right.startIndex
+        while l != left.endIndex {
+            let a = left[l], b = right[r]
+            if a != b {
+                let folded = a | 0x20
+                guard folded == b | 0x20, folded >= 0x61, folded <= 0x7A else { return false }
+            }
+            left.formIndex(after: &l)
+            right.formIndex(after: &r)
+        }
+        return true
     }
 
     // MARK: Schatten des alten Wegs (nur Log)

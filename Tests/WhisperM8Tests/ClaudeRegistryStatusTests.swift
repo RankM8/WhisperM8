@@ -223,6 +223,17 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
     }
 
+    func testSameSessionIDIgnoresCaseOnlyForLetters() {
+        typealias C = AgentSessionStatusCoordinator
+        XCTAssertTrue(C.sameSessionID("1f353dce-783f", "1f353dce-783f"))
+        XCTAssertTrue(C.sameSessionID("1F353DCE-783F", "1f353dce-783f"))
+        XCTAssertFalse(C.sameSessionID("1f353dce-783f", "1f353dce-783e"))
+        XCTAssertFalse(C.sameSessionID("abc", "abcd"))
+        XCTAssertFalse(C.sameSessionID("a-b", "a\rb"), "0x2D und 0x0D unterscheiden sich nur im Bit 0x20")
+        XCTAssertFalse(C.sameSessionID("@", "`"), "kein Buchstabe")
+        XCTAssertTrue(C.sameSessionID("", ""))
+    }
+
     func testRegistryOwnerFallsBackToFirstChatWithTheID() {
         typealias C = AgentSessionStatusCoordinator
         let project = UUID()
@@ -241,6 +252,12 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [first],
                                        processID: { _ in 1 }), first.id, "ein Kandidat: unverändert")
         XCTAssertNil(C.registryOwner(of: record("idle", sessionID: "fremd"), sessions: sessions, processID: { _ in nil }))
+
+        // Groß/Klein nur, wenn exakt nichts passt.
+        let upper = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "EXT-1", title: "gross")
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [upper], processID: { _ in nil }), upper.id)
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [upper, first], processID: { _ in 1 }),
+                       first.id, "exakter Treffer geht vor, auch mit fremder PID")
     }
 
     func testHooksAndTranscriptNoLongerDriveRegistryLiveSession() throws {
