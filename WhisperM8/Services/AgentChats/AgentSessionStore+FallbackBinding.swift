@@ -26,16 +26,44 @@ extension AgentSessionStore {
         case transcriptFallback
     }
 
+    /// Nur bei einem frischen Vordergrund-Start ist die Registry-ID sicher die
+    /// neue Sitzung des Chats. Bei Resume und Fork ist nicht belegt, ob Claude
+    /// die Datei vor oder nach dem Laden der Unterhaltung schreibt (ein Fork
+    /// bliebe sonst auf seiner Quelle); `attach` führt einen Background-Agent.
+    /// Dort und ohne Registry-Schalter gilt der bisherige Weg über Transcripts.
     static func claudeFallbackStep(
+        launchArguments: [String]?,
+        registryEnabled: Bool,
         processID: Int32?,
+        processStartedAt: Date?,
         records: [ClaudeSessionRecord],
         isLastAttempt: Bool
     ) -> ClaudeFallbackStep {
+        guard registryEnabled, let launchArguments, isFreshClaudeStart(arguments: launchArguments) else {
+            return .transcriptFallback
+        }
         if let processID,
-           let record = records.first(where: { $0.pid == processID && !$0.isBackground && !$0.sessionID.isEmpty }) {
+           let record = records.first(where: { record in
+               record.pid == processID && !record.isBackground && !record.sessionID.isEmpty
+                   // Wiederverwendete PID: ein liegengebliebener Eintrag ist älter als unser Prozess.
+                   && (record.startedAt == nil || processStartedAt == nil
+                       || record.startedAt! >= processStartedAt!.addingTimeInterval(-2))
+           }) {
             return .bind(record.sessionID)
         }
         return isLastAttempt ? .transcriptFallback : .wait
+    }
+
+    static func isFreshClaudeStart(arguments: [String]) -> Bool {
+        let resuming: Set<String> = ["--resume", "-r", "--continue", "-c", "--fork-session", "--session-id"]
+        return arguments.first != "attach" && !arguments.contains(where: resuming.contains)
+    }
+
+    /// IDs, die andere Chats als `localSessionID` tragen (klein geschrieben).
+    static func externalIDsBound(in workspace: AgentWorkspace, except localSessionID: UUID) -> Set<String> {
+        Set(workspace.sessions.compactMap { session in
+            session.id == localSessionID || session.isTerminal ? nil : session.externalSessionID?.lowercased()
+        })
     }
 
     /// Bindet die Sitzung, die Claudes Registry für den Prozess des Chats
@@ -74,10 +102,11 @@ extension AgentSessionStore {
         indexedSessions: [IndexedAgentSession]
     ) -> IndexedAgentSession? {
         let standardizedPath = canonicalProjectPath(projectPath)
-        let others = workspace.sessions.filter { $0.id != session.id && !$0.isTerminal }
-        let taken = Set(others.compactMap { $0.externalSessionID?.lowercased() })
-        let rivals = provider != .claude ? [] : others.filter { other in
-            other.provider == provider
+        let taken = externalIDsBound(in: workspace, except: session.id)
+        let rivals = provider != .claude ? [] : workspace.sessions.filter { other in
+            other.id != session.id && !other.isTerminal && !other.isAgentView && !other.isBackgroundChat
+                && other.status != .archived
+                && other.provider == provider
                 && other.externalSessionID == nil
                 && abs(other.createdAt.timeIntervalSince(session.createdAt)) <= fallbackBindingRivalWindow
                 && workspace.projects.first(where: { $0.id == other.projectID })

@@ -842,14 +842,20 @@ struct AgentSessionDetailView: View {
                 guard let currentSession,
                       currentSession.externalSessionID == nil else { return }
 
-                if provider == .claude {
+                if provider == .claude, !currentSession.isBackgroundChat {
                     // Exakt über Claudes Registry und die PID des Chats.
-                    let processID = await MainActor.run {
-                        terminalRegistry.controller(for: localSessionID)?.processID
+                    let launch = await MainActor.run { () -> (arguments: [String]?, pid: Int32?, startedAt: Date?, registry: Bool) in
+                        let controller = terminalRegistry.controller(for: localSessionID)
+                        return (controller?.command.arguments, controller?.processID, controller?.startedAt,
+                                AppPreferences.shared.isClaudeRegistryStatusEnabled)
                     }
-                    let records = processID == nil ? [] : ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots())
+                    let registryEnabled = launch.registry
+                    let records = launch.pid == nil || !registryEnabled
+                        ? [] : ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots())
                     switch AgentSessionStore.claudeFallbackStep(
-                        processID: processID, records: records, isLastAttempt: delay == retryDelays.last) {
+                        launchArguments: launch.arguments, registryEnabled: registryEnabled,
+                        processID: launch.pid, processStartedAt: launch.startedAt,
+                        records: records, isLastAttempt: delay == retryDelays.last) {
                     case .bind(let externalID):
                         // Hat der Hook inzwischen gebunden, bindet das hier nichts mehr.
                         await MainActor.run {

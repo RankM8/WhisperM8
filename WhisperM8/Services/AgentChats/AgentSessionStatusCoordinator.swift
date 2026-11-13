@@ -1109,11 +1109,13 @@ final class AgentSessionStatusCoordinator {
 
     /// Führt ein lebender Vordergrund-Prozess außer dem eigenen die Sitzung?
     /// Hintergrund-Worker zählen nicht (`/background` gibt die Sitzung bewusst
-    /// dorthin ab). Ohne eigene PID zählt jeder Vordergrund-Prozess.
+    /// dorthin ab). Ohne eigene PID lässt sich der eigene Prozess nicht
+    /// ausnehmen — dann nie (der Registry-Cache kann den eigenen Prozess nach
+    /// `/background` noch mit der alten ID führen).
     nonisolated static func runsInOtherForegroundProcess(
         sessionID: String, ownProcessID: Int32?, records: [ClaudeSessionRecord]
     ) -> Bool {
-        guard !sessionID.isEmpty else { return false }
+        guard !sessionID.isEmpty, let ownProcessID else { return false }
         return records.contains {
             !$0.isBackground && $0.pid != ownProcessID
                 && $0.sessionID.caseInsensitiveCompare(sessionID) == .orderedSame

@@ -125,18 +125,80 @@ final class AgentFallbackBindingTests: XCTestCase {
         ClaudeSessionRecord(profileName: "main", pid: pid, sessionID: id, kind: kind)
     }
 
+    private func step(_ arguments: [String]? = ["--settings", "/x.json"], registry: Bool = true, pid: Int32? = 200,
+                      startedAt: Date? = nil, records: [ClaudeSessionRecord], last: Bool = false) -> AgentSessionStore.ClaudeFallbackStep {
+        AgentSessionStore.claudeFallbackStep(launchArguments: arguments, registryEnabled: registry, processID: pid,
+                                             processStartedAt: startedAt, records: records, isLastAttempt: last)
+    }
+
     func testClaudeStepBindsRegistryEntryOfOwnProcess() {
         let records = [record("cd00c6c0", pid: 100), record("aa82d0ba", pid: 200)]
-        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: false),
-                       .bind("aa82d0ba"))
+        XCTAssertEqual(step(records: records), .bind("aa82d0ba"))
     }
 
     func testClaudeStepWaitsForRegistryBeforeLookingAtTranscripts() {
         let records = [record("cd00c6c0", pid: 100), record("bgjob", pid: 200, kind: "bg")]
-        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: false), .wait)
-        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: nil, records: records, isLastAttempt: false), .wait)
-        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: true),
-                       .transcriptFallback)
+        XCTAssertEqual(step(records: records), .wait)
+        XCTAssertEqual(step(pid: nil, records: records), .wait)
+        XCTAssertEqual(step(records: records, last: true), .transcriptFallback)
+    }
+
+    func testClaudeStepUsesRegistryOnlyForFreshForegroundStarts() {
+        let records = [record("quelle", pid: 200)]
+        XCTAssertEqual(step(["--resume", "quelle", "--fork-session"], records: records), .transcriptFallback, "Fork")
+        XCTAssertEqual(step(["--resume", "quelle"], records: records), .transcriptFallback, "Resume")
+        XCTAssertEqual(step(["attach", "abc"], records: records), .transcriptFallback, "Background-Agent")
+        XCTAssertEqual(step(nil, records: records), .transcriptFallback, "kein Controller")
+        XCTAssertEqual(step(registry: false, records: records), .transcriptFallback, "Schalter aus")
+    }
+
+    func testClaudeStepIgnoresStaleEntryOfReusedPID() {
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        var stale = record("alt", pid: 200)
+        stale.startedAt = started.addingTimeInterval(-3600)
+        XCTAssertEqual(step(startedAt: started, records: [stale]), .wait)
+        var fresh = record("neu", pid: 200)
+        fresh.startedAt = started.addingTimeInterval(0.4)
+        XCTAssertEqual(step(startedAt: started, records: [fresh]), .bind("neu"))
+    }
+
+    func testOnlyRealChatsCountAsRivals() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let here = AgentProject(name: "hier", path: tempDir.path)
+        let chat = AgentChatSession(provider: .claude, projectID: here.id, title: "neu", createdAt: t0)
+        let agentView = AgentChatSession(provider: .claude, projectID: here.id, title: "Agent View",
+                                         createdAt: t0, kind: .agentView)
+        let background = AgentChatSession(provider: .claude, projectID: here.id, title: "bg",
+                                          createdAt: t0, kind: .backgroundChat)
+        var archived = AgentChatSession(provider: .claude, projectID: here.id, title: "archiviert", createdAt: t0)
+        archived.status = .archived
+        let workspace = AgentWorkspace(projects: [here], sessions: [chat, agentView, background, archived])
+
+        let candidate = AgentSessionStore.fallbackBindingCandidate(
+            for: chat, projectPath: tempDir.path, provider: .claude, workspace: workspace,
+            indexedSessions: [indexed("eigen", cwd: tempDir.path, createdAt: t0.addingTimeInterval(1))])
+
+        XCTAssertEqual(candidate?.externalSessionID, "eigen")
+    }
+
+    /// Gleiche Fehlerklasse in der Resume-Reparatur (Opus-Review): Chat A ohne
+    /// Transcript darf nicht auf das Transcript von Chat B umgebunden werden.
+    func testResumeRepairNeverRebindsToTranscriptOfAnotherChat() throws {
+        let (store, bash, question, t0) = try makeStoreWithSoakChats()
+        var unused = question
+        unused.externalSessionID = "leer-ohne-transcript"
+        unused.hasLaunchedInitialPrompt = true
+        _ = try store.upsertSession(unused)
+        _ = bash
+
+        let result = try store.repairResumeStateBeforeLaunch(
+            localSessionID: question.id, projectPath: tempDir.path,
+            indexedSessions: [indexed("cd00c6c0", cwd: tempDir.path, createdAt: t0.addingTimeInterval(4))],
+            now: t0.addingTimeInterval(600))
+
+        XCTAssertNotEqual(result?.session.externalSessionID, "cd00c6c0")
+        XCTAssertEqual(store.loadWorkspace().sessions.first(where: { $0.id == question.id })?.externalSessionID,
+                       "leer-ohne-transcript")
     }
 
     func testRegistryBindingOnlyBindsUnboundChat() throws {

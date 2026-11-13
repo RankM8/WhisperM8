@@ -785,10 +785,12 @@ struct AgentSessionStore {
                 return AgentResumeRepairResult(session: session, outcome: .unchanged)
             }
 
+            // Nie auf ein Transcript, das ein anderer Chat trägt (Befund 13.11.2026).
+            let taken = Self.externalIDsBound(in: workspace, except: session.id)
             if let replacement = Self.bestResumeReplacement(
                 for: session,
                 currentExternalID: currentExternalID,
-                indexedSessions: indexedForProject,
+                indexedSessions: indexedForProject.filter { !taken.contains($0.externalSessionID.lowercased()) },
                 now: now
             ) {
                 workspace.sessions[index].externalSessionID = replacement.externalSessionID

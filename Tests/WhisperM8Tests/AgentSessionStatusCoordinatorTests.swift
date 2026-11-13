@@ -262,8 +262,9 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200,
                                                       records: [record("cd00c6c0", pid: 100, kind: "bg")]), "/background")
         XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200, records: []))
-        XCTAssertTrue(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: nil,
-                                                     records: [record("cd00c6c0", pid: 100)]))
+        XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: nil,
+                                                      records: [record("cd00c6c0", pid: 100)]),
+                       "ohne eigene PID nie — der eigene Prozess ließe sich nicht ausnehmen")
     }
 
     private func bindBoth(_ id: String, second title: String) throws -> (UUID, AgentChatSession) {
@@ -313,6 +314,24 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.transcriptExistsOverride = { _, id, _ in id == "ac020fd4" }
         coordinator.terminalProcessID = { _ in 300 }
         coordinator.foregroundRecordsLookup = { _ in [] }
+
+        coordinator.handleHookEvent(localID: ownerID, event: sessionStart("8a5a7119", source: "startup"))
+
+        XCTAssertEqual(externalID(coordinator, ownerID), "ac020fd4")
+    }
+
+    /// `/background` beim echten Besitzer: Der Worker führt die alte ID weiter
+    /// (`kind: bg`), der Registry-Cache kennt den eigenen Prozess noch mit der
+    /// alten ID. Beides ist kein fremder Vordergrund-Prozess.
+    func testBackgroundHandoffWithWorkerEntryStillPostpones() throws {
+        let (coordinator, ownerID, _, _, _) = try makeCoordinator()
+        try setExternalID("ac020fd4", for: ownerID)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "ac020fd4" }
+        coordinator.terminalProcessID = { _ in 300 }
+        coordinator.foregroundRecordsLookup = { id in
+            [ClaudeSessionRecord(profileName: "main", pid: 300, sessionID: id, kind: "interactive"),
+             ClaudeSessionRecord(profileName: "main", pid: 900, sessionID: id, kind: "bg")]
+        }
 
         coordinator.handleHookEvent(localID: ownerID, event: sessionStart("8a5a7119", source: "startup"))
 
