@@ -325,6 +325,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .appSlot(slot): performAppSlot(slot)
         case let .islandScroll(step): scrollLimitsCard(step)
 
+        // Paddles (Xbox Elite)
+        case .nextWaitingChat, .answerNextWaiting, .sendNowOrContinue, .cycleMode, .slashCommand:
+            performPaddleAction(action)
+
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)
         case .pauseToggle: togglePause()

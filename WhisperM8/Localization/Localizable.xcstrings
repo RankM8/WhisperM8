@@ -9091,6 +9091,26 @@
         }
       }
     },
+    "Lower left paddle (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddle unten links (%@)"
+          }
+        }
+      }
+    },
+    "Lower right paddle (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddle unten rechts (%@)"
+          }
+        }
+      }
+    },
     "MCP Servers": {
       "localizations": {
         "de": {
@@ -18730,6 +18750,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Updates"
+          }
+        }
+      }
+    },
+    "Upper left paddle (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddle oben links (%@)"
+          }
+        }
+      }
+    },
+    "Upper right paddle (%@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddle oben rechts (%@)"
           }
         }
       }

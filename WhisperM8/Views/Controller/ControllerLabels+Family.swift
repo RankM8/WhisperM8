@@ -27,6 +27,8 @@ extension ControllerButton {
         case .create: return "Create"
         case .options: return "Options"
         case .touchpad: return "Touchpad"
+        case .paddleUpperLeft, .paddleLowerLeft, .paddleUpperRight, .paddleLowerRight:
+            return ControllerPaddle(button: self)?.displayName ?? rawValue
         }
     }
 
@@ -71,6 +73,8 @@ extension ControllerButton {
         case .create: return "Create"
         case .options: return "Options"
         case .touchpad: return "Touchpad"
+        case .paddleUpperLeft, .paddleLowerLeft, .paddleUpperRight, .paddleLowerRight:
+            return ControllerPaddle(button: self).map { "P\($0.eliteNumber)" } ?? rawValue
         }
     }
 
@@ -98,6 +102,19 @@ extension ControllerButton {
         switch self {
         case .cross, .circle, .square, .triangle, .dpadUp, .dpadDown, .dpadLeft, .dpadRight: return true
         default: return false
+        }
+    }
+}
+
+extension ControllerPaddle {
+    /// „Upper left paddle (P3)“ — Lage und Elite-Zählung.
+    var displayName: String {
+        let number = "P\(eliteNumber)"
+        switch self {
+        case .upperLeft: return String(localized: "Upper left paddle (\(number))")
+        case .lowerLeft: return String(localized: "Lower left paddle (\(number))")
+        case .upperRight: return String(localized: "Upper right paddle (\(number))")
+        case .lowerRight: return String(localized: "Lower right paddle (\(number))")
         }
     }
 }

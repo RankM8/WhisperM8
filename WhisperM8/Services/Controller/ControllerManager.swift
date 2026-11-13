@@ -126,6 +126,9 @@ final class ControllerManager {
     var onResolution: ((ControllerResolution) -> Void)?
     /// Lauf, Verbindung oder Pause haben sich geändert.
     var onStateChange: (() -> Void)?
+    /// Belegung der Paddles, zwischengespeichert: kein Lesen der
+    /// Einstellungen je Geste.
+    private(set) var paddleBindings: ControllerPaddleBindings = .standard
 
     private let source: ControllerInputSource
     private let pump: ControllerGesturePump
@@ -297,7 +300,7 @@ final class ControllerManager {
         snapshot.backgroundEnabled = preferences().isControllerBackgroundEnabled
         snapshot.wakeOnInputEnabled = preferences().isControllerWakeOnInputEnabled
         let context = ControllerContextResolver.context(for: snapshot)
-        let action = ControllerBindingResolver.action(for: gesture, in: context)
+        let action = ControllerBindingResolver.action(for: gesture, in: context, paddles: paddleBindings)
         guard let action, !isDryRun, let performer else {
             return ControllerResolution(gesture: gesture, context: context, action: action, executed: false)
         }
