@@ -16,8 +16,14 @@ extension ControllerTerminalMarks {
     /// ältere Eingabe Kreuz nicht mehr scharf) und schließt eine Auswahl;
     /// Escape und alles, was das Feld ändert, schließen sie ebenso. Pfeile und
     /// Leerzeichen bewegen sich darin; verlängert wird die Liste nicht.
+    /// - Parameter choosing: Bei Claude ist eine Auswahl sichtbar offen — eine
+    ///   erkannte Ansicht (`/tasks`, Transkript, Fußzeile …), eine Rückfrage
+    ///   oder eine Liste aus dem Menü (Runde 5, R2). Nur dann macht ein Pfeil
+    ///   Kreuz scharf; im Hauptfeld holt ↑ den letzten Prompt, und Kreuz
+    ///   schickte ihn bei „arbeitet“ sonst erneut ab.
     mutating func recordControllerKey(
-        _ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, isCodex: Bool, at now: Date
+        _ key: TerminalControlKey, status: AgentSessionRuntimeStatus?, isCodex: Bool,
+        choosing: Bool? = nil, at now: Date
     ) {
         switch key {
         case .enter:
@@ -34,19 +40,24 @@ extension ControllerTerminalMarks {
                 recordDraftInput(submitted: false, at: now)
                 return
             }
-            // Claude und Shell: Ein Pfeil macht Kreuz für kurze Zeit scharf
-            // (Subagenten- und Workflow-Ansichten während eines Turns). ↑ nur,
-            // wenn schon ein scharfer Pfeil vorausging — als erster Pfeil
-            // holt ↑ den letzten Prompt zurück, und auch ↑↑ bleibt Verlauf.
-            let inSequence = lastArmingArrowAt.map { now.timeIntervalSince($0) < Self.arrowArmWindow } ?? false
-            if key != .up || inSequence { lastArmingArrowAt = now }
             lastArrowAt = now
+            if let choosing {
+                // Claude: scharf nur in einer sichtbar offenen Auswahl, dort
+                // jeder Pfeil (Runde 5, R2). Im Hauptfeld nicht.
+                if choosing { lastArmingArrowAt = now }
+            } else {
+                // Shell: Ein Pfeil macht Kreuz für kurze Zeit scharf (Menüs
+                // in Programmen). ↑ nur, wenn schon ein scharfer Pfeil
+                // vorausging — als erster Pfeil holt ↑ den letzten Befehl.
+                let inSequence = lastArmingArrowAt.map { now.timeIntervalSince($0) < Self.arrowArmWindow } ?? false
+                if key != .up || inSequence { lastArmingArrowAt = now }
+            }
             // → übernimmt in Claude den grauen Vorschlag ins Feld: Das ist eine
             // Eingabe wie getippter Text. Ohne das sperrte Kreuz nach 5 s, wenn
             // der Chat noch als „arbeitet“ galt (etwa wegen eines
             // Hintergrund-Agenten), und erst eine Rücktaste machte es wieder
             // scharf (Handtest 12.11.2026).
-            if key == .right { recordDraftInput(submitted: false, at: now) }
+            if key == .right, choosing != true { recordDraftInput(submitted: false, at: now) }
         case .space:
             // In `/config` schaltet Leerzeichen den Eintrag um; die Liste bleibt.
             recordDraftInput(submitted: false, at: now)
@@ -56,8 +67,19 @@ extension ControllerTerminalMarks {
             // nicht hier durch (`clearInputFromController`).
             choiceListClosed()
             recordDraftInput(submitted: false, at: now)
-        case .tab, .backTab, .lineEnd:
+        case .tab, .backTab, .lineEnd, .wordLeft, .wordRight:
             choiceListClosed()
+        case .sendNow:
+            // „Jetzt senden“ schickt ab wie Enter.
+            lastEnterAt = now
+            choiceListClosed()
+            recordDraftInput(submitted: true, at: now)
+        case .undo, .imagePaste:
+            // Holen Text bzw. einen Anhang ins Feld.
+            choiceListClosed()
+            recordDraftInput(submitted: false, at: now)
+        case .toggleTranscript, .redraw:
+            break
         }
     }
 

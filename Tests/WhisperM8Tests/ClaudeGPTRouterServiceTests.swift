@@ -20,7 +20,7 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         services.forEach { $0.router.stop() }
         services.removeAll()
         upstream.stop()
-        try? FileManager.default.removeItem(at: root)
+        GPTRouterTestClient.removeRoot(root)
     }
 
     private func makeService(port: Int, takeOver: Bool, build: String = "test-build") throws -> (ClaudeGPTRouterService, DispatchSemaphore) {
@@ -52,7 +52,7 @@ final class ClaudeGPTRouterServiceTests: XCTestCase {
         let (first, _) = try makeService(port: 0, takeOver: false)
         let port = try XCTUnwrap(first.router.listeningPort)
         let otherRoot = GPTRouterTestClient.makeRoot()
-        defer { try? FileManager.default.removeItem(at: otherRoot) }
+        defer { GPTRouterTestClient.removeRoot(otherRoot) }
         let url = URL(string: "http://127.0.0.1:\(upstream.port)")!
         let router = ClaudeGPTMixRouter(codexProxyURL: url, anthropicURL: url, listenerKind: .bsdSockets)
         let second = ClaudeGPTRouterService(

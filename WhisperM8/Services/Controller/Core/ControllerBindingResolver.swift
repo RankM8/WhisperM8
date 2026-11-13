@@ -36,8 +36,8 @@ enum ControllerBindingResolver {
             return nil
         case let .outsideApp(backgroundEnabled, wakeOnInput):
             return backgroundEnabled ? outsideApp(gesture, wakeOnInput: wakeOnInput) : nil
-        case let .recording(phase, targetIsChat):
-            return recording(gesture, phase: phase, targetIsChat: targetIsChat)
+        case let .recording(phase, targetIsChat, navigation):
+            return recording(gesture, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
         case .quickAction:
             return quickAction(gesture)
         case let .clipboardPanel(state):
@@ -155,11 +155,32 @@ enum ControllerBindingResolver {
 
     // MARK: - Diktat und Schnellaktion
 
-    private static func recording(
-        _ gesture: ControllerGesture, phase: ControllerRecordingPhase, targetIsChat: Bool
+    static func recording(
+        _ gesture: ControllerGesture, phase: ControllerRecordingPhase, targetIsChat: Bool,
+        navigation: ControllerRecordingNavigation? = nil
     ) -> ControllerAction? {
         // Scrollen geht in jeder Phase: Man liest im Chat weiter, während man spricht.
         if case let .scroll(lines) = gesture { return .scroll(lines: lines) }
+        // Runde 5, Punkt 9: Ist das Diktat an einen Chat gebunden, navigieren
+        // linker Stick und L1/R1 wie sonst (in jeder Phase); der Text geht
+        // trotzdem in den Chat, in dem das Diktat begann.
+        if let navigation {
+            switch gesture {
+            case let .move(direction, .leftStick, isRepeat):
+                if navigation.area == .list {
+                    switch direction {
+                    case .up: return .listMove(step: -1)
+                    case .down: return .listMove(step: 1)
+                    case .right: return isRepeat ? nil : .leaveList
+                    case .left: return nil
+                    }
+                }
+                return navigate(direction, isRepeat: isRepeat, gridActive: navigation.gridActive)
+            case .tap(.l1): return .adjacentChat(step: -1)
+            case .tap(.r1): return .adjacentChat(step: 1)
+            default: break
+            }
+        }
         // Der linke Stick ruht (Runde 3): Ein Stoß beim Greifen nach R2 oder
         // Kreis darf weder die Liste betreten noch die Kachel wechseln — das
         // Ziel der Aufnahme bliebe zwar, aber die Ansicht spränge weg. Bewusst

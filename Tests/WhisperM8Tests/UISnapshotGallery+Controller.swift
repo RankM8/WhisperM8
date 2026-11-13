@@ -84,7 +84,7 @@ extension UISnapshotGallery {
                 state.backTarget = ControllerBackTarget(kind: .workspace, title: "Marketing")
                 return legend(.chat(state), title: "2 Lux · Integrationen")
             },
-            Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 600)) {
+            Fixture(name: "controller-menue", size: CGSize(width: 1340, height: 900)) {
                 let session = UUID()
                 var chat = ControllerChatActionInfo(title: "2 Lux · Integrationen", isPinned: true, canFork: true)
                 chat.accounts = [
@@ -97,6 +97,24 @@ extension UISnapshotGallery {
                     ControllerAccountChoice(kind: .gpt, name: "main", label: "main · gpt@example.com",
                                             isCurrent: true, isLoggedIn: true),
                 ]
+                chat.accounts[1].fiveHourUsed = 12
+                chat.accounts[1].weekUsed = 28
+                chat.accounts[0].fiveHourUsed = 42
+                chat.accounts[0].weekUsed = 61
+                chat.accounts = ControllerAccountHeadroom.marked(chat.accounts)
+                // Runde 5: Kopf-Aktionen einer Kachel mit Notiz.
+                chat.hasProject = true
+                chat.projectOpenTargetName = "PhpStorm"
+                chat.canRefreshTitle = true
+                chat.canRestart = true
+                chat.hasTab = true
+                chat.notesAvailable = true
+                chat.notesDefaultOpen = true
+                chat.tileNoteOpen = false
+                chat.removableWorkspaceName = "Marketing"
+                chat.shownInWorkspace = ControllerWorkspaceContext(
+                    id: UUID(), name: "Marketing", gridVisible: true, chatIsMember: true, isCurated: true)
+                chat.pendingAccountSwitchTarget = "work"
                 let setup = ControllerMenuSetup(
                     acceptsInput: true, profile: .claude, sessionID: session, target: .chat(session), chat: chat)
                 var question = setup
@@ -107,10 +125,10 @@ extension UISnapshotGallery {
                 var accounts = ControllerMenuModel(setup: setup, selected: .switchAccount)
                 _ = accounts.openSubmenu()
                 return AnyView(HStack(alignment: .top, spacing: 20) {
-                    ControllerMenuPanel(menu: ControllerMenuModel(setup: setup))
-                    ControllerMenuPanel(menu: ControllerMenuModel(setup: question))
-                    ControllerMenuPanel(menu: commands)
-                    ControllerMenuPanel(menu: accounts)
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: setup), fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: ControllerMenuModel(setup: question), fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: commands, fallbackTitle: nil).pillGlassShadow()
+                    ControllerMenuCard(menu: accounts, fallbackTitle: nil).pillGlassShadow()
                 }.padding(20).frame(maxHeight: .infinity, alignment: .top))
             },
         ]
@@ -263,6 +281,28 @@ extension UISnapshotGallery {
         let writing = ControllerIslandModel(
             target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
             content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))))
+        // Runde 5: L1 mit Text bzw. Bild zum Einfügen, R1 mit „Jetzt senden“
+        // und mit laufendem Diktat.
+        let writingPaste = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .working),
+            content: .writing(ControllerWritingSlots(
+                state: ControllerChatState(status: .working, profile: .claude),
+                clip: ControllerClipPreview(id: "t", kind: .text, preview: "Bitte die Tests für den Konto-Wechsel ergänzen"))))
+        let writingImage = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
+            content: .writing(ControllerWritingSlots(
+                state: ControllerChatState(status: .idle, profile: .claude),
+                clip: ControllerClipPreview(id: "i", kind: .image, preview: "", imageWidth: 1280, imageHeight: 800))))
+        var sendNowSetup = busySetup
+        sendNowSetup.quickCross = .sendNow
+        let quickDrawSendNow = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "Controller Insel", status: .working),
+            content: .quickDraw(ControllerQuickDrawSlots(setup: sendNowSetup)))
+        var dictatingSetup = busySetup
+        dictatingSetup.dictationRunning = true
+        let quickDrawDictating = ControllerIslandModel(
+            target: ControllerIslandTarget(title: "→ Controller Insel", status: .working),
+            content: .quickDraw(ControllerQuickDrawSlots(setup: dictatingSetup)))
         let writingShell = ControllerIslandModel(
             target: ControllerIslandTarget(title: "zsh · whisperm8", status: .idle),
             content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .shell))))
@@ -318,6 +358,10 @@ extension UISnapshotGallery {
             },
             Fixture(name: "controller-insel-schreiben", size: small) { island(writing) },
             Fixture(name: "controller-insel-schreiben-shell", size: small) { island(writingShell) },
+            Fixture(name: "controller-insel-schreiben-einfuegen", size: smallNote) { island(writingPaste) },
+            Fixture(name: "controller-insel-schreiben-bild", size: small) { island(writingImage, style: .pill) },
+            Fixture(name: "controller-insel-schnellbefehle-jetzt-senden", size: small) { island(quickDrawSendNow) },
+            Fixture(name: "controller-insel-schnellbefehle-diktat", size: smallNote) { island(quickDrawDictating) },
             Fixture(name: "controller-insel-schnellbefehle", size: small) { island(quickDraw) },
             Fixture(name: "controller-insel-schnellbefehle-rueckfrage", size: smallNote) { island(quickDrawQuestion) },
             // Review nach Runde 4: Chat arbeitet — Weiter und Modus aus.

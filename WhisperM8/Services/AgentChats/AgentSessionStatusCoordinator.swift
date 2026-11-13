@@ -1039,6 +1039,11 @@ final class AgentSessionStatusCoordinator {
             .isTerminal ?? false
     }
 
+    /// Eigene Prompts in Claudes Warteschlange (Controller: „Jetzt senden“).
+    func queuedOwnPrompts(sessionID: UUID) -> Int {
+        watcher.queuedOwnPrompts(sessionID: sessionID)
+    }
+
     // MARK: - Watch/Binding-Helfer
 
     /// Hängt den Transcript-Watcher an (idempotent) — vormals

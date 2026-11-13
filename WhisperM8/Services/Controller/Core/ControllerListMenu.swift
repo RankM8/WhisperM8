@@ -19,6 +19,19 @@ struct ControllerListMenu<ID: Hashable & Sendable>: Equatable, Sendable {
         normalize()
     }
 
+    /// Markierung beginnt auf `start`, auch wenn der Eintrag aus ist (etwa das
+    /// aktuelle Konto im Konto-Menü); Kreuz geht dort nicht, der erste Schritt
+    /// führt zum nächsten aktiven Eintrag. Ohne `start` wie `init(entries:)`.
+    init(entries: [Entry], start: ID?) {
+        self.entries = entries
+        if let start, entries.contains(where: { $0.id == start }) {
+            selected = start
+        } else {
+            selected = nil
+            normalize()
+        }
+    }
+
     func isEnabled(_ id: ID) -> Bool {
         entries.first { $0.id == id }?.enabled ?? false
     }

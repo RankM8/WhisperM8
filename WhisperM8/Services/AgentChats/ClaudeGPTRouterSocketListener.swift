@@ -46,6 +46,8 @@ final class ClaudeGPTRouterSocketListener {
         self.queue = queue
         self.onAccept = onAccept
         AgentControlServer.setCloseOnExec(fileDescriptor)
+        // Auch für übernommene Sockets älterer Generationen.
+        Self.setNoSigPipe(fileDescriptor)
         let flags = fcntl(fileDescriptor, F_GETFL)
         if flags >= 0 { _ = fcntl(fileDescriptor, F_SETFL, flags | O_NONBLOCK) }
         let source = DispatchSource.makeReadSource(fileDescriptor: fileDescriptor, queue: queue)
@@ -69,6 +71,7 @@ final class ClaudeGPTRouterSocketListener {
         // TIME_WAIT-Reste) auf demselben Port blockieren das Binden nicht.
         // Ein zweiter LAUSCHENDER Socket bleibt ausgeschlossen (kein SO_REUSEPORT).
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        setNoSigPipe(fd)
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
         address.sin_family = sa_family_t(AF_INET)
@@ -90,6 +93,15 @@ final class ClaudeGPTRouterSocketListener {
             throw ListenerError.listenFailed(code)
         }
         return fd
+    }
+
+    /// `SO_NOSIGPIPE` am LAUSCHENDEN Socket setzen: Angenommene Verbindungen
+    /// erben die Option. Nachträglich am angenommenen Socket gesetzt, scheitert
+    /// der Aufruf mit EINVAL, wenn die Gegenseite schon geschlossen hat — die
+    /// nächste Antwort löste dann SIGPIPE aus (gemessen 13.11.2026, Unix und TCP).
+    static func setNoSigPipe(_ fd: Int32) {
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
     }
 
     /// Port eines gebundenen Sockets oder `nil`, wenn `fd` kein lauschender

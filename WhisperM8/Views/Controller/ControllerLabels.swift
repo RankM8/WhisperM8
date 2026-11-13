@@ -60,6 +60,14 @@ extension ControllerLegendLabel {
         case .pauseHold: return String(localized: "Hold: pause")
         case .bringToFront: return String(localized: "Open WhisperM8")
         case .clipboardWithL2: return String(localized: "Clipboard")
+        case .closeView: return String(localized: "Close view")
+        case .wordJump: return String(localized: "Word back / forward")
+        case .lineMove: return String(localized: "Line up / down")
+        case .pasteNewest: return String(localized: "Paste newest")
+        case .escapeOnce: return String(localized: "Escape once")
+        case .undo: return String(localized: "Undo")
+        case .transcript: return String(localized: "Transcript")
+        case .reopenClosed: return String(localized: "Reopen closed chat")
         }
     }
 
@@ -96,6 +104,14 @@ extension ControllerLegendLabel {
         case .nextWaiting: return String(localized: "Hold L2, then △: next chat that is waiting for you")
         case .pauseHold: return String(localized: "Hold both: pause and resume the controller")
         case .clipboardWithL2: return String(localized: "Hold L2, then press the touchpad: open and close the clipboard history")
+        case .closeView: return String(localized: "In Claude's views (tasks, workflows, transcript, rewind, footer selection) ○ closes the view, also while the chat works")
+        case .wordJump: return String(localized: "Hold L1, then ◀ ▶: jump a word back or forward (Claude and Codex)")
+        case .lineMove: return String(localized: "Hold L1, then ▲ ▼: line up or down in a draft with several lines, not from its first or last line")
+        case .pasteNewest: return String(localized: "Hold L1, then ✕: paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)")
+        case .escapeOnce: return String(localized: "Hold L1, then ○: send exactly one Escape — while the chat works it interrupts unless a view is open")
+        case .undo: return String(localized: "Hold L1, then L3: undo (Claude)")
+        case .transcript: return String(localized: "Hold R1, then L3: detailed transcript on and off (Claude)")
+        case .reopenClosed: return String(localized: "Hold L2, then □: reopen the most recently closed chat; again for the one before")
         default: return title
         }
     }

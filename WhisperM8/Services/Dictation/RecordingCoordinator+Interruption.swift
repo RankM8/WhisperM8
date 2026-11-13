@@ -17,6 +17,7 @@ extension RecordingCoordinator {
         let frozenContextBundle = appState.contextBundle
         // Ein Retry der Teilaufnahme liefert ins selbe Ziel, sendet aber nie.
         let frozenDelivery = DictationDelivery(target: pendingDeliveryTarget)
+        inFlightDeliveryTarget = frozenDelivery.target
         pendingDeliveryTarget = .frontApp
 
         recordingTimer.stop()
