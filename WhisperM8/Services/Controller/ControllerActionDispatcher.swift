@@ -161,13 +161,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             recentArrowNavigation: ControllerTerminalMarks.hasFreshArrow(
                 armedAt: terminal.lastArmingArrowAt, lastSubmitAt: terminal.lastEnterAt, now: moment),
             choiceListOpen: terminal.choiceListOpen,
-            onlyRecalledPrompt: terminal.onlyRecalledPrompt,
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning,
             shellAtPrompt: terminal.shellAtPrompt,
             backTarget: window.backTarget,
             openView: terminal.screen?.openView,
-            promptField: terminal.screen?.promptField
+            promptField: terminal.screen?.promptField,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt
         )
     }
 

@@ -190,9 +190,8 @@ final class ControllerRound5BindingTests: XCTestCase {
 
     // MARK: Kreuz bei sichtbarem Eingabefeld (Entscheidung 13.11.2026)
 
-    /// Jedes Feld des Zustands kommt unverändert durch `ControllerContext.chat`.
-    /// Am Ende des Structs hinter `promptField` ging ein Bool im Debug-Build
-    /// (Swift 6.2.3) beim Verpacken verloren (13.11.2026).
+    /// Jedes Feld des Zustands kommt unverändert durch `ControllerContext.chat`
+    /// (Weitergabe-Test; neue Felder hier mit einem Nicht-Standardwert ergänzen).
     func testChatStateSurvivesTheContextEnum() {
         var full = ControllerChatState(status: .working, profile: .claude)
         full.draftSuspected = true

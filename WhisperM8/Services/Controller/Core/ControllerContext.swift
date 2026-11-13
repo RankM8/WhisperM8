@@ -58,12 +58,6 @@ struct ControllerChatState: Equatable, Sendable {
     /// `/config`, „/“ …), und sie ist vermutlich noch offen
     /// (`ControllerTerminalMarks`): Pfeile und Kreuz gehen dann ins Terminal.
     var choiceListOpen: Bool = false
-    /// Im Feld steht laut Entwurfs-Tracker nur ein alter Prompt: mit ↑ vom
-    /// Controller zurückgeholt oder nach einem Abbruch zurückgelegt.
-    /// Steht bewusst hier und nicht am Ende: Hinter `promptField` ging der
-    /// Wert im Debug-Build beim Verpacken in `ControllerContext.chat`
-    /// verloren (Swift 6.2.3, `testChatStateSurvivesTheContextEnum`).
-    var onlyRecalledPrompt: Bool = false
     var gridActive: Bool = false
     /// Ein lebendes Terminal ist da (nicht nur der Verlauf).
     var hasTerminal: Bool = true
@@ -77,6 +71,9 @@ struct ControllerChatState: Equatable, Sendable {
     var openView: ControllerOpenView?
     /// Eingabefeld, wie es am Bildschirm steht; `nil`, wenn nicht ablesbar.
     var promptField: ControllerPromptField?
+    /// Im Feld steht laut Entwurfs-Tracker nur ein alter Prompt: mit ↑ vom
+    /// Controller zurückgeholt oder nach einem Abbruch zurückgelegt.
+    var onlyRecalledPrompt: Bool = false
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }
