@@ -24,7 +24,7 @@ enum AccountMoveStopResumePlanner {
 
         var label: String {
             switch self {
-            case .working: return "arbeitet gerade — nur mit --force"
+            case .working: return "beschäftigt (Turn, Rückfrage oder Hintergrund-Tasks) — nur mit --force"
             case .unsentInput: return "Eingabefeld enthält vermutlich ungesendeten Text — nur mit --force"
             case .ownSession: return "eigene Session — kann sich nicht selbst anhalten"
             }
@@ -41,6 +41,20 @@ enum AccountMoveStopResumePlanner {
         var toStop: [AccountMovePlanner.Candidate] = []
         /// Wuerden umziehen, wenn sie nicht liefen — bleiben aber stehen.
         var blocked: [Blocked] = []
+    }
+
+    /// Darf ein laufender Chat jetzt angehalten werden? Dieselbe Regel wie
+    /// in der App (`AccountSwitchPlanner.waitReason`): nur ein ruhender Chat
+    /// (idle, stopped, errored) ohne offene Hintergrund-Tasks. Eine offene
+    /// Rückfrage und ein unbekannter Status zählen als beschäftigt — lieber
+    /// warten als einen Turn abschießen. Den Entwurf prüft `select` getrennt.
+    static func isBusy(
+        status: AgentSessionRuntimeStatus?,
+        openBackgroundTasks: @autoclosure () -> Int
+    ) -> Bool {
+        AccountSwitchPlanner.waitReason(
+            status: status, mayHaveUnsentInput: false,
+            openBackgroundTasks: openBackgroundTasks()) != nil
     }
 
     static func select(

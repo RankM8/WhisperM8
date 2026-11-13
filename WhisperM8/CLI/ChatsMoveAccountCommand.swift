@@ -75,6 +75,9 @@ struct ChatsMoveAccountResultItem: Equatable {
     var stopAndResumePossible = false
     var stopBlocked: String?
     var resumeScheduled = false
+    /// Zielkonto hat den Projektordner nie freigegeben — Claude fragt beim
+    /// nächsten Start danach (Trust-Dialog).
+    var targetTrustMissing = false
 }
 
 enum ChatsMoveAccountSupport {
@@ -92,7 +95,8 @@ enum ChatsMoveAccountSupport {
                 stopAndResume: entry["stopAndResume"]?.boolValue ?? false,
                 stopAndResumePossible: entry["stopAndResumePossible"]?.boolValue ?? false,
                 stopBlocked: entry["stopBlocked"]?.stringValue,
-                resumeScheduled: entry["resumeScheduled"]?.boolValue ?? false)
+                resumeScheduled: entry["resumeScheduled"]?.boolValue ?? false,
+                targetTrustMissing: entry["targetTrustMissing"]?.boolValue ?? false)
         }
     }
 
@@ -120,15 +124,18 @@ enum ChatsMoveAccountSupport {
         let name = label.isEmpty ? (fallbackLabel ?? item.id) : label
         let route = "\(item.fromProfile) → \(toProfile)"
         let why = item.reasonLabel.map { " — \($0)" } ?? ""
+        let trust = item.targetTrustMissing
+            ? " · Ordner im Zielkonto noch nicht freigegeben, Claude fragt beim nächsten Start danach"
+            : ""
         switch item.outcome {
         case "wouldMove" where item.stopAndResume:
-            return "↻ würde anhalten, umziehen und neu starten: \(name) (\(route))"
+            return "↻ würde anhalten, umziehen und neu starten: \(name) (\(route))\(trust)"
         case "wouldMove":
-            return "→ würde umziehen: \(name) (\(route))"
+            return "→ würde umziehen: \(name) (\(route))\(trust)"
         case "moved" where item.resumeScheduled:
-            return "✓ umgezogen, Neustart vorgemerkt: \(name) (\(route))"
+            return "✓ umgezogen, Neustart vorgemerkt: \(name) (\(route))\(trust)"
         case "moved":
-            return "✓ umgezogen: \(name) (\(route))"
+            return "✓ umgezogen: \(name) (\(route))\(trust)"
         case "scheduled":
             return "⏱ vorgemerkt: \(name) (\(route))\(why)"
         case "skipped":
