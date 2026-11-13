@@ -44,6 +44,7 @@ struct AgentSessionDetailView: View {
     /// Sperr-Meldung der Codex-Startsperre mit einem Prozess, den der Nutzer
     /// beenden darf („Prozess beenden“).
     @State private var codexEndable: CodexEndableState?
+    @State private var codexEndConfirming = false
     @State private var showRestartConfirmation = false
     /// Launch scheiterte an fehlender CLI: geführter Leerzustand statt Balken (LR-AU-022).
     @State private var missingCLI: AgentCLI?
@@ -91,7 +92,13 @@ struct AgentSessionDetailView: View {
             HStack(spacing: 8) {
                 switch state.phase {
                 case .ready:
-                    Button("End Process") { endCodexProcess(force: false) }
+                    Button("End Process") {
+                        if state.needsConfirmation {
+                            codexEndConfirming = true
+                        } else {
+                            endCodexProcess(force: false)
+                        }
+                    }
                 case .ending:
                     ProgressView().controlSize(.small)
                     Text("Ending process…")
@@ -104,7 +111,22 @@ struct AgentSessionDetailView: View {
             }
             .font(.system(size: 12))
             .controlSize(.small)
+            .confirmationDialog(
+                "Quit the Codex in that terminal?",
+                isPresented: $codexEndConfirming,
+                presenting: state.process
+            ) { _ in
+                Button("Quit Codex", role: .destructive) { endCodexProcess(force: false) }
+                Button("Cancel", role: .cancel) {}
+            } message: { process in
+                Text(Self.codexTerminalQuitMessage(pid: process.pid))
+            }
         }
+    }
+
+    /// Text der Rückfrage vor dem Beenden eines Codex im Terminal.
+    static func codexTerminalQuitMessage(pid: Int32) -> String {
+        String(localized: "This quits the Codex process (PID \(String(pid))) in the other terminal window, whatever it is working on right now. If it has moved on to another conversation there, that work is interrupted too.")
     }
 
     /// Beendet den Prozess aus der Sperr-Meldung und startet den Chat danach
@@ -678,7 +700,8 @@ struct AgentSessionDetailView: View {
         } catch {
             if case AgentCommandError.codexSessionRunning(_, let conflict) = error,
                let process = conflict.endableProcess {
-                codexEndable = CodexEndableState(sessionID: session.id, process: process, phase: .ready)
+                codexEndable = CodexEndableState(sessionID: session.id, process: process, phase: .ready,
+                                                 needsConfirmation: conflict.endNeedsConfirmation)
             } else {
                 codexEndable = nil
             }
@@ -1044,4 +1067,6 @@ struct CodexEndableState: Equatable {
     let sessionID: UUID
     let process: CodexProcessTarget
     var phase: Phase
+    /// Vor dem Signal fragen (Codex im Terminal, `endNeedsConfirmation`).
+    var needsConfirmation = false
 }

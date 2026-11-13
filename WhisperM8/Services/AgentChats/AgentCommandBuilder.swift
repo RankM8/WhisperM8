@@ -74,7 +74,7 @@ enum AgentCommandError: LocalizedError, Equatable {
             return String(localized: "Cannot resume \(title): the previous run of this chat is still ending (Codex process PID \(String(process.pid))). Wait a few seconds and try again. If it does not end, use “End Process”.")
         case .codexSessionRunning(let title, .outsideApp(let process, true)):
             let pid = process.pid
-            return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process outside WhisperM8 (PID \(String(pid))), probably in a terminal window. Close it there, or use “End Process”, which ends that Codex session. A second Codex process would run the same conversation twice.")
+            return String(localized: "Cannot resume \(title): a Codex process outside WhisperM8 (PID \(String(pid))), probably in a terminal window, was started with this conversation and is still running. Close it there, or use “End Process”. A second Codex process on the same conversation would run it twice.")
         case .codexSessionRunning(let title, .outsideApp(let process, false)):
             let pid = process.pid
             return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process without a terminal (PID \(String(pid))), for example a subagent job. If that job is no longer needed, use “End Process”. A second Codex process would run the same conversation twice.")

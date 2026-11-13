@@ -3131,6 +3131,16 @@
         }
       }
     },
+    "Cannot resume %@: a Codex process outside WhisperM8 (PID %@), probably in a terminal window, was started with this conversation and is still running. Close it there, or use “End Process”. A second Codex process on the same conversation would run it twice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Ein Codex-Prozess außerhalb von WhisperM8 (PID %@), vermutlich in einem Terminalfenster, wurde mit diesem Gespräch gestartet und läuft noch. Schließe ihn dort oder nutze „Prozess beenden“. Ein zweiter Codex-Prozess auf demselben Gespräch würde es doppelt führen."
+          }
+        }
+      }
+    },
     "Cannot resume %@: the chat “%@” is starting this conversation right now. A second start would run the same conversation twice. Close one of the two chats, or try again in a few seconds.": {
       "localizations": {
         "de": {
@@ -3157,16 +3167,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut. Endet er nicht, nutze „Prozess beenden“."
-          }
-        }
-      }
-    },
-    "Cannot resume %@: this conversation is already running in a Codex process outside WhisperM8 (PID %@), probably in a terminal window. Close it there, or use “End Process”, which ends that Codex session. A second Codex process would run the same conversation twice.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem Codex-Prozess außerhalb von WhisperM8 (PID %@), vermutlich in einem Terminalfenster. Schließe ihn dort oder nutze „Prozess beenden“, das beendet diese Codex-Sitzung. Ein zweiter Codex-Prozess würde dieselbe Unterhaltung doppelt führen."
           }
         }
       }
@@ -13114,12 +13114,32 @@
         }
       }
     },
+    "Quit Codex": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex beenden"
+          }
+        }
+      }
+    },
     "Quit and Reopen Later": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Beenden und später wieder öffnen"
+          }
+        }
+      }
+    },
+    "Quit the Codex in that terminal?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex in diesem Terminal beenden?"
           }
         }
       }
@@ -18410,6 +18430,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Proxy-Login dieses Profils wird gelöscht und seine Instanz beendet. Chats, die auf dieses Konto gestempelt sind, werden auf das Hauptkonto umgestellt."
+          }
+        }
+      }
+    },
+    "This quits the Codex process (PID %@) in the other terminal window, whatever it is working on right now. If it has moved on to another conversation there, that work is interrupted too.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das beendet den Codex-Prozess (PID %@) im anderen Terminalfenster, egal woran er gerade arbeitet. Ist er dort inzwischen bei einem anderen Gespräch, wird auch diese Arbeit unterbrochen."
           }
         }
       }

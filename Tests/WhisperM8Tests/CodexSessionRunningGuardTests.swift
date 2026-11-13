@@ -91,6 +91,18 @@ final class CodexSessionRunningGuardTests: XCTestCase {
                      "ohne Startzeit kein Knopf: die Prüfung vor dem Signal wäre unvollständig")
     }
 
+    /// Vic: Nur ein Codex im Terminal braucht die Rückfrage, die anderen Fälle nicht.
+    func testOnlyCodexInTerminalNeedsConfirmation() {
+        XCTAssertTrue(CodexRunningConflict.outsideApp(process: target(1, start: 1), inTerminal: true).endNeedsConfirmation)
+        XCTAssertFalse(CodexRunningConflict.outsideApp(process: target(1, start: 1), inTerminal: false).endNeedsConfirmation)
+        XCTAssertFalse(CodexRunningConflict.ownPreviousRun(process: target(1, start: 1)).endNeedsConfirmation)
+        XCTAssertFalse(CodexRunningConflict.otherChatEnding(title: "x", process: target(1, start: 1)).endNeedsConfirmation)
+        XCTAssertFalse(CodexRunningConflict.otherChat(title: "x").endNeedsConfirmation)
+        let text = AgentSessionDetailView.codexTerminalQuitMessage(pid: 4711)
+        XCTAssertTrue(text.contains("4711"))
+        XCTAssertTrue(text.contains("whatever it is working on"), "warnt: egal woran er gerade arbeitet")
+    }
+
     func testConflictPassesStartTimesToTheLedger() {
         var asked: [(Int32, UInt64?)] = []
         var proc = tui(902, leader: 900); proc.startTime = 5; proc.leaderStartTime = 4
@@ -210,6 +222,8 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         blocked.codexRunningConflict = { _, _ in .outsideApp(process: self.target(4242), inTerminal: true) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("4242"))
+            XCTAssertTrue($0.localizedDescription.contains("was started with this conversation"),
+                          "vorsichtig: gestartet mit, nicht „läuft dort“")
             XCTAssertTrue($0.localizedDescription.contains("WhisperM8"), "nennt: außerhalb der App")
         }
         blocked.codexRunningConflict = { _, _ in .outsideApp(process: self.target(4243), inTerminal: false) }

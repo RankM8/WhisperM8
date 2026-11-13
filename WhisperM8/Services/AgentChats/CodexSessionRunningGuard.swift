@@ -46,6 +46,15 @@ enum CodexRunningConflict: Equatable {
         }
         return process.startTime == nil ? nil : process
     }
+
+    /// Vic: Ein Codex im Terminal kann seit dem Start per `/new` oder
+    /// `/resume` an etwas anderem arbeiten, die Startargumente bleiben. Vor
+    /// dem Beenden deshalb fragen; die anderen Fälle gehören sicher zu
+    /// dieser Sitzung oder zu einem beendeten Chat.
+    var endNeedsConfirmation: Bool {
+        if case .outsideApp(_, true) = self { return true }
+        return false
+    }
 }
 
 /// Doppelstart-Sperre für Codex (nie zwei Prozesse auf einer Sitzung).
