@@ -64,4 +64,33 @@ enum ControllerIslandRows {
             statusSince: { coordinator.activityStore.statusSince(for: $0) },
             now: Date())
     }
+
+    /// Frisch fertige Chats (Paddle „Antworten“): ruhend, Turn vor höchstens
+    /// 15 min beendet — dieselbe Einteilung wie Notch und `chats`-Board
+    /// (`AttentionModelBuilder`). Der jüngste zuerst; ohne Archiv und
+    /// Subagent-Jobs.
+    static func freshDone(inputs: [NotchChatInput], now: Date) -> [UUID] {
+        inputs.compactMap { input -> (UUID, Date)? in
+            let (category, _) = AttentionModelBuilder.classify(
+                status: input.status, lastTurnAt: input.lastTurnAt, since: input.statusSince, now: now)
+            guard category == .freshDone else { return nil }
+            return (input.id, input.lastTurnAt ?? input.statusSince ?? input.lastActivityAt)
+        }
+        .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.uuidString < $1.0.uuidString }
+        .map(\.0)
+    }
+
+    @MainActor
+    static func liveFreshDone() -> [UUID] {
+        let coordinator = AgentSessionStatusCoordinator.shared
+        let workspace = AgentWorkspaceUIModel.shared.workspace
+        var statuses: [UUID: AgentSessionRuntimeStatus] = [:]
+        for session in workspace.sessions {
+            if let status = coordinator.statusStore.status(for: session.id) { statuses[session.id] = status }
+        }
+        let inputs = NotchInputBuilder.inputs(
+            statuses: statuses, workspace: workspace,
+            statusSince: { coordinator.activityStore.statusSince(for: $0) }, activity: nil)
+        return freshDone(inputs: inputs, now: Date())
+    }
 }

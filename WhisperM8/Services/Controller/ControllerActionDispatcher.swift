@@ -44,6 +44,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     }
     /// Limits aller Konten für Kopf und Limits-Karte der R1-Insel (Insel-Paket).
     var limits = ControllerLimitsAccess()
+    /// Chats, die frisch fertig sind (ruhen, Turn vor höchstens 15 min
+    /// beendet), der jüngste zuerst — für das Paddle „Antworten“.
+    var freshDoneChats: () -> [UUID] = { [] }
 
     /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
     var islandState: ControllerIslandSession?
