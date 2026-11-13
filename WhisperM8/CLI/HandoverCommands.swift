@@ -252,11 +252,25 @@ enum AppCLICommand {
         return 3
     }
 
-    static func handover(json: Bool, fromMakeDev: Bool = false) -> Int32 {
+    /// Wie lange `app handover` auf eine laufende Übernahme wartet.
+    struct TakeWait {
+        var takeInProgress: () -> Bool = { HandoverTakeLock.isHeld(paths: .default) }
+        var maxWait: TimeInterval = 60
+        /// Nach dem Ende der Übernahme startet der Steuer-Socket; so lange
+        /// wird noch versucht.
+        var settle: TimeInterval = 5
+        var sleep: (TimeInterval) -> Void = { usleep(useconds_t($0 * 1_000_000)) }
+        var now: () -> Date = Date.init
+        var notice: (String) -> Void = { CLIIO.err($0) }
+    }
+
+    static func handover(json: Bool, fromMakeDev: Bool = false, wait: TakeWait = TakeWait()) -> Int32 {
         let response: ChatsControlResponse
         do {
-            response = try ChatsControlClient.send(method: "app.handover",
-                                                   params: fromMakeDev ? ["fromMakeDev": true] : [:])
+            response = try sendWaitingForTake(wait: wait) {
+                try ChatsControlClient.send(method: "app.handover",
+                                            params: fromMakeDev ? ["fromMakeDev": true] : [:])
+            }
         } catch {
             CLIIO.err("App nicht erreichbar: \(error)")
             return HandoverExit.appUnreachable
@@ -273,6 +287,31 @@ enum AppCLICommand {
             CLIIO.out(String(decoding: (try? encoder.encode(result)) ?? Data(), as: UTF8.self))
         }
         return exitCode(outcome: outcome, reason: reason, result: result, quiet: json)
+    }
+
+    /// Befund 4 (Dex): Übernimmt die App gerade (Sperre gehalten), läuft ihr
+    /// Steuer-Socket noch nicht. Dann warten bis zum Ende der Übernahme und
+    /// danach noch kurz, bis der Socket antwortet; sonst gilt der erste Fehler.
+    static func sendWaitingForTake(wait: TakeWait,
+                                   _ send: () throws -> ChatsControlResponse) throws -> ChatsControlResponse {
+        do {
+            return try send()
+        } catch {
+            guard wait.takeInProgress() else { throw error }
+            // Sichtbar für `make dev` und test-instance.sh: worauf gewartet wird.
+            // Eine Sperre aus einem abgestürzten Lauf hält niemand mehr (flock
+            // endet mit dem Prozess); dann wird hier nicht gewartet.
+            wait.notice("Die App übernimmt gerade Chats aus dem letzten Neustart; warte bis zu \(Int(wait.maxWait)) s …")
+            let deadline = wait.now().addingTimeInterval(wait.maxWait)
+            while wait.takeInProgress(), wait.now() < deadline { wait.sleep(0.2) }
+            let settled = wait.now().addingTimeInterval(wait.settle)
+            var last = error
+            repeat {
+                do { return try send() } catch let next { last = next }
+                wait.sleep(0.2)
+            } while wait.now() < settled
+            throw last
+        }
     }
 
     static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool) -> Int32 {

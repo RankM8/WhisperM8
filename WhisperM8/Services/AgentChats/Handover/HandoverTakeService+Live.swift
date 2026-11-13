@@ -15,7 +15,7 @@ extension HandoverTakeService {
             sessions: { store.loadWorkspace().sessions },
             adopt: { taken, session in adoptLive(taken, session: session, store: store) },
             showEnded: { taken, session in showEndedLive(taken, session: session, store: store) },
-            scheduleResume: { ids in scheduleResumeLive(ids, store: store) }
+            scheduleResume: { ids in scheduleFallbackResume(ids, store: store) }
         ))
     }
 
@@ -86,26 +86,35 @@ extension HandoverTakeService {
         AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: id, exitCode: taken.exitStatus)
     }
 
-    /// In diesem Start schon zum Fortsetzen vorgemerkt (der Rückfall kommt in
-    /// zwei Schüben: sofort und nach dem Ende verwaister Prozesse).
-    private static var scheduledThisLaunch: Set<UUID> = []
-
     /// Wie die Absturz-Wiederaufnahme: beim Anzeigen per `--resume` starten,
     /// fehlender Tab kommt zurück, ohne die Auswahl zu ändern. Je Sitzung
     /// höchstens ein Chat, laufende und schon vorgemerkte zählen mit
-    /// (`AgentCollectiveStartPlanner`).
-    private static func scheduleResumeLive(_ ids: [UUID], store: AgentSessionStore) {
-        let windowStore = AgentWindowStore.shared
+    /// (`AgentCollectiveStartPlanner`). Anders als dort starten die Chats
+    /// auch in unterdrückten Grid-Panes (`HandoverFallbackLaunchQueue`).
+    static func scheduleFallbackResume(
+        _ ids: [UUID],
+        store: AgentSessionStore,
+        windowStore: AgentWindowStore? = nil,
+        runningSessionIDs: Set<UUID>? = nil,
+        queue: HandoverFallbackLaunchQueue? = nil
+    ) {
+        let windowStore = windowStore ?? .shared
+        let runningSessionIDs = runningSessionIDs ?? AgentTerminalRegistry.shared.activeSessionIDs
+        let queue = queue ?? .shared
         let plan = AgentCollectiveStartPlanner.plan(
             ids, sessions: store.loadWorkspace().sessions,
-            alreadyStarted: AgentTerminalRegistry.shared.activeSessionIDs.union(scheduledThisLaunch))
+            alreadyStarted: runningSessionIDs.union(queue.scheduledThisLaunch))
         for skipped in plan.skipped {
+            // Nur zurücksetzen, wenn ein ANDERER Chat die Sitzung führt; ein
+            // selbst schon vorgemerkter oder laufender behält sein Flag (Vic).
+            guard let keeper = plan.keeperOf[skipped], keeper != skipped else { continue }
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(
                 "handover_fallback_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")
         }
+        // Vor dem Flag: Dessen Änderung startet die Pane schon.
+        queue.schedule(plan.start)
         for id in plan.start {
-            scheduledThisLaunch.insert(id)
             try? store.updateSession(id: id) { $0.shouldLaunchOnOpen = true }
             if windowStore.windowID(containingTab: id) == nil {
                 windowStore.openTab(id, in: windowStore.primaryWindowID, select: false)

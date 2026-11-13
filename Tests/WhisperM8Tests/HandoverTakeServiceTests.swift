@@ -301,6 +301,73 @@ final class HandoverTakeServiceTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: markerURL)
     }
 
+    /// Befund 2 (Dex): Lehnt der Aufbewahrer das Geheimnis ab, beendet die
+    /// App auch ihn, nicht nur die Chats. Sonst hielte er bis zur Frist und
+    /// jede weitere Übergabe scheiterte mit keeperStillHolding.
+    func testRejectedSecretEndsTheKeeperToo() async throws {
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: FakeSecretStore())
+        let keeper = try XCTUnwrap(HandoverTakeService.status(paths: paths))
+        let wrong = FakeSecretStore()
+        wrong.stored = HandoverSecret.make()
+        let calls = Calls()
+        let summary = service(secrets: wrong, sessions: sources.map { session(for: $0) }, calls: calls).takeAtLaunch()
+        XCTAssertTrue(summary.adopted.isEmpty)
+        XCTAssertEqual(summary.fallback, sources.map(\.sessionID))
+        XCTAssertTrue(HandoverTestSupport.waitUntil(timeout: 10) { kill(keeper.pid, 0) != 0 }, "Aufbewahrer beendet")
+        let end = Date().addingTimeInterval(15)
+        while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
+        XCTAssertEqual(calls.resumed, sources.map(\.sessionID))
+        XCTAssertFalse(sources[0].child.isAlive)
+    }
+
+    /// Befund 6 (Dex): Ist die Verbindung tot, gehen die übrigen Chats sofort
+    /// in den Rückfall, ohne je die Pause vor TAKE abzuwarten.
+    func testDeadConnectionSendsTheRestToFallbackWithoutWaiting() throws {
+        let secrets = FakeSecretStore()
+        let sources = [try spawn(), try spawn(), try spawn(), try spawn()]
+        _ = try handOver(sources, secrets: secrets)
+        let keeper = try XCTUnwrap(HandoverTakeService.status(paths: paths))
+        let calls = Calls()
+        var dependencies = serviceDependencies(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: calls)
+        let adopt = dependencies.adopt
+        dependencies.adopt = { taken, session in
+            kill(keeper.pid, SIGKILL)
+            _ = HandoverTestSupport.waitUntil(timeout: 5) { kill(keeper.pid, 0) != 0 }
+            return adopt(taken, session)
+        }
+        dependencies.takeDelay = { 1.5 }
+        let started = Date()
+        let summary = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
+        let seconds = Date().timeIntervalSince(started)
+        XCTAssertEqual(summary.adopted.count, 1)
+        XCTAssertEqual(summary.fallback.count, 3)
+        // Vorher: viermal 1,5 s. Jetzt: vor dem ersten und dem gescheiterten zweiten TAKE.
+        XCTAssertLessThan(seconds, 4.4, "wartete \(seconds) s")
+    }
+
+    /// Befund 4 (Dex): Während der Übernahme hält die App take.lock; danach nicht mehr.
+    func testTakeHoldsTheTakeLockWhileTaking() throws {
+        let secrets = FakeSecretStore()
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: secrets)
+        var heldDuringTake = false
+        var dependencies = serviceDependencies(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: Calls())
+        let adopt = dependencies.adopt
+        dependencies.adopt = { [paths] taken, session in
+            heldDuringTake = HandoverTakeLock.isHeld(paths: paths)
+            return adopt(taken, session)
+        }
+        _ = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
+        XCTAssertTrue(heldDuringTake)
+        XCTAssertFalse(HandoverTakeLock.isHeld(paths: paths))
+    }
+
+    func testNormalStartTakesNoLock() {
+        _ = service(secrets: FakeSecretStore(), sessions: [], calls: Calls()).takeAtLaunch()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.takeLockFileURL.path))
+    }
+
     /// Befund kill-mid-take (Dex): Nach SIGKILL des Aufbewahrers blieb sein
     /// Socket liegen. Mit dem veralteten Discovery-Eintrag verschwindet er.
     func testStaleSocketOfAKilledKeeperIsRemoved() throws {

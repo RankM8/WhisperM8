@@ -46,6 +46,8 @@ final class HandoverTakeService {
             return !HandoverPlanning.isSameProcess(pid: pid, expectedStartTime: start)
         }
         var ioTimeout: TimeInterval = 5
+        /// Pause vor jedem TAKE (Stellschraube der Test-Instanz).
+        var takeDelay: () -> TimeInterval = { HandoverTestKnobs.takeDelay() }
         /// Wie bei der Abgabe: Socket und empfangene Leitungen nur auf dem
         /// Main Thread, wo auch alle `forkpty` laufen.
         var isMainThread: () -> Bool = { Thread.isMainThread }
@@ -94,6 +96,12 @@ final class HandoverTakeService {
         // Prüfung kostete dann wieder jeder Start die volle Frist (Vic).
         let mayHaveKeeper = previous.handover != nil
             || HandoverKeeperLock.liveDiscovery(paths: dependencies.paths)
+        // Befund 4 (Dex): Während der Übernahme läuft der Steuer-Socket noch
+        // nicht. Ein zweiter Neustart sah „App nicht erreichbar“ und startete
+        // klassisch neu; die gerade übernommenen Chats endeten. Die Sperre sagt
+        // `app handover`, dass es warten soll.
+        let takeLock = mayHaveKeeper ? HandoverTakeLock.acquire(paths: dependencies.paths) : nil
+        defer { HandoverTakeLock.release(takeLock) }
         let keeperStatus = onMain && mayHaveKeeper ? Self.status(paths: dependencies.paths) : nil
         guard previous.handover != nil || keeperStatus != nil else { return summary }
         Self.isTaking = true
@@ -183,12 +191,23 @@ final class HandoverTakeService {
         defer { client.close() }
         do {
             try client.verifyServer(expectedPID: keeperPID)
+        } catch {
+            // Fremder oder falscher Prozess am Socket: nichts beenden.
+            Logger.agentStore.error("handover_take_verify_failed error=\(HandoverLog.label(error), privacy: .public)")
+            return [:]
+        }
+        do {
             _ = try client.helloTake(secret: secret)
         } catch HandoverClient.ClientError.incompatible {
             try? client.release(secret: secret)
             return [:]
         } catch {
+            // Befund 2 (Dex): Lehnt der Aufbewahrer das Geheimnis ab, hielte er
+            // seine (gleich beendeten) Chats bis zur Frist und blockierte jede
+            // weitere Übergabe. Wie bei fehlendem Geheimnis beenden; seine
+            // PID ist oben geprüft.
             Logger.agentStore.error("handover_take_hello_failed error=\(HandoverLog.label(error), privacy: .public)")
+            if let keeperPID { dependencies.terminateProcess(keeperPID) }
             return [:]
         }
         var outcomes: [String: HandoverTakeOutcome] = [:]
@@ -198,13 +217,16 @@ final class HandoverTakeService {
             // Unbekannte Chats (gelöscht) bleiben beim Aufbewahrer; `DONE`
             // beendet sie geordnet.
             guard let session = sessions[chatID] else { continue }
-            let delay = HandoverTestKnobs.takeDelay()
+            let delay = dependencies.takeDelay()
             if delay > 0 { Thread.sleep(forTimeInterval: delay) }
             let taken: HandoverClient.TakenChat
             do {
                 taken = try client.take(chatID: chatID)
             } catch {
                 Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(HandoverLog.label(error), privacy: .public)")
+                // Befund 6 (Dex): Ist die Verbindung tot, scheitert jeder
+                // weitere Chat genauso. Der Rest geht sofort in den Rückfall.
+                if Self.connectionIsGone(error) { return outcomes }
                 continue
             }
             // Review Paket 1, Befund 3: SwiftTerm prüft die Startzeit nicht.
@@ -227,6 +249,15 @@ final class HandoverTakeService {
         }
         try? client.done()
         return outcomes
+    }
+
+    /// Verbindung zum Aufbewahrer verloren (nicht nur ein Chat abgelehnt).
+    static func connectionIsGone(_ error: Error) -> Bool {
+        guard let wire = error as? HandoverWireError else { return false }
+        switch wire {
+        case .closed, .io, .timedOut: return true
+        default: return false
+        }
     }
 
     private func release(secret: String, keeperPID: Int32?) {
@@ -297,13 +328,44 @@ final class HandoverTakeService {
 }
 
 
+// MARK: - Sperre während der Übernahme
+
+/// Die App hält `take.lock`, solange sie beim Start übernimmt. `app handover`
+/// wartet, statt „nicht erreichbar“ zu melden (Befund 4, Dex).
+enum HandoverTakeLock {
+    static func acquire(paths: HandoverPaths) -> Int32? {
+        let fd = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
+        guard fd >= 0 else { return nil }
+        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            close(fd)
+            return nil
+        }
+        return fd
+    }
+
+    static func release(_ fd: Int32?) {
+        guard let fd else { return }
+        flock(fd, LOCK_UN)
+        close(fd)
+    }
+
+    static func isHeld(paths: HandoverPaths) -> Bool {
+        HandoverKeeperLock.isHeld(url: paths.takeLockFileURL)
+    }
+}
+
 // MARK: - Sperre des Aufbewahrers ohne Warten prüfen
 
 enum HandoverKeeperLock {
     /// Hält gerade ein Aufbewahrer die Sperre `keeper.lock`? Prüft ohne zu
     /// warten mit einer geteilten Sperre: Der Aufbewahrer hält sie exklusiv.
     static func isHeld(paths: HandoverPaths) -> Bool {
-        let fd = open(paths.lockFileURL.path, O_RDONLY | O_CLOEXEC)
+        isHeld(url: paths.lockFileURL)
+    }
+
+    /// Hält jemand die Sperre in `url` exklusiv?
+    static func isHeld(url: URL) -> Bool {
+        let fd = open(url.path, O_RDONLY | O_CLOEXEC)
         guard fd >= 0 else { return false }
         defer { close(fd) }
         if flock(fd, LOCK_SH | LOCK_NB) == 0 {
