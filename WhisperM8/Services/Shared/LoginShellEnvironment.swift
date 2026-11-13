@@ -189,7 +189,8 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// SwiftTerm setzt diese Defaults nur, wenn man `environment: nil` an
     /// `startProcess` übergibt — wir übergeben aber ein eigenes Env (für PATH),
     /// also fallen die Defaults weg und Ink rendert monochrom.
-    /// Wir setzen nur, was nicht ohnehin schon vom User-Profil definiert wurde.
+    /// `TERM` und `COLORTERM` setzen wir immer (siehe unten), `CLICOLOR` und
+    /// `LANG` nur, wenn sie fehlen.
     func processEnvironment(base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
         var env = base
 
@@ -281,29 +282,38 @@ final class LoginShellEnvironment: @unchecked Sendable {
     /// und `LANG` (unten); davon steht hier nichts.
     static let starterTerminalVariables: Set<String> = [
         // macOS Terminal, iTerm2, Warp, VS Code, Hyper u. a.
-        "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "SHELL_SESSION_ID",
-        // iTerm2
-        "LC_TERMINAL", "LC_TERMINAL_VERSION",
-        // terminfo eines anderen Terminals (kitty und Ghostty zeigen in ihr Bundle)
-        "TERMINFO",
+        "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TERM_SESSION_ID",
+        // iTerm2 (TERM_FEATURES ab 3.5: Fähigkeiten, die SwiftTerm nicht hat)
+        "LC_TERMINAL", "LC_TERMINAL_VERSION", "TERM_FEATURES",
+        // Hintergrundfarbe des Starters (iTerm2, Konsole, rxvt); widerspräche dem Theme der App
+        "COLORFGBG",
+        // terminfo und termcap eines anderen Terminals (kitty und Ghostty zeigen in ihr Bundle, screen exportiert TERMCAP)
+        "TERMINFO", "TERMCAP",
         // tmux, screen, zellij: Programme hielten sich sonst für eine Sitzung darin
-        "TMUX", "TMUX_PANE", "STY", "WINDOW",
+        "TMUX", "TMUX_PANE", "STY", "ZELLIJ", "ZELLIJ_SESSION_NAME", "ZELLIJ_PANE_ID",
         // Alacritty
         "ALACRITTY_SOCKET", "ALACRITTY_LOG", "ALACRITTY_WINDOW_ID",
+        // Editoren mit eingebautem Terminal (JetBrains, Zed, Emacs, Cursor)
+        "TERMINAL_EMULATOR", "ZED_TERM", "INSIDE_EMACS", "CURSOR_TRACE_ID",
         // Konsole, GNOME, xterm-Abkömmlinge
-        "KONSOLE_VERSION", "VTE_VERSION", "WINDOWID",
+        "SHELL_SESSION_ID", "PROFILEHOME", "VTE_VERSION", "WINDOWID",
     ]
 
-    /// Präfixe derselben Art (je Terminal eine Familie).
+    /// Präfixe derselben Art (je Terminal eine Familie). `ITERM` ohne
+    /// Unterstrich, damit auch `ITERM2_*` fällt.
     static let starterTerminalPrefixes = [
-        "ITERM_", "KITTY_", "GHOSTTY_", "WEZTERM_", "WARP_", "VSCODE_", "ZELLIJ", "TABBY_",
+        "ITERM", "KITTY_", "GHOSTTY_", "WEZTERM_", "WARP_", "VSCODE_", "TABBY_", "KONSOLE_",
     ]
 
     static func removeStarterTerminalVariables(_ env: inout [String: String]) {
-        // VS Code setzt `GIT_ASKPASS` auf sein eigenes Skript, das nur mit seinem
-        // IPC-Kanal (`VSCODE_GIT_IPC_HANDLE`) funktioniert: nur dann mit weg.
+        // VS Code (und Cursor) setzen `GIT_ASKPASS` auf ihr eigenes Skript, das
+        // nur mit ihrem IPC-Kanal (`VSCODE_GIT_IPC_HANDLE`) funktioniert: nur dann mit weg.
         if env.keys.contains(where: { $0.hasPrefix("VSCODE_GIT_") }) {
             env.removeValue(forKey: "GIT_ASKPASS")
+        }
+        // `WINDOW` ist ein allgemeiner Name; von screen nur zusammen mit `STY`.
+        if env["STY"] != nil {
+            env.removeValue(forKey: "WINDOW")
         }
         for key in env.keys
         where starterTerminalVariables.contains(key) || starterTerminalPrefixes.contains(where: key.hasPrefix) {

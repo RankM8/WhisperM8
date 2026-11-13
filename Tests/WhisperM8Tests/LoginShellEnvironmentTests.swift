@@ -113,7 +113,10 @@ final class LoginShellEnvironmentTests: XCTestCase {
             "GHOSTTY_RESOURCES_DIR": "/Applications/Ghostty.app", "KITTY_WINDOW_ID": "1", "KITTY_PID": "2",
             "WEZTERM_PANE": "0", "WARP_IS_LOCAL_SHELL_SESSION": "1", "TMUX": "/tmp/tmux-501/default,1,0",
             "TMUX_PANE": "%1", "STY": "1.tty", "ZELLIJ": "0", "ZELLIJ_SESSION_NAME": "s",
-            "ALACRITTY_WINDOW_ID": "1", "VTE_VERSION": "7000",
+            "ALACRITTY_WINDOW_ID": "1", "VTE_VERSION": "7000", "WINDOW": "0",
+            "COLORFGBG": "7;0", "TERM_FEATURES": "T3LrMSc7UUw9Ts3BFGsSyHNoSxF", "ITERM2_SQUELCH_MARK": "1",
+            "TERMCAP": "SC|screen", "TERMINAL_EMULATOR": "JetBrains-JediTerm", "ZED_TERM": "true",
+            "INSIDE_EMACS": "29.1,vterm", "CURSOR_TRACE_ID": "x", "KONSOLE_DBUS_SESSION": "/Sessions/1",
             "VSCODE_GIT_IPC_HANDLE": "/tmp/vscode-git.sock", "VSCODE_INJECTION": "1",
             "GIT_ASKPASS": "/Applications/Visual Studio Code.app/askpass.sh",
             // bleiben:
@@ -128,6 +131,12 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(result["LANG"], "de_DE.UTF-8")
         XCTAssertEqual(result["EDITOR"], "vim")
         XCTAssertEqual(result["TERM"], "xterm-256color")
+    }
+
+    /// `WINDOW` ohne screen-Sitzung ist nicht von screen und bleibt.
+    func testKeepsWindowWithoutScreenSession() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        XCTAssertEqual(env.processEnvironment(base: ["WINDOW": "main"])["WINDOW"], "main")
     }
 
     /// Ein eigenes `GIT_ASKPASS` (ohne VS Code) bleibt.
