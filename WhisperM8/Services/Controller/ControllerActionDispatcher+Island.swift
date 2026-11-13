@@ -289,19 +289,7 @@ extension ControllerActionDispatcher {
         // senden“ statt „Weiter“ (Runde 5, R1). Leeres Feld bei arbeitendem
         // Chat: „geht nicht“.
         if item == .continueWork, setup.acceptsInput {
-            switch setup.quickCross {
-            case let cross? where cross != .continueWork:
-                guard let sessionID = setup.sessionID, sessionID == selectedSessionID else {
-                    return playHaptic(.rejected)
-                }
-                flashQuickDrawHit(item)
-                if !terminals.sendKey(cross == .sendNow ? .sendNow : .enter, to: sessionID) { playHaptic(.rejected) }
-                return
-            case nil:
-                return playHaptic(.rejected)
-            default:
-                break
-            }
+            return sendOrContinue(setup: setup) { self.flashQuickDrawHit(item) }
         }
         guard ControllerMenuModel.isEnabled(item, setup: setup) else { return playHaptic(.rejected) }
         flashQuickDrawHit(item)
@@ -317,9 +305,31 @@ extension ControllerActionDispatcher {
         }
     }
 
+    /// Kreuz der R1-Raute und das Paddle „Jetzt senden / Weiter“: mit Text im
+    /// Feld oder Wartendem Senden bzw. „Jetzt senden“ (Ctrl+X Ctrl+S), bei
+    /// leerem Feld und ruhendem Chat „Weiter“; leeres Feld bei arbeitendem
+    /// Chat, offene Rückfrage oder Ansicht: „geht nicht“. `onHit` läuft, bevor
+    /// etwas rausgeht (die Raute leuchtet kurz auf).
+    func sendOrContinue(setup: ControllerMenuSetup, onHit: () -> Void) {
+        switch setup.quickCross {
+        case let cross? where cross != .continueWork:
+            guard let sessionID = setup.sessionID, sessionID == selectedSessionID else {
+                return playHaptic(.rejected)
+            }
+            onHit()
+            if !terminals.sendKey(cross == .sendNow ? .sendNow : .enter, to: sessionID) { playHaptic(.rejected) }
+        case nil:
+            playHaptic(.rejected)
+        default:
+            guard ControllerMenuModel.isEnabled(.continueWork, setup: setup) else { return playHaptic(.rejected) }
+            onHit()
+            perform(.continueWork, setup: setup)
+        }
+    }
+
     /// Markiert den gedrückten Eintrag kurz und schließt die Insel danach.
     /// Bis zum Loslassen von R1 kommt sie nicht wieder.
-    private func flashQuickDrawHit(_ item: ControllerMenuItem) {
+    func flashQuickDrawHit(_ item: ControllerMenuItem) {
         spentLayer = .quickDraw
         guard var state = islandState, case let .quickDraw(slots) = state.model.content else { return }
         var hit = slots

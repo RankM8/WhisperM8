@@ -46,10 +46,10 @@ extension ControllerIslandView {
                 if card.canScroll { footItem("L", String(localized: "stick: scroll"), round: false) }
                 // Während eines Diktats ist ✕ unter R1 „geht nicht“.
                 if card.canRefresh {
-                    footItem(ControllerButton.cross.glyph,
+                    footItem(ControllerButton.cross.glyph(family),
                              card.isLoading ? String(localized: "refreshing …") : String(localized: "refresh"))
                 }
-                footItem(ControllerButton.r1.glyph, String(localized: "release: close"), round: false)
+                footItem(ControllerButton.r1.glyph(family), String(localized: "release: close"), round: false)
             }
             .font(.system(size: 11))
             .foregroundStyle(palette.secondary)

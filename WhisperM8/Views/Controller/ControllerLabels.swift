@@ -75,8 +75,14 @@ extension ControllerLegendLabel {
         }
     }
 
-    /// Ausführlicher Text für die Belegungs-Übersicht in den Einstellungen.
-    var explanation: String {
+    /// Ausführlicher Text für die Belegungs-Übersicht in den Einstellungen,
+    /// mit den Tastenzeichen der Familie.
+    func explanation(_ family: ControllerFamily) -> String {
+        let l1 = ControllerButton.l1.glyph(family), r1 = ControllerButton.r1.glyph(family)
+        let l2 = ControllerButton.l2.glyph(family), r2 = ControllerButton.r2.glyph(family)
+        let l3 = ControllerButton.l3.glyph(family)
+        let cross = ControllerButton.cross.glyph(family), circle = ControllerButton.circle.glyph(family)
+        let square = ControllerButton.square.glyph(family), triangle = ControllerButton.triangle.glyph(family)
         switch self {
         case .move: return String(localized: "Move: through the list, into the chat, from tile to tile; in a single chat, up and down mark another chat in the list")
         case .confirm: return String(localized: "Select, confirm, send; start a stopped chat")
@@ -88,7 +94,7 @@ extension ControllerLegendLabel {
         case .previousNextChat: return String(localized: "Tap: previous / next chat in the order of the list; in the list: Active / Recent / All. Hold: layer, see below")
         case .arrows: return String(localized: "D-pad: arrow keys in every running chat, also in subagent and workflow views; in the app you move with the left stick")
         case .scroll: return String(localized: "Scroll the conversation")
-        case .acceptSuggestion: return String(localized: "Take Claude's grey suggestion into the input; ✕ sends it")
+        case .acceptSuggestion: return String(localized: "Take Claude's grey suggestion into the input; \(cross) sends it")
         case .backspace: return String(localized: "Delete (hold: characters, after a second whole words; in a shell only characters)")
         case .closeHold: return String(localized: "In the list, hold: close the chat (like its − or ×)")
         case .newChat: return String(localized: "Pick a project for a new chat")
@@ -97,29 +103,29 @@ extension ControllerLegendLabel {
         case .menu: return String(localized: "Menu: input for the chat, chat actions, controller")
         case .startChat: return String(localized: "Start a stopped chat")
         case .lastChat: return String(localized: "Tap: back to where you were before — the previous chat, or the previous workspace as a grid. Hold: layer, see below")
-        case .pickAndDictate: return String(localized: "Hold L2, then R2: switch to the marked chat and dictate")
-        case .deleteToLineStart: return String(localized: "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)")
-        case .newline: return String(localized: "Hold L1, then △: new line without sending (Claude and Codex)")
-        case .continueWork: return String(localized: "Hold R1, then ✕: send “Continue”")
-        case .cycleMode: return String(localized: "Hold R1, then △: switch mode (not while the agent asks a question)")
-        case .commands: return String(localized: "Hold R1, then □: open the commands in the menu")
-        case .switchAccount: return String(localized: "Hold R1, then ○: open the accounts in the menu")
-        case .whereToHold: return String(localized: "Hold L2: where to — the list starts on where you are, the previous place is one step away; up and down move, left and right switch between chats and workspaces & projects, release or ✕ switches after a move, ○ cancels")
-        case .nextWaiting: return String(localized: "Hold L2, then △: next chat that is waiting for you")
+        case .pickAndDictate: return String(localized: "Hold \(l2), then \(r2): switch to the marked chat and dictate")
+        case .deleteToLineStart: return String(localized: "Hold \(l1), then \(square): delete to the start of the line, held line by line (Claude and Codex)")
+        case .newline: return String(localized: "Hold \(l1), then \(triangle): new line without sending (Claude and Codex)")
+        case .continueWork: return String(localized: "Hold \(r1), then \(cross): send “Continue”")
+        case .cycleMode: return String(localized: "Hold \(r1), then \(triangle): switch mode (not while the agent asks a question)")
+        case .commands: return String(localized: "Hold \(r1), then \(square): open the commands in the menu")
+        case .switchAccount: return String(localized: "Hold \(r1), then \(circle): open the accounts in the menu")
+        case .whereToHold: return String(localized: "Hold \(l2): where to — the list starts on where you are, the previous place is one step away; up and down move, left and right switch between chats and workspaces & projects, release or \(cross) switches after a move, \(circle) cancels")
+        case .nextWaiting: return String(localized: "Hold \(l2), then \(triangle): next chat that is waiting for you")
         case .pauseHold: return String(localized: "Hold both: pause and resume the controller")
-        case .clipboardWithL2: return String(localized: "Hold L2, then press the touchpad: open and close the clipboard history")
-        case .closeView: return String(localized: "In Claude's views (tasks, workflows, transcript, rewind, footer selection) ○ closes the view, also while the chat works")
-        case .wordJump: return String(localized: "Hold L1, then ◀ ▶: jump a word back or forward (Claude and Codex)")
-        case .lineMove: return String(localized: "Hold L1, then ▲ ▼: line up or down in a draft with several lines, not from its first or last line")
-        case .pasteNewest: return String(localized: "Hold L1, then ✕: paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)")
-        case .escapeOnce: return String(localized: "Hold L1, then ○: send exactly one Escape — while the chat works it interrupts unless a view is open")
-        case .undo: return String(localized: "Hold L1, then L3: undo (Claude)")
-        case .transcript: return String(localized: "Hold R1, then L3: detailed transcript on and off (Claude)")
-        case .reopenClosed: return String(localized: "Hold L2, then □: reopen the most recently closed chat; again for the one before")
-        case .limitsCard: return String(localized: "Hold R1, then ▲: limits of all Claude and GPT accounts while R1 is held; ✕ refreshes")
-        case .alertLevel: return String(localized: "Hold R1, then ◀: sound and notifications one step further, like the bell")
-        case .stayAwake: return String(localized: "Hold R1, then ▶: stay awake one step further, like the stay-awake button")
-        case .clipboardWithR1: return String(localized: "Hold R1, then ▼: open and close the clipboard history")
+        case .clipboardWithL2: return String(localized: "Hold \(l2), then press \(family.touchpadPhrase): open and close the clipboard history")
+        case .closeView: return String(localized: "In Claude's views (tasks, workflows, transcript, rewind, footer selection) \(circle) closes the view, also while the chat works")
+        case .wordJump: return String(localized: "Hold \(l1), then ◀ ▶: jump a word back or forward (Claude and Codex)")
+        case .lineMove: return String(localized: "Hold \(l1), then ▲ ▼: line up or down in a draft with several lines, not from its first or last line")
+        case .pasteNewest: return String(localized: "Hold \(l1), then \(cross): paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)")
+        case .escapeOnce: return String(localized: "Hold \(l1), then \(circle): send exactly one Escape — while the chat works it interrupts unless a view is open")
+        case .undo: return String(localized: "Hold \(l1), then \(l3): undo (Claude)")
+        case .transcript: return String(localized: "Hold \(r1), then \(l3): detailed transcript on and off (Claude)")
+        case .reopenClosed: return String(localized: "Hold \(l2), then \(square): reopen the most recently closed chat; again for the one before")
+        case .limitsCard: return String(localized: "Hold \(r1), then ▲: limits of all Claude and GPT accounts while \(r1) is held; \(cross) refreshes")
+        case .alertLevel: return String(localized: "Hold \(r1), then ◀: sound and notifications one step further, like the bell")
+        case .stayAwake: return String(localized: "Hold \(r1), then ▶: stay awake one step further, like the stay-awake button")
+        case .clipboardWithR1: return String(localized: "Hold \(r1), then ▼: open and close the clipboard history")
         default: return title
         }
     }
@@ -139,72 +145,15 @@ extension ControllerLegendEntry {
     }
 }
 
-extension ControllerButton {
-    /// Name der Taste für den Tasten-Test.
-    var displayName: String {
-        switch self {
-        case .cross: return String(localized: "Cross")
-        case .circle: return String(localized: "Circle")
-        case .square: return String(localized: "Square")
-        case .triangle: return String(localized: "Triangle")
-        case .dpadUp: return String(localized: "D-pad up")
-        case .dpadDown: return String(localized: "D-pad down")
-        case .dpadLeft: return String(localized: "D-pad left")
-        case .dpadRight: return String(localized: "D-pad right")
-        case .l1: return "L1"
-        case .r1: return "R1"
-        case .l2: return "L2"
-        case .r2: return "R2"
-        case .l3: return String(localized: "Left stick click")
-        case .r3: return String(localized: "Right stick click")
-        case .create: return "Create"
-        case .options: return "Options"
-        case .touchpad: return "Touchpad"
-        }
-    }
-
-    /// Zeichen auf dem Tasten-Symbol. Bewusst feste PlayStation-Zeichen statt
-    /// SF Symbols: Sie sehen in jeder macOS-Version gleich aus.
-    var glyph: String {
-        switch self {
-        case .cross: return "✕"
-        case .circle: return "○"
-        case .square: return "□"
-        case .triangle: return "△"
-        case .dpadUp: return "▲"
-        case .dpadDown: return "▼"
-        case .dpadLeft: return "◀"
-        case .dpadRight: return "▶"
-        case .l1: return "L1"
-        case .r1: return "R1"
-        case .l2: return "L2"
-        case .r2: return "R2"
-        case .l3: return "L3"
-        case .r3: return "R3"
-        case .create: return "Create"
-        case .options: return "Options"
-        case .touchpad: return "Touchpad"
-        }
-    }
-
-    /// Runde Tasten (Symbole, Steuerkreuz) gegen eckige (Schultertasten, Text).
-    var isRoundGlyph: Bool {
-        switch self {
-        case .cross, .circle, .square, .triangle, .dpadUp, .dpadDown, .dpadLeft, .dpadRight: return true
-        default: return false
-        }
-    }
-}
-
 extension ControllerLegendInput {
     /// Die Symbole, mit denen diese Eingabe gezeigt wird.
-    var glyphs: [(text: String, round: Bool)] {
+    func glyphs(_ family: ControllerFamily) -> [(text: String, round: Bool)] {
         switch self {
-        case let .button(button): return [(button.glyph, button.isRoundGlyph)]
+        case let .button(button): return [(button.glyph(family), button.isRoundGlyph)]
         case .leftStick: return [("L", true)]
         case .rightStick: return [("R", true)]
         case .dpad: return [("✛", true)]
-        case .bumpers: return [("L1", false), ("R1", false)]
+        case .bumpers: return [(ControllerButton.l1.glyph(family), false), (ControllerButton.r1.glyph(family), false)]
         }
     }
 }
@@ -233,6 +182,7 @@ struct ControllerGlyphView: View {
 struct ControllerInputGlyphs: View {
     let inputs: [ControllerLegendInput]
     var isCombination = false
+    @Environment(\.controllerFamily) private var family
 
     var body: some View {
         HStack(spacing: 3) {
@@ -242,7 +192,7 @@ struct ControllerInputGlyphs: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(AppTheme.textSecondary)
                 }
-                ForEach(Array(input.glyphs.enumerated()), id: \.offset) { _, glyph in
+                ForEach(Array(input.glyphs(family).enumerated()), id: \.offset) { _, glyph in
                     ControllerGlyphView(text: glyph.text, round: glyph.round)
                 }
             }
