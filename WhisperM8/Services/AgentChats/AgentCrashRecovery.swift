@@ -165,8 +165,10 @@ enum AgentCrashRecoveryCoordinator {
             sessions: sessions
         )
         for skipped in plan.skipped {
+            // Ein altes Flag darf den übersprungenen Chat nicht doch starten.
+            try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(
-                "crash_recovery_duplicate_skipped session=\(skipped.uuidString, privacy: .public)")
+                "crash_recovery_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")
         }
         let resumeIDs = plan.start
         for id in resumeIDs {

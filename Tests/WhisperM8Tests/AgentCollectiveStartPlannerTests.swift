@@ -7,24 +7,47 @@ import XCTest
 final class AgentCollectiveStartPlannerTests: XCTestCase {
     private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-    private func chat(_ id: String?, provider: AgentProvider = .claude, active: TimeInterval = 0) -> AgentChatSession {
-        AgentChatSession(provider: provider, projectID: UUID(), externalSessionID: id, title: "t",
-                         lastActivityAt: t0.addingTimeInterval(active))
+    private func chat(_ id: String?, provider: AgentProvider = .claude, created: TimeInterval = 0,
+                      active: TimeInterval = 0, manual: Bool? = nil) -> AgentChatSession {
+        var session = AgentChatSession(provider: provider, projectID: UUID(), externalSessionID: id, title: "t",
+                                       createdAt: t0.addingTimeInterval(created),
+                                       lastActivityAt: t0.addingTimeInterval(active))
+        session.createdManually = manual
+        return session
     }
 
-    func testOnlyMostRecentlyActiveChatOfASessionStarts() {
-        // Fall aus dem echten Workspace: laufender Fin und ein später angelegter Eintrag auf derselben ID.
-        let fin = chat("1f353dce", active: 100), stale = chat("1F353DCE", active: 10), other = chat("aa82d0ba")
-        let plan = AgentCollectiveStartPlanner.plan([stale.id, fin.id, other.id], sessions: [fin, stale, other])
+    /// Fall aus dem echten Workspace: Fin (16:27:18) und ein 29 s später
+    /// angelegter Eintrag auf derselben ID — der spätere wurde zuletzt
+    /// angefasst (Start setzt lastActivityAt) und darf trotzdem nicht gewinnen.
+    func testOlderChatKeepsTheSessionDespiteNewerActivity() {
+        let fin = chat("1f353dce", created: 0, active: 10), late = chat("1F353DCE", created: 29, active: 100)
+        let other = chat("aa82d0ba")
+        let plan = AgentCollectiveStartPlanner.plan([late.id, fin.id, other.id], sessions: [fin, late, other])
         XCTAssertEqual(plan.start, [fin.id, other.id])
-        XCTAssertEqual(plan.skipped, [stale.id])
+        XCTAssertEqual(plan.skipped, [late.id])
+        XCTAssertEqual(plan.keeperOf[late.id], fin.id)
     }
 
-    func testTieKeepsFirstAndOrderIsPreserved() {
-        let first = chat("x"), second = chat("x"), unbound = chat(nil), alsoUnbound = chat(nil)
-        let plan = AgentCollectiveStartPlanner.plan([unbound.id, first.id, alsoUnbound.id, second.id],
-                                                    sessions: [first, second, unbound, alsoUnbound])
-        XCTAssertEqual(plan.start, [unbound.id, first.id, alsoUnbound.id], "ungebundene Chats starten immer")
+    func testManuallyCreatedChatBeatsOlderImport() {
+        let imported = chat("x", created: 0), manual = chat("x", created: 50, manual: true)
+        let plan = AgentCollectiveStartPlanner.plan([imported.id, manual.id], sessions: [imported, manual])
+        XCTAssertEqual(plan.start, [manual.id])
+        XCTAssertEqual(plan.skipped, [imported.id])
+    }
+
+    func testSameRuleAsChatsDuplicates() {
+        let a = chat("x", created: 5), b = chat("x", created: 1), c = chat("x", created: 9, manual: true)
+        let group = AgentSessionDuplicateGroup.groups(in: AgentWorkspace(projects: [], sessions: [a, b, c])).first
+        let plan = AgentCollectiveStartPlanner.plan([a.id, b.id, c.id], sessions: [a, b, c])
+        XCTAssertEqual(plan.start, [group?.keeper.id].compactMap { $0 })
+        XCTAssertEqual(group?.keeper.id, c.id)
+    }
+
+    func testUnboundChatsAlwaysStartAndOrderIsPreserved() {
+        let first = chat("x", created: 0), second = chat("x", created: 1), unbound = chat(nil), empty = chat("")
+        let plan = AgentCollectiveStartPlanner.plan([unbound.id, second.id, empty.id, first.id],
+                                                    sessions: [first, second, unbound, empty])
+        XCTAssertEqual(plan.start, [unbound.id, empty.id, first.id], "ungebunden und leere ID starten immer")
         XCTAssertEqual(plan.skipped, [second.id])
     }
 
@@ -44,10 +67,13 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
         let project = UUID()
         let owner = try persistence.upsertSession(AgentChatSession(
             provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "soak bash",
-            status: .running, lastActivityAt: t0.addingTimeInterval(60)))
-        let wrong = try persistence.upsertSession(AgentChatSession(
+            status: .running, createdAt: t0, lastActivityAt: t0))
+        var wrongSession = AgentChatSession(
             provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "soak question",
-            status: .running, lastActivityAt: t0))
+            status: .running, createdAt: t0.addingTimeInterval(3), lastActivityAt: t0.addingTimeInterval(60))
+        wrongSession.shouldLaunchOnOpen = true // altes Flag
+        let wrong = try persistence.upsertSession(wrongSession)
+        let windowStore = AgentWindowStore(persistence: persistence)
         let markerURL = dir.appendingPathComponent("marker.json")
         let crashed = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 100, isProcessAlive: { _ in false })
         _ = crashed.beginRun()
@@ -56,12 +82,14 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
         let resumed = AgentCrashRecoveryCoordinator.start(
             marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
             registry: AgentTerminalRegistry(),
-            windowStore: AgentWindowStore(persistence: persistence),
+            windowStore: windowStore,
             store: persistence,
             isEnabled: true
         )
 
         XCTAssertEqual(resumed, [owner.id])
+        XCTAssertNil(windowStore.windowID(containingTab: wrong.id), "übersprungener Chat bekommt keinen Tab")
+        XCTAssertNotNil(windowStore.windowID(containingTab: owner.id))
         let sessions = Dictionary(uniqueKeysWithValues: persistence.loadWorkspace().sessions.map { ($0.id, $0) })
         XCTAssertEqual(sessions[owner.id]?.shouldLaunchOnOpen, true)
         XCTAssertNotEqual(sessions[wrong.id]?.shouldLaunchOnOpen, true)
