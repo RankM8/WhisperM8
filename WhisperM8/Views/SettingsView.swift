@@ -19,7 +19,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case clipboard
     case statistics
     case controller
-    case restart
 
     var id: String { rawValue }
 
@@ -65,8 +64,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Statistics")
         case .controller:
             return String(localized: "Controller")
-        case .restart:
-            return String(localized: "Restart without losing chats")
         }
     }
 
@@ -108,8 +105,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "chart.bar.xaxis"
         case .controller:
             return "gamecontroller"
-        case .restart:
-            return "arrow.triangle.2.circlepath"
         }
     }
 
@@ -151,8 +146,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Active time, tokens, API value, limits, chats and dictations — calculated locally.")
         case .controller:
             return String(localized: "Use WhisperM8 with a gamepad.")
-        case .restart:
-            return String(localized: "Running chats keep working while WhisperM8 restarts.")
         }
     }
 }
@@ -358,8 +351,6 @@ struct SettingsView: View {
             StatisticsSettingsPage()
         case .controller:
             ControllerSettingsPage()
-        case .restart:
-            RestartSettingsPage()
         }
     }
 

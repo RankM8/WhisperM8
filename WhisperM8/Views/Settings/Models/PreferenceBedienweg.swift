@@ -81,6 +81,7 @@ enum PreferenceBedienweg {
 
     /// Mess- und Entwicklerwerkzeuge: für Untersuchungen und A/B-Vergleiche, kein Bedienweg.
     static let measurementTools: [Entry] = [
+        Entry(key: "restartKeepsChatsEnabled", reason: "Labs „Neustart ohne Chatverlust“ ist noch nicht einschaltbar (Geheimnis-Weg offen). Die Seite RestartSettingsPage samt Übersetzung liegt bereit und wird erst eingehängt, wenn das Feature einschaltbar ist; bis dahin soll niemand den Schalter versehentlich setzen."),
         Entry(key: "agentStatusPulseEnabled", reason: "A/B-Schalter für die alte Dauerbewegung der Status-Punkte, nur für Lastmessungen."),
         Entry(key: "debugControlEnabled", reason: "Aktiviert den Debug-Control-Socket für Entwickler und QA (`whisperm8 debug`)."),
     ]

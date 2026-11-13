@@ -211,6 +211,18 @@ final class HandoverTakeServiceTests: XCTestCase {
         XCTAssertTrue(calls.resumed.isEmpty)
     }
 
+    /// Review Paket 4 (Startbremse): Ohne Marker „übergeben“ und ohne
+    /// Discovery-Eintrag eines Aufbewahrers darf der Start nichts kosten, also
+    /// keinen Verbindungsversuch mit Frist auf dem Main Thread.
+    func testNormalStartCostsNoSocketWait() {
+        let calls = Calls()
+        let started = Date()
+        _ = service(secrets: FakeSecretStore(), sessions: [], calls: calls).takeAtLaunch()
+        let millis = Date().timeIntervalSince(started) * 1000
+        print("handover_take_ohne_aufbewahrer_ms=\(Int(millis))")
+        XCTAssertLessThan(millis, 50, "Start ohne Übergabe wartete \(Int(millis)) ms")
+    }
+
     func testNormalStartWithoutHandoverDoesNothing() {
         let calls = Calls()
         let summary = service(secrets: FakeSecretStore(), sessions: [], calls: calls).takeAtLaunch()

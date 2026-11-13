@@ -77,7 +77,13 @@ final class HandoverTakeService {
         }
         // Abseits des Main Threads keinen Socket öffnen; der Aufbewahrer wird
         // dann über die PID aus dem Marker beendet (unten).
-        let keeperStatus = onMain ? Self.status(paths: dependencies.paths) : nil
+        // Review Paket 4 (Startbremse): Der Verbindungsaufbau wartet bis zu
+        // seiner Frist, auch wenn kein Socket da ist — beim normalen Start kostete
+        // das 525 ms auf dem Main Thread. Gefragt wird deshalb nur, wenn es einen
+        // Grund gibt: Marker „übergeben“ oder Discovery-Eintrag eines Aufbewahrers.
+        let mayHaveKeeper = previous.handover != nil
+            || FileManager.default.fileExists(atPath: dependencies.paths.discoveryFileURL.path)
+        let keeperStatus = onMain && mayHaveKeeper ? Self.status(paths: dependencies.paths) : nil
         guard previous.handover != nil || keeperStatus != nil else { return summary }
         Self.isTaking = true
         defer { Self.isTaking = false }

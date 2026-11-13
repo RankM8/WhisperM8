@@ -1,6 +1,9 @@
 import SwiftUI
 
 /// Labs-Seite „Neustart ohne Chatverlust“ (Plan docs/plans/neustart-ohne-chatverlust.md).
+/// **Noch nicht eingehängt** (Entscheidung 13.11.2026): Sie kommt in die
+/// Labs-Gruppe (`SettingsPage`, `SettingsNavigation`), sobald das Feature
+/// einschaltbar ist; bis dahin steht der Schlüssel in `PreferenceBedienweg`.
 /// Ein Schalter: Beim Neustart über `make dev` gibt die App laufende Chats an
 /// einen Aufbewahrer ab und holt sie danach zurück; der GPT-Router läuft dafür
 /// als eigener Dienst. Derselbe Schlüssel wie aus Paket 3, kein zweiter.

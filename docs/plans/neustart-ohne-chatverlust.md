@@ -327,6 +327,19 @@ Grundlage: Pakete 1 bis 3 und das Dauerlauf-Skript sind gebaut. Paket 4 verbinde
 - Wechsel Brew-Build ↔ Dev-Build: Der Zugriff scheitert sauber, ohne Dialog und ohne Hängen. Es gilt der Rückfall (`--resume` nach geordnetem Ende des Aufbewahrers). Abfrage nur mit `kSecUseAuthenticationUIFail` beziehungsweise ohne Benutzerinteraktion, mit kurzer Frist.
 - Test-Instanz (eigene Bundle-ID): eigener Eintrag, berührt die Arbeits-App nie.
 
+### Vor dem Einschalten des Schalters (Stand 13.11.2026, nach Vics Review von Paket 4)
+
+Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblendet. Eingeschaltet wird erst, wenn alles hier erledigt ist:
+
+1. **Geheimnis-Weg entschieden und gebaut.** Mit Schlüsselbund scheitert die Übernahme über zwei Builds (cdhash-Bindung ohne Team-ID, gemessen in der Test-Instanz). Vorschlag Option A: Datei 0600 im 0700-Ordner des Aufbewahrers, Schlüsselbund ganz aus dem Weg, Kontoname ohne Signatur; später C (Apple-Entwicklerkonto). Abnahme mit Dev-Build auf Dev-Build und ad hoc auf ad hoc. Abschnitt „Wovor schützen wir“ entsprechend zurückschneiden.
+2. **Kein Start mehr nach `COMMIT`.** Zwischen Abgabe und Beenden startet die alte App keinen Chat mehr.
+3. **Abgabe-Fehler mit Fortsetzen wie im Plan:** Chats, deren Abgabe scheiterte, werden nach dem Neustart fortgesetzt.
+4. **Aufbewahrer liest erst ab `COMMIT`** aus den Leitungen.
+5. **`app handover` gegen Aufruf aus einem Chat sichern.**
+6. **Bindungs-Befund** (zwei Chats an derselben Claude-Sitzung): nach der Übernahme die Sitzungs-ID über die PID in Claudes Registry prüfen und korrigieren; vor jedem Sammel-Start auf doppelte IDs prüfen; Reservierung gegen gleichzeitigen Doppelstart; zurückgestellte IDs und Fork-Merkliste ins Manifest.
+7. **Prüfungen gegen die Wirklichkeit:** Bild im echten Fenster, Dauerlauf grün, fünfmal `make dev`, der erste echte Lauf nur mit Chats, deren Verlust nicht schlimm wäre.
+8. **Labs-Seite einhängen** (`RestartSettingsPage`, liegt samt Übersetzung bereit) und den Eintrag in `PreferenceBedienweg` streichen.
+
 ## Bau-Reihenfolge
 
 Jedes Paket hat einen eigenen Branch und Arbeitsordner, wird einzeln reviewt und geht erst nach grüner Suite in main. Ist der Labs-Schalter aus, ändert keins das heutige Verhalten. Ausnahme ist Paket 0, das sind Fehlerbehebungen.
