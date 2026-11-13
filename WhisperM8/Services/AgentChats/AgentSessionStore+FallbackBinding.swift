@@ -65,11 +65,24 @@ extension AgentSessionStore {
     /// bliebe still auf der Quelle). Ein reiner Resume bindet nur die
     /// fortgesetzte ID.
     static func registryIDFits(_ registryID: String, arguments: [String]) -> Bool {
-        guard let flag = arguments.firstIndex(where: { $0 == "--resume" || $0 == "-r" }),
-              flag + 1 < arguments.count else { return true }
-        let resumed = arguments[flag + 1]
+        guard let resumed = resumedSessionID(in: arguments) else { return true }
         let sameAsResumed = registryID.caseInsensitiveCompare(resumed) == .orderedSame
         return arguments.contains("--fork-session") ? !sameAsResumed : sameAsResumed
+    }
+
+    /// Die fortgesetzte ID aus `--resume <id>`, `-r <id>` oder `--resume=<id>`
+    /// (Vic: die Gleichheitsform kann der Nutzer in eigenen Argumenten eintragen).
+    static func resumedSessionID(in arguments: [String]) -> String? {
+        for (index, argument) in arguments.enumerated() {
+            if argument.hasPrefix("--resume=") {
+                let value = String(argument.dropFirst("--resume=".count))
+                return value.isEmpty ? nil : value
+            }
+            if argument == "--resume" || argument == "-r" {
+                return index + 1 < arguments.count ? arguments[index + 1] : nil
+            }
+        }
+        return nil
     }
 
     static func isForegroundClaudeStart(arguments: [String]) -> Bool {
