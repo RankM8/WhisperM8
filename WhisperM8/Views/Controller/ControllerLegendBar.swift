@@ -187,11 +187,13 @@ struct ControllerLegendHost: View {
         if legendEnabled, status.isRunning, status.device != nil {
             let isThisWindow = windows.keyAgentChatWindowID == windowID
             let context: ControllerContext = status.isPaused ? .paused : (isThisWindow ? model.context : .otherWindow)
+            let traits = status.traits
             ControllerLegendBar(
                 target: .make(context: context, chatTitle: model.targetTitle),
-                entries: isThisWindow || status.isPaused ? ControllerLegend.entries(for: context) : [],
+                entries: isThisWindow || status.isPaused ? ControllerLegend.entries(for: context, traits: traits) : [],
                 holdProgress: isThisWindow ? model.holdProgress : nil
             )
+            .environment(\.controllerFamily, traits.family)
         }
     }
 }

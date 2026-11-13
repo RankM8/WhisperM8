@@ -182,7 +182,8 @@ enum DebugCLICommand {
            [--busy-after <ms>]      mitschneiden: Lücke ohne Pille, Versatz, Zeiten je Fenster.
                                     --busy blockiert den Main Thread nach dem Aufbau des
                                     Diktat-Fensters (sofort oder --busy-after ms später)
-      controller state              Controller-Steuerung: Verbindung, Schalter, Zähler je Taste
+      controller state              Controller-Steuerung: Verbindung, Familie, Paddles (HID-Zustand,
+                                    Maske, verschluckte Tasten, Zurückhaltungen), Schalter, Zähler je Taste
                                     (App vorne / im Hintergrund), letzte aufgelöste Gesten
       controller press <taste>      Künstlicher Tastendruck durch die echte Kette. Ohne
                  [--hold <ms>]      --execute ein Trockenlauf (Geste, Zusammenhang, Aktion);
@@ -190,8 +191,10 @@ enum DebugCLICommand {
                  [--window <id>]    --window: dieses Fenster gilt als aktives Agent-Chats-Fenster,
                  [--frontmost]      --frontmost: die App gilt als vorne
       controller sequence "<…>"     Folge aus down:<taste>, up:<taste>, trigger:<l2|r2>:<0…1>,
-                                    stick:<left|right>:<x>:<y>, wait:<ms> — durch Kommas getrennt,
-                                    zusammen höchstens 8 s Wartezeit; Optionen wie bei press
+                                    stick:<left|right>:<x>:<y>, wait:<ms>, hid:<maske>[+|-<taste>]
+                                    (HID-Bericht des Xbox Elite, z. B. hid:4+cross, hid:0-cross,
+                                    hid:+home) — durch Kommas getrennt, zusammen höchstens 8 s
+                                    Wartezeit; Optionen wie bei press
 
     Ausgabe: JSON auf stdout. Exit: 0 ok, 1 Aufruf/Parameter, 3 nicht gefunden,
     4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.

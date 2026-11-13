@@ -59,6 +59,8 @@ extension AgentControlRequestHandler {
                     switch step {
                     case .event(let event):
                         manager.inject(event)
+                    case .hid(let report):
+                        manager.injectHID(report)
                     case .wait(let milliseconds):
                         try? await Task.sleep(for: .milliseconds(milliseconds))
                     }
@@ -99,12 +101,29 @@ extension AgentControlRequestHandler {
                 "name": info.name, "category": info.category,
                 "battery": info.batteryLevel.map { Double($0) as Any } ?? NSNull(),
                 "light": info.hasLight, "haptics": info.hasHaptics,
+                "family": info.family.rawValue,
             ] as [String: Any]
         }
+        let gate = manager.paddleGateStats
+        let paddles: [String: Any] = [
+            "source": status.paddles.debugName,
+            "hidEnabled": preferences.isControllerPaddleHIDEnabled,
+            "listenAccess": XboxPaddleHIDSource.listenAccess,
+            "bindings": Dictionary(uniqueKeysWithValues: ControllerPaddle.allCases.map {
+                ($0.rawValue, manager.paddleBindings[$0].rawValue)
+            }),
+            "lastMask": Int(gate.lastMask),
+            "reports": gate.reports,
+            "swallowed": gate.swallowed,
+            "holds": gate.holds,
+            "holdsExpired": gate.holdsExpired,
+            "longestHoldMs": Int((gate.longestHold * 1000).rounded()),
+        ]
         return [
             "running": status.isRunning,
             "paused": status.isPaused,
             "device": device,
+            "paddles": paddles,
             "background": status.background.rawValue,
             "switches": [
                 "feature": preferences.isControllerFeatureEnabled,

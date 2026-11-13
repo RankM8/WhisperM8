@@ -45,7 +45,29 @@ final class ControllerStatus {
     /// Zuletzt gedrückte Taste (Tasten-Test auf der Einstellungsseite).
     var lastButton: ControllerButton?
     var lastButtonCount = 0
+    /// Paddles und Xbox-Knopf über HID (Xbox Elite).
+    var paddles: ControllerPaddleSupport = .none
+
+    /// Was Legende, Insel und Einstellungen zeigen: Tastennamen des
+    /// Controllers der letzten Eingabe; beim Xbox-Controller gibt es die
+    /// Taste für den Verlauf nur, wenn der Xbox-Knopf über HID lesbar ist.
+    var traits: ControllerInputTraits {
+        let family = device?.family ?? .playStation
+        return ControllerInputTraits(family: family, hasTouchpad: family.hasTouchpad || paddles.homeButtonReadable)
+    }
 }
+
+/// Quelle für Paddles und Xbox-Knopf über rohes HID. Live:
+/// `XboxPaddleHIDSource`; Tests lassen sie weg.
+protocol ControllerHIDSourcing: AnyObject {
+    var onReport: (@Sendable (ControllerHIDReport) -> Void)? { get set }
+    var onPaddlesAvailable: (@Sendable (Bool) -> Void)? { get set }
+    var onStateChange: (@MainActor (ControllerPaddleSupport) -> Void)? { get set }
+    func start(queue: DispatchQueue)
+    func stop()
+}
+
+extension XboxPaddleHIDSource: ControllerHIDSourcing {}
 
 /// Zählt Roh-Ereignisse je Taste, getrennt danach, ob die App vorne war.
 /// Wird auf der Eingabe-Queue geschrieben und vom Debug-Kanal gelesen.
@@ -107,7 +129,7 @@ final class ControllerEventCounters: @unchecked Sendable {
 /// gehen zum Main Thread; dort werden Zusammenhang und Aktion bestimmt.
 @MainActor
 final class ControllerManager {
-    static let shared = ControllerManager(source: GameControllerInputSource())
+    static let shared = ControllerManager(source: GameControllerInputSource(), hidSource: XboxPaddleHIDSource())
 
     let status = ControllerStatus()
     let counters = ControllerEventCounters()
@@ -126,8 +148,12 @@ final class ControllerManager {
     var onResolution: ((ControllerResolution) -> Void)?
     /// Lauf, Verbindung oder Pause haben sich geändert.
     var onStateChange: (() -> Void)?
+    /// Belegung der Paddles, zwischengespeichert: kein Lesen der
+    /// Einstellungen je Geste.
+    private(set) var paddleBindings: ControllerPaddleBindings = .standard
 
     private let source: ControllerInputSource
+    private let hidSource: ControllerHIDSourcing?
     private let pump: ControllerGesturePump
     private let preferences: () -> AppPreferences
     private var activeObservers: [NSObjectProtocol] = []
@@ -143,20 +169,29 @@ final class ControllerManager {
 
     init(
         source: ControllerInputSource,
+        hidSource: ControllerHIDSourcing? = nil,
         pump: ControllerGesturePump = ControllerGesturePump(),
         preferences: @escaping () -> AppPreferences = { AppPreferences.shared }
     ) {
         self.source = source
+        self.hidSource = hidSource
         self.pump = pump
         self.preferences = preferences
 
         let counters = self.counters
-        source.onEvent = { [pump] event in
+        source.onEvent = { [pump] event, origin in
             counters.record(event)
-            pump.ingest(event)
+            pump.ingest(event, origin: origin)
         }
         source.onReset = { [pump] in pump.reset() }
         source.onDeviceChange = { [weak self] info in self?.deviceChanged(info) }
+        hidSource?.onReport = { [pump] report in pump.ingestHID(report) }
+        hidSource?.onPaddlesAvailable = { [pump] available in pump.setPaddleSourceAvailable(available) }
+        hidSource?.onStateChange = { [weak self] state in
+            guard let self, self.status.isRunning, self.status.paddles != state else { return }
+            self.status.paddles = state
+            self.onStateChange?()
+        }
         pump.onGestures = { [weak self] gestures, idleAfter in
             Task { @MainActor in self?.handle(gestures, idleAfter: idleAfter) }
         }
@@ -168,6 +203,7 @@ final class ControllerManager {
     /// wenn sich ein Schalter ändert.
     func applyPreferences() {
         let prefs = preferences()
+        paddleBindings = prefs.paddleBindings
         let shouldRun = prefs.isControllerFeatureEnabled && prefs.isControllerEnabled
         if shouldRun, !status.isRunning {
             start()
@@ -191,6 +227,14 @@ final class ControllerManager {
             },
         ]
         source.start(queue: pump.queue)
+        if let hidSource {
+            if preferences().isControllerPaddleHIDEnabled {
+                hidSource.start(queue: pump.queue)
+            } else {
+                status.paddles = .disabled
+                Logger.controller.info("controller_hid_disabled")
+            }
+        }
         Logger.controller.info("controller_started")
         onStateChange?()
     }
@@ -200,8 +244,11 @@ final class ControllerManager {
         activeObservers.forEach(NotificationCenter.default.removeObserver)
         activeObservers = []
         source.stop()
+        hidSource?.stop()
+        pump.setPaddleSourceAvailable(false)
         pump.reset()
         status.device = nil
+        status.paddles = .none
         status.background = .off
         Logger.controller.info("controller_stopped")
         onStateChange?()
@@ -297,7 +344,7 @@ final class ControllerManager {
         snapshot.backgroundEnabled = preferences().isControllerBackgroundEnabled
         snapshot.wakeOnInputEnabled = preferences().isControllerWakeOnInputEnabled
         let context = ControllerContextResolver.context(for: snapshot)
-        let action = ControllerBindingResolver.action(for: gesture, in: context)
+        let action = ControllerBindingResolver.action(for: gesture, in: context, paddles: paddleBindings)
         guard let action, !isDryRun, let performer else {
             return ControllerResolution(gesture: gesture, context: context, action: action, executed: false)
         }
@@ -362,10 +409,20 @@ final class ControllerManager {
     /// sonst stellte einer den Trockenlauf des anderen zurück.
     private(set) var isDebugRunActive = false
 
-    /// Speist künstliche Roh-Ereignisse in dieselbe Kette wie echte Hardware.
+    /// Speist künstliche Roh-Ereignisse in dieselbe Kette wie echte Hardware,
+    /// mit der Familie des verbundenen Controllers (so greift bei einem Xbox
+    /// Elite auch die Weiche der Paddles).
     func inject(_ event: ControllerInputEvent) {
-        pump.ingest(event)
+        pump.ingest(event, origin: status.device?.family ?? .playStation)
     }
+
+    /// Künstlicher HID-Bericht (Debug-Schritt `hid:`), durch die Weiche.
+    func injectHID(_ report: ControllerHIDReport) {
+        pump.ingestHID(report)
+    }
+
+    /// Zahlen der Weiche der Paddles (Debug-Kanal).
+    var paddleGateStats: ControllerPaddleGate.Stats { pump.paddleGateStats }
 
     /// Klammert einen Lauf des Debug-Kanals: setzt Trockenlauf und Angaben,
     /// führt die Schritte aus, löst danach alles Gehaltene, wartet, bis die

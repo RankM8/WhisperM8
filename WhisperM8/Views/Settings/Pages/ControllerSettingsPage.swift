@@ -7,13 +7,17 @@ struct ControllerSettingsDependencies {
     var status: @MainActor () -> ControllerStatus
     /// Schalter wurden geändert: Lauf der Steuerung angleichen.
     var applyPreferences: @MainActor () -> Void
+    /// Paddles nicht lesbar: auf Klick nach „Eingabeüberwachung“ fragen und
+    /// die Systemeinstellungen öffnen (nie von selbst).
+    var requestInputMonitoring: @MainActor () -> Void = {}
 
     static let live = ControllerSettingsDependencies(
         status: { ControllerManager.shared.status },
         applyPreferences: {
             ControllerManager.shared.applyPreferences()
             ControllerConnectHint.shared.sync()
-        }
+        },
+        requestInputMonitoring: { XboxPaddleHIDSource.requestListenAccess() }
     )
 }
 
@@ -34,11 +38,16 @@ struct ControllerSettingsPage: View {
     }
 
     var body: some View {
+        // Tastennamen nach dem Controller der letzten Eingabe (Xbox: A B X Y).
+        let traits = dependencies.status().traits
+        let family = traits.family
+        let l1 = ControllerButton.l1.glyph(family), r1 = ControllerButton.r1.glyph(family)
+        let r2 = ControllerButton.r2.glyph(family)
         SettingsPageContainer(
             title: "Controller",
             subtitle: "Use WhisperM8 with a gamepad."
         ) {
-            SettingsLabsNotice("New and still evolving. Built for the PS5 DualSense; other gamepads work through the generic profile. Off by default.")
+            SettingsLabsNotice("New and still evolving. Built for the PS5 DualSense and Xbox controllers; other gamepads work through the generic profile. Off by default.")
 
             SettingsSection("Controller") {
                 SettingsToggleRow(
@@ -67,26 +76,34 @@ struct ControllerSettingsPage: View {
                 )
                 SettingsToggleRow(
                     title: "Also when another app is in front",
-                    subtitle: "Dictation and clipboard history work everywhere. Turn this off for gaming, or pause the controller with L1 + R1.",
+                    subtitle: String(localized: "Dictation and clipboard history work everywhere. Turn this off for gaming, or pause the controller with \(l1) + \(r1)."),
                     isOn: $backgroundEnabled
                 )
                 ControllerBackgroundRow(status: dependencies.status(), isEnabled: enabled && backgroundEnabled)
                 SettingsToggleRow(
                     title: "Bring WhisperM8 to the front on input",
-                    subtitle: "While another app is in front, moving a stick or pressing a button brings the Agent Chats window forward. That first input does nothing else. R2 and the touchpad keep working in the other app. Needs the switch above.",
+                    subtitle: traits.hasTouchpad
+                        ? String(localized: "While another app is in front, moving a stick or pressing a button brings the Agent Chats window forward. That first input does nothing else. \(r2) and \(family.touchpadPhrase) keep working in the other app. Needs the switch above.")
+                        : String(localized: "While another app is in front, moving a stick or pressing a button brings the Agent Chats window forward. That first input does nothing else. \(r2) keeps working in the other app. Needs the switch above."),
                     isOn: $wakeOnInputEnabled
                 )
                 .disabled(!backgroundEnabled)
             }
 
-            ForEach(ControllerLegend.allBindings(), id: \.kind) { section in
-                ControllerBindingsSection(section: section)
+            ControllerPaddleSection(
+                status: dependencies.status(), applyPreferences: dependencies.applyPreferences,
+                requestAccess: dependencies.requestInputMonitoring)
+
+            ForEach(ControllerLegend.allBindings(traits: traits), id: \.kind) { section in
+                ControllerBindingsSection(section: section, family: family)
             }
 
             SettingsSection("Pairing") {
                 SettingsHelpText("PS5 controller: switch it off, then hold Create (left of the touchpad) and the PlayStation button together until the light bar flashes quickly. Then connect it under Bluetooth in System Settings. A USB-C cable works without pairing.")
+                SettingsHelpText("Xbox controller: hold the pair button on the top edge until the Xbox button flashes quickly, then connect it under Bluetooth in System Settings. The Elite Series 2 needs a current firmware for Bluetooth LE.")
             }
         }
+        .environment(\.controllerFamily, family)
         .onChange(of: enabled) { _, _ in dependencies.applyPreferences() }
         .onChange(of: backgroundEnabled) { _, _ in dependencies.applyPreferences() }
     }
@@ -96,6 +113,7 @@ struct ControllerSettingsPage: View {
 private struct ControllerConnectionRows: View {
     let status: ControllerStatus
     let isEnabled: Bool
+    @Environment(\.controllerFamily) private var family
 
     var body: some View {
         if let device = status.device, isEnabled {
@@ -108,8 +126,8 @@ private struct ControllerConnectionRows: View {
             SettingsRow(title: "Button test", subtitle: "Press a button on the controller.") {
                 if let button = status.lastButton {
                     HStack(spacing: 8) {
-                        ControllerGlyphView(text: button.glyph, round: button.isRoundGlyph)
-                        Text(verbatim: button.displayName)
+                        ControllerGlyphView(text: button.glyph(family), round: button.isRoundGlyph)
+                        Text(verbatim: button.displayName(family))
                             .font(.system(size: 11.5, weight: .medium))
                             .foregroundStyle(AppTheme.textSecondary)
                     }
@@ -176,13 +194,20 @@ private struct ControllerBackgroundRow: View {
 /// Belegung zum Nachlesen, aus derselben Tabelle wie die Legende.
 private struct ControllerBindingsSection: View {
     let section: ControllerLegendSection
+    let family: ControllerFamily
 
     var body: some View {
         switch section.kind {
         case .core: SettingsSection("Core buttons") { rows }
         case .extra: SettingsSection("More buttons") { rows }
-        case .layers: SettingsSection("Hold L1, R1 or L2: layers") { rows }
+        case .layers: SettingsSection(layersTitle) { rows }
         }
+    }
+
+    private var layersTitle: String {
+        let l1 = ControllerButton.l1.glyph(family), r1 = ControllerButton.r1.glyph(family)
+        let l2 = ControllerButton.l2.glyph(family)
+        return String(localized: "Hold \(l1), \(r1) or \(l2): layers")
     }
 
     @ViewBuilder
@@ -192,7 +217,7 @@ private struct ControllerBindingsSection: View {
                 HStack(alignment: .center, spacing: 14) {
                     ControllerInputGlyphs(inputs: entry.inputs, isCombination: entry.isCombination)
                         .frame(width: 116, alignment: .leading)
-                    Text(verbatim: entry.label.explanation)
+                    Text(verbatim: entry.label.explanation(family))
                         .font(.system(size: 13))
                         .foregroundStyle(AppTheme.textPrimary)
                     Spacer(minLength: 0)

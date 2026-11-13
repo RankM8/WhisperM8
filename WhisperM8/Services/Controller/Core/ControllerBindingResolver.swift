@@ -21,7 +21,15 @@ enum ControllerBindingResolver {
     /// Steht für das Paar L1 + R1 in `holdProgress`.
     static let chordProgressButton: ControllerButton = .l1
 
-    static func action(for gesture: ControllerGesture, in context: ControllerContext) -> ControllerAction? {
+    /// `paddles`: Belegung der Paddles (Einstellungen); Legende und Tests
+    /// rufen ohne sie auf.
+    static func action(
+        for gesture: ControllerGesture, in context: ControllerContext,
+        paddles: ControllerPaddleBindings = .standard
+    ) -> ControllerAction? {
+        if let paddle = paddleGesture(gesture) {
+            return paddleAction(paddle, gesture: gesture, in: context, bindings: paddles)
+        }
         if let chordAction = chordAction(for: gesture, in: context) {
             return chordAction
         }
@@ -97,7 +105,7 @@ enum ControllerBindingResolver {
     static func wakes(_ gesture: ControllerGesture) -> Bool {
         switch gesture {
         case let .press(button):
-            return button != .r2 && button != .touchpad
+            return button != .r2 && button != .touchpad && !button.isPaddle
         case let .holdPending(button, _):
             return ControllerLayer(key: button) == nil
         case let .tap(button):
