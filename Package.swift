@@ -40,11 +40,14 @@ let package = Package(
         // frisches Terminal nach dem Einspielen gleich aussieht und sich gleich
         // verhaelt; LocalProcess.detachForHandover()/adopt(_:) geben eine
         // laufende Leitung ab und uebernehmen sie, Ende per kqueue mit
-        // Exit-Status; das Kind schliesst vor execve alle Deskriptoren ab 3.
+        // Exit-Status. Das Kind schliesst vor execve alle Deskriptoren ab 3,
+        // die beim Start offen waren; was ein anderer Thread erst zwischen
+        // dieser Liste und dem fork oeffnet, bleibt offen (deshalb weiter
+        // close-on-exec setzen). Review-Befunde 13.11.2026 in ce47a2c.
         //
         // Upstream-PR-faehig — bei Merge zurueck auf migueldeicaza/SwiftTerm +
         // Version-Bump. Pin auf Commit fuer reproduzierbare Builds.
-        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "4c3b0faed065e3fe636b056b3773534f4bbae6df"),
+        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "ce47a2cb5e1b29efb9d351c649eb159bfb88d3ad"),
     ],
     targets: [
         // Winziges Objective-C-Target, nur damit Swift eine NSException

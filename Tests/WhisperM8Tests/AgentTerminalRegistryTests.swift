@@ -25,7 +25,7 @@ final class AgentTerminalRegistryTests: XCTestCase {
 
     func testTerminateAllPaysGraceWaitOnlyOnce() {
         let spy = SleepSpy()
-        let registry = AgentTerminalRegistry(sleep: { spy($0) })
+        let registry = AgentTerminalRegistry(sleep: { spy($0) }, termination: .inert)
         let ids = startSleepers(5, in: registry)
         XCTAssertEqual(registry.activeSessionIDs.count, 5)
 
@@ -39,7 +39,7 @@ final class AgentTerminalRegistryTests: XCTestCase {
 
     func testTerminateAllWithoutRunningChatsDoesNotSleep() {
         let spy = SleepSpy()
-        let registry = AgentTerminalRegistry(sleep: { spy($0) })
+        let registry = AgentTerminalRegistry(sleep: { spy($0) }, termination: .inert)
         XCTAssertEqual(registry.terminateAll(), [])
         XCTAssertTrue(spy.calls.isEmpty)
     }
