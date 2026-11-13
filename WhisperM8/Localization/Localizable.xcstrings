@@ -14044,12 +14044,12 @@
         }
       }
     },
-    "Restarted as a new session after the restart: this chat had no session to continue yet.": {
+    "Restarted as a new session after the restart: this chat had no session to continue yet. A prompt it was started with is not sent again.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nach dem Neustart als neue Sitzung gestartet: Dieser Chat hatte noch keine Sitzung, die sich fortsetzen ließ."
+            "value": "Nach dem Neustart als neue Sitzung gestartet: Dieser Chat hatte noch keine Sitzung, die sich fortsetzen ließ. Ein Prompt, mit dem er gestartet wurde, wird nicht noch einmal gesendet."
           }
         }
       }

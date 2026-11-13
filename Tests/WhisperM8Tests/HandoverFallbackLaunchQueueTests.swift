@@ -232,4 +232,50 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
         XCTAssertEqual(store.loadWorkspace().sessions.first { $0.id == chat.id }?.hasLaunchedInitialPrompt, true)
         XCTAssertNil(HandoverFallbackLaunchQueue.shared.takeNotice(for: chat.id))
     }
+
+    // MARK: Vic zu 41f220fc: „kein Turn“ belastbarer
+
+    /// (1) Nach einer Rotation zählen auch die Einträge in `<datei>.1`.
+    func testJournalRecentAlsoReadsTheRotatedFile() throws {
+        let url = tempURL("journal")
+        let chat = UUID()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601   // wie das Journal
+        func line(_ to: String, _ at: TimeInterval) throws -> String {
+            String(decoding: try encoder.encode(ChatsStatusJournalEntry(
+                at: Date(timeIntervalSince1970: at), sessionID: chat, from: nil, to: to, signal: "s", source: "hook")),
+                   as: UTF8.self)
+        }
+        try (try line("working", 1) + "\n").write(to: url.appendingPathExtension("1"), atomically: true, encoding: .utf8)
+        try (try line("idle", 2) + "\n").write(to: url, atomically: true, encoding: .utf8)
+        let entries = ChatsStatusJournal.recent(sessionID: chat, limit: 10, fileURL: url)
+        XCTAssertEqual(entries.map(\.to), ["working", "idle"], "älteste zuerst, auch aus der rotierten Datei")
+        XCTAssertTrue(HandoverFallbackStart.hadTurn(launched(.codex), journal: entries, hookEvents: nil))
+    }
+
+    /// (2) Unabhängiger Beleg: ein ungebundener Verlauf desselben Anbieters im
+    /// Projektordner, entstanden nach dem Anlegen des Chats.
+    func testUnboundTranscriptInTheProjectCountsAsATurn() {
+        let chat = launched(.codex)
+        func indexed(_ id: String, provider: AgentProvider = .codex, cwd: String = "/p/projekt",
+                     created: TimeInterval = 10) -> IndexedAgentSession {
+            IndexedAgentSession(provider: provider, externalSessionID: id, cwd: cwd, title: "t", model: nil,
+                                reasoningEffort: nil, createdAt: chat.createdAt.addingTimeInterval(created),
+                                lastActivityAt: chat.createdAt.addingTimeInterval(created))
+        }
+        func check(_ items: [IndexedAgentSession], bound: Set<String> = []) -> Bool {
+            HandoverFallbackStart.hasUnboundTranscript(for: chat, projectPath: "/p/projekt", indexed: items, boundIDs: bound)
+        }
+        XCTAssertTrue(check([indexed("a")]), "ungebunden, danach entstanden")
+        XCTAssertFalse(check([indexed("a")], bound: ["a"]), "gehört schon einem Chat")
+        XCTAssertFalse(check([indexed("a", created: -60)]), "älter als der Chat")
+        XCTAssertFalse(check([indexed("a", provider: .claude)]), "anderer Anbieter")
+        XCTAssertFalse(check([indexed("a", cwd: "/p/anders")]), "anderer Ordner")
+        XCTAssertFalse(check([]))
+    }
+
+    /// (3) Der Hinweis sagt ehrlich, dass ein Start-Prompt nicht noch einmal läuft.
+    func testFreshStartNoticeMentionsThePrompt() {
+        XCTAssertTrue(HandoverFallbackStart.startFresh.notice?.contains("not sent again") == true)
+    }
 }

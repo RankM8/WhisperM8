@@ -118,9 +118,14 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// auch von der CLI genutzt, ohne Schreib-Nebenwirkung.
     static func recent(sessionID: UUID, limit: Int = 8, fileURL: URL? = nil) -> [ChatsStatusJournalEntry] {
         let url = fileURL ?? defaultFileURL()
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        // Nach einer Rotation liegen ältere Zeilen in `<datei>.1` (Vic,
+        // 13.11.2026: im echten Workspace schon geschehen). Neueste zuerst:
+        // erst die aktuelle Datei, dann die rotierte.
+        let texts = [url, url.appendingPathExtension("1")].compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+        guard !texts.isEmpty else { return [] }
         var found: [ChatsStatusJournalEntry] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+        let lines = texts.flatMap { $0.split(separator: "\n", omittingEmptySubsequences: true).reversed() }
+        for line in lines {
             guard let data = line.data(using: .utf8),
                   let entry = try? decoder.decode(ChatsStatusJournalEntry.self, from: data) else { continue }
             // Board-Ereignisse sind keine Statuswechsel — die Historie einer

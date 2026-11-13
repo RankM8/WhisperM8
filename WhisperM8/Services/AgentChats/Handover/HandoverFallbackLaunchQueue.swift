@@ -85,6 +85,27 @@ enum HandoverFallbackStart: Equatable {
         return hadTurn ? .keepStopped : .startFresh
     }
 
+    /// Unabhängiger Beleg (Vic, 13.11.2026): Die drei Quellen unten hängen an
+    /// derselben Status-Mechanik, die für Chats ohne ID teilweise blind ist
+    /// (Codex hat keine Hook-Datei). Liegt im Projektordner ein ungebundener
+    /// Verlauf desselben Anbieters, der nach dem Anlegen des Chats entstand,
+    /// könnte es seiner sein: dann gestoppt lassen. Im Zweifel gestoppt; das
+    /// kostet einen Klick.
+    static func hasUnboundTranscript(
+        for session: AgentChatSession,
+        projectPath: String,
+        indexed: [IndexedAgentSession],
+        boundIDs: Set<String>
+    ) -> Bool {
+        let path = AgentSessionStore.canonicalProjectPath(projectPath)
+        return indexed.contains {
+            $0.provider == session.provider
+                && AgentSessionStore.canonicalProjectPath($0.cwd) == path
+                && $0.createdAt >= session.createdAt.addingTimeInterval(-5)
+                && !boundIDs.contains($0.externalSessionID.lowercased())
+        }
+    }
+
     /// Nachweis eines Turns: `lastTurnAt`, ein Übergang nach „working“ im
     /// Status-Journal oder `UserPromptSubmit` in der Hook-Ereignisdatei.
     static func hadTurn(_ session: AgentChatSession, journal: [ChatsStatusJournalEntry], hookEvents: Data?) -> Bool {
@@ -99,7 +120,7 @@ enum HandoverFallbackStart: Equatable {
         case .resume:
             return nil
         case .startFresh:
-            return String(localized: "Restarted as a new session after the restart: this chat had no session to continue yet.")
+            return String(localized: "Restarted as a new session after the restart: this chat had no session to continue yet. A prompt it was started with is not sent again.")
         case .keepStopped:
             return String(localized: "Not continued after the restart: this chat has no bound session ID yet, although it already had turns. Its history is kept; start it again once the session is bound, or start a new chat.")
         }
