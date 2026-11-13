@@ -191,6 +191,47 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.coordinator.pendingBinding(for: f.sessionID).forkExternalIDs, ["fork-1"])
     }
 
+    /// Bindungs-Befund, Punkt d: Nach der Übernahme gilt der Registry-Eintrag
+    /// des eigenen Prozesses. Läuft die gespeicherte ID in einem fremden
+    /// Prozess (Altlast), wird sofort umgebunden.
+    func testAdoptedChatIsRebindWhenStoredIDRunsElsewhere() throws {
+        let f = try makeFixture()
+        f.registryEnabled.value = true
+        f.coordinator.terminalProcessID = { _ in 4711 }
+        f.coordinator.foregroundRecordsLookup = { id in
+            id == "ext-1" ? [self.record("busy", sessionID: "ext-1", pid: 999)] : []
+        }
+        f.coordinator.sessionAdopted(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", sessionID: "ext-9", pid: 4711))
+        XCTAssertEqual(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }?.externalSessionID, "ext-9")
+    }
+
+    /// Ohne fremden Prozess ist die neue ID wie nach `/clear` zurückgestellt
+    /// und bindet erst mit dem ersten echten Turn.
+    func testAdoptedChatPostponesNewIDUntilFirstTurn() throws {
+        let f = try makeFixture()
+        f.registryEnabled.value = true
+        f.coordinator.terminalProcessID = { _ in 4711 }
+        f.coordinator.foregroundRecordsLookup = { _ in [] }
+        f.coordinator.sessionAdopted(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", sessionID: "ext-9", pid: 4711))
+        XCTAssertEqual(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }?.externalSessionID, "ext-1")
+        XCTAssertEqual(f.coordinator.pendingBinding(for: f.sessionID).pendingExternalID, "ext-9")
+        f.coordinator.handleRegistryRecord(record("busy", sessionID: "ext-9", pid: 4711))
+        XCTAssertEqual(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }?.externalSessionID, "ext-9")
+    }
+
+    /// Nicht übernommene Chats bleiben beim bisherigen Weg.
+    func testNotAdoptedChatIsNotReconciled() throws {
+        let f = try makeFixture()
+        f.registryEnabled.value = true
+        f.coordinator.terminalProcessID = { _ in 4711 }
+        f.coordinator.foregroundRecordsLookup = { _ in [self.record("busy", sessionID: "ext-1", pid: 999)] }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", sessionID: "ext-9", pid: 4711))
+        XCTAssertEqual(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }?.externalSessionID, "ext-1")
+    }
+
     func testHandoverManifestCarriesPendingBinding() throws {
         var manifest = HandoverManifest(chatID: UUID().uuidString, kind: "claude", pid: 1, cols: 80, rows: 24,
                                         sendsInterruptOnStop: true)
