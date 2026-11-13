@@ -34,7 +34,7 @@ final class ClaudeGPTRouterServiceProcessTests: XCTestCase {
             kill(status.pid, SIGKILL)
         }
         upstream?.stop()
-        if let root { try? FileManager.default.removeItem(at: root) }
+        GPTRouterTestClient.removeRoot(root)
     }
 
     private func testFlags() -> [String] {

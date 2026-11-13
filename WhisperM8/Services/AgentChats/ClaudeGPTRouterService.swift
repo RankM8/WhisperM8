@@ -38,6 +38,12 @@ final class ClaudeGPTRouterService {
         /// fremden Upstreams den echten Socket.
         var instanceRoot: String = AppInstance.testRoot?.path ?? ""
         var testUpstreams = false
+        /// Leerlauf-Frist: Ist so lange keine App verbunden (`attach`) und
+        /// läuft keine Anfrage, beendet sich der Dienst geordnet (Entscheidung
+        /// des Users vom 13.11.2026: 30 Minuten). Sonst liefe er etwa nach
+        /// einer Deinstallation bis zum Neustart des Macs.
+        var idleLimit: TimeInterval = 30 * 60
+        var idleCheckInterval: TimeInterval = 30
     }
 
     /// Reine Entscheidung — unit-getestet.
@@ -71,15 +77,21 @@ final class ClaudeGPTRouterService {
     let configuration: Configuration
     let router: ClaudeGPTMixRouter
     private let onExit: (Int32) -> Void
-    private let stateQueue = DispatchQueue(label: "com.whisperm8.gpt-router.service.state")
+    let stateQueue = DispatchQueue(label: "com.whisperm8.gpt-router.service.state")
     private let controlQueue = DispatchQueue(label: "com.whisperm8.gpt-router.service.control", attributes: .concurrent)
     private var controlFD: Int32 = -1
     private var controlSource: DispatchSourceRead?
     private var controlInode: ino_t = 0
-    private var state: State = .serving
+    var state: State = .serving
     private(set) var generation = 1
     private var didExit = false
     private let startedAt = Date()
+    // Leerlauf (siehe `+Idle`). Zugriff nur auf `stateQueue`.
+    var attachedClients = 0
+    var lastBusyAt = Date()
+    var idleTimer: DispatchSourceTimer?
+    static let maximumAttachments = 8
+    let attachSlots = DispatchSemaphore(value: ClaudeGPTRouterService.maximumAttachments)
     /// Programm dieses Prozesses, beim Start gelesen (nach `make dev` ist die
     /// Datei ersetzt, der Pfad bleibt derselbe).
     private let ownExecutablePath = ClaudeGPTRouterService.executablePath(of: getpid())
@@ -138,6 +150,7 @@ final class ClaudeGPTRouterService {
             return .failure(error)
         }
         log("started pid=\(getpid()) port=\(router.listeningPort ?? -1) build=\(configuration.build)")
+        startIdleWatch()
         return .success(())
     }
 
@@ -192,6 +205,7 @@ final class ClaudeGPTRouterService {
             return .failure(ServiceError.takeOverFailed("\(error)"))
         }
         log("took_over pid=\(getpid()) port=\(router.listeningPort ?? -1) generation=\(generation) build=\(configuration.build)")
+        startIdleWatch()
         return .success(())
     }
 
@@ -247,6 +261,8 @@ final class ClaudeGPTRouterService {
             throw ServiceError.controlSocketFailed(code)
         }
         chmod(path, 0o600)
+        // Vererbt sich auf jede angenommene Verbindung (siehe setNoSigPipe).
+        ClaudeGPTRouterSocketListener.setNoSigPipe(fd)
         guard listen(fd, 8) == 0 else {
             let code = errno
             close(fd)
@@ -315,6 +331,8 @@ final class ClaudeGPTRouterService {
         case "shutdown":
             try? ClaudeGPTRouterWire.send(client, ["ok": true])
             shutdown(reason: "requested")
+        case "attach":
+            holdAttachment(on: client)
         default:
             try? ClaudeGPTRouterWire.send(client, ["ok": false, "error": "unknown op"])
         }
@@ -331,6 +349,7 @@ final class ClaudeGPTRouterService {
             "generation": generation,
             "state": current.rawValue,
             "active": router.activeConnectionCount,
+            "attached": stateQueue.sync { attachedClients },
             "startedAt": startedAt.timeIntervalSince1970,
             "executable": ownExecutablePath ?? "",
         ]
@@ -411,6 +430,16 @@ final class ClaudeGPTRouterService {
             return true
         }
         guard shouldDrain else { return }
+        performShutdown(reason: reason)
+    }
+
+    /// Leerlauf-Frist: Der Zustand steht schon auf `.draining` (gesetzt in
+    /// derselben Entscheidung wie „abgelaufen“).
+    func drainAfterIdle() {
+        performShutdown(reason: "idle")
+    }
+
+    private func performShutdown(reason: String) {
         log("shutdown reason=\(reason) active=\(router.activeConnectionCount)")
         router.closeListenerKeepingConnections()
         closeControlSocket(unlinkPath: true)
@@ -439,6 +468,8 @@ final class ClaudeGPTRouterService {
         let first: Bool = stateQueue.sync {
             guard !didExit else { return false }
             didExit = true
+            idleTimer?.cancel()
+            idleTimer = nil
             return true
         }
         guard first else { return }
@@ -456,7 +487,7 @@ final class ClaudeGPTRouterService {
 
     // MARK: Log
 
-    private func log(_ message: String) {
+    func log(_ message: String) {
         Logger.claudeGPTRouter.notice("gpt_router_service \(message, privacy: .public)")
         let line = "\(ISO8601DateFormatter().string(from: Date())) [\(getpid())] \(message)\n"
         let url = configuration.root.appendingPathComponent("gpt-router.log")
