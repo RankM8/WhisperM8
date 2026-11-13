@@ -42,6 +42,7 @@ ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}"
 BIN="$REPO/.build-test/WhisperM8Test.app/Contents/MacOS/WhisperM8"
 PY=/usr/bin/python3
 SOAK="$ROOT/soak"
+TEST_DOMAIN="com.whisperm8.app.test"
 STATE="$SOAK/state"
 # Projektordner außerhalb des echten Home: Claude Code sucht `.mcp.json` auch in
 # übergeordneten Ordnern und fand unter ~/.whisperm8-test-instance die
@@ -86,10 +87,16 @@ codex SOAK-CODEX-ENDE 0"
 
 # Nach jedem Start oder Neustart das Grid wieder öffnen (solange Chats nur
 # über die Anzeige starten), sonst starten fortgesetzte Chats nicht.
+# Nach start/restart das Grid wieder öffnen, sobald eine Instanz läuft, auch
+# bei Exit ungleich 0: `restart --keep-chats` startet bei Exit 2 (keine
+# Übergabe) und 3 (Übernahme unvollständig) trotzdem neu, und ohne Anzeige
+# startet kein fortgesetzter Chat (Lauf vom 13.11., 13:30).
 ti() {
     local rc=0
     "$TI" "$@" || rc=$?
-    if (( rc == 0 )) && [[ "${1:-}" == start || "${1:-}" == restart ]]; then reopen_grid; fi
+    if [[ "${1:-}" == start || "${1:-}" == restart ]] && [[ -n "$("$TI" status | awk '/^PID:/ {print $2}')" ]]; then
+        reopen_grid
+    fi
     return "$rc"
 }
 reopen_grid() {
@@ -416,6 +423,11 @@ prepare_instance() {
     mkdir -p "$STATE" "$PROJECT"
     rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
     prepare_bundle "$running" || exit 1
+    # Labs „Neustart ohne Chatverlust“ ist standardmäßig aus und hat keine UI;
+    # ohne Schalter antwortet `app handover` mit featureDisabled (Lauf vom
+    # 13.11., 13:30). Nur in der Domain der Test-Instanz.
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    record setup schalter OK "restartKeepsChatsEnabled in $TEST_DOMAIN an"
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
     : > "$ECHO_FILE"
