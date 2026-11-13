@@ -34,13 +34,13 @@ Stand 13.11.2026, nach dem ersten echten Lauf (3 von 3 Übergaben mit einem Clau
 
 > **Zuerst lesen: Schalter erst NACH dem Schließen der echten Chats einschalten.** Ob ein `make dev` übergibt, entscheidet der Schalter zum Zeitpunkt des Neustarts, nicht beim Start der App. Läuft die App schon mit Router als Dienst (sie wurde mit Schalter an gestartet, wie nach Lauf 1), übergibt der nächste `make dev` sofort ALLE laufenden Chats, sobald der Schalter auf YES steht. Die Zeile „wirkt erst ab diesem Neustart“ schützt dann nicht. Reihenfolge deshalb immer: echte Chats schließen, prüfen (Befehl oben unter „Wichtig vorab“), erst dann `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool YES`. Nicht voraussetzen, dass der erste `make dev` klassisch ist.
 >
-> **Vorher nachsehen, nicht raten:** `whisperm8 debug state --json` zeigt unter `restart.routerMode`, wie die laufende App ihren GPT-Router betreibt. Steht dort `service`, übergibt der nächste `make dev` sofort, sobald der Schalter an ist. Steht dort `inApp`, ist der nächste `make dev` klassisch („wirkt erst ab diesem Neustart“). `restart.featureEnabled` zeigt den Schalter.
+> **Vorher nachsehen, nicht raten:** `whisperm8 debug state` (ohne Option, die Ausgabe ist immer JSON) zeigt unter `restart.routerMode`, wie die laufende App ihren GPT-Router betreibt. Steht dort `service`, übergibt der nächste `make dev` sofort, sobald der Schalter an ist. Steht dort `inApp`, ist der nächste `make dev` klassisch („wirkt erst ab diesem Neustart“). `restart.featureEnabled` zeigt den Schalter.
 
 ### Abbruchregel und Aufräumen
 
 - **Beim ersten Fehlschlag anhalten**, kein weiterer `make dev`. Belege sichern (Log der letzten 15 Minuten mit `/usr/bin/log show --last 15m --predicate 'subsystem == "com.whisperm8.app"' > …`, `keeper.log`, Messung je Chat, Fotos), Jarvis Bescheid geben, auf seine Antwort warten.
 - **Kein `make dev`, solange ein Schlüsselbund-Dialog offen ist.** Ohne Fins Fix beantwortet ein blockierter Main Thread `app handover` nicht (Frist 30 s); `make dev` fiele auf den klassischen Weg zurück, und die Runde sähe aus wie ein Übergabe-Fehler. Mit Fins Fix (in main seit 43bdc4f5) antwortet die App auch bei offenem Dialog. Die Regel bleibt trotzdem: Ein offener Dialog wartet auf das Passwort des Users, und eine Runde mit offenem Dialog lässt sich nicht sauber lesen.
-- **Aufräumen am Ende** (wie in Lauf 1): Schalter wieder so wie vorher, Testchats mit `chats close <ref> --stop` schließen und archivieren, Test-Grid löschen, Wegwerf-Ordner und Wegwerf-Branch löschen, `/tmp/wm8-zaehler.txt` löschen, Freigabe-Datei umbenennen. Vor jedem `close --stop` eines Codex-Chats selbst hinsehen, ob er noch schreibt: Sein Status kann `idle` zeigen, während er arbeitet (Befund 2 aus Lauf 1, bis Gus' Fix da ist).
+- **Aufräumen am Ende** (wie in Lauf 1): Schalter wieder so wie vorher, Testchats mit `chats close <ref> --stop` schließen und archivieren, Test-Grid löschen, Wegwerf-Ordner und Wegwerf-Branch löschen, `/tmp/wm8-zaehler.txt` löschen, Freigabe-Datei umbenennen. Vor jedem `close --stop` eines Codex-Chats selbst hinsehen, ob er noch schreibt: Lange Antworten zeigt er seit Gus' Fix richtig, aber ein langer Befehl ohne `approval_policy never` steht nach 120 s weiter auf `idle`. Solange ein Werkzeug läuft, also vor `close --stop` weiter hinsehen.
 
 ### Vorab auf dem Teststand (fährt Dex, ohne Login)
 
@@ -67,7 +67,7 @@ Sobald Oles CLI-Paket (Terminal-Tab per `chats new --provider terminal --command
 - `whisperm8` liegt nicht immer im Suchpfad: dann `~/.local/bin/whisperm8` aufrufen.
 - In zsh ist `log` ein eingebauter Befehl: immer `/usr/bin/log show …` schreiben.
 - Der Testpilot läuft außerhalb der App (eigenes Terminal), weil er `make dev` auslöst. Echte Chats sind geschlossen, nicht nur angehalten.
-- **Voraussetzung:** `defaults write com.whisperm8.app debugControlEnabled -bool YES`. Ohne das lehnt die App `chats new --provider terminal --command` ab, und `debug state` und `debug terminal --text` fehlen. Beim Aufräumen wieder so setzen wie vorher.
+- **Voraussetzung:** Der Testpilot darf in Phase 2 neben `restartKeepsChatsEnabled` ausdrücklich auch `debugControlEnabled` setzen: `defaults write com.whisperm8.app debugControlEnabled -bool YES`. Ohne das lehnt die App `chats new --provider terminal --command` ab, und `debug state` und `debug terminal --text` fehlen. Beim Aufräumen wieder so setzen wie vorher.
 - Vor jedem Schritt: `whisperm8 app handover-status` zeigt „Kein Aufbewahrer aktiv“.
 - Belege je Schritt in einen eigenen Ordner, Namen wie in Lauf 1 (`r<n>-vor.json`, `r<n>-nach.json`, Log, Foto).
 
