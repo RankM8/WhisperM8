@@ -451,6 +451,10 @@ enum HandoverKeeperLock {
     static func removeLeftovers(paths: HandoverPaths) {
         removeStaleSocket(at: paths.socketURL)
         try? FileManager.default.removeItem(at: paths.discoveryFileURL)
+        // Option A (Vic): Nach SIGKILL des Aufbewahrers oder einem Neustart des
+        // Macs räumte niemand das Geheimnis weg. Ohne seinen Aufbewahrer ist es
+        // wertlos, liegen bleiben soll es trotzdem nicht.
+        HandoverFileSecretStore.remove(at: paths)
     }
 
     /// Nur einen eigenen Socket entfernen, nie etwas anderes (wie der

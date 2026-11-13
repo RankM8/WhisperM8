@@ -75,6 +75,15 @@ final class HandoverFileSecretStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: paths.secretFileURL.path))
     }
 
+    /// Vic zu 565433f7: Starb der Aufbewahrer (SIGKILL, Neustart des Macs),
+    /// räumt das Aufräumen der Reste auch das Geheimnis weg.
+    func testLeftoversOfADeadKeeperIncludeTheSecret() {
+        XCTAssertTrue(store.store(HandoverSecret.make()))
+        XCTAssertFalse(HandoverKeeperLock.isHeld(paths: paths), "kein lebender Aufbewahrer")
+        HandoverKeeperLock.removeLeftovers(paths: paths)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.secretFileURL.path))
+    }
+
     /// Auflage 1: kein Schlüsselbund-Aufruf mehr im Übergabe-Weg.
     func testHandoverPathUsesTheFileStoreAndNoKeychain() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
