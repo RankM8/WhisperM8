@@ -17,16 +17,23 @@ import os
 ///   zugestellt werden (selten, unter Last).
 ///
 /// Hier hält FSEvents eine kleine Box (retain/release im Kontext), nicht den
-/// Besitzer. `cancel()` schaltet die Box unscharf (kein Handler mehr) und baut
-/// den Stream ab; die letzte eigene Referenz auf die Box geht erst per
-/// `queue.async` — die Queue ist seriell, also nach jedem Rückruf, der schon
-/// läuft oder eingereiht ist. `deinit` ruft `cancel()`: Ein Besitzer, der ohne
-/// Stopp verschwindet, nimmt seinen Stream mit.
+/// Besitzer. `cancel()` schaltet die Box unscharf (kein Handler mehr), stoppt
+/// und invalidiert den Stream; `FSEventStreamRelease` und die letzte eigene
+/// Referenz auf die Box folgen per `async` auf der eigenen, seriellen Queue —
+/// also nach jedem Rückruf, der schon läuft oder eingereiht ist, und nie
+/// innerhalb eines Rückrufs desselben Streams. `deinit` ruft `cancel()`: Ein
+/// Besitzer, der ohne Stopp verschwindet, nimmt seinen Stream mit.
 ///
-/// Der Handler läuft auf `queue`. Er sollte seinen Besitzer nur schwach fangen.
+/// Zusage: Nach `cancel()` beginnt kein neuer Handler-Aufruf. Ein Aufruf, der
+/// schon begonnen hat, läuft noch zu Ende — wer danach keine Wirkung mehr will,
+/// muss das im Besitzer selbst sicherstellen.
+///
+/// Der Handler läuft auf einer seriellen Queue, die auf `queue` zielt (also
+/// mit deren übriger Arbeit in Reihe). Er ist `@Sendable` und sollte seinen
+/// Besitzer nur schwach fangen.
 final class FSEventsSubscription: @unchecked Sendable {
     /// Pfade und Flags eines Rückrufs.
-    typealias Handler = (_ paths: [String], _ flags: [FSEventStreamEventFlags]) -> Void
+    typealias Handler = @Sendable (_ paths: [String], _ flags: [FSEventStreamEventFlags]) -> Void
 
     /// Vom Stream gehalten; trägt den Handler, solange die Subscription scharf ist.
     final class Box: @unchecked Sendable {
@@ -87,15 +94,24 @@ final class FSEventsSubscription: @unchecked Sendable {
             latency,
             flags | FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes)
         ) else { return nil }
-        self.queue = queue
+        // Eigene serielle Queue: Die Lebensdauer-Zusage hängt an der Reihenfolge.
+        let serial = DispatchQueue(label: "com.whisperm8.fsevents-subscription", target: queue)
+        self.queue = serial
         self.stream = stream
         self.box = box
-        FSEventStreamSetDispatchQueue(stream, queue)
+        FSEventStreamSetDispatchQueue(stream, serial)
         FSEventStreamStart(stream)
     }
 
     deinit {
         cancel()
+    }
+
+    /// `FSEventStreamRef` ist ein undurchsichtiger Zeiger; der Stream ist hier
+    /// schon gestoppt und invalidiert und wird nur noch freigegeben.
+    private struct UncheckedStream: @unchecked Sendable {
+        let stream: FSEventStreamRef
+        init(_ stream: FSEventStreamRef) { self.stream = stream }
     }
 
     var isActive: Bool {
@@ -113,14 +129,16 @@ final class FSEventsSubscription: @unchecked Sendable {
         self.box = nil
         lock.unlock()
         box?.disarm()
-        if let stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-        }
-        // Die Box überlebt jeden Rückruf, der schon läuft oder eingereiht ist.
-        if let box {
-            queue.async { withExtendedLifetime(box) {} }
+        guard let stream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        // Freigeben erst hinter allem, was auf der Queue schon wartet; so auch
+        // nie im eigenen Rückruf (cancel() kann aus dem deinit eines Besitzers
+        // kommen, den gerade ein Rückruf festhielt). Die Box lebt bis dahin mit.
+        let pending = UncheckedStream(stream)
+        queue.async {
+            FSEventStreamRelease(pending.stream)
+            withExtendedLifetime(box) {}
         }
     }
 }

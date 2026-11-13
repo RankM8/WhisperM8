@@ -1,5 +1,6 @@
 import CoreServices
 import Foundation
+import os
 import XCTest
 @testable import WhisperM8
 
@@ -15,12 +16,14 @@ import XCTest
 ///   schlägt ohne Fix nicht zuverlässig an; er zeigt nur, dass der Weg unter
 ///   Last hält.
 /// - Die `FSEventsSubscription`-Tests prüfen die Zusage selbst: Nach `cancel()`
-///   oder dem Ende der Subscription erreicht kein Rückruf mehr den Handler.
+///   oder dem Ende der Subscription beginnt kein Handler-Aufruf mehr. Diese
+///   beiden würden auch ohne die Box bestehen (Stop/Invalidate beenden den
+///   Strom); den Fix beweist der Test ohne stop().
 @MainActor
 final class FSEventsLifetimeTests: XCTestCase {
     private var tempDir: URL!
-    private var writer: Thread?
-    nonisolated(unsafe) private var writing = false
+    private let writing = OSAllocatedUnfairLock<Bool>(initialState: false)
+    private var writerDone: DispatchSemaphore?
 
     override func setUpWithError() throws {
         tempDir = FileManager.default.temporaryDirectory
@@ -35,24 +38,27 @@ final class FSEventsLifetimeTests: XCTestCase {
 
     /// Schreibt ständig Dateien in `directory`, damit FSEvents Ereignisse hat.
     private func startWriting(into directory: URL) {
-        writing = true
-        let thread = Thread { [unowned self] in
+        writing.withLock { $0 = true }
+        let done = DispatchSemaphore(value: 0)
+        writerDone = done
+        let flag = writing
+        Thread {
             var index = 0
-            while self.writing {
+            while flag.withLock({ $0 }) {
                 try? Data("{\"pid\": \(4000 + index % 40)}".utf8)
                     .write(to: directory.appendingPathComponent("\(4000 + index % 40).json"))
                 index += 1
                 usleep(300)
             }
-        }
-        thread.start()
-        writer = thread
+            done.signal()
+        }.start()
     }
 
+    /// Hält den Schreiber an und wartet, bis er wirklich fertig ist.
     private func stopWriting() {
-        writing = false
-        writer = nil
-        Thread.sleep(forTimeInterval: 0.05)
+        writing.withLock { $0 = false }
+        _ = writerDone?.wait(timeout: .now() + 5)
+        writerDone = nil
     }
 
     private func sessionsRoot(_ name: String) throws -> ClaudeSessionRegistry.Root {
@@ -101,22 +107,28 @@ final class FSEventsLifetimeTests: XCTestCase {
     func testSubscriptionDeliversEventsWithFlags() throws {
         let queue = DispatchQueue(label: "fsevents-test")
         let counter = Counter()
-        var flagsSeen = false
+        // Je geschriebener .json-Datei: trägt ihr Ereignis die Datei-Flags?
+        let fileFlagsMatched = OSAllocatedUnfairLock<Bool>(initialState: false)
+        let fileFlag = FSEventStreamEventFlags(kFSEventStreamEventFlagItemIsFile)
+        let changeFlags = FSEventStreamEventFlags(kFSEventStreamEventFlagItemCreated | kFSEventStreamEventFlagItemModified)
         let subscription = try XCTUnwrap(FSEventsSubscription(
             paths: [tempDir.path], latency: 0.01,
             flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
             queue: queue,
             handler: { paths, flags in
-                if !paths.isEmpty, paths.count == flags.count { flagsSeen = true }
+                for (path, flag) in zip(paths, flags)
+                where path.hasSuffix(".json") && flag & fileFlag != 0 && flag & changeFlags != 0 {
+                    fileFlagsMatched.withLock { $0 = true }
+                }
                 counter.increment()
             }
         ))
         defer { subscription.cancel() }
         startWriting(into: tempDir)
-        waitUntil(5) { counter.value > 0 }
+        waitUntil(5) { fileFlagsMatched.withLock { $0 } }
+        stopWriting()
         XCTAssertGreaterThan(counter.value, 0)
-        queue.sync {}
-        XCTAssertTrue(flagsSeen, "Pfade und Flags passen nicht zusammen")
+        XCTAssertTrue(fileFlagsMatched.withLock { $0 }, "Flags kommen nicht beim passenden Pfad an")
     }
 
     func testNoCallbackReachesHandlerAfterCancel() throws {
