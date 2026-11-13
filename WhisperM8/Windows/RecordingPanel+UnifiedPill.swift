@@ -168,6 +168,7 @@ extension OverlayController {
             initialOrigin: UnifiedPillGeometry.pillDictationPanelOrigin(center: center, panelSize: size),
             size: size)
         panel.allowsAboveMenuBar = true
+        panel.clampsLikeStatusPill = true
         return panel
     }
 

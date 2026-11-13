@@ -253,7 +253,7 @@ final class UnifiedPillControllerTests: XCTestCase {
         let wanted = CGRect(
             origin: UnifiedPillGeometry.pillDictationPanelOrigin(center: center, panelSize: OverlayFrameResolver.panelSize),
             size: OverlayFrameResolver.panelSize)
-        XCTAssertGreaterThan(wanted.maxY, visible.maxY, "Der Schattenrand ragt in die Menüleiste")
+        // Der Schattenrand (24 pt) ragt hier immer über den sichtbaren Bereich hinaus.
         XCTAssertEqual(panel.frame, wanted)
         XCTAssertEqual(panel.constrainFrameRect(wanted, to: screen), wanted)
         XCTAssertEqual(panel.frame.midY, center.y, accuracy: 0.5)
@@ -264,6 +264,36 @@ final class UnifiedPillControllerTests: XCTestCase {
         let panel = RecordingPanel(initialOrigin: .zero)
         defer { panel.close() }
         XCTAssertFalse(panel.allowsAboveMenuBar)
+        XCTAssertFalse(panel.clampsLikeStatusPill)
+    }
+
+    /// Menüleiste automatisch ausgeblendet: Die vereinte Diktat-Pille bleibt
+    /// wie die Status-Pille eine Leistenhöhe unter der Bildschirmkante, damit
+    /// die hereinfahrende Leiste ✓ und ✕ nicht verdeckt. Die getrennte Pille
+    /// rechnet weiter mit dem sichtbaren Bereich.
+    func testUnifiedPillStaysBelowAHiddenMenuBarLikeTheStatusPill() {
+        let frame = CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        let hiddenBar = NotchScreenInfo(
+            displayID: 7, frame: frame, visibleFrame: frame, safeAreaTop: 0,
+            auxiliaryLeftWidth: nil, auxiliaryRightWidth: nil, isBuiltIn: false, uuid: "HIDDEN")
+        let unified = OverlayController.makeUnifiedPillPanel(center: CGPoint(x: 800, y: 900))
+        defer { unified.close() }
+        let area = unified.pillClampArea(visibleFrame: frame, info: hiddenBar)
+        XCTAssertEqual(area, NotchPillPlacement.usableArea(hiddenBar))
+        XCTAssertEqual(area.maxY, frame.maxY - NotchGeometry.fallbackMenuBarHeight)
+        // Pille bündig an der Bildschirmkante wird um die Ersatzhöhe heruntergeholt.
+        let size = OverlayFrameResolver.panelSize
+        let pill = NSRect(x: 100, y: OverlayFrameResolver.contentMargin, width: 200, height: PillMetrics.height)
+        let atTop = NSPoint(x: 400, y: frame.maxY - OverlayFrameResolver.contentMargin - PillMetrics.height)
+        let clamped = OverlayFrameResolver.clampedPanelOrigin(panelOrigin: atTop, pillFrameInPanel: pill, visibleFrame: area)
+        XCTAssertEqual(clamped.y + pill.maxY, area.maxY, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(clamped.y + size.height, frame.maxY + OverlayFrameResolver.contentMargin)
+
+        let classic = RecordingPanel(initialOrigin: .zero)
+        defer { classic.close() }
+        XCTAssertEqual(classic.pillClampArea(visibleFrame: frame, info: hiddenBar), frame)
+        // Sichtbare Leiste: beide Bereiche sind gleich.
+        XCTAssertEqual(unified.pillClampArea(visibleFrame: pillScreen.visibleFrame, info: pillScreen), pillScreen.visibleFrame)
     }
 
     // MARK: Asynchroner Aufbau der Diktat-Pille
