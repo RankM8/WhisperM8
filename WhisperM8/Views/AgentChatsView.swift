@@ -771,7 +771,6 @@ struct AgentChatsView: View {
                 mainWorkspace
                     .background { projectViewSyncWithoutSidebar }
                     .safeAreaInset(edge: .bottom, spacing: 0) { ControllerLegendHost(windowID: windowID) }
-                    .overlay(alignment: .bottom) { ControllerMenuHost(windowID: windowID) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if isInspectorVisible {
@@ -794,6 +793,7 @@ struct AgentChatsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .controllerMenuCardOverlay(windowID: windowID)
         }
         // Bewusst KEINE feste Mindestgröße mehr — der User soll das Fenster
         // so klein ziehen können, wie er will. Die einzige Untergrenze ist
@@ -919,6 +919,7 @@ struct AgentChatsView: View {
         } message: { _ in
             Text(String(localized: "It is still running. Removing it stops the agent and deletes it from the supervisor."))
         }
+        .modifier(ControllerConfirmationDialog(windowID: windowID) { performControllerConfirmed($0) })
         .confirmationDialog(
             "Archive chat?",
             isPresented: Binding(
@@ -2928,9 +2929,7 @@ struct AgentChatsView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
             } else {
-                activeChatStatusRow
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 3)
+                anchoredChatStatusRow
             }
         }
         .background(AgentTheme.header)
@@ -2944,7 +2943,7 @@ struct AgentChatsView: View {
     ///   der TUI, live-getrackt ueber `~/.claude/jobs/*/state.json`
     /// - Runtime-Info (Provider · Modell · Status) ganz rechts
     @ViewBuilder
-    private var activeChatStatusRow: some View {
+    var activeChatStatusRow: some View {
         HStack(alignment: .center, spacing: 8) {
             statusDot
 

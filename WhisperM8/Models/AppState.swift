@@ -168,7 +168,15 @@ final class AppState {
     /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
     var dictationTargetSessionID: UUID? {
         if case let .agentChat(sessionID) = recordingCoordinator.pendingDeliveryTarget { return sessionID }
-        return nil
+        // Nach dem Stopp: das eingefrorene Ziel, solange transkribiert oder
+        // nachbearbeitet wird (Review Runde 5, Befund 9).
+        switch recordingPhase {
+        case .transcribing, .postProcessing:
+            if case let .agentChat(sessionID) = recordingCoordinator.inFlightDeliveryTarget { return sessionID }
+            return nil
+        default:
+            return nil
+        }
     }
 
     /// Läuft gerade eine Schnellaktion?
