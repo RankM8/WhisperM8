@@ -34,7 +34,8 @@ enum ChatsOutput {
         truncated: Bool = false,
         countsCoverFullScope: Bool = true,
         queuedCounts: [UUID: Int] = [:],
-        liveStatuses: ChatsLiveSnapshot? = nil
+        liveStatuses: ChatsLiveSnapshot? = nil,
+        orderInfo: [UUID: [String: Any]] = [:]
     ) -> [String: Any] {
         var countsDict: [String: Any] = [:]
         for category in ChatsAttentionCategory.allCases {
@@ -66,6 +67,7 @@ enum ChatsOutput {
                 if let queued = queuedCounts[item.entry.session.id], queued > 0 {
                     dict["queued"] = queued
                 }
+                if let order = orderInfo[item.entry.session.id] { dict["order"] = order }
                 return dict
             },
         ]

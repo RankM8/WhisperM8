@@ -31,7 +31,7 @@ umgesetzt als CLI + Skill statt als UI. Plan-Dokumentation (Konzept, Mockups):
 | Befehl | Klasse | Pfad |
 |---|---|---|
 | `list`, `overview`, `show`, `tail`, `wait`, `audit`, `archived`, `duplicates`, `address` | Lesen | Disk (+ optionaler Live-Merge; `address`: Claudes Registry) |
-| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
+| `send`, `interrupt`, `open`, `close`, `reopen`, `pin`/`unpin`, `order`, `move`, `move-account`, `window list`, `resume`, `new`, `rename`, `group`, `archive`, `unarchive`, `workspace …` | Handeln | Socket → App |
 
 ### Claude-Account-Profil neuer Chats
 
@@ -464,6 +464,21 @@ bewusst schwache Schwester von `archive`. Contract:
   Ursprungsfenster nicht mehr, landet der Tab im Primärfenster.
 - **`pin <ref> [<ref>…]` / `unpin …`** setzen den Sidebar-Pin idempotent
   (Batch wie close; Outcomes `pinned`/`unpinned`/`unchanged`/`notFound`).
+- **`order <ref> [<ref>…] [--last <ref>]… [--dry-run] [--json]`** setzt die
+  Reihenfolge der Chats eines Projekts in der Seitenleiste (Methode
+  `session.order`, seit 13.11.2026). Genannte Chats kommen in dieser Folge nach
+  vorn, `--last` ans Ende, alle übrigen behalten ihre relative Folge dazwischen.
+  Alle Chats müssen im selben Projekt liegen und in dessen Gruppe der
+  Seitenleiste stehen (nicht gepinnt, kein Subagent-Kind), sonst Exit 1;
+  unbekannte oder archivierte Chats Exit 3. Geschrieben wird über
+  `AgentSessionStore.reorderSessions` (`lastActivityAt` bleibt stehen).
+  Die Projekt-Ansicht (Raster) hält ihre Plätze sonst absichtlich stabil, auch
+  beim Umsortieren mit der Maus; `order` setzt die belegten Plätze bewusst mit
+  um, leere Plätze bleiben (`WorkspaceSlotOps.reorderedSlots`). `--dry-run`
+  zeigt die Folge vorher und nachher ohne Änderung; `--json` liefert `before`,
+  `after` (je `position`, `id`, `title`) und `projectViews` (Plätze vorher und
+  nachher). Beispiel, Chats nach Nummer und Jarvis ans Ende:
+  `whisperm8 chats order fin ole dex gus vic jon doc --last jarvis --dry-run`.
 - **`move <ref> --window <primary|id>`** verschiebt einen Tab in ein anderes
   BESTEHENDES Fenster (`AgentUIState.moveTab`-Semantik: nicht-offene Tabs
   werden im Ziel geöffnet). Fenster-Refs: `primary` oder ID/-Präfix ≥ 8 aus
@@ -690,10 +705,26 @@ Agent braucht, um vor einer Aussage zu **prüfen** statt zu **vermuten**:
 
 // window list
 {"id":"…","isPrimary":true,"tabCount":11,"tabTitles":[…],  // unverändert
+ "tabs":[{"position":1,"id":"…","title":"…"}],   // seit 13.11.2026: Tabs mit ID
  "selectedTitle":"…",
  "showsGrid":false,             // Grid oder Einzelansicht
  "activeWorkspaceID":"…","activeWorkspaceName":"Recherche"}
 ```
+
+`chats list --json` und `chats show --json` nennen je Chat seine Position
+(seit 13.11.2026, nur ergänzt):
+
+```jsonc
+"order": {"sidebarPosition": 3,   // Folge im Projekt (1-basiert), archiviert: null
+          "sortIndex": 2,         // roher Wert, null = nie sortiert
+          "tabs": [{"windowID": "…", "position": 5}]}   // je Fenster, 1-basiert
+```
+
+`sidebarPosition` ist die Position in der Projektgruppe der Seitenleiste, mit
+demselben Filter wie die App (`AgentSidebarModelBuilder.sessionsByProject`):
+`null` für archivierte, gepinnte (eigene Sektion), Subagent-Kinder und nicht von
+Hand angelegte Chats. `chats order` ordnet genau diese Gruppe und lehnt
+Chats außerhalb davon mit Exit 1 ab.
 
 **Bewusst kein Feld `isVisible`.** `activeWorkspaceID` ist doppelt belegt: Es
 bezeichnet das aktive Grid **oder** nur das Rücksprungziel der Einzelansicht —
