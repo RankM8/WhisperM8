@@ -172,7 +172,7 @@ Der Marker bekommt einen dritten Zustand neben „sauber beendet“ und „forts
 - **Cmd+Q bleibt echtes Beenden** mit dem heutigen Dialog (Entscheidung 3).
 - **Neuer Menüpunkt „Neu starten, Chats laufen weiter“:** Übergabe wie bei `make dev`. Danach startet der Aufbewahrer die App selbst neu (`open` auf das Bundle der Instanz), weil die alte App nach dem Beenden nichts mehr anstoßen kann.
 - **Update per Brew:** Der Cask beendet die App nicht, er ersetzt das Bundle unter der laufenden App (kein `uninstall quit:`, `scripts/update-cask.sh:40-53`). Die App erkennt beim Aktivieren, dass die Version auf der Platte neuer ist als die laufende, und zeigt „Update installiert, neu starten, Chats laufen weiter“. Das ist derselbe Weg wie der Menüpunkt. Ein Selbst-Update gibt es nicht und kommt hier auch nicht hinzu.
-- **Labs-Schalter** `restartKeepsChatsEnabled` in der Labs-Gruppe der Einstellungen, ab Werk aus. Neuer Eintrag in der Kill-Switch-Liste von `CLAUDE.md`. Ist er aus, laufen Router, Proxy und Beenden wie heute.
+- **Labs-Schalter** `restartKeepsChatsEnabled` in der Labs-Gruppe der Einstellungen, ab Werk aus. Neuer Eintrag in der Kill-Switch-Liste von `CLAUDE.md`. Ist er aus, laufen Router, Proxy und Beenden wie heute. **Aus wirkt beim nächsten `make dev`, An erst nach einem Neustart** (Stand 13.11.2026): Die Abgabe liest den Schalter bei jeder Anfrage (Notbremse), der Router-Modus steht einmal je App-Lauf fest. Wird er während eines Laufs eingeschaltet, gibt es noch keinen Router-Dienst, und `make dev` startet klassisch neu (Grund `routerInApp`). `whisperm8 debug state` zeigt beides: `restart.featureEnabled` und `restart.routerMode` (`inApp` oder `service`).
 
 ## Fehlerfälle
 

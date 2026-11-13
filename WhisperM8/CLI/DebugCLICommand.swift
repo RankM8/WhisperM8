@@ -16,6 +16,7 @@ enum DebugCLIArguments: Equatable {
     case controllerState
     case controllerRun(script: String, execute: Bool, window: String?, frontmost: Bool)
     case pill(holdMs: Int?, busyMs: Int?, busyAfterMs: Int?)
+    case terminal(ref: String, text: Bool, lines: Int?)
 
     static let defaultDictateTimeout = 300
 
@@ -80,6 +81,17 @@ enum DebugCLIArguments: Equatable {
                 throw ParseError.usage("status braucht <ref> <working|awaitingInput|idle|errored|stopped>")
             }
             return .status(ref: rest[0], status: rest[1])
+        case "terminal":
+            let linesRaw = try takeOption(["--lines"])
+            let text = rest.contains("--text")
+            rest.removeAll { $0 == "--text" }
+            guard rest.count == 1 else { throw ParseError.usage("terminal braucht genau einen <ref>") }
+            var lines: Int?
+            if let linesRaw {
+                guard let value = Int(linesRaw), value > 0 else { throw ParseError.usage("--lines braucht eine Zahl > 0") }
+                lines = value
+            }
+            return .terminal(ref: rest[0], text: text, lines: lines)
         case "context":
             try noRest()
             return .context
@@ -173,6 +185,9 @@ enum DebugCLICommand {
       status <ref> <status>         Laufzeitstatus eines Chats nur für die Anzeige setzen
                                     (working|awaitingInput|idle|errored|stopped) — UI-Tests
                                     von Status-Punkten; der nächste echte Wechsel überschreibt ihn
+      terminal <ref> [--text]       Text eines laufenden Terminals (Bildschirm plus Rücklauf,
+               [--lines <n>]        ohne Farben); --text gibt nur den Text aus, sonst JSON.
+                                    Exit 4 ohne laufendes Terminal. Nie im Log.
       context                       Clipboard-Fallback des Diktatstarts durchlaufen (private
                                     Zwischenablage, kein Tastendruck) — Tastencodes für Cmd+C/V
       record [<sekunden>]           Echten Aufnahmestart wie per Hotkey messen (Default 1 s,
@@ -229,6 +244,17 @@ enum DebugCLICommand {
             return call("debug.job", ["jobID": id])
         case .status(let ref, let status):
             return call("debug.status", ["ref": ref, "status": status])
+        case .terminal(let ref, let text, let lines):
+            var params: [String: Any] = ["ref": ref]
+            if let lines { params["lines"] = lines }
+            guard text else { return call("debug.terminal", params) }
+            switch send("debug.terminal", params) {
+            case .failure(let code): return code
+            case .success(let response):
+                guard response.ok else { return printFailure(response) }
+                CLIIO.out(response.result?["text"]?.stringValue ?? "")
+                return ChatsCLIExit.ok
+            }
         case .context:
             return call("debug.context", [:])
         case .record(let seconds):

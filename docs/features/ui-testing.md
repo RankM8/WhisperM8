@@ -92,6 +92,7 @@ defaults write com.whisperm8.app debugControlEnabled -bool YES   # wirkt sofort
 | `whisperm8 debug record [<sekunden>]` | Echter Aufnahmestart wie per Hotkey (Engine, Neustart bei Bluetooth-Formatwechsel, Pill „Mikrofon verbindet …"), dann Abbruch: Datei verworfen, kein Transkript, kein Einfügen, **kein** Kontext-Capture. Liefert `startMs`, `connectingShown`, `engineAttempts`, `maxLevel` und das Eingabegerät. Fragt nie nach der Mikrofonfreigabe; Pill und Ducking sind kurz sichtbar/hörbar. |
 | `whisperm8 debug pill [--hold <ms>] [--busy <ms>] [--busy-after <ms>]` | Übergang der vereinten Pille ohne Aufnahme durchspielen und die Fensterliste mitschneiden: Lücke ohne Pille, Versatz, Verschiebung durch AppKit beim Einblenden, Reihenfolge von Tausch und Fenstern. Details im Abschnitt „Übergang der vereinten Pille prüfen“. |
 | `whisperm8 debug job <id>` | Stand eines Diktat-Auftrags. |
+| `whisperm8 debug terminal <ref> [--text] [--lines <n>]` | Text eines laufenden Terminals (Bildschirm plus Rücklauf) ohne Farben und Steuerzeichen; Leerzeichen am Zeilenende fallen weg. Mit `--text` nur der Text auf stdout (sonst JSON mit `session` und `text`), `--lines` begrenzt auf die letzten N Zeilen. Exit 4 ohne laufendes Terminal (Tab nie angezeigt oder beendet). Der Inhalt geht weder ins Log noch ins Audit. Für den Dauerlauf (`scripts/handover-soak*.sh`): Zähler lesen, nach „Retrying“ oder „API Error“ suchen. |
 
 Ausgabe immer JSON auf stdout; Exit 0 ok, 1 Aufruf, 3 nicht gefunden,
 4 Konflikt/Auftrag gescheitert, 5 App nicht erreichbar, 124 Timeout.

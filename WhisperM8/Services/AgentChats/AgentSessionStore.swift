@@ -625,7 +625,8 @@ struct AgentSessionStore {
         forkSourceSessionID: String? = nil,
         claudeProfile: ClaudeProfileSelection = .activeDefault,
         claudeBackendModel: String? = nil,
-        gptProfile: GPTProfileSelection = .activeDefault
+        gptProfile: GPTProfileSelection = .activeDefault,
+        terminalCommand: String? = nil
     ) throws -> AgentChatSession {
         // Profil VOR der Mutation aufloesen (Datei-I/O gehoert nicht unter den
         // Store-Lock). Codex kennt keine Account-Profile — dort immer `nil`.
@@ -652,7 +653,7 @@ struct AgentSessionStore {
             createdManually: createdManually,
             touchUpdatedAt: true
         )
-        let session = AgentChatSession(
+        var session = AgentChatSession(
             provider: provider,
             projectID: project.id,
             externalSessionID: externalSessionID,
@@ -672,6 +673,7 @@ struct AgentSessionStore {
             claudeBackendModel: claudeBackendModel,
             gptProfileName: gptProfileName
         )
+        session.terminalCommand = kind == .terminal ? terminalCommand : nil
         let stored = try upsertSession(session)
         StatisticsCollectors.noteChatCreated(stored, projectPath: project.path)
         // Crash-safe: strukturelle Erstellung SOFORT persistieren statt auf den 0,5-s-Debounce zu warten — sonst

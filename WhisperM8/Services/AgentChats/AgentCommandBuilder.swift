@@ -524,6 +524,9 @@ struct AgentCommandBuilder {
         // Terminals sind kein Agent-Launch: der `provider` ist nur ein
         // Schema-Platzhalter, das Kommando ist immer die Login-Shell.
         if session.isTerminal {
+            if let command = session.terminalCommand, !command.isEmpty {
+                return Self.terminalRunCommand(command, project: project)
+            }
             return terminalCommand(project: project)
         }
 
@@ -540,6 +543,18 @@ struct AgentCommandBuilder {
     /// .zprofile/.zshrc gesourct werden und PATH/Prompt/Aliases exakt wie in
     /// Terminal.app aussehen. Keine Session-Args, kein Resume — jede neue
     /// Shell ist frisch.
+    /// Terminal-Tab mit festem Befehl (`chats new --provider terminal
+    /// --command`): `/bin/sh -c` im Projektordner, keine Login-Shell. Endet der
+    /// Befehl, endet der Tab (kein Neustart).
+    static func terminalRunCommand(_ command: String, project: AgentProject) -> AgentLaunchCommand {
+        AgentLaunchCommand(
+            executablePath: "/bin/sh",
+            arguments: ["-c", command],
+            workingDirectory: project.path,
+            keyboardProfile: .plainShell
+        )
+    }
+
     private func terminalCommand(project: AgentProject) -> AgentLaunchCommand {
         AgentLaunchCommand(
             executablePath: shellResolver(),

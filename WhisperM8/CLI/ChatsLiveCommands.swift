@@ -596,8 +596,11 @@ struct ChatsNewArguments: Equatable {
     /// Einstellungen → Konten aktiv ist (siehe docs/features/agent-chats-cli.md).
     var account: String?
     var json: Bool
+    /// Nur `--provider terminal`: Befehl für `/bin/sh -c` im Projektordner.
+    var command: String? = nil
 
-    static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt \"…\"] [--account <profil>]\n"
+    static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex|terminal] [--title T] [--prompt \"…\"] [--command \"…\"] [--account <profil>]\n"
+        + "  --provider terminal legt einen Terminal-Tab an; mit --command führt er den Befehl per /bin/sh -c im Projektordner aus.\n"
         + "  Ohne --account startet ein Claude-Chat im Konto, das in WhisperM8 unter Einstellungen → Konten aktiv ist.\n"
         + "  Ist es abgemeldet oder abgelaufen, bricht der Befehl ab (kein Ausweichen auf main). --account main wählt das Hauptkonto."
 
@@ -607,14 +610,18 @@ struct ChatsNewArguments: Equatable {
         case projectMissing
         case invalidProvider(String)
         case accountRequiresClaude
+        case commandRequiresTerminal
+        case optionNotForTerminal(String)
 
         var message: String {
             switch self {
             case .missingValue(let flag): return "\(flag) erwartet einen Wert."
             case .unknownOption(let option): return "Unbekannte Option: \(option)"
             case .projectMissing: return ChatsNewArguments.usage
-            case .invalidProvider: return "--provider muss claude oder codex sein."
+            case .invalidProvider: return "--provider muss claude, codex oder terminal sein."
             case .accountRequiresClaude: return "--account gilt nur für Claude-Chats (Codex kennt keine Claude-Konten)."
+            case .commandRequiresTerminal: return "--command gilt nur mit --provider terminal."
+            case .optionNotForTerminal(let flag): return "\(flag) gilt nicht für Terminal-Tabs."
             }
         }
     }
@@ -625,6 +632,7 @@ struct ChatsNewArguments: Equatable {
         var title: String?
         var prompt: String?
         var account: String?
+        var command: String?
         var json = false
         var index = 0
         while index < arguments.count {
@@ -650,6 +658,9 @@ struct ChatsNewArguments: Equatable {
             case "--account":
                 guard let v = value() else { return .failure(.missingValue(arg)) }
                 account = v
+            case "--command":
+                guard let v = value() else { return .failure(.missingValue(arg)) }
+                command = v
             case "--json":
                 json = true
             default:
@@ -658,13 +669,18 @@ struct ChatsNewArguments: Equatable {
             index += 1
         }
         guard let project, !project.isEmpty else { return .failure(.projectMissing) }
-        guard provider == "claude" || provider == "codex" else {
+        guard ["claude", "codex", "terminal"].contains(provider) else {
             return .failure(.invalidProvider(provider))
         }
         if provider == "codex", account != nil { return .failure(.accountRequiresClaude) }
+        if provider != "terminal", command != nil { return .failure(.commandRequiresTerminal) }
+        if provider == "terminal" {
+            if prompt != nil { return .failure(.optionNotForTerminal("--prompt")) }
+            if account != nil { return .failure(.optionNotForTerminal("--account")) }
+        }
         return .success(ChatsNewArguments(
             project: project, provider: provider, title: title,
-            prompt: prompt, account: account, json: json))
+            prompt: prompt, account: account, json: json, command: command))
     }
 
     /// Konto-Teil der Erfolgsmeldung, z. B. `, Konto: RankM8 (aktiv in den
@@ -688,6 +704,7 @@ struct ChatsNewArguments: Equatable {
         if let title { params["title"] = title }
         if let prompt { params["prompt"] = prompt }
         if let account { params["account"] = account }
+        if let command { params["command"] = command }
         return params
     }
 }
@@ -720,8 +737,33 @@ enum ChatsNewCommand {
                     source: session?["accountSource"]?.stringValue)
                 return "✓ Neue Session \(name)/\(sessionTitle) gestartet (\(ref)\(account))"
             }
+            if parsed.provider == "terminal",
+               let id = response.result?["session"]?["id"]?.stringValue.flatMap(UUID.init(uuidString:)) {
+                reportTerminalStart(id: id, json: json)
+            }
             return ChatsCLIExit.ok
         }
+    }
+
+    /// Ein Tab startet erst, wenn er angezeigt wird. Statt still zu hoffen,
+    /// sagt die CLI nach kurzem Warten, ob der Befehl läuft (stderr, das
+    /// JSON auf stdout bleibt wie bei claude|codex).
+    private static func reportTerminalStart(id: UUID, json: Bool, timeout: TimeInterval = 5) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let live = ChatsLiveMerge.fetch()?[id], live.isAttachedPTY {
+                CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), pid: live.pid))
+                return
+            }
+            usleep(250_000)
+        }
+        CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), pid: nil))
+    }
+
+    static func terminalStartLine(ref: String, pid: Int32?) -> String {
+        if let pid { return "Terminal-Tab läuft (PID \(pid))." }
+        return "Hinweis: Der Terminal-Tab ist angelegt, läuft aber noch nicht. Er startet (samt Befehl), "
+            + "sobald sein Tab angezeigt wird: whisperm8 chats open \(ref)"
     }
 }
 

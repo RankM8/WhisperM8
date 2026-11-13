@@ -45,6 +45,15 @@ whisperm8 chats new --project whisperm8 --title "Analyse" --account main      # 
 whisperm8 chats new --project whisperm8 --title "Analyse" --account PowerUser # ausdrücklich Zusatzkonto
 ```
 
+**Terminal-Tab:** `whisperm8 chats new --project <ordner> --provider terminal [--title T] [--command "…"]`
+legt einen Terminal-Tab an wie das Menü. Mit `--command` läuft statt der Login-Shell `/bin/sh -c "<befehl>"`
+im Projektordner; endet der Befehl, endet der Tab (kein Neustart). `--prompt` und `--account` gelten hier nicht.
+Gestartet wird wie bei jedem Chat, sobald der Tab angezeigt wird. Die CLI wartet kurz und sagt auf stderr, ob der
+Tab läuft (`Terminal-Tab läuft (PID …)`) oder noch auf seine Anzeige wartet (`whisperm8 chats open <ref>`); das
+JSON auf stdout hat dieselbe Form wie bei Claude und Codex (`result.session.id`, dazu `kind: terminal`). Der Befehl
+steht nicht im Audit. `chats show --json` nennt für jeden laufenden Tab (Terminal, Codex, Claude) die PID des
+obersten Prozesses im PTY unter `runtime.pid`. `chats send` erreicht einen laufenden Terminal-Tab ohne Marker-Zeile.
+
 Die Erfolgsmeldung nennt das Konto und woher es kommt
 (`Konto: RankM8 (aktiv in den Einstellungen)` bzw. `(--account)`), im
 `--json`-Modus stehen `session.account` (immer der Name, auch `main`) und
