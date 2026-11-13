@@ -78,12 +78,16 @@ extension UISnapshotGallery {
             return model
         }
 
-        func connectedController() -> ControllerStatus {
+        func connectedController(family: ControllerFamily = .playStation) -> ControllerStatus {
             let status = ControllerStatus()
             status.isRunning = true
-            status.device = ControllerDeviceInfo(
-                name: "DualSense Wireless Controller", category: "DualSense",
-                batteryLevel: nil, hasLight: true, hasHaptics: true)
+            status.device = family == .xbox
+                ? ControllerDeviceInfo(
+                    name: "Xbox Wireless Controller", category: "Xbox One",
+                    batteryLevel: nil, hasLight: false, hasHaptics: true, family: .xbox)
+                : ControllerDeviceInfo(
+                    name: "DualSense Wireless Controller", category: "DualSense",
+                    batteryLevel: nil, hasLight: true, hasHaptics: true)
             return status
         }
 
@@ -132,6 +136,13 @@ extension UISnapshotGallery {
                 let active = model(selected: "err")
                 active.quickActionsAvailable = true
                 return AnyView(ClipboardHistoryView(model: active, now: now, controllerStatus: connectedController()))
+            },
+            // Xbox-Controller: A B X Y, LB RB, Menu statt Options.
+            Fixture(name: "clipboard-verlauf-controller-xbox", size: size) {
+                let active = model(selected: "err")
+                active.quickActionsAvailable = true
+                return AnyView(ClipboardHistoryView(
+                    model: active, now: now, controllerStatus: connectedController(family: .xbox)))
             },
             Fixture(name: "clipboard-verlauf-controller-menue", size: size) {
                 let active = model(selected: "err")

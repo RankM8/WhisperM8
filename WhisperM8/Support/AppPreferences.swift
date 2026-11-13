@@ -505,6 +505,16 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeRegistryStatusEnabled) }
     }
 
+    /// Doppelstart-Sperre für Codex (`CodexSessionRunningGuard`). Aus = Codex
+    /// setzt wieder ohne Prüfung fort — für den Fall, dass eine künftige
+    /// Codex-Version einen langlebigen Prozess mit `resume <id>` hält und
+    /// damit jedes Fortsetzen sperren würde.
+    /// `defaults write com.whisperm8.app codexStartGuardEnabled -bool NO`
+    var isCodexStartGuardEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.codexStartGuardEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.codexStartGuardEnabled) }
+    }
+
     /// Gemeinsames Auto-Memory: Chats von Zusatzprofilen bekommen per
     /// `autoMemoryDirectory` das Memory von `main` (Plan
     /// claude-account-switch-ohne-stopp.md, Slice 1). Aus = jedes Profil nutzt
@@ -677,6 +687,21 @@ struct AppPreferences {
     var isControllerLegendEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.controllerLegendEnabled) }
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
+    }
+
+    /// Notbremse für das Lesen der Paddles und des Xbox-Knopfs über rohes HID
+    /// (Xbox Elite). Aus: kein `IOHIDManager`, Paddles wirken als die
+    /// Gesichtstasten ihres Controller-Profils.
+    /// `defaults write com.whisperm8.app controllerPaddleHIDEnabled -bool NO`
+    var isControllerPaddleHIDEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerPaddleHIDEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerPaddleHIDEnabled) }
+    }
+
+    /// Belegung der vier Paddles (Rohwerte von `ControllerPaddleBinding`);
+    /// fehlende oder unbekannte Werte gelten als Standard des Paddles.
+    var paddleBindings: ControllerPaddleBindings {
+        ControllerPaddleBindings(rawValues: { defaults.string(forKey: $0.preferenceKey) })
     }
 
     /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
@@ -1138,6 +1163,7 @@ enum PreferenceKeys {
     static let agentEventDrivenWatchEnabled = "agentEventDrivenWatchEnabled"
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let claudeRegistryStatusEnabled = "claudeRegistryStatusEnabled"
+    static let codexStartGuardEnabled = "codexStartGuardEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
@@ -1161,6 +1187,11 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let controllerPaddleHIDEnabled = "controllerPaddleHIDEnabled"
+    static let controllerPaddleUpperLeft = "controllerPaddleUpperLeft"
+    static let controllerPaddleLowerLeft = "controllerPaddleLowerLeft"
+    static let controllerPaddleUpperRight = "controllerPaddleUpperRight"
+    static let controllerPaddleLowerRight = "controllerPaddleLowerRight"
     static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
@@ -1207,3 +1238,15 @@ enum PreferenceKeys {
 }
 
 private typealias Keys = PreferenceKeys
+
+extension ControllerPaddle {
+    /// Einstellungs-Schlüssel der Belegung dieses Paddles.
+    var preferenceKey: String {
+        switch self {
+        case .upperLeft: return PreferenceKeys.controllerPaddleUpperLeft
+        case .lowerLeft: return PreferenceKeys.controllerPaddleLowerLeft
+        case .upperRight: return PreferenceKeys.controllerPaddleUpperRight
+        case .lowerRight: return PreferenceKeys.controllerPaddleLowerRight
+        }
+    }
+}

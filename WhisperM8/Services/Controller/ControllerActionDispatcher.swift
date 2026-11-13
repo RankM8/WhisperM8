@@ -44,6 +44,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     }
     /// Limits aller Konten für Kopf und Limits-Karte der R1-Insel (Insel-Paket).
     var limits = ControllerLimitsAccess()
+    /// Chats, die frisch fertig sind (ruhen, Turn vor höchstens 15 min
+    /// beendet), der jüngste zuerst — für das Paddle „Antworten“.
+    var freshDoneChats: () -> [UUID] = { [] }
 
     /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
     var islandState: ControllerIslandSession?
@@ -324,6 +327,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .quickDraw(item): performQuickDraw(item)
         case let .appSlot(slot): performAppSlot(slot)
         case let .islandScroll(step): scrollLimitsCard(step)
+
+        // Paddles (Xbox Elite)
+        case .nextWaitingChat, .answerNextWaiting, .sendNowOrContinue, .cycleMode, .slashCommand:
+            performPaddleAction(action)
 
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)

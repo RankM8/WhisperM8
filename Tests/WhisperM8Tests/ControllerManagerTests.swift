@@ -5,7 +5,7 @@ import XCTest
 
 /// Quelle ohne Hardware: Tests speisen Roh-Ereignisse über `onEvent` ein.
 private final class FakeControllerSource: ControllerInputSource, @unchecked Sendable {
-    var onEvent: (@Sendable (ControllerInputEvent) -> Void)?
+    var onEvent: (@Sendable (ControllerInputEvent, ControllerFamily) -> Void)?
     var onReset: (@Sendable () -> Void)?
     var onDeviceChange: (@MainActor (ControllerDeviceInfo?) -> Void)?
 
@@ -82,7 +82,7 @@ final class ControllerManagerTests: XCTestCase {
             seen += 1
             if seen == count { done.fulfill() }
         }
-        events.forEach { source.onEvent?($0) }
+        events.forEach { source.onEvent?($0, .playStation) }
         await fulfillment(of: [done], timeout: 2)
         manager.onResolution = nil
         return manager.recentResolutions
@@ -137,7 +137,7 @@ final class ControllerManagerTests: XCTestCase {
     /// R2 löst erst ab halbem Hub aus — ein aufliegender Finger nicht.
     func testTriggerNeedsHalfTravel() async {
         enable()
-        source.onEvent?(.trigger(.r2, value: 0.02))
+        source.onEvent?(.trigger(.r2, value: 0.02), .playStation)
         let resolutions = await send([.trigger(.r2, value: 0.8)], expecting: 1)
         XCTAssertEqual(resolutions.map(\.action), [.dictationToggle])
     }
@@ -311,7 +311,7 @@ final class GameControllerInputSourceTests: XCTestCase {
         var events: [ControllerInputEvent] = []
         let received = expectation(description: "Ereignisse")
         received.expectedFulfillmentCount = 4
-        source.onEvent = { event in
+        source.onEvent = { event, _ in
             lock.lock(); events.append(event); lock.unlock()
             received.fulfill()
         }

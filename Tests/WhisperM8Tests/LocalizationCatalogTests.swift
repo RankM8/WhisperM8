@@ -14,6 +14,7 @@ final class LocalizationCatalogTests: XCTestCase {
     /// Neue oder umgestellte Ansichten hier eintragen.
     static let localizedFiles: [String] = [
         "WhisperM8/Views/Controller/ControllerLabels.swift",
+        "WhisperM8/Views/Controller/ControllerLabels+Family.swift",
         "WhisperM8/Views/Controller/ControllerLegendBar.swift",
         "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
         "WhisperM8/Views/Controller/ControllerIslandView.swift",
@@ -79,6 +80,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Pages/ClaudeAccountsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/ClaudeHooksSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/ClaudeMCPSyncSection.swift",
+        "WhisperM8/Views/Settings/Pages/ControllerPaddleSection.swift",
         "WhisperM8/Views/Settings/Pages/ContextPrivacySettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/GPTAccountsSection.swift",
         "WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift",
@@ -206,6 +208,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Controller/ControllerIslandView+Limits.swift",
         "WhisperM8/Views/Controller/ControllerMenuOverlay.swift",
         "WhisperM8/Views/Controller/ControllerLabels.swift",
+        "WhisperM8/Views/Controller/ControllerLabels+Family.swift",
         "WhisperM8/Views/Controller/ControllerListMarker.swift",
         "WhisperM8/Views/AgentChatChromeViews.swift",
         "WhisperM8/Views/AgentChatsSidebarViews.swift",

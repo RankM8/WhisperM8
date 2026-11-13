@@ -10,7 +10,7 @@ import GameController
 /// macOS (`preferredSystemGestureState` wird bewusst nicht verändert).
 /// `GCKeyboard` und `GCMouse` fasst diese Klasse nicht an.
 final class GameControllerInputSource: NSObject, ControllerInputSource, @unchecked Sendable {
-    var onEvent: (@Sendable (ControllerInputEvent) -> Void)?
+    var onEvent: (@Sendable (ControllerInputEvent, ControllerFamily) -> Void)?
     var onReset: (@Sendable () -> Void)?
     var onDeviceChange: (@MainActor (ControllerDeviceInfo?) -> Void)?
 
@@ -19,11 +19,17 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
     /// Controller, von dem das letzte Ereignis kam. Nur auf `queue` gelesen
     /// und geschrieben.
     private var lastSource: ObjectIdentifier?
+    /// Familie je verdrahtetem Controller, für die Herkunft der Ereignisse.
+    /// Nur auf `queue` gelesen und geschrieben.
+    private var families: [ObjectIdentifier: ControllerFamily] = [:]
     /// Haptik-Engine je Controller. Nur auf dem Main Thread.
     private var hapticEngines: [ObjectIdentifier: CHHapticEngine] = [:]
     /// Alle Controller, an denen Handler hängen — auch solche, die
     /// `GCController.controllers()` nicht (mehr) nennt. Nur auf dem Main Thread.
     private var wiredControllers: [ObjectIdentifier: GCController] = [:]
+    /// Controller der letzten Eingabe, nachgeführt aus `deliver`. Nur auf dem
+    /// Main Thread.
+    private var lastInputID: ObjectIdentifier?
 
     // MARK: - Start und Stopp
 
@@ -40,6 +46,7 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
             guard let self else { return }
             if let controller = note.object as? GCController {
                 self.hapticEngines[ObjectIdentifier(controller)] = nil
+                if self.lastInputID == ObjectIdentifier(controller) { self.lastInputID = nil }
             }
             // Das Zurücksetzen muss auf die Handler-Queue, sonst überholt es
             // die letzten Ereignisse des getrennten Controllers.
@@ -65,6 +72,7 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         wiredControllers.values.forEach(unwire)
         wiredControllers = [:]
         hapticEngines = [:]
+        lastInputID = nil
         if let queue {
             queue.async { [weak self] in
                 self?.lastSource = nil
@@ -90,6 +98,8 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
         controller.handlerQueue = queue
         let id = ObjectIdentifier(controller)
         wiredControllers[id] = controller
+        let family = Self.family(of: controller)
+        queue.async { [weak self] in self?.families[id] = family }
 
         for (input, button) in Self.buttons(of: pad) {
             input.pressedChangedHandler = { [weak self] _, _, pressed in
@@ -153,19 +163,27 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
     }
 
     /// Auf `queue`. Wechselt die Quelle (zweiter Controller), gilt vorher alles
-    /// Gehaltene als losgelassen.
+    /// Gehaltene als losgelassen, und die Anzeige folgt dem Gerät dieser
+    /// Eingabe (Tastennamen nach dem Controller der letzten Eingabe).
     private func deliver(_ event: ControllerInputEvent, from id: ObjectIdentifier) {
         if lastSource != id {
             if lastSource != nil { onReset?() }
             lastSource = id
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.lastInputID = id
+                self.announceDevice()
+            }
         }
-        onEvent?(event)
+        onEvent?(event, families[id] ?? .generic)
     }
 
     // MARK: - Gerät
 
+    /// Controller der letzten Eingabe; sonst der zuletzt benutzte laut System.
     private var preferredController: GCController? {
-        GCController.current ?? GCController.controllers().first { $0.extendedGamepad != nil }
+        if let lastInputID, let controller = wiredControllers[lastInputID] { return controller }
+        return GCController.current ?? GCController.controllers().first { $0.extendedGamepad != nil }
     }
 
     private func announceDevice() {
@@ -184,8 +202,19 @@ final class GameControllerInputSource: NSObject, ControllerInputSource, @uncheck
             category: controller.productCategory,
             batteryLevel: battery,
             hasLight: controller.light != nil,
-            hasHaptics: controller.haptics != nil
+            hasHaptics: controller.haptics != nil,
+            family: family(of: controller)
         )
+    }
+
+    /// Familie aus der Profilklasse; nur ohne bekanntes Profil aus dem
+    /// Kategorie-Text.
+    static func family(of controller: GCController) -> ControllerFamily {
+        switch controller.extendedGamepad {
+        case is GCXboxGamepad: return .xbox
+        case is GCDualSenseGamepad, is GCDualShockGamepad: return .playStation
+        default: return ControllerFamily.classify(productCategory: controller.productCategory)
+        }
     }
 
     // MARK: - Lichtleiste und Haptik

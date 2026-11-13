@@ -310,6 +310,7 @@ final class ControllerRuntime {
             dispatcher.islandStatus = { id in
                 ControllerIslandRows.status(AgentSessionStatusCoordinator.shared.statusStore.status(for: id))
             }
+            dispatcher.freshDoneChats = { ControllerIslandRows.liveFreshDone() }
             dispatcher.clipboard = ControllerClipboardAccess(
                 newest: { LiveControllerClipboard.newest() },
                 loadText: { LiveControllerClipboard.loadText(id: $0, completion: $1) },

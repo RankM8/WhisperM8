@@ -174,12 +174,12 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
 bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
 Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
-`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`,
+`agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `codexStartGuardEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`,
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
