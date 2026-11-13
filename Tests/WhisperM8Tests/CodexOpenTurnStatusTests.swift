@@ -442,3 +442,47 @@ final class CodexOpenTurnWatcherTests: XCTestCase {
         XCTAssertEqual(poll(.notRunning), .idle)
     }
 }
+
+// MARK: - Echte Reihenfolge bei offenem Freigabe-Dialog
+
+/// Fixture aus dem Handversuch 13.11.2026 (`CodexApprovalWaitFixture`). Die
+/// Freigabe-Regel des Deciders setzt voraus, dass Codex den Tool-Aufruf VOR
+/// dem Dialog schreibt. Stünde stattdessen der Denkschritt als letztes
+/// Ereignis da, wäre ein wartender Chat bis zu 30 min grün.
+final class CodexApprovalWaitFixtureTests: XCTestCase {
+    private let fixture = CodexApprovalWaitFixture.self
+    private var tail: String { fixture.linesWhileDialogOpen.joined(separator: "\n") }
+
+    func testLastEventWhileTheDialogIsOpenIsThePendingCommand() {
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        guard case .toolCallPending(let timestamp, .command) = event else {
+            return XCTFail("Bei offenem Dialog muss der Befehl das letzte Ereignis sein, war: \(String(describing: event))")
+        }
+        // Geschrieben nach dem Denkschritt, vor der letzten Meta-Zeile.
+        XCTAssertEqual(try XCTUnwrap(timestamp).timeIntervalSince1970, 1_794_605_697.324, accuracy: 0.001)
+    }
+
+    func testDialogIsGreenAtMostTwoMinutes() {
+        let event = AgentTranscriptParser.lastEvent(in: tail, provider: .codex)
+        let process = CodexProcessLiveness.running(since: fixture.processStart)
+        func status(after seconds: TimeInterval) -> AgentSessionRuntimeStatus? {
+            AgentTranscriptStatusDecider.decide(
+                lastEvent: event, fileMTime: fixture.lastWrite,
+                now: fixture.lastWrite.addingTimeInterval(seconds),
+                priorTurnFinishedAt: nil, codexProcess: process
+            )?.status
+        }
+        // Versuch: nach 69 s working, nach über 120 s idle.
+        XCTAssertEqual(status(after: 69), .working)
+        XCTAssertEqual(status(after: AgentTranscriptStatusDecider.workingStallSeconds + 1), .idle)
+        XCTAssertEqual(status(after: 30 * 60), .idle)
+    }
+
+    func testTheTurnUsesAnApprovalPolicyThatCanWait() {
+        // Die Fixture belegt den vorsichtigen Fall: `on-request` kann warten,
+        // der Befehl wird also nicht zu `.commandUnattended`.
+        XCTAssertFalse(AgentTranscriptParser.codexApprovalPolicyIsNever(
+            before: fixture.linesWhileDialogOpen.count,
+            in: fixture.linesWhileDialogOpen.map { Substring($0) }))
+    }
+}
