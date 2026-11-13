@@ -436,16 +436,24 @@ final class HandoverKeeperHardeningTests: XCTestCase {
 
     // MARK: Zweiter Review
 
-    /// Wer sich zuerst ausweist, bleibt der einzige Absender der Verbindung.
-    /// Hier ohne Pfadprüfung (leere Policy): Nur die Absender-Bindung hält
-    /// ein Kind auf, das über die geerbte Verbindung LIST schickt.
-    func testOtherProcessCannotSpeakOnPinnedConnection() throws {
+    /// Ein Erbe wird abgewiesen, solange der gebundene Prozess ruht.
+    ///
+    /// Der Kernel rechnet einen Unix-Socket dem Prozess zu, der ihn zuletzt
+    /// benutzt hat; schon ein `poll` zählt dazu. Wartet der gebundene Prozess
+    /// gerade auf die Antwort, sieht der Aufbewahrer ihn statt des Erben (gemessen
+    /// 13.11.2026: 31 von 200). Die Bindung ist deshalb eine Hürde, keine
+    /// Garantie; die Grenzen sind das Geheimnis und dass kein Kind den Socket
+    /// erbt. Der Test prüft genau das, was sie leistet: Der Testprozess fasst den
+    /// Socket nicht an, bis der Aufbewahrer über die Nachricht des Erben
+    /// entschieden hat, und das Kind lebt so lange weiter.
+    func testInheritorIsRejectedWhileBoundProcessIsIdle() throws {
         let child = try spawn { try .ticking(in: directory) }
         let keeper = try makeKeeper()
         try depositAll([(child, child.manifest(chatID: "a"))])
         let client = try connect()
         defer { client.close() }
         _ = try client.helloTake(secret: nil)
+        XCTAssertTrue(keeper.queue.sync { keeper.takeConnectionActive })
 
         var list = HandoverMessage(type: .list)
         list.chatID = nil
@@ -455,7 +463,7 @@ final class HandoverKeeperHardeningTests: XCTestCase {
         frame.append(contentsOf: json)
         let sock = client.connection.fd
         _ = fcntl(sock, F_SETFD, 0) // das Kind soll die Verbindung erben
-        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("sleep"), strdup("3"), nil]
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup("sleep"), strdup("30"), nil]
         let envp: [UnsafeMutablePointer<CChar>?] = [nil]
         defer { argv.forEach { free($0) } }
         var master: Int32 = -1
@@ -478,10 +486,17 @@ final class HandoverKeeperHardeningTests: XCTestCase {
             var status: Int32 = 0
             waitpid(pid, &status, 0)
         }
+        // Entscheidung am Zustand des Aufbewahrers ablesen, nicht am Socket:
+        // Nach der Abweisung endet seine Übernahme-Verbindung.
+        XCTAssertTrue(HandoverTestSupport.waitUntil(timeout: 30) {
+            !keeper.queue.sync { keeper.takeConnectionActive }
+        }, "Aufbewahrer hat über die Nachricht des Erben entschieden")
+        XCTAssertTrue(kill(pid, 0) == 0, "das Kind lebt noch")
+
         let reply = try client.connection.receive(timeout: 10)
-        XCTAssertEqual(reply.message.type, .error, "fremder Absender auf gebundener Verbindung")
+        XCTAssertEqual(reply.message.type, .error, "Erbe auf gebundener Verbindung abgewiesen")
         XCTAssertNil(reply.message.chats)
-        XCTAssertEqual(keeper.queue.sync { keeper.chats.count }, 1)
+        XCTAssertEqual(keeper.queue.sync { keeper.chats.count }, 1, "Chat bleibt beim Aufbewahrer")
     }
 
     func testTakeAndReleaseRequireSecret() throws {
