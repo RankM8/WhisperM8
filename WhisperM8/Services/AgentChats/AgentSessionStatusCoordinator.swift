@@ -613,7 +613,7 @@ final class AgentSessionStatusCoordinator {
         // belebte sonst den gestoppten PTY-Chat (Status „arbeitet“ ohne
         // Terminal, Fertig-Meldung für einen Chat ohne Prozess).
         guard isRegistryStatusEnabled(), !record.isBackground,
-              let sessionID = registrySessionID(forExternalID: record.sessionID)
+              let sessionID = registrySessionID(for: record)
                 ?? bindPendingExternalID(from: record) else { return }
         // Ohne eigenes PTY gehört der Prozess nicht zu diesem Chat (fremdes
         // Terminal, Headless-Lauf): sonst kämen Ton und Meldungen für einen
@@ -652,14 +652,18 @@ final class AgentSessionStatusCoordinator {
         Logger.claudeBinding.info(
             "binding_resolved_by_registry localID=\(localID.uuidString, privacy: .public) id=\(record.sessionID, privacy: .public)")
         setExternalSessionID(localID: localID, newID: record.sessionID)
-        return registrySessionID(forExternalID: record.sessionID)
+        // Genau dieser Chat — eine Suche nach der ID fände bei doppelt
+        // vergebenen IDs womöglich einen anderen.
+        return localID
     }
 
     /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
     /// PTY-Pfad (`processTerminated`); extern gestartete Sessions fallen
     /// zurück auf den Transcript-Pfad.
     func handleRegistryRecordRemoved(_ record: ClaudeSessionRecord) {
-        guard let sessionID = registrySessionID(forExternalID: record.sessionID),
+        // Zuerst der Chat, dem genau dieser Prozess gemeldet wurde.
+        let owner = registryRecords.first { $0.value.pid == record.pid && $0.value.sessionID == record.sessionID }?.key
+        guard let sessionID = owner ?? registrySessionID(for: record),
               registryLiveSessions.contains(sessionID) else { return }
         // Beim Resume endet der alte Prozess, während der neue mit derselben
         // Session-ID schon läuft — dessen Ende betrifft den Chat nicht mehr.
@@ -791,13 +795,27 @@ final class AgentSessionStatusCoordinator {
         terminatedAt[sessionID] = nil
     }
 
-    private func registrySessionID(forExternalID externalID: String) -> UUID? {
-        store.loadWorkspace().sessions.first { session in
+    /// Chat zu einem Registry-Eintrag. Tragen mehrere Chats dieselbe ID (nach
+    /// einer Fehlbindung), gehört der Eintrag dem, dessen PTY-Prozess ihn
+    /// schreibt (PID); sonst wie bisher dem ersten mit dieser ID.
+    private func registrySessionID(for record: ClaudeSessionRecord) -> UUID? {
+        Self.registryOwner(of: record, sessions: store.loadWorkspace().sessions, processID: terminalProcessID)
+    }
+
+    /// Pur: siehe `registrySessionID(for:)`.
+    nonisolated static func registryOwner(
+        of record: ClaudeSessionRecord,
+        sessions: [AgentChatSession],
+        processID: (UUID) -> Int32?
+    ) -> UUID? {
+        let candidates = sessions.filter { session in
             session.provider == .claude
-                && session.externalSessionID == externalID
+                && session.externalSessionID == record.sessionID
                 && !session.isBackgroundChat
                 && !session.isTerminal
-        }?.id
+        }
+        guard candidates.count > 1 else { return candidates.first?.id }
+        return candidates.first(where: { processID($0.id) == record.pid })?.id ?? candidates.first?.id
     }
 
     // MARK: Schatten des alten Wegs (nur Log)

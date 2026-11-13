@@ -155,6 +155,48 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1)
     }
 
+    // MARK: Zuordnung über die PID (Folgepunkt f zum Bindungs-Befund 13.11.2026)
+
+    /// Zwei Chats tragen nach einer Fehlbindung dieselbe ID. Der Eintrag gehört
+    /// dem, dessen Prozess ihn schreibt — früher bekam ihn der erste Treffer.
+    func testRecordGoesToTheChatWhoseProcessWritesIt() throws {
+        let f = try makeFixture()
+        let second = try f.store.createSession(
+            provider: .claude, projectPath: tempDir.path, title: "zweiter Chat", initialPrompt: nil)
+        try f.store.updateSession(id: second.id) { $0.externalSessionID = "ext-1" }
+        f.coordinator.terminalProcessID = { $0 == second.id ? 200 : 100 }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.sessionLaunched(sessionID: second.id)
+
+        f.coordinator.handleRegistryRecord(record("busy", pid: 200))
+
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(second.id))
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: second.id), .working)
+        XCTAssertNotEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
+
+        // Das Ende des Prozesses trifft ebenfalls genau diesen Chat.
+        f.coordinator.handleRegistryRecordRemoved(record("busy", pid: 200))
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(second.id))
+    }
+
+    func testRegistryOwnerFallsBackToFirstChatWithTheID() {
+        typealias C = AgentSessionStatusCoordinator
+        let project = UUID()
+        let first = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1", title: "a")
+        let second = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1", title: "b")
+        let background = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1",
+                                          title: "bg", kind: .backgroundChat)
+        let sessions = [background, first, second]
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 200), sessions: sessions,
+                                       processID: { $0 == second.id ? 200 : nil }), second.id)
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: sessions,
+                                       processID: { _ in nil }), first.id, "ohne PID-Treffer wie bisher")
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [first],
+                                       processID: { _ in 1 }), first.id, "ein Kandidat: unverändert")
+        XCTAssertNil(C.registryOwner(of: record("idle", sessionID: "fremd"), sessions: sessions, processID: { _ in nil }))
+    }
+
     func testHooksAndTranscriptNoLongerDriveRegistryLiveSession() throws {
         let f = try makeFixture()
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
