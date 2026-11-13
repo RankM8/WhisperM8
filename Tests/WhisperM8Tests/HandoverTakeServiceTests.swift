@@ -223,6 +223,33 @@ final class HandoverTakeServiceTests: XCTestCase {
         XCTAssertLessThan(millis, 50, "Start ohne Übergabe wartete \(Int(millis)) ms")
     }
 
+    /// Vic zu e393fb03: Nach Absturz oder SIGKILL des Aufbewahrers bleibt sein
+    /// Discovery-Eintrag liegen. Ohne lebende Sperre wird er entfernt, und der
+    /// Start kostet keine Wartezeit.
+    func testStaleDiscoveryIsRemovedWithoutWaiting() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "/private/tmp/gibt-es-nicht/keeper.sock\n".write(to: paths.discoveryFileURL, atomically: true, encoding: .utf8)
+        FileManager.default.createFile(atPath: paths.lockFileURL.path, contents: nil)
+        let started = Date()
+        _ = service(secrets: FakeSecretStore(), sessions: [], calls: Calls()).takeAtLaunch()
+        XCTAssertLessThan(Date().timeIntervalSince(started) * 1000, 50)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.discoveryFileURL.path), "veralteter Eintrag entfernt")
+    }
+
+    func testLiveKeeperLockKeepsTheDiscoveryEntry() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try "x\n".write(to: paths.discoveryFileURL, atomically: true, encoding: .utf8)
+        let fd = open(paths.lockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        XCTAssertEqual(flock(fd, LOCK_EX | LOCK_NB), 0, "wie der Aufbewahrer")
+        XCTAssertTrue(HandoverKeeperLock.isHeld(paths: paths))
+        XCTAssertTrue(HandoverKeeperLock.liveDiscovery(paths: paths))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.discoveryFileURL.path))
+        flock(fd, LOCK_UN)
+        XCTAssertFalse(HandoverKeeperLock.isHeld(paths: paths))
+    }
+
     func testNormalStartWithoutHandoverDoesNothing() {
         let calls = Calls()
         let summary = service(secrets: FakeSecretStore(), sessions: [], calls: calls).takeAtLaunch()
