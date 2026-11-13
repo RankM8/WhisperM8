@@ -300,6 +300,7 @@ run_scenario() { # name erwartung funktion
     stop_sampler
     clear_knobs
     check_no_leftovers "$name" "$violations"
+    check_no_inherited_sockets "$name"
 }
 
 requires() { # szenario fähigkeit… — trägt FEHLT ein und liefert 1, wenn etwas fehlt
@@ -543,6 +544,7 @@ cmd_fault_run() {
             record "$scenario" voraussetzung FEHLER "Chats laufen nicht, Szenario nicht gefahren"
         done
     else
+        check_no_inherited_sockets setup
         for scenario in $list; do
             run_scenario "$scenario" "$(scenario_expectation "$scenario")" "$(scenario_function "$scenario")"
             wait_until_running || { record "$scenario" weiter FEHLER "Chats nicht zurück, Rest abgebrochen"; break; }

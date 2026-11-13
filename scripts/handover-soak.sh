@@ -279,6 +279,40 @@ chat_identity() {
         | grep -E '^WHISPERM8_SESSION_(ID|TOKEN)=' | tr '\n' ' ' || true
 }
 
+# Kernel-Adressen der Unix-Sockets aus `lsof -nP -a -U -p PID -F pfdn` (stdin).
+unix_socket_addresses() { awk '/^d0x/ {print substr($0, 2)}' | sort -u; }
+
+# Adressen, die in beiden Listen stehen: ein vom Kind geerbter Socket der App.
+shared_sockets() { # adressen-app adressen-kind
+    comm -12 <(printf '%s\n' "$1" | grep -v '^$' | sort -u) <(printf '%s\n' "$2" | grep -v '^$' | sort -u) || true
+}
+
+# „Kein Kind erbt einen Socket der App“ — laut Review (Vic, 13.11.2026) neben
+# dem Geheimnis die zweite echte Grenze der Übergabe. Prüft jedes Kind der
+# Test-App: per `Process` gestartete Helfer (ohne Terminal) und Chats aus
+# forkpty (mit Terminal).
+check_no_inherited_sockets() { # runde
+    local round="$1" app_pid app_addrs kid tty kid_addrs shared checked=0 helpers=0 ptys=0 found=""
+    app_pid=$("$TI" status | awk '/^PID:/ {print $2}')
+    if [[ -z "$app_pid" ]]; then record "$round" kein-erbe FEHLT "Test-App läuft nicht"; return 0; fi
+    app_addrs=$(lsof -nP -a -U -p "$app_pid" -F pfdn 2>/dev/null | unix_socket_addresses || true)
+    while read -r kid tty; do
+        [[ -n "$kid" ]] || continue
+        kid_addrs=$(lsof -nP -a -U -p "$kid" -F pfdn 2>/dev/null | unix_socket_addresses || true)
+        shared=$(shared_sockets "$app_addrs" "$kid_addrs")
+        checked=$((checked + 1))
+        if [[ "$tty" == "??" ]]; then helpers=$((helpers + 1)); else ptys=$((ptys + 1)); fi
+        [[ -z "$shared" ]] || found="$found $kid($tty):$(printf '%s' "$shared" | tr '\n' ',')"
+    done <<< "$(ps -axo pid=,ppid=,tty= | awk -v p="$app_pid" '$2 == p {print $1, $3}')"
+    if [[ -n "$found" ]]; then
+        record "$round" kein-erbe FEHLER "Kinder halten Sockets der App:$found"
+    elif (( checked == 0 )); then
+        record "$round" kein-erbe FEHLT "die Test-App hat gerade keine Kinder"
+    else
+        record "$round" kein-erbe OK "$checked Kinder ($helpers per Process, $ptys mit Terminal) ohne geerbten Socket"
+    fi
+}
+
 json_field() { "$PY" -I -c 'import json,sys; d=json.load(sys.stdin); print(eval("d"+sys.argv[1]))' "$1"; }
 
 # MARK: - Test-Instanz vorbereiten
@@ -528,6 +562,8 @@ check_round() { # runde vorher-datei
         record_verdict "$round" zaehler "$(check_counter_file "$COUNTER_FILE")"
     fi
 
+    check_no_inherited_sockets "$round"
+
     if pgrep -f "handover-keeper --root $ROOT" >/dev/null 2>&1; then
         record "$round" aufbewahrer-weg FEHLER "läuft noch"
     elif has_keep_chats; then
@@ -641,6 +677,7 @@ cmd_run() {
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     setup_chats
     wait_until_working
+    check_no_inherited_sockets setup
     local round
     for round in $(seq 1 "$ROUNDS"); do
         snapshot "$STATE/before-$round.tsv"
@@ -717,6 +754,14 @@ cmd_self_test() {
     printf '%s\n' '{"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"q1"}]}}' >> "$dir/t3.jsonl"
     expect_exact "FEHLER Rückfrage beantwortet" "$(check_question_open "$dir/t3.jsonl")" "Rückfrage beantwortet"
     expect_exact "FEHLER keine Rückfrage gestellt" "$(check_question_open "$dir/t1.jsonl")" "keine Rückfrage"
+
+    local lsof_app lsof_kid
+    lsof_app=$(printf 'p100\nf3\nd0xaaa\nn->0x1\nf4\nd0xbbb\nn/x.sock\n' | unix_socket_addresses)
+    lsof_kid=$(printf 'p200\nf5\nd0xbbb\nn/x.sock\nf6\nd0xccc\nn->0x2\n' | unix_socket_addresses)
+    expect_exact "0xaaa
+0xbbb" "$lsof_app" "Socket-Adressen aus lsof"
+    expect_exact "0xbbb" "$(shared_sockets "$lsof_app" "$lsof_kid")" "geerbter Socket erkannt"
+    expect_exact "" "$(shared_sockets "$lsof_app" "")" "Kind ohne Sockets"
 
     RESULTS=""
     record_verdict 1 probe "OK" 2>/dev/null
