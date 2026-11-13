@@ -201,6 +201,9 @@ enum HandoverManifestFactory {
         manifest.accountProfile = session.claudeProfileName
         manifest.gptProfile = session.gptProfileName
         manifest.externalSessionID = session.externalSessionID
+        let binding = AgentSessionStatusCoordinator.shared.pendingBinding(for: session.id)
+        manifest.pendingExternalSessionID = binding.pendingExternalID
+        manifest.forkExternalSessionIDs = binding.forkExternalIDs.isEmpty ? nil : binding.forkExternalIDs
         manifest.terminalColors = detached.colors
         return manifest
     }

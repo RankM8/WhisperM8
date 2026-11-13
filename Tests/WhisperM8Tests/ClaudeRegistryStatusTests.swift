@@ -169,6 +169,41 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1, "das echte Turn-Ende nach der Übernahme meldet einmal")
     }
 
+    /// Bindungs-Befund, Punkt c: Eine zurückgestellte ID übersteht die
+    /// Übergabe über das Manifest und wird in der neuen App mit dem ersten
+    /// echten Turn gebunden, wie vorher.
+    func testPendingBindingSurvivesHandoverAndBindsOnFirstTurn() throws {
+        let f = try makeFixture()
+        f.registryEnabled.value = true
+        f.coordinator.sessionAdopted(sessionID: f.sessionID)
+        XCTAssertEqual(f.coordinator.pendingBinding(for: f.sessionID),
+                       .init(pendingExternalID: nil, forkExternalIDs: []))
+
+        // Neue App: Zustand aus dem Manifest, dann meldet Claude die neue ID busy.
+        f.coordinator.restorePendingBinding(.init(pendingExternalID: "ext-2", forkExternalIDs: ["fork-1"]),
+                                            for: f.sessionID)
+        XCTAssertEqual(f.coordinator.pendingBinding(for: f.sessionID),
+                       .init(pendingExternalID: "ext-2", forkExternalIDs: ["fork-1"]))
+        f.coordinator.handleRegistryRecord(record("busy", sessionID: "ext-2"))
+        XCTAssertEqual(f.store.loadWorkspace().sessions.first { $0.id == f.sessionID }?.externalSessionID, "ext-2",
+                       "zurückgestellte ID beim ersten Turn gebunden")
+        XCTAssertNil(f.coordinator.pendingBinding(for: f.sessionID).pendingExternalID)
+        XCTAssertEqual(f.coordinator.pendingBinding(for: f.sessionID).forkExternalIDs, ["fork-1"])
+    }
+
+    func testHandoverManifestCarriesPendingBinding() throws {
+        var manifest = HandoverManifest(chatID: UUID().uuidString, kind: "claude", pid: 1, cols: 80, rows: 24,
+                                        sendsInterruptOnStop: true)
+        manifest.pendingExternalSessionID = "ext-2"
+        manifest.forkExternalSessionIDs = ["fork-1"]
+        let wire = try JSONDecoder().decode(HandoverManifest.self, from: JSONEncoder().encode(manifest))
+        XCTAssertEqual(wire.pendingExternalSessionID, "ext-2")
+        XCTAssertEqual(wire.forkExternalSessionIDs, ["fork-1"])
+        // Ein Manifest ohne die Felder (älterer Stand) bleibt lesbar.
+        let old = #"{"chatID":"a","kind":"claude","pid":1,"cols":80,"rows":24,"sendsInterruptOnStop":true}"#
+        XCTAssertNil(try JSONDecoder().decode(HandoverManifest.self, from: Data(old.utf8)).pendingExternalSessionID)
+    }
+
     func testHooksAndTranscriptNoLongerDriveRegistryLiveSession() throws {
         let f = try makeFixture()
         f.coordinator.sessionLaunched(sessionID: f.sessionID)

@@ -134,6 +134,30 @@ final class AgentSessionStatusCoordinator {
     /// IDs der Background-Forks pro lokaler Session — werden nie gebunden.
     private var forkExternalIDs: [UUID: Set<String>] = [:]
 
+    /// Bindungs-Zustand, der nur im Speicher liegt: zurückgestellte ID und
+    /// Fork-Merkliste. Geht bei einem Neustart ohne Chatverlust im Manifest mit.
+    struct PendingBinding: Equatable {
+        var pendingExternalID: String?
+        var forkExternalIDs: [String]
+    }
+
+    func pendingBinding(for sessionID: UUID) -> PendingBinding {
+        PendingBinding(pendingExternalID: pendingExternalIDs[sessionID],
+                       forkExternalIDs: (forkExternalIDs[sessionID] ?? []).sorted())
+    }
+
+    /// Übernommener Chat: Zustand aus dem Manifest wieder eintragen. Eine
+    /// zurückgestellte ID wird wie bisher erst mit dem ersten echten Turn
+    /// gebunden (Hook oder Registry), eine Fork-ID nie.
+    func restorePendingBinding(_ binding: PendingBinding, for sessionID: UUID) {
+        if let pending = binding.pendingExternalID, !pending.isEmpty {
+            pendingExternalIDs[sessionID] = pending
+        }
+        if !binding.forkExternalIDs.isEmpty {
+            forkExternalIDs[sessionID, default: []].formUnion(binding.forkExternalIDs)
+        }
+    }
+
     // MARK: Registry-Zustand (Plan claude-status-aus-registry.md)
 
     /// Sessions, deren Status aus Claudes eigener Registry kommt
