@@ -10801,6 +10801,16 @@
         }
       }
     },
+    "Not resumed: this conversation continues in the chat “%@”. Both chats were bound to the same session, and only one may run it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht fortgesetzt: Diese Unterhaltung läuft im Chat „%@“ weiter. Beide Chats waren an dieselbe Sitzung gebunden, und nur einer darf sie führen."
+          }
+        }
+      }
+    },
     "Not reverted because still running: %@ — pause the chat and choose “Undo last account switch” again.": {
       "localizations": {
         "de": {
