@@ -184,8 +184,27 @@ Einblenden doch (Menüleiste), steht im Log `unified_pill_moved_on_order_front`.
 **Prüfen ohne Hinsehen:** `whisperm8 debug pill [--busy <ms>]` spielt den
 Übergang ohne Aufnahme durch und schneidet die Fensterliste mit (Lücke,
 Versatz, Verschiebung beim Einblenden, Reihenfolge von Tausch und Fenstern),
-Doku in [ui-testing.md](ui-testing.md). Messungen vom 13.11.2026 stehen im
-Commit des Übergangs.
+Doku in [ui-testing.md](ui-testing.md).
+
+**Messung vom 13.11.2026** (Aufnahme nur der Fenster der Test-Instanz, 60 Bilder
+je Sekunde, je Lage zwei Läufe hin und zurück: oben mittig, ganz oben unter der
+Menüleiste, frei in der Mitte, dazu 150 ms bzw. 60 ms beschäftigter Main
+Thread beim Start; MacBook-Bildschirm als Bildschirm ohne Notch über
+`WHISPERM8_TEST_NO_NOTCH`, ein Kontrolllauf oben mittig am 5120×1440-Bildschirm
+mit demselben Ergebnis):
+
+| | vorher | nachher |
+|---|---|---|
+| Bilder ohne Pille | 0 | 0 |
+| Versatz der Oberkante | 0 pt (Sprung nach unten schon behoben) | 0 pt |
+| zwei Pillen übereinander (dunkler) | 100 bis 717 ms je Lauf | 0 ms |
+| Ruhebild im anderen Ton | 167 bis 217 ms je Lauf | 0 ms |
+| größter Breitenschritt je Bild | 47 bis 150 pt | 31 bis 46 pt |
+| Abstand Diktat steht → Status weg | 4 bis 35 ms (beschäftigt: 4 und 9) | Tausch ≥ 49 ms danach |
+| Aufbau → Wachsen beginnt | 31 bis 43 ms | 65 bis 75 ms |
+
+Ohne die Ausnahme an der Menüleiste zeigt dieselbe Messung den alten Sprung:
+18 pt oben mittig, 24 pt ganz oben (`orderFrontShift` ebenso).
 
 ### Kill-Switch der vereinten Pille
 

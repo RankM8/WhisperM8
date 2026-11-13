@@ -259,6 +259,56 @@ final class UnifiedPillControllerTests: XCTestCase {
         XCTAssertEqual(panel.frame.midY, center.y, accuracy: 0.5)
     }
 
+    /// Wie oben, aber durch den echten Fehlerort: AppKit verschiebt beim
+    /// Einblenden (`orderFront`), nicht beim Setzen des Rahmens. Das Fenster
+    /// ist dabei unsichtbar und klickdurchlässig und geht sofort wieder zu.
+    /// Gegenprobe: Dasselbe Fenster ohne `allowsAboveMenuBar` wird verschoben,
+    /// der Test sieht den Fehler also wirklich.
+    func testUnifiedPillPanelIsNotMovedWhenOrderedFront() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first, "kein Bildschirm")
+        try XCTSkipUnless(screen.visibleFrame.maxY < screen.frame.maxY, "keine sichtbare Menüleiste")
+        let center = CGPoint(x: screen.frame.midX, y: screen.visibleFrame.maxY - PillMetrics.height / 2)
+        func shiftOnOrderFront(_ panel: RecordingPanel) -> CGFloat {
+            panel.alphaValue = 0
+            panel.ignoresMouseEvents = true
+            defer { panel.close() }
+            let before = panel.frame
+            panel.orderFrontRegardless()
+            return panel.frame.minY - before.minY
+        }
+        XCTAssertEqual(shiftOnOrderFront(OverlayController.makeUnifiedPillPanel(center: center)), 0)
+        let constrained = OverlayController.makeUnifiedPillPanel(center: center)
+        constrained.allowsAboveMenuBar = false
+        XCTAssertLessThan(shiftOnOrderFront(constrained), -1, "Gegenprobe: ohne Ausnahme schiebt AppKit nach unten")
+    }
+
+    /// Übergang: Die Status-Seite bekommt jede Änderung der Sichtbarkeit
+    /// genau einmal, Wiederholungen nicht.
+    func testStatusContentHiddenIsForwardedOnce() {
+        let hub = UnifiedPillHub()
+        var applied: [UInt32?] = []
+        hub.applyStatusContentHidden = { applied.append($0) }
+        hub.setStatusContentHidden(onDisplay: 7)
+        hub.setStatusContentHidden(onDisplay: 7)
+        hub.setStatusContentHidden(onDisplay: nil)
+        hub.setStatusContentHidden(onDisplay: nil)
+        XCTAssertEqual(applied, [7, nil])
+        XCTAssertNil(hub.statusContentHiddenDisplayID)
+    }
+
+    /// Der Tausch wartet, bis der Main Thread sein Bild abgegeben hat: nie
+    /// im selben Durchlauf, in dem er geplant wurde.
+    func testHandoverRunsOnlyAfterTheNextCommit() {
+        var ran = false
+        let done = expectation(description: "nach dem Abgeben")
+        OverlayController.afterNextCommit(delay: 0.01) {
+            ran = true
+            done.fulfill()
+        }
+        XCTAssertFalse(ran, "nicht sofort")
+        wait(for: [done], timeout: 5)
+    }
+
     /// Die getrennte Diktat-Pille überlässt die Lage weiter AppKit.
     func testClassicPanelKeepsTheAppKitConstraint() {
         let panel = RecordingPanel(initialOrigin: .zero)
