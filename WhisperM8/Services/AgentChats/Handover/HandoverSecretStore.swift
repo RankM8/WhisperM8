@@ -32,9 +32,14 @@ protocol HandoverKeychainBackend {
 }
 
 /// Ein Eintrag je Instanz (Dienst je Instanz, Konto aus dem Ordner des
-/// Aufbewahrers). Der Zugriff hängt an der Code-Signatur der App, die ihn
-/// anlegt: Zwei `make dev`-Builds mit derselben Signatur lesen ihn ohne
-/// Dialog; ein anders signierter Build bekommt ihn nicht.
+/// Aufbewahrers). Der Zugriff hängt an der App, die ihn anlegt.
+///
+/// **Gemessen 13.11.2026 (Test-Instanz):** Ohne Team-ID (selbstsigniertes
+/// „WhisperM8 Local Dev“) bindet macOS den Eintrag an den cdhash des Builds
+/// (`partition_id cdhash:…`), nicht an die Signatur. Ein neuer `make dev`-Build
+/// liest ihn deshalb nicht; erst ein Developer-ID-Zertifikat mit Team-ID
+/// (`teamid:…`) macht ihn über Builds lesbar. `kSecUseAuthenticationUIFail`
+/// allein verhinderte den Dialog dabei NICHT (SecurityAgent startete).
 ///
 /// **Nie ein Dialog, nie ein Hängen:** Gelesen wird ohne Benutzerdialog und
 /// mit Frist. Scheitert das, gilt der Rückfall — ein Dialog beim Start nach
@@ -161,18 +166,36 @@ struct SecItemHandoverKeychainBackend: HandoverKeychainBackend {
         var query = baseQuery(service, account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        // Kein Dialog: Braucht der Zugriff eine Bestätigung (anders signierter
-        // Build), scheitert er mit errSecInteractionNotAllowed.
+        // Kein Dialog: Braucht der Zugriff eine Bestätigung (anderer Build),
+        // scheitert er mit errSecInteractionNotAllowed.
         query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let status = Self.withoutUserInteraction { SecItemCopyMatching(query as CFDictionary, &result) }
         return (status, result as? Data)
     }
 
     func delete(service: String, account: String) -> OSStatus {
         var query = baseQuery(service, account)
         query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
-        return SecItemDelete(query as CFDictionary)
+        return Self.withoutUserInteraction { SecItemDelete(query as CFDictionary) }
+    }
+
+    /// Schaltet für den Aufruf jede Rückfrage des Schlüsselbunds ab. Der
+    /// Partitions-Dialog des alten Schlüsselbunds kommt sonst trotz
+    /// `kSecUseAuthenticationUIFail` (gemessen 13.11.2026). Prozessweit, aber
+    /// nur für die Dauer dieses einen Aufrufs; der vorige Wert kommt zurück.
+    /// Die API ist veraltet, für den Datei-Schlüsselbund aber der einzige
+    /// Schalter, der den Dialog verhindert.
+    private static let interactionLock = NSLock()
+
+    static func withoutUserInteraction(_ body: () -> OSStatus) -> OSStatus {
+        interactionLock.lock()
+        defer { interactionLock.unlock() }
+        var previous: DarwinBoolean = true
+        let readOK = SecKeychainGetUserInteractionAllowed(&previous) == errSecSuccess
+        _ = SecKeychainSetUserInteractionAllowed(false)
+        defer { _ = SecKeychainSetUserInteractionAllowed(readOK ? previous.boolValue : true) }
+        return body()
     }
 }
 
