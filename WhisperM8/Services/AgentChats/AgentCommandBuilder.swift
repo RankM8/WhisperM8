@@ -50,7 +50,7 @@ enum AgentCommandError: LocalizedError, Equatable {
     /// Die Sitzung läuft schon in einem anderen Claude-Prozess (Registry).
     case sessionAlreadyRunning(title: String, pid: Int32)
     /// Ein anderer Chat startet dieselbe Sitzung gerade (noch nicht in der Registry).
-    case sessionStartingElsewhere(title: String)
+    case sessionStartingElsewhere(title: String, otherChat: String)
 
     var errorDescription: String? {
         switch self {
@@ -64,8 +64,8 @@ enum AgentCommandError: LocalizedError, Equatable {
             return "Cannot attach to background agent \(title): no short ID stored yet. Spawn the agent first."
         case .sessionAlreadyRunning(let title, let pid):
             return String(localized: "Cannot resume \(title): this conversation is already running in another Claude process (PID \(String(pid))). Close that process first, a second start would run the same conversation twice.")
-        case .sessionStartingElsewhere(let title):
-            return String(localized: "Cannot resume \(title): another chat is starting this conversation right now. A second start would run the same conversation twice.")
+        case .sessionStartingElsewhere(let title, let otherChat):
+            return String(localized: "Cannot resume \(title): the chat “\(otherChat)” is starting this conversation right now. A second start would run the same conversation twice. Close one of the two chats, or try again in a few seconds.")
         }
     }
 }
@@ -269,11 +269,15 @@ struct AgentCommandBuilder {
         ClaudeSessionRunningGuard.liveLookup(sessionID: sessionID)
     }
 
-    /// Reserviert die fortzusetzende Sitzung für den Chat; liefert den Chat,
-    /// der sie gerade selbst startet (`ClaudeSessionLaunchReservations`).
+    /// Reserviert die fortzusetzende Sitzung für den Chat; liefert den Namen
+    /// des Chats, der sie gerade selbst startet (`ClaudeSessionLaunchReservations`).
     /// Standard: keine Reservierung — nur der echte Startpfad bindet sie an,
     /// damit Builder-Aufrufe ohne Start (Tests, Vorschau) nichts belegen.
-    var launchReservation: (_ sessionID: String, _ localID: UUID) -> UUID? = { _, _ in nil }
+    /// Jeder weitere Startpfad mit `--resume` muss sie ebenfalls anbinden
+    /// (heute nur `AgentSessionDetailView.prepareCommand`). Der Attach-Pfad
+    /// kehrt vorher zurück: `claude attach` startet keinen zweiten Prozess
+    /// auf der Sitzung, der Rückweg mit `--resume` läuft wieder hier durch.
+    var launchReservation: (_ sessionID: String, _ localID: UUID) -> String? = { _, _ in nil }
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
     /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
@@ -837,9 +841,9 @@ struct AgentCommandBuilder {
         if !isFork, let resumeSessionID,
            let holder = launchReservation(resumeSessionID, session.id) {
             Logger.agentStore.error(
-                "resume_blocked_session_starting session=\(resumeSessionID, privacy: .public) holder=\(holder.uuidString, privacy: .public)"
+                "resume_blocked_session_starting session=\(resumeSessionID, privacy: .public) holder=\(holder, privacy: .private)"
             )
-            throw AgentCommandError.sessionStartingElsewhere(title: session.title)
+            throw AgentCommandError.sessionStartingElsewhere(title: session.title, otherChat: holder)
         }
 
         if let resumeSessionID {

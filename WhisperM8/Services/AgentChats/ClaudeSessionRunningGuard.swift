@@ -40,12 +40,17 @@ enum ClaudeSessionRunningGuard {
     }
 
     /// Prüfung gegen eine vorher (abseits des Main Threads) gelesene Liste.
-    /// Ob die App einen Prozess gerade beendet, entscheidet sich erst jetzt.
-    static func runningForegroundProcess(sessionID: String, in records: [ClaudeSessionRecord]) -> ClaudeSessionRecord? {
+    /// Ob die App einen Prozess gerade beendet, entscheidet sich erst jetzt —
+    /// und nur der auslaufende Vorgänger DESSELBEN Chats (`localID`) ist
+    /// ausgenommen: Der Prozess eines anderen, gerade geschlossenen Chats auf
+    /// derselben Sitzung schreibt noch und sperrt weiter.
+    static func runningForegroundProcess(
+        sessionID: String, in records: [ClaudeSessionRecord], localID: UUID? = nil
+    ) -> ClaudeSessionRecord? {
         runningForegroundProcess(
             sessionID: sessionID,
             records: records,
-            isBeingTerminated: { ProcessTerminationLedger.shared.isBeingTerminated(pid: $0) }
+            isBeingTerminated: { ProcessTerminationLedger.shared.isBeingTerminated(pid: $0, forLocalID: localID) }
         )
     }
 
@@ -62,8 +67,13 @@ enum ClaudeSessionRunningGuard {
 final class ProcessTerminationLedger: @unchecked Sendable {
     static let shared = ProcessTerminationLedger()
 
+    private struct Entry {
+        let at: Date
+        let localID: UUID?
+    }
+
     private let lock = NSLock()
-    private var entries: [Int32: Date] = [:]
+    private var entries: [Int32: Entry] = [:]
     private let window: TimeInterval
     private let now: () -> Date
 
@@ -72,20 +82,24 @@ final class ProcessTerminationLedger: @unchecked Sendable {
         self.now = now
     }
 
-    func noteTerminating(pid: Int32) {
+    /// `localID`: der Chat, dessen Prozess endet (für die Frage „eigener Vorgänger?“).
+    func noteTerminating(pid: Int32, localID: UUID? = nil) {
         guard pid > 0 else { return }
         lock.lock()
         defer { lock.unlock() }
         let current = now()
-        entries = entries.filter { current.timeIntervalSince($0.value) < window }
-        entries[pid] = current
+        entries = entries.filter { current.timeIntervalSince($0.value.at) < window }
+        entries[pid] = Entry(at: current, localID: localID)
     }
 
-    func isBeingTerminated(pid: Int32) -> Bool {
+    /// Mit `forLocalID` zählt nur der Prozess desselben Chats (oder einer
+    /// ohne vermerkten Chat) als auslaufend.
+    func isBeingTerminated(pid: Int32, forLocalID localID: UUID? = nil) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard let noted = entries[pid] else { return false }
-        return now().timeIntervalSince(noted) < window
+        guard let noted = entries[pid], now().timeIntervalSince(noted.at) < window else { return false }
+        guard let localID, let owner = noted.localID else { return true }
+        return owner == localID
     }
 }
 

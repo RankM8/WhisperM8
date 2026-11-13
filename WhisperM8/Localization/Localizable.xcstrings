@@ -3061,12 +3061,12 @@
         }
       }
     },
-    "Cannot resume %@: another chat is starting this conversation right now. A second start would run the same conversation twice.": {
+    "Cannot resume %@: the chat “%@” is starting this conversation right now. A second start would run the same conversation twice. Close one of the two chats, or try again in a few seconds.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Ein anderer Chat startet diese Unterhaltung gerade. Ein zweiter Start würde dieselbe Unterhaltung doppelt führen."
+            "value": "%@ lässt sich nicht fortsetzen: Der Chat „%@“ startet diese Unterhaltung gerade. Ein zweiter Start würde dieselbe Unterhaltung doppelt führen. Schließe einen der beiden Chats oder versuche es in ein paar Sekunden erneut."
           }
         }
       }

@@ -426,12 +426,6 @@ struct AgentSessionDetailView: View {
                 launchGuardResult = .notNeeded
             }
 
-            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
-            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten).
-            let runningRecords = launchSession.provider == .claude
-                && !launchSession.isTerminal && !launchSession.isAgentView
-                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
-
             let resumeRepairPreparation: ResumeRepairPreparation
             if !launchSession.isAgentView,
                !launchSession.isTerminal,
@@ -451,6 +445,14 @@ struct AgentSessionDetailView: View {
             } else {
                 resumeRepairPreparation = .noRepairNeeded
             }
+
+            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
+            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten) —
+            // und als letzten Schritt, nach dem Index-Scan: So liegt das Lesen
+            // sicher im Fenster der Start-Reservierung eines anderen Chats.
+            let runningRecords = launchSession.provider == .claude
+                && !launchSession.isTerminal && !launchSession.isAgentView
+                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
 
             await MainActor.run {
                 // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
@@ -524,11 +526,15 @@ struct AgentSessionDetailView: View {
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
             builder.backgroundAttachAllowed = allowsBackgroundAttach
+            let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
-                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords)
+                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
             }
-            builder.launchReservation = { sessionID, localID in
-                ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID)
+            builder.launchReservation = { [store] sessionID, localID in
+                ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID).map { holder in
+                    store.loadWorkspace().sessions.first(where: { $0.id == holder })?.title
+                        ?? String(holder.uuidString.prefix(8))
+                }
             }
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den
