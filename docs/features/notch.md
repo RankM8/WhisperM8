@@ -23,7 +23,7 @@ den 13 beantworteten Fragen: Branch `docs/pille-vereint-entwurf`,
 ruhenden Kern startet ein Diktat (derselbe Weg wie der Hotkey), ein Klick auf
 die Zähler oder den Rest der Pille öffnet die Liste.
 
-**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Insel vor Diktat vor
+**Was sie zeigt, immer nur eins** (`UnifiedPillPriority`): Dynamic Island vor Diktat vor
 offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
 
 | Zustand | Ohne Notch | Mit Notch |
@@ -32,7 +32,7 @@ offener Liste vor Hinweis „braucht dich“ vor Ruhe mit Zählern.
 | Hinweis | Kern, Punkt, Chat-Name, Wort, „+ n“, einmal ca. 4 s | wie bisher |
 | Liste | wächst aus der Pille, Pillen-Zeile bleibt stehen; unten „Status in der Pille ausblenden“ | wie bisher |
 | Diktat | die Pille wächst in die Diktat-Pille hinein (Breite um die Mitte), links Raute bzw. Ring für wartende Chats und Fehler | das schwarze Band wächst nach unten in die Diktat-Zeile, Raute links |
-| Insel | wächst aus der Pille | wächst aus der Notch |
+| Dynamic Island (Controller) | wächst aus der Pille, mit zwei Rauten unter R1 rund 700 pt breit, immer ganz auf dem Bildschirm | wächst aus der Notch |
 
 **Aussehen:** Die Pille in Ruhe, beim Hinweis und mit Liste ist gezeichnet wie
 die Diktat-Pille: 40 pt hoch, Kapsel, `PillGlassBackground` (dünnes Material,
@@ -121,12 +121,12 @@ sich die Pille dort nicht, die Raute erscheint links. Wartet der Chat nach dem
 Diktat noch, kommt die Verbreiterung einmal nach (`alertDuringDictation`).
 
 **Menüs und Listen:** In der oberen Bildschirmhälfte nach unten, in der
-unteren nach oben (Statusliste, Insel, Liste der Ausgabemodi am Controller;
+unteren nach oben (Statusliste, Dynamic Island, Liste der Ausgabemodi am Controller;
 die Menüs von Modus und Kontext legt macOS selbst passend).
 
-**Vollbild:** In Ruhe ausgeblendet, Diktat und Insel erscheinen trotzdem.
+**Vollbild:** In Ruhe ausgeblendet, Diktat und Dynamic Island erscheinen trotzdem.
 **Aus Bildschirmfotos ausblenden** gilt für die ganze Pille, auch das Diktat.
-**Status aus:** Die Pille erscheint nur beim Diktat und für die Insel.
+**Status aus:** Die Pille erscheint nur beim Diktat und für die Dynamic Island.
 
 **Technik:** Die Diktat-Logik ist unberührt (Coordinator, Aufnahme,
 Auslieferung). `OverlayController` entscheidet nur, wo die Diktat-Pille steht
@@ -285,8 +285,8 @@ Hosting-View (`NotchHostingView.pillMouse`), wie bei der Diktat-Pille
 Pille zugleich Knopf (Liste auf und zu), deshalb führt die Hosting-View das
 Fenster selbst mit der Maus mit und meldet einen Klick nur ohne Bewegung.
 
-Die Controller-Insel wächst ohne Notch aus genau dieser Pille (siehe
-[controller.md](controller.md)).
+Die Dynamic Island des Controllers (früher „Insel“) wächst ohne Notch aus genau
+dieser Pille (siehe [controller.md](controller.md)).
 
 **Ausschalten direkt in der Notch:** Unten links in der aufgeklappten Liste
 steht „Turn off notch“. Das setzt denselben Schalter wie die Einstellungen
@@ -367,11 +367,11 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 |---|---|
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
-| `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Controller-Insel |
+| `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
 | `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
 | `Windows/NotchPanel.swift` | Nicht aktivierendes `NSPanel`, Hosting-View mit erstem Klick und Klick/Ziehen/Doppelklick der Pille |
-| `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Insel |
+| `Views/PillGlass.swift` | Dunkles Glas, Höhe und Schatten der Diktat-Pille, geteilt mit Pille und Dynamic Island |
 | `Views/NotchStatusView.swift` | Darstellung aus einem fertigen `NotchDisplay`-Wert |
 | `Services/Shared/UnifiedPill/UnifiedPillModel.swift` | Rein: Priorität, Ort des Diktats, Raute, Geometrie (Mitte, Rechts-Anker beim Darüberfahren, Fenster mit Schattenrand), Klickziel, Aufklapprichtung |
 | `Services/Shared/UnifiedPill/UnifiedPillHub.swift` | Treffpunkt Diktat und Status: Bildschirm des Diktats, Raute |
@@ -461,7 +461,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   solange die Liste offen ist. Beide schlucken nichts (der globale kann es
   nicht, der lokale gibt das Ereignis immer zurück).
 - Keine Dateideskriptoren, keine Subprozesse.
-- Controller-Insel: Hält man am Controller L1, R1 oder L2, legt sich die Insel
+- Dynamic Island: Hält man am Controller L1, R1 oder L2, legt sich die Dynamic Island
   (eigenes Fenster, `mainMenu + 4`, dieselbe Band-Geometrie an der Notch,
   ohne Notch an der Stelle der Pille) über diese Anzeige und zeigt ihre Zähler
   im Kopf. Die Anzeige selbst ändert sich dafür
@@ -505,9 +505,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
-  sichtbaren Bereich, nach oben in der unteren Hälfte, Insel an derselben
+  sichtbaren Bereich, nach oben in der unteren Hälfte, Dynamic Island an derselben
   Stelle, Schlüssel ist die Display-UUID, Speichern und Zurücksetzen.
-- `UnifiedPillModelTests`: Priorität (Insel, Diktat, Liste, Hinweis, Ruhe;
+- `UnifiedPillModelTests`: Priorität (Dynamic Island, Diktat, Liste, Hinweis, Ruhe;
   Status aus, Vollbild), Ort des Diktats (vorderes Fenster, Maus,
   Hauptbildschirm, Notch, gemerkte Lage), Raute, Rechts-Anker beim
   Darüberfahren, Fenster mit Schattenrand, Liste nach oben und unten,

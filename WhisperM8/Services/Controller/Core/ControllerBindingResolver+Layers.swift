@@ -61,7 +61,8 @@ extension ControllerBindingResolver {
                 if case .press(let button) = inner, ControllerQuickDrawSlots.item(for: button) != nil || button == .l3 {
                     return .rejected
                 }
-                return nil
+                // Die App-Raute geht auch während des Diktats (Insel-Paket).
+                return appDiamond(inner)
             }
         default: return nil
         }
@@ -157,6 +158,7 @@ extension ControllerBindingResolver {
     /// mit denselben Regeln wie das Options-Menü (`ControllerMenuModel.isEnabled`).
     private static func quickDrawLayer(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         if gesture == .press(.r2) { return .dictationToggle }
+        if let app = appDiamond(gesture) { return app }
         if gesture == .press(.l3) {
             return transcriptToggleAllowed(state) ? .chatKey(.toggleTranscript) : layerWritingRejected(state)
         }
@@ -164,6 +166,22 @@ extension ControllerBindingResolver {
             return nil
         }
         return .quickDraw(item)
+    }
+
+    /// Zweite Raute unter R1 (Insel-Paket): Das Steuerkreuz schaltet die App,
+    /// ein Druck je Stufe (Wiederholungen beim Halten zählen nicht, außer ▲ ▼
+    /// zum Scrollen der Limits-Karte). Der linke Stick scrollt die Karte.
+    private static func appDiamond(_ gesture: ControllerGesture) -> ControllerAction? {
+        guard case let .move(direction, source, isRepeat) = gesture else { return nil }
+        let vertical = direction == .up || direction == .down
+        let step = direction == .up ? -1 : 1
+        switch source {
+        case .dpad:
+            if !isRepeat { return ControllerAppSlot(direction: direction).map { .appSlot($0) } }
+            return vertical ? .islandScroll(step: step) : nil
+        case .leftStick:
+            return vertical ? .islandScroll(step: step) : nil
+        }
     }
 
     /// L2 gehalten: Stick oder Steuerkreuz hoch/runter öffnen die Liste und
