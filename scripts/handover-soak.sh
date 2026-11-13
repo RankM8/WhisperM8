@@ -79,7 +79,7 @@ reopen_grid() {
     local name
     name=$(cat "$STATE/grid-name")
     cli chats workspace open "$name" --json >/dev/null 2>&1 \
-        || record grid wieder-offen FEHLER "Grid „$name“ nach dem Neustart nicht geöffnet"
+        || record grid wieder-offen FEHLER "Grid „${name}“ nach dem Neustart nicht geöffnet"
 }
 cli() { "$TI" cli "$@"; }
 log() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
@@ -340,7 +340,7 @@ show_in_grid() {
         return 1
     fi
     printf '%s' "$name" > "$STATE/grid-name"
-    record setup grid OK "${#refs[@]} Chats im Grid „$name“ geöffnet (bis Paket 4 --start bietet)"
+    record setup grid OK "${#refs[@]} Chats im Grid „${name}“ geöffnet (bis Paket 4 --start bietet)"
     if (( USE_RUNNING )); then
         record setup grid-sichtbar FEHLT "laufende Instanz (--use-running): ob sie sichtbar läuft, ist unbekannt; versteckt starten die Chats nicht"
     fi
@@ -617,15 +617,17 @@ report() {
 
 # Bricht der Lauf ab (gescheiterter Neustart, `chats new` …): trotzdem Chats
 # beenden und einen Bericht schreiben, statt Chats laufen zu lassen.
+# Ob abgebrochen wurde, sagt der Merker RUN_STARTED, nicht der Exit-Status:
+# bash 3.2 beendet bei `set -u` innerhalb von `f || true` mit Status 0 (Lauf
+# vom 13.11.: Abbruch, kein Bericht, Exit 0).
 on_exit() { # [exit-status] — ohne Argument der Status beim Aufruf als Trap
     local status=${1:-$?}
     (( RUN_STARTED )) || return 0
     RUN_STARTED=0
-    if (( status != 0 )); then
-        record abbruch skript FEHLER "Lauf abgebrochen (Exit $status)"
-        (( KEEP )) || cleanup_chats
-        report || true
-    fi
+    record abbruch skript FEHLER "Lauf abgebrochen (Exit $status)"
+    (( KEEP )) || cleanup_chats
+    report || true
+    (( status != 0 )) || exit 1
 }
 
 cmd_run() {

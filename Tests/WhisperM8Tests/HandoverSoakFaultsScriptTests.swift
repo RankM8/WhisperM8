@@ -99,4 +99,13 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         let soak = try String(contentsOf: Self.root.appendingPathComponent("scripts/handover-soak.sh"), encoding: .utf8)
         XCTAssertTrue(soak.contains(#"if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then"#), "handover-soak.sh als Bibliothek ladbar")
     }
+
+    /// bash 3.2 liest bei `"$name“"` das erste Byte des Unicode-Zeichens als Teil
+    /// des Variablennamens („unbound variable“, Lauf vom 13.11.). Deshalb `${name}`.
+    func testNoVariableDirectlyBeforeNonASCII() throws {
+        let text = try String(contentsOf: Self.script, encoding: .utf8)
+        let pattern = #"\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]"#
+        XCTAssertNil(text.range(of: pattern, options: .regularExpression),
+                     "Variable direkt vor Nicht-ASCII: ${…} verwenden")
+    }
 }

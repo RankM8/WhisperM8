@@ -608,6 +608,14 @@ S3 107 108" "$(printf '%s\n' "$ps_fixture" | codex_doubles /r)" "Codex doppelt: 
         RUN_STARTED=1 KEEP=1
         (exit 3) || on_fault_exit
     )" "Abbruch meldet den echten Exit-Status"
+    # Abbruch mit Status 0 (bash 3.2: `set -u` in `f || true`) gilt trotzdem als Abbruch.
+    expect_exact "record abbruch FEHLER Lauf abgebrochen (Exit 0);report|1" "$(
+        stop_sampler() { :; }; clear_knobs() { :; }
+        record() { printf 'record %s %s %s;' "$1" "$3" "$4"; }
+        report() { printf 'report'; }
+        cleanup_chats() { :; }
+        ( RUN_STARTED=1 KEEP=1; true; on_fault_exit ); printf '|%s' "$?"
+    )" "Abbruch mit Status 0 wird gemeldet, Exit 1"
 
     # await_pid liest auch nach Fristende noch einmal und wartet bei `resumed`
     # auf eine neue PID.
