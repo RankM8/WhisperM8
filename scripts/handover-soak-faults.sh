@@ -6,7 +6,7 @@
 #
 #   scripts/handover-soak-faults.sh capabilities              # was Paket 4 dafür schon liefert
 #   scripts/handover-soak-faults.sh run [--only <szenario>]   # Szenarien fahren, Bericht
-#            [--keep] [--report <datei>] [--use-running]
+#            [--signing dev|adhoc] [--keep] [--report <datei>] [--use-running]
 #   scripts/handover-soak-faults.sh self-test                 # Prüf-Funktionen ohne App
 #
 # Szenarien:
@@ -26,12 +26,22 @@
 #   - jeder Chat kommt zurück (übernommen oder fortgesetzt, je nach Szenario),
 #     und sein Prozess bleibt einige Sekunden stabil;
 #   - keine Leichen: kein Aufbewahrer, kein Socket (auch der Ausweich-Socket),
-#     kein Claude-Prozess ohne Chat.
+#     keine fremde Datei im Ordner des Aufbewahrers, kein Claude-Prozess ohne Chat;
+#   - kein Schlüsselbund-Dialog (SecurityAgent) während des Szenarios, Ordner
+#     des Aufbewahrers 0700, Dateien darin 0600;
+#   - am Ende: Das Geheimnis (jede unbekannte kleine Datei im Ordner des
+#     Aufbewahrers) steht in keinem Log.
+#
+# Signatur (Vics Auflage 4): `--signing dev` signiert das Test-Bundle mit
+# „WhisperM8 Local Dev“ wie `make dev`, `--signing adhoc` ad hoc wie die
+# Release-Pipeline (Brew-Nutzer). binary-swap ersetzt dann das Bundle durch
+# einen neuen Build derselben Art: Dev auf Dev oder ad hoc auf ad hoc.
 #
 # Ergebnis und Exit wie handover-soak.sh: OK, FEHLER, FEHLT; Exit 0/1/2/64. Ein
 # Szenario, dem eine Voraussetzung fehlt, steht nur als FEHLT da, ohne weitere
-# Einträge. Nach binary-swap trägt das Test-Bundle die Build-Nummer „soak-…“;
-# `scripts/test-instance.sh build` setzt das zurück.
+# Einträge. Nach binary-swap trägt das Test-Bundle die Build-Nummer „soak-…“,
+# nach --signing adhoc eine Ad-hoc-Signatur; `scripts/test-instance.sh build`
+# setzt beides zurück.
 set -euo pipefail
 
 # shellcheck source=handover-soak.sh
@@ -47,6 +57,10 @@ ONLY=""
 SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart"
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
+SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
+# Dateien, die der Aufbewahrer aus Paket 2 anlegt; alles andere gilt als
+# Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
+KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock"
 
 # MARK: - Fähigkeiten (Paket 4)
 
@@ -62,6 +76,9 @@ has_codesign_identity() {
     ids=$(security find-identity -p codesigning -v 2>/dev/null || true)
     contains "$ids" 'WhisperM8 Local Dev'
 }
+
+# Für binary-swap: dev braucht das Zertifikat, ad hoc nichts.
+has_signing() { [[ "$SIGNING" == adhoc ]] || { [[ "$SIGNING" == dev ]] && has_codesign_identity; }; }
 
 cmd_fault_capabilities() {
     local name
@@ -144,7 +161,126 @@ keeper_pids_from() { # ps-ausgabe(pid command) handover-dir
     printf '%s\n' "$1" | awk -v needle="handover-keeper --root $2 " 'index($0, needle) {print $1}'
 }
 
+# Signaturart aus `codesign -dvv`: dev (Zertifikat WhisperM8 Local Dev), adhoc oder andere.
+signing_kind_from() { # codesign-ausgabe
+    if contains "$1" '^Signature=adhoc'; then echo adhoc
+    elif contains "$1" '^Authority=WhisperM8 Local Dev$'; then echo dev
+    else echo andere; fi
+}
+
+# Rechte im Ordner des Aufbewahrers (Vics Auflage 2: Geheimnis als Datei 0600
+# im 0700-Ordner): Ordner 0700, jede Datei außer denen aus Paket 2 0600.
+# Ausgabe: je Abweichung eine Zeile, sonst nichts.
+handover_dir_issues() { # ordner
+    [[ -d "$1" ]] || return 0
+    local mode base
+    mode=$(stat -f %Lp "$1" 2>/dev/null || echo '?')
+    [[ "$mode" == 700 ]] || echo "Ordner $mode"
+    for base in $(unknown_handover_files "$1"); do
+        [[ -f "$1/$base" ]] || continue
+        mode=$(stat -f %Lp "$1/$base" 2>/dev/null || echo '?')
+        [[ "$mode" == 600 ]] || echo "Datei $mode $base"
+    done
+}
+
+# Unbekannte Dateien im Ordner des Aufbewahrers (nur Namen).
+unknown_handover_files() { # ordner
+    local f base
+    for f in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+        [[ -e "$f" ]] || continue
+        base=$(basename "$f")
+        [[ " $KNOWN_HANDOVER_FILES " == *" $base "* ]] && continue
+        [[ "$base" == keeper.log.* ]] && continue
+        echo "$base"
+    done
+}
+
+# Kleine unbekannte Dateien als Geheimnis-Kandidaten sichern (Name, Base64).
+capture_secret_candidates() { # ordner ziel
+    local base size line
+    for base in $(unknown_handover_files "$1"); do
+        [[ -f "$1/$base" ]] || continue
+        size=$(stat -f %z "$1/$base" 2>/dev/null || echo 99999)
+        (( size > 0 && size <= 4096 )) || continue
+        line=$(printf '%s\t%s' "$base" "$(base64 < "$1/$base" 2>/dev/null | tr -d '\n')")
+        grep -qxF -- "$line" "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
+    done
+}
+
+# In welchen Dateien steht ein Geheimnis-Kandidat (roh, hex oder Base64)?
+# Kandidaten unter 8 Byte zählen nicht, sonst träfe jede Zahl.
+secret_hits() { # kandidaten-datei datei…
+    "$PY" -I - "$@" <<'PYEOF'
+import base64, sys
+needles = set()
+for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+    parts = line.rstrip("\n").split("\t", 1)
+    if len(parts) != 2:
+        continue
+    try:
+        raw = base64.b64decode(parts[1])
+    except Exception:
+        continue
+    raw = raw.strip()
+    if len(raw) < 8:
+        continue
+    needles.update({raw, raw.hex().encode(), base64.b64encode(raw)})
+for path in sys.argv[2:]:
+    try:
+        data = open(path, "rb").read()
+    except OSError:
+        continue
+    if any(n in data for n in needles):
+        print(path)
+PYEOF
+}
+
 # MARK: - Werkzeuge
+
+bundle_signing() { signing_kind_from "$(codesign -dvv "$1" 2>&1 || true)"; }
+bundle_cdhash() { codesign -dvvv "$1" 2>&1 | awk -F= '/^CDHash=/ {print $2; exit}' || true; }
+
+signing_identity() { # art → Identität für codesign
+    case "$1" in
+        adhoc) echo - ;;
+        dev) security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/WhisperM8 Local Dev/ {print $2; exit}' || true ;;
+    esac
+}
+
+# Signiert wie das Makefile (`_build_dev`); ohne Zertifikat signiert es ad hoc,
+# und so baut auch die Release-Pipeline.
+sign_bundle() { # bundle art → 0 ok, sonst Grund auf stdout
+    local id kind
+    id=$(signing_identity "$2")
+    [[ -n "$id" ]] || { echo "kein Zertifikat WhisperM8 Local Dev"; return 1; }
+    codesign --force --deep --sign "$id" --entitlements "$REPO/WhisperM8/WhisperM8.entitlements" --timestamp=none "$1" >/dev/null 2>&1 \
+        || { echo "Signieren gescheitert"; return 1; }
+    codesign --verify --deep --strict "$1" >/dev/null 2>&1 || { echo "Signatur ungültig"; return 1; }
+    kind=$(bundle_signing "$1")
+    [[ "$kind" == "$2" ]] || { echo "Signatur ist ${kind}, erwartet $2"; return 1; }
+}
+
+# Haken aus prepare_instance: Test-Bundle vor dem Start in die verlangte
+# Signaturart bringen. Ohne --signing gilt die Art des Bundles (so wie
+# `test-instance.sh build` es signiert hat). Eine laufende Instanz
+# (--use-running) wird nie umsigniert.
+prepare_bundle() { # pid der laufenden instanz oder leer
+    local kind reason
+    kind=$(bundle_signing "$APP")
+    if [[ -z "$SIGNING" ]]; then
+        SIGNING=$kind
+        record setup signatur OK "Test-Bundle $kind signiert, übernommen (CDHash $(bundle_cdhash "$APP"))"
+        return 0
+    fi
+    if [[ "$kind" != "$SIGNING" ]]; then
+        if [[ -n "$1" ]]; then
+            echo "Test-Bundle ist $kind signiert, verlangt ist $SIGNING — eine laufende Instanz wird nicht umsigniert" >&2
+            return 1
+        fi
+        reason=$(sign_bundle "$APP" "$SIGNING") || { echo "Test-Bundle nicht $SIGNING signiert: $reason" >&2; return 1; }
+    fi
+    record setup signatur OK "Test-Bundle $SIGNING signiert (CDHash $(bundle_cdhash "$APP"))"
+}
 
 keeper_status_json() {
     env -u WHISPERM8_SESSION_ID -u WHISPERM8_SESSION_TOKEN WHISPERM8_INSTANCE_ROOT="$ROOT" "$BIN" app handover-status --json 2>/dev/null || true
@@ -174,12 +310,25 @@ sample_once() { # datei
     now=$(date +%H:%M:%S)
     violations_now "$(registry_pids "$ROOT/home/.claude/sessions" || true)" "$now" >> "$1" || true
     ps -E -ww -axo pid=,comm=,command= 2>/dev/null | codex_doubles "$ROOT" | sed "s/^/$now codex /" >> "$1" || true
+    # Ein Schlüsselbund-Dialog blockiert die Übernahme unbeaufsichtigt (Ole, 13.11.).
+    # Nur neue Prozesse zählen; was beim Start schon lief, steht in .keychain-base.
+    pgrep -x SecurityAgent 2>/dev/null | grep -vxF -f "$1.keychain-base" | sed "s/^/$now SecurityAgent /" >> "$1.keychain" || true
+    handover_dir_issues "$HANDOVER_DIR" | sed "s/^/$now /" >> "$1.modes" || true
+    capture_secret_candidates "$HANDOVER_DIR" "$STATE/secret-candidates" || true
 }
 
 start_sampler() { # datei
     : > "$1"
+    : > "$1.modes"
+    keychain_baseline "$1"
     ( while :; do sample_once "$1"; sleep 0.3; done ) &
     SAMPLER_PID=$!
+}
+
+# Laufende SecurityAgent-Prozesse als Vergleichsstand; danach zählen nur neue.
+keychain_baseline() { # wächter-datei
+    pgrep -x SecurityAgent > "$1.keychain-base" 2>/dev/null || true
+    : > "$1.keychain"
 }
 
 stop_sampler() {
@@ -190,11 +339,13 @@ stop_sampler() {
     fi
 }
 
-# Programm unter dem laufenden Aufbewahrer ersetzen, wie `make dev`: neue
-# Build-Nummer, neu signiert mit demselben Zertifikat, per rsync (Umbenennen).
+# Programm unter dem laufenden Aufbewahrer ersetzen, wie `make dev` oder ein
+# Brew-Update. stage_bundle baut vorher den neuen Build (neue Build-Nummer,
+# signiert in der Art aus --signing), damit codesign nicht im Messfenster den
+# Schlüsselbund fragt; swap_bundle tauscht nur noch per rsync (Umbenennen).
 # Jeder Schritt muss klappen, sonst bleibt das Bundle unangetastet.
-swap_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
-    local work="$SOAK/swap" id copy
+stage_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
+    local work="$SOAK/swap" copy reason
     [[ -d "$APP/Contents/MacOS" ]] || { echo "kein Test-Bundle unter $APP"; return 1; }
     rm -rf "$work" && mkdir -p "$work" || { echo "Arbeitsordner"; return 1; }
     cp -R "$APP" "$work/" || { echo "Kopie gescheitert"; return 1; }
@@ -202,11 +353,14 @@ swap_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $1" "$copy/Contents/Info.plist" 2>/dev/null \
         || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $1" "$copy/Contents/Info.plist" \
         || { echo "Info.plist"; return 1; }
-    id=$(security find-identity -p codesigning -v 2>/dev/null | awk -F'"' '/WhisperM8 Local Dev/ {print $2; exit}' || true)
-    [[ -n "$id" ]] || { echo "kein Zertifikat WhisperM8 Local Dev"; return 1; }
-    codesign --force --deep --sign "$id" --entitlements "$REPO/WhisperM8/WhisperM8.entitlements" --timestamp=none "$copy" >/dev/null 2>&1 \
-        || { echo "Signieren gescheitert"; return 1; }
-    codesign --verify --deep --strict "$copy" >/dev/null 2>&1 || { echo "Signatur der Kopie ungültig"; return 1; }
+    reason=$(sign_bundle "$copy" "$SIGNING") || { echo "Kopie: $reason"; return 1; }
+    : > "$work/ready"
+}
+
+swap_bundle() { # → 0 ok, sonst Grund auf stdout
+    local work="$SOAK/swap" copy
+    copy="$work/$(basename "$APP")"
+    [[ -f "$work/ready" && -d "$copy/Contents/MacOS" ]] || { echo "kein vorbereiteter Build"; return 1; }
     rsync -a --delete "$copy/" "$APP/" || { echo "rsync gescheitert"; return 1; }
     rm -rf "$work"
 }
@@ -271,6 +425,25 @@ check_no_leftovers() { # szenario verletzungen-datei
         record "$scenario" leichen:aufbewahrer FEHLER "Socket oder Discovery-Datei liegt noch (${socket:-$HANDOVER_DIR/keeper.sock})"
     else
         record "$scenario" leichen:aufbewahrer OK ""
+    fi
+    local extra
+    extra=$(unknown_handover_files "$HANDOVER_DIR" | tr '\n' ' ')
+    if [[ -n "$extra" ]]; then
+        record "$scenario" leichen:dateien FEHLER "im Ordner des Aufbewahrers liegt noch: $extra"
+    else
+        record "$scenario" leichen:dateien OK ""
+    fi
+    if [[ -s "$violations.keychain" ]]; then
+        record "$scenario" schluesselbund-dialog FEHLER "SecurityAgent lief: $(head -2 "$violations.keychain" | tr '\n' ';') (kann auch eine fremde App sein, Bildschirm prüfen)"
+    else
+        record "$scenario" schluesselbund-dialog OK ""
+    fi
+    if [[ -s "$violations.modes" && ! -s "$STATE/secret-candidates" ]]; then
+        record "$scenario" rechte-aufbewahrer FEHLT "noch kein Geheimnis als Datei (Paket 4), Befund bis dahin: $(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -2 | tr '\n' ';')"
+    elif [[ -s "$violations.modes" ]]; then
+        record "$scenario" rechte-aufbewahrer FEHLER "$(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -3 | tr '\n' ';')"
+    else
+        record "$scenario" rechte-aufbewahrer OK "Ordner 0700, Geheimnis-Kandidaten 0600 (oder kein Ordner)"
     fi
     registry=$(registry_pids "$ROOT/home/.claude/sessions" || true)
     stray=$(orphans "$registry" "$(chat_pids_now)")
@@ -424,8 +597,15 @@ fault_secret_missing() { fault_secret "$1" missing; }
 fault_secret_wrong() { fault_secret "$1" wrong; }
 
 fault_binary_swap() {
-    local scenario="$1" build reason summary keeper bin
-    requires "$scenario" handover_only codesign_identity || return "$SKIPPED"
+    local scenario="$1" build reason summary keeper bin old_hash new_hash
+    requires "$scenario" handover_only signing || return "$SKIPPED"
+    build="soak-$(date +%s)"
+    if ! reason=$(stage_bundle "$build"); then
+        record "$scenario" ausgeloest FEHLER "neuer Build nicht vorbereitet: $reason — nichts abgegeben"
+        return 1
+    fi
+    # Das Signieren gehört nicht zur Übergabe: Vergleichsstand für den Schlüsselbund neu setzen.
+    keychain_baseline "$STATE/fault-$scenario-violations.log"
     if ! ti handover > "$STATE/fault-$scenario-handover.log" 2>&1; then
         record "$scenario" ausgeloest FEHLER "test-instance.sh handover gescheitert: $(tail -1 "$STATE/fault-$scenario-handover.log")"
         ti start > /dev/null 2>&1 || true
@@ -440,9 +620,15 @@ fault_binary_swap() {
         ti start > /dev/null 2>&1 || true
         return 1
     fi
-    build="soak-$(date +%s)"
-    if reason=$(swap_bundle "$build"); then
+    old_hash=$(bundle_cdhash "$APP")
+    if reason=$(swap_bundle); then
         record "$scenario" ausgeloest OK "Bundle ersetzt (CFBundleVersion $build), Aufbewahrer $keeper läuft aus dem alten Programm"
+        new_hash=$(bundle_cdhash "$APP")
+        if [[ -n "$new_hash" && "$new_hash" != "$old_hash" ]]; then
+            record "$scenario" signatur OK "$SIGNING auf ${SIGNING}, CDHash $old_hash -> $new_hash"
+        else
+            record "$scenario" signatur FEHLER "CDHash unverändert ($old_hash -> ${new_hash:-?}), kein neuer Build"
+        fi
     else
         record "$scenario" ausgeloest FEHLER "Austausch gescheitert: $reason — Bundle unverändert"
     fi
@@ -514,6 +700,24 @@ wait_until_running() {
     return 1
 }
 
+# Vics Auflage 2: Das Geheimnis steht nie im Log. Geprüft werden die Logs des
+# Aufbewahrers, das Log der Test-Instanz und das System-Log seit Laufbeginn.
+check_secret_not_logged() {
+    local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits
+    if [[ ! -s "$candidates" ]]; then
+        record ende geheimnis-im-log FEHLT "kein Geheimnis-Kandidat im Ordner des Aufbewahrers gesehen (Ablage als Datei aus Paket 4?)"
+        return 0
+    fi
+    log show --style compact --start "$(cat "$STATE/started-at")" \
+        --predicate 'subsystem BEGINSWITH "com.whisperm8"' > "$unified" 2>/dev/null || true
+    hits=$(secret_hits "$candidates" "$HANDOVER_DIR"/keeper.log* "$ROOT/instance.log" "$unified" | tr '\n' ' ')
+    if [[ -n "$hits" ]]; then
+        record ende geheimnis-im-log FEHLER "Geheimnis steht in: $hits"
+    else
+        record ende geheimnis-im-log OK "$(cut -f1 "$candidates" | sort -u | tr '\n' ' ')geprüft"
+    fi
+}
+
 on_fault_exit() {
     local status=$?
     stop_sampler
@@ -537,7 +741,7 @@ cmd_fault_run() {
     trap on_fault_exit EXIT
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
-    rm -f "$STATE/unmeasurable-recorded"
+    rm -f "$STATE/unmeasurable-recorded" "$STATE/secret-candidates"
     setup_chats
     if ! wait_until_running; then
         for scenario in $list; do
@@ -550,8 +754,9 @@ cmd_fault_run() {
             wait_until_running || { record "$scenario" weiter FEHLER "Chats nicht zurück, Rest abgebrochen"; break; }
         done
     fi
-    (( KEEP )) || cleanup_chats
     stop_sampler
+    check_secret_not_logged
+    (( KEEP )) || cleanup_chats
     clear_knobs
     RUN_STARTED=0
     local status=0
@@ -642,6 +847,49 @@ S3 107 108" "$(printf '%s\n' "$ps_fixture" | codex_doubles /r)" "Codex doppelt: 
     expect_exact "$$" "$(SETTLE_SECONDS=0; chat_pid() { echo "$$"; }; await_pid x "$$" resumed 0)" "resumed ohne neue PID: alte gemeldet, judge sagt FEHLER"
     expect_exact "" "$(SETTLE_SECONDS=0; chat_pid() { echo 999999; }; await_pid x 1 same 0)" "Frist vorbei, tote PID: leer statt übernommen"
 
+    # Signaturart aus codesign -dvv.
+    expect_exact "adhoc" "$(signing_kind_from "$(printf 'Executable=/x\nSignature=adhoc\nTeamIdentifier=not set')")" "ad hoc erkannt"
+    expect_exact "dev" "$(signing_kind_from "$(printf 'Signature size=1731\nAuthority=WhisperM8 Local Dev\nTeamIdentifier=not set')")" "Dev-Zertifikat erkannt"
+    expect_exact "andere" "$(signing_kind_from "$(printf 'Authority=Developer ID Application: X\nAuthority=Apple Root CA')")" "fremde Signatur"
+    expect_exact "-" "$(signing_identity adhoc)" "ad hoc signiert mit -"
+
+    # Ordner des Aufbewahrers: Rechte, fremde Dateien, Geheimnis im Log.
+    local dir
+    dir=$(mktemp -d "${TMPDIR:-/tmp}/soak-selftest.XXXXXX")
+    mkdir "$dir/h" && chmod 700 "$dir/h"
+    : > "$dir/h/keeper.lock"; : > "$dir/h/keeper.log"; : > "$dir/h/keeper.log.1"
+    chmod 644 "$dir/h/keeper.log"
+    expect_exact "" "$(handover_dir_issues "$dir/h")" "Rechte stimmen (Log aus Paket 2 darf 0644 sein)"
+    expect_exact "" "$(unknown_handover_files "$dir/h")" "nur bekannte Dateien"
+    expect_exact "" "$(handover_dir_issues "$dir/fehlt")" "kein Ordner, keine Abweichung"
+    printf 'geheim-0123456789' > "$dir/h/secret"
+    chmod 644 "$dir/h/secret"; chmod 755 "$dir/h"
+    expect_exact "Ordner 755
+Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
+    expect_exact "secret" "$(unknown_handover_files "$dir/h")" "fremde Datei erkannt"
+    capture_secret_candidates "$dir/h" "$dir/cand"
+    printf 'nichts\n' > "$dir/sauber.log"
+    printf 'x geheim-0123456789 y\n' > "$dir/roh.log"
+    printf 'token=%s\n' "$(printf 'geheim-0123456789' | xxd -p | tr -d '\n')" > "$dir/hex.log"
+    expect_exact "$dir/roh.log $dir/hex.log " "$(secret_hits "$dir/cand" "$dir/sauber.log" "$dir/roh.log" "$dir/hex.log" "$dir/fehlt.log" | tr '\n' ' ')" "Geheimnis roh und hex gefunden"
+    printf 'kurz' > "$dir/h/secret"; : > "$dir/cand2"
+    capture_secret_candidates "$dir/h" "$dir/cand2"
+    expect_exact "" "$(printf 'kurz\n' > "$dir/k.log"; secret_hits "$dir/cand2" "$dir/k.log")" "unter 8 Byte kein Treffer"
+    printf 'geheim-0123456789' > "$dir/h/secret"
+    capture_secret_candidates "$dir/h" "$dir/cand3"; capture_secret_candidates "$dir/h" "$dir/cand3"
+    expect_exact "1" "$(wc -l < "$dir/cand3" | tr -d ' ')" "Kandidat nur einmal gesichert"
+    rm -f "$dir/h/secret"; : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
+    expect_exact "..doppel .versteckt" "$(unknown_handover_files "$dir/h" | sort | tr '\n' ' ' | sed 's/ $//')" "versteckte Dateien erkannt"
+    rm -rf "$dir"
+
+    # Schlüsselbund-Wächter: nur neue SecurityAgent-Prozesse zählen.
+    expect_exact "34" "$(printf '12\n34\n' | grep -vxF -f <(printf '12\n'))" "Vergleichsstand blendet Altes aus"
+    expect_exact "12 34" "$(printf '12\n34\n' | grep -vxF -f /dev/null | tr '\n' ' ' | sed 's/ $//')" "leerer Vergleichsstand blendet nichts aus"
+
+    # Ohne --signing und ohne erkannte Art kein Austausch.
+    expect_exact "nein" "$(SIGNING=andere; has_signing && echo ja || echo nein)" "fremde Signatur: binary-swap fehlt"
+    expect_exact "ja" "$(SIGNING=adhoc; has_signing && echo ja || echo nein)" "ad hoc braucht kein Zertifikat"
+
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi
 }
 
@@ -653,6 +901,7 @@ fault_main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --only) ONLY="${2:?--only braucht ein Szenario}"; shift 2 ;;
+            --signing) SIGNING="${2:?--signing braucht dev oder adhoc}"; shift 2 ;;
             --keep) KEEP=1; shift ;;
             --report) REPORT="${2:?--report braucht einen Pfad}"; shift 2 ;;
             --use-running) USE_RUNNING=1; shift ;;
@@ -661,6 +910,7 @@ fault_main() {
     done
     [[ "$ROOT" == /* ]] || { echo "WHISPERM8_TEST_ROOT muss ein absoluter Pfad sein: $ROOT" >&2; exit 64; }
     [[ -z "$ONLY" ]] || validate_scenarios "$ONLY"
+    [[ -z "$SIGNING" || "$SIGNING" == dev || "$SIGNING" == adhoc ]] || { echo "--signing: dev oder adhoc, nicht $SIGNING" >&2; exit 64; }
     case "$cmd" in
         capabilities) cmd_fault_capabilities ;;
         run) cmd_fault_run ;;

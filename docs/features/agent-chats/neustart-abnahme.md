@@ -12,7 +12,7 @@ Das Test-Bundle muss aus dem Sammel-Branch `neustart/integration` gebaut sein, s
 scripts/test-instance.sh build                       # Test-Bundle aus dem aktuellen Ordner
 scripts/handover-soak.sh capabilities                # was Paket 4 schon liefert
 scripts/handover-soak.sh run --rounds 5              # Pflichttest aus dem Plan
-scripts/handover-soak-faults.sh run [--only <szenario>]
+scripts/handover-soak-faults.sh run [--only <szenario>] [--signing dev|adhoc]
 scripts/handover-soak.sh self-test                   # Prüf-Funktionen ohne App
 scripts/handover-soak-faults.sh self-test
 ```
@@ -44,6 +44,17 @@ Jede Prüfung meldet **OK**, **FEHLER** oder **FEHLT**. FEHLT heißt: Ein Befehl
 | Zähler, Echo | siehe Ersatz-Chats |
 | Inhalt (mit Login) | kein „API Error“/„Retrying“, Rückfrage offen, Antworten vollständig, genau eine Fertig-Meldung |
 
+## Signaturarten
+
+Releases sind ad hoc signiert, Dev-Builds tragen das Zertifikat „WhisperM8 Local Dev“ ohne Team-ID. Deshalb fährt die Abnahme den Austausch einmal je Art (Vics Auflage 4 aus seinem Urteil zum Schlüsselbund vom 13.11.2026). Ad hoc ist der Fall aller Brew-Nutzer und war bis dahin in keinem Test:
+
+```
+scripts/handover-soak-faults.sh run --only binary-swap --signing dev     # Dev-Build auf Dev-Build (make dev)
+scripts/handover-soak-faults.sh run --only binary-swap --signing adhoc   # ad hoc auf ad hoc (Brew-Update)
+```
+
+Ohne `--signing` gilt die Art, mit der `scripts/test-instance.sh build` das Bundle signiert hat. `--signing` signiert das Test-Bundle vor dem Start in dieser Art und den neuen Build beim Austausch ebenso, mit demselben Befehl wie das Makefile. Der neue Build entsteht vor der Abgabe, damit `codesign` nicht im Messfenster liegt; der Wächter zählt nur SecurityAgent-Prozesse, die danach neu auftauchen. Der Bericht nennt beide CDHashes; bleibt der CDHash gleich, ist das ein FEHLER, weil dann kein neuer Build getestet wurde. Eine laufende Instanz (`--use-running`) wird nie umsigniert. `scripts/test-instance.sh build` stellt die Dev-Signatur wieder her.
+
 ## Fehler-Szenarien
 
 | Szenario | Auslöser | Erwartung |
@@ -54,7 +65,15 @@ Jede Prüfung meldet **OK**, **FEHLER** oder **FEHLT**. FEHLT heißt: Ein Befehl
 | `binary-swap` | Bundle unter dem laufenden Aufbewahrer ersetzt: neue Build-Nummer, gleiches Zertifikat, `rsync --delete` wie bei `make dev` | Übernahme klappt trotz ersetzter Datei |
 | `double-restart` | zweiter Neustart, während die Übernahme des ersten läuft | Übernahme, kein zweiter Prozess |
 
-Jedes Szenario prüft danach: Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil, es gibt keine Leichen (Aufbewahrer, Socket, Claude-Prozess ohne Chat) und kein Kind erbt einen Socket.
+Jedes Szenario prüft danach:
+
+- Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil.
+- Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
+- Kein Kind erbt einen Socket.
+- Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
+- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 (`keeper.lock`, `keeper.log`, Socket) 0600, solange sie existiert.
+
+Am Ende des Laufs prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidat ist jede kleine Datei im Ordner des Aufbewahrers, die nicht zu Paket 2 gehört. Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Ohne Kandidat steht der Punkt als FEHLT da.
 
 ## Was Paket 4 dafür liefern muss
 
@@ -67,6 +86,8 @@ Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschlä
 5. Eine Logzeile je Fertig-Meldung: `session_notification_posted kind=turnCompleted session=<uuid>`.
 6. `runtime.pid` in `chats show --json` für Codex und Terminal.
 7. Stellschrauben nur für die Test-Instanz: `handoverHoldSeconds`, `handoverTakeDelayMs`, `handoverSecretOverride` (`missing`, `wrong`).
+8. Das Geheimnis als Datei im Ordner des Aufbewahrers (`…/WhisperM8/handover/`), nicht anderswo; sonst sehen `geheimnis-im-log` und `leichen:dateien` sie nicht.
+9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert. Heute legt Paket 2 ihn mit 0755 an; bis ein Geheimnis als Datei auftaucht, steht `rechte-aufbewahrer` deshalb als FEHLT da.
 
 ## Bekannte Grenzen
 
