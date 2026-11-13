@@ -6,16 +6,26 @@ final class AgentTerminalRegistry: ObservableObject {
     /// Geteilte Instanz, damit View-Bäume außerhalb von `AgentChatsView`
     /// (insbesondere der MenuBarExtra) dieselben laufenden Vordergrund-PTYs
     /// erreichen — Voraussetzung für ein globales "Stop all".
-    static let shared = AgentTerminalRegistry()
+    static let shared = AgentTerminalRegistry(termination: .live)
 
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
 
     /// Wartezeit zwischen den Ctrl+C-Wellen (Mikrosekunden). Injizierbar, damit
     /// Tests die Anzahl der Pausen zählen können, statt sie abzusitzen.
     private let sleep: (useconds_t) -> Void
+    /// Was beim Ende eines Chat-Prozesses passiert (Store, Statuskoordinator).
+    /// Lebt hier statt in der Ansicht, damit es auch für Chats ohne Ansicht
+    /// gilt. Pflicht-Parameter ohne Standardwert (Review 13.11.2026): Eine
+    /// Registry, die das Ende still verschluckt, ließe Tabs auf „läuft“
+    /// stehen. Die App nimmt `.live`, Tests ausdrücklich `.inert`.
+    private let termination: AgentChatTermination
 
-    init(sleep: @escaping (useconds_t) -> Void = { usleep($0) }) {
+    init(
+        sleep: @escaping (useconds_t) -> Void = { usleep($0) },
+        termination: AgentChatTermination
+    ) {
         self.sleep = sleep
+        self.termination = termination
     }
 
     /// Meldet jede Änderung des Satzes laufender PTYs — Quelle des
@@ -41,7 +51,7 @@ final class AgentTerminalRegistry: ObservableObject {
         sessionID: UUID,
         command: AgentLaunchCommand,
         onLaunched: @escaping () -> Void,
-        onTerminated: @escaping (Int32?) -> Void
+        onTerminated: @escaping (AgentChatTermination.Outcome) -> Void
     ) -> AgentTerminalController {
         if let controller = controllers[sessionID], controller.isRunning {
             return controller
@@ -52,8 +62,14 @@ final class AgentTerminalRegistry: ObservableObject {
             command: command,
             onLaunched: onLaunched,
             onTerminated: { [weak self] exitCode in
-                onTerminated(exitCode)
-                self?.notifyRunningSetChanged()
+                guard let self else { return }
+                // Erst Store und Status, dann die Ansicht (falls es eine gibt).
+                // Steht der Controller noch hier, endete der Prozess von selbst.
+                let outcome = self.termination.handle(
+                    sessionID: sessionID, exitCode: exitCode,
+                    endedController: self.controllers[sessionID])
+                onTerminated(outcome)
+                self.notifyRunningSetChanged()
             }
         )
         controllers[sessionID] = controller
@@ -63,30 +79,41 @@ final class AgentTerminalRegistry: ObservableObject {
     }
 
     /// Übernommener Chat (Neustart ohne Chatverlust): Controller ohne
-    /// `forkpty` und ohne View. `setUp` spielt das Bild ein und übernimmt die
-    /// Leitung; das Ende meldet `onTerminated` hier statt über eine View.
+    /// `forkpty` und ohne Ansicht. `setUp` spielt das Bild ein und übernimmt
+    /// die Leitung. Das Ende meldet dieselbe Ende-Meldung wie bei gestarteten
+    /// Chats (Store, Status). Eine Ansicht, die den Chat später zeigt, hängt
+    /// ihren Teil über `viewTerminationHandler` an (Review Ende-Meldung).
     /// `nil`, wenn schon ein laufender Controller da ist oder `setUp` scheitert.
     @discardableResult
     func adoptController(
         sessionID: UUID,
         command: AgentLaunchCommand,
-        onTerminated: @escaping (Int32?) -> Void,
         setUp: (AgentTerminalController) -> Bool
     ) -> AgentTerminalController? {
         guard controllers[sessionID]?.isRunning != true else { return nil }
+        let box = ControllerBox()
         let controller = AgentTerminalController(
             sessionID: sessionID,
             command: command,
             onLaunched: {},
             onTerminated: { [weak self] exitCode in
-                onTerminated(exitCode)
-                self?.notifyRunningSetChanged()
+                guard let self else { return }
+                let outcome = self.termination.handle(
+                    sessionID: sessionID, exitCode: exitCode,
+                    endedController: self.controllers[sessionID])
+                box.controller?.viewTerminationHandler?(outcome)
+                self.notifyRunningSetChanged()
             }
         )
+        box.controller = controller
         guard setUp(controller) else { return nil }
         controllers[sessionID] = controller
         notifyRunningSetChanged()
         return controller
+    }
+
+    private final class ControllerBox {
+        weak var controller: AgentTerminalController?
     }
 
     func terminate(sessionID: UUID) {

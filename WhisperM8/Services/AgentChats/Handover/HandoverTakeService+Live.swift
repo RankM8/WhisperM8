@@ -27,12 +27,9 @@ extension HandoverTakeService {
                 .decoded(as: HandoverLaunchCommandSnapshot.self)?.launchCommand else { return false }
         let id = session.id
         let coordinator = AgentSessionStatusCoordinator.shared
+        // Das Ende meldet die Registry (Store, Status) wie bei jedem Chat.
         let controller = AgentTerminalRegistry.shared.adoptController(
             sessionID: id, command: command,
-            onTerminated: { exitCode in
-                try? store.updateSession(id: id) { if $0.status == .running { $0.status = .closed } }
-                coordinator.sessionTerminated(sessionID: id, exitCode: exitCode)
-            },
             setUp: { $0.adoptHandedOver(descriptor: fd, manifest: manifest, image: taken.image) })
         guard controller != nil else { return false }
 
@@ -73,7 +70,7 @@ extension HandoverTakeService {
         guard let command = taken.manifest.launchCommand?
             .decoded(as: HandoverLaunchCommandSnapshot.self)?.launchCommand else { return }
         AgentTerminalRegistry.shared.adoptController(
-            sessionID: id, command: command, onTerminated: { _ in },
+            sessionID: id, command: command,
             setUp: { controller in
                 controller.showEndedInGap(manifest: taken.manifest, image: taken.image, exitStatus: taken.exitStatus)
                 return true

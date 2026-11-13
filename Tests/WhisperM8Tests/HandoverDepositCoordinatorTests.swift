@@ -350,6 +350,42 @@ final class HandoverTerminalControllerTests: XCTestCase {
         XCTAssertEqual((try? String(contentsOf: marker, encoding: .utf8)) ?? "", "", "weder Ctrl+C noch SIGHUP")
     }
 
+    /// Ende eines übernommenen Chats: dieselbe Ende-Meldung wie bei gestarteten
+    /// Chats (Store, Status), danach der Teil, den eine Ansicht angehängt hat.
+    func testAdoptedChatReportsItsEndThroughTheRegistryAndAnAttachedView() throws {
+        let (original, _) = try startTicking()
+        let pid = try XCTUnwrap(original.processID)
+        XCTAssertTrue(spin(until: 5) { screenText(original).contains("tick 2") })
+        let detached = try XCTUnwrap(original.detachForHandover())
+
+        var log: [String] = []
+        let termination = AgentChatTermination(
+            markClosed: { _ in log.append("store") },
+            notifyStatus: { _, _ in log.append("status") })
+        let registry = AgentTerminalRegistry(sleep: { _ in }, termination: termination)
+        var manifest = HandoverManifest(chatID: original.sessionID.uuidString, kind: "terminal", pid: pid,
+                                        pidStartTime: ProcessStartTime.of(pid: pid)?.timeIntervalSince1970,
+                                        cols: detached.cols, rows: detached.rows, sendsInterruptOnStop: false)
+        manifest.controlToken = "tok"
+        let adopted = try XCTUnwrap(registry.adoptController(
+            sessionID: original.sessionID, command: original.command,
+            // Wie über den Aufbewahrer: die neue Seite bekommt eine eigene Kopie.
+            setUp: { $0.adoptHandedOver(descriptor: dup(detached.handle.fileDescriptor), manifest: manifest,
+                                        image: detached.image) }))
+        original.completeHandover()   // schließt nur die Kopie der alten Seite
+        XCTAssertTrue(adopted.isAdopted)
+        XCTAssertTrue(adopted.isRunning)
+        XCTAssertEqual(registry.activeSessionIDs, [original.sessionID])
+        XCTAssertTrue(spin(until: 5) { screenText(adopted).contains("tick") }, "Bild und neue Ausgabe kommen an")
+
+        adopted.viewTerminationHandler = { _ in log.append("view") }
+        kill(pid, SIGKILL)
+        XCTAssertTrue(spin(until: 10) { log.contains("view") })
+        XCTAssertEqual(log, ["store", "status", "view"])
+        XCTAssertFalse(adopted.isRunning)
+        XCTAssertTrue(registry.activeSessionIDs.isEmpty)
+    }
+
     func testCompletedHandoverIsNotRunningAndGetsNoInterruptOnQuit() throws {
         let (controller, marker) = try startTicking()
         let pid = try XCTUnwrap(controller.processID)

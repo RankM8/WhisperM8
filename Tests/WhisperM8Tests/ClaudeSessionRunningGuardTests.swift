@@ -109,7 +109,7 @@ final class ClaudeSessionRunningGuardTests: XCTestCase {
     /// dieses Tor (`prepareCommand`).
     @MainActor
     func testRunningControllerOfThisAppStopsTheLaunchBeforeTheBuilder() {
-        let registry = AgentTerminalRegistry(sleep: { _ in })
+        let registry = AgentTerminalRegistry(sleep: { _ in }, termination: .inert)
         let id = UUID()
         XCTAssertTrue(AgentCommandBuilder.allowsTriggeredLaunch(
             controllerIsRunning: registry.controller(for: id)?.isRunning))

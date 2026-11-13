@@ -591,6 +591,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// Übergeben: der Prozess läuft beim Aufbewahrer weiter. Kein Ctrl+C,
     /// kein Ende melden, kein Token widerrufen.
     private(set) var isHandedOver = false
+    /// Vom Aufbewahrer übernommen statt selbst gestartet. Eine Ansicht, die so
+    /// einen Chat zeigt, hängt ihren Teil der Ende-Meldung an
+    /// (`viewTerminationHandler`), weil sie ihn nicht selbst gestartet hat.
+    private(set) var isAdopted = false
+    /// Teil der Ende-Meldung, den die Ansicht braucht (Rückweg nach
+    /// gescheitertem Andocken, Fehlertext, Auffrischen). Für übernommene Chats;
+    /// gestartete Chats bekommen ihn beim Start über die Registry.
+    var viewTerminationHandler: ((AgentChatTermination.Outcome) -> Void)?
     let terminal = QuietableTerminalView(frame: .zero)
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
@@ -1027,6 +1035,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// Übernommener Chat (Neustart ohne Chatverlust): gilt als gestartet und
     /// laufend, ohne `forkpty`. Token und Startzeit kommen aus dem Manifest.
     func markAdopted(token: String?, startedAt: Date?) {
+        isAdopted = true
         hasStarted = true
         isRunning = true
         self.startedAt = startedAt ?? Date()
