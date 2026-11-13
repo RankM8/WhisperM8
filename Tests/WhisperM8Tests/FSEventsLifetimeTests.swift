@@ -116,17 +116,18 @@ final class FSEventsLifetimeTests: XCTestCase {
             flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
             queue: queue,
             handler: { paths, flags in
+                counter.increment()
                 for (path, flag) in zip(paths, flags)
                 where path.hasSuffix(".json") && flag & fileFlag != 0 && flag & changeFlags != 0 {
                     fileFlagsMatched.withLock { $0 = true }
                 }
-                counter.increment()
             }
         ))
         defer { subscription.cancel() }
         startWriting(into: tempDir)
         waitUntil(5) { fileFlagsMatched.withLock { $0 } }
         stopWriting()
+        subscription.queue.sync {}
         XCTAssertGreaterThan(counter.value, 0)
         XCTAssertTrue(fileFlagsMatched.withLock { $0 }, "Flags kommen nicht beim passenden Pfad an")
     }
@@ -139,7 +140,7 @@ final class FSEventsLifetimeTests: XCTestCase {
         waitUntil(5) { counter.value > 0 }
         subscription.cancel()
         XCTAssertFalse(subscription.isActive)
-        queue.sync {} // alles, was schon eingereiht war
+        subscription.queue.sync {} // alles, was schon eingereiht war
         let afterCancel = counter.value
         Thread.sleep(forTimeInterval: 0.4)
         XCTAssertEqual(counter.value, afterCancel, "Rückruf nach cancel()")
@@ -152,9 +153,9 @@ final class FSEventsLifetimeTests: XCTestCase {
         var subscription: FSEventsSubscription? = try makeSubscription(counter, queue: queue)
         startWriting(into: tempDir)
         waitUntil(5) { counter.value > 0 }
-        XCTAssertNotNil(subscription)
+        let ownQueue = try XCTUnwrap(subscription?.queue)
         subscription = nil // deinit → cancel
-        queue.sync {}
+        ownQueue.sync {}
         let afterDrop = counter.value
         Thread.sleep(forTimeInterval: 0.4)
         XCTAssertEqual(counter.value, afterDrop, "Stream läuft nach dem Ende der Subscription weiter")
