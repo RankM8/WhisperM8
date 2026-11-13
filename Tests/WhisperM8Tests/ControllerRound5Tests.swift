@@ -187,6 +187,72 @@ final class ControllerRound5BindingTests: XCTestCase {
         XCTAssertFalse(codex.canPaste)
         XCTAssertNil(ControllerWritingSlots(state: state(.working, view: .tasks), clip: nil).note)
     }
+
+    // MARK: Kreuz bei sichtbarem Eingabefeld (Entscheidung 13.11.2026)
+
+    /// Jedes Feld des Zustands kommt unverändert durch `ControllerContext.chat`.
+    /// Am Ende des Structs hinter `promptField` ging ein Bool im Debug-Build
+    /// (Swift 6.2.3) beim Verpacken verloren (13.11.2026).
+    func testChatStateSurvivesTheContextEnum() {
+        var full = ControllerChatState(status: .working, profile: .claude)
+        full.draftSuspected = true
+        full.fieldMayHaveText = true
+        full.recentlySubmitted = true
+        full.secondsSinceAwaitingBegan = 1.5
+        full.escapeSentRecently = true
+        full.escapeSentJustNow = true
+        full.recentDraftInput = true
+        full.recentArrowNavigation = true
+        full.choiceListOpen = true
+        full.onlyRecalledPrompt = true
+        full.gridActive = true
+        full.shellAtPrompt = true
+        full.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: UUID())
+        full.openView = .footerSelection
+        full.promptField = ControllerPromptField(rows: 2, cursorRow: 1, cursorAtStart: false, isEmpty: false)
+        guard case let .chat(inner) = ControllerContext.chat(full) else { return XCTFail("chat erwartet") }
+        XCTAssertEqual(inner, full)
+        XCTAssertTrue(inner.onlyRecalledPrompt)
+    }
+
+    func testCrossWhileWorkingFollowsTheVisiblePromptField() {
+        let empty = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+        let text = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+        func cross(_ state: ControllerChatState) -> ControllerAction? {
+            ControllerBindingResolver.action(for: .press(.cross), in: .chat(state))
+        }
+        XCTAssertEqual(cross(state(.working, field: empty)), .chatKey(.enter), "leeres Feld: Enter tut dort nichts")
+        XCTAssertEqual(cross(state(.working, field: text)), .chatKey(.enter), "Text von Tastatur oder Hotkey-Diktat")
+        XCTAssertEqual(cross(state(.unknown, field: text)), .chatKey(.enter))
+        XCTAssertEqual(cross(state(.working, view: .footerSelection, field: empty)), .chatKey(.enter), "Subagent in der Fußzeile")
+        // Nur ein mit ↑ zurückgeholter Prompt: nicht erneut abschicken —
+        // außer in der Fußzeilen-Auswahl, dort öffnet Enter den Agenten.
+        var recalled = state(.working, field: text)
+        recalled.onlyRecalledPrompt = true
+        XCTAssertNil(cross(recalled))
+        recalled.openView = .footerSelection
+        XCTAssertEqual(cross(recalled), .chatKey(.enter))
+        // Nicht ablesbar oder kein Feld (Dialog, Ansicht, hochgescrollt): alte Regel.
+        XCTAssertNil(cross(state(.working)))
+        XCTAssertNil(cross(state(.working, view: .transcript)))
+        var armed = state(.working)
+        armed.recentDraftInput = true
+        XCTAssertEqual(cross(armed), .chatKey(.enter), "alte Regel gilt weiter")
+        // Eine Ansicht, die das Feld ersetzt, schließt die Regel aus — auch
+        // wenn ein Feld gemeldet würde.
+        XCTAssertNil(cross(state(.working, view: .tasks, field: empty)))
+        // Nur Claude: Codex zeigt Freigaben ohne „wartet“, Shells haben kein Feld.
+        XCTAssertNil(cross(state(.working, profile: .codex, field: text)))
+        XCTAssertNil(cross(state(.working, profile: .shell, field: text)))
+        // Rückfragen unverändert: 0,5 s Sperre, auch mit gemeldetem Feld.
+        var question = state(.awaitingInput, field: text)
+        question.secondsSinceAwaitingBegan = 0.1
+        XCTAssertNil(cross(question))
+        question.secondsSinceAwaitingBegan = 2
+        XCTAssertEqual(cross(question), .chatKey(.enter))
+        // Escape bleibt bei „arbeitet“ ohne Ansicht gesperrt.
+        XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: .chat(state(.working, field: text))))
+    }
 }
 
 /// Warteschlange im Transcript (`queue-operation`, Claude Code 2.1.322).
@@ -270,6 +336,46 @@ final class ControllerRound5DispatcherTests: XCTestCase {
 
     private func perform(_ action: ControllerAction) {
         dispatcher.perform(action, in: dispatcher.snapshot().chat.map { .chat($0) } ?? .list)
+    }
+
+    /// Geste wie der Manager: Zustand beim Druck lesen, auflösen, ausführen.
+    private func press(_ gesture: ControllerGesture) {
+        let context = ControllerContextResolver.context(for: dispatcher.snapshot())
+        if let action = ControllerBindingResolver.action(for: gesture, in: context) {
+            dispatcher.perform(action, in: context)
+        }
+    }
+
+    /// Kreuz bei „arbeitet“ liest den Bildschirm beim Druck, nicht beim Pfeil
+    /// davor: Der erste ▼ in die Fußzeile kommt, bevor Claude neu zeichnet.
+    func testCrossReadsTheScreenAtPressTime() {
+        setTerminal(.working)
+        press(.move(.down, source: .dpad, isRepeat: false))
+        XCTAssertEqual(terminals.keys, [.down])
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down], "Feld noch nicht ablesbar: alte Regel")
+
+        // Claude hat neu gezeichnet: Feld sichtbar, Agent in der Fußzeile gewählt.
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(
+            openView: .footerSelection,
+            promptField: ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true))
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down, .enter])
+
+        // Jetzt ersetzt ein Freigabe-Dialog das Feld, Status noch „arbeitet“.
+        terminals.states[chat]?.screen = ControllerScreenSnapshot()
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down, .enter], "ohne sichtbares Feld kein Enter")
+
+        // Feld zeigt nur den mit ↑ zurückgeholten Prompt: nicht erneut abschicken.
+        terminals.states[chat]?.screen = ControllerScreenSnapshot(
+            promptField: ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false))
+        terminals.states[chat]?.onlyRecalledPrompt = true
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down, .enter], "zurückgeholter Prompt geht nicht erneut raus")
+        terminals.states[chat]?.onlyRecalledPrompt = false
+        press(.press(.cross))
+        XCTAssertEqual(terminals.keys, [.down, .enter, .enter], "eigener Text im Feld geht raus")
     }
 
     func testPasteTextGoesInAsBlockWithoutSending() {

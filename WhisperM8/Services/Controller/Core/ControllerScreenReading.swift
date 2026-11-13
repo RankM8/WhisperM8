@@ -96,7 +96,13 @@ enum ControllerScreenReading {
     ///   - cursor: Cursor in diesen Zeilen (Zeile, Spalte), sofern bekannt.
     ///   - detectViews: nur bei Claude (Codex hat diese Ansichten nicht).
     static func read(lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, detectViews: Bool) -> ControllerScreenSnapshot {
-        let box = promptBox(in: lines.map(\.full))
+        // Steht unter dem vermeintlichen Feld ein Dialog-Hinweis, ist es kein
+        // Eingabefeld (etwa eine Trennlinie aus Tool-Ausgabe über einer Zeile
+        // mit „>“ und darunter die obere Linie eines Freigabe-Dialogs). Kreuz
+        // bei „arbeitet“ hängt am sichtbaren Feld (`claudePromptVisible`).
+        let box = promptBox(in: lines.map(\.full)).flatMap { box in
+            dialogBelow(Array(lines[(box.lower + 1)...]).map(\.full)) ? nil : box
+        }
         var snapshot = ControllerScreenSnapshot()
         if let box {
             snapshot.promptField = field(in: lines, box: box, cursor: cursor)
@@ -153,6 +159,21 @@ enum ControllerScreenReading {
             return .tasks
         }
         return nil
+    }
+
+    /// Hinweise, die nur Claudes Dialoge zeigen (Freigabe, Rückfrage-Tool,
+    /// Zurückspulen, Plan freigeben), nie die Fußzeile unter dem Eingabefeld
+    /// (Claude Code 2.1.322). Gesucht im ganzen Text, nicht nur im
+    /// abgeblendeten: Ein Treffer macht nur vorsichtiger.
+    static let dialogMarkers = [
+        "esc to cancel", "esc cancel", "enter to select", "enter to confirm",
+        "do you want to proceed", "would you like to proceed",
+    ]
+
+    static func dialogBelow(_ lines: [String]) -> Bool {
+        let text = lines.map { $0.lowercased() }.joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return dialogMarkers.contains { text.contains($0) }
     }
 
     // MARK: - Eingabefeld

@@ -134,6 +134,31 @@ final class ControllerScreenReadingTests: XCTestCase {
         XCTAssertEqual(field?.isEmpty, false)
     }
 
+    /// Ein Freigabe-Dialog ersetzt das Feld: Mit nur seiner oberen Linie gibt
+    /// es kein Feld (Grundlage für Kreuz bei „arbeitet“).
+    func testPermissionDialogIsNoPromptField() {
+        let lines: [ControllerScreenLine] = [
+            .plain("⏺ Bash(rm build.log)"), .plain(rule), .plain(" Bash command"), .plain("   rm build.log"),
+            .plain(" Do you want to proceed?"), .plain(" ❯ 1. Yes"), .plain("   2. No"),
+            .dimmed(" Esc to cancel · Tab to amend"),
+        ]
+        XCTAssertNil(read(lines, cursor: (5, 3)).promptField)
+    }
+
+    /// Trennlinie aus Tool-Ausgabe, darunter eine Zeile mit „>“ und weiter
+    /// unten die obere Linie eines Dialogs: sähe aus wie ein Feld. Ein
+    /// Dialog-Hinweis darunter schließt das aus.
+    func testDialogHintBelowAFakeBoxIsNoPromptField() {
+        let lines: [ControllerScreenLine] = [
+            .plain(rule), .plain("> zitierte Zeile aus der Ausgabe"), .plain("  weiter"), .plain(rule),
+            .plain(" Do you want to proceed?"), .plain(" ❯ 1. Yes"), .dimmed(" Esc to cancel"),
+        ]
+        XCTAssertNil(read(lines).promptField)
+        // Die echte Fußzeile unter dem Feld zählt nicht als Dialog.
+        let footer = read([.plain(rule), prompt(""), .plain(rule), .dimmed("  ⏵⏵ accept edits on · ? for shortcuts")])
+        XCTAssertNotNil(footer.promptField)
+    }
+
     func testNoPromptBoxWithoutPromptCharacter() {
         XCTAssertNil(read([.plain(rule), .plain("  some table row"), .plain(rule)]).promptField)
     }

@@ -301,7 +301,7 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
      und Shell gilt er als Entwurf. Und ↑ als erster Pfeil macht Kreuz bei arbeitendem Chat nicht scharf.
   3. Ein Pfeil macht Kreuz bei Claude nur in einer erkannten Ansicht, einer Rückfrage oder einer
      offenen Auswahl scharf (Runde 5): Im Hauptfeld holte ↑ den letzten Prompt, und Kreuz schickte ihn
-     bei „arbeitet“ erneut. Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
+     bei „arbeitet“ erneut. Ohne sichtbares Eingabefeld (siehe unten) Kreuz bei arbeitendem Claude-Chat nur bis 5 s nach einem scharfen Pfeil (`arrowArmWindow`, ↓/←/→
      oder ↑ nach einem scharfen Pfeil): kurz, wegen der Lücke vor einem Freigabe-Dialog, in der Enter
      die Vorauswahl bestätigte. Codex behält die 30-s-Regel (Freigaben ohne „wartet“).
      Ausnahme →: Es übernimmt den grauen Vorschlag ins Feld und zählt deshalb wie getippter Text
@@ -328,12 +328,29 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 - Kreuz während der Aufnahme sendet nur bei Claude und Codex; in einer Shell wäre der Text ein Befehl.
 - Solange das Mikrofon verbindet, zählt das als Aufnahme: R2 beendet (sobald sie läuft), Kreis verwirft.
 - Kreuz ist 0,5 s nach Erscheinen einer Rückfrage ohne Wirkung.
-- Arbeitet der Chat oder ist sein Zustand unklar, schickt Kreuz Enter nur, wenn in den letzten 30 s
-  per Controller getippt, gelöscht oder diktiert wurde und seitdem nichts abgeschickt wurde — auf
-  keinem Weg: Kreuz auch in einer Rückfrage, Enter der Tastatur, `chats send`, Diktat mit Senden,
-  Befehle aus dem Menü. Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt
-  eine Lücke, in der Enter sonst die Vorauswahl bestätigte. Der Entwurfs-Verdacht zählt dafür nicht,
-  und Tippen auf der Tastatur auch nicht.
+- Arbeitet ein Claude-Chat oder ist sein Zustand unklar, schickt Kreuz Enter, sobald Claudes
+  Eingabefeld sichtbar unten am Bildschirm steht (Entscheidung 13.11.2026, `claudePromptVisible`).
+  Abgelesen wird beim Druck selbst, nicht beim Pfeil davor. Ein Freigabe-Dialog ersetzt das Feld; ist
+  es zu sehen, ist also keiner offen. Enter schickt dann den Text ab oder reiht ihn ein (auch getippt
+  oder per Hotkey diktiert), öffnet den gewählten Agenten in der Fußzeile oder tut im leeren Feld
+  nichts. Steht unter dem Feld ein Dialog-Hinweis („Esc to cancel“, „Enter to select“, „Do you want
+  to proceed“ und ähnliche), gilt es nicht als Feld. Steht nur ein mit ↑ zurückgeholter oder nach
+  einem Abbruch zurückgelegter Prompt im Feld, gilt die vorsichtige Regel, sonst schickte ↑ + Kreuz
+  den letzten Prompt noch einmal ab (in der Fußzeilen-Auswahl nicht: dort öffnet Enter den
+  Agenten). Vorher wirkte Kreuz bei arbeitendem Chat kaum: Getippter Text zählte nicht, und der
+  erste ▼ in die Fußzeile machte Kreuz nicht scharf, weil der Bildschirm gelesen wurde, bevor Claude
+  neu gezeichnet hatte.
+- Ist das Feld nicht zu sehen oder nicht ablesbar (Dialog, Transkript und andere Ansichten,
+  hochgescrollt, Codex, Shell), gilt die vorsichtige Regel: Kreuz schickt Enter nur, wenn in den
+  letzten 30 s per Controller getippt, gelöscht oder diktiert wurde und seitdem nichts abgeschickt
+  wurde — auf keinem Weg: Kreuz auch in einer Rückfrage, Enter der Tastatur, `chats send`, Diktat mit
+  Senden, Befehle aus dem Menü. Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status
+  „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl bestätigte. Der Entwurfs-Verdacht
+  zählt dafür nicht, und Tippen auf der Tastatur auch nicht.
+- Restrisiko der Feld-Regel: Zwischen dem Moment, in dem Claude einen Dialog aufmacht, und seinem
+  ersten Bild am Bildschirm vergeht ein Bruchteil einer Sekunde. Ein Kreuz genau dann bestätigte die
+  Vorauswahl, wie Enter auf der Tastatur im selben Augenblick. Diese Lücke kann kein Ablesen
+  schließen; die vorsichtige Regel hatte sie genauso, 30 s lang nach jeder Eingabe.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
 - Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
   Versand: Enter vom Controller oder der Tastatur, Diktat mit Senden, `chats send`) und unbekannter
@@ -467,6 +484,8 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
 - **Runde 5, Bildschirm-Lesen:** Die Hinweistexte gelten für Claude Code 2.1.322; ändert Claude sie,
   erkennt der Controller die Ansicht nicht mehr (dann gilt die alte Regel, nichts wird gefährlicher).
+  Kreuz bei „arbeitet“ verlässt sich darauf, dass Claudes Dialoge das Eingabefeld ersetzen und nicht
+  darunter erscheinen; ändert sich das in einer neuen Version, die Regel neu prüfen.
   Ob SwiftTerms Cursor im eingebetteten PTY an der Schreibmarke steht (Grundlage für L1 ▲▼ und
   „sicher Text“), ist am Gerät zu bestätigen. Ein grauer Platzhalter, der nicht als abgeblendet markiert
   ist, zählt nicht als Text.
