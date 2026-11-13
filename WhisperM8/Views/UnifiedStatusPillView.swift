@@ -112,24 +112,8 @@ struct UnifiedStatusPillView: View {
         .frame(maxWidth: display.isExpanded ? .infinity : nil)
     }
 
-    @ViewBuilder
     private var status: some View {
-        if let alert = display.alert, !display.isExpanded {
-            UnifiedPillAlertLabel(alert: alert, palette: palette)
-        } else if display.summary.hasActivity {
-            HStack(spacing: 11) {
-                if display.summary.working > 0 { chip(.working, display.summary.working) }
-                if display.summary.waiting > 0 { chip(.waiting, display.summary.waiting) }
-                if display.summary.errored > 0 { chip(.errored, display.summary.errored) }
-                if display.summary.freshDone > 0 { chip(.done, display.summary.freshDone) }
-            }
-            .padding(.leading, 9)
-            .padding(.trailing, 10)
-        }
-    }
-
-    private func chip(_ kind: NotchChip.Kind, _ count: Int) -> some View {
-        NotchChip(kind: kind, count: count, palette: palette, font: .system(size: 12.5, weight: .semibold))
+        UnifiedPillRestStatus(summary: display.summary, alert: display.isExpanded ? nil : display.alert)
     }
 
     private var headerAccessibilityLabel: Text {
@@ -144,6 +128,35 @@ struct UnifiedStatusPillView: View {
         }
         if parts.isEmpty { return Text("No active chats") }
         return Text(parts.joined(separator: ", "))
+    }
+}
+
+/// Rechte Seite der ruhenden Pille: Zähler bzw. „braucht dich“. Geteilt mit
+/// dem Ruhebild der Diktat-Pille (`UnifiedPillRestLookView`), damit der
+/// Übergang ins Diktat ohne Sprung beginnt.
+struct UnifiedPillRestStatus: View {
+    let summary: NotchSummary
+    let alert: NotchAlert?
+
+    private var palette: NotchPalette { .pill }
+
+    var body: some View {
+        if let alert {
+            UnifiedPillAlertLabel(alert: alert, palette: palette)
+        } else if summary.hasActivity {
+            HStack(spacing: 11) {
+                if summary.working > 0 { chip(.working, summary.working) }
+                if summary.waiting > 0 { chip(.waiting, summary.waiting) }
+                if summary.errored > 0 { chip(.errored, summary.errored) }
+                if summary.freshDone > 0 { chip(.done, summary.freshDone) }
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 10)
+        }
+    }
+
+    private func chip(_ kind: NotchChip.Kind, _ count: Int) -> some View {
+        NotchChip(kind: kind, count: count, palette: palette, font: .system(size: 12.5, weight: .semibold))
     }
 }
 
