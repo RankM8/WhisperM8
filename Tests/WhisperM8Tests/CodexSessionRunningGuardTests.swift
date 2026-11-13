@@ -13,8 +13,12 @@ final class CodexSessionRunningGuardTests: XCTestCase {
     private func check(_ chats: [G.AppChat] = [], processes: [CodexProcess]?,
                        terminating: [Int32: UUID] = [:], former: [Int32: UUID] = [:]) -> CodexRunningConflict? {
         G.conflict(sessionID: thread, localID: me, appChats: chats, processes: processes,
-                   terminatingOwner: { terminating[$0] }, formerOwner: { former[$0] },
+                   terminatingOwner: { pid, _ in terminating[pid] }, formerOwner: { pid, _ in former[pid] },
                    titleOf: { $0 == self.other ? "Anderer Chat" : "?" })
+    }
+
+    private func target(_ pid: Int32, start: UInt64? = nil) -> CodexProcessTarget {
+        CodexProcessTarget(pid: pid, startTime: start, sessionID: thread)
     }
 
     private func tui(_ pid: Int32, leader: Int32? = nil, id: String? = nil, terminal: Bool = true) -> CodexProcess {
@@ -37,7 +41,7 @@ final class CodexSessionRunningGuardTests: XCTestCase {
 
     // (b) Codex im normalen Terminal.
     func testCodexInTerminalBlocksAsOutsideApp() {
-        XCTAssertEqual(check(processes: [tui(700)]), .outsideApp(pid: 700, inTerminal: true))
+        XCTAssertEqual(check(processes: [tui(700)]), .outsideApp(process: target(700), inTerminal: true))
         XCTAssertNil(check(processes: [tui(700, id: "anderer-thread")]), "andere Sitzung")
         let fresh = CodexProcess(pid: 701, sessionLeader: 701, arguments: ["-C", "/repo", thread])
         XCTAssertNil(check(processes: [fresh]), "ohne resume kein Fortsetzen")
@@ -55,7 +59,7 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         let job = CodexProcess(pid: 800, sessionLeader: 800,
                                arguments: ["-a", "never", "exec", "resume", "--json", thread, "weiter"],
                                hasTerminal: false)
-        XCTAssertEqual(check(processes: [job]), .outsideApp(pid: 800, inTerminal: false))
+        XCTAssertEqual(check(processes: [job]), .outsideApp(process: target(800), inTerminal: false))
     }
 
     // (d) Tab-Neustart: der eigene Vorgänger läuft aus und sperrt nicht.
@@ -64,17 +68,37 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         XCTAssertNil(check(processes: [tui(902, leader: 900)], terminating: [900: me]))
         XCTAssertNil(check(processes: [tui(900)], terminating: [900: me]), "Programm direkt im PTY")
         XCTAssertEqual(check(processes: [tui(902, leader: 900)], terminating: [900: other]),
-                       .otherChatEnding(title: "Anderer Chat"), "ein anderer, gerade geschlossener Chat schreibt noch")
+                       .otherChatEnding(title: "Anderer Chat", process: target(902)),
+                       "ein anderer, gerade geschlossener Chat schreibt noch")
     }
 
     /// Jarvis: Überlebt der eigene Prozess das Schließen länger als 30 s,
     /// sperrt er — aber als „voriger Lauf dieses Chats“, nicht „außerhalb“.
     func testOwnPreviousRunBeyondWindowIsNamedCorrectly() {
-        XCTAssertEqual(check(processes: [tui(902, leader: 900)], former: [900: me]), .ownPreviousRun(pid: 902))
+        XCTAssertEqual(check(processes: [tui(902, leader: 900)], former: [900: me]), .ownPreviousRun(process: target(902)))
         XCTAssertEqual(check(processes: [tui(902, leader: 900)], former: [900: other]),
-                       .otherChatEnding(title: "Anderer Chat"))
+                       .otherChatEnding(title: "Anderer Chat", process: target(902)), "mit PID für den Ausweg")
         XCTAssertNil(check(processes: [tui(902, leader: 900)], terminating: [900: me], former: [900: me]),
                      "innerhalb von 30 s läuft der eigene Vorgänger aus")
+    }
+
+    func testEndableProcessOnlyForProcessConflicts() {
+        XCTAssertNil(CodexRunningConflict.otherChat(title: "x").endableProcess, "laufender Chat: dort schließen")
+        XCTAssertEqual(CodexRunningConflict.ownPreviousRun(process: target(5)).endableProcess, target(5))
+        XCTAssertEqual(CodexRunningConflict.outsideApp(process: target(6), inTerminal: false).endableProcess, target(6))
+    }
+
+    /// Vic: Vor „Prozess beenden“ muss unter der PID noch derselbe Prozess laufen.
+    func testIsStillTargetChecksNameArgumentsAndStartTime() {
+        var proc = tui(42); proc.startTime = 1000
+        let t = target(42, start: 1000)
+        XCTAssertTrue(G.isStillTarget(t, current: proc, currentName: "codex"))
+        XCTAssertFalse(G.isStillTarget(t, current: proc, currentName: "zsh"), "anderer Name")
+        var later = proc; later.startTime = 2000
+        XCTAssertFalse(G.isStillTarget(t, current: later, currentName: "codex"), "PID neu vergeben")
+        XCTAssertFalse(G.isStillTarget(t, current: tui(42, id: "anderer"), currentName: "codex"), "andere Sitzung")
+        XCTAssertFalse(G.isStillTarget(t, current: nil, currentName: nil), "nicht mehr da")
+        XCTAssertTrue(G.isStillTarget(target(42), current: later, currentName: "codex"), "ohne bekannte Startzeit")
     }
 
     func testUnreadableProcessListNeverBlocks() {
@@ -162,20 +186,21 @@ final class CodexSessionRunningGuardTests: XCTestCase {
                            .codexSessionRunning(title: "Ich", conflict: .otherChat(title: "Anderer Chat")))
             XCTAssertTrue($0.localizedDescription.contains("Anderer Chat"))
         }
-        blocked.codexRunningConflict = { _, _ in .outsideApp(pid: 4242, inTerminal: true) }
+        blocked.codexRunningConflict = { _, _ in .outsideApp(process: self.target(4242), inTerminal: true) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("4242"))
             XCTAssertTrue($0.localizedDescription.contains("WhisperM8"), "nennt: außerhalb der App")
         }
-        blocked.codexRunningConflict = { _, _ in .outsideApp(pid: 4243, inTerminal: false) }
+        blocked.codexRunningConflict = { _, _ in .outsideApp(process: self.target(4243), inTerminal: false) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("kill 4243"), "Ausweg ohne Terminalfenster")
         }
-        blocked.codexRunningConflict = { _, _ in .otherChatEnding(title: "Alter Chat") }
+        blocked.codexRunningConflict = { _, _ in .otherChatEnding(title: "Alter Chat", process: self.target(4245)) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("Alter Chat"))
+            XCTAssertTrue($0.localizedDescription.contains("4245"), "Vic: PID auch beim anderen Chat")
         }
-        blocked.codexRunningConflict = { _, _ in .ownPreviousRun(pid: 4244) }
+        blocked.codexRunningConflict = { _, _ in .ownPreviousRun(process: self.target(4244)) }
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("4244"))
             XCTAssertFalse($0.localizedDescription.contains("outside"), "nicht „außerhalb“")
@@ -186,7 +211,7 @@ final class CodexSessionRunningGuardTests: XCTestCase {
     func testKillSwitchTurnsTheGuardOff() throws {
         var off = builder()
         off.codexStartGuardEnabled = false
-        off.codexRunningConflict = { _, _ in .outsideApp(pid: 1, inTerminal: true) }
+        off.codexRunningConflict = { _, _ in .outsideApp(process: self.target(1), inTerminal: true) }
         off.launchReservation = { _, _ in "anderer" }
         XCTAssertEqual(try off.command(for: codexChat("Ich"), project: project).arguments.last, thread)
         XCTAssertTrue(AppPreferences(defaults: UserDefaults(suiteName: "wm8-codexguard-\(UUID())")!)
@@ -229,6 +254,20 @@ final class ProcessTerminationLedgerOwnerTests: XCTestCase {
         XCTAssertNil(ledger.formerOwner(of: 20))
     }
 
+    /// Vic: Eine binnen 24 h neu vergebene PID darf nicht den alten Chat nennen.
+    func testReusedPIDDoesNotMatchTheOldChat() {
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        let ledger = ProcessTerminationLedger(window: 30, now: { clock }, startTimeOf: { _ in 111 })
+        let chat = UUID()
+        ledger.noteTerminating(pid: 30, localID: chat)
+        XCTAssertEqual(ledger.owner(ofTerminating: 30, startTime: 111), chat)
+        XCTAssertNil(ledger.owner(ofTerminating: 30, startTime: 222))
+        clock = clock.addingTimeInterval(3600)
+        XCTAssertEqual(ledger.formerOwner(of: 30, startTime: 111), chat)
+        XCTAssertNil(ledger.formerOwner(of: 30, startTime: 222), "andere Startzeit = anderer Prozess")
+        XCTAssertEqual(ledger.formerOwner(of: 30, startTime: nil), chat, "ohne Startzeit wie bisher")
+    }
+
     func testOwnerOfTerminatingProcess() {
         var clock = Date(timeIntervalSince1970: 1_800_000_000)
         let ledger = ProcessTerminationLedger(window: 30, now: { clock })
@@ -240,5 +279,60 @@ final class ProcessTerminationLedgerOwnerTests: XCTestCase {
         XCTAssertNil(ledger.owner(ofTerminating: 12))
         clock = clock.addingTimeInterval(31)
         XCTAssertNil(ledger.owner(ofTerminating: 10), "abgelaufen")
+    }
+}
+
+/// „Prozess beenden“: erst SIGTERM, SIGKILL nur auf ausdrücklichen Wunsch,
+/// vor jedem Signal erneute Prüfung.
+final class CodexProcessTerminatorTests: XCTestCase {
+    private let thread = "019a6f2e-1c2d-7e3f-8a9b-0c1d2e3f4a5b"
+
+    private func make(name: String? = "codex", start: UInt64 = 1000, exitsAfterSignal: Bool = true,
+                      alreadyGone: Bool = false, signals: Box) -> CodexProcessTerminator {
+        var terminator = CodexProcessTerminator()
+        terminator.read = { pid in
+            (CodexProcess(pid: pid, sessionLeader: pid, arguments: ["resume", self.thread], startTime: start), name)
+        }
+        terminator.signal = { _, sig in signals.values.append(sig); return 0 }
+        terminator.hasExited = { _ in alreadyGone }
+        terminator.waitForExit = { _, _ in exitsAfterSignal }
+        return terminator
+    }
+
+    final class Box { var values: [Int32] = [] }
+
+    private var target: CodexProcessTarget { CodexProcessTarget(pid: 77, startTime: 1000, sessionID: thread) }
+
+    func testSendsSIGTERMFirst() async {
+        let signals = Box()
+        let outcome = await make(signals: signals).end(target, force: false)
+        XCTAssertEqual(outcome, .ended)
+        XCTAssertEqual(signals.values, [SIGTERM])
+    }
+
+    func testSIGKILLOnlyWhenForced() async {
+        let signals = Box()
+        let stubborn = make(exitsAfterSignal: false, signals: signals)
+        let first = await stubborn.end(target, force: false)
+        XCTAssertEqual(first, .stillRunning)
+        let second = await stubborn.end(target, force: true)
+        XCTAssertEqual(second, .stillRunning)
+        XCTAssertEqual(signals.values, [SIGTERM, SIGKILL])
+    }
+
+    func testNoSignalWhenThePIDNowBelongsToAnotherProcess() async {
+        let signals = Box()
+        let reused = await make(start: 2000, signals: signals).end(target, force: true)
+        XCTAssertEqual(reused, .notTheSameProcess)
+        let renamed = await make(name: "zsh", signals: signals).end(target, force: false)
+        XCTAssertEqual(renamed, .notTheSameProcess)
+        XCTAssertTrue(signals.values.isEmpty, "nie ein Signal an einen fremden Prozess")
+    }
+
+    func testAlreadyGoneIsEndedWithoutSignal() async {
+        let signals = Box()
+        let outcome = await make(alreadyGone: true, signals: signals).end(target, force: false)
+        XCTAssertEqual(outcome, .ended)
+        XCTAssertTrue(signals.values.isEmpty)
     }
 }

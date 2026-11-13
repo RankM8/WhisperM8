@@ -3071,22 +3071,22 @@
         }
       }
     },
-    "Cannot resume %@: the chat “%@” was just closed and its Codex process is still ending. Try again in a few seconds.": {
+    "Cannot resume %@: the chat “%@” was closed, but its Codex process (PID %@) is still running. Wait a few seconds and try again; if it does not end, end the process.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Der Chat „%@“ wurde gerade geschlossen, sein Codex-Prozess endet noch. Versuche es in ein paar Sekunden erneut."
+            "value": "%@ lässt sich nicht fortsetzen: Der Chat „%@“ wurde geschlossen, sein Codex-Prozess (PID %@) läuft aber noch. Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende den Prozess."
           }
         }
       }
     },
-    "Cannot resume %@: the previous run of this chat is still ending (Codex process PID %@). Wait a few seconds and try again; if it does not end, quit it with “kill %@” in a terminal.": {
+    "Cannot resume %@: the previous run of this chat is still ending (Codex process PID %@). Wait a few seconds and try again; if it does not end, end the process.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende ihn mit „kill %@“ in einem Terminal."
+            "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende den Prozess."
           }
         }
       }
@@ -6081,6 +6081,16 @@
         }
       }
     },
+    "End Process": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prozess beenden"
+          }
+        }
+      }
+    },
     "End chat?": {
       "localizations": {
         "de": {
@@ -6097,6 +6107,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mit Fehler beendet"
+          }
+        }
+      }
+    },
+    "Ending process…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prozess wird beendet …"
           }
         }
       }
@@ -6707,6 +6727,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Folge-Turn, die Sitzung behält ihren Kontext (codex exec resume)"
+          }
+        }
+      }
+    },
+    "Force Quit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sofort beenden"
           }
         }
       }
@@ -17640,6 +17670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein-/Ausschalter und Touch ID lassen sich nicht sperren. Ein Druck darauf schickt den Mac in den Ruhezustand und entsperrt die Tastatur."
+          }
+        }
+      }
+    },
+    "The process did not end.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Prozess wurde nicht beendet."
           }
         }
       }

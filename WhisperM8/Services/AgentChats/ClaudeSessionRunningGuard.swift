@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Sperre gegen einen zweiten Prozess auf derselben Claude-Sitzung.
@@ -60,6 +61,21 @@ enum ClaudeSessionRunningGuard {
     }
 }
 
+extension ProcessStartTime {
+    /// Startzeit in µs seit 1970, `nil` wenn der Prozess nicht mehr lesbar
+    /// ist. Unterscheidet einen Prozess von einem späteren mit derselben PID.
+    static func microseconds(pid: Int32) -> UInt64? {
+        guard pid > 0 else { return nil }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let start = info.kp_proc.p_un.__p_starttime
+        guard start.tv_sec > 0 else { return nil }
+        return UInt64(start.tv_sec) * 1_000_000 + UInt64(start.tv_usec)
+    }
+}
+
 /// Merkt sich Prozesse, denen die App gerade das Ende geschickt hat.
 /// Ein Eintrag gilt für `window` Sekunden — genug für das Auslaufen nach
 /// SIGTERM, kurz genug, dass eine wiederverwendete PID nicht dauerhaft als
@@ -70,6 +86,14 @@ final class ProcessTerminationLedger: @unchecked Sendable {
     private struct Entry {
         let at: Date
         let localID: UUID?
+        /// Startzeit des Prozesses (µs seit 1970): Eine PID kann binnen 24 h
+        /// neu vergeben werden, dann darf der Eintrag nicht mehr passen.
+        let startTime: UInt64?
+
+        func matches(_ other: UInt64?) -> Bool {
+            guard let startTime, let other else { return true }
+            return startTime == other
+        }
     }
 
     private let lock = NSLock()
@@ -80,38 +104,47 @@ final class ProcessTerminationLedger: @unchecked Sendable {
     private let historyWindow: TimeInterval = 24 * 60 * 60
     private let window: TimeInterval
     private let now: () -> Date
+    private let startTimeOf: (Int32) -> UInt64?
 
-    init(window: TimeInterval = 30, now: @escaping () -> Date = Date.init) {
+    init(window: TimeInterval = 30, now: @escaping () -> Date = Date.init,
+         startTimeOf: @escaping (Int32) -> UInt64? = { ProcessStartTime.microseconds(pid: $0) }) {
         self.window = window
         self.now = now
+        self.startTimeOf = startTimeOf
     }
 
     /// `localID`: der Chat, dessen Prozess endet (für die Frage „eigener Vorgänger?“).
     func noteTerminating(pid: Int32, localID: UUID? = nil) {
         guard pid > 0 else { return }
+        // Vor dem SIGTERM gelesen: Danach kann der Prozess schon weg sein.
+        let startTime = startTimeOf(pid)
         lock.lock()
         defer { lock.unlock() }
         let current = now()
+        let entry = Entry(at: current, localID: localID, startTime: startTime)
         entries = entries.filter { current.timeIntervalSince($0.value.at) < window }
-        entries[pid] = Entry(at: current, localID: localID)
+        entries[pid] = entry
         history = history.filter { current.timeIntervalSince($0.value.at) < historyWindow }
-        history[pid] = Entry(at: current, localID: localID)
+        history[pid] = entry
     }
 
     /// Der Chat, dessen Prozess die App irgendwann (bis 24 h) beendet hat —
     /// auch nach Ablauf von `window`. Nur für die Zuordnung in Meldungen.
-    func formerOwner(of pid: Int32) -> UUID? {
+    /// Mit `startTime`: nur, wenn es noch derselbe Prozess ist (PID nicht neu vergeben).
+    func formerOwner(of pid: Int32, startTime: UInt64? = nil) -> UUID? {
         lock.lock()
         defer { lock.unlock() }
-        guard let noted = history[pid], now().timeIntervalSince(noted.at) < historyWindow else { return nil }
+        guard let noted = history[pid], now().timeIntervalSince(noted.at) < historyWindow,
+              noted.matches(startTime) else { return nil }
         return noted.localID
     }
 
     /// Der Chat, dessen Prozess die App gerade beendet (nur mit vermerktem Chat).
-    func owner(ofTerminating pid: Int32) -> UUID? {
+    func owner(ofTerminating pid: Int32, startTime: UInt64? = nil) -> UUID? {
         lock.lock()
         defer { lock.unlock() }
-        guard let noted = entries[pid], now().timeIntervalSince(noted.at) < window else { return nil }
+        guard let noted = entries[pid], now().timeIntervalSince(noted.at) < window,
+              noted.matches(startTime) else { return nil }
         return noted.localID
     }
 

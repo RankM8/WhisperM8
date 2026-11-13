@@ -41,6 +41,9 @@ struct AgentSessionDetailView: View {
 
     @State private var store = AgentSessionStore()
     @State private var errorMessage: String?
+    /// Sperr-Meldung der Codex-Startsperre mit einem Prozess, den der Nutzer
+    /// beenden darf („Prozess beenden“).
+    @State private var codexEndable: CodexEndableState?
     @State private var showRestartConfirmation = false
     /// Launch scheiterte an fehlender CLI: geführter Leerzustand statt Balken (LR-AU-022).
     @State private var missingCLI: AgentCLI?
@@ -81,6 +84,50 @@ struct AgentSessionDetailView: View {
         }
     }
 
+    /// Knöpfe unter der Sperr-Meldung (kein Hover: immer sichtbar).
+    @ViewBuilder
+    private var codexEndActions: some View {
+        if let state = codexEndable {
+            HStack(spacing: 8) {
+                switch state.phase {
+                case .ready:
+                    Button("End Process") { endCodexProcess(force: false) }
+                case .ending:
+                    ProgressView().controlSize(.small)
+                    Text("Ending process…")
+                case .notEnded:
+                    Text("The process did not end.")
+                    Button("Force Quit") { endCodexProcess(force: true) }
+                }
+            }
+            .font(.system(size: 12))
+            .controlSize(.small)
+        }
+    }
+
+    /// Beendet den Prozess aus der Sperr-Meldung und startet den Chat danach
+    /// neu (die Sperre prüft dabei ohnehin noch einmal).
+    private func endCodexProcess(force: Bool) {
+        guard let state = codexEndable, state.phase != .ending else { return }
+        codexEndable?.phase = .ending
+        let process = state.process
+        Task.detached(priority: .userInitiated) {
+            let outcome = await CodexProcessTerminator().end(process, force: force)
+            Logger.agentStore.notice(
+                "codex_process_end pid=\(process.pid) force=\(force) outcome=\(String(describing: outcome), privacy: .public)")
+            await MainActor.run {
+                switch outcome {
+                case .ended, .notTheSameProcess:
+                    codexEndable = nil
+                    errorMessage = nil
+                    launchAfterCacheWarmup()
+                case .stillRunning:
+                    codexEndable?.phase = .notEnded
+                }
+            }
+        }
+    }
+
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
     }
@@ -94,13 +141,17 @@ struct AgentSessionDetailView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.yellow)
-                    Text(errorMessage)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AgentTheme.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(errorMessage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(AgentTheme.textPrimary)
+                            .textSelection(.enabled)
+                        codexEndActions
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     Button {
                         self.errorMessage = nil
+                        self.codexEndable = nil
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 10, weight: .bold))
@@ -156,6 +207,7 @@ struct AgentSessionDetailView: View {
         }
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
+            codexEndable = nil
             showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
@@ -612,7 +664,14 @@ struct AgentSessionDetailView: View {
                 onClaudeHookLaunched(launchSession.id)
             }
             errorMessage = nil
+            codexEndable = nil
         } catch {
+            if case AgentCommandError.codexSessionRunning(_, let conflict) = error,
+               let process = conflict.endableProcess {
+                codexEndable = CodexEndableState(process: process, phase: .ready)
+            } else {
+                codexEndable = nil
+            }
             if case AgentCommandError.commandNotFound(let name) = error {
                 missingCLI = AgentChatStartGate.cli(forCommandName: name)
                 errorMessage = nil
@@ -965,4 +1024,11 @@ struct AgentResumeTranscriptMissingError: LocalizedError {
     var errorDescription: String? {
         String(localized: "Chat history currently not found: for session \(externalSessionID) there is no transcript file under ~/.claude/projects or in any account profile (~/.claude-profiles/*/projects). If it was deleted, start a new chat for new work — this tab keeps its assignment and resumes automatically as soon as the file reappears.")
     }
+}
+
+/// Zustand der Knöpfe „Prozess beenden“ / „Sofort beenden“ im Meldungsbanner.
+struct CodexEndableState: Equatable {
+    enum Phase: Equatable { case ready, ending, notEnded }
+    let process: CodexProcessTarget
+    var phase: Phase
 }

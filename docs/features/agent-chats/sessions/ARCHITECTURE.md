@@ -278,7 +278,16 @@ der Chat ohne diese Prüfung. Für den Fall, dass eine künftige Codex-Version
 einen langlebigen Prozess mit `resume <id>` hält, gibt es die Notbremse
 `defaults write com.whisperm8.app codexStartGuardEnabled -bool NO`. Endet der
 vorige Lauf eines Chats länger als 30 Sekunden nicht, sperrt er weiter, aber
-die Meldung sagt das mit PID, statt „außerhalb von WhisperM8“. Prozesse
+die Meldung sagt das mit PID, statt „außerhalb von WhisperM8“; der Ledger
+vergleicht dafür auch die Startzeit, damit eine neu vergebene PID nicht den
+alten Chat nennt. Nennt die Meldung einen Prozess (nicht bei einem laufenden
+Chat der App), bietet das Banner „Prozess beenden“ an
+(`CodexProcessTerminator`): Vor dem Signal wird geprüft, dass unter der PID
+noch derselbe Prozess läuft (Name, `resume <id>`, Startzeit). Zuerst nur
+SIGTERM, damit Codex den Verlauf sauber zu Ende schreibt; endet er binnen
+3 Sekunden nicht, erscheint „Sofort beenden“ (SIGKILL) als zweiter,
+ausdrücklicher Schritt. Danach startet der Chat neu, die Sperre prüft dabei
+noch einmal. Prozesse
 werden über ihren Sitzungsführer (`getsid`) dem PTY eines Chats zugeordnet,
 auch hinter Wrappern wie Node oder Volta. Grenzen der Argumente: Ein fremdes
 Codex, das in der TUI per `/resume` auf die Sitzung gewechselt hat, bleibt

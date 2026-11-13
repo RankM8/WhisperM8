@@ -12,16 +12,37 @@ struct CodexProcess: Equatable {
     let arguments: [String]
     /// Hängt an einem Terminal (sonst etwa ein verwaister Subagent-Job).
     var hasTerminal: Bool = true
+    /// Startzeiten (µs seit 1970) des Prozesses und seines Sitzungsführers.
+    var startTime: UInt64?
+    var leaderStartTime: UInt64?
+}
+
+/// Ein Prozess, den der Nutzer per „Prozess beenden“ beenden darf: Vor jedem
+/// Signal wird geprüft, dass unter der PID noch derselbe Prozess läuft
+/// (Name `codex`, `resume <id>`, gleiche Startzeit).
+struct CodexProcessTarget: Equatable {
+    let pid: Int32
+    let startTime: UInt64?
+    let sessionID: String
 }
 
 /// Wo eine Codex-Sitzung schon läuft.
 enum CodexRunningConflict: Equatable {
     case otherChat(title: String)
     /// Der Prozess eines gerade geschlossenen Chats läuft noch aus.
-    case otherChatEnding(title: String)
+    case otherChatEnding(title: String, process: CodexProcessTarget)
     /// Der vorige Lauf dieses Chats endet länger als erwartet (> 30 s).
-    case ownPreviousRun(pid: Int32)
-    case outsideApp(pid: Int32, inTerminal: Bool)
+    case ownPreviousRun(process: CodexProcessTarget)
+    case outsideApp(process: CodexProcessTarget, inTerminal: Bool)
+
+    /// Der Prozess, den „Prozess beenden“ anbieten darf (nicht bei einem
+    /// laufenden Chat der App — den schließt man dort).
+    var endableProcess: CodexProcessTarget? {
+        switch self {
+        case .otherChat: return nil
+        case .otherChatEnding(_, let process), .ownPreviousRun(let process), .outsideApp(let process, _): return process
+        }
+    }
 }
 
 /// Doppelstart-Sperre für Codex (nie zwei Prozesse auf einer Sitzung).
@@ -91,8 +112,8 @@ enum CodexSessionRunningGuard {
         localID: UUID,
         appChats: [AppChat],
         processes: [CodexProcess]?,
-        terminatingOwner: (Int32) -> UUID?,
-        formerOwner: (Int32) -> UUID? = { _ in nil },
+        terminatingOwner: (_ pid: Int32, _ startTime: UInt64?) -> UUID?,
+        formerOwner: (_ pid: Int32, _ startTime: UInt64?) -> UUID? = { _, _ in nil },
         titleOf: (UUID) -> String
     ) -> CodexRunningConflict? {
         let others = appChats.filter { $0.id != localID }
@@ -105,23 +126,28 @@ enum CodexSessionRunningGuard {
         let chatByPID = Dictionary(appChats.compactMap { chat in chat.processID.map { ($0, chat) } },
                                    uniquingKeysWith: { first, _ in first })
         for process in processes where resumes(process, sessionID: sessionID) {
+            let target = CodexProcessTarget(pid: process.pid, startTime: process.startTime, sessionID: sessionID)
             // Gerade beendet: der eigene Vorgänger (Tab-Neustart) läuft aus und
             // sperrt nicht; der eines anderen Chats schreibt noch und sperrt.
-            if let owner = terminatingOwner(process.pid) ?? terminatingOwner(process.sessionLeader) {
+            if let owner = terminatingOwner(process.pid, process.startTime)
+                ?? terminatingOwner(process.sessionLeader, process.leaderStartTime) {
                 if owner == localID { continue }
-                return .otherChatEnding(title: titleOf(owner))
+                return .otherChatEnding(title: titleOf(owner), process: target)
             }
             // Länger als das Fenster: sperrt, aber mit der richtigen Zuordnung
-            // statt „außerhalb von WhisperM8“.
-            if let owner = formerOwner(process.pid) ?? formerOwner(process.sessionLeader) {
-                return owner == localID ? .ownPreviousRun(pid: process.pid) : .otherChatEnding(title: titleOf(owner))
+            // statt „außerhalb von WhisperM8“ (Startzeit gegen neu vergebene PIDs).
+            if let owner = formerOwner(process.pid, process.startTime)
+                ?? formerOwner(process.sessionLeader, process.leaderStartTime) {
+                return owner == localID
+                    ? .ownPreviousRun(process: target)
+                    : .otherChatEnding(title: titleOf(owner), process: target)
             }
             // Prozess eines Chats der App (über den Sitzungsführer auch hinter Wrappern)?
             if let chat = chatByPID[process.pid] ?? chatByPID[process.sessionLeader] {
                 if chat.id == localID { continue }
                 return .otherChat(title: chat.title)
             }
-            return .outsideApp(pid: process.pid, inTerminal: process.hasTerminal)
+            return .outsideApp(process: target, inTerminal: process.hasTerminal)
         }
         return nil
     }
@@ -149,14 +175,41 @@ enum CodexSessionRunningGuard {
         for pid in pids.prefix(Int(count)) where pid > 0 {
             guard proc_name(pid, &name, UInt32(name.count)) > 0,
                   isCodexName(String(cString: name)),
-                  let arguments = arguments(of: pid) else { continue }
-            var info = proc_bsdinfo()
-            let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
-            let hasTerminal = size == Int32(MemoryLayout<proc_bsdinfo>.size) ? info.e_tdev != UInt32(bitPattern: -1) : true
-            result.append(CodexProcess(pid: pid, sessionLeader: getsid(pid), arguments: arguments,
-                                       hasTerminal: hasTerminal))
+                  let process = readProcess(pid: pid) else { continue }
+            result.append(process)
         }
         return result
+    }
+
+    /// Ein einzelner Prozess mit Argumenten, Terminal und Startzeiten; `nil`,
+    /// wenn er nicht (mehr) lesbar ist. Prüft den Namen nicht.
+    static func readProcess(pid: Int32) -> CodexProcess? {
+        guard let arguments = arguments(of: pid) else { return nil }
+        var info = proc_bsdinfo()
+        let size = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+        let readable = size == Int32(MemoryLayout<proc_bsdinfo>.size)
+        let leader = getsid(pid)
+        return CodexProcess(
+            pid: pid, sessionLeader: leader, arguments: arguments,
+            hasTerminal: readable ? info.e_tdev != UInt32(bitPattern: -1) : true,
+            startTime: ProcessStartTime.microseconds(pid: pid),
+            leaderStartTime: ProcessStartTime.microseconds(pid: leader))
+    }
+
+    /// Läuft unter der PID noch genau der Prozess, den die Meldung nannte?
+    static func isStillTarget(_ target: CodexProcessTarget, current: CodexProcess?, currentName: String?) -> Bool {
+        guard let current, current.pid == target.pid,
+              let currentName, isCodexName(currentName),
+              resumes(current, sessionID: target.sessionID) else { return false }
+        guard let expected = target.startTime else { return true }
+        return current.startTime == expected
+    }
+
+    /// Der Prozessname zu einer PID (`proc_name`), `nil` wenn nicht lesbar.
+    static func processName(pid: Int32) -> String? {
+        var name = [CChar](repeating: 0, count: 64)
+        guard proc_name(pid, &name, UInt32(name.count)) > 0 else { return nil }
+        return String(cString: name)
     }
 
     /// `codex` (npm-Symlink, Cask) oder umbenannte Builds wie
@@ -195,5 +248,42 @@ enum CodexSessionRunningGuard {
             index += 1
         }
         return argv.count == argc ? Array(argv.dropFirst()) : nil
+    }
+}
+
+/// „Prozess beenden“ aus der Sperr-Meldung. Zuerst nur SIGTERM: Codex kann
+/// den Verlauf sauber zu Ende schreiben. SIGKILL gibt es nur als zweiten,
+/// ausdrücklich bestätigten Schritt, wenn der Prozess nach SIGTERM nicht
+/// endet — ohne ihn säße ein Nutzer bei einem hängenden Prozess fest, ein
+/// SIGKILL ohne Rückfrage könnte eine halb geschriebene Verlaufszeile
+/// hinterlassen. Vor jedem Signal wird geprüft, dass unter der PID noch
+/// derselbe Prozess läuft (Name, `resume <id>`, Startzeit).
+struct CodexProcessTerminator {
+    enum Outcome: Equatable {
+        case ended
+        case stillRunning
+        /// Unter der PID läuft inzwischen etwas anderes: kein Signal gesendet.
+        case notTheSameProcess
+    }
+
+    var read: (Int32) -> (process: CodexProcess?, name: String?) = { pid in
+        (CodexSessionRunningGuard.readProcess(pid: pid), CodexSessionRunningGuard.processName(pid: pid))
+    }
+    var signal: (Int32, Int32) -> Int32 = { kill($0, $1) }
+    var hasExited: (Int32) -> Bool = { ProcessExitWaiter.hasExited(pid: $0) }
+    var waitForExit: (Int32, TimeInterval) async -> Bool = { pid, timeout in
+        await ProcessExitWaiter.waitForExit(pid: pid, timeout: timeout)
+    }
+
+    func end(_ target: CodexProcessTarget, force: Bool) async -> Outcome {
+        if hasExited(target.pid) { return .ended }
+        let current = read(target.pid)
+        guard CodexSessionRunningGuard.isStillTarget(target, current: current.process, currentName: current.name) else {
+            return hasExited(target.pid) ? .ended : .notTheSameProcess
+        }
+        guard signal(target.pid, force ? SIGKILL : SIGTERM) == 0 else {
+            return hasExited(target.pid) ? .ended : .stillRunning
+        }
+        return await waitForExit(target.pid, 3) ? .ended : .stillRunning
     }
 }
