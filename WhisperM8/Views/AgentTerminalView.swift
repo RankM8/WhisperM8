@@ -1134,7 +1134,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Vor dem SIGTERM vermerken: Ein Neustart des Tabs startet sofort neu,
         // während dieser Prozess noch ausläuft — die Doppelstart-Sperre im
         // Builder nimmt ihn deshalb aus (`ClaudeSessionRunningGuard`).
-        if let pid { ProcessTerminationLedger.shared.noteTerminating(pid: pid) }
+        if let pid { ProcessTerminationLedger.shared.noteTerminating(pid: pid, localID: sessionID) }
         // Terminal-Stand JETZT sichern — nach dem Flush steht der komplette
         // Exit-Output (inkl. `claude --resume …`-Hinweis) im Normal-Buffer,
         // und die Registry entfernt den Controller direkt nach terminate().
