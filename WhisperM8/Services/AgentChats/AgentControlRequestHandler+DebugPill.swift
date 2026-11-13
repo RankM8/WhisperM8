@@ -24,13 +24,31 @@ extension AgentControlRequestHandler {
                 return nil
             }
             let tracer = UnifiedPillWindowTracer()
+            try? await Task.sleep(for: .milliseconds(250))
+            let dictationRunning = { appState.isRecording || appState.isTranscribing }
+            // In der Wartezeit kann ein echtes Diktat begonnen haben: dann nicht
+            // zeigen (`show` blendete es sonst aus).
+            guard !dictationRunning(), !overlay.isPresented, overlay.panel == nil else {
+                _ = tracer.stop()
+                return nil
+            }
+            let statusBefore = Self.statusPillWindows()
+            // `show` zählt genau einmal weiter: Das ist dann unsere Anzeige.
+            // Jedes echte Diktat (Hotkey, Schnellaktion) zählt erneut.
+            let ownership = DebugPillOwnership(presentation: overlay.presentationCount + 1)
             var dictationWindow: Int?
             overlay.debugEvent = { name in
+                // Fremde Anzeige (echtes Diktat): nichts mitschreiben, nie blockieren.
+                guard ownership.isCurrent(overlay.presentationCount) else { return }
                 tracer.mark(name)
-                guard name.hasPrefix("installed:") else { return }
+                guard name.hasPrefix("installed:"), dictationWindow == nil else { return }
                 dictationWindow = Int(name.dropFirst("installed:".count))
                 guard busy > 0 else { return }
                 let block = {
+                    // Nur, solange die Pille noch unsere ist und kein Diktat startete.
+                    guard ownership.owns(
+                        currentPresentation: overlay.presentationCount, isPresented: overlay.isPresented,
+                        dictationRunning: dictationRunning()) else { return }
                     tracer.mark("busyStart")
                     usleep(useconds_t(busy * 1000))
                     tracer.mark("busyEnd")
@@ -43,19 +61,27 @@ extension AgentControlRequestHandler {
                     }
                     return
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(busyAfter)) { block() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(busyAfter)) {
+                    MainActor.assumeIsolated { block() }
+                }
             }
             defer { overlay.debugEvent = nil }
-            try? await Task.sleep(for: .milliseconds(250))
-            let statusBefore = Self.statusPillWindows()
             tracer.mark("show")
             overlay.show(
                 appState: appState, onCancel: {}, onCancelTranscription: {}, onCancelPostProcessing: {},
                 onStopAndTranscribe: {}, onOutputModeChange: { _ in }, onAddScreenshot: {}, onCaptureScreenshot: {},
                 onToggleScreenClip: {}, onClearContext: {}, onContextAction: { _ in })
             try? await Task.sleep(for: .milliseconds(hold))
-            tracer.mark("hide")
-            overlay.hide()
+            // Hat inzwischen ein echtes Diktat die Pille übernommen, bleibt sie stehen.
+            if ownership.owns(
+                currentPresentation: overlay.presentationCount, isPresented: overlay.isPresented,
+                dictationRunning: dictationRunning()) {
+                tracer.mark("hide")
+                overlay.hide()
+            } else {
+                tracer.mark("supersededByDictation")
+                overlay.debugEvent = nil
+            }
             try? await Task.sleep(for: .milliseconds(900))
             let (samples, events) = tracer.stop()
             let statusWindows = statusBefore.union(Self.statusPillWindows())
@@ -119,5 +145,20 @@ extension AgentControlRequestHandler {
             "events": events.map { ["t": rounded($0.time), "name": $0.name] as [String: Any] },
             "windows": rows,
         ]
+    }
+}
+
+/// `debug pill` blendet nur die eigene Anzeige aus und blockiert nur sie:
+/// Startet währenddessen ein echtes Diktat (Hotkey, Schnellaktion), zählt
+/// `OverlayController.presentationCount` weiter, und der Befehl lässt die
+/// Pille in Ruhe.
+struct DebugPillOwnership: Equatable {
+    /// Wert von `presentationCount` nach dem eigenen `show`.
+    let presentation: Int
+
+    func isCurrent(_ currentPresentation: Int) -> Bool { currentPresentation == presentation }
+
+    func owns(currentPresentation: Int, isPresented: Bool, dictationRunning: Bool) -> Bool {
+        isCurrent(currentPresentation) && isPresented && !dictationRunning
     }
 }

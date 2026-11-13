@@ -198,7 +198,9 @@ Tausch und Fenstern (`revealDictationLeadMs` u. a., negativ = zu früh), dazu
 Ereignisse und Fensterrahmen mit Zeit. `--busy` blockiert den Main Thread
 direkt nach dem Aufbau des Diktat-Fensters, noch vor seinem ersten Bild
 (`--busy-after`: so viele ms später). Läuft ein Diktat, lehnt der Befehl ab.
-Geht auch in der echten App (hinter `debugControlEnabled`).
+Geht auch in der echten App (hinter `debugControlEnabled`): Startet während
+der Anzeige ein echtes Diktat, lässt der Befehl dessen Pille in Ruhe (kein
+Ausblenden, kein Blockieren, `supersededByDictation` im Mitschnitt).
 
 Grenze: Die Fensterliste weiß nicht, ob zwei durchscheinende Pillen
 übereinander liegen oder welchen Ton eine hat. Das zeigt nur eine Aufnahme:

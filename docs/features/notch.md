@@ -155,7 +155,11 @@ Sichtbarkeit: Diktat-Inhalt sichtbar, Inhalt der Status-Pille unsichtbar
 (`UnifiedPillHub.setStatusContentHidden`). Im selben Durchlauf beginnt die
 Pille in einer SwiftUI-Animation ins Diktat zu wachsen (`showsRestLook`, Kern
 über `matchedGeometryEffect`); die Status-Pille geht erst aus dem Weg, wenn
-der Tausch auf dem Bildschirm ist. Am Ende umgekehrt: zurück ins Ruhebild,
+der Tausch auf dem Bildschirm ist, auch wenn das Wachsen schon durch ist.
+Läuft der Beobachter nie (anderer Run-Loop-Modus), geht es nach 300 ms über
+einen Ersatzweg weiter, damit das Diktat nicht unsichtbar bleibt. Wird die
+Pille im Diktat auf einen anderen Bildschirm gezogen, wandert die
+Unsichtbarkeit der Status-Pille mit (`UnifiedPillHub.dictationMoved`). Am Ende umgekehrt: zurück ins Ruhebild,
 die Status-Pille erscheint unsichtbar wieder (ohne Animation, mit dem
 aktuellen Wert), nach ihrem Bild der Rücktausch, danach schließt das
 Diktat-Fenster. So steht in jedem Bild genau eine Pille: keine Lücke, und

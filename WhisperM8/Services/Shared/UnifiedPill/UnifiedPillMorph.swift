@@ -106,6 +106,12 @@ struct UnifiedPillMorph: Equatable {
     /// Zählt jeden Wechsel; ein geplanter Schritt mit älterer Generation ist
     /// überholt und wird verworfen.
     private(set) var generation = 0
+    /// Beim Wachsen: Der Tausch der Sichtbarkeit ist auf dem Bildschirm
+    /// (`revealDrawn`). Erst dann darf die Status-Pille aus dem Weg, auch wenn
+    /// das Wachsen schon durch ist (Main Thread lange blockiert).
+    private var swapShown = false
+    /// Beim Wachsen: Die Animation ist durch, es fehlt nur noch der Tausch.
+    private var growFinished = false
 
     /// Das Fenster steht noch, das Diktat ist aber schon vorbei (es zieht
     /// sich zurück). Ein neues Diktat übernimmt es.
@@ -125,12 +131,14 @@ struct UnifiedPillMorph: Equatable {
             return [.hideStatus]
         case .shrinking:
             // Neues Diktat, während sich das alte zurückzieht: aus dem
-            // jetzigen Stand wieder wachsen, die Status-Pille ist noch weg.
+            // jetzigen Stand wieder wachsen, kein Tausch nötig.
             enter(.growing)
+            swapShown = true
             return [.grow, .schedule(.animationDone, generation: generation)]
         case .handoverOut:
             // Status-Pille steht schon wieder, aber noch unsichtbar.
             enter(.growing)
+            swapShown = true
             return [.hideStatus, .grow, .schedule(.animationDone, generation: generation)]
         case .closing:
             // Beide Fenster stehen schon: Sichtbarkeit zurücktauschen und wachsen.
@@ -156,8 +164,17 @@ struct UnifiedPillMorph: Equatable {
             ]
         case (.growing, .revealDrawn):
             // Erst jetzt aus dem Weg: Ihr Inhalt ist schon unsichtbar.
+            swapShown = true
+            if growFinished {
+                enter(.dictation)
+            }
             return [.hideStatus]
         case (.growing, .animationDone):
+            // Steht der Tausch noch aus, wartet das Diktat auf ihn.
+            guard swapShown else {
+                growFinished = true
+                return []
+            }
             enter(.dictation)
             return [.hideStatus]
         case (.shrinking, .animationDone):
@@ -234,5 +251,7 @@ struct UnifiedPillMorph: Equatable {
     private mutating func enter(_ next: Phase) {
         phase = next
         generation += 1
+        swapShown = false
+        growFinished = false
     }
 }

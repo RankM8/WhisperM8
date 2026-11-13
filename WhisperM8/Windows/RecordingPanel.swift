@@ -496,6 +496,9 @@ class OverlayController: ObservableObject {
     /// Nur `whisperm8 debug pill`: meldet Fenster-Aufbau und Schritte des
     /// Übergangs mit Namen, sonst `nil`.
     var debugEvent: ((String) -> Void)?
+    /// Zählt jedes Zeigen (Diktat und Schnellaktion). `debug pill` erkennt
+    /// daran, ob die Pille noch seine eigene ist (`DebugPillOwnership`).
+    private(set) var presentationCount = 0
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
@@ -573,6 +576,7 @@ class OverlayController: ObservableObject {
     /// Baut die Pill auf und zeigt sie (Diktat und Schnellaktion).
     private func presentPanel() {
         isPresented = true
+        presentationCount += 1
         guard presentsWindow else { return }
         self.overlayStyle = OverlayPositionStore.loadStyle()
         self.isHoverExpanded = false

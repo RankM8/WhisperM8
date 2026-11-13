@@ -53,6 +53,15 @@ final class UnifiedPillHub: ObservableObject {
         if dictationDisplayID != displayID { dictationDisplayID = displayID }
     }
 
+    /// Diktat-Pille auf einen anderen Bildschirm gezogen: Dort tritt die
+    /// Status-Pille zurück. Ist ihr Inhalt wegen des Übergangs unsichtbar,
+    /// wandert das mit: Auf dem alten Bildschirm ist sie wieder zu sehen, auf
+    /// dem neuen beginnt das Zurückziehen wie dort üblich unsichtbar.
+    func dictationMoved(toDisplay displayID: UInt32) {
+        dictationDidShow(onDisplay: displayID)
+        if statusContentHiddenDisplayID != nil { setStatusContentHidden(onDisplay: displayID) }
+    }
+
     func dictationDidHide() {
         if dictationDisplayID != nil { dictationDisplayID = nil }
     }

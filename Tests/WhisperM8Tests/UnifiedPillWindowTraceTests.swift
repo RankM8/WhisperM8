@@ -84,6 +84,32 @@ final class UnifiedPillWindowTraceTests: XCTestCase {
         XCTAssertEqual(result.longestGapMs, 0)
     }
 
+    /// `debug pill` in der echten App: Startet während der Anzeige ein echtes
+    /// Diktat, gehört die Pille nicht mehr dem Befehl. Er blendet sie dann
+    /// nicht aus und blockiert den Main Thread nicht.
+    func testDebugPillLetsARealDictationAlone() {
+        let ownership = DebugPillOwnership(presentation: 5)
+        XCTAssertTrue(ownership.owns(currentPresentation: 5, isPresented: true, dictationRunning: false))
+        XCTAssertFalse(ownership.owns(currentPresentation: 6, isPresented: true, dictationRunning: false),
+                       "echtes Diktat hat die Pille neu gezeigt")
+        XCTAssertFalse(ownership.owns(currentPresentation: 5, isPresented: true, dictationRunning: true),
+                       "Aufnahme läuft")
+        XCTAssertFalse(ownership.owns(currentPresentation: 5, isPresented: false, dictationRunning: false),
+                       "schon ausgeblendet")
+        XCTAssertFalse(ownership.isCurrent(6))
+    }
+
+    /// Jedes Zeigen zählt weiter, auch ohne Fenster (Testprozess).
+    @MainActor
+    func testEveryShowCountsAsANewPresentation() {
+        let overlay = OverlayController(presentsWindow: false)
+        let before = overlay.presentationCount
+        overlay.showQuickActionWorking(label: "Test", onCancel: {})
+        XCTAssertEqual(overlay.presentationCount, before + 1)
+        overlay.hide()
+        XCTAssertEqual(overlay.presentationCount, before + 1, "Ausblenden zählt nicht")
+    }
+
     func testCLIArguments() throws {
         XCTAssertEqual(try DebugCLIArguments.parse(["pill"], cwd: "/"), .pill(holdMs: nil, busyMs: nil, busyAfterMs: nil))
         XCTAssertEqual(

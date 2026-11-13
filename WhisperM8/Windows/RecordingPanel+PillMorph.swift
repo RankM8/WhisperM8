@@ -183,20 +183,41 @@ extension OverlayController {
         CATransaction.commit()
     }
 
-    /// `body` läuft, wenn der Main Thread das nächste Bild abgegeben hat
-    /// (Ende des laufenden Run-Loop-Durchlaufs, nach dem Zeichnen und der
-    /// CATransaction), plus `delay` für die Fensterverwaltung. Ein
-    /// beschäftigter Main Thread verschiebt so nur den Zeitpunkt, er kann den
-    /// Tausch nicht vor das Bild ziehen (vorher: fester Zeitgeber ab Aufbau).
-    static func afterNextCommit(delay: TimeInterval, _ body: @escaping @MainActor () -> Void) {
-        // Core Animation gibt bei `beforeWaiting` mit Rang 2_000_000 ab;
-        // dieser Beobachter läuft direkt danach und nur einmal.
-        let observer = CFRunLoopObserverCreateWithHandler(
-            nil, CFRunLoopActivity.beforeWaiting.rawValue, false, 2_000_001
-        ) { _, _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(body) }
+    /// Ersatz, falls der Beobachter nie läuft (anderer Run-Loop-Modus,
+    /// Durchlauf, der nie zur Ruhe kommt): sonst hinge der Übergang, und das
+    /// Diktat bliebe unsichtbar.
+    static let morphCommitFallback: TimeInterval = 0.3
+
+    /// `body` läuft genau einmal: wenn der Main Thread das nächste Bild
+    /// abgegeben hat (Ende des laufenden Run-Loop-Durchlaufs, nach dem
+    /// Zeichnen und der CATransaction), plus `delay` für die
+    /// Fensterverwaltung; spätestens aber nach `fallback`. Ein beschäftigter
+    /// Main Thread verschiebt so nur den Zeitpunkt, er kann den Tausch nicht
+    /// vor das Bild ziehen (vorher: fester Zeitgeber ab Aufbau).
+    /// `observesCommit: false` nur für Tests des Ersatzwegs.
+    static func afterNextCommit(
+        delay: TimeInterval, fallback: TimeInterval = morphCommitFallback, observesCommit: Bool = true,
+        _ body: @escaping @MainActor () -> Void
+    ) {
+        var done = false
+        var observer: CFRunLoopObserver?
+        let runOnce: @MainActor () -> Void = {
+            guard !done else { return }
+            done = true
+            if let observer { CFRunLoopObserverInvalidate(observer) }
+            body()
         }
-        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        if observesCommit {
+            // Core Animation gibt bei `beforeWaiting` mit Rang 2_000_000 ab;
+            // dieser Beobachter läuft direkt danach und nur einmal.
+            observer = CFRunLoopObserverCreateWithHandler(
+                nil, CFRunLoopActivity.beforeWaiting.rawValue, false, 2_000_001
+            ) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(runOnce) }
+            }
+            if let observer { CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(fallback, delay)) { MainActor.assumeIsolated(runOnce) }
     }
 
     /// Fenster zu, nachdem die Status-Pille wieder steht (oder sofort beim

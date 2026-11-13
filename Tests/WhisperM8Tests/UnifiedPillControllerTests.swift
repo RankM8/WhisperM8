@@ -297,16 +297,76 @@ final class UnifiedPillControllerTests: XCTestCase {
     }
 
     /// Der Tausch wartet, bis der Main Thread sein Bild abgegeben hat: nie
-    /// im selben Durchlauf, in dem er geplant wurde.
-    func testHandoverRunsOnlyAfterTheNextCommit() {
-        var ran = false
+    /// im selben Durchlauf, in dem er geplant wurde, und nur einmal, auch
+    /// wenn danach der Ersatzweg abläuft.
+    func testHandoverRunsOnlyAfterTheNextCommitAndOnce() {
+        var runs = 0
         let done = expectation(description: "nach dem Abgeben")
-        OverlayController.afterNextCommit(delay: 0.01) {
-            ran = true
+        OverlayController.afterNextCommit(delay: 0.01, fallback: 0.1) {
+            runs += 1
             done.fulfill()
         }
-        XCTAssertFalse(ran, "nicht sofort")
+        XCTAssertEqual(runs, 0, "nicht sofort")
         wait(for: [done], timeout: 5)
+        let settled = expectation(description: "Ersatzweg vorbei")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { settled.fulfill() }
+        wait(for: [settled], timeout: 5)
+        XCTAssertEqual(runs, 1)
+    }
+
+    /// Läuft der Beobachter nie (anderer Run-Loop-Modus), kommt der Übergang
+    /// trotzdem weiter, sonst bliebe das Diktat unsichtbar.
+    func testHandoverFallsBackWhenNoCommitIsObserved() {
+        var runs = 0
+        let done = expectation(description: "Ersatzweg")
+        OverlayController.afterNextCommit(delay: 0.01, fallback: 0.05, observesCommit: false) {
+            runs += 1
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(runs, 1)
+    }
+
+    /// Diktat auf einen anderen Bildschirm gezogen, während die Status-Pille
+    /// unsichtbar ist: Die Unsichtbarkeit wandert mit, der alte Bildschirm
+    /// zeigt sie wieder. Ohne Übergang bleibt alles sichtbar.
+    func testDraggingTheDictationMovesTheHiddenStatus() {
+        let hub = UnifiedPillHub()
+        var applied: [UInt32?] = []
+        hub.applyStatusContentHidden = { applied.append($0) }
+        hub.dictationMoved(toDisplay: 3)
+        XCTAssertNil(hub.statusContentHiddenDisplayID, "kein Übergang, nichts zu verstecken")
+        XCTAssertEqual(hub.dictationDisplayID, 3)
+        hub.setStatusContentHidden(onDisplay: 3)
+        hub.dictationMoved(toDisplay: 4)
+        XCTAssertEqual(hub.statusContentHiddenDisplayID, 4)
+        XCTAssertEqual(hub.dictationDisplayID, 4)
+        XCTAssertEqual(applied, [3, 4])
+    }
+
+    /// Jeder Schließweg macht die Status-Pille wieder sichtbar: Ausblenden
+    /// (`tearDownUnified`), Neuaufbau nach Bildschirmwechsel und das Ende des
+    /// Übergangs (`closeWindow`).
+    func testEveryCloseRevealsTheStatusAgain() {
+        let hub = UnifiedPillHub.shared
+        defer { hub.setStatusContentHidden(onDisplay: nil) }
+        let overlay = OverlayController(presentsWindow: false)
+
+        hub.setStatusContentHidden(onDisplay: 9)
+        overlay.hide()
+        XCTAssertNil(hub.statusContentHiddenDisplayID, "tearDownUnified")
+
+        hub.setStatusContentHidden(onDisplay: 9)
+        overlay.resetForRebuild()
+        XCTAssertNil(hub.statusContentHiddenDisplayID, "Neuaufbau")
+
+        hub.setStatusContentHidden(onDisplay: 9)
+        overlay.applyMorph([.closeWindow])
+        XCTAssertNil(hub.statusContentHiddenDisplayID, "Ende des Übergangs")
+
+        hub.setStatusContentHidden(onDisplay: 9)
+        overlay.applyMorph([.revealStatus])
+        XCTAssertNil(hub.statusContentHiddenDisplayID, "Rücktausch")
     }
 
     /// Die getrennte Diktat-Pille überlässt die Lage weiter AppKit.

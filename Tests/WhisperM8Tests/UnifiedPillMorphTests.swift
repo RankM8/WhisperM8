@@ -57,6 +57,30 @@ final class UnifiedPillMorphTests: XCTestCase {
         XCTAssertEqual(morph.phase, .idle)
     }
 
+    /// Main Thread lange blockiert: Das Wachsen ist durch, bevor der Tausch
+    /// auf dem Bildschirm ist. Die Status-Pille bleibt stehen, bis er da ist,
+    /// sonst gäbe es ein Bild ohne Pille.
+    func testGrowEndingBeforeTheSwapWaitsForIt() throws {
+        var morph = UnifiedPillMorph()
+        let shown = morph.show(morph: true)
+        let drawn = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shown, .frameDrawn)))
+        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(drawn, .animationDone))), [])
+        XCTAssertEqual(morph.phase, .growing, "wartet auf den Tausch")
+        XCTAssertEqual(morph.step(.revealDrawn, generation: try XCTUnwrap(scheduled(drawn, .revealDrawn))), [.hideStatus])
+        XCTAssertEqual(morph.phase, .dictation)
+    }
+
+    /// Ohne Tausch (aus dem Zurückziehen wieder wachsen) wartet nichts.
+    func testRegrowWithoutSwapEndsDirectly() throws {
+        var morph = UnifiedPillMorph()
+        _ = morph.show(morph: false)
+        _ = morph.hide(morph: true)
+        let again = morph.show(morph: true)
+        XCTAssertNil(scheduled(again, .revealDrawn))
+        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(again, .animationDone))), [.hideStatus])
+        XCTAssertEqual(morph.phase, .dictation)
+    }
+
     /// Ohne ruhende Pille an der Stelle (anderer Bildschirm, Status aus,
     /// Kill-Switch): wie bisher direkt da und direkt weg.
     func testWithoutRestPillTheDictationAppearsDirectly() {

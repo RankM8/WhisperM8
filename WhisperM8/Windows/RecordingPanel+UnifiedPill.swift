@@ -201,7 +201,7 @@ extension OverlayController {
         AppPreferences.shared.notchPillPositions = positions
         if screen.displayID != unifiedScreen?.displayID {
             unifiedScreen = screen
-            UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID)
+            UnifiedPillHub.shared.dictationMoved(toDisplay: screen.displayID)
         }
     }
 
@@ -249,11 +249,17 @@ extension OverlayController {
             screens: screens,
             positions: AppPreferences.shared.notchPillPositions) else { return }
         Logger.info("unified_pill_relocated")
+        resetForRebuild()
+        buildUnifiedPanel(placement, allowMorph: false)
+    }
+
+    /// Vor dem Neuaufbau an anderer Stelle: altes Fenster zu, Übergang auf
+    /// Anfang, die Status-Pille wieder sichtbar (das neue Diktat steht direkt).
+    func resetForRebuild() {
         closePanelForRebuild()
         cancelMorphSignpost()
         morph.reset()
         UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
-        buildUnifiedPanel(placement, allowMorph: false)
     }
 
     /// Aufräumen beim Ausblenden (aus `hide`). `keepingWindow`: Die Pille
