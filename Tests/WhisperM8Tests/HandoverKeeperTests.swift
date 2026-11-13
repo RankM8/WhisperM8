@@ -121,6 +121,21 @@ final class HandoverKeeperTests: XCTestCase {
         if let fd = taken.descriptor { close(fd) }
     }
 
+    /// Vic zu 027dd4e7: Der zweite HELLO-Versuch der App kann kommen, bevor
+    /// der Aufbewahrer das Ende der ersten Verbindung bemerkt. Statt „belegt“
+    /// wartet er dann kurz.
+    func testSecondTakeWaitsBrieflyInsteadOfBusy() throws {
+        let child = try child { try .ticking(in: directory) }
+        _ = try makeKeeper()
+        try depositAll([(child, child.manifest(chatID: "a"))])
+        let first = try connect()
+        _ = try first.helloTake(secret: nil)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { first.close() }
+        let second = try connect()
+        defer { second.close() }
+        XCTAssertNoThrow(try second.helloTake(secret: nil), "nicht „belegt“")
+    }
+
     func testTakeWithoutAckLeavesChatWithKeeper() throws {
         let child = try child { try .ticking(in: directory) }
         let keeper = try makeKeeper()

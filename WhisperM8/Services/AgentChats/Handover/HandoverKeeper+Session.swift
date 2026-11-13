@@ -228,7 +228,11 @@ extension HandoverKeeper {
                 takeConnectionActive = true
                 return nil
             }
-            guard admitted == "Abgabe noch nicht abgeschlossen", Date() < admissionEnd else { break }
+            // Auch „belegt“ kurz abwarten: Nach einer Zeitüberschreitung beim
+            // HELLO versucht die App es neu, bevor hier das Ende der ersten
+            // Verbindung bemerkt ist (Vic zu 027dd4e7).
+            guard admitted == "Abgabe noch nicht abgeschlossen" || admitted == "belegt",
+                  Date() < admissionEnd else { break }
             usleep(20_000)
         } while true
         if let admitted {

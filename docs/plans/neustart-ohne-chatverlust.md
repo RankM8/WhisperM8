@@ -347,6 +347,7 @@ Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblende
 9. **„Arbeitet seit“ ins Manifest** (Vic, Befund 7): Statistik und Wach-Knopf starten nach einer Übernahme sonst neu.
 10. **`make dev` ohne Steuer-Socket** (Vic, Befund 6): Läuft die App, ist ihr Socket aber nicht erreichbar (etwa `agentControlServerEnabled` aus), wartet `_handover` bis zu 15 s. Nur warten, wenn die App gerade startet.
    - Bekannte Grenze (Vic, 13.11.2026): Dauert eine Übernahme länger als etwa 65 s (15 s Warten in `_handover`, dazu bis zu 60 s auf `take.lock` in `app handover`), kommt `make dev` zu `kill` und nach 5 s zu SIGKILL. Dann enden die schon übernommenen Chats (ihre Leitung lag nur noch bei der App) und werden beim nächsten Start über den Absturz-Marker fortgesetzt; der Rest liegt weiter beim Aufbewahrer, der nächste Start übernimmt ihn. Bei zehn Chats dauert die Übernahme deutlich kürzer (Messung c).
+   - Einmalig nach dem Merge der Ablehnungs-Kennung (Vic, 13.11.2026): Der Aufbewahrer stammt immer aus dem ALTEN Build. Beim ersten `make dev` danach kennt er das Feld `rejection` noch nicht; lehnt er das Geheimnis ab, beendet die neue App ihn nicht (einmal Dex' Befund 2, er hält bis zur Frist). Das heilt mit dem nächsten Start. Das Feld ist abwärtsverträglich, keine neue Protokollversion.
 8. **Labs-Seite einhängen** (`RestartSettingsPage`, liegt samt Übersetzung bereit) und den Eintrag in `PreferenceBedienweg` streichen. Das kommt als Letztes.
 
 ## Bau-Reihenfolge

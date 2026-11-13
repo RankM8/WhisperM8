@@ -105,11 +105,17 @@ final class HandoverTakeService {
             switch HandoverTakeLock.acquire(paths: dependencies.paths) {
             case .acquired(let fd): takeLock = fd
             case .unavailable: break
-            case .heldByOther:
-                // Vic: Eine zweite Instanz beim Start (übernimmt gerade die
-                // erste) übernimmt nichts und beendet nichts.
+            case .heldByOther where previous.handover == nil:
+                // Vic: Eine echte zweite Instanz beim Start bekommt vom Marker
+                // nichts (sein Besitzer lebt); übernimmt gerade eine andere,
+                // übernimmt und beendet sie nichts.
                 Logger.agentStore.notice("handover_take_skipped reason=take_in_progress")
                 return summary
+            case .heldByOther:
+                // Steht „übergeben“ im Marker, ist diese App zuständig, auch
+                // wenn gerade jemand die Sperre prüft (`app handover`); dann
+                // ohne Sperre übernehmen (Vic zu 027dd4e7).
+                Logger.agentStore.notice("handover_take_lock_busy_taking_anyway")
             }
         }
         defer { HandoverTakeLock.release(takeLock) }
@@ -371,15 +377,23 @@ enum HandoverTakeLock {
         case unavailable
     }
 
-    static func acquire(paths: HandoverPaths) -> Acquisition {
+    /// `isHeld` muss mit `flock` kurz selbst sperren (es gibt keine Abfrage
+    /// ohne Sperre). Damit eine solche Prüfung der CLI die App nicht trifft,
+    /// versucht sie es einige Male im Abstand von 5 ms; die Prüfung hält die
+    /// Sperre nur Mikrosekunden.
+    static func acquire(paths: HandoverPaths, attempts: Int = 5) -> Acquisition {
         let fd = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { return .unavailable }
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            let busy = errno == EWOULDBLOCK
-            close(fd)
-            return busy ? .heldByOther : .unavailable
+        for attempt in 1...max(1, attempts) {
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 { return .acquired(fd) }
+            guard errno == EWOULDBLOCK else { break }
+            if attempt < attempts { usleep(5_000) } else {
+                close(fd)
+                return .heldByOther
+            }
         }
-        return .acquired(fd)
+        close(fd)
+        return .unavailable
     }
 
     static func release(_ fd: Int32?) {

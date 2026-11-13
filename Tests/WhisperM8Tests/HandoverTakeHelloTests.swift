@@ -120,18 +120,58 @@ final class HandoverTakeHelloTests: XCTestCase {
         XCTAssertTrue(result.terminated.isEmpty)
     }
 
-    /// Zweite Instanz beim Start: Hält eine andere die Sperre, wird weder
-    /// übernommen noch beendet, und der Marker bleibt für die erste stehen.
-    func testSecondInstanceWithHeldTakeLockDoesNothing() throws {
+    /// Vic zu 027dd4e7: Prüft die CLI genau beim Start die Sperre (geteilte
+    /// Sperre für einen Augenblick), ist diese App trotzdem zuständig, wenn
+    /// „übergeben“ im Marker steht, und übernimmt.
+    func testRaceWithCLICheckStillTakesWhenMarkerSaysHandedOver() throws {
         let keeper = try FakeKeeper(path: paths.preferredSocketURL.path, hello: .reject)
         defer { keeper.stop() }
-        let other = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
-        XCTAssertEqual(flock(other, LOCK_EX | LOCK_NB), 0)
-        defer { close(other) }
+        let cli = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        XCTAssertEqual(flock(cli, LOCK_SH | LOCK_NB), 0, "wie isHeld in app handover")
+        defer { close(cli) }
         var terminated: [Int32] = []
-        let summary = takeService(terminated: { terminated.append($0) }).takeAtLaunch()
-        XCTAssertEqual(keeper.hellos, 0, "keine Übernahme")
-        XCTAssertTrue(terminated.isEmpty, "nichts beendet")
-        XCTAssertTrue(summary.handled.isEmpty)
+        _ = takeService(terminated: { terminated.append($0) }).takeAtLaunch()
+        XCTAssertEqual(keeper.hellos, 1, "übernommen, nicht übersprungen")
+        XCTAssertEqual(terminated, [getpid()])
+    }
+
+    /// Eine kurz gehaltene Prüfung der CLI überbrückt schon der zweite Versuch.
+    func testShortCLICheckDoesNotBlockTheLock() throws {
+        let cli = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        XCTAssertEqual(flock(cli, LOCK_SH | LOCK_NB), 0)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.008) { flock(cli, LOCK_UN); close(cli) }
+        guard case .acquired(let fd) = HandoverTakeLock.acquire(paths: paths, attempts: 20) else {
+            return XCTFail("Sperre trotz kurzer Prüfung nicht bekommen")
+        }
+        HandoverTakeLock.release(fd)
+    }
+
+    /// Echte zweite Instanz: Der Besitzer des Markers lebt (also kein
+    /// „übergeben“ für sie), ein Aufbewahrer ist da, und eine andere Instanz
+    /// hält die Sperre. Dann übernimmt und beendet sie nichts.
+    func testSecondInstanceWithoutMarkerAndHeldTakeLockDoesNothing() throws {
+        let keeper = try FakeKeeper(path: paths.preferredSocketURL.path, hello: .reject)
+        defer { keeper.stop() }
+        try (paths.preferredSocketURL.path + "\n").write(to: paths.discoveryFileURL, atomically: true, encoding: .utf8)
+        let keeperLock = open(paths.lockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        XCTAssertEqual(flock(keeperLock, LOCK_EX | LOCK_NB), 0, "wie der Aufbewahrer")
+        defer { close(keeperLock) }
+        let other = open(paths.takeLockFileURL.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        XCTAssertEqual(flock(other, LOCK_EX | LOCK_NB), 0, "die erste Instanz übernimmt gerade")
+        defer { close(other) }
+
+        let markerURL = directory.appendingPathComponent("running-sessions.json")
+        let first = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 100, isProcessAlive: { _ in true })
+        _ = first.beginRun()
+        var dependencies = HandoverTakeService.Dependencies(
+            paths: paths, secretStore: FakeSecretStore(),
+            marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in true }),
+            sessions: { [] }, adopt: { _, _ in false }, showEnded: { _, _ in }, scheduleResume: { _ in })
+        var terminated: [Int32] = []
+        dependencies.terminateProcess = { terminated.append($0) }
+        let summary = HandoverTakeService(dependencies: dependencies).takeAtLaunch()
+        XCTAssertNil(summary.previous.handover)
+        XCTAssertEqual(keeper.hellos, 0)
+        XCTAssertTrue(terminated.isEmpty, "nichts beendet, auch nicht über terminateKeeper")
     }
 }
