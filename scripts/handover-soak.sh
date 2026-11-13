@@ -297,7 +297,7 @@ prepare_instance() {
     mkdir -p "$ROOT/home/.codex"
     grep -q '^check_for_update_on_startup' "$ROOT/home/.codex/config.toml" 2>/dev/null \
         || echo 'check_for_update_on_startup = false' >> "$ROOT/home/.codex/config.toml"
-    # Claude: Ordner als vertraut eintragen — in der .claude.json der Test-Instanz
+    # Claude: Ordner als vertraut eintragen und Einrichtung als erledigt — in der .claude.json der Test-Instanz
     # ($ROOT/home), nie in der echten. Sonst landet der Prompt im Trust-Dialog.
     "$PY" -I - "$ROOT/home/.claude.json" "$PROJECT" <<'PYEOF'
 import json, os, sys
@@ -306,6 +306,9 @@ data = {}
 if os.path.exists(path):
     data = json.load(open(path))
 data.setdefault("projects", {}).setdefault(project, {})["hasTrustDialogAccepted"] = True
+# Frische Test-Wurzel: sonst zeigt Claude Code zuerst den Einrichtungsdialog
+# (Theme-Auswahl), und der Prompt des Chats landet dort.
+data["hasCompletedOnboarding"] = True
 tmp = path + ".soak-tmp"
 json.dump(data, open(tmp, "w"), indent=2)
 os.replace(tmp, path)
