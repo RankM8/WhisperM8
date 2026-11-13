@@ -364,7 +364,25 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
 
     // MARK: - R1 Schnellbefehle
 
+    /// Claude: R1 + Kreuz ist fest „Jetzt senden“ (Ctrl+X Ctrl+S, wie
+    /// Ctrl+Enter), auch bei ruhendem Chat; nie mehr „Weiter“ als Text.
+    func testQuickDrawCrossSendsNowInClaude() {
+        press(.r1, at: 0)
+        tick(0.3)
+        guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
+        XCTAssertEqual(slots.cross, .sendNow)
+        XCTAssertTrue(slots.enabled.contains(.continueWork))
+        press(.cross, at: 0.4)
+        XCTAssertEqual(terminals.keys, [.sendNow])
+        XCTAssertTrue(terminals.texts.isEmpty, "kein „Weiter“ im Feld")
+        release(.cross, at: 0.42)
+        release(.r1, at: 0.45)
+        XCTAssertFalse(island.isVisible)
+    }
+
+    /// Codex (ruhend, leeres Feld): R1 + Kreuz schickt weiterhin „Weiter“.
     func testQuickDrawContinueSendsAndCloses() {
+        setTerminal(chats[1], status: .idle, profile: .codex)
         press(.r1, at: 0)
         tick(0.3)
         guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
@@ -531,9 +549,9 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
     /// bei arbeitend, unbekannt oder gerade gesendet (Lücke vor „wartet“;
     /// Codex meldet nie „wartet“). Konto wechseln geht weiter.
     func testContinueAndModeOnlyWhileTheChatIsIdle() {
+        // Codex: „Weiter“ und „Modus wechseln“ nur bei ruhendem Chat.
         let cases: [(AgentSessionRuntimeStatus?, ControllerChatState.Profile, Date?)] = [
-            (.working, .claude, nil), (nil, .claude, nil), (.idle, .claude, now.addingTimeInterval(-1)),
-            (.working, .codex, nil),
+            (.working, .codex, nil), (nil, .codex, nil), (.idle, .codex, now.addingTimeInterval(-1)),
         ]
         for (status, profile, lastEnter) in cases {
             haptics = []
@@ -560,12 +578,39 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(terminals.keys, [.backTab], "ruhender Codex-Chat: Modus wechseln geht")
     }
 
+    /// Claude: Arbeitet der Chat (oder wurde gerade gesendet), bleibt „Modus
+    /// wechseln“ gesperrt; R1 + Kreuz ist „Jetzt senden“ und geht.
+    func testClaudeBusyCrossSendsNowButModeWaits() {
+        let cases: [(AgentSessionRuntimeStatus?, Date?)] = [
+            (.working, nil), (nil, nil), (.idle, now.addingTimeInterval(-1)),
+        ]
+        for (status, lastEnter) in cases {
+            haptics = []
+            let keysBefore = terminals.keys.count
+            setTerminal(chats[1], status: status, profile: .claude, lastEnter: lastEnter)
+            press(.r1, at: 0)
+            tick(0.3)
+            guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
+            XCTAssertEqual(slots.cross, .sendNow, "\(String(describing: status))")
+            XCTAssertFalse(slots.enabled.contains(.cycleMode))
+            press(.triangle, at: 0.4)
+            XCTAssertEqual(haptics, [.rejected], "kein Shift+Tab bei arbeitendem Chat")
+            press(.cross, at: 0.5)
+            XCTAssertEqual(Array(terminals.keys.dropFirst(keysBefore)), [.sendNow])
+            XCTAssertTrue(terminals.texts.isEmpty)
+            release(.cross, at: 0.6)
+            release(.triangle, at: 0.6)
+            release(.r1, at: 0.7)
+        }
+    }
+
     /// Der Chat beginnt zu arbeiten, während R1 gehalten wird: Die Raute graut
     /// aus (nach `refreshContext`), und ein Druck geht nicht.
     func testChatStartingToWorkWhileHoldingR1() {
+        setTerminal(chats[1], status: .idle, profile: .codex)
         press(.r1, at: 0)
         tick(0.3)
-        setTerminal(chats[1], status: .working)
+        setTerminal(chats[1], status: .working, profile: .codex)
         dispatcher.refreshContext()
         guard case let .quickDraw(slots)? = island.last?.content else { return XCTFail("Raute erwartet") }
         XCTAssertEqual(slots.note, .busy)
