@@ -138,6 +138,13 @@ enum ControllerAction: Equatable, Sendable {
     /// Schnellbefehl der R1-Raute; dieselben Wege und Schutzregeln wie der
     /// Eintrag im Options-Menü.
     case quickDraw(ControllerMenuItem)
+    /// Feld der App-Raute unter R1 (Steuerkreuz, Insel-Paket): Limits,
+    /// Glocke, Wach bleiben, Zwischenablage. Bei offener Limits-Karte
+    /// scrollen ▲ ▼ stattdessen (das entscheidet der Ausführer).
+    case appSlot(ControllerAppSlot)
+    /// R1 gehalten, linker Stick bzw. gehaltenes Steuerkreuz hoch/runter:
+    /// offene Limits-Karte scrollen, sonst ohne Wirkung.
+    case islandScroll(step: Int)
 
     // Sonstiges
     case bridgeKey(ControllerBridgeKey)

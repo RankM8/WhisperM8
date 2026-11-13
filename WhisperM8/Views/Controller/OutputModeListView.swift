@@ -5,10 +5,12 @@ import SwiftUI
 /// Akzentrahmen wie die Markierung im Controller-Menü. Kein Bestätigen: Der
 /// Wechsel gilt sofort, die Liste zeigt nur, wo man steht.
 ///
-/// Gleiche Optik wie die Pill (dunkles Glas, immer dunkel).
+/// Gleiche Optik wie die Pill (dunkles Glas, immer dunkel). An der vereinten
+/// Pille (`unified`) folgt sie der Einstellung „Tiefschwarzer Hintergrund“.
 struct OutputModeListView: View {
     let modes: [OutputMode]
     let selectedID: String
+    var unified = false
 
     static let width: CGFloat = 240
     static let rowHeight: CGFloat = 28
@@ -31,13 +33,7 @@ struct OutputModeListView: View {
         .padding(6)
         .frame(width: Self.width, alignment: .leading)
         .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(OverlayPalette.glassTint))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
-                )
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: 12, style: .continuous), unified: unified)
         }
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)

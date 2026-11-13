@@ -105,6 +105,14 @@ enum AgentChatsCommand: Equatable {
     /// Vorgemerkten Kontowechsel abbrechen.
     case cancelAccountSwitch(UUID)
     case undoLastAccountSwitch
+    /// Archiv der Seitenleiste zeigen bzw. verlassen, wie der Archiv-Knopf
+    /// unten in der Seitenleiste (Options-Menü des Controllers).
+    case toggleArchiveMode
+    /// Projekt als Raster seiner aktiven Chats öffnen wie der Klick in der
+    /// Seitenleiste, aber still wie `switchToWorkspace`: Gehört die Ansicht
+    /// einem anderen Fenster oder laufen ihre Chats dort, kommt nichts nach
+    /// vorn und kein Dialog (Insel am Controller, L2 „Wohin“).
+    case switchToProject(UUID)
 }
 
 /// Was ein Fenster über sich sagt, wenn eine Eingabe eintrifft. Wird im

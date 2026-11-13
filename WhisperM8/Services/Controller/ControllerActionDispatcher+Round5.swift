@@ -103,8 +103,10 @@ extension ControllerActionDispatcher {
         })
     }
 
-    /// Neue Zahlen kamen an: ein offenes Menü zieht nach.
+    /// Neue Zahlen kamen an: ein offenes Menü und die R1-Insel (Kopf,
+    /// Limits-Karte) ziehen nach.
     func accountLimitsChanged() {
+        limitsMayHaveChanged()
         guard let accounts = ui.menu?.setup.chat?.accounts, !accounts.isEmpty else { return }
         ui.menu?.updateAccounts(accountsWithUsage(accounts))
     }

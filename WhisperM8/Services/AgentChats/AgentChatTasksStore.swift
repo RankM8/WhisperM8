@@ -79,7 +79,7 @@ final class AgentChatTasksStore {
     private var directories: [UUID: URL] = [:]
     private var pendingLoads: Set<UUID> = []
     private var watchedRoots: Set<String> = []
-    private var stream: FSEventStreamRef?
+    private var subscription: FSEventsSubscription?
 
     private let ioQueue = DispatchQueue(label: "com.whisperm8.app.task-lists", qos: .utility)
     private let index: AgentChatTaskListIndex
@@ -282,36 +282,22 @@ final class AgentChatTasksStore {
     }
 
     private func restartStream() {
-        if let stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-            self.stream = nil
-        }
+        subscription?.cancel()
+        subscription = nil
         guard !watchedRoots.isEmpty else { return }
-        var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
-        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
-            guard let info,
-                  let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
-            let store = Unmanaged<AgentChatTasksStore>.fromOpaque(info).takeUnretainedValue()
-            Task { @MainActor in store.handleFileEvents(paths: paths) }
-        }
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            callback,
-            &context,
-            Array(watchedRoots).sorted() as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.3,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
+        guard let subscription = FSEventsSubscription(
+            paths: Array(watchedRoots).sorted(),
+            latency: 0.3,
+            flags: FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents),
+            queue: DispatchQueue(label: "com.whisperm8.app.task-lists-fsevents", qos: .utility),
+            handler: { [weak self] paths, _ in
+                Task { @MainActor [weak self] in self?.handleFileEvents(paths: paths) }
+            }
         ) else {
             Logger.agentPerformance.error("task_lists_fsevents_start_failed")
             return
         }
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue(label: "com.whisperm8.app.task-lists-fsevents", qos: .utility))
-        FSEventStreamStart(stream)
-        self.stream = stream
+        self.subscription = subscription
         Logger.agentPerformance.info("task_lists_fsevents_started roots=\(self.watchedRoots.count, privacy: .public)")
     }
 }

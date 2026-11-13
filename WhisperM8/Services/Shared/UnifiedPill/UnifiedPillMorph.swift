@@ -40,9 +40,19 @@ struct UnifiedPillRestSnapshot: Equatable {
 /// Ereignisse und führt die zurückgegebenen Schritte aus.
 ///
 /// Ablauf mit Übergang: `idle` → `handoverIn` (Diktat-Fenster zeigt das
-/// Ruhebild über der Status-Pille) → `growing` (Status-Pille weg, die Pille
-/// wächst zum Diktat) → `dictation` → `shrinking` (zurück ins Ruhebild) →
-/// `handoverOut` (Status-Pille wieder da) → `idle` (Diktat-Fenster zu).
+/// Ruhebild, noch unsichtbar, über der Status-Pille) → `growing` (in einem
+/// Bild: Diktat sichtbar, Status-Pille unsichtbar; dann wächst die Pille) →
+/// `dictation` → `shrinking` (zurück ins Ruhebild) → `handoverOut`
+/// (Status-Pille wieder da, noch unsichtbar) → `closing` (in einem Bild:
+/// Status sichtbar, Diktat unsichtbar) → `idle` (Diktat-Fenster zu).
+///
+/// Warum unsichtbar zuerst: Zwei Glas-Pillen übereinander sind dunkler als
+/// eine (Aufnahme 13.11.2026: drei Bilder deutlich dunkler beim Start), und
+/// ein Fenster, das erst wegginge, bevor das andere steht, hinterließe ein
+/// Bild ohne Pille. Getauscht wird deshalb nur die Sichtbarkeit der Inhalte,
+/// in einer einzigen CATransaction, wenn beide Fenster schon auf dem
+/// Bildschirm stehen.
+///
 /// Ohne ruhende Pille an der Stelle (anderer Bildschirm, Status aus, Liste
 /// offen, Vollbild, Kill-Switch) erscheint das Diktat wie bisher direkt.
 ///
@@ -56,12 +66,16 @@ struct UnifiedPillMorph: Equatable {
         case dictation
         case shrinking
         case handoverOut
+        case closing
     }
 
     /// Folgeschritte, die der Controller zeitversetzt meldet.
     enum Step: Equatable {
-        /// Das Fenster hat sein aktuelles Bild gezeichnet (ein Bild später).
+        /// Das neu gezeigte Fenster steht mit seinem Bild auf dem Bildschirm
+        /// (Bild abgegeben, dann eine kurze Wartezeit für die Fensterverwaltung).
         case frameDrawn
+        /// Der Tausch der Sichtbarkeit ist auf dem Bildschirm angekommen.
+        case revealDrawn
         /// Die Breitenanimation ist durch.
         case animationDone
     }
@@ -75,8 +89,13 @@ struct UnifiedPillMorph: Equatable {
         case shrink
         /// Status-Pille an dieser Stelle ausblenden (Hub: Diktat steht hier).
         case hideStatus
-        /// Status-Pille wieder zeigen (Hub: Diktat weg).
+        /// Status-Pille wieder zeigen (Hub: Diktat weg). Ihr Inhalt bleibt,
+        /// wie er ist: nach dem Übergang erst unsichtbar.
         case showStatus
+        /// In einem Bild: Diktat-Inhalt sichtbar, Status-Inhalt unsichtbar.
+        case revealDictation
+        /// In einem Bild: Status-Inhalt sichtbar, Diktat-Inhalt unsichtbar.
+        case revealStatus
         /// Diktat-Fenster schließen.
         case closeWindow
         /// Folgeschritt melden, sobald er eingetreten ist.
@@ -87,13 +106,20 @@ struct UnifiedPillMorph: Equatable {
     /// Zählt jeden Wechsel; ein geplanter Schritt mit älterer Generation ist
     /// überholt und wird verworfen.
     private(set) var generation = 0
+    /// Beim Wachsen: Der Tausch der Sichtbarkeit ist auf dem Bildschirm
+    /// (`revealDrawn`). Erst dann darf die Status-Pille aus dem Weg, auch wenn
+    /// das Wachsen schon durch ist (Main Thread lange blockiert).
+    private var swapShown = false
+    /// Beim Wachsen: Die Animation ist durch, es fehlt nur noch der Tausch.
+    private var growFinished = false
 
     /// Das Fenster steht noch, das Diktat ist aber schon vorbei (es zieht
     /// sich zurück). Ein neues Diktat übernimmt es.
-    var isRetiring: Bool { phase == .shrinking || phase == .handoverOut }
+    var isRetiring: Bool { phase == .shrinking || phase == .handoverOut || phase == .closing }
 
     /// Ein Diktat soll erscheinen. `morph`: an dieser Stelle steht eine
-    /// ruhende Pille, aus der es wachsen kann.
+    /// ruhende Pille, aus der es wachsen kann. Mit Übergang beginnt das
+    /// Diktat-Fenster unsichtbar (der Controller setzt das beim Aufbau).
     mutating func show(morph: Bool) -> [Effect] {
         switch phase {
         case .idle:
@@ -105,12 +131,22 @@ struct UnifiedPillMorph: Equatable {
             return [.hideStatus]
         case .shrinking:
             // Neues Diktat, während sich das alte zurückzieht: aus dem
-            // jetzigen Stand wieder wachsen, die Status-Pille ist noch weg.
+            // jetzigen Stand wieder wachsen, kein Tausch nötig.
             enter(.growing)
+            swapShown = true
             return [.grow, .schedule(.animationDone, generation: generation)]
         case .handoverOut:
+            // Status-Pille steht schon wieder, aber noch unsichtbar.
             enter(.growing)
+            swapShown = true
             return [.hideStatus, .grow, .schedule(.animationDone, generation: generation)]
+        case .closing:
+            // Beide Fenster stehen schon: Sichtbarkeit zurücktauschen und wachsen.
+            enter(.growing)
+            return [
+                .revealDictation, .grow,
+                .schedule(.revealDrawn, generation: generation), .schedule(.animationDone, generation: generation),
+            ]
         case .handoverIn, .growing, .dictation:
             return []
         }
@@ -122,14 +158,32 @@ struct UnifiedPillMorph: Equatable {
         switch (phase, step) {
         case (.handoverIn, .frameDrawn):
             enter(.growing)
-            return [.hideStatus, .grow, .schedule(.animationDone, generation: generation)]
+            return [
+                .revealDictation, .grow,
+                .schedule(.revealDrawn, generation: generation), .schedule(.animationDone, generation: generation),
+            ]
+        case (.growing, .revealDrawn):
+            // Erst jetzt aus dem Weg: Ihr Inhalt ist schon unsichtbar.
+            swapShown = true
+            if growFinished {
+                enter(.dictation)
+            }
+            return [.hideStatus]
         case (.growing, .animationDone):
+            // Steht der Tausch noch aus, wartet das Diktat auf ihn.
+            guard swapShown else {
+                growFinished = true
+                return []
+            }
             enter(.dictation)
-            return []
+            return [.hideStatus]
         case (.shrinking, .animationDone):
             enter(.handoverOut)
             return [.showStatus, .schedule(.frameDrawn, generation: generation)]
         case (.handoverOut, .frameDrawn):
+            enter(.closing)
+            return [.revealStatus, .schedule(.revealDrawn, generation: generation)]
+        case (.closing, .revealDrawn):
             enter(.idle)
             return [.closeWindow]
         default:
@@ -141,10 +195,10 @@ struct UnifiedPillMorph: Equatable {
     /// in das es sich zurückziehen kann.
     mutating func hide(morph: Bool) -> [Effect] {
         switch phase {
-        case .idle, .shrinking, .handoverOut:
+        case .idle, .shrinking, .handoverOut, .closing:
             return []
         case .handoverIn:
-            // Noch nicht gewachsen, die Status-Pille steht noch: einfach weg.
+            // Noch nicht getauscht, die Status-Pille steht sichtbar: einfach weg.
             enter(.idle)
             return [.closeWindow]
         case .growing, .dictation:
@@ -153,19 +207,26 @@ struct UnifiedPillMorph: Equatable {
                 return [.shrink, .schedule(.animationDone, generation: generation)]
             }
             enter(.idle)
-            return [.closeWindow, .showStatus]
+            return [.closeWindow, .showStatus, .revealStatus]
         }
     }
 
     /// Fenster sofort weg (Bildschirm geändert, Kill-Switch, neues Fenster
-    /// an anderer Stelle). Steht die Status-Pille noch aus, kommt sie zurück.
+    /// an anderer Stelle). Steht die Status-Pille noch aus oder ist sie
+    /// unsichtbar, kommt sie zurück.
     mutating func abort() -> [Effect] {
-        let wasHidingStatus = phase == .growing || phase == .dictation || phase == .shrinking
-        let hadWindow = phase != .idle
+        let previous = phase
         enter(.idle)
         var effects: [Effect] = []
-        if hadWindow { effects.append(.closeWindow) }
-        if wasHidingStatus { effects.append(.showStatus) }
+        if previous != .idle { effects.append(.closeWindow) }
+        switch previous {
+        case .growing, .dictation, .shrinking:
+            effects += [.showStatus, .revealStatus]
+        case .handoverOut:
+            effects.append(.revealStatus)
+        case .idle, .handoverIn, .closing:
+            break
+        }
         return effects
     }
 
@@ -190,5 +251,7 @@ struct UnifiedPillMorph: Equatable {
     private mutating func enter(_ next: Phase) {
         phase = next
         generation += 1
+        swapShown = false
+        growFinished = false
     }
 }

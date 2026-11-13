@@ -15,6 +15,7 @@ enum DebugCLIArguments: Equatable {
     case record(seconds: Double?)
     case controllerState
     case controllerRun(script: String, execute: Bool, window: String?, frontmost: Bool)
+    case pill(holdMs: Int?, busyMs: Int?, busyAfterMs: Int?)
 
     static let defaultDictateTimeout = 300
 
@@ -89,6 +90,19 @@ enum DebugCLIArguments: Equatable {
                 throw ParseError.usage("record: Sekunden zwischen 0 und 5")
             }
             return .record(seconds: seconds)
+        case "pill":
+            func milliseconds(_ names: Set<String>, max upper: Int) throws -> Int? {
+                guard let raw = try takeOption(names) else { return nil }
+                guard let value = Int(raw), value >= 0, value <= upper else {
+                    throw ParseError.usage("\(names.sorted().first ?? "") braucht Millisekunden zwischen 0 und \(upper)")
+                }
+                return value
+            }
+            let hold = try milliseconds(["--hold"], max: 5000)
+            let busy = try milliseconds(["--busy"], max: 1000)
+            let busyAfter = try milliseconds(["--busy-after"], max: 300)
+            try noRest()
+            return .pill(holdMs: hold, busyMs: busy, busyAfterMs: busyAfter)
         case "controller":
             guard let sub = rest.first else { throw ParseError.usage("controller braucht state, press oder sequence") }
             rest.removeFirst()
@@ -163,6 +177,11 @@ enum DebugCLICommand {
                                     Zwischenablage, kein Tastendruck) — Tastencodes für Cmd+C/V
       record [<sekunden>]           Echten Aufnahmestart wie per Hotkey messen (Default 1 s,
                                     max. 5), danach Abbruch ohne Transkript und ohne Kontext
+      pill [--hold <ms>]            Übergang der vereinten Pille ohne Aufnahme durchspielen
+           [--busy <ms>]            (zeigen, stehen lassen, ausblenden) und die Fensterliste
+           [--busy-after <ms>]      mitschneiden: Lücke ohne Pille, Versatz, Zeiten je Fenster.
+                                    --busy blockiert den Main Thread nach dem Aufbau des
+                                    Diktat-Fensters (sofort oder --busy-after ms später)
       controller state              Controller-Steuerung: Verbindung, Schalter, Zähler je Taste
                                     (App vorne / im Hintergrund), letzte aufgelöste Gesten
       controller press <taste>      Künstlicher Tastendruck durch die echte Kette. Ohne
@@ -213,6 +232,12 @@ enum DebugCLICommand {
             return call("debug.record", seconds.map { ["seconds": $0] } ?? [:])
         case .controllerState:
             return call("debug.controller", ["op": "state"])
+        case .pill(let hold, let busy, let busyAfter):
+            var params: [String: Any] = [:]
+            if let hold { params["holdMs"] = hold }
+            if let busy { params["busyMs"] = busy }
+            if let busyAfter { params["busyAfterMs"] = busyAfter }
+            return call("debug.pill", params)
         case .controllerRun(let script, let execute, let window, let frontmost):
             var params: [String: Any] = ["op": "run", "script": script, "execute": execute, "frontmost": frontmost]
             if let window { params["window"] = window }

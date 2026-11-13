@@ -24,6 +24,7 @@ extension NotchStatusController {
         dictationDisplayID = hub.dictationDisplayID
         hub.restSnapshot = { [weak self] displayID in self?.restSnapshot(onDisplay: displayID) }
         hub.startDictation = { [weak self] in self?.startDictation() }
+        hub.applyStatusContentHidden = { [weak self] displayID in self?.applyContentHidden(onDisplay: displayID) }
         hub.$dictationDisplayID
             .removeDuplicates()
             .dropFirst()
@@ -42,6 +43,17 @@ extension NotchStatusController {
         if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
         if displayID == nil { replayAlertAfterDictation() }
         render()
+    }
+
+    /// Übergang ins Diktat und zurück: Inhalt der Pille auf diesem
+    /// Bildschirm unsichtbar bzw. überall wieder sichtbar, ohne das Fenster
+    /// zu bewegen. Wirkt in der laufenden CATransaction, also im selben Bild
+    /// wie der Gegenschritt am Diktat-Fenster.
+    func applyContentHidden(onDisplay displayID: UInt32?) {
+        for slot in slots.values {
+            let hidden = displayID != nil && slot.screen?.displayID == displayID
+            if slot.host?.alphaValue != (hidden ? 0 : 1) { slot.host?.alphaValue = hidden ? 0 : 1 }
+        }
     }
 
     func replayAlertAfterDictation() {

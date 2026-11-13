@@ -10,6 +10,7 @@ struct PillSettingsSection: View {
     @AppStorage(PreferenceKeys.notchStatusHideFromCapture) private var hideFromCapture = true
     @AppStorage(PreferenceKeys.notchStatusShowFreshDone) private var showFreshDone = true
     @AppStorage(PreferenceKeys.notchStatusExpandOnHover) private var expandOnHover = false
+    @AppStorage(PreferenceKeys.pillSolidBlackEnabled) private var solidBlack = false
 
     var body: some View {
         if AppPreferences.shared.isUnifiedPillEnabled {
@@ -21,6 +22,12 @@ struct PillSettingsSection: View {
                         isOn: $isStatusEnabled
                     )
                 }
+
+                SettingsToggleRow(
+                    title: "Solid black background",
+                    subtitle: "Draws the pill in deep black like the notch, also on displays without one, instead of dark glass. Applies to every state: at rest, the list, dictation and the controller island.",
+                    isOn: $solidBlack
+                )
 
                 SettingsToggleRow(
                     title: "Hide from screenshots and screen sharing",

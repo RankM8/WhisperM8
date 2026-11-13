@@ -737,6 +737,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusExpandOnHover) }
     }
 
+    /// Vereinte Pille auch ohne Notch tiefschwarz statt im dunklen Glas, in
+    /// allen Zuständen (`PillAppearance`). Standard: aus.
+    var isPillSolidBlackEnabled: Bool {
+        get { defaults.bool(forKey: Keys.pillSolidBlackEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.pillSolidBlackEnabled) }
+    }
+
     /// Gemerkte Lage der Pille je Bildschirm ohne Notch (mit der Maus
     /// verschoben). Schlüssel ist die feste Display-UUID, nicht die Nummer
     /// des Bildschirms. Leer: überall oben mittig. Zurücksetzen über den
@@ -1161,6 +1168,7 @@ enum PreferenceKeys {
     static let notchStatusHideFromCapture = "notchStatusHideFromCapture"
     static let notchStatusShowFreshDone = "notchStatusShowFreshDone"
     static let notchStatusExpandOnHover = "notchStatusExpandOnHover"
+    static let pillSolidBlackEnabled = "pillSolidBlackEnabled"
     static let notchPillPositions = "notchPillPositions"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"
