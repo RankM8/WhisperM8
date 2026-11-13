@@ -235,6 +235,12 @@ enum CodexSessionRunningGuard {
 
     /// `argv` ohne Programmpfad aus `KERN_PROCARGS2`.
     private static func arguments(of pid: pid_t) -> [String]? {
+        procArgs(pid: pid).flatMap(parseProcArgs)
+    }
+
+    /// Roher `KERN_PROCARGS2`-Puffer (argc, Pfad, argv, Umgebung); `nil`,
+    /// wenn der Prozess nicht lesbar ist.
+    static func procArgs(pid: pid_t) -> [UInt8]? {
         var mib: [Int32] = [CTL_KERN, KERN_ARGMAX]
         var argMax: Int32 = 0
         var size = MemoryLayout<Int32>.size
@@ -243,7 +249,7 @@ enum CodexSessionRunningGuard {
         size = buffer.count
         mib = [CTL_KERN, KERN_PROCARGS2, pid]
         guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
-        return parseProcArgs(Array(buffer.prefix(size)))
+        return Array(buffer.prefix(size))
     }
 
     /// Pur: `argc`, Programmpfad, Füll-Nullen, dann `argc` Argumente.

@@ -70,6 +70,19 @@ enum ChatsStatusProbe {
         ClaudeSessionRegistry.indexBySessionID(ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots()))
     }
 
+    // MARK: - Codex-Prozesse
+
+    /// Codex-Prozesse je Chat (über `WHISPERM8_SESSION_ID` in ihrer Umgebung),
+    /// ein Scan je Sekunde CLI-Laufzeit.
+    static let codexProcessCache = ChatsTimedCache<[UUID: Date?]?> { CodexChatProcessIndex.scan() }
+
+    /// Prozesswissen für den Decider: nur Codex-Chats im PTY der App. Subagent-
+    /// Jobs (`codex exec`) tragen die Chat-ID nicht und bleiben `.unknown`.
+    static var codexLiveness: (AgentChatSession, Date) -> CodexProcessLiveness = { session, now in
+        guard session.provider == .codex, session.effectiveKind == .chat else { return .unknown }
+        return CodexProcessLiveness.of(sessionID: session.id, index: codexProcessCache.index(now: now))
+    }
+
     /// Pur: Claudes eigener Status schlägt die Transcript-Schätzung. Revision
     /// und Transcript-Pfad bleiben (Grundlage von `wait --since`).
     static func overlayRegistry(_ estimate: ChatsRuntimeInfo, record: ClaudeSessionRecord?) -> ChatsRuntimeInfo {
@@ -168,7 +181,14 @@ enum ChatsStatusProbe {
         // aus dem Transcript-Schätzer, working nie bei stale mtime) — der
         // 64-KB-Tail-Read entfällt. Bei 1000+ indizierten Sessions ist das der
         // Unterschied zwischen ~0,5 s und mehreren Sekunden pro `list`.
-        if now.timeIntervalSince(stat.mtime) > AgentTranscriptStatusDecider.workingStallSeconds {
+        // Codex schreibt während einer Antwort nichts; lebt sein Prozess,
+        // entscheidet der offene Turn im Tail (Decider). Nur dann der Read.
+        let codexProcess = provider == .codex ? codexLiveness(session, now) : .unknown
+        let codexMayWork: Bool = {
+            if case .running = codexProcess { return true }
+            return false
+        }()
+        if now.timeIntervalSince(stat.mtime) > AgentTranscriptStatusDecider.workingStallSeconds, !codexMayWork {
             let isClosedQuiet = (session.status == .closed || session.status == .archived)
                 && now.timeIntervalSince(stat.mtime) > closedQuietSeconds
             return ChatsRuntimeInfo(
@@ -188,7 +208,8 @@ enum ChatsStatusProbe {
             lastEvent: lastEvent,
             fileMTime: stat.mtime,
             now: now,
-            priorTurnFinishedAt: session.lastTurnAt
+            priorTurnFinishedAt: session.lastTurnAt,
+            codexProcess: codexProcess
         )
 
         var status = decision?.status
@@ -205,7 +226,7 @@ enum ChatsStatusProbe {
             switch lastEvent {
             case .userMessage(let ts), .assistantMessageOngoing(let ts),
                  .assistantMessageStopped(let ts, _), .toolResult(let ts),
-                 .turnInterrupted(let ts):
+                 .turnInterrupted(let ts), .toolCallPending(let ts, _):
                 return ts ?? stat.mtime
             default:
                 return stat.mtime
@@ -414,19 +435,23 @@ final class ThrottledTranscriptIndex<Value>: @unchecked Sendable {
 
 /// Registry-Index für einen CLI-Lauf: höchstens 1 s alt, damit `wait`-
 /// Schleifen frische Werte sehen und `list` nicht je Session neu scannt.
-final class ChatsRegistryCache: @unchecked Sendable {
-    private let build: () -> [String: ClaudeSessionRecord]
+typealias ChatsRegistryCache = ChatsTimedCache<[String: ClaudeSessionRecord]>
+
+/// Ein Index, der je CLI-Lauf höchstens `maxAge` alt wird (Registry,
+/// Codex-Prozesse).
+final class ChatsTimedCache<Value>: @unchecked Sendable {
+    private let build: () -> Value
     private let maxAge: TimeInterval
     private let lock = NSLock()
-    private var cached: [String: ClaudeSessionRecord]?
+    private var cached: Value?
     private var builtAt: Date = .distantPast
 
-    init(maxAge: TimeInterval = 1, build: @escaping () -> [String: ClaudeSessionRecord]) {
+    init(maxAge: TimeInterval = 1, build: @escaping () -> Value) {
         self.build = build
         self.maxAge = maxAge
     }
 
-    func index(now: Date) -> [String: ClaudeSessionRecord] {
+    func index(now: Date) -> Value {
         lock.lock()
         defer { lock.unlock() }
         if let cached, abs(now.timeIntervalSince(builtAt)) < maxAge { return cached }

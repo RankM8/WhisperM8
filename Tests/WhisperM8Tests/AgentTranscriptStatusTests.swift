@@ -75,10 +75,14 @@ final class AgentTranscriptStatusTests: XCTestCase {
 
     func testCodexRealRolloutActivityLines() {
         for line in [CodexRolloutFixtures.agentMessageCommentary, CodexRolloutFixtures.reasoningEncrypted,
-                     CodexRolloutFixtures.functionCall, CodexRolloutFixtures.responseItemAssistantCommentary] {
+                     CodexRolloutFixtures.responseItemAssistantCommentary] {
             guard case .assistantMessageOngoing = AgentTranscriptParser.parseLine(line, provider: .codex) else {
                 return XCTFail("Aktivitaet erwartet: \(line.prefix(80))")
             }
+        }
+        // Offener Tool-Aufruf: eigener Fall (läuft oder wartet auf Freigabe).
+        guard case .toolCallPending(_, false) = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCall, provider: .codex) else {
+            return XCTFail("function_call muss ein offener Tool-Aufruf sein")
         }
         guard case .toolResult = AgentTranscriptParser.parseLine(CodexRolloutFixtures.functionCallOutput, provider: .codex) else {
             return XCTFail("function_call_output muss .toolResult sein")

@@ -151,6 +151,27 @@ statusrelevante Event: laufende User-, Assistant- oder Tool-Events ergeben
 `working`, echte Assistant-Stopps ergeben `idle` und optional `turnFinished`,
 lange stille Aktivität wird nach dem Stall-Timeout auf `idle` heruntergestuft.
 
+Codex schreibt während einer Antwort oder eines Denkschritts nichts ins
+Rollout, erst das fertige Element (Testlauf 13.11.2026: 4 min 46 s Stille bei
+einer 300-Zeilen-Antwort). Mit dem 120-s-Stall-Timeout stand ein schreibender
+Codex-Chat deshalb auf `idle`, und der Schutz von `close --stop` griff nicht.
+Für Codex-Chats bekommt der Decider deshalb ein Prozesswissen
+(`CodexProcessLiveness`): Ein offener Turn (Prompt, Antwort, Denkschritt,
+Tool-Ergebnis) gilt als `working`, solange der Prozess lebt und der Turn nach
+dessen Start begann. Ein offener Turn von vor dem Prozessstart stammt aus
+einem abgestürzten Lauf und ist `idle`, ein toter Prozess arbeitet nie. Gegen
+einen hängenden Prozess bleibt eine Obergrenze von 30 Minuten ohne Schreiben.
+Ein offener Tool-Aufruf behält die 120-s-Grenze, weil Codex Freigabe-Anfragen
+nicht ins Rollout schreibt: Ein wartender Aufruf sieht aus wie ein laufender
+und darf höchstens kurz grün sein. Eine Rückfrage per `request_user_input` ist
+sofort `idle`. Die App liest den Prozess über die PID im PTY
+(`kill(pid, 0)` plus Startzeit, im Poll außerhalb des Main Threads). Die CLI
+(`ChatsStatusProbe`) kennt keine PTYs und sucht Codex-Prozesse mit
+`WHISPERM8_SESSION_ID=<Chat-ID>` in der Umgebung (`CodexChatProcessIndex`,
+ein Scan je Sekunde CLI-Laufzeit); so urteilen beide über denselben Prozess.
+Claude-Chats, Subagent-Jobs und alle Aufrufer ohne Prozesswissen bleiben beim
+alten Verhalten.
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu
