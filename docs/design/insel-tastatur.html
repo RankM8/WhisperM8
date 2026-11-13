@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insel per Tastatur – Entwurf</title>
+<style>
+  /* Farben aus AppTheme.swift; die Insel an der Notch ist immer schwarz wie die Hardware. */
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#8d8e93; --line:rgba(0,0,0,.09);
+    --wall:linear-gradient(160deg,#cfd8ee,#e8d9ee 55%,#f3e4d6); --menubar:rgba(255,255,255,.72);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --pill-bg:rgba(250,250,252,.94); --pill-ink:#1c1c1e; --pill-ink2:#5f6064; --pill-ink3:#8d8e93; --pill-line:rgba(0,0,0,.12);
+    --pill-key:#ffffff; --pill-key-line:rgba(0,0,0,.16); --pill-mark:rgba(94,106,210,.13); --pill-mark-line:#5e6ad2;
+    --accent:#5e6ad2; --working:#3fa873; --awaiting:#c9962a; --error:#d6473d;
+  }
+  [data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#76777d; --line:rgba(255,255,255,.09);
+    --wall:linear-gradient(160deg,#1b2238,#2a2140 55%,#3a2b2e); --menubar:rgba(30,30,34,.7);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.07);
+    --pill-bg:rgba(22,22,25,.95); --pill-ink:#f1f1f3; --pill-ink2:#a4a5ab; --pill-ink3:#76777d; --pill-line:rgba(255,255,255,.12);
+    --pill-key:#2a2a2e; --pill-key-line:rgba(255,255,255,.16); --pill-mark:rgba(124,132,232,.18); --pill-mark-line:#7c84e8;
+    --accent:#7c84e8; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.4 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header p { margin:0; color:var(--ink2); }
+  header button { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:8px; padding:6px 12px; cursor:pointer; }
+  main { padding:24px 28px 60px; display:grid; grid-template-columns:repeat(auto-fill,minmax(560px,1fr)); gap:26px; }
+  h2 { grid-column:1/-1; margin:14px 0 -8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  figure { margin:0; }
+  figure.full { grid-column:1/-1; }
+  figcaption { margin:8px 2px 0; color:var(--ink2); max-width:78ch; }
+  figcaption b { color:var(--ink); font-weight:600; }
+  .rules { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul { margin:6px 0 0; padding-left:18px; }
+  .rules li { margin:3px 0; }
+
+  /* Bildschirm-Attrappe */
+  .screen { position:relative; height:360px; border-radius:12px; overflow:hidden; background:var(--wall); border:1px solid var(--line); }
+  .screen.tall { height:440px; }
+  .screen.huge { height:520px; }
+  .menubar { position:absolute; inset:0 0 auto 0; height:32px; background:var(--menubar); backdrop-filter:blur(14px);
+             display:flex; align-items:center; justify-content:space-between; padding:0 14px; font-size:12px; color:var(--ink); z-index:1; }
+  .menubar.nonotch { height:24px; }
+  .menubar .l, .menubar .r { display:flex; gap:14px; opacity:.85; }
+
+  /* Agent-Chats-Fenster dahinter, damit man sieht, was frei bleibt */
+  .win { position:absolute; left:24px; right:24px; top:48px; bottom:18px; background:var(--win); border:1px solid var(--border);
+         border-radius:10px; box-shadow:0 14px 40px rgba(0,0,0,.22); display:grid; grid-template-columns:190px 1fr; overflow:hidden; }
+  .win.nonotch { top:40px; }
+  .win .side { background:var(--sidebar); border-right:1px solid var(--border); padding:30px 8px 8px; font-size:11.5px; color:var(--ink2); }
+  .win .side div { height:22px; display:flex; align-items:center; gap:7px; padding:0 8px; border-radius:5px; white-space:nowrap; overflow:hidden; }
+  .win .side .sel { background:rgba(127,127,127,.14); color:var(--ink); }
+  .win .side .grp { font-weight:600; color:var(--ink); margin-top:6px; }
+  .win .chat { display:flex; flex-direction:column; min-width:0; }
+  .win .tabs { height:30px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11px; color:var(--ink2); }
+  .win .tabs span { padding:3px 8px; border-radius:5px; }
+  .win .tabs .on { background:var(--win); color:var(--ink); border:1px solid var(--border); }
+  .win .term { flex:1; background:var(--term); padding:12px 16px; font:11.5px/1.55 "SF Mono",ui-monospace,monospace; color:var(--ink2); overflow:hidden; }
+  .win .input { margin:0 14px 8px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:11.5px "SF Mono",ui-monospace,monospace; color:var(--ink); background:var(--term); }
+  .win .input::before { content:"> "; color:var(--accent); }
+  .win .legend { height:26px; border-top:1px solid var(--border); background:var(--header); display:flex; align-items:center; gap:12px; padding:0 12px; font-size:11px; color:var(--ink2); white-space:nowrap; overflow:hidden; }
+  .win .legend b { color:var(--ink); font-weight:600; }
+  .win .legend .k { display:inline-flex; align-items:center; gap:4px; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.8; }
+  .dot.working { background:#4cc38a; opacity:1; }
+  .dot.awaiting { background:#e9b949; border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.error { background:transparent; border:1.5px solid #e5594f; opacity:1; }
+
+  /* ── Insel an der Notch ─────────────────────────────────────── */
+  .hang { position:absolute; top:0; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; color:#f4f4f6; z-index:3; }
+  .hang .band { width:184px; height:32px; background:#000; flex:none; }
+  .hang .body { background:#000; min-width:184px; border-radius:10px 10px 20px 20px; box-shadow:0 18px 40px rgba(0,0,0,.35); }
+  .hang .body.small { border-radius:0 0 14px 14px; }
+  .grow { animation:grow .26s cubic-bezier(.2,.9,.25,1.05) both; transform-origin:top center; }
+  @keyframes grow { from { clip-path:inset(0 calc(50% - 92px) calc(100% - 24px) calc(50% - 92px) round 0 0 12px 12px); } }
+
+  /* ── Insel ohne Notch: Pille unter der Menüleiste ──────────── */
+  .pill { position:absolute; top:30px; left:50%; transform:translateX(-50%); background:var(--pill-bg); color:var(--pill-ink);
+          border:1px solid var(--pill-line); border-radius:20px; box-shadow:0 12px 30px rgba(0,0,0,.22); backdrop-filter:blur(18px); z-index:3; }
+
+  /* Gemeinsame Bausteine */
+  .island-head { display:flex; align-items:center; gap:8px; padding:9px 14px 6px; font-size:11px; color:#8d8e93; white-space:nowrap; }
+  .pill .island-head { color:var(--pill-ink3); }
+  .island-head .layer { font-weight:700; color:#f4f4f6; letter-spacing:.02em; }
+  .pill .island-head .layer { color:var(--pill-ink); }
+  .island-head .target { margin-left:auto; display:flex; align-items:center; gap:6px; max-width:190px; overflow:hidden; text-overflow:ellipsis; }
+  .island-head .target span { overflow:hidden; text-overflow:ellipsis; }
+
+  .g { display:inline-flex; align-items:center; justify-content:center; height:20px; min-width:20px; padding:0 4px; border-radius:10px;
+       background:#2a2a2e; border:1px solid rgba(255,255,255,.14); color:#f4f4f6; font-size:11px; font-weight:700; line-height:1; flex:none; }
+  .g.sq { border-radius:5px; padding:0 5px; }
+  .pill .g { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+
+  .hints { display:flex; flex-wrap:wrap; gap:6px 14px; padding:2px 14px 12px; font-size:12px; }
+  .hints .h { display:inline-flex; align-items:center; gap:6px; color:#d6d6da; white-space:nowrap; }
+  .pill .hints .h { color:var(--pill-ink); }
+  .hints .h.off { opacity:.38; }
+
+  /* Reiter */
+  .seg { display:flex; gap:2px; margin:0 12px 6px; padding:2px; background:rgba(255,255,255,.08); border-radius:8px; }
+  .pill .seg { background:rgba(127,127,127,.12); }
+  .seg span { flex:1; text-align:center; font-size:11.5px; font-weight:600; padding:4px 0; border-radius:6px; color:#a4a5ab; }
+  .pill .seg span { color:var(--pill-ink2); }
+  .seg span.on { background:rgba(255,255,255,.16); color:#fff; }
+  .pill .seg span.on { background:var(--pill-key); color:var(--pill-ink); box-shadow:0 1px 2px rgba(0,0,0,.12); }
+
+  /* Liste */
+  .rows { padding:0 8px 4px; }
+  .r { display:grid; grid-template-columns:16px 1fr auto; gap:9px; align-items:center; height:34px; padding:0 8px; border-radius:8px; }
+  .r .t { font-size:12.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#f4f4f6; }
+  .pill .r .t { color:var(--pill-ink); }
+  .r .t small { font-weight:400; color:#8d8e93; margin-left:6px; font-size:11px; }
+  .pill .r .t small { color:var(--pill-ink3); }
+  .r .w { font-size:11px; color:#8d8e93; white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums; }
+  .pill .r .w { color:var(--pill-ink3); }
+  .r.cur .t { font-weight:700; }
+  .r.mark { background:rgba(124,132,232,.24); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .pill .r.mark { background:var(--pill-mark); box-shadow:inset 0 0 0 1.5px var(--pill-mark-line); }
+  .r .sw { width:15px; height:15px; border-radius:4px; color:#fff; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .more { text-align:center; font-size:11px; color:#76777d; padding:0 0 4px; }
+  .pill .more { color:var(--pill-ink3); }
+  .foot { display:flex; gap:14px; justify-content:center; padding:6px 14px 11px; font-size:11px; color:#a4a5ab; border-top:1px solid rgba(255,255,255,.08); }
+  .pill .foot { color:var(--pill-ink2); border-top-color:var(--pill-line); }
+  .foot span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+
+  /* Quick Draw: Raute wie die Tasten */
+  .diamond { display:grid; grid-template-columns:repeat(3,152px); grid-template-rows:repeat(3,44px); gap:4px; padding:4px 14px 14px; justify-content:center; }
+  .slot { display:flex; align-items:center; gap:7px; padding:0 10px; border-radius:10px; background:rgba(255,255,255,.07); font-size:12px; white-space:nowrap; color:#f4f4f6; }
+  .pill .slot { background:rgba(127,127,127,.10); color:var(--pill-ink); }
+  .slot.top { grid-column:2; grid-row:1; } .slot.left { grid-column:1; grid-row:2; }
+  .slot.right { grid-column:3; grid-row:2; } .slot.bottom { grid-column:2; grid-row:3; }
+  .slot.off { opacity:.36; }
+  .slot.hit { background:rgba(124,132,232,.30); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .slot .chev { margin-left:auto; color:#8d8e93; }
+  .center { grid-column:2; grid-row:2; display:flex; align-items:center; justify-content:center; font-size:11px; color:#76777d; }
+  .pill .center { color:var(--pill-ink3); }
+  .note-inline { padding:0 14px 12px; font-size:11px; color:#e9b949; text-align:center; }
+  .pill .note-inline { color:var(--awaiting); }
+
+  /* Vorher/Nachher nebeneinander */
+  .pair { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .chin { height:24px; display:flex; align-items:center; justify-content:center; gap:12px; padding:0 14px; font-size:12px; font-weight:600; }
+  .chip { display:inline-flex; align-items:center; gap:6px; }
+  .chip.working { color:#4cc38a; } .chip.awaiting { color:#e9b949; }
+  .tag { position:absolute; left:10px; bottom:10px; font-size:11px; color:var(--ink2); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:2px 7px; z-index:4; }
+
+  /* ── Tastatur ─────────────────────────────────────────────── */
+  .kc { display:inline-flex; align-items:center; justify-content:center; height:20px; min-width:20px; padding:0 5px; border-radius:5px;
+        background:#2a2a2e; border:1px solid rgba(255,255,255,.18); border-bottom-width:2px; color:#f4f4f6; font:600 11px/1 -apple-system,"SF Pro Text",system-ui; flex:none; }
+  .pill .kc { background:var(--pill-key); border-color:var(--pill-key-line); color:var(--pill-ink); }
+  .win .legend .kc { background:var(--win); border-color:var(--border); color:var(--ink); }
+  .kc.held { background:#5e6ad2; border-color:#8d95ee; color:#fff; }
+  .plus { color:#76777d; font-size:10px; margin:0 1px; }
+  .keyrow { margin:4px 12px 8px; border-radius:10px; background:rgba(255,255,255,.06); padding:7px 10px 8px; }
+  .pill .keyrow { background:rgba(127,127,127,.09); }
+  .keyrow .lbl { font-size:10.5px; color:#8d8e93; margin-bottom:5px; display:flex; justify-content:space-between; }
+  .pill .keyrow .lbl { color:var(--pill-ink3); }
+  .keyrow .ks { display:flex; flex-wrap:wrap; gap:5px 12px; font-size:11.5px; color:#d6d6da; }
+  .pill .keyrow .ks { color:var(--pill-ink); }
+  .keyrow .ks span { display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .keyrow .ks .off { opacity:.36; }
+  .keyrow .ks .hit { color:#fff; } .keyrow .ks .hit .kc { background:#5e6ad2; border-color:#8d95ee; color:#fff; }
+  .keyrow .sep { width:1px; align-self:stretch; background:rgba(255,255,255,.12); }
+  .pill .keyrow .sep { background:var(--pill-line); }
+  .vorher { font-size:10px; font-weight:700; letter-spacing:.03em; color:#8d95ee; border:1px solid rgba(141,149,238,.5); border-radius:4px; padding:0 4px; margin-left:6px; }
+  .pill .vorher { color:var(--pill-mark-line); border-color:var(--pill-mark-line); }
+  .r .stand { display:block; font-size:10.5px; font-weight:400; color:#a4a5ab; margin-top:1px; overflow:hidden; text-overflow:ellipsis; }
+  .r.two { height:44px; }
+  .toast { padding:0 14px 10px; font-size:11.5px; color:#d6d6da; display:flex; gap:10px; justify-content:space-between; }
+  .toast b { color:#fff; }
+  .cheat { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; padding:4px 16px 12px; font-size:12px; color:#d6d6da; align-items:center; }
+  .cheat .k2 { display:flex; gap:3px; justify-content:flex-end; }
+  .strip { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .frame { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:10px; align-items:center; text-align:center; color:var(--ink2); }
+  .frame .keys { display:flex; gap:4px; align-items:center; }
+  .frame .kc { background:var(--win); border-color:var(--line); color:var(--ink); height:28px; min-width:28px; font-size:13px; }
+  .frame .kc.held { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .frame b { color:var(--ink); }
+  .variants { display:flex; gap:6px; }
+  .variants button { border:1px solid var(--line); background:var(--panel); color:var(--ink2); border-radius:8px; padding:6px 12px; cursor:pointer; font-weight:600; }
+  .variants button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  body[data-v="a"] .v-b, body[data-v="a"] .v-c, body[data-v="b"] .v-a, body[data-v="b"] .v-c, body[data-v="c"] .v-a, body[data-v="c"] .v-b { display:none !important; }
+  .vbanner { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; padding:12px 16px; color:var(--ink2); }
+  .vbanner b { color:var(--ink); }
+  .decide { grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; }
+  .decide ol { margin:8px 0 0; padding-left:22px; color:var(--ink2); }
+  .decide li { margin:6px 0; }
+  .decide li b { color:var(--ink); }
+  .rec { display:inline-block; font-size:10.5px; font-weight:700; color:#fff; background:var(--working); border-radius:4px; padding:0 5px; margin-left:6px; }
+  table.facts { border-collapse:collapse; width:100%; font-size:12px; margin-top:6px; }
+  table.facts td, table.facts th { border-top:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; color:var(--ink2); }
+  table.facts th { color:var(--ink); font-weight:600; }
+  table.facts td:first-child { color:var(--ink); font-weight:600; white-space:nowrap; }
+</style>
+</head>
+<body data-v="b">
+<header>
+  <h1>Dynamic Island per Tastatur</h1>
+  <p>Entwurf: ⌥Tab wie L2, Schnellbefehle und Diktat ohne Controller</p>
+  <div class="variants" style="margin-left:auto"><button data-v="a">A Eins zu eins</button><button data-v="b" class="on">B Eine Insel</button><button data-v="c">C Statt Kacheln</button></div>
+  <button id="theme" style="margin-left:8px">Hell / Dunkel</button>
+</header>
+<main>
+
+<div class="rules">
+    <b>Befund: ⌥Tab ist frei</b>
+    <table class="facts">
+      <tr><td>App</td><td>Belegt sind nur ⌃Tab (Kachel-Umschalter) und ⌃⌥Tab (nächster wartender Chat).</td></tr>
+      <tr><td>Terminal</td><td>⌥Tab kommt heute nirgends an: SwiftTerm macht daraus <code>insertTabIgnoringFieldEditor:</code> und schickt nichts. Claude Code und Codex sehen es in WhisperM8 nie.</td></tr>
+      <tr><td>macOS</td><td>Kein System-Kürzel. In anderen Apps fügt ⌥Tab selten genutzt einen echten Tab ein.</td></tr>
+      <tr><td>AltTab</td><td>Ab Werk ⌥Tab, bei dir auf ⌘Tab umgestellt, also frei. Setzt AltTab sich zurück, kollidiert es.</td></tr>
+      <tr><td>Diktat</td><td>⌥Leertaste ist schon die Aufnahme. Mit gehaltenem ⌥ wird Leertaste in der Insel „hin und diktieren“ wie R2.</td></tr>
+    </table>
+  </div>
+
+<div class="vbanner v-b"><b>Variante B · Eine Insel (Empfehlung).</b> Die Tastatur hat genug Tasten, also keine Ebenen: ⌥Tab öffnet Wohin, Buchstaben sind die Schnellbefehle, Leertaste diktiert, ? zeigt die Schreib-Tasten. ⌃Tab bleibt der Kachel-Umschalter.</div>
+<h2 class="v-b">⌥Tab kurz · zurück, ohne Insel</h2>
+<figure class="full v-b"><div class="strip">
+    <div class="frame"><div class="keys"><span class="kc held">⌥</span></div><b>⌥ drücken</b>nichts zu sehen</div>
+    <div class="frame"><div class="keys"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc held">⇥</span></div><b>Tab tippen</b>Markierung springt auf „vorher“ (unsichtbar, erst nach 0,2 s erscheint die Insel)</div>
+    <div class="frame"><div class="keys"><span class="kc ">⌥</span></div><b>⌥ loslassen</b>Wechsel zu „Jarvis: Supervisor“, wie L2 getippt. Noch mal ⌥Tab: zurück.</div>
+  </div><figcaption><b>1 · Antippen.</b> Wie ⌘Tab: Der erste Tab ist schon ein Schritt und landet auf „vorher“. Schnell gegriffen blitzt keine Insel auf.</figcaption></figure>
+<h2 class="v-b">⌥ gehalten · Wohin</h2>
+<figure class="full v-b"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:520px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="keyrow"><div class="lbl"><span>für Controller Insel</span><span>App</span></div><div class="ks"><span class=""><span class="kc ">S</span>Jetzt senden</span><span class=""><span class="kc ">M</span>Modus</span><span class=""><span class="kc ">O</span>Transkript</span><span class=""><span class="kc ">B</span>Befehle ›</span><span class=""><span class="kc ">K</span>Konto ›</span><i class="sep"></i><span class=""><span class="kc ">L</span>Limits</span><span class=""><span class="kc ">N</span>Mitteilungen</span><span class=""><span class="kc ">A</span>Wach bleiben</span><span class=""><span class="kc ">C</span>Zwischenablage</span></div></div><div class="foot"><span><span class="kc ">⇥</span><span class="kc ">⇧⇥</span> weiter/zurück</span><span><span class="kc ">←</span><span class="kc ">→</span> Reiter</span><span><span class="kc ">␣</span> hin &amp; diktieren</span><span><span class="kc ">W</span> wartet</span><span><span class="kc ">R</span> wieder öffnen</span><span><span class="kc ">esc</span> abbrechen</span><span><span class="kc ">⌥</span> los: wechseln</span></div></div></div></div>
+  <figcaption><b>2 · Wohin, Chats.</b> Die Insel steht nach 0,2 s. Markierung auf „vorher“, Tab geht weiter nach unten, ⇧Tab zurück. Unter der Liste die Tastenzeile: links Befehle für den <b>aktuellen</b> Chat (steht dabei, damit man ihn nicht mit der Markierung verwechselt), rechts App-Befehle. Die Fußzeile nennt alles, was sonst noch geht.</figcaption></figure>
+<figure class="v-b"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:440px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="">Chats</span><span class="on">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><span class="sw" style="background:#5e6ad2">W</span><div class="t">Controller-Raster</div><div class="w">jetzt</div></div><div class="r mark"><span class="sw" style="background:#3fa873">L</span><div class="t">ListM8 Kampagnen<span class="vorher">vorher</span></div><div class="w">◆ wartet · 3 Chats</div></div><div class="r"><span class="sw" style="background:#c9962a">R</span><div class="t">Release 2.26</div><div class="w">2 Chats</div></div><div style="height:1px;background:rgba(255,255,255,.1);margin:4px 8px"></div><div class="r"><span class="sw" style="background:#7a7d85">▤</span><div class="t">whisperm8<small>Projekt</small></div><div class="w">4 aktiv</div></div><div class="r"><span class="sw" style="background:#7a7d85">▤</span><div class="t">ListM8<small>Projekt</small></div><div class="w">2 aktiv</div></div></div><div class="foot"><span><span class="kc ">⇥</span> weiter</span><span><span class="kc ">←</span> Chats</span><span><span class="kc ">␣</span> hier diktieren</span><span><span class="kc ">esc</span> abbrechen</span><span><span class="kc ">⌥</span> los: wechseln</span></div></div></div></div>
+  <figcaption><b>3 · Reiter mit →.</b> Workspaces oben, Projekte mit aktiven Chats darunter. Die Markierung startet auch hier auf „vorher“. Die Tastenzeile fällt hier weg, damit die Liste Platz hat.</figcaption></figure>
+<figure class="v-b"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:520px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="keyrow"><div class="lbl"><span>für Controller Insel</span><span>App</span></div><div class="ks"><span class=""><span class="kc ">S</span>Jetzt senden</span><span class=""><span class="kc ">M</span>Modus</span><span class=""><span class="kc ">O</span>Transkript</span><span class=""><span class="kc ">B</span>Befehle ›</span><span class=""><span class="kc ">K</span>Konto ›</span><i class="sep"></i><span class=""><span class="kc ">L</span>Limits</span><span class="hit"><span class="kc ">N</span>Mitteilungen</span><span class=""><span class="kc ">A</span>Wach bleiben</span><span class=""><span class="kc ">C</span>Zwischenablage</span></div></div><div class="toast"><span><b>Mitteilungen: Ton aus</b> · Glocke wie in der Seitenleiste</span><span>N noch mal: alles aus</span></div><div class="foot"><span><span class="kc ">⌥</span> los: nichts wechselt (Markierung unbewegt)</span></div></div></div></div>
+  <figcaption><b>4 · Schalter mit N.</b> Wie R1 + ◀: Die Insel bleibt offen, der Stand steht ausgeschrieben, daneben was der nächste Druck bringt. A schaltet Wach bleiben genauso. Alle anderen Befehle schließen die Insel.</figcaption></figure>
+<h2 class="v-b">Diktat und Spickzettel</h2>
+<figure class="v-b"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:520px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><i class="dot error"></i><span>Aufnahme → Controller Insel</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="keyrow"><div class="lbl"><span>für Controller Insel</span><span>Diktat läuft: Chat-Befehle aus</span></div><div class="ks"><span class="off"><span class="kc ">S</span>Jetzt senden</span><span class="off"><span class="kc ">M</span>Modus</span><span class="off"><span class="kc ">O</span>Transkript</span><span class="off"><span class="kc ">B</span>Befehle ›</span><span class="off"><span class="kc ">K</span>Konto ›</span><i class="sep"></i><span class=""><span class="kc ">L</span>Limits</span><span class=""><span class="kc ">N</span>Mitteilungen</span><span class=""><span class="kc ">A</span>Wach bleiben</span><span class=""><span class="kc ">C</span>Zwischenablage</span></div></div><div class="foot"><span><span class="kc ">␣</span> stopp</span><span><span class="kc ">⇥</span> weiter</span><span><span class="kc ">esc</span> nur Insel zu, Aufnahme läuft</span><span><span class="kc ">⌥</span> los: wechseln</span></div></div></div></div>
+  <figcaption><b>5 · Während eines Diktats.</b> Wohin geht, das Diktat bleibt an seinem Ziel. Chat-Befehle sind aus, App-Befehle gehen. Leertaste heißt „stopp“. Esc schließt nur die Insel, die Aufnahme läuft weiter — das steht in der Fußzeile, weil Esc sonst die Aufnahme abbricht.</figcaption></figure>
+<figure class="v-b"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:400px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">?</span><span class="layer">Schreiben</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div><div class="cheat"><div class="k2"><span class="kc ">⌘</span><span class="kc ">⌫</span></div><div>bis Zeilenanfang löschen</div><div class="k2"><span class="kc ">⇧</span><span class="kc ">↩</span></div><div>Zeilenumbruch ohne Senden</div><div class="k2"><span class="kc ">⌥</span><span class="kc ">←</span><span class="kc ">→</span></div><div>Wort zurück / vor</div><div class="k2"><span class="kc ">↑</span><span class="kc ">↓</span></div><div>Zeile hoch / runter im Entwurf</div><div class="k2"><span class="kc ">⌘</span><span class="kc ">V</span></div><div>einfügen</div><div class="k2"><span class="kc ">esc</span></div><div>Escape an Claude</div><div class="k2"><span class="kc ">⌃</span><span class="kc ">_</span></div><div>rückgängig (Claude)</div></div><div class="foot"><span><span class="kc ">⌥</span> los: schließen</span><span>die Tasten gehen auch ohne Insel</span></div></div></div></div>
+  <figcaption><b>6 · Spickzettel mit ?.</b> L1 braucht auf der Tastatur keine Ebene: Jede Funktion hat schon eine eigene Taste. Die Insel zeigt sie nur, damit man sie an einer Stelle findet.</figcaption></figure>
+<h2 class="v-b">Ohne Notch · folgt Hell und Dunkel</h2>
+<figure class="v-b"><div class="screen huge"><div class="menubar nonotch"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win nonotch">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="pill" style="width:520px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="keyrow"><div class="lbl"><span>für Controller Insel</span><span>App</span></div><div class="ks"><span class=""><span class="kc ">S</span>Jetzt senden</span><span class=""><span class="kc ">M</span>Modus</span><span class=""><span class="kc ">O</span>Transkript</span><span class=""><span class="kc ">B</span>Befehle ›</span><span class=""><span class="kc ">K</span>Konto ›</span><i class="sep"></i><span class=""><span class="kc ">L</span>Limits</span><span class=""><span class="kc ">N</span>Mitteilungen</span><span class=""><span class="kc ">A</span>Wach bleiben</span><span class=""><span class="kc ">C</span>Zwischenablage</span></div></div><div class="foot"><span><span class="kc ">⇥</span><span class="kc ">⇧⇥</span> weiter/zurück</span><span><span class="kc ">←</span><span class="kc ">→</span> Reiter</span><span><span class="kc ">␣</span> hin &amp; diktieren</span><span><span class="kc ">W</span> wartet</span><span><span class="kc ">R</span> wieder öffnen</span><span><span class="kc ">esc</span> abbrechen</span><span><span class="kc ">⌥</span> los: wechseln</span></div></div></div>
+  <figcaption><b>7 · Aus der Pille.</b> Gleicher Inhalt im Glas der Diktat-Pille. Oben rechts „Hell / Dunkel“ zum Vergleichen.</figcaption></figure>
+<figure class="v-b"><div class="screen tall"><div class="menubar nonotch"><div class="l"><b>WhisperM8</b></div><div class="r"><span>Do 22:51</span></div></div><div class="win nonotch">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="tag">Legende ohne Controller</div></div>
+  <figcaption><b>8 · Legende unten im Fenster.</b> Ohne verbundenen Controller zeigt sie Tastatur: ⌥Tab Wohin, ⌥Leertaste Diktieren, ⌃Tab Raster. Mit Controller bleibt sie wie heute.</figcaption></figure>
+<div class="vbanner v-a"><b>Variante A · Eins zu eins.</b> ⌥Tab = L2 Wohin, eine zweite Taste (⌥ + Taste über Tab, ^ bzw. `) = R1 mit derselben Raute, Pfeile statt Steuerkreuz. Kein L1. Zwei Kürzel zum Merken; die zweite Taste ist vermutlich AltTabs zweites Kürzel.</div>
+<h2 class="v-a">⌥Tab · Wohin</h2>
+<figure class="full v-a"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:460px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="foot"><span><span class="kc ">⇥</span><span class="kc ">⇧⇥</span> weiter/zurück</span><span><span class="kc ">←</span><span class="kc ">→</span> Reiter</span><span><span class="kc ">␣</span> hin &amp; diktieren</span><span><span class="kc ">esc</span> abbrechen</span><span><span class="kc ">⌥</span> los: wechseln</span></div></div></div></div>
+  <figcaption><b>A1 · Wohin.</b> Wie in B, aber ohne Tastenzeile.</figcaption></figure>
+<h2 class="v-a">⌥^ · Schnellbefehle</h2>
+<figure class="full v-a"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:1000px"><div class="island-head"><span class="kc held">⌥</span><span class="plus">+</span><span class="kc ">^</span><span class="layer">Schnellbefehle</span><span class="target"><i class="dot working"></i><span>Controller Insel</span></span></div><div style="display:flex"><div class="diamond">
+  <div class="slot top"><span class="kc ">↑</span>Limits</div><div class="slot left"><span class="kc ">←</span>Mitteilungen</div>
+  <div class="center">App</div><div class="slot right"><span class="kc ">→</span>Wach bleiben</div><div class="slot bottom"><span class="kc ">↓</span>Zwischenablage</div></div><div class="diamond">
+  <div class="slot top"><span class="kc ">M</span>Modus</div><div class="slot left"><span class="kc ">B</span>Befehle ›</div>
+  <div class="center">Chat</div><div class="slot right"><span class="kc ">K</span>Konto ›</div><div class="slot bottom"><span class="kc ">↩</span>Jetzt senden</div></div></div><div class="foot"><span><span class="kc ">O</span> Transkript</span><span><span class="kc ">⌥</span> los: schließen</span></div></div></div></div>
+  <figcaption><b>A2 · Zwei Rauten wie R1.</b> Pfeile für die App-Raute, Buchstaben für die Chat-Raute. Vertraut für Controller-Nutzer, auf der Tastatur aber umständlicher als die Tastenzeile in B.</figcaption></figure>
+<div class="vbanner v-c"><b>Variante C · Insel statt Kacheln.</b> ⌃Tab öffnet die Insel, der Kachel-Umschalter fällt weg. Die markierte Zeile bekommt die Stand-Zeile der Kachel. Ein Kürzel, aber Raster-Markierung, Mini-Map und Umfang „nur mein Workspace“ gehen verloren.</div>
+<h2 class="v-c">⌃Tab · Wohin mit Stand-Zeile</h2>
+<figure class="full v-c"><div class="screen huge"><div class="menubar"><div class="l"><b>WhisperM8</b><span>Ablage</span><span>Bearbeiten</span><span>Fenster</span></div><div class="r"><span>Do 22:51</span></div></div><div class="win">
+        <div class="side">
+          <div class="grp">WhisperM8</div>
+          <div class="sel"><i class="dot working"></i>Controller Insel</div>
+          <div><i class="dot awaiting"></i>Jarvis: Supervisor WhisperM8</div>
+          <div><i class="dot"></i>Schlüsselbund Diktat</div>
+          <div class="grp">ListM8</div>
+          <div><i class="dot working"></i>Kampagnen Import</div>
+          <div><i class="dot"></i>Lead Varianten</div>
+        </div>
+        <div class="chat">
+          <div class="tabs"><span class="on">Controller Insel</span><span>Jarvis: Supervisor</span><span>Schlüsselbund Diktat</span></div>
+          <div class="term">⏺ Ich lese die Controller-Doku und die Tastenkürzel der App.<br>⏺ Bash(grep -rn "TabSwitcherShortcut" WhisperM8)<br>&nbsp;&nbsp;⎿ direction · isNextWaitingChat<br><br>⏺ Write(docs/plans/insel-tastatur.md)</div>
+          <div class="input">und dann die Insel auch per Tastatur</div>
+          <div class="legend"><b>Controller Insel</b><span>arbeitet</span><span class="k"><span class="kc ">⌥</span><span class="kc ">⇥</span>Wohin</span><span class="k"><span class="kc ">⌥</span><span class="kc ">␣</span>Diktieren</span><span class="k"><span class="kc ">⌃</span><span class="kc ">⇥</span>Raster</span></div>
+        </div>
+      </div><div class="hang"><div class="band"></div><div class="body grow" style="width:520px"><div class="island-head"><span class="kc held">⌃</span><span class="plus">+</span><span class="kc ">⇥</span><span class="layer">Wohin</span><span class="target"><span class="chip working">● 2</span>&nbsp;<span class="chip awaiting">◆ 1</span></span></div><div class="seg"><span class="on">Chats</span><span class="">Workspaces &amp; Projekte</span></div><div class="rows"><div class="r cur"><i class="dot working"></i><div class="t">Controller Insel<small>WhisperM8</small></div><div class="w">jetzt</div></div><div class="r mark two"><i class="dot awaiting"></i><div class="t">Jarvis: Supervisor WhisperM8<small>WhisperM8</small><span class="vorher">vorher</span><span class="stand">Frage: „Merge jetzt oder nach dem Review?“</span></div><div class="w">wartet · 2 min</div></div><div class="r"><i class="dot "></i><div class="t">Schlüsselbund Diktat<small>WhisperM8</small></div><div class="w">bereit</div></div><div class="r"><i class="dot working"></i><div class="t">Kampagnen Import<small>ListM8</small></div><div class="w">arbeitet · 6 min</div></div><div class="r"><i class="dot "></i><div class="t">Lead Varianten<small>ListM8</small></div><div class="w">vor 40 min</div></div><div class="more">+ 9 weitere</div></div><div class="keyrow"><div class="lbl"><span>für Controller Insel</span><span>App</span></div><div class="ks"><span class=""><span class="kc ">S</span>Jetzt senden</span><span class=""><span class="kc ">M</span>Modus</span><span class=""><span class="kc ">O</span>Transkript</span><span class=""><span class="kc ">B</span>Befehle ›</span><span class=""><span class="kc ">K</span>Konto ›</span><i class="sep"></i><span class=""><span class="kc ">L</span>Limits</span><span class=""><span class="kc ">N</span>Mitteilungen</span><span class=""><span class="kc ">A</span>Wach bleiben</span><span class=""><span class="kc ">C</span>Zwischenablage</span></div></div><div class="foot"><span><span class="kc ">⇥</span><span class="kc ">⇧⇥</span> weiter/zurück</span><span><span class="kc ">←</span><span class="kc ">→</span> Reiter</span><span><span class="kc ">esc</span> abbrechen</span><span><span class="kc ">⌃</span> los: wechseln</span></div></div></div></div>
+  <figcaption><b>C1 · Ersatz.</b> Diktieren ginge hier nicht über Leertaste, weil das Diktat auf ⌥Leertaste liegt und ⌃ gehalten ist; man bräuchte eine eigene Taste. Im Raster markiert ⌃Tab heute die echten Kacheln — das fiele weg.</figcaption></figure>
+<div class="decide">
+  <b>Entscheidungen für dich</b> (Empfehlung jeweils dahinter)
+  <ol>
+    <li><b>⌥Tab öffnet die Insel wie L2</b>, kurz getippt zurück zum vorigen Ort. <span class="rec">Ja</span></li>
+    <li><b>⌃Tab bleibt der Kachel-Umschalter</b>, die Insel läuft daneben auf ⌥Tab (statt Variante C). <span class="rec">Ja</span></li>
+    <li><b>Variante B</b>: eine Insel, Schnellbefehle als Buchstaben (S M O B K · L N A C) statt einer zweiten Taste mit Raute. <span class="rec">Ja</span></li>
+    <li><b>Leertaste in der Insel = hin und diktieren</b> (R2), während eines Diktats „stopp“. <span class="rec">Ja</span></li>
+    <li><b>W = nächster wartender Chat, R = zuletzt geschlossenen wieder öffnen</b> in der Insel. <span class="rec">Ja</span></li>
+    <li><b>Keine L1-Ebene</b> auf der Tastatur, weil jede Funktion schon eine Taste hat. <span class="rec">Ja</span></li>
+    <li><b>? zeigt die Schreib-Tasten als Spickzettel.</b> <span class="rec">Ja, klein</span></li>
+    <li><b>Legende ohne Controller auf Tastatur umstellen</b> (⌥Tab Wohin · ⌥Leertaste Diktieren · ⌃Tab Raster). <span class="rec">Ja</span></li>
+    <li><b>Zuerst nur in der App</b> (Agent-Chats-Fenster vorne); global außerhalb der App später als eigener Schalter, Standard aus. <span class="rec">Ja</span></li>
+    <li><b>Stand-Zeile an der markierten Zeile</b> auch in B (zweite Zeile wie in C1). <span class="rec">Nein, erst nach Feldtest</span></li>
+  </ol>
+</div>
+
+</main>
+<script>
+  const root = document.documentElement;
+  try { const saved = localStorage.getItem("insel-tastatur-theme"); if (saved) root.dataset.theme = saved;
+        else if (matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark"; } catch (e) {}
+  document.getElementById("theme").addEventListener("click", () => {
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+    try { localStorage.setItem("insel-tastatur-theme", root.dataset.theme); } catch (e) {}
+  });
+  document.querySelectorAll(".variants button").forEach(b => b.addEventListener("click", () => {
+    document.body.dataset.v = b.dataset.v;
+    document.querySelectorAll(".variants button").forEach(x => x.classList.toggle("on", x === b));
+  }));
+</script>
+</body>
+</html>
