@@ -188,8 +188,10 @@ handover_dir_issues() { # ordner
     mode=$(stat -f %Lp "$1" 2>/dev/null || echo '?')
     [[ "$mode" == 700 ]] || echo "Ordner $mode"
     for base in $(secret_bearing_files "$1"); do
+        # Verschwindet die Datei zwischen Auflisten und stat (take-secret wird
+        # nach dem Lesen gelöscht), ist das keine Abweichung.
         [[ -f "$1/$base" ]] || continue
-        mode=$(stat -f %Lp "$1/$base" 2>/dev/null || echo '?')
+        mode=$(stat -f %Lp "$1/$base" 2>/dev/null) || continue
         [[ "$mode" == 600 ]] || echo "Datei $mode $base"
     done
 }
