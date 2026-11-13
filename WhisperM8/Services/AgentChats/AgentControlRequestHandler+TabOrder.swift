@@ -13,12 +13,15 @@ extension AgentControlRequestHandler {
     }
 
     /// Prüft und plant die Tab-Folge eines Fensters (pure). Alle genannten
-    /// Chats müssen als Tab offen sein, im selben Fenster und im selben
-    /// Projekt. Die Tabs dieses Projekts werden wie bei `chats order` geordnet
-    /// und rücken als Block an die Stelle des ersten; andere Tabs bleiben in
-    /// ihrer Folge.
+    /// Chats müssen als Tab offen sein, im selben Fenster und in derselben
+    /// Tab-Gruppe wie in der Tab-Leiste (`AgentTabGrouping.key`: Raster-
+    /// Workspace vor Projekt). Die Tabs dieser Gruppe werden wie bei
+    /// `chats order` geordnet und rücken als Block an die Stelle des ersten;
+    /// andere Tabs bleiben in ihrer Folge.
     static func planTabOrder(
-        windows: [(id: UUID, tabs: [UUID])], workspace: AgentWorkspace, first: [UUID], last: [UUID]
+        windows: [(id: UUID, tabs: [UUID])], workspace: AgentWorkspace,
+        workspaceBySession: [UUID: UUID] = [:], workspaceNames: [UUID: String] = [:],
+        first: [UUID], last: [UUID]
     ) -> Result<TabOrderPlan, ChatsControlErrorKind> {
         let named = first + last
         guard !named.isEmpty else { return .failure(.init(.invalid, "Mindestens einen Chat nennen.")) }
@@ -38,15 +41,26 @@ extension AgentControlRequestHandler {
               let window = windows.first(where: { $0.id == windowID }) else {
             return .failure(.init(.invalid, "Die Tabs liegen in verschiedenen Fenstern; chats order --tabs ordnet nur innerhalb eines Fensters."))
         }
-        let projectIDs = Set(named.compactMap { byID[$0]?.projectID })
-        guard projectIDs.count == 1, let projectID = projectIDs.first else {
-            return .failure(.init(.invalid, "Die Tabs gehören zu verschiedenen Projekten; chats order --tabs ordnet die Tabs eines Projekts."))
+        if let unknown = named.first(where: { byID[$0] == nil }) {
+            return .failure(.init(.notFound, "Chat \(unknown.uuidString) nicht im Workspace."))
         }
-        let projectTabs = window.tabs.filter { byID[$0]?.projectID == projectID }
-        let block = ChatOrderPlanner.plannedOrder(current: projectTabs, first: first, last: last)
+        func groupKey(_ id: UUID) -> AgentTabGroupingKey? {
+            byID[id].map { AgentTabGrouping.key(for: .init(sessionID: id, projectID: $0.projectID), workspaceBySession: workspaceBySession) }
+        }
+        let keys = Set(named.compactMap(groupKey))
+        guard keys.count == 1, let key = keys.first else {
+            return .failure(.init(.invalid, "Die Tabs gehören zu verschiedenen Tab-Gruppen (Projekt oder Raster-Workspace); chats order --tabs ordnet die Tabs einer Gruppe."))
+        }
+        let groupTabs = window.tabs.filter { groupKey($0) == key }
+        let block = ChatOrderPlanner.plannedOrder(current: groupTabs, first: first, last: last)
+        let groupName: String
+        switch key {
+        case .project(let projectID): groupName = workspace.projects.first { $0.id == projectID }?.name ?? "?"
+        case .workspace(let workspaceID): groupName = "Workspace " + (workspaceNames[workspaceID] ?? "?")
+        }
         return .success(TabOrderPlan(
             windowID: windowID,
-            projectName: workspace.projects.first { $0.id == projectID }?.name ?? "?",
+            projectName: groupName,
             before: window.tabs,
             after: ChatOrderPlanner.tabBlockOrder(window: window.tabs, block: block)))
     }
@@ -67,7 +81,10 @@ extension AgentControlRequestHandler {
             let store = AgentWindowStore.shared
             let workspace = AgentSessionStore().loadWorkspace()
             let windows = ([store.primaryWindowID] + store.secondaryWindowIDs).map { (id: $0, tabs: store.openTabIDs(in: $0)) }
-            switch Self.planTabOrder(windows: windows, workspace: workspace, first: first, last: last) {
+            let names = Dictionary(store.gridWorkspaces.map { ($0.id, $0.name) }, uniquingKeysWith: { lhs, _ in lhs })
+            switch Self.planTabOrder(windows: windows, workspace: workspace,
+                                     workspaceBySession: store.tabGroupWorkspaceBySession, workspaceNames: names,
+                                     first: first, last: last) {
             case .failure(let error):
                 return .failure(error)
             case .success(let plan):

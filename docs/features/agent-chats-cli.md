@@ -484,9 +484,12 @@ bewusst schwache Schwester von `archive`. Contract:
   bis zu 20 s alte Folge).
   **`--tabs`** (Methode `tab.order`) ordnet stattdessen die Tabs eines
   Fensters: Alle genannten Chats müssen im selben Fenster als Tab offen sein
-  und zum selben Projekt gehören. Die Tabs dieses Projekts werden wie oben
-  geordnet und rücken als Block an die Stelle des ersten; Tabs anderer Projekte
-  behalten ihre Folge davor und dahinter. Die Auswahl im Fenster bleibt.
+  und zur selben Tab-Gruppe gehören, wie die Tab-Leiste sie bildet
+  (`AgentTabGrouping.key`: ein Raster-Workspace geht vor dem Projekt). Die Tabs
+  dieser Gruppe werden wie oben geordnet und rücken als Block an die Stelle des
+  ersten; andere Tabs behalten ihre Folge davor und dahinter. Die Auswahl im
+  Fenster bleibt. Scheitert das sofortige Schreiben, steht im Ergebnis
+  `persisted: false` (Folge in der App gesetzt, auf der Platte noch nicht).
 - **`move <ref> --window <primary|id>`** verschiebt einen Tab in ein anderes
   BESTEHENDES Fenster (`AgentUIState.moveTab`-Semantik: nicht-offene Tabs
   werden im Ziel geöffnet). Fenster-Refs: `primary` oder ID/-Präfix ≥ 8 aus

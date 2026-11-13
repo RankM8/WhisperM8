@@ -119,6 +119,9 @@ enum ChatsOrderCommand {
                 : "Projekt-Ansicht folgt: \(moved.compactMap { $0["name"]?.stringValue }.joined(separator: ", "))")
         }
         if !changed { lines.append("Unverändert: Die Folge stimmte schon.") }
+        if result?["persisted"]?.boolValue == false {
+            lines.append("Achtung: In der App gesetzt, aber noch nicht gespeichert; chats list kann kurz die alte Folge zeigen.")
+        }
         return lines.joined(separator: "\n")
     }
 }

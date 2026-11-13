@@ -207,8 +207,26 @@ final class TabOrderPlanTests: XCTestCase {
         } else { XCTFail("zwei Fenster") }
         if case .failure(let error) = AgentControlRequestHandler.planTabOrder(windows: [w1], workspace: workspace, first: [a.id, c.id], last: []) {
             XCTAssertEqual(error.code, .invalid)
-            XCTAssertTrue(error.message.contains("Projekten"))
+            XCTAssertTrue(error.message.contains("Tab-Gruppen"))
         } else { XCTFail("zwei Projekte") }
+    }
+
+    /// Tab-Leiste gruppiert Raster-Workspace vor Projekt: Ein Tab im Workspace
+    /// gehört nicht zur Projektgruppe.
+    func testTabGroupFollowsTheTabStripGrouping() throws {
+        let (a1, a2, a3) = (chat("a1", projectA), chat("a2", projectA), chat("a3", projectA))
+        let gridID = UUID()
+        let window = (id: UUID(), tabs: [a1.id, a2.id, a3.id])
+        let workspace = AgentWorkspace(projects: [projectA], sessions: [a1, a2, a3])
+        if case .failure(let error) = AgentControlRequestHandler.planTabOrder(
+            windows: [window], workspace: workspace, workspaceBySession: [a1.id: gridID],
+            first: [a3.id, a1.id], last: []) {
+            XCTAssertTrue(error.message.contains("Tab-Gruppen"))
+        } else { XCTFail("Workspace-Tab und Projekt-Tab sind verschiedene Gruppen") }
+        let plan = try AgentControlRequestHandler.planTabOrder(
+            windows: [window], workspace: workspace, workspaceBySession: [a1.id: gridID],
+            first: [a3.id], last: []).get()
+        XCTAssertEqual(plan.after, [a1.id, a3.id, a2.id], "nur a2 und a3 bilden die Projektgruppe")
     }
 
     func testParsesTabsFlag() throws {

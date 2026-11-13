@@ -124,8 +124,9 @@ extension AgentControlRequestHandler {
             let changed = plan.after != plan.before || views.contains { $0.before != $0.after }
             // Befund 13.11.2026: `chats list` las direkt danach noch die alte
             // Folge. Erst antworten, wenn der Workspace auf der Platte steht.
+            var persisted = true
             if !dryRun, plan.after != plan.before {
-                await AgentSessionStore().flushToDisk(reason: "order")
+                persisted = await AgentSessionStore().flushToDisk(reason: "order")
             }
             if !dryRun, changed {
                 await audit(request.actor, method: "order", target: plan.projectName, outcome: "ok", prompt: nil)
@@ -140,6 +141,9 @@ extension AgentControlRequestHandler {
                 "ok": true,
                 "dryRun": dryRun,
                 "changed": changed,
+                // false: Folge gesetzt, aber noch nicht auf der Platte; chats list
+                // kann bis zum nächsten Schreibversuch die alte Folge lesen.
+                "persisted": persisted,
                 "project": plan.projectName,
                 "projectID": plan.projectID.uuidString,
                 "before": list(plan.before),

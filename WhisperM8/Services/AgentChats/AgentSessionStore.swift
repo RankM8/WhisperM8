@@ -712,7 +712,8 @@ struct AgentSessionStore {
     }
 
     /// Wartet, bis der Stand auf der Platte steht (siehe `AgentWorkspaceStore.flushToDisk`).
-    func flushToDisk(reason: String) async {
+    @discardableResult
+    func flushToDisk(reason: String) async -> Bool {
         await workspaceStore.flushToDisk(reason: reason)
     }
 

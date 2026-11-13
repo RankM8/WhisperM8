@@ -53,4 +53,17 @@ extension AgentWindowStore {
         }
         return (before, openTabIDs(in: windowID))
     }
+
+    /// Raster-Workspace je Tab für die Gruppierung der Tab-Leiste
+    /// (`AgentTabGrouping.key`): Projekt-Ansichten zählen nicht, sonst trüge
+    /// jeder aktive Chat eine Workspace-Färbung.
+    var tabGroupWorkspaceBySession: [UUID: UUID] {
+        var result: [UUID: UUID] = [:]
+        for entity in gridWorkspaces where entity.sourceProjectID == nil {
+            for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
+                result[sessionID] = entity.id
+            }
+        }
+        return result
+    }
 }

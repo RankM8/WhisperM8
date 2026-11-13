@@ -247,16 +247,23 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// steht. Für Mutationen über den Steuer-Socket, nach denen die CLI sofort
     /// wieder von Disk liest (`chats order`, dann `chats list`). Nie vom Main
     /// Thread aus warten: Encoding und Write laufen auf der Utility-Queue.
-    func flushToDisk(reason: String) async {
-        guard case .debounced = policy else { return }
+    /// `false`, wenn das Schreiben scheiterte (der Stand bleibt dann dirty,
+    /// der Retry mit Backoff läuft wie sonst).
+    @discardableResult
+    func flushToDisk(reason: String) async -> Bool {
+        guard case .debounced = policy else { return true }
         lock.lock()
         pendingFlush?.cancel()
         pendingFlush = nil
         lock.unlock()
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             flushQueue.async { [weak self] in
-                self?.drain(reason: reason)
-                continuation.resume()
+                guard let self else { return continuation.resume(returning: false) }
+                self.drain(reason: reason)
+                self.lock.lock()
+                let written = !self.dirty
+                self.lock.unlock()
+                continuation.resume(returning: written)
             }
         }
     }
