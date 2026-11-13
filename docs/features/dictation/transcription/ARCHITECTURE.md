@@ -80,8 +80,13 @@ Transcribe-Pfad übergibt nur `verbose_json` für segmentfähige Modelle oder
    `transcribeAndDeliver` mit Audio-URL, Dauer, OutputMode und Kontextbundle.
 2. Der Provider-Resolver führt bei Bedarf die Settings-Migration aus und lädt
    den aktuellen Provider; der Modell-Resolver lädt das aktuelle Modell.
-3. Der API-Key-Resolver lädt `provider.keychainKey` aus `KeychainManager`;
-   `TranscriptionCredentialGate` entscheidet über `missingAPIKey` (Anbieter
+3. Der API-Key-Resolver lädt `provider.keychainKey` über
+   `KeychainManager.loadOffMain` auf einem Hintergrund-Thread. Nach jedem neuen
+   Build fragt macOS beim ersten Lesen per Dialog nach; auf dem Main Thread
+   stünde so lange die ganze App samt Terminals (5-s-Hänger am 13.11.2026).
+   Danach bleibt der Key für den App-Lauf im Speicher; ein 401 des Anbieters
+   verwirft diese Kopie (`apiKeyRejected`), Speichern und Löschen in den
+   Einstellungen ersetzen sie. `TranscriptionCredentialGate` entscheidet über `missingAPIKey` (Anbieter
    ohne Key — ChatGPT-Abo — bekommen `""`, der Resolver wird nicht gefragt).
 4. `provider.createService(apiKey:model:)` erzeugt den passenden Provider-
    Adapter und damit einen `MultipartTranscriptionClient`.
@@ -145,7 +150,7 @@ ist doppelt so hoch.
 - `gpt-4o-transcribe` gilt im CLI-Code als nicht segmentfähig; SRT/VTT brauchen Whisper-Modelle.
 - Post-Processing im CLI-Pfad verwirft Segmente nur bei Modes mit `usesPostProcessing`; Raw-Modes ohne Post-Processing behalten Segmente.
 - `KeychainManager.exists` kann bei `errSecInteractionNotAllowed` trotzdem `true` liefern, weil ein Key vorhanden sein kann, obwohl gerade keine UI-Interaktion erlaubt ist.
-- `KeychainManager.load` hat einen In-Memory-Cache und migriert alte UserDefaults-Keys beim ersten erfolgreichen Lesen.
+- `KeychainManager.load` hat einen In-Memory-Cache und migriert alte UserDefaults-Keys beim ersten erfolgreichen Lesen. Es blockiert, solange ein Schlüsselbund-Dialog offen ist; Aufrufer auf dem Main Thread nehmen `loadOffMain`. Gleichzeitige Aufrufe teilen sich einen Lesevorgang, und ein Lesevorgang, der ein Speichern oder Löschen überholt, legt seinen alten Wert nicht in den Cache.
 
 ## Schlüsseldateien
 
