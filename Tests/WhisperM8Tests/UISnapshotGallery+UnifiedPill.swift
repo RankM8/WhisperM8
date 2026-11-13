@@ -84,7 +84,7 @@ extension UISnapshotGallery {
 
         let notch = OverlayPresentation.notch(width: 185, height: 32)
 
-        return [
+        let fixtures: [Fixture] = [
             status("ruhe-leer", size: compact) { unifiedDisplay(inputs: []) },
             status("ruhe-zaehler", size: compact) { unifiedDisplay(inputs: unifiedDemoInputs) },
             status("hinweis", size: compact) { unifiedDisplay(inputs: unifiedDemoInputs, alert: alert) },
@@ -132,6 +132,42 @@ extension UISnapshotGallery {
                             .frame(height: 88)
                     }
                 })
+            },
+        ]
+        return fixtures + solidBlackFixtures(fixtures)
+    }
+
+    /// Einstellung „Tiefschwarzer Hintergrund“: dieselben Zustände ohne Notch
+    /// (an der Notch ist die Pille ohnehin schwarz), dazu die Insel, die aus
+    /// der Pille wächst, und der Schalter in den Einstellungen.
+    @MainActor
+    private static func solidBlackFixtures(_ fixtures: [Fixture]) -> [Fixture] {
+        let black = fixtures.filter { !$0.name.contains("notch") }.map { fixture in
+            Fixture(name: fixture.name.replacingOccurrences(of: "vereint-", with: "vereint-schwarz-"),
+                    size: fixture.size, storage: fixture.storage) {
+                AnyView(fixture.view().environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        func island(_ content: ControllerIslandModel.Content, _ name: String, height: CGFloat) -> Fixture {
+            Fixture(name: "vereint-schwarz-insel-\(name)", size: CGSize(width: 520, height: height)) {
+                let model = ControllerIslandModel(
+                    target: ControllerIslandTarget(title: "Pille vereint", status: .working), content: content)
+                return AnyView(UnifiedDesk {
+                    ControllerIslandView(display: ControllerIslandDisplay(
+                        style: .pill, model: model, counts: ControllerIslandCounts(working: 2, waiting: 1)))
+                        .pillGlassShadow()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 24)
+                }
+                .environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        return black + [
+            island(.writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))),
+                   "schreiben", height: 230),
+            Fixture(name: "vereint-schwarz-einstellungen", size: CGSize(width: 700, height: 760),
+                    storage: [PreferenceKeys.pillSolidBlackEnabled: true]) {
+                AnyView(ScrollView { PillSettingsSection().padding(24) })
             },
         ]
     }

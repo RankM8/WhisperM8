@@ -5731,6 +5731,16 @@
         }
       }
     },
+    "Draws the pill in deep black like the notch, also on displays without one, instead of dark glass. Applies to every state: at rest, the list, dictation and the controller island.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeichnet die Pille tiefschwarz wie die Notch, auch auf Bildschirmen ohne Notch, statt in dunklem Glas. Gilt in jedem Zustand: in Ruhe, mit Liste, beim Diktat und für die Controller-Insel."
+          }
+        }
+      }
+    },
     "Drop chat here": {
       "localizations": {
         "de": {
@@ -15460,6 +15470,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Snapshot der letzten Codex-Session · %@"
+          }
+        }
+      }
+    },
+    "Solid black background": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiefschwarzer Hintergrund"
           }
         }
       }
