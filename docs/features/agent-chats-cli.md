@@ -1,6 +1,6 @@
 ---
 status: aktiv
-stand: 2026-07-19
+stand: 2026-11-13
 feature: whisperm8 chats (Agent-Chats-CLI / Jarvis)
 ---
 
@@ -45,11 +45,54 @@ whisperm8 chats new --project whisperm8 --title "Analyse" --account main      # 
 whisperm8 chats new --project whisperm8 --title "Analyse" --account PowerUser # ausdrücklich Zusatzkonto
 ```
 
-Die Erfolgsmeldung nennt das Konto (`Account: …`), im `--json`-Modus steht es
-unter `session.account`. Ein `--account`, das kein Profil benennt oder auf ein
-nicht eingeloggtes Profil zeigt, lässt den Befehl **fehlschlagen** — bewusst
-kein stiller Rückfall auf den Haupt-Account, denn eine im falschen Konto
-entstandene Session lässt sich nur noch per Transcript-Umzug korrigieren.
+Die Erfolgsmeldung nennt das Konto und woher es kommt
+(`Konto: RankM8 (aktiv in den Einstellungen)` bzw. `(--account)`), im
+`--json`-Modus stehen `session.account` (immer der Name, auch `main`) und
+`session.accountSource` (`active` · `explicit` · `killSwitch`). Codex-Chats
+haben kein Claude-Konto: dort ist `session.account` `null` (bis 13.11.2026
+stand dort fälschlich `main`), und `--account` zusammen mit
+`--provider codex` ist ein Bedienfehler (Exit 1).
+
+Der Befehl **scheitert mit Exit 3**, statt still auf den Haupt-Account
+auszuweichen, wenn das gewählte Konto nicht taugt — egal ob es per `--account`
+genannt oder in den Einstellungen aktiv ist:
+
+- das Profil existiert nicht (auch: `.active` nennt ein gelöschtes Profil),
+- `.active` ist vorhanden, aber nicht lesbar (Rechte, Ordner statt Datei, kein
+  UTF-8) — nur eine fehlende oder leere `.active` heißt `main`,
+- es hat keine Kontodaten (`oauthAccount` fehlt in seiner `.claude.json`) oder
+  keinen Login im Keychain (gilt nur für Zusatzprofile),
+- sein Login ist nachweislich abgelaufen (30-Tage-Frist, siehe
+  [Claude-Konten](agent-chats/claude-konten.md#login-frist-und-erneuerung)).
+
+`main` sperrt nur ein nachweislich abgelaufener Login: dort läuft Claude auch
+mit API-Key, `apiKeyHelper` oder über einen Proxy, ganz ohne OAuth-Login.
+Die Liste „Angemeldet: …“ in der Meldung nennt nur Konten, die die Prüfung
+bestehen — abgelaufene fehlen.
+
+**Offen** (aus dem Review vom 13.11.2026, bewusst später):
+- Timeout für das Lesen des Keychains (`security` kann bei gesperrtem
+  Schlüsselbund hängen).
+- Exit-Codes trennen: Konto-Fehler und Projekt-Fehler von `new` sind beide 3.
+- `chats address` meldet das Konto aus Claudes Registry, `list`/`show` aus dem
+  Transcript-Ort — vereinheitlichen.
+- `move-account` sollte `AccountSwitchPlanner.decide` direkt nutzen statt die
+  Regeln über `AccountMoveStopResumePlanner` nachzubauen.
+- main mit nachweislich abgelaufenem OAuth-Login wird gesperrt, auch wenn
+  Claude dort per API-Key oder Proxy liefe.
+- `move-account` liest die `.claude.json` eines Zusatzprofils (Kontodaten) im
+  MainActor-Block.
+
+Die Meldung nennt die angemeldeten Konten und den Ausweg (`--account <profil>`
+oder ein anderes Konto aktiv setzen bzw. den Login erneuern). Grund: eine im
+falschen Konto entstandene Session lässt sich nur noch per Transcript-Umzug
+korrigieren. Die Prüfung läuft im Control-Server vor dem Anlegen und abseits
+des Main Threads (`ClaudeAccountProfiles.resolveNewChatAccount`, ein
+`security`-Aufruf); ist der Keychain gerade nicht lesbar, blockiert sie nicht.
+Profilnamen sind unabhängig von Groß-/Kleinschreibung (`--account rankm8`
+→ `RankM8`). Der Stempel bekommt immer den echten Ordnernamen: Claude bildet
+den Keychain-Namen aus dem unveränderten `CLAUDE_CONFIG_DIR`, ein klein
+geschriebener Pfad stünde auf APFS zwar im richtigen Ordner, aber ohne Login da.
 
 Der Stempel wird beim Anlegen eingefroren: ein späterer Wechsel des aktiven
 Kontos hängt bestehende Chats nicht um, weil deren `--resume` sonst im falschen
@@ -61,7 +104,24 @@ Haupt-Account): `defaults write com.whisperm8.app chatsNewProfileDefaultEnabled 
 
 **Ausnahme Background-Agenten** (`claude --bg`): laufen weiterhin immer im
 Haupt-Account. Supervisor-Daemon, `~/.claude/jobs/` und die Lifecycle-Aufrufe
-(`claude logs/stop`) sind fest darauf verdrahtet.
+(`claude logs/stop`) sind fest darauf verdrahtet. Die CLI legt keine
+Background-Agenten an; `list`/`show` zeigen für sie `account: "main"`.
+
+**Fork und Resume** folgen nie dem aktiven Konto, sondern dem Chat: ein Fork
+(Kontextmenü) erbt das Konto der Quelle, `chats resume` startet im Konto des
+Chats — genauer dort, wo sein Transcript liegt, denn nur dort findet
+`claude --resume` den Verlauf.
+
+### Konto eines Chats ablesen
+
+`list --json` und `show --json` führen je Chat das Feld `account`: den Namen des
+Claude-Kontos, `"main"` für das Hauptkonto, `null` für Codex-, Terminal- und
+Agent-View-Tabs. Maßgeblich ist der Ort, an dem das Transcript liegt — dorthin
+folgt auch der nächste Start (Resume-Selbstheilung im `AgentCommandBuilder`).
+Weicht der gespeicherte Stempel davon ab, steht er zusätzlich unter
+`accountStamp`. Vor der ersten Antwort (noch kein Transcript) gilt der Stempel.
+`show` zeigt dasselbe als Zeile `Konto`. Das rohe Stempelfeld bleibt unter
+`detail.claudeProfileName` (`null` = main).
 
 ### Bestehende Chats umziehen
 
@@ -110,12 +170,30 @@ Dieselbe Kette wie das Kontextmenü (`AccountMoveFacts` → `AccountMovePlanner`
 Skip-Regeln, dasselbe Journal — „Letzten Kontowechsel rückgängig machen" in
 der App nimmt einen CLI-Umzug genauso zurück. `--to main` zieht zurück in den
 Haupt-Account; ein unbekanntes Profil scheitert mit Exit 3 und nennt die
-vorhandenen. Refs werden vorab alle aufgelöst (alles oder nichts), ohne
+vorhandenen, die Schreibweise ist egal (`--to rankm8` → `RankM8`). Ein Ziel
+ohne Login **oder mit abgelaufenem Login** sperrt den Umzug
+(`skipped`/`targetNotLoggedIn`, `result.targetLoginProblem` = `notLoggedIn`
+bzw. `loginEnded`) — der Chat stünde sonst im Zielkonto vor dem Login.
+**Ausnahme main:** Das Hauptkonto sperrt nur ein nachweislich abgelaufener
+Login. Fehlen Kontodaten (`oauthAccount`) oder der Keychain-Eintrag, darf der
+Umzug nach main trotzdem laufen, denn dort arbeitet Claude auch mit API-Key,
+`apiKeyHelper` oder über einen Proxy (in Planung und Ausführung gleich,
+`executionTargetIsLoggedIn`). **Abweichung von der App:** Die CLI sperrt ein
+Zusatzkonto mit abgelaufenem Login; das Kontextmenü „Zu Account verschieben“
+prüft nur, ob Kontodaten da sind, und lässt den Umzug zu.
+Hat das Zielkonto den Projektordner nie im Trust-Dialog freigegeben, trägt
+das Ergebnis `targetTrustMissing: true` und die Textzeile einen Hinweis:
+Claude fragt dann beim nächsten Start nach der Freigabe. Bei Chats, die
+nicht laufen, ist das unkritisch — sie starten erst, wenn jemand den Tab
+öffnet und den Dialog sieht. Laufende Chats hält `--stop-and-resume` ohne
+`--force` in diesem Fall nicht an (siehe unten). Refs werden vorab alle aufgelöst (alles oder nichts), ohne
 Nachfrage — die Bestätigung holt der aufrufende Agent vorher ein.
 
 Ergebnis je Chat (`--json`: `result.results[]`): `outcome` = `wouldMove`
 (Vorschau) · `moved` · `scheduled` (vorgemerkt, wechselt nach dem Turn;
-`reason` = `turnRunning`/`awaitingInput`/`unsentInput`) · `skipped`
+`reason` = `turnRunning`/`awaitingInput`/`unsentInput`/`backgroundTasks`) ·
+`wouldSchedule` (Vorschau: der echte Lauf würde vormerken, seit 13.11.2026;
+vorher zeigte `--dry-run` diese Chats als übersprungen) · `skipped`
 (+ `reason` = Skip-Grund des Planers) · `failed` · `notFound`. Exit: Vorschau 0; sonst 0 nur, wenn danach **jeder**
 genannte Chat im Zielkonto ist (umgezogen oder schon dort), andernfalls 4 —
 ein Supervisor erkennt „nicht alles erledigt" am Exit-Code.
@@ -146,11 +224,29 @@ wechselt sie, sobald ihr Turn fertig und kein Entwurf mehr zu vermuten ist
 (Rückfrage offen → wartet weiter). Nicht vorgemerkt wird, wenn das Zielkonto
 den Ordner nie im Trust-Dialog freigegeben hat — der unbeobachtete Neustart
 landete sonst in Claudes Dialog mit Vorauswahl „No, exit"; diese Chats bleiben
-blockiert. Vormerkungen sind flüchtig (App-Neustart verwirft sie), aufheben
+blockiert (`stopBlocked: "trustMissing"`, auch schon in der Vorschau).
+
+**Fehlende Freigabe hält auch ruhende Chats auf** (seit 13.11.2026): Ohne
+`--force` hält `--stop-and-resume` keinen laufenden Chat an, dessen Ordner das
+Zielkonto nie freigegeben hat — auch keinen ruhenden. Die CLI wird meist
+unbeobachtet aufgerufen, der Neustart bliebe im Trust-Dialog hängen. Ergebnis:
+`skipped` mit `stopBlocked: "trustMissing"` und einem Text mit dem Ausweg:
+einmal einen Chat in diesem Ordner im Zielkonto öffnen und die Freigabe
+bestätigen (etwa `whisperm8 chats new --project <ordner> --account <ziel>`
+und im Tab „Yes“ wählen), dann erneut umziehen — oder `--force`, das wie
+bisher anhält. Das Kontextmenü der App bleibt dabei: dort wechselt ein
+ruhender Chat sofort, weil der User gerade hinschaut.
+Als beschäftigt gilt dieselbe Regel wie in der App
+(`AccountMoveStopResumePlanner.isBusy` → `AccountSwitchPlanner.waitReason`):
+arbeitet, wartet auf eine Antwort (Permission-Dialog), unbekannter Status oder
+offene Hintergrund-Tasks. Bis 13.11.2026 zählte die CLI nur „arbeitet" und
+hielt einen Chat mitten in einer Rückfrage sofort an. Vormerkungen sind flüchtig (App-Neustart verwirft sie), aufheben
 geht im Kontextmenü („Kontowechsel zu … aufheben"). `--force` hält auch
-arbeitende Chats sofort an. Kill-Switch:
+arbeitende Chats sofort an. Das Vormerken gibt es nur, solange
+`accountSwitchAfterTurnEnabled` an ist (Standard). Kill-Switch:
 `defaults write com.whisperm8.app accountSwitchAfterTurnEnabled -bool NO`
-(dann wieder blockiert wie vorher). Die Entwurfs-Schätzung
+(dann wieder blockiert wie vorher; die Meldung behauptet dann auch keinen
+ausgefallenen „Wechsel nach dem Turn“). Die Entwurfs-Schätzung
 (`TerminalComposerDraftTracker`) ist konservativ: getippte Zeichen, Einfügen,
 Datei-Drop und `send --no-submit` markieren, Return (ohne Shift/Option),
 Ctrl+C und ein zugestellter `send` heben die Markierung auf (Details und
