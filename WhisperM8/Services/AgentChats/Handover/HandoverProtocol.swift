@@ -323,6 +323,8 @@ struct HandoverPaths: Equatable {
     static var `default`: HandoverPaths { HandoverPaths(directory: defaultDirectory()) }
 
     var lockFileURL: URL { directory.appendingPathComponent("keeper.lock") }
+    /// Hält die App, solange sie beim Start übernimmt (Befund 4, Dex).
+    var takeLockFileURL: URL { directory.appendingPathComponent("take.lock") }
     var logFileURL: URL { directory.appendingPathComponent("keeper.log") }
     /// Enthält genau eine Zeile: den realen Socket-Pfad.
     var discoveryFileURL: URL { directory.appendingPathComponent("socket-path") }

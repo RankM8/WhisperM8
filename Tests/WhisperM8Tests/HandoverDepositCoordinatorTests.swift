@@ -232,6 +232,74 @@ final class FakeDepositSource: HandoverDepositSource {
 // MARK: - CLI `app handover`, `--wait-take`
 
 final class HandoverRestartCLITests: XCTestCase {
+    private struct Unreachable: Error {}
+
+    /// Uhr und Übernahme zum Durchspielen: Die Übernahme endet nach `takeSteps`
+    /// Wartezyklen, der Socket antwortet ab dem `answersFrom`-ten Versuch.
+    private final class Scenario {
+        var clock = Date(timeIntervalSince1970: 0)
+        var takeSteps: Int
+        var answersFrom: Int
+        var sends = 0
+        var notices: [String] = []
+        init(takeSteps: Int, answersFrom: Int) { self.takeSteps = takeSteps; self.answersFrom = answersFrom }
+
+        var wait: AppCLICommand.TakeWait {
+            AppCLICommand.TakeWait(
+                takeInProgress: { self.takeSteps > 0 },
+                maxWait: 60, settle: 5,
+                sleep: { self.clock = self.clock.addingTimeInterval($0); if self.takeSteps > 0 { self.takeSteps -= 1 } },
+                now: { self.clock },
+                notice: { self.notices.append($0) })
+        }
+
+        func send() throws -> ChatsControlResponse {
+            sends += 1
+            guard sends >= answersFrom else { throw Unreachable() }
+            return .success(requestID: "r", result: .object(["outcome": .string("handedOver")]))
+        }
+    }
+
+    /// Befund 4 (Dex): Ein zweiter Neustart mitten in der Übernahme wartet,
+    /// bis die App übernommen hat und ihr Socket antwortet.
+    func testHandoverWaitsForARunningTake() throws {
+        let scenario = Scenario(takeSteps: 10, answersFrom: 3)
+        let response = try AppCLICommand.sendWaitingForTake(wait: scenario.wait, scenario.send)
+        XCTAssertTrue(response.ok)
+        XCTAssertEqual(scenario.sends, 3)
+        XCTAssertGreaterThanOrEqual(scenario.clock.timeIntervalSince1970, 2, "erst nach der Übernahme")
+        XCTAssertEqual(scenario.notices.count, 1, "sagt sichtbar, worauf es wartet")
+    }
+
+    /// Ohne laufende Übernahme bleibt „nicht erreichbar“ sofort (Exit 5).
+    func testUnreachableWithoutTakeFailsAtOnce() {
+        let scenario = Scenario(takeSteps: 0, answersFrom: 99)
+        XCTAssertThrowsError(try AppCLICommand.sendWaitingForTake(wait: scenario.wait, scenario.send))
+        XCTAssertEqual(scenario.sends, 1)
+        XCTAssertTrue(scenario.notices.isEmpty)
+    }
+
+    /// Nach einem Absturz liegt take.lock noch da, aber niemand hält sie:
+    /// Sie blockiert nichts.
+    func testLeftoverTakeLockFileBlocksNothing() throws {
+        let directory = try HandoverTestSupport.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let paths = HandoverPaths(directory: directory)
+        let fd = try XCTUnwrap(HandoverTakeLock.acquire(paths: paths))
+        XCTAssertTrue(HandoverTakeLock.isHeld(paths: paths))
+        HandoverTakeLock.release(fd)   // wie das Ende des Prozesses
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.takeLockFileURL.path))
+        XCTAssertFalse(HandoverTakeLock.isHeld(paths: paths))
+    }
+
+    /// Antwortet der Socket auch nach der Übernahme nicht, gibt die CLI nach
+    /// der Nachfrist auf.
+    func testGivesUpAfterTheSettlePeriod() {
+        let scenario = Scenario(takeSteps: 2, answersFrom: 999)
+        XCTAssertThrowsError(try AppCLICommand.sendWaitingForTake(wait: scenario.wait, scenario.send))
+        XCTAssertLessThanOrEqual(scenario.clock.timeIntervalSince1970, 0.4 + 5.4)
+    }
+
     func testOutcomeMapsToExitCodes() {
         let empty = ChatsControlJSON.object([:])
         XCTAssertEqual(AppCLICommand.exitCode(outcome: "handedOver", reason: nil, result: empty, quiet: true), 0)
