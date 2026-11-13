@@ -35,16 +35,9 @@ let package = Package(
         // jeder spaeter gestartete Chat die Master aller frueheren Chats und
         // konnte deren Terminals lesen und beschreiben.
         //
-        // Dazu fuer „Neustart ohne Chatverlust“ (Branch whisperm8-handover):
-        // Terminal.serializeScreen() sichert Bild und Schalter so, dass ein
-        // frisches Terminal nach dem Einspielen gleich aussieht und sich gleich
-        // verhaelt; LocalProcess.detachForHandover()/adopt(_:) geben eine
-        // laufende Leitung ab und uebernehmen sie, Ende per kqueue mit
-        // Exit-Status; das Kind schliesst vor execve alle Deskriptoren ab 3.
-        //
         // Upstream-PR-faehig — bei Merge zurueck auf migueldeicaza/SwiftTerm +
         // Version-Bump. Pin auf Commit fuer reproduzierbare Builds.
-        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "4c3b0faed065e3fe636b056b3773534f4bbae6df"),
+        .package(url: "https://github.com/GiulianoCosta71/SwiftTerm", revision: "2d05c3a4995259a26e71d18a9cecbab03a4e338f"),
     ],
     targets: [
         // Winziges Objective-C-Target, nur damit Swift eine NSException

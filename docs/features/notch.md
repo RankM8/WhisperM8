@@ -129,7 +129,11 @@ Vollbild-Apps).
 
 **Technik des Übergangs:** Das Diktat-Fenster zeigt zuerst das Ruhebild der
 Pille (`UnifiedPillRestLook`: Kern und Zähler bzw. Hinweis, an der Notch die
-Zeile unter der Aussparung oder nur das Band), genau an deren Stelle. Das
+Zeile unter der Aussparung oder nur das Band), genau an deren Stelle. Dafür
+darf AppKit das Diktat-Fenster nicht unter die Menüleiste schieben
+(`RecordingPanel.allowsAboveMenuBar`, auch ohne Notch): Sein Schattenrand
+ragt oben in die Leiste, sonst stünde die Pille bis zu 24 pt zu tief und
+spränge beim Start nach unten. Das
 Ruhebild liefert die Status-Seite über den Hub
 (`NotchStatusController.restSnapshot`), aus ihrem Zustand gerechnet, nicht
 aus dem Fenster. Es wird aus denselben Bausteinen gezeichnet wie die

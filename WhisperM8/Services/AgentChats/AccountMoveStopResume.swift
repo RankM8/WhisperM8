@@ -24,7 +24,7 @@ enum AccountMoveStopResumePlanner {
 
         var label: String {
             switch self {
-            case .working: return "arbeitet gerade — nur mit --force"
+            case .working: return "beschäftigt (Turn, Rückfrage oder Hintergrund-Tasks) — nur mit --force"
             case .unsentInput: return "Eingabefeld enthält vermutlich ungesendeten Text — nur mit --force"
             case .ownSession: return "eigene Session — kann sich nicht selbst anhalten"
             }
@@ -41,6 +41,20 @@ enum AccountMoveStopResumePlanner {
         var toStop: [AccountMovePlanner.Candidate] = []
         /// Wuerden umziehen, wenn sie nicht liefen — bleiben aber stehen.
         var blocked: [Blocked] = []
+    }
+
+    /// Darf ein laufender Chat jetzt angehalten werden? Dieselbe Regel wie
+    /// in der App (`AccountSwitchPlanner.waitReason`): nur ein ruhender Chat
+    /// (idle, stopped, errored) ohne offene Hintergrund-Tasks. Eine offene
+    /// Rückfrage und ein unbekannter Status zählen als beschäftigt — lieber
+    /// warten als einen Turn abschießen. Den Entwurf prüft `select` getrennt.
+    static func isBusy(
+        status: AgentSessionRuntimeStatus?,
+        openBackgroundTasks: @autoclosure () -> Int
+    ) -> Bool {
+        AccountSwitchPlanner.waitReason(
+            status: status, mayHaveUnsentInput: false,
+            openBackgroundTasks: openBackgroundTasks()) != nil
     }
 
     static func select(
@@ -78,6 +92,76 @@ enum AccountMoveStopResumePlanner {
             }
         }
         return selection
+    }
+
+    // MARK: Ordner-Freigabe des Zielkontos
+
+    /// Was die Ordner-Freigabe (Trust) des Zielkontos für eine Auswahl
+    /// bedeutet. Pur — Arbeitsverzeichnisse und freigegebene Pfade liefert
+    /// der Aufrufer.
+    struct TrustDecision: Equatable {
+        /// Chats, deren Ordner das Zielkonto nicht freigegeben hat: Claude
+        /// fragt beim nächsten Start danach (nie die eigene Session).
+        var trustMissing: Set<UUID> = []
+        /// Beschäftigte Chats, die nach ihrem Turn wechseln.
+        var scheduleAfterTurn: [UUID] = []
+        /// Beschäftigte Chats, die wegen fehlender Freigabe NICHT vorgemerkt
+        /// werden: der unbeobachtete Neustart landete in Claudes Trust-Dialog
+        /// mit Vorauswahl „No, exit".
+        var blockedByTrust: Set<UUID> = []
+        /// Ruhende Chats aus `selection.toStop`, die ohne `--force` NICHT
+        /// angehalten werden: die CLI läuft meist unbeobachtet, der Neustart
+        /// im Zielkonto bliebe im Trust-Dialog hängen. Die App (Kontextmenü)
+        /// wechselt ruhende Chats trotzdem — dort schaut der User gerade hin.
+        var stopHeldByTrust: Set<UUID> = []
+    }
+
+    /// Text für Chats, die wegen fehlender Freigabe stehen bleiben — mit
+    /// dem Ausweg, damit der Aufrufer weiß, was zu tun ist.
+    static let trustMissingHint = "Ordner im Zielkonto nie freigegeben, Claude fragt beim Neustart danach "
+        + "(Vorauswahl „No, exit“). Einmal einen Chat in diesem Ordner im Zielkonto öffnen und die "
+        + "Freigabe bestätigen, dann erneut umziehen — oder --force"
+
+    /// Unbekanntes Arbeitsverzeichnis zählt als „nicht freigegeben" —
+    /// im Zweifel nicht unbeobachtet neu starten.
+    static func targetTrusts(cwd: String?, trustedPaths: Set<String>) -> Bool {
+        guard let cwd else { return false }
+        return ClaudeAccountPreflight.trustsProject(cwd: cwd, trustedPaths: trustedPaths)
+    }
+
+    /// - Parameters:
+    ///   - movable: laufen nicht, ziehen sofort um.
+    ///   - selection: Ergebnis von `select` (anzuhalten bzw. blockiert).
+    ///   - force: `--force` — hält auch Chats ohne Freigabe an (wie bisher).
+    ///   - mayScheduleAfterTurn: `--stop-and-resume` bei eingeschaltetem
+    ///     Kontowechsel nach dem Turn (in der Vorschau nur angezeigt).
+    static func trustDecision(
+        movable: [UUID],
+        selection: Selection,
+        cwd: (UUID) -> String?,
+        trustedPaths: Set<String>,
+        force: Bool,
+        mayScheduleAfterTurn: Bool
+    ) -> TrustDecision {
+        var decision = TrustDecision()
+        func trusts(_ id: UUID) -> Bool { targetTrusts(cwd: cwd(id), trustedPaths: trustedPaths) }
+        for id in movable where !trusts(id) {
+            decision.trustMissing.insert(id)
+        }
+        for id in selection.toStop.map(\.sessionID) where !trusts(id) {
+            decision.trustMissing.insert(id)
+            if !force { decision.stopHeldByTrust.insert(id) }
+        }
+        for blocked in selection.blocked where blocked.reason != .ownSession {
+            let id = blocked.candidate.sessionID
+            if !trusts(id) {
+                decision.trustMissing.insert(id)
+                decision.blockedByTrust.insert(id)
+            } else if mayScheduleAfterTurn {
+                decision.scheduleAfterTurn.append(id)
+            }
+        }
+        return decision
     }
 }
 

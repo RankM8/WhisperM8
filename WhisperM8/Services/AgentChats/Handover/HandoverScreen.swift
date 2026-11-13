@@ -13,25 +13,16 @@ import SwiftTerm
 /// und Scrollback anlegen und den Strom per `feed(byteArray:)` füttern.
 /// Mehr nicht — das Bild ist damit unabhängig von der Protokollversion.
 ///
-/// Standard ist `HandoverTerminalSerializer` aus dem SwiftTerm-Fork (Paket 1).
+/// Die echte Umsetzung baut Paket 1 im SwiftTerm-Fork. Bis dahin gilt
+/// `HandoverPlainTextSerializer`.
 protocol HandoverScreenSerializing {
     func serialize(_ terminal: Terminal) -> [UInt8]
 }
 
-/// Das vollständige Bild aus dem SwiftTerm-Fork (`Terminal.serializeScreen`):
-/// Verlauf, Farben, Stile, Links, Alt-Screen samt Hauptpuffer, Cursor samt
-/// gesichertem Cursor, Scrollbereich und alle Schalter, die TUIs beim Start
-/// setzen. Eine am Ende angeschnittene Sequenz trägt der Strom selbst weiter.
-struct HandoverTerminalSerializer: HandoverScreenSerializing {
-    func serialize(_ terminal: Terminal) -> [UInt8] {
-        terminal.serializeScreen()
-    }
-}
-
-/// Nur Text und Cursor, ohne Farben, Stile und Schalter. Bleibt für Tests, die
-/// nur den Text vergleichen; für echte TUIs reicht es nicht (ohne Schalter
-/// kommen Shift+Enter und Mausklicks nach der Übernahme falsch an, siehe Plan
-/// „Bild und Schalter“).
+/// Platzhalter bis zum Serialisierer aus dem Fork: nur Text und Cursor, ohne
+/// Farben, Stile und Schalter. Für den Aufbewahrer reicht das zum Testen; für
+/// echte TUIs nicht (ohne Schalter kommen Shift+Enter und Mausklicks nach der
+/// Übernahme falsch an, siehe Plan „Bild und Schalter“).
 struct HandoverPlainTextSerializer: HandoverScreenSerializing {
     func serialize(_ terminal: Terminal) -> [UInt8] {
         let text = String(decoding: terminal.getBufferAsData(kind: .active), as: UTF8.self)

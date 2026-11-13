@@ -154,7 +154,8 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 - Der Terminal-Delegate-Proxy (`AgentTerminalLinkInterceptor`) bleibt: er verweigert `clipboardRead` (OSC 52),
   sonst bekäme jede TUI den Klartext der Zwischenablage.
 - Kontowechsel: Hat das Zielkonto den Ordner nie freigegeben (Trust), wird ein arbeitender Chat nicht vorgemerkt —
-  der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“.
+  der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“. Die CLI
+  (`chats move-account --stop-and-resume`) hält dann ohne `--force` auch einen ruhenden Chat nicht an.
 - Der GPT-Proxy wird zur Laufzeit nie neu gestartet (laufende GPT-Chats); Waisen ersetzt nur der Start-Guard.
 - Tab-Logik (Auswahl, Reorder, Switcher-Umfang) bleibt pur und getestet; Drag/Drop/Menüs sind manuelle QA.
 - Status-Punkte in Sidebar, Tab und Kopf folgen derselben Logik (`AgentStatusIndicator`); Grün heißt nur „arbeitet“.
