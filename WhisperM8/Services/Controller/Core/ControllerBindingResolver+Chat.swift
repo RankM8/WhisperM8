@@ -152,12 +152,13 @@ extension ControllerBindingResolver {
 
     /// Enter: im Ruhezustand immer, in einer Rückfrage nach den ersten 0,5 s
     /// (unbekannter Beginn gilt als alt). Arbeitet der Chat oder ist sein
-    /// Zustand unklar, nur wenn kurz vorher per Controller getippt, gelöscht
-    /// oder diktiert (bei Codex: ein Pfeil gedrückt; bei Claude bis 5 s nach
-    /// einem scharfen Pfeil, `recentArrowNavigation`) und seither nichts
-    /// abgeschickt wurde, oder wenn eine Auswahl des Menüs offen ist: Zwischen
-    /// dem Erscheinen eines Freigabe-Dialogs und dem Status „wartet“ liegt eine
-    /// Lücke, in der Enter sonst die Vorauswahl bestätigte.
+    /// Zustand unklar: bei Claude immer, wenn sein Eingabefeld sichtbar ist
+    /// (`claudePromptVisible`). Sonst nur, wenn kurz vorher per Controller
+    /// getippt, gelöscht oder diktiert (bei Codex: ein Pfeil gedrückt; bei
+    /// Claude bis 5 s nach einem scharfen Pfeil, `recentArrowNavigation`) und
+    /// seither nichts abgeschickt wurde, oder wenn eine Auswahl des Menüs offen
+    /// ist: Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status
+    /// „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl bestätigte.
     static func confirmAllowed(_ state: ControllerChatState) -> Bool {
         guard state.acceptsKeys else { return false }
         switch state.status {
@@ -167,9 +168,50 @@ extension ControllerBindingResolver {
         case .idle:
             return true
         case .working, .unknown:
-            return state.recentDraftInput || choiceListActive(state) || state.recentArrowNavigation
+            return claudePromptVisible(state) || state.recentDraftInput || choiceListActive(state)
+                || state.recentArrowNavigation
         case .ended:
             return false
+        }
+    }
+
+    /// Claudes Eingabefeld steht beim Druck sichtbar unten am Bildschirm
+    /// (Entscheidung 13.11.2026). Ein Freigabe-Dialog ersetzt das Feld; steht
+    /// es da, ist also keiner offen, und Enter schickt den Text ab (oder reiht
+    /// ihn ein), öffnet den gewählten Eintrag der Fußzeile oder tut im leeren
+    /// Feld nichts. So wirkt Kreuz auch auf Text von Tastatur und Hotkey-Diktat
+    /// und auf den ersten ▼ in die Fußzeile, den der Pfeil selbst noch nicht
+    /// scharf machen konnte (Claude zeichnet erst danach neu).
+    ///
+    /// Gelesen wird beim Druck selbst (Schnappschuss je Geste). Nicht
+    /// ablesbar (hochgescrollt, Feld nicht erkannt, Codex, Shell) heißt
+    /// `nil`, dann gilt die vorsichtige Regel. Steht unter dem Feld ein
+    /// Dialog-Hinweis, gilt es nicht als Feld (`ControllerScreenReading`).
+    ///
+    /// Steht laut Tracker nur ein alter Prompt im Feld (mit ↑ zurückgeholt
+    /// oder zurückgelegt), gilt ebenfalls die vorsichtige Regel: Sonst
+    /// schickte ↑ + Kreuz den letzten Prompt erneut ab (Runde 5; R1 + Kreuz
+    /// sperrt dort genauso). In der Fußzeilen-Auswahl öffnet Enter den
+    /// Agenten, das Feld bleibt unberührt.
+    /// Lässt bei „arbeitet“ oder unklarem Zustand allein das sichtbare Feld
+    /// Kreuz zu (keine frische Eingabe, kein scharfer Pfeil, keine offene
+    /// Auswahl)? Dann schickt der Ausführer Enter erst nach einer Nachprüfung
+    /// (`ControllerActionDispatcher.confirmWhenSettled`): Zwischen Claudes
+    /// Umschalten auf einen Dialog und dessen erstem Bild steht das Feld noch da.
+    static func confirmRestsOnPromptField(_ state: ControllerChatState) -> Bool {
+        guard state.acceptsKeys, state.status == .working || state.status == .unknown else { return false }
+        return claudePromptVisible(state) && !state.recentDraftInput && !choiceListActive(state)
+            && !state.recentArrowNavigation
+    }
+
+    static func claudePromptVisible(_ state: ControllerChatState) -> Bool {
+        guard state.profile == .claude, state.promptField != nil else { return false }
+        // Mit sichtbarem Feld kann nur die Fußzeilen-Auswahl erkannt sein;
+        // jede andere Ansicht ersetzt das Feld.
+        switch state.openView {
+        case .footerSelection: return true
+        case nil: return !state.onlyRecalledPrompt
+        default: return false
         }
     }
 
