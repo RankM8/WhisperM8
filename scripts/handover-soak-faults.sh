@@ -758,6 +758,36 @@ fault_double_restart() {
     return 0
 }
 
+# Legt den Router-Modus dieses App-Laufs fest, wie es ein Router-Start täte:
+# `ClaudeGPTRouterMode.current` ist ein `static let` und wird erst beim ersten
+# Zugriff ausgewertet. Die Test-Instanz hat kein GPT-Backend und startet nie
+# einen Router; ohne diese Anfrage fiele die Entscheidung erst bei der Übergabe
+# (Schalter dann schon an). Die Anfrage ist harmlos: Ohne Router-Dienst lehnt
+# die App sie ab und startet nichts. Ausgabe: Antwortzeile der App.
+pin_router_mode() {
+    local sock
+    sock=$("$TI" status | awk '/^Socket:/ {print $2}')
+    "$PY" -I - "$sock" <<'PYEOF'
+import json, socket, sys, uuid
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(10)
+try:
+    s.connect(sys.argv[1])
+    req = {"protocolVersion": 1, "requestID": str(uuid.uuid4()), "actor": {},
+           "method": "gptRouter.startProfile", "params": {"profile": "soak-probe"}}
+    s.sendall((json.dumps(req) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    print(buf.decode(errors="replace").strip())
+except OSError as e:
+    print("keine Antwort: %s" % e)
+PYEOF
+}
+
 # Schalter erst in diesem App-Lauf eingeschaltet (Vic, Gesamt-Review Teil 2):
 # Der Router-Modus steht je Lauf fest, der GPT-Router steckt also noch in der
 # App. Erwartet: keine Übergabe, Hinweis „wirkt erst ab diesem Neustart“,
@@ -772,11 +802,29 @@ fault_router_switch() {
         record "$scenario" ausgeloest FEHLER "Neustart mit Schalter aus gescheitert: $(tail -1 "$STATE/fault-$scenario-aus.log")"
         return 1
     fi
+    # Mit Schalter aus enden die Chats wie bisher, ohne Fortsetzen
+    # (featureDisabled). Für den eigentlichen Test wieder hochfahren.
+    local name
+    for name in $(chat_names); do
+        unresumable_codex "$name" && continue
+        cli chats resume "$(chat_ref "$name")" --json >/dev/null 2>&1 || true
+    done
     if ! wait_until_running; then
         defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
-        record "$scenario" ausgeloest FEHLER "Chats nach dem Neustart mit Schalter aus nicht zurück"
+        record "$scenario" ausgeloest FEHLER "Chats nach dem Neustart mit Schalter aus auch per chats resume nicht zurück"
         return 1
     fi
+    # Router-Modus festlegen, solange der Schalter aus ist (in der echten App
+    # tut das der Router-Start beim App-Start).
+    local answer
+    answer=$(pin_router_mode)
+    if [[ "$answer" == *"nicht aktiv"* ]]; then
+        record "$scenario" router-modus OK "App: Router-Dienst in diesem Lauf nicht aktiv (Router in der App)"
+    else
+        record "$scenario" router-modus FEHLER "Router-Modus nicht festgelegt, Antwort: $(printf '%s' "$answer" | cut -c1-200)"
+    fi
+    # Vergleichsstand neu: Gemessen wird nur der Neustart mit eingeschaltetem Schalter.
+    snapshot "$STATE/fault-$scenario-before.tsv"
     # Jetzt einschalten, während die App läuft, und neu starten.
     defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
     sleep 1
