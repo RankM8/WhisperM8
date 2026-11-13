@@ -71,6 +71,7 @@ Jedes Szenario prüft danach:
 - Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
 - Kein Kind erbt einen Socket.
 - Start ohne Auswahl: Jeder Chat, der vorher einen Prozess hatte, hat nach 20 s wieder einen, ohne dass er ausgewählt wurde. Sonst ist das ein FEHLER; danach wählt das Skript die fehlenden Chats per `chats open` aus, damit die übrigen Prüfungen laufen (Befund vom 13.11.: Nach dem Rückfall startete nur der ausgewählte Chat im Grid).
+- Codex ohne Login legt keine Sitzung an. Ohne Sitzungs-ID baut die App kein `codex resume`, ein solcher Chat kann im Rückfall also nicht zurückkommen. Das Skript prüft bei ihm nur die Übernahme und trägt das Fortsetzen als FEHLT ein (gemessen am 13.11.: kein Codex-Prozess nach dem Rückfall, auch nicht nach Auswahl).
 - Eine PID je Sitzung: Wird die PID eines Chats über seine Prozessumgebung bestimmt (`WHISPERM8_SESSION_ID` in der Wurzel der Test-Instanz) und gibt es dabei mehr als einen obersten Prozess, ist das der FEHLER `zwei-prozesse-umgebung`. Das Skript wählt dann keine der PIDs aus.
 - Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
 - Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`) 0600, solange sie existiert.
