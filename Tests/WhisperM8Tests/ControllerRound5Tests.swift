@@ -97,12 +97,12 @@ final class ControllerRound5BindingTests: XCTestCase {
             ControllerQuickDrawSlots.crossAction(
                 profile: profile, busy: busy, dialogOpen: dialog, viewOpen: view, fieldHasText: text, queuedOwnPrompts: queued)
         }
-        // Claude
+        // Claude: immer „Jetzt senden“, egal was die Erkennung im Feld vermutet
         XCTAssertEqual(cross(busy: true, text: true), .sendNow)
         XCTAssertEqual(cross(busy: true, queued: 1), .sendNow)
-        XCTAssertEqual(cross(text: true), .send)
-        XCTAssertEqual(cross(), .continueWork)
-        XCTAssertNil(cross(busy: true), "leer und nichts wartet: geht nicht")
+        XCTAssertEqual(cross(text: true), .sendNow)
+        XCTAssertEqual(cross(), .sendNow, "nie mehr „Weiter“ in einen Prompt tippen")
+        XCTAssertEqual(cross(busy: true), .sendNow)
         XCTAssertNil(cross(busy: true, dialog: true, text: true), "nie in einer Rückfrage")
         XCTAssertNil(cross(view: true, text: true), "nie bei offener Ansicht")
         // Codex
@@ -114,19 +114,13 @@ final class ControllerRound5BindingTests: XCTestCase {
         XCTAssertEqual(cross(.shell, busy: true, text: true), .continueWork)
     }
 
-    func testRecalledPromptIsNotSentAgain() {
-        XCTAssertNil(ControllerQuickDrawSlots.crossAction(
-            profile: .claude, busy: false, dialogOpen: false, viewOpen: false,
-            fieldHasText: true, queuedOwnPrompts: 0, onlyRecalledPrompt: true))
-        XCTAssertNil(ControllerQuickDrawSlots.crossAction(
-            profile: .claude, busy: true, dialogOpen: false, viewOpen: false,
-            fieldHasText: true, queuedOwnPrompts: 1, onlyRecalledPrompt: true))
+    func testRecalledCodexPromptIsNotSentAgain() {
         XCTAssertNil(ControllerQuickDrawSlots.crossAction(
             profile: .codex, busy: false, dialogOpen: false, viewOpen: false,
             fieldHasText: true, queuedOwnPrompts: 0, onlyRecalledPrompt: true), "Codex: mit ↑ zurückgeholt")
         // Sichtbar leer: der Rückleger-Verdacht ist veraltet, „Weiter“ geht.
         XCTAssertEqual(ControllerQuickDrawSlots.crossAction(
-            profile: .claude, busy: false, dialogOpen: false, viewOpen: false,
+            profile: .codex, busy: false, dialogOpen: false, viewOpen: false,
             fieldHasText: false, queuedOwnPrompts: 0, onlyRecalledPrompt: true), .continueWork)
     }
 
