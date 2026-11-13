@@ -153,9 +153,25 @@ extension HandoverKeeperCommand {
 
 /// `whisperm8 app handover-status [--json]` — Stand des Aufbewahrers dieser
 /// Instanz (Phase, Frist, Chats mit PID und Ende-Status). Ohne Tokens.
-/// `app handover` (Übergabe anstoßen) kommt mit Paket 4.
+///
+/// `whisperm8 app handover [--json]` — Neustart, Chats laufen weiter: Die App
+/// gibt ihre Chats an den Aufbewahrer ab und beendet sich selbst. Exit-Codes:
+/// 0 abgegeben (App endet gleich), 2 keine Übergabe (heutiger Weg, App läuft
+/// weiter; Grund auf stderr), 4 Abgabe gescheitert (alle Chats laufen weiter
+/// in der App), 5 App nicht erreichbar.
 enum AppCLICommand {
-    static let usage = "Usage: whisperm8 app handover-status [--json]"
+    static let usage = """
+    Usage: whisperm8 app handover-status [--json]
+           whisperm8 app handover-status --wait-take <runID> [--timeout <s>]
+           whisperm8 app handover [--json]
+    """
+
+    enum HandoverExit {
+        static let handedOver: Int32 = 0
+        static let classic: Int32 = 2
+        static let failed: Int32 = 4
+        static let appUnreachable: Int32 = 5
+    }
 
     static func run(arguments: [String], paths: HandoverPaths = .default) async -> Int32 {
         guard let sub = arguments.first else {
@@ -165,11 +181,25 @@ enum AppCLICommand {
         switch sub {
         case "handover-status":
             let rest = Array(arguments.dropFirst())
+            if rest.first == "--wait-take" {
+                guard rest.count >= 2 else { CLIIO.err(usage); return 64 }
+                var timeout: TimeInterval = 30
+                if rest.count == 4, rest[2] == "--timeout", let value = TimeInterval(rest[3]) { timeout = value }
+                else if rest.count != 2 { CLIIO.err(usage); return 64 }
+                return waitForTake(runID: rest[1], timeout: timeout, paths: paths)
+            }
             guard rest.allSatisfy({ $0 == "--json" }) else {
                 CLIIO.err(usage)
                 return 64
             }
             return handoverStatus(json: rest.contains("--json"), paths: paths)
+        case "handover":
+            let rest = Array(arguments.dropFirst())
+            guard rest.allSatisfy({ $0 == "--json" }) else {
+                CLIIO.err(usage)
+                return 64
+            }
+            return handover(json: rest.contains("--json"))
         case "help", "--help", "-h":
             CLIIO.out(usage)
             return 0
@@ -199,6 +229,67 @@ enum AppCLICommand {
             CLIIO.out(renderText(status, now: Date()))
         }
         return 0
+    }
+
+    /// Wartet, bis die neue App die Übernahme des Laufs `runID` abgeschlossen
+    /// hat. Exit 0: alle übergebenen Chats übernommen (oder in der Lücke
+    /// beendet); 3: Rückfall für mindestens einen Chat oder Frist abgelaufen.
+    static func waitForTake(runID: String, timeout: TimeInterval, paths: HandoverPaths) -> Int32 {
+        let end = Date().addingTimeInterval(timeout)
+        repeat {
+            if let report = HandoverTakeReport.read(paths: paths), report.runID == runID {
+                let summary = "übernommen \(report.adopted.count), in der Lücke beendet \(report.endedInGap.count), Rückfall \(report.fallback.count)"
+                if report.isComplete {
+                    CLIIO.out(summary)
+                    return 0
+                }
+                CLIIO.err(summary + ": " + report.fallback.joined(separator: ", "))
+                return 3
+            }
+            usleep(200_000)
+        } while Date() < end
+        CLIIO.err("keine Übernahme von Lauf \(runID) binnen \(Int(timeout)) s")
+        return 3
+    }
+
+    static func handover(json: Bool) -> Int32 {
+        let response: ChatsControlResponse
+        do {
+            response = try ChatsControlClient.send(method: "app.handover", params: [:])
+        } catch {
+            CLIIO.err("App nicht erreichbar: \(error)")
+            return HandoverExit.appUnreachable
+        }
+        guard response.ok, let result = response.result else {
+            CLIIO.err("app handover: \(response.error?.message ?? "Fehler ohne Text")")
+            return HandoverExit.failed
+        }
+        let outcome = result["outcome"]?.stringValue ?? ""
+        let reason = result["reason"]?.stringValue
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            CLIIO.out(String(decoding: (try? encoder.encode(result)) ?? Data(), as: UTF8.self))
+        }
+        return exitCode(outcome: outcome, reason: reason, result: result, quiet: json)
+    }
+
+    static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool) -> Int32 {
+        switch outcome {
+        case "handedOver":
+            if !quiet {
+                let count = result["handedOver"]?.arrayValue?.count ?? 0
+                let skipped = result["notHandedOver"]?.arrayValue?.count ?? 0
+                CLIIO.out("Übergeben: \(count) Chats" + (skipped > 0 ? ", \(skipped) enden wie bisher" : "") + ". Die App beendet sich.")
+            }
+            return HandoverExit.handedOver
+        case "classic":
+            CLIIO.err("Keine Übergabe: \(reason ?? "ohne Grund")")
+            return HandoverExit.classic
+        default:
+            CLIIO.err("Übergabe gescheitert: \(reason ?? "ohne Grund")")
+            return HandoverExit.failed
+        }
     }
 
     static func renderJSON(_ status: HandoverKeeperStatus?) -> String {

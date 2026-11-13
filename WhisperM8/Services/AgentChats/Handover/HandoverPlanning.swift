@@ -208,3 +208,37 @@ extension HandoverPlanning {
         }
     }
 }
+
+// MARK: - Bericht der Übernahme
+
+/// Ergebnis der letzten Übernahme, für `whisperm8 app handover-status
+/// --wait-take` (Dauerlauf, Test-Instanz `restart --keep-chats`). Ohne Tokens
+/// und ohne Inhalte; liegt im Ordner des Aufbewahrers.
+struct HandoverTakeReport: Codable, Equatable {
+    var runID: String
+    var finishedAt: Double
+    /// In der App übernommen.
+    var adopted: [String]
+    /// In der Lücke beendet, „beendet“ angezeigt.
+    var endedInGap: [String]
+    /// Nicht übernommen, fortgesetzt oder beendet (Rückfall).
+    var fallback: [String]
+
+    var isComplete: Bool { fallback.isEmpty }
+
+    static func fileURL(paths: HandoverPaths) -> URL {
+        paths.directory.appendingPathComponent("last-take.json")
+    }
+
+    static func read(paths: HandoverPaths) -> HandoverTakeReport? {
+        guard let data = try? Data(contentsOf: fileURL(paths: paths)) else { return nil }
+        return try? JSONDecoder().decode(HandoverTakeReport.self, from: data)
+    }
+
+    func write(paths: HandoverPaths) {
+        try? FileManager.default.createDirectory(at: paths.directory, withIntermediateDirectories: true,
+                                                 attributes: [.posixPermissions: 0o700])
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        try? data.write(to: Self.fileURL(paths: paths), options: .atomic)
+    }
+}

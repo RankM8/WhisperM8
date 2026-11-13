@@ -319,6 +319,11 @@ final class AgentSessionStatusCoordinator {
         hookBridge.startTracking(localSessionID: sessionID)
     }
 
+    /// Cursor der Hook-Event-Datei für das Manifest der Übergabe.
+    func hookCursor(sessionID: UUID) -> UInt64? {
+        hookBridge.trackingCursor(localSessionID: sessionID)
+    }
+
     /// Prozess (PTY/Spawn) wurde gestartet: Zustand `launching`, Transcript-
     /// Watch anhängen, Grace-Timer für stumme Hooks armieren. Die Hook-
     /// Lebendigkeit wird zurückgesetzt — die neue Prozessinstanz muss erst

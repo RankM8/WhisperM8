@@ -512,6 +512,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// nicht aus dem Store werfen, sonst waere der Launch-Restore nach jedem
     /// Neustart leer. Nie zurueckgenommen — der Prozess endet.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Neustart mit Übergabe: Die Chats liegen beim Aufbewahrer, der Marker
+        // steht schon auf „übergeben“. Kein Dialog; nur Chats, deren Abgabe
+        // scheiterte, laufen noch und enden wie heute (Ctrl+C, Fortsetzen).
+        if MainActor.assumeIsolated({ HandoverRestartService.shared.isTerminatingAfterHandover }) {
+            MainActor.assumeIsolated {
+                AgentWindowStore.shared.suspendCloseTracking()
+                AgentTerminalRegistry.shared.captureAllSnapshotsForAppQuit()
+                AppState.shared.prepareDictationForTermination()
+            }
+            return .terminateNow
+        }
         // Cmd+Q/Menü bei arbeitenden oder wartenden Chats: nachfragen (D4,
         // LR-AU-006). Nie bei SIGTERM (`make dev`) und nie beim Abmelden/
         // Ausschalten — dort werden die laufenden Chats still zum Fortsetzen

@@ -127,7 +127,9 @@ final class ClaudeHookBridge {
     /// Beginnt das Tracken einer Session. Oeffnet einen Read-Only-FD auf das
     /// Event-File, registriert eine DispatchSource fuer `.write | .extend`
     /// und schedule einen einmaligen Silence-Timer fuer Diagnostik.
-    func startTracking(localSessionID: UUID) {
+    /// `resumeAtOffset`: übernommener Chat (Neustart ohne Chatverlust) — ab
+    /// dem übergebenen Cursor weiterlesen; die Datei wurde nicht geleert.
+    func startTracking(localSessionID: UUID, resumeAtOffset: UInt64? = nil) {
         // Doppelt-Tracken vermeiden — wenn schon ein Entry da ist, alten
         // canceln und neu aufsetzen (Resume nach Restart).
         if let existing = entries[localSessionID] {
@@ -135,7 +137,11 @@ final class ClaudeHookBridge {
         }
 
         let eventURL = paths.eventFileURL(localSessionID: localSessionID)
-        store.resetCursor(for: eventURL)
+        if let resumeAtOffset {
+            store.setCursor(resumeAtOffset, for: eventURL)
+        } else {
+            store.resetCursor(for: eventURL)
+        }
 
         let entry = Entry(
             localSessionID: localSessionID,
@@ -209,6 +215,13 @@ final class ClaudeHookBridge {
     func stopTracking(localSessionID: UUID) {
         guard let entry = entries.removeValue(forKey: localSessionID) else { return }
         cleanupEntry(entry)
+    }
+
+    /// Gelesene Bytes der Event-Datei einer getrackten Session, für das
+    /// Manifest der Übergabe. `nil`, wenn die Session nicht getrackt wird.
+    func trackingCursor(localSessionID: UUID) -> UInt64? {
+        guard entries[localSessionID] != nil else { return nil }
+        return store.cursorOffset(for: paths.eventFileURL(localSessionID: localSessionID)) ?? 0
     }
 
     func hasReceivedAnyEvent(localSessionID: UUID) -> Bool {
