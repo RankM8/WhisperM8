@@ -22,6 +22,8 @@ extension NotchStatusController {
     /// nachholen, wenn der Chat noch wartet.
     func observeDictation() {
         dictationDisplayID = hub.dictationDisplayID
+        hub.restSnapshot = { [weak self] displayID in self?.restSnapshot(onDisplay: displayID) }
+        hub.startDictation = { [weak self] in self?.startDictation() }
         hub.$dictationDisplayID
             .removeDuplicates()
             .dropFirst()
@@ -30,7 +32,13 @@ extension NotchStatusController {
     }
 
     func dictationChanged(to displayID: UInt32?) {
+        let previous = dictationDisplayID
         dictationDisplayID = displayID
+        // Hier zog sich das Diktat ins Ruhebild zurück: Die Anzeige erscheint
+        // genau mit dem aktuellen Wert, ohne vom alten Stand hinzuwachsen.
+        if let previous, previous != displayID {
+            for slot in slots.values where slot.screen?.displayID == previous { slot.returnsFromDictation = true }
+        }
         if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
         if displayID == nil { replayAlertAfterDictation() }
         render()
@@ -39,10 +47,68 @@ extension NotchStatusController {
     func replayAlertAfterDictation() {
         guard let pending = alertDuringDictation else { return }
         alertDuringDictation = nil
+        guard NotchStatusModel.isStillValid(pending, statuses: currentStatuses()) else { return }
+        show(alert: pending)
+    }
+
+    private func currentStatuses() -> [UUID: AgentSessionRuntimeStatus] {
         var statuses: [UUID: AgentSessionRuntimeStatus] = [:]
         for input in inputs { if let status = input.status { statuses[input.id] = status } }
-        guard NotchStatusModel.isStillValid(pending, statuses: statuses) else { return }
-        show(alert: pending)
+        return statuses
+    }
+
+    // MARK: Übergang ins Diktat
+
+    /// Ruhebild für den Übergang (`UnifiedPillMorph`): was die Anzeige auf
+    /// diesem Bildschirm zeigt bzw. nach dem Diktat zeigen wird, samt
+    /// Mittelpunkt der Pille. Aus dem Zustand gerechnet, nicht aus dem
+    /// Fenster, denn beim Diktat ist es ausgeblendet. `nil`, wo keine
+    /// ruhende Anzeige steht: Status aus, Liste offen, Vollbild, an der Notch
+    /// nichts los. Kein I/O, nur beim Ein- und Ausblenden des Diktats gefragt.
+    func restSnapshot(onDisplay displayID: UInt32) -> UnifiedPillRestSnapshot? {
+        guard config.isActive, config.unified,
+              let placement = placements().first(where: { $0.screen.displayID == displayID }),
+              let slot = slots[placement.kind], !slot.isFullscreenHidden,
+              expandedKind != placement.kind else { return nil }
+        let rows = NotchStatusModel.rows(from: inputs, now: now(), showFreshDone: config.showFreshDone)
+        let summary = NotchStatusModel.summary(of: rows)
+        let shownAlert = alertAfterDictation()
+        let mode = NotchStatusModel.panelMode(isExpanded: false, alert: shownAlert, rows: rows, sections: [])
+        let screen = placement.screen
+        switch placement.kind {
+        case .pill:
+            // Die Status-Pille sitzt mittig in ihrem Fenster, das mittig über
+            // diesem Rahmen steht (`statusPanelFrame`).
+            let visible = UnifiedPillGeometry.statusVisibleFrame(mode: mode, center: pillCenter(on: screen), screen: screen)
+            return UnifiedPillRestSnapshot(
+                look: .pill(summary: summary, alert: shownAlert), center: CGPoint(x: visible.midX, y: visible.midY))
+        case .notch:
+            guard NotchStatusModel.isVisible(summary: summary, isExpanded: false, alert: shownAlert) else { return nil }
+            let body = NotchGeometry.layout(screen: screen, mode: mode).body
+            return UnifiedPillRestSnapshot(
+                look: .notch(summary: summary, alert: shownAlert, bodyWidth: body.width), center: nil)
+        }
+    }
+
+    /// Hinweis, mit dem die Anzeige nach dem Diktat dasteht: ein währenddessen
+    /// gemerkter, wenn sein Anlass noch steht (wird dann nachgeholt), sonst
+    /// der laufende.
+    private func alertAfterDictation() -> NotchAlert? {
+        if let pending = alertDuringDictation, NotchStatusModel.isStillValid(pending, statuses: currentStatuses()) {
+            return pending
+        }
+        return alert
+    }
+
+    /// Neuer Wert für die Ansicht. Kommt das Fenster aus dem Diktat zurück
+    /// (`returnsFromDictation`, noch nicht sichtbar), ohne Animation: Es soll
+    /// genau das Ruhebild zeigen, aus dem sich die Diktat-Pille zurückgezogen
+    /// hat, nicht vom alten Stand aus hinwachsen. Sonst wie immer animiert.
+    func setDisplay(_ display: NotchDisplay, on slot: NotchSlot, wasVisible: Bool) {
+        guard !wasVisible, slot.returnsFromDictation else { return slot.viewModel.display = display }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { slot.viewModel.display = display }
     }
 
     /// Raute für die Diktat-Pille: nur wartende Chats und Fehler.
@@ -106,7 +172,7 @@ extension NotchStatusController {
         let wasVisible = panel.isVisible
         if display != slot.lastDisplay {
             slot.lastDisplay = display
-            slot.viewModel.display = display
+            setDisplay(display, on: slot, wasVisible: wasVisible)
         }
         updatePillMouse(slot, display: display)
         if frame != slot.lastFrame, slot.dragOrigin == nil {
@@ -126,6 +192,7 @@ extension NotchStatusController {
             }
         }
         if !wasVisible { panel.orderFrontRegardless() }
+        slot.returnsFromDictation = false
     }
 
     /// Ziehen der vereinten Pille: ihren Mittelpunkt führen, die Pille selbst

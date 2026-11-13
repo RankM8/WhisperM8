@@ -553,6 +553,14 @@ enum TerminalShortcut {
             return [0x1f]
         }
 
+        // Ctrl+Return in Claude-Chats: „Jetzt senden“ (`chat:sendNow`, Standard
+        // auf ctrl+enter). Ohne Kitty-Protokoll käme nur CR an; deshalb die
+        // gleichwertige Folge Ctrl+X Ctrl+S.
+        if hasControl, !hasCommand, !hasOption, !hasShift, keyCode == KeyCode.returnKey,
+           profile == .claudeCodeChat {
+            return [0x18, 0x13]
+        }
+
         // Cmd-Combos kollidieren mit Ctrl-Combos auf TUI-Ebene → wenn Control gehalten
         // wird, immer durchreichen (User will die Standard-Control-Sequence).
         guard !hasControl else { return nil }
@@ -849,11 +857,15 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             restoresPromptOnInterrupt: isClaude, now: now)
         // In einer Rückfrage bestätigt Enter die Auswahl, nicht das Eingabefeld —
         // ein Entwurf dort bleibt stehen und darf nicht als gesendet gelten.
-        if key == .enter, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
+        if key == .enter || key == .sendNow, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
         // ↑ holt im Feld den letzten Prompt zurück (Review 12.11.2026): Ein
         // „Weiter“ oder `chats send` darf sich nicht daran hängen.
         if key == .up, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
-            composerDraft.recordHistoryRecall(isClaude: isClaude)
+            // Codex: vorher am Bildschirm ablesen, ob das Feld leer ist (nur
+            // hier im Ereignis-Pfad, höchstens 12 Zeilen).
+            let field = isClaude ? nil : controllerScreenSnapshot()?.promptField
+            let empty: Bool? = field.flatMap { $0.isEmpty ? true : ($0.hasText ? false : nil) }
+            composerDraft.recordHistoryRecall(isClaude: isClaude, fieldVisiblyEmpty: empty)
         }
         if key == .right, isClaude, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
             composerDraft.recordSuggestionAccepted()

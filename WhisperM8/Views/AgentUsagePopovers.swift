@@ -331,6 +331,7 @@ private struct ClaudeUsagePopoverView: View {
             await MainActor.run {
                 usageByProfile = finalResults
                 isLoading = false
+                for (name, usage) in finalResults { AccountLimitsStore.shared.record(claude: name, usage: usage) }
             }
         }
     }
@@ -347,6 +348,7 @@ private struct ClaudeUsagePopoverView: View {
         Task {
             _ = await ClaudeUsageUpdateFlow.run(profileNames: loggedIn) { name, usage in
                 usageByProfile[name] = usage
+                AccountLimitsStore.shared.record(claude: name, usage: usage)
             }
             await MainActor.run { isLoading = false }
         }
@@ -579,6 +581,7 @@ private struct CodexUsagePopoverView: View {
                 for (name, usage) in results {
                     if let usage {
                         usageByProfile[name] = usage
+                        AccountLimitsStore.shared.record(gpt: name, usage: usage)
                     } else {
                         usageByProfile[name] = nil
                         failedProfiles.insert(name)

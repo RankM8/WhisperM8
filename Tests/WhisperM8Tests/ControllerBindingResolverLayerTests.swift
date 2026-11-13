@@ -44,8 +44,9 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
                 XCTAssertEqual(action(.inLayer(.writing, .holdRepeat(.square)), context), .chatKey(.deleteToLineStart),
                                "gehalten Zeile für Zeile")
                 XCTAssertEqual(action(.inLayer(.writing, .press(.triangle)), context), .chatKey(.newline))
-                XCTAssertNil(action(.inLayer(.writing, .press(.cross)), context), "Kreuz bleibt frei")
-                XCTAssertNil(action(.inLayer(.writing, .press(.circle)), context), "Kreis bleibt frei")
+                // Runde 5: Kreuz fügt ein, Kreis schickt genau ein Escape.
+                XCTAssertEqual(action(.inLayer(.writing, .press(.cross)), context), .pasteNewest)
+                XCTAssertEqual(action(.inLayer(.writing, .press(.circle)), context), .chatKey(.escape))
                 XCTAssertEqual(action(.inLayer(.writing, .press(.r2)), context), .dictationToggle)
                 XCTAssertEqual(action(.layerEnded(.writing), context), .islandClose)
             }
@@ -69,8 +70,10 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
     }
 
     func testWritingSlotsFollowTheSameRules() {
-        XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude)),
-                       ControllerWritingSlots(canDeleteLine: true, canInsertNewline: true, note: nil))
+        let claude = ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))
+        XCTAssertTrue(claude.canDeleteLine)
+        XCTAssertTrue(claude.canInsertNewline)
+        XCTAssertNil(claude.note)
         XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .shell)).note, .shell)
         XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .awaitingInput, profile: .codex)).note,
                        .question)
@@ -141,7 +144,7 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.r2)), context), .islandCommitAndDictate)
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.touchpad)), context), .clipboardToggle,
                            "L2 + Touchpad: Verlauf (Touchpad als Maus)")
-            XCTAssertNil(action(.inLayer(.whereTo, .press(.square)), context))
+            XCTAssertEqual(action(.inLayer(.whereTo, .press(.square)), context), .islandReopenClosed, "Runde 5")
             XCTAssertNil(action(.inLayer(.whereTo, .press(.l1)), context), "kein Pause-Akkord unter L2")
             XCTAssertEqual(action(.layerEnded(.whereTo), context), .islandRelease)
             XCTAssertEqual(action(.layerCancelled(.whereTo), context), .islandClose)

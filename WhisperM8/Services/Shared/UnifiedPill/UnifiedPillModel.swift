@@ -212,6 +212,15 @@ enum UnifiedPillGeometry {
         CGPoint(x: center.x - panelSize.width / 2, y: center.y - panelSize.height / 2)
     }
 
+    /// Kern im Ruhebild der Diktat-Pille (gleiches Koordinatensystem wie
+    /// `pill`): links nach Innenrand und 2 pt Abstand, Maße des Kerns.
+    static func restCoreFrame(pill: CGRect) -> CGRect {
+        CGRect(
+            x: pill.minX + PillMetrics.horizontalPadding + 2,
+            y: pill.midY - PillMetrics.coreHeight / 2,
+            width: PillMetrics.coreMinWidth, height: PillMetrics.coreHeight)
+    }
+
     /// Mittelpunkt der Diktat-Pille aus ihrem Anker (nach dem Ziehen).
     static func center(of anchor: PillAnchor) -> CGPoint {
         CGPoint(x: (anchor.minX + anchor.maxX) / 2, y: anchor.y + PillMetrics.height / 2)

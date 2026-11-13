@@ -183,4 +183,76 @@ final class TerminalControlKeyTests: XCTestCase {
         XCTAssertFalse(may(.claudeCodeChat, .awaitingInput, alternate: true))
         XCTAssertFalse(may(.claudeAgentsView, .idle, alternate: false))
     }
+
+    // MARK: - Runde 5: neue Tasten
+
+    func testRound5KeyBytes() {
+        for applicationCursor in [false, true] {
+            XCTAssertEqual(TerminalControlKey.wordLeft.bytes(applicationCursor: applicationCursor), Array("\u{1b}[1;5D".utf8))
+            XCTAssertEqual(TerminalControlKey.wordRight.bytes(applicationCursor: applicationCursor), Array("\u{1b}[1;5C".utf8))
+        }
+        XCTAssertEqual(TerminalControlKey.sendNow.bytes(applicationCursor: false), [0x18, 0x13])
+        XCTAssertEqual(TerminalControlKey.toggleTranscript.bytes(applicationCursor: false), [0x0F])
+        XCTAssertEqual(TerminalControlKey.undo.bytes(applicationCursor: false), [0x1F])
+        XCTAssertEqual(TerminalControlKey.imagePaste.bytes(applicationCursor: false), [0x16])
+        XCTAssertEqual(TerminalControlKey.redraw.bytes(applicationCursor: false), [0x0C])
+    }
+
+    /// Kein Controller-Tastendruck außer Escape selbst darf mit einem
+    /// einzelnen ESC enden oder nur aus ESC + Buchstabe bestehen (Meta) — ein
+    /// einzelnes ESC bricht einen arbeitenden Chat ab.
+    func testNoKeyIsALoneOrMetaEscape() {
+        for key in TerminalControlKey.allCases where key != .escape {
+            for applicationCursor in [false, true] {
+                let bytes = key.bytes(applicationCursor: applicationCursor)
+                XCTAssertNotEqual(bytes.last, 0x1B, "\(key)")
+                if bytes.first == 0x1B {
+                    XCTAssertTrue(bytes.count >= 3 && (bytes[1] == 0x5B || bytes[1] == 0x4F), "\(key) ist Meta")
+                }
+            }
+        }
+    }
+
+    func testRound5KeysAllowedPerProfile() {
+        func allows(_ key: TerminalControlKey, _ status: AgentSessionRuntimeStatus?,
+                    _ profile: TerminalKeyboardProfile) -> Bool {
+            TerminalControlKey.controllerAllows(key, status: status, profile: profile, choiceListOpen: false)
+        }
+        for key in [TerminalControlKey.wordLeft, .wordRight, .imagePaste] {
+            XCTAssertTrue(allows(key, .working, .claudeCodeChat), "\(key)")
+            XCTAssertTrue(allows(key, .idle, .codexChat), "\(key)")
+            XCTAssertFalse(allows(key, .awaitingInput, .claudeCodeChat), "\(key)")
+            XCTAssertFalse(allows(key, .idle, .plainShell), "\(key)")
+        }
+        for key in [TerminalControlKey.sendNow, .undo] {
+            XCTAssertTrue(allows(key, .working, .claudeCodeChat), "\(key)")
+            XCTAssertFalse(allows(key, .awaitingInput, .claudeCodeChat), "\(key)")
+            XCTAssertFalse(allows(key, .working, .codexChat), "\(key) nie an Codex")
+            XCTAssertFalse(allows(key, .idle, .plainShell), "\(key)")
+        }
+        for key in [TerminalControlKey.toggleTranscript, .redraw] {
+            XCTAssertTrue(allows(key, .working, .claudeCodeChat), "\(key)")
+            XCTAssertFalse(allows(key, .idle, .codexChat), "\(key)")
+            XCTAssertFalse(allows(key, .idle, .plainShell), "\(key)")
+        }
+    }
+
+    func testSendNowCountsAsSubmitForTheTracker() {
+        XCTAssertFalse(tracker(after: [.sendNow], status: .working, startingWithDraft: true).mayHaveUnsentInput)
+    }
+
+    func testImagePasteAndUndoLeaveSomethingInTheField() {
+        XCTAssertTrue(tracker(after: [.imagePaste], startingWithDraft: false).mayHaveUnsentInput)
+        XCTAssertTrue(tracker(after: [.undo], startingWithDraft: false).mayHaveUnsentInput)
+        XCTAssertFalse(tracker(after: [.wordLeft, .toggleTranscript, .redraw], startingWithDraft: false).mayHaveUnsentInput)
+    }
+
+    func testMarksTreatSendNowAsSubmit() {
+        var marks = ControllerTerminalMarks()
+        let now = Date()
+        marks.recordControllerKey(.backspace, status: .working, isCodex: false, at: now)
+        marks.recordControllerKey(.sendNow, status: .working, isCodex: false, at: now.addingTimeInterval(1))
+        XCTAssertEqual(marks.lastEnterAt, now.addingTimeInterval(1))
+        XCTAssertNil(marks.lastDraftInputAt)
+    }
 }
