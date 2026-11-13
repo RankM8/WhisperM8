@@ -44,8 +44,9 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
                 XCTAssertEqual(action(.inLayer(.writing, .holdRepeat(.square)), context), .chatKey(.deleteToLineStart),
                                "gehalten Zeile für Zeile")
                 XCTAssertEqual(action(.inLayer(.writing, .press(.triangle)), context), .chatKey(.newline))
-                XCTAssertNil(action(.inLayer(.writing, .press(.cross)), context), "Kreuz bleibt frei")
-                XCTAssertNil(action(.inLayer(.writing, .press(.circle)), context), "Kreis bleibt frei")
+                // Runde 5: Kreuz fügt ein, Kreis schickt genau ein Escape.
+                XCTAssertEqual(action(.inLayer(.writing, .press(.cross)), context), .pasteNewest)
+                XCTAssertEqual(action(.inLayer(.writing, .press(.circle)), context), .chatKey(.escape))
                 XCTAssertEqual(action(.inLayer(.writing, .press(.r2)), context), .dictationToggle)
                 XCTAssertEqual(action(.layerEnded(.writing), context), .islandClose)
             }
@@ -69,8 +70,10 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
     }
 
     func testWritingSlotsFollowTheSameRules() {
-        XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude)),
-                       ControllerWritingSlots(canDeleteLine: true, canInsertNewline: true, note: nil))
+        let claude = ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))
+        XCTAssertTrue(claude.canDeleteLine)
+        XCTAssertTrue(claude.canInsertNewline)
+        XCTAssertNil(claude.note)
         XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .shell)).note, .shell)
         XCTAssertEqual(ControllerWritingSlots(state: ControllerChatState(status: .awaitingInput, profile: .codex)).note,
                        .question)
@@ -90,7 +93,24 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.square)), context), .quickDraw(.commands))
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.circle)), context), .quickDraw(.switchAccount))
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.r2)), context), .dictationToggle)
-        XCTAssertNil(action(.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: false)), context))
+        // Insel-Paket: Der Stick scrollt die Limits-Karte, links/rechts tut er nichts.
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: false)), context),
+                       .islandScroll(step: 1))
+        XCTAssertNil(action(.inLayer(.quickDraw, .move(.left, source: .leftStick, isRepeat: false)), context))
+        // Zweite Raute auf dem Steuerkreuz, ein Druck je Stufe.
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: false)), context), .appSlot(.limits))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)), context), .appSlot(.alerts))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false)), context),
+                       .appSlot(.stayAwake))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: false)), context),
+                       .appSlot(.clipboard))
+        XCTAssertNil(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: true)), context),
+                     "gehalten schaltet nicht weiter")
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: true)), context),
+                       .islandScroll(step: -1))
+        // Auch bei beendetem Chat (die App-Raute hängt nicht am Chat).
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)), chat(.ended)),
+                       .appSlot(.alerts))
         XCTAssertEqual(action(.layerEnded(.quickDraw), context), .islandClose)
         // Raute in der Lage der Tasten.
         XCTAssertEqual(ControllerQuickDrawSlots.items, [.cycleMode, .commands, .switchAccount, .continueWork])
@@ -141,7 +161,7 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.r2)), context), .islandCommitAndDictate)
             XCTAssertEqual(action(.inLayer(.whereTo, .press(.touchpad)), context), .clipboardToggle,
                            "L2 + Touchpad: Verlauf (Touchpad als Maus)")
-            XCTAssertNil(action(.inLayer(.whereTo, .press(.square)), context))
+            XCTAssertEqual(action(.inLayer(.whereTo, .press(.square)), context), .islandReopenClosed, "Runde 5")
             XCTAssertNil(action(.inLayer(.whereTo, .press(.l1)), context), "kein Pause-Akkord unter L2")
             XCTAssertEqual(action(.layerEnded(.whereTo), context), .islandRelease)
             XCTAssertEqual(action(.layerCancelled(.whereTo), context), .islandClose)

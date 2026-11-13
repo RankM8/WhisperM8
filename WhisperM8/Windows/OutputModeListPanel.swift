@@ -3,15 +3,19 @@ import SwiftUI
 
 /// Wo die Liste der Ausgabemodi steht: mittig über der Pill, mit kleinem
 /// Abstand. Reicht der Platz über der Pill nicht (Pill ganz oben), steht sie
-/// darunter. Seitlich bleibt sie im sichtbaren Bereich des Bildschirms. Pur.
+/// darunter. Die vereinte Pille in der oberen Bildschirmhälfte klappt sie
+/// gleich nach unten auf (`opensDownward`). Seitlich bleibt sie im sichtbaren
+/// Bereich des Bildschirms. Pur.
 enum OutputModeListPlacement {
     static let gap: CGFloat = 8
 
-    static func frame(listSize: NSSize, pillFrame: NSRect, visibleFrame: NSRect) -> NSRect {
+    static func frame(
+        listSize: NSSize, pillFrame: NSRect, visibleFrame: NSRect, opensDownward: Bool = false
+    ) -> NSRect {
         var x = pillFrame.midX - listSize.width / 2
         x = min(max(x, visibleFrame.minX), visibleFrame.maxX - listSize.width)
         var y = pillFrame.maxY + gap
-        if y + listSize.height > visibleFrame.maxY {
+        if opensDownward || y + listSize.height > visibleFrame.maxY {
             y = pillFrame.minY - gap - listSize.height
         }
         return NSRect(x: x, y: y, width: listSize.width, height: listSize.height)
@@ -33,11 +37,21 @@ final class OutputModeListPresenter {
 
     var isShown: Bool { panel?.isVisible == true }
 
+    /// Gehört die Liste zur vereinten Pille (ohne Notch und an der Notch)?
+    /// Dann folgt sie deren Hintergrund, also der Einstellung „Tiefschwarzer
+    /// Hintergrund“; an der getrennten Diktat-Pille bleibt sie Glas. Rein.
+    nonisolated static func followsUnifiedPill(_ presentation: OverlayPresentation) -> Bool {
+        presentation.isUnified
+    }
+
     /// Zeigt die Liste über `pillFrame` (Bildschirm-Koordinaten) und plant das
-    /// Ausblenden 1,5 s nach diesem Wechsel.
-    func show(modes: [OutputMode], selectedID: String, pillFrame: NSRect) {
+    /// Ausblenden 1,5 s nach diesem Wechsel. `unified`: Liste an der
+    /// vereinten Pille (folgt dann deren Hintergrund).
+    func show(
+        modes: [OutputMode], selectedID: String, pillFrame: NSRect, opensDownward: Bool = false, unified: Bool = false
+    ) {
         guard !modes.isEmpty else { return }
-        let view = OutputModeListView(modes: modes, selectedID: selectedID)
+        let view = OutputModeListView(modes: modes, selectedID: selectedID, unified: unified)
         let panel = self.panel ?? makePanel()
         if let hostingView {
             hostingView.rootView = view
@@ -51,7 +65,9 @@ final class OutputModeListPresenter {
         let screen = NSScreen.screens.first { $0.frame.intersects(pillFrame) } ?? NSScreen.main
         if let screen, size.width > 0 {
             panel.setFrame(
-                OutputModeListPlacement.frame(listSize: size, pillFrame: pillFrame, visibleFrame: screen.visibleFrame),
+                OutputModeListPlacement.frame(
+                    listSize: size, pillFrame: pillFrame, visibleFrame: screen.visibleFrame,
+                    opensDownward: opensDownward),
                 display: true
             )
         }

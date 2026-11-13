@@ -361,6 +361,16 @@
         }
       }
     },
+    "%lld active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld aktiv"
+          }
+        }
+      }
+    },
     "%lld active · live view of the project": {
       "localizations": {
         "de": {
@@ -921,6 +931,26 @@
         }
       }
     },
+    "5 h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Std."
+          }
+        }
+      }
+    },
+    "5 h %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Std. %@"
+          }
+        }
+      }
+    },
     "5 hours": {
       "localizations": {
         "de": {
@@ -1211,6 +1241,16 @@
         }
       }
     },
+    "Account · 5 h · week": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto · 5 Std. · Woche"
+          }
+        }
+      }
+    },
     "Account …%@": {
       "localizations": {
         "de": {
@@ -1491,6 +1531,16 @@
         }
       }
     },
+    "Add to another workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu anderem Workspace hinzufügen"
+          }
+        }
+      }
+    },
     "Add to workspace": {
       "localizations": {
         "de": {
@@ -1701,6 +1751,16 @@
         }
       }
     },
+    "Alerts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilungen"
+          }
+        }
+      }
+    },
     "All": {
       "localizations": {
         "de": {
@@ -1861,6 +1921,16 @@
         }
       }
     },
+    "Allow it in the sidebar first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erst in der Seitenleiste freigeben"
+          }
+        }
+      }
+    },
     "Allow screenshots and screen clips as context": {
       "localizations": {
         "de": {
@@ -1971,6 +2041,16 @@
         }
       }
     },
+    "Always show the output mode while dictating": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgabemodus beim Diktat immer zeigen"
+          }
+        }
+      }
+    },
     "Always uses the newest frontier model from your Codex CLI — currently %@.": {
       "localizations": {
         "de": {
@@ -2067,6 +2147,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erscheinungsbild"
+          }
+        }
+      }
+    },
+    "Applies to the whole pill, dictation included. Asks macOS to keep it out of screenshots and screen sharing; some recording and meeting apps may still show it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt für die ganze Pille, auch beim Diktat. Bittet macOS, sie aus Bildschirmfotos und Bildschirmfreigaben herauszuhalten; manche Aufnahme- und Meeting-Apps zeigen sie trotzdem."
+          }
+        }
+      }
+    },
+    "Applies while you dictate. Full keeps the drag handle, screenshot and screen clip open; Mini shows them on hover. At rest the pill is always small.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt beim Diktat. Voll zeigt Griff, Bildschirmfoto und Bildschirmclip immer, Mini erst beim Darüberfahren. In Ruhe ist die Pille immer klein."
           }
         }
       }
@@ -2561,6 +2661,16 @@
         }
       }
     },
+    "Background tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrund-Aufgaben"
+          }
+        }
+      }
+    },
     "Background tasks still running — switches afterwards": {
       "localizations": {
         "de": {
@@ -2811,6 +2921,16 @@
         }
       }
     },
+    "Buttons": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasten"
+          }
+        }
+      }
+    },
     "Buttons in the background": {
       "localizations": {
         "de": {
@@ -2941,6 +3061,16 @@
         }
       }
     },
+    "Cannot resume %@: this conversation is already running in another Claude process (PID %@). Close that process first, a second start would run the same conversation twice.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem anderen Claude-Prozess (PID %@). Beende zuerst diesen Prozess, ein zweiter Start würde dieselbe Unterhaltung doppelt führen."
+          }
+        }
+      }
+    },
     "Cannot return to the workspace: %@.": {
       "localizations": {
         "de": {
@@ -3037,6 +3167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat-Status an der Notch"
+          }
+        }
+      }
+    },
+    "Chat Status in the Pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status in der Pille"
           }
         }
       }
@@ -3911,6 +4051,16 @@
         }
       }
     },
+    "Close view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht schließen"
+          }
+        }
+      }
+    },
     "Close/archive %lld": {
       "localizations": {
         "de": {
@@ -4781,6 +4931,16 @@
         }
       }
     },
+    "Counts chats that just finished and briefly widens the pill when one does.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zählt gerade fertig gewordene Chats und verbreitert die Pille kurz, wenn einer fertig wird."
+          }
+        }
+      }
+    },
     "Counts chats that just finished and briefly widens the strip when one does.": {
       "localizations": {
         "de": {
@@ -4967,6 +5127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Benutzerdefiniert — %lld"
+          }
+        }
+      }
+    },
+    "D-pad": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuerkreuz"
           }
         }
       }
@@ -5541,6 +5711,16 @@
         }
       }
     },
+    "Dictation running — the text goes into its chat; nothing else goes into the field now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat läuft — der Text geht in seinen Chat; ins Feld geht jetzt nichts anderes."
+          }
+        }
+      }
+    },
     "Dictations": {
       "localizations": {
         "de": {
@@ -5601,12 +5781,32 @@
         }
       }
     },
+    "Drag the pill anywhere on a display without a notch; each display remembers its own spot. Double-click the pill to put it back at the top center. At the notch the pill stays put.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehe die Pille auf einem Bildschirm ohne Notch an jede Stelle; jeder Bildschirm merkt sich seine eigene. Doppelklick auf die Pille setzt sie oben mittig zurück. An der Notch bleibt sie fest."
+          }
+        }
+      }
+    },
     "Drag the pill anywhere on its display; each display remembers its own spot. Double-click the pill to put it back at the top center.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Die Pille lässt sich mit der Maus überallhin auf ihrem Bildschirm ziehen, jeder Bildschirm merkt sich seine Stelle. Ein Doppelklick auf die Pille setzt sie wieder oben in die Mitte."
+          }
+        }
+      }
+    },
+    "Draws the pill in deep black like the notch, also on displays without one, instead of dark glass. Applies to every state: at rest, the list, dictation and the controller island.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeichnet die Pille tiefschwarz wie die Notch, auch auf Bildschirmen ohne Notch, statt in dunklem Glas. Gilt in jedem Zustand: in Ruhe, mit Liste, beim Diktat und für die Controller-Insel."
           }
         }
       }
@@ -5917,6 +6117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esc schließt"
+          }
+        }
+      }
+    },
+    "Escape once": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einmal Escape"
           }
         }
       }
@@ -6771,6 +6981,26 @@
         }
       }
     },
+    "Grid size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße"
+          }
+        }
+      }
+    },
+    "Grid size · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rastergröße · %@"
+          }
+        }
+      }
+    },
     "Grid · %@": {
       "localizations": {
         "de": {
@@ -6921,12 +7151,32 @@
         }
       }
     },
+    "Hide status in the pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status in der Pille ausblenden"
+          }
+        }
+      }
+    },
     "Hide this mode from recording.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Modus bei der Aufnahme ausblenden."
+          }
+        }
+      }
+    },
+    "Hide this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel ausblenden"
           }
         }
       }
@@ -6957,6 +7207,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blendet den Chat-Status an der Notch aus. Wieder einschalten in den Einstellungen oder in der Menüleiste."
+          }
+        }
+      }
+    },
+    "Hides the chat status in the pill. The pill still shows up for dictation. Turn it back on in Settings or the menu bar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blendet den Chat-Status in der Pille aus. Für das Diktat erscheint die Pille weiter. Wieder an über die Einstellungen oder die Menüleiste."
           }
         }
       }
@@ -7011,6 +7271,16 @@
         }
       }
     },
+    "Hold L1, then L3: undo (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann L3: rückgängig (Claude)"
+          }
+        }
+      }
+    },
     "Hold L1, then □: delete to the start of the line, held line by line (Claude and Codex)": {
       "localizations": {
         "de": {
@@ -7021,12 +7291,52 @@
         }
       }
     },
+    "Hold L1, then ▲ ▼: line up or down in a draft with several lines, not from its first or last line": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ▲ ▼: eine Zeile hoch oder runter im mehrzeiligen Entwurf, nicht aus der ersten bzw. letzten Zeile"
+          }
+        }
+      }
+    },
     "Hold L1, then △: new line without sending (Claude and Codex)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "L1 halten, dann △: Zeilenumbruch, ohne zu senden (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ◀ ▶: jump a word back or forward (Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ◀ ▶: ein Wort zurück oder vor (Claude und Codex)"
+          }
+        }
+      }
+    },
+    "Hold L1, then ○: send exactly one Escape — while the chat works it interrupts unless a view is open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ○: genau ein Escape — arbeitet der Chat, unterbricht es, wenn keine Ansicht offen ist"
+          }
+        }
+      }
+    },
+    "Hold L1, then ✕: paste the newest clipboard entry; images arrive like ⌘V (images only in Claude and Codex)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L1 halten, dann ✕: neuesten Eintrag der Zwischenablage einfügen; Bilder kommen wie mit ⌘V an (Bilder nur in Claude und Codex)"
           }
         }
       }
@@ -7051,12 +7361,32 @@
         }
       }
     },
+    "Hold L2, then □: reopen the most recently closed chat; again for the one before": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten, dann □: zuletzt geschlossenen Chat wieder öffnen; noch mal für den davor"
+          }
+        }
+      }
+    },
     "Hold L2, then △: next chat that is waiting for you": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "L2 halten, dann △: nächster Chat, der auf dich wartet"
+          }
+        }
+      }
+    },
+    "Hold L2: where to — the list starts on where you are, the previous place is one step away; up and down move, left and right switch between chats and workspaces & projects, release or ✕ switches after a move, ○ cancels": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L2 halten: Wohin — die Liste beginnt dort, wo du bist, der vorige Ort ist einen Schritt entfernt; hoch und runter bewegen, links und rechts wechseln zwischen Chats und Workspaces & Projekten, Loslassen oder ✕ wechselt nach einer Bewegung, ○ bricht ab"
           }
         }
       }
@@ -7071,6 +7401,16 @@
         }
       }
     },
+    "Hold R1, then L3: detailed transcript on and off (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann L3: ausführliches Transkript an und aus (Claude)"
+          }
+        }
+      }
+    },
     "Hold R1, then □: open the commands in the menu": {
       "localizations": {
         "de": {
@@ -7081,12 +7421,52 @@
         }
       }
     },
+    "Hold R1, then ▲: limits of all Claude and GPT accounts while R1 is held; ✕ refreshes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▲: Limits aller Claude- und GPT-Konten, solange R1 gehalten ist; ✕ aktualisiert"
+          }
+        }
+      }
+    },
     "Hold R1, then △: switch mode (not while the agent asks a question)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "R1 halten, dann △: Modus wechseln (nicht während einer Rückfrage)"
+          }
+        }
+      }
+    },
+    "Hold R1, then ▶: stay awake one step further, like the stay-awake button": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▶: Wach bleiben eine Stufe weiter, wie der Wach-Knopf"
+          }
+        }
+      }
+    },
+    "Hold R1, then ▼: open and close the clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ▼: Zwischenablage-Verlauf öffnen und schließen"
+          }
+        }
+      }
+    },
+    "Hold R1, then ◀: sound and notifications one step further, like the bell": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "R1 halten, dann ◀: Ton und Mitteilungen eine Stufe weiter, wie die Glocke"
           }
         }
       }
@@ -7391,6 +7771,26 @@
         }
       }
     },
+    "In Claude's views (tasks, workflows, transcript, rewind, footer selection) ○ closes the view, also while the chat works": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Claudes Ansichten (Aufgaben, Workflows, Transkript, Zurückspulen, Auswahl in der Fußzeile) schließt ○ die Ansicht, auch während der Chat arbeitet"
+          }
+        }
+      }
+    },
+    "In addition to clicking, only while you are not dictating.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusätzlich zum Klick, nur wenn du gerade nicht diktierst."
+          }
+        }
+      }
+    },
     "In addition to clicking. Off by default so the list does not pop open when the pointer passes by.": {
       "localizations": {
         "de": {
@@ -7647,6 +8047,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Interne ChatGPT-Transkription über den GPT-Proxy"
+          }
+        }
+      }
+    },
+    "Into the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In den Chat"
           }
         }
       }
@@ -8071,6 +8481,16 @@
         }
       }
     },
+    "Lifecycle": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lebenszyklus"
+          }
+        }
+      }
+    },
     "Light": {
       "localizations": {
         "de": {
@@ -8111,12 +8531,12 @@
         }
       }
     },
-    "Limits unavailable (token in the file is stale)": {
+    "Limits unavailable (live fetch failed)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limits nicht abrufbar (Token in der Datei veraltet)"
+            "value": "Limits nicht abrufbar (Live-Abruf fehlgeschlagen)"
           }
         }
       }
@@ -8137,6 +8557,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limits aktualisiert."
+          }
+        }
+      }
+    },
+    "Line up / down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeile hoch / runter"
           }
         }
       }
@@ -8197,6 +8627,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live-Abruf fehlgeschlagen (HTTP %lld)"
+          }
+        }
+      }
+    },
+    "Live fetch failed — last known state": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Abruf fehlgeschlagen — letzter bekannter Stand"
           }
         }
       }
@@ -9801,6 +10241,16 @@
         }
       }
     },
+    "No account signed in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Konto angemeldet"
+          }
+        }
+      }
+    },
     "No active chats": {
       "localizations": {
         "de": {
@@ -10191,6 +10641,16 @@
         }
       }
     },
+    "No workspaces or projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Workspaces oder Projekte"
+          }
+        }
+      }
+    },
     "None yet": {
       "localizations": {
         "de": {
@@ -10511,6 +10971,16 @@
         }
       }
     },
+    "Nothing to paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts zum Einfügen"
+          }
+        }
+      }
+    },
     "Nothing was recorded. Wait until the text is inserted, then press the hotkey again. Esc cancels the clean-up.": {
       "localizations": {
         "de": {
@@ -10620,6 +11090,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aus: nichts wird mehr gezählt oder eingelesen. Bisherige Werte bleiben, bis du sie löschst."
+          }
+        }
+      }
+    },
+    "Off: the mode chip only appears on hover. With a controller it is always shown.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus: Der Modus erscheint nur beim Darüberfahren. Am Controller steht er immer da."
           }
         }
       }
@@ -10864,6 +11344,16 @@
         }
       }
     },
+    "Open in General": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In General öffnen"
+          }
+        }
+      }
+    },
     "Open in PhpStorm": {
       "localizations": {
         "de": {
@@ -10934,6 +11424,16 @@
         }
       }
     },
+    "Open status list hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkey „Statusliste öffnen“"
+          }
+        }
+      }
+    },
     "Open the Codex and Claude session hub.": {
       "localizations": {
         "de": {
@@ -11000,6 +11500,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Öffnet die Chat-Liste"
+          }
+        }
+      }
+    },
+    "Opens the chat list with the keyboard: arrow keys choose, Return opens the chat, Esc closes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffnet die Chat-Liste mit der Tastatur: Pfeiltasten wählen, Return öffnet den Chat, Esc schließt."
           }
         }
       }
@@ -11254,6 +11764,36 @@
         }
       }
     },
+    "Paste image": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen"
+          }
+        }
+      }
+    },
+    "Paste image · %lld × %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild einfügen · %lld × %lld"
+          }
+        }
+      }
+    },
+    "Paste newest": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes einfügen"
+          }
+        }
+      }
+    },
     "Paste original": {
       "localizations": {
         "de": {
@@ -11290,6 +11830,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fügt ein, was du gesagt hast, bevor der Modus es umformuliert hat"
+          }
+        }
+      }
+    },
+    "Paste “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einfügen „%@“"
           }
         }
       }
@@ -11460,6 +12010,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine laufende App wählen oder eine Bundle-ID eintippen."
+          }
+        }
+      }
+    },
+    "Pill and Notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pille und Notch"
+          }
+        }
+      }
+    },
+    "Pill and notch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pille und Notch"
           }
         }
       }
@@ -11680,6 +12250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Position"
+          }
+        }
+      }
+    },
+    "Position, hiding from screenshots and the chat status live in General, section Pill and Notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lage, Ausblenden aus Bildschirmfotos und der Chat-Status stehen unter General, Abschnitt Pille und Notch."
           }
         }
       }
@@ -12484,6 +13064,16 @@
         }
       }
     },
+    "Redraw": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu zeichnen"
+          }
+        }
+      }
+    },
     "Reduce system volume while recording": {
       "localizations": {
         "de": {
@@ -12650,6 +13240,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vom Supervisor entfernen"
+          }
+        }
+      }
+    },
+    "Remove from this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus diesem Workspace nehmen"
           }
         }
       }
@@ -12844,6 +13444,16 @@
         }
       }
     },
+    "Rename workspace…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace umbenennen…"
+          }
+        }
+      }
+    },
     "Rename…": {
       "localizations": {
         "de": {
@@ -12960,6 +13570,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wieder öffnen"
+          }
+        }
+      }
+    },
+    "Reopen closed chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschlossenen Chat wieder öffnen"
           }
         }
       }
@@ -13440,6 +14060,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Lauf und archivierte Ausgabeberichte ansehen."
+          }
+        }
+      }
+    },
+    "Rewind": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurückspulen"
           }
         }
       }
@@ -14004,6 +14634,16 @@
         }
       }
     },
+    "Send now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt senden"
+          }
+        }
+      }
+    },
     "Send test notification": {
       "localizations": {
         "de": {
@@ -14394,6 +15034,16 @@
         }
       }
     },
+    "Show archive": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiv zeigen"
+          }
+        }
+      }
+    },
     "Show button layout": {
       "localizations": {
         "de": {
@@ -14420,6 +15070,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat-Status an der Notch anzeigen"
+          }
+        }
+      }
+    },
+    "Show chat status in the pill": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat-Status in der Pille zeigen"
           }
         }
       }
@@ -14480,6 +15140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Flach anzeigen (nach Aktivität sortiert)"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Finder zeigen"
           }
         }
       }
@@ -14550,6 +15220,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hotkey zum Ein- und Ausblenden"
+          }
+        }
+      }
+    },
+    "Show or hide status hotkey": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkey zum Ein- und Ausblenden des Status"
           }
         }
       }
@@ -14630,6 +15310,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diesen Modus bei der Aufnahme zeigen."
+          }
+        }
+      }
+    },
+    "Show this tile's note": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notiz dieser Kachel zeigen"
           }
         }
       }
@@ -14944,6 +15634,16 @@
         }
       }
     },
+    "Solid black background": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiefschwarzer Hintergrund"
+          }
+        }
+      }
+    },
     "Sound": {
       "localizations": {
         "de": {
@@ -15234,6 +15934,16 @@
         }
       }
     },
+    "Start dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat starten"
+          }
+        }
+      }
+    },
     "Start new shell": {
       "localizations": {
         "de": {
@@ -15364,6 +16074,16 @@
         }
       }
     },
+    "Stay awake": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wach bleiben"
+          }
+        }
+      }
+    },
     "Stays": {
       "localizations": {
         "de": {
@@ -15420,6 +16140,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Proxy stoppen"
+          }
+        }
+      }
+    },
+    "Stop this background agent?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Hintergrund-Agenten stoppen?"
+          }
+        }
+      }
+    },
+    "Stop this job?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesen Job stoppen?"
           }
         }
       }
@@ -16514,6 +17254,16 @@
         }
       }
     },
+    "The chat status now lives in the pill at the top of the screen (on a MacBook: the notch). Its settings are in General, section Pill and Notch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Chat-Status steht jetzt in der Pille oben am Bildschirm (am MacBook: an der Notch). Die Einstellungen dazu stehen unter General, Abschnitt Pille und Notch."
+          }
+        }
+      }
+    },
     "The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.": {
       "localizations": {
         "de": {
@@ -16800,6 +17550,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der neue Login hat ein unerwartetes Format."
+          }
+        }
+      }
+    },
+    "The pill at the top of the screen (on a MacBook: the notch) shows how many chats are working or waiting for you. Click the counters for the list, click the gray core to start dictating. Off: the pill only appears while you dictate or use the controller.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Pille oben am Bildschirm (am MacBook: die Notch) zeigt, wie viele Chats arbeiten oder auf dich warten. Klick auf die Zähler öffnet die Liste, Klick auf den grauen Kern startet ein Diktat. Aus: Die Pille erscheint nur beim Diktat und am Controller."
           }
         }
       }
@@ -17404,6 +18164,16 @@
         }
       }
     },
+    "Transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript"
+          }
+        }
+      }
+    },
     "Transcript + post-processing through an output mode": {
       "localizations": {
         "de": {
@@ -17504,6 +18274,26 @@
         }
       }
     },
+    "Turn notes off everywhere": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen überall aus"
+          }
+        }
+      }
+    },
+    "Turn notes on everywhere": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizen überall an"
+          }
+        }
+      }
+    },
     "Turn off notch": {
       "localizations": {
         "de": {
@@ -17590,6 +18380,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tab-Gruppen einschalten"
+          }
+        }
+      }
+    },
+    "Turns the chat status in the pill on or off from anywhere.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schaltet den Chat-Status in der Pille von überall ein oder aus."
           }
         }
       }
@@ -17700,6 +18500,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzten Kontowechsel rückgängig machen"
+          }
+        }
+      }
+    },
+    "Undo last account switch (all chats it moved)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzten Kontowechsel rückgängig (alle betroffenen Chats)"
           }
         }
       }
@@ -18694,12 +19504,32 @@
         }
       }
     },
+    "Word back / forward": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wort zurück / vor"
+          }
+        }
+      }
+    },
     "Words": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Wörter"
+          }
+        }
+      }
+    },
+    "Workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows"
           }
         }
       }
@@ -18744,6 +19574,16 @@
         }
       }
     },
+    "Working: ○ interrupts if no view is open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet: ○ unterbricht, wenn keine Ansicht offen ist."
+          }
+        }
+      }
+    },
     "Works": {
       "localizations": {
         "de": {
@@ -18764,6 +19604,16 @@
         }
       }
     },
+    "Workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspace „%@“"
+          }
+        }
+      }
+    },
     "Workspace “%@” cannot open here: %@.": {
       "localizations": {
         "de": {
@@ -18780,6 +19630,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspaces"
+          }
+        }
+      }
+    },
+    "Workspaces & Projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workspaces & Projekte"
           }
         }
       }
@@ -18974,6 +19834,46 @@
         }
       }
     },
+    "again: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch mal: %@"
+          }
+        }
+      }
+    },
+    "all accounts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alle Konten"
+          }
+        }
+      }
+    },
+    "all off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles aus"
+          }
+        }
+      }
+    },
+    "all on": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "alles an"
+          }
+        }
+      }
+    },
     "already in this account": {
       "localizations": {
         "de": {
@@ -19010,6 +19910,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "scharf"
+          }
+        }
+      }
+    },
+    "as of %lld h ago": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand vor %lld Std."
+          }
+        }
+      }
+    },
+    "as of %lld min ago": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand vor %lld min"
+          }
+        }
+      }
+    },
+    "as of just now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand gerade eben"
           }
         }
       }
@@ -19080,6 +20010,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Katalog vom %@"
+          }
+        }
+      }
+    },
+    "choose with the mouse": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur mit der Maus"
           }
         }
       }
@@ -19324,6 +20264,16 @@
         }
       }
     },
+    "history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        }
+      }
+    },
     "idle": {
       "localizations": {
         "de": {
@@ -19340,6 +20290,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "in %@"
+          }
+        }
+      }
+    },
+    "in %lld h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld Std."
+          }
+        }
+      }
+    },
+    "in %lld h %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld Std. %lld min"
+          }
+        }
+      }
+    },
+    "in %lld min": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld min"
           }
         }
       }
@@ -19534,6 +20514,16 @@
         }
       }
     },
+    "most free": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "am meisten frei"
+          }
+        }
+      }
+    },
     "muted": {
       "localizations": {
         "de": {
@@ -19624,6 +20614,16 @@
         }
       }
     },
+    "nothing closed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nichts geschlossen"
+          }
+        }
+      }
+    },
     "now": {
       "localizations": {
         "de": {
@@ -19654,12 +20654,32 @@
         }
       }
     },
+    "off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aus"
+          }
+        }
+      }
+    },
     "offline — showing last known state": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Offline. Letzter bekannter Stand wird angezeigt"
+          }
+        }
+      }
+    },
+    "one-time admin permission at the stay-awake button": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "einmalige Admin-Freigabe am Wach-Knopf"
           }
         }
       }
@@ -19754,12 +20774,52 @@
         }
       }
     },
+    "refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktualisieren"
+          }
+        }
+      }
+    },
+    "refreshing …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aktualisiere …"
+          }
+        }
+      }
+    },
+    "release: close": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "loslassen: zu"
+          }
+        }
+      }
+    },
     "release: switch": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "loslassen: wechseln"
+          }
+        }
+      }
+    },
+    "reopen %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wieder öffnen: %@"
           }
         }
       }
@@ -19854,6 +20914,16 @@
         }
       }
     },
+    "stick: scroll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stick: scrollen"
+          }
+        }
+      }
+    },
     "stopped": {
       "localizations": {
         "de": {
@@ -19910,6 +20980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "das neueste gelistete Modell"
+          }
+        }
+      }
+    },
+    "this chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dieser Chat"
           }
         }
       }
@@ -19990,6 +21070,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "wartet"
+          }
+        }
+      }
+    },
+    "while working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bei Arbeit"
           }
         }
       }
@@ -20334,12 +21424,32 @@
         }
       }
     },
+    "↑ %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑ %lld weitere"
+          }
+        }
+      }
+    },
     "→ app in front": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "→ Programm vorne"
+          }
+        }
+      }
+    },
+    "↓ %lld more": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↓ %lld weitere"
           }
         }
       }
@@ -20460,6 +21570,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "⚠️ %@"
+          }
+        }
+      }
+    },
+    "✕ select · ○ back · Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ zurück · Options schließt"
+          }
+        }
+      }
+    },
+    "✕ select · ○ or Options closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✕ wählen · ○ oder Options schließt"
           }
         }
       }

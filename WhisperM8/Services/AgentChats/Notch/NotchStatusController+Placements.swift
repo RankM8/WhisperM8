@@ -15,7 +15,10 @@ extension NotchStatusController {
         let rows = NotchStatusModel.rows(from: inputs, now: current, showFreshDone: config.showFreshDone)
         let summary = NotchStatusModel.summary(of: rows)
         let sections = isExpanded ? NotchStatusModel.sections(of: rows) : []
+        listRowIDs = sections.flatMap { $0.rows.map(\.id) }
         let placements = placements()
+        // Vereinte Pille: Raute für die Diktat-Pille (nur bei Änderung).
+        publishBadge(summary)
 
         // Die Stelle mit der offenen Liste ist weg (Fenster auf anderen
         // Bildschirm gezogen, Bildschirm getrennt): Liste zu.
@@ -41,11 +44,15 @@ extension NotchStatusController {
         _ slot: NotchSlot, screen: NotchScreenInfo,
         rows: [NotchRow], summary: NotchSummary, sections: [NotchSection]
     ) {
+        if slot.isUnified {
+            return renderUnifiedPill(slot, screen: screen, rows: rows, summary: summary, sections: sections)
+        }
         let expandedHere = expandedKind == slot.kind
         let isPill = slot.kind == .pill
         // Die Pille steht immer da, wie die Notch selbst; an der Notch
-        // erscheint die Anzeige nur, wenn etwas los ist.
-        guard !slot.isFullscreenHidden,
+        // erscheint die Anzeige nur, wenn etwas los ist. Vereint macht die
+        // Notch dem Diktat Platz, das dann selbst dort hängt.
+        guard !slot.isFullscreenHidden, !isDictationShown(on: screen),
               isPill || NotchStatusModel.isVisible(summary: summary, isExpanded: expandedHere, alert: alert) else {
             return hide(slot)
         }
@@ -57,7 +64,8 @@ extension NotchStatusController {
             style: screen.hasNotch ? .notch(width: screen.notchWidth, height: screen.safeAreaTop) : .pill,
             summary: summary, alert: alert, isExpanded: expandedHere,
             sections: expandedHere ? sections : [],
-            opensUpward: pillCenter.map { NotchPillPlacement.opensUpward(center: $0, on: screen) } ?? false)
+            opensUpward: pillCenter.map { NotchPillPlacement.opensUpward(center: $0, on: screen) } ?? false,
+            selectedRowID: expandedHere ? keyboardSelection : nil)
         let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, pillCenter: pillCenter)
 
         let panel = ensurePanel(slot)
@@ -68,7 +76,7 @@ extension NotchStatusController {
         let wasVisible = panel.isVisible
         if display != slot.lastDisplay {
             slot.lastDisplay = display
-            slot.viewModel.display = display
+            setDisplay(display, on: slot, wasVisible: wasVisible)
         }
         updatePillMouse(slot, display: display)
         // Während des Ziehens bestimmt die Maus die Lage.
@@ -87,25 +95,34 @@ extension NotchStatusController {
             }
         }
         if !wasVisible { panel.orderFrontRegardless() }
+        slot.returnsFromDictation = false
     }
 
-    private func hide(_ slot: NotchSlot) {
+    func hide(_ slot: NotchSlot) {
         slot.lastDisplay = nil
         slot.dragOrigin = nil
+        slot.shrinkTask?.cancel()
+        slot.shrinkTask = nil
         slot.panel?.orderOut(nil)
     }
 
-    private func ensurePanel(_ slot: NotchSlot) -> NotchPanel {
+    func ensurePanel(_ slot: NotchSlot) -> NotchPanel {
         if let panel = slot.panel { return panel }
         let panel = NotchPanel()
-        let host = NotchHostingView(rootView: NotchHostView(model: slot.viewModel, controller: self, kind: slot.kind))
+        // Vereinte Pille ohne Notch: Ansicht und Rand wie die Diktat-Pille.
+        slot.isUnified = config.unified && slot.kind == .pill
+        let host = NotchHostingView(rootView: NotchHostView(
+            model: slot.viewModel, controller: self, kind: slot.kind, unified: slot.isUnified))
+        host.unifiedPill = slot.isUnified
         host.safeAreaRegions = []
         host.sizingOptions = []
         // Immer dunkel: an der Notch schwarz, ohne Notch das Glas der Diktat-Pille.
         host.appearance = NSAppearance(named: .darkAqua)
         panel.contentView = host
+        if let hidden = hub.statusContentHiddenDisplayID, slot.screen?.displayID == hidden { host.alphaValue = 0 }
         panel.sharingType = config.hideFromCapture ? .none : .readOnly
         panel.onCancel = { [weak self] in self?.collapse() }
+        panel.onKeyDown = { [weak self] event in self?.handleListKey(event) ?? false }
         NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
         ) { [weak self] _ in
@@ -275,7 +292,7 @@ extension NotchStatusController {
     /// zieht, unter 4 pt Bewegung ist es ein Klick (Liste auf und zu), ein
     /// Doppelklick setzt sie oben mittig zurück. Bei offener Liste gilt das
     /// nur für den Kopf; die Zeilen bleiben normale Knöpfe.
-    private func updatePillMouse(_ slot: NotchSlot, display: NotchDisplay) {
+    func updatePillMouse(_ slot: NotchSlot, display: NotchDisplay) {
         guard let host = slot.host else { return }
         guard slot.kind == .pill, !display.isNotch else {
             host.pillMouse = nil
@@ -288,8 +305,9 @@ extension NotchStatusController {
         host.pillMouse = NotchPillMouse(
             began: { [weak self] in self?.pillDragBegan(kind) },
             dragged: { [weak self] in self?.pillDragged(kind, by: $0) },
-            ended: { [weak self] in self?.pillDragEnded(kind, moved: $0) },
-            doubleClick: { [weak self] in self?.pillDoubleClicked(kind) })
+            ended: { [weak self] in self?.pillDragEnded(kind, moved: $0, at: $1) },
+            doubleClick: { [weak self] in self?.pillDoubleClicked(kind, at: $0) })
+        host.unifiedPill = slot.isUnified
     }
 
     private func pillDragBegan(_ kind: NotchPlacement.Kind) {
@@ -304,8 +322,12 @@ extension NotchStatusController {
     /// Doppelklick: zurücksetzen nur, wenn die Pille vor dem ersten Klick zu
     /// war (der erste Klick hat dann die Liste geöffnet). War sie offen, ist
     /// es schnelles Zu und wieder Auf, die gemerkte Lage bleibt.
-    private func pillDoubleClicked(_ kind: NotchPlacement.Kind) {
+    private func pillDoubleClicked(_ kind: NotchPlacement.Kind, at point: CGPoint) {
         guard let slot = slots[kind] else { return }
+        // Der erste Klick lag auf dem Kern und hat ein Diktat gestartet: dann
+        // tut der zweite nichts mehr. Zurückgesetzt wird nur außerhalb des Kerns.
+        if Date().timeIntervalSince(slot.lastCoreClickAt) < 0.6 { return }
+        if slot.isUnified, UnifiedPillClickTarget.resolve(point: point, coreFrame: slot.coreFrame) == .core { return }
         if slot.pressStartedExpanded {
             toggleExpanded(kind)
         } else {
@@ -318,15 +340,22 @@ extension NotchStatusController {
     private func pillDragged(_ kind: NotchPlacement.Kind, by offset: CGVector) {
         guard let slot = slots[kind], let panel = slot.panel, let origin = slot.dragOrigin,
               let screen = slot.screen else { return }
+        if slot.isUnified {
+            return unifiedPillDragged(slot, panel: panel, origin: origin, offset: offset, screen: screen)
+        }
         let moved = CGRect(origin: CGPoint(x: origin.x + offset.dx, y: origin.y + offset.dy), size: panel.frame.size)
         let clamped = NotchPillPlacement.clamp(moved, to: NotchPillPlacement.usableArea(screen))
         panel.setFrameOrigin(clamped.origin)
     }
 
-    private func pillDragEnded(_ kind: NotchPlacement.Kind, moved: Bool) {
+    private func pillDragEnded(_ kind: NotchPlacement.Kind, moved: Bool, at point: CGPoint) {
         guard let slot = slots[kind] else { return }
         let wasDragging = slot.dragOrigin != nil
         slot.dragOrigin = nil
+        if !moved, slot.isUnified,
+           UnifiedPillClickTarget.resolve(point: point, coreFrame: slot.coreFrame) == .core {
+            return startDictationFromPill(kind)
+        }
         guard moved else { return toggleExpanded(kind) }
         guard wasDragging, let panel = slot.panel, let screen = slot.screen else { return }
         let center = CGPoint(x: panel.frame.midX, y: panel.frame.midY)
@@ -355,7 +384,9 @@ extension NotchStatusController {
 struct NotchPillMouse {
     var began: () -> Void
     var dragged: (CGVector) -> Void
-    /// `true`: gezogen, `false`: Klick.
-    var ended: (Bool) -> Void
-    var doubleClick: () -> Void
+    /// `true`: gezogen, `false`: Klick; dazu der Ort des Drückens
+    /// (SwiftUI-Koordinaten der Hosting-View, oben links).
+    var ended: (Bool, CGPoint) -> Void
+    /// Ort des zweiten Klicks (SwiftUI-Koordinaten, oben links).
+    var doubleClick: (CGPoint) -> Void
 }

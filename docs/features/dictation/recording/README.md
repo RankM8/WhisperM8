@@ -47,6 +47,20 @@ hält Menüs während der Bedienung offen und bleibt über einen persistierten
 Pill-Anker verschiebbar; ein Doppelklick auf freie Pill-Fläche setzt sie auf
 die Default-Position zurück.
 
+Seit 12.11.2026 ist die Pill Teil der **vereinten Pille** (Diktat und
+Chat-Status in einer Pille, [notch.md](../../notch.md#vereinte-pille-standard-seit-12112026)):
+Sie erscheint auf dem Bildschirm, auf dem getippt wird, ohne Notch an der
+gemerkten Lage dieses Bildschirms (Standard oben mittig), mit Notch schwarz
+unter der Notch. Steht dort die ruhende Pille, wächst sie selbst in die
+Diktat-Pille hinein und zieht sich danach wieder zurück (an der Notch wächst
+das Band nach unten); die Aufnahme wartet dabei nie auf die Animation.
+Wartende Chats stehen als Raute links. Zustandswechsel wachsen
+um die Mitte, nur das Hover-Expand klappt nach links auf. Nur die Darstellung
+ist neu (`OverlayPresentation`, `RecordingPanel+UnifiedPill.swift`,
+Übergang in `RecordingPanel+PillMorph.swift`); Start,
+Stop, Abbruch, Transkription und Auslieferung laufen unverändert. Kill-Switch
+`unifiedPillEnabled` stellt die getrennte Pill (unten mittig) wieder her.
+
 Screenshot-, Screen-Clip- und visuelle Kontextdetails gehören zur
 Nachbardoku [Visual Context](../visual-context/); Recording beschreibt hier nur
 die Bedienpunkte im Aufnahme-Overlay.

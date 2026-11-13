@@ -224,6 +224,11 @@ final class AgentSessionRuntimeWatcher {
         watched[sessionID]?.lastStat?.mtime
     }
 
+    /// Eigene Prompts in Claudes Warteschlange, Stand des letzten Polls (kein I/O).
+    func queuedOwnPrompts(sessionID: UUID) -> Int {
+        watched[sessionID]?.cachedQueuedOwnPrompts ?? 0
+    }
+
     /// Aufgelöste Transcript-Datei einer beobachteten Session (kein I/O).
     func cachedTranscriptURL(sessionID: UUID) -> URL? {
         watched[sessionID]?.transcriptURL
@@ -391,6 +396,7 @@ final class AgentSessionRuntimeWatcher {
             current.cachedLastEvent = snapshot.lastEvent
             let activityChanged = current.cachedActivity != snapshot.activity
             current.cachedActivity = snapshot.activity
+            current.cachedQueuedOwnPrompts = snapshot.queuedOwnPrompts
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
             }
@@ -474,7 +480,8 @@ final class AgentSessionRuntimeWatcher {
                 stat: stat,
                 lastEvent: entry.cachedLastEvent,
                 // Stat-first: Datei unverändert → Stand-Zeile auch.
-                activity: entry.cachedActivity
+                activity: entry.cachedActivity,
+                queuedOwnPrompts: entry.cachedQueuedOwnPrompts
             )
         }
 
@@ -498,7 +505,9 @@ final class AgentSessionRuntimeWatcher {
             decision: decision,
             stat: stat,
             lastEvent: lastEvent,
-            activity: activity
+            activity: activity,
+            // Nur Zeilen mit dem Marker werden geparst (Runde 5, R1).
+            queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0
         )
     }
 
@@ -561,6 +570,8 @@ struct WatchedSession {
     var cachedLastEvent: AgentTranscriptEvent?
     /// Stand-Zeile aus demselben Read — bleibt im Stat-first-Pfad stehen.
     var cachedActivity: AgentSessionActivity? = nil
+    /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`).
+    var cachedQueuedOwnPrompts: Int = 0
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -577,4 +588,6 @@ struct AgentSessionRuntimePollSnapshot {
     /// Stand-Zeile (Tab-Switcher) aus dem Tail; im Stat-first-Pfad der
     /// gecachte Wert.
     var activity: AgentSessionActivity?
+    /// Eigene Prompts in Claudes Warteschlange; im Stat-first-Pfad gecacht.
+    var queuedOwnPrompts: Int = 0
 }

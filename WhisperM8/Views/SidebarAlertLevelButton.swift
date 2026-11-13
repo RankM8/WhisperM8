@@ -11,12 +11,8 @@ struct SidebarAlertLevelButton: View {
 
     var body: some View {
         Button {
-            let newLevel = nextLevel
-            level = newLevel
-            if newLevel.silencesSound {
-                SpeechCalloutCenter.shared.discardAll()
-            }
-            Logger.claudeBinding.info("alert_level_changed level=\(newLevel.rawValue, privacy: .public)")
+            // Derselbe Weg wie R1 + ◀ am Controller.
+            AgentAlertLevel.advance()
         } label: {
             Image(systemName: Self.symbolName(for: level))
                 .font(.system(size: 13, weight: .medium))
@@ -58,5 +54,33 @@ struct SidebarAlertLevelButton: View {
         case .off: action = String(localized: "everything off")
         }
         return String(localized: "\(title(for: current)) — click: \(action)")
+    }
+}
+
+extension AgentAlertLevel {
+    /// Hat die Stufe „Ton aus“ etwas stumm zu schalten (Fertig-Ton an oder
+    /// Ansagen an und nicht stumm)? Sonst springt die Glocke darüber hinweg.
+    static func soundStageHasEffect(_ preferences: AppPreferences = .shared) -> Bool {
+        preferences.isAgentStopSoundEnabled
+            || (preferences.isSpeechCalloutsEnabled && !preferences.isSpeechCalloutsMuted)
+    }
+
+    /// Die nächste Stufe beim Klick auf die Glocke.
+    static func nextLevel(_ preferences: AppPreferences = .shared) -> AgentAlertLevel {
+        preferences.agentAlertLevel.next(soundStageHasEffect: soundStageHasEffect(preferences))
+    }
+
+    /// Eine Stufe weiter: der eine Weg für die Glocke in der Seitenleiste und
+    /// R1 + ◀ am Controller. Liefert die neue Stufe.
+    @MainActor
+    @discardableResult
+    static func advance(_ preferences: AppPreferences = .shared) -> AgentAlertLevel {
+        let newLevel = nextLevel(preferences)
+        preferences.agentAlertLevel = newLevel
+        if newLevel.silencesSound {
+            SpeechCalloutCenter.shared.discardAll()
+        }
+        Logger.claudeBinding.info("alert_level_changed level=\(newLevel.rawValue, privacy: .public)")
+        return newLevel
     }
 }

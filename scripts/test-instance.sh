@@ -18,7 +18,9 @@
 # `make kill`, nie ein Prozess außerhalb von $APP.
 #
 # WHISPERM8_TEST_ROOT überschreibt die Wurzel, WHISPERM8_TEST_VISIBLE=1 zeigt die Fenster
-# (=front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
+# (=pill: nur die Pillen an ihrem Platz, für Aufnahmen des Übergangs;
+# =front: schwebend vor allen, ohne Fokus — für kurze Sichttests),
+# WHISPERM8_TEST_NO_NOTCH=1 behandelt jeden Bildschirm als ohne Notch (Pille statt Notch),
 # WHISPERM8_TEST_LANG=en|de setzt die Sprache.
 set -euo pipefail
 
@@ -27,6 +29,9 @@ SCRATCH="$REPO/.build-test"
 APP="$SCRATCH/WhisperM8Test.app"
 BIN="$APP/Contents/MacOS/WhisperM8"
 ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}"
+# Die App nimmt nur absolute Wurzeln an (AppInstance.resolveTestRoot); mit einer
+# relativen oder „~/…“ liefen `cli`-Befehle gegen die Produktiv-App.
+[[ "$ROOT" == /* ]] || { echo "WHISPERM8_TEST_ROOT muss ein absoluter Pfad sein: $ROOT" >&2; exit 64; }
 LOG="$ROOT/instance.log"
 BUNDLE_ID="com.whisperm8.app.test"
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
@@ -35,7 +40,9 @@ pids() {
     # Jede laufende Test-Instanz, auch aus einem anderen Worktree — es gibt nur
     # eine Wurzel, zwei Instanzen würden sich die Daten teilen. Nie die
     # Produktiv-App (anderer Bundle-Name).
-    ps -axo pid=,comm= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ {print $1}'
+    # Der Router-Dienst (`gpt-router`) ist kein App-Prozess: er überlebt den
+    # Neustart der App (Labs „Neustart ohne Chatverlust“).
+    ps -axww -o pid=,args= | awk '$2 ~ /\/WhisperM8Test\.app\/Contents\/MacOS\/WhisperM8$/ && $0 !~ / gpt-router / {print $1}'
 }
 
 cmd_build() {
@@ -79,6 +86,7 @@ cmd_start() {
     seed_defaults
     local env_args=(--env "WHISPERM8_INSTANCE_ROOT=$ROOT")
     [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && env_args+=(--env "WHISPERM8_TEST_VISIBLE=$WHISPERM8_TEST_VISIBLE")
+    [[ -n "${WHISPERM8_TEST_NO_NOTCH:-}" ]] && env_args+=(--env "WHISPERM8_TEST_NO_NOTCH=$WHISPERM8_TEST_NO_NOTCH")
     # Versteckt starten (-j), außer die Fenster sollen sichtbar sein.
     local hide=(-j)
     [[ -n "${WHISPERM8_TEST_VISIBLE:-}" ]] && hide=()

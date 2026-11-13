@@ -231,7 +231,9 @@ struct ClaudeAccountProfiles {
                 || fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
             return Self.mainProfileName
         }
-        return name
+        // Echter Ordnername: `rankm8` in `.active` fände auf APFS den Ordner
+        // `RankM8`, Claude bildete den Keychain-Namen aber aus `rankm8`.
+        return canonicalProfileName(name) ?? name
     }
 
     /// Wie `activeProfileName()`, aber `nil` fuer `main` — direkt als
@@ -239,38 +241,6 @@ struct ClaudeAccountProfiles {
     func activeProfileNameOrNil() -> String? {
         let name = activeProfileName()
         return name == Self.mainProfileName ? nil : name
-    }
-
-    /// Fehler bei einer AUSDRUECKLICHEN Profilangabe (`chats new --account`).
-    enum SelectionError: LocalizedError, Equatable {
-        case unknownProfile(String)
-        case notLoggedIn(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .unknownProfile(let name):
-                return "Account-Profil „\(name)“ existiert nicht."
-            case .notLoggedIn(let name):
-                return "Account-Profil „\(name)“ ist nicht eingeloggt — bitte zuerst in den Einstellungen anmelden."
-            }
-        }
-    }
-
-    /// Prueft eine ausdrueckliche Profilangabe und normalisiert sie auf den
-    /// Stempel-Wert (`nil` = main). Anders als `environmentOverrides` faellt
-    /// hier bewusst NICHTS auf main zurueck: wer ein Profil ausdruecklich
-    /// nennt, bekommt es — oder einen Fehler. Ein stiller Main-Fallback waere
-    /// exakt der Bedienfehler, den die explizite Angabe verhindern soll.
-    func validatedProfileName(_ raw: String) throws -> String? {
-        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, name != Self.mainProfileName else { return nil }
-        guard fileManager.fileExists(atPath: configDir(forProfile: name).path) else {
-            throw SelectionError.unknownProfile(name)
-        }
-        guard profile(named: name).isLoggedIn else {
-            throw SelectionError.notLoggedIn(name)
-        }
-        return name
     }
 
     func setActiveProfile(_ name: String) throws {

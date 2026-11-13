@@ -46,7 +46,8 @@ extension AgentChatsView {
             hasMultiSelection: !multiSelection.isEmpty,
             isArchiveMode: archiveModeActive,
             isNewChatPickerOpen: showNewChatProjectPicker,
-            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil,
+            isConfirmationOpen: sessionsPendingEnd != nil || sessionsPendingArchive != nil
+                || ControllerConfirmations.shared.isOpen(in: windowID),
             screenDisplayID: (hostWindow?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
                 as? NSNumber)?.uint32Value,
             backTarget: controllerBackTarget()
@@ -190,6 +191,11 @@ extension AgentChatsView {
             guard let project = workspace.projects.first(where: { $0.id == projectID }) else { return false }
             openProjectAsWorkspace(project, activeSessionIDs: activeSessionIDs)
             return true
+        case .switchToProject(let projectID):
+            return switchToProjectFromController(projectID)
+        case .toggleArchiveMode:
+            toggleArchiveModeFromController()
+            return true
         case .setSidebarVisible(let visible):
             guard isSidebarVisible != visible else { return false }
             isSidebarVisible = visible
@@ -203,6 +209,11 @@ extension AgentChatsView {
             return true
         case .nextWaitingChat:
             return selectNextWaitingChat()
+        case .openProjectOfChat, .revealProjectInFinder, .refreshChatTitle, .restartChat, .toggleTileNote,
+             .toggleNotes, .removeChatFromWorkspace, .addChatToWorkspace, .moveChatToNewWindow, .backgroundLogs,
+             .backgroundStop, .backgroundRespawn, .stopSubagentJob, .cancelAccountSwitch, .undoLastAccountSwitch,
+             .renameWorkspace, .setWorkspaceCapacity:
+            return performControllerChatCommand(command)
         case .switcherCancel:
             guard tabSwitcher != nil else { return false }
             cancelTabSwitcher()

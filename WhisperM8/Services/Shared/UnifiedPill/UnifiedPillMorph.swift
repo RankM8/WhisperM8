@@ -1,0 +1,257 @@
+import CoreGraphics
+import Foundation
+
+/// Was die ruhende Pille an einer Stelle gerade zeigt, damit die Diktat-Pille
+/// genau so beginnt und genau so endet (Übergang ohne Sprung). Rein, aus dem
+/// Zustand der Status-Pille berechnet, auch während sie ausgeblendet ist.
+enum UnifiedPillRestLook: Equatable {
+    /// Pille ohne Notch: grauer Kern, daneben Zähler bzw. „braucht dich“.
+    case pill(summary: NotchSummary, alert: NotchAlert?)
+    /// An der Notch mit Anzeige: Zeile unter der Aussparung, so breit wie dort.
+    case notch(summary: NotchSummary, alert: NotchAlert?, bodyWidth: CGFloat)
+    /// An der Notch ohne Anzeige: nur das schwarze Band in der Aussparung, die
+    /// Diktat-Zeile wächst darunter heraus.
+    case notchBand
+
+    var isNotch: Bool {
+        if case .pill = self { return false }
+        return true
+    }
+
+    /// Höhe der Zeile unter dem Band bzw. der Pille.
+    var rowHeight: CGFloat {
+        switch self {
+        case .pill: return PillMetrics.height
+        case .notch: return NotchGeometry.chinHeight
+        case .notchBand: return 0
+        }
+    }
+}
+
+/// Ruhebild samt Mittelpunkt der Pille (globale Cocoa-Koordinaten). Ohne
+/// Notch beginnt die Diktat-Pille genau dort; an der Notch zählt nur das Bild.
+struct UnifiedPillRestSnapshot: Equatable {
+    var look: UnifiedPillRestLook
+    var center: CGPoint?
+}
+
+/// Ablauf des Übergangs zwischen ruhender Pille und Diktat auf einem
+/// Bildschirm, rein und ohne Fenster testbar. Der `OverlayController` meldet
+/// Ereignisse und führt die zurückgegebenen Schritte aus.
+///
+/// Ablauf mit Übergang: `idle` → `handoverIn` (Diktat-Fenster zeigt das
+/// Ruhebild, noch unsichtbar, über der Status-Pille) → `growing` (in einem
+/// Bild: Diktat sichtbar, Status-Pille unsichtbar; dann wächst die Pille) →
+/// `dictation` → `shrinking` (zurück ins Ruhebild) → `handoverOut`
+/// (Status-Pille wieder da, noch unsichtbar) → `closing` (in einem Bild:
+/// Status sichtbar, Diktat unsichtbar) → `idle` (Diktat-Fenster zu).
+///
+/// Warum unsichtbar zuerst: Zwei Glas-Pillen übereinander sind dunkler als
+/// eine (Aufnahme 13.11.2026: drei Bilder deutlich dunkler beim Start), und
+/// ein Fenster, das erst wegginge, bevor das andere steht, hinterließe ein
+/// Bild ohne Pille. Getauscht wird deshalb nur die Sichtbarkeit der Inhalte,
+/// in einer einzigen CATransaction, wenn beide Fenster schon auf dem
+/// Bildschirm stehen.
+///
+/// Ohne ruhende Pille an der Stelle (anderer Bildschirm, Status aus, Liste
+/// offen, Vollbild, Kill-Switch) erscheint das Diktat wie bisher direkt.
+///
+/// Die Aufnahme selbst wartet nie auf diese Schritte: Sie startet und endet
+/// im Coordinator, hier geht es nur ums Bild.
+struct UnifiedPillMorph: Equatable {
+    enum Phase: Equatable {
+        case idle
+        case handoverIn
+        case growing
+        case dictation
+        case shrinking
+        case handoverOut
+        case closing
+    }
+
+    /// Folgeschritte, die der Controller zeitversetzt meldet.
+    enum Step: Equatable {
+        /// Das neu gezeigte Fenster steht mit seinem Bild auf dem Bildschirm
+        /// (Bild abgegeben, dann eine kurze Wartezeit für die Fensterverwaltung).
+        case frameDrawn
+        /// Der Tausch der Sichtbarkeit ist auf dem Bildschirm angekommen.
+        case revealDrawn
+        /// Die Breitenanimation ist durch.
+        case animationDone
+    }
+
+    enum Effect: Equatable {
+        /// Diktat-Fenster zeigt das Ruhebild (ohne Animation).
+        case showRestLook
+        /// Animiert vom Ruhebild ins Diktat.
+        case grow
+        /// Animiert vom Diktat zurück ins Ruhebild.
+        case shrink
+        /// Status-Pille an dieser Stelle ausblenden (Hub: Diktat steht hier).
+        case hideStatus
+        /// Status-Pille wieder zeigen (Hub: Diktat weg). Ihr Inhalt bleibt,
+        /// wie er ist: nach dem Übergang erst unsichtbar.
+        case showStatus
+        /// In einem Bild: Diktat-Inhalt sichtbar, Status-Inhalt unsichtbar.
+        case revealDictation
+        /// In einem Bild: Status-Inhalt sichtbar, Diktat-Inhalt unsichtbar.
+        case revealStatus
+        /// Diktat-Fenster schließen.
+        case closeWindow
+        /// Folgeschritt melden, sobald er eingetreten ist.
+        case schedule(Step, generation: Int)
+    }
+
+    private(set) var phase: Phase = .idle
+    /// Zählt jeden Wechsel; ein geplanter Schritt mit älterer Generation ist
+    /// überholt und wird verworfen.
+    private(set) var generation = 0
+    /// Beim Wachsen: Der Tausch der Sichtbarkeit ist auf dem Bildschirm
+    /// (`revealDrawn`). Erst dann darf die Status-Pille aus dem Weg, auch wenn
+    /// das Wachsen schon durch ist (Main Thread lange blockiert).
+    private var swapShown = false
+    /// Beim Wachsen: Die Animation ist durch, es fehlt nur noch der Tausch.
+    private var growFinished = false
+
+    /// Das Fenster steht noch, das Diktat ist aber schon vorbei (es zieht
+    /// sich zurück). Ein neues Diktat übernimmt es.
+    var isRetiring: Bool { phase == .shrinking || phase == .handoverOut || phase == .closing }
+
+    /// Ein Diktat soll erscheinen. `morph`: an dieser Stelle steht eine
+    /// ruhende Pille, aus der es wachsen kann. Mit Übergang beginnt das
+    /// Diktat-Fenster unsichtbar (der Controller setzt das beim Aufbau).
+    mutating func show(morph: Bool) -> [Effect] {
+        switch phase {
+        case .idle:
+            if morph {
+                enter(.handoverIn)
+                return [.showRestLook, .schedule(.frameDrawn, generation: generation)]
+            }
+            enter(.dictation)
+            return [.hideStatus]
+        case .shrinking:
+            // Neues Diktat, während sich das alte zurückzieht: aus dem
+            // jetzigen Stand wieder wachsen, kein Tausch nötig.
+            enter(.growing)
+            swapShown = true
+            return [.grow, .schedule(.animationDone, generation: generation)]
+        case .handoverOut:
+            // Status-Pille steht schon wieder, aber noch unsichtbar.
+            enter(.growing)
+            swapShown = true
+            return [.hideStatus, .grow, .schedule(.animationDone, generation: generation)]
+        case .closing:
+            // Beide Fenster stehen schon: Sichtbarkeit zurücktauschen und wachsen.
+            enter(.growing)
+            return [
+                .revealDictation, .grow,
+                .schedule(.revealDrawn, generation: generation), .schedule(.animationDone, generation: generation),
+            ]
+        case .handoverIn, .growing, .dictation:
+            return []
+        }
+    }
+
+    /// Ein geplanter Schritt ist eingetreten.
+    mutating func step(_ step: Step, generation stepGeneration: Int) -> [Effect] {
+        guard stepGeneration == generation else { return [] }
+        switch (phase, step) {
+        case (.handoverIn, .frameDrawn):
+            enter(.growing)
+            return [
+                .revealDictation, .grow,
+                .schedule(.revealDrawn, generation: generation), .schedule(.animationDone, generation: generation),
+            ]
+        case (.growing, .revealDrawn):
+            // Erst jetzt aus dem Weg: Ihr Inhalt ist schon unsichtbar.
+            swapShown = true
+            if growFinished {
+                enter(.dictation)
+            }
+            return [.hideStatus]
+        case (.growing, .animationDone):
+            // Steht der Tausch noch aus, wartet das Diktat auf ihn.
+            guard swapShown else {
+                growFinished = true
+                return []
+            }
+            enter(.dictation)
+            return [.hideStatus]
+        case (.shrinking, .animationDone):
+            enter(.handoverOut)
+            return [.showStatus, .schedule(.frameDrawn, generation: generation)]
+        case (.handoverOut, .frameDrawn):
+            enter(.closing)
+            return [.revealStatus, .schedule(.revealDrawn, generation: generation)]
+        case (.closing, .revealDrawn):
+            enter(.idle)
+            return [.closeWindow]
+        default:
+            return []
+        }
+    }
+
+    /// Das Diktat ist vorbei. `morph`: an dieser Stelle gibt es ein Ruhebild,
+    /// in das es sich zurückziehen kann.
+    mutating func hide(morph: Bool) -> [Effect] {
+        switch phase {
+        case .idle, .shrinking, .handoverOut, .closing:
+            return []
+        case .handoverIn:
+            // Noch nicht getauscht, die Status-Pille steht sichtbar: einfach weg.
+            enter(.idle)
+            return [.closeWindow]
+        case .growing, .dictation:
+            if morph {
+                enter(.shrinking)
+                return [.shrink, .schedule(.animationDone, generation: generation)]
+            }
+            enter(.idle)
+            return [.closeWindow, .showStatus, .revealStatus]
+        }
+    }
+
+    /// Fenster sofort weg (Bildschirm geändert, Kill-Switch, neues Fenster
+    /// an anderer Stelle). Steht die Status-Pille noch aus oder ist sie
+    /// unsichtbar, kommt sie zurück.
+    mutating func abort() -> [Effect] {
+        let previous = phase
+        enter(.idle)
+        var effects: [Effect] = []
+        if previous != .idle { effects.append(.closeWindow) }
+        switch previous {
+        case .growing, .dictation, .shrinking:
+            effects += [.showStatus, .revealStatus]
+        case .handoverOut:
+            effects.append(.revealStatus)
+        case .idle, .handoverIn, .closing:
+            break
+        }
+        return effects
+    }
+
+    /// Zurück auf Anfang, ohne Schritte (das Diktat baut nach einem
+    /// Bildschirmwechsel an anderer Stelle neu auf und steht dort direkt).
+    /// Die Generation zählt weiter: Alte geplante Schritte verpuffen.
+    mutating func reset() {
+        enter(.idle)
+    }
+
+    /// Darf ein neues Diktat eine Pille übernehmen, die sich gerade
+    /// zurückzieht? Nur auf genau ihrem Bildschirm (noch angeschlossen, gleiche
+    /// Maße) und in derselben Darstellung (Notch bzw. Pille).
+    static func canAdopt(
+        retiringScreen: NotchScreenInfo?, retiringIsNotch: Bool,
+        placement: DictationPillPlacement, screens: [NotchScreenInfo]
+    ) -> Bool {
+        guard let retiringScreen, screens.contains(retiringScreen) else { return false }
+        return placement.screen == retiringScreen && placement.isNotch == retiringIsNotch
+    }
+
+    private mutating func enter(_ next: Phase) {
+        phase = next
+        generation += 1
+        swapShown = false
+        growFinished = false
+    }
+}

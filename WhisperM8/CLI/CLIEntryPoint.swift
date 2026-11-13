@@ -77,6 +77,9 @@ enum CLIModeDetector {
         // dort ist argv0 das App-Binary (WhisperM8), nicht der Symlink,
         // deshalb muss das Keyword hier stehen.
         "agent", "agent-supervise",
+        // Interner Modus: GPT-Router als eigener Dienst (Labs, Plan
+        // neustart-ohne-chatverlust.md) — argv0 ist das App-Binary.
+        "gpt-router",
         // Agent-Chats-Verwaltung (Jarvis-CLI) — docs/plans/whisperm8-chats-cli/.
         "chats",
         // Debug-Steuerkanal (UI-Tests ohne Computer Use) — docs/features/ui-testing.md.
@@ -85,6 +88,9 @@ enum CLIModeDetector {
         "speak",
         // Zwischenablage-Verlauf für Agents, siehe docs/features/clipboard-history.md.
         "clipboard",
+        // Neustart ohne Chatverlust: `app handover-status`, und der interne
+        // Modus des Aufbewahrers (argv0 ist dort das App-Binary).
+        "app", "handover-keeper",
     ]
 
     static func shouldRunCLI(_ arguments: [String]) -> Bool {
@@ -150,6 +156,14 @@ enum CLICommand {
             return await SpeakCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "clipboard":
             return await ClipboardCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "gpt-router":
+            // Interner Dienst-Modus — startet nur ClaudeGPTRouterServiceSupervisor.
+            return await GPTRouterCommand.run(arguments: Array(arguments.dropFirst()))
+        case "app":
+            return await AppCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "handover-keeper":
+            // Interner Modus — startet nur die App beim Neustart ohne Chatverlust.
+            return await HandoverKeeperCommand.run(arguments: Array(arguments.dropFirst()))
         case "agent-supervise":
             // Interner Detach-Modus — wird nur vom AgentSupervisorLauncher
             // gestartet, nie von Hand.
@@ -199,6 +213,7 @@ enum CLIHelp {
       whisperm8 debug <befehl>                    (Debug-Steuerkanal der App — siehe `whisperm8 debug help`)
       whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
       whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
+      whisperm8 app handover-status [--json]      (Stand des Aufbewahrers beim Neustart ohne Chatverlust)
       whisperm8 --help | --version
 
     TRANSCRIBE

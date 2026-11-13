@@ -426,6 +426,12 @@ struct AgentSessionDetailView: View {
                 launchGuardResult = .notNeeded
             }
 
+            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
+            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten).
+            let runningRecords = launchSession.provider == .claude
+                && !launchSession.isTerminal && !launchSession.isAgentView
+                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
+
             let resumeRepairPreparation: ResumeRepairPreparation
             if !launchSession.isAgentView,
                !launchSession.isTerminal,
@@ -464,6 +470,7 @@ struct AgentSessionDetailView: View {
                 prepareCommand(
                     resumeRepairPreparation: resumeRepairPreparation,
                     launchGuardResult: launchGuardResult,
+                    runningRecords: runningRecords,
                     allowsBackgroundAttach: allowsBackgroundAttach,
                     // Rückweg: den gespeicherten Stand nehmen, nicht den
                     // Snapshot aus der Closure des beendeten Laufs (ein Attach
@@ -477,9 +484,21 @@ struct AgentSessionDetailView: View {
     private func prepareCommand(
         resumeRepairPreparation: ResumeRepairPreparation,
         launchGuardResult: ClaudeGPTLaunchGuardResult,
+        runningRecords: [ClaudeSessionRecord] = [],
         allowsBackgroundAttach: Bool = true,
         storedSession: AgentChatSession? = nil
     ) {
+        // Derselbe Chat kann in zwei Fenstern oder Workspaces offen sein, und
+        // beide starten beim Erscheinen. Läuft er im Controller dieser App
+        // schon, gibt die Registry ohnehin diesen zurück; bauen würde hier
+        // nur die Doppelstart-Sperre auslösen („läuft schon in PID …“),
+        // obwohl es der eigene Prozess ist.
+        guard AgentCommandBuilder.allowsTriggeredLaunch(
+            controllerIsRunning: terminalRegistry.controller(for: session.id)?.isRunning
+        ) else {
+            focusLaunchInFlight = false
+            return
+        }
         do {
             var launchSession = try repairedSessionForLaunch(
                 resumeRepairPreparation: resumeRepairPreparation
@@ -505,6 +524,9 @@ struct AgentSessionDetailView: View {
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
             builder.backgroundAttachAllowed = allowsBackgroundAttach
+            builder.runningSessionProcessResolver = { sessionID in
+                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords)
+            }
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den
             // bisherigen Direktbetrieb ohne Router-Env.

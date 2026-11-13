@@ -61,6 +61,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
     static func expected(_ gesture: ControllerGesture, in context: ControllerContext, table: Table) -> ControllerAction? {
         if let action = table[gesture] { return action }
         if case .chat = context { return nil }
+        // Gebundenes Diktat (Runde 5): L2 und R1 stehen vollständig in der
+        // Tabelle, L1 wirkt wie ohne Ebene.
+        if case .recording(_, _, _?) = context {
+            switch gesture {
+            case .layerBegan, .inLayer(.whereTo, _), .inLayer(.quickDraw, _): return nil
+            default: break
+            }
+        }
         if case .paused = context { return nil }
         switch gesture {
         case .layerEnded(.whereTo): return .islandRelease
@@ -173,6 +181,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .inLayer(.whereTo, .press(.cross)): .islandCommit,
             .inLayer(.whereTo, .press(.circle)): .islandCancel,
             .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
+            .inLayer(.whereTo, .press(.square)): .islandReopenClosed,
             .inLayer(.whereTo, .press(.r2)): .islandCommitAndDictate,
             // Touchpad als Maus: L2 + Touchpad ist der Weg zum Verlauf.
             .inLayer(.whereTo, .press(.touchpad)): .clipboardToggle,
@@ -189,8 +198,99 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
             table[.inLayer(.whereTo, gesture)] = action
         }
+        return table.merging(appDiamond) { old, _ in old }
+    }()
+
+    /// Insel-Paket: zweite Raute unter R1. Das Steuerkreuz schaltet die App
+    /// (ein Druck je Stufe), gehalten ▲ ▼ und der linke Stick hoch/runter
+    /// scrollen die Limits-Karte. Gilt auch während eines gebundenen Diktats.
+    static let appDiamond: Table = {
+        var table: Table = [
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: false)): .appSlot(.limits),
+            .inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)): .appSlot(.alerts),
+            .inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false)): .appSlot(.stayAwake),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: false)): .appSlot(.clipboard),
+            .inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: true)): .islandScroll(step: -1),
+            .inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: true)): .islandScroll(step: 1),
+        ]
+        for isRepeat in [false, true] {
+            table[.inLayer(.quickDraw, .move(.up, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: -1)
+            table[.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: isRepeat))] = .islandScroll(step: 1)
+        }
         return table
     }()
+
+    // MARK: Diktat mit gebundenem Ziel (Runde 5, Punkt 9)
+
+    private static let recordingOutputModes: Table = [
+        .move(.left, source: .dpad, isRepeat: false): .outputMode(step: -1),
+        .move(.right, source: .dpad, isRepeat: false): .outputMode(step: 1),
+        .move(.up, source: .dpad, isRepeat: false): .outputMode(step: -1),
+        .move(.up, source: .dpad, isRepeat: true): .outputMode(step: -1),
+        .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
+        .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
+    ]
+    private static let recordingInChat: Table = merge([
+        .press(.r2): .dictationToggle,
+        .press(.cross): .dictationStopAndSubmit,
+        .tap(.circle): .dictationCancel,
+    ], recordingOutputModes, scrollWhileRecording)
+    private static let recordingInApp: Table = merge([
+        .press(.r2): .dictationToggle,
+        .tap(.circle): .dictationCancel,
+    ], recordingOutputModes, scrollWhileRecording)
+
+    /// Stick und L1/R1 navigieren wie sonst.
+    private static func boundNavigation(area: ControllerFocusArea, grid: Bool) -> Table {
+        var table: Table = [.tap(.l1): .adjacentChat(step: -1), .tap(.r1): .adjacentChat(step: 1)]
+        func stick(_ direction: ControllerDirection, _ isRepeat: Bool) -> ControllerGesture {
+            .move(direction, source: .leftStick, isRepeat: isRepeat)
+        }
+        if area == .list {
+            for isRepeat in [false, true] {
+                table[stick(.up, isRepeat)] = .listMove(step: -1)
+                table[stick(.down, isRepeat)] = .listMove(step: 1)
+            }
+            table[stick(.right, false)] = .leaveList
+        } else if grid {
+            for direction in ControllerDirection.allCases { table[stick(direction, false)] = .moveInContent(direction) }
+        } else {
+            table[stick(.up, false)] = .enterList(step: -1)
+            table[stick(.down, false)] = .enterList(step: 1)
+            table[stick(.left, false)] = .moveInContent(.left)
+        }
+        return table
+    }
+
+    /// L2 „Wohin“ samt Wechsel, R1 nur „geht nicht“, R2 bleibt „stopp“.
+    private static func boundLayers(recording: Bool) -> Table {
+        var table: Table = [
+            .layerBegan(.whereTo): .islandShow(.whereTo),
+            .layerBegan(.quickDraw): .islandShow(.quickDraw),
+            .inLayer(.whereTo, .press(.cross)): .islandCommit,
+            .inLayer(.whereTo, .press(.circle)): .islandCancel,
+            .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
+            .inLayer(.whereTo, .press(.square)): .islandReopenClosed,
+            .inLayer(.whereTo, .press(.touchpad)): .clipboardToggle,
+            .inLayer(.whereTo, .move(.left, source: .leftStick, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.left, source: .dpad, isRepeat: false)): .islandTab(step: -1),
+            .inLayer(.whereTo, .move(.right, source: .leftStick, isRepeat: false)): .islandTab(step: 1),
+            .inLayer(.whereTo, .move(.right, source: .dpad, isRepeat: false)): .islandTab(step: 1),
+        ]
+        for (gesture, action) in moves(.up, .islandMove(step: -1)).merging(moves(.down, .islandMove(step: 1)), uniquingKeysWith: { a, _ in a }) {
+            table[.inLayer(.whereTo, gesture)] = action
+        }
+        for button in [ControllerButton.cross, .triangle, .square, .circle, .l3] {
+            table[.inLayer(.quickDraw, .press(button))] = .rejected
+        }
+        table.merge(appDiamond) { old, _ in old }
+        if recording {
+            table[.inLayer(.whereTo, .press(.r2))] = .dictationToggle
+            table[.inLayer(.quickDraw, .press(.r2))] = .dictationToggle
+            table[.inLayer(.writing, .press(.r2))] = .dictationToggle
+        }
+        return table
+    }
 
     /// L1-Ebene, wo Schreiben nicht geht (Shell, Rückfrage): „geht nicht“.
     private static let writingRejected: Table = [
@@ -288,6 +388,10 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .press(.r2): .dictationToggle,
     ], pauseChord)
 
+    /// Am Bildschirm abgelesenes Eingabefeld: sichtbar leer bzw. mit Text.
+    private static let emptyField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+    private static let textField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+
     private static func chatState(
         _ status: ControllerChatState.Status, _ configure: (inout ControllerChatState) -> Void = { _ in }
     ) -> ControllerContext {
@@ -331,6 +435,19 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .move(.down, source: .dpad, isRepeat: false): .outputMode(step: 1),
             .move(.down, source: .dpad, isRepeat: true): .outputMode(step: 1),
         ], scrollWhileRecording)),
+        ("Aufnahme gebunden, Einzelansicht",
+         .recording(phase: .recording, targetIsChat: true, navigation: .init(area: .content, gridActive: false)),
+         merge(recordingInChat, boundNavigation(area: .content, grid: false), boundLayers(recording: true))),
+        ("Aufnahme gebunden, Liste",
+         .recording(phase: .recording, targetIsChat: true, navigation: .init(area: .list, gridActive: false)),
+         merge(recordingInChat, boundNavigation(area: .list, grid: false), boundLayers(recording: true))),
+        ("Aufnahme gebunden, Raster (Shell)",
+         .recording(phase: .recording, targetIsChat: false, navigation: .init(area: .content, gridActive: true)),
+         merge(recordingInApp, boundNavigation(area: .content, grid: true), boundLayers(recording: true))),
+        ("Transkription gebunden",
+         .recording(phase: .transcribing, targetIsChat: true, navigation: .init(area: .content, gridActive: false)),
+         merge([.tap(.circle): .dictationCancel], scrollWhileRecording,
+               boundNavigation(area: .content, grid: false), boundLayers(recording: false))),
         ("Transkription", .recording(phase: .transcribing, targetIsChat: true),
          merge([.tap(.circle): .dictationCancel], scrollWhileRecording)),
         ("Nacharbeit", .recording(phase: .postProcessing, targetIsChat: false),
@@ -460,6 +577,48 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
+        // Entscheidung 13.11.2026: Ist Claudes Eingabefeld sichtbar (beim Druck
+        // abgelesen), schickt Kreuz auch bei „arbeitet“ oder unklarem Zustand
+        // Enter — leer, mit Text oder mit gewählter Fußzeile. Ohne ablesbares
+        // Feld bleibt „Chat arbeitet“ oben gültig.
+        ("Claude arbeitet, Feld sichtbar leer", chatState(.working) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Text im Feld", chatState(.working) { $0.promptField = textField },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude Zustand unklar, Feld sichtbar", chatState(.unknown) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Fußzeile gewählt",
+         chatState(.working) { $0.promptField = emptyField; $0.openView = .footerSelection },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .tap(.circle): .chatKey(.escape),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        // Codex: Das Feld zählt für Kreuz nicht (Freigaben ohne „wartet“).
+        ("Codex arbeitet, Feld sichtbar",
+         .chat(ControllerChatState(status: .working, profile: .codex, promptField: emptyField)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
         ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
@@ -490,8 +649,37 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
     }
 
+    /// Runde 5 im Chat: L1 mit Wortsprung, Zeilen, Einfügen, Escape und
+    /// Rückgängig, R1 + L3 (Transkript). Aus den Regeln abgeleitet, damit die
+    /// Tabellen oben unverändert bleiben. Die Zeilen sind hier nie ablesbar
+    /// (kein Eingabefeld im Zustand): ▲ ▼ gehen deshalb nie.
+    static func round5(_ context: ControllerContext) -> Table {
+        guard case let .chat(state) = context, state.acceptsKeys else { return [:] }
+        let agent = state.profile == .claude || state.profile == .codex
+        let question = state.status == .awaitingInput
+        let writing = agent && !question
+        var table: Table = [:]
+        for direction in ControllerDirection.allCases {
+            for isRepeat in [false, true] {
+                let gesture = ControllerGesture.inLayer(.writing, .move(direction, source: .dpad, isRepeat: isRepeat))
+                if writing, direction == .left || direction == .right {
+                    table[gesture] = .chatKey(direction == .left ? .wordLeft : .wordRight)
+                } else {
+                    table[gesture] = isRepeat ? nil : .rejected
+                }
+            }
+        }
+        let shellPrompt = state.profile == .shell && state.shellAtPrompt
+        table[.inLayer(.writing, .press(.cross))] = !question && (agent || shellPrompt) ? .pasteNewest : .rejected
+        table[.inLayer(.writing, .press(.circle))] = agent ? .chatKey(.escape) : .rejected
+        table[.inLayer(.writing, .press(.l3))] = state.profile == .claude && !question ? .chatKey(.undo) : .rejected
+        table[.inLayer(.quickDraw, .press(.l3))] = state.profile == .claude ? .chatKey(.toggleTranscript) : .rejected
+        return table
+    }
+
     func testEveryGestureInEveryContextHasTheExpectedOutcome() {
-        for (name, context, table) in Self.expectations {
+        for (name, context, base) in Self.expectations {
+            let table = base.merging(Self.round5(context)) { old, _ in old }
             for gesture in Self.allGestures {
                 XCTAssertEqual(
                     ControllerBindingResolver.action(for: gesture, in: context),

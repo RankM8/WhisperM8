@@ -31,7 +31,8 @@ struct ControllerIslandDisplay: Equatable {
         let width: CGFloat
         switch model.content {
         case .writing: width = 420
-        case .quickDraw: width = 524
+        // Zwei Rauten nebeneinander (Insel-Paket): rund 700 pt.
+        case .quickDraw: width = 704
         case .whereTo: width = 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
@@ -46,7 +47,7 @@ struct ControllerIslandCounts: Equatable {
 
 /// Farben der Insel. Immer dunkel: an der Notch wie die Hardware, ohne Notch
 /// im dunklen Glas der Diktat-Pille.
-private struct IslandPalette {
+struct IslandPalette {
     var background: Color
     var border: Color
     var text: Color
@@ -63,6 +64,8 @@ private struct IslandPalette {
     var line: Color
     var awaiting: Color
     var working: Color
+    /// Rot der Ampel (ab 80 % verbraucht).
+    var error = Color(red: 0.898, green: 0.349, blue: 0.31)
 
     static let notch = IslandPalette(
         background: .black, border: .clear,
@@ -85,7 +88,7 @@ struct ControllerIslandView: View {
     /// Aufgeklappt; zu ist nur der Umriss der Notch sichtbar.
     var revealed = true
 
-    private var palette: IslandPalette { .notch }
+    var palette: IslandPalette { .notch }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,7 +112,7 @@ struct ControllerIslandView: View {
         if display.isNotch {
             shape.fill(palette.background)
         } else {
-            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous), unified: true)
         }
     }
 
@@ -148,13 +151,17 @@ struct ControllerIslandView: View {
     private var header: some View {
         HStack(spacing: 8) {
             IslandGlyph(text: display.model.layer.key.glyph, round: false, palette: palette)
-            Text(verbatim: display.model.layer.title)
+            Text(verbatim: limitsCard == nil ? display.model.layer.title : String(localized: "Limits"))
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.2)
                 .foregroundStyle(palette.text)
             Spacer(minLength: 12)
-            headerTarget
-                .frame(maxWidth: 190, alignment: .trailing)
+            if let card = limitsCard {
+                limitsStatus(card)
+            } else {
+                headerTarget
+                    .frame(maxWidth: display.model.layer == .quickDraw ? 420 : 190, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 9)
@@ -184,6 +191,10 @@ struct ControllerIslandView: View {
                     .foregroundStyle(palette.tertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                // R1: das Konto des Chats mit seinem 5-Stunden-Stand.
+                if display.model.layer == .quickDraw, let badge = quickDrawAccount {
+                    accountBadge(badge)
+                }
             }
         }
     }
@@ -218,12 +229,8 @@ struct ControllerIslandView: View {
     private func writing(_ slots: ControllerWritingSlots) -> some View {
         VStack(spacing: 0) {
             IslandFlow {
-                hint(.square, String(localized: "Delete to line start"), on: slots.canDeleteLine)
-                hint(.triangle, String(localized: "New line"), on: slots.canInsertNewline)
-                if slots.note == nil {
-                    // Bewusst frei: ausgegraut, damit klar ist, dass dort nichts liegt.
-                    hint(.cross, String(localized: "free"), on: false)
-                    hint(.circle, String(localized: "free"), on: false)
+                ForEach(ControllerWritingSlots.Hint.allCases, id: \.self) { item in
+                    hint(item.button, item.label(slots), on: slots.isOn(item), glyph: item.glyph)
                 }
             }
             .padding(.horizontal, 14)
@@ -231,68 +238,6 @@ struct ControllerIslandView: View {
             .padding(.bottom, 12)
             if let note = slots.note { self.note(note.text) }
         }
-    }
-
-    private func quickDraw(_ slots: ControllerQuickDrawSlots) -> some View {
-        VStack(spacing: 0) {
-            Grid(horizontalSpacing: 4, verticalSpacing: 4) {
-                GridRow {
-                    Color.clear.frame(width: 160, height: 44)
-                    slot(.cycleMode, slots)
-                    Color.clear.frame(width: 160, height: 44)
-                }
-                GridRow {
-                    slot(.commands, slots)
-                    Text(verbatim: ControllerButton.r1.glyph)
-                        .font(.system(size: 11))
-                        .foregroundStyle(palette.tertiary)
-                        .frame(width: 160, height: 44)
-                    slot(.switchAccount, slots)
-                }
-                GridRow {
-                    Color.clear.frame(width: 160, height: 44)
-                    slot(.continueWork, slots)
-                    Color.clear.frame(width: 160, height: 44)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 4)
-            .padding(.bottom, slots.note == nil ? 14 : 8)
-            if let note = slots.note { self.note(note.text) }
-        }
-    }
-
-    private func slot(_ item: ControllerMenuItem, _ slots: ControllerQuickDrawSlots) -> some View {
-        let on = slots.enabled.contains(item)
-        let hit = slots.hit == item
-        return HStack(spacing: 7) {
-            if let button = ControllerQuickDrawSlots.button(for: item) {
-                IslandGlyph(text: button.glyph, round: true, palette: palette)
-            }
-            Text(verbatim: item.islandTitle)
-                .font(.system(size: 12))
-                .foregroundStyle(palette.text)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if item.opensSubmenu {
-                Text(verbatim: "›")
-                    .font(.system(size: 12))
-                    .foregroundStyle(palette.tertiary)
-            }
-        }
-        .padding(.horizontal, 10)
-        .frame(width: 160, height: 44)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(hit ? palette.mark : palette.slot)
-                .overlay {
-                    if hit {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(palette.markBorder, lineWidth: 1.5)
-                    }
-                }
-        )
-        .opacity(on || hit ? 1 : 0.36)
     }
 
     /// Die Liste steht sofort da (wie Cmd-Tab), die Markierung auf dem
@@ -311,17 +256,30 @@ struct ControllerIslandView: View {
                     if state.chats.rows.isEmpty { empty(String(localized: "No chats")) }
                 case .workspaces:
                     ForEach(state.workspaces.visibleRows) { choice in
+                        // Unter den Workspaces die Projekte, abgesetzt durch eine Linie.
+                        if choice.kind == .project, isFirstProject(choice, in: state) {
+                            Rectangle().fill(palette.line).frame(height: 1).padding(.horizontal, 8).padding(.vertical, 3)
+                        }
                         workspaceRow(choice, marked: choice.id == state.workspaces.selected?.id,
-                                     previous: state.isPrevious(workspace: choice.id))
+                                     previous: state.isPrevious(choice))
                     }
                     more(state.workspaces.hiddenCount)
-                    if state.workspaces.rows.isEmpty { empty(String(localized: "No workspaces")) }
+                    if state.workspaces.rows.isEmpty { empty(String(localized: "No workspaces or projects")) }
                 }
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
-            footer(state.tab)
+            footer(state.tab, reopenTitle: state.reopenTitle)
         }
+    }
+
+    /// Erste Projekt-Zeile nach mindestens einem Workspace. Der vorige Ort
+    /// steht außer der Reihe gleich hinter dem aktuellen und zählt dafür nicht.
+    private func isFirstProject(_ choice: ControllerWorkspaceChoice, in state: ControllerWhereToState) -> Bool {
+        guard !state.isPrevious(choice) else { return false }
+        let rows = state.workspaces.rows.filter { !state.isPrevious($0) }
+        guard let index = rows.firstIndex(where: { $0.id == choice.id }), index > 0 else { return false }
+        return rows[index - 1].kind == .workspace
     }
 
     private func empty(_ text: String) -> some View {
@@ -343,7 +301,7 @@ struct ControllerIslandView: View {
     private func tabs(_ selected: ControllerIslandTab) -> some View {
         HStack(spacing: 2) {
             tab(String(localized: "Chats"), on: selected == .chats)
-            tab(String(localized: "Workspaces"), on: selected == .workspaces)
+            tab(String(localized: "Workspaces & Projects"), on: selected == .workspaces)
         }
         .padding(2)
         .background(palette.segment, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -400,14 +358,22 @@ struct ControllerIslandView: View {
 
     private func workspaceRow(_ choice: ControllerWorkspaceChoice, marked: Bool, previous: Bool) -> some View {
         HStack(spacing: 9) {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color(hex: choice.colorHex))
-                .frame(width: 16, height: 16)
-                .overlay {
-                    Text(verbatim: String(choice.name.prefix(1)).uppercased())
-                        .font(.system(size: 11, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
+            if choice.kind == .project {
+                // Projekt wie in der Seitenleiste: Ordner in der Projektfarbe.
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(hex: choice.colorHex))
+                    .frame(width: 16, height: 16)
+            } else {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(hex: choice.colorHex))
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        Text(verbatim: String(choice.name.prefix(1)).uppercased())
+                            .font(.system(size: 11, weight: .heavy))
+                            .foregroundStyle(.white)
+                    }
+            }
             HStack(spacing: 6) {
                 Text(verbatim: choice.name)
                     .font(.system(size: 12.5, weight: choice.isCurrent ? .bold : .medium))
@@ -427,7 +393,8 @@ struct ControllerIslandView: View {
                 // Dasselbe Zeichen wie der Status-Punkt eines wartenden Chats.
                 IslandStatusDot(status: .awaiting)
             }
-            Text(verbatim: ChatsUIStrings.chatCount(choice.chatCount))
+            Text(verbatim: choice.kind == .project
+                 ? String(localized: "\(choice.chatCount) active") : ChatsUIStrings.chatCount(choice.chatCount))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundStyle(palette.tertiary)
                 .fixedSize()
@@ -452,13 +419,16 @@ struct ControllerIslandView: View {
     /// Fußzeile: Was die Tasten jetzt tun. Loslassen wechselt zum markierten
     /// Eintrag, Kreis bricht ab — beides steht immer da, weil es keine
     /// Hinweiszeile mehr davor gibt.
-    private func footer(_ tab: ControllerIslandTab) -> some View {
+    private func footer(_ tab: ControllerIslandTab, reopenTitle: String? = nil) -> some View {
         IslandFlow(spacing: 12, lineSpacing: 5) {
             footItem("▲▼", String(localized: "select"))
             footItem("◀▶", String(localized: "tabs"))
             footItem(ControllerButton.l2.glyph, String(localized: "release: switch"), round: false)
             footItem(ControllerButton.circle.glyph, String(localized: "cancel"))
             footItem(ControllerButton.triangle.glyph, String(localized: "next waiting"))
+            footItem(ControllerButton.square.glyph,
+                     reopenTitle.map { String(localized: "reopen \($0)") } ?? String(localized: "nothing closed"),
+                     round: false)
             // Im Reiter Workspaces diktiert R2 nur, wenn die Markierung auf
             // dem aktuellen Workspace steht (in den aktuellen Chat).
             footItem(ControllerButton.r2.glyph,
@@ -474,7 +444,7 @@ struct ControllerIslandView: View {
         .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
     }
 
-    private func footItem(_ glyph: String, _ label: String, round: Bool = true) -> some View {
+    func footItem(_ glyph: String, _ label: String, round: Bool = true) -> some View {
         HStack(spacing: 5) {
             IslandGlyph(text: glyph, round: round, palette: palette)
             Text(verbatim: label)
@@ -495,7 +465,7 @@ struct ControllerIslandView: View {
         .opacity(on ? 1 : 0.38)
     }
 
-    private func note(_ text: String) -> some View {
+    func note(_ text: String) -> some View {
         Text(verbatim: text)
             .font(.system(size: 11))
             .foregroundStyle(palette.awaiting)
@@ -511,6 +481,7 @@ extension ControllerWritingSlots.Note {
         switch self {
         case .shell: return String(localized: "Not in a shell — a program there could read the keys differently.")
         case .question: return String(localized: "Question open — nothing goes into the chat right now.")
+        case .escapeInterrupts: return String(localized: "Working: ○ interrupts if no view is open.")
         }
     }
 }
@@ -520,6 +491,7 @@ extension ControllerQuickDrawSlots.Note {
         switch self {
         case .question: return ControllerWritingSlots.Note.question.text
         case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
+        case .dictating: return String(localized: "Dictation running — the text goes into its chat; nothing else goes into the field now.")
         }
     }
 }
@@ -562,7 +534,7 @@ extension ControllerIslandStatus {
 
 /// Status-Punkt der Insel: derselbe `AgentStatusIndicator` wie in Seitenleiste
 /// und Tabs (ruhige Form ohne Puls), etwas größer.
-private struct IslandStatusDot: View {
+struct IslandStatusDot: View {
     let status: ControllerIslandStatus?
 
     var body: some View {
@@ -573,7 +545,7 @@ private struct IslandStatusDot: View {
 }
 
 /// Tasten-Symbol der Insel.
-private struct IslandGlyph: View {
+struct IslandGlyph: View {
     let text: String
     let round: Bool
     let palette: IslandPalette
@@ -594,7 +566,7 @@ private struct IslandGlyph: View {
     }
 }
 
-private extension View {
+extension View {
     func islandMarking(_ marked: Bool, palette: IslandPalette) -> some View {
         background {
             if marked {
@@ -610,7 +582,7 @@ private extension View {
 
 /// Zeilen mit Umbruch, wie `flex-wrap` im Entwurf: 14 pt zwischen den
 /// Einträgen, 6 pt zwischen den Zeilen.
-private struct IslandFlow: Layout {
+struct IslandFlow: Layout {
     var spacing: CGFloat = 14
     var lineSpacing: CGFloat = 6
 

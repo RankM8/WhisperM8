@@ -3,11 +3,16 @@ import Foundation
 
 /// Räumt beim App-Start einen verwaisten, veralteten Proxy vom Port.
 ///
-/// Befund 2026-09-23: `make kill`/`make dev` beendet die App per SIGTERM — dabei
-/// läuft KEIN `willTerminate`, der selbst gestartete Proxy überlebt als Waise
-/// (PPID 1). Die neue App findet den Port erreichbar und benutzt ihn weiter.
-/// So lief nach dem Wechsel auf Upstream 0.1.42 weiter der alte Fork-Build, und
-/// ein Auto-Update des verwalteten Binarys hätte nie gegriffen.
+/// Befund 2026-09-23: Damals lief bei SIGTERM (`make kill`/`make dev`) kein
+/// `willTerminate`, der selbst gestartete Proxy überlebte als Waise (PPID 1).
+/// Seit SIGTERM ein reguläres Beenden ist, entstehen Waisen nur noch nach einem
+/// Absturz oder `kill -9`. Die neue App fand den Port erreichbar und benutzte
+/// ihn weiter; so lief nach dem Wechsel auf Upstream 0.1.42 weiter der alte
+/// Fork-Build, und ein Auto-Update des verwalteten Binarys hätte nie gegriffen.
+///
+/// Ausnahme Router-Dienst (Labs `restartKeepsChatsEnabled`): Proxys, die die App
+/// aus dem Proxy-Register übernommen hat (`protectedPIDs`), bleiben immer — an
+/// ihnen hängen überlebende GPT-Chats.
 ///
 /// Ersetzt wird nur, was sicher unser Rest ist: eine Waise (PPID 1), deren
 /// Programm `claude-code-proxy` heißt und die veraltet ist — anderes Binary als
@@ -79,6 +84,7 @@ enum ClaudeCodeProxyOrphanGuard {
         port: Int,
         resolvedBinaryPath: String?,
         requireTranscriptionRoute: Bool = false,
+        protectedPIDs: Set<Int32> = [],
         routeProbe: (Int) -> ClaudeCodeProxyTranscriptionRoute = { ClaudeCodeProxyManager.transcriptionRouteStatus(port: $0) },
         listenerResolver: (Int) -> ListenerProcess? = ClaudeCodeProxyOrphanGuard.listener,
         terminator: (Int32) -> Void = { _ = kill($0, SIGTERM) },
@@ -86,6 +92,13 @@ enum ClaudeCodeProxyOrphanGuard {
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) -> Bool {
         guard let listener = listenerResolver(port) else { return false }
+        // Aus dem Proxy-Register übernommen (Router-Dienst): daran hängen
+        // überlebende GPT-Chats — nie ersetzen, auch wenn er veraltet ist.
+        // Ein neueres Binary wirkt beim nächsten echten Neustart.
+        guard !protectedPIDs.contains(listener.pid) else {
+            Logger.claudeGPTRouter.notice("claude_code_proxy_orphan_kept_adopted pid=\(listener.pid)")
+            return false
+        }
         let modified = resolvedBinaryPath.flatMap {
             (try? FileManager.default.attributesOfItem(atPath: $0))?[.modificationDate] as? Date
         }

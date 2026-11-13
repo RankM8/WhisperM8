@@ -146,22 +146,25 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertFalse(island.isVisible)
     }
 
-    /// Cmd-Tab: Halten und Loslassen ohne Bewegung führt zum vorigen Ort —
-    /// dasselbe Ziel wie L2 getippt, aber über die Liste.
-    func testHoldAndReleaseGoesToThePreviousChat() {
+    /// Insel-Paket: Halten zeigt die Markierung auf dem aktuellen Chat;
+    /// Loslassen ohne Bewegung tut nichts. Der vorige Chat ist einen Schritt
+    /// entfernt und geht dann denselben Weg wie Tippen.
+    func testHoldAndReleaseWithoutMovementStays() {
         window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
         press(.l2, at: 0)
         tick(0.3)
-        XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "Markierung auf dem vorigen Chat")
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[1], "Markierung auf dem aktuellen Chat")
+        XCTAssertEqual(whereTo?.previous, .chat(chats[3]), "„vorher“ am vorigen Chat")
         release(.l2, at: 1)
-        XCTAssertEqual(window.selected, chats[3])
-        XCTAssertEqual(window.commands.last, .lastChat, "derselbe Weg wie Tippen")
+        XCTAssertEqual(window.selected, chats[1])
+        XCTAssertFalse(window.commands.contains(.lastChat))
         XCTAssertTrue(haptics.isEmpty)
     }
 
     /// Der vorige Chat steht auch dann in der Liste, wenn die Seitenleiste
-    /// ihn gerade nicht zeigt (Filter, Suche, eingeklappt).
-    func testPreviousChatOutsideTheSidebarIsStillListed() {
+    /// ihn gerade nicht zeigt (Filter, Suche, eingeklappt) — gleich unter dem
+    /// aktuellen, ein Schritt nach unten führt dorthin über `lastChat`.
+    func testPreviousChatOutsideTheSidebarIsOneStepAway() {
         let hidden = UUID()
         setTerminal(hidden, status: .idle)
         window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: hidden)
@@ -169,15 +172,17 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         tick(0.3)
         XCTAssertEqual(whereTo?.chats.rows.map(\.id), [chats[0], chats[1], hidden, chats[2], chats[3]],
                        "gleich hinter dem aktuellen")
+        press(.dpadDown, at: 0.4)
+        release(.dpadDown, at: 0.45)
         XCTAssertEqual(whereTo?.chats.selected?.id, hidden)
         release(.l2, at: 1)
         XCTAssertEqual(window.commands.last, .lastChat)
         XCTAssertEqual(window.selected, hidden)
     }
 
-    /// Halten und Loslassen auf den vorigen Workspace geht denselben Weg wie
-    /// Tippen; scheitert er (Workspace gehört einem anderen Fenster),
-    /// vibriert es „geht nicht“ und kein Fenster kommt nach vorn.
+    /// Bewegt auf den vorigen Workspace: derselbe Weg wie Tippen; scheitert
+    /// er (Workspace gehört einem anderen Fenster), vibriert es „geht nicht“
+    /// und kein Fenster kommt nach vorn.
     func testReleaseOnPreviousWorkspaceGoesBackAndRejectsQuietly() {
         let workspaces = [UUID(), UUID()]
         window.workspaces = workspaces.enumerated().map { index, id in
@@ -189,6 +194,8 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         window.failing = [String(describing: AgentChatsCommand.lastChat)]
         press(.l2, at: 0)
         tick(0.3)
+        press(.dpadDown, at: 0.4)
+        release(.dpadDown, at: 0.45)
         release(.l2, at: 1)
         XCTAssertEqual(window.commands.last, .lastChat)
         XCTAssertFalse(window.commands.contains(.activateWorkspace(workspaces[1])))
@@ -208,11 +215,13 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertFalse(island.isVisible)
     }
 
-    /// Kreis bricht ab, auch wenn die Markierung auf dem vorigen Ort steht.
-    func testCircleCancelsTheSwitchToThePreviousPlace() {
+    /// Kreis bricht ab, auch nach einer Bewegung.
+    func testCircleCancelsTheSwitchAfterAMovement() {
         window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
         press(.l2, at: 0)
         tick(0.3)
+        press(.dpadDown, at: 0.4)
+        release(.dpadDown, at: 0.45)
         press(.circle, at: 0.5)
         XCTAssertFalse(island.isVisible)
         release(.circle, at: 0.6)
@@ -264,8 +273,8 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         window.backTarget = ControllerBackTarget(kind: .workspace, title: "W1", id: workspaces[1])
         press(.l2, at: 0)
         tick(0.3)
-        XCTAssertEqual(whereTo?.tab, .workspaces, "Raster: Reiter Workspaces")
-        XCTAssertEqual(whereTo?.workspaces.selected?.id, workspaces[1], "auf dem vorigen Workspace")
+        XCTAssertEqual(whereTo?.tab, .workspaces, "Raster: Reiter Workspaces & Projekte")
+        XCTAssertEqual(whereTo?.workspaces.selected?.id, workspaces[0], "auf dem aktuellen Workspace")
         press(.dpadLeft, at: 0.5)
         release(.dpadLeft, at: 0.55)
         XCTAssertEqual(whereTo?.tab, .chats, "links: Reiter Chats")
@@ -273,9 +282,11 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.dpadRight, at: 0.6)
         release(.dpadRight, at: 0.65)
         XCTAssertEqual(whereTo?.tab, .workspaces)
-        XCTAssertEqual(whereTo?.destination, .workspace(workspaces[1]), "zurück auf dem vorigen Workspace")
+        XCTAssertEqual(whereTo?.destination, .stay, "zurück auf dem aktuellen Workspace")
         press(.dpadDown, at: 0.7)
         release(.dpadDown, at: 0.75)
+        press(.dpadDown, at: 0.8)
+        release(.dpadDown, at: 0.85)
         release(.l2, at: 1)
         XCTAssertEqual(window.commands.last, .switchToWorkspace(workspaces[2]), "still, ohne Konfliktdialog")
     }
@@ -447,8 +458,10 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         press(.triangle, at: 1.1)
         press(.cross, at: 1.2)
         press(.circle, at: 1.3)
-        XCTAssertEqual(terminals.keys, [.killLineStart, .killLineStart, .killLineStart, .newline],
-                       "Kreuz und Kreis bleiben frei")
+        // Runde 5: Kreuz fügt ein (hier ist die Zwischenablage leer: „geht
+        // nicht“), Kreis schickt genau ein Escape.
+        XCTAssertEqual(terminals.keys, [.killLineStart, .killLineStart, .killLineStart, .newline, .escape])
+        XCTAssertEqual(haptics, [.rejected])
         release(.l1, at: 1.5)
         XCTAssertFalse(island.isVisible)
         XCTAssertEqual(window.selected, chats[1])
@@ -633,5 +646,261 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(island.shown.count, shown)
         dispatcher.refreshContext()
         XCTAssertEqual(island.shown.count, shown + 1)
+    }
+
+    // MARK: - Insel-Paket: Projekte im Reiter „Workspaces & Projekte“
+
+    /// Ein Projekt öffnet still als Raster (wie der ⊞ in der Seitenleiste);
+    /// R2 auf einem Projekt geht nicht.
+    func testProjectSwitchesSilentlyAndRejectsDictation() {
+        let project = UUID()
+        window.workspaces = [
+            ControllerWorkspaceChoice(id: UUID(), name: "W", colorHex: "#888888", chatCount: 1,
+                                      hasWaitingChat: false, isCurrent: true),
+            ControllerWorkspaceChoice(id: project, name: "P", colorHex: "#888888", chatCount: 2,
+                                      hasWaitingChat: false, isCurrent: false, kind: .project),
+        ]
+        window.isGridActive = true
+        press(.l2, at: 0)
+        press(.dpadDown, at: 0.1)
+        release(.dpadDown, at: 0.15)
+        press(.r2, at: 0.2)
+        XCTAssertEqual(haptics, [.rejected], "R2 auf einem Projekt")
+        XCTAssertTrue(dictation.started.isEmpty)
+        press(.cross, at: 0.3)
+        XCTAssertEqual(window.commands.last, .switchToProject(project))
+    }
+
+    // MARK: - Insel-Paket: App-Raute unter R1
+
+    private func holdR1() {
+        press(.r1, at: 0)
+        tick(0.3)
+    }
+
+    private var quickDraw: ControllerQuickDrawSlots? {
+        if case let .quickDraw(slots)? = island.last?.content { return slots }
+        return nil
+    }
+
+    /// Die Glocke schaltet eine Stufe weiter; die Insel bleibt offen und
+    /// bestätigt, was jetzt gilt und was der nächste Druck bringt.
+    func testAlertToggleKeepsTheIslandOpenAndConfirms() {
+        let environment = ControllerEnvironmentSpy()
+        rebuild(environment: environment)
+        holdR1()
+        press(.dpadLeft, at: 0.4)
+        release(.dpadLeft, at: 0.45)
+        XCTAssertEqual(environment.alertCycles, 1)
+        XCTAssertEqual(quickDraw?.confirmation, .alert(.soundOff, next: .off))
+        XCTAssertEqual(quickDraw?.app.alert, .soundOff)
+        XCTAssertTrue(island.isVisible, "Schalter lassen die Insel offen")
+        press(.dpadLeft, at: 0.5)
+        release(.dpadLeft, at: 0.55)
+        XCTAssertEqual(environment.alertCycles, 2)
+        XCTAssertEqual(quickDraw?.confirmation, .alert(.off, next: .all))
+        XCTAssertEqual(haptics, [.toggled, .toggled])
+    }
+
+    /// Wach bleiben ohne Admin-Freigabe: kein Dialog, Hinweis, „geht nicht“.
+    func testStayAwakeWithoutPermissionOpensNoDialog() {
+        let environment = ControllerEnvironmentSpy()
+        environment.stayAwakeResult = .needsPermission
+        rebuild(environment: environment)
+        holdR1()
+        press(.dpadRight, at: 0.4)
+        XCTAssertEqual(quickDraw?.confirmation, .awakeNeedsPermission)
+        XCTAssertEqual(haptics, [.rejected])
+        XCTAssertTrue(island.isVisible)
+        environment.stayAwakeResult = .changed(.whileWorking)
+        release(.dpadRight, at: 0.45)
+        press(.dpadRight, at: 0.5)
+        XCTAssertEqual(quickDraw?.confirmation, .awake(.whileWorking, next: .always))
+    }
+
+    /// ▼ öffnet den Verlauf und schließt die Insel (ein Befehl).
+    func testClipboardSlotClosesTheIsland() {
+        let environment = ControllerEnvironmentSpy()
+        rebuild(environment: environment)
+        holdR1()
+        press(.dpadDown, at: 0.4)
+        XCTAssertEqual(environment.clipboardToggles, 1)
+        XCTAssertFalse(island.isVisible)
+    }
+
+    /// Während eines gebundenen Diktats geht die App-Raute weiter.
+    func testAppDiamondWorksWhileDictating() {
+        let environment = ControllerEnvironmentSpy()
+        rebuild(environment: environment)
+        dictation.start(target: .agentChat(sessionID: chats[1]), label: nil)
+        holdR1()
+        press(.dpadLeft, at: 0.4)
+        XCTAssertEqual(environment.alertCycles, 1)
+        XCTAssertEqual(quickDraw?.note, .dictating)
+    }
+
+    /// R1 + ▲: Limits-Karte mit allen Konten, Konto des Chats markiert, ein
+    /// passiver Abruf nur beim Öffnen der Karte (nicht beim Halten von R1);
+    /// Stick und ▼ scrollen, ✕ nimmt den Weg von ↻.
+    func testLimitsCardScrollsAndRefreshes() {
+        var stale = 0, refreshed = 0
+        dispatcher.limits = ControllerLimitsAccess(
+            accounts: { ControllerLimitAccounts(claude: (0..<7).map { "k\($0)" }, gpt: ["k7", "k8"]) },
+            rows: { accounts in
+                accounts.claude.map { ControllerAccountLimitRow(kind: .claude, name: $0, fiveHour: 10) }
+                    + accounts.gpt.map { ControllerAccountLimitRow(kind: .gpt, name: $0, fiveHour: 10) }
+            },
+            updatedAt: { nil }, isLoading: { false },
+            refreshIfStale: { stale += 1 }, refresh: { refreshed += 1 })
+        var info = ControllerChatActionInfo(title: "Chat")
+        info.usageAccount = ControllerUsageAccount(kind: .claude, name: "k2")
+        window.chatInfo = info
+        holdR1()
+        XCTAssertEqual(stale, 0, "R1 halten lädt nichts")
+        XCTAssertEqual(quickDraw?.account, ControllerIslandAccountBadge(name: "k2", fiveHourUsed: nil))
+        press(.dpadUp, at: 0.4)
+        release(.dpadUp, at: 0.45)
+        XCTAssertEqual(stale, 1)
+        XCTAssertEqual(quickDraw?.card?.rows.first(where: \.isCurrentChat)?.name, "k2")
+        XCTAssertEqual(quickDraw?.card?.hiddenBelow, 3)
+        press(.dpadDown, at: 0.5)
+        release(.dpadDown, at: 0.55)
+        XCTAssertEqual(quickDraw?.card?.hiddenAbove, 1, "▼ scrollt statt Verlauf")
+        feed(.stick(.left, x: 0, y: -1), at: 0.6)
+        XCTAssertEqual(quickDraw?.card?.hiddenAbove, 2, "Stick scrollt")
+        feed(.stick(.left, x: 0, y: 0), at: 0.65)
+        press(.cross, at: 0.7)
+        XCTAssertEqual(refreshed, 1)
+        XCTAssertTrue(window.commands.isEmpty || !terminals.texts.contains { $0.text == ControllerMenuText.continueWork })
+        XCTAssertTrue(island.isVisible)
+        release(.cross, at: 0.75)
+        press(.triangle, at: 0.8)
+        XCTAssertEqual(haptics.last, .rejected, "Chat-Raute geht bei offener Karte nicht")
+        release(.r1, at: 1)
+        XCTAssertFalse(island.isVisible, "Loslassen schließt")
+    }
+
+    /// Review Insel-Paket, Befunde 2 und 3: Kopf und Karte bleiben beim
+    /// Konto, das beim Öffnen galt — während eines Diktats dem seines Ziels,
+    /// auch wenn neue Zahlen kommen und ein anderer Chat ausgewählt ist. Die
+    /// Konten liest die Karte einmal beim Öffnen, neue Zahlen ordnen sich
+    /// nur noch zu.
+    func testIslandKeepsTheAccountItOpenedWithAndReadsAccountsOnce() {
+        var accountReads = 0, rowBuilds = 0
+        var fiveHour: Double = 10
+        dispatcher.limits = ControllerLimitsAccess(
+            accounts: {
+                accountReads += 1
+                return ControllerLimitAccounts(claude: ["main", "diktat"], gpt: [])
+            },
+            rows: { accounts in
+                rowBuilds += 1
+                return accounts.claude.map { ControllerAccountLimitRow(kind: .claude, name: $0, fiveHour: fiveHour) }
+            })
+        dispatcher.accountLimit = { _, _ in (fiveHour: fiveHour, week: nil) }
+        var selectedInfo = ControllerChatActionInfo(title: "Ausgewählt")
+        selectedInfo.usageAccount = ControllerUsageAccount(kind: .claude, name: "main")
+        var targetInfo = ControllerChatActionInfo(title: "Ziel")
+        targetInfo.usageAccount = ControllerUsageAccount(kind: .claude, name: "diktat")
+        window.chatInfo = selectedInfo
+        window.chatInfoByID[chats[2]] = targetInfo
+        dictation.start(target: .agentChat(sessionID: chats[2]), label: nil)
+        holdR1()
+        XCTAssertEqual(quickDraw?.account?.name, "diktat", "Kopf: Konto des Diktat-Ziels")
+        XCTAssertEqual(accountReads, 0, "R1 halten liest keine Konten")
+        press(.dpadUp, at: 0.4)
+        release(.dpadUp, at: 0.45)
+        XCTAssertEqual(accountReads, 1)
+        XCTAssertEqual(quickDraw?.card?.rows.first(where: \.isCurrentChat)?.name, "diktat")
+
+        fiveHour = 55
+        dispatcher.accountLimitsChanged()
+        dispatcher.accountLimitsChanged()
+        XCTAssertEqual(accountReads, 1, "neue Zahlen lesen die Profile nicht neu")
+        XCTAssertGreaterThan(rowBuilds, 1)
+        XCTAssertEqual(quickDraw?.account, ControllerIslandAccountBadge(name: "diktat", fiveHourUsed: 55))
+        XCTAssertEqual(quickDraw?.card?.rows.first(where: \.isCurrentChat)?.name, "diktat")
+        XCTAssertEqual(quickDraw?.card?.rows.first?.fiveHour, 55)
+    }
+
+    /// Review Insel-Paket, Befund 5: Bei offener Karte schickt R1 + L3 kein
+    /// Ctrl+O. Während eines Diktats bietet die Fußzeile ✕ nicht an (dort
+    /// „geht nicht“), nach dem Diktat wieder.
+    func testLimitsCardBlocksTranscriptToggleAndHidesRefreshWhileDictating() {
+        holdR1()
+        press(.dpadUp, at: 0.4)
+        release(.dpadUp, at: 0.45)
+        XCTAssertEqual(quickDraw?.card?.canRefresh, true)
+        press(.l3, at: 0.5)
+        XCTAssertEqual(haptics.last, .rejected)
+        XCTAssertFalse(terminals.keys.contains(.toggleTranscript), "kein Ctrl+O bei offener Karte")
+        release(.l3, at: 0.55)
+        release(.r1, at: 0.6)
+
+        dictation.start(target: .agentChat(sessionID: chats[1]), label: nil)
+        press(.r1, at: 1)
+        tick(1.3)
+        press(.dpadUp, at: 1.4)
+        release(.dpadUp, at: 1.45)
+        XCTAssertEqual(quickDraw?.card?.canRefresh, false, "✕ geht während des Diktats nicht")
+        press(.cross, at: 1.5)
+        XCTAssertEqual(haptics.last, .rejected)
+        release(.cross, at: 1.55)
+        dictation.cancel()
+        dispatcher.refreshContext()
+        XCTAssertEqual(quickDraw?.card?.canRefresh, true, "nach dem Diktat wieder")
+    }
+
+    /// Review Insel-Paket, Befund 7: Steht die Prüfung der Freigabe noch aus
+    /// (Seitenleiste seit dem Start verborgen), antwortet der Wach-Schalter
+    /// danach — ohne vorher „Erst in der Seitenleiste freigeben“ zu sagen.
+    func testStayAwakeAnswersAfterTheSilentPermissionCheck() {
+        let environment = ControllerEnvironmentSpy()
+        environment.deferStayAwake = true
+        rebuild(environment: environment)
+        holdR1()
+        press(.dpadRight, at: 0.4)
+        XCTAssertNil(quickDraw?.confirmation)
+        XCTAssertTrue(haptics.isEmpty)
+        environment.answerStayAwake()
+        XCTAssertEqual(quickDraw?.confirmation, .awake(.whileWorking, next: .always))
+        XCTAssertEqual(haptics, [.toggled])
+
+        // Ist die Insel bis zur Antwort zu, bleibt nur der Impuls.
+        release(.dpadRight, at: 0.45)
+        environment.deferStayAwake = true
+        press(.dpadRight, at: 0.5)
+        release(.r1, at: 0.6)
+        let shown = island.shown.count
+        environment.answerStayAwake()
+        XCTAssertEqual(island.shown.count, shown)
+        XCTAssertFalse(island.isVisible)
+        XCTAssertEqual(haptics, [.toggled, .toggled])
+    }
+
+    /// Review Insel-Paket, Befund 9: Auch während eines gebundenen Diktats
+    /// wechselt Loslassen von L2 nach einer Bewegung; das Diktat bleibt bei
+    /// seinem Ziel.
+    func testReleasingL2AfterAMoveSwitchesDuringBoundDictation() {
+        dictation.start(target: .agentChat(sessionID: chats[1]), label: nil)
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertNotNil(whereTo)
+        press(.dpadDown, at: 0.4)
+        release(.dpadDown, at: 0.45)
+        release(.l2, at: 0.5)
+        XCTAssertEqual(window.selected, chats[2], "Loslassen nach Bewegung wechselt")
+        XCTAssertEqual(dictation.targetSessionID, chats[1], "Diktat bleibt beim Ziel")
+        XCTAssertTrue(dictation.stopped.isEmpty)
+        XCTAssertFalse(island.isVisible)
+    }
+
+    private func rebuild(environment: ControllerEnvironmentSpy) {
+        dispatcher = ControllerActionDispatcher(
+            chats: center, terminals: terminals, dictation: dictation, environment: environment,
+            ui: ui, island: island, now: { Date(timeIntervalSince1970: 1_000) })
+        dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
+        dispatcher.titleForSession = { _ in "Controller Insel" }
+        dispatcher.islandStatus = { _ in .working }
     }
 }

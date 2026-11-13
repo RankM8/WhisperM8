@@ -145,7 +145,17 @@ struct AgentChatsWorkspaceSettingsTab: View {
 
             StayAwakeSettingsSection()
 
-            NotchSettingsSection()
+            if AppPreferences.shared.isUnifiedPillEnabled {
+                if AppPreferences.shared.isNotchStatusFeatureEnabled {
+                    SettingsSection("Notch Status") {
+                        PillSettingsLinkRow(
+                            subtitle: "The chat status now lives in the pill at the top of the screen (on a MacBook: the notch). Its settings are in General, section Pill and Notch."
+                        )
+                    }
+                }
+            } else {
+                NotchSettingsSection()
+            }
         }
         .onAppear {
             defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath

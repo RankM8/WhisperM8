@@ -28,8 +28,22 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Reihenfolge (Titel, Projekt, Status, „wartet · 2 min“). Im
     /// Ereignis-Pfad gebaut, wenn „Wohin“ aufgeht.
     var islandChatRows: (_ order: [UUID], _ current: UUID?) -> [ControllerIslandChatRow] = { _, _ in [] }
+    /// Zwischenablage-Verlauf für L1 + Kreuz (Runde 5).
+    var clipboard = ControllerClipboardAccess()
+    /// Zuletzt geschlossene Chats für L2 + Viereck (Runde 5).
+    var closedChats = ControllerClosedChatsAccess()
+    /// Letzter Verbrauch eines Kontos (5 Std., Woche) für das Konto-Menü.
+    var accountLimit: (ControllerAccountChoice.Kind, String) -> (fiveHour: Double?, week: Double?)? = { _, _ in nil }
+    /// Stößt den passiven Abruf der Limits an, wenn der Stand alt ist.
+    var refreshAccountLimits: () -> Void = {}
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
+    /// Verzögert ausführen (Nachprüfung vor Enter); Tests feuern selbst.
+    var scheduleOnMain: (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(work) }
+    }
+    /// Limits aller Konten für Kopf und Limits-Karte der R1-Insel (Insel-Paket).
+    var limits = ControllerLimitsAccess()
 
     /// Offene Insel: Ebene, Inhalt und der Chat, für den sie aufging.
     var islandState: ControllerIslandSession?
@@ -48,6 +62,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     static let recentlySubmittedWindow: TimeInterval = 3
     /// Ein zweites Escape in dieser Zeit wird verschluckt.
     static let escapeRepeatWindow: TimeInterval = 1
+    /// In einer erkannten Ansicht genügt eine kürzere Sperre (Runde 5).
+    static let escapeInViewWindow: TimeInterval = 0.3
     /// So lange nach einer Eingabe ins Feld (Rücktaste, Diktat, Text ohne
     /// Senden) darf Kreuz auch bei arbeitendem Chat Enter schicken. 30 s
     /// reichen, um einen diktierten Entwurf zu überfliegen; ein Entwurf von
@@ -92,6 +108,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         snapshot.appIsActive = debugOverride()?.assumeFrontmost == true || environment.isAppActive
         snapshot.recordingPhase = dictation.phase
         snapshot.recordingTargetIsChat = submitAllowed(to: dictation.targetSessionID)
+        snapshot.recordingTargetBound = dictation.phase != nil && dictation.targetSessionID != nil
         snapshot.quickActionRunning = dictation.isQuickActionRunning
         snapshot.clipboardPanelOpen = environment.isClipboardPanelOpen
         if snapshot.clipboardPanelOpen { snapshot.clipboard = environment.clipboardState }
@@ -107,7 +124,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
-        let title = window.selectedSessionID.flatMap(titleForSession)
+        // Während eines gebundenen Diktats nennt die Legende dessen Ziel, nicht
+        // die Auswahl: Die darf wechseln, der Text geht trotzdem dorthin.
+        let titleSession = snapshot.recordingTargetBound ? dictation.targetSessionID : window.selectedSessionID
+        let title = titleSession.flatMap(titleForSession)
         if ui.targetTitle != title { ui.targetTitle = title }
         publish(snapshot)
         return snapshot
@@ -140,6 +160,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             secondsSinceAwaitingBegan: status == .awaitingInput
                 ? terminal.statusSince.map { moment.timeIntervalSince($0) } : nil,
             escapeSentRecently: within(Self.escapeRepeatWindow, of: terminal.lastEscapeAt),
+            escapeSentJustNow: within(Self.escapeInViewWindow, of: terminal.lastEscapeAt),
             recentDraftInput: ControllerTerminalMarks.hasFreshDraftInput(
                 draftAt: terminal.lastDraftInputAt, lastSubmitAt: terminal.lastEnterAt,
                 window: Self.draftInputWindow, now: moment),
@@ -149,7 +170,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             gridActive: window.isGridActive,
             hasTerminal: terminal.isRunning,
             shellAtPrompt: terminal.shellAtPrompt,
-            backTarget: window.backTarget
+            backTarget: window.backTarget,
+            openView: terminal.screen?.openView,
+            promptField: terminal.screen?.promptField,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt
         )
     }
 
@@ -182,7 +206,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Nebenwirkung, auch bei Trockenläufen des Debug-Kanals.
     func refreshContext() {
         let snapshot = snapshot()
-        if islandState != nil { islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID) }
+        if islandState != nil {
+            islandChatMayHaveChanged(snapshot.chat, sessionID: selectedSessionID)
+            limitsCardDictationMayHaveChanged()
+        }
     }
 
     /// Schließt, was der Controller offen hat: Insel, Menü, Liste,
@@ -222,10 +249,20 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .outputMode(step): dictation.stepOutputMode(step)
 
         // Chat
-        case let .chatKey(key): sendKey(key.terminalKey)
+        case let .chatKey(key):
+            // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
+            if key == .toggleTranscript, quickDrawSlots?.card != nil {
+                playHaptic(.rejected)
+            } else if key == .enter, case let .chat(state) = context,
+                      ControllerBindingResolver.confirmRestsOnPromptField(state) {
+                confirmWhenSettled()
+            } else {
+                sendKey(key.terminalKey)
+            }
         case .chatInterrupt: sendKey(.escape)
         case .chatResume: withSelectedSession { command(.startChat($0), orReject: true) }
         case .chatClearInput: clearInput()
+        case .pasteNewest: pasteNewest()
         // Danach gleich neu lesen: Die Legende nennt sonst noch den Ort, an
         // dem man jetzt ist, als Ziel.
         case .lastChat: if command(.lastChat, orReject: true) { refreshContext() }
@@ -266,11 +303,14 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             closeIsland()
             spentLayer = nil
         case .islandRelease:
-            // Loslassen wechselt nur im Chat. Hat inzwischen etwas anderes die
-            // Eingaben (Aufnahme per Hotkey, Dialog, Sheet), nur schließen.
-            if case .chat = context {
+            // Loslassen wechselt im Chat und während eines an einen Chat
+            // gebundenen Diktats (das Diktat bleibt an seinem Ziel). Hat
+            // inzwischen etwas anderes die Eingaben (Aufnahme per Hotkey,
+            // Dialog, Sheet), nur schließen.
+            switch context {
+            case .chat, .recording(_, _, .some):
                 releaseWhereTo()
-            } else {
+            default:
                 closeIsland()
                 spentLayer = nil
             }
@@ -280,7 +320,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .islandCommit: commitWhereTo(dictate: false)
         case .islandCommitAndDictate: commitWhereTo(dictate: true)
         case .islandNextWaiting: jumpToNextWaitingChat()
+        case .islandReopenClosed: reopenClosedChat()
         case let .quickDraw(item): performQuickDraw(item)
+        case let .appSlot(slot): performAppSlot(slot)
+        case let .islandScroll(step): scrollLimitsCard(step)
 
         // Sonstiges
         case let .bridgeKey(key): environment.postBridgeKey(key)
@@ -349,7 +392,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         switch action {
         case .holdProgress, .holdProgressCancelled, .rejected, .pauseToggle, .bringAppToFront,
              .clipboard, .clipboardToggle, .bridgeKey, .islandShow, .islandClose, .islandCancel,
-             .islandMove, .islandTab:
+             .islandMove, .islandTab, .appSlot, .islandScroll:
             return
         default:
             break
@@ -560,13 +603,33 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         setup.sessionID = target?.sessionID
         setup.target = target
         setup.chat = setup.sessionID.flatMap { chats.chatActionInfo($0, in: targetWindowID) }
+        if var chat = setup.chat, !chat.accounts.isEmpty {
+            chat.accounts = accountsWithUsage(chat.accounts)
+            setup.chat = chat
+        }
         if let selected, setup.sessionID == selected, let terminal = terminals.state(of: selected), terminal.isRunning {
             setup.acceptsInput = true
             setup.profile = terminal.profile
             setup.dialogOpen = terminal.status == .awaitingInput
             setup.chatBusy = isBusy(terminal)
+            setup.quickCross = quickCross(terminal)
         }
+        // Während eines Diktats geht nichts ins Feld (Runde 5, Punkt 9).
+        setup.dictationRunning = dictation.phase != nil
+        setup.archiveModeActive = targetWindowID.flatMap { chats.snapshot(of: $0) }?.isArchiveMode == true
         return setup
+    }
+
+    /// Was R1 + Kreuz aus dem Zustand des Terminals tut (Runde 5, R1).
+    func quickCross(_ terminal: ControllerTerminalState) -> ControllerQuickDrawCross? {
+        guard terminal.isRunning else { return nil }
+        let fieldHasText = ControllerScreenReading.fieldHasText(
+            screen: terminal.screen, tracker: terminal.fieldMayHaveText || terminal.draftSuspected)
+        return ControllerQuickDrawSlots.crossAction(
+            profile: terminal.profile, busy: isBusy(terminal),
+            dialogOpen: terminal.status == .awaitingInput, viewOpen: terminal.screen?.openView != nil,
+            fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt)
     }
 
     /// Wie `isBusy(_:)`, aus dem Zustand des Terminals.
@@ -582,6 +645,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             guard let text = list.selectedEnabled else { return playHaptic(.rejected) }
             ui.menu = nil
             sendCommand(ControllerSlashCommand(text: text), setup: menu.setup)
+        case .accounts(let list) where list.selectedEnabled == ControllerMenuModel.cancelSwitchID:
+            ui.menu = nil
+            guard let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
+            command(.cancelAccountSwitch(sessionID), orReject: true)
+        case .accounts(let list) where list.selectedEnabled == ControllerMenuModel.undoSwitchID:
+            ui.menu = nil
+            command(.undoLastAccountSwitch, orReject: true)
         case .accounts(let list):
             guard let id = list.selectedEnabled, let sessionID = menu.setup.sessionID,
                   let account = menu.setup.chat?.accounts.first(where: { $0.id == id }) else {
@@ -592,10 +662,23 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             case .claude: command(.moveChatToAccount(sessionID, profileName: account.name), orReject: true)
             case .gpt: command(.setGPTAccount(sessionID, profileName: account.name), orReject: true)
             }
+        case .workspaces(let list):
+            guard let raw = list.selectedEnabled, let workspaceID = UUID(uuidString: raw),
+                  let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
+            ui.menu = nil
+            command(.addChatToWorkspace(sessionID, workspaceID: workspaceID), orReject: true)
+        case .capacities(let list):
+            guard let id = list.selectedEnabled, let context = menu.setup.chat?.shownInWorkspace,
+                  let choice = context.capacities.first(where: { $0.id == id }) else { return playHaptic(.rejected) }
+            ui.menu = nil
+            command(.setWorkspaceCapacity(context.id, capacity: choice.capacity), orReject: true)
         case nil:
             guard let item = menu.top.selectedEnabled else { return playHaptic(.rejected) }
             if item.opensSubmenu {
                 if menu.openSubmenu() { ui.menu = menu } else { playHaptic(.rejected) }
+                // Verbrauch erst beim Öffnen der Konten auffrischen, nicht bei
+                // jedem Menü oder R1-Halten.
+                if item == .switchAccount { refreshAccountLimits() }
                 return
             }
             ui.menu = nil
@@ -624,8 +707,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .cycleMode:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             terminals.sendKey(.backTab, to: sessionID)
-        case .commands, .switchAccount:
+        case .commands, .switchAccount, .addToWorkspace, .gridCapacity:
             break
+        case .redraw:
+            guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
+            if !terminals.sendKey(.redraw, to: sessionID) { playHaptic(.rejected) }
+        case .refreshTitle, .openProject, .revealInFinder, .toggleTileNote, .toggleNotes, .removeFromWorkspace,
+             .moveToNewWindow, .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
+             .renameWorkspace:
+            performChatAction(item, setup: setup)
         case .rename, .fork, .pin, .archive, .closeChat:
             guard let sessionID = setup.sessionID else { return playHaptic(.rejected) }
             switch item {
@@ -636,6 +726,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             default:
                 if command(.closeListRow(setup.target ?? .chat(sessionID)), orReject: true) { refreshListMarker() }
             }
+        case .archiveMode:
+            command(.toggleArchiveMode, orReject: true)
         case .clipboardHistory:
             environment.toggleClipboardPanel()
         case .showBindings:
@@ -698,6 +790,10 @@ private extension ControllerChatKey {
         case .deleteWord: return .deleteWord
         case .deleteToLineStart: return .killLineStart
         case .newline: return .newline
+        case .wordLeft: return .wordLeft
+        case .wordRight: return .wordRight
+        case .undo: return .undo
+        case .toggleTranscript: return .toggleTranscript
         }
     }
 }

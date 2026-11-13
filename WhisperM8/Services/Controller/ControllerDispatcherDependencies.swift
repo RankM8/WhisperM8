@@ -33,6 +33,39 @@ struct ControllerTerminalState: Equatable {
     /// Shell an ihrer Eingabezeile (normaler Puffer, kein Vollbild-Programm
     /// wie nano oder vim) — dort darf R3 die Zeile leeren.
     var shellAtPrompt: Bool = false
+    /// Abgelesener unterer Rand (offene Ansicht, Eingabefeld); `nil`, wenn
+    /// nicht ablesbar (hochgescrollt, Shell, kein Prozess).
+    var screen: ControllerScreenSnapshot? = nil
+    /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`, Stand des
+    /// letzten Transcript-Polls; Runde 5, R1).
+    var queuedOwnPrompts: Int = 0
+    /// Im Feld steht vermutlich nur ein zurückgelegter oder mit ↑
+    /// zurückgeholter Prompt, nichts selbst Getipptes (R1 + Kreuz lehnt ab).
+    var onlyRecalledPrompt: Bool = false
+    /// Die TUI hat Bracketed Paste eingeschaltet (Einfügen in Shells).
+    var bracketedPaste: Bool = false
+}
+
+/// Zugriff auf den Zwischenablage-Verlauf für L1 + Kreuz (Runde 5). Closures
+/// statt Protokoll, damit Tests synchron antworten können.
+@MainActor
+struct ControllerClipboardAccess {
+    /// Neuester Eintrag (Text oder Bild), aus dem Index im Speicher.
+    var newest: () -> ControllerClipPreview? = { nil }
+    /// Vollen Text laden (lange Texte liegen in einer Datei).
+    var loadText: (_ id: String, _ completion: @escaping @MainActor (String?) -> Void) -> Void = { $1(nil) }
+    /// Bild in die allgemeine Zwischenablage legen (als eigener Schreibvorgang
+    /// beansprucht, landet also nicht doppelt im Verlauf).
+    var copyImage: (_ id: String, _ completion: @escaping @MainActor (Bool) -> Void) -> Void = { $1(false) }
+}
+
+/// Zuletzt geschlossene Chats dieses App-Starts (L2 + Viereck, Runde 5).
+@MainActor
+struct ControllerClosedChatsAccess {
+    /// Titel des Chats, den „Wieder öffnen“ als nächstes zurückholt.
+    var nextTitle: () -> String? = { nil }
+    /// Holt ihn zurück; `false`, wenn es keinen gibt.
+    var reopen: () -> Bool = { false }
 }
 
 @MainActor
@@ -83,6 +116,32 @@ protocol ControllerAppEnvironment: AnyObject {
     func bringAgentChatsToFront()
     func postBridgeKey(_ key: ControllerBridgeKey)
     func openControllerSettings()
+    /// Stand der App-Schalter der R1-Insel (Glocke, Wach bleiben).
+    var appToggles: ControllerAppToggles { get }
+    /// Glocke eine Stufe weiter, derselbe Weg wie ihr Klick. Liefert die neue Stufe.
+    func cycleAlertLevel() -> ControllerAlertStage
+    /// Wach-Knopf eine Stufe weiter, aber nie mit Admin-Dialog. Ist noch
+    /// unbekannt, ob die Freigabe da ist (Seitenleiste seit dem Start
+    /// verborgen), wird das erst still geprüft; `completion` kommt danach.
+    func cycleStayAwake(_ completion: @escaping @MainActor (ControllerStayAwakeResult) -> Void)
+}
+
+/// Limits aller Konten für Kopf und Limits-Karte der Dynamic Island
+/// (Insel-Paket). Closures statt Protokoll, damit Tests synchron antworten.
+@MainActor
+struct ControllerLimitsAccess {
+    /// Angemeldete Claude- und GPT-Backend-Konten. Liest die Profile, also
+    /// nur einmal beim Öffnen der Karte.
+    var accounts: () -> ControllerLimitAccounts = { ControllerLimitAccounts() }
+    /// Zeilen zu diesen Konten mit dem letzten Stand, ohne Platten-I/O (auch
+    /// bei jeder Änderung im `AccountLimitsStore`).
+    var rows: (ControllerLimitAccounts) -> [ControllerAccountLimitRow] = { _ in [] }
+    var updatedAt: () -> Date? = { nil }
+    var isLoading: () -> Bool = { false }
+    /// Passiver Abruf, höchstens einmal je Minute (Öffnen der Karte).
+    var refreshIfStale: () -> Void = {}
+    /// Derselbe Weg wie ↻ im Popover (✕ in der Karte).
+    var refresh: () -> Void = {}
 }
 
 /// Anzeige der Controller-Insel (eigenes Fenster an der Notch bzw. als Pille

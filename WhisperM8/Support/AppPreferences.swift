@@ -516,6 +516,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeSharedMemoryEnabled) }
     }
 
+    /// Labs „Neustart ohne Chatverlust“ (Plan neustart-ohne-chatverlust.md),
+    /// ab Werk aus. Bisher wirkt er nur auf den GPT-Router: an = Router als
+    /// eigener Dienst `gpt-router` samt Proxy-Register, ab dem nächsten
+    /// App-Start. Aus = Router in der App wie bisher. Den UI-Schalter bringt
+    /// Paket 4 (Abgabe und Übernahme der Chats).
+    /// `defaults write com.whisperm8.app restartKeepsChatsEnabled -bool YES`
+    var isRestartKeepsChatsEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.restartKeepsChatsEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.restartKeepsChatsEnabled) }
+    }
+
     /// MCP-Server beim App-Start über alle Claude-Konten angleichen (nur
     /// ergänzen, per `claude mcp add-json -s user`). Default aus — für neue
     /// Nutzer soll nichts ungefragt in ihre Konten geschrieben werden.
@@ -674,6 +685,17 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerConnectHintShown) }
     }
 
+    // MARK: Vereinte Pille
+
+    /// Notbremse für die vereinte Pille (Diktat und Chat-Status in einer
+    /// Pille, ohne Notch oben mittig, mit Notch an der Notch). Aus = die
+    /// getrennte Diktat-Pille und Status-Pille wie vor dem 12.11.2026.
+    /// `defaults write com.whisperm8.app unifiedPillEnabled -bool NO`
+    var isUnifiedPillEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.unifiedPillEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.unifiedPillEnabled) }
+    }
+
     // MARK: Notch-Status
 
     /// Notbremse für die Statusanzeige an der Notch: Aus = kein Fenster, keine
@@ -713,6 +735,13 @@ struct AppPreferences {
     var isNotchStatusExpandingOnHover: Bool {
         get { defaults.bool(forKey: Keys.notchStatusExpandOnHover) }
         nonmutating set { defaults.set(newValue, forKey: Keys.notchStatusExpandOnHover) }
+    }
+
+    /// Vereinte Pille auch ohne Notch tiefschwarz statt im dunklen Glas, in
+    /// allen Zuständen (`PillAppearance`). Standard: aus.
+    var isPillSolidBlackEnabled: Bool {
+        get { defaults.bool(forKey: Keys.pillSolidBlackEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.pillSolidBlackEnabled) }
     }
 
     /// Gemerkte Lage der Pille je Bildschirm ohne Notch (mit der Maus
@@ -1112,6 +1141,7 @@ enum PreferenceKeys {
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
+    static let restartKeepsChatsEnabled = "restartKeepsChatsEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let claudeLoginExpiryWarningEnabled = "claudeLoginExpiryWarningEnabled"
@@ -1131,12 +1161,14 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
     static let notchStatusScreen = "notchStatusScreen"
     static let notchStatusHideFromCapture = "notchStatusHideFromCapture"
     static let notchStatusShowFreshDone = "notchStatusShowFreshDone"
     static let notchStatusExpandOnHover = "notchStatusExpandOnHover"
+    static let pillSolidBlackEnabled = "pillSolidBlackEnabled"
     static let notchPillPositions = "notchPillPositions"
     static let claudePluginEnabled = "claudePluginEnabled"
     static let claudePluginSkillMigrationDone = "claudePluginSkillMigrationDone"

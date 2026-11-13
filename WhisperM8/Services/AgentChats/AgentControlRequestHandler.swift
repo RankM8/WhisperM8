@@ -591,12 +591,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// oder gelöscht wurden, überspringt die Store-Logik.
     private func sessionReopen(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let outcome: SendOutcome = await MainActor.run {
-            let workspace = AgentWorkspaceUIModel.shared.workspace
-            let reopened = AgentWindowStore.shared.reopenLastClosedTab { id in
-                workspace.sessions.contains { $0.id == id && $0.status != .archived }
-            }
-            guard let reopened,
-                  let session = workspace.sessions.first(where: { $0.id == reopened.sessionID }) else {
+            guard let session = ClosedChatReopener.reopen() else {
                 return .failure(.notFound, "Keine zuletzt geschlossenen Tabs (die Liste ist ephemer und nach App-Neustart leer)")
             }
             return .success(session)
@@ -1307,43 +1302,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         }
     }
 
-    // MARK: session.new
-
-    private func sessionNew(_ request: ChatsControlRequest) async -> ChatsControlResponse {
-        guard let projectRef = request.params["project"]?.stringValue, !projectRef.isEmpty else {
-            return .failure(requestID: request.requestID, code: .invalid, message: "project fehlt")
-        }
-        let providerRaw = request.params["provider"]?.stringValue ?? "claude"
-        guard let provider = AgentProvider(rawValue: providerRaw) else {
-            return .failure(requestID: request.requestID, code: .invalid, message: "provider muss claude|codex sein")
-        }
-        let title = request.params["title"]?.stringValue
-        let prompt = request.params["prompt"]?.stringValue
-        let account = request.params["account"]?.stringValue
-
-        let result = await MainActor.run {
-            AgentChatLaunchService().openChatViaControl(
-                provider: provider, projectRef: projectRef, title: title, prompt: prompt,
-                account: account)
-        }
-        switch result {
-        case .failure(let error):
-            return .failure(requestID: request.requestID, code: .notFound, message: error.message)
-        case .success(let launch):
-            let profileLabel = launch.profileName ?? ClaudeAccountProfiles.mainProfileName
-            await audit(
-                request.actor, method: "new",
-                target: "\(launch.projectName)/\(launch.title) [\(profileLabel)]",
-                outcome: "ok", prompt: prompt)
-            return .success(requestID: request.requestID, result: .object([
-                "ok": true,
-                "session": [
-                    "id": launch.id.uuidString, "title": launch.title,
-                    "project": launch.projectName, "account": profileLabel,
-                ],
-            ]))
-        }
-    }
+    // session.new: AgentControlRequestHandler+SessionNew.swift
 
     // MARK: workspace.rename / .group / .archive
 

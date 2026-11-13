@@ -33,6 +33,32 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
     /// Shift+Enter: Ohne Kitty-Protokoll kommt das im PTY als CR an und würde
     /// senden.
     case newline
+    /// Wort zurück bzw. vor: Ctrl+← / Ctrl+→ als vollständige CSI-Sequenz
+    /// (`ESC [ 1 ; 5 D` bzw. `C`). Claude Code 2.1.322 liest sie als
+    /// Ctrl+Pfeil und springt wortweise (`backwardWord`/`forwardWord`), Codex
+    /// 0.160.1 hat `move_word_left/right` standardmäßig auf Ctrl+←/→. Bewusst
+    /// nicht Meta-b/f (`ESC b`): Ein einzelnes ESC bricht einen arbeitenden
+    /// Chat ab.
+    case wordLeft, wordRight
+    /// „Jetzt senden“: Ctrl+X Ctrl+S (`chat:sendNow`, Claude Code 2.1.322).
+    /// Schickt die Warteschlange sofort bzw. den Entwurf und danach die
+    /// Warteschlange. Nur Claude: In Codex ist Ctrl+X Sprach-Stumm und Ctrl+S
+    /// die Verlaufssuche.
+    case sendNow
+    /// Ausführliches Transkript an/aus: Ctrl+O (`app:toggleTranscript`). Nur
+    /// Claude; in Codex kopiert Ctrl+O die letzte Antwort.
+    case toggleTranscript
+    /// Rückgängig: Ctrl+_ (0x1F, `chat:undo`). Nur Claude; in Codex kommt
+    /// 0x1F als Ctrl+7 an und öffnet die Nebenunterhaltung.
+    case undo
+    /// Bild aus der Zwischenablage einfügen: Ctrl+V (Claude
+    /// `chat:imagePaste`, Codex `fixed.paste_image`). Beide lesen das Bild
+    /// selbst aus der Zwischenablage.
+    case imagePaste
+    /// Neu zeichnen: Ctrl+L. In Claude Code 2.1.322 haben `chat:clearInput`
+    /// und `chat:clearScreen` denselben Handler (`forceRedraw`), der Entwurf
+    /// bleibt stehen. Nur Claude; in Codex leert Ctrl+L die Oberfläche.
+    case redraw
 
     /// Absicherung des Controller-Wegs (`AgentTerminalController.sendKey`);
     /// die Tastatur des Nutzers läuft nicht hier durch. Pfeile immer: Das
@@ -70,6 +96,9 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         // Leeren nie in einer Rückfrage: Dort wählt man aus, das Eingabefeld
         // ist nicht gemeint.
         case .killLineStart, .lineEnd, .newline: return isAgentChat && status != .awaitingInput
+        case .wordLeft, .wordRight, .imagePaste: return isAgentChat && status != .awaitingInput
+        case .sendNow, .undo: return profile == .claudeCodeChat && status != .awaitingInput
+        case .toggleTranscript, .redraw: return profile == .claudeCodeChat
         }
     }
 
@@ -97,6 +126,13 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .killLineStart: return [0x15]                    // Ctrl+U
         case .lineEnd: return [0x05]                          // Ctrl+E
         case .newline: return [0x0A]                          // Ctrl+J (LF)
+        case .wordLeft: return [0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x44]   // ESC [ 1 ; 5 D
+        case .wordRight: return [0x1B, 0x5B, 0x31, 0x3B, 0x35, 0x43]  // ESC [ 1 ; 5 C
+        case .sendNow: return [0x18, 0x13]                    // Ctrl+X Ctrl+S
+        case .toggleTranscript: return [0x0F]                 // Ctrl+O
+        case .undo: return [0x1F]                             // Ctrl+_
+        case .imagePaste: return [0x16]                       // Ctrl+V
+        case .redraw: return [0x0C]                           // Ctrl+L
         }
     }
 
@@ -118,13 +154,25 @@ enum TerminalControlKey: String, CaseIterable, Sendable {
         case .lineEnd: return 14                              // E
         // Für den Entwurfs-Tracker wie Shift+Return: ein Umbruch im Entwurf.
         case .newline: return 36
+        case .wordLeft: return 123
+        case .wordRight: return 124
+        // Für den Tracker ein Absenden wie Return (mit Ctrl, ohne Shift).
+        case .sendNow: return 36
+        case .toggleTranscript: return 31                    // O
+        // Rückgängig kann Text zurückholen: für den Tracker wie ein Zeichen.
+        case .undo: return 6                                  // Z
+        // Wie Cmd+V: Danach steht etwas im Feld (der Anhang).
+        case .imagePaste: return 9                            // V
+        case .redraw: return 37                               // L
         }
     }
 
     var modifiers: NSEvent.ModifierFlags {
         switch self {
         case .backTab, .newline: return .shift
-        case .deleteWord, .killLineStart, .lineEnd: return .control
+        case .deleteWord, .killLineStart, .lineEnd, .wordLeft, .wordRight, .sendNow,
+             .toggleTranscript, .redraw: return .control
+        case .imagePaste: return .command
         default: return []
         }
     }

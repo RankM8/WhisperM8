@@ -1,6 +1,6 @@
 # Plan: Neustart ohne Chatverlust
 
-**Stand:** 12.11.2026 · **Status:** Bauplan fertig, offene Entscheidungen unten, Bau nach Release 2.25, kein App-Code geändert
+**Stand:** 12.11.2026 · **Status:** Bau läuft seit 12.11.2026 (Pakete 0 und 1, 2 und 3 parallel in eigenen Branches), alle neun Entscheidungen getroffen
 **Herkunft:** Wunsch vom 11.11.2026 nach der Wettbewerbsanalyse ([`wettbewerb-orca-t3code/auswahl.md`](wettbewerb-orca-t3code/auswahl.md), Punkt 5)
 **Festgelegt vom User (12.11.2026):** kein Warten auf das Ende laufender Chats vor dem Neustart; kein Umweg über Claudes Hintergrund-Agents (`/background`, `claude --bg`, `attach`) als Hauptweg. Gebaut wird der eigene Aufbewahrer: Die Terminal-Leitungen gehen per `SCM_RIGHTS` an einen Aufbewahrer und nach dem Neustart zurück.
 
@@ -264,6 +264,21 @@ Diese Tests halten den **heutigen** Stand fest und laufen grün auf main, bevor 
 8. Makefile: `GUI_PIDS` nimmt `agent-supervise` aus (Textprüfung). Neue Ausnahmen kommen später dazu.
 9. Statusquelle: Registry-Eintrag ohne eigenes Terminal wird verworfen (vorhanden, Ergänzung um „Eintrag kommt später“).
 
+### Stand nach Paket 0 (12.11.2026)
+
+- Erledigt: 2 (Cmd+Q-Dialog, vorhandene Tests), 3 (Hook-Bridge), 4 (Sperre gegen Doppelstart, jetzt umgesetzt), 5 (Router-Strom, `testRouterDispatchesToBothLocalUpstreamsAndStreamsResponses`), 7 (Prompt-Queue, vorhandene Tests), 8 (Makefile).
+- Teilweise: 1. Ctrl+C an Chats, keins an angedockte Tabs und eine gemeinsame Wartezeit sind getestet. Die Marker-Entscheidung beim SIGTERM-Quit als reine Funktion fehlt noch und kommt in Paket 4, wo sie sich ändert.
+- Verschoben: 6 (Leck von Profil-Proxys) nach Paket 3, 9 (Registry-Eintrag kommt nach dem Terminal) nach Paket 4.
+
+### Nachträge aus dem Review von Paket 0
+
+1. **Deskriptoren im Kind schließen.** Das Kind schließt vor `execve` alle Deskriptoren ab 3. close-on-exec am Master deckt nur die eigenen PTYs ab. Jeder Deskriptor, der ohne das Flag entsteht (fremde Bibliotheken, per `SCM_RIGHTS` empfangene Leitungen im Aufbewahrer), würde sonst weiter vererbt. Gilt für den Fork (Paket 1) und für den Aufbewahrer (Paket 2).
+2. **Sperrmeldung mit Ort und Aktionen.** Die Meldung nennt heute nur die PID. Besser: wo die Sitzung läuft (anderer Tab, Terminal außerhalb der App) und eine Aktion wie „Zum Chat wechseln“. Kommt mit Paket 4.
+3. **Fehlende Tests.**
+   - Neustart eines Tabs über den echten Weg (Beenden, sofort neu bauen, Sperre greift nicht).
+   - Die offenen Punkte oben.
+   - Die Makefile-Prüfung ist eine Textprüfung und damit fragil. Sie wird ersetzt, sobald `GUI_PIDS` in Paket 4 ohnehin umgebaut wird.
+
 ## Bau-Reihenfolge
 
 Jedes Paket hat einen eigenen Branch und Arbeitsordner, wird einzeln reviewt und geht erst nach grüner Suite in main. Ist der Labs-Schalter aus, ändert keins das heutige Verhalten. Ausnahme ist Paket 0, das sind Fehlerbehebungen.
@@ -304,31 +319,51 @@ Die Test-Instanz deckt alles außer dem GPT-Chat ab (kein GPT-Login, Logins werd
 
 **Reihenfolge-Begründung:** Paket 0 lohnt sich auch ohne das Feature, der close-on-exec-Fix ist ein Sicherheitsfehler. Pakete 1 bis 3 sind unabhängig voneinander baubar und testbar, ohne die App zu verändern. Paket 4 setzt sie zusammen. Ohne Paket 3 würde Paket 4 auf diesem Mac jede gerade strömende Antwort abreißen. Deshalb kommt 3 vor 4, und eingeschaltet wird erst, wenn beide da sind.
 
-## Offene Entscheidungen
+### Nacharbeit Paket 3 (aus dem Opus-Review vom 12.11.2026)
+
+Behoben vor dem Merge: `gptRouter.startProfile` nur im Dienst-Modus und nur der Profilpfad; Socket-Übergabe nur an dasselbe Programm (Code-Signatur über `LOCAL_PEERTOKEN`, bei jeder Nachricht), Test-Upstreams nur im Debug-Build, `--root` nur der Ordner der App; verwaister Dienst ohne `router.sock` wird vom Port geräumt; ohne `released` gibt die neue Generation auf; anderer Programmort startet frisch, statt bei jedem Chat-Start eine Übernahme zu versuchen.
+
+Später:
+- ~~**Main Thread:** Stop-Knopf und `willTerminate` warten bis zu 2 s auf den Steuer-Socket des Dienstes.~~ Erledigt 13.11.2026: `stop()` schickt `shutdown`, ohne auf Antwort oder ein laufendes `ensureRunning` zu warten; aufgeräumt wird im Hintergrund.
+- **Tests:** feste Sleeps durch Bedingungen ersetzen; Prozess-Tests werden still übersprungen, wenn das Binary fehlt (in der CI sichtbar machen); Router-Dienste nach einem Absturz von xctest bleiben als Waisen (Aufräumen per Prozessgruppe).
+- **Leerlauf-Frist** (Entscheidung des Users 13.11.2026, umgesetzt): Der Dienst beendet sich geordnet, wenn 30 Minuten lang keine App verbunden war (`attach`-Verbindung der Aufsicht) und keine Anfrage lief. Anfragen überlebender Chats zählen als Betrieb.
+
+## Entscheidungen
+
+Am 12.11.2026 vom User getroffen, jeweils wie empfohlen.
 
 1. **Router: eigener Dienst oder Auslaufen in der App?**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: eigener Dienst (Paket 3 wie oben).* Nur so wartet `make dev` auf nichts.
    - Alternative: Der Router bleibt in der App, lässt beim Neustart laufende Antworten auslaufen (gemessen 24 und 35 s, einzelne bis 170 s, mit Obergrenze) und gibt dann seinen Socket über den Aufbewahrer weiter. Das ist kleiner (M statt L), aber genau das Warten, das ausgeschlossen ist. Nach der Obergrenze reißen Antworten ab.
 2. **Was tut der Aufbewahrer, wenn keine neue App kommt?**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: 10 Minuten halten (Chats arbeiten unsichtbar weiter, Rückfragen werden beantwortet), dann geordnet beenden wie heute.* Der Marker „fortsetzen“ bleibt; die Chats kommen beim nächsten Start per `--resume` wieder.
    - Alternative: halten, bis alle Chats von selbst enden. Dann können unsichtbar Prozesse stundenlang laufen.
 3. **Cmd+Q:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: bleibt echtes Beenden mit dem heutigen Dialog, dazu der neue Menüpunkt „Neu starten, Chats laufen weiter“.*
    - Alternative: Cmd+Q übergibt immer. Dann laufen nach jedem Beenden Chats unsichtbar weiter, das widerspricht dem, was „Beenden“ heißt.
 4. **Update per Brew:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: Hinweis „Update installiert, neu starten, Chats laufen weiter“ nach erkanntem neuem Bundle.*
    - Alternative: `uninstall quit:` im Cask. Brew würde die App dann hart beenden, die Chats wären weg.
 5. **Turn-Enden während der Lücke:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: still nachziehen (Status ja, Ansage und Notch-Meldung nein)*, damit nach einem Neustart keine Ansagen auf einmal kommen.
    - Alternative: eine Sammelansage „3 Chats sind fertig“.
 6. **Labs-Schalter als Standard:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: ab Werk aus, nach zwei Wochen Feldtest ohne Befund an.* Danach wird der Router-Dienst die einzige Router-Variante, der Router in der App entfällt.
 7. **Angedockte Hintergrund-Chats:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: übergeben wie alle anderen*, ein Weg für alles.
    - Alternative: nicht übergeben, nach dem Neustart neu andocken (geht schon heute, kostet aber das Bild).
 8. **close-on-exec-Fix vorziehen:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: ja, als eigener kleiner Fix ins nächste Patch-Release (2.25.x)*, unabhängig von diesem Projekt.
 9. **Vorgemerkter Kontowechsel nach dem Turn:**
+   - **Entschieden: Empfehlung.**
    - *Empfehlung: im Manifest mitnehmen.*
    - Alternative: verwerfen, mit Hinweis im Log.
 

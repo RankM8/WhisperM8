@@ -29,8 +29,15 @@ extension Animation {
 struct RecordingPillView: View {
     @ObservedObject var controller: OverlayController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Ruhe-Kern und Diktat-Kern sind beim Übergang ein Kern (`PillMorphID`).
+    @Namespace private var morphSpace
 
     private var phase: OverlayPhase { controller.phase }
+
+    /// Vereinte Pille im Übergang: das Ruhebild statt des Diktats (`nil` sonst).
+    private var restLook: UnifiedPillRestLook? {
+        controller.showsRestLook ? controller.restLook : nil
+    }
 
     /// Voll-Stil ist permanent expandiert; Mini expandiert per Hover
     /// (Grace-Period und Menü-Halt regelt der Controller).
@@ -40,6 +47,9 @@ struct RecordingPillView: View {
 
     private var isFullStyle: Bool { controller.overlayStyle == .full }
 
+    /// An der Notch ist nichts verschiebbar: kein Griff.
+    private var showsGrip: Bool { !controller.presentation.isNotch }
+
     var body: some View {
         // Zwei Anordnungen, ein Prinzip:
         // - Full (permanent expandiert): klassische Anatomie, Kern links außen.
@@ -48,36 +58,18 @@ struct RecordingPillView: View {
         //   Zuständen identisch — nichts rutscht beim Expandieren unter der
         //   Maus weg (z. B. der Mode-Chip, den man gerade anklicken wollte).
         HStack(spacing: 0) {
-            if let quickActionLabel = controller.quickActionLabel {
-                PillQuickActionContent(
-                    label: quickActionLabel,
-                    isHint: controller.isQuickActionHint,
-                    controller: controller,
-                    reduceMotion: reduceMotion
-                )
+            if let restLook {
+                UnifiedPillRestLookView(look: restLook, presentation: controller.presentation, morphSpace: morphSpace)
             } else {
-                if isFullStyle {
-                    fullLayout
-                } else {
-                    miniLayout
-                }
-
-                if phase == .recording && controller.showConfirmButton {
-                    PillConfirmButton(action: controller.stopAndTranscribe)
-                        .transition(.opacity)
-                }
-
-                PillCancelButton(phase: phase, controller: controller)
+                dictationContent
             }
         }
-        .padding(.horizontal, PillMetrics.horizontalPadding)
-        .frame(height: PillMetrics.height)
-        .background {
-            // Dunkles Glas wie im Prototyp, geteilt mit der Pille der
-            // Notch-Anzeige (`PillGlassBackground`).
-            PillGlassBackground(shape: Capsule())
-        }
-        .pillGlassShadow()
+        // Ruhebild an der Notch: Zeile in Höhe der Notch-Anzeige (bzw. nur
+        // das Band), ohne Innenrand; sonst wie immer. Die Höhe gleitet beim
+        // Übergang mit, die Zeile wächst unter der Notch heraus.
+        .padding(.horizontal, restLook?.isNotch == true ? 0 : PillMetrics.horizontalPadding)
+        .frame(height: restLook?.rowHeight ?? PillMetrics.height)
+        .modifier(PillChrome(presentation: controller.presentation, bottomRadius: restLook?.isNotch == true ? 11 : 18))
         .animation(reduceMotion ? nil : .pill, value: isExpanded)
         .animation(reduceMotion ? nil : .pill, value: phase)
         .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
@@ -85,8 +77,46 @@ struct RecordingPillView: View {
         .animation(reduceMotion ? nil : .pill, value: controller.showModePickerInMiniOverlay)
         .animation(reduceMotion ? nil : .pill, value: controller.showConfirmButton)
         .animation(reduceMotion ? nil : .pill, value: controller.overlayStyle)
+        .animation(reduceMotion ? nil : .pill, value: controller.statusBadge)
+        // Übergang aus der ruhenden Pille und zurück: dieselbe Kurve, nur die
+        // Breite (an der Notch die Höhe der Zeile) gleitet.
+        .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
+    }
+
+    /// Das Diktat selbst (Mini, Voll, Schnellaktion).
+    @ViewBuilder
+    private var dictationContent: some View {
+        // Vereinte Pille: wartende Chats und Fehler ganz links, hinter
+        // einem feinen Trenner (sonst nie gesetzt).
+        if let badge = controller.statusBadge {
+            DictationStatusBadgeView(badge: badge)
+                .transition(.opacity)
+            PillSeparator()
+        }
+        if let quickActionLabel = controller.quickActionLabel {
+            PillQuickActionContent(
+                label: quickActionLabel,
+                isHint: controller.isQuickActionHint,
+                controller: controller,
+                reduceMotion: reduceMotion,
+                morphSpace: morphSpace
+            )
+        } else {
+            if isFullStyle {
+                fullLayout
+            } else {
+                miniLayout
+            }
+
+            if phase == .recording && controller.showConfirmButton {
+                PillConfirmButton(action: controller.stopAndTranscribe)
+                    .transition(.opacity)
+            }
+
+            PillCancelButton(phase: phase, controller: controller)
+        }
     }
 
     // Bewusst KEIN Status-Text neben dem Kern (auch nicht bei
@@ -101,6 +131,7 @@ struct RecordingPillView: View {
             reduceMotion: reduceMotion
         )
         .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
+        .matchedGeometryEffect(id: PillMorphID.core, in: morphSpace)
     }
 
     private var modeChip: some View {
@@ -115,7 +146,9 @@ struct RecordingPillView: View {
     /// Full: klassische Anatomie, permanent expandiert.
     @ViewBuilder
     private var fullLayout: some View {
-        PillGrip()
+        if showsGrip {
+            PillGrip()
+        }
 
         coreView
 
@@ -144,8 +177,10 @@ struct RecordingPillView: View {
     @ViewBuilder
     private var miniLayout: some View {
         if isExpanded {
-            PillGrip()
-                .transition(.opacity)
+            if showsGrip {
+                PillGrip()
+                    .transition(.opacity)
+            }
             PillCameraButton(controller: controller)
                 .transition(.opacity)
         }
@@ -187,6 +222,52 @@ struct RecordingPillView: View {
             PillContextChip(controller: controller)
                 .padding(.trailing, 5)
                 .transition(.opacity)
+        }
+    }
+}
+
+// MARK: - Hülle
+
+/// Hintergrund der Pill: als Pille das dunkle Glas samt Schatten (geteilt mit
+/// der Status-Pille, `PillGlassBackground`), an der Notch schwarz wie die
+/// Hardware — die Zeile hängt unter einem Band in Notch-Breite.
+private struct PillChrome: ViewModifier {
+    let presentation: OverlayPresentation
+    /// Unterer Radius an der Notch: 18 beim Diktat, 11 im Ruhebild (wie die
+    /// Notch-Anzeige in Ruhe).
+    var bottomRadius: CGFloat = 18
+
+    func body(content: Content) -> some View {
+        switch presentation {
+        case .classic:
+            content
+                .background {
+                    // Dunkles Glas wie im Prototyp, geteilt mit der Pille der
+                    // Notch-Anzeige (`PillGlassBackground`). Getrennte
+                    // Diktat-Pille: immer Glas, auch mit „Tiefschwarz“.
+                    PillGlassBackground(shape: Capsule())
+                }
+                .pillGlassShadow()
+        case .pill:
+            // Vereinte Pille: gebaut wie die Status-Pille, erst auf die Kapsel
+            // zugeschnitten, dann EIN Schatten. Ohne Zuschnitt wirft jede
+            // Ebene (Glas, Tönung, Kern) ihren eigenen Schatten unter das
+            // durchscheinende Glas; die Pille war im Fenster dadurch dunkler
+            // als die Status-Pille (Aufnahme 13.11.2026: Körper 82 statt 91,
+            // Schatten 204 statt 221 von 255) und sprang beim Übergang im Ton.
+            // `unified`: folgt der Einstellung „Tiefschwarzer Hintergrund“.
+            content
+                .background { PillGlassBackground(shape: Capsule(), unified: true) }
+                .clipShape(Capsule())
+                .pillGlassShadow()
+        case .notch(let width, let height):
+            content
+                .frame(minWidth: width)
+                .padding(.top, height)
+                .background {
+                    NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: bottomRadius)
+                        .fill(Color.black)
+                }
         }
     }
 }
@@ -704,6 +785,7 @@ private struct PillQuickActionContent: View {
     let isHint: Bool
     @ObservedObject var controller: OverlayController
     let reduceMotion: Bool
+    let morphSpace: Namespace.ID
 
     var body: some View {
         if isHint {
@@ -719,6 +801,7 @@ private struct PillQuickActionContent: View {
                 isClipping: false,
                 reduceMotion: reduceMotion
             )
+            .matchedGeometryEffect(id: PillMorphID.core, in: morphSpace)
             .padding(.leading, 2)
         }
 

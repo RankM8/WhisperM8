@@ -154,7 +154,8 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 - Der Terminal-Delegate-Proxy (`AgentTerminalLinkInterceptor`) bleibt: er verweigert `clipboardRead` (OSC 52),
   sonst bekäme jede TUI den Klartext der Zwischenablage.
 - Kontowechsel: Hat das Zielkonto den Ordner nie freigegeben (Trust), wird ein arbeitender Chat nicht vorgemerkt —
-  der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“.
+  der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“. Die CLI
+  (`chats move-account --stop-and-resume`) hält dann ohne `--force` auch einen ruhenden Chat nicht an.
 - Der GPT-Proxy wird zur Laufzeit nie neu gestartet (laufende GPT-Chats); Waisen ersetzt nur der Start-Guard.
 - Tab-Logik (Auswahl, Reorder, Switcher-Umfang) bleibt pur und getestet; Drag/Drop/Menüs sind manuelle QA.
 - Status-Punkte in Sidebar, Tab und Kopf folgen derselben Logik (`AgentStatusIndicator`); Grün heißt nur „arbeitet“.
@@ -178,9 +179,12 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`.
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`,
+`unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
-`mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung).
+`mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
+(Labs „Neustart ohne Chatverlust“, im Bau; bisher nur GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem
+nächsten App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 

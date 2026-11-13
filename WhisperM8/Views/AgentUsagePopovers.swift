@@ -230,7 +230,7 @@ private struct ClaudeUsagePopoverView: View {
                             }
                         }
                         if let problem = usage.liveFetchProblem {
-                            Text(Self.problemText(problem))
+                            Text(verbatim: problem.displayText)
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(AppTheme.statusAwaiting)
                         }
@@ -288,27 +288,6 @@ private struct ClaudeUsagePopoverView: View {
         return (usage.modelWeeklyLabel ?? "model") + " · " + age(modelDate)
     }
 
-    private static func problemText(_ problem: ClaudeUsageFetchProblem) -> String {
-        switch problem {
-        case .noCredentials:
-            return String(localized: "No login token — sign in again in the account settings")
-        case .loginExpired:
-            return String(localized: "Login expired — sign in again in the account settings")
-        case .refreshBlockedBySession:
-            return String(localized: "Token expired — the running session will renew it shortly")
-        case .tokenExpired:
-            return String(localized: "Token expired — ↻ renews it via CLI ping")
-        case .refreshCoolingDown(let until):
-            return String(localized: "Just pinged — next attempt from \(AgentChatsClaudeAccountsTab.timeText(until))")
-        case .httpStatus(429):
-            return String(localized: "Rate limit from Anthropic — try again shortly")
-        case .httpStatus(let status):
-            return String(localized: "Live fetch failed (HTTP \(status))")
-        case .network:
-            return String(localized: "Offline — last known state")
-        }
-    }
-
     /// Passiv (onAppear): nur lesen, nie Tokens anfassen.
     private func load() {
         isLoading = true
@@ -331,6 +310,7 @@ private struct ClaudeUsagePopoverView: View {
             await MainActor.run {
                 usageByProfile = finalResults
                 isLoading = false
+                for (name, usage) in finalResults { AccountLimitsStore.shared.record(claude: name, usage: usage) }
             }
         }
     }
@@ -347,6 +327,7 @@ private struct ClaudeUsagePopoverView: View {
         Task {
             _ = await ClaudeUsageUpdateFlow.run(profileNames: loggedIn) { name, usage in
                 usageByProfile[name] = usage
+                AccountLimitsStore.shared.record(claude: name, usage: usage)
             }
             await MainActor.run { isLoading = false }
         }
@@ -487,7 +468,7 @@ private struct CodexUsagePopoverView: View {
             if let usage = usageByProfile[profile.name] {
                 usageRows(usage, showEmail: false)
             } else if failedProfiles.contains(profile.name) {
-                Text("Limits unavailable (token in the file is stale)")
+                Text(verbatim: AccountLimitsStore.Problem.gptFetchFailedText(hasNumbers: false))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AppTheme.statusAwaiting)
             } else if !isLoading {
@@ -579,9 +560,11 @@ private struct CodexUsagePopoverView: View {
                 for (name, usage) in results {
                     if let usage {
                         usageByProfile[name] = usage
+                        AccountLimitsStore.shared.record(gpt: name, usage: usage)
                     } else {
                         usageByProfile[name] = nil
                         failedProfiles.insert(name)
+                        AccountLimitsStore.shared.recordFailure(gpt: name)
                     }
                 }
                 cliUsage = cli

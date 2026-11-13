@@ -6,6 +6,8 @@ import SwiftUI
 extension KeyboardShortcuts.Name {
     /// Notch-Anzeige ein- und ausblenden. Ohne Standardbelegung.
     static let toggleNotchStatus = Self("toggleNotchStatus")
+    /// Statusliste mit Tastaturfokus öffnen (vereinte Pille). Ohne Standardbelegung.
+    static let openNotchStatusList = Self("openNotchStatusList")
 }
 
 /// Einstellungen der Anzeige als Wert, damit ein Preference-Schreibzugriff
@@ -18,15 +20,22 @@ struct NotchConfig: Equatable {
     var expandOnHover: Bool
     /// Gemerkte Lage der Pille je Bildschirm ohne Notch.
     var pillPositions: [String: NotchPillPosition] = [:]
+    /// Vereinte Pille (Kill-Switch `unifiedPillEnabled`): Status-Pille sieht
+    /// aus wie die Diktat-Pille und macht ihr beim Diktat Platz.
+    var unified = false
 
     static func current(_ prefs: AppPreferences = .shared) -> NotchConfig {
-        NotchConfig(
+        let unified = prefs.isUnifiedPillEnabled
+        return NotchConfig(
             isActive: prefs.isNotchStatusFeatureEnabled && prefs.isNotchStatusEnabled,
-            screenChoice: NotchScreenChoice(rawValue: prefs.notchStatusScreenRaw) ?? .auto,
+            // Vereint gibt es keine Bildschirmwahl mehr: Notch = Bildschirm
+            // mit Notch, Pille = Bildschirm des Agent-Chats-Fensters.
+            screenChoice: unified ? .auto : NotchScreenChoice(rawValue: prefs.notchStatusScreenRaw) ?? .auto,
             hideFromCapture: prefs.isNotchStatusHiddenFromCapture,
             showFreshDone: prefs.isNotchStatusShowingFreshDone,
             expandOnHover: prefs.isNotchStatusExpandingOnHover,
-            pillPositions: prefs.notchPillPositions)
+            pillPositions: prefs.notchPillPositions,
+            unified: unified)
     }
 }
 
@@ -74,14 +83,27 @@ struct NotchHostView: View {
     @ObservedObject var model: NotchViewModel
     let controller: NotchStatusController
     let kind: NotchPlacement.Kind
+    /// Vereinte Pille ohne Notch: gezeichnet wie die Diktat-Pille.
+    var unified = false
 
     var body: some View {
-        NotchStatusView(
-            display: model.display,
-            onToggle: { controller.toggleExpanded(kind) },
-            onSelect: { controller.select(sessionID: $0) },
-            onTurnOff: { controller.turnOff() },
-            onHover: { controller.hoverChanged($0, kind: kind) })
+        if unified {
+            UnifiedStatusPillView(
+                display: model.display,
+                onToggle: { controller.toggleExpanded(kind) },
+                onStartDictation: { controller.startDictationFromPill(kind) },
+                onSelect: { controller.select(sessionID: $0) },
+                onTurnOff: { controller.turnOff() },
+                onHover: { controller.hoverChanged($0, kind: kind) },
+                onLayout: { controller.pillLayoutChanged(kind, pill: $0, core: $1) })
+        } else {
+            NotchStatusView(
+                display: model.display,
+                onToggle: { controller.toggleExpanded(kind) },
+                onSelect: { controller.select(sessionID: $0) },
+                onTurnOff: { controller.turnOff() },
+                onHover: { controller.hoverChanged($0, kind: kind) })
+        }
     }
 }
 
@@ -103,6 +125,19 @@ final class NotchSlot {
     /// die Pille nur zurück, wenn sie davor zu war; sonst ist er schnelles
     /// Zu und Auf.
     var pressStartedExpanded = false
+    /// Vereinte Pille: Fenster mit Schattenrand, Ansicht `UnifiedStatusPillView`.
+    var isUnified = false
+    /// Kern der vereinten Pille (SwiftUI-Koordinaten der Hosting-View):
+    /// Klick darauf startet ein Diktat.
+    var coreFrame: CGRect?
+    /// Zuletzt per Klick auf den Kern ein Diktat gestartet: der zweite Klick
+    /// eines Doppelklicks setzt dann nichts zurück.
+    var lastCoreClickAt = Date.distantPast
+    /// Verkleinern nach dem Zuklappen erst, wenn die Liste ausgeblendet ist.
+    var shrinkTask: Task<Void, Never>?
+    /// Das Diktat auf diesem Bildschirm ist gerade gegangen: Beim
+    /// Wiedererscheinen den aktuellen Wert ohne Animation zeigen.
+    var returnsFromDictation = false
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -139,6 +174,9 @@ final class NotchStatusController {
     let now: () -> Date
     private let appIsActive: @MainActor () -> Bool
     private let focusSession: @MainActor (UUID) -> Void
+    /// Klick auf den ruhenden Kern: derselbe Weg wie der Diktat-Hotkey.
+    let startDictation: @MainActor () -> Void
+    let hub: UnifiedPillHub
     /// Bildschirm des Agent-Chats-Fensters (`NSScreenNumber`), dort steht die
     /// Pille, wenn er keine Notch hat. Nur im Ereignis-Pfad gefragt.
     let agentWindowDisplayID: @MainActor () -> UInt32?
@@ -164,6 +202,16 @@ final class NotchStatusController {
     private var expandedByHover = false
     private var isHovering = false
     var isReleasingKey = false
+    /// Mit der Tastatur markierte Zeile der offenen Liste.
+    var keyboardSelection: UUID?
+    /// Zeilen der offenen Liste in Anzeige-Reihenfolge (für die Pfeiltasten).
+    var listRowIDs: [UUID] = []
+    /// „braucht dich“ während eines Diktats: danach einmal nachholen, wenn
+    /// der Anlass noch steht.
+    var alertDuringDictation: NotchAlert?
+    /// Bildschirm, auf dem das Diktat steht (aus `UnifiedPillHub`, im
+    /// Beobachter übernommen); dort tritt die Anzeige zurück.
+    var dictationDisplayID: UInt32?
 
     var inputs: [NotchChatInput] = []
     /// Stellen der Anzeige; neu bestimmt bei Bildschirmwechsel, Einstellung
@@ -188,9 +236,15 @@ final class NotchStatusController {
         agentWindowDisplayID: @escaping @MainActor () -> UInt32? = {
             AgentChatsCommandCenter.shared.windowDisplayID(preferring: AgentWindowStore.shared.dictationWindowID)
         },
-        prefs: AppPreferences = .shared
+        prefs: AppPreferences = .shared,
+        startDictation: @escaping @MainActor () -> Void = {
+            Task { @MainActor in await AppState.shared.startRecording() }
+        },
+        hub: UnifiedPillHub = .shared
     ) {
         self.prefs = prefs
+        self.startDictation = startDictation
+        self.hub = hub
         self.statusStore = statusStore ?? AgentSessionStatusCoordinator.shared.statusStore
         self.activityStore = activityStore ?? AgentSessionStatusCoordinator.shared.activityStore
         self.workspaceProvider = workspaceProvider
@@ -217,6 +271,9 @@ final class NotchStatusController {
             KeyboardShortcuts.onKeyDown(for: .toggleNotchStatus) {
                 Task { @MainActor in NotchStatusController.shared.toggleFeature() }
             }
+            KeyboardShortcuts.onKeyDown(for: .openNotchStatusList) {
+                Task { @MainActor in NotchStatusController.shared.openListFromKeyboard() }
+            }
         }
         applyConfigIfChanged(force: true)
     }
@@ -240,6 +297,8 @@ final class NotchStatusController {
         guard force || new != config else { return }
         let wasActive = config.isActive
         let screenChanged = new.screenChoice != config.screenChoice
+        // Kill-Switch umgelegt: Fenster neu aufbauen (andere Ansicht, anderer Rand).
+        if new.unified != config.unified { dismantlePanels() }
         config = new
         if screenChanged || !new.isActive || force { cachedPlacements = nil }
         if new.isActive {
@@ -284,6 +343,7 @@ final class NotchStatusController {
             .store(in: &activeCancellables)
 
         observeAgentWindowScreen()
+        observeDictation()
         scheduleFullscreenCheck()
         Logger.info("notch_status_started")
     }
@@ -297,8 +357,12 @@ final class NotchStatusController {
         fullscreenGeneration += 1
         collapse(rebuildAfter: false)
         alert = nil
+        alertDuringDictation = nil
         inputs = []
         cachedPlacements = nil
+        hub.updateBadge(nil)
+        hub.restSnapshot = { _ in nil }
+        hub.startDictation = {}
         for slot in slots.values {
             slot.lastDisplay = nil
             slot.lastFrame = nil
@@ -338,13 +402,17 @@ final class NotchStatusController {
             alertTask?.cancel(); alertTask = nil
             self.alert = nil
         }
-        if let fired { show(alert: fired) }
+        if let fired {
+            show(alert: fired)
+            // Beim Diktat verbreitert sich die Pille dort nicht; danach einmal.
+            if config.unified, dictationDisplayID != nil { alertDuringDictation = fired }
+        }
 
         scheduleExpiry(current)
         render()
     }
 
-    private func show(alert fired: NotchAlert) {
+    func show(alert fired: NotchAlert) {
         alert = fired
         alertTask?.cancel()
         alertTask = Task { [weak self] in
@@ -417,6 +485,7 @@ final class NotchStatusController {
         guard config.isActive, !isExpanded else { return }
         expandedKind = kind
         expandedByHover = byHover
+        keyboardSelection = nil
         alertTask?.cancel(); alert = nil
 
         // Stand-Zeilen nur lesen, solange die Liste offen ist.
@@ -446,6 +515,8 @@ final class NotchStatusController {
         guard let kind = expandedKind else { return }
         expandedKind = nil
         expandedByHover = false
+        keyboardSelection = nil
+        listRowIDs = []
         expandedCancellables.removeAll()
         tickTask?.cancel(); tickTask = nil
         removeDismissMonitors()
@@ -521,14 +592,21 @@ extension NotchScreenInfo {
             let value = unmanaged.takeRetainedValue()
             return (CFUUIDCreateString(nil, value) as String?) ?? "display-\(id)"
         }
+        let hidesNotch = Self.testInstanceHidesNotch
         self.init(
             displayID: id,
             frame: screen.frame,
             visibleFrame: screen.visibleFrame,
-            safeAreaTop: screen.safeAreaInsets.top,
-            auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
-            auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width,
+            safeAreaTop: hidesNotch ? 0 : screen.safeAreaInsets.top,
+            auxiliaryLeftWidth: hidesNotch ? nil : screen.auxiliaryTopLeftArea?.width,
+            auxiliaryRightWidth: hidesNotch ? nil : screen.auxiliaryTopRightArea?.width,
             isBuiltIn: CGDisplayIsBuiltin(id) != 0,
             uuid: uuid)
     }
+
+    /// Nur Test-Instanz (`WHISPERM8_TEST_NO_NOTCH=1 scripts/test-instance.sh
+    /// start`): Bildschirme gelten als ohne Notch, damit sich die Pille ohne
+    /// Notch auch auf einem MacBook prüfen lässt. Einmal gelesen.
+    static let testInstanceHidesNotch =
+        AppInstance.isTestInstance && ProcessInfo.processInfo.environment["WHISPERM8_TEST_NO_NOTCH"] == "1"
 }

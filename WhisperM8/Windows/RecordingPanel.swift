@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 enum OverlayStyle: String, CaseIterable {
@@ -173,10 +174,32 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
     /// vom Controller aus dem SwiftUI-Layout gemeldet.
     var pillFrameInPanel: NSRect = .zero
     private var suppressMoveCallback = false
+    /// Vereinte Pille: AppKit darf den Rahmen nicht unter die Menüleiste
+    /// schieben. An der Notch liegt die Pille selbst über der Leiste, ohne
+    /// Notch ragt nur der durchsichtige Schattenrand hinein. Die getrennte
+    /// Diktat-Pille (unten) bleibt bei der Regel von AppKit.
+    var allowsAboveMenuBar = false
+    /// Vereinte Pille ohne Notch: Die sichtbare Pille bleibt im selben Bereich
+    /// wie die Status-Pille (`NotchPillPlacement.usableArea`). Der zieht bei
+    /// automatisch ausgeblendeter Menüleiste eine Ersatzhöhe ab; sonst ließe
+    /// sich die Pille bis an die Bildschirmkante ziehen, wo die Leiste beim
+    /// Hinfahren ✓ und ✕ verdeckt. Bisher hielt AppKit sie dort zufällig fern.
+    var clampsLikeStatusPill = false
 
-    init(initialOrigin: NSPoint) {
+    /// Bereich, in dem die sichtbare Pille liegen darf.
+    func pillClampArea(on screen: NSScreen) -> NSRect {
+        pillClampArea(visibleFrame: screen.visibleFrame, info: NotchScreenInfo(screen: screen))
+    }
+
+    /// Kern ohne `NSScreen`, für Tests.
+    func pillClampArea(visibleFrame: NSRect, info: NotchScreenInfo?) -> NSRect {
+        guard clampsLikeStatusPill, let info else { return visibleFrame }
+        return NotchPillPlacement.usableArea(info)
+    }
+
+    init(initialOrigin: NSPoint, size: NSSize = OverlayFrameResolver.panelSize) {
         super.init(
-            contentRect: NSRect(origin: initialOrigin, size: OverlayFrameResolver.panelSize),
+            contentRect: NSRect(origin: initialOrigin, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -193,6 +216,10 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        allowsAboveMenuBar ? frameRect : super.constrainFrameRect(frameRect, to: screen)
+    }
 
     /// Setzt den Frame ohne Move-Callback (programmatische Positionierung).
     func setOriginSilently(_ origin: NSPoint) {
@@ -229,7 +256,7 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
         let clamped = OverlayFrameResolver.clampedPanelOrigin(
             panelOrigin: frame.origin,
             pillFrameInPanel: pillFrameInPanel,
-            visibleFrame: screen.visibleFrame
+            visibleFrame: pillClampArea(on: screen)
         )
         if clamped != frame.origin {
             setOriginSilently(clamped)
@@ -280,6 +307,9 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     /// für SwiftUI — Buttons/Menüs konsumieren ihren ersten Klick selbst und
     /// erreichen diesen Pfad praktisch nie mit clickCount == 2.
     var onDoubleClick: (() -> Void)?
+    /// Vereinte Pille beim Zurückziehen: Klicks (Fensterkoordinaten) gehen
+    /// hierher statt an SwiftUI; Ziehen und Doppelklick entfallen.
+    var onInterceptedClick: ((CGPoint) -> Void)?
 
     private var hoverArea: NSTrackingArea?
 
@@ -290,11 +320,24 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if let onInterceptedClick {
+            return onInterceptedClick(event.locationInWindow)
+        }
         if event.clickCount == 2 {
             onDoubleClick?()
             return
         }
         super.mouseDown(with: event)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard onInterceptedClick == nil else { return }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard onInterceptedClick == nil else { return }
+        super.mouseUp(with: event)
     }
 
     override func updateTrackingAreas() {
@@ -360,9 +403,9 @@ enum ContextAction {
 
 @MainActor
 class OverlayController: ObservableObject {
-    private var panel: RecordingPanel?
-    private var hostingView: PillHitTestHostingView<RecordingOverlayView>?
-    private var previousApp: NSRunningApplication?
+    var panel: RecordingPanel?
+    var hostingView: PillHitTestHostingView<RecordingOverlayView>?
+    var previousApp: NSRunningApplication?
     private var modesObserver: NSObjectProtocol?
     private var menuTrackingObservers: [NSObjectProtocol] = []
     private var hoverCollapseWork: DispatchWorkItem?
@@ -427,13 +470,42 @@ class OverlayController: ObservableObject {
     @Published var pillAlignment: PillAlignment = .trailing
     /// Mini-Stil: Hover (mit Grace-Period) expandiert zur vollen Pill.
     @Published var isHoverExpanded: Bool = false
+    /// Getrennte Diktat-Pille oder vereinte Pille (ohne Notch bzw. an der
+    /// Notch), siehe `RecordingPanel+UnifiedPill.swift`.
+    @Published var presentation: OverlayPresentation = .classic
+    /// Vereinte Pille: wartende Chats und Fehler als Raute ganz links.
+    @Published var statusBadge: DictationStatusBadge?
+
+    // Vereinte Pille (Zustand für `RecordingPanel+UnifiedPill.swift`).
+    var unifiedGeneration = 0
+    var unifiedScreen: NotchScreenInfo?
+    var badgeCancellable: AnyCancellable?
+    var unifiedScreenObserver: NSObjectProtocol?
+    /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
+    var collapsedPillWidth: CGFloat?
+    /// Übergang aus der und in die ruhende Pille (`RecordingPanel+PillMorph.swift`):
+    /// Die Pille zeigt statt des Diktats das Ruhebild `restLook`.
+    @Published var showsRestLook = false
+    @Published var restLook: UnifiedPillRestLook?
+    /// Mittelpunkt der ruhenden Pille (ohne Notch), dorthin zieht sie sich zurück.
+    var restCenter: CGPoint?
+    var morph = UnifiedPillMorph()
+    var morphSignpost: PerformanceBudget.Token?
+    /// Das Zurückziehen begann in diesem Lauf (`show` direkt nach `hide`).
+    var retiredInCurrentTurn = false
+    /// Nur `whisperm8 debug pill`: meldet Fenster-Aufbau und Schritte des
+    /// Übergangs mit Namen, sonst `nil`.
+    var debugEvent: ((String) -> Void)?
+    /// Zählt jedes Zeigen (Diktat und Schnellaktion). `debug pill` erkennt
+    /// daran, ob die Pille noch seine eigene ist (`DebugPillOwnership`).
+    private(set) var presentationCount = 0
 
     /// Hat der User die Pill je bewegt? Ohne Custom-Position folgt der
     /// Default dem aktiven Screen und wird nach dem ersten Layout exakt
     /// zentriert (statt die Schätzbreite einzufrieren).
-    private var hasCustomPosition = false
+    var hasCustomPosition = false
     private var didPreciseCenter = false
-    private var isResettingPosition = false
+    var isResettingPosition = false
     /// Nachzentrieren ist NUR kurz nach dem Doppelklick-Reset erlaubt (die
     /// Mini-Pill kommt dort hover-expandiert an und soll nach dem Collapse
     /// exakt mittig landen). Organische Breitenänderungen (Kontext kommt
@@ -448,7 +520,7 @@ class OverlayController: ObservableObject {
     /// Letzte Button-/Menü-Aktion an der Pill: Ein schneller Doppelklick auf
     /// ✓/Kamera landet mit clickCount == 2 auf inzwischen „freier" Fläche —
     /// der Positions-Reset darf dann NICHT feuern.
-    private var lastPillActionAt = Date.distantPast
+    var lastPillActionAt = Date.distantPast
 
     var phase: OverlayPhase {
         OverlayPhase.resolve(
@@ -504,6 +576,7 @@ class OverlayController: ObservableObject {
     /// Baut die Pill auf und zeigt sie (Diktat und Schnellaktion).
     private func presentPanel() {
         isPresented = true
+        presentationCount += 1
         guard presentsWindow else { return }
         self.overlayStyle = OverlayPositionStore.loadStyle()
         self.isHoverExpanded = false
@@ -511,6 +584,21 @@ class OverlayController: ObservableObject {
         self.isResettingPosition = false
         self.trackedPillMenus = []
         self.lastPillActionAt = .distantPast
+
+        // Vereinte Pille: Lage und Aussehen wie die Status-Pille bzw. an der
+        // Notch. Die Beobachter sind dieselben, das Fenster folgt, sobald der
+        // Bildschirm feststeht.
+        if UnifiedPillHub.shared.isEnabled() {
+            installPresentationObservers()
+            // `show` direkt nach `hide`: dasselbe Fenster wächst wieder. Sonst
+            // entscheidet die Bildschirmsuche, ob eine sich zurückziehende
+            // Pille übernommen wird.
+            if adoptRetiringPanelInSameTurn() { return }
+            presentUnifiedPanel()
+            return
+        }
+        finishRetiringPanelNow()
+        presentation = .classic
 
         // Anker laden entscheidet zugleich über „Custom-Position": nur eine
         // valide gespeicherte Position zählt (loadAnchor bereinigt Korruptes).
@@ -539,11 +627,20 @@ class OverlayController: ObservableObject {
             OverlayPositionStore.saveAnchor(anchor)
         }
 
+        installPanel(panel)
+        installPresentationObservers()
+    }
+
+    /// Hängt die Pill-Ansicht ins Fenster und zeigt es (getrennte und vereinte Pille).
+    /// `contentHidden`: Inhalt beginnt unsichtbar (Übergang der vereinten Pille).
+    func installPanel(_ panel: RecordingPanel, safeAreaFree: Bool = false, contentHidden: Bool = false) {
         // Create view with bindings (ONCE) - view will update via bindings
         let view = RecordingOverlayView(controller: self)
 
         let hostingView = PillHitTestHostingView(rootView: view)
-        hostingView.frame = NSRect(origin: .zero, size: OverlayFrameResolver.panelSize)
+        hostingView.frame = NSRect(origin: .zero, size: panel.frame.size)
+        // An der Notch verschöbe die Aussparung sonst den Inhalt.
+        if safeAreaFree { hostingView.safeAreaRegions = [] }
         hostingView.onHoverChange = { [weak self] hovering in
             self?.setHovering(hovering)
         }
@@ -561,14 +658,27 @@ class OverlayController: ObservableObject {
         // schaltet Material, .primary/.secondary und die OverlayPalette
         // konsistent auf ihre Dark-Varianten.
         hostingView.appearance = NSAppearance(named: .darkAqua)
+        if contentHidden { hostingView.alphaValue = 0 }
 
         // Referenzen VOR contentView/orderFront setzen — der erste
         // Geometry-Report aus SwiftUI darf nicht an nil-Guards verpuffen.
         self.panel = panel
         self.hostingView = hostingView
         panel.contentView = hostingView
+        let intended = panel.frame.origin
         panel.orderFront(nil)
+        // Vereinte Pille: AppKit darf das Fenster beim Einblenden nicht
+        // verschieben (Menüleiste), sonst springt die Pille beim Start.
+        let shift = CGVector(dx: panel.frame.origin.x - intended.x, dy: panel.frame.origin.y - intended.y)
+        if presentation.isUnified, shift != .zero {
+            Logger.info("unified_pill_moved_on_order_front dx=\(shift.dx) dy=\(shift.dy)")
+        }
+        debugEvent?("installed:\(panel.windowNumber)")
+        debugEvent?("orderFrontShift:\(shift.dx),\(shift.dy)")
+    }
 
+    /// Beobachter, solange die Pill steht: Modusliste und offene Menüs.
+    private func installPresentationObservers() {
         // Event-getriebener Mode-Reload statt Tick-Polling. show() ruft oben
         // hide() auf, das den alten Observer entfernt — re-entrantes show()
         // (z. B. Transkriptions-Retry) registriert also nie doppelt.
@@ -618,6 +728,10 @@ class OverlayController: ObservableObject {
 
     func hide() {
         isPresented = false
+        // Vereinte Pille: Zieht sie sich ins Ruhebild zurück, bleibt das
+        // Fenster noch einen Moment stehen und schließt danach selbst.
+        let retiring = retireUnifiedPanel()
+        tearDownUnified(keepingWindow: retiring)
         modeList.hide()
         controllerTargetLabel = nil
         isConnecting = false
@@ -639,9 +753,11 @@ class OverlayController: ObservableObject {
         recenterWork = nil
         // Default-Position bleibt Default: gespeichert wird nur, was der
         // User selbst bewegt hat (onMoveAnchor persistiert live).
-        panel?.close()
-        panel = nil
-        hostingView = nil
+        if !retiring {
+            panel?.close()
+            panel = nil
+            hostingView = nil
+        }
         onCancel = nil
         onCancelTranscription = nil
         onCancelPostProcessing = nil
@@ -652,6 +768,17 @@ class OverlayController: ObservableObject {
         onToggleScreenClip = nil
         onClearContext = nil
         onContextAction = nil
+    }
+
+    /// Fenster schließen, Zustand und Rückwege behalten (vereinte Pille baut
+    /// nach einem Bildschirmwechsel an neuer Stelle neu auf).
+    func closePanelForRebuild() {
+        hoverCollapseWork?.cancel()
+        hoverCollapseWork = nil
+        panel?.close()
+        panel = nil
+        hostingView = nil
+        isHoverExpanded = false
     }
 
     /// Schnellaktion läuft: Pill mit Arbeits-Animation, Text und ✕ (bricht ab).
@@ -741,7 +868,9 @@ class OverlayController: ObservableObject {
     func showModeList() {
         guard presentsWindow, let panel, panel.pillFrameInPanel.width > 0 else { return }
         let pillFrame = panel.pillFrameInPanel.offsetBy(dx: panel.frame.origin.x, dy: panel.frame.origin.y)
-        modeList.show(modes: outputModes, selectedID: selectedOutputMode.id, pillFrame: pillFrame)
+        modeList.show(
+            modes: outputModes, selectedID: selectedOutputMode.id, pillFrame: pillFrame,
+            opensDownward: unifiedMenusOpenDownward, unified: OutputModeListPresenter.followsUnifiedPill(presentation))
     }
 
     func addScreenshot() {
@@ -805,13 +934,21 @@ class OverlayController: ObservableObject {
     /// SwiftUI meldet den sichtbaren Pill-Frame (Koordinaten des Hosting-Views,
     /// top-left origin) — hier wird er in AppKit-Koordinaten gedreht und an
     /// hitTest/Tracking/Clamp/Persistenz verteilt.
-    func reportPillFrame(_ swiftUIFrame: CGRect) {
+    func reportPillFrame(_ reportedFrame: CGRect) {
         guard let panel, let hostingView else { return }
+        // An der Notch zählt nur der Körper unter der Menüleiste: Das Band
+        // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
+        // die Menüleiste (Treffer- und Hover-Fläche).
+        var swiftUIFrame = reportedFrame
+        if case .notch(_, let bandHeight) = presentation {
+            swiftUIFrame.origin.y += bandHeight
+            swiftUIFrame.size.height -= bandHeight
+        }
         guard swiftUIFrame.width > 0, swiftUIFrame.height > 0 else { return }
 
         // Fenster-Koordinaten sind immer bottom-left; die Hosting-View
         // konvertiert für hitTest/Tracking selbst anhand ihres isFlipped.
-        let panelHeight = OverlayFrameResolver.panelSize.height
+        let panelHeight = hostingView.bounds.height
         let appKitFrame = NSRect(
             x: swiftUIFrame.minX,
             y: panelHeight - swiftUIFrame.maxY,
@@ -821,6 +958,11 @@ class OverlayController: ObservableObject {
 
         hostingView.setInteractive(swiftUIFrame: swiftUIFrame)
         panel.pillFrameInPanel = appKitFrame
+        // Breite der zugeklappten Pille merken: beim Darüberfahren bleibt
+        // ihre rechte Kante stehen (vereinte Pille).
+        if !isHoverExpanded, !showsRestLook { collapsedPillWidth = appKitFrame.width }
+        // An der Notch hängt die Pille fest unter der Aussparung.
+        if presentation.isNotch { return }
 
         // Ohne Custom-Position: nach dem ersten ECHTEN Layout einmalig exakt
         // zentrieren (die Default-Position basierte auf einer Schätzbreite).
@@ -847,7 +989,7 @@ class OverlayController: ObservableObject {
             let clamped = OverlayFrameResolver.clampedPanelOrigin(
                 panelOrigin: panel.frame.origin,
                 pillFrameInPanel: appKitFrame,
-                visibleFrame: screen.visibleFrame
+                visibleFrame: panel.pillClampArea(on: screen)
             )
             if clamped != panel.frame.origin {
                 panel.setOriginSilently(clamped)
@@ -894,6 +1036,8 @@ class OverlayController: ObservableObject {
     // MARK: - Hover (Mini-Stil)
 
     private func setHovering(_ hovering: Bool) {
+        // Beim Zurückziehen klappt nichts mehr auf.
+        if hovering, morph.isRetiring { return }
         if hovering {
             hoverCollapseWork?.cancel()
             hoverCollapseWork = nil
@@ -934,6 +1078,10 @@ class OverlayController: ObservableObject {
     /// aktuellen Screen) und löscht die gespeicherte Custom-Position.
     func resetToDefaultPosition() {
         guard let panel, !isResettingPosition else { return }
+        if presentation.isUnified {
+            guard Date().timeIntervalSince(lastPillActionAt) > 0.6 else { return }
+            return resetUnifiedPosition()
+        }
         // Doppelklick-Schutz: Kam gerade eine Button-/Menü-Aktion von der
         // Pill, ist dieser clickCount == 2 der Nachklapp eines schnellen
         // Doppelklicks auf ein Control (✓ verschwindet nach Klick 1!) —

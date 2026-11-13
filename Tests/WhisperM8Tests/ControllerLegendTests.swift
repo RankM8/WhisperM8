@@ -205,8 +205,10 @@ final class ControllerLegendTests: XCTestCase {
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         // Alle drei Ebenen mit jeder Taste der Tabelle.
         XCTAssertEqual(sections[2].entries.map(\.label), [
-            .deleteToLineStart, .newline, .continueWork, .cycleMode, .commands, .switchAccount,
-            .whereToHold, .nextWaiting, .clipboardWithL2, .pickAndDictate,
+            .deleteToLineStart, .newline, .wordJump, .lineMove, .pasteNewest, .escapeOnce, .undo,
+            .continueWork, .cycleMode, .commands, .switchAccount, .transcript,
+            .limitsCard, .alertLevel, .stayAwake, .clipboardWithR1,
+            .whereToHold, .nextWaiting, .reopenClosed, .clipboardWithL2, .pickAndDictate,
         ])
         XCTAssertTrue(sections[2].entries.contains {
             $0.label == .pickAndDictate && $0.isCombination && $0.inputs == [.button(.l2), .button(.r2)]
