@@ -121,6 +121,13 @@ enum ChatsOutput {
             "externalSessionID": session.externalSessionID ?? NSNull(),
             "backgroundShortID": session.backgroundShortID ?? NSNull(),
         ]
+        let account = claudeAccount(session: session, transcriptPath: runtime.transcriptPath)
+        dict["account"] = account?.name ?? NSNull()
+        if let account, let stamped = account.stampedName {
+            // Stempel und realer Ablageort weichen ab — der nächste Start folgt
+            // dem Ablageort (Resume-Selbstheilung), der Stempel wird nachgezogen.
+            dict["accountStamp"] = stamped
+        }
         if let attention {
             dict["attention"] = ["category": attention.category.rawValue, "rank": attention.rank]
         }
@@ -128,6 +135,35 @@ enum ChatsOutput {
             dict["lastAssistantLine"] = line
         }
         return dict
+    }
+
+    /// Claude-Konto eines Chats, wie es die CLI zeigt.
+    struct ClaudeAccountDisplay: Equatable {
+        /// Profilname; `main` für das Hauptkonto (nie `nil` wie der Stempel).
+        var name: String
+        /// Gesetzt, wenn der Stempel der Session ein anderes Konto nennt als
+        /// der Ort, an dem das Transcript wirklich liegt.
+        var stampedName: String?
+    }
+
+    /// `nil` für alles ohne Claude-Konto (Codex, Terminal, Agent View).
+    /// Maßgeblich ist der reale Ablageort des Transcripts: dort sucht
+    /// `claude --resume`, und dorthin folgt auch der nächste Start
+    /// (`AgentCommandBuilder`, Resume-Selbstheilung). Ohne Transcript (neuer
+    /// Chat vor der ersten Antwort) gilt der Stempel.
+    static func claudeAccount(session: AgentChatSession, transcriptPath: String?) -> ClaudeAccountDisplay? {
+        guard session.provider == .claude else { return nil }
+        switch session.effectiveKind {
+        case .terminal, .agentView: return nil
+        case .chat, .backgroundChat, .subagentJob: break
+        }
+        let main = ClaudeAccountProfiles.mainProfileName
+        let stamped = AccountMovePlanner.normalize(session.claudeProfileName) ?? main
+        guard let transcriptPath, transcriptPath.contains("/projects/") else {
+            return ClaudeAccountDisplay(name: stamped)
+        }
+        let actual = ClaudeAccountProfiles.profileName(forTranscriptPath: transcriptPath) ?? main
+        return ClaudeAccountDisplay(name: actual, stampedName: actual == stamped ? nil : stamped)
     }
 
     /// Angezeigtes Modell eines Chats. `session.model` ist bei jedem Chat
@@ -292,7 +328,10 @@ enum ChatsOutput {
         CLIIO.out("Ref          \(shortID(session.id))  ·  \(session.id.uuidString)")
         CLIIO.out("Provider     \(session.provider.rawValue) · \(session.effectiveKind.displayName) · Modell \(modelDisplay(session: session, transcriptModel: transcriptModel).text)")
         if let group = session.groupName { CLIIO.out("Gruppe       \(group)") }
-        if let profile = session.claudeProfileName { CLIIO.out("Profil       \(profile)") }
+        if let account = claudeAccount(session: session, transcriptPath: runtime.transcriptPath) {
+            let note = account.stampedName.map { " (Stempel: \($0), Transcript liegt hier)" } ?? ""
+            CLIIO.out("Konto        \(account.name)\(note)")
+        }
         CLIIO.out("")
         CLIIO.out("── LAUFZEIT " + String(repeating: "─", count: 41))
         CLIIO.out("Status       \(session.status.rawValue) / runtime: \(runtime.status?.rawValue ?? "unknown") (\(runtime.source))")
