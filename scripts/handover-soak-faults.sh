@@ -402,6 +402,33 @@ await_pid() { # name pid_vorher erwartung frist(epoch) → pid oder leer
     done
 }
 
+# Befund 13.11.2026: Nach dem Rückfall startet ein fortgesetzter Chat im Grid
+# erst, wenn er ausgewählt wird, obwohl sein Pane angezeigt ist (rendered).
+# Das wird gemeldet; danach wählt das Skript ihn per `chats open` aus, damit
+# die übrigen Prüfungen und Szenarien laufen.
+START_WITHOUT_SELECT_SECONDS=20
+nudge_unstarted() { # szenario
+    local scenario="$1" name end missing
+    end=$(( $(date +%s) + START_WITHOUT_SELECT_SECONDS ))
+    while :; do
+        missing=""
+        for name in $(chat_names); do
+            [[ -n "$(chat_pid "$name")" ]] || missing="$missing $name"
+        done
+        if [[ -z "$missing" ]]; then
+            record "$scenario" start-ohne-auswahl OK "alle Chats laufen ohne Auswahl"
+            return 0
+        fi
+        (( $(date +%s) < end )) || break
+        sleep 2
+    done
+    record "$scenario" start-ohne-auswahl FEHLER "nach ${START_WITHOUT_SELECT_SECONDS} s ohne Prozess, obwohl im Grid angezeigt:$missing (jetzt per chats open ausgewählt)"
+    for name in $missing; do
+        cli chats open "$(chat_ref "$name")" --json >/dev/null 2>&1 || true
+        sleep 1
+    done
+}
+
 check_comeback() { # szenario vorher-datei erwartung
     local scenario="$1" before="$2" expect="$3" name pid_before pid_now old_alive deadline
     deadline=$(( $(date +%s) + COMEBACK_TIMEOUT ))
@@ -476,6 +503,7 @@ run_scenario() { # name erwartung funktion
         clear_knobs
         return 0
     fi
+    nudge_unstarted "$name"
     check_comeback "$name" "$before" "$expect"
     stop_sampler
     clear_knobs

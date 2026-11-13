@@ -70,6 +70,7 @@ Jedes Szenario prüft danach:
 - Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil.
 - Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
 - Kein Kind erbt einen Socket.
+- Start ohne Auswahl: Jeder Chat hat nach 20 s einen Prozess, ohne dass er ausgewählt wurde. Sonst ist das ein FEHLER; danach wählt das Skript die fehlenden Chats per `chats open` aus, damit die übrigen Prüfungen laufen (Befund vom 13.11.: Nach dem Rückfall startete nur der ausgewählte Chat im Grid).
 - Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
 - Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`) 0600, solange sie existiert.
 
