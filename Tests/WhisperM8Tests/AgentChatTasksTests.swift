@@ -160,9 +160,9 @@ final class AgentChatTasksTests: XCTestCase {
             #"{"hook_event_name":"TaskCreated","session_id":"s1","team_name":"session-412eed50","transcript_path":"\#(transcript.path)"}"#))
         event.transcriptPath = transcript.path
         store.handleHookEvent(localSessionID: sessionID, event: event)
-        let loaded = expectation(description: "Hook-Ordner gelesen")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { loaded.fulfill() }
-        wait(for: [loaded], timeout: 2)
+        // Auf das Ergebnis warten statt fest 0,3 s: Gelesen wird auf einer
+        // eigenen Queue, unter Last dauert das länger (wackelte bei Load > 70).
+        waitUntil { store.tasks[sessionID]?.map(\.subject) == ["Doku"] && received.last?.first?.activeForm == "Schreibt" }
         XCTAssertEqual(store.tasks[sessionID]?.map(\.subject), ["Doku"])
         XCTAssertEqual(received.last?.first?.activeForm, "Schreibt")
     }
@@ -263,10 +263,18 @@ final class AgentChatTasksTests: XCTestCase {
             #"{"hook_event_name":"TaskCreated","session_id":"s1","transcript_path":"\#(transcript.path)","task_id":"1"}"#))
         XCTAssertNil(event.teamName)
         store.handleHookEvent(localSessionID: sessionID, event: event)
-        let loaded = expectation(description: "Registry-Ordner gelesen")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { loaded.fulfill() }
-        wait(for: [loaded], timeout: 2)
+        waitUntil { store.tasks[sessionID]?.map(\.subject) == ["RIO: Dashboard"] }
         XCTAssertEqual(store.tasks[sessionID]?.map(\.subject), ["RIO: Dashboard"])
+    }
+
+    /// Lässt den Main-RunLoop laufen, bis die Bedingung gilt (höchstens
+    /// `timeout`). Ergebnisse des Stores kommen über den MainActor.
+    @MainActor
+    private func waitUntil(timeout: TimeInterval = 10, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition(), Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
     }
 
     private final class LiveBox: @unchecked Sendable {

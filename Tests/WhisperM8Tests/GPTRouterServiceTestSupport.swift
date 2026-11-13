@@ -176,6 +176,19 @@ enum GPTRouterTestClient {
         return url
     }
 
+    /// Löscht einen Testordner. Dienste schreiben im Hintergrund noch Log-
+    /// zeilen (etwa beim Abmelden einer attach-Verbindung); scheitert das
+    /// Löschen daran („Ordner nicht leer“), wird kurz wiederholt. Ist der
+    /// Ordner weg, legt ein späterer Log-Eintrag ihn nicht neu an.
+    static func removeRoot(_ url: URL?) {
+        guard let url else { return }
+        for _ in 0..<40 {
+            try? FileManager.default.removeItem(at: url)
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
     /// Freier Port (bind auf 0, wieder schließen).
     static func freePort() -> Int {
         guard let fd = try? ClaudeGPTRouterSocketListener.bind(port: 0) else { return 0 }
