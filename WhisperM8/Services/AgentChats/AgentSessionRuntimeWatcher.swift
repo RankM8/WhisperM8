@@ -103,6 +103,12 @@ final class AgentSessionRuntimeWatcher {
     /// `nil` = nichts Verwertbares mehr im Tail (oder Datei weg).
     var onActivity: ((UUID, AgentSessionActivity?) -> Void)?
 
+    /// PID des Prozesses im PTY eines Chats (Coordinator setzt sie). Nur für
+    /// Codex gelesen: Codex schreibt während einer Antwort nichts ins Rollout,
+    /// ob er arbeitet, entscheidet bei offenem Turn der Prozess
+    /// (`CodexProcessLiveness`).
+    var processIDProvider: (UUID) -> Int32? = { _ in nil }
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
@@ -121,17 +127,21 @@ final class AgentSessionRuntimeWatcher {
     private let statProvider: @Sendable (URL) -> AgentTranscriptFileStat?
     private let tailProvider: @Sendable (URL, Int) -> String?
     private let urlResolver: @Sendable (WatchedSession) -> URL?
+    /// `kill(pid, 0)` + Startzeit per sysctl, off-main im Poll (Mikrosekunden).
+    private let livenessProvider: @Sendable (Int32?) -> CodexProcessLiveness
 
     init(
         onDecision: ((UUID, AgentTranscriptStatusDecider.Decision) -> Void)? = nil,
         statProvider: @escaping @Sendable (URL) -> AgentTranscriptFileStat? = { AgentSessionRuntimeWatcher.fileStat(at: $0) },
         tailProvider: @escaping @Sendable (URL, Int) -> String? = { AgentSessionRuntimeWatcher.readTail(at: $0, bytes: $1) },
-        urlResolver: @escaping @Sendable (WatchedSession) -> URL? = { AgentSessionRuntimeWatcher.resolveTranscriptURL(for: $0) }
+        urlResolver: @escaping @Sendable (WatchedSession) -> URL? = { AgentSessionRuntimeWatcher.resolveTranscriptURL(for: $0) },
+        livenessProvider: @escaping @Sendable (Int32?) -> CodexProcessLiveness = { CodexProcessLiveness.of(pid: $0) }
     ) {
         self.onDecision = onDecision
         self.statProvider = statProvider
         self.tailProvider = tailProvider
         self.urlResolver = urlResolver
+        self.livenessProvider = livenessProvider
     }
 
     deinit {
@@ -358,6 +368,8 @@ final class AgentSessionRuntimeWatcher {
         let statProvider = self.statProvider
         let tailProvider = self.tailProvider
         let urlResolver = self.urlResolver
+        let livenessProvider = self.livenessProvider
+        let codexProcessID = entry.provider == .codex ? processIDProvider(sessionID) : nil
 
         Task { @MainActor [weak self] in
             let snapshot = await Task.detached(priority: .utility) {
@@ -369,7 +381,8 @@ final class AgentSessionRuntimeWatcher {
                         now: Date(),
                         statProvider: statProvider,
                         tailProvider: tailProvider,
-                        urlResolver: urlResolver
+                        urlResolver: urlResolver,
+                        codexProcess: snapshotEntry.provider == .codex ? livenessProvider(codexProcessID) : .unknown
                     )
                 }
             }.value
@@ -456,7 +469,8 @@ final class AgentSessionRuntimeWatcher {
         now: Date,
         statProvider: @Sendable (URL) -> AgentTranscriptFileStat?,
         tailProvider: @Sendable (URL, Int) -> String?,
-        urlResolver: @Sendable (WatchedSession) -> URL?
+        urlResolver: @Sendable (WatchedSession) -> URL?,
+        codexProcess: CodexProcessLiveness = .unknown
     ) -> AgentSessionRuntimePollSnapshot {
         let transcriptURL = entry.transcriptURL ?? urlResolver(entry)
         guard let url = transcriptURL,
@@ -472,7 +486,8 @@ final class AgentSessionRuntimeWatcher {
                 lastEvent: entry.cachedLastEvent,
                 fileMTime: stat.mtime,
                 now: now,
-                priorTurnFinishedAt: entry.lastTurnFinishedAt
+                priorTurnFinishedAt: entry.lastTurnFinishedAt,
+                codexProcess: codexProcess
             )
             return AgentSessionRuntimePollSnapshot(
                 transcriptURL: url,
@@ -498,7 +513,8 @@ final class AgentSessionRuntimeWatcher {
             lastEvent: lastEvent,
             fileMTime: stat.mtime,
             now: now,
-            priorTurnFinishedAt: entry.lastTurnFinishedAt
+            priorTurnFinishedAt: entry.lastTurnFinishedAt,
+            codexProcess: codexProcess
         )
         return AgentSessionRuntimePollSnapshot(
             transcriptURL: url,

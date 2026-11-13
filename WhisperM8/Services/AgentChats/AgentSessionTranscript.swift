@@ -12,6 +12,11 @@ enum AgentTranscriptEvent: Equatable {
     /// Assistant-Message ohne `stop_reason` → Tool-Use offen oder Streaming.
     case assistantMessageOngoing(timestamp: Date?)
     case toolResult(timestamp: Date?)
+    /// Nur Codex: Tool-Aufruf ohne Ergebnis. Codex führt das Tool gerade aus
+    /// ODER wartet auf die Freigabe des Nutzers — im Rollout ist beides gleich
+    /// (Freigabe-Anfragen schreibt Codex nicht mit). `kind` sagt, was der
+    /// Aufruf sein kann.
+    case toolCallPending(timestamp: Date?, kind: CodexPendingTool)
     /// User hat den Turn per ESC abgebrochen — Claude schreibt dann eine
     /// user-Zeile `[Request interrupted by user]` (ggf. „… for tool use").
     /// Eigener Fall statt `.userMessage`, weil ein Abbruch das GEGENTEIL
@@ -24,6 +29,20 @@ enum AgentTranscriptEvent: Equatable {
     /// Zeile — sie als „letztes Event" zu werten stufte arbeitende Chats über
     /// die 30-s-mtime-Heuristik fälschlich auf idle herab.
     case meta
+    case other
+}
+
+/// Was ein offener Codex-Tool-Aufruf sein kann.
+enum CodexPendingTool: Equatable {
+    /// Eine Frage an den Nutzer (`request_user_input…`, `request_permissions`):
+    /// bis zur Antwort arbeitet Codex nicht.
+    case question
+    /// Ein Befehl (`exec`, Shell); wartet je nach Freigabe-Regel auf den Nutzer.
+    case command
+    /// Ein Befehl in einem Turn mit `approval_policy: never`: Er kann nicht auf
+    /// eine Freigabe warten, läuft also, solange Codex lebt.
+    case commandUnattended
+    /// Anderes Werkzeug (MCP und Co.), kann auf eine Freigabe warten.
     case other
 }
 
@@ -51,13 +70,33 @@ enum AgentTranscriptParser {
     /// den Status sonst verwässern. Nur-Meta-Tail → `nil` („keine Meinung").
     static func lastEvent(in tailText: String, provider: AgentProvider) -> AgentTranscriptEvent? {
         let lines = tailText.split(omittingEmptySubsequences: true) { $0.isNewline }
-        for line in lines.reversed() {
+        for (index, line) in lines.enumerated().reversed() {
             if let event = parseLine(String(line), provider: provider) {
                 if case .meta = event { continue }
+                // Offener Befehl: Steht die Freigabe-Regel des Turns auf
+                // `never`, kann er nicht auf den Nutzer warten.
+                if case .toolCallPending(let timestamp, .command) = event,
+                   codexApprovalPolicyIsNever(before: index, in: lines) {
+                    return .toolCallPending(timestamp: timestamp, kind: .commandUnattended)
+                }
                 return event
             }
         }
         return nil
+    }
+
+    /// Freigabe-Regel aus dem letzten `turn_context` vor der Zeile `index`.
+    /// Fehlt er im Tail (langer Turn), gilt die vorsichtige Annahme: Der
+    /// Befehl kann auf eine Freigabe warten.
+    static func codexApprovalPolicyIsNever(before index: Int, in lines: [Substring]) -> Bool {
+        for line in lines[..<index].reversed() where line.contains("\"turn_context\"") {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["type"] as? String == "turn_context" else { continue }
+            let payload = object["payload"] as? [String: Any]
+            return payload?["approval_policy"] as? String == "never"
+        }
+        return false
     }
 
     // MARK: - Claude
@@ -162,6 +201,20 @@ enum AgentTranscriptParser {
         }
     }
 
+    /// Codex-Werkzeuge, deren Aufruf eine Frage an den Nutzer ist: Bis zur
+    /// Antwort arbeitet Codex nicht. Präfix-Vergleich, Codex 0.169 nennt die
+    /// Rückfrage `request_user_input_async`.
+    static let codexUserQuestionToolPrefixes = ["request_user_input", "request_permissions"]
+    /// Befehls-Werkzeuge: `exec` (Code-Modus), `exec_command`, `shell`.
+    static let codexCommandTools: Set<String> = ["exec", "exec_command", "shell", "local_shell"]
+
+    static func codexPendingToolKind(type: String, name: String?) -> CodexPendingTool {
+        if type == "local_shell_call" { return .command }
+        guard let name else { return .other }
+        if codexUserQuestionToolPrefixes.contains(where: name.hasPrefix) { return .question }
+        return codexCommandTools.contains(name) ? .command : .other
+    }
+
     /// Übersetzt eine Zeile des echten Codex-Rollouts. `nil` = kein Rollout-Typ
     /// (dann greifen die Alt-Formate).
     private static func parseCodexRolloutLine(type: String?, payload: [String: Any]?, timestamp: Date?) -> AgentTranscriptEvent? {
@@ -202,8 +255,13 @@ enum AgentTranscriptParser {
                     return .assistantMessageOngoing(timestamp: timestamp)
                 }
                 return .meta
-            case "reasoning", "function_call", "custom_tool_call", "local_shell_call",
-                 "web_search_call", "tool_search_call":
+            case "function_call", "custom_tool_call", "local_shell_call":
+                // Offener Tool-Aufruf: läuft oder wartet auf eine Freigabe.
+                return .toolCallPending(
+                    timestamp: timestamp,
+                    kind: codexPendingToolKind(type: payloadType ?? "", name: payload?["name"] as? String))
+            case "reasoning", "web_search_call", "tool_search_call":
+                // Suchen laufen ohne Freigabe auf dem Server bzw. sofort.
                 return .assistantMessageOngoing(timestamp: timestamp)
             case "function_call_output", "custom_tool_call_output", "tool_search_output":
                 return .toolResult(timestamp: timestamp)
@@ -267,6 +325,18 @@ enum AgentTranscriptStatusDecider {
     /// das ist bewusst das kleinere Übel gegenüber ewigem Grün-Puls.
     static let workingStallSeconds: TimeInterval = 120
 
+    /// Codex schreibt während einer Antwort oder eines Denkschritts NICHTS ins
+    /// Rollout — erst das fertige Element (gemessen 13.11.2026: 4 min 46 s
+    /// Stille bei 300 Zeilen Antwort). Die 120-s-Sicherung stufte arbeitende
+    /// Codex-Chats deshalb auf idle herab. Lebt der Codex-Prozess, gilt ein
+    /// offener Turn bis zu dieser Grenze als Arbeit; sie fängt nur noch einen
+    /// hängenden Prozess ab, der den Turn nie beendet.
+    static let codexOpenTurnStallSeconds: TimeInterval = 30 * 60
+
+    /// Toleranz beim Vergleich „Turn-Zeitstempel ≥ Prozessstart“: Codex
+    /// schreibt `task_started` sofort nach dem Start, Uhren runden.
+    static let codexProcessStartTolerance: TimeInterval = 2
+
     /// `stop_reason`-Werte einer Claude-Assistant-Message, die KEIN Turn-Ende
     /// bedeuten (Anthropic-API): der Agent hat nur einen Tool-Aufruf abgesetzt
     /// (`tool_use`) bzw. eine Server-seitige Pause (`pause_turn`) und arbeitet
@@ -286,6 +356,9 @@ enum AgentTranscriptStatusDecider {
     /// - Parameter priorTurnFinishedAt: Zeitstempel des letzten als-fertig-markierten
     ///   Turns. Wenn das aktuelle Stop-Event älter oder gleich diesem Zeitstempel
     ///   ist, melden wir `turnFinished = false` (Re-Detection wird unterdrückt).
+    /// - Parameter codexProcess: nur für Codex-Chats: lebt der Prozess des
+    ///   Chats, und seit wann? Claude und alle Aufrufer ohne Prozesswissen
+    ///   lassen `.unknown` stehen — dann gilt die alte 120-s-Sicherung.
     /// - Returns: `nil`, wenn kein parsebares Event vorliegt — „keine Meinung".
     ///   Früher galt das als `.working`; genau das ließ frisch geöffnete Chats
     ///   ohne Prompt dauerhaft als „arbeitet" pulsieren.
@@ -293,7 +366,8 @@ enum AgentTranscriptStatusDecider {
         lastEvent: AgentTranscriptEvent?,
         fileMTime: Date?,
         now: Date,
-        priorTurnFinishedAt: Date?
+        priorTurnFinishedAt: Date?,
+        codexProcess: CodexProcessLiveness = .unknown
     ) -> Decision? {
         guard let event = lastEvent else {
             return nil
@@ -307,8 +381,37 @@ enum AgentTranscriptStatusDecider {
         // gilt nicht mehr als Arbeit.
         let isStalled = secondsSinceWrite > workingStallSeconds
 
+        // Offener Turn (Prompt, Antwort, Denkschritt, Tool-Ergebnis): bei
+        // Codex mit Prozesswissen zählt der Prozess statt der Datei-Stille.
+        func openTurn(_ timestamp: Date?) -> Decision {
+            let working = codexOpenTurnIsWorking(
+                turnAt: timestamp ?? mtime, secondsSinceWrite: secondsSinceWrite,
+                isStalled: isStalled, process: codexProcess)
+            return Decision(status: working ? .working : .idle, turnFinished: false)
+        }
+
         switch event {
-        case .userMessage:
+        case .userMessage(let timestamp):
+            return openTurn(timestamp)
+
+        case .toolCallPending(let timestamp, let kind):
+            // Eine Frage an den Nutzer ist keine Arbeit (Grün heißt nur
+            // „arbeitet“). Ein Befehl unter `approval_policy: never` kann
+            // nicht warten und folgt dem Prozess wie ein offener Turn. Jedes
+            // andere offene Tool läuft gerade ODER wartet auf eine Freigabe —
+            // das Rollout zeigt keinen Unterschied. Darum dort weiter die
+            // 120-s-Sicherung und kein Prozess-Vorrang: eine Freigabe-
+            // Wartezeit wird höchstens 2 min grün, nie dauerhaft.
+            if kind == .question || codexProcess == .notRunning {
+                return Decision(status: .idle, turnFinished: false)
+            }
+            if kind == .commandUnattended {
+                return openTurn(timestamp)
+            }
+            if case .running(let since?) = codexProcess,
+               (timestamp ?? mtime) < since.addingTimeInterval(-codexProcessStartTolerance) {
+                return Decision(status: .idle, turnFinished: false) // Aufruf eines früheren Laufs
+            }
             return Decision(status: isStalled ? .idle : .working, turnFinished: false)
 
         case .assistantMessageStopped(let timestamp, let stopReason):
@@ -330,16 +433,16 @@ enum AgentTranscriptStatusDecider {
             }()
             return Decision(status: .idle, turnFinished: turnFinished)
 
-        case .assistantMessageOngoing:
+        case .assistantMessageOngoing(let timestamp):
             // Laufende Assistant-Antwort = arbeitet. Früher wurde nach 8 s
             // Stille fälschlich auf .awaitingInput eskaliert — das verwechselte
             // langes Arbeiten (langer Tool-/Reasoning-Schritt, der nichts ins
             // JSONL schreibt) mit Warten auf Permission. „Braucht Handlung"
             // kommt jetzt ausschließlich vom Notification-Hook.
-            return Decision(status: isStalled ? .idle : .working, turnFinished: false)
+            return openTurn(timestamp)
 
-        case .toolResult:
-            return Decision(status: isStalled ? .idle : .working, turnFinished: false)
+        case .toolResult(let timestamp):
+            return openTurn(timestamp)
 
         case .turnInterrupted:
             // ESC-Abbruch: Chat idlet am Prompt. Kein `turnFinished` — ein
@@ -354,6 +457,31 @@ enum AgentTranscriptStatusDecider {
                 return Decision(status: .idle, turnFinished: false)
             }
             return Decision(status: .working, turnFinished: false)
+        }
+    }
+
+    /// Pur: Arbeitet ein offener Turn noch?
+    /// - `.unknown` (Claude, Aufrufer ohne Prozesswissen): 120-s-Sicherung.
+    /// - `.notRunning`: nein — ein toter Prozess arbeitet nicht.
+    /// - `.running(since:)`: ja, wenn der Turn zu DIESEM Prozess gehört. Ein
+    ///   offener Turn von vor dem Prozessstart stammt aus einem früheren Lauf
+    ///   (Absturz mitten im Turn, danach Resume): Der neue Prozess wartet am
+    ///   Prompt. Obergrenze `codexOpenTurnStallSeconds` gegen Hänger.
+    static func codexOpenTurnIsWorking(
+        turnAt: Date,
+        secondsSinceWrite: TimeInterval,
+        isStalled: Bool,
+        process: CodexProcessLiveness
+    ) -> Bool {
+        switch process {
+        case .unknown:
+            return !isStalled
+        case .notRunning:
+            return false
+        case .running(let since):
+            guard let since else { return !isStalled }
+            guard turnAt >= since.addingTimeInterval(-codexProcessStartTolerance) else { return false }
+            return secondsSinceWrite <= codexOpenTurnStallSeconds
         }
     }
 }
