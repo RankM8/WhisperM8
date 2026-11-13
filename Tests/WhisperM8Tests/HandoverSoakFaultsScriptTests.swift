@@ -97,7 +97,7 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         let code = try code()
         XCTAssertTrue(code.contains("source \"$(cd \"$(dirname \"$0\")\" && pwd)/handover-soak.sh\""))
         let soak = try String(contentsOf: Self.root.appendingPathComponent("scripts/handover-soak.sh"), encoding: .utf8)
-        XCTAssertTrue(soak.contains(#"if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then"#), "handover-soak.sh als Bibliothek ladbar")
+        XCTAssertTrue(soak.contains(#"if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then"#), "handover-soak.sh als Bibliothek ladbar")
     }
 
     /// bash 3.2 liest bei `"$name“"` das erste Byte des Unicode-Zeichens als Teil

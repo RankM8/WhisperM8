@@ -49,6 +49,11 @@ STATE="$SOAK/state"
 # stehen (Lauf vom 13.11.). /private/tmp statt /tmp: Claude sieht den echten Pfad.
 PROJECT="/private/tmp/whisperm8-soak-$(id -u)/project"
 COUNTER_FILE="$SOAK/counter.log"
+ECHO_FILE="$SOAK/echo.log"
+# Ohne Claude-Login in der Test-Instanz (Entscheidung des Users 13.11.2026)
+# entfallen die Inhaltsprüfungen der Claude- und Codex-Chats; Prozess, PID und
+# Doppelstart-Sperre werden weiter geprüft. Den Inhalt messen die Ersatz-Chats.
+NO_LOGIN=0
 ROUNDS=5
 KEEP=0
 REPORT=""
@@ -63,7 +68,11 @@ PROMPT_STREAM='Schreibe ohne Werkzeuge 400 nummerierte Zeilen im Format „Zeile
 PROMPT_CODEX='Führe nacheinander 30 Shell-Befehle einzeln aus: `echo SOAK-CODEX-<n>; sleep 3` mit n von 1 bis 30. Schreibe am Ende genau das Wort SOAK-CODEX, direkt gefolgt von -ENDE.'
 PROMPT_QUESTION='Stell mir mit dem Werkzeug AskUserQuestion genau eine Frage: „Welche Farbe soll der Test haben?“ mit den Optionen Rot und Blau. Warte dann auf meine Antwort und tu sonst nichts.'
 PROMPT_ATTACHED='Führe nacheinander 30 Bash-Befehle einzeln aus: `echo SOAK-BG-<n>; sleep 4`. Schreibe am Ende genau das Wort SOAK-BG, direkt gefolgt von -ENDE.'
-COUNTER_COMMAND="i=0; while :; do i=\$((i+1)); echo \$i >> '$COUNTER_FILE'; echo \"zähler \$i\"; sleep 1; done"
+# Ersatz-Chats (Terminal-Tabs, brauchen `chats new --provider terminal --command`
+# aus Paket 4): ein Zähler mit Zeitstempel und ein Echo, das Eingaben nummeriert
+# zurückgibt. Die Skripte legt prepare_instance unter $SOAK ab.
+COUNTER_COMMAND="/bin/sh '$SOAK/counter.sh' '$COUNTER_FILE'"
+ECHO_COMMAND="/bin/sh '$SOAK/echo.sh' '$ECHO_FILE'"
 
 # Chats, deren Antwort am Ende vollständig sein muss: name endmarke zeilen
 ANSWERS="bash SOAK-BASH-ENDE 0
@@ -140,12 +149,15 @@ cmd_capabilities() {
 check_counter_file() {
     "$PY" -I - "$1" <<'PYEOF'
 import sys
-nums = []
+nums, stamps = [], []
 try:
     for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if line.isdigit():
-            nums.append(int(line))
+        parts = line.split()
+        if parts and parts[0].isdigit():
+            nums.append(int(parts[0]))
+            if len(parts) > 1:
+                try: stamps.append(float(parts[1]))
+                except ValueError: pass
 except FileNotFoundError:
     pass
 if not nums:
@@ -153,7 +165,37 @@ if not nums:
 for a, b in zip(nums, nums[1:]):
     if b != a + 1:
         print(f"FEHLER Sprung {a} -> {b}"); sys.exit(0)
-print(f"OK {nums[0]}..{nums[-1]}")
+if len(stamps) == len(nums) and len(stamps) > 1:
+    for a, b in zip(stamps, stamps[1:]):
+        if b < a:
+            print(f"FEHLER Zeit rückwärts {a:.3f} -> {b:.3f}"); sys.exit(0)
+    gap = max(b - a for a, b in zip(stamps, stamps[1:]))
+    print(f"OK {nums[0]}..{nums[-1]}, längste Lücke {gap:.1f} s")
+else:
+    print(f"OK {nums[0]}..{nums[-1]}")
+PYEOF
+}
+
+# Echo-Probe: Kam die Zeile im Echo-Protokoll an (mit lückenloser Nummer)?
+check_echo_file() { # datei probe
+    "$PY" -I - "$1" "$2" <<'PYEOF'
+import sys
+path, probe = sys.argv[1], sys.argv[2]
+rows = []
+try:
+    for line in open(path, encoding="utf-8", errors="replace"):
+        n, _, text = line.rstrip("\n").partition(" ")
+        if n.isdigit():
+            rows.append((int(n), text))
+except FileNotFoundError:
+    pass
+nums = [n for n, _ in rows]
+if nums != list(range(1, len(nums) + 1)):
+    print(f"FEHLER Nummern nicht lückenlos: {nums[-5:]}"); sys.exit(0)
+hits = [n for n, text in rows if text == probe]
+if len(hits) == 1: print(f"OK als Nummer {hits[0]}")
+elif hits: print(f"FEHLER {len(hits)}-mal angekommen")
+else: print("FEHLER nicht angekommen")
 PYEOF
 }
 
@@ -331,6 +373,27 @@ prepare_instance() {
     rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
+    : > "$ECHO_FILE"
+    cat > "$SOAK/counter.sh" <<'SH'
+# Ersatz-Chat: nummerierte Zeilen mit Zeitstempel, alle 0,2 s.
+i=0
+while :; do
+    i=$((i + 1))
+    t=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+    echo "$i $t" >> "$1"
+    echo "zaehler $i $t"
+    sleep 0.2
+done
+SH
+    cat > "$SOAK/echo.sh" <<'SH'
+# Ersatz-Chat: wartet auf Eingabe und gibt sie nummeriert zurück.
+i=0
+while IFS= read -r line; do
+    i=$((i + 1))
+    printf '%s %s\n' "$i" "$line" >> "$1"
+    printf 'echo %s: %s\n' "$i" "$line"
+done
+SH
     # Codex in der Test-Instanz: nie ein Update-Dialog, den ein Enter bestätigt.
     mkdir -p "$ROOT/home/.codex"
     grep -q '^check_for_update_on_startup' "$ROOT/home/.codex/config.toml" 2>/dev/null \
@@ -414,8 +477,9 @@ setup_chats() {
     new_chat question claude "$PROMPT_QUESTION" ${start[@]+"${start[@]}"}
     if has_terminal_tabs; then
         new_chat counter terminal "" --command "$COUNTER_COMMAND" ${start[@]+"${start[@]}"}
+        new_chat echo terminal "" --command "$ECHO_COMMAND" ${start[@]+"${start[@]}"}
     else
-        record setup counter FEHLT "Terminal-Tab per CLI (Paket 4: chats new --provider terminal)"
+        record setup ersatz-chats FEHLT "Zähler und Echo als Terminal-Tabs (Paket 4: chats new --provider terminal --command)"
     fi
     if has_background_chats; then
         new_chat attached claude "$PROMPT_ATTACHED" --background ${start[@]+"${start[@]}"}
@@ -503,8 +567,8 @@ check_round() { # runde vorher-datei
             record "$round" "pid:$name" FEHLER "vorher $pid_before, jetzt ${pid_now:-keiner}"
         fi
 
-        # Terminal-Tabs haben weder Transcript noch API.
-        if [[ "$(chat_provider "$name")" != terminal ]]; then
+        # Terminal-Tabs haben weder Transcript noch API; ohne Login gibt es keinen Inhalt.
+        if [[ "$(chat_provider "$name")" != terminal ]] && (( ! NO_LOGIN )); then
             path=$(transcript_path "$name")
             if [[ -z "$path" || ! -f "$path" ]]; then
                 record "$round" "api-fehler:$name" FEHLER "kein Transcript gefunden"
@@ -552,7 +616,9 @@ check_round() { # runde vorher-datei
     fi
 
     path=$(transcript_path question)
-    if [[ -z "$path" ]]; then
+    if (( NO_LOGIN )); then
+        record "$round" inhalt FEHLT "ohne Login: API-Fehler, Rückfrage und Antworten nicht prüfbar (Handtest des Users)"
+    elif [[ -z "$path" ]]; then
         record "$round" rueckfrage FEHLER "kein Transcript des Rückfrage-Chats"
     else
         record_verdict "$round" rueckfrage "$(check_question_open "$path")"
@@ -560,6 +626,7 @@ check_round() { # runde vorher-datei
 
     if has_terminal_tabs; then
         record_verdict "$round" zaehler "$(check_counter_file "$COUNTER_FILE")"
+        echo_probe "$round"
     fi
 
     check_no_inherited_sockets "$round"
@@ -573,8 +640,27 @@ check_round() { # runde vorher-datei
     fi
 }
 
+# Eingabe nach dem Neustart: eine Zeile an den Echo-Tab schicken und prüfen,
+# dass sie genau einmal und lückenlos nummeriert zurückkommt.
+echo_probe() { # runde
+    local probe="soak-probe-$1" end verdict=""
+    cli chats send "$(chat_ref echo)" -- "$probe" >/dev/null 2>&1 \
+        || { record "$1" eingabe FEHLER "chats send an den Echo-Tab gescheitert"; return 0; }
+    end=$(( $(date +%s) + 15 ))
+    while (( $(date +%s) < end )); do
+        verdict=$(check_echo_file "$ECHO_FILE" "$probe")
+        [[ "$verdict" == OK* ]] && break
+        sleep 1
+    done
+    record_verdict "$1" eingabe "$verdict"
+}
+
 final_checks() {
     local path name marker lines
+    if (( NO_LOGIN )); then
+        record ende inhalt FEHLT "ohne Login: Vollständigkeit und Fertig-Meldungen nicht prüfbar (Handtest des Users)"
+        return 0
+    fi
     while read -r name marker lines; do
         [[ -n "$name" ]] || continue
         path=$(transcript_path "$name")
@@ -608,6 +694,11 @@ wait_until_working() {
     while (( tries < 60 )); do
         path=$(transcript_path bash)
         if [[ -n "$path" ]] && grep -q 'SOAK-STEP-2' "$path" 2>/dev/null; then return 0; fi
+        if [[ -n "$path" ]] && grep -q 'Not logged in' "$path" 2>/dev/null; then
+            NO_LOGIN=1
+            record setup claude-login FEHLT "nicht angemeldet (Entscheidung des Users: kein Login in der Test-Instanz); Inhaltsprüfungen von Claude und Codex entfallen, Prozess und PID werden geprüft"
+            return 0
+        fi
         sleep 2; tries=$((tries + 1))
     done
     record setup arbeitet FEHLER "Bash-Chat zeigt nach 2 min keine Schritte"
@@ -687,7 +778,7 @@ cmd_run() {
         check_round "$round" "$STATE/before-$round.tsv"
         sleep 5
     done
-    if has_keep_chats; then
+    if has_keep_chats && (( ! NO_LOGIN )); then
         log "warte auf vollständige Antworten (höchstens 15 min)"
         wait_for_answers
     else
@@ -717,6 +808,17 @@ cmd_self_test() {
     printf '1\n2\n4\n' > "$dir/c2"; expect_exact "FEHLER Sprung 2 -> 4" "$(check_counter_file "$dir/c2")" "Zähler mit Lücke"
     printf '7\n8\n1\n2\n' > "$dir/c3"; expect_exact "FEHLER Sprung 8 -> 1" "$(check_counter_file "$dir/c3")" "Zähler neu gestartet"
     expect_exact "FEHLER leer" "$(check_counter_file "$dir/fehlt")" "Zähler-Datei fehlt"
+    printf '1 100.000\n2 100.200\n3 102.700\n' > "$dir/c4"
+    expect_exact "OK 1..3, längste Lücke 2.5 s" "$(check_counter_file "$dir/c4")" "Zähler mit Zeitstempel und Lücke"
+    printf '1 100.000\n2 99.000\n' > "$dir/c5"
+    expect "FEHLER Zeit rückwärts" "$(check_counter_file "$dir/c5")" "Zeit läuft rückwärts"
+    printf '1 hallo\n2 soak-probe-1\n' > "$dir/e1"
+    expect_exact "OK als Nummer 2" "$(check_echo_file "$dir/e1" soak-probe-1)" "Echo-Probe angekommen"
+    expect_exact "FEHLER nicht angekommen" "$(check_echo_file "$dir/e1" soak-probe-2)" "Echo-Probe fehlt"
+    printf '1 a\n3 soak-probe-1\n' > "$dir/e2"
+    expect "FEHLER Nummern" "$(check_echo_file "$dir/e2" soak-probe-1)" "Echo mit Lücke"
+    printf '1 soak-probe-1\n2 soak-probe-1\n' > "$dir/e3"
+    expect_exact "FEHLER 2-mal angekommen" "$(check_echo_file "$dir/e3" soak-probe-1)" "Echo doppelt"
 
     mkdir -p "$dir/sessions"
     echo "{\"pid\": $$, \"sessionId\": \"s1\"}" > "$dir/sessions/$$.json"
@@ -800,6 +902,6 @@ main() {
 }
 
 # Als Bibliothek ladbar (scripts/handover-soak-faults.sh), dann ohne main.
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
     main "$@"
 fi
