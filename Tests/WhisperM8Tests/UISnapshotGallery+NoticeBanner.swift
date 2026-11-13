@@ -8,7 +8,7 @@ extension UISnapshotGallery {
     static let noticeBannerPaneWidth: CGFloat = 320
 
     static let noticeBannerCodexError = "soak codex lässt sich nicht fortsetzen: Ein Codex-Prozess außerhalb von WhisperM8 (PID 48211), vermutlich in einem Terminalfenster, wurde mit diesem Gespräch gestartet und läuft noch. Schließe ihn dort oder nutze „Prozess beenden“. Ein zweiter Codex-Prozess auf demselben Gespräch würde es doppelt führen."
-    static let noticeBannerFallback = "Nach dem Neustart nicht fortgesetzt: Dieser Chat hat noch keine gebundene Sitzungs-ID, obwohl er schon Turns hatte. Sein Verlauf bleibt erhalten; starte ihn wieder, sobald die Sitzung gebunden ist, oder beginne einen neuen Chat."
+    static let noticeBannerFallback = "Nach dem Neustart nicht fortgesetzt: Die App konnte diesem Chat seinen bisherigen Verlauf noch nicht sicher zuordnen. Der Verlauf ist nicht verloren. Starte den Chat später noch einmal oder beginne einen neuen."
 
     static let noticeBannerStates: [(name: String, error: String?, notice: String?, phase: AgentSessionNoticeBanner.CodexEndPhase?)] = [
         ("nur-fehler", noticeBannerCodexError, nil, nil),

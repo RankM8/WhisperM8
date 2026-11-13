@@ -11011,12 +11011,12 @@
         }
       }
     },
-    "Not continued after the restart: this chat has no bound session ID yet, although it already had turns. Its history is kept; start it again once the session is bound, or start a new chat.": {
+    "Not continued after the restart: the app could not yet safely match this chat to its earlier conversation. Nothing is lost. Start the chat again later, or start a new one.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nach dem Neustart nicht fortgesetzt: Dieser Chat hat noch keine gebundene Sitzungs-ID, obwohl er schon Turns hatte. Sein Verlauf bleibt erhalten; starte ihn wieder, sobald die Sitzung gebunden ist, oder beginne einen neuen Chat."
+            "value": "Nach dem Neustart nicht fortgesetzt: Die App konnte diesem Chat seinen bisherigen Verlauf noch nicht sicher zuordnen. Der Verlauf ist nicht verloren. Starte den Chat später noch einmal oder beginne einen neuen."
           }
         }
       }
@@ -14444,16 +14444,6 @@
         }
       }
     },
-    "Restarted as a new session after the restart: this chat had no session to continue yet. A prompt it was started with is not sent again.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nach dem Neustart als neue Sitzung gestartet: Dieser Chat hatte noch keine Sitzung, die sich fortsetzen ließ. Ein Prompt, mit dem er gestartet wurde, wird nicht noch einmal gesendet."
-          }
-        }
-      }
-    },
     "Restore": {
       "localizations": {
         "de": {
@@ -16510,6 +16500,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gestartet"
+          }
+        }
+      }
+    },
+    "Started fresh after the restart: this chat had no conversation yet that could be continued. If it was opened with a first message, that message is not sent again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach dem Neustart neu begonnen: Dieser Chat hatte noch kein Gespräch, das sich fortsetzen ließ. Wurde er mit einer ersten Nachricht geöffnet, wird sie nicht noch einmal gesendet."
           }
         }
       }
