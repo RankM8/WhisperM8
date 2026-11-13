@@ -44,10 +44,11 @@ Ohne Option A übernimmt die App über zwei Builds hinweg nie (Schlüsselbund bi
 
 | Punkt | Stand |
 |---|---|
-| 1 Geheimnis-Weg | gebaut als Option A, wartet auf Entscheidung des Users |
+| 1 Geheimnis-Weg | Option A+ gewählt (13.11.), Datei gemergt in 074af842; Apple-Konto später |
 | 2–5 kein Start nach `COMMIT`, Fortsetzen nach Abgabe-Fehler, Aufbewahrer liest ab `COMMIT`, `app handover` gegen Chats | erledigt |
 | 6 Bindungs-Befund a–f | erledigt (a, b, e, f1 Gus; c, d Ole); Bereinigung der Altlasten im echten Workspace wartet auf Freigabe des Users |
 | 7 Prüfungen gegen die Wirklichkeit | Größe, Fehler-Szenarien, zehn Chats (134 ms Abgabe, 179 ms Übernahme), beide Signaturarten und Bild im Fenster erledigt; offen: fünfmal `make dev`, erster echter Lauf (Handtest) |
 | 9 „arbeitet seit“, 10 `make dev` ohne Steuer-Socket | erledigt |
 | 11 Rückfall für Chats ohne Sitzungs-ID | erledigt, mit Verlaufsbeleg und rotiertem Journal |
 | 8 Labs-Seite einhängen | als Letztes, nach dem ersten echten Lauf |
+| 12 Übergabe nur mit Router-Dienst | erledigt auf `fix/handover-review-teil1` |
