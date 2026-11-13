@@ -490,5 +490,7 @@ final class HandoverTestKnobsTests: XCTestCase {
         XCTAssertEqual(take?["runID"] as? String, "r9")
         XCTAssertEqual(take?["adopted"] as? [String], [adopted.uuidString])
         XCTAssertEqual(AgentControlRequestHandler.restartDebugState(nil)["previousRun"] as? String, "unknown")
+        // Jarvis: Aus wirkt sofort, An erst nach einem Neustart; der Router-Modus steht dabei.
+        XCTAssertTrue(["inApp", "service"].contains(state["routerMode"] as? String ?? ""))
     }
 }

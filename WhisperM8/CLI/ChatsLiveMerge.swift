@@ -8,6 +8,10 @@ struct ChatsLiveStatus {
     var isAttachedPTY: Bool
     var canSend: Bool
     var canInterrupt: Bool
+    /// Oberster Prozess im PTY (Terminal, Codex, Claude), solange er läuft.
+    var pid: Int32? = nil
+    /// Der Prozess lief schon einmal (auch wenn er inzwischen beendet ist).
+    var hasStarted = false
 
     /// Kein PTY, kein bekannter Status — so stand jede ruhende Session in der
     /// vollen Liste.
@@ -55,7 +59,9 @@ enum ChatsLiveMerge {
                 runtimeStatus: statusRaw.flatMap(AgentSessionRuntimeStatus.init(rawValue:)),
                 isAttachedPTY: session["isAttachedPTY"]?.boolValue ?? false,
                 canSend: session["canSend"]?.boolValue ?? false,
-                canInterrupt: session["canInterrupt"]?.boolValue ?? false
+                canInterrupt: session["canInterrupt"]?.boolValue ?? false,
+                pid: session["pid"]?.intValue.map { Int32($0) },
+                hasStarted: session["hasStarted"]?.boolValue ?? false
             )
         }
         return ChatsLiveSnapshot(

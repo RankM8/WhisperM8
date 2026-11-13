@@ -134,13 +134,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 let controller = registry.controller(for: session.id)
                 let isRunning = controller?.isRunning ?? false
                 let runtime = statusStore.status(for: session.id)
-                if onlyActive, !isRunning, runtime == nil { return nil }
+                if onlyActive, !isRunning, runtime == nil, controller?.hasStarted != true { return nil }
                 return [
                     "sessionID": session.id.uuidString,
                     "runtimeStatus": runtime?.rawValue ?? "unknown",
-                    "isAttachedPTY": isRunning,
+                    "isAttachedPTY": isRunning, "hasStarted": controller?.hasStarted == true,
                     "canSend": isRunning,
-                    "canInterrupt": isRunning && runtime == .working,
+                    "canInterrupt": isRunning && runtime == .working, "pid": Self.livePID(isRunning ? controller?.processID : nil),
                 ]
             }
         }

@@ -45,6 +45,25 @@ whisperm8 chats new --project whisperm8 --title "Analyse" --account main      # 
 whisperm8 chats new --project whisperm8 --title "Analyse" --account PowerUser # ausdrücklich Zusatzkonto
 ```
 
+**Terminal-Tab:** `whisperm8 chats new --project <ordner> --provider terminal [--title T] [--command "…"]`
+legt einen Terminal-Tab an wie das Menü. `--command` ist für Tests gedacht und braucht den Debug-Steuerkanal
+(`debugControlEnabled`): Wer `whisperm8 chats` pauschal erlaubt, gäbe sonst jedem Agenten eine Shell an den
+Rechte-Abfragen von Claude Code vorbei. Ohne Schalter bricht der Befehl mit Exit 1 und einer Meldung ab und legt
+nichts an; ein Terminal-Tab ohne Befehl geht immer. Ein Befehls-Tab, der in einem früheren App-Lauf angelegt und nie
+angezeigt wurde, startet nicht mehr von selbst: Er zeigt „Befehl noch nicht gestartet“ samt Befehl und den Knopf
+„Befehl ausführen“. Mit `--command` läuft statt der Login-Shell `/bin/sh -c "<befehl>"`
+im Projektordner (Umgebung wie in Terminal-Tabs, PATH aus der Login-Shell, aber ohne `.zshrc`, Aliase und
+Shell-Funktionen). Endet der Befehl, endet sein Prozess; der Tab bleibt mit „Befehl beendet“ stehen, und sein Knopf
+„Befehl erneut ausführen“ startet ihn noch einmal, von selbst läuft er nie erneut. Läuft der Befehl, fragt das
+Schließen des Tabs immer nach. `--prompt` und `--account` gelten hier nicht. Der Befehl steht im Klartext in der
+Workspace-Datei (`AgentSessions.json`), also keine Geheimnisse hineinschreiben.
+Gestartet wird wie bei jedem Chat, sobald der Tab angezeigt wird. Die CLI wartet kurz und sagt auf stderr, ob der
+Tab läuft (`Terminal-Tab läuft (PID …)`), schon fertig ist (kurze Befehle) oder noch auf seine Anzeige wartet
+(`whisperm8 chats open <ref>`); das
+JSON auf stdout hat dieselbe Form wie bei Claude und Codex (`result.session.id`, dazu `kind: terminal`). Der Befehl
+steht nicht im Audit. `chats show --json` nennt für jeden laufenden Tab (Terminal, Codex, Claude) die PID des
+obersten Prozesses im PTY unter `runtime.pid`. `chats send` erreicht einen laufenden Terminal-Tab ohne Marker-Zeile.
+
 Die Erfolgsmeldung nennt das Konto und woher es kommt
 (`Konto: RankM8 (aktiv in den Einstellungen)` bzw. `(--account)`), im
 `--json`-Modus stehen `session.account` (immer der Name, auch `main`) und

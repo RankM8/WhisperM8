@@ -4501,12 +4501,32 @@
         }
       }
     },
+    "Command ended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehl beendet"
+          }
+        }
+      }
+    },
     "Command line access and installable agent skills.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Zugriff über die Kommandozeile und installierbare Agent-Skills."
+          }
+        }
+      }
+    },
+    "Command not started yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehl noch nicht gestartet"
           }
         }
       }
@@ -14610,6 +14630,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Leitet GPT-Subagent-Anfragen: standardmäßig der native `gpt`-Agent-Typ (WhisperM8-GPT-Backend), dazu der vollständige Codex-CLI-Weg mit Befehlen, Flags, Exit-Codes, Bildgenerierung und Workflows."
+          }
+        }
+      }
+    },
+    "Run command": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehl ausführen"
+          }
+        }
+      }
+    },
+    "Run command again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehl erneut ausführen"
           }
         }
       }

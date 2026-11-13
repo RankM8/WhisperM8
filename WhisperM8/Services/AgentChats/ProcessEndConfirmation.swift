@@ -8,8 +8,12 @@ import Foundation
 enum ProcessEndConfirmation {
     /// Shell-Terminal: nur mit laufendem Kindprozess (Dev-Server, Build, …).
     /// Eine Shell am leeren Prompt verliert nichts.
-    static func terminalNeedsConfirmation(isRunning: Bool, shellHasChildProcess: Bool) -> Bool {
-        isRunning && shellHasChildProcess
+    /// Ein Tab mit festem Befehl (`chats new --provider terminal --command`)
+    /// fragt immer nach, solange er läuft: `/bin/sh -c` ersetzt sich oft
+    /// durch den Befehl, der dann ohne Kindprozess oberster Prozess ist.
+    static func terminalNeedsConfirmation(isRunning: Bool, shellHasChildProcess: Bool,
+                                          runsFixedCommand: Bool = false) -> Bool {
+        isRunning && (shellHasChildProcess || runsFixedCommand)
     }
 
     /// Restart bricht einen Turn ab und verwirft einen Entwurf im Composer:

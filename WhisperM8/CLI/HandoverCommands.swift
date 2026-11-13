@@ -292,6 +292,12 @@ enum AppCLICommand {
             return HandoverExit.appUnreachable
         }
         guard response.ok, let result = response.result else {
+            // Ein Build ohne Übergabe kennt die Methode nicht: kein Fehler,
+            // sondern ein Neustart wie bisher (Exit 2), mit ruhiger Zeile.
+            if isUnknownMethod(response) {
+                CLIIO.err(oldAppLine)
+                return HandoverExit.classic
+            }
             CLIIO.err("app handover: \(response.error?.message ?? "Fehler ohne Text")")
             return HandoverExit.failed
         }
@@ -331,6 +337,12 @@ enum AppCLICommand {
             } while wait.now() < settled
             throw last
         }
+    }
+
+    static let oldAppLine = "Keine Übergabe: Die laufende App kennt das noch nicht; Neustart wie bisher."
+
+    static func isUnknownMethod(_ response: ChatsControlResponse) -> Bool {
+        response.error?.message.hasPrefix("Unbekannte Methode") == true
     }
 
     /// Zeile für die Ausgabe von `make dev` bei klassischem Neustart.

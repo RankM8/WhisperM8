@@ -61,7 +61,9 @@ struct AgentChatLaunchService {
         projectRef: String,
         title: String?,
         prompt: String?,
-        claudeProfile: ClaudeProfileSelection
+        claudeProfile: ClaudeProfileSelection,
+        terminalCommand: String? = nil,
+        asTerminal: Bool = false
     ) -> Result<ControlLaunchResult, ControlLaunchError> {
         // Projekt auflösen: existierender Pfad → direkt; sonst als
         // Name/Pfadfragment gegen den Workspace matchen (eindeutig).
@@ -85,11 +87,16 @@ struct AgentChatLaunchService {
         }
 
         let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let effectiveTitle = (trimmedTitle?.isEmpty == false ? trimmedTitle! : "Neue Session")
+        let effectiveTitle = (trimmedTitle?.isEmpty == false ? trimmedTitle! : (asTerminal ? "Terminal" : "Neue Session"))
         do {
             let project = try store.upsertProject(path: projectPath)
             let session: AgentChatSession
             switch provider {
+            case _ where asTerminal:
+                // Terminal-Tab: `provider` ist nur Schema-Platzhalter (wie im Menü).
+                session = try store.createSession(
+                    provider: .claude, projectPath: project.path, title: effectiveTitle,
+                    shouldLaunchOnOpen: true, kind: .terminal, terminalCommand: terminalCommand)
             case .codex:
                 session = try store.createSession(
                     provider: .codex, projectPath: project.path, title: effectiveTitle,

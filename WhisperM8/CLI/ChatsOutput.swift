@@ -88,6 +88,7 @@ enum ChatsOutput {
         ]
         if let since = runtime.since { runtimeDict["since"] = iso(since) }
         if let revision = runtime.revision { runtimeDict["revision"] = revision }
+        if let pid = liveStatus?.pid { runtimeDict["pid"] = pid }
 
         var transcriptDict: [String: Any] = ["availability": runtime.availability.rawValue]
         if let path = runtime.transcriptPath { transcriptDict["path"] = path }

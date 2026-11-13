@@ -12,7 +12,7 @@ import ScreenCaptureKit
 extension AgentControlRequestHandler {
     static let debugMethods: Set<String> = [
         "debug.state", "debug.open", "debug.snapshot", "debug.dictate", "debug.job", "debug.status",
-        "debug.context", "debug.record", "debug.controller", "debug.pill",
+        "debug.context", "debug.record", "debug.controller", "debug.pill", "debug.terminal",
     ]
 
     func debugRequest(_ request: ChatsControlRequest) async -> ChatsControlResponse {
@@ -28,6 +28,7 @@ extension AgentControlRequestHandler {
             case "debug.record": response = await debugRecord(request)
             case "debug.controller": response = await debugController(request)
             case "debug.pill": response = await debugPill(request)
+            case "debug.terminal": response = await debugTerminal(request)
             default: response = debugJob(request)
             }
         } else {
@@ -151,7 +152,10 @@ extension AgentControlRequestHandler {
 
     static func restartDebugState(_ summary: HandoverTakeService.Summary?) -> [String: Any] {
         var state: [String: Any] = [
+            // Aus wirkt beim nächsten make dev (Notbremse), An erst nach einem
+            // Neustart: Der Router-Modus steht einmal je App-Lauf fest.
             "featureEnabled": AppPreferences.shared.isRestartKeepsChatsEnabled,
+            "routerMode": ClaudeGPTRouterMode.current == .service ? "service" : "inApp",
             "previousRun": summary?.previous.kind ?? "unknown",
             "previousChats": summary?.previous.runningSessionIDs.count ?? 0,
         ]

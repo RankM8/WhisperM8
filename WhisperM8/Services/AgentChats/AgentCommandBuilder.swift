@@ -524,6 +524,9 @@ struct AgentCommandBuilder {
         // Terminals sind kein Agent-Launch: der `provider` ist nur ein
         // Schema-Platzhalter, das Kommando ist immer die Login-Shell.
         if session.isTerminal {
+            if let command = session.terminalCommand, !command.isEmpty {
+                return Self.terminalRunCommand(command, project: project)
+            }
             return terminalCommand(project: project)
         }
 
@@ -533,6 +536,19 @@ struct AgentCommandBuilder {
         case .claude:
             return try claudeCommand(for: session, project: project)
         }
+    }
+
+    /// Terminal-Tab mit festem Befehl (`chats new --provider terminal
+    /// --command`): `/bin/sh -c` im Projektordner, keine Login-Shell. Endet der
+    /// Befehl, endet sein Prozess; der Tab bleibt stehen, erneut läuft der
+    /// Befehl nur über den Knopf „Befehl erneut ausführen“.
+    static func terminalRunCommand(_ command: String, project: AgentProject) -> AgentLaunchCommand {
+        AgentLaunchCommand(
+            executablePath: "/bin/sh",
+            arguments: ["-c", command],
+            workingDirectory: project.path,
+            keyboardProfile: .plainShell
+        )
     }
 
     /// Baut den Launch für einen normalen Terminal-Tab: die Login-Shell des
