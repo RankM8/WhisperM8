@@ -162,7 +162,13 @@ extension UISnapshotGallery {
                 .environment(\.pillSolidBlackOverride, true))
             }
         }
-        return black + [
+        // Alle Insel-Zustände als Pille (ohne Notch), mit Option an.
+        let islands = (islandFixtures() + islandPackageFixtures()).filter { $0.name.contains("pille") }.map { fixture in
+            Fixture(name: "vereint-schwarz-" + fixture.name, size: fixture.size, storage: fixture.storage) {
+                AnyView(fixture.view().environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        return black + islands + [
             island(.writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))),
                    "schreiben", height: 230),
             // Liste der Ausgabemodi am Controller, unter der Diktat-Pille aufgeklappt.

@@ -50,7 +50,7 @@ weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
 **Tiefschwarz statt Glas** (Einstellung „Solid black background“,
 `pillSolidBlackEnabled`, Standard aus): Die Pille ist dann auch ohne Notch
 deckend schwarz wie an der Notch, in jedem Zustand (Ruhe, Hinweis, Liste,
-Diktat, Insel). Haarstrich und Schatten bleiben, damit die Pille auf einem
+Diktat, Insel samt Limits-Karte, Rauten und Reitern). Haarstrich und Schatten bleiben, damit die Pille auf einem
 dunklen Schreibtisch ihren Umriss behält. Entschieden wird an einer Stelle
 (`PillSurface` in `PillGlass.swift`); den Wert hält `PillAppearance`, das bei
 Änderungen der Preferences neu liest, deshalb wirkt der Schalter sofort auf
@@ -538,8 +538,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   `ONLY=uebergang` zeigt den Übergang: Ruhe, Mitte, Diktat ohne Notch und an
   der Notch (aus dem Band und aus der Zeile mit Zählern).
   `ONLY=vereint-schwarz` zeigt dieselben Zustände ohne Notch in Tiefschwarz,
-  dazu die Insel, die Liste der Ausgabemodi und den Schalter in den
-  Einstellungen.
+  dazu alle Insel-Fixtures als Pille (Limits-Karte, Rauten, Reiter, Listen),
+  die Liste der Ausgabemodi und den Schalter in den Einstellungen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
