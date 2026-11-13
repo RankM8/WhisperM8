@@ -872,6 +872,8 @@ enum ChatsCLIHelp {
                            [--limit N] [--json]
                            Tabelle/JSON zeigen höchstens 50 (--limit 0 = alle);
                            die Kürzung meldet eine Zeile auf stderr.
+                           JSON: „account“ = Claude-Konto jedes Claude-Chats
+                           („main“ fürs Hauptkonto), null bei Codex/Terminal.
       whisperm8 chats overview [--json]        Alias: list --sort attention --format board
       whisperm8 chats show <ref> [--all] [--json]
       whisperm8 chats show <ref> --recap [--json]
@@ -965,6 +967,12 @@ enum ChatsCLIHelp {
       whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
       whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt "…"]
                           [--account <profil>] [--json]
+                               Claude-Konto: ohne --account das in WhisperM8 unter
+                               Einstellungen → Konten aktive Konto. Abgemeldet,
+                               abgelaufen oder verschwunden → Abbruch (Exit 3),
+                               nie still main. --account main = Hauptkonto;
+                               Groß-/Kleinschreibung egal. Die Meldung nennt das
+                               Konto (--json: session.account/accountSource).
       whisperm8 chats move-account <ref> [<ref>…] --to <profil> [--dry-run] [--json]
                                Bestehende Claude-Chats in ein anderes Claude-Konto
                                umziehen (wie „Zu Account verschieben" in der App:
@@ -972,14 +980,19 @@ enum ChatsCLIHelp {
                                „Letzten Kontowechsel rückgängig machen").
                                --dry-run zeigt nur die Vorschau. Übersprungen mit
                                Grund: laufend, Hintergrund-Agent, kein Claude-Chat,
-                               schon im Zielkonto, Kollision, Ziel nicht eingeloggt.
-                               Exit 0 = alle im Zielkonto, 4 = nicht alle.
+                               schon im Zielkonto, Kollision, Ziel nicht eingeloggt
+                               oder Login abgelaufen. --to main zieht zurück ins
+                               Hauptkonto. Exit 0 = alle im Zielkonto, 4 = nicht alle.
       whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
                                Laufende Chats zusätzlich anhalten, nach dem
                                Prozessende umziehen und zum Neustart vormerken
                                (startet beim Anzeigen des Tabs). Arbeitende Chats
                                und Chats mit vermutlich ungesendetem Entwurf nur
                                mit --force; die eigene Session nie.
+                               Arbeitende, wartende (Rückfrage) und Chats mit Entwurf
+                               werden vorgemerkt und wechseln nach dem Turn
+                               (outcome scheduled) — nicht, wenn das Zielkonto den
+                               Ordner nie freigegeben hat (stopBlocked trustMissing).
       whisperm8 chats rename <ref> "<titel>" | --reset [--json]
       whisperm8 chats group <ref> "<gruppe>" | --clear [--json]
       whisperm8 chats archive <ref> [--force] [--json]

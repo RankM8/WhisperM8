@@ -1,12 +1,21 @@
 ---
 status: aktiv
-updated: 2026-11-10
-description: Claude-Konten in Agent Chats — Login-Frist und Erneuerung, Hauptkonto tauschen, gemeinsames Memory, Kontowechsel ohne Stoppen, MCP-Angleich.
+updated: 2026-11-13
+description: Claude-Konten in Agent Chats — Konto neuer Chats, Login-Frist und Erneuerung, Hauptkonto tauschen, gemeinsames Memory, Kontowechsel ohne Stoppen, MCP-Angleich.
 ---
 
 # Claude-Konten
 
 Mehrere Claude-Konten über eigene `CLAUDE_CONFIG_DIR`-Profile; Gegenstück für ChatGPT: [gpt-konten.md](gpt-konten.md).
+
+## Welches Konto ein neuer Chat bekommt
+
+Neue Claude-Chats starten im Konto, das unter Einstellungen → Konten aktiv ist (Datei `~/.claude-profiles/.active`,
+fehlt sie, ist es `main`). Das gilt für die Oberfläche wie für `whisperm8 chats new`; dort wählt `--account <profil>`
+ein anderes angemeldetes Konto, auch `main`. Die CLI prüft das Konto vor dem Anlegen und bricht ab, wenn es fehlt,
+abgemeldet ist oder sein Login abgelaufen ist — kein stiller Rückfall auf `main`. Ausnahmen: Background-Agenten laufen
+immer in `main`, ein Fork erbt das Konto der Quelle, ein Resume bleibt im Konto des Chats. Umziehen bestehender Chats
+und das Ablesen des Kontos (`list`/`show --json`, Feld `account`): [agent-chats-cli.md](../agent-chats-cli.md).
 
 ## Login-Frist und Erneuerung
 
