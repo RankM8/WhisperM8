@@ -18,6 +18,9 @@
 #   secret-wrong     neue App hat ein falsches Geheimnis
 #   binary-swap      Programm unter dem laufenden Aufbewahrer ersetzt (wie make dev)
 #   double-restart   zweiter Neustart, während die Übernahme des ersten noch läuft
+#   router-switch    Schalter erst im laufenden Lauf eingeschaltet (Router noch in
+#                    der App): klassischer Neustart mit Hinweis, Fortsetzen
+#   router-service   der Neustart danach: Router als Dienst, Übernahme
 #
 # Prüfung jeweils:
 #   - nie zwei Prozesse auf einer Sitzung: Ein Wächter fragt etwa jede Sekunde
@@ -31,8 +34,10 @@
 #     keine fremde Datei im Ordner des Aufbewahrers, kein Claude-Prozess ohne Chat;
 #   - kein Schlüsselbund-Dialog (SecurityAgent) während des Szenarios, Ordner
 #     des Aufbewahrers 0700, Dateien darin 0600;
-#   - am Ende: Das Geheimnis (jede unbekannte kleine Datei im Ordner des
-#     Aufbewahrers) steht in keinem Log.
+#   - das Einmal-Geheimnis (`take-secret`, Option A) liegt nach dem Szenario
+#     nicht mehr da;
+#   - am Ende: Das Geheimnis (`take-secret` und jede unbekannte kleine Datei im
+#     Ordner des Aufbewahrers) steht in keinem Log.
 #
 # Signatur (Vics Auflage 4): `--signing dev` signiert das Test-Bundle mit
 # „WhisperM8 Local Dev“ wie `make dev`, `--signing adhoc` ad hoc wie die
@@ -56,14 +61,17 @@ COMEBACK_TIMEOUT=120
 SETTLE_SECONDS=5
 SAMPLER_PID=""
 ONLY=""
-SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart"
+SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart router-switch router-service"
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
 SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
+# Einmal-Geheimnis als Datei (Option A, HandoverFileSecretStore): liegt nur
+# zwischen Abgabe und Übernahme, 0600, und muss danach weg sein.
+SECRET_FILE="take-secret"
 # Dateien aus Paket 2 (Aufbewahrer) und Paket 4 (last-take.json, take.lock: flock-Datei
-# der Übernahme, bleibt absichtlich liegen); alles andere gilt als
-# Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
-KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json take.lock"
+# der Übernahme, bleibt absichtlich liegen; take-secret, eigene Prüfung); alles
+# andere gilt als Geheimnis-Kandidat und muss danach weg sein.
+KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json take.lock $SECRET_FILE"
 
 # MARK: - Fähigkeiten (Paket 4)
 
@@ -172,16 +180,18 @@ signing_kind_from() { # codesign-ausgabe
 }
 
 # Rechte im Ordner des Aufbewahrers (Vics Auflage 2: Geheimnis als Datei 0600
-# im 0700-Ordner): Ordner 0700, jede Datei außer denen aus Paket 2 0600.
+# im 0700-Ordner): Ordner 0700, take-secret und jede unbekannte Datei 0600.
 # Ausgabe: je Abweichung eine Zeile, sonst nichts.
 handover_dir_issues() { # ordner
     [[ -d "$1" ]] || return 0
     local mode base
     mode=$(stat -f %Lp "$1" 2>/dev/null || echo '?')
     [[ "$mode" == 700 ]] || echo "Ordner $mode"
-    for base in $(unknown_handover_files "$1"); do
+    for base in $(secret_bearing_files "$1"); do
+        # Verschwindet die Datei zwischen Auflisten und stat (take-secret wird
+        # nach dem Lesen gelöscht), ist das keine Abweichung.
         [[ -f "$1/$base" ]] || continue
-        mode=$(stat -f %Lp "$1/$base" 2>/dev/null || echo '?')
+        mode=$(stat -f %Lp "$1/$base" 2>/dev/null) || continue
         [[ "$mode" == 600 ]] || echo "Datei $mode $base"
     done
 }
@@ -199,15 +209,24 @@ unknown_handover_files() { # ordner
     done
 }
 
-# Kleine unbekannte Dateien als Geheimnis-Kandidaten sichern (Name, Base64).
+# Dateien, die das Geheimnis tragen können: take-secret und jede unbekannte.
+secret_bearing_files() { # ordner
+    [[ -f "$1/$SECRET_FILE" ]] && echo "$SECRET_FILE"
+    unknown_handover_files "$1"
+}
+
+# take-secret und kleine unbekannte Dateien als Geheimnis-Kandidaten sichern
+# (Name, Base64). `<ziel>.seen` merkt, dass take-secret gerade dalag.
 capture_secret_candidates() { # ordner ziel
     local base size line
-    for base in $(unknown_handover_files "$1"); do
+    [[ -f "$1/$SECRET_FILE" ]] && : > "$2.seen"
+    for base in $(secret_bearing_files "$1"); do
         [[ -f "$1/$base" ]] || continue
         size=$(stat -f %z "$1/$base" 2>/dev/null || echo 99999)
         (( size > 0 && size <= 4096 )) || continue
         line=$(printf '%s\t%s' "$base" "$(base64 < "$1/$base" 2>/dev/null | tr -d '\n')")
-        grep -qxF -- "$line" "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
+        # Über stdin, nicht als Argument: sonst stünde das Geheimnis in ps.
+        printf '%s\n' "$line" | grep -qxF -f /dev/stdin "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
     done
 }
 
@@ -347,6 +366,7 @@ sample_once() { # datei
 start_sampler() { # datei
     : > "$1"
     : > "$1.modes"
+    rm -f "$STATE/secret-candidates.seen"
     keychain_baseline "$1"
     ( while :; do sample_once "$1"; sleep 0.3; done ) &
     SAMPLER_PID=$!
@@ -502,17 +522,22 @@ check_no_leftovers() { # szenario verletzungen-datei
     else
         record "$scenario" leichen:dateien OK ""
     fi
+    if [[ -e "$HANDOVER_DIR/$SECRET_FILE" ]]; then
+        record "$scenario" geheimnis-datei FEHLER "$SECRET_FILE liegt nach dem Szenario noch da"
+    elif [[ -f "$STATE/secret-candidates.seen" ]]; then
+        record "$scenario" geheimnis-datei OK "lag während der Übergabe da, danach weg"
+    else
+        record "$scenario" geheimnis-datei OK "weg (vom Wächter nicht gesehen, er fragt alle 0,3 s)"
+    fi
     if [[ -s "$violations.keychain" ]]; then
         record "$scenario" schluesselbund-dialog FEHLER "SecurityAgent lief: $(head -2 "$violations.keychain" | tr '\n' ';') (kann auch eine fremde App sein, Bildschirm prüfen)"
     else
         record "$scenario" schluesselbund-dialog OK ""
     fi
-    if [[ -s "$violations.modes" && ! -s "$STATE/secret-candidates" ]]; then
-        record "$scenario" rechte-aufbewahrer FEHLT "noch kein Geheimnis als Datei (Paket 4), Befund bis dahin: $(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -2 | tr '\n' ';')"
-    elif [[ -s "$violations.modes" ]]; then
+    if [[ -s "$violations.modes" ]]; then
         record "$scenario" rechte-aufbewahrer FEHLER "$(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -3 | tr '\n' ';')"
     else
-        record "$scenario" rechte-aufbewahrer OK "Ordner 0700, Geheimnis-Kandidaten 0600 (oder kein Ordner)"
+        record "$scenario" rechte-aufbewahrer OK "Ordner 0700, $SECRET_FILE und Kandidaten 0600 (oder kein Ordner)"
     fi
     registry=$(registry_pids "$ROOT/home/.claude/sessions" || true)
     stray=$(orphans "$registry" "$(chat_pids_now)")
@@ -735,6 +760,110 @@ fault_double_restart() {
     return 0
 }
 
+ROUTER_SWITCH_OFF=0
+switch_on() {
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    ROUTER_SWITCH_OFF=0
+}
+
+# Legt den Router-Modus dieses App-Laufs fest, wie es ein Router-Start täte:
+# `ClaudeGPTRouterMode.current` ist ein `static let` und wird erst beim ersten
+# Zugriff ausgewertet. Die Test-Instanz hat kein GPT-Backend und startet nie
+# einen Router; ohne diese Anfrage fiele die Entscheidung erst bei der Übergabe
+# (Schalter dann schon an). Die Anfrage ist harmlos: Ohne Router-Dienst lehnt
+# die App sie ab und startet nichts. Ausgabe: Antwortzeile der App.
+pin_router_mode() {
+    local sock
+    # Direkt aus der Datei: Der Pfad kann Leerzeichen enthalten.
+    sock=$(head -1 "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null || true)
+    "$PY" -I - "$sock" <<'PYEOF'
+import json, socket, sys, uuid
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(10)
+try:
+    s.connect(sys.argv[1])
+    req = {"protocolVersion": 1, "requestID": str(uuid.uuid4()), "actor": {},
+           "method": "gptRouter.startProfile", "params": {"profile": "soak-probe"}}
+    s.sendall((json.dumps(req) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    print(buf.decode(errors="replace").strip())
+except OSError as e:
+    print("keine Antwort: %s" % e)
+PYEOF
+}
+
+# Schalter erst in diesem App-Lauf eingeschaltet (Vic, Gesamt-Review Teil 2):
+# Der Router-Modus steht je Lauf fest, der GPT-Router steckt also noch in der
+# App. Erwartet: keine Übergabe, Hinweis „wirkt erst ab diesem Neustart“,
+# klassischer Neustart mit Fortsetzen. Den Neustart danach prüft router-service.
+fault_router_switch() {
+    local scenario="$1" code=0 log="$STATE/fault-$1-handover.log"
+    requires "$scenario" keep_chats || return "$SKIPPED"
+    # Ein Lauf mit Schalter aus: Router in der App. Bei einem Abbruch schaltet
+    # on_fault_exit ihn wieder ein.
+    ROUTER_SWITCH_OFF=1
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool NO
+    if ! ti restart > "$STATE/fault-$scenario-aus.log" 2>&1; then
+        switch_on
+        record "$scenario" ausgeloest FEHLER "Neustart mit Schalter aus gescheitert: $(tail -1 "$STATE/fault-$scenario-aus.log")"
+        return 1
+    fi
+    # Mit Schalter aus enden die Chats wie bisher, ohne Fortsetzen
+    # (featureDisabled). Für den eigentlichen Test wieder hochfahren.
+    local name
+    for name in $(chat_names); do
+        unresumable_codex "$name" && continue
+        cli chats resume "$(chat_ref "$name")" --json >/dev/null 2>&1 || true
+    done
+    if ! wait_until_running; then
+        switch_on
+        record "$scenario" ausgeloest FEHLER "Chats nach dem Neustart mit Schalter aus auch per chats resume nicht zurück"
+        return 1
+    fi
+    # Router-Modus festlegen, solange der Schalter aus ist (in der echten App
+    # tut das der Router-Start beim App-Start).
+    local answer
+    answer=$(pin_router_mode)
+    if [[ "$answer" == *"nicht aktiv"* ]]; then
+        record "$scenario" router-modus OK "App: Router-Dienst in diesem Lauf nicht aktiv (Router in der App)"
+    else
+        record "$scenario" router-modus FEHLER "Router-Modus nicht festgelegt, Antwort: $(printf '%s' "$answer" | cut -c1-200)"
+    fi
+    # Vergleichsstand neu: Gemessen wird nur der Neustart mit eingeschaltetem Schalter.
+    snapshot "$STATE/fault-$scenario-before.tsv"
+    # Jetzt einschalten, während die App läuft, und neu starten.
+    switch_on
+    sleep 1
+    ti restart --keep-chats > "$log" 2>&1 || code=$?
+    if (( code == 2 )) && grep -q "wirkt erst ab diesem Neustart" "$log"; then
+        record "$scenario" ausgeloest OK "keine Übergabe, Hinweis: Schalter wirkt erst ab diesem Neustart"
+    elif (( code == 0 )); then
+        record "$scenario" ausgeloest FEHLER "Übergabe trotz Router in der App"
+    else
+        record "$scenario" ausgeloest FEHLER "Exit $code ohne den erwarteten Hinweis: $(tr '\n' ' ' < "$log" | cut -c1-300)"
+    fi
+    return 0
+}
+
+# Der Neustart nach router-switch (oder jeder gewöhnliche): Router als Dienst,
+# die Chats werden übernommen.
+fault_router_service() {
+    local scenario="$1" code=0 log="$STATE/fault-$1-handover.log"
+    requires "$scenario" keep_chats || return "$SKIPPED"
+    ti restart --keep-chats > "$log" 2>&1 || code=$?
+    if (( code == 0 )); then
+        record "$scenario" ausgeloest OK "Übergabe mit Router als Dienst"
+    else
+        record "$scenario" ausgeloest FEHLER "keine Übergabe (Exit $code): $(tr '\n' ' ' < "$log" | cut -c1-300)"
+    fi
+    return 0
+}
+
 # Erwartung je Szenario: wie die Chats zurückkommen müssen.
 scenario_expectation() {
     case "$1" in
@@ -742,6 +871,8 @@ scenario_expectation() {
         hold-deadline) echo resumed ;;         # nach der Frist beendet, dann fortgesetzt
         secret-missing|secret-wrong) echo resumed ;;
         binary-swap|double-restart) echo same ;;
+        router-switch) echo resumed ;;         # klassisch, Router noch in der App
+        router-service) echo same ;;
     esac
 }
 
@@ -783,9 +914,9 @@ wait_until_running() {
 #     Hex-Wert (Lauf vom 13.11., 13:36: handover_take_plan schrieb den Anfang
 #     des Geheimnisses öffentlich ins System-Log). Greift auch bei Ablage im
 #     Schlüsselbund.
-#   - Kandidaten: Inhalt jeder unbekannten kleinen Datei im Ordner des
-#     Aufbewahrers (Ablage als Datei), roh, hex oder Base64 in keeper.log,
-#     Log der Test-Instanz und System-Log.
+#   - Kandidaten: Inhalt von take-secret und jeder unbekannten kleinen Datei im
+#     Ordner des Aufbewahrers, roh, hex oder Base64 in keeper.log, Log der
+#     Test-Instanz und System-Log.
 check_secret_not_logged() {
     local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits pattern
     # Mit --info --debug, sonst liefert log show nur Default-Meldungen.
@@ -801,7 +932,7 @@ check_secret_not_logged() {
         record ende geheimnis-muster FEHLT "System-Log der Test-App leer oder nicht lesbar"
     fi
     if [[ ! -s "$candidates" ]]; then
-        record ende geheimnis-im-log FEHLT "kein Geheimnis-Kandidat im Ordner des Aufbewahrers gesehen (Ablage als Datei aus Paket 4?)"
+        record ende geheimnis-im-log FEHLT "$SECRET_FILE nie gesehen (der Wächter fragt alle 0,3 s), Inhalt nicht prüfbar"
         return 0
     fi
     hits=$(secret_hits "$candidates" "$HANDOVER_DIR"/keeper.log* "$ROOT/instance.log" "$unified" | tr '\n' ' ')
@@ -812,9 +943,16 @@ check_secret_not_logged() {
     fi
 }
 
+# Die gesicherte Kopie des Geheimnisses bleibt nicht liegen.
+forget_secret_candidates() {
+    rm -f "$STATE/secret-candidates" "$STATE/secret-candidates.seen"
+}
+
 on_fault_exit() {
     local status=$?
     stop_sampler
+    forget_secret_candidates
+    (( ROUTER_SWITCH_OFF )) && switch_on
     clear_knobs
     on_exit "$status"
 }
@@ -835,7 +973,8 @@ cmd_fault_run() {
     trap on_fault_exit EXIT
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
-    rm -f "$STATE/unmeasurable-recorded" "$STATE/secret-candidates"
+    rm -f "$STATE/unmeasurable-recorded"
+    forget_secret_candidates
     setup_chats
     if ! wait_until_running; then
         for scenario in $list; do
@@ -850,6 +989,7 @@ cmd_fault_run() {
     fi
     stop_sampler
     check_secret_not_logged
+    forget_secret_candidates
     (( KEEP )) || cleanup_chats
     clear_knobs
     RUN_STARTED=0
@@ -972,7 +1112,23 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
     printf 'geheim-0123456789' > "$dir/h/secret"
     capture_secret_candidates "$dir/h" "$dir/cand3"; capture_secret_candidates "$dir/h" "$dir/cand3"
     expect_exact "1" "$(wc -l < "$dir/cand3" | tr -d ' ')" "Kandidat nur einmal gesichert"
-    rm -f "$dir/h/secret"; : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
+    rm -f "$dir/h/secret"
+    # take-secret: bekannt (keine fremde Datei), aber Kandidat mit Rechte-Prüfung.
+    chmod 700 "$dir/h"
+    printf 'abcdef0123456789abcdef0123456789' > "$dir/h/take-secret"; chmod 600 "$dir/h/take-secret"
+    expect_exact "" "$(unknown_handover_files "$dir/h")" "take-secret ist keine fremde Datei"
+    expect_exact "" "$(handover_dir_issues "$dir/h")" "take-secret mit 0600 in Ordnung"
+    chmod 644 "$dir/h/take-secret"
+    expect_exact "Datei 644 take-secret" "$(handover_dir_issues "$dir/h")" "take-secret mit 0644 gemeldet"
+    capture_secret_candidates "$dir/h" "$dir/cand4"
+    expect_exact "take-secret" "$(cut -f1 "$dir/cand4")" "take-secret als Kandidat gesichert"
+    expect_exact "ja" "$([[ -f "$dir/cand4.seen" ]] && echo ja || echo nein)" "take-secret als gesehen vermerkt"
+    printf 'x abcdef0123456789abcdef0123456789\n' > "$dir/ts.log"
+    expect_exact "$dir/ts.log " "$(secret_hits "$dir/cand4" "$dir/ts.log" "$dir/sauber.log" | tr '\n' ' ')" "take-secret im Log gefunden"
+    rm -f "$dir/h/take-secret"; : > "$dir/cand5"
+    capture_secret_candidates "$dir/h" "$dir/cand5"
+    expect_exact "nein" "$([[ -f "$dir/cand5.seen" ]] && echo ja || echo nein)" "ohne take-secret nichts vermerkt"
+    : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
     expect_exact "..doppel .versteckt" "$(unknown_handover_files "$dir/h" | sort | tr '\n' ' ' | sed 's/ $//')" "versteckte Dateien erkannt"
     rm -rf "$dir"
 

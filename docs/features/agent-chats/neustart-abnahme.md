@@ -64,21 +64,24 @@ Ohne `--signing` gilt die Art, mit der `scripts/test-instance.sh build` das Bund
 | `secret-missing`, `secret-wrong` | Stellschraube `handoverSecretOverride` | Die App beendet den Aufbewahrer über die PID aus STATUS, statt die Frist abzuwarten; dann Fortsetzen |
 | `binary-swap` | Bundle unter dem laufenden Aufbewahrer ersetzt: neue Build-Nummer, gleiches Zertifikat, `rsync --delete` wie bei `make dev` | Übernahme klappt trotz ersetzter Datei |
 | `double-restart` | zweiter Neustart, während die Übernahme des ersten läuft | Übernahme, kein zweiter Prozess |
+| `router-switch` | Lauf mit Schalter aus (GPT-Router in der App; die dabei beendeten Chats fährt `chats resume` wieder hoch, gemessen wird ab da), dann Schalter an und `restart --keep-chats` | Keine Übergabe, Hinweis „wirkt erst ab diesem Neustart“, klassischer Neustart, Fortsetzen |
+| `router-service` | gewöhnlicher `restart --keep-chats`, nach `router-switch` der zweite Neustart (Router als Dienst) | Übernahme mit denselben PIDs |
 
 Jedes Szenario prüft danach:
 
 - Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil.
-- Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers (etwa ein liegengebliebenes Geheimnis), kein Claude-Prozess ohne Chat.
+- Es gibt keine Leichen: kein Aufbewahrer, kein Socket, keine fremde Datei im Ordner des Aufbewahrers, kein Claude-Prozess ohne Chat.
+- `geheimnis-datei`: Das Einmal-Geheimnis `take-secret` (Option A) liegt nach dem Szenario nicht mehr da. Die neue App löscht es nach dem Lesen, der Aufbewahrer bei seinem Ende. Der Bericht sagt, ob der Wächter die Datei während der Übergabe gesehen hat. Der Dauerlauf prüft dasselbe nach jeder Runde.
 - Kein Kind erbt einen Socket.
 - Start ohne Auswahl: Jeder Chat, der vorher einen Prozess hatte, hat nach 20 s wieder einen, ohne dass er ausgewählt wurde. Sonst ist das ein FEHLER; danach wählt das Skript die fehlenden Chats per `chats open` aus, damit die übrigen Prüfungen laufen (Befund vom 13.11.: Nach dem Rückfall startete nur der ausgewählte Chat im Grid).
 - Codex ohne Login legt keine Sitzung an. Ohne Sitzungs-ID baut die App kein `codex resume`, ein solcher Chat kann im Rückfall also nicht zurückkommen. Das Skript prüft bei ihm nur die Übernahme und trägt das Fortsetzen als FEHLT ein (gemessen am 13.11.: kein Codex-Prozess nach dem Rückfall, auch nicht nach Auswahl).
 - Eine PID je Sitzung: Wird die PID eines Chats über seine Prozessumgebung bestimmt (`WHISPERM8_SESSION_ID` in der Wurzel der Test-Instanz) und gibt es dabei mehr als einen obersten Prozess, ist das der FEHLER `zwei-prozesse-umgebung`. Das Skript wählt dann keine der PIDs aus.
 - Kein Schlüsselbund-Dialog: Der Wächter meldet jeden laufenden `SecurityAgent`. Das kann auch eine fremde App sein, deshalb steht der Hinweis „Bildschirm prüfen“ dabei.
-- Rechte: Ordner des Aufbewahrers 0700, jede Datei darin außer denen aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`) 0600, solange sie existiert.
+- Rechte: Ordner des Aufbewahrers 0700, `take-secret` und jede unbekannte Datei 0600, solange sie existiert. Ausgenommen sind die Dateien aus Paket 2 und 4 (`keeper.lock`, `keeper.log`, Socket, `last-take.json`, `take.lock`).
 
 Am Ende des Laufs prüft `geheimnis-muster` das System-Log der Test-App seit Laufbeginn (mit `--info --debug`), `keeper.log` und das Log der Test-Instanz auf eine Zeile mit „secret“ und einem Hex-Wert ab 7 Zeichen; UUIDs zählen nicht. Der Bericht zeigt davon höchstens die ersten 6 Zeichen. Das greift auch, wenn das Geheimnis im Schlüsselbund liegt (Befund vom 13.11.: `handover_take_plan` schrieb den Anfang des Geheimnisses ins System-Log).
 
-Danach prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidat ist jede kleine Datei im Ordner des Aufbewahrers, die nicht zu Paket 2 gehört. Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Ohne Kandidat steht der Punkt als FEHLT da.
+Danach prüft `geheimnis-im-log`, dass kein Geheimnis-Kandidat in einem Log steht. Kandidaten sind `take-secret` und jede kleine unbekannte Datei im Ordner des Aufbewahrers; der Wächter sichert ihren Inhalt alle 0,3 s, solange sie liegen (nur im Zustandsordner des Laufs, 0600, am Ende gelöscht). Gesucht wird roh, als Hex und als Base64 in `keeper.log`, im Log der Test-Instanz und im System-Log seit Laufbeginn. Hat der Wächter `take-secret` nie gesehen, steht der Punkt als FEHLT da.
 
 ## Was Paket 4 dafür liefern muss
 
@@ -91,14 +94,16 @@ Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschlä
 5. Eine Logzeile je Fertig-Meldung: `session_notification_posted kind=turnCompleted session=<uuid>`.
 6. `runtime.pid` in `chats show --json` für Codex und Terminal.
 7. Stellschrauben nur für die Test-Instanz: `handoverHoldSeconds`, `handoverTakeDelayMs`, `handoverSecretOverride` (`missing`, `wrong`).
-8. Das Geheimnis als Datei im Ordner des Aufbewahrers (`…/WhisperM8/handover/`), nicht anderswo; sonst sehen `geheimnis-im-log` und `leichen:dateien` sie nicht.
-9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert. Gemessen am 13.11.: Der Ordner hat 0700; solange kein Geheimnis als Datei auftaucht, prüft `rechte-aufbewahrer` nur den Ordner.
+8. Das Geheimnis als Datei im Ordner des Aufbewahrers (`…/WhisperM8/handover/take-secret`, geliefert mit Option A, 074af842).
+9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert (gemessen am 13.11.: 0700).
 
 ## Bekannte Grenzen
 
 - **Wächter:** Er sieht eine Überschneidung erst, wenn sich der neue Claude-Prozess in der Registry eingetragen hat. Am Ende prüft `check_comeback` zusätzlich, dass der alte Prozess tot ist, wenn ein neuer läuft.
 - **Zurechnung durch den Kernel:** Er rechnet einen Unix-Socket dem Prozess zu, der ihn zuletzt benutzt hat, und schon `poll()` zählt dazu. Code-Prüfung und Absender-Bindung im Aufbewahrer sind deshalb Hürden, keine Garantien. Die Grenzen sind das Geheimnis und dass kein Kind den Socket erbt (Vics Urteil, Abschnitt „Wovor schützen wir“ in der Doku des Aufbewahrers).
 - **GPT-Chats:** Die Test-Instanz hat kein GPT-Login, GPT-Chats fehlen im Lauf.
+- **GPT-Router:** Ohne GPT-Backend startet die Test-Instanz nie einen Router. Der Router-Modus (`ClaudeGPTRouterMode.current`, ein `static let`) wird erst beim ersten Zugriff festgelegt, in der echten App beim Router-Start. `router-switch` legt ihn deshalb mit einer harmlosen Router-Anfrage über den Steuer-Socket fest, solange der Schalter aus ist (die App lehnt sie mit „Router-Dienst ist in diesem Lauf nicht aktiv“ ab). Ob laufende GPT-Antworten den Neustart über den Router-Dienst überstehen, prüft erst der Handtest.
+- **Kein Erbe nach Übernahme:** Übernommene Chats sind keine Kinder der neuen App; hat sie sonst keine Kinder, steht `kein-erbe` als FEHLT da.
 
 ## Handtest des Users (mit echten, angemeldeten Chats)
 

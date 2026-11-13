@@ -737,6 +737,13 @@ check_round() { # runde vorher-datei
     else
         record "$round" aufbewahrer-weg FEHLT "ohne Übergabe gibt es keinen Aufbewahrer"
     fi
+    # Einmal-Geheimnis als Datei (Option A): liegt nur zwischen Abgabe und
+    # Übernahme. Ob es im Log steht, prüft handover-soak-faults.sh.
+    if [[ -e "$ROOT/home/Library/Application Support/WhisperM8/handover/take-secret" ]]; then
+        record "$round" geheimnis-datei FEHLER "take-secret liegt nach der Runde noch da"
+    elif has_keep_chats; then
+        record "$round" geheimnis-datei OK ""
+    fi
 }
 
 # Eingabe nach dem Neustart: eine Zeile an den Echo-Tab schicken und prüfen,
