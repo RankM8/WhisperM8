@@ -248,8 +248,9 @@ extension UISnapshotGallery {
                                       hasWaitingChat: false, isCurrent: false),
         ]
         let target = ControllerIslandTarget(title: "Controller Insel", status: .working)
-        /// Wie Cmd-Tab: Die Liste steht sofort da, die Markierung auf dem
-        /// vorigen Ort (hier „Jarvis“ bzw. „ListM8“), sonst auf dem aktuellen.
+        /// Die Liste steht sofort da, die Markierung auf dem aktuellen Ort;
+        /// der vorige (hier „Jarvis“ bzw. „ListM8“) trägt „vorher“ und steht
+        /// gleich darunter.
         func whereTo(grid: Bool, previous: Bool = true, open: [Int] = []) -> ControllerIslandModel {
             let back: ControllerWhereToState.Destination = previous
                 ? (grid ? .workspace(workspaces[1].id) : .chat(chats[1].id)) : .stay

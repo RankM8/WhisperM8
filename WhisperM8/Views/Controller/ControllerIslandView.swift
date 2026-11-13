@@ -273,10 +273,13 @@ struct ControllerIslandView: View {
         }
     }
 
-    /// Erste Projekt-Zeile nach mindestens einem Workspace.
+    /// Erste Projekt-Zeile nach mindestens einem Workspace. Der vorige Ort
+    /// steht außer der Reihe gleich hinter dem aktuellen und zählt dafür nicht.
     private func isFirstProject(_ choice: ControllerWorkspaceChoice, in state: ControllerWhereToState) -> Bool {
-        guard let index = state.workspaces.rows.firstIndex(where: { $0.id == choice.id }), index > 0 else { return false }
-        return state.workspaces.rows[index - 1].kind == .workspace
+        guard !state.isPrevious(choice) else { return false }
+        let rows = state.workspaces.rows.filter { !state.isPrevious($0) }
+        guard let index = rows.firstIndex(where: { $0.id == choice.id }), index > 0 else { return false }
+        return rows[index - 1].kind == .workspace
     }
 
     private func empty(_ text: String) -> some View {

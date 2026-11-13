@@ -120,7 +120,8 @@ enum ControllerIslandTab: Int, CaseIterable, Sendable {
 /// Markierung beginnt auf dem aktuellen Eintrag. Loslassen ohne Bewegung tut
 /// deshalb nichts; erst nach einer Bewegung wechseln Loslassen und Kreuz zum
 /// markierten Eintrag. Der vorige Ort (Ziel von L2 getippt) trägt „vorher“
-/// und steht bei den Chats gleich unter dem aktuellen, einen Schritt weit weg.
+/// und steht in beiden Reitern gleich unter dem aktuellen, einen Schritt weit
+/// weg — auch wenn die Seitenleiste ihn weiter unten zeigt.
 struct ControllerWhereToState: Equatable, Sendable {
     /// Wohin ein Wechsel führt.
     enum Destination: Equatable, Sendable {
@@ -152,10 +153,33 @@ struct ControllerWhereToState: Equatable, Sendable {
         previous: Destination = .stay
     ) {
         self.currentChatID = currentChatID
-        self.previous = Self.resolve(previous, chats: chats, workspaces: workspaces)
+        let previous = Self.resolve(previous, chats: chats, workspaces: workspaces)
+        self.previous = previous
         tab = gridActive && !workspaces.isEmpty ? .workspaces : .chats
+        let chats = Self.placingPrevious(
+            chats, isPrevious: { previous == .chat($0.id) }, isCurrent: { $0.id == currentChatID })
+        let workspaces = Self.placingPrevious(
+            workspaces, isPrevious: { Self.destination(of: $0) == previous }, isCurrent: \.isCurrent)
         self.chats = ControllerIslandList(rows: chats, startID: currentChatID)
         self.workspaces = ControllerIslandList(rows: workspaces, startID: workspaces.first(where: \.isCurrent)?.id)
+    }
+
+    /// Der vorige Ort rückt gleich hinter den aktuellen (ohne aktuellen ganz
+    /// nach oben), wo immer die Liste ihn sonst führt: ein Schritt bis dorthin,
+    /// wie bei Cmd-Tab. Die übrigen Zeilen behalten ihre Reihenfolge.
+    static func placingPrevious<Row>(
+        _ rows: [Row], isPrevious: (Row) -> Bool, isCurrent: (Row) -> Bool
+    ) -> [Row] {
+        guard let index = rows.firstIndex(where: isPrevious), !isCurrent(rows[index]) else { return rows }
+        var result = rows
+        let row = result.remove(at: index)
+        let target = result.firstIndex(where: isCurrent).map { $0 + 1 } ?? 0
+        result.insert(row, at: target)
+        return result
+    }
+
+    private static func destination(of choice: ControllerWorkspaceChoice) -> Destination {
+        choice.kind == .project ? .project(choice.id) : .workspace(choice.id)
     }
 
     /// Der vorige Ort, wie die Listen ihn kennen: Eine Projekt-Ansicht ist
@@ -214,21 +238,20 @@ struct ControllerWhereToState: Equatable, Sendable {
         }
     }
 
-    /// Reihenfolge der Chat-Zeilen: die der Liste links, dazu der vorige
-    /// Chat, falls sie ihn gerade nicht zeigt (Filter, Suche, eingeklappt,
-    /// Archiv) — gleich hinter dem aktuellen, wie bei Cmd-Tab.
+    /// Reihenfolge der Chat-Zeilen: die der Liste links, der vorige Chat aber
+    /// immer gleich hinter dem aktuellen (ohne aktuellen ganz oben), wie bei
+    /// Cmd-Tab — auch wenn die Liste ihn weiter unten oder gar nicht zeigt
+    /// (Filter, Suche, eingeklappt, Archiv).
     static func chatOrder(_ order: [UUID], current: UUID?, previous: Destination) -> [UUID] {
-        guard case let .chat(id) = previous, !order.contains(id) else { return order }
-        var result = order
-        let index = current.flatMap { result.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
-        result.insert(id, at: index)
-        return result
+        guard case let .chat(id) = previous, id != current else { return order }
+        let rows = order.contains(id) ? order : [id] + order
+        return placingPrevious(rows, isPrevious: { $0 == id }, isCurrent: { $0 == current })
     }
 
     func isPrevious(chat id: UUID) -> Bool { previous == .chat(id) }
 
     func isPrevious(_ choice: ControllerWorkspaceChoice) -> Bool {
-        previous == (choice.kind == .project ? .project(choice.id) : .workspace(choice.id))
+        previous == Self.destination(of: choice)
     }
 
     /// Workspace oder Projekt, dessen Raster das Fenster zeigt (Kopf „Raster · Name“).

@@ -142,8 +142,53 @@ final class ControllerWorkspacePickerTests: XCTestCase {
         let a = UUID(), b = UUID(), hidden = UUID()
         XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(hidden)), [a, hidden, b])
         XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: nil, previous: .chat(hidden)), [hidden, a, b])
-        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(b)), [a, b], "schon drin")
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(b)), [a, b], "schon daneben")
         XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .workspace(hidden)), [a, b])
+        XCTAssertEqual(ControllerWhereToState.chatOrder([a, b], current: a, previous: .chat(a)), [a, b], "vorher = jetzt")
+    }
+
+    /// Review Insel-Paket, Befund 1: Zeigt die Seitenleiste den vorigen Chat
+    /// weit weg vom aktuellen, rückt er trotzdem gleich darunter — ein
+    /// Schritt, wie Legende und Hilfe es versprechen. Die übrigen Chats
+    /// behalten ihre Reihenfolge.
+    func testPreviousChatMovesRightBelowTheCurrentEvenWhenFarAway() {
+        let ids = (0..<6).map { _ in UUID() }
+        XCTAssertEqual(ControllerWhereToState.chatOrder(ids, current: ids[1], previous: .chat(ids[5])),
+                       [ids[0], ids[1], ids[5], ids[2], ids[3], ids[4]])
+        XCTAssertEqual(ControllerWhereToState.chatOrder(ids, current: ids[4], previous: .chat(ids[0])),
+                       [ids[1], ids[2], ids[3], ids[4], ids[0], ids[5]], "auch von oben")
+
+        let chats = chatRows(6, current: 1)
+        var state = ControllerWhereToState(
+            chats: chats, currentChatID: chats[1].id, workspaces: [], gridActive: false,
+            previous: .chat(chats[5].id))
+        XCTAssertEqual(state.chats.rows.map(\.id), [chats[0], chats[1], chats[5], chats[2], chats[3], chats[4]].map(\.id))
+        XCTAssertEqual(state.destination, .stay)
+        state.move(1)
+        XCTAssertEqual(state.destination, .chat(chats[5].id), "ein Schritt bis zum vorigen")
+    }
+
+    /// Dasselbe im Reiter „Workspaces & Projekte“: Der vorige Ort (hier die
+    /// Projekt-Ansicht ganz unten) steht gleich unter dem aktuellen Workspace.
+    func testPreviousPlaceMovesRightBelowTheCurrentWorkspace() {
+        let view = UUID()
+        var project = choice("P")
+        project.kind = .project
+        project.viewWorkspaceID = view
+        let choices = [choice("A", current: true), choice("B"), choice("C"), project]
+        var state = ControllerWhereToState(
+            chats: chatRows(2, current: 0), currentChatID: nil, workspaces: choices, gridActive: true,
+            previous: .workspace(view))
+        XCTAssertEqual(state.workspaces.rows.map(\.name), ["A", "P", "B", "C"])
+        XCTAssertTrue(state.isPrevious(project))
+        state.move(1)
+        XCTAssertEqual(state.destination, .project(project.id), "ein Schritt bis zum vorigen")
+
+        let noCurrent = [choice("A"), choice("B"), choice("C")]
+        let bare = ControllerWhereToState(
+            chats: [], currentChatID: nil, workspaces: noCurrent, gridActive: true,
+            previous: .workspace(noCurrent[2].id))
+        XCTAssertEqual(bare.workspaces.rows.map(\.name), ["C", "A", "B"], "ohne aktuellen ganz oben")
     }
 
     /// Ein voriger Ort, der in keiner Liste steht, zählt nicht.
@@ -164,7 +209,7 @@ final class ControllerWorkspacePickerTests: XCTestCase {
             chats: chats, currentChatID: chats[0].id, workspaces: choices, gridActive: false,
             previous: .chat(chats[2].id))
         state.move(1)
-        XCTAssertEqual(state.destination, .chat(chats[1].id))
+        XCTAssertEqual(state.destination, .chat(chats[2].id), "der vorige steht gleich unter dem aktuellen")
         XCTAssertTrue(state.switchTab(1))
         XCTAssertEqual(state.workspaces.selected?.name, "B", "Workspaces: der aktuelle")
         XCTAssertEqual(state.destination, .stay)
