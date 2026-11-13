@@ -267,7 +267,9 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
             HandoverFallbackStart.hasUnboundTranscript(for: chat, projectPath: "/p/projekt", indexed: items, boundIDs: bound)
         }
         XCTAssertTrue(check([indexed("a")]), "ungebunden, danach entstanden")
-        XCTAssertFalse(check([indexed("a")], bound: ["a"]), "gehört schon einem Chat")
+        XCTAssertFalse(check([indexed("a", created: 600)], bound: ["a"]), "gehört schon einem Chat, später entstanden")
+        XCTAssertTrue(check([indexed("a", created: 20)], bound: ["a"]), "Altlast: gebunden, aber im Fenster um den Start")
+        XCTAssertTrue(check([indexed("a", cwd: "/p/projekt/.claude/worktrees/feature-x")]), "Claude-Worktree zählt zum Projekt")
         XCTAssertFalse(check([indexed("a", created: -60)]), "älter als der Chat")
         XCTAssertFalse(check([indexed("a", provider: .claude)]), "anderer Anbieter")
         XCTAssertFalse(check([indexed("a", cwd: "/p/anders")]), "anderer Ordner")
@@ -277,5 +279,15 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
     /// (3) Der Hinweis sagt ehrlich, dass ein Start-Prompt nicht noch einmal läuft.
     func testFreshStartNoticeMentionsThePrompt() {
         XCTAssertTrue(HandoverFallbackStart.startFresh.notice?.contains("not sent again") == true)
+    }
+
+    /// Vic (Leistung): recent dekodiert nur Zeilen mit der UUID der Sitzung.
+    func testLineRangesFindOnlyLinesWithTheNeedle() {
+        let text = "aaa\nx-NADEL-1\nbbb\ny NADEL\n\nNADEL"
+        let data = Data(text.utf8)
+        let lines = ChatsStatusJournal.lineRanges(containing: Array("NADEL".utf8), in: data)
+            .map { String(decoding: data.subdata(in: $0), as: UTF8.self) }
+        XCTAssertEqual(lines, ["x-NADEL-1", "y NADEL", "NADEL"])
+        XCTAssertTrue(ChatsStatusJournal.lineRanges(containing: Array("fehlt".utf8), in: data).isEmpty)
     }
 }

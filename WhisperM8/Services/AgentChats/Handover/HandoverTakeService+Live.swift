@@ -181,8 +181,10 @@ extension HandoverTakeService {
         var cache = AgentSessionIndexCacheStore().load()
         let indexed: [IndexedAgentSession]
         switch session.provider {
-        case .claude: indexed = ClaudeSessionIndexer().indexedSessionResult(limit: 50, cache: &cache).sessions
-        case .codex: indexed = CodexSessionIndexer().indexedSessionResult(limit: 50, cache: &cache).sessions
+        // 500 wie im Startweg: Die Liste ist nach Aktivität über ALLE Projekte
+        // sortiert; ein seit Stunden ruhender Chat läge sonst außerhalb (Vic).
+        case .claude: indexed = ClaudeSessionIndexer().indexedSessionResult(limit: 500, cache: &cache).sessions
+        case .codex: indexed = CodexSessionIndexer().indexedSessionResult(limit: 500, cache: &cache).sessions
         }
         return HandoverFallbackStart.hasUnboundTranscript(
             for: session, projectPath: project.path, indexed: indexed,
