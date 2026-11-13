@@ -102,4 +102,13 @@ final class HandoverSoakScriptTests: XCTestCase {
         XCTAssertNil(text.range(of: pattern, options: .regularExpression),
                      "Variable direkt vor Nicht-ASCII: ${…} verwenden")
     }
+
+    /// Eine Test-Instanz für alle Chats: Das Skript nimmt die gemeinsame Sperre
+    /// und gibt sie am Ende wieder frei (Regel vom 13.11.2026).
+    func testScriptTakesAndReleasesTheSharedInstanceLock() throws {
+        let text = try String(contentsOf: Self.script, encoding: .utf8)
+        XCTAssertTrue(text.contains("/private/tmp/whisperm8-testinstanz.lock"))
+        XCTAssertTrue(text.contains("take_instance_lock || exit 1"))
+        XCTAssertTrue(text.contains("release_instance_lock"))
+    }
 }

@@ -556,6 +556,7 @@ cmd_fault_run() {
     RUN_STARTED=0
     local status=0
     report || status=$?
+    release_instance_lock
     exit "$status"
 }
 
