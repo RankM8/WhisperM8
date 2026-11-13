@@ -36,7 +36,8 @@ enum AgentCollectiveStartPlanner {
     ) -> Plan {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         func key(_ id: UUID) -> String? {
-            guard let session = byID[id],
+            // Agent View setzt keine Sitzung fort: nie ein Doppel.
+            guard let session = byID[id], !session.isAgentView,
                   let external = session.externalSessionID?.lowercased(), !external.isEmpty else { return nil }
             return "\(session.provider.rawValue):\(external)"
         }

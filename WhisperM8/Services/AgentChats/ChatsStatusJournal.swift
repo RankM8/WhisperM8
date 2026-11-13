@@ -118,18 +118,52 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// auch von der CLI genutzt, ohne Schreib-Nebenwirkung.
     static func recent(sessionID: UUID, limit: Int = 8, fileURL: URL? = nil) -> [ChatsStatusJournalEntry] {
         let url = fileURL ?? defaultFileURL()
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        // Leistung (Vic, 13.11.2026): Dekodiert wird nur, was die UUID der
+        // Sitzung enthält; JSONEncoder schreibt sie groß. Ohne diese Prüfung
+        // dekodierte `chats show` bei einer ruhigen Sitzung jede Zeile.
+        let needle = sessionID.uuidString
         var found: [ChatsStatusJournalEntry] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
-            guard let data = line.data(using: .utf8),
-                  let entry = try? decoder.decode(ChatsStatusJournalEntry.self, from: data) else { continue }
-            // Board-Ereignisse sind keine Statuswechsel — die Historie einer
-            // Session (`chats show`) bliebe sonst nicht mehr erklärbar.
-            guard entry.sessionID == sessionID, !entry.isBoardEvent else { continue }
-            found.append(entry)
-            if found.count >= limit { break }
+        // Nach einer Rotation liegen ältere Zeilen in `<datei>.1` (im echten
+        // Workspace schon geschehen). Neueste zuerst: erst die aktuelle Datei,
+        // die rotierte nur, wenn die aktuelle nicht reicht.
+        for candidate in [url, url.appendingPathExtension("1")] {
+            guard let data = try? Data(contentsOf: candidate, options: .mappedIfSafe) else { continue }
+            for range in lineRanges(containing: Array(needle.utf8), in: data).reversed() {
+                guard let entry = try? decoder.decode(ChatsStatusJournalEntry.self, from: data.subdata(in: range))
+                else { continue }
+                // Board-Ereignisse sind keine Statuswechsel — die Historie einer
+                // Session (`chats show`) bliebe sonst nicht mehr erklärbar.
+                guard entry.sessionID == sessionID, !entry.isBoardEvent else { continue }
+                found.append(entry)
+                if found.count >= limit { return found.reversed() }
+            }
         }
         return found.reversed()
+    }
+
+    /// Zeilen (ohne Zeilenende), die `needle` enthalten, in Dateireihenfolge.
+    /// Sucht mit `memmem` in den Bytes; Zerlegen und Suchen in Swift-Strings
+    /// kostete bei 16.000 Zeilen rund 300 ms je `chats show` (Debug-Build).
+    static func lineRanges(containing needle: [UInt8], in data: Data) -> [Range<Int>] {
+        guard !needle.isEmpty, !data.isEmpty else { return [] }
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [Range<Int>] in
+            guard let base = raw.baseAddress else { return [] }
+            let count = raw.count
+            var ranges: [Range<Int>] = []
+            var offset = 0
+            while offset < count {
+                guard let hit = needle.withUnsafeBytes({ memmem(base + offset, count - offset, $0.baseAddress, needle.count) })
+                else { break }
+                let position = UnsafeRawPointer(hit) - base
+                var start = position
+                while start > 0, raw[start - 1] != UInt8(ascii: "\n") { start -= 1 }
+                var end = position
+                while end < count, raw[end] != UInt8(ascii: "\n") { end += 1 }
+                ranges.append(start..<end)
+                offset = end + 1
+            }
+            return ranges
+        }
     }
 
     // MARK: - Cursor

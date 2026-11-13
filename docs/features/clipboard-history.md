@@ -225,6 +225,10 @@ Robustheit:
 - Dateien ohne Eintrag (Absturz zwischen Datei und Index) und Temp-Reste
   entfernt der Store beim Laden.
 - Löschen eines Eintrags löscht alle seine Dateien.
+- Löschen und Leeren schreiben den Index sofort, nicht gebündelt, und
+  entfernen die Dateien erst danach. Stürbe die App im Debounce-Fenster,
+  stünden gelöschte Texte sonst beim nächsten Start wieder im Verlauf.
+  Sofortiges Schreiben (auch `flush()` beim Beenden) verwirft ein geplantes.
 - Zwei Knöpfe zum Leeren mit verschiedener Wirkung: „Clear history…“ in den
   **Einstellungen** löscht alles samt Pins und leert den ganzen Ordner, auch
   Reste und einen beiseitegelegten Index (`clear(keepPinned: false)`).
