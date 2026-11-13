@@ -38,6 +38,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var refreshAccountLimits: () -> Void = {}
     /// Status eines Chats für den Kopf der Insel.
     var islandStatus: (UUID) -> ControllerIslandStatus? = { _ in nil }
+    /// Verzögert ausführen (Nachprüfung vor Enter); Tests feuern selbst.
+    var scheduleOnMain: (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(work) }
+    }
     /// Limits aller Konten für Kopf und Limits-Karte der R1-Insel (Insel-Paket).
     var limits = ControllerLimitsAccess()
 
@@ -168,7 +172,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             shellAtPrompt: terminal.shellAtPrompt,
             backTarget: window.backTarget,
             openView: terminal.screen?.openView,
-            promptField: terminal.screen?.promptField
+            promptField: terminal.screen?.promptField,
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt
         )
     }
 
@@ -248,6 +253,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
             if key == .toggleTranscript, quickDrawSlots?.card != nil {
                 playHaptic(.rejected)
+            } else if key == .enter, case let .chat(state) = context,
+                      ControllerBindingResolver.confirmRestsOnPromptField(state) {
+                confirmWhenSettled()
             } else {
                 sendKey(key.terminalKey)
             }
