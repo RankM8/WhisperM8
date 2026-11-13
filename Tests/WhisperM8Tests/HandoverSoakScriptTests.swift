@@ -81,6 +81,12 @@ final class HandoverSoakScriptTests: XCTestCase {
         }
         XCTAssertNil(code.range(of: #"com\.whisperm8\.app[^.]"#, options: .regularExpression), "Produktiv-Bundle-ID im Skript")
         XCTAssertTrue(code.contains(#"[[ "$ROOT" == /* ]]"#), "Wurzel muss absolut sein")
+        // Defaults nur in der Domain der Test-Instanz (Labs-Schalter für die Übergabe).
+        XCTAssertTrue(code.contains(#"TEST_DOMAIN="com.whisperm8.app.test""#))
+        XCTAssertTrue(code.contains("restartKeepsChatsEnabled -bool YES"), "Labs-Schalter in der Test-Instanz an")
+        for line in code.split(separator: "\n") where line.contains("defaults write") || line.contains("defaults delete") {
+            XCTAssertTrue(line.contains("\"$TEST_DOMAIN\""), "Defaults außerhalb der Test-Domain: \(line)")
+        }
     }
 
     func testTestInstanceScriptRefusesRelativeRoot() throws {

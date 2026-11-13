@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Dauerlauf „Neustart ohne Chatverlust“ (Paket 6) — nur gegen die Test-Instanz.
+# Unter zsh oder sh liefe sonst beim Einbinden der falsche Einstieg.
+[ -n "${BASH_VERSION:-}" ] || exec /bin/bash "$0" "$@"
 # Plan: docs/plans/neustart-ohne-chatverlust.md, Abschnitt „Pflichttest“.
 #
 #   scripts/handover-soak.sh capabilities        # welche Startbefehle aus Paket 4 schon da sind
@@ -42,6 +44,7 @@ ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}"
 BIN="$REPO/.build-test/WhisperM8Test.app/Contents/MacOS/WhisperM8"
 PY=/usr/bin/python3
 SOAK="$ROOT/soak"
+TEST_DOMAIN="com.whisperm8.app.test"
 STATE="$SOAK/state"
 # Projektordner außerhalb des echten Home: Claude Code sucht `.mcp.json` auch in
 # übergeordneten Ordnern und fand unter ~/.whisperm8-test-instance die
@@ -86,10 +89,16 @@ codex SOAK-CODEX-ENDE 0"
 
 # Nach jedem Start oder Neustart das Grid wieder öffnen (solange Chats nur
 # über die Anzeige starten), sonst starten fortgesetzte Chats nicht.
+# Nach start/restart das Grid wieder öffnen, sobald eine Instanz läuft, auch
+# bei Exit ungleich 0: `restart --keep-chats` startet bei Exit 2 (keine
+# Übergabe) und 3 (Übernahme unvollständig) trotzdem neu, und ohne Anzeige
+# startet kein fortgesetzter Chat (Lauf vom 13.11., 13:30).
 ti() {
     local rc=0
     "$TI" "$@" || rc=$?
-    if (( rc == 0 )) && [[ "${1:-}" == start || "${1:-}" == restart ]]; then reopen_grid; fi
+    if [[ "${1:-}" == start || "${1:-}" == restart ]] && [[ -n "$("$TI" status | awk '/^PID:/ {print $2}')" ]]; then
+        reopen_grid
+    fi
     return "$rc"
 }
 reopen_grid() {
@@ -416,6 +425,11 @@ prepare_instance() {
     mkdir -p "$STATE" "$PROJECT"
     rm -f "$STATE/grid-name"   # Grid eines früheren Laufs gilt nicht mehr
     prepare_bundle "$running" || exit 1
+    # Labs „Neustart ohne Chatverlust“ ist standardmäßig aus und hat keine UI;
+    # ohne Schalter antwortet `app handover` mit featureDisabled (Lauf vom
+    # 13.11., 13:30). Nur in der Domain der Test-Instanz.
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    record setup schalter OK "restartKeepsChatsEnabled in $TEST_DOMAIN an"
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
     : > "$ECHO_FILE"
@@ -550,14 +564,53 @@ set_offset() {
 }
 
 # PID eines Chats: Claude über die Registry, sonst runtime.pid (Paket 4).
+# Oberster Prozess eines Chats nach seiner Umgebung (WHISPERM8_SESSION_ID und
+# Wurzel der Test-Instanz), aus `ps -E -ww -axo pid=,ppid=,command=` (stdin).
+# Rückfall, wenn die Registry die Sitzung (noch) nicht unter der gespeicherten
+# externen ID führt, etwa direkt nach dem Fortsetzen. Mehrere oberste Prozesse
+# sind zwei Prozesse auf einer Sitzung: dann keine PID, sondern
+# „mehrdeutig p1 p2“ auf stderr (nie still die kleinste PID nehmen).
+env_pid_from() { # chat-uuid wurzel
+    "$PY" -I -c '
+import os, re, sys
+chat, root = sys.argv[1].upper(), os.path.normpath(sys.argv[2])
+rows = {}
+for line in sys.stdin:
+    parts = line.split(None, 2)
+    if len(parts) < 3:
+        continue
+    s = re.search(r"WHISPERM8_SESSION_ID=(\S+)", parts[2])
+    r = re.search(r"WHISPERM8_INSTANCE_ROOT=(\S+)", parts[2])
+    if s and r and s.group(1).upper() == chat and os.path.normpath(r.group(1)) == root:
+        rows[parts[0]] = parts[1]
+tops = sorted((int(p) for p, pp in rows.items() if pp not in rows))
+if len(tops) > 1:
+    print("mehrdeutig " + " ".join(map(str, tops)), file=sys.stderr)
+    print("")
+else:
+    print(tops[0] if tops else "")
+' "$1" "$2"
+}
+
 chat_pid() {
-    local id pid
+    local id pid chat
     id=$(external_id "$1")
     if [[ -n "$id" ]]; then
         pid=$(registry_pids "$ROOT/home/.claude/sessions" | awk -v s="$id" '$1 == s {print $2}')
         [[ -n "$pid" ]] && { echo "$pid"; return 0; }
     fi
-    chat_show "$1" | json_field '.get("runtime", {}).get("pid") or ""' 2>/dev/null || true
+    pid=$(chat_show "$1" | json_field '.get("runtime", {}).get("pid") or ""' 2>/dev/null || true)
+    [[ -n "$pid" ]] && { echo "$pid"; return 0; }
+    chat=$(chat_ref "$1")
+    [[ -n "$chat" ]] || return 0
+    local note
+    note=$(mktemp "${TMPDIR:-/tmp}/handover-soak-pid.XXXXXX")
+    pid=$(ps -E -ww -axo pid=,ppid=,command= 2>/dev/null | env_pid_from "$chat" "$ROOT" 2>"$note" || true)
+    if [[ -s "$note" && -n "${STATE:-}" && -d "$STATE" ]]; then
+        printf '%s\t%s\n' "$1" "$(head -1 "$note")" >> "$STATE/pid-ambiguous.log"
+    fi
+    rm -f "$note"
+    echo "${pid:-}"
 }
 
 # MARK: - Durchgang
@@ -724,7 +777,7 @@ final_checks() {
             [[ -n "$name" ]] || continue
             id=$(chat_show "$name" | json_field '["id"]' 2>/dev/null || true)
             if [[ -z "$id" ]]; then record ende "fertig-meldung:$name" FEHLER "Chat-ID nicht ermittelbar"; continue; fi
-            count=$(log show --start "$since" --style compact \
+            count=$(/usr/bin/log show --start "$since" --style compact \
                 --predicate "processImagePath CONTAINS \"WhisperM8Test.app\" AND eventMessage CONTAINS \"session_notification_posted kind=turnCompleted session=$id\"" 2>/dev/null \
                 | grep -c session_notification_posted || true)
             if [[ "$count" == 1 ]]; then record ende "fertig-meldung:$name" OK "1"
@@ -820,7 +873,7 @@ cmd_run() {
     for round in $(seq 1 "$ROUNDS"); do
         snapshot "$STATE/before-$round.tsv"
         log "Durchgang $round/$ROUNDS: Neustart"
-        restart_instance "$round"
+        restart_instance "$round" || record "$round" neustart FEHLER "Exit $?"
         sleep 3
         check_round "$round" "$STATE/before-$round.tsv"
         sleep 5
@@ -927,6 +980,21 @@ cmd_self_test() {
     expect_exact "OK|;FEHLER|Sprung 2 -> 4" \
         "$(printf '%s' "$RESULTS" | awk -F'\t' '{printf "%s%s|%s", (NR > 1 ? ";" : ""), $3, $4}')" \
         "Befund ohne Detail sauber eingetragen"
+
+    # PID nach Umgebung: oberster Prozess des Chats, nur in dieser Wurzel.
+    local ps_fixture
+    ps_fixture=$(printf '%s\n' \
+        "200 1 /bin/zsh -l WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-1" \
+        "201 200 claude --resume x WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-1" \
+        "150 1 claude WHISPERM8_INSTANCE_ROOT=/anders WHISPERM8_SESSION_ID=ABC-1" \
+        "300 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-2")
+    expect_exact "200" "$(printf '%s\n' "$ps_fixture" | env_pid_from ABC-1 /r/)" "PID nach Umgebung: oberster Prozess, nur diese Wurzel"
+    expect_exact "" "$(printf '%s\n' "$ps_fixture" | env_pid_from abc-9 /r)" "PID nach Umgebung: kein Treffer"
+    local amb_pid
+    amb_pid=$(printf '%s\n' "400 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-3" \
+        "401 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-3" | env_pid_from abc-3 /r 2>"$dir/amb")
+    expect_exact "|mehrdeutig 400 401" "$amb_pid|$(cat "$dir/amb")" \
+        "PID nach Umgebung: zwei oberste Prozesse sind mehrdeutig, keine PID"
 
     rm -rf "$dir"
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi
