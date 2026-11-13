@@ -562,14 +562,40 @@ set_offset() {
 }
 
 # PID eines Chats: Claude über die Registry, sonst runtime.pid (Paket 4).
+# Oberster Prozess eines Chats nach seiner Umgebung (WHISPERM8_SESSION_ID und
+# Wurzel der Test-Instanz), aus `ps -E -ww -axo pid=,ppid=,command=` (stdin).
+# Rückfall, wenn die Registry die Sitzung (noch) nicht unter der gespeicherten
+# externen ID führt, etwa direkt nach dem Fortsetzen.
+env_pid_from() { # chat-uuid wurzel
+    "$PY" -I -c '
+import os, re, sys
+chat, root = sys.argv[1].upper(), os.path.normpath(sys.argv[2])
+rows = {}
+for line in sys.stdin:
+    parts = line.split(None, 2)
+    if len(parts) < 3:
+        continue
+    s = re.search(r"WHISPERM8_SESSION_ID=(\S+)", parts[2])
+    r = re.search(r"WHISPERM8_INSTANCE_ROOT=(\S+)", parts[2])
+    if s and r and s.group(1).upper() == chat and os.path.normpath(r.group(1)) == root:
+        rows[parts[0]] = parts[1]
+tops = sorted((int(p) for p, pp in rows.items() if pp not in rows))
+print(tops[0] if tops else "")
+' "$1" "$2"
+}
+
 chat_pid() {
-    local id pid
+    local id pid chat
     id=$(external_id "$1")
     if [[ -n "$id" ]]; then
         pid=$(registry_pids "$ROOT/home/.claude/sessions" | awk -v s="$id" '$1 == s {print $2}')
         [[ -n "$pid" ]] && { echo "$pid"; return 0; }
     fi
-    chat_show "$1" | json_field '.get("runtime", {}).get("pid") or ""' 2>/dev/null || true
+    pid=$(chat_show "$1" | json_field '.get("runtime", {}).get("pid") or ""' 2>/dev/null || true)
+    [[ -n "$pid" ]] && { echo "$pid"; return 0; }
+    chat=$(chat_show "$1" | json_field '.get("id") or ""' 2>/dev/null || true)
+    [[ -n "$chat" ]] || return 0
+    ps -E -ww -axo pid=,ppid=,command= 2>/dev/null | env_pid_from "$chat" "$ROOT" || true
 }
 
 # MARK: - Durchgang
@@ -939,6 +965,16 @@ cmd_self_test() {
     expect_exact "OK|;FEHLER|Sprung 2 -> 4" \
         "$(printf '%s' "$RESULTS" | awk -F'\t' '{printf "%s%s|%s", (NR > 1 ? ";" : ""), $3, $4}')" \
         "Befund ohne Detail sauber eingetragen"
+
+    # PID nach Umgebung: oberster Prozess des Chats, nur in dieser Wurzel.
+    local ps_fixture
+    ps_fixture=$(printf '%s\n' \
+        "200 1 /bin/zsh -l WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-1" \
+        "201 200 claude --resume x WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-1" \
+        "150 1 claude WHISPERM8_INSTANCE_ROOT=/anders WHISPERM8_SESSION_ID=ABC-1" \
+        "300 1 claude WHISPERM8_INSTANCE_ROOT=/r WHISPERM8_SESSION_ID=abc-2")
+    expect_exact "200" "$(printf '%s\n' "$ps_fixture" | env_pid_from ABC-1 /r/)" "PID nach Umgebung: oberster Prozess, nur diese Wurzel"
+    expect_exact "" "$(printf '%s\n' "$ps_fixture" | env_pid_from abc-9 /r)" "PID nach Umgebung: kein Treffer"
 
     rm -rf "$dir"
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi
