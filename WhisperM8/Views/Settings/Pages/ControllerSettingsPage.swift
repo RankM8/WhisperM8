@@ -7,13 +7,17 @@ struct ControllerSettingsDependencies {
     var status: @MainActor () -> ControllerStatus
     /// Schalter wurden geändert: Lauf der Steuerung angleichen.
     var applyPreferences: @MainActor () -> Void
+    /// Paddles nicht lesbar: auf Klick nach „Eingabeüberwachung“ fragen und
+    /// die Systemeinstellungen öffnen (nie von selbst).
+    var requestInputMonitoring: @MainActor () -> Void = {}
 
     static let live = ControllerSettingsDependencies(
         status: { ControllerManager.shared.status },
         applyPreferences: {
             ControllerManager.shared.applyPreferences()
             ControllerConnectHint.shared.sync()
-        }
+        },
+        requestInputMonitoring: { XboxPaddleHIDSource.requestListenAccess() }
     )
 }
 
@@ -85,6 +89,10 @@ struct ControllerSettingsPage: View {
                 )
                 .disabled(!backgroundEnabled)
             }
+
+            ControllerPaddleSection(
+                status: dependencies.status(), applyPreferences: dependencies.applyPreferences,
+                requestAccess: dependencies.requestInputMonitoring)
 
             ForEach(ControllerLegend.allBindings(traits: traits), id: \.kind) { section in
                 ControllerBindingsSection(section: section, family: family)

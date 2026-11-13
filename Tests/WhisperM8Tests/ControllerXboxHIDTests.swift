@@ -133,6 +133,15 @@ final class ControllerManagerHIDTests: XCTestCase {
         XCTAssertEqual(manager.status.paddles, .disabled)
     }
 
+    func testPaddleBindingsAreCachedAndRefreshed() {
+        let manager = makeManager(FakeHIDSource())
+        XCTAssertEqual(manager.paddleBindings, .standard)
+        defaults.set("pause", forKey: PreferenceKeys.controllerPaddleUpperRight)
+        XCTAssertEqual(manager.paddleBindings, .standard, "kein Lesen je Geste")
+        manager.applyPreferences()
+        XCTAssertEqual(manager.paddleBindings[.upperRight], .pause)
+    }
+
     func testTraitsFollowTheHomeButton() {
         let status = ControllerStatus()
         status.device = ControllerDeviceInfo(name: "Xbox", category: "Xbox One", batteryLevel: nil,

@@ -6,9 +6,12 @@ import SwiftUI
 extension UISnapshotGallery {
     @MainActor
     static func controllerXboxFixtures() -> [Fixture] {
-        func xboxStatus(lastButton: ControllerButton? = nil) -> ControllerStatus {
+        func xboxStatus(
+            lastButton: ControllerButton? = nil, paddles: ControllerPaddleSupport = .readable
+        ) -> ControllerStatus {
             let status = ControllerStatus()
             status.isRunning = true
+            status.paddles = paddles
             status.lastButton = lastButton
             status.device = ControllerDeviceInfo(
                 name: "Xbox Wireless Controller", category: "Xbox One",
@@ -52,7 +55,19 @@ extension UISnapshotGallery {
                 name: "controller-xbox-einstellungen", size: CGSize(width: 760, height: 1950),
                 storage: [PreferenceKeys.controllerEnabled: true, PreferenceKeys.controllerBackgroundEnabled: true]
             ) {
-                page(xboxStatus(lastButton: .cross))
+                page(xboxStatus(lastButton: .paddleUpperLeft))
+            },
+            Fixture(
+                name: "controller-xbox-einstellungen-nicht-lesbar", size: CGSize(width: 760, height: 1950),
+                storage: [PreferenceKeys.controllerEnabled: true, PreferenceKeys.controllerPaddleLowerRight: "claudeTasks"]
+            ) {
+                page(xboxStatus(lastButton: .cross, paddles: .notReadable(reason: "not permitted")))
+            },
+            Fixture(
+                name: "controller-xbox-einstellungen-ohne-paddles", size: CGSize(width: 760, height: 1950),
+                storage: [PreferenceKeys.controllerEnabled: true]
+            ) {
+                page(xboxStatus(lastButton: .touchpad, paddles: .noPaddles))
             },
         ]
     }

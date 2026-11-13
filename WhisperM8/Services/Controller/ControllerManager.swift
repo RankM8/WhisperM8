@@ -203,6 +203,7 @@ final class ControllerManager {
     /// wenn sich ein Schalter ändert.
     func applyPreferences() {
         let prefs = preferences()
+        paddleBindings = prefs.paddleBindings
         let shouldRun = prefs.isControllerFeatureEnabled && prefs.isControllerEnabled
         if shouldRun, !status.isRunning {
             start()

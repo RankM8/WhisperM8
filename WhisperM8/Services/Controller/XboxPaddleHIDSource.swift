@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IOKit.hid
 import os
@@ -39,6 +40,18 @@ final class XboxPaddleHIDSource: @unchecked Sendable {
         case kIOHIDAccessTypeGranted: return "granted"
         case kIOHIDAccessTypeDenied: return "denied"
         default: return "unknown"
+        }
+    }
+
+    /// Nur auf Klick in den Einstellungen: nach „Eingabeüberwachung“ fragen
+    /// und die passende Stelle der Systemeinstellungen öffnen. Wirkt erst nach
+    /// einem Neustart der App.
+    @MainActor
+    static func requestListenAccess() {
+        let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        Logger.controller.info("controller_hid_access_requested granted=\(granted, privacy: .public)")
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
         }
     }
 

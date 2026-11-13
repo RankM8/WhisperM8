@@ -1951,6 +1951,16 @@
         }
       }
     },
+    "Allow in System Settings…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In den Systemeinstellungen erlauben…"
+          }
+        }
+      }
+    },
     "Allow it in the sidebar first": {
       "localizations": {
         "de": {
@@ -2117,6 +2127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anderes Fenster"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antworten"
           }
         }
       }
@@ -2562,6 +2582,16 @@
       }
     },
     "Back to previous": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum vorigen Ort"
+          }
+        }
+      }
+    },
+    "Back to previous place": {
       "localizations": {
         "de": {
           "stringUnit": {
@@ -3737,6 +3767,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Claude · Usage-Limits"
+          }
+        }
+      }
+    },
+    "Claude: /tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude: /tasks"
+          }
+        }
+      }
+    },
+    "Claude: /workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude: /workflows"
           }
         }
       }
@@ -5597,6 +5647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Icon automatisch erkennen"
+          }
+        }
+      }
+    },
+    "Detected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkannt"
           }
         }
       }
@@ -9091,12 +9151,32 @@
         }
       }
     },
+    "Lower left": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unten links"
+          }
+        }
+      }
+    },
     "Lower left paddle (%@)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Paddle unten links (%@)"
+          }
+        }
+      }
+    },
+    "Lower right": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unten rechts"
           }
         }
       }
@@ -10261,6 +10341,16 @@
         }
       }
     },
+    "Next waiting chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster wartender Chat"
+          }
+        }
+      }
+    },
     "No Codex thread ID — resume impossible.": {
       "localizations": {
         "de": {
@@ -10471,6 +10561,16 @@
         }
       }
     },
+    "No controller with paddles connected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Controller mit Paddles verbunden."
+          }
+        }
+      }
+    },
     "No data": {
       "localizations": {
         "de": {
@@ -10567,6 +10667,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noch keine Ausgabe"
+          }
+        }
+      }
+    },
+    "No paddles": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Paddles"
           }
         }
       }
@@ -10871,6 +10981,16 @@
         }
       }
     },
+    "Not readable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht lesbar"
+          }
+        }
+      }
+    },
     "Not requested": {
       "localizations": {
         "de": {
@@ -10997,6 +11117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notizen auf"
+          }
+        }
+      }
+    },
+    "Nothing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichts"
           }
         }
       }
@@ -11404,6 +11534,16 @@
         }
       }
     },
+    "Open clipboard history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischenablage-Verlauf öffnen"
+          }
+        }
+      }
+    },
     "Open history": {
       "localizations": {
         "de": {
@@ -11794,6 +11934,46 @@
         }
       }
     },
+    "Paddles": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddles"
+          }
+        }
+      }
+    },
+    "Paddles act only in WhisperM8, with a single press — not inside a layer and not while recording. Leave them on A, B, X, Y in the controller profile: WhisperM8 ignores that button when it can read the paddle.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddles wirken nur in WhisperM8, mit einem einzelnen Druck — nicht in einer Ebene und nicht während einer Aufnahme. Im Profil des Controllers auf A, B, X oder Y lassen: WhisperM8 übergeht diese Taste, wenn es das Paddle lesen kann."
+          }
+        }
+      }
+    },
+    "Paddles detected. Each one is its own button; the Xbox button opens the clipboard history.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddles erkannt. Jedes ist eine eigene Taste; der Xbox-Knopf öffnet den Zwischenablage-Verlauf."
+          }
+        }
+      }
+    },
+    "Paddles not readable — they act as the buttons of the controller profile, and the Xbox button does nothing. Allow WhisperM8 under Input Monitoring, then restart the app.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paddles nicht lesbar — sie wirken als die Tasten des Controller-Profils, und der Xbox-Knopf tut nichts. WhisperM8 unter Eingabeüberwachung erlauben und die App danach neu starten."
+          }
+        }
+      }
+    },
     "Pairing": {
       "localizations": {
         "de": {
@@ -11850,6 +12030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch einfügen"
+          }
+        }
+      }
+    },
+    "Paste from clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus der Zwischenablage einfügen"
           }
         }
       }
@@ -12934,6 +13124,16 @@
         }
       }
     },
+    "Reading paddles is switched off. They act as the buttons of the controller profile.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Lesen der Paddles ist ausgeschaltet. Sie wirken als die Tasten des Controller-Profils."
+          }
+        }
+      }
+    },
     "Reads the current selection (needs Accessibility permission) so modes like Reply understand what you refer to.": {
       "localizations": {
         "de": {
@@ -13994,6 +14194,16 @@
         }
       }
     },
+    "Reset to defaults": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf Standard zurücksetzen"
+          }
+        }
+      }
+    },
     "Resource usage": {
       "localizations": {
         "de": {
@@ -14750,6 +14960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jetzt senden"
+          }
+        }
+      }
+    },
+    "Send now / Continue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt senden / Weiter"
           }
         }
       }
@@ -15910,6 +16130,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standard"
+          }
+        }
+      }
+    },
+    "Standard assignment": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardbelegung"
           }
         }
       }
@@ -17954,6 +18184,16 @@
         }
       }
     },
+    "This Xbox controller has no paddles. The Xbox button opens the clipboard history.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Xbox-Controller hat keine Paddles. Der Xbox-Knopf öffnet den Zwischenablage-Verlauf."
+          }
+        }
+      }
+    },
     "This background session has no short ID, so it can't be attached. Close the tab or start it again.": {
       "localizations": {
         "de": {
@@ -18754,12 +18994,32 @@
         }
       }
     },
+    "Upper left": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oben links"
+          }
+        }
+      }
+    },
     "Upper left paddle (%@)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Paddle oben links (%@)"
+          }
+        }
+      }
+    },
+    "Upper right": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oben rechts"
           }
         }
       }

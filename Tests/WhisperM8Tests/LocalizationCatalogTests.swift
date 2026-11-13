@@ -80,6 +80,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Pages/ClaudeAccountsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/ClaudeHooksSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/ClaudeMCPSyncSection.swift",
+        "WhisperM8/Views/Settings/Pages/ControllerPaddleSection.swift",
         "WhisperM8/Views/Settings/Pages/ContextPrivacySettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/GPTAccountsSection.swift",
         "WhisperM8/Views/Settings/Pages/GPTBackendSettingsPage.swift",
