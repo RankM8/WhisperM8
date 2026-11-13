@@ -164,6 +164,17 @@ final class AgentFallbackBindingTests: XCTestCase {
         XCTAssertTrue(AgentSessionStore.registryIDFits("neu", arguments: ["--settings", "/x.json"]), "frischer Start")
     }
 
+    /// Vic: auch die Gleichheitsform `--resume=<id>` aus eigenen Argumenten.
+    func testForkGuardUnderstandsResumeWithEqualsSign() {
+        let fork = ["--settings", "/x.json", "--resume=quelle", "--fork-session"]
+        XCTAssertEqual(step(fork, records: [record("quelle", pid: 200)]), .wait)
+        XCTAssertEqual(step(fork, records: [record("neu", pid: 200)]), .bind("neu"))
+        XCTAssertEqual(step(["--resume=quelle"], records: [record("anders", pid: 200)]), .wait)
+        XCTAssertEqual(AgentSessionStore.resumedSessionID(in: ["-r", "abc"]), "abc")
+        XCTAssertNil(AgentSessionStore.resumedSessionID(in: ["--resume="]))
+        XCTAssertNil(AgentSessionStore.resumedSessionID(in: ["--settings", "/x.json"]))
+    }
+
     func testClaudeStepSkipsRegistryForAttachAndWithoutSwitch() {
         let records = [record("quelle", pid: 200)]
         XCTAssertEqual(step(["attach", "abc"], records: records), .transcriptFallback, "Background-Agent")
