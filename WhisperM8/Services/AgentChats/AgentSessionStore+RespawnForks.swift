@@ -165,10 +165,7 @@ struct AgentSessionDuplicateGroup: Equatable {
         }
         return byKey.values.compactMap { sessions -> AgentSessionDuplicateGroup? in
             guard sessions.count > 1 else { return nil }
-            let sorted = sessions.sorted { lhs, rhs in
-                if lhs.isManuallyCreated != rhs.isManuallyCreated { return lhs.isManuallyCreated }
-                return lhs.createdAt < rhs.createdAt
-            }
+            let sorted = sessions.sorted(by: keeperPrecedes)
             return AgentSessionDuplicateGroup(
                 externalSessionID: sorted[0].externalSessionID ?? "",
                 keeper: sorted[0],
@@ -176,5 +173,16 @@ struct AgentSessionDuplicateGroup: Equatable {
             )
         }
         .sorted { $0.keeper.createdAt < $1.keeper.createdAt }
+    }
+
+    /// Wer von mehreren Chats derselben Sitzung sie führt: der von Hand
+    /// angelegte, sonst der älteste (eine Fehlbindung trifft den später
+    /// angelegten: Fork auf Quelle, Rückfall auf ein fremdes Transcript),
+    /// bei Gleichstand fest nach UUID. Gilt auch für Sammel-Starts
+    /// (`AgentCollectiveStartPlanner`).
+    static func keeperPrecedes(_ lhs: AgentChatSession, _ rhs: AgentChatSession) -> Bool {
+        if lhs.isManuallyCreated != rhs.isManuallyCreated { return lhs.isManuallyCreated }
+        if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }
