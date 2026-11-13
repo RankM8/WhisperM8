@@ -143,6 +143,105 @@ final class RecordingCoordinatorTranscriptionTests: XCTestCase {
         }
         XCTAssertFalse(factoryCalled)
     }
+
+    /// Dialog abgelehnt: Der Schlüssel liegt im Schlüsselbund, war aber nicht
+    /// lesbar. Eigene Meldung statt „No API key configured“.
+    func testUnreadableStoredKeyReportsKeychainAccessDenied() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        for (stored, expectDenied) in [(true, true), (false, false)] {
+            let coordinator = RecordingCoordinator(
+                appState: .shared,
+                providerResolver: { .groq },
+                modelResolver: { .groq_whisper_v3 },
+                apiKeyResolver: { _ in nil },
+                apiKeyStored: { _ in stored },
+                transcriberFactory: { _, _, _ in ThrowingTranscriptionService() }
+            )
+            do {
+                try await coordinator.transcribeAndDeliver(
+                    audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+                )
+                XCTFail("Expected an error")
+            } catch TranscriptionError.keychainAccessDenied {
+                XCTAssertTrue(expectDenied)
+            } catch TranscriptionError.missingAPIKey {
+                XCTAssertFalse(expectDenied)
+            }
+        }
+    }
+
+    /// Abbruch über die Pille bei offenem Schlüsselbund-Dialog: Der Resolver kehrt abgebrochen mit
+    /// nil zurück. Das ist ein Abbruch, kein fehlender Schlüssel (kein Alert).
+    func testCancelWhileKeyLoadsIsCancellationNotMissingKey() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        var factoryCalled = false
+        let coordinator = RecordingCoordinator(
+            appState: .shared,
+            providerResolver: { .groq },
+            modelResolver: { .groq_whisper_v3 },
+            apiKeyResolver: { _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+                return nil
+            },
+            transcriberFactory: { _, _, _ in
+                factoryCalled = true
+                return ThrowingTranscriptionService()
+            }
+        )
+
+        do {
+            try await coordinator.transcribeAndDeliver(
+                audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+            )
+            XCTFail("Expected CancellationError")
+        } catch is CancellationError {
+            // erwartet
+        }
+        XCTAssertFalse(factoryCalled)
+    }
+
+    /// Lehnt der Anbieter den Schlüssel ab, wird die Kopie im Speicher verworfen;
+    /// andere Fehler lassen sie stehen.
+    func testRejectedKeyIsForgottenOnlyOn401() async throws {
+        let audio = try tempAudio()
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        for (error, expectForget) in [
+            (TranscriptionError.apiError(statusCode: 401, message: "bad key"), true),
+            (TranscriptionError.apiError(statusCode: 429, message: "slow down"), false),
+            (TranscriptionError.timeout, false)
+        ] {
+            var rejected: [TranscriptionProvider] = []
+            let coordinator = RecordingCoordinator(
+                appState: .shared,
+                providerResolver: { .groq },
+                modelResolver: { .groq_whisper_v3 },
+                apiKeyResolver: { _ in "stale" },
+                apiKeyRejected: { rejected.append($0) },
+                transcriberFactory: { _, _, _ in FailingTranscriptionService(error: error) }
+            )
+            do {
+                try await coordinator.transcribeAndDeliver(
+                    audioURL: audio, audioDuration: 1, outputMode: .defaultMode(), contextBundle: .empty
+                )
+                XCTFail("Expected \(error)")
+            } catch {
+                // erwartet
+            }
+            XCTAssertEqual(rejected, expectForget ? [.groq] : [], "\(error)")
+        }
+    }
+}
+
+private struct FailingTranscriptionService: TranscriptionServiceProtocol {
+    let error: Error
+    func transcribe(audioURL: URL, language: String?, audioDuration: TimeInterval?) async throws -> String {
+        throw error
+    }
 }
 
 private struct EchoPostProcessor: PostProcessing {
