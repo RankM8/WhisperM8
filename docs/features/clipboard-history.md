@@ -221,7 +221,7 @@ Robustheit:
 - Ein einzelner kaputter Eintrag im Index kostet nur sich selbst
   (nachsichtiges Lesen), nicht den ganzen Verlauf.
 - Ist der Index gar nicht lesbar, wird er beiseitegelegt statt überschrieben;
-  solange er da liegt, räumt die App keine Dateien weg.
+  solange er da liegt, räumt die App keine Dateien weg, bis der User leert.
 - Dateien ohne Eintrag (Absturz zwischen Datei und Index) und Temp-Reste
   entfernt der Store beim Laden.
 - Löschen eines Eintrags löscht alle seine Dateien.
@@ -233,8 +233,11 @@ Robustheit:
   **Einstellungen** löscht alles samt Pins und leert den ganzen Ordner, auch
   Reste und einen beiseitegelegten Index (`clear(keepPinned: false)`).
   „Clear History…“ in der **Fußzeile des Fensters** (und „Clear when WhisperM8
-  quits“) löscht nur nicht angepinnte Einträge; Pins, ihre Dateien, Reste und
-  ein beiseitegelegter Index bleiben (`clear(keepPinned: true)`).
+  quits“) löscht nur nicht angepinnte Einträge; Pins und ihre Dateien bleiben
+  (`clear(keepPinned: true)`). Ein beiseitegelegter kaputter Index geht auch
+  hier mit weg, samt Dateien ohne Eintrag: Seine Einträge, auch Pins, lädt die
+  App nie wieder, und wer leert, erwartet, dass die Texte weg sind
+  (Entscheidung 13.11.2026).
 
 Platz: Dateien nicht angepinnter Einträge (Bilder, Archive, lange Texte)
 dürfen zusammen höchstens 512 MB belegen (`Limits.maxUnpinnedBlobBytes`); darüber
