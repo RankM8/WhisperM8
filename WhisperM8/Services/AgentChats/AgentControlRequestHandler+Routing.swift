@@ -14,6 +14,7 @@ extension AgentControlRequestHandler {
         case speech
         case clipboard
         case gptRouter
+        case order
 
         var methods: Set<String> {
             switch self {
@@ -22,6 +23,7 @@ extension AgentControlRequestHandler {
             case .speech: return AgentControlRequestHandler.speechMethods
             case .clipboard: return AgentControlRequestHandler.clipboardMethods
             case .gptRouter: return [AgentControlRequestHandler.gptRouterStartProfileMethod]
+            case .order: return [AgentControlRequestHandler.sessionOrderMethod]
             }
         }
     }
@@ -39,6 +41,7 @@ extension AgentControlRequestHandler {
         case .speech: return await speechRequest(request)
         case .clipboard: return await clipboardRequest(request)
         case .gptRouter: return gptRouterStartProfile(request)
+        case .order: return await sessionOrder(request)
         }
     }
 }

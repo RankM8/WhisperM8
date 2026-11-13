@@ -737,6 +737,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     "isPrimary": id == store.primaryWindowID,
                     "tabCount": tabs.count,
                     "tabTitles": tabs.map { titles[$0] ?? "?" },
+                    "tabs": tabs.enumerated().map { ["position": $0.offset + 1, "id": $0.element.uuidString, "title": titles[$0.element] ?? "?"] },
                     "selectedTitle": store.selectedSession(in: id).flatMap { titles[$0] } ?? "",
                     // Grid oder Einzelansicht? Ohne dieses Feld ist ein
                     // gesetzter `activeWorkspaceID` nicht interpretierbar —
