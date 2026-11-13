@@ -43,6 +43,10 @@ struct AgentSessionDetailView: View {
     /// Hinweis aus dem Rückfall der Übernahme (Punkt 11): steht im selben
     /// Banner, übersteht aber den erfolgreichen Start, bis man ihn schließt.
     @State private var fallbackNotice: String?
+    /// Sperr-Meldung der Codex-Startsperre mit einem Prozess, den der Nutzer
+    /// beenden darf („Prozess beenden“).
+    @State private var codexEndable: CodexEndableState?
+    @State private var codexEndConfirming = false
     @State private var showRestartConfirmation = false
     /// Launch scheiterte an fehlender CLI: geführter Leerzustand statt Balken (LR-AU-022).
     @State private var missingCLI: AgentCLI?
@@ -83,6 +87,63 @@ struct AgentSessionDetailView: View {
         }
     }
 
+    /// Zustand des Knopfs im Banner (`AgentSessionNoticeBanner`).
+    private var bannerCodexEndPhase: AgentSessionNoticeBanner.CodexEndPhase? {
+        switch codexEndable?.phase {
+        case .ready: return .ready
+        case .ending: return .ending
+        case .notEnded: return .notEnded
+        case .signalFailed: return .signalFailed
+        case nil: return nil
+        }
+    }
+
+    /// „Prozess beenden“: bei Codex im Terminal erst die Rückfrage.
+    private func requestCodexEnd() {
+        guard let state = codexEndable else { return }
+        if state.needsConfirmation {
+            codexEndConfirming = true
+        } else {
+            endCodexProcess(force: false)
+        }
+    }
+
+    /// Text der Rückfrage vor dem Beenden eines Codex im Terminal.
+    static func codexTerminalQuitMessage(pid: Int32) -> String {
+        String(localized: "This quits the Codex process (PID \(String(pid))) in the other terminal window, whatever it is working on right now. If it has moved on to another conversation there, that work is interrupted too.")
+    }
+
+    /// Beendet den Prozess aus der Sperr-Meldung und startet den Chat danach
+    /// neu (die Sperre prüft dabei ohnehin noch einmal).
+    private func endCodexProcess(force: Bool) {
+        guard let state = codexEndable, state.phase != .ending, state.sessionID == session.id else { return }
+        codexEndable?.phase = .ending
+        let process = state.process
+        let chatID = state.sessionID
+        Task.detached(priority: .userInitiated) {
+            let outcome = await CodexProcessTerminator().end(process, force: force)
+            Logger.agentStore.notice(
+                "codex_process_end pid=\(process.pid) force=\(force) outcome=\(String(describing: outcome), privacy: .public)")
+            await MainActor.run {
+                // Inzwischen anderer Chat in dieser Ansicht oder Meldung
+                // weggeklickt: Ergebnis verwerfen, nichts neu starten.
+                guard codexEndable?.sessionID == chatID, session.id == chatID else { return }
+                switch outcome {
+                case .ended, .notTheSameProcess:
+                    codexEndable = nil
+                    errorMessage = nil
+                    guard !focusLaunchInFlight else { return }
+                    focusLaunchInFlight = true
+                    launchAfterCacheWarmup()
+                case .stillRunning:
+                    codexEndable?.phase = .notEnded
+                case .signalFailed:
+                    codexEndable?.phase = .signalFailed
+                }
+            }
+        }
+    }
+
     private var controller: AgentTerminalController? {
         terminalRegistry.controller(for: session.id)
     }
@@ -92,26 +153,34 @@ struct AgentSessionDetailView: View {
             // Launch-/Repair-Fehler sichtbar machen (Review-Befund 2026-07-13:
             // errorMessage wurde gesetzt, aber nie gerendert — abgebrochene
             // Launches wirkten wie ein No-op bzw. verschwundener Verlauf).
-            if let bannerText = errorMessage ?? fallbackNotice {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    Text(bannerText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(AgentTheme.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button {
-                        if self.errorMessage != nil { self.errorMessage = nil } else { self.fallbackNotice = nil }
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(AgentTheme.textSecondary)
+            if errorMessage != nil || fallbackNotice != nil {
+                AgentSessionNoticeBanner(
+                    errorMessage: errorMessage,
+                    fallbackNotice: fallbackNotice,
+                    codexEndPhase: errorMessage == nil ? nil : bannerCodexEndPhase,
+                    onEndProcess: requestCodexEnd,
+                    onForceQuit: { endCodexProcess(force: true) },
+                    onClose: {
+                        // Erst der Fehler samt Codex-Zustand, dann der Hinweis.
+                        if errorMessage != nil {
+                            errorMessage = nil
+                            codexEndable = nil
+                            codexEndConfirming = false
+                        } else {
+                            fallbackNotice = nil
+                        }
                     }
-                    .buttonStyle(.plain)
+                )
+                .confirmationDialog(
+                    "Quit the Codex in that terminal?",
+                    isPresented: $codexEndConfirming,
+                    presenting: codexEndable?.process
+                ) { _ in
+                    Button("Quit Codex", role: .destructive) { endCodexProcess(force: false) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { process in
+                    Text(Self.codexTerminalQuitMessage(pid: process.pid))
                 }
-                .padding(10)
-                .background(Color.yellow.opacity(0.12))
             }
             if let missingCLI, controller == nil {
                 AgentCLIMissingView(cli: missingCLI, onInstalled: { self.missingCLI = nil })
@@ -167,6 +236,8 @@ struct AgentSessionDetailView: View {
         .onChange(of: session.id) { _, _ in
             errorMessage = nil
             fallbackNotice = HandoverFallbackLaunchQueue.shared.takeNotice(for: session.id)
+            codexEndable = nil
+            codexEndConfirming = false
             showCollectiveStartNotice()
             cachedTranscript = nil
             isLoadingTranscript = false
@@ -656,7 +727,15 @@ struct AgentSessionDetailView: View {
                 onClaudeHookLaunched(launchSession.id)
             }
             errorMessage = nil
+            codexEndable = nil
         } catch {
+            if case AgentCommandError.codexSessionRunning(_, let conflict) = error,
+               let process = conflict.endableProcess {
+                codexEndable = CodexEndableState(sessionID: session.id, process: process, phase: .ready,
+                                                 needsConfirmation: conflict.endNeedsConfirmation)
+            } else {
+                codexEndable = nil
+            }
             if case AgentCommandError.commandNotFound(let name) = error {
                 missingCLI = AgentChatStartGate.cli(forCommandName: name)
                 errorMessage = nil
@@ -1006,4 +1085,16 @@ struct AgentResumeTranscriptMissingError: LocalizedError {
     var errorDescription: String? {
         String(localized: "Chat history currently not found: for session \(externalSessionID) there is no transcript file under ~/.claude/projects or in any account profile (~/.claude-profiles/*/projects). If it was deleted, start a new chat for new work — this tab keeps its assignment and resumes automatically as soon as the file reappears.")
     }
+}
+
+/// Zustand der Knöpfe „Prozess beenden“ / „Sofort beenden“ im Meldungsbanner.
+struct CodexEndableState: Equatable {
+    enum Phase: Equatable { case ready, ending, notEnded, signalFailed }
+    /// Der Chat, zu dem die Meldung gehört (die Ansicht kann inzwischen einen
+    /// anderen zeigen).
+    let sessionID: UUID
+    let process: CodexProcessTarget
+    var phase: Phase
+    /// Vor dem Signal fragen (Codex im Terminal, `endNeedsConfirmation`).
+    var needsConfirmation = false
 }

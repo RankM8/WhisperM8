@@ -279,6 +279,12 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
     /// (3) Der Hinweis sagt ehrlich, dass ein Start-Prompt nicht noch einmal läuft.
     func testFreshStartNoticeMentionsThePrompt() {
         XCTAssertTrue(HandoverFallbackStart.startFresh.notice?.contains("not sent again") == true)
+        // Alltagssprache (Jarvis, 13.11.2026): keine Fachwörter im Hinweis.
+        for notice in [HandoverFallbackStart.startFresh.notice, HandoverFallbackStart.keepStopped.notice].compactMap({ $0 }) {
+            for word in ["session ID", "bound", "turn", "prompt"] {
+                XCTAssertFalse(notice.localizedCaseInsensitiveContains(word), "„\(word)“ in: \(notice)")
+            }
+        }
     }
 
     /// Vic (Leistung): recent dekodiert nur Zeilen mit der UUID der Sitzung.

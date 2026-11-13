@@ -135,13 +135,20 @@ struct ClaudeBackgroundTaskTracker {
 /// laufenden Prozesses von denen eines früheren.
 enum ProcessStartTime {
     static func of(pid: pid_t) -> Date? {
+        microseconds(pid: pid).map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000_000) }
+    }
+
+    /// Startzeit in µs seit 1970, `nil` wenn der Prozess nicht mehr lesbar
+    /// ist. Unterscheidet einen Prozess von einem späteren mit derselben PID.
+    static func microseconds(pid: pid_t) -> UInt64? {
+        guard pid > 0 else { return nil }
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
         guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
         let start = info.kp_proc.p_un.__p_starttime
         guard start.tv_sec > 0 else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(start.tv_sec) + TimeInterval(start.tv_usec) / 1_000_000)
+        return UInt64(start.tv_sec) * 1_000_000 + UInt64(start.tv_usec)
     }
 }
 

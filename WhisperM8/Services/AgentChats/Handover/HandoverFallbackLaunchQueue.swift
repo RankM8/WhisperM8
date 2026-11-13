@@ -129,9 +129,9 @@ enum HandoverFallbackStart: Equatable {
         case .resume:
             return nil
         case .startFresh:
-            return String(localized: "Restarted as a new session after the restart: this chat had no session to continue yet. A prompt it was started with is not sent again.")
+            return String(localized: "Started fresh after the restart: this chat had no conversation yet that could be continued. If it was opened with a first message, that message is not sent again.")
         case .keepStopped:
-            return String(localized: "Not continued after the restart: this chat has no bound session ID yet, although it already had turns. Its history is kept; start it again once the session is bound, or start a new chat.")
+            return String(localized: "Not continued after the restart: the app could not yet safely match this chat to its earlier conversation. Nothing is lost. Start the chat again later, or start a new one.")
         }
     }
 }

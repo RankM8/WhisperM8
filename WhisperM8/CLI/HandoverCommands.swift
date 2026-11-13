@@ -336,8 +336,8 @@ enum AppCLICommand {
     /// Zeile für die Ausgabe von `make dev` bei klassischem Neustart.
     static func classicLine(reason: String?) -> String {
         if reason == "routerInApp" {
-            return "Keine Übergabe: Der Schalter „Neustart ohne Chatverlust“ wirkt erst ab diesem Neustart "
-                + "(der GPT-Router lief noch in der App). Diesmal enden die Chats wie bisher und werden fortgesetzt."
+            return "Keine Übergabe: „Neustart ohne Chatverlust“ wirkt erst ab diesem Neustart, weil die App "
+                + "beim Einschalten schon lief. Diesmal enden die Chats wie bisher und werden danach fortgesetzt."
         }
         return "Keine Übergabe: \(reason ?? "ohne Grund")"
     }
