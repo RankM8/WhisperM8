@@ -10,7 +10,8 @@ import Foundation
 /// `--no-optional-locks` (siehe `GitChangesSnapshot.load`).
 @MainActor
 final class ProjectChangesWatcher {
-    private var stream: FSEventStreamRef?
+    /// Endet mit dem Besitzer (deinit der Subscription), auch ohne stop().
+    private var subscription: FSEventsSubscription?
     private var debounceTask: Task<Void, Never>?
     private let debounceInterval: TimeInterval
     private let onChange: () -> Void
@@ -24,48 +25,27 @@ final class ProjectChangesWatcher {
         stop()
         guard FileManager.default.fileExists(atPath: path) else { return }
 
-        var context = FSEventStreamContext()
-        context.info = Unmanaged.passUnretained(self).toOpaque()
-
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
-            guard let info else { return }
-            let watcher = Unmanaged<ProjectChangesWatcher>.fromOpaque(info).takeUnretainedValue()
-            Task { @MainActor in
-                watcher.scheduleChange()
-            }
-        }
-
         // FSEvents-eigene Latenz (1 s) fasst Bursts zusammen; kein
         // kFileEvents-Flag — Verzeichnisgranularität reicht (wir laden ohnehin
         // den ganzen Status) und ist bei node_modules-Stürmen deutlich billiger.
-        guard let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            callback,
-            &context,
-            [path] as CFArray,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            1.0,
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes)
+        guard let subscription = FSEventsSubscription(
+            paths: [path],
+            latency: 1.0,
+            flags: 0,
+            queue: DispatchQueue(label: "com.whisperm8.app.project-changes", qos: .utility),
+            handler: { [weak self] _, _ in
+                Task { @MainActor [weak self] in self?.scheduleChange() }
+            }
         ) else {
             Logger.agentPerformance.error("project_changes_fsevents_start_failed")
             return
         }
-
-        FSEventStreamSetDispatchQueue(
-            stream,
-            DispatchQueue(label: "com.whisperm8.app.project-changes", qos: .utility)
-        )
-        FSEventStreamStart(stream)
-        self.stream = stream
+        self.subscription = subscription
     }
 
     func stop() {
-        if let stream {
-            FSEventStreamStop(stream)
-            FSEventStreamInvalidate(stream)
-            FSEventStreamRelease(stream)
-            self.stream = nil
-        }
+        subscription?.cancel()
+        subscription = nil
         debounceTask?.cancel()
         debounceTask = nil
     }
