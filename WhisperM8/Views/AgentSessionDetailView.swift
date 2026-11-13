@@ -133,8 +133,12 @@ struct AgentSessionDetailView: View {
         }
         .onAppear {
             attachToAdoptedController()
+            if suppressesAutoActivation, session.shouldLaunchOnOpen == true {
+                launchFromHandoverFallbackIfQueued()
+            }
             if !suppressesAutoActivation {
                 if session.shouldLaunchOnOpen == true {
+                    HandoverFallbackLaunchQueue.shared.forget(session.id)
                     launchAfterCacheWarmup()
                 }
                 // Direkt nach dem Mount Tastaturfokus auf das Terminal setzen,
@@ -180,6 +184,10 @@ struct AgentSessionDetailView: View {
         // Guards wie beim Grid-Fokus-Nachholen (kein Controller, keine
         // laufende Vorbereitung, nicht unterdrückt).
         .onChange(of: session.shouldLaunchOnOpen) { wasSet, isSet in
+            if suppressesAutoActivation, isSet == true, wasSet != true {
+                launchFromHandoverFallbackIfQueued()
+                return
+            }
             // Ein beendeter Prozess (z. B. gescheitertes `claude attach`)
             // hinterlässt einen nicht laufenden Controller — `resume` muss
             // auch diesen Tab neu starten (Befund 11.11.2026).
@@ -386,6 +394,19 @@ struct AgentSessionDetailView: View {
     /// gespeicherte Claude-Resume-ID repariert werden muss, läuft auch der
     /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
     /// dem MainActor frei von blockierendem Datei-I/O.
+    /// Befund 3 (Dex): Nur Chats aus dem Rückfall der Übernahme starten auch
+    /// in einer unterdrückten Grid-Pane, nacheinander mit kurzem Abstand.
+    private func launchFromHandoverFallbackIfQueued() {
+        guard let delay = HandoverFallbackLaunchQueue.shared.takeLaunchSlot(for: session.id) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning,
+                                                            refusesNewStarts: terminalRegistry.refusesNewStarts),
+                  !focusLaunchInFlight else { return }
+            focusLaunchInFlight = true
+            launchAfterCacheWarmup()
+        }
+    }
+
     private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
         // Nach einer geglückten Abgabe nichts mehr vorbereiten (Hook-Datei).
         guard !terminalRegistry.refusesNewStarts else {
