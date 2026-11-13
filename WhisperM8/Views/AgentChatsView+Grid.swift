@@ -1139,9 +1139,6 @@ extension AgentChatsView {
                 onSessionLaunched: { sessionID in
                     AgentSessionStatusCoordinator.shared.sessionLaunched(sessionID: sessionID)
                 },
-                onSessionTerminated: { sessionID, exitCode in
-                    AgentSessionStatusCoordinator.shared.sessionTerminated(sessionID: sessionID, exitCode: exitCode)
-                },
                 onExternalSessionIDBound: { sessionID in
                     AgentSessionStatusCoordinator.shared.externalSessionIDBound(sessionID: sessionID)
                 },

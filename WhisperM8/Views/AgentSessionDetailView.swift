@@ -27,7 +27,6 @@ struct AgentSessionDetailView: View {
     /// rein, die intern `runtimeWatcher?.watch(...)` etc. aufrufen — so muss
     /// die Detail-View nichts vom Watcher selbst wissen.
     var onSessionLaunched: (UUID) -> Void = { _ in }
-    var onSessionTerminated: (UUID, Int32?) -> Void = { _, _ in }
     var onExternalSessionIDBound: (UUID) -> Void = { _ in }
     /// Wird gerufen direkt VOR dem Claude-Launch: schreibt die
     /// `--settings`-Datei (Hook-Bridge + GPT-Katalog) und liefert Args +
@@ -564,7 +563,7 @@ struct AgentSessionDetailView: View {
                 sessionID: launchSession.id,
                 command: command,
                 onLaunched: markLaunched,
-                onTerminated: { exitCode in markTerminated(exitCode: exitCode) }
+                onTerminated: { outcome in markTerminated(outcome) }
             )
             // Terminal-Tabs: Shell-Titel (OSC 0/2 — laufendes Kommando/cwd)
             // live als Tab-Titel übernehmen, solange der User nicht manuell
@@ -738,28 +737,16 @@ struct AgentSessionDetailView: View {
         }
     }
 
-    private func markTerminated(exitCode: Int32?) {
-        // Steht der beendete Controller noch in der Registry, endete der
-        // Prozess von selbst (ein `terminate()` durch uns entfernt ihn vorher).
-        let ended = terminalRegistry.controller(for: session.id)
-        let quickFailedAttach = AgentAttachRecovery.isQuickFailedAttach(
-            isBackgroundAttachFallback: ended?.command.isBackgroundAttachFallback ?? false,
-            end: AgentAttachRecovery.decode(waitStatus: exitCode),
-            runDuration: ended?.startedAt.map { Date().timeIntervalSince($0) }
-        )
+    /// Store und Statuskoordinator hat die Registry beim Ende schon versorgt
+    /// (`AgentChatTermination`); hier bleibt nur, was die Ansicht braucht.
+    private func markTerminated(_ outcome: AgentChatTermination.Outcome) {
         defer {
-            if quickFailedAttach { recoverFromFailedAttach(rawExitStatus: exitCode) }
+            if outcome.quickFailedAttach { recoverFromFailedAttach(rawExitStatus: outcome.exitCode) }
         }
-        do {
-            try store.updateSession(id: session.id) { updated in
-                if updated.status == .running {
-                    updated.status = .closed
-                }
-            }
-            onSessionTerminated(session.id, exitCode)
+        if let errorDescription = outcome.errorDescription {
+            errorMessage = errorDescription
+        } else {
             onStateChanged()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

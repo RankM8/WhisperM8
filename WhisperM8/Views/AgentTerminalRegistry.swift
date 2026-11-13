@@ -6,16 +6,24 @@ final class AgentTerminalRegistry: ObservableObject {
     /// Geteilte Instanz, damit View-Bäume außerhalb von `AgentChatsView`
     /// (insbesondere der MenuBarExtra) dieselben laufenden Vordergrund-PTYs
     /// erreichen — Voraussetzung für ein globales "Stop all".
-    static let shared = AgentTerminalRegistry()
+    static let shared = AgentTerminalRegistry(termination: .live)
 
     @Published private var controllers: [UUID: AgentTerminalController] = [:]
 
     /// Wartezeit zwischen den Ctrl+C-Wellen (Mikrosekunden). Injizierbar, damit
     /// Tests die Anzahl der Pausen zählen können, statt sie abzusitzen.
     private let sleep: (useconds_t) -> Void
+    /// Was beim Ende eines Chat-Prozesses passiert (Store, Statuskoordinator).
+    /// Lebt hier statt in der Ansicht, damit es auch für Chats ohne Ansicht
+    /// gilt. Tests bekommen `.inert` und schreiben nie in den echten Workspace.
+    private let termination: AgentChatTermination
 
-    init(sleep: @escaping (useconds_t) -> Void = { usleep($0) }) {
+    init(
+        sleep: @escaping (useconds_t) -> Void = { usleep($0) },
+        termination: AgentChatTermination = .inert
+    ) {
         self.sleep = sleep
+        self.termination = termination
     }
 
     /// Meldet jede Änderung des Satzes laufender PTYs — Quelle des
@@ -41,7 +49,7 @@ final class AgentTerminalRegistry: ObservableObject {
         sessionID: UUID,
         command: AgentLaunchCommand,
         onLaunched: @escaping () -> Void,
-        onTerminated: @escaping (Int32?) -> Void
+        onTerminated: @escaping (AgentChatTermination.Outcome) -> Void
     ) -> AgentTerminalController {
         if let controller = controllers[sessionID], controller.isRunning {
             return controller
@@ -52,8 +60,14 @@ final class AgentTerminalRegistry: ObservableObject {
             command: command,
             onLaunched: onLaunched,
             onTerminated: { [weak self] exitCode in
-                onTerminated(exitCode)
-                self?.notifyRunningSetChanged()
+                guard let self else { return }
+                // Erst Store und Status, dann die Ansicht (falls es eine gibt).
+                // Steht der Controller noch hier, endete der Prozess von selbst.
+                let outcome = self.termination.handle(
+                    sessionID: sessionID, exitCode: exitCode,
+                    endedController: self.controllers[sessionID])
+                onTerminated(outcome)
+                self.notifyRunningSetChanged()
             }
         )
         controllers[sessionID] = controller
