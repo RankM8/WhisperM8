@@ -9,14 +9,15 @@ import SwiftUI
 ///
 /// Die Diktat-Logik merkt davon nichts: `show`/`hide` kehren sofort zurück,
 /// Aufnahme und Auslieferung warten nie auf eine Animation. Das Fenster bleibt
-/// das bewährte `RecordingPanel` (nicht aktivierend, nie Key); die
-/// Status-Pille tritt erst zurück, wenn es sein erstes Bild gezeichnet hat,
-/// und kommt zurück, bevor es schließt. So steht auf dem Bildschirm immer
-/// genau eine Pille.
+/// das bewährte `RecordingPanel` (nicht aktivierend, nie Key). Es erscheint
+/// zuerst unsichtbar über der Status-Pille; steht es auf dem Bildschirm,
+/// tauschen beide in einem Bild ihre Sichtbarkeit. Zurück genauso. So steht
+/// auf dem Bildschirm in jedem Bild genau eine Pille.
 extension OverlayController {
-    /// Ein Bild bei 60 Hz plus Luft: so lange überlappen Status- und
-    /// Diktat-Fenster mit gleichem Bild beim Wechsel.
-    static let morphHandoverDelay: TimeInterval = 0.03
+    /// Wartezeit, nachdem ein Fenster sein Bild abgegeben hat, bis es sicher
+    /// auf dem Bildschirm steht. Gemessen (13.11.2026, 120 Hz, Rechner unter
+    /// Last): ein neues Fenster erscheint 18 bis 33 ms nach dem Abgeben.
+    static let morphHandoverDelay: TimeInterval = 0.05
     /// Länge der Breitenanimation (`Animation.pill`) plus ein Bild.
     static let morphAnimationDelay: TimeInterval = 0.37
 
@@ -145,20 +146,57 @@ extension OverlayController {
                 if let screen = unifiedScreen { UnifiedPillHub.shared.dictationDidShow(onDisplay: screen.displayID) }
             case .showStatus:
                 UnifiedPillHub.shared.dictationDidHide()
+            case .revealDictation:
+                swapVisibility(dictationVisible: true)
+            case .revealStatus:
+                swapVisibility(dictationVisible: false)
             case .closeWindow:
                 closeRetiredPanel()
             case .schedule(let step, let generation):
-                let delay = step == .frameDrawn ? Self.morphHandoverDelay : Self.morphAnimationDelay
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                    MainActor.assumeIsolated {
-                        guard let self else { return }
-                        // Nur die laufende Messung beenden, nicht eine überholte.
-                        if step == .animationDone, generation == self.morph.generation { self.endMorphSignpost() }
-                        self.applyMorph(self.morph.step(step, generation: generation))
+                let perform: @MainActor () -> Void = { [weak self] in
+                    guard let self else { return }
+                    // Nur die laufende Messung beenden, nicht eine überholte.
+                    if step == .animationDone, generation == self.morph.generation { self.endMorphSignpost() }
+                    self.applyMorph(self.morph.step(step, generation: generation))
+                }
+                switch step {
+                case .frameDrawn, .revealDrawn:
+                    Self.afterNextCommit(delay: Self.morphHandoverDelay, perform)
+                case .animationDone:
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.morphAnimationDelay) {
+                        MainActor.assumeIsolated(perform)
                     }
                 }
             }
         }
+    }
+
+    /// Tausch in einem Bild: Beide Änderungen landen in derselben
+    /// CATransaction (Ebenen-Deckkraft, keine Fensterbewegung), also im selben
+    /// Bild auf dem Bildschirm. Fenster ein- und ausblenden ginge dagegen
+    /// sofort an die Fensterverwaltung und überholte das Bild.
+    private func swapVisibility(dictationVisible: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        hostingView?.alphaValue = dictationVisible ? 1 : 0
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: dictationVisible ? unifiedScreen?.displayID : nil)
+        CATransaction.commit()
+    }
+
+    /// `body` läuft, wenn der Main Thread das nächste Bild abgegeben hat
+    /// (Ende des laufenden Run-Loop-Durchlaufs, nach dem Zeichnen und der
+    /// CATransaction), plus `delay` für die Fensterverwaltung. Ein
+    /// beschäftigter Main Thread verschiebt so nur den Zeitpunkt, er kann den
+    /// Tausch nicht vor das Bild ziehen (vorher: fester Zeitgeber ab Aufbau).
+    static func afterNextCommit(delay: TimeInterval, _ body: @escaping @MainActor () -> Void) {
+        // Core Animation gibt bei `beforeWaiting` mit Rang 2_000_000 ab;
+        // dieser Beobachter läuft direkt danach und nur einmal.
+        let observer = CFRunLoopObserverCreateWithHandler(
+            nil, CFRunLoopActivity.beforeWaiting.rawValue, false, 2_000_001
+        ) { _, _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(body) }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
     }
 
     /// Fenster zu, nachdem die Status-Pille wieder steht (oder sofort beim
@@ -166,6 +204,8 @@ extension OverlayController {
     /// Schritt nicht an (Generation).
     private func closeRetiredPanel() {
         cancelMorphSignpost()
+        // Steht die Status-Pille noch unsichtbar, wird sie spätestens jetzt sichtbar.
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
         if let unifiedScreenObserver {
             NotificationCenter.default.removeObserver(unifiedScreenObserver)
             self.unifiedScreenObserver = nil

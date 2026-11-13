@@ -147,7 +147,9 @@ extension OverlayController {
             guard let self, !self.isResettingPosition else { return }
             self.rememberUnifiedPosition(anchor)
         }
-        installPanel(panel, safeAreaFree: placement.isNotch)
+        // Mit Übergang zuerst unsichtbar über der ruhenden Pille; sichtbar
+        // wird es im selben Bild, in dem die Status-Pille unsichtbar wird.
+        installPanel(panel, safeAreaFree: placement.isNotch, contentHidden: snapshot != nil)
         observeScreenChanges()
         observeUnifiedBadge()
         // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
@@ -250,6 +252,7 @@ extension OverlayController {
         closePanelForRebuild()
         cancelMorphSignpost()
         morph.reset()
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
         buildUnifiedPanel(placement, allowMorph: false)
     }
 
@@ -272,6 +275,7 @@ extension OverlayController {
         restLook = nil
         restCenter = nil
         UnifiedPillHub.shared.dictationDidHide()
+        UnifiedPillHub.shared.setStatusContentHidden(onDisplay: nil)
     }
 
     /// Klappen Listen an der Pille nach unten auf (obere Bildschirmhälfte)?

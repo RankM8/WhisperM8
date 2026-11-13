@@ -32,6 +32,23 @@ final class UnifiedPillHub: ObservableObject {
     /// wie per Hotkey. Gesetzt vom `NotchStatusController` (sein Weg).
     var startDictation: () -> Void = {}
 
+    /// Übergang (`UnifiedPillMorph`): Bildschirm, auf dem der Inhalt der
+    /// Status-Pille gerade unsichtbar ist, weil das Diktat-Fenster dort ihr
+    /// Bild zeigt; `nil` sonst. Das Fenster selbst bleibt, wie es ist.
+    private(set) var statusContentHiddenDisplayID: UInt32?
+    /// Setzt die Sichtbarkeit sofort in der laufenden CATransaction um.
+    /// Gesetzt vom `NotchStatusController`, solange er läuft.
+    var applyStatusContentHidden: (UInt32?) -> Void = { _ in }
+
+    /// Inhalt der Status-Pille auf diesem Bildschirm unsichtbar (`nil`: überall
+    /// sichtbar). Nur der Übergang ruft das, jeweils im selben Bild wie den
+    /// Gegenschritt am Diktat-Fenster.
+    func setStatusContentHidden(onDisplay displayID: UInt32?) {
+        guard statusContentHiddenDisplayID != displayID else { return }
+        statusContentHiddenDisplayID = displayID
+        applyStatusContentHidden(displayID)
+    }
+
     func dictationDidShow(onDisplay displayID: UInt32) {
         if dictationDisplayID != displayID { dictationDisplayID = displayID }
     }

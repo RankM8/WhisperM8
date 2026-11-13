@@ -57,6 +57,26 @@ final class UnifiedPillWindowTraceTests: XCTestCase {
         XCTAssertEqual(result.maxCenterOffset, 24)
     }
 
+    /// Tausch der Sichtbarkeit, bevor das Diktat-Fenster in der Fensterliste
+    /// stand: nicht nahtlos, auch wenn immer ein Fenster stand.
+    func testRevealBeforeTheWindowIsOnScreenIsReported() {
+        let samples = [
+            Sample(time: 0, windows: [window(status)]),
+            Sample(time: 40, windows: [window(status), window(dictation)]),
+            Sample(time: 90, windows: [window(dictation)]),
+        ]
+        let early = UnifiedPillTraceVerdict.evaluate(
+            samples: samples, events: [UnifiedPillTraceEvent(time: 30, name: "revealDictation")],
+            dictationWindow: dictation, statusWindows: [status])
+        XCTAssertEqual(early.revealDictationLeadMs, -10)
+        XCTAssertFalse(early.isSeamless)
+        let inTime = UnifiedPillTraceVerdict.evaluate(
+            samples: samples, events: [UnifiedPillTraceEvent(time: 70, name: "revealDictation")],
+            dictationWindow: dictation, statusWindows: [status])
+        XCTAssertEqual(inTime.revealDictationLeadMs, 30)
+        XCTAssertTrue(inTime.isSeamless)
+    }
+
     func testWithoutDictationWindowNothingIsJudged() {
         let result = UnifiedPillTraceVerdict.evaluate(
             samples: [Sample(time: 0, windows: [window(status)])], dictationWindow: nil, statusWindows: [status])

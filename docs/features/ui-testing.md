@@ -90,6 +90,7 @@ defaults write com.whisperm8.app debugControlEnabled -bool YES   # wirkt sofort
 | `whisperm8 debug dictate <datei> [--provider groq\|openai\|chatgpt] [--language de\|en\|auto] [--timeout <s>]` | Audiodatei durch den echten Transkriptions-Weg (Einstellungen, Zugangs-Gate, Service-Factory, ChatGPT-Abo inklusive). **Kein** Einfügen, keine Zwischenablage, kein Run-Report, keine Nachbearbeitung, `AppState` bleibt unberührt. |
 | `whisperm8 debug context` | Clipboard-Fallback des Diktatstarts wie beim Hotkey (Task auf dem MainActor, Snapshot-`await`, Tastencode für Cmd+C aus dem Tastaturlayout) — auf einer privaten Zwischenablage, ohne Tastendruck, ohne Aktivierung. Liefert die Tastencodes für Cmd+C/Cmd+V und ob Cmd+C auf dem Main Thread lief. Prüft in der laufenden App, was Unit-Tests nicht können: HIToolbox bricht nur dort ab. |
 | `whisperm8 debug record [<sekunden>]` | Echter Aufnahmestart wie per Hotkey (Engine, Neustart bei Bluetooth-Formatwechsel, Pill „Mikrofon verbindet …"), dann Abbruch: Datei verworfen, kein Transkript, kein Einfügen, **kein** Kontext-Capture. Liefert `startMs`, `connectingShown`, `engineAttempts`, `maxLevel` und das Eingabegerät. Fragt nie nach der Mikrofonfreigabe; Pill und Ducking sind kurz sichtbar/hörbar. |
+| `whisperm8 debug pill [--hold <ms>] [--busy <ms>] [--busy-after <ms>]` | Übergang der vereinten Pille ohne Aufnahme durchspielen und die Fensterliste mitschneiden: Lücke ohne Pille, Versatz, Verschiebung durch AppKit beim Einblenden, Reihenfolge von Tausch und Fenstern. Details im Abschnitt „Übergang der vereinten Pille prüfen“. |
 | `whisperm8 debug job <id>` | Stand eines Diktat-Auftrags. |
 
 Ausgabe immer JSON auf stdout; Exit 0 ok, 1 Aufruf, 3 nicht gefunden,
@@ -174,3 +175,38 @@ sichtbar machen: `WHISPERM8_TEST_VISIBLE=1 scripts/test-instance.sh start`.
 **Grenzen:** Mikrofon und Bedienungshilfen hat das Test-Bundle nicht (eigener
 TCC-Eintrag) — Diktat nur über `debug dictate <audio>`. Claude im Test-Home ist
 nicht angemeldet; echte Modell-Turns gehen dort nicht.
+
+### Übergang der vereinten Pille prüfen (`debug pill`)
+
+Snapshots sehen nur das Bild einer Ansicht, nicht, wo AppKit das Fenster
+hinstellt und in welcher Reihenfolge Fenster erscheinen. Dafür:
+
+```bash
+WHISPERM8_TEST_VISIBLE=pill scripts/test-instance.sh start   # nur die Pillen bleiben an ihrem Platz
+# auf einem MacBook zusätzlich WHISPERM8_TEST_NO_NOTCH=1: Pille statt Notch
+scripts/test-instance.sh cli debug pill [--hold <ms>] [--busy <ms>] [--busy-after <ms>]
+```
+
+`debug pill` zeigt die Diktat-Pille ohne Aufnahme (`show`/`hide` des
+`OverlayController`, kein Mikrofon), lässt sie `--hold` ms stehen und blendet
+sie aus. Ein Faden liest dabei etwa jede Millisekunde die Fensterliste.
+Antwort: `seamless`, `longestGapMs` (Zeit ohne Pillen-Fenster),
+`maxCenterOffset` (senkrechter Versatz der Fenstermitten, pt),
+`orderFrontShift` (wie weit AppKit das Diktat-Fenster beim Einblenden
+verschoben hat, der Fehlerort des Sprungs nach unten), die Abstände von
+Tausch und Fenstern (`revealDictationLeadMs` u. a., negativ = zu früh), dazu
+Ereignisse und Fensterrahmen mit Zeit. `--busy` blockiert den Main Thread
+direkt nach dem Aufbau des Diktat-Fensters, noch vor seinem ersten Bild
+(`--busy-after`: so viele ms später). Läuft ein Diktat, lehnt der Befehl ab.
+Geht auch in der echten App (hinter `debugControlEnabled`).
+
+Grenze: Die Fensterliste weiß nicht, ob zwei durchscheinende Pillen
+übereinander liegen oder welchen Ton eine hat. Das zeigt nur eine Aufnahme:
+ein ScreenCaptureKit-Filter nur auf die Fenster der Test-Instanz
+(`SCContentFilter(display:including:[App])`, weißer Hintergrund), auf einen
+kleinen Rahmen um die Pille beschnitten, je Bild Ober- und Unterkante,
+Breite, Mitte und Helligkeit des Körpers auswerten, die Bilder danach
+löschen. Die Pille muss dafür in Bildschirmfotos erlaubt sein
+(`defaults write com.whisperm8.app.test notchStatusHideFromCapture -bool NO`,
+nur die Test-Domain); das aufnehmende Programm braucht die Freigabe
+Bildschirmaufnahme.

@@ -592,14 +592,21 @@ extension NotchScreenInfo {
             let value = unmanaged.takeRetainedValue()
             return (CFUUIDCreateString(nil, value) as String?) ?? "display-\(id)"
         }
+        let hidesNotch = Self.testInstanceHidesNotch
         self.init(
             displayID: id,
             frame: screen.frame,
             visibleFrame: screen.visibleFrame,
-            safeAreaTop: screen.safeAreaInsets.top,
-            auxiliaryLeftWidth: screen.auxiliaryTopLeftArea?.width,
-            auxiliaryRightWidth: screen.auxiliaryTopRightArea?.width,
+            safeAreaTop: hidesNotch ? 0 : screen.safeAreaInsets.top,
+            auxiliaryLeftWidth: hidesNotch ? nil : screen.auxiliaryTopLeftArea?.width,
+            auxiliaryRightWidth: hidesNotch ? nil : screen.auxiliaryTopRightArea?.width,
             isBuiltIn: CGDisplayIsBuiltin(id) != 0,
             uuid: uuid)
     }
+
+    /// Nur Test-Instanz (`WHISPERM8_TEST_NO_NOTCH=1 scripts/test-instance.sh
+    /// start`): Bildschirme gelten als ohne Notch, damit sich die Pille ohne
+    /// Notch auch auf einem MacBook prüfen lässt. Einmal gelesen.
+    static let testInstanceHidesNotch =
+        AppInstance.isTestInstance && ProcessInfo.processInfo.environment["WHISPERM8_TEST_NO_NOTCH"] == "1"
 }

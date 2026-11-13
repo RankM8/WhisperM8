@@ -15,8 +15,9 @@ final class UnifiedPillMorphTests: XCTestCase {
     }
 
     /// Ruhe → Wachsen → Diktat → Zurückziehen → Ruhe, mit den Schritten in
-    /// der richtigen Reihenfolge: Die Status-Pille geht erst, wenn das
-    /// Diktat-Fenster ihr Bild zeigt, und kommt zurück, bevor es schließt.
+    /// der richtigen Reihenfolge: Erst wenn das Diktat-Fenster steht,
+    /// tauschen beide in einem Bild die Sichtbarkeit; die Status-Pille geht
+    /// erst danach aus dem Weg. Zurück genauso, das Fenster schließt zuletzt.
     func testFullCycleHandsOverWithoutAGap() throws {
         var morph = UnifiedPillMorph()
         let shown = morph.show(morph: true)
@@ -26,9 +27,12 @@ final class UnifiedPillMorphTests: XCTestCase {
 
         let drawn = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shown, .frameDrawn)))
         XCTAssertEqual(morph.phase, .growing)
-        XCTAssertEqual(Array(drawn.prefix(2)), [.hideStatus, .grow])
+        XCTAssertEqual(Array(drawn.prefix(2)), [.revealDictation, .grow])
+        XCTAssertFalse(drawn.contains(.hideStatus), "Fenster geht erst, wenn der Tausch auf dem Bildschirm ist")
 
-        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(drawn, .animationDone))), [])
+        XCTAssertEqual(morph.step(.revealDrawn, generation: try XCTUnwrap(scheduled(drawn, .revealDrawn))), [.hideStatus])
+        XCTAssertEqual(morph.phase, .growing)
+        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(drawn, .animationDone))), [.hideStatus])
         XCTAssertEqual(morph.phase, .dictation)
 
         let hidden = morph.hide(morph: true)
@@ -40,9 +44,15 @@ final class UnifiedPillMorphTests: XCTestCase {
         let shrunk = morph.step(.animationDone, generation: try XCTUnwrap(scheduled(hidden, .animationDone)))
         XCTAssertEqual(morph.phase, .handoverOut)
         XCTAssertTrue(shrunk.contains(.showStatus))
+        XCTAssertFalse(shrunk.contains(.revealStatus), "erst wenn die Status-Pille wieder steht")
         XCTAssertFalse(shrunk.contains(.closeWindow), "Fenster bleibt, bis die Status-Pille gezeichnet ist")
 
-        let closed = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shrunk, .frameDrawn)))
+        let revealed = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shrunk, .frameDrawn)))
+        XCTAssertEqual(morph.phase, .closing)
+        XCTAssertEqual(revealed.first, .revealStatus)
+        XCTAssertFalse(revealed.contains(.closeWindow), "Fenster geht erst, wenn der Tausch auf dem Bildschirm ist")
+
+        let closed = morph.step(.revealDrawn, generation: try XCTUnwrap(scheduled(revealed, .revealDrawn)))
         XCTAssertEqual(closed, [.closeWindow])
         XCTAssertEqual(morph.phase, .idle)
     }
@@ -53,7 +63,7 @@ final class UnifiedPillMorphTests: XCTestCase {
         var morph = UnifiedPillMorph()
         XCTAssertEqual(morph.show(morph: false), [.hideStatus])
         XCTAssertEqual(morph.phase, .dictation)
-        XCTAssertEqual(morph.hide(morph: false), [.closeWindow, .showStatus])
+        XCTAssertEqual(morph.hide(morph: false), [.closeWindow, .showStatus, .revealStatus])
         XCTAssertEqual(morph.phase, .idle)
     }
 
@@ -111,6 +121,24 @@ final class UnifiedPillMorphTests: XCTestCase {
         XCTAssertEqual(morph.phase, .growing)
     }
 
+    /// Neues Diktat, nachdem schon zurückgetauscht ist (Status sichtbar,
+    /// Diktat-Fenster unsichtbar, schließt gleich): in einem Bild zurück
+    /// tauschen und wachsen, das Fenster schließt nicht.
+    func testStartWhileClosingSwapsBackAndGrows() throws {
+        var morph = UnifiedPillMorph()
+        _ = morph.show(morph: false)
+        let hidden = morph.hide(morph: true)
+        let shrunk = morph.step(.animationDone, generation: try XCTUnwrap(scheduled(hidden, .animationDone)))
+        let revealed = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shrunk, .frameDrawn)))
+        let closeStep = try XCTUnwrap(scheduled(revealed, .revealDrawn))
+        XCTAssertTrue(morph.isRetiring)
+        let again = morph.show(morph: true)
+        XCTAssertEqual(Array(again.prefix(2)), [.revealDictation, .grow])
+        XCTAssertEqual(morph.step(.revealDrawn, generation: closeStep), [], "Fenster bleibt")
+        XCTAssertEqual(morph.step(.revealDrawn, generation: try XCTUnwrap(scheduled(again, .revealDrawn))), [.hideStatus])
+        XCTAssertEqual(morph.phase, .growing)
+    }
+
     /// `show` ruft vorher `hide` (Wiederholen, Schnellaktion): im selben Lauf
     /// zurück und wieder vor, am Ende wieder das Diktat.
     func testHideAndShowInTheSameTurnEndsInDictation() throws {
@@ -118,7 +146,8 @@ final class UnifiedPillMorphTests: XCTestCase {
         _ = morph.show(morph: false)
         _ = morph.hide(morph: true)
         let again = morph.show(morph: true)
-        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(again, .animationDone))), [])
+        // Status-Pille bleibt weg (doppelt gemeldet schadet nicht, der Hub entprellt).
+        XCTAssertEqual(morph.step(.animationDone, generation: try XCTUnwrap(scheduled(again, .animationDone))), [.hideStatus])
         XCTAssertEqual(morph.phase, .dictation)
     }
 
@@ -148,16 +177,36 @@ final class UnifiedPillMorphTests: XCTestCase {
         var morph = UnifiedPillMorph()
         _ = morph.show(morph: false)
         _ = morph.hide(morph: true)
-        XCTAssertEqual(morph.abort(), [.closeWindow, .showStatus])
+        XCTAssertEqual(morph.abort(), [.closeWindow, .showStatus, .revealStatus])
         XCTAssertEqual(morph.phase, .idle)
         XCTAssertEqual(morph.abort(), [], "nichts mehr offen")
     }
 
-    func testAbortAfterTheStatusIsBackOnlyClosesTheWindow() throws {
+    /// Status-Pille steht schon wieder, ist aber noch unsichtbar: Fenster zu,
+    /// Status sichtbar machen.
+    func testAbortDuringHandoverOutRevealsTheStatus() throws {
         var morph = UnifiedPillMorph()
         _ = morph.show(morph: false)
         let hidden = morph.hide(morph: true)
         _ = morph.step(.animationDone, generation: try XCTUnwrap(scheduled(hidden, .animationDone)))
+        XCTAssertEqual(morph.phase, .handoverOut)
+        XCTAssertEqual(morph.abort(), [.closeWindow, .revealStatus])
+    }
+
+    func testAbortWhileClosingOnlyClosesTheWindow() throws {
+        var morph = UnifiedPillMorph()
+        _ = morph.show(morph: false)
+        let hidden = morph.hide(morph: true)
+        let shrunk = morph.step(.animationDone, generation: try XCTUnwrap(scheduled(hidden, .animationDone)))
+        _ = morph.step(.frameDrawn, generation: try XCTUnwrap(scheduled(shrunk, .frameDrawn)))
+        XCTAssertEqual(morph.phase, .closing)
+        XCTAssertEqual(morph.abort(), [.closeWindow], "Status ist schon sichtbar")
+    }
+
+    /// Stopp, bevor getauscht wurde: Das Diktat-Fenster war nie sichtbar.
+    func testAbortDuringHandoverInOnlyClosesTheWindow() {
+        var morph = UnifiedPillMorph()
+        _ = morph.show(morph: true)
         XCTAssertEqual(morph.abort(), [.closeWindow])
     }
 

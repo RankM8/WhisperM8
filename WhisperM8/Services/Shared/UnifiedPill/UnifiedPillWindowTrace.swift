@@ -42,10 +42,36 @@ struct UnifiedPillTraceVerdict: Equatable {
     var statusHiddenMs: Double?
     var statusBackMs: Double?
     var dictationGoneMs: Double?
+    /// Tausch der Sichtbarkeit (`revealDictation`) nach dem Erscheinen des
+    /// Diktat-Fensters in der Fensterliste (ms). Negativ: getauscht, bevor
+    /// das Fenster stand, ein Bild ohne Pille ist möglich.
+    var revealDictationLeadMs: Double?
+    /// Rücktausch (`revealStatus`) nach dem Wiedererscheinen der Status-Pille.
+    var revealStatusLeadMs: Double?
+    /// Diktat-Fenster verschwindet nach dem Rücktausch (ms); negativ: zu früh.
+    var closeAfterRevealMs: Double?
 
-    var isSeamless: Bool { longestGapMs == 0 && maxCenterOffset <= 0.5 }
+    var isSeamless: Bool {
+        longestGapMs == 0 && maxCenterOffset <= 0.5
+            && [revealDictationLeadMs, revealStatusLeadMs, closeAfterRevealMs].allSatisfy { ($0 ?? 0) >= 0 }
+    }
 
     static func evaluate(
+        samples: [UnifiedPillWindowSample], events: [UnifiedPillTraceEvent] = [],
+        dictationWindow: Int?, statusWindows: Set<Int>
+    ) -> UnifiedPillTraceVerdict {
+        var verdict = evaluateWindows(samples: samples, dictationWindow: dictationWindow, statusWindows: statusWindows)
+        let revealDictation = events.first { $0.name == "revealDictation" }?.time
+        let revealStatus = events.last { $0.name == "revealStatus" }?.time
+        if let revealDictation, let appeared = verdict.dictationAppearedMs {
+            verdict.revealDictationLeadMs = revealDictation - appeared
+        }
+        if let revealStatus, let back = verdict.statusBackMs { verdict.revealStatusLeadMs = revealStatus - back }
+        if let revealStatus, let gone = verdict.dictationGoneMs { verdict.closeAfterRevealMs = gone - revealStatus }
+        return verdict
+    }
+
+    private static func evaluateWindows(
         samples: [UnifiedPillWindowSample], dictationWindow: Int?, statusWindows: Set<Int>
     ) -> UnifiedPillTraceVerdict {
         var verdict = UnifiedPillTraceVerdict(longestGapMs: 0, maxCenterOffset: 0, overlapMs: 0)

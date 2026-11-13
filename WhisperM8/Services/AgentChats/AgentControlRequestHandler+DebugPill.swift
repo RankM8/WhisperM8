@@ -10,8 +10,8 @@ import Foundation
 /// welches Fenster stand, und ob es eine Lücke oder einen Versatz gab.
 ///
 /// `busy` blockiert den Main Thread nach dem Aufbau des Diktat-Fensters
-/// (sofort im selben Lauf oder `busyAfter` ms später), wie ein schwerer
-/// Diktatstart. Läuft ein Diktat, lehnt der Befehl ab.
+/// (direkt danach, noch bevor es zeichnet, oder `busyAfter` ms später), wie
+/// ein schwerer Diktatstart. Läuft ein Diktat, lehnt der Befehl ab.
 extension AgentControlRequestHandler {
     func debugPill(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let hold = min(max(request.params["holdMs"]?.intValue ?? 1500, 200), 5000)
@@ -35,7 +35,14 @@ extension AgentControlRequestHandler {
                     usleep(useconds_t(busy * 1000))
                     tracer.mark("busyEnd")
                 }
-                if busyAfter == 0 { return block() }
+                guard busyAfter > 0 else {
+                    // Noch in diesem Durchlauf der Run Loop, nach dem Aufbau,
+                    // aber vor dem Zeichnen (CATransaction am Ende des Durchlaufs).
+                    CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+                        MainActor.assumeIsolated { block() }
+                    }
+                    return
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(busyAfter)) { block() }
             }
             defer { overlay.debugEvent = nil }
@@ -53,7 +60,7 @@ extension AgentControlRequestHandler {
             let (samples, events) = tracer.stop()
             let statusWindows = statusBefore.union(Self.statusPillWindows())
             let verdict = UnifiedPillTraceVerdict.evaluate(
-                samples: samples, dictationWindow: dictationWindow, statusWindows: statusWindows)
+                samples: samples, events: events, dictationWindow: dictationWindow, statusWindows: statusWindows)
             return Self.pillTraceJSON(
                 samples: samples, events: events, dictationWindow: dictationWindow,
                 statusWindows: statusWindows, verdict: verdict)
@@ -90,8 +97,15 @@ extension AgentControlRequestHandler {
             rows.append(["t": rounded(sample.time), "status": status, "dictation": dictation])
         }
         func optional(_ value: Double?) -> Any { value.map(rounded) ?? NSNull() }
+        // Hat AppKit das Diktat-Fenster beim Einblenden verschoben (`installPanel`)?
+        let shift = events.lazy.compactMap { event -> Double? in
+            guard event.name.hasPrefix("orderFrontShift:") else { return nil }
+            let parts = event.name.dropFirst("orderFrontShift:".count).split(separator: ",").compactMap { Double($0) }
+            return parts.map(abs).max()
+        }.first ?? 0
         return [
-            "seamless": verdict.isSeamless,
+            "seamless": verdict.isSeamless && shift == 0,
+            "orderFrontShift": rounded(shift),
             "longestGapMs": rounded(verdict.longestGapMs),
             "maxCenterOffset": rounded(verdict.maxCenterOffset),
             "overlapMs": rounded(verdict.overlapMs),
@@ -99,6 +113,9 @@ extension AgentControlRequestHandler {
             "statusHiddenMs": optional(verdict.statusHiddenMs),
             "statusBackMs": optional(verdict.statusBackMs),
             "dictationGoneMs": optional(verdict.dictationGoneMs),
+            "revealDictationLeadMs": optional(verdict.revealDictationLeadMs),
+            "revealStatusLeadMs": optional(verdict.revealStatusLeadMs),
+            "closeAfterRevealMs": optional(verdict.closeAfterRevealMs),
             "events": events.map { ["t": rounded($0.time), "name": $0.name] as [String: Any] },
             "windows": rows,
         ]
