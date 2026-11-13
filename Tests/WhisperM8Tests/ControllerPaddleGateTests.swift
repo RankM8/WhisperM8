@@ -89,6 +89,25 @@ final class ControllerPaddleGateTests: XCTestCase {
         XCTAssertEqual(gc(.l1, true, at: 0), [], "LB beurteilt HID, also wartet es")
     }
 
+    /// Gemessenes Profil des Nutzers (13.11.2026): Paddles auf LS, RS, A und
+    /// B. Auch LS und RS werden verschluckt, in beiden Reihenfolgen.
+    func testPaddlesOnStickClicksAreSwallowed() {
+        // P1 (Bit 1) auf RS: HID zuerst.
+        XCTAssertEqual(gate.hid(report(mask: 0x1, [(.r3, true)]), at: 0), [.button(.paddleUpperRight, pressed: true)])
+        XCTAssertEqual(gc(.r3, true, at: 0.002), [])
+        XCTAssertEqual(gate.hid(report(mask: 0, [(.r3, false)]), at: 0.2), [.button(.paddleUpperRight, pressed: false)])
+        XCTAssertEqual(gc(.r3, false, at: 0.202), [])
+        // P3 (Bit 4) auf LS: GameController zuerst, wird bis zum Urteil gehalten.
+        XCTAssertEqual(gc(.l3, true, at: 1), [])
+        XCTAssertEqual(gate.hid(report(mask: 0x4, [(.l3, true)]), at: 1.003), [.button(.paddleUpperLeft, pressed: true)])
+        XCTAssertEqual(gc(.l3, false, at: 1.2), [])
+        XCTAssertEqual(gate.stats.swallowed, 2)
+        XCTAssertEqual(gate.stats.holdsExpired, 0)
+        // Direkter Druck auf LS geht durch.
+        XCTAssertEqual(gate.hid(report([(.l3, true)]), at: 2), [])
+        XCTAssertEqual(gc(.l3, true, at: 2.001), [.button(.l3, pressed: true)])
+    }
+
     // MARK: - Mehrere Paddles
 
     func testTwoPaddlesInOneReport() {
