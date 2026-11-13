@@ -243,6 +243,7 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         // Ein Manifest ohne die Felder (älterer Stand) bleibt lesbar.
         let old = #"{"chatID":"a","kind":"claude","pid":1,"cols":80,"rows":24,"sendsInterruptOnStop":true}"#
         XCTAssertNil(try JSONDecoder().decode(HandoverManifest.self, from: Data(old.utf8)).pendingExternalSessionID)
+    }
 
     // MARK: Zuordnung über die PID (Folgepunkt f zum Bindungs-Befund 13.11.2026)
 
