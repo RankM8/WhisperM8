@@ -984,15 +984,23 @@ enum ChatsCLIHelp {
                                oder Login abgelaufen. --to main zieht zurück ins
                                Hauptkonto. Exit 0 = alle im Zielkonto, 4 = nicht alle.
       whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
-                               Laufende Chats zusätzlich anhalten, nach dem
+                               Ruhende laufende Chats anhalten, nach dem
                                Prozessende umziehen und zum Neustart vormerken
-                               (startet beim Anzeigen des Tabs). Arbeitende Chats
-                               und Chats mit vermutlich ungesendetem Entwurf nur
-                               mit --force; die eigene Session nie.
-                               Arbeitende, wartende (Rückfrage) und Chats mit Entwurf
-                               werden vorgemerkt und wechseln nach dem Turn
-                               (outcome scheduled) — nicht, wenn das Zielkonto den
-                               Ordner nie freigegeben hat (stopBlocked trustMissing).
+                               (startet beim Anzeigen des Tabs); die eigene
+                               Session nie. Beschäftigte Chats (Turn, Rückfrage,
+                               Hintergrund-Tasks) und Chats mit vermutlich
+                               ungesendetem Entwurf hält es nicht an, sondern merkt
+                               sie vor: sie wechseln nach dem Turn (outcome
+                               scheduled; --dry-run zeigt wouldSchedule). Das gilt
+                               nur bei eingeschaltetem accountSwitchAfterTurnEnabled,
+                               sonst bleiben sie übersprungen. --force hält sie
+                               sofort an.
+                               Hat das Zielkonto den Ordner nie freigegeben
+                               (Trust-Dialog), wird ohne --force nichts angehalten
+                               und nichts vorgemerkt (stopBlocked trustMissing):
+                               der Neustart bliebe im Dialog „No, exit“ hängen.
+                               Ausweg: den Ordner einmal im Zielkonto öffnen und
+                               freigeben, oder --force.
       whisperm8 chats rename <ref> "<titel>" | --reset [--json]
       whisperm8 chats group <ref> "<gruppe>" | --clear [--json]
       whisperm8 chats archive <ref> [--force] [--json]

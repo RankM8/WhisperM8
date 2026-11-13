@@ -58,6 +58,8 @@ auszuweichen, wenn das gewählte Konto nicht taugt — egal ob es per `--account
 genannt oder in den Einstellungen aktiv ist:
 
 - das Profil existiert nicht (auch: `.active` nennt ein gelöschtes Profil),
+- `.active` ist vorhanden, aber nicht lesbar (Rechte, Ordner statt Datei, kein
+  UTF-8) — nur eine fehlende oder leere `.active` heißt `main`,
 - es hat keine Kontodaten (`oauthAccount` fehlt in seiner `.claude.json`) oder
   keinen Login im Keychain (gilt nur für Zusatzprofile),
 - sein Login ist nachweislich abgelaufen (30-Tage-Frist, siehe
@@ -76,6 +78,10 @@ bestehen — abgelaufene fehlen.
   Transcript-Ort — vereinheitlichen.
 - `move-account` sollte `AccountSwitchPlanner.decide` direkt nutzen statt die
   Regeln über `AccountMoveStopResumePlanner` nachzubauen.
+- main mit nachweislich abgelaufenem OAuth-Login wird gesperrt, auch wenn
+  Claude dort per API-Key oder Proxy liefe.
+- `move-account` liest die `.claude.json` eines Zusatzprofils (Kontodaten) im
+  MainActor-Block.
 
 Die Meldung nennt die angemeldeten Konten und den Ausweg (`--account <profil>`
 oder ein anderes Konto aktiv setzen bzw. den Login erneuern). Grund: eine im
@@ -168,14 +174,26 @@ vorhandenen, die Schreibweise ist egal (`--to rankm8` → `RankM8`). Ein Ziel
 ohne Login **oder mit abgelaufenem Login** sperrt den Umzug
 (`skipped`/`targetNotLoggedIn`, `result.targetLoginProblem` = `notLoggedIn`
 bzw. `loginEnded`) — der Chat stünde sonst im Zielkonto vor dem Login.
+**Ausnahme main:** Das Hauptkonto sperrt nur ein nachweislich abgelaufener
+Login. Fehlen Kontodaten (`oauthAccount`) oder der Keychain-Eintrag, darf der
+Umzug nach main trotzdem laufen, denn dort arbeitet Claude auch mit API-Key,
+`apiKeyHelper` oder über einen Proxy (in Planung und Ausführung gleich,
+`executionTargetIsLoggedIn`). **Abweichung von der App:** Die CLI sperrt ein
+Zusatzkonto mit abgelaufenem Login; das Kontextmenü „Zu Account verschieben“
+prüft nur, ob Kontodaten da sind, und lässt den Umzug zu.
 Hat das Zielkonto den Projektordner nie im Trust-Dialog freigegeben, trägt
 das Ergebnis `targetTrustMissing: true` und die Textzeile einen Hinweis:
-Claude fragt dann beim nächsten Start nach der Freigabe. Refs werden vorab alle aufgelöst (alles oder nichts), ohne
+Claude fragt dann beim nächsten Start nach der Freigabe. Bei Chats, die
+nicht laufen, ist das unkritisch — sie starten erst, wenn jemand den Tab
+öffnet und den Dialog sieht. Laufende Chats hält `--stop-and-resume` ohne
+`--force` in diesem Fall nicht an (siehe unten). Refs werden vorab alle aufgelöst (alles oder nichts), ohne
 Nachfrage — die Bestätigung holt der aufrufende Agent vorher ein.
 
 Ergebnis je Chat (`--json`: `result.results[]`): `outcome` = `wouldMove`
 (Vorschau) · `moved` · `scheduled` (vorgemerkt, wechselt nach dem Turn;
-`reason` = `turnRunning`/`awaitingInput`/`unsentInput`) · `skipped`
+`reason` = `turnRunning`/`awaitingInput`/`unsentInput`/`backgroundTasks`) ·
+`wouldSchedule` (Vorschau: der echte Lauf würde vormerken, seit 13.11.2026;
+vorher zeigte `--dry-run` diese Chats als übersprungen) · `skipped`
 (+ `reason` = Skip-Grund des Planers) · `failed` · `notFound`. Exit: Vorschau 0; sonst 0 nur, wenn danach **jeder**
 genannte Chat im Zielkonto ist (umgezogen oder schon dort), andernfalls 4 —
 ein Supervisor erkennt „nicht alles erledigt" am Exit-Code.
@@ -207,15 +225,28 @@ wechselt sie, sobald ihr Turn fertig und kein Entwurf mehr zu vermuten ist
 den Ordner nie im Trust-Dialog freigegeben hat — der unbeobachtete Neustart
 landete sonst in Claudes Dialog mit Vorauswahl „No, exit"; diese Chats bleiben
 blockiert (`stopBlocked: "trustMissing"`, auch schon in der Vorschau).
+
+**Fehlende Freigabe hält auch ruhende Chats auf** (seit 13.11.2026): Ohne
+`--force` hält `--stop-and-resume` keinen laufenden Chat an, dessen Ordner das
+Zielkonto nie freigegeben hat — auch keinen ruhenden. Die CLI wird meist
+unbeobachtet aufgerufen, der Neustart bliebe im Trust-Dialog hängen. Ergebnis:
+`skipped` mit `stopBlocked: "trustMissing"` und einem Text mit dem Ausweg:
+einmal einen Chat in diesem Ordner im Zielkonto öffnen und die Freigabe
+bestätigen (etwa `whisperm8 chats new --project <ordner> --account <ziel>`
+und im Tab „Yes“ wählen), dann erneut umziehen — oder `--force`, das wie
+bisher anhält. Das Kontextmenü der App bleibt dabei: dort wechselt ein
+ruhender Chat sofort, weil der User gerade hinschaut.
 Als beschäftigt gilt dieselbe Regel wie in der App
 (`AccountMoveStopResumePlanner.isBusy` → `AccountSwitchPlanner.waitReason`):
 arbeitet, wartet auf eine Antwort (Permission-Dialog), unbekannter Status oder
 offene Hintergrund-Tasks. Bis 13.11.2026 zählte die CLI nur „arbeitet" und
 hielt einen Chat mitten in einer Rückfrage sofort an. Vormerkungen sind flüchtig (App-Neustart verwirft sie), aufheben
 geht im Kontextmenü („Kontowechsel zu … aufheben"). `--force` hält auch
-arbeitende Chats sofort an. Kill-Switch:
+arbeitende Chats sofort an. Das Vormerken gibt es nur, solange
+`accountSwitchAfterTurnEnabled` an ist (Standard). Kill-Switch:
 `defaults write com.whisperm8.app accountSwitchAfterTurnEnabled -bool NO`
-(dann wieder blockiert wie vorher). Die Entwurfs-Schätzung
+(dann wieder blockiert wie vorher; die Meldung behauptet dann auch keinen
+ausgefallenen „Wechsel nach dem Turn“). Die Entwurfs-Schätzung
 (`TerminalComposerDraftTracker`) ist konservativ: getippte Zeichen, Einfügen,
 Datei-Drop und `send --no-submit` markieren, Return (ohne Shift/Option),
 Ctrl+C und ein zugestellter `send` heben die Markierung auf (Details und

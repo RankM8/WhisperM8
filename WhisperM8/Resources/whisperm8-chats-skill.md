@@ -82,7 +82,7 @@ whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "�
                                                      # (Konten) aktive Claude-Konto; --account main = Hauptkonto.
                                                      # Unbekannt, abgemeldet oder Login abgelaufen → Exit 3
                                                      # (kein stiller Main-Fallback). Antwort: session.account
-                                                     # + accountSource (active|explicit). Nicht mit codex.
+                                                     # + accountSource (active|explicit|killSwitch). Nicht mit codex.
 whisperm8 chats move-account <ref> [<ref>…] --to <profil> [--dry-run]
                                                      # bestehende Claude-Chats in ein anderes Claude-Konto
                                                      # umziehen (wie „Zu Account verschieben"); laufende
@@ -91,8 +91,9 @@ whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
                                                      # laufende Chats anhalten → umziehen → Neustart vormerken;
                                                      # working/Rückfrage/Entwurf: vorgemerkt (outcome scheduled),
                                                      # wechseln selbst nach dem Turn; sofort nur mit --force, @self nie.
-                                                     # Ordner im Ziel nie freigegeben → kein Vormerken
-                                                     # (stopBlocked trustMissing). Konto je Chat: list/show --json
+                                                     # Ordner im Ziel nie freigegeben → ohne --force weder
+                                                     # anhalten noch vormerken (stopBlocked trustMissing);
+                                                     # --dry-run zeigt Vormerken als wouldSchedule. Konto je Chat: list/show --json
                                                      # Feld "account" ("main" fürs Hauptkonto, null bei Codex)
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel).
 whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI (Claudes /rename bzw. generierter Titel, sonst erster Prompt)
