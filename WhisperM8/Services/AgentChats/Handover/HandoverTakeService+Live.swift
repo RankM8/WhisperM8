@@ -98,18 +98,32 @@ extension HandoverTakeService {
         runningSessionIDs: Set<UUID>? = nil,
         queue: HandoverFallbackLaunchQueue? = nil,
         hadTurn: ((AgentChatSession) -> Bool)? = nil,
-        claudeRecoverable: ((AgentChatSession) -> Bool)? = nil
+        claudeRecoverable: ((AgentChatSession) -> Bool)? = nil,
+        hookPaths: ClaudeHookPaths = ClaudeHookPaths(),
+        notices: AgentCollectiveStartNotices? = nil
     ) {
         let windowStore = windowStore ?? .shared
         let runningSessionIDs = runningSessionIDs ?? AgentTerminalRegistry.shared.activeSessionIDs
         let queue = queue ?? .shared
+        let notices = notices ?? .shared
+        let workspaceSessions = store.loadWorkspace().sessions
+        // Dieselbe Regel wie die Absturz-Wiederaufnahme: Belege aus der
+        // Hook-Datei entscheiden den Halter, der übersprungene Chat zeigt,
+        // wer seine Unterhaltung führt (Vic, Gus' Halter-Regel 5bb84874).
         let plan = AgentCollectiveStartPlanner.plan(
-            ids, sessions: store.loadWorkspace().sessions,
-            alreadyStarted: runningSessionIDs.union(queue.scheduledThisLaunch))
+            ids, sessions: workspaceSessions,
+            alreadyStarted: runningSessionIDs.union(queue.scheduledThisLaunch),
+            evidence: { AgentSessionOwnershipEvidence.live(for: $0, hookPaths: hookPaths) })
+        let titles = Dictionary(workspaceSessions.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
         for skipped in plan.skipped {
             // Nur zurücksetzen, wenn ein ANDERER Chat die Sitzung führt; ein
             // selbst schon vorgemerkter oder laufender behält sein Flag (Vic).
             guard let keeper = plan.keeperOf[skipped], keeper != skipped else { continue }
+            let title = titles[keeper].flatMap { $0.isEmpty ? nil : $0 }
+            notices.note(skipped: skipped, keeperTitle: title ?? String(keeper.uuidString.prefix(8)).lowercased())
+            if windowStore.windowID(containingTab: skipped) == nil {
+                windowStore.openTab(skipped, in: windowStore.primaryWindowID, select: false)
+            }
             try? store.updateSession(id: skipped) { $0.shouldLaunchOnOpen = false }
             Logger.agentStore.notice(
                 "handover_fallback_duplicate_skipped session=\(skipped.uuidString, privacy: .public) keeper=\(plan.keeperOf[skipped]?.uuidString ?? "-", privacy: .public)")
