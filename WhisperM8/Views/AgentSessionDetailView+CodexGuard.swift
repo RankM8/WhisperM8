@@ -45,8 +45,8 @@ extension AgentSessionDetailView {
             localID: localID,
             appChats: appChats,
             processes: processes,
-            terminatingOwner: { ProcessTerminationLedger.shared.owner(ofTerminating: $0) },
-            formerOwner: { ProcessTerminationLedger.shared.formerOwner(of: $0) },
+            terminatingOwner: { ProcessTerminationLedger.shared.owner(ofTerminating: $0, startTime: $1) },
+            formerOwner: { ProcessTerminationLedger.shared.formerOwner(of: $0, startTime: $1) },
             titleOf: { sessions[$0]?.title ?? String($0.uuidString.prefix(8)).lowercased() })
     }
 }
