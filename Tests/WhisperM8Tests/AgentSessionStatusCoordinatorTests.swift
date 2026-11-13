@@ -232,66 +232,104 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         XCTAssertEqual(decide("alt", "startup", newExists: false, currentExists: true), .postpone, "leere Session")
     }
 
-    /// Befund 13.11.2026: Eine ID, die auch ein anderer Chat trägt, war nie
-    /// sicher die eigene — der SessionStart des eigenen Prozesses gewinnt sofort.
-    func testExternalIDBindingDecisionReplacesSharedID() {
+    /// Befund 13.11.2026: Läuft die bisherige ID in einem anderen Prozess, war
+    /// sie nie die eigene — der SessionStart des eigenen Prozesses gewinnt sofort.
+    func testExternalIDBindingDecisionReplacesIDRunningElsewhere() {
         typealias C = AgentSessionStatusCoordinator
-        func decide(_ source: String?, shared: Bool) -> C.ExternalIDBindingDecision {
+        func decide(_ source: String?, elsewhere: Bool) -> C.ExternalIDBindingDecision {
             C.externalIDBindingDecision(currentID: "cd00c6c0", newID: "aa82d0ba", source: source,
                                         newTranscriptExists: false, currentTranscriptExists: true,
-                                        currentIDSharedWithOtherChat: shared)
+                                        currentIDRunsInOtherProcess: elsewhere)
         }
-        XCTAssertEqual(decide("startup", shared: true), .bind, "fremde Sitzung, eigener Start")
-        XCTAssertEqual(decide("clear", shared: true), .bind, "auch nach /clear nicht auf der fremden bleiben")
-        XCTAssertEqual(decide("fork", shared: true), .ignoreFork, "Fork bleibt Fork")
-        XCTAssertEqual(decide("startup", shared: false), .postpone, "ohne Teilung unverändert")
+        XCTAssertEqual(decide("startup", elsewhere: true), .bind, "fremde Sitzung, eigener Start")
+        XCTAssertEqual(decide("clear", elsewhere: true), .bind, "auch nach /clear nicht auf der fremden bleiben")
+        XCTAssertEqual(decide("fork", elsewhere: true), .ignoreFork, "Fork bleibt Fork")
+        XCTAssertEqual(decide("startup", elsewhere: false), .postpone, "sonst unverändert")
         XCTAssertEqual(C.externalIDBindingDecision(currentID: "x", newID: "x", source: "resume",
                                                    newTranscriptExists: true, currentTranscriptExists: true,
-                                                   currentIDSharedWithOtherChat: true), .unchanged)
+                                                   currentIDRunsInOtherProcess: true), .unchanged)
     }
 
-    func testIsExternalIDSharedIgnoresOwnEntryAndCase() {
-        let project = UUID()
-        let own = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "a")
-        let other = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "CD00C6C0", title: "b")
+    func testRunsInOtherForegroundProcess() {
         typealias C = AgentSessionStatusCoordinator
-        XCTAssertFalse(C.isExternalIDShared("cd00c6c0", exceptLocalID: own.id, in: [own]))
-        XCTAssertTrue(C.isExternalIDShared("cd00c6c0", exceptLocalID: own.id, in: [own, other]))
-        XCTAssertFalse(C.isExternalIDShared("", exceptLocalID: own.id, in: [own, other]))
+        func record(_ id: String, pid: Int32, kind: String = "interactive") -> ClaudeSessionRecord {
+            ClaudeSessionRecord(profileName: "main", pid: pid, sessionID: id, kind: kind)
+        }
+        XCTAssertTrue(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200,
+                                                     records: [record("CD00C6C0", pid: 100)]))
+        XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 100,
+                                                      records: [record("cd00c6c0", pid: 100)]), "eigener Prozess")
+        XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200,
+                                                      records: [record("cd00c6c0", pid: 100, kind: "bg")]), "/background")
+        XCTAssertFalse(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: 200, records: []))
+        XCTAssertTrue(C.runsInOtherForegroundProcess(sessionID: "cd00c6c0", ownProcessID: nil,
+                                                     records: [record("cd00c6c0", pid: 100)]))
+    }
+
+    private func bindBoth(_ id: String, second title: String) throws -> (UUID, AgentChatSession) {
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
+        var other = try store.createSession(provider: .claude, projectPath: tempDir.path, title: title)
+        other.externalSessionID = id
+        _ = try store.upsertSession(other)
+        return (other.id, other)
+    }
+
+    private func setExternalID(_ id: String, for sessionID: UUID) throws {
+        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
+        var session = try XCTUnwrap(store.loadWorkspace().sessions.first(where: { $0.id == sessionID }))
+        session.externalSessionID = id
+        _ = try store.upsertSession(session)
     }
 
     /// Der Fall aus der Test-Instanz, nachgestellt: „soak question“ trägt
-    /// schon die Sitzung von „soak bash“ (cd00c6c0, Transcript existiert), der
-    /// eigene SessionStart (aa82d0ba, noch ohne Transcript) kommt danach.
-    /// Vorher: zurückgestellt — ohne Turn (nicht angemeldet) für immer falsch.
-    func testOwnSessionStartReplacesSessionSharedWithAnotherChat() throws {
+    /// schon die Sitzung von „soak bash“ (cd00c6c0, Transcript existiert, läuft
+    /// in dessen Prozess), der eigene SessionStart (aa82d0ba, noch ohne
+    /// Transcript) kommt danach. Vorher: zurückgestellt — ohne Turn (nicht
+    /// angemeldet) für immer falsch.
+    func testOwnSessionStartReplacesSessionRunningInAnotherChat() throws {
         let (coordinator, questionID, _, _, _) = try makeCoordinator()
-        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
-        var bash = try store.createSession(provider: .claude, projectPath: tempDir.path, title: "soak bash")
-        bash.externalSessionID = "cd00c6c0"
-        _ = try store.upsertSession(bash)
-        var question = try XCTUnwrap(store.loadWorkspace().sessions.first(where: { $0.id == questionID }))
-        question.externalSessionID = "cd00c6c0"
-        _ = try store.upsertSession(question)
+        let (bashID, _) = try bindBoth("cd00c6c0", second: "soak bash")
+        try setExternalID("cd00c6c0", for: questionID)
         coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+        coordinator.terminalProcessID = { $0 == questionID ? 200 : 100 }
+        coordinator.foregroundRecordsLookup = { id in
+            id == "cd00c6c0" ? [ClaudeSessionRecord(profileName: "main", pid: 100, sessionID: id, kind: "interactive")] : []
+        }
 
         coordinator.handleHookEvent(localID: questionID, event: sessionStart("aa82d0ba", source: "startup"))
 
         XCTAssertEqual(externalID(coordinator, questionID), "aa82d0ba")
-        XCTAssertEqual(externalID(coordinator, bash.id), "cd00c6c0", "der andere Chat behält seine Sitzung")
+        XCTAssertEqual(externalID(coordinator, bashID), "cd00c6c0", "der andere Chat behält seine Sitzung")
     }
 
-    /// Gegenprobe: ohne Teilung bleibt die bekannte Regel (leere Session nach
-    /// /clear oder /background wird zurückgestellt).
-    func testUnsharedSessionStartIsStillPostponed() throws {
-        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
-        let store = AgentSessionStore(fileURL: tempDir.appendingPathComponent("workspace.json"))
-        var session = try XCTUnwrap(store.loadWorkspace().sessions.first(where: { $0.id == sessionID }))
-        session.externalSessionID = "cd00c6c0"
-        _ = try store.upsertSession(session)
-        coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+    /// Gegenprobe zum Vorfall 2026-09-30: Der echte Besitzer hat einen alten
+    /// Doppel-Eintrag im Workspace (davon gibt es viele, archiviert oder
+    /// geschlossen). Nach `/background` startet die TUI eine leere Session —
+    /// die bleibt zurückgestellt, die bisherige ID läuft in keinem fremden Prozess.
+    func testOwnerWithStaleDuplicateStillPostponesEmptySession() throws {
+        let (coordinator, ownerID, _, _, _) = try makeCoordinator()
+        _ = try bindBoth("ac020fd4", second: "alter Doppel-Eintrag")
+        try setExternalID("ac020fd4", for: ownerID)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "ac020fd4" }
+        coordinator.terminalProcessID = { _ in 300 }
+        coordinator.foregroundRecordsLookup = { _ in [] }
 
-        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("aa82d0ba", source: "startup"))
+        coordinator.handleHookEvent(localID: ownerID, event: sessionStart("8a5a7119", source: "startup"))
+
+        XCTAssertEqual(externalID(coordinator, ownerID), "ac020fd4")
+    }
+
+    /// Gegenprobe: führt der EIGENE Prozess die bisherige ID, gilt die alte Regel.
+    func testOwnProcessRunningCurrentIDStillPostpones() throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        try setExternalID("cd00c6c0", for: sessionID)
+        coordinator.transcriptExistsOverride = { _, id, _ in id == "cd00c6c0" }
+        coordinator.terminalProcessID = { _ in 100 }
+        coordinator.foregroundRecordsLookup = { id in
+            [ClaudeSessionRecord(profileName: "main", pid: 100, sessionID: id, kind: "interactive")]
+        }
+
+        coordinator.handleHookEvent(localID: sessionID, event: sessionStart("aa82d0ba", source: "clear"))
 
         XCTAssertEqual(externalID(coordinator, sessionID), "cd00c6c0")
     }

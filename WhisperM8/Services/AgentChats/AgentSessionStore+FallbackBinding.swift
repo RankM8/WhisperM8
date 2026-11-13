@@ -9,16 +9,63 @@ import Foundation
 // dessen Hook und nahm das jüngste Transcript im Ordner — das des ersten,
 // den sein Hook längst gebunden hatte. Beide trugen dieselbe Claude-Sitzung;
 // der richtige SessionStart wurde danach zurückgestellt (`postpone`).
+//
+// Für Claude gibt es eine exakte Quelle: Claudes Registry
+// (`<config-dir>/sessions/<pid>.json`) nennt zu jeder PID die Sitzungs-ID,
+// geschrieben beim Prozessstart, also vor dem ersten Turn. Claude läuft als
+// direktes Kind der App im PTY, die PID des Chats ist bekannt. Der Weg über
+// Ordner und Zeitfenster bleibt nur als letzter Versuch und für Codex.
 extension AgentSessionStore {
+    /// Nächster Schritt des Pollers für einen Claude-Chat.
+    enum ClaudeFallbackStep: Equatable {
+        /// Registry-Eintrag des eigenen Prozesses: genau diese Sitzung.
+        case bind(String)
+        /// Noch kein Eintrag; nächster Versuch.
+        case wait
+        /// Letzter Versuch ohne Eintrag: Transcript im Ordner suchen.
+        case transcriptFallback
+    }
+
+    static func claudeFallbackStep(
+        processID: Int32?,
+        records: [ClaudeSessionRecord],
+        isLastAttempt: Bool
+    ) -> ClaudeFallbackStep {
+        if let processID,
+           let record = records.first(where: { $0.pid == processID && !$0.isBackground && !$0.sessionID.isEmpty }) {
+            return .bind(record.sessionID)
+        }
+        return isLastAttempt ? .transcriptFallback : .wait
+    }
+
+    /// Bindet die Sitzung, die Claudes Registry für den Prozess des Chats
+    /// nennt — nur, solange der Chat noch ungebunden ist (der Hook kann
+    /// schneller gewesen sein).
+    @discardableResult
+    func bindRegistryExternalSessionID(localSessionID: UUID, externalSessionID: String) throws -> AgentChatSession? {
+        let bound: AgentChatSession? = try mutateWorkspace { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == localSessionID }),
+                  !workspace.sessions[index].isTerminal,
+                  workspace.sessions[index].externalSessionID == nil else { return nil }
+            workspace.sessions[index].externalSessionID = externalSessionID
+            return workspace.sessions[index]
+        }
+        if bound != nil { flushNow(reason: "binding") }
+        return bound
+    }
+
     /// Fenster, in dem ein anderer ungebundener Chat als Mitbewerber um
     /// dasselbe Transcript gilt (gleichzeitig gestartete Chats).
     static let fallbackBindingRivalWindow: TimeInterval = 30
 
     /// Pur: welches indexierte Transcript der Poller `session` geben darf.
     /// - nie eines, das schon ein anderer Chat trägt;
-    /// - gar keines, solange ein anderer ungebundener Chat desselben Providers
-    ///   im selben Ordner etwa gleichzeitig gestartet ist — dann entscheidet
-    ///   der Hook, der seine Sitzung genau kennt.
+    /// - bei Claude gar keines, solange ein anderer ungebundener Claude-Chat im
+    ///   selben Ordner etwa gleichzeitig gestartet ist — dann entscheiden Hook
+    ///   und Registry, die die Sitzung genau kennen. Codex hat beides nicht und
+    ///   bliebe sonst für immer ungebunden; dort reicht der Ausschluss
+    ///   vergebener Transcripts (zwei gleichzeitige Codex-Chats können ihre
+    ///   Transcripts noch tauschen, aber nie teilen).
     static func fallbackBindingCandidate(
         for session: AgentChatSession,
         projectPath: String,
@@ -29,7 +76,7 @@ extension AgentSessionStore {
         let standardizedPath = canonicalProjectPath(projectPath)
         let others = workspace.sessions.filter { $0.id != session.id && !$0.isTerminal }
         let taken = Set(others.compactMap { $0.externalSessionID?.lowercased() })
-        let rivals = others.filter { other in
+        let rivals = provider != .claude ? [] : others.filter { other in
             other.provider == provider
                 && other.externalSessionID == nil
                 && abs(other.createdAt.timeIntervalSince(session.createdAt)) <= fallbackBindingRivalWindow

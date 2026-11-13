@@ -817,6 +817,7 @@ struct AgentSessionDetailView: View {
         let store = store
         let onExternalSessionIDBound = onExternalSessionIDBound
         let onStateChanged = onStateChanged
+        let terminalRegistry = terminalRegistry
 
         Task.detached(priority: .utility) {
             let retryDelays: [UInt64] = [
@@ -840,6 +841,36 @@ struct AgentSessionDetailView: View {
                     .first(where: { $0.id == localSessionID })
                 guard let currentSession,
                       currentSession.externalSessionID == nil else { return }
+
+                if provider == .claude {
+                    // Exakt über Claudes Registry und die PID des Chats.
+                    let processID = await MainActor.run {
+                        terminalRegistry.controller(for: localSessionID)?.processID
+                    }
+                    let records = processID == nil ? [] : ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots())
+                    switch AgentSessionStore.claudeFallbackStep(
+                        processID: processID, records: records, isLastAttempt: delay == retryDelays.last) {
+                    case .bind(let externalID):
+                        // Hat der Hook inzwischen gebunden, bindet das hier nichts mehr.
+                        await MainActor.run {
+                            do {
+                                guard try store.bindRegistryExternalSessionID(
+                                    localSessionID: localSessionID, externalSessionID: externalID) != nil else { return }
+                                Logger.claudeBinding.notice(
+                                    "binding_by_registry_pid localID=\(localSessionID.uuidString, privacy: .public) id=\(externalID, privacy: .public)")
+                                onExternalSessionIDBound(localSessionID)
+                                onStateChanged()
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                        }
+                        return
+                    case .wait:
+                        continue
+                    case .transcriptFallback:
+                        break
+                    }
+                }
 
                 let indexedSessions: [IndexedAgentSession]
                 switch provider {

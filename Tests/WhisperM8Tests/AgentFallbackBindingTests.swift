@@ -100,4 +100,50 @@ final class AgentFallbackBindingTests: XCTestCase {
 
         XCTAssertEqual(candidate?.externalSessionID, "eigen")
     }
+
+    func testCodexBindsDespiteRivalButNeverSharesTranscript() throws {
+        // Codex hat weder Hook noch Registry; ohne Bindung bliebe der Chat für immer ungebunden.
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let here = AgentProject(name: "hier", path: tempDir.path)
+        let first = AgentChatSession(provider: .codex, projectID: here.id, externalSessionID: "x",
+                                     title: "erster", createdAt: t0)
+        let rival = AgentChatSession(provider: .codex, projectID: here.id, title: "rivale", createdAt: t0)
+        let chat = AgentChatSession(provider: .codex, projectID: here.id, title: "neu", createdAt: t0.addingTimeInterval(1))
+        let workspace = AgentWorkspace(projects: [here], sessions: [first, rival, chat])
+        let transcripts = [indexed("x", cwd: tempDir.path, createdAt: t0.addingTimeInterval(3), provider: .codex),
+                           indexed("y", cwd: tempDir.path, createdAt: t0.addingTimeInterval(2), provider: .codex)]
+
+        let candidate = AgentSessionStore.fallbackBindingCandidate(
+            for: chat, projectPath: tempDir.path, provider: .codex, workspace: workspace, indexedSessions: transcripts)
+
+        XCTAssertEqual(candidate?.externalSessionID, "y")
+    }
+
+    // MARK: Registry per PID (Claude)
+
+    private func record(_ id: String, pid: Int32, kind: String = "interactive") -> ClaudeSessionRecord {
+        ClaudeSessionRecord(profileName: "main", pid: pid, sessionID: id, kind: kind)
+    }
+
+    func testClaudeStepBindsRegistryEntryOfOwnProcess() {
+        let records = [record("cd00c6c0", pid: 100), record("aa82d0ba", pid: 200)]
+        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: false),
+                       .bind("aa82d0ba"))
+    }
+
+    func testClaudeStepWaitsForRegistryBeforeLookingAtTranscripts() {
+        let records = [record("cd00c6c0", pid: 100), record("bgjob", pid: 200, kind: "bg")]
+        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: false), .wait)
+        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: nil, records: records, isLastAttempt: false), .wait)
+        XCTAssertEqual(AgentSessionStore.claudeFallbackStep(processID: 200, records: records, isLastAttempt: true),
+                       .transcriptFallback)
+    }
+
+    func testRegistryBindingOnlyBindsUnboundChat() throws {
+        let (store, bash, question, _) = try makeStoreWithSoakChats()
+        XCTAssertNil(try store.bindRegistryExternalSessionID(localSessionID: bash.id, externalSessionID: "anders"))
+        XCTAssertEqual(store.loadWorkspace().sessions.first(where: { $0.id == bash.id })?.externalSessionID, "cd00c6c0")
+        XCTAssertEqual(try store.bindRegistryExternalSessionID(localSessionID: question.id, externalSessionID: "aa82d0ba")?
+                        .externalSessionID, "aa82d0ba")
+    }
 }
