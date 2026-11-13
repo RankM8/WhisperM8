@@ -538,14 +538,10 @@ struct AgentCommandBuilder {
         }
     }
 
-    /// Baut den Launch für einen normalen Terminal-Tab: die Login-Shell des
-    /// Users, interaktiv + als Login-Shell gestartet (`-i -l`), damit
-    /// .zprofile/.zshrc gesourct werden und PATH/Prompt/Aliases exakt wie in
-    /// Terminal.app aussehen. Keine Session-Args, kein Resume — jede neue
-    /// Shell ist frisch.
     /// Terminal-Tab mit festem Befehl (`chats new --provider terminal
     /// --command`): `/bin/sh -c` im Projektordner, keine Login-Shell. Endet der
-    /// Befehl, endet der Tab (kein Neustart).
+    /// Befehl, endet sein Prozess; der Tab bleibt stehen, erneut läuft der
+    /// Befehl nur über den Knopf „Befehl erneut ausführen“.
     static func terminalRunCommand(_ command: String, project: AgentProject) -> AgentLaunchCommand {
         AgentLaunchCommand(
             executablePath: "/bin/sh",
@@ -555,6 +551,11 @@ struct AgentCommandBuilder {
         )
     }
 
+    /// Baut den Launch für einen normalen Terminal-Tab: die Login-Shell des
+    /// Users, interaktiv + als Login-Shell gestartet (`-i -l`), damit
+    /// .zprofile/.zshrc gesourct werden und PATH/Prompt/Aliases exakt wie in
+    /// Terminal.app aussehen. Keine Session-Args, kein Resume — jede neue
+    /// Shell ist frisch.
     private func terminalCommand(project: AgentProject) -> AgentLaunchCommand {
         AgentLaunchCommand(
             executablePath: shellResolver(),

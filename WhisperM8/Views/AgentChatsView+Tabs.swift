@@ -160,7 +160,8 @@ extension AgentChatsView {
         guard session.isTerminal else { return isRunning }
         return ProcessEndConfirmation.terminalNeedsConfirmation(
             isRunning: isRunning,
-            shellHasChildProcess: controller?.processID.map(ProcessChildren.hasChildProcess(of:)) ?? false
+            shellHasChildProcess: controller?.processID.map(ProcessChildren.hasChildProcess(of:)) ?? false,
+            runsFixedCommand: session.terminalCommand?.isEmpty == false
         )
     }
 

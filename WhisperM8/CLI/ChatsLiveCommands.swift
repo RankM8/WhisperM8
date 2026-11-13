@@ -751,19 +751,32 @@ enum ChatsNewCommand {
     private static func reportTerminalStart(id: UUID, json: Bool, timeout: TimeInterval = 5) {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if let live = ChatsLiveMerge.fetch()?[id], live.isAttachedPTY {
-                CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), pid: live.pid))
+            if let live = ChatsLiveMerge.fetch()?[id], live.isAttachedPTY || live.hasStarted {
+                CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), state: live.isAttachedPTY
+                    ? .running(pid: live.pid) : .alreadyEnded))
                 return
             }
             usleep(250_000)
         }
-        CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), pid: nil))
+        CLIIO.err(terminalStartLine(ref: ChatsOutput.shortID(id), state: .notStarted))
     }
 
-    static func terminalStartLine(ref: String, pid: Int32?) -> String {
-        if let pid { return "Terminal-Tab läuft (PID \(pid))." }
-        return "Hinweis: Der Terminal-Tab ist angelegt, läuft aber noch nicht. Er startet (samt Befehl), "
-            + "sobald sein Tab angezeigt wird: whisperm8 chats open \(ref)"
+    enum TerminalStartState: Equatable {
+        case running(pid: Int32?)
+        /// Kurzer Befehl, schon gelaufen und beendet, bevor die CLI nachsah.
+        case alreadyEnded
+        case notStarted
+    }
+
+    static func terminalStartLine(ref: String, state: TerminalStartState) -> String {
+        switch state {
+        case .running(let pid?): return "Terminal-Tab läuft (PID \(pid))."
+        case .running(nil): return "Terminal-Tab läuft."
+        case .alreadyEnded: return "Terminal-Tab ist gelaufen, der Befehl ist schon beendet."
+        case .notStarted:
+            return "Hinweis: Der Terminal-Tab ist angelegt, läuft aber noch nicht. Er startet (samt Befehl), "
+                + "sobald sein Tab angezeigt wird: whisperm8 chats open \(ref)"
+        }
     }
 }
 

@@ -42,10 +42,32 @@ final class ChatsTerminalTabTests: XCTestCase {
 
     /// Klare Meldung statt stillem Verlust, wenn der Tab noch nie angezeigt wurde.
     func testStartLineSaysWhetherTheTabRuns() {
-        XCTAssertEqual(ChatsNewCommand.terminalStartLine(ref: "abcd1234", pid: 4711), "Terminal-Tab läuft (PID 4711).")
-        let waiting = ChatsNewCommand.terminalStartLine(ref: "abcd1234", pid: nil)
+        XCTAssertEqual(ChatsNewCommand.terminalStartLine(ref: "abcd1234", state: .running(pid: 4711)),
+                       "Terminal-Tab läuft (PID 4711).")
+        XCTAssertEqual(ChatsNewCommand.terminalStartLine(ref: "abcd1234", state: .running(pid: nil)), "Terminal-Tab läuft.")
+        XCTAssertTrue(ChatsNewCommand.terminalStartLine(ref: "abcd1234", state: .alreadyEnded).contains("schon beendet"))
+        let waiting = ChatsNewCommand.terminalStartLine(ref: "abcd1234", state: .notStarted)
         XCTAssertTrue(waiting.contains("läuft aber noch nicht"))
         XCTAssertTrue(waiting.contains("whisperm8 chats open abcd1234"))
+    }
+
+    /// Opus-Review: `/bin/sh -c` ersetzt sich oft durch den Befehl; ohne
+    /// Kindprozess fragte das Schließen sonst nicht nach.
+    func testFixedCommandTabAlwaysAsksBeforeEnding() {
+        XCTAssertTrue(ProcessEndConfirmation.terminalNeedsConfirmation(isRunning: true, shellHasChildProcess: false,
+                                                                      runsFixedCommand: true))
+        XCTAssertFalse(ProcessEndConfirmation.terminalNeedsConfirmation(isRunning: false, shellHasChildProcess: false,
+                                                                       runsFixedCommand: true))
+        XCTAssertFalse(ProcessEndConfirmation.terminalNeedsConfirmation(isRunning: true, shellHasChildProcess: false),
+                       "Login-Shell ohne Kind wie bisher")
+    }
+
+    /// Rundlauf über den Draht: sessions.live → ChatsLiveMerge-Parser.
+    func testLiveEntryParsesPidAndHasStarted() {
+        let entry = ChatsControlJSON(any: ["sessionID": UUID().uuidString, "isAttachedPTY": false, "hasStarted": true,
+                                           "pid": AgentControlRequestHandler.livePID(nil)] as [String: Any])
+        XCTAssertEqual(entry["hasStarted"]?.boolValue, true)
+        XCTAssertNil(entry["pid"]?.intValue)
     }
 
     // MARK: Startkommando und Modell

@@ -428,9 +428,23 @@ struct AgentSessionDetailView: View {
             Image(systemName: "terminal")
                 .font(.system(size: 28, weight: .light))
                 .foregroundStyle(AgentTheme.textTertiary)
-            Text("Shell ended")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AgentTheme.textSecondary)
+            // Tab mit festem Befehl: Der Knopf führt GENAU diesen Befehl noch
+            // einmal aus, deshalb steht er dabei (Opus-Review).
+            if let command = session.terminalCommand, !command.isEmpty {
+                Text("Command ended")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                Text(command)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(AgentTheme.textTertiary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+            } else {
+                Text("Shell ended")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textSecondary)
+            }
             Text(project.path)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(AgentTheme.textTertiary)
@@ -439,8 +453,13 @@ struct AgentSessionDetailView: View {
             Button {
                 launchAfterCacheWarmup()
             } label: {
-                Label("Start new shell", systemImage: "play.fill")
-                    .font(.system(size: 11, weight: .medium))
+                if session.terminalCommand?.isEmpty == false {
+                    Label("Run command again", systemImage: "play.fill")
+                        .font(.system(size: 11, weight: .medium))
+                } else {
+                    Label("Start new shell", systemImage: "play.fill")
+                        .font(.system(size: 11, weight: .medium))
+                }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
