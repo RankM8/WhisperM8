@@ -75,6 +75,37 @@ final class PillSolidBlackTests: XCTestCase {
         XCTAssertEqual(changes, 2)
     }
 
+    func testAppearanceRemovesItsObserverWhenReleased() {
+        let center = NotificationCenter()
+        var reads = 0
+        var appearance: PillAppearance? = PillAppearance(read: { reads += 1; return false }, center: center)
+        XCTAssertNotNil(appearance)
+        center.post(name: UserDefaults.didChangeNotification, object: nil)
+        XCTAssertEqual(reads, 2, "einmal im init, einmal bei der Änderung")
+        appearance = nil
+        center.post(name: UserDefaults.didChangeNotification, object: nil)
+        XCTAssertEqual(reads, 2)
+    }
+
+    // MARK: Liste der Ausgabemodi
+
+    /// Aufrufstelle in `OverlayController.showModeList`: Die Liste gehört ohne
+    /// Notch und an der Notch zur vereinten Pille, an der getrennten nicht.
+    /// Mit Option aus bleibt sie überall Glas.
+    func testOutputModeListFollowsTheUnifiedPillAtTheNotchToo() {
+        let notch = OverlayPresentation.notch(width: 185, height: 32)
+        XCTAssertTrue(OutputModeListPresenter.followsUnifiedPill(.pill))
+        XCTAssertTrue(OutputModeListPresenter.followsUnifiedPill(notch))
+        XCTAssertFalse(OutputModeListPresenter.followsUnifiedPill(.classic))
+        for presentation in [OverlayPresentation.pill, notch] {
+            let unified = OutputModeListPresenter.followsUnifiedPill(presentation)
+            XCTAssertEqual(PillSurface.resolve(unified: unified, solidBlack: true), .solidBlack, "\(presentation)")
+            XCTAssertEqual(PillSurface.resolve(unified: unified, solidBlack: false), .glass, "\(presentation)")
+        }
+        let classic = OutputModeListPresenter.followsUnifiedPill(.classic)
+        XCTAssertEqual(PillSurface.resolve(unified: classic, solidBlack: true), .glass)
+    }
+
     // MARK: Bild
 
     private static let desk = Color(red: 0.5, green: 0.6, blue: 0.7)
@@ -153,6 +184,32 @@ final class PillSolidBlackTests: XCTestCase {
         let on = try blackPixels(view, size: size, solidBlack: true)
         let off = try blackPixels(view, size: size, solidBlack: false)
         XCTAssertEqual(on, off, "Liste der getrennten Diktat-Pille darf sich nicht ändern")
+    }
+
+    private func assertUnchangedBySetting(_ view: some View, size: CGSize, _ what: String) throws {
+        let on = try blackPixels(view, size: size, solidBlack: true)
+        let off = try blackPixels(view, size: size, solidBlack: false)
+        XCTAssertEqual(on, off, "\(what) darf sich nicht ändern")
+    }
+
+    func testControllerMenuCardInTheChatWindowStaysGlass() throws {
+        let session = UUID()
+        let rows = ControllerMenuRow.rows(of: ControllerMenuModel(setup: ControllerMenuSetup(
+            acceptsInput: true, profile: .claude, sessionID: session, target: .chat(session),
+            chat: ControllerChatActionInfo(title: "Controller Insel"))))
+        XCTAssertFalse(rows.isEmpty)
+        try assertUnchangedBySetting(
+            ControllerMenuCard(title: "Controller Insel", isSubmenu: false, rows: rows, selectedID: rows.first?.id),
+            size: CGSize(width: 360, height: 320), "Menükarte am Chat")
+    }
+
+    func testClassicNotchStatusPillStaysGlass() throws {
+        for expanded in [false, true] {
+            try assertUnchangedBySetting(
+                NotchStatusView(display: statusDisplay(expanded: expanded)),
+                size: CGSize(width: UnifiedPillGeometry.statusPanelWidth, height: expanded ? 200 : 40),
+                "getrennte Status-Pille (aufgeklappt: \(expanded))")
+        }
     }
 
     func testControllerIslandWithoutNotchTurnsBlack() throws {

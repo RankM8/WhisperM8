@@ -57,17 +57,24 @@ final class PillAppearance: ObservableObject {
     @Published private(set) var isSolidBlack: Bool
 
     private let read: () -> Bool
-    private var observer: NSObjectProtocol?
+    private let center: NotificationCenter
+    /// Nur in `init` gesetzt und in `deinit` gelesen.
+    private nonisolated(unsafe) var observer: NSObjectProtocol?
 
     init(
         read: @escaping () -> Bool = { PillAppearance.isSolidBlack(.shared) },
         center: NotificationCenter = .default
     ) {
         self.read = read
+        self.center = center
         isSolidBlack = read()
         observer = center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+    }
+
+    deinit {
+        if let observer { center.removeObserver(observer) }
     }
 
     /// Schwarz nur, wenn die Einstellung an ist und die vereinte Pille läuft.

@@ -55,7 +55,9 @@ dunklen Schreibtisch ihren Umriss behält. Entschieden wird an einer Stelle
 (`PillSurface` in `PillGlass.swift`); den Wert hält `PillAppearance`, das bei
 Änderungen der Preferences neu liest, deshalb wirkt der Schalter sofort auf
 sichtbare Pillen. Dazu gehört auch die Liste der Ausgabemodi, die beim
-Moduswechsel per Controller an der Diktat-Pille aufklappt. Nur mit vereinter
+Moduswechsel per Controller an der Diktat-Pille aufklappt, und zwar ohne
+Notch und an der Notch (dort passt sie dann zur ohnehin schwarzen Pille; mit
+Option aus bleibt sie auch an der Notch Glas). Nur mit vereinter
 Pille: Die getrennte Diktat-Pille (Kill-Switch) bleibt samt ihrer Liste Glas,
 ebenso die Menükarte des Controllers am Chat. Die Menüs von Modus und Kontext
 (mit den Vorschaubildern) sind Menüs von macOS und bleiben, wie sie sind.

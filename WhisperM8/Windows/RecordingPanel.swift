@@ -852,7 +852,7 @@ class OverlayController: ObservableObject {
         let pillFrame = panel.pillFrameInPanel.offsetBy(dx: panel.frame.origin.x, dy: panel.frame.origin.y)
         modeList.show(
             modes: outputModes, selectedID: selectedOutputMode.id, pillFrame: pillFrame,
-            opensDownward: unifiedMenusOpenDownward, unified: presentation.isUnified)
+            opensDownward: unifiedMenusOpenDownward, unified: OutputModeListPresenter.followsUnifiedPill(presentation))
     }
 
     func addScreenshot() {
