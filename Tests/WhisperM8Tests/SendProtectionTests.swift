@@ -416,4 +416,17 @@ final class PromptGuardStubTests: XCTestCase {
         tracker.recordSubmitted()
         XCTAssertFalse(tracker.fieldMayHaveText)
     }
+
+    /// Entscheidung des Users (13.11.2026): ↑ auf der TASTATUR gilt nicht als
+    /// Zurückholen. Der Entwurfs-Tracker behandelt es als reine Navigation;
+    /// nur das ↑ vom Controller setzt einen Rückleger. Bewusste, dokumentierte
+    /// Grenze (controller.md, Schutzregeln) — dieser Test hält sie fest.
+    func testKeyboardUpIsNotARecall() {
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordKeyDown(keyCode: 126, modifiers: [])
+        XCTAssertFalse(tracker.mayHoldRestoredPrompt)
+        XCTAssertFalse(tracker.mayHoldRecalledCodexPrompt)
+        XCTAssertFalse(tracker.mayHaveUnsentInput)
+        XCTAssertFalse(tracker.fieldMayHaveText)
+    }
 }
