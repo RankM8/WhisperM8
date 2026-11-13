@@ -179,6 +179,23 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
     /// Notch ragt nur der durchsichtige Schattenrand hinein. Die getrennte
     /// Diktat-Pille (unten) bleibt bei der Regel von AppKit.
     var allowsAboveMenuBar = false
+    /// Vereinte Pille ohne Notch: Die sichtbare Pille bleibt im selben Bereich
+    /// wie die Status-Pille (`NotchPillPlacement.usableArea`). Der zieht bei
+    /// automatisch ausgeblendeter Menüleiste eine Ersatzhöhe ab; sonst ließe
+    /// sich die Pille bis an die Bildschirmkante ziehen, wo die Leiste beim
+    /// Hinfahren ✓ und ✕ verdeckt. Bisher hielt AppKit sie dort zufällig fern.
+    var clampsLikeStatusPill = false
+
+    /// Bereich, in dem die sichtbare Pille liegen darf.
+    func pillClampArea(on screen: NSScreen) -> NSRect {
+        pillClampArea(visibleFrame: screen.visibleFrame, info: NotchScreenInfo(screen: screen))
+    }
+
+    /// Kern ohne `NSScreen`, für Tests.
+    func pillClampArea(visibleFrame: NSRect, info: NotchScreenInfo?) -> NSRect {
+        guard clampsLikeStatusPill, let info else { return visibleFrame }
+        return NotchPillPlacement.usableArea(info)
+    }
 
     init(initialOrigin: NSPoint, size: NSSize = OverlayFrameResolver.panelSize) {
         super.init(
@@ -239,7 +256,7 @@ class RecordingPanel: NSPanel, NSWindowDelegate {
         let clamped = OverlayFrameResolver.clampedPanelOrigin(
             panelOrigin: frame.origin,
             pillFrameInPanel: pillFrameInPanel,
-            visibleFrame: screen.visibleFrame
+            visibleFrame: pillClampArea(on: screen)
         )
         if clamped != frame.origin {
             setOriginSilently(clamped)
@@ -958,7 +975,7 @@ class OverlayController: ObservableObject {
             let clamped = OverlayFrameResolver.clampedPanelOrigin(
                 panelOrigin: panel.frame.origin,
                 pillFrameInPanel: appKitFrame,
-                visibleFrame: screen.visibleFrame
+                visibleFrame: panel.pillClampArea(on: screen)
             )
             if clamped != panel.frame.origin {
                 panel.setOriginSilently(clamped)

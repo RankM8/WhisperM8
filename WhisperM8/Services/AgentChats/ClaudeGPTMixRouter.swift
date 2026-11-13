@@ -222,6 +222,13 @@ final class ClaudeGPTMixRouter {
     var requestedPort: Int?
     var boundPortStorage: Int?
     var connections: [UUID: ClientConnection] = [:]
+    /// Letzte angenommene oder beendete Verbindung (Leerlauf-Frist des
+    /// Router-Dienstes: auch kurze Anfragen zählen). Zugriff auf `lifecycleQueue`.
+    var lastActivityAtStorage = Date()
+
+    var lastActivityAt: Date {
+        lifecycleQueue.sync { lastActivityAtStorage }
+    }
     var generation: UInt64 = 0
 
     init(
@@ -816,6 +823,7 @@ final class ClaudeGPTMixRouter {
                 onFinish: { [weak self] in self?.removeConnection(id: id) }
             )
             connections[id] = client
+            lastActivityAtStorage = Date()
             return client
         }
         guard let client else { return false }
@@ -826,6 +834,7 @@ final class ClaudeGPTMixRouter {
     func removeConnection(id: UUID) {
         lifecycleQueue.async { [weak self] in
             self?.connections.removeValue(forKey: id)
+            self?.lastActivityAtStorage = Date()
         }
     }
 }
