@@ -1,15 +1,17 @@
 ---
 status: aktiv
 updated: 2026-11-13
-description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
+description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense, Xbox-Controller samt Paddles des Elite) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
 ---
 
 # Controller-Steuerung
 
 WhisperM8 lässt sich mit einem Gamepad bedienen: durch die Liste links gehen, Chats, Workspaces und
 Projekte öffnen, diktieren, Rückfragen der Agenten beantworten und den Zwischenablage-Verlauf nutzen.
-Referenzgerät ist der PS5-Controller (DualSense) über Bluetooth; andere Gamepads laufen über das
-allgemeine Profil (`GCExtendedGamepad`) mit.
+Referenzgeräte sind der PS5-Controller (DualSense) und der Xbox Elite Wireless Controller Series 2,
+beide über Bluetooth; andere Gamepads laufen über das allgemeine Profil (`GCExtendedGamepad`) mit.
+Xbox-Controller zeigen ihre eigenen Tastennamen, die Paddles des Elite sind eigene, belegbare Tasten
+(siehe „Xbox-Controller und Paddles“).
 
 Der Controller löst **Aktionen** aus, keine Tastendrücke an das Fenster im Vordergrund. Er schreibt
 gezielt in das Terminal des Ziel-Chats und braucht dafür keine Bedienungshilfen-Berechtigung.
@@ -48,7 +50,8 @@ pausiert der Controller ohnehin und weckt nicht. Spiele im Browser erkennt die P
 holt jeder Stick WhisperM8 nach vorn, bis man mit L1 + R1 pausiert oder den Schalter ausschaltet.
 
 Notbremse: `defaults write com.whisperm8.app controllerFeatureEnabled -bool NO` — kein Zugriff auf
-das GameController-Framework, der Schalter wirkt nicht.
+das GameController-Framework, der Schalter wirkt nicht. Für das rohe HID der Xbox-Controller (Paddles,
+Xbox-Knopf) gibt es eine eigene: `controllerPaddleHIDEnabled -bool NO`.
 
 ## Belegung
 
@@ -331,6 +334,68 @@ Fokus. In Dialogen des Agent-Chats-Fensters bewegt auch der linke Stick hoch/run
 (`isNewChatPickerOpen`, `isConfirmationOpen`); das Fenster bleibt Ziel, auch wenn das Popover selbst Key
 wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 
+## Xbox-Controller und Paddles
+
+Plan und Entscheidungen: [`../plans/controller-xbox-paddles.md`](../plans/controller-xbox-paddles.md).
+
+**Tastennamen.** Sie folgen dem Controller der letzten Eingabe (Familie `playStation`, `xbox`,
+`generic`; bestimmt aus der Profilklasse, `GCXboxGamepad` usw.). Die Belegung bleibt nach Lage gleich:
+A = Kreuz, B = Kreis, X = Viereck, Y = Dreieck, LB/RB = L1/R1, LT/RT = L2/R2, LS/RS = L3/R3,
+View = Create, Menu = Options. Legende, Dynamic Island, Menü-Karte, Fußzeile des Verlaufs und die
+Einstellungen lesen die Familie über den Umgebungswert `controllerFamily`; die Erklärtexte nutzen
+Platzhalter. Allgemeine Gamepads behalten die PlayStation-Zeichen. Wer zwei Controller verbunden hat,
+sieht die Namen dessen, von dem zuletzt etwas kam.
+
+**Touchpad und Xbox-Knopf.** Xbox-Controller haben kein Touchpad. Der runde Xbox-Knopf übernimmt dessen
+Rolle (Zwischenablage-Verlauf auf und zu, auch mit LT gehalten). GameController meldet ihn nicht; er
+kommt über denselben HID-Leser wie die Paddles (Tastenseite 0x09, Usage 0x0D). Ist HID nicht lesbar,
+hat er keine Wirkung, und Legende und Einstellungen zeigen keine Touchpad-Einträge. Der kleine
+Profil-Knopf darunter gehört dem Controller und bleibt unbelegt.
+
+**Paddles (Elite).** Die vier Paddles sind eigene Sofort-Tasten (`paddleUpperLeft` usw.): ein Druck,
+eine Aktion, kein Halten. Standard: oben links (P3) „Nächster wartender Chat“, unten links (P4)
+„Antworten“, oben rechts (P1) „Jetzt senden / Weiter“, unten rechts (P2) „Modus wechseln“. In
+Einstellungen › Controller › Paddles wählt man je Paddle aus einer festen Liste (dazu „Zurück zum
+vorigen Ort“, „Aus der Zwischenablage einfügen“, „Rückgängig“, „Zwischenablage-Verlauf öffnen“,
+„Controller pausieren“, `/workflows`, `/tasks`, „Nichts“); die Belegung liest der Manager nur beim
+Abgleich der Schalter.
+
+| Paddle-Aktion | Wirkung |
+|---|---|
+| Nächster wartender Chat | derselbe Weg wie ⌃⌥Tab, ohne Dynamic Island; ohne wartenden Chat „geht nicht“ |
+| Antworten | zum jüngsten frisch fertigen Chat (ruht, Turn vor höchstens 15 min beendet, nicht der aktuelle; Einteilung wie Notch und `chats`-Board) und dort diktieren. Gibt es keinen, zum nächsten wartenden Chat, nur springen. Ist der aktuelle Chat der einzige Kandidat und ruht er, diktiert es hier. Scheitert der Wechsel, wird nicht diktiert; in eine Rückfrage läuft nie ein Diktat |
+| Jetzt senden / Weiter | dieselbe Entscheidung wie R1 + Kreuz (`sendOrContinue`); in Shells „geht nicht“ |
+| Modus wechseln | Shift+Tab mit den Regeln des Menüs (nur ruhend, nicht in einer Rückfrage) |
+| `/workflows`, `/tasks` | wie aus „Befehle ›“, nur in Claude-Chats |
+
+**Wo Paddles wirken:** nur in der App. Im Chat (auch im Raster) jede Belegung; in der Liste alles außer
+Eingaben in einen Chat; im Verlauf nur Verlauf und Pause; in Menü, Dialogen und anderen Fenstern nur
+Pause. Nichts — auch ohne Vibration — in einer Ebene (L1, R1, L2 gehalten; die Ebene gilt als benutzt),
+während Aufnahme, Transkription und Nacharbeit und außerhalb der App. Paddles wecken WhisperM8 nie.
+Ausnahme: „Pause“ wirkt überall, wo L1 + R1 wirkt, auch in der Pause selbst.
+
+**Weiche gegen die doppelte Taste.** Das Profil im Controller legt jedes Paddle zusätzlich auf eine
+Gesichtstaste; GameController meldet dann ein gewöhnliches A, B, X oder Y. HID meldet im selben Bericht
+das Paddle-Bit (Consumer 0x0C, Usage 0x81) und die Taste. `ControllerPaddleGate` (pur, im Kern) macht
+aus der Maske Paddle-Tasten und fällt für jeden Tastendruck im Bericht ein Urteil: „vom Paddle“, wenn
+im selben Bericht ein Paddle-Bit dazukam, sonst „direkt“ (gültig 100 ms). Ein Druck von GameController
+mit Urteil „vom Paddle“ wird verschluckt, samt seinem Loslassen; „direkt“ geht sofort durch; ohne Urteil
+hält die Weiche ihn zurück, bis es kommt, höchstens 40 ms, und alles Spätere wartet dahinter. Trigger
+und Sticks hält sie nie zurück. DualSense-Ereignisse und Xbox-Controller ohne lesbare Paddles laufen
+ohne Verzögerung durch. Paddles im Controller-Profil darum auf A, B, X oder Y lassen; auf Trigger oder
+Stick gelegt, wirken sie zusätzlich.
+
+**HID und Berechtigung.** `XboxPaddleHIDSource` öffnet nur Microsoft-Geräte mit Gamepad-Usage
+(Generic Desktop: GamePad, Joystick, MultiAxis — nie Tastatur oder Maus), ohne sie zu vereinnahmen,
+auf der Queue der Pumpe. Paddles erkennt sie am Element 0x0C/0x81, nicht an der Produkt-ID.
+„Eingabeüberwachung“ wird nur gelesen (`IOHIDCheckAccess`, im Log), nie von selbst angefragt. Scheitert
+das Öffnen, zeigt die Einstellungsseite „nicht lesbar“ mit dem Knopf „In den Systemeinstellungen
+erlauben…“ (wirkt nach einem Neustart der App); die Paddles wirken dann als die Gesichtstasten ihres
+Profils. Die Tabellen `XboxHIDButtons` (Usages der Tastenseite) und `XboxPaddleBits` (Bit ↔ Lage) stehen
+zentral in `Core/XboxHIDLayout.swift` und `Core/ControllerPaddles.swift`. Gemessen sind A = 1, B = 2,
+X = 4, Y = 5, Xbox-Knopf = 0x0D und die Bits 1, 2, 4, 8; Annahmen sind LB = 7, RB = 8, View = 0x0B,
+Menu = 0x0C, LS = 0x0E, RS = 0x0F und die Zuordnung Bit 1 = P1 … Bit 8 = P4.
+
 ## Schutzregeln
 
 - In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
@@ -487,10 +552,11 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 ## Aufbau
 
 ```
-GameControllerInputSource ──┐  eigene serielle Queue
+GameControllerInputSource ──┐  (Ereignis + Familie)       eigene serielle Queue
+XboxPaddleHIDSource ────────┤  (HID-Bericht: Paddle-Maske, Tasten, Xbox-Knopf)
 debug.controller (Skript) ──┤
                             ▼
-                ControllerGesturePump → ControllerGestureRecognizer (pur)
+                ControllerGesturePump → ControllerPaddleGate (pur) → ControllerGestureRecognizer (pur)
                             ▼  nur diskrete Gesten zum Main Thread
                 ControllerManager → ControllerContextResolver + ControllerBindingResolver (pur)
                             ▼
@@ -501,8 +567,10 @@ debug.controller (Skript) ──┤
 | Teil | Datei | Aufgabe |
 |---|---|---|
 | Kern | `Services/Controller/Core/` | Tasten, Gesten, Zusammenhang, Belegung, Legende, Listen- und Menü-Modell, Regeln für Licht, Warte-Signal und Spiele — nur Foundation, ein Quelltext-Test erzwingt das |
-| Quelle | `GameControllerInputSource` | Verdrahtung des Frameworks, Lichtleiste, Haptik (eine Engine je Controller, Neuaufbau nach Fehler) |
-| Pumpe | `ControllerGesturePump` | Erkennung auf eigener Queue; `DispatchSourceTimer(.strict)` nur, solange etwas gedrückt ist, dann auch Aktivität gegen App Nap |
+| Quelle | `GameControllerInputSource` | Verdrahtung des Frameworks, Familie je Controller, Gerät der letzten Eingabe, Lichtleiste, Haptik (eine Engine je Controller, Neuaufbau nach Fehler) |
+| HID-Quelle | `XboxPaddleHIDSource`, `Core/XboxHIDLayout.swift` | Paddles und Xbox-Knopf über `IOHIDManager` (nur Microsoft-Gamepads), Bericht bündeln, Zustand (`ControllerPaddleSupport`), Notbremse `controllerPaddleHIDEnabled` |
+| Weiche | `Core/ControllerPaddleGate.swift` | Paddle-Maske → Paddle-Tasten, mitgeschickte Gesichtstaste verschlucken, Zurückhalten bis zum Urteil (40 ms) |
+| Pumpe | `ControllerGesturePump` | Weiche und Erkennung auf eigener Queue; `DispatchSourceTimer(.strict)` nur, solange etwas gedrückt ist oder die Weiche zurückhält, dann auch Aktivität gegen App Nap |
 | Manager | `ControllerManager` | Ein/Aus nach Schaltern, Pause, Hintergrund-Zustand (Systemwert wird zurückgelesen), Zähler je Taste |
 | Ausführer | `ControllerActionDispatcher` | Schnappschuss der App je Eingabe, Ausführung über Schnittstellen (`ControllerTerminalControlling`, `ControllerDictationControlling`, `ControllerAppEnvironment`) |
 | Rückmeldung | `ControllerFeedback` | Lichtleiste, Warte-Signal, automatische Pause, Maus/Tastatur geben Liste, Menü und Dynamic Island ab |
@@ -526,6 +594,10 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   `AccountLimitsStore` (Fehlschläge behalten den letzten Stand); `--filter StayAwake` auch die stille
   Prüfung der Freigabe ohne Seitenleiste;
   `--filter NotchPillPlacement` die Lage von Pille und Dynamic Island ohne Notch.
+- `swift test --filter ControllerPaddle` — Paddles im Kern, Weiche (`ControllerPaddleGateTests`) und
+  Ausführer; `--filter ControllerFamily` Tastennamen und Legende ohne Touchpad; `--filter XboxHID` das
+  Bündeln der HID-Berichte und den Debug-Schritt `hid:`; `--filter ControllerManagerHID` HID-Quelle,
+  Notbremse und Belegung im Manager.
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
@@ -542,9 +614,16 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   und viele Konten mit Fehlerzeilen als Pille, „Wohin“ mit Markierung auf dem aktuellen Chat und „vorher“,
   Reiter „Workspaces & Projekte“ mit der Markierung auf dem vorigen Projekt gleich unter dem aktuellen
   Workspace, an der Notch und als Pille);
-  `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf.
-- `whisperm8 debug controller state` — Verbindung, Schalter, Zähler je Taste (App vorne / im
-  Hintergrund), zuletzt aufgelöste Gesten.
+  `ONLY=clipboard-verlauf-controller` die Fußzeile und das Menü im Verlauf (auch mit Xbox);
+  `ONLY=controller-xbox` Legende, Menü-Karte, Dynamic Island und Einstellungen mit Xbox-Zeichen, die
+  Einstellungen mit lesbaren, nicht lesbaren und ohne Paddles.
+- `whisperm8 debug controller state` — Verbindung (mit `family`), Schalter, Zähler je Taste (App vorne /
+  im Hintergrund), zuletzt aufgelöste Gesten; unter `paddles` der HID-Zustand (`source`: none,
+  disabled, noPaddles, readable, notReadable), `hidEnabled`, `listenAccess`, die Belegung, `lastMask`
+  und die Zahlen der Weiche (`reports`, `swallowed`, `holds`, `holdsExpired`, `longestHoldMs`).
+- `whisperm8 debug controller sequence "hid:4+cross,down:cross,up:cross,hid:0-cross"` — spielt die
+  Weiche ohne Gerät durch: HID-Bericht mit Paddle-Maske 4 und A, danach A von GameController (wird
+  verschluckt); `hid:+home` drückt den Xbox-Knopf.
 - `whisperm8 debug controller press <taste>` und `sequence "<schritte>"` — künstliche Eingaben durch
   dieselbe Kette; ohne `--execute` ein Trockenlauf. Ausführen geht nur in der Test-Instanz, mit
   `--window <id>` und `--frontmost` (die Test-Instanz hat nie ein aktives Fenster). Ein Skript muss
@@ -571,7 +650,14 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Zurück mit L2 folgt dem Workspace, den das Fenster referenziert, auch wenn der Bezug veraltet ist:
   Raster W, dann Chat Y (nicht in W), dann Chat X (in W) aus der Seitenleiste — X in der Einzelansicht
   zählt als Workspace W, nicht als eigener Chat.
-- Umbelegen gibt es noch nicht; die Belegung ist eine pure Tabelle, auf die das später aufsetzen kann.
+- Umbelegen geht nur bei den Paddles; die übrige Belegung ist eine pure Tabelle, auf die das später
+  aufsetzen kann.
+- **Xbox:** Über USB spricht der Elite vermutlich GIP über Apples Treiber und erscheint nicht als
+  HID-Gerät — dann „nicht lesbar“ und Rückfall. Zwei Xbox-Controller gleichzeitig: Paddles nur am
+  ersten Elite. Ein Elite, der zwar geöffnet wird, aber nie 0x81-Werte liefert, wird nicht als „nicht
+  lesbar“ erkannt; die Paddles wirken dann nach 40 ms als ihre Gesichtstasten (sichtbar an
+  `holdsExpired` im Debug-Kanal). DualSense Edge (Rücktasten über `physicalInputProfile`) ist nicht
+  angebunden. Die Share-Taste der Series X|S bleibt frei (macOS nutzt sie für Bildschirmfotos).
 - **Runde 5, Bildschirm-Lesen:** Die Hinweistexte gelten für Claude Code 2.1.322; ändert Claude sie,
   erkennt der Controller die Ansicht nicht mehr (dann gilt die alte Regel, nichts wird gefährlicher).
   Kreuz bei „arbeitet“ verlässt sich darauf, dass Claudes Dialoge das Eingabefeld ersetzen und nicht

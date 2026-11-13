@@ -1,6 +1,6 @@
 ---
-status: Plan, Bau nach der vereinten Pille (feat/pille-vereint) und zusammen mit bzw. nach Runde 5 (feat/controller-runde5)
-stand: 2026-11-12
+status: Gebaut (Schritte 2–8, 13.11.2026), Gerätetest H1–H10 offen
+stand: 2026-11-13
 feature: Xbox-Controller mit eigenen Tastennamen, Paddles des Xbox Elite als frei belegbare Tasten
 branch: feat/controller-xbox
 ---
@@ -529,3 +529,24 @@ und gehört dem Controller; er wird nicht belegt.
 Freigegeben vom User: Der Xbox-Knopf öffnet und schließt den Zwischenablage-Verlauf, wie das Touchpad am
 DualSense. Er läuft über denselben HID-Leser wie die Paddles (nur Microsoft-Gamepads). Ohne HID-Zugriff hat er
 keine Wirkung; die Einstellungen sagen das in der Zustandszeile. View (Create) und Menu (Options) bleiben, wie sie sind.
+
+## Umsetzung (13.11.2026)
+
+Schritte 2 bis 8 gebaut, offene Fragen jeweils nach Empfehlung entschieden. Abweichungen vom Plan:
+
+- **Zustand der Paddles** steht in `ControllerStatus.paddles` (`ControllerPaddleSupport`: none, disabled,
+  noPaddles, readable, notReadable) statt in `ControllerDeviceInfo`: Die HID-Quelle ist unabhängig von
+  GameController und meldet auch „Xbox ohne Paddles“ (Xbox-Knopf lesbar).
+- **Legende:** Der Parameter heißt `traits: ControllerInputTraits` (Familie und `hasTouchpad`), weil der
+  Xbox-Knopf laut Nachtrag die Rolle des Touchpads übernimmt. Er ist die logische Taste `.touchpad` mit
+  dem Zeichen „Xbox“; Touchpad-Einträge fallen bei Xbox nur weg, wenn HID nicht lesbar ist.
+- **Laufzeit der HID-Quelle:** Sie läuft, solange die Steuerung läuft, nicht erst ab dem Verbinden eines
+  Xbox-Controllers. Sie ist ereignisgetrieben (kein Zeitgeber, kein Abfragen) und öffnet nur
+  Microsoft-Gamepads; so ist sie auch bereit, wenn die letzte Eingabe von einem DualSense kam.
+- **„Nicht lesbar“ ohne 0x81-Werte** (Elite geöffnet, liefert aber keine Paddle-Werte) wird nicht
+  erkannt; sichtbar wird es an `holdsExpired` im Debug-Kanal. Rückfall wie heute nach 40 ms.
+- **Einfügen und Rückgängig** auf einem Paddle prüft schon die Belegung (wie die L1-Ebene), nicht erst
+  der Ausführer.
+- **Debug-Schritt:** `hid:<maske>[+<taste>|-<taste>…]`, Xbox-Knopf als `home` (`hid:+home`).
+- **lsof-Prüfung** an einer Test-Instanz entfiel (keine Test-Instanz aus dem Chat). Die Quelle nutzt
+  nur Mach-Ports des `IOHIDManager`, keine Dateideskriptoren.
