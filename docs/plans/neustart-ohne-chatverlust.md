@@ -337,8 +337,10 @@ Paket 4 ist mit ausgeschaltetem Schalter gemergt; die Labs-Seite ist ausgeblende
 4. **Aufbewahrer liest erst ab `COMMIT`** aus den Leitungen.
 5. **`app handover` gegen Aufruf aus einem Chat sichern.**
 6. **Bindungs-Befund** (zwei Chats an derselben Claude-Sitzung): nach der Übernahme die Sitzungs-ID über die PID in Claudes Registry prüfen und korrigieren; vor jedem Sammel-Start auf doppelte IDs prüfen; Reservierung gegen gleichzeitigen Doppelstart; zurückgestellte IDs und Fork-Merkliste ins Manifest.
-7. **Prüfungen gegen die Wirklichkeit:** Bild im echten Fenster, Dauerlauf grün, fünfmal `make dev`, der erste echte Lauf nur mit Chats, deren Verlust nicht schlimm wäre.
-8. **Labs-Seite einhängen** (`RestartSettingsPage`, liegt samt Übersetzung bereit) und den Eintrag in `PreferenceBedienweg` streichen.
+7. **Prüfungen gegen die Wirklichkeit:** Bild im echten Fenster samt Größe und Neuzeichnen nach der Übernahme (Vic, Befund 8: das Terminal bekommt erst die Manifest-Größe, die echte erst mit der Ansicht), Dauerlauf grün mit Dex' absichtlichen Fehlern, Dauer von Abgabe und Übernahme bei zehn Chats, Abnahme Dev-Build auf Dev-Build und ad hoc auf ad hoc, fünfmal `make dev`, der erste echte Lauf nur mit Chats, deren Verlust nicht schlimm wäre.
+9. **„Arbeitet seit“ ins Manifest** (Vic, Befund 7): Statistik und Wach-Knopf starten nach einer Übernahme sonst neu.
+10. **`make dev` ohne Steuer-Socket** (Vic, Befund 6): Läuft die App, ist ihr Socket aber nicht erreichbar (etwa `agentControlServerEnabled` aus), wartet `_handover` bis zu 15 s. Nur warten, wenn die App gerade startet.
+8. **Labs-Seite einhängen** (`RestartSettingsPage`, liegt samt Übersetzung bereit) und den Eintrag in `PreferenceBedienweg` streichen. Das kommt als Letztes.
 
 ## Bau-Reihenfolge
 
