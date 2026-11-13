@@ -176,6 +176,25 @@ nicht, Zombies werden übersprungen.
 Claude-Chats, Subagent-Jobs und alle Aufrufer ohne Prozesswissen bleiben beim
 alten Verhalten.
 
+Beleg für die Freigabe-Regel (Versuch 13.11.2026, codex-cli 0.160.1,
+`-a on-request -s read-only`, Befehl `touch`): Codex schreibt den
+`custom_tool_call exec` ins Rollout, bevor der Freigabe-Dialog erscheint (beides
+22:34:57), danach nichts mehr, solange der Dialog offen ist. Der Decider
+liefert nach 60 s `working` und nach 120 s `idle`.
+
+Bekannte Grenzen:
+
+- Ein langer Befehl ohne Freigabe (Build, Tests) steht bei jeder Regel außer
+  `never` weiter nach 120 s auf `idle`, weil er von einem wartenden Befehl nicht
+  zu unterscheiden ist.
+- Hängt Codex mit offenem Turn bei lebendem Prozess (Limit, Netz), ohne den
+  Turn zu beenden, bleibt der Chat bis zur 30-min-Grenze grün.
+- Ein Codex-Prozess außerhalb des PTY der App: Die App sagt `unknown` (alte
+  120-s-Regel), die CLI sagt `notRunning` (sofort `idle`).
+- Mögliche nächste Schritte: Rückfragen als `awaitingInput` statt `idle`
+  melden; die PTY-Ausgabe als Arbeitssignal nutzen; ein echtes Freigabe-Signal
+  über Codex-Hooks oder die OSC-9-Meldungen der TUI.
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu
