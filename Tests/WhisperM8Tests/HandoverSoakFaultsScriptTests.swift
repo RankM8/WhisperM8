@@ -93,6 +93,24 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         }
     }
 
+    /// Umsigniert wird nur das Test-Bundle oder seine Arbeitskopie, und nur in den
+    /// beiden Arten, die es wirklich gibt: Dev-Zertifikat (`make dev`) und ad hoc
+    /// (Release-Pipeline, also alle Brew-Nutzer).
+    func testSigningOnlyTouchesTheTestBundle() throws {
+        let code = try code()
+        let signing = code.split(separator: "\n").filter { $0.contains("codesign --force") }
+        XCTAssertEqual(signing.count, 1, "codesign --force nur in sign_bundle")
+        XCTAssertTrue(signing.first?.contains(#"--sign "$id""#) == true)
+        for line in code.split(separator: "\n") where line.range(of: #"\bsign_bundle ""#, options: .regularExpression) != nil {
+            XCTAssertTrue(line.contains(#"sign_bundle "$APP""#) || line.contains(#"sign_bundle "$copy""#),
+                          "sign_bundle mit anderem Ziel: \(line)")
+        }
+        XCTAssertTrue(code.contains(#"[[ "$SIGNING" == dev || "$SIGNING" == adhoc ]]"#))
+        let usage = try run([Self.script.path, "run", "--signing", "apple"],
+                            environment: ["WHISPERM8_TEST_ROOT": "/private/tmp/whisperm8-test-guard"])
+        XCTAssertEqual(usage.status, 64, usage.output)
+    }
+
     func testFaultScriptReusesTheSoakLibrary() throws {
         let code = try code()
         XCTAssertTrue(code.contains("source \"$(cd \"$(dirname \"$0\")\" && pwd)/handover-soak.sh\""))
