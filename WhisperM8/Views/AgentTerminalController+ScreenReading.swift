@@ -12,13 +12,27 @@ extension AgentTerminalController {
     func controllerScreenSnapshot() -> ControllerScreenSnapshot? {
         let profile = command.keyboardProfile
         guard isRunning, profile == .claudeCodeChat || profile == .codexChat else { return nil }
+        // Erst den Rückstand einer gedrosselten Pane verarbeiten, dann prüfen,
+        // ob die Ansicht unten steht (`controllerBottomLines`).
+        terminal.flushPendingOutput()
         let swiftTerm = terminal.getTerminal()
         let atBottom = swiftTerm.isCurrentBufferAlternate || !terminal.canScroll || terminal.scrollPosition >= 1
         guard atBottom else { return nil }
         PerformanceCounters.shared.count(.controllerScreenRead)
-        let capture = ControllerScreenCapture.bottomLines(of: swiftTerm)
+        let capture = terminal.controllerBottomLines()
         return ControllerScreenReading.read(
             lines: capture.lines, cursor: capture.cursor, detectViews: profile == .claudeCodeChat)
+    }
+}
+
+extension QuietableTerminalView {
+    /// Unterer Rand für den Controller. Vorher den Puffer der Drosselung
+    /// leeren: Eine gedrosselte Pane (Raster ohne Fokus, Chat in zwei
+    /// Workspaces) zeigte sonst bis zu 80 ms alte Bytes — etwa noch das
+    /// Eingabefeld, obwohl Claude schon einen Freigabe-Dialog geschickt hat.
+    func controllerBottomLines() -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) {
+        flushPendingOutput()
+        return ControllerScreenCapture.bottomLines(of: getTerminal())
     }
 }
 

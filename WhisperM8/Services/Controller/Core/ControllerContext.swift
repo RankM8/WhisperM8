@@ -71,6 +71,9 @@ struct ControllerChatState: Equatable, Sendable {
     var openView: ControllerOpenView?
     /// Eingabefeld, wie es am Bildschirm steht; `nil`, wenn nicht ablesbar.
     var promptField: ControllerPromptField?
+    /// Im Feld steht laut Entwurfs-Tracker nur ein alter Prompt: mit ↑ vom
+    /// Controller zurückgeholt oder nach einem Abbruch zurückgelegt.
+    var onlyRecalledPrompt: Bool = false
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

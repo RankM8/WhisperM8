@@ -388,6 +388,10 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .press(.r2): .dictationToggle,
     ], pauseChord)
 
+    /// Am Bildschirm abgelesenes Eingabefeld: sichtbar leer bzw. mit Text.
+    private static let emptyField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+    private static let textField = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+
     private static func chatState(
         _ status: ControllerChatState.Status, _ configure: (inout ControllerChatState) -> Void = { _ in }
     ) -> ControllerContext {
@@ -573,6 +577,48 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
             .holdCancelled(.circle): .holdProgressCancelled(.circle),
         ])),
+        // Entscheidung 13.11.2026: Ist Claudes Eingabefeld sichtbar (beim Druck
+        // abgelesen), schickt Kreuz auch bei „arbeitet“ oder unklarem Zustand
+        // Enter — leer, mit Text oder mit gewählter Fußzeile. Ohne ablesbares
+        // Feld bleibt „Chat arbeitet“ oben gültig.
+        ("Claude arbeitet, Feld sichtbar leer", chatState(.working) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Text im Feld", chatState(.working) { $0.promptField = textField },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude Zustand unklar, Feld sichtbar", chatState(.unknown) { $0.promptField = emptyField },
+         merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        ("Claude arbeitet, Fußzeile gewählt",
+         chatState(.working) { $0.promptField = emptyField; $0.openView = .footerSelection },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+            .press(.cross): .chatKey(.enter),
+            .tap(.circle): .chatKey(.escape),
+            .holdBegan(.circle): .chatInterrupt,
+            .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+            .holdCancelled(.circle): .holdProgressCancelled(.circle),
+        ])),
+        // Codex: Das Feld zählt für Kreuz nicht (Freigaben ohne „wartet“).
+        ("Codex arbeitet, Feld sichtbar",
+         .chat(ControllerChatState(status: .working, profile: .codex, promptField: emptyField)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
         ("Chat gerade gesendet", chatState(.idle) { $0.recentlySubmitted = true }, merge(chatNavigation, claudeEmptyFieldArrows, backspace, clearInput, [
             .press(.cross): .chatKey(.enter),
             .holdBegan(.circle): .chatInterrupt,
