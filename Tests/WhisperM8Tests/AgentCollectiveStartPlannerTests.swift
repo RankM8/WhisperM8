@@ -81,7 +81,7 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
 
         let resumed = AgentCrashRecoveryCoordinator.start(
             marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
-            registry: AgentTerminalRegistry(),
+            registry: AgentTerminalRegistry(termination: .inert),
             windowStore: windowStore,
             store: persistence,
             isEnabled: true
