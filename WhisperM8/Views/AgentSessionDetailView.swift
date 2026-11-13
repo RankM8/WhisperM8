@@ -185,7 +185,8 @@ struct AgentSessionDetailView: View {
             // auch diesen Tab neu starten (Befund 11.11.2026).
             guard isSet == true, wasSet != true,
                   !suppressesAutoActivation,
-                  AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
+                  AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning,
+                                                             refusesNewStarts: terminalRegistry.refusesNewStarts),
                   !focusLaunchInFlight else { return }
             focusLaunchInFlight = true
             launchAfterCacheWarmup()
@@ -202,7 +203,8 @@ struct AgentSessionDetailView: View {
         .onChange(of: suppressesAutoActivation) { wasSuppressed, isSuppressed in
             guard wasSuppressed, !isSuppressed else { return }
             if session.shouldLaunchOnOpen == true,
-               AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning),
+               AgentCommandBuilder.allowsTriggeredLaunch(controllerIsRunning: controller?.isRunning,
+                                                             refusesNewStarts: terminalRegistry.refusesNewStarts),
                !focusLaunchInFlight {
                 focusLaunchInFlight = true
                 launchAfterCacheWarmup()
@@ -385,6 +387,11 @@ struct AgentSessionDetailView: View {
     /// dafür nötige JSONL-Scan hier — `prepareCommand()` bleibt dadurch auf
     /// dem MainActor frei von blockierendem Datei-I/O.
     private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
+        // Nach einer geglückten Abgabe nichts mehr vorbereiten (Hook-Datei).
+        guard !terminalRegistry.refusesNewStarts else {
+            focusLaunchInFlight = false
+            return
+        }
         let commandName: String? = session.isTerminal
             ? nil
             : (session.provider == .claude ? "claude" : "codex")
@@ -426,12 +433,6 @@ struct AgentSessionDetailView: View {
                 launchGuardResult = .notNeeded
             }
 
-            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
-            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten).
-            let runningRecords = launchSession.provider == .claude
-                && !launchSession.isTerminal && !launchSession.isAgentView
-                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
-
             let resumeRepairPreparation: ResumeRepairPreparation
             if !launchSession.isAgentView,
                !launchSession.isTerminal,
@@ -451,6 +452,14 @@ struct AgentSessionDetailView: View {
             } else {
                 resumeRepairPreparation = .noRepairNeeded
             }
+
+            // Doppelstart-Sperre: Claudes Registry hier lesen, nicht beim
+            // Bauen auf dem Main Thread (Dateien aller Konten + Startzeiten) —
+            // und als letzten Schritt, nach dem Index-Scan: So liegt das Lesen
+            // sicher im Fenster der Start-Reservierung eines anderen Chats.
+            let runningRecords = launchSession.provider == .claude
+                && !launchSession.isTerminal && !launchSession.isAgentView
+                ? ClaudeSessionRunningGuard.liveForegroundRecords() : []
 
             await MainActor.run {
                 // Der Warmup kann bei kaltem Cache Sekunden dauern: Wurde die
@@ -494,7 +503,8 @@ struct AgentSessionDetailView: View {
         // nur die Doppelstart-Sperre auslösen („läuft schon in PID …“),
         // obwohl es der eigene Prozess ist.
         guard AgentCommandBuilder.allowsTriggeredLaunch(
-            controllerIsRunning: terminalRegistry.controller(for: session.id)?.isRunning
+            controllerIsRunning: terminalRegistry.controller(for: session.id)?.isRunning,
+            refusesNewStarts: terminalRegistry.refusesNewStarts
         ) else {
             focusLaunchInFlight = false
             return
@@ -524,8 +534,15 @@ struct AgentSessionDetailView: View {
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
             builder.backgroundAttachAllowed = allowsBackgroundAttach
+            let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
-                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords)
+                ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
+            }
+            builder.launchReservation = { [store] sessionID, localID in
+                ClaudeSessionLaunchReservations.shared.reserve(sessionID: sessionID, for: localID).map { holder in
+                    store.loadWorkspace().sessions.first(where: { $0.id == holder })?.title
+                        ?? String(holder.uuidString.prefix(8))
+                }
             }
             // Der Guard friert die Lifecycle-Entscheidung fuer genau diesen
             // Launch ein. Bei Fehler baut derselbe pure Builder damit den

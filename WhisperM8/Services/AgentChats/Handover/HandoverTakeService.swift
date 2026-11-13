@@ -28,6 +28,10 @@ final class HandoverTakeService {
         var scheduleResume: ([UUID]) -> Void
         var isSameProcess: (Int32, Double?) -> Bool = { HandoverPlanning.isSameProcess(pid: $0, expectedStartTime: $1) }
         var terminateProcess: (Int32) -> Void = { kill($0, SIGTERM) }
+        /// Letzte Stufe für Chats, die SIGHUP und SIGTERM überleben.
+        var killProcess: (Int32) -> Void = { kill($0, SIGKILL) }
+        /// So lange nach SIGTERM und nach SIGKILL auf das Ende warten.
+        var signalWait: TimeInterval = 5
         /// Wartet off-main, bis der Prozess nicht mehr lebt.
         var waitUntilGone: @Sendable (Int32, Double?, TimeInterval) async -> Bool = { pid, start, timeout in
             let end = Date().addingTimeInterval(timeout)
@@ -101,7 +105,8 @@ final class HandoverTakeService {
             ? HandoverTestKnobs.secret(dependencies.secretStore.load()) : .missing
         let plan = HandoverPlanning.launchPlan(
             markerHandover: previous.handover, keeper: observation, secret: secret)
-        Logger.agentStore.notice("handover_take_plan plan=\(String(describing: plan).prefix(40), privacy: .public)")
+        // Nur der Fall: `.take` trägt das Geheimnis (Befund 13.11.2026).
+        Logger.agentStore.notice("handover_take_plan plan=\(plan.logLabel, privacy: .public)")
 
         var outcomes: [String: HandoverTakeOutcome] = [:]
         if !onMain, let handover = previous.handover,
@@ -179,7 +184,7 @@ final class HandoverTakeService {
             try? client.release(secret: secret)
             return [:]
         } catch {
-            Logger.agentStore.error("handover_take_hello_failed error=\(String(describing: error), privacy: .public)")
+            Logger.agentStore.error("handover_take_hello_failed error=\(HandoverLog.label(error), privacy: .public)")
             return [:]
         }
         var outcomes: [String: HandoverTakeOutcome] = [:]
@@ -195,7 +200,7 @@ final class HandoverTakeService {
             do {
                 taken = try client.take(chatID: chatID)
             } catch {
-                Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(String(describing: error), privacy: .public)")
+                Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(HandoverLog.label(error), privacy: .public)")
                 continue
             }
             // Review Paket 1, Befund 3: SwiftTerm prüft die Startzeit nicht.
@@ -235,8 +240,13 @@ final class HandoverTakeService {
     }
 
     /// Chats, deren Prozess noch lebt: Nach dem Ende des Aufbewahrers bekommen
-    /// sie SIGHUP. Wer danach noch lebt, bekommt SIGTERM. Fortgesetzt wird nur,
-    /// wer nachweislich weg ist.
+    /// sie SIGHUP. Wer danach noch lebt, bekommt SIGTERM, wer auch das
+    /// übersteht, SIGKILL. Fortgesetzt wird nur, wer nachweislich weg ist.
+    ///
+    /// Befund kill-mid-take (Dex, 13.11.2026): Ohne SIGKILL kam ein Chat, der
+    /// SIGTERM überlebte, nie zurück — etwa ein Prozess, der beim Aufräumen
+    /// auf eine Leitung ohne Leser schreibt. Die Sitzung liegt auf der Platte,
+    /// `--resume` setzt sie fort.
     private func finishOrphans(_ chats: [(UUID, Int32, Double?, Bool)]) {
         let dependencies = self.dependencies
         Task { @MainActor in
@@ -245,7 +255,13 @@ final class HandoverTakeService {
                 var gone = await dependencies.waitUntilGone(pid, start, dependencies.gracePeriod)
                 if !gone, dependencies.isSameProcess(pid, start) {
                     dependencies.terminateProcess(pid)
-                    gone = await dependencies.waitUntilGone(pid, start, 5)
+                    gone = await dependencies.waitUntilGone(pid, start, dependencies.signalWait)
+                }
+                if !gone, dependencies.isSameProcess(pid, start) {
+                    Logger.agentStore.notice(
+                        "handover_orphan_killed session=\(sessionID.uuidString, privacy: .public) pid=\(pid)")
+                    dependencies.killProcess(pid)
+                    gone = await dependencies.waitUntilGone(pid, start, dependencies.signalWait)
                 }
                 if gone, resumeAfter {
                     resume.append(sessionID)
@@ -284,12 +300,24 @@ enum HandoverKeeperLock {
     }
 
     /// `true`, wenn ein Discovery-Eintrag da ist und ein Aufbewahrer lebt.
-    /// Einen veralteten Eintrag (niemand hält die Sperre) entfernt sie.
+    /// Einen veralteten Eintrag (niemand hält die Sperre) entfernt sie samt
+    /// dem Socket des toten Aufbewahrers (Befund kill-mid-take: nach SIGKILL
+    /// blieben beide liegen).
     static func liveDiscovery(paths: HandoverPaths) -> Bool {
         guard FileManager.default.fileExists(atPath: paths.discoveryFileURL.path) else { return false }
         if isHeld(paths: paths) { return true }
+        removeStaleSocket(at: paths.socketURL)
         try? FileManager.default.removeItem(at: paths.discoveryFileURL)
         Logger.agentStore.notice("handover_stale_discovery_removed")
         return false
+    }
+
+    /// Nur einen eigenen Socket entfernen, nie etwas anderes (wie der
+    /// Aufbewahrer selbst beim Start).
+    static func removeStaleSocket(at url: URL) {
+        var existing = stat()
+        guard lstat(url.path, &existing) == 0, (existing.st_mode & S_IFMT) == S_IFSOCK,
+              existing.st_uid == getuid() else { return }
+        unlink(url.path)
     }
 }

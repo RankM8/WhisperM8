@@ -26,11 +26,15 @@ extension AgentSessionStore {
         case transcriptFallback
     }
 
-    /// Nur bei einem frischen Vordergrund-Start ist die Registry-ID sicher die
-    /// neue Sitzung des Chats. Bei Resume und Fork ist nicht belegt, ob Claude
-    /// die Datei vor oder nach dem Laden der Unterhaltung schreibt (ein Fork
-    /// bliebe sonst auf seiner Quelle); `attach` führt einen Background-Agent.
-    /// Dort und ohne Registry-Schalter gilt der bisherige Weg über Transcripts.
+    /// Gemessen am 13.11.2026 mit Claude Code 2.1.323, je dreimal und ohne
+    /// Login (`scripts/measure-claude-registry.py`): Schon der erste
+    /// Registry-Eintrag trägt die endgültige ID, dieselbe wie der
+    /// SessionStart-Hook — frisch eine neue, bei `--resume` die fortgesetzte,
+    /// bei `--fork-session` die neue Fork-ID, nie die Quelle oder eine
+    /// vorläufige ID (nach 0,25 bis 1,2 s); der Hook meldet den Fork als
+    /// `source: fork`. Ausgenommen bleibt `attach`: Das
+    /// führt einen Background-Agent. Dort und ohne Registry-Schalter gilt der
+    /// bisherige Weg über Transcripts.
     static func claudeFallbackStep(
         launchArguments: [String]?,
         registryEnabled: Bool,
@@ -39,7 +43,7 @@ extension AgentSessionStore {
         records: [ClaudeSessionRecord],
         isLastAttempt: Bool
     ) -> ClaudeFallbackStep {
-        guard registryEnabled, let launchArguments, isFreshClaudeStart(arguments: launchArguments) else {
+        guard registryEnabled, let launchArguments, isForegroundClaudeStart(arguments: launchArguments) else {
             return .transcriptFallback
         }
         if let processID,
@@ -48,15 +52,41 @@ extension AgentSessionStore {
                    // Wiederverwendete PID: ein liegengebliebener Eintrag ist älter als unser Prozess.
                    && (record.startedAt == nil || processStartedAt == nil
                        || record.startedAt! >= processStartedAt!.addingTimeInterval(-2))
-           }) {
+           }),
+           registryIDFits(record.sessionID, arguments: launchArguments) {
             return .bind(record.sessionID)
         }
         return isLastAttempt ? .transcriptFallback : .wait
     }
 
-    static func isFreshClaudeStart(arguments: [String]) -> Bool {
-        let resuming: Set<String> = ["--resume", "-r", "--continue", "-c", "--fork-session", "--session-id"]
-        return arguments.first != "attach" && !arguments.contains(where: resuming.contains)
+    /// Absicherung, falls ein späteres CLI-Update die gemessene Reihenfolge
+    /// ändert: Ein Fork bindet nie seine Quelle (der SessionStart mit der
+    /// Fork-ID käme dann als `source: fork` und würde ignoriert — der Chat
+    /// bliebe still auf der Quelle). Ein reiner Resume bindet nur die
+    /// fortgesetzte ID.
+    static func registryIDFits(_ registryID: String, arguments: [String]) -> Bool {
+        guard let resumed = resumedSessionID(in: arguments) else { return true }
+        let sameAsResumed = registryID.caseInsensitiveCompare(resumed) == .orderedSame
+        return arguments.contains("--fork-session") ? !sameAsResumed : sameAsResumed
+    }
+
+    /// Die fortgesetzte ID aus `--resume <id>`, `-r <id>` oder `--resume=<id>`
+    /// (Vic: die Gleichheitsform kann der Nutzer in eigenen Argumenten eintragen).
+    static func resumedSessionID(in arguments: [String]) -> String? {
+        for (index, argument) in arguments.enumerated() {
+            if argument.hasPrefix("--resume=") {
+                let value = String(argument.dropFirst("--resume=".count))
+                return value.isEmpty ? nil : value
+            }
+            if argument == "--resume" || argument == "-r" {
+                return index + 1 < arguments.count ? arguments[index + 1] : nil
+            }
+        }
+        return nil
+    }
+
+    static func isForegroundClaudeStart(arguments: [String]) -> Bool {
+        arguments.first != "attach"
     }
 
     /// IDs, die andere Chats als `localSessionID` tragen (klein geschrieben).

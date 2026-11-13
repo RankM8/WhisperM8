@@ -82,6 +82,7 @@ final class HandoverTakeServiceTests: XCTestCase {
             showEnded: { _, session in calls.ended.append(session.id) },
             scheduleResume: { calls.resumed.append(contentsOf: $0) },
             gracePeriod: 3)
+        dependencies.signalWait = 1
         if let isSameProcess { dependencies.isSameProcess = isSameProcess }
         if !onMainThread { dependencies.isMainThread = { false } }
         return HandoverTakeService(dependencies: dependencies)
@@ -197,6 +198,51 @@ final class HandoverTakeServiceTests: XCTestCase {
         while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
         XCTAssertEqual(calls.resumed, sources.map(\.sessionID))
         XCTAssertFalse(sources[0].child.isAlive, "fortgesetzt erst nach dem Ende des Prozesses")
+    }
+
+    /// Befund kill-mid-take (Dex): Ein Chat, der SIGHUP und SIGTERM übersteht,
+    /// bekommt SIGKILL und wird danach fortgesetzt, statt nie zurückzukommen.
+    func testOrphanSurvivingSigtermIsKilledAndThenResumed() async throws {
+        let child = try HandoverPTYChild.spawn(script: """
+        trap '' HUP TERM
+        : > "$READY"
+        while true; do sleep 0.05; done
+        """, in: directory)
+        children.append(child)
+        let sources = [FakeDepositSource(child: child, detachable: true)]
+        _ = try handOver(sources, secrets: FakeSecretStore())
+        let calls = Calls()
+        // Ohne Geheimnis: Der Aufbewahrer wird beendet, der Chat überlebt das.
+        let summary = service(secrets: FakeSecretStore(), sessions: sources.map { session(for: $0) },
+                              calls: calls).takeAtLaunch()
+        XCTAssertEqual(summary.fallback, sources.map(\.sessionID))
+        let end = Date().addingTimeInterval(20)
+        while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
+        XCTAssertEqual(calls.resumed, sources.map(\.sessionID), "nach SIGKILL fortgesetzt")
+        XCTAssertFalse(child.isAlive, "erst weg, dann fortgesetzt")
+    }
+
+    /// Befund kill-mid-take (Dex): Nach SIGKILL des Aufbewahrers blieb sein
+    /// Socket liegen. Mit dem veralteten Discovery-Eintrag verschwindet er.
+    func testStaleSocketOfAKilledKeeperIsRemoved() throws {
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: FakeSecretStore())
+        let status = try XCTUnwrap(HandoverTakeService.status(paths: paths))
+        kill(status.pid, SIGKILL)
+        XCTAssertTrue(HandoverTestSupport.waitUntil(timeout: 10) { kill(status.pid, 0) != 0 })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: paths.socketURL.path), "SIGKILL lässt den Socket liegen")
+        XCTAssertFalse(HandoverKeeperLock.liveDiscovery(paths: paths))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.socketURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: paths.discoveryFileURL.path))
+    }
+
+    /// Kein Socket, sondern eine gewöhnliche Datei am selben Ort: bleibt stehen.
+    func testStaleSocketCleanupLeavesOtherFilesAlone() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("not-a-socket")
+        FileManager.default.createFile(atPath: url.path, contents: Data("x".utf8))
+        HandoverKeeperLock.removeStaleSocket(at: url)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
     }
 
     func testTerminalTabIsEndedButNotResumed() async throws {

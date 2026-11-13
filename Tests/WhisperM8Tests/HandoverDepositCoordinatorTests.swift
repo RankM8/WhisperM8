@@ -422,6 +422,49 @@ final class HandoverTerminalControllerTests: XCTestCase {
         XCTAssertTrue(registry.activeSessionIDs.isEmpty)
     }
 
+    /// Review Paket 4, Befund 8: Der übernommene Chat startet mit der Größe aus
+    /// dem Manifest; sobald die Ansicht ihre echte Größe bekommt, erfährt der
+    /// Prozess sie (TIOCSWINSZ, also SIGWINCH). Ohne Ansicht bleibt die alte.
+    func testAdoptedChatGetsTheRealSizeOnceTheViewIsLaidOut() throws {
+        let (original, _) = try startTicking()
+        let pid = try XCTUnwrap(original.processID)
+        defer { kill(pid, SIGKILL) }
+        XCTAssertTrue(spin(until: 5) { screenText(original).contains("tick 2") })
+        let detached = try XCTUnwrap(original.detachForHandover())
+        let probe = dup(detached.handle.fileDescriptor)
+        defer { close(probe) }
+        func childSize() -> (Int, Int) {
+            var size = winsize()
+            _ = ioctl(probe, TIOCGWINSZ, &size)
+            return (Int(size.ws_col), Int(size.ws_row))
+        }
+        let before = childSize()
+        XCTAssertEqual(before.0, detached.cols)
+        XCTAssertEqual(before.1, detached.rows)
+
+        let registry = AgentTerminalRegistry(
+            sleep: { _ in }, termination: AgentChatTermination(markClosed: { _ in }, notifyStatus: { _, _ in }))
+        let manifest = HandoverManifest(chatID: original.sessionID.uuidString, kind: "terminal", pid: pid,
+                                        pidStartTime: ProcessStartTime.of(pid: pid)?.timeIntervalSince1970,
+                                        cols: detached.cols, rows: detached.rows, sendsInterruptOnStop: false)
+        let adopted = try XCTUnwrap(registry.adoptController(
+            sessionID: original.sessionID, command: original.command,
+            setUp: { $0.adoptHandedOver(descriptor: dup(detached.handle.fileDescriptor), manifest: manifest,
+                                        image: detached.image) }))
+        original.completeHandover()
+        let core = adopted.terminal.getTerminal()
+        XCTAssertEqual(core.cols, detached.cols, "zuerst die Größe aus dem Manifest")
+        spin(0.3)
+        XCTAssertTrue(childSize() == before, "ohne Ansicht keine neue Größe")
+
+        // Die Ansicht legt sich an: deutlich größer als das alte Fenster.
+        adopted.terminal.setFrameSize(NSSize(width: 2400, height: 1400))
+        XCTAssertNotEqual(core.cols, detached.cols)
+        XCTAssertTrue(spin(until: 3) { childSize() == (core.cols, core.rows) },
+                      "Prozess kennt die echte Größe: \(childSize()) statt \((core.cols, core.rows))")
+        XCTAssertTrue(adopted.isRunning)
+    }
+
     /// Review Paket 4, Befund 2: Nach der Abgabe startet die Registry nichts mehr.
     func testRegistryRefusesStartsAfterHandover() throws {
         let registry = AgentTerminalRegistry(sleep: { _ in }, termination: .inert)
