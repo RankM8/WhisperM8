@@ -79,6 +79,33 @@ enum CodexRolloutFixtures {
     ]
 }
 
+/// Rollout eines Codex-Chats mit OFFENEM Freigabe-Dialog (Handversuch
+/// 13.11.2026, codex-cli 0.160.1, `-a on-request -s read-only`, Auftrag
+/// `touch probe.txt`). Die Zeilen stehen in echter Reihenfolge mit echten
+/// Zeitstempeln; IDs, Pfade, Anweisungen und verschlüsselte Inhalte sind
+/// ersetzt, nur statusrelevante Felder bleiben. Kernaussage: Codex schreibt
+/// den Tool-Aufruf (21:34:57.324Z) VOR dem Dialog (22:34:57 Ortszeit) ins
+/// Rollout und danach nichts mehr, solange der Dialog offen ist. Ändert eine
+/// spätere Codex-Version diese Reihenfolge, schlagen die Tests in
+/// `CodexApprovalWaitFixtureTests` an. Bei Codex-Updates neu aufnehmen.
+enum CodexApprovalWaitFixture {
+    static let taskStarted = #"{"timestamp":"2026-11-13T21:34:50.695Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started","turn_id":"t-1","started_at":1794605690,"collaboration_mode_kind":"default"}}"#
+    static let turnContext = #"{"timestamp":"2026-11-13T21:34:54.011Z","ordinal":7,"type":"turn_context","payload":{"turn_id":"t-1","cwd":"/tmp/freigabe-versuch","approval_policy":"on-request","approvals_reviewer":"user","sandbox_policy":{"type":"read-only"}}}"#
+    static let reasoningCompleted = #"{"timestamp":"2026-11-13T21:34:56.412Z","ordinal":10,"type":"event_msg","payload":{"type":"item_completed","turn_id":"t-1","item":{"type":"Reasoning","id":"rs-1"}}}"#
+    static let reasoning = #"{"timestamp":"2026-11-13T21:34:56.414Z","ordinal":11,"type":"response_item","payload":{"type":"reasoning","id":"rs-1","summary":[],"encrypted_content":"gekürzt"}}"#
+    /// `status: completed` heißt nur: Das Modell hat den Aufruf fertig
+    /// ausgegeben. Ausgeführt ist er erst nach der Freigabe.
+    static let execCall = #"{"timestamp":"2026-11-13T21:34:57.324Z","ordinal":12,"type":"response_item","payload":{"type":"custom_tool_call","id":"ctc-1","status":"completed","call_id":"call-1","name":"exec","input":"const r = await tools.exec_command({cmd:\"touch probe.txt\",sandbox_permissions:\"require_escalated\"});"}}"#
+    static let tokenUsage = #"{"timestamp":"2026-11-13T21:34:57.332Z","ordinal":13,"type":"token_usage_record","payload":{"turn_id":"t-1","usage":{"input_tokens":10,"output_tokens":2}}}"#
+
+    /// Stand der Datei bei offenem Dialog, in Datei-Reihenfolge.
+    static let linesWhileDialogOpen = [taskStarted, turnContext, reasoningCompleted, reasoning, execCall, tokenUsage]
+    /// Letzte Schreibzeit der Datei (= Zeitpunkt des Dialogs).
+    static let lastWrite = Date(timeIntervalSince1970: 1_794_605_697.332)
+    /// Startzeit des Codex-Prozesses (Datei angelegt 22:34:49 Ortszeit).
+    static let processStart = Date(timeIntervalSince1970: 1_794_605_689)
+}
+
 extension XCTestCase {
     func makeTempProjectDirectory() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
