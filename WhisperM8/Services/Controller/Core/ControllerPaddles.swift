@@ -39,11 +39,10 @@ extension ControllerButton {
 }
 
 /// Bit der Paddle-Maske im HID-Bericht (Consumer-Seite 0x0C, Usage 0x81) ↔
-/// Lage. **Annahme**, am Gerät nur teilweise gemessen: Gemessen sind die
-/// Werte 1, 2, 4, 8 je Paddle, nicht welches Bit zu welcher Lage gehört.
-/// Vermutet wird die Elite-Zählung (Bit 1 = P1 usw.). Geprüft im Gerätetest
-/// H2 über den Tasten-Test der Einstellungen; bei Abweichung nur diese
-/// Tabelle ändern.
+/// Lage, gemessen 13.11.2026 (Elite Series 2, Bluetooth LE): Die Bits folgen
+/// der Elite-Zählung, Bit 1 = P1 oben rechts, 2 = P2 unten rechts, 4 = P3
+/// oben links, 8 = P4 unten links. Weicht ein Modell ab, nur diese Tabelle
+/// ändern.
 enum XboxPaddleBits {
     static let table: [(bit: UInt32, paddle: ControllerPaddle)] = [
         (0x1, .upperRight), // P1

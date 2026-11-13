@@ -405,7 +405,9 @@ erlauben…“ (wirkt nach einem Neustart der App); die Paddles wirken dann als 
 Profils. Die Tabellen `XboxHIDButtons` (Usages der Tastenseite) und `XboxPaddleBits` (Bit ↔ Lage) stehen
 zentral in `Core/XboxHIDLayout.swift` und `Core/ControllerPaddles.swift`. Gemessen sind A = 1, B = 2,
 X = 4, Y = 5, Xbox-Knopf = 0x0D und die Bits 1, 2, 4, 8; gemessen 13.11.2026 sind LB = 7, RB = 8,
-View = 0x0B, Menu = 0x0C, LS = 0x0E, RS = 0x0F. Ungeprüft bleibt die Zuordnung Bit 1 = P1 … Bit 8 = P4.
+View = 0x0B, Menu = 0x0C, LS = 0x0E, RS = 0x0F und die Zuordnung Bit 1 = P1 (oben rechts), 2 = P2
+(unten rechts), 4 = P3 (oben links), 8 = P4 (unten links). Profile dürfen Paddles auch auf LS oder RS
+legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesichtstasten.
 
 ## Schutzregeln
 

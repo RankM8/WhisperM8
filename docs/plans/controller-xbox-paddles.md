@@ -52,9 +52,10 @@ Feature-Doku: [`../features/controller.md`](../features/controller.md). Bauplan 
 - **Reihenfolge:** Im Testwerkzeug liefen HID und GameController beide auf dem Main-Runloop. HID kam in allen
   22 Fällen zuerst, GameController 0 bis 3 ms danach. Das ist ein Hinweis, keine Garantie; der Plan verlässt
   sich nicht darauf (siehe „Weiche“).
-- Nicht gemessen: welches Bit zu welchem Paddle gehört. Die Elite-Zählung ist P1 oben rechts, P2 unten
-  rechts, P3 oben links, P4 unten links; vermutlich Bit 1, 2, 4, 8 in dieser Reihenfolge. Geprüft wird das
-  über den Tasten-Test der Einstellungen (Handtest H2).
+- Welches Bit zu welchem Paddle gehört, gemessen 13.11.2026: Bit 1 = P1 oben rechts, 2 = P2 unten rechts,
+  4 = P3 oben links, 8 = P4 unten links (die Elite-Zählung, wie angenommen).
+- Gemessen 13.11.2026: Im aktiven Profil des Nutzers liegen die Paddles auf LS (0x0E), RS (0x0F), A und B.
+  Urteile für LS und RS müssen in der Weiche also genauso greifen wie für die Gesichtstasten.
 - Nicht gemessen: GameController-Loslassen (das Werkzeug protokollierte nur Drücken) und ob das Öffnen aus der
   signierten App eine Rückfrage nach „Eingabeüberwachung“ auslöst (siehe Risiken).
 
@@ -440,7 +441,8 @@ umbelegbar“ ändern. Nutzer-Doku der Einstellungsseite, falls `testUserGuideSe
   und die HID-Usages ablesen (Tabelle `XboxHIDButtons`). Reihenfolge HID/GameController und längste
   Zurückhaltung ablesen.
 - **H2 Paddle-Lage:** Tasten-Test der Einstellungen, jedes Paddle einzeln: zeigt „Upper left paddle“ usw.
-  an der richtigen Stelle, nie zusätzlich A/B/X/Y. Bei Abweichung nur `XboxPaddleBits` ändern.
+  an der richtigen Stelle, nie zusätzlich A/B/X/Y. Bei Abweichung nur `XboxPaddleBits` ändern. Die
+  Zuordnung Bit ↔ Lage ist seit 13.11.2026 gemessen und stimmt.
 - **H3 Kein Enter durch das Paddle:** Im ruhenden Claude-Chat mit Text im Feld das Paddle „Modus wechseln“
   (liegt auf A oder einer anderen Gesichtstaste): Modus wechselt, nichts wird gesendet.
 - **H4 Standardbelegung:** zwei Chats wartend → oben links springt reihum; unten links springt, diktiert nicht
