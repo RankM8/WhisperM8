@@ -592,18 +592,21 @@ struct ChatsNewArguments: Equatable {
     var provider: String
     var title: String?
     var prompt: String?
-    /// Ausdrueckliches Account-Profil. `nil` = das in den Einstellungen
-    /// aktive Profil (Default-Regel, siehe docs/features/agent-chats-cli.md).
+    /// Ausdrueckliches Claude-Konto. `nil` = das Konto, das in WhisperM8 unter
+    /// Einstellungen → Konten aktiv ist (siehe docs/features/agent-chats-cli.md).
     var account: String?
     var json: Bool
 
-    static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt \"…\"] [--account <profil>]"
+    static let usage = "Usage: whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--title T] [--prompt \"…\"] [--account <profil>]\n"
+        + "  Ohne --account startet ein Claude-Chat im Konto, das in WhisperM8 unter Einstellungen → Konten aktiv ist.\n"
+        + "  Ist es abgemeldet oder abgelaufen, bricht der Befehl ab (kein Ausweichen auf main). --account main wählt das Hauptkonto."
 
     enum ParseError: Error, Equatable {
         case missingValue(String)
         case unknownOption(String)
         case projectMissing
         case invalidProvider(String)
+        case accountRequiresClaude
 
         var message: String {
             switch self {
@@ -611,6 +614,7 @@ struct ChatsNewArguments: Equatable {
             case .unknownOption(let option): return "Unbekannte Option: \(option)"
             case .projectMissing: return ChatsNewArguments.usage
             case .invalidProvider: return "--provider muss claude oder codex sein."
+            case .accountRequiresClaude: return "--account gilt nur für Claude-Chats (Codex kennt keine Claude-Konten)."
             }
         }
     }
@@ -657,9 +661,24 @@ struct ChatsNewArguments: Equatable {
         guard provider == "claude" || provider == "codex" else {
             return .failure(.invalidProvider(provider))
         }
+        if provider == "codex", account != nil { return .failure(.accountRequiresClaude) }
         return .success(ChatsNewArguments(
             project: project, provider: provider, title: title,
             prompt: prompt, account: account, json: json))
+    }
+
+    /// Konto-Teil der Erfolgsmeldung, z. B. `, Konto: RankM8 (aktiv in den
+    /// Einstellungen)`. Leer bei Codex-Chats (kein Claude-Konto).
+    static func accountText(account: String?, source: String?) -> String {
+        guard let account else { return "" }
+        let origin: String
+        switch source {
+        case "explicit": origin = " (--account)"
+        case "active": origin = " (aktiv in den Einstellungen)"
+        case "killSwitch": origin = " (Notbremse chatsNewProfileDefaultEnabled aus)"
+        default: origin = ""
+        }
+        return ", Konto: \(account)\(origin)"
     }
 
     /// Params fuer `session.new`. Leere Optionalwerte bleiben weg, damit der
@@ -695,8 +714,11 @@ enum ChatsNewCommand {
                 let name = session?["project"]?.stringValue ?? project
                 let sessionTitle = session?["title"]?.stringValue ?? "?"
                 let id = session?["id"]?.stringValue ?? ""
-                let account = session?["account"]?.stringValue ?? "?"
-                return "✓ Neue Session \(name)/\(sessionTitle) gestartet (\(ChatsOutput.shortID(UUID(uuidString: id) ?? UUID())), Account: \(account))"
+                let ref = ChatsOutput.shortID(UUID(uuidString: id) ?? UUID())
+                let account = ChatsNewArguments.accountText(
+                    account: session?["account"]?.stringValue,
+                    source: session?["accountSource"]?.stringValue)
+                return "✓ Neue Session \(name)/\(sessionTitle) gestartet (\(ref)\(account))"
             }
             return ChatsCLIExit.ok
         }
