@@ -244,7 +244,7 @@ private struct PillChrome: ViewModifier {
                 .background {
                     // Dunkles Glas wie im Prototyp, geteilt mit der Pille der
                     // Notch-Anzeige (`PillGlassBackground`).
-                    PillGlassBackground(shape: Capsule())
+                    PillGlassBackground(shape: Capsule(), unified: presentation == .pill)
                 }
                 .pillGlassShadow()
         case .notch(let width, let height):

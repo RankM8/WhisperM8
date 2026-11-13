@@ -47,6 +47,21 @@ Pille Klicks ab (die Fensterverwaltung reicht nur völlig durchsichtige Pixel
 weiter). Der ruhende Kern (`PillRestCoreView`) hat die Maße des Diktat-Kerns
 (28 pt hoch, mindestens 46 pt breit, fünf Balken), grau und flach.
 
+**Tiefschwarz statt Glas** (Einstellung „Solid black background“,
+`pillSolidBlackEnabled`, Standard aus): Die Pille ist dann auch ohne Notch
+deckend schwarz wie an der Notch, in jedem Zustand (Ruhe, Hinweis, Liste,
+Diktat, Insel samt Limits-Karte, Rauten und Reitern). Haarstrich und Schatten bleiben, damit die Pille auf einem
+dunklen Schreibtisch ihren Umriss behält. Entschieden wird an einer Stelle
+(`PillSurface` in `PillGlass.swift`); den Wert hält `PillAppearance`, das bei
+Änderungen der Preferences neu liest, deshalb wirkt der Schalter sofort auf
+sichtbare Pillen. Dazu gehört auch die Liste der Ausgabemodi, die beim
+Moduswechsel per Controller an der Diktat-Pille aufklappt, und zwar ohne
+Notch und an der Notch (dort passt sie dann zur ohnehin schwarzen Pille; mit
+Option aus bleibt sie auch an der Notch Glas). Nur mit vereinter
+Pille: Die getrennte Diktat-Pille (Kill-Switch) bleibt samt ihrer Liste Glas,
+ebenso die Menükarte des Controllers am Chat. Die Menüs von Modus und Kontext
+(mit den Vorschaubildern) sind Menüs von macOS und bleiben, wie sie sind.
+
 **Wo sie steht:**
 
 - Ohne Notch auf dem Bildschirm des Agent-Chats-Fensters (ohne Fenster auf
@@ -285,7 +300,8 @@ einen selbst belegten Hotkey; ab Werk hat er keine Belegung).
 Vereinte Pille: Einstellungen, General, Abschnitt „Pille und Notch“
 (`PillSettingsSection`), mit Verweisen aus Recording und Agent Chats. Dort:
 Chat-Status in der Pille zeigen, Ausblenden aus Bildschirmfotos (ganze
-Pille), Fertige Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
+Pille), Tiefschwarzer Hintergrund (`pillSolidBlackEnabled`, aus), Fertige
+Chats, Liste beim Darüberfahren, Lage zurücksetzen, Hotkeys
 „Statusliste öffnen“ und Ein-/Ausblenden. Die Bildschirmwahl fällt weg.
 Recording behält Voll/Mini (nur beim Diktat) und „Ausgabemodus beim Diktat
 immer zeigen“ (`showModePickerInMiniOverlay`). Menüleiste: „Chat-Status in
@@ -506,7 +522,12 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   gemerkte Lage, Notch nur mit Anzeige, nachgeholter Hinweis), kein Übergang
   bei offener Liste, Vollbild, Status aus, Kill-Switch.
 - `UnifiedPillRestLookPixelTests`: Ruhebild der Diktat-Pille Pixel für Pixel
-  wie die Status-Pille bzw. die Notch-Zeile, mit und ohne Hinweis.
+  wie die Status-Pille bzw. die Notch-Zeile, mit und ohne Hinweis, ohne Notch
+  auch in Tiefschwarz.
+- `PillSolidBlackTests`: Tiefschwarz standardmäßig aus, nur mit vereinter
+  Pille, Entscheidung `PillSurface`, Live-Wert meldet nur echte Wechsel; im
+  Bild schwarz bei Ruhe, Liste, Diktat, Insel und Liste der Ausgabemodi, die
+  getrennte Diktat-Pille samt Liste unverändert.
 - `UnifiedPillControllerTests`: Kill-Switch und Bildschirmwahl, Klick auf den
   Kern startet das Diktat (Spy), Raute nur vereint, Diktat blendet den Status
   nur auf seinem Bildschirm aus, nachgeholter Hinweis, Pfeile und Return,
@@ -518,6 +539,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Seite). `ONLY=diktatpille` zeigt die Diktat-Pille in allen Zuständen.
   `ONLY=uebergang` zeigt den Übergang: Ruhe, Mitte, Diktat ohne Notch und an
   der Notch (aus dem Band und aus der Zeile mit Zählern).
+  `ONLY=vereint-schwarz` zeigt dieselben Zustände ohne Notch in Tiefschwarz,
+  dazu alle Insel-Fixtures als Pille (Limits-Karte, Rauten, Reiter, Listen),
+  die Liste der Ausgabemodi und den Schalter in den Einstellungen.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).

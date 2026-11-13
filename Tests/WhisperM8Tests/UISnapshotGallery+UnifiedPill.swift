@@ -84,7 +84,7 @@ extension UISnapshotGallery {
 
         let notch = OverlayPresentation.notch(width: 185, height: 32)
 
-        return [
+        let fixtures: [Fixture] = [
             status("ruhe-leer", size: compact) { unifiedDisplay(inputs: []) },
             status("ruhe-zaehler", size: compact) { unifiedDisplay(inputs: unifiedDemoInputs) },
             status("hinweis", size: compact) { unifiedDisplay(inputs: unifiedDemoInputs, alert: alert) },
@@ -132,6 +132,65 @@ extension UISnapshotGallery {
                             .frame(height: 88)
                     }
                 })
+            },
+        ]
+        return fixtures + solidBlackFixtures(fixtures)
+    }
+
+    /// Einstellung „Tiefschwarzer Hintergrund“: dieselben Zustände ohne Notch
+    /// (an der Notch ist die Pille ohnehin schwarz), dazu die Insel, die aus
+    /// der Pille wächst, und der Schalter in den Einstellungen.
+    @MainActor
+    private static func solidBlackFixtures(_ fixtures: [Fixture]) -> [Fixture] {
+        let black = fixtures.filter { !$0.name.contains("notch") }.map { fixture in
+            Fixture(name: fixture.name.replacingOccurrences(of: "vereint-", with: "vereint-schwarz-"),
+                    size: fixture.size, storage: fixture.storage) {
+                AnyView(fixture.view().environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        func island(_ content: ControllerIslandModel.Content, _ name: String, height: CGFloat) -> Fixture {
+            Fixture(name: "vereint-schwarz-insel-\(name)", size: CGSize(width: 520, height: height)) {
+                let model = ControllerIslandModel(
+                    target: ControllerIslandTarget(title: "Pille vereint", status: .working), content: content)
+                return AnyView(UnifiedDesk {
+                    ControllerIslandView(display: ControllerIslandDisplay(
+                        style: .pill, model: model, counts: ControllerIslandCounts(working: 2, waiting: 1)))
+                        .pillGlassShadow()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 24)
+                }
+                .environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        // Alle Insel-Zustände als Pille (ohne Notch), mit Option an.
+        let islands = (islandFixtures() + islandPackageFixtures()).filter { $0.name.contains("pille") }.map { fixture in
+            Fixture(name: "vereint-schwarz-" + fixture.name, size: fixture.size, storage: fixture.storage) {
+                AnyView(fixture.view().environment(\.pillSolidBlackOverride, true))
+            }
+        }
+        return black + islands + [
+            island(.writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))),
+                   "schreiben", height: 230),
+            // Liste der Ausgabemodi am Controller, unter der Diktat-Pille aufgeklappt.
+            Fixture(name: "vereint-schwarz-modusliste", size: CGSize(width: 420, height: 330)) {
+                let controller = dictationPillController { $0.presentation = .pill; $0.levelModel.level = 0.45 }
+                return AnyView(UnifiedDesk {
+                    VStack(spacing: OutputModeListPlacement.gap) {
+                        RecordingPillView(controller: controller).padding(.horizontal, 20)
+                        OutputModeListView(
+                            modes: Array(controller.outputModes.prefix(6)), selectedID: controller.selectedOutputMode.id,
+                            unified: true)
+                            .pillGlassShadow()
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 32)
+                    .environment(\.colorScheme, .dark)
+                }
+                .environment(\.pillSolidBlackOverride, true))
+            },
+            Fixture(name: "vereint-schwarz-einstellungen", size: CGSize(width: 700, height: 760),
+                    storage: [PreferenceKeys.pillSolidBlackEnabled: true]) {
+                AnyView(ScrollView { PillSettingsSection().padding(24) })
             },
         ]
     }

@@ -80,6 +80,16 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
     }
 
     func testPillRestLookMatchesTheStatusPill() throws {
+        try assertPillRestLookMatchesTheStatusPill(solidBlack: false, name: "pille")
+    }
+
+    /// Einstellung „Tiefschwarzer Hintergrund“: Beide Seiten zeichnen dasselbe
+    /// Schwarz, der Übergang bleibt deckungsgleich.
+    func testPillRestLookMatchesTheStatusPillInSolidBlack() throws {
+        try assertPillRestLookMatchesTheStatusPill(solidBlack: true, name: "pille-schwarz")
+    }
+
+    private func assertPillRestLookMatchesTheStatusPill(solidBlack: Bool, name: String) throws {
         let size = CGSize(width: OverlayFrameResolver.panelSize.width, height: 88)
         let summary = summary
         let alerts = alerts
@@ -93,7 +103,8 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
                 }
             }
         }
-        let image = try render(view, cell: size, name: "pille")
+        .environment(\.pillSolidBlackOverride, solidBlack)
+        let image = try render(view, cell: size, name: name)
         for row in alerts.indices {
             XCTAssertGreaterThan(darkPixels(image, row: row), 2000, "keine Pille gezeichnet (Zeile \(row))")
             XCTAssertLessThan(mismatch(image, row: row), 0.001, "Ruhebild weicht von der Status-Pille ab (Zeile \(row))")

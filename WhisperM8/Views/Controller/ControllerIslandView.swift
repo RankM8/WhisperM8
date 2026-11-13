@@ -112,7 +112,7 @@ struct ControllerIslandView: View {
         if display.isNotch {
             shape.fill(palette.background)
         } else {
-            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous), unified: true)
         }
     }
 

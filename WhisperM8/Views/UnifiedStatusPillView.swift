@@ -61,9 +61,9 @@ struct UnifiedStatusPillView: View {
     @ViewBuilder
     private var glass: some View {
         if display.isExpanded {
-            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
+            PillGlassBackground(shape: RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous), unified: true)
         } else {
-            PillGlassBackground(shape: Capsule())
+            PillGlassBackground(shape: Capsule(), unified: true)
         }
     }
 
