@@ -15,6 +15,26 @@ extension AgentControlRequestHandler {
             loginReading: { profiles.readLoginExpiry(forProfile: $0) })
     }
 
+    /// `result.session` von `session.new`. `account` steht immer drin: der
+    /// Name des Claude-Kontos (auch `main`) bzw. `null` bei Codex-Chats, die
+    /// kein Claude-Konto haben (bis 13.11.2026 stand dort fälschlich `main`).
+    /// Maßgeblich ist der gespeicherte Stempel, nicht die Anfrage.
+    static func sessionNewPayload(
+        id: UUID, title: String, projectName: String, provider: AgentProvider,
+        storedProfile: String?, account: ClaudeAccountProfiles.NewChatAccount?
+    ) -> [String: Any] {
+        var session: [String: Any] = [
+            "id": id.uuidString, "title": title,
+            "project": projectName, "provider": provider.rawValue,
+            "account": NSNull(),
+        ]
+        if provider == .claude, let account {
+            session["account"] = storedProfile ?? ClaudeAccountProfiles.mainProfileName
+            session["accountSource"] = account.source.rawValue
+        }
+        return session
+    }
+
     func sessionNew(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         guard let projectRef = request.params["project"]?.stringValue, !projectRef.isEmpty else {
             return .failure(requestID: request.requestID, code: .invalid, message: "project fehlt")
@@ -58,18 +78,11 @@ extension AgentControlRequestHandler {
         case .failure(let error):
             return .failure(requestID: request.requestID, code: .notFound, message: error.message)
         case .success(let launch):
-            var session: [String: Any] = [
-                "id": launch.id.uuidString, "title": launch.title,
-                "project": launch.projectName, "provider": provider.rawValue,
-            ]
+            let session = Self.sessionNewPayload(
+                id: launch.id, title: launch.title, projectName: launch.projectName,
+                provider: provider, storedProfile: launch.profileName, account: account)
             var auditTarget = "\(launch.projectName)/\(launch.title)"
-            if let account {
-                // Der gespeicherte Stempel ist die Wahrheit, nicht die Anfrage.
-                let label = launch.profileName ?? ClaudeAccountProfiles.mainProfileName
-                session["account"] = label
-                session["accountSource"] = account.source.rawValue
-                auditTarget += " [\(label)]"
-            }
+            if let label = session["account"] as? String { auditTarget += " [\(label)]" }
             await audit(request.actor, method: "new", target: auditTarget, outcome: "ok", prompt: prompt)
             return .success(requestID: request.requestID, result: .object([
                 "ok": true,

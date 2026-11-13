@@ -93,6 +93,59 @@ enum AccountMoveStopResumePlanner {
         }
         return selection
     }
+
+    // MARK: Ordner-Freigabe des Zielkontos
+
+    /// Was die Ordner-Freigabe (Trust) des Zielkontos für eine Auswahl
+    /// bedeutet. Pur — Arbeitsverzeichnisse und freigegebene Pfade liefert
+    /// der Aufrufer.
+    struct TrustDecision: Equatable {
+        /// Chats, deren Ordner das Zielkonto nicht freigegeben hat: Claude
+        /// fragt beim nächsten Start danach (nie die eigene Session).
+        var trustMissing: Set<UUID> = []
+        /// Beschäftigte Chats, die nach ihrem Turn wechseln.
+        var scheduleAfterTurn: [UUID] = []
+        /// Beschäftigte Chats, die wegen fehlender Freigabe NICHT vorgemerkt
+        /// werden: der unbeobachtete Neustart landete in Claudes Trust-Dialog
+        /// mit Vorauswahl „No, exit".
+        var blockedByTrust: Set<UUID> = []
+    }
+
+    /// Unbekanntes Arbeitsverzeichnis zählt als „nicht freigegeben" —
+    /// im Zweifel nicht unbeobachtet neu starten.
+    static func targetTrusts(cwd: String?, trustedPaths: Set<String>) -> Bool {
+        guard let cwd else { return false }
+        return ClaudeAccountPreflight.trustsProject(cwd: cwd, trustedPaths: trustedPaths)
+    }
+
+    /// - Parameters:
+    ///   - movable: laufen nicht, ziehen sofort um.
+    ///   - selection: Ergebnis von `select` (anzuhalten bzw. blockiert).
+    ///   - mayScheduleAfterTurn: echte Ausführung mit `--stop-and-resume` und
+    ///     eingeschaltetem Kontowechsel nach dem Turn.
+    static func trustDecision(
+        movable: [UUID],
+        selection: Selection,
+        cwd: (UUID) -> String?,
+        trustedPaths: Set<String>,
+        mayScheduleAfterTurn: Bool
+    ) -> TrustDecision {
+        var decision = TrustDecision()
+        let trusts: (UUID) -> Bool = { targetTrusts(cwd: cwd($0), trustedPaths: trustedPaths) }
+        for id in movable + selection.toStop.map(\.sessionID) where !trusts(id) {
+            decision.trustMissing.insert(id)
+        }
+        for blocked in selection.blocked where blocked.reason != .ownSession {
+            let id = blocked.candidate.sessionID
+            if !trusts(id) {
+                decision.trustMissing.insert(id)
+                decision.blockedByTrust.insert(id)
+            } else if mayScheduleAfterTurn {
+                decision.scheduleAfterTurn.append(id)
+            }
+        }
+        return decision
+    }
 }
 
 /// Wartet, bis ein beendeter PTY-Prozess wirklich weg ist. Erst dann ist

@@ -88,19 +88,28 @@ extension ClaudeAccountProfiles {
         return name.isEmpty ? nil : name
     }
 
-    /// Prüft, ob ein (kanonisches) Konto gerade nutzbar ist. Angemeldet heißt:
-    /// Kontodaten in der `.claude.json` UND ein Login im Keychain, dessen
-    /// Frist nicht um ist. Ein unlesbarer Keychain (gesperrt, `security` nicht
-    /// startbar) blockiert nicht — dann gibt es keine verlässliche Aussage.
+    /// Prüft, ob ein (kanonisches) Konto gerade nutzbar ist.
+    ///
+    /// Zusatzprofile: Kontodaten in der `.claude.json` UND ein Login im
+    /// Keychain, dessen Frist nicht um ist.
+    ///
+    /// `main` sperrt nur ein NACHWEISLICH abgelaufener Login. Fehlende
+    /// Kontodaten oder ein fehlender Keychain-Eintrag allein sagen bei main
+    /// nichts: dort läuft Claude auch mit API-Key, `apiKeyHelper` oder über
+    /// einen Proxy, ganz ohne OAuth-Login.
+    ///
+    /// Ein unlesbarer Keychain (gesperrt, `security` nicht startbar) blockiert
+    /// nie — dann gibt es keine verlässliche Aussage.
     func loginProblem(
         forProfile name: String,
         loginReading: (String) -> ClaudeLoginExpiryReading,
         now: Date
     ) -> NewChatAccountError.Reason? {
-        guard profile(named: name).isLoggedIn else { return .notLoggedIn(name) }
+        let isMain = name == Self.mainProfileName
+        if !isMain, !profile(named: name).isLoggedIn { return .notLoggedIn(name) }
         switch loginReading(name) {
         case .noLogin:
-            return .notLoggedIn(name)
+            return isMain ? nil : .notLoggedIn(name)
         case .login(let expiry):
             return expiry.status(now: now) == .ended ? .loginEnded(name) : nil
         case .unreadable:
@@ -108,10 +117,15 @@ extension ClaudeAccountProfiles {
         }
     }
 
-    /// Profile mit Kontodaten — für die Fehlermeldung. Nur die
-    /// `.claude.json`-Sicht (gecacht), kein Keychain-Zugriff je Konto.
-    func profilesWithAccountData() -> [String] {
-        profiles().filter(\.isLoggedIn).map(\.name)
+    /// Konten, die gerade taugen — für die Fehlermeldung („Angemeldet: …“).
+    /// Dieselbe Prüfung wie für das gewählte Konto, ein abgelaufener Login
+    /// zählt also nicht. Läuft nur im Fehlerfall (ein Keychain-Zugriff je
+    /// Konto mit Kontodaten).
+    func usableProfiles(
+        loginReading: (String) -> ClaudeLoginExpiryReading,
+        now: Date
+    ) -> [String] {
+        profileNames().filter { loginProblem(forProfile: $0, loginReading: loginReading, now: now) == nil }
     }
 
     /// Konto für einen neuen Claude-Chat.
@@ -135,7 +149,7 @@ extension ClaudeAccountProfiles {
             guard let canonical = canonicalProfileName(trimmed) else {
                 throw NewChatAccountError(
                     reason: .unknownProfile(trimmed), isActiveDefault: false,
-                    usableProfiles: profilesWithAccountData())
+                    usableProfiles: usableProfiles(loginReading: loginReading, now: now))
             }
             name = canonical
         } else if !followsActiveProfile {
@@ -147,7 +161,7 @@ extension ClaudeAccountProfiles {
                 guard let canonical = canonicalProfileName(raw) else {
                     throw NewChatAccountError(
                         reason: .activeProfileMissing(raw), isActiveDefault: true,
-                        usableProfiles: profilesWithAccountData())
+                        usableProfiles: usableProfiles(loginReading: loginReading, now: now))
                 }
                 name = canonical
             } else {
@@ -158,7 +172,7 @@ extension ClaudeAccountProfiles {
         if let problem = loginProblem(forProfile: name, loginReading: loginReading, now: now) {
             throw NewChatAccountError(
                 reason: problem, isActiveDefault: source != .explicit,
-                usableProfiles: profilesWithAccountData())
+                usableProfiles: usableProfiles(loginReading: loginReading, now: now))
         }
         return NewChatAccount(
             profileName: name == Self.mainProfileName ? nil : name,

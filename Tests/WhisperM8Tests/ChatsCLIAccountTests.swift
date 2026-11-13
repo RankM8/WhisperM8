@@ -172,12 +172,34 @@ final class ChatsNewAccountResolutionTests: XCTestCase {
         XCTAssertEqual(consulted, ["main"], "geprüft wird nur das gewählte Konto")
     }
 
-    func testExplicitMainMustBeLoggedInToo() throws {
+    func testMainWithoutOAuthLoginIsNotBlocked() throws {
+        // API-Key, apiKeyHelper oder Proxy: main läuft ohne OAuth-Login.
         let home = try AccountHome(); defer { home.remove() }
         try home.main(loggedIn: false)
 
-        expectError({ _ = try resolve(home, requested: "main") },
-                    reason: .notLoggedIn("main"), isActiveDefault: false)
+        XCTAssertEqual(try resolve(home, requested: "main", readings: ["main": .noLogin]),
+                       .init(profileName: nil, source: .explicit))
+        XCTAssertEqual(try resolve(home, readings: ["main": .noLogin]),
+                       .init(profileName: nil, source: .active))
+    }
+
+    func testMainWithProvablyEndedLoginIsBlocked() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+
+        expectError({ _ = try resolve(home, requested: "main", readings: ["main": endedLogin]) },
+                    reason: .loginEnded("main"), isActiveDefault: false)
+    }
+
+    func testUsableAccountsLeaveOutEndedLogins() throws {
+        let home = try AccountHome(); defer { home.remove() }
+        try home.main(loggedIn: true)
+        try home.profile("Abgelaufen", loggedIn: true)
+        try home.profile("RankM8", loggedIn: true)
+
+        XCTAssertThrowsError(try resolve(home, requested: "gibtsnicht", readings: ["Abgelaufen": endedLogin])) { error in
+            XCTAssertEqual((error as? ClaudeAccountProfiles.NewChatAccountError)?.usableProfiles, ["main", "RankM8"])
+        }
     }
 
     func testExplicitProfileIsCaseInsensitive() throws {
@@ -373,5 +395,127 @@ final class ChatsMoveAccountAccountTests: XCTestCase {
             "results": [["id": "x", "outcome": "wouldMove", "targetTrustMissing": true]],
         ])
         XCTAssertEqual(ChatsMoveAccountSupport.items(from: result).first?.targetTrustMissing, true)
+    }
+}
+
+// MARK: - Ordner-Freigabe beim Umzug
+
+final class AccountMoveTrustDecisionTests: XCTestCase {
+    private var trustedDir: URL!
+    private var otherDir: URL!
+
+    override func setUpWithError() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("WhisperM8Trust-\(UUID().uuidString)", isDirectory: true)
+        trustedDir = root.appendingPathComponent("frei/repo", isDirectory: true)
+        otherDir = root.appendingPathComponent("fremd", isDirectory: true)
+        try FileManager.default.createDirectory(at: trustedDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherDir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: trustedDir.deletingLastPathComponent().deletingLastPathComponent())
+    }
+
+    /// Freigegeben ist der Elternordner „frei" — das gilt auch für „frei/repo".
+    private var trustedPaths: Set<String> {
+        [ClaudeSharedMemoryPath.realPath(trustedDir.deletingLastPathComponent().path)]
+    }
+
+    private func candidate(_ title: String) -> AccountMovePlanner.Candidate {
+        AccountMovePlanner.Candidate(
+            sessionID: UUID(), title: title, currentProfile: nil, provider: .claude,
+            kind: .chat, isRunning: true, hasTargetConflict: false)
+    }
+
+    func testUnknownWorkingDirectoryCountsAsNotApproved() {
+        XCTAssertFalse(AccountMoveStopResumePlanner.targetTrusts(cwd: nil, trustedPaths: trustedPaths))
+        XCTAssertTrue(AccountMoveStopResumePlanner.targetTrusts(cwd: trustedDir.path, trustedPaths: trustedPaths))
+        XCTAssertFalse(AccountMoveStopResumePlanner.targetTrusts(cwd: otherDir.path, trustedPaths: trustedPaths))
+    }
+
+    func testBusyChatsAreScheduledOnlyWithApproval() {
+        let approved = candidate("Freigegeben")
+        let foreign = candidate("Fremder Ordner")
+        let unknown = candidate("Ohne Pfad")
+        let me = candidate("Jarvis")
+        let selection = AccountMoveStopResumePlanner.Selection(
+            toStop: [],
+            blocked: [
+                .init(candidate: approved, reason: .working),
+                .init(candidate: foreign, reason: .working),
+                .init(candidate: unknown, reason: .unsentInput),
+                .init(candidate: me, reason: .ownSession),
+            ])
+        let cwds: [UUID: String] = [
+            approved.sessionID: trustedDir.path, foreign.sessionID: otherDir.path, me.sessionID: otherDir.path,
+        ]
+
+        let decision = AccountMoveStopResumePlanner.trustDecision(
+            movable: [], selection: selection, cwd: { cwds[$0] },
+            trustedPaths: trustedPaths, mayScheduleAfterTurn: true)
+
+        XCTAssertEqual(decision.scheduleAfterTurn, [approved.sessionID])
+        XCTAssertEqual(decision.blockedByTrust, [foreign.sessionID, unknown.sessionID])
+        XCTAssertEqual(decision.trustMissing, [foreign.sessionID, unknown.sessionID],
+                       "die eigene Session bleibt außen vor")
+    }
+
+    func testPreviewMarksMissingApprovalButSchedulesNothing() {
+        let foreign = candidate("Fremd")
+        let approved = candidate("Frei")
+        let selection = AccountMoveStopResumePlanner.Selection(
+            toStop: [], blocked: [.init(candidate: foreign, reason: .working), .init(candidate: approved, reason: .working)])
+        let cwds = [foreign.sessionID: otherDir.path, approved.sessionID: trustedDir.path]
+
+        let decision = AccountMoveStopResumePlanner.trustDecision(
+            movable: [], selection: selection, cwd: { cwds[$0] },
+            trustedPaths: trustedPaths, mayScheduleAfterTurn: false)
+
+        XCTAssertTrue(decision.scheduleAfterTurn.isEmpty)
+        XCTAssertEqual(decision.blockedByTrust, [foreign.sessionID])
+    }
+
+    func testChatsToStopAndMovableChatsGetTheTrustFlag() {
+        let stopForeign = candidate("Anhalten, fremd")
+        let stopApproved = candidate("Anhalten, frei")
+        let movableForeign = UUID()
+        let selection = AccountMoveStopResumePlanner.Selection(toStop: [stopForeign, stopApproved], blocked: [])
+        let cwds = [
+            stopForeign.sessionID: otherDir.path, stopApproved.sessionID: trustedDir.path,
+            movableForeign: otherDir.path,
+        ]
+
+        let decision = AccountMoveStopResumePlanner.trustDecision(
+            movable: [movableForeign], selection: selection, cwd: { cwds[$0] },
+            trustedPaths: trustedPaths, mayScheduleAfterTurn: true)
+
+        XCTAssertEqual(decision.trustMissing, [stopForeign.sessionID, movableForeign])
+        XCTAssertTrue(decision.blockedByTrust.isEmpty)
+        XCTAssertTrue(decision.scheduleAfterTurn.isEmpty)
+    }
+}
+
+// MARK: - Antwort von `session.new`
+
+final class SessionNewPayloadTests: XCTestCase {
+    func testClaudeChatNamesAccountAndSource() {
+        let payload = AgentControlRequestHandler.sessionNewPayload(
+            id: UUID(), title: "T", projectName: "p", provider: .claude, storedProfile: "RankM8",
+            account: .init(profileName: "RankM8", source: .active))
+        XCTAssertEqual(payload["account"] as? String, "RankM8")
+        XCTAssertEqual(payload["accountSource"] as? String, "active")
+
+        let main = AgentControlRequestHandler.sessionNewPayload(
+            id: UUID(), title: "T", projectName: "p", provider: .claude, storedProfile: nil,
+            account: .init(profileName: nil, source: .explicit))
+        XCTAssertEqual(main["account"] as? String, "main")
+    }
+
+    func testCodexChatHasAccountNull() {
+        let payload = AgentControlRequestHandler.sessionNewPayload(
+            id: UUID(), title: "T", projectName: "p", provider: .codex, storedProfile: nil, account: nil)
+        XCTAssertTrue(payload["account"] is NSNull)
+        XCTAssertNil(payload["accountSource"])
     }
 }

@@ -123,6 +123,14 @@ extension AgentControlRequestHandler {
         // noch angehängte Bytes (der erste Durchlauf liest das ganze Transcript).
         await ClaudeBackgroundTaskMonitor.shared.prefetch(liveSessionIDs: requestedIDs)
 
+        // Freigaben des Zielkontos hier lesen, nicht im MainActor-Block: die
+        // `.claude.json` von main ist schnell mehrere MB groß. Ein Ziel ohne
+        // Login sperrt ohnehin alles — dann gar nicht lesen.
+        let trustedPaths: Set<String> = targetCheck.loginProblem != nil
+            ? []
+            : ClaudeAccountPreflight.trustedPaths(
+                claudeJSON: ClaudeAccountProfiles().claudeJSONURL(forProfile: targetName))
+
         // Phase 1 — planen und (nur bei echter Ausfuehrung) anhalten. EIN
         // MainActor-Block: Laufzustand, Status und Stop sehen denselben Stand.
         let phase: MoveAccountPhase = await MainActor.run {
@@ -187,24 +195,25 @@ extension AgentControlRequestHandler {
                 uniquingKeysWith: { first, _ in first }
             )
 
-            // Trust des Zielkontos einmal lesen (die `.claude.json` von main
-            // ist mehrere MB) und nur, wenn überhaupt ein Chat umziehen könnte.
-            let trustedPaths: Set<String> = plan.movable.isEmpty
-                && selection.toStop.isEmpty && selection.blocked.isEmpty
-                ? []
-                : ClaudeAccountPreflight.trustedPaths(
-                    claudeJSON: profiles.claudeJSONURL(forProfile: targetName))
-            let targetTrusts: (UUID) -> Bool = { id in
-                guard let session = sessions.first(where: { $0.id == id }),
-                      let cwd = AccountMoveFacts.cwd(for: session, projects: workspace.projects) else {
-                    return true
-                }
-                return ClaudeAccountPreflight.trustsProject(cwd: cwd, trustedPaths: trustedPaths)
-            }
+            // Kontowechsel nach dem Turn (Slice 2): Statt „arbeitet gerade —
+            // nur mit --force" merkt sich die App den Chat vor und wechselt ihn,
+            // sobald sein Turn fertig ist. Nicht, wenn das Zielkonto den Ordner
+            // nie freigegeben hat — ein unbeobachteter Neustart landete im
+            // Trust-Dialog mit Vorauswahl „No, exit".
+            let switchCoordinator = AccountSwitchCoordinator.shared
+            let trust = AccountMoveStopResumePlanner.trustDecision(
+                movable: plan.movable.map(\.sessionID),
+                selection: selection,
+                cwd: { id in
+                    sessions.first(where: { $0.id == id })
+                        .flatMap { AccountMoveFacts.cwd(for: $0, projects: workspace.projects) }
+                },
+                trustedPaths: trustedPaths,
+                mayScheduleAfterTurn: stopAndResume && !dryRun && switchCoordinator.isEnabled)
 
             for candidate in plan.movable {
                 items[candidate.sessionID]?.outcome = "wouldMove"
-                items[candidate.sessionID]?.targetTrustMissing = !targetTrusts(candidate.sessionID)
+                items[candidate.sessionID]?.targetTrustMissing = trust.trustMissing.contains(candidate.sessionID)
             }
             for skip in plan.skipped {
                 let id = skip.candidate.sessionID
@@ -218,16 +227,15 @@ extension AgentControlRequestHandler {
                     items[id]?.reason = nil
                     items[id]?.reasonLabel = nil
                     items[id]?.stopAndResume = true
-                    items[id]?.targetTrustMissing = !targetTrusts(id)
+                    items[id]?.targetTrustMissing = trust.trustMissing.contains(id)
                 } else if stoppableIDs.contains(id) {
                     items[id]?.stopAndResumePossible = true
-                    items[id]?.targetTrustMissing = !targetTrusts(id)
+                    items[id]?.targetTrustMissing = trust.trustMissing.contains(id)
                 } else if let blocked = blockedByID[id] {
                     // Ein beschäftigter Chat wird nur vorgemerkt, wenn das
-                    // Zielkonto den Ordner freigegeben hat — sonst landete der
-                    // unbeobachtete Neustart in Claudes Trust-Dialog mit
-                    // Vorauswahl „No, exit". Das sagt die Antwort auch.
-                    if blocked != .ownSession, !targetTrusts(id) {
+                    // Zielkonto den Ordner freigegeben hat — das sagt die
+                    // Antwort auch, schon in der Vorschau.
+                    if trust.blockedByTrust.contains(id) {
                         items[id]?.stopBlocked = AccountSwitchPlanner.BlockReason.trustMissing.rawValue
                         items[id]?.targetTrustMissing = true
                         if stopAndResume {
@@ -243,17 +251,9 @@ extension AgentControlRequestHandler {
                 }
             }
 
-            // Kontowechsel nach dem Turn (Slice 2): Statt „arbeitet gerade —
-            // nur mit --force" merkt sich die App den Chat vor und wechselt ihn,
-            // sobald sein Turn fertig ist. Nicht, wenn das Zielkonto den Ordner
-            // nie freigegeben hat — ein unbeobachteter Neustart landete im
-            // Trust-Dialog mit Vorauswahl „No, exit".
-            let switchCoordinator = AccountSwitchCoordinator.shared
-            if stopAndResume, !dryRun, switchCoordinator.isEnabled {
+            if !trust.scheduleAfterTurn.isEmpty {
                 var toSchedule: [(sessionID: UUID, reason: AccountSwitchPlanner.WaitReason)] = []
-                for blocked in selection.blocked where blocked.reason != .ownSession {
-                    let id = blocked.candidate.sessionID
-                    guard targetTrusts(id) else { continue }
+                for id in trust.scheduleAfterTurn {
                     let reason = AccountSwitchPlanner.waitReason(
                         status: statusStore.status(for: id),
                         mayHaveUnsentInput: registry.controller(for: id)?.composerDraft.mayHaveUnsentInput == true,
