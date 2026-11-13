@@ -35,7 +35,7 @@ struct ControllerSettingsPage: View {
 
     var body: some View {
         // Tastennamen nach dem Controller der letzten Eingabe (Xbox: A B X Y).
-        let traits = dependencies.status().device?.traits ?? .standard
+        let traits = dependencies.status().traits
         let family = traits.family
         let l1 = ControllerButton.l1.glyph(family), r1 = ControllerButton.r1.glyph(family)
         let r2 = ControllerButton.r2.glyph(family)

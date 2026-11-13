@@ -23,7 +23,7 @@ struct ClipboardControllerHints<Keyboard: View>: View {
     var body: some View {
         if status.isRunning, let device = status.device {
             HStack(spacing: 12) {
-                ForEach(Array(ControllerLegend.entries(for: .clipboardPanel(state), traits: device.traits).enumerated()),
+                ForEach(Array(ControllerLegend.entries(for: .clipboardPanel(state), traits: status.traits).enumerated()),
                         id: \.offset) { _, entry in
                     HStack(spacing: 5) {
                         ControllerInputGlyphs(inputs: entry.inputs, isCombination: entry.isCombination)

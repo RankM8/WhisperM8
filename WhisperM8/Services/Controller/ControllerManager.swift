@@ -45,7 +45,29 @@ final class ControllerStatus {
     /// Zuletzt gedrückte Taste (Tasten-Test auf der Einstellungsseite).
     var lastButton: ControllerButton?
     var lastButtonCount = 0
+    /// Paddles und Xbox-Knopf über HID (Xbox Elite).
+    var paddles: ControllerPaddleSupport = .none
+
+    /// Was Legende, Insel und Einstellungen zeigen: Tastennamen des
+    /// Controllers der letzten Eingabe; beim Xbox-Controller gibt es die
+    /// Taste für den Verlauf nur, wenn der Xbox-Knopf über HID lesbar ist.
+    var traits: ControllerInputTraits {
+        let family = device?.family ?? .playStation
+        return ControllerInputTraits(family: family, hasTouchpad: family.hasTouchpad || paddles.homeButtonReadable)
+    }
 }
+
+/// Quelle für Paddles und Xbox-Knopf über rohes HID. Live:
+/// `XboxPaddleHIDSource`; Tests lassen sie weg.
+protocol ControllerHIDSourcing: AnyObject {
+    var onReport: (@Sendable (ControllerHIDReport) -> Void)? { get set }
+    var onPaddlesAvailable: (@Sendable (Bool) -> Void)? { get set }
+    var onStateChange: (@MainActor (ControllerPaddleSupport) -> Void)? { get set }
+    func start(queue: DispatchQueue)
+    func stop()
+}
+
+extension XboxPaddleHIDSource: ControllerHIDSourcing {}
 
 /// Zählt Roh-Ereignisse je Taste, getrennt danach, ob die App vorne war.
 /// Wird auf der Eingabe-Queue geschrieben und vom Debug-Kanal gelesen.
@@ -107,7 +129,7 @@ final class ControllerEventCounters: @unchecked Sendable {
 /// gehen zum Main Thread; dort werden Zusammenhang und Aktion bestimmt.
 @MainActor
 final class ControllerManager {
-    static let shared = ControllerManager(source: GameControllerInputSource())
+    static let shared = ControllerManager(source: GameControllerInputSource(), hidSource: XboxPaddleHIDSource())
 
     let status = ControllerStatus()
     let counters = ControllerEventCounters()
@@ -131,6 +153,7 @@ final class ControllerManager {
     private(set) var paddleBindings: ControllerPaddleBindings = .standard
 
     private let source: ControllerInputSource
+    private let hidSource: ControllerHIDSourcing?
     private let pump: ControllerGesturePump
     private let preferences: () -> AppPreferences
     private var activeObservers: [NSObjectProtocol] = []
@@ -146,10 +169,12 @@ final class ControllerManager {
 
     init(
         source: ControllerInputSource,
+        hidSource: ControllerHIDSourcing? = nil,
         pump: ControllerGesturePump = ControllerGesturePump(),
         preferences: @escaping () -> AppPreferences = { AppPreferences.shared }
     ) {
         self.source = source
+        self.hidSource = hidSource
         self.pump = pump
         self.preferences = preferences
 
@@ -160,6 +185,13 @@ final class ControllerManager {
         }
         source.onReset = { [pump] in pump.reset() }
         source.onDeviceChange = { [weak self] info in self?.deviceChanged(info) }
+        hidSource?.onReport = { [pump] report in pump.ingestHID(report) }
+        hidSource?.onPaddlesAvailable = { [pump] available in pump.setPaddleSourceAvailable(available) }
+        hidSource?.onStateChange = { [weak self] state in
+            guard let self, self.status.isRunning, self.status.paddles != state else { return }
+            self.status.paddles = state
+            self.onStateChange?()
+        }
         pump.onGestures = { [weak self] gestures, idleAfter in
             Task { @MainActor in self?.handle(gestures, idleAfter: idleAfter) }
         }
@@ -194,6 +226,14 @@ final class ControllerManager {
             },
         ]
         source.start(queue: pump.queue)
+        if let hidSource {
+            if preferences().isControllerPaddleHIDEnabled {
+                hidSource.start(queue: pump.queue)
+            } else {
+                status.paddles = .disabled
+                Logger.controller.info("controller_hid_disabled")
+            }
+        }
         Logger.controller.info("controller_started")
         onStateChange?()
     }
@@ -203,8 +243,11 @@ final class ControllerManager {
         activeObservers.forEach(NotificationCenter.default.removeObserver)
         activeObservers = []
         source.stop()
+        hidSource?.stop()
+        pump.setPaddleSourceAvailable(false)
         pump.reset()
         status.device = nil
+        status.paddles = .none
         status.background = .off
         Logger.controller.info("controller_stopped")
         onStateChange?()

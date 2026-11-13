@@ -679,6 +679,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLegendEnabled) }
     }
 
+    /// Notbremse für das Lesen der Paddles und des Xbox-Knopfs über rohes HID
+    /// (Xbox Elite). Aus: kein `IOHIDManager`, Paddles wirken als die
+    /// Gesichtstasten ihres Controller-Profils.
+    /// `defaults write com.whisperm8.app controllerPaddleHIDEnabled -bool NO`
+    var isControllerPaddleHIDEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.controllerPaddleHIDEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.controllerPaddleHIDEnabled) }
+    }
+
     /// Einmal-Merker: Hinweis „Controller erkannt, Steuerung ist aus“ gezeigt.
     var controllerConnectHintShown: Bool {
         get { defaults.bool(forKey: Keys.controllerConnectHintShown) }
@@ -1161,6 +1170,7 @@ enum PreferenceKeys {
     static let controllerLightEnabled = "controllerLightEnabled"
     static let controllerLegendEnabled = "controllerLegendEnabled"
     static let controllerConnectHintShown = "controllerConnectHintShown"
+    static let controllerPaddleHIDEnabled = "controllerPaddleHIDEnabled"
     static let unifiedPillEnabled = "unifiedPillEnabled"
     static let notchStatusFeatureEnabled = "notchStatusFeatureEnabled"
     static let notchStatusEnabled = "notchStatusEnabled"
