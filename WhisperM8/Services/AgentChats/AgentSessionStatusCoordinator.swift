@@ -360,6 +360,19 @@ final class AgentSessionStatusCoordinator {
         scheduleLaunchGrace(sessionID: sessionID)
     }
 
+    /// Übernommener Chat (Neustart ohne Chatverlust): Der Prozess läuft schon.
+    /// Anders als `sessionLaunched` keine Startphase und keine Startfrist —
+    /// der Chat steht sofort auf „bereit“, den echten Zustand liefern danach
+    /// Registry, Hooks (ab dem übergebenen Cursor) oder der Verlauf. Hook- und
+    /// Registry-Zustand dieses Laufs sind ohnehin leer; nichts wird verworfen.
+    func sessionAdopted(sessionID: UUID) {
+        apply(.processLaunched, to: sessionID)
+        apply(.launchGraceExpired, to: sessionID)
+        if !isTerminalSession(sessionID) {
+            attachWatch(sessionID: sessionID)
+        }
+    }
+
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.
     func externalSessionIDBound(sessionID: UUID) {
         if let bound = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID {
