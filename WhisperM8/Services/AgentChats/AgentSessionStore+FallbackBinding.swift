@@ -26,11 +26,14 @@ extension AgentSessionStore {
         case transcriptFallback
     }
 
-    /// Nur bei einem frischen Vordergrund-Start ist die Registry-ID sicher die
-    /// neue Sitzung des Chats. Bei Resume und Fork ist nicht belegt, ob Claude
-    /// die Datei vor oder nach dem Laden der Unterhaltung schreibt (ein Fork
-    /// bliebe sonst auf seiner Quelle); `attach` führt einen Background-Agent.
-    /// Dort und ohne Registry-Schalter gilt der bisherige Weg über Transcripts.
+    /// Gemessen am 13.11.2026 mit Claude Code 2.1.323, je dreimal und ohne
+    /// Login (`scripts/measure-claude-registry.py`): Schon der erste
+    /// Registry-Eintrag trägt die endgültige ID, dieselbe wie der
+    /// SessionStart-Hook — frisch eine neue, bei `--resume` die fortgesetzte,
+    /// bei `--fork-session` die neue Fork-ID, nie die Quelle oder eine
+    /// vorläufige ID (nach 0,25 bis 1,2 s). Ausgenommen bleibt `attach`: Das
+    /// führt einen Background-Agent. Dort und ohne Registry-Schalter gilt der
+    /// bisherige Weg über Transcripts.
     static func claudeFallbackStep(
         launchArguments: [String]?,
         registryEnabled: Bool,
@@ -39,7 +42,7 @@ extension AgentSessionStore {
         records: [ClaudeSessionRecord],
         isLastAttempt: Bool
     ) -> ClaudeFallbackStep {
-        guard registryEnabled, let launchArguments, isFreshClaudeStart(arguments: launchArguments) else {
+        guard registryEnabled, let launchArguments, isForegroundClaudeStart(arguments: launchArguments) else {
             return .transcriptFallback
         }
         if let processID,
@@ -54,9 +57,8 @@ extension AgentSessionStore {
         return isLastAttempt ? .transcriptFallback : .wait
     }
 
-    static func isFreshClaudeStart(arguments: [String]) -> Bool {
-        let resuming: Set<String> = ["--resume", "-r", "--continue", "-c", "--fork-session", "--session-id"]
-        return arguments.first != "attach" && !arguments.contains(where: resuming.contains)
+    static func isForegroundClaudeStart(arguments: [String]) -> Bool {
+        arguments.first != "attach"
     }
 
     /// IDs, die andere Chats als `localSessionID` tragen (klein geschrieben).
