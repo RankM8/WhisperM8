@@ -274,15 +274,19 @@ final class HandoverKeeper: @unchecked Sendable {
             // Schon beendet, bevor die Überwachung stand.
             chat.markExited(status: nil)
         }
-        chat.startReading()
+        // Gelesen wird erst ab COMMIT (Review Paket 4, Befund 4): Scheitert die
+        // Abgabe davor, holt die App ihre Leitung zurück und findet alle Bytes
+        // seit dem Ablösen noch im Kernel. Läse der Aufbewahrer schon jetzt,
+        // fehlten sie ihr, und ihr Bild wäre gestört.
         log("deposited chat=\(manifest.chatID) kind=\(manifest.kind) pid=\(manifest.pid) image=\(image.count)")
         return nil
     }
 
     private func processExited(pid: pid_t, status: Int32?) {
         for chat in chats.values where chat.manifest.pid == pid && !chat.exited {
-            // Mitten in der Übergabe liest nur noch die App.
-            if !chat.inTransfer { chat.pump() }
+            // Mitten in der Übergabe liest nur noch die App; vor COMMIT liest
+            // der Aufbewahrer noch gar nicht (siehe addChat).
+            if !chat.inTransfer, phase != .awaitingDeposit { chat.pump() }
             chat.markExited(status: status)
             log("chat_exited chat=\(chat.manifest.chatID) status=\(status.map(String.init) ?? "?")")
         }
@@ -317,6 +321,9 @@ final class HandoverKeeper: @unchecked Sendable {
         guard phase == .awaitingDeposit else { return }
         phase = .holding
         log("committed chats=\(chats.count)")
+        // Ab jetzt hält der Aufbewahrer die Chats und liest ihre Ausgabe mit,
+        // auch die eines Prozesses, der schon vor COMMIT endete.
+        for id in chatOrder { chats[id]?.startReading() }
         // Ohne Chats endet der Aufbewahrer erst, nachdem die App ihr OK hat
         // (serveDeposit), sonst schlösse `finish` die Verbindung davor.
         arm(deadline: Date().addingTimeInterval(configuration.holdSeconds)) { [weak self] in
