@@ -10,7 +10,8 @@ extension AgentSessionDetailView {
     nonisolated static func codexProcessesForLaunch(_ session: AgentChatSession) -> [CodexProcess]? {
         // Bewusst ohne `hasLaunchedInitialPrompt`: Der Stand kann veraltet sein
         // (Job-Übernahme), und die Prüfung kostet nur etwa 0,4 ms.
-        guard session.provider == .codex, !session.isTerminal else { return [] }
+        guard session.provider == .codex, !session.isTerminal,
+              AppPreferences.shared.isCodexStartGuardEnabled else { return [] }
         let start = DispatchTime.now().uptimeNanoseconds
         let processes = CodexSessionRunningGuard.liveCodexProcesses()
         let micros = (DispatchTime.now().uptimeNanoseconds - start) / 1000
@@ -45,6 +46,7 @@ extension AgentSessionDetailView {
             appChats: appChats,
             processes: processes,
             terminatingOwner: { ProcessTerminationLedger.shared.owner(ofTerminating: $0) },
+            formerOwner: { ProcessTerminationLedger.shared.formerOwner(of: $0) },
             titleOf: { sessions[$0]?.title ?? String($0.uuidString.prefix(8)).lowercased() })
     }
 }

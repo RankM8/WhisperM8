@@ -19,6 +19,8 @@ enum CodexRunningConflict: Equatable {
     case otherChat(title: String)
     /// Der Prozess eines gerade geschlossenen Chats läuft noch aus.
     case otherChatEnding(title: String)
+    /// Der vorige Lauf dieses Chats endet länger als erwartet (> 30 s).
+    case ownPreviousRun(pid: Int32)
     case outsideApp(pid: Int32, inTerminal: Bool)
 }
 
@@ -82,13 +84,15 @@ enum CodexSessionRunningGuard {
     ///   - appChats: die laufenden Chats der App (ohne den startenden).
     ///   - processes: die `codex`-Prozesse; `nil`, wenn das Lesen scheiterte —
     ///     dann zählt nur die eigene Tabelle.
-    ///   - terminatingOwner: Chat, dessen Prozess die App gerade beendet.
+    ///   - terminatingOwner: Chat, dessen Prozess die App gerade beendet (30 s).
+    ///   - formerOwner: Chat, dessen Prozess die App früher beendet hat (bis 24 h).
     static func conflict(
         sessionID: String,
         localID: UUID,
         appChats: [AppChat],
         processes: [CodexProcess]?,
         terminatingOwner: (Int32) -> UUID?,
+        formerOwner: (Int32) -> UUID? = { _ in nil },
         titleOf: (UUID) -> String
     ) -> CodexRunningConflict? {
         let others = appChats.filter { $0.id != localID }
@@ -106,6 +110,11 @@ enum CodexSessionRunningGuard {
             if let owner = terminatingOwner(process.pid) ?? terminatingOwner(process.sessionLeader) {
                 if owner == localID { continue }
                 return .otherChatEnding(title: titleOf(owner))
+            }
+            // Länger als das Fenster: sperrt, aber mit der richtigen Zuordnung
+            // statt „außerhalb von WhisperM8“.
+            if let owner = formerOwner(process.pid) ?? formerOwner(process.sessionLeader) {
+                return owner == localID ? .ownPreviousRun(pid: process.pid) : .otherChatEnding(title: titleOf(owner))
             }
             // Prozess eines Chats der App (über den Sitzungsführer auch hinter Wrappern)?
             if let chat = chatByPID[process.pid] ?? chatByPID[process.sessionLeader] {

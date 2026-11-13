@@ -274,7 +274,11 @@ etwa 0,4 ms bei 580 Prozessen). Für beide Anbieter gilt zusätzlich eine
 (`ClaudeSessionLaunchReservations`, Schlüssel bei Codex `codex:<id>`). Der
 eigene auslaufende Vorgänger nach einem Tab-Neustart sperrt nicht
 (`ProcessTerminationLedger`). Lässt sich die Prozessliste nicht lesen, startet
-der Chat ohne diese Prüfung; eine Notbremse gibt es deshalb nicht. Prozesse
+der Chat ohne diese Prüfung. Für den Fall, dass eine künftige Codex-Version
+einen langlebigen Prozess mit `resume <id>` hält, gibt es die Notbremse
+`defaults write com.whisperm8.app codexStartGuardEnabled -bool NO`. Endet der
+vorige Lauf eines Chats länger als 30 Sekunden nicht, sperrt er weiter, aber
+die Meldung sagt das mit PID, statt „außerhalb von WhisperM8“. Prozesse
 werden über ihren Sitzungsführer (`getsid`) dem PTY eines Chats zugeordnet,
 auch hinter Wrappern wie Node oder Volta. Grenzen der Argumente: Ein fremdes
 Codex, das in der TUI per `/resume` auf die Sitzung gewechselt hat, bleibt

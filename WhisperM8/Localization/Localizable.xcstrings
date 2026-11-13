@@ -3081,6 +3081,16 @@
         }
       }
     },
+    "Cannot resume %@: the previous run of this chat is still ending (Codex process PID %@). Wait a few seconds and try again; if it does not end, quit it with “kill %@” in a terminal.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende ihn mit „kill %@“ in einem Terminal."
+          }
+        }
+      }
+    },
     "Cannot resume %@: this conversation is already running in a Codex process outside WhisperM8 (PID %@). End that process first, for example by closing its terminal window; a second Codex process would run the same conversation twice.": {
       "localizations": {
         "de": {

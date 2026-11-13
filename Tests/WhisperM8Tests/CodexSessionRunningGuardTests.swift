@@ -11,9 +11,10 @@ final class CodexSessionRunningGuardTests: XCTestCase {
     private let me = UUID(), other = UUID()
 
     private func check(_ chats: [G.AppChat] = [], processes: [CodexProcess]?,
-                       terminating: [Int32: UUID] = [:]) -> CodexRunningConflict? {
+                       terminating: [Int32: UUID] = [:], former: [Int32: UUID] = [:]) -> CodexRunningConflict? {
         G.conflict(sessionID: thread, localID: me, appChats: chats, processes: processes,
-                   terminatingOwner: { terminating[$0] }, titleOf: { $0 == self.other ? "Anderer Chat" : "?" })
+                   terminatingOwner: { terminating[$0] }, formerOwner: { former[$0] },
+                   titleOf: { $0 == self.other ? "Anderer Chat" : "?" })
     }
 
     private func tui(_ pid: Int32, leader: Int32? = nil, id: String? = nil, terminal: Bool = true) -> CodexProcess {
@@ -64,6 +65,16 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         XCTAssertNil(check(processes: [tui(900)], terminating: [900: me]), "Programm direkt im PTY")
         XCTAssertEqual(check(processes: [tui(902, leader: 900)], terminating: [900: other]),
                        .otherChatEnding(title: "Anderer Chat"), "ein anderer, gerade geschlossener Chat schreibt noch")
+    }
+
+    /// Jarvis: Überlebt der eigene Prozess das Schließen länger als 30 s,
+    /// sperrt er — aber als „voriger Lauf dieses Chats“, nicht „außerhalb“.
+    func testOwnPreviousRunBeyondWindowIsNamedCorrectly() {
+        XCTAssertEqual(check(processes: [tui(902, leader: 900)], former: [900: me]), .ownPreviousRun(pid: 902))
+        XCTAssertEqual(check(processes: [tui(902, leader: 900)], former: [900: other]),
+                       .otherChatEnding(title: "Anderer Chat"))
+        XCTAssertNil(check(processes: [tui(902, leader: 900)], terminating: [900: me], former: [900: me]),
+                     "innerhalb von 30 s läuft der eigene Vorgänger aus")
     }
 
     func testUnreadableProcessListNeverBlocks() {
@@ -164,6 +175,22 @@ final class CodexSessionRunningGuardTests: XCTestCase {
         XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
             XCTAssertTrue($0.localizedDescription.contains("Alter Chat"))
         }
+        blocked.codexRunningConflict = { _, _ in .ownPreviousRun(pid: 4244) }
+        XCTAssertThrowsError(try blocked.command(for: codexChat("Ich"), project: project)) {
+            XCTAssertTrue($0.localizedDescription.contains("4244"))
+            XCTAssertFalse($0.localizedDescription.contains("outside"), "nicht „außerhalb“")
+        }
+    }
+
+    /// Notbremse `codexStartGuardEnabled`: aus = keine Prüfung, keine Reservierung.
+    func testKillSwitchTurnsTheGuardOff() throws {
+        var off = builder()
+        off.codexStartGuardEnabled = false
+        off.codexRunningConflict = { _, _ in .outsideApp(pid: 1, inTerminal: true) }
+        off.launchReservation = { _, _ in "anderer" }
+        XCTAssertEqual(try off.command(for: codexChat("Ich"), project: project).arguments.last, thread)
+        XCTAssertTrue(AppPreferences(defaults: UserDefaults(suiteName: "wm8-codexguard-\(UUID())")!)
+            .isCodexStartGuardEnabled, "Standard an")
     }
 
     func testSimultaneousCodexResumesStartOnlyOnce() throws {
@@ -189,6 +216,19 @@ final class CodexSessionRunningGuardTests: XCTestCase {
 }
 
 final class ProcessTerminationLedgerOwnerTests: XCTestCase {
+    func testFormerOwnerOutlivesTheWindow() {
+        var clock = Date(timeIntervalSince1970: 1_800_000_000)
+        let ledger = ProcessTerminationLedger(window: 30, now: { clock })
+        let chat = UUID()
+        ledger.noteTerminating(pid: 20, localID: chat)
+        clock = clock.addingTimeInterval(120)
+        XCTAssertNil(ledger.owner(ofTerminating: 20))
+        XCTAssertFalse(ledger.isBeingTerminated(pid: 20, forLocalID: chat), "sperrt wieder")
+        XCTAssertEqual(ledger.formerOwner(of: 20), chat, "aber die Meldung kennt den Chat")
+        clock = clock.addingTimeInterval(25 * 60 * 60)
+        XCTAssertNil(ledger.formerOwner(of: 20))
+    }
+
     func testOwnerOfTerminatingProcess() {
         var clock = Date(timeIntervalSince1970: 1_800_000_000)
         let ledger = ProcessTerminationLedger(window: 30, now: { clock })

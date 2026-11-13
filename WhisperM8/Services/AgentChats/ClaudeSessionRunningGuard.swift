@@ -74,6 +74,10 @@ final class ProcessTerminationLedger: @unchecked Sendable {
 
     private let lock = NSLock()
     private var entries: [Int32: Entry] = [:]
+    /// Wer welchen Prozess beendet hat, länger als `window` (für Meldungen:
+    /// „der vorige Lauf dieses Chats endet noch“). Sperrt nichts.
+    private var history: [Int32: Entry] = [:]
+    private let historyWindow: TimeInterval = 24 * 60 * 60
     private let window: TimeInterval
     private let now: () -> Date
 
@@ -90,6 +94,17 @@ final class ProcessTerminationLedger: @unchecked Sendable {
         let current = now()
         entries = entries.filter { current.timeIntervalSince($0.value.at) < window }
         entries[pid] = Entry(at: current, localID: localID)
+        history = history.filter { current.timeIntervalSince($0.value.at) < historyWindow }
+        history[pid] = Entry(at: current, localID: localID)
+    }
+
+    /// Der Chat, dessen Prozess die App irgendwann (bis 24 h) beendet hat —
+    /// auch nach Ablauf von `window`. Nur für die Zuordnung in Meldungen.
+    func formerOwner(of pid: Int32) -> UUID? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let noted = history[pid], now().timeIntervalSince(noted.at) < historyWindow else { return nil }
+        return noted.localID
     }
 
     /// Der Chat, dessen Prozess die App gerade beendet (nur mit vermerktem Chat).

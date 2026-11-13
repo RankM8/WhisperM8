@@ -70,6 +70,8 @@ enum AgentCommandError: LocalizedError, Equatable {
             return String(localized: "Cannot resume \(title): this conversation is already running in the chat “\(other)”. Close that chat first; a second Codex process would run the same conversation twice.")
         case .codexSessionRunning(let title, .otherChatEnding(let other)):
             return String(localized: "Cannot resume \(title): the chat “\(other)” was just closed and its Codex process is still ending. Try again in a few seconds.")
+        case .codexSessionRunning(let title, .ownPreviousRun(let pid)):
+            return String(localized: "Cannot resume \(title): the previous run of this chat is still ending (Codex process PID \(String(pid))). Wait a few seconds and try again; if it does not end, quit it with “kill \(String(pid))” in a terminal.")
         case .codexSessionRunning(let title, .outsideApp(let pid, true)):
             return String(localized: "Cannot resume \(title): this conversation is already running in a Codex process outside WhisperM8 (PID \(String(pid))). End that process first, for example by closing its terminal window; a second Codex process would run the same conversation twice.")
         case .codexSessionRunning(let title, .outsideApp(let pid, false)):
@@ -294,6 +296,10 @@ struct AgentCommandBuilder {
     /// an (`CodexSessionRunningGuard`), mit vorher abseits des Main Threads
     /// gelesener Prozessliste.
     var codexRunningConflict: (_ sessionID: String, _ localID: UUID) -> CodexRunningConflict? = { _, _ in nil }
+
+    /// Notbremse `codexStartGuardEnabled`: aus = Codex setzt ohne
+    /// Doppelstart-Prüfung und ohne Reservierung fort.
+    var codexStartGuardEnabled = true
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
     /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
@@ -554,13 +560,13 @@ struct AgentCommandBuilder {
             }
             // Nie zwei Prozesse auf einer Sitzung: erst ein laufender Prozess,
             // dann ein gleichzeitiger Start (Reservierung, eigener Schlüssel).
-            if let conflict = codexRunningConflict(externalSessionID, session.id) {
+            if codexStartGuardEnabled, let conflict = codexRunningConflict(externalSessionID, session.id) {
                 Logger.agentStore.error(
                     "codex_resume_blocked session=\(externalSessionID, privacy: .public) conflict=\(String(describing: conflict), privacy: .private)"
                 )
                 throw AgentCommandError.codexSessionRunning(title: session.title, conflict: conflict)
             }
-            if let holder = launchReservation("codex:\(externalSessionID)", session.id) {
+            if codexStartGuardEnabled, let holder = launchReservation("codex:\(externalSessionID)", session.id) {
                 Logger.agentStore.error(
                     "codex_resume_blocked_starting session=\(externalSessionID, privacy: .public)"
                 )

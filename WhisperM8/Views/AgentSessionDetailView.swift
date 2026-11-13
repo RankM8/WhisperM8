@@ -544,6 +544,7 @@ struct AgentSessionDetailView: View {
             builder.runningSessionProcessResolver = { sessionID in
                 ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)
             }
+            builder.codexStartGuardEnabled = AppPreferences.shared.isCodexStartGuardEnabled
             builder.codexRunningConflict = { [store, terminalRegistry] sessionID, localID in
                 Self.codexConflict(sessionID: sessionID, localID: localID, processes: codexProcesses,
                                    store: store, registry: terminalRegistry)
