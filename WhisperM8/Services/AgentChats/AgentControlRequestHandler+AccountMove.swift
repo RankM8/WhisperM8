@@ -341,8 +341,12 @@ extension AgentControlRequestHandler {
             let registry = AgentTerminalRegistry.shared
             let profiles = ClaudeAccountProfiles()
             let sessions = workspace.sessions.filter { attemptIDs.contains($0.id) }
+            // main ohne Kontodaten bleibt erlaubt (API-Key, Proxy) — wie in
+            // Phase 1 (`loginProblem`). Nur Zusatzprofile brauchen weiter
+            // ihre Kontodaten; main wird hier gar nicht gelesen, seine
+            // `.claude.json` ist schnell mehrere MB groß (Main Thread).
             let targetIsLoggedIn = prepared.targetIsLoggedIn
-                && profiles.profile(named: prepared.targetName).isLoggedIn
+                && (prepared.target == nil || profiles.profile(named: prepared.targetName).isLoggedIn)
             let plan = AccountMovePlanner.plan(
                 candidates: AccountMoveFacts.candidates(
                     for: sessions, projects: workspace.projects, target: prepared.target,
