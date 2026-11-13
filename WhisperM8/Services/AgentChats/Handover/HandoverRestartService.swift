@@ -43,6 +43,8 @@ final class HandoverRestartService {
     var registry: AgentTerminalRegistry { .shared }
 
     func requestRestart(trigger: HandoverQuitTrigger, terminate: Bool = true) -> Result {
+        // Socket zum Aufbewahrer nur auf dem Main Thread (siehe Abgabe).
+        guard Thread.isMainThread else { return Result(kind: .failed, reason: "notMainThread") }
         guard !isRunning, !isTerminatingAfterHandover, !HandoverTakeService.isTaking else {
             return Result(kind: .failed, reason: "busy")
         }

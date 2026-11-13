@@ -38,6 +38,9 @@ final class HandoverTakeService {
             return !HandoverPlanning.isSameProcess(pid: pid, expectedStartTime: start)
         }
         var ioTimeout: TimeInterval = 5
+        /// Wie bei der Abgabe: Socket und empfangene Leitungen nur auf dem
+        /// Main Thread, wo auch alle `forkpty` laufen.
+        var isMainThread: () -> Bool = { Thread.isMainThread }
         /// Nach dem Ende des Aufbewahrers: so lange auf das Ende der Chats warten,
         /// bevor sie ein SIGTERM bekommen.
         var gracePeriod: TimeInterval = 8
@@ -68,7 +71,13 @@ final class HandoverTakeService {
         let previous = dependencies.marker.beginRunDetailed()
         var summary = Summary(previous: previous)
         Self.lastSummary = summary
-        let keeperStatus = Self.status(paths: dependencies.paths)
+        let onMain = dependencies.isMainThread()
+        if !onMain {
+            Logger.agentStore.error("handover_take_not_on_main_thread")
+        }
+        // Abseits des Main Threads keinen Socket öffnen; der Aufbewahrer wird
+        // dann über die PID aus dem Marker beendet (unten).
+        let keeperStatus = onMain ? Self.status(paths: dependencies.paths) : nil
         guard previous.handover != nil || keeperStatus != nil else { return summary }
         Self.isTaking = true
         defer { Self.isTaking = false }
@@ -86,6 +95,12 @@ final class HandoverTakeService {
         Logger.agentStore.notice("handover_take_plan plan=\(String(describing: plan).prefix(40), privacy: .public)")
 
         var outcomes: [String: HandoverTakeOutcome] = [:]
+        if !onMain, let handover = previous.handover,
+           dependencies.isSameProcess(handover.keeperPID, handover.keeperStartTime) {
+            // Kein Socket abseits des Main Threads: geordnet per Signal beenden,
+            // die Chats enden mit ihm und werden danach fortgesetzt.
+            dependencies.terminateProcess(handover.keeperPID)
+        }
         let sessionsByID = Dictionary(dependencies.sessions().map { ($0.id.uuidString, $0) },
                                       uniquingKeysWith: { first, _ in first })
         switch plan {

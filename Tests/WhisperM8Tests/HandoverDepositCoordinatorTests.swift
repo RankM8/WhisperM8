@@ -29,6 +29,7 @@ final class HandoverDepositCoordinatorTests: XCTestCase {
     private var paths: HandoverPaths { HandoverPaths(directory: directory) }
 
     private func coordinator(secrets: FakeSecretStore,
+                             onMainThread: Bool = true,
                              launch: ((URL, [String], String) throws -> Process)? = nil) throws -> HandoverDepositCoordinator {
         var dependencies = HandoverDepositCoordinator.Dependencies(
             paths: paths,
@@ -37,6 +38,7 @@ final class HandoverDepositCoordinatorTests: XCTestCase {
             secretStore: secrets,
             holdSeconds: 60)
         if let launch { dependencies.launch = launch }
+        if !onMainThread { dependencies.isMainThread = { false } }
         return HandoverDepositCoordinator(dependencies: dependencies)
     }
 
@@ -145,6 +147,22 @@ final class HandoverDepositCoordinatorTests: XCTestCase {
         }.deposit(items([source]))
         guard case .failed = outcome else { return XCTFail("erwartet: gescheitert, war \(outcome)") }
         XCTAssertEqual(source.detachCalls, 0, "ohne Aufbewahrer wird nichts abgelöst")
+    }
+
+    /// Urteil zur Absender-Bindung: Abseits des Main Threads entsteht kein
+    /// Socket und nichts wird abgelöst; der heutige Weg greift.
+    func testDepositOffTheMainThreadDoesNothing() throws {
+        let source = try spawnSource()
+        var launched = false
+        let outcome = try coordinator(secrets: FakeSecretStore(), onMainThread: false) { _, _, _ in
+            launched = true
+            throw HandoverWireError.unexpected("nicht erwartet")
+        }.deposit(items([source]))
+        guard case .failed(let reason) = outcome else { return XCTFail("erwartet: gescheitert, war \(outcome)") }
+        XCTAssertTrue(reason.contains("Main Thread"))
+        XCTAssertFalse(launched, "kein Aufbewahrer")
+        XCTAssertEqual(source.detachCalls, 0, "keine Leitung abgelöst")
+        XCTAssertGreaterThanOrEqual(source.child.master, 0)
     }
 
     func testEmptyListNeedsNoKeeper() throws {

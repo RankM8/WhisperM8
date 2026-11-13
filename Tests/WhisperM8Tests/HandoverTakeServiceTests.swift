@@ -68,7 +68,8 @@ final class HandoverTakeServiceTests: XCTestCase {
 
     private func service(secrets: HandoverSecretStoring, sessions: [AgentChatSession], calls: Calls,
                          adoptSucceeds: Bool = true,
-                         isSameProcess: ((Int32, Double?) -> Bool)? = nil) -> HandoverTakeService {
+                         isSameProcess: ((Int32, Double?) -> Bool)? = nil,
+                         onMainThread: Bool = true) -> HandoverTakeService {
         var dependencies = HandoverTakeService.Dependencies(
             paths: paths, secretStore: secrets, marker: marker(pid: 200),
             sessions: { sessions },
@@ -82,6 +83,7 @@ final class HandoverTakeServiceTests: XCTestCase {
             scheduleResume: { calls.resumed.append(contentsOf: $0) },
             gracePeriod: 3)
         if let isSameProcess { dependencies.isSameProcess = isSameProcess }
+        if !onMainThread { dependencies.isMainThread = { false } }
         return HandoverTakeService(dependencies: dependencies)
     }
 
@@ -173,6 +175,28 @@ final class HandoverTakeServiceTests: XCTestCase {
         XCTAssertTrue(summary.adopted.isEmpty)
         XCTAssertEqual(summary.fallback, sources.map(\.sessionID))
         XCTAssertGreaterThanOrEqual(checks, 1)
+    }
+
+    /// Urteil zur Absender-Bindung, vor 4c: Abseits des Main Threads öffnet
+    /// die Übernahme keinen Socket. Der Aufbewahrer wird per Signal beendet
+    /// (PID und Startzeit aus dem Marker), die Chats erst nach ihrem Ende
+    /// fortgesetzt.
+    func testTakeOffTheMainThreadOpensNoSocketAndFallsBack() async throws {
+        let secrets = FakeSecretStore()
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: secrets)
+        let keeper = try XCTUnwrap(HandoverTakeService.status(paths: paths))
+        let calls = Calls()
+        let summary = service(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: calls,
+                              onMainThread: false).takeAtLaunch()
+        XCTAssertTrue(summary.adopted.isEmpty)
+        XCTAssertEqual(summary.fallback, sources.map(\.sessionID))
+        XCTAssertTrue(calls.adopted.isEmpty)
+        XCTAssertTrue(HandoverTestSupport.waitUntil(timeout: 10) { kill(keeper.pid, 0) != 0 }, "Aufbewahrer per Signal beendet")
+        let end = Date().addingTimeInterval(15)
+        while calls.resumed.isEmpty, Date() < end { try await Task.sleep(nanoseconds: 100_000_000) }
+        XCTAssertEqual(calls.resumed, sources.map(\.sessionID))
+        XCTAssertFalse(sources[0].child.isAlive, "fortgesetzt erst nach dem Ende des Prozesses")
     }
 
     func testTerminalTabIsEndedButNotResumed() async throws {

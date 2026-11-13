@@ -48,6 +48,11 @@ final class HandoverDepositCoordinator {
         var startTimeout: TimeInterval = 3
         /// Frist je Telegramm.
         var ioTimeout: TimeInterval = 5
+        /// Läuft der Aufruf auf dem Main Thread? Nur dort entstehen Socket und
+        /// Kopien der Leitungen, denn dort laufen auch alle `forkpty`; macOS
+        /// kennt kein `SOCK_CLOEXEC`, ein Kind von einem anderen Thread könnte
+        /// sonst den Socket erben (Urteil zur Absender-Bindung, 13.11.2026).
+        var isMainThread: () -> Bool = { Thread.isMainThread }
     }
 
     enum Outcome: Equatable {
@@ -75,6 +80,8 @@ final class HandoverDepositCoordinator {
 
     func deposit(_ items: [Item]) -> Outcome {
         guard !items.isEmpty else { return .nothingToHandOver }
+        // Nicht auf dem Main Thread: keine Übergabe, der heutige Weg greift.
+        guard dependencies.isMainThread() else { return fail("nicht auf dem Main Thread") }
         let started = Date()
         let secret = HandoverSecret.make()
         let runID = UUID().uuidString.lowercased()
