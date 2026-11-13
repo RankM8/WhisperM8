@@ -60,9 +60,10 @@ SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap d
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
 SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
-# Dateien aus Paket 2 (Aufbewahrer) und Paket 4 (last-take.json); alles andere gilt als
+# Dateien aus Paket 2 (Aufbewahrer) und Paket 4 (last-take.json, take.lock: flock-Datei
+# der Übernahme, bleibt absichtlich liegen); alles andere gilt als
 # Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
-KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json"
+KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock last-take.json take.lock"
 
 # MARK: - Fähigkeiten (Paket 4)
 
@@ -434,6 +435,7 @@ nudge_unstarted() { # szenario vorher-datei
         for name in $(chat_names); do
             # Nur Chats, die vorher einen Prozess hatten; der Rest ist FEHLT.
             [[ -n "$(awk -F'\t' -v n="$name" '$1 == n {print $2}' "$before")" ]] || continue
+            unresumable_codex "$name" && continue
             [[ -n "$(chat_pid "$name")" ]] || missing="$missing $name"
         done
         if [[ -z "$missing" ]]; then
@@ -450,12 +452,24 @@ nudge_unstarted() { # szenario vorher-datei
     done
 }
 
+# Codex ohne Login legt keine Sitzung an (kein ~/.codex/sessions), der Chat hat
+# dann keine externe ID, und die App baut kein `codex resume`
+# (AgentCommandBuilder: missingExternalSessionID). Fortsetzen ist so nicht
+# messbar, nur die Übernahme (Lauf vom 13.11., 15:54).
+unresumable_codex() { # name
+    [[ "$(chat_provider "$1")" == codex && -z "$(external_id "$1")" ]]
+}
+
 check_comeback() { # szenario vorher-datei erwartung
     local scenario="$1" before="$2" expect="$3" name pid_before pid_now old_alive deadline
     deadline=$(( $(date +%s) + COMEBACK_TIMEOUT ))
     while IFS=$'\t' read -r name pid_before; do
         if [[ -z "$pid_before" ]]; then
             record "$scenario" "zurueck:$name" FEHLT "PID vorher nicht ermittelbar"
+            continue
+        fi
+        if ! kill -0 "$pid_before" 2>/dev/null && unresumable_codex "$name"; then
+            record "$scenario" "zurueck:$name" FEHLT "nicht übernommen; Fortsetzen nicht messbar (Codex ohne Login hat keine Sitzungs-ID)"
             continue
         fi
         pid_now=$(await_pid "$name" "$pid_before" "$expect" "$deadline")
