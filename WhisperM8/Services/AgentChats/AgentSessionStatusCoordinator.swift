@@ -269,6 +269,9 @@ final class AgentSessionStatusCoordinator {
         watcher.onActivity = { [weak self] sessionID, activity in
             self?.handleTranscriptActivity(sessionID: sessionID, activity: activity)
         }
+        watcher.processIDProvider = { [weak self] sessionID in
+            self?.terminalProcessID(sessionID)
+        }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)

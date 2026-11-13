@@ -104,12 +104,22 @@ final class ClaudeRegistryStatusSource {
         }
         let isAlive = self.isAlive
         let started = now()
-        let records = await withCheckedContinuation { continuation in
+        // Gemessen wird nur der Scan selbst auf der Queue. Früher lief die Uhr
+        // ab hier bis zur Rückkehr auf den MainActor: Beim App-Start zählte
+        // `claude_registry_scan_slow` so den Stau des Main Threads mit
+        // (Testlauf 13.11.2026: 460–490 ms bei 1–2 Dateien, nur beim Start).
+        let (records, scanSeconds) = await withCheckedContinuation { continuation in
             queue.async {
-                continuation.resume(returning: ClaudeSessionRegistry.scan(roots: roots, isAlive: isAlive))
+                let clock = ContinuousClock()
+                let begin = clock.now
+                let records = ClaudeSessionRegistry.scan(roots: roots, isAlive: isAlive)
+                let elapsed = clock.now - begin
+                let seconds = Double(elapsed.components.seconds)
+                    + Double(elapsed.components.attoseconds) / 1e18
+                continuation.resume(returning: (records, seconds))
             }
         }
-        let elapsedMs = now().timeIntervalSince(started) * 1000
+        let elapsedMs = scanSeconds * 1000
         if elapsedMs > 50 {
             Logger.agentPerformance.warning(
                 "claude_registry_scan_slow ms=\(Int(elapsedMs), privacy: .public) files=\(records.count, privacy: .public)")
