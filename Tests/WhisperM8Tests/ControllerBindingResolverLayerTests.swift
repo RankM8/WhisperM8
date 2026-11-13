@@ -93,7 +93,24 @@ final class ControllerBindingResolverLayerTests: XCTestCase {
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.square)), context), .quickDraw(.commands))
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.circle)), context), .quickDraw(.switchAccount))
         XCTAssertEqual(action(.inLayer(.quickDraw, .press(.r2)), context), .dictationToggle)
-        XCTAssertNil(action(.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: false)), context))
+        // Insel-Paket: Der Stick scrollt die Limits-Karte, links/rechts tut er nichts.
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.down, source: .leftStick, isRepeat: false)), context),
+                       .islandScroll(step: 1))
+        XCTAssertNil(action(.inLayer(.quickDraw, .move(.left, source: .leftStick, isRepeat: false)), context))
+        // Zweite Raute auf dem Steuerkreuz, ein Druck je Stufe.
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: false)), context), .appSlot(.limits))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)), context), .appSlot(.alerts))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false)), context),
+                       .appSlot(.stayAwake))
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.down, source: .dpad, isRepeat: false)), context),
+                       .appSlot(.clipboard))
+        XCTAssertNil(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: true)), context),
+                     "gehalten schaltet nicht weiter")
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.up, source: .dpad, isRepeat: true)), context),
+                       .islandScroll(step: -1))
+        // Auch bei beendetem Chat (die App-Raute hängt nicht am Chat).
+        XCTAssertEqual(action(.inLayer(.quickDraw, .move(.left, source: .dpad, isRepeat: false)), chat(.ended)),
+                       .appSlot(.alerts))
         XCTAssertEqual(action(.layerEnded(.quickDraw), context), .islandClose)
         // Raute in der Lage der Tasten.
         XCTAssertEqual(ControllerQuickDrawSlots.items, [.cycleMode, .commands, .switchAccount, .continueWork])

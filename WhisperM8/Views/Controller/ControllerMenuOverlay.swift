@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension ControllerMenuItem {
-    func title(chat: ControllerChatActionInfo?) -> String {
+    func title(chat: ControllerChatActionInfo?, archiveModeActive: Bool = false) -> String {
         switch self {
         case .continueWork: return String(localized: "Send “Continue”")
         case .commands: return String(localized: "Commands")
@@ -43,6 +43,8 @@ extension ControllerMenuItem {
         case .backgroundStop: return String(localized: "Stop")
         case .backgroundRestart: return String(localized: "Respawn")
         case .stopJob: return String(localized: "Stop job")
+        case .archiveMode:
+            return archiveModeActive ? String(localized: "Leave archive") : String(localized: "Show archive")
         case .clipboardHistory: return String(localized: "Clipboard history")
         case .showBindings: return String(localized: "Show button layout")
         case .pause: return String(localized: "Pause controller")
@@ -149,7 +151,7 @@ extension ControllerMenuRow {
         case nil:
             return menu.top.entries.map { entry in
                 ControllerMenuRow(
-                    id: entry.id.rawValue, title: entry.id.title(chat: menu.setup.chat), hint: entry.id.hint,
+                    id: entry.id.rawValue, title: entry.id.title(chat: menu.setup.chat, archiveModeActive: menu.setup.archiveModeActive), hint: entry.id.hint,
                     enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id),
                     groupHeading: menu.groupStart(entry.id)?.heading(chat: menu.setup.chat))
             }

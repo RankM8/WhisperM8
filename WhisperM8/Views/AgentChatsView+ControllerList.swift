@@ -61,15 +61,4 @@ extension AgentChatsView {
         }
         return AgentChatsListRowsBuilder.rows(input)
     }
-
-    /// Angelegte Workspaces für die Workspace-Auswahl (L2 halten im Raster).
-    /// Nur im Ereignis-Pfad, beim Öffnen der Auswahl.
-    func controllerWorkspaceChoices() -> [ControllerWorkspaceChoice] {
-        let statusStore = runtimeStatusStore
-        return ControllerWorkspaceChoice.choices(
-            from: windowStore.gridWorkspaces,
-            currentID: isGridActive ? windowStore.window(for: windowID).activeWorkspaceID : nil,
-            status: { statusStore.status(for: $0) }
-        )
-    }
 }
