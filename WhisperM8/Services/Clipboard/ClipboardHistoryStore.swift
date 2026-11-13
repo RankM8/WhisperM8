@@ -219,9 +219,12 @@ final class ClipboardHistoryStore: @unchecked Sendable {
                 for entry in entries where !entry.isPinned { pendingBlobRemovals.append(contentsOf: entry.blobFiles) }
                 entries = entries.filter(\.isPinned)
                 search.retain(entries)
-                changed(writeNow: true)
-                removeBrokenIndexes()
-                removeOrphans()
+                // Nur wenn der neue Index steht: Sonst schützte nach einem
+                // Neustart nichts mehr die Dateien der Pins vor dem Aufräumen.
+                if changed(writeNow: true) {
+                    removeBrokenIndexes()
+                    removeOrphans()
+                }
             } else {
                 entries = []
                 search = ClipboardSearchIndex(limits: limits.search)
@@ -270,16 +273,20 @@ final class ClipboardHistoryStore: @unchecked Sendable {
         search.enforceBudget(entries)
     }
 
-    private func changed(writeNow: Bool = false) {
+    /// `true`, wenn der Index sofort geschrieben wurde.
+    @discardableResult
+    private func changed(writeNow: Bool = false) -> Bool {
         onChange?(ClipboardHistoryState(entries: entries, search: search))
-        if writeNow {
-            // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
-            // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
-            if !writeIndexNow() { scheduleFlush() }
-            removePendingBlobs()
-        } else {
+        guard writeNow else {
             scheduleFlush()
+            return false
         }
+        // Scheitert das Schreiben (Platte voll), gehen die Dateien trotzdem:
+        // Der User hat ausdrücklich gelöscht. Der Index kommt erneut dran.
+        let written = writeIndexNow()
+        if !written { scheduleFlush() }
+        removePendingBlobs()
+        return written
     }
 
     private func scheduleFlush() {
