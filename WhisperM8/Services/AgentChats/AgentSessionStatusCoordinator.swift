@@ -218,8 +218,8 @@ final class AgentSessionStatusCoordinator {
     }
     /// Prozesse, denen die App gerade das Ende geschickt hat (Tab-Neustart,
     /// Kontowechsel): Der auslaufende Vorgänger des eigenen Chats ist nicht fremd.
-    var isBeingTerminated: (Int32) -> Bool = {
-        ProcessTerminationLedger.shared.isBeingTerminated(pid: $0)
+    var isBeingTerminated: (_ pid: Int32, _ localID: UUID) -> Bool = {
+        ProcessTerminationLedger.shared.isBeingTerminated(pid: $0, forLocalID: $1)
     }
 
     /// Test-Injection: Existiert das Transcript der Claude-Session
@@ -1221,7 +1221,7 @@ final class AgentSessionStatusCoordinator {
         let runsElsewhere = currentID.map {
             Self.runsInOtherForegroundProcess(sessionID: $0, ownProcessID: record.pid,
                                               records: foregroundRecordsLookup($0),
-                                              isBeingTerminated: isBeingTerminated)
+                                              isBeingTerminated: { [isBeingTerminated] in isBeingTerminated($0, localID) })
         } ?? false
         if currentID?.isEmpty != false || runsElsewhere {
             pendingExternalIDs[localID] = nil
@@ -1248,7 +1248,8 @@ final class AgentSessionStatusCoordinator {
         let isReplacement = currentID.map { !$0.isEmpty && $0 != newID && event.source != "fork" } ?? false
         let runsElsewhere = isReplacement && Self.runsInOtherForegroundProcess(
             sessionID: currentID ?? "", ownProcessID: terminalProcessID(localID),
-            records: foregroundRecordsLookup(currentID ?? ""), isBeingTerminated: isBeingTerminated)
+            records: foregroundRecordsLookup(currentID ?? ""),
+            isBeingTerminated: { [isBeingTerminated] in isBeingTerminated($0, localID) })
         // Dateisystem nur befragen, wo die Regel es wirklich braucht.
         let needsFileCheck = isReplacement && !runsElsewhere
         let currentExists = needsFileCheck
