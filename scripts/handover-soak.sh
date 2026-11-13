@@ -92,6 +92,9 @@ record_verdict() { # runde prüfung befund
 # sobald grep früh aufhört und der Schreiber SIGPIPE bekommt.
 contains() { grep -qE -- "$2" <<< "$1"; }
 has_keep_chats() { grep -q -- '--keep-chats' "$TI"; }
+# Chat ohne Anzeige starten (Paket 4). Heute startet ein Chat erst, wenn sein
+# Tab angezeigt wird — in der versteckten Test-Instanz also nie (Lauf 13.11.).
+has_chat_start() { contains "$(cli chats help 2>/dev/null || true)" '--start'; }
 has_terminal_tabs() { contains "$(cli chats help 2>/dev/null || true)" '--provider [^ ]*terminal'; }
 has_background_chats() { contains "$(cli chats help 2>/dev/null || true)" '--background'; }
 has_terminal_text() { contains "$(cli debug help 2>/dev/null || true)" '^  terminal'; }
@@ -107,7 +110,7 @@ cmd_capabilities() {
     if [[ ! -x "$BIN" ]]; then
         echo "unbekannt: kein Test-Bundle ($BIN) — erst scripts/test-instance.sh build" >&2
     fi
-    for name in keep_chats terminal_tabs background_chats terminal_text notification_log; do
+    for name in chat_start keep_chats terminal_tabs background_chats terminal_text notification_log; do
         check="has_$name"
         if "$check"; then echo "da     $name"; else echo "fehlt  $name"; fi
     done
@@ -311,17 +314,23 @@ new_chat() { # name provider prompt [extra…]
 setup_chats() {
     : > "$STATE/chats.tsv"
     : > "$STATE/offsets.tsv"
-    new_chat bash claude "$PROMPT_BASH"
-    new_chat stream claude "$PROMPT_STREAM"
-    new_chat codex codex "$PROMPT_CODEX"
-    new_chat question claude "$PROMPT_QUESTION"
+    local start=()
+    if has_chat_start; then
+        start=(--start)
+    else
+        record setup chat-start FEHLT "Chat ohne Anzeige starten (Paket 4: chats new --start); sonst startet in der versteckten Test-Instanz kein Chat"
+    fi
+    new_chat bash claude "$PROMPT_BASH" ${start[@]+"${start[@]}"}
+    new_chat stream claude "$PROMPT_STREAM" ${start[@]+"${start[@]}"}
+    new_chat codex codex "$PROMPT_CODEX" ${start[@]+"${start[@]}"}
+    new_chat question claude "$PROMPT_QUESTION" ${start[@]+"${start[@]}"}
     if has_terminal_tabs; then
-        new_chat counter terminal "" --command "$COUNTER_COMMAND"
+        new_chat counter terminal "" --command "$COUNTER_COMMAND" ${start[@]+"${start[@]}"}
     else
         record setup counter FEHLT "Terminal-Tab per CLI (Paket 4: chats new --provider terminal)"
     fi
     if has_background_chats; then
-        new_chat attached claude "$PROMPT_ATTACHED" --background
+        new_chat attached claude "$PROMPT_ATTACHED" --background ${start[@]+"${start[@]}"}
         ANSWERS="$ANSWERS
 attached SOAK-BG-ENDE 0"
     else
@@ -688,4 +697,7 @@ main() {
     esac
 }
 
-main "$@"
+# Als Bibliothek ladbar (scripts/handover-soak-faults.sh), dann ohne main.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
