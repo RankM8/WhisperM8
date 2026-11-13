@@ -220,7 +220,8 @@ capture_secret_candidates() { # ordner ziel
         size=$(stat -f %z "$1/$base" 2>/dev/null || echo 99999)
         (( size > 0 && size <= 4096 )) || continue
         line=$(printf '%s\t%s' "$base" "$(base64 < "$1/$base" 2>/dev/null | tr -d '\n')")
-        grep -qxF -- "$line" "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
+        # Über stdin, nicht als Argument: sonst stünde das Geheimnis in ps.
+        printf '%s\n' "$line" | grep -qxF -f /dev/stdin "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
     done
 }
 
@@ -831,9 +832,15 @@ check_secret_not_logged() {
     fi
 }
 
+# Die gesicherte Kopie des Geheimnisses bleibt nicht liegen.
+forget_secret_candidates() {
+    rm -f "$STATE/secret-candidates" "$STATE/secret-candidates.seen"
+}
+
 on_fault_exit() {
     local status=$?
     stop_sampler
+    forget_secret_candidates
     clear_knobs
     on_exit "$status"
 }
@@ -854,7 +861,8 @@ cmd_fault_run() {
     trap on_fault_exit EXIT
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
-    rm -f "$STATE/unmeasurable-recorded" "$STATE/secret-candidates" "$STATE/secret-candidates.seen"
+    rm -f "$STATE/unmeasurable-recorded"
+    forget_secret_candidates
     setup_chats
     if ! wait_until_running; then
         for scenario in $list; do
@@ -869,6 +877,7 @@ cmd_fault_run() {
     fi
     stop_sampler
     check_secret_not_logged
+    forget_secret_candidates
     (( KEEP )) || cleanup_chats
     clear_knobs
     RUN_STARTED=0
