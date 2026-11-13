@@ -295,7 +295,33 @@ tmp = path + ".soak-tmp"
 json.dump(data, open(tmp, "w"), indent=2)
 os.replace(tmp, path)
 PYEOF
-    if [[ -n "$running" ]]; then log "benutze die laufende Test-Instanz (--use-running)"; else ti start; fi
+    if [[ -n "$running" ]]; then
+        log "benutze die laufende Test-Instanz (--use-running)"
+    else
+        # Bis Paket 4 Chats ohne Anzeige starten kann: sichtbar starten, damit
+        # die Panes im Grid angezeigt werden und ihre Chats starten (show_in_grid).
+        # Gilt auch für jeden Neustart in diesem Lauf (exportiert).
+        has_chat_start || export WHISPERM8_TEST_VISIBLE=1
+        ti start
+    fi
+}
+
+# Bis Paket 4 `--start` anbietet, startet ein Chat erst, wenn sein Pane oder
+# Tab angezeigt wird (Lauf vom 13.11.: versteckte Instanz, kein Chat gestartet).
+# Deshalb alle Chats in einen eigenen Grid-Workspace legen und ihn öffnen.
+show_in_grid() {
+    local name refs=() out
+    for name in $(chat_names); do refs+=("$(chat_ref "$name")"); done
+    name="soak $(date +%H%M%S)"
+    if ! out=$(cli chats workspace create "$name" "${refs[@]}" --json 2>&1); then
+        record setup grid FEHLER "Grid-Workspace nicht angelegt: $(printf '%s' "$out" | tail -1)"
+        return 1
+    fi
+    if ! out=$(cli chats workspace open "$name" --json 2>&1); then
+        record setup grid FEHLER "Grid-Workspace nicht geöffnet: $(printf '%s' "$out" | tail -1)"
+        return 1
+    fi
+    record setup grid OK "${#refs[@]} Chats im Grid „$name“ angezeigt (sichtbare Test-Instanz, bis Paket 4 --start bietet)"
 }
 
 new_chat() { # name provider prompt [extra…]
@@ -314,11 +340,12 @@ new_chat() { # name provider prompt [extra…]
 setup_chats() {
     : > "$STATE/chats.tsv"
     : > "$STATE/offsets.tsv"
-    local start=()
+    local start=() grid=0
     if has_chat_start; then
         start=(--start)
     else
-        record setup chat-start FEHLT "Chat ohne Anzeige starten (Paket 4: chats new --start); sonst startet in der versteckten Test-Instanz kein Chat"
+        grid=1
+        record setup chat-start FEHLT "Chat ohne Anzeige starten (Paket 4: chats new --start); bis dahin über das Grid"
     fi
     new_chat bash claude "$PROMPT_BASH" ${start[@]+"${start[@]}"}
     new_chat stream claude "$PROMPT_STREAM" ${start[@]+"${start[@]}"}
@@ -336,6 +363,7 @@ attached SOAK-BG-ENDE 0"
     else
         record setup attached FEHLT "Hintergrund-Chat per CLI (Paket 4: chats new --background)"
     fi
+    if (( grid )); then show_in_grid || true; fi
 }
 
 chat_names() { cut -f1 "$STATE/chats.tsv"; }

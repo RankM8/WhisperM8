@@ -516,9 +516,9 @@ cmd_fault_run() {
     date '+%Y-%m-%d %H:%M:%S' > "$STATE/started-at"
     clear_knobs
     setup_chats
-    if ! has_chat_start || ! wait_until_running; then
+    if ! wait_until_running; then
         for scenario in $list; do
-            record "$scenario" voraussetzung FEHLT "Chats laufen nicht (Chat-Start ohne Anzeige fehlt)"
+            record "$scenario" voraussetzung FEHLER "Chats laufen nicht, Szenario nicht gefahren"
         done
     else
         for scenario in $list; do
