@@ -18,6 +18,9 @@
 #   secret-wrong     neue App hat ein falsches Geheimnis
 #   binary-swap      Programm unter dem laufenden Aufbewahrer ersetzt (wie make dev)
 #   double-restart   zweiter Neustart, während die Übernahme des ersten noch läuft
+#   router-switch    Schalter erst im laufenden Lauf eingeschaltet (Router noch in
+#                    der App): klassischer Neustart mit Hinweis, Fortsetzen
+#   router-service   der Neustart danach: Router als Dienst, Übernahme
 #
 # Prüfung jeweils:
 #   - nie zwei Prozesse auf einer Sitzung: Ein Wächter fragt etwa jede Sekunde
@@ -58,7 +61,7 @@ COMEBACK_TIMEOUT=120
 SETTLE_SECONDS=5
 SAMPLER_PID=""
 ONLY=""
-SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart"
+SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart router-switch router-service"
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
 SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
@@ -755,6 +758,53 @@ fault_double_restart() {
     return 0
 }
 
+# Schalter erst in diesem App-Lauf eingeschaltet (Vic, Gesamt-Review Teil 2):
+# Der Router-Modus steht je Lauf fest, der GPT-Router steckt also noch in der
+# App. Erwartet: keine Übergabe, Hinweis „wirkt erst ab diesem Neustart“,
+# klassischer Neustart mit Fortsetzen. Den Neustart danach prüft router-service.
+fault_router_switch() {
+    local scenario="$1" code=0 log="$STATE/fault-$1-handover.log"
+    requires "$scenario" keep_chats || return "$SKIPPED"
+    # Ein Lauf mit Schalter aus: Router in der App.
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool NO
+    if ! ti restart > "$STATE/fault-$scenario-aus.log" 2>&1; then
+        defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+        record "$scenario" ausgeloest FEHLER "Neustart mit Schalter aus gescheitert: $(tail -1 "$STATE/fault-$scenario-aus.log")"
+        return 1
+    fi
+    if ! wait_until_running; then
+        defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+        record "$scenario" ausgeloest FEHLER "Chats nach dem Neustart mit Schalter aus nicht zurück"
+        return 1
+    fi
+    # Jetzt einschalten, während die App läuft, und neu starten.
+    defaults write "$TEST_DOMAIN" restartKeepsChatsEnabled -bool YES
+    sleep 1
+    ti restart --keep-chats > "$log" 2>&1 || code=$?
+    if (( code == 2 )) && grep -q "wirkt erst ab diesem Neustart" "$log"; then
+        record "$scenario" ausgeloest OK "keine Übergabe, Hinweis: Schalter wirkt erst ab diesem Neustart"
+    elif (( code == 0 )); then
+        record "$scenario" ausgeloest FEHLER "Übergabe trotz Router in der App"
+    else
+        record "$scenario" ausgeloest FEHLER "Exit $code ohne den erwarteten Hinweis: $(tr '\n' ' ' < "$log" | cut -c1-300)"
+    fi
+    return 0
+}
+
+# Der Neustart nach router-switch (oder jeder gewöhnliche): Router als Dienst,
+# die Chats werden übernommen.
+fault_router_service() {
+    local scenario="$1" code=0 log="$STATE/fault-$1-handover.log"
+    requires "$scenario" keep_chats || return "$SKIPPED"
+    ti restart --keep-chats > "$log" 2>&1 || code=$?
+    if (( code == 0 )); then
+        record "$scenario" ausgeloest OK "Übergabe mit Router als Dienst"
+    else
+        record "$scenario" ausgeloest FEHLER "keine Übergabe (Exit $code): $(tr '\n' ' ' < "$log" | cut -c1-300)"
+    fi
+    return 0
+}
+
 # Erwartung je Szenario: wie die Chats zurückkommen müssen.
 scenario_expectation() {
     case "$1" in
@@ -762,6 +812,8 @@ scenario_expectation() {
         hold-deadline) echo resumed ;;         # nach der Frist beendet, dann fortgesetzt
         secret-missing|secret-wrong) echo resumed ;;
         binary-swap|double-restart) echo same ;;
+        router-switch) echo resumed ;;         # klassisch, Router noch in der App
+        router-service) echo same ;;
     esac
 }
 
