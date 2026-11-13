@@ -93,4 +93,22 @@ final class HandoverSoakScriptTests: XCTestCase {
         let instance = try String(contentsOf: Self.root.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(instance.contains(#"ROOT="${WHISPERM8_TEST_ROOT:-$HOME/.whisperm8-test-instance}""#))
     }
+
+    /// bash 3.2 liest bei `"$name“"` das erste Byte des Unicode-Zeichens als Teil
+    /// des Variablennamens („unbound variable“, Lauf vom 13.11.). Deshalb `${name}`.
+    func testNoVariableDirectlyBeforeNonASCII() throws {
+        let text = try String(contentsOf: Self.script, encoding: .utf8)
+        let pattern = #"\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]"#
+        XCTAssertNil(text.range(of: pattern, options: .regularExpression),
+                     "Variable direkt vor Nicht-ASCII: ${…} verwenden")
+    }
+
+    /// Eine Test-Instanz für alle Chats: Das Skript nimmt die gemeinsame Sperre
+    /// und gibt sie am Ende wieder frei (Regel vom 13.11.2026).
+    func testScriptTakesAndReleasesTheSharedInstanceLock() throws {
+        let text = try String(contentsOf: Self.script, encoding: .utf8)
+        XCTAssertTrue(text.contains("/private/tmp/whisperm8-testinstanz.lock"))
+        XCTAssertTrue(text.contains("take_instance_lock || exit 1"))
+        XCTAssertTrue(text.contains("release_instance_lock"))
+    }
 }

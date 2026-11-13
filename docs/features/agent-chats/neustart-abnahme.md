@@ -1,0 +1,99 @@
+# Abnahme: Neustart ohne Chatverlust
+
+**Stand:** 13.11.2026 · **Plan:** [neustart-ohne-chatverlust.md](../../plans/neustart-ohne-chatverlust.md) · **Zweite Meinung:** [neustart-zweite-meinung.md](../../plans/neustart-zweite-meinung.md) · **Aufbewahrer:** [neustart-aufbewahrer.md](neustart-aufbewahrer.md)
+
+Zwei Skripte prüfen die Übergabe in der Test-Instanz. Den guten Fall prüft `scripts/handover-soak.sh`. Die Rückfall-Wege prüft `scripts/handover-soak-faults.sh`, indem es absichtlich Fehler auslöst. Beide fassen nur die Test-Instanz an (`scripts/test-instance.sh`, eigene Wurzel, eigene Bundle-ID), nie die laufende App und nie echte Chats.
+
+Das Test-Bundle muss aus dem Sammel-Branch `neustart/integration` gebaut sein, sonst fehlt Paket 1.
+
+## Aufruf
+
+```
+scripts/test-instance.sh build                       # Test-Bundle aus dem aktuellen Ordner
+scripts/handover-soak.sh capabilities                # was Paket 4 schon liefert
+scripts/handover-soak.sh run --rounds 5              # Pflichttest aus dem Plan
+scripts/handover-soak-faults.sh run [--only <szenario>]
+scripts/handover-soak.sh self-test                   # Prüf-Funktionen ohne App
+scripts/handover-soak-faults.sh self-test
+```
+
+Läuft die Test-Instanz schon, etwa für einen anderen Chat, brechen beide Skripte ab; `--use-running` übersteuert das. `WHISPERM8_TEST_ROOT` muss ein absoluter Pfad sein, sonst spräche die CLI die Produktiv-App an.
+
+## Ergebnisse
+
+Jede Prüfung meldet **OK**, **FEHLER** oder **FEHLT**. FEHLT heißt: Ein Befehl oder Messpunkt aus Paket 4 ist noch nicht da, deshalb wurde nicht geprüft. Exit 0 heißt alles OK, Exit 1 heißt mindestens ein FEHLER, Exit 2 heißt nur FEHLT. Bricht ein Lauf ab, entstehen trotzdem Bericht und Aufräumen, und er endet mit Exit 1, auch wenn bash 3.2 selbst Status 0 meldet. Der Bericht liegt unter `<Test-Wurzel>/soak/report.md` oder unter `--report`.
+
+## Chats im Lauf
+
+- **Chat-Start:** Ein Chat startet erst, wenn sein Tab oder Pane angezeigt wird. Ohne `chats new --start` startet das Skript die Test-Instanz deshalb sichtbar (`WHISPERM8_TEST_VISIBLE=1`), legt die Chats in einen eigenen Grid-Workspace und öffnet ihn nach jedem Start wieder. Ole hat entschieden, dass das so bleibt; einen zweiten Startweg ohne Anzeige gibt es nicht.
+- **Claude und Codex:** Sie laufen als Prozesse mit (Start, PID, Doppelstart-Sperre, Token aus dem Chat). Die Test-Instanz hat keinen Login (Entscheidung des Users), deshalb entfallen ihre Inhaltsprüfungen mit FEHLT. Das sind API-Fehler, offene Rückfrage, vollständige Antworten und Fertig-Meldungen. Den Inhalt prüft der User am Ende von Hand (unten).
+- **Ersatz-Chats:** Sie brauchen `chats new --provider terminal --command` aus Paket 4.
+  - Zähler: schreibt alle 0,2 s `Nummer Zeitstempel`. Geprüft wird, dass keine Zeile fehlt, keine doppelt kommt und die Zeit nie rückwärts läuft. Gemeldet wird die längste Lücke, also die Dauer der Übergabe aus Sicht des Chats.
+  - Echo: wartet auf Eingabe und gibt sie nummeriert zurück. Nach jedem Neustart schickt das Skript eine Probe. Sie muss genau einmal und lückenlos nummeriert ankommen; das belegt Eingabe und Bild nach der Übernahme.
+- **Projektordner:** `/private/tmp/whisperm8-soak-<uid>/project`, absichtlich außerhalb des echten Home. Claude sucht `.mcp.json` auch in übergeordneten Ordnern und blieb sonst im Dialog „new MCP servers found“ stehen.
+
+## Prüfungen
+
+| Prüfung | Was sie misst |
+|---|---|
+| gleiche PIDs | Jeder Chat läuft nach dem Neustart mit derselben PID weiter. |
+| ein Prozess je Sitzung | Claudes Registry hat je Sitzung höchstens einen lebenden Prozess. Die Fehler-Szenarien prüfen das etwa jede Sekunde, für Codex über die Prozessliste. |
+| Token aus dem Chat | `chats list` plus ein mutierender Aufruf (Pin setzen und entfernen) mit der Identität des Chats. |
+| kein Erbe | Per `lsof`: Kein Kind der Test-App hält einen Unix-Socket der App. Das gilt für per `Process` gestartete Helfer und für Chats aus `forkpty`. Laut Review ist das neben dem Geheimnis die zweite echte Grenze. |
+| Aufbewahrer weg | Nach der Übergabe kein Aufbewahrer, kein Socket, keine Discovery-Datei. |
+| Zähler, Echo | siehe Ersatz-Chats |
+| Inhalt (mit Login) | kein „API Error“/„Retrying“, Rückfrage offen, Antworten vollständig, genau eine Fertig-Meldung |
+
+## Fehler-Szenarien
+
+| Szenario | Auslöser | Erwartung |
+|---|---|---|
+| `kill-mid-take` | SIGKILL an den Aufbewahrer, wenn mindestens ein Chat übernommen ist und mindestens einer nicht | Übernommene laufen weiter, der Rest wird fortgesetzt; nie zwei Prozesse |
+| `hold-deadline` | `test-instance.sh handover`, keine neue App bis nach der Haltefrist | Aufbewahrer endet selbst, alte Prozesse sind weg, nach dem Start wird fortgesetzt |
+| `secret-missing`, `secret-wrong` | Stellschraube `handoverSecretOverride` | Die App beendet den Aufbewahrer über die PID aus STATUS, statt die Frist abzuwarten; dann Fortsetzen |
+| `binary-swap` | Bundle unter dem laufenden Aufbewahrer ersetzt: neue Build-Nummer, gleiches Zertifikat, `rsync --delete` wie bei `make dev` | Übernahme klappt trotz ersetzter Datei |
+| `double-restart` | zweiter Neustart, während die Übernahme des ersten läuft | Übernahme, kein zweiter Prozess |
+
+Jedes Szenario prüft danach: Die Chats kommen zurück, die PIDs bleiben einige Sekunden stabil, es gibt keine Leichen (Aufbewahrer, Socket, Claude-Prozess ohne Chat) und kein Kind erbt einen Socket.
+
+## Was Paket 4 dafür liefern muss
+
+Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschläge an Ole; das Skript passt sich an.
+
+1. `scripts/test-instance.sh restart --keep-chats` (Neustart mit Übergabe) und `scripts/test-instance.sh handover` (abgeben, keine neue App starten).
+2. `chats new --provider terminal --command '<sh>'` für die Ersatz-Chats.
+3. `chats new --background` für einen angedockten Hintergrund-Chat.
+4. `debug terminal <ref> --text` für „Retrying“ im Terminal.
+5. Eine Logzeile je Fertig-Meldung: `session_notification_posted kind=turnCompleted session=<uuid>`.
+6. `runtime.pid` in `chats show --json` für Codex und Terminal.
+7. Stellschrauben nur für die Test-Instanz: `handoverHoldSeconds`, `handoverTakeDelayMs`, `handoverSecretOverride` (`missing`, `wrong`).
+
+## Bekannte Grenzen
+
+- **Wächter:** Er sieht eine Überschneidung erst, wenn sich der neue Claude-Prozess in der Registry eingetragen hat. Am Ende prüft `check_comeback` zusätzlich, dass der alte Prozess tot ist, wenn ein neuer läuft.
+- **Zurechnung durch den Kernel:** Er rechnet einen Unix-Socket dem Prozess zu, der ihn zuletzt benutzt hat, und schon `poll()` zählt dazu. Code-Prüfung und Absender-Bindung im Aufbewahrer sind deshalb Hürden, keine Garantien. Die Grenzen sind das Geheimnis und dass kein Kind den Socket erbt (Vics Urteil, Abschnitt „Wovor schützen wir“ in der Doku des Aufbewahrers).
+- **GPT-Chats:** Die Test-Instanz hat kein GPT-Login, GPT-Chats fehlen im Lauf.
+
+## Handtest des Users (mit echten, angemeldeten Chats)
+
+Nur mit Chats, deren Verlust nicht schlimm wäre, zum Beispiel einem eigenen Projekt nur für diesen Test. Vorher den Labs-Schalter „Neustart ohne Chatverlust“ einschalten.
+
+1. **Aufbau, alle Chats im selben Fenster sichtbar:**
+   - ein Claude-Chat mit einer Folge von Bash-Schritten („führe nacheinander 20× `echo n; sleep 3` aus“);
+   - ein Claude-Chat mitten in einer langen Antwort („schreibe 300 nummerierte Zeilen“);
+   - ein GPT-Chat mit langer Antwort;
+   - ein Codex-Chat mit Shell-Schritten;
+   - ein Terminal-Tab mit `i=0; while :; do i=$((i+1)); echo $i; sleep 1; done`;
+   - ein angedockter Hintergrund-Chat;
+   - ein Chat mit offener Rückfrage (AskUserQuestion).
+2. **Erster Neustart:** `make dev`, während alles läuft.
+3. **Prüfen:**
+   - Alle Tabs sind wieder da. Die PIDs sind gleich, im Terminal mit `ps -o pid,command -p <pid>` vor und nach.
+   - Die lange Antwort ist vollständig, ohne „API Error“ und ohne „Retrying“.
+   - Die Rückfrage ist noch offen.
+   - Der Zähler im Terminal läuft ohne Sprung weiter.
+   - `whisperm8 chats list` funktioniert aus einem der Chats.
+   - Es kommt keine doppelte Fertig-Meldung.
+4. **Zweiter Neustart:** sofort danach noch einmal `make dev`, dann dieselben Prüfungen.
+5. **Schalter aus:** Labs-Schalter ausschalten und `make dev`. Die Chats enden wie bisher und kommen per Fortsetzen zurück.
+6. **Bericht:** Auffälligkeiten mit Uhrzeit an Jarvis, dazu `log show --last 15m --predicate 'subsystem == "com.whisperm8.app" AND category == "handover"'`.
