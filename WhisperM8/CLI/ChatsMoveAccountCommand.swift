@@ -67,7 +67,7 @@ struct ChatsMoveAccountResultItem: Equatable {
     var title: String?
     var project: String?
     var fromProfile: String
-    /// moved | wouldMove | scheduled | skipped | failed | notFound
+    /// moved | wouldMove | scheduled | wouldSchedule (Vorschau) | skipped | failed | notFound
     var outcome: String
     var reason: String?
     var reasonLabel: String?
@@ -75,6 +75,9 @@ struct ChatsMoveAccountResultItem: Equatable {
     var stopAndResumePossible = false
     var stopBlocked: String?
     var resumeScheduled = false
+    /// Zielkonto hat den Projektordner nie freigegeben — Claude fragt beim
+    /// nächsten Start danach (Trust-Dialog).
+    var targetTrustMissing = false
 }
 
 enum ChatsMoveAccountSupport {
@@ -92,7 +95,8 @@ enum ChatsMoveAccountSupport {
                 stopAndResume: entry["stopAndResume"]?.boolValue ?? false,
                 stopAndResumePossible: entry["stopAndResumePossible"]?.boolValue ?? false,
                 stopBlocked: entry["stopBlocked"]?.stringValue,
-                resumeScheduled: entry["resumeScheduled"]?.boolValue ?? false)
+                resumeScheduled: entry["resumeScheduled"]?.boolValue ?? false,
+                targetTrustMissing: entry["targetTrustMissing"]?.boolValue ?? false)
         }
     }
 
@@ -120,17 +124,22 @@ enum ChatsMoveAccountSupport {
         let name = label.isEmpty ? (fallbackLabel ?? item.id) : label
         let route = "\(item.fromProfile) → \(toProfile)"
         let why = item.reasonLabel.map { " — \($0)" } ?? ""
+        let trust = item.targetTrustMissing
+            ? " · Ordner im Zielkonto noch nicht freigegeben, Claude fragt beim nächsten Start danach"
+            : ""
         switch item.outcome {
         case "wouldMove" where item.stopAndResume:
-            return "↻ würde anhalten, umziehen und neu starten: \(name) (\(route))"
+            return "↻ würde anhalten, umziehen und neu starten: \(name) (\(route))\(trust)"
         case "wouldMove":
-            return "→ würde umziehen: \(name) (\(route))"
+            return "→ würde umziehen: \(name) (\(route))\(trust)"
         case "moved" where item.resumeScheduled:
-            return "✓ umgezogen, Neustart vorgemerkt: \(name) (\(route))"
+            return "✓ umgezogen, Neustart vorgemerkt: \(name) (\(route))\(trust)"
         case "moved":
-            return "✓ umgezogen: \(name) (\(route))"
+            return "✓ umgezogen: \(name) (\(route))\(trust)"
         case "scheduled":
             return "⏱ vorgemerkt: \(name) (\(route))\(why)"
+        case "wouldSchedule":
+            return "⏱ würde vormerken: \(name) (\(route))\(why)"
         case "skipped":
             var line = "– übersprungen: \(name)\(why)"
             if item.stopAndResumePossible {
@@ -161,6 +170,8 @@ enum ChatsMoveAccountSupport {
         }
         let scheduled = count("scheduled")
         if scheduled > 0 { parts.append("\(scheduled) vorgemerkt (wechseln nach dem Turn)") }
+        let wouldSchedule = count("wouldSchedule")
+        if wouldSchedule > 0 { parts.append("\(wouldSchedule) würden vorgemerkt (wechseln nach dem Turn)") }
         let skipped = count("skipped")
         if skipped > 0 { parts.append("\(skipped) übersprungen") }
         let failed = count("failed")
