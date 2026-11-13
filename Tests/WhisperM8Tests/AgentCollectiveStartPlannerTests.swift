@@ -58,6 +58,114 @@ final class AgentCollectiveStartPlannerTests: XCTestCase {
         XCTAssertTrue(plan.skipped.isEmpty)
     }
 
+    // MARK: Beleg aus der eigenen Hook-Event-Datei (Vic, 13.11.2026)
+
+    private func line(_ id: String, event: String = "UserPromptSubmit", source: String? = nil) -> String {
+        var line = "{\"session_id\":\"\(id)\",\"transcript_path\":\"/p/\(id).jsonl\",\"hook_event_name\":\"\(event)\""
+        if let source { line += ",\"source\":\"\(source)\"" }
+        return line + "}"
+    }
+
+    func testEvidenceScanDistinguishesCreatedMentionedAndNone() {
+        typealias E = AgentSessionOwnershipEvidence
+        let created = [line("aaa", event: "SessionStart", source: "startup"), line("aaa")].joined(separator: "\n")
+        let resumed = [line("bbb", event: "SessionStart", source: "startup"),
+                       line("aaa", event: "SessionStart", source: "resume"), line("aaa")].joined(separator: "\n")
+        let pathOnly = "{\"session_id\":\"ccc\",\"transcript_path\":\"/p/aaa.jsonl\"}"
+        XCTAssertEqual(E.scan(data: Data(created.utf8), sessionID: "aaa"), .created)
+        XCTAssertEqual(E.scan(data: Data(created.utf8), sessionID: "AAA"), .created, "ID ohne Groß/Klein")
+        XCTAssertEqual(E.scan(data: Data(resumed.utf8), sessionID: "aaa"), .mentioned, "nur fortgesetzt")
+        XCTAssertEqual(E.scan(data: Data(resumed.utf8), sessionID: "bbb"), .created)
+        XCTAssertEqual(E.scan(data: Data(pathOnly.utf8), sessionID: "aaa"), .none, "nur im Pfad erwähnt")
+        XCTAssertEqual(E.scan(data: Data(line("aaa", event: "SessionStart", source: "clear").utf8), sessionID: "aaa"), .created)
+        XCTAssertEqual(E.scan(data: Data(line("aaa", event: "SessionStart", source: "fork").utf8), sessionID: "aaa"), .created)
+        XCTAssertEqual(E.scan(data: Data(), sessionID: "aaa"), .none)
+        XCTAssertEqual(E.read(eventFile: URL(fileURLWithPath: "/nicht/da.jsonl"), sessionID: "aaa"), .none)
+    }
+
+    /// Vics Fall: Der ältere Chat erwischte das Transcript des jüngeren. Der
+    /// jüngere hat die Sitzung angelegt und behält sie, obwohl „der älteste“
+    /// sonst gewönne.
+    func testCreatorBeatsOlderChatAndMentionBeatsNoEvidence() {
+        let older = chat("x", created: 0), younger = chat("x", created: 50), third = chat("x", created: 99)
+        var asked: [UUID] = []
+        let plan = AgentCollectiveStartPlanner.plan(
+            [older.id, younger.id, third.id], sessions: [older, younger, third],
+            evidence: { chat, _ in
+                asked.append(chat)
+                return chat == younger.id ? .created : chat == older.id ? .mentioned : .none
+            })
+        XCTAssertEqual(plan.start, [younger.id])
+        XCTAssertEqual(Set(plan.skipped), [older.id, third.id])
+        XCTAssertEqual(plan.keeperOf[older.id], younger.id)
+        XCTAssertEqual(Set(asked), [older.id, younger.id, third.id])
+
+        let noCreator = AgentCollectiveStartPlanner.plan(
+            [third.id, older.id], sessions: [older, third],
+            evidence: { chat, _ in chat == third.id ? .mentioned : .none })
+        XCTAssertEqual(noCreator.start, [third.id], "genutzt schlägt keinen Beleg")
+    }
+
+    func testEvidenceIsOnlyAskedForRealDuplicates() {
+        let single = chat("x"), unbound = chat(nil), other = chat("y")
+        var asked = 0
+        let plan = AgentCollectiveStartPlanner.plan([single.id, unbound.id, other.id], sessions: [single, unbound, other],
+                                                    evidence: { _, _ in asked += 1; return .none })
+        XCTAssertEqual(plan.start, [single.id, unbound.id, other.id])
+        XCTAssertEqual(asked, 0, "Event-Dateien nur bei echter Dopplung lesen")
+    }
+
+    func testEqualEvidenceFallsBackToKeeperRule() {
+        let older = chat("x", created: 0), younger = chat("x", created: 50)
+        let plan = AgentCollectiveStartPlanner.plan([younger.id, older.id], sessions: [older, younger],
+                                                    evidence: { _, _ in .created })
+        XCTAssertEqual(plan.start, [older.id])
+    }
+
+    func testCrashRecoveryUsesEventFilesAndLeavesANoticeAtTheSkippedChat() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wm8-halter-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let persistence = AgentSessionStore(fileURL: dir.appendingPathComponent("ws.json"),
+                                            uiStateFileURL: dir.appendingPathComponent("ui.json"))
+        let project = UUID()
+        // Älter, aber falsch gebunden: hat die Sitzung nur fortgesetzt.
+        let wrong = try persistence.upsertSession(AgentChatSession(
+            provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "soak question",
+            status: .running, createdAt: t0, lastActivityAt: t0))
+        let owner = try persistence.upsertSession(AgentChatSession(
+            provider: .claude, projectID: project, externalSessionID: "cd00c6c0", title: "soak bash",
+            status: .running, createdAt: t0.addingTimeInterval(30), lastActivityAt: t0))
+        let hookPaths = ClaudeHookPaths(rootDirectory: dir)
+        try FileManager.default.createDirectory(at: hookPaths.eventsDirectory, withIntermediateDirectories: true)
+        try Data((line("cd00c6c0", event: "SessionStart", source: "startup") + "\n").utf8)
+            .write(to: hookPaths.eventFileURL(localSessionID: owner.id))
+        try Data((line("eeee", event: "SessionStart", source: "startup") + "\n"
+                  + line("cd00c6c0", event: "SessionStart", source: "resume") + "\n").utf8)
+            .write(to: hookPaths.eventFileURL(localSessionID: wrong.id))
+        let markerURL = dir.appendingPathComponent("marker.json")
+        let crashed = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 100, isProcessAlive: { _ in false })
+        _ = crashed.beginRun()
+        crashed.record(runningSessionIDs: [wrong.id, owner.id])
+        let notices = AgentCollectiveStartNotices()
+
+        let resumed = AgentCrashRecoveryCoordinator.start(
+            marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
+            registry: AgentTerminalRegistry(),
+            windowStore: AgentWindowStore(persistence: persistence),
+            store: persistence,
+            isEnabled: true,
+            hookPaths: hookPaths,
+            notices: notices
+        )
+
+        XCTAssertEqual(resumed, [owner.id], "der Anleger gewinnt, nicht der ältere")
+        let message = try XCTUnwrap(notices.takeMessage(for: wrong.id))
+        XCTAssertTrue(message.contains("soak bash"), "nennt den Halter")
+        XCTAssertNil(notices.takeMessage(for: wrong.id), "nur einmal")
+        XCTAssertNil(notices.takeMessage(for: owner.id))
+    }
+
     func testCrashRecoveryResumesOnlyOneChatPerSession() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("wm8-sammelstart-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
