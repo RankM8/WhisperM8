@@ -382,7 +382,8 @@ release_instance_lock() {
         echo "Hinweis: --keep, Test-Instanz und Sperre bleiben stehen — danach selbst beenden und $INSTANCE_LOCK löschen" >&2
         return 0
     fi
-    "$TI" stop >/dev/null 2>&1 || true
+    # Eine mit --use-running übernommene Instanz gehört vielleicht einem anderen Chat.
+    if (( INSTANCE_STARTED || ! USE_RUNNING )); then "$TI" stop >/dev/null 2>&1 || true; fi
     rm -rf "$INSTANCE_LOCK"
     LOCK_HELD=0
 }

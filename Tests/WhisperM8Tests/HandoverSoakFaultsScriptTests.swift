@@ -105,7 +105,7 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
             XCTAssertTrue(line.contains(#"sign_bundle "$APP""#) || line.contains(#"sign_bundle "$copy""#),
                           "sign_bundle mit anderem Ziel: \(line)")
         }
-        XCTAssertTrue(code.contains(#"[[ "$SIGNING" == dev || "$SIGNING" == adhoc ]]"#))
+        XCTAssertTrue(code.contains(#"[[ -z "$SIGNING" || "$SIGNING" == dev || "$SIGNING" == adhoc ]]"#))
         let usage = try run([Self.script.path, "run", "--signing", "apple"],
                             environment: ["WHISPERM8_TEST_ROOT": "/private/tmp/whisperm8-test-guard"])
         XCTAssertEqual(usage.status, 64, usage.output)

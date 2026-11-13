@@ -53,7 +53,7 @@ scripts/handover-soak-faults.sh run --only binary-swap --signing dev     # Dev-B
 scripts/handover-soak-faults.sh run --only binary-swap --signing adhoc   # ad hoc auf ad hoc (Brew-Update)
 ```
 
-`--signing` signiert das Test-Bundle vor dem Start in dieser Art und den neuen Build beim Austausch ebenso, mit demselben Befehl wie das Makefile. Der Bericht nennt beide CDHashes; bleibt der CDHash gleich, ist das ein FEHLER, weil dann kein neuer Build getestet wurde. Eine laufende Instanz (`--use-running`) wird nie umsigniert. `scripts/test-instance.sh build` stellt die Dev-Signatur wieder her.
+Ohne `--signing` gilt die Art, mit der `scripts/test-instance.sh build` das Bundle signiert hat. `--signing` signiert das Test-Bundle vor dem Start in dieser Art und den neuen Build beim Austausch ebenso, mit demselben Befehl wie das Makefile. Der neue Build entsteht vor der Abgabe, damit `codesign` nicht im Messfenster liegt; der Wächter zählt nur SecurityAgent-Prozesse, die danach neu auftauchen. Der Bericht nennt beide CDHashes; bleibt der CDHash gleich, ist das ein FEHLER, weil dann kein neuer Build getestet wurde. Eine laufende Instanz (`--use-running`) wird nie umsigniert. `scripts/test-instance.sh build` stellt die Dev-Signatur wieder her.
 
 ## Fehler-Szenarien
 
@@ -87,6 +87,7 @@ Solange es fehlt, steht der Punkt als FEHLT im Bericht. Die Namen sind Vorschlä
 6. `runtime.pid` in `chats show --json` für Codex und Terminal.
 7. Stellschrauben nur für die Test-Instanz: `handoverHoldSeconds`, `handoverTakeDelayMs`, `handoverSecretOverride` (`missing`, `wrong`).
 8. Das Geheimnis als Datei im Ordner des Aufbewahrers (`…/WhisperM8/handover/`), nicht anderswo; sonst sehen `geheimnis-im-log` und `leichen:dateien` sie nicht.
+9. Den Ordner des Aufbewahrers auf 0700 setzen, auch wenn er schon existiert. Heute legt Paket 2 ihn mit 0755 an; bis ein Geheimnis als Datei auftaucht, steht `rechte-aufbewahrer` deshalb als FEHLT da.
 
 ## Bekannte Grenzen
 

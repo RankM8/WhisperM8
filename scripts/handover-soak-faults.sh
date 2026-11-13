@@ -57,7 +57,7 @@ ONLY=""
 SCENARIOS="kill-mid-take hold-deadline secret-missing secret-wrong binary-swap double-restart"
 KNOBS="handoverTakeDelayMs handoverHoldSeconds handoverSecretOverride"
 SKIPPED=2   # Rückgabe einer Szenario-Funktion: Voraussetzung fehlt, nichts geprüft
-SIGNING=dev # Signaturart des Test-Bundles und jedes Austauschs: dev oder adhoc
+SIGNING=""  # Signaturart des Test-Bundles und jedes Austauschs: dev, adhoc oder leer (vom Bundle übernehmen)
 # Dateien, die der Aufbewahrer aus Paket 2 anlegt; alles andere gilt als
 # Geheimnis-Kandidat (Ablage als Datei, Vics Urteil) und muss danach weg sein.
 KNOWN_HANDOVER_FILES="keeper.lock keeper.log socket-path keeper.sock"
@@ -78,7 +78,7 @@ has_codesign_identity() {
 }
 
 # Für binary-swap: dev braucht das Zertifikat, ad hoc nichts.
-has_signing() { [[ "$SIGNING" == adhoc ]] || has_codesign_identity; }
+has_signing() { [[ "$SIGNING" == adhoc ]] || { [[ "$SIGNING" == dev ]] && has_codesign_identity; }; }
 
 cmd_fault_capabilities() {
     local name
@@ -186,7 +186,7 @@ handover_dir_issues() { # ordner
 # Unbekannte Dateien im Ordner des Aufbewahrers (nur Namen).
 unknown_handover_files() { # ordner
     local f base
-    for f in "$1"/*; do
+    for f in "$1"/* "$1"/.[!.]* "$1"/..?*; do
         [[ -e "$f" ]] || continue
         base=$(basename "$f")
         [[ " $KNOWN_HANDOVER_FILES " == *" $base "* ]] && continue
@@ -197,12 +197,13 @@ unknown_handover_files() { # ordner
 
 # Kleine unbekannte Dateien als Geheimnis-Kandidaten sichern (Name, Base64).
 capture_secret_candidates() { # ordner ziel
-    local base size
+    local base size line
     for base in $(unknown_handover_files "$1"); do
         [[ -f "$1/$base" ]] || continue
         size=$(stat -f %z "$1/$base" 2>/dev/null || echo 99999)
         (( size > 0 && size <= 4096 )) || continue
-        printf '%s\t%s\n' "$base" "$(base64 < "$1/$base" 2>/dev/null | tr -d '\n')" >> "$2" 2>/dev/null || true
+        line=$(printf '%s\t%s' "$base" "$(base64 < "$1/$base" 2>/dev/null | tr -d '\n')")
+        grep -qxF -- "$line" "$2" 2>/dev/null || printf '%s\n' "$line" >> "$2" 2>/dev/null || true
     done
 }
 
@@ -260,10 +261,17 @@ sign_bundle() { # bundle art → 0 ok, sonst Grund auf stdout
 }
 
 # Haken aus prepare_instance: Test-Bundle vor dem Start in die verlangte
-# Signaturart bringen. Eine laufende Instanz (--use-running) wird nie umsigniert.
+# Signaturart bringen. Ohne --signing gilt die Art des Bundles (so wie
+# `test-instance.sh build` es signiert hat). Eine laufende Instanz
+# (--use-running) wird nie umsigniert.
 prepare_bundle() { # pid der laufenden instanz oder leer
     local kind reason
     kind=$(bundle_signing "$APP")
+    if [[ -z "$SIGNING" ]]; then
+        SIGNING=$kind
+        record setup signatur OK "Test-Bundle $kind signiert, übernommen (CDHash $(bundle_cdhash "$APP"))"
+        return 0
+    fi
     if [[ "$kind" != "$SIGNING" ]]; then
         if [[ -n "$1" ]]; then
             echo "Test-Bundle ist $kind signiert, verlangt ist $SIGNING — eine laufende Instanz wird nicht umsigniert" >&2
@@ -303,17 +311,24 @@ sample_once() { # datei
     violations_now "$(registry_pids "$ROOT/home/.claude/sessions" || true)" "$now" >> "$1" || true
     ps -E -ww -axo pid=,comm=,command= 2>/dev/null | codex_doubles "$ROOT" | sed "s/^/$now codex /" >> "$1" || true
     # Ein Schlüsselbund-Dialog blockiert die Übernahme unbeaufsichtigt (Ole, 13.11.).
-    pgrep -x SecurityAgent 2>/dev/null | sed "s/^/$now SecurityAgent /" >> "$1.keychain" || true
+    # Nur neue Prozesse zählen; was beim Start schon lief, steht in .keychain-base.
+    pgrep -x SecurityAgent 2>/dev/null | grep -vxF -f "$1.keychain-base" | sed "s/^/$now SecurityAgent /" >> "$1.keychain" || true
     handover_dir_issues "$HANDOVER_DIR" | sed "s/^/$now /" >> "$1.modes" || true
     capture_secret_candidates "$HANDOVER_DIR" "$STATE/secret-candidates" || true
 }
 
 start_sampler() { # datei
     : > "$1"
-    : > "$1.keychain"
     : > "$1.modes"
+    keychain_baseline "$1"
     ( while :; do sample_once "$1"; sleep 0.3; done ) &
     SAMPLER_PID=$!
+}
+
+# Laufende SecurityAgent-Prozesse als Vergleichsstand; danach zählen nur neue.
+keychain_baseline() { # wächter-datei
+    pgrep -x SecurityAgent > "$1.keychain-base" 2>/dev/null || true
+    : > "$1.keychain"
 }
 
 stop_sampler() {
@@ -325,9 +340,11 @@ stop_sampler() {
 }
 
 # Programm unter dem laufenden Aufbewahrer ersetzen, wie `make dev` oder ein
-# Brew-Update: neue Build-Nummer, neu signiert in der Art aus --signing, per
-# rsync (Umbenennen). Jeder Schritt muss klappen, sonst bleibt das Bundle unangetastet.
-swap_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
+# Brew-Update. stage_bundle baut vorher den neuen Build (neue Build-Nummer,
+# signiert in der Art aus --signing), damit codesign nicht im Messfenster den
+# Schlüsselbund fragt; swap_bundle tauscht nur noch per rsync (Umbenennen).
+# Jeder Schritt muss klappen, sonst bleibt das Bundle unangetastet.
+stage_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
     local work="$SOAK/swap" copy reason
     [[ -d "$APP/Contents/MacOS" ]] || { echo "kein Test-Bundle unter $APP"; return 1; }
     rm -rf "$work" && mkdir -p "$work" || { echo "Arbeitsordner"; return 1; }
@@ -337,6 +354,13 @@ swap_bundle() { # build-nummer → 0 ok, sonst Grund auf stdout
         || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $1" "$copy/Contents/Info.plist" \
         || { echo "Info.plist"; return 1; }
     reason=$(sign_bundle "$copy" "$SIGNING") || { echo "Kopie: $reason"; return 1; }
+    : > "$work/ready"
+}
+
+swap_bundle() { # → 0 ok, sonst Grund auf stdout
+    local work="$SOAK/swap" copy
+    copy="$work/$(basename "$APP")"
+    [[ -f "$work/ready" && -d "$copy/Contents/MacOS" ]] || { echo "kein vorbereiteter Build"; return 1; }
     rsync -a --delete "$copy/" "$APP/" || { echo "rsync gescheitert"; return 1; }
     rm -rf "$work"
 }
@@ -414,7 +438,9 @@ check_no_leftovers() { # szenario verletzungen-datei
     else
         record "$scenario" schluesselbund-dialog OK ""
     fi
-    if [[ -s "$violations.modes" ]]; then
+    if [[ -s "$violations.modes" && ! -s "$STATE/secret-candidates" ]]; then
+        record "$scenario" rechte-aufbewahrer FEHLT "noch kein Geheimnis als Datei (Paket 4), Befund bis dahin: $(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -2 | tr '\n' ';')"
+    elif [[ -s "$violations.modes" ]]; then
         record "$scenario" rechte-aufbewahrer FEHLER "$(awk '!seen[$2 FS $3 FS $4]++' "$violations.modes" | head -3 | tr '\n' ';')"
     else
         record "$scenario" rechte-aufbewahrer OK "Ordner 0700, Geheimnis-Kandidaten 0600 (oder kein Ordner)"
@@ -573,6 +599,13 @@ fault_secret_wrong() { fault_secret "$1" wrong; }
 fault_binary_swap() {
     local scenario="$1" build reason summary keeper bin old_hash new_hash
     requires "$scenario" handover_only signing || return "$SKIPPED"
+    build="soak-$(date +%s)"
+    if ! reason=$(stage_bundle "$build"); then
+        record "$scenario" ausgeloest FEHLER "neuer Build nicht vorbereitet: $reason — nichts abgegeben"
+        return 1
+    fi
+    # Das Signieren gehört nicht zur Übergabe: Vergleichsstand für den Schlüsselbund neu setzen.
+    keychain_baseline "$STATE/fault-$scenario-violations.log"
     if ! ti handover > "$STATE/fault-$scenario-handover.log" 2>&1; then
         record "$scenario" ausgeloest FEHLER "test-instance.sh handover gescheitert: $(tail -1 "$STATE/fault-$scenario-handover.log")"
         ti start > /dev/null 2>&1 || true
@@ -587,9 +620,8 @@ fault_binary_swap() {
         ti start > /dev/null 2>&1 || true
         return 1
     fi
-    build="soak-$(date +%s)"
     old_hash=$(bundle_cdhash "$APP")
-    if reason=$(swap_bundle "$build"); then
+    if reason=$(swap_bundle); then
         record "$scenario" ausgeloest OK "Bundle ersetzt (CFBundleVersion $build), Aufbewahrer $keeper läuft aus dem alten Programm"
         new_hash=$(bundle_cdhash "$APP")
         if [[ -n "$new_hash" && "$new_hash" != "$old_hash" ]]; then
@@ -843,7 +875,20 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
     printf 'kurz' > "$dir/h/secret"; : > "$dir/cand2"
     capture_secret_candidates "$dir/h" "$dir/cand2"
     expect_exact "" "$(printf 'kurz\n' > "$dir/k.log"; secret_hits "$dir/cand2" "$dir/k.log")" "unter 8 Byte kein Treffer"
+    printf 'geheim-0123456789' > "$dir/h/secret"
+    capture_secret_candidates "$dir/h" "$dir/cand3"; capture_secret_candidates "$dir/h" "$dir/cand3"
+    expect_exact "1" "$(wc -l < "$dir/cand3" | tr -d ' ')" "Kandidat nur einmal gesichert"
+    rm -f "$dir/h/secret"; : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
+    expect_exact "..doppel .versteckt" "$(unknown_handover_files "$dir/h" | sort | tr '\n' ' ' | sed 's/ $//')" "versteckte Dateien erkannt"
     rm -rf "$dir"
+
+    # Schlüsselbund-Wächter: nur neue SecurityAgent-Prozesse zählen.
+    expect_exact "34" "$(printf '12\n34\n' | grep -vxF -f <(printf '12\n'))" "Vergleichsstand blendet Altes aus"
+    expect_exact "12 34" "$(printf '12\n34\n' | grep -vxF -f /dev/null | tr '\n' ' ' | sed 's/ $//')" "leerer Vergleichsstand blendet nichts aus"
+
+    # Ohne --signing und ohne erkannte Art kein Austausch.
+    expect_exact "nein" "$(SIGNING=andere; has_signing && echo ja || echo nein)" "fremde Signatur: binary-swap fehlt"
+    expect_exact "ja" "$(SIGNING=adhoc; has_signing && echo ja || echo nein)" "ad hoc braucht kein Zertifikat"
 
     if (( failures == 0 )); then echo "self-test: alles ok"; else echo "self-test: $failures Fehler"; return 1; fi
 }
@@ -865,7 +910,7 @@ fault_main() {
     done
     [[ "$ROOT" == /* ]] || { echo "WHISPERM8_TEST_ROOT muss ein absoluter Pfad sein: $ROOT" >&2; exit 64; }
     [[ -z "$ONLY" ]] || validate_scenarios "$ONLY"
-    [[ "$SIGNING" == dev || "$SIGNING" == adhoc ]] || { echo "--signing: dev oder adhoc, nicht $SIGNING" >&2; exit 64; }
+    [[ -z "$SIGNING" || "$SIGNING" == dev || "$SIGNING" == adhoc ]] || { echo "--signing: dev oder adhoc, nicht $SIGNING" >&2; exit 64; }
     case "$cmd" in
         capabilities) cmd_fault_capabilities ;;
         run) cmd_fault_run ;;
