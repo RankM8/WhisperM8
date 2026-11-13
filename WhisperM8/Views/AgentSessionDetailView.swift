@@ -98,6 +98,8 @@ struct AgentSessionDetailView: View {
                 case .notEnded:
                     Text("The process did not end.")
                     Button("Force Quit") { endCodexProcess(force: true) }
+                case .signalFailed:
+                    Text("The process could not be ended. Close it where it runs.")
                 }
             }
             .font(.system(size: 12))
@@ -108,21 +110,29 @@ struct AgentSessionDetailView: View {
     /// Beendet den Prozess aus der Sperr-Meldung und startet den Chat danach
     /// neu (die Sperre prüft dabei ohnehin noch einmal).
     private func endCodexProcess(force: Bool) {
-        guard let state = codexEndable, state.phase != .ending else { return }
+        guard let state = codexEndable, state.phase != .ending, state.sessionID == session.id else { return }
         codexEndable?.phase = .ending
         let process = state.process
+        let chatID = state.sessionID
         Task.detached(priority: .userInitiated) {
             let outcome = await CodexProcessTerminator().end(process, force: force)
             Logger.agentStore.notice(
                 "codex_process_end pid=\(process.pid) force=\(force) outcome=\(String(describing: outcome), privacy: .public)")
             await MainActor.run {
+                // Inzwischen anderer Chat in dieser Ansicht oder Meldung
+                // weggeklickt: Ergebnis verwerfen, nichts neu starten.
+                guard codexEndable?.sessionID == chatID, session.id == chatID else { return }
                 switch outcome {
                 case .ended, .notTheSameProcess:
                     codexEndable = nil
                     errorMessage = nil
+                    guard !focusLaunchInFlight else { return }
+                    focusLaunchInFlight = true
                     launchAfterCacheWarmup()
                 case .stillRunning:
                     codexEndable?.phase = .notEnded
+                case .signalFailed:
+                    codexEndable?.phase = .signalFailed
                 }
             }
         }
@@ -668,7 +678,7 @@ struct AgentSessionDetailView: View {
         } catch {
             if case AgentCommandError.codexSessionRunning(_, let conflict) = error,
                let process = conflict.endableProcess {
-                codexEndable = CodexEndableState(process: process, phase: .ready)
+                codexEndable = CodexEndableState(sessionID: session.id, process: process, phase: .ready)
             } else {
                 codexEndable = nil
             }
@@ -1028,7 +1038,10 @@ struct AgentResumeTranscriptMissingError: LocalizedError {
 
 /// Zustand der Knöpfe „Prozess beenden“ / „Sofort beenden“ im Meldungsbanner.
 struct CodexEndableState: Equatable {
-    enum Phase: Equatable { case ready, ending, notEnded }
+    enum Phase: Equatable { case ready, ending, notEnded, signalFailed }
+    /// Der Chat, zu dem die Meldung gehört (die Ansicht kann inzwischen einen
+    /// anderen zeigen).
+    let sessionID: UUID
     let process: CodexProcessTarget
     var phase: Phase
 }

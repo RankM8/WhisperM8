@@ -3071,42 +3071,42 @@
         }
       }
     },
-    "Cannot resume %@: the chat “%@” was closed, but its Codex process (PID %@) is still running. Wait a few seconds and try again; if it does not end, end the process.": {
+    "Cannot resume %@: the chat “%@” was closed, but its Codex process (PID %@) is still running. Wait a few seconds and try again. If it does not end, use “End Process”.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Der Chat „%@“ wurde geschlossen, sein Codex-Prozess (PID %@) läuft aber noch. Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende den Prozess."
+            "value": "%@ lässt sich nicht fortsetzen: Der Chat „%@“ wurde geschlossen, sein Codex-Prozess (PID %@) läuft aber noch. Warte ein paar Sekunden und versuche es erneut. Endet er nicht, nutze „Prozess beenden“."
           }
         }
       }
     },
-    "Cannot resume %@: the previous run of this chat is still ending (Codex process PID %@). Wait a few seconds and try again; if it does not end, end the process.": {
+    "Cannot resume %@: the previous run of this chat is still ending (Codex process PID %@). Wait a few seconds and try again. If it does not end, use “End Process”.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut, endet er nicht, beende den Prozess."
+            "value": "%@ lässt sich nicht fortsetzen: Der vorige Lauf dieses Chats endet noch (Codex-Prozess PID %@). Warte ein paar Sekunden und versuche es erneut. Endet er nicht, nutze „Prozess beenden“."
           }
         }
       }
     },
-    "Cannot resume %@: this conversation is already running in a Codex process outside WhisperM8 (PID %@). End that process first, for example by closing its terminal window; a second Codex process would run the same conversation twice.": {
+    "Cannot resume %@: this conversation is already running in a Codex process outside WhisperM8 (PID %@), probably in a terminal window. Close it there, or use “End Process”, which ends that Codex session. A second Codex process would run the same conversation twice.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem Codex-Prozess außerhalb von WhisperM8 (PID %@). Beende zuerst diesen Prozess, zum Beispiel indem du sein Terminalfenster schließt, ein zweiter Codex-Prozess würde dieselbe Unterhaltung doppelt führen."
+            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem Codex-Prozess außerhalb von WhisperM8 (PID %@), vermutlich in einem Terminalfenster. Schließe ihn dort oder nutze „Prozess beenden“, das beendet diese Codex-Sitzung. Ein zweiter Codex-Prozess würde dieselbe Unterhaltung doppelt führen."
           }
         }
       }
     },
-    "Cannot resume %@: this conversation is already running in a Codex process without a terminal (PID %@, for example a leftover subagent job). End it first, for example with “kill %@” in a terminal; a second Codex process would run the same conversation twice.": {
+    "Cannot resume %@: this conversation is already running in a Codex process without a terminal (PID %@), for example a subagent job. If that job is no longer needed, use “End Process”. A second Codex process would run the same conversation twice.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem Codex-Prozess ohne Terminal (PID %@, etwa ein liegengebliebener Subagent-Job). Beende ihn zuerst, zum Beispiel mit „kill %@“ in einem Terminal, ein zweiter Codex-Prozess würde dieselbe Unterhaltung doppelt führen."
+            "value": "%@ lässt sich nicht fortsetzen: Diese Unterhaltung läuft schon in einem Codex-Prozess ohne Terminal (PID %@), etwa einem Subagent-Job. Wird dieser Job nicht mehr gebraucht, nutze „Prozess beenden“. Ein zweiter Codex-Prozess würde dieselbe Unterhaltung doppelt führen."
           }
         }
       }
@@ -17670,6 +17670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein-/Ausschalter und Touch ID lassen sich nicht sperren. Ein Druck darauf schickt den Mac in den Ruhezustand und entsperrt die Tastatur."
+          }
+        }
+      }
+    },
+    "The process could not be ended. Close it where it runs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Prozess ließ sich nicht beenden. Schließe ihn dort, wo er läuft."
           }
         }
       }

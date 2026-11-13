@@ -61,21 +61,6 @@ enum ClaudeSessionRunningGuard {
     }
 }
 
-extension ProcessStartTime {
-    /// Startzeit in µs seit 1970, `nil` wenn der Prozess nicht mehr lesbar
-    /// ist. Unterscheidet einen Prozess von einem späteren mit derselben PID.
-    static func microseconds(pid: Int32) -> UInt64? {
-        guard pid > 0 else { return nil }
-        var info = kinfo_proc()
-        var size = MemoryLayout<kinfo_proc>.stride
-        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
-        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
-        let start = info.kp_proc.p_un.__p_starttime
-        guard start.tv_sec > 0 else { return nil }
-        return UInt64(start.tv_sec) * 1_000_000 + UInt64(start.tv_usec)
-    }
-}
-
 /// Merkt sich Prozesse, denen die App gerade das Ende geschickt hat.
 /// Ein Eintrag gilt für `window` Sekunden — genug für das Auslaufen nach
 /// SIGTERM, kurz genug, dass eine wiederverwendete PID nicht dauerhaft als
@@ -91,7 +76,12 @@ final class ProcessTerminationLedger: @unchecked Sendable {
         let startTime: UInt64?
 
         func matches(_ other: UInt64?) -> Bool {
-            guard let startTime, let other else { return true }
+            guard let other else { return true }
+            guard let startTime else {
+                // Beim Vermerk nicht mehr lesbar: passt nur auf einen Prozess,
+                // der vorher schon lief — nie auf eine später vergebene PID.
+                return Double(other) / 1_000_000 < at.timeIntervalSince1970
+            }
             return startTime == other
         }
     }

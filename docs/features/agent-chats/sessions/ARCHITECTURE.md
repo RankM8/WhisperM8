@@ -287,7 +287,9 @@ noch derselbe Prozess läuft (Name, `resume <id>`, Startzeit). Zuerst nur
 SIGTERM, damit Codex den Verlauf sauber zu Ende schreibt; endet er binnen
 3 Sekunden nicht, erscheint „Sofort beenden“ (SIGKILL) als zweiter,
 ausdrücklicher Schritt. Danach startet der Chat neu, die Sperre prüft dabei
-noch einmal. Prozesse
+noch einmal. Beendet wird nur diese eine PID; nach „Sofort beenden“ können
+Kinder von Codex (Tool-Kommandos, MCP-Server) verwaist zurückbleiben. Den
+Knopf gibt es nur mit bekannter Startzeit. Prozesse
 werden über ihren Sitzungsführer (`getsid`) dem PTY eines Chats zugeordnet,
 auch hinter Wrappern wie Node oder Volta. Grenzen der Argumente: Ein fremdes
 Codex, das in der TUI per `/resume` auf die Sitzung gewechselt hat, bleibt

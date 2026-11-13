@@ -35,13 +35,16 @@ enum CodexRunningConflict: Equatable {
     case ownPreviousRun(process: CodexProcessTarget)
     case outsideApp(process: CodexProcessTarget, inTerminal: Bool)
 
-    /// Der Prozess, den „Prozess beenden“ anbieten darf (nicht bei einem
-    /// laufenden Chat der App — den schließt man dort).
+    /// Der Prozess, den „Prozess beenden“ anbieten darf: nicht bei einem
+    /// laufenden Chat der App (den schließt man dort) und nur mit bekannter
+    /// Startzeit, damit die Prüfung vor dem Signal vollständig ist.
     var endableProcess: CodexProcessTarget? {
+        let process: CodexProcessTarget
         switch self {
         case .otherChat: return nil
-        case .otherChatEnding(_, let process), .ownPreviousRun(let process), .outsideApp(let process, _): return process
+        case .otherChatEnding(_, let target), .ownPreviousRun(let target), .outsideApp(let target, _): process = target
         }
+        return process.startTime == nil ? nil : process
     }
 }
 
@@ -134,6 +137,13 @@ enum CodexSessionRunningGuard {
                 if owner == localID { continue }
                 return .otherChatEnding(title: titleOf(owner), process: target)
             }
+            // Prozess eines laufenden Chats der App (über den Sitzungsführer auch
+            // hinter Wrappern)? Geht vor dem 24-h-Verlauf: Ein lebender Chat
+            // darf nie als „beendeter Lauf“ mit Beenden-Knopf erscheinen.
+            if let chat = chatByPID[process.pid] ?? chatByPID[process.sessionLeader] {
+                if chat.id == localID { continue }
+                return .otherChat(title: chat.title)
+            }
             // Länger als das Fenster: sperrt, aber mit der richtigen Zuordnung
             // statt „außerhalb von WhisperM8“ (Startzeit gegen neu vergebene PIDs).
             if let owner = formerOwner(process.pid, process.startTime)
@@ -141,11 +151,6 @@ enum CodexSessionRunningGuard {
                 return owner == localID
                     ? .ownPreviousRun(process: target)
                     : .otherChatEnding(title: titleOf(owner), process: target)
-            }
-            // Prozess eines Chats der App (über den Sitzungsführer auch hinter Wrappern)?
-            if let chat = chatByPID[process.pid] ?? chatByPID[process.sessionLeader] {
-                if chat.id == localID { continue }
-                return .otherChat(title: chat.title)
             }
             return .outsideApp(process: target, inTerminal: process.hasTerminal)
         }
@@ -264,6 +269,8 @@ struct CodexProcessTerminator {
         case stillRunning
         /// Unter der PID läuft inzwischen etwas anderes: kein Signal gesendet.
         case notTheSameProcess
+        /// Das Signal ging nicht raus (etwa keine Berechtigung).
+        case signalFailed(errno: Int32)
     }
 
     var read: (Int32) -> (process: CodexProcess?, name: String?) = { pid in
@@ -282,7 +289,8 @@ struct CodexProcessTerminator {
             return hasExited(target.pid) ? .ended : .notTheSameProcess
         }
         guard signal(target.pid, force ? SIGKILL : SIGTERM) == 0 else {
-            return hasExited(target.pid) ? .ended : .stillRunning
+            let error = errno
+            return hasExited(target.pid) ? .ended : .signalFailed(errno: error)
         }
         return await waitForExit(target.pid, 3) ? .ended : .stillRunning
     }
