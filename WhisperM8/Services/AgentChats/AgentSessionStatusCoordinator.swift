@@ -678,7 +678,7 @@ final class AgentSessionStatusCoordinator {
             // auch wenn eine andere Sitzung dieselbe ID trägt (Altlast).
             resolved = reconcileAdoptedBinding(localID: adopted, record: record)
         } else {
-            resolved = registrySessionID(forExternalID: record.sessionID) ?? bindPendingExternalID(from: record)
+            resolved = registrySessionID(for: record) ?? bindPendingExternalID(from: record)
         }
         guard let sessionID = resolved else { return }
         // Ohne eigenes PTY gehört der Prozess nicht zu diesem Chat (fremdes
@@ -718,14 +718,20 @@ final class AgentSessionStatusCoordinator {
         Logger.claudeBinding.info(
             "binding_resolved_by_registry localID=\(localID.uuidString, privacy: .public) id=\(record.sessionID, privacy: .public)")
         setExternalSessionID(localID: localID, newID: record.sessionID)
-        return registrySessionID(forExternalID: record.sessionID)
+        // Genau dieser Chat — eine Suche nach der ID fände bei doppelt
+        // vergebenen IDs womöglich einen anderen. Nur, wenn die Bindung
+        // wirklich gespeichert ist.
+        let bound = store.loadWorkspace().sessions.first { $0.id == localID }?.externalSessionID
+        return bound?.caseInsensitiveCompare(record.sessionID) == .orderedSame ? localID : nil
     }
 
     /// Registry-Datei weg (Prozess beendet). Das Ende selbst meldet der
     /// PTY-Pfad (`processTerminated`); extern gestartete Sessions fallen
     /// zurück auf den Transcript-Pfad.
     func handleRegistryRecordRemoved(_ record: ClaudeSessionRecord) {
-        guard let sessionID = registrySessionID(forExternalID: record.sessionID),
+        // Zuerst der Chat, dem genau dieser Prozess gemeldet wurde.
+        let owner = registryRecords.first { $0.value.pid == record.pid && $0.value.sessionID == record.sessionID }?.key
+        guard let sessionID = owner ?? registrySessionID(for: record),
               registryLiveSessions.contains(sessionID) else { return }
         // Beim Resume endet der alte Prozess, während der neue mit derselben
         // Session-ID schon läuft — dessen Ende betrifft den Chat nicht mehr.
@@ -844,7 +850,8 @@ final class AgentSessionStatusCoordinator {
     private func adoptRegistryRecord(sessionID: UUID) {
         guard isRegistryStatusEnabled(),
               let ext = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.externalSessionID,
-              let record = registryRecordLookup(ext) else { return }
+              let record = ownRegistryRecord(sessionID: sessionID, externalID: ext) ?? registryRecordLookup(ext)
+        else { return }
         handleRegistryRecord(record)
     }
 
@@ -857,13 +864,82 @@ final class AgentSessionStatusCoordinator {
         terminatedAt[sessionID] = nil
     }
 
-    private func registrySessionID(forExternalID externalID: String) -> UUID? {
-        store.loadWorkspace().sessions.first { session in
-            session.provider == .claude
-                && session.externalSessionID == externalID
-                && !session.isBackgroundChat
-                && !session.isTerminal
-        }?.id
+    /// Der Eintrag des eigenen Prozesses zur ID — bei doppelt vergebenen IDs
+    /// oder nach `/background` nicht der eines anderen Prozesses.
+    private func ownRegistryRecord(sessionID: UUID, externalID: String) -> ClaudeSessionRecord? {
+        guard let pid = terminalProcessID(sessionID) else { return nil }
+        return foregroundRecordsLookup(externalID).first { $0.pid == pid && !$0.isBackground }
+    }
+
+    /// Chat zu einem Registry-Eintrag. Tragen mehrere Chats dieselbe ID (nach
+    /// einer Fehlbindung), gehört der Eintrag dem, dessen PTY-Prozess ihn
+    /// schreibt (PID). Ein Chat mit bekannter, anderer PID ist sicher nicht der
+    /// Schreiber; ohne passenden Kandidaten dann der erste ohne bekannte PID
+    /// (etwa ein archivierter Doppel-Eintrag, den der Terminal-Guard verwirft),
+    /// sonst niemand — der Prozess gehört keinem dieser Chats.
+    private func registrySessionID(for record: ClaudeSessionRecord) -> UUID? {
+        Self.registryOwner(of: record, sessions: store.loadWorkspace().sessions, processID: terminalProcessID)
+    }
+
+    /// Pur: siehe `registrySessionID(for:)`.
+    nonisolated static func registryOwner(
+        of record: ClaudeSessionRecord,
+        sessions: [AgentChatSession],
+        processID: (UUID) -> Int32?
+    ) -> UUID? {
+        // Erst exakt (Claude schreibt die IDs klein), nur ohne Treffer ohne Groß/Klein.
+        let wanted = record.sessionID
+        var candidates = sessions.filter { session in
+            session.provider == .claude && session.externalSessionID == wanted
+                && !session.isBackgroundChat && !session.isTerminal
+        }
+        if candidates.isEmpty {
+            candidates = sessions.filter { session in
+                guard session.provider == .claude, let id = session.externalSessionID,
+                      sameSessionID(id, wanted) else { return false }
+                return !session.isBackgroundChat && !session.isTerminal
+            }
+        }
+        guard candidates.count > 1 else { return candidates.first?.id }
+        return candidates.first(where: { processID($0.id) == record.pid })?.id
+            ?? candidates.first(where: { processID($0.id) == nil })?.id
+    }
+
+    /// Gleiche Sitzungs-ID ohne Rücksicht auf Groß/Klein, aber billig: Läuft je
+    /// Registry-Ereignis über alle Sitzungen auf dem Main Thread (echter
+    /// Workspace 5.824). `caseInsensitiveCompare` kostete dort rund 227 µs je
+    /// Aufruf statt 18 µs (Vic, 13.11.2026). Deshalb erst `==`, dann nur bei
+    /// gleicher Länge ein Byte-Vergleich, der ASCII-Buchstaben gleich behandelt
+    /// (`registryOwner` fragt ihn ohnehin nur, wenn `==` nichts findet).
+    nonisolated static func sameSessionID(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return true }
+        guard lhs.utf8.count == rhs.utf8.count else { return false }
+        // Billige Vorprüfung: Bei UUIDs weicht fast immer schon das erste Byte ab.
+        if let a = lhs.utf8.first, let b = rhs.utf8.first, a | 0x20 != b | 0x20 { return false }
+        // Native Strings liegen zusammenhängend im Speicher: direkt die Bytes
+        // vergleichen (bei UUIDs weicht fast immer schon das erste ab).
+        let fast = lhs.utf8.withContiguousStorageIfAvailable { left in
+            rhs.utf8.withContiguousStorageIfAvailable { right in foldedEqual(left, right) }
+        }
+        if let result = fast ?? nil { return result }
+        return foldedEqual(Array(lhs.utf8), Array(rhs.utf8))
+    }
+
+    /// Nur A–Z/a–z dürfen sich unterscheiden, und nur im Bit 0x20.
+    private nonisolated static func foldedEqual<C: RandomAccessCollection>(_ left: C, _ right: C) -> Bool
+    where C.Element == UInt8 {
+        guard left.count == right.count else { return false }
+        var l = left.startIndex, r = right.startIndex
+        while l != left.endIndex {
+            let a = left[l], b = right[r]
+            if a != b {
+                let folded = a | 0x20
+                guard folded == b | 0x20, folded >= 0x61, folded <= 0x7A else { return false }
+            }
+            left.formIndex(after: &l)
+            right.formIndex(after: &r)
+        }
+        return true
     }
 
     // MARK: Schatten des alten Wegs (nur Log)

@@ -142,4 +142,94 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
         let body = text[start.upperBound...].prefix(400)
         XCTAssertTrue(body.contains("HandoverFallbackLaunchQueue.shared.forget(session.id)"))
     }
+
+    // MARK: Punkt 11: Rückfall für Chats ohne Sitzungs-ID
+
+    private func launched(_ provider: AgentProvider, id: String? = nil, lastTurn: Date? = nil) -> AgentChatSession {
+        var session = AgentChatSession(provider: provider, projectID: UUID(), externalSessionID: id, title: "t",
+                                       status: .running)
+        session.hasLaunchedInitialPrompt = true
+        session.lastTurnAt = lastTurn
+        return session
+    }
+
+    func testDecisionForChatsWithoutSessionID() {
+        for provider in [AgentProvider.claude, .codex] {
+            XCTAssertEqual(HandoverFallbackStart.decide(for: launched(provider), hadTurn: false, claudeRecoverable: false),
+                           .startFresh, "\(provider): ohne Turn frisch")
+            XCTAssertEqual(HandoverFallbackStart.decide(for: launched(provider), hadTurn: true, claudeRecoverable: false),
+                           .keepStopped, "\(provider): mit Turn gestoppt")
+            XCTAssertEqual(HandoverFallbackStart.decide(for: launched(provider, id: "x"), hadTurn: true, claudeRecoverable: false),
+                           .resume, "\(provider): mit ID normal fortsetzen")
+        }
+        XCTAssertEqual(HandoverFallbackStart.decide(for: launched(.claude), hadTurn: true, claudeRecoverable: true),
+                       .resume, "Claude: Hook-Ereignisse nennen die Sitzung")
+        XCTAssertEqual(HandoverFallbackStart.decide(for: launched(.codex), hadTurn: true, claudeRecoverable: true),
+                       .keepStopped, "Codex kennt diesen Weg nicht")
+        var neverLaunched = launched(.codex)
+        neverLaunched.hasLaunchedInitialPrompt = false
+        XCTAssertEqual(HandoverFallbackStart.decide(for: neverLaunched, hadTurn: false, claudeRecoverable: false), .resume,
+                       "nie gestartet: startet ohnehin frisch")
+    }
+
+    func testTurnEvidence() {
+        let plain = launched(.codex)
+        XCTAssertFalse(HandoverFallbackStart.hadTurn(plain, journal: [], hookEvents: nil))
+        XCTAssertTrue(HandoverFallbackStart.hadTurn(launched(.codex, lastTurn: Date()), journal: [], hookEvents: nil))
+        let working = ChatsStatusJournalEntry(at: Date(), sessionID: plain.id, from: "idle", to: "working", signal: "promptSubmitted",
+                                              source: "hook")
+        XCTAssertTrue(HandoverFallbackStart.hadTurn(plain, journal: [working], hookEvents: nil))
+        XCTAssertTrue(HandoverFallbackStart.hadTurn(plain, journal: [],
+                                                    hookEvents: Data(#"{"hook_event_name":"UserPromptSubmit"}"#.utf8)))
+        XCTAssertFalse(HandoverFallbackStart.hadTurn(plain, journal: [],
+                                                     hookEvents: Data(#"{"hook_event_name":"SessionStart"}"#.utf8)))
+    }
+
+    /// Im Rückfall: ohne Turn frisch (Flag zurück, vorgemerkt, Hinweis), mit
+    /// Turn gestoppt (nicht vorgemerkt, Hinweis), je für Claude und Codex.
+    func testFallbackStartsFreshOrKeepsStoppedWithNotice() throws {
+        let store = AgentSessionStore(fileURL: tempURL("ws"), uiStateFileURL: tempURL("ui"))
+        let windowStore = AgentWindowStore(persistence: store)
+        var ids: [AgentProvider: (fresh: UUID, stopped: UUID)] = [:]
+        for provider in [AgentProvider.claude, .codex] {
+            let fresh = try store.upsertSession(launched(provider))
+            let stopped = try store.upsertSession(launched(provider))
+            ids[provider] = (fresh.id, stopped.id)
+        }
+        let withTurns = Set(ids.values.map(\.stopped))
+        let queue = queue()
+        HandoverTakeService.scheduleFallbackResume(
+            ids.values.flatMap { [$0.fresh, $0.stopped] }, store: store, windowStore: windowStore,
+            runningSessionIDs: [], queue: queue,
+            hadTurn: { withTurns.contains($0.id) }, claudeRecoverable: { _ in false })
+        let sessions = Dictionary(uniqueKeysWithValues: store.loadWorkspace().sessions.map { ($0.id, $0) })
+        for (provider, pair) in ids {
+            XCTAssertEqual(sessions[pair.fresh]?.hasLaunchedInitialPrompt, false, "\(provider): frisch")
+            XCTAssertEqual(sessions[pair.fresh]?.shouldLaunchOnOpen, true)
+            XCTAssertNotNil(queue.takeLaunchSlot(for: pair.fresh))
+            XCTAssertNotNil(queue.takeNotice(for: pair.fresh))
+            XCTAssertEqual(sessions[pair.stopped]?.hasLaunchedInitialPrompt, true, "\(provider): Verlauf bleibt")
+            XCTAssertNotEqual(sessions[pair.stopped]?.shouldLaunchOnOpen, true, "\(provider): gestoppt")
+            XCTAssertNil(queue.takeLaunchSlot(for: pair.stopped))
+            XCTAssertNotNil(queue.takeNotice(for: pair.stopped))
+        }
+    }
+
+    /// Absturz-Wiederaufnahme unverändert: Sie setzt keine Hinweise und setzt
+    /// das Start-Flag nicht zurück.
+    func testCrashRecoveryDoesNotStartFresh() throws {
+        let store = AgentSessionStore(fileURL: tempURL("ws"), uiStateFileURL: tempURL("ui"))
+        let windowStore = AgentWindowStore(persistence: store)
+        let chat = try store.upsertSession(launched(.codex))
+        let markerURL = tempURL("marker")
+        let crashed = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 100, isProcessAlive: { _ in false })
+        _ = crashed.beginRun()
+        crashed.record(runningSessionIDs: [chat.id])
+        _ = AgentCrashRecoveryCoordinator.start(
+            marker: AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { _ in false }),
+            registry: AgentTerminalRegistry(termination: .inert), windowStore: windowStore, store: store,
+            isEnabled: true, alreadyStarted: [])
+        XCTAssertEqual(store.loadWorkspace().sessions.first { $0.id == chat.id }?.hasLaunchedInitialPrompt, true)
+        XCTAssertNil(HandoverFallbackLaunchQueue.shared.takeNotice(for: chat.id))
+    }
 }

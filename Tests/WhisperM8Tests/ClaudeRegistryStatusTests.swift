@@ -245,6 +245,111 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(HandoverManifest.self, from: Data(old.utf8)).pendingExternalSessionID)
     }
 
+    // MARK: Zuordnung über die PID (Folgepunkt f zum Bindungs-Befund 13.11.2026)
+
+    /// Zwei Chats tragen nach einer Fehlbindung dieselbe ID. Der Eintrag gehört
+    /// dem, dessen Prozess ihn schreibt — früher bekam ihn der erste Treffer.
+    func testRecordGoesToTheChatWhoseProcessWritesIt() throws {
+        let f = try makeFixture()
+        let second = try f.store.createSession(
+            provider: .claude, projectPath: tempDir.path, title: "zweiter Chat", initialPrompt: nil)
+        try f.store.updateSession(id: second.id) { $0.externalSessionID = "ext-1" }
+        f.coordinator.terminalProcessID = { $0 == second.id ? 200 : 100 }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.sessionLaunched(sessionID: second.id)
+
+        f.coordinator.handleRegistryRecord(record("busy", pid: 200))
+
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(second.id))
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: second.id), .working)
+        XCTAssertNotEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
+
+        // Beide live: Das Ende eines Prozesses trifft nur seinen Chat.
+        f.coordinator.handleRegistryRecord(record("idle", pid: 100))
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        f.coordinator.handleRegistryRecordRemoved(record("busy", pid: 200))
+        XCTAssertFalse(f.coordinator.registryLiveSessions.contains(second.id))
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(f.sessionID), "der andere bleibt live")
+    }
+
+    /// Echter Workspace-Fall: Der erste Chat mit der ID ist ein Doppel-Eintrag
+    /// ohne Terminal, der zweite läuft. Früher landete der Eintrag beim ersten
+    /// und wurde verworfen — der laufende Chat bekam nie Registry-Status.
+    func testDuplicateWithoutTerminalDoesNotSwallowTheRecord() throws {
+        let f = try makeFixture()
+        let running = try f.store.createSession(
+            provider: .claude, projectPath: tempDir.path, title: "läuft", initialPrompt: nil)
+        try f.store.updateSession(id: running.id) { $0.externalSessionID = "ext-1" }
+        f.coordinator.hasRunningTerminal = { $0 == running.id }
+        f.coordinator.terminalProcessID = { $0 == running.id ? 200 : nil }
+        f.coordinator.sessionLaunched(sessionID: running.id)
+
+        f.coordinator.handleRegistryRecord(record("busy", pid: 200))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: running.id), .working)
+
+        // Ein Eintrag eines fremden Prozesses landet beim Doppel und wird verworfen.
+        f.coordinator.handleRegistryRecord(record("idle", pid: 999))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: running.id), .working)
+    }
+
+    /// Tab-Neustart mit Doppel: Das Ende des alten Prozesses setzt den Chat nicht zurück.
+    func testEndOfOldProcessWithDuplicateKeepsChatLive() throws {
+        let f = try makeFixture()
+        let twin = try f.store.createSession(
+            provider: .claude, projectPath: tempDir.path, title: "Doppel", initialPrompt: nil)
+        try f.store.updateSession(id: twin.id) { $0.externalSessionID = "ext-1" }
+        var pid: Int32 = 100
+        f.coordinator.hasRunningTerminal = { $0 == f.sessionID }
+        f.coordinator.terminalProcessID = { $0 == f.sessionID ? pid : nil }
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle", pid: 100))
+        pid = 200 // neuer Prozess nach dem Neustart
+        f.coordinator.handleRegistryRecord(record("busy", pid: 200))
+
+        f.coordinator.handleRegistryRecordRemoved(record("idle", pid: 100))
+
+        XCTAssertTrue(f.coordinator.registryLiveSessions.contains(f.sessionID))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
+    }
+
+    func testSameSessionIDIgnoresCaseOnlyForLetters() {
+        typealias C = AgentSessionStatusCoordinator
+        XCTAssertTrue(C.sameSessionID("1f353dce-783f", "1f353dce-783f"))
+        XCTAssertTrue(C.sameSessionID("1F353DCE-783F", "1f353dce-783f"))
+        XCTAssertFalse(C.sameSessionID("1f353dce-783f", "1f353dce-783e"))
+        XCTAssertFalse(C.sameSessionID("abc", "abcd"))
+        XCTAssertFalse(C.sameSessionID("a-b", "a\rb"), "0x2D und 0x0D unterscheiden sich nur im Bit 0x20")
+        XCTAssertFalse(C.sameSessionID("@", "`"), "kein Buchstabe")
+        XCTAssertTrue(C.sameSessionID("", ""))
+    }
+
+    func testRegistryOwnerFallsBackToFirstChatWithTheID() {
+        typealias C = AgentSessionStatusCoordinator
+        let project = UUID()
+        let first = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1", title: "a")
+        let second = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1", title: "b")
+        let background = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "ext-1",
+                                          title: "bg", kind: .backgroundChat)
+        let sessions = [background, first, second]
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 200), sessions: sessions,
+                                       processID: { $0 == second.id ? 200 : nil }), second.id)
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: sessions,
+                                       processID: { _ in nil }), first.id, "ohne bekannte PIDs wie bisher")
+        XCTAssertNil(C.registryOwner(of: record("idle", pid: 999), sessions: sessions,
+                                     processID: { $0 == first.id ? 100 : 200 }),
+                     "beide laufen mit anderer PID: der Prozess gehört keinem")
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [first],
+                                       processID: { _ in 1 }), first.id, "ein Kandidat: unverändert")
+        XCTAssertNil(C.registryOwner(of: record("idle", sessionID: "fremd"), sessions: sessions, processID: { _ in nil }))
+
+        // Groß/Klein nur, wenn exakt nichts passt.
+        let upper = AgentChatSession(provider: .claude, projectID: project, externalSessionID: "EXT-1", title: "gross")
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [upper], processID: { _ in nil }), upper.id)
+        XCTAssertEqual(C.registryOwner(of: record("idle", pid: 999), sessions: [upper, first], processID: { _ in 1 }),
+                       first.id, "exakter Treffer geht vor, auch mit fremder PID")
+    }
+
     func testHooksAndTranscriptNoLongerDriveRegistryLiveSession() throws {
         let f = try makeFixture()
         f.coordinator.sessionLaunched(sessionID: f.sessionID)
