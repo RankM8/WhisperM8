@@ -95,7 +95,7 @@ final class HandoverDepositCoordinator {
                     appBinaries: dependencies.appBinaries),
                 secret)
         } catch {
-            return fail("Aufbewahrer startet nicht: \(error)")
+            return fail("Aufbewahrer startet nicht: \(HandoverLog.label(error))")
         }
         let keeperPID = process.processIdentifier
 
@@ -119,7 +119,7 @@ final class HandoverDepositCoordinator {
         do {
             try client.helloDeposit(secret: secret, expectedRunID: runID, expectedPID: keeperPID)
         } catch {
-            return rollback("HELLO gescheitert: \(error)")
+            return rollback("HELLO gescheitert: \(HandoverLog.label(error))")
         }
 
         var notHandedOver: [UUID] = []
@@ -133,7 +133,7 @@ final class HandoverDepositCoordinator {
                 try client.deposit(manifest: item.makeManifest(chat),
                                    descriptor: chat.handle.fileDescriptor, image: chat.image)
             } catch {
-                return rollback("DEPOSIT gescheitert: \(error)")
+                return rollback("DEPOSIT gescheitert: \(HandoverLog.label(error))")
             }
         }
         guard !detached.isEmpty else { return rollback("keine Leitung abgelöst") }
@@ -149,7 +149,7 @@ final class HandoverDepositCoordinator {
             // kommen zurück ans Terminal.
             for entry in detached { entry.item.source.reattachAfterFailedHandover() }
             dependencies.secretStore.remove()
-            return fail("COMMIT gescheitert: \(error)")
+            return fail("COMMIT gescheitert: \(HandoverLog.label(error))")
         }
 
         let chats = detached.map { entry -> HandedOverChat in

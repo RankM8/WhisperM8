@@ -195,7 +195,7 @@ extension HandoverKeeper {
                 }
             }
         } catch {
-            log("deposit_connection_error \(error)")
+            log("deposit_connection_error \(HandoverLog.label(error))")
         }
     }
 
@@ -279,7 +279,7 @@ extension HandoverKeeper {
                 }
             }
         } catch {
-            log("take_connection_error \(error)")
+            log("take_connection_error \(HandoverLog.label(error))")
         }
     }
 

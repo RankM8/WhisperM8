@@ -101,7 +101,8 @@ final class HandoverTakeService {
             ? HandoverTestKnobs.secret(dependencies.secretStore.load()) : .missing
         let plan = HandoverPlanning.launchPlan(
             markerHandover: previous.handover, keeper: observation, secret: secret)
-        Logger.agentStore.notice("handover_take_plan plan=\(String(describing: plan).prefix(40), privacy: .public)")
+        // Nur der Fall: `.take` trägt das Geheimnis (Befund 13.11.2026).
+        Logger.agentStore.notice("handover_take_plan plan=\(plan.logLabel, privacy: .public)")
 
         var outcomes: [String: HandoverTakeOutcome] = [:]
         if !onMain, let handover = previous.handover,
@@ -179,7 +180,7 @@ final class HandoverTakeService {
             try? client.release(secret: secret)
             return [:]
         } catch {
-            Logger.agentStore.error("handover_take_hello_failed error=\(String(describing: error), privacy: .public)")
+            Logger.agentStore.error("handover_take_hello_failed error=\(HandoverLog.label(error), privacy: .public)")
             return [:]
         }
         var outcomes: [String: HandoverTakeOutcome] = [:]
@@ -195,7 +196,7 @@ final class HandoverTakeService {
             do {
                 taken = try client.take(chatID: chatID)
             } catch {
-                Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(String(describing: error), privacy: .public)")
+                Logger.agentStore.error("handover_take_chat_failed chat=\(chatID, privacy: .public) error=\(HandoverLog.label(error), privacy: .public)")
                 continue
             }
             // Review Paket 1, Befund 3: SwiftTerm prüft die Startzeit nicht.
