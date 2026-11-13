@@ -364,7 +364,7 @@ Abgleich der Schalter.
 |---|---|
 | Nächster wartender Chat | derselbe Weg wie ⌃⌥Tab, ohne Dynamic Island; ohne wartenden Chat „geht nicht“ |
 | Antworten | zum jüngsten frisch fertigen Chat (ruht, Turn vor höchstens 15 min beendet, nicht der aktuelle; Einteilung wie Notch und `chats`-Board) und dort diktieren. Gibt es keinen, zum nächsten wartenden Chat, nur springen. Ist der aktuelle Chat der einzige Kandidat und ruht er, diktiert es hier. Scheitert der Wechsel, wird nicht diktiert; in eine Rückfrage läuft nie ein Diktat |
-| Jetzt senden / Weiter | dieselbe Entscheidung wie R1 + Kreuz (`sendOrContinue`); in Shells „geht nicht“ |
+| Jetzt senden / Weiter | dieselbe Entscheidung wie R1 + Kreuz (`sendOrContinue`): im Claude-Chat immer „Jetzt senden“, in Codex Enter oder „Weiter“; in Shells „geht nicht“ |
 | Modus wechseln | Shift+Tab mit den Regeln des Menüs (nur ruhend, nicht in einer Rückfrage) |
 | `/workflows`, `/tasks` | wie aus „Befehle ›“, nur in Claude-Chats |
 

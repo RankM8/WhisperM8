@@ -116,19 +116,31 @@ final class ControllerActionDispatcherPaddleTests: XCTestCase {
         XCTAssertEqual(terminals.keys, [.sendNow])
     }
 
-    func testSendWhileIdleWithText() {
+    /// Claude: wie R1 + Kreuz immer „Jetzt senden“ (wie Ctrl+Enter), auch
+    /// ruhend und bei leerem Feld; kein „Weiter“ als Text.
+    func testClaudeAlwaysSendsNow() {
         setTerminal(.idle, draft: true)
+        perform(.sendNowOrContinue)
+        setTerminal(.idle)
+        perform(.sendNowOrContinue)
+        XCTAssertEqual(terminals.keys, [.sendNow, .sendNow])
+        XCTAssertTrue(terminals.texts.isEmpty)
+    }
+
+    func testSendWhileIdleWithTextInCodex() {
+        setTerminal(.idle, profile: .codex, draft: true)
         perform(.sendNowOrContinue)
         XCTAssertEqual(terminals.keys, [.enter])
     }
 
-    func testContinueWhenEmptyAndIdle() {
+    func testContinueWhenEmptyAndIdleInCodex() {
+        setTerminal(.idle, profile: .codex)
         perform(.sendNowOrContinue)
         XCTAssertEqual(terminals.texts.map(\.text), [ControllerMenuText.continueWork])
     }
 
-    func testRejectedWhenEmptyAndWorking() {
-        setTerminal(.working)
+    func testRejectedWhenCodexWorks() {
+        setTerminal(.working, profile: .codex)
         perform(.sendNowOrContinue)
         XCTAssertTrue(terminals.keys.isEmpty)
         XCTAssertTrue(terminals.texts.isEmpty)
