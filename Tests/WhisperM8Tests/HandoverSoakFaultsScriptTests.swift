@@ -111,6 +111,17 @@ final class HandoverSoakFaultsScriptTests: XCTestCase {
         XCTAssertEqual(usage.status, 64, usage.output)
     }
 
+    /// `log` ist im Skript eine eigene Funktion (und in zsh ein Builtin): ein
+    /// nacktes `log show` las nie das System-Log (Lauf vom 13.11.).
+    func testSystemLogIsReadWithFullPath() throws {
+        for name in ["scripts/handover-soak.sh", "scripts/handover-soak-faults.sh"] {
+            let text = try String(contentsOf: Self.root.appendingPathComponent(name), encoding: .utf8)
+            for line in text.split(separator: "\n") where line.contains("log show") && !line.trimmingCharacters(in: .whitespaces).hasPrefix("#") {
+                XCTAssertTrue(line.contains("/usr/bin/log show"), "\(name): \(line)")
+            }
+        }
+    }
+
     func testFaultScriptReusesTheSoakLibrary() throws {
         let code = try code()
         XCTAssertTrue(code.contains("source \"$(cd \"$(dirname \"$0\")\" && pwd)/handover-soak.sh\""))

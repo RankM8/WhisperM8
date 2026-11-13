@@ -736,7 +736,7 @@ final_checks() {
             [[ -n "$name" ]] || continue
             id=$(chat_show "$name" | json_field '["id"]' 2>/dev/null || true)
             if [[ -z "$id" ]]; then record ende "fertig-meldung:$name" FEHLER "Chat-ID nicht ermittelbar"; continue; fi
-            count=$(log show --start "$since" --style compact \
+            count=$(/usr/bin/log show --start "$since" --style compact \
                 --predicate "processImagePath CONTAINS \"WhisperM8Test.app\" AND eventMessage CONTAINS \"session_notification_posted kind=turnCompleted session=$id\"" 2>/dev/null \
                 | grep -c session_notification_posted || true)
             if [[ "$count" == 1 ]]; then record ende "fertig-meldung:$name" OK "1"

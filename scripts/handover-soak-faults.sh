@@ -207,6 +207,13 @@ capture_secret_candidates() { # ordner ziel
     done
 }
 
+# Logzeilen (stdin) mit „secret“ und einem Hex-Wert ab 16 Zeichen. Ausgabe
+# gekürzt: Zeit und die ersten 6 Zeichen des Werts, nie der ganze Wert.
+secret_pattern_hits() {
+    grep -iE 'secret[^0-9a-f]{0,6}[0-9a-f]{16,}' 2>/dev/null \
+        | sed -E 's/^([0-9-]+ [0-9:.]+).*(secret[^0-9a-fA-F]{0,6})([0-9a-fA-F]{6})[0-9a-fA-F]*.*/\1 \2\3…/I' || true
+}
+
 # In welchen Dateien steht ein Geheimnis-Kandidat (roh, hex oder Base64)?
 # Kandidaten unter 8 Byte zählen nicht, sonst träfe jede Zahl.
 secret_hits() { # kandidaten-datei datei…
@@ -700,16 +707,30 @@ wait_until_running() {
     return 1
 }
 
-# Vics Auflage 2: Das Geheimnis steht nie im Log. Geprüft werden die Logs des
-# Aufbewahrers, das Log der Test-Instanz und das System-Log seit Laufbeginn.
+# Vics Auflage 2: Das Geheimnis steht nie im Log. Zwei Wege:
+#   - Muster: eine Logzeile der Test-App mit „secret“ und einem langen
+#     Hex-Wert (Lauf vom 13.11., 13:36: handover_take_plan schrieb den Anfang
+#     des Geheimnisses öffentlich ins System-Log). Greift auch bei Ablage im
+#     Schlüsselbund.
+#   - Kandidaten: Inhalt jeder unbekannten kleinen Datei im Ordner des
+#     Aufbewahrers (Ablage als Datei), roh, hex oder Base64 in keeper.log,
+#     Log der Test-Instanz und System-Log.
 check_secret_not_logged() {
-    local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits
+    local candidates="$STATE/secret-candidates" unified="$STATE/unified.log" hits pattern
+    /usr/bin/log show --style compact --start "$(cat "$STATE/started-at")" \
+        --predicate 'processImagePath CONTAINS "WhisperM8Test.app"' > "$unified" 2>/dev/null || true
+    pattern=$(secret_pattern_hits < "$unified" | head -2 | tr '\n' ';')
+    if [[ -n "$pattern" ]]; then
+        record ende geheimnis-muster FEHLER "Logzeile mit Geheimnis-Wert (gekürzt): $pattern"
+    elif [[ -s "$unified" ]]; then
+        record ende geheimnis-muster OK "System-Log der Test-App ohne secret=<hex>"
+    else
+        record ende geheimnis-muster FEHLT "System-Log der Test-App leer oder nicht lesbar"
+    fi
     if [[ ! -s "$candidates" ]]; then
         record ende geheimnis-im-log FEHLT "kein Geheimnis-Kandidat im Ordner des Aufbewahrers gesehen (Ablage als Datei aus Paket 4?)"
         return 0
     fi
-    log show --style compact --start "$(cat "$STATE/started-at")" \
-        --predicate 'subsystem BEGINSWITH "com.whisperm8"' > "$unified" 2>/dev/null || true
     hits=$(secret_hits "$candidates" "$HANDOVER_DIR"/keeper.log* "$ROOT/instance.log" "$unified" | tr '\n' ' ')
     if [[ -n "$hits" ]]; then
         record ende geheimnis-im-log FEHLER "Geheimnis steht in: $hits"
@@ -881,6 +902,10 @@ Datei 644 secret" "$(handover_dir_issues "$dir/h")" "falsche Rechte gemeldet"
     rm -f "$dir/h/secret"; : > "$dir/h/.versteckt"; : > "$dir/h/..doppel"
     expect_exact "..doppel .versteckt" "$(unknown_handover_files "$dir/h" | sort | tr '\n' ' ' | sed 's/ $//')" "versteckte Dateien erkannt"
     rm -rf "$dir"
+
+    # Geheimnis-Muster im System-Log, Ausgabe gekürzt.
+    expect_exact '2026-11-13 13:32:03.686 secret: "256d62…' "$(printf '%s\n' '2026-11-13 13:32:03.686 Df WhisperM8[1:2] [x] handover_take_plan plan=take(secret: "256d62b3860129aa5e2ef5c73d' | secret_pattern_hits)" "Geheimnis im Log erkannt, gekürzt"
+    expect_exact "" "$(printf '%s\n' 'handover_take_plan plan=take secret=<redacted>' 'session=9D5AF90C-0A31-4E72-A8E8-09B1757C3284' | secret_pattern_hits)" "kein Fehlalarm ohne Hex-Wert"
 
     # Schlüsselbund-Wächter: nur neue SecurityAgent-Prozesse zählen.
     expect_exact "34" "$(printf '12\n34\n' | grep -vxF -f <(printf '12\n'))" "Vergleichsstand blendet Altes aus"
