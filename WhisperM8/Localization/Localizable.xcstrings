@@ -20264,6 +20264,16 @@
         }
       }
     },
+    "in %lld h": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %lld Std."
+          }
+        }
+      }
+    },
     "in %lld h %lld min": {
       "localizations": {
         "de": {
@@ -21034,12 +21044,12 @@
         }
       }
     },
-    "while working on power": {
+    "while working": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "bei Arbeit am Strom"
+            "value": "bei Arbeit"
           }
         }
       }

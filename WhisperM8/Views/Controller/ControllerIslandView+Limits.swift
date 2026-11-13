@@ -176,6 +176,7 @@ extension ControllerIslandView {
     static func resetText(_ resetsAt: Date?, now: Date) -> String {
         switch ControllerResetStyle.of(resetsAt, now: now) {
         case .duration(let minutes)?:
+            if minutes >= 60, minutes % 60 == 0 { return String(localized: "in \(minutes / 60) h") }
             if minutes >= 60 { return String(localized: "in \(minutes / 60) h \(minutes % 60) min") }
             return String(localized: "in \(minutes) min")
         case .dayAndTime?:

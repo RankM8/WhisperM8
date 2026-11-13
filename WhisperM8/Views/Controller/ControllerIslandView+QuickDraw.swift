@@ -102,7 +102,7 @@ extension ControllerIslandView {
             Image(systemName: slot.symbolName(slots.app))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(palette.hint)
-                .frame(width: 15)
+                .frame(width: 21)
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: slot.title)
                     .font(.system(size: 12))
@@ -301,7 +301,7 @@ extension ControllerAwakeStage {
     var shortTitle: String {
         switch self {
         case .off: return String(localized: "off")
-        case .whileWorking: return String(localized: "while working on power")
+        case .whileWorking: return String(localized: "while working")
         case .always: return String(localized: "always awake")
         }
     }
