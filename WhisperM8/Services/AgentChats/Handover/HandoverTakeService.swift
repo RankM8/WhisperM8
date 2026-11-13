@@ -194,6 +194,12 @@ final class HandoverTakeService {
             ).write(paths: dependencies.paths)
         }
         dependencies.marker.finishHandoverTake()
+        // Dex, Befund 5 (kill-mid-take): Starb der Aufbewahrer während der
+        // Übernahme (SIGKILL), blieben Socket und socket-path liegen, bis zum
+        // nächsten Start. Hält niemand mehr seine Sperre, ist er sicher weg.
+        if !HandoverKeeperLock.isHeld(paths: dependencies.paths) {
+            HandoverKeeperLock.removeLeftovers(paths: dependencies.paths)
+        }
         Self.lastSummary = summary
         Logger.agentStore.notice(
             "handover_take_finished adopted=\(summary.adopted.count) ended=\(summary.endedInGap.count) fallback=\(summary.fallback.count)")
@@ -435,10 +441,16 @@ enum HandoverKeeperLock {
     static func liveDiscovery(paths: HandoverPaths) -> Bool {
         guard FileManager.default.fileExists(atPath: paths.discoveryFileURL.path) else { return false }
         if isHeld(paths: paths) { return true }
-        removeStaleSocket(at: paths.socketURL)
-        try? FileManager.default.removeItem(at: paths.discoveryFileURL)
+        removeLeftovers(paths: paths)
         Logger.agentStore.notice("handover_stale_discovery_removed")
         return false
+    }
+
+    /// Socket und Discovery-Eintrag eines toten Aufbewahrers. Nur aufrufen,
+    /// wenn niemand die Sperre hält.
+    static func removeLeftovers(paths: HandoverPaths) {
+        removeStaleSocket(at: paths.socketURL)
+        try? FileManager.default.removeItem(at: paths.discoveryFileURL)
     }
 
     /// Nur einen eigenen Socket entfernen, nie etwas anderes (wie der

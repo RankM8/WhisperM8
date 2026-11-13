@@ -382,6 +382,9 @@ final class HandoverRestartCLITests: XCTestCase {
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("--keep-chats"))
         XCTAssertTrue(script.contains("--wait-take"))
+        // Dex, Nachlauf: Die Wartemeldung während einer laufenden Übernahme
+        // muss durchkommen, auch wenn das Skript die Ausgabe auffängt.
+        XCTAssertTrue(script.contains("app handover --json 2> >(tee"), "stderr live durchgereicht")
     }
 }
 

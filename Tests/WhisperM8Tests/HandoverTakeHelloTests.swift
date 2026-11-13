@@ -51,8 +51,16 @@ final class HandoverTakeHelloTests: XCTestCase {
             while true {
                 let fd = Darwin.accept(listenFD, nil, nil)
                 guard fd >= 0 else { return }
+                // Jede Verbindung eigen: Ein schweigender HELLO darf den
+                // nächsten Versuch nicht aufhalten.
+                Thread.detachNewThread { [self] in handle(fd) }
+            }
+        }
+
+        private func handle(_ fd: Int32) {
+            do {
                 let connection = HandoverConnection(fd: fd)
-                guard let received = try? connection.receive(timeout: 5) else { continue }
+                guard let received = try? connection.receive(timeout: 5) else { return }
                 switch received.message.type {
                 case .status:
                     var reply = HandoverMessage(type: .statusResult)
@@ -99,6 +107,7 @@ final class HandoverTakeHelloTests: XCTestCase {
         defer { keeper.stop() }
         var terminated: [Int32] = []
         _ = takeService(terminated: { terminated.append($0) }).takeAtLaunch()
+        usleep(200_000)   // späte Verbindungs-Threads zählen lassen
         return (keeper.hellos, terminated)
     }
 

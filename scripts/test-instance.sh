@@ -127,15 +127,21 @@ cmd_restart_keep_chats() {
     local old out code
     old=$(pids)
     [[ -z "$old" ]] && { echo "läuft nicht" >&2; exit 1; }
+    # stderr live durchreichen (Wartemeldung während einer laufenden
+    # Übernahme) und für die Fehlermeldung mitschreiben.
+    local errf
+    errf=$(mktemp "${TMPDIR:-/tmp}/ti-handover.XXXXXX")
     set +e
-    out=$(cmd_cli app handover --json 2>&1); code=$?
+    out=$(cmd_cli app handover --json 2> >(tee "$errf" >&2)); code=$?
     set -e
     if [[ $code -ne 0 ]]; then
-        echo "keine Übergabe (app handover: Exit $code): $out" >&2
+        echo "keine Übergabe (app handover: Exit $code): $(cat "$errf") $out" >&2
+        rm -f "$errf"
         cmd_stop >/dev/null
         cmd_start >/dev/null || true
         exit 2
     fi
+    rm -f "$errf"
     local run
     run=$(printf '%s\n' "$out" | sed -n 's/.*"runID" *: *"\([^"]*\)".*/\1/p' | head -1)
     for _ in $(seq 1 100); do [[ -z "$(pids)" ]] && break; sleep 0.1; done
