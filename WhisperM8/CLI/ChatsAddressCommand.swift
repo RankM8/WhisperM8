@@ -48,13 +48,19 @@ enum ChatsAddressLogic {
         return .address(record)
     }
 
-    static func json(entry: ChatsSessionEntry, outcome: Outcome) -> [String: Any] {
+    static func json(entry: ChatsSessionEntry, outcome: Outcome, usageLimit: AgentUsageLimit? = nil) -> [String: Any] {
         var payload: [String: Any] = [
             "schemaVersion": 1,
             "id": entry.session.id.uuidString,
             "shortID": ChatsOutput.shortID(entry.session.id),
             "title": entry.session.title,
         ]
+        // Empfänger am Nutzungslimit (WM8-85): Eine native Nachricht käme an,
+        // der Chat arbeitet aber nicht, und der Absender erfährt es nicht.
+        if let usageLimit {
+            payload["usageLimit"] = usageLimit.kind
+            payload["usageLimitResetsAt"] = usageLimit.resetsAt.map(ChatsOutput.iso) ?? NSNull()
+        }
         switch outcome {
         case .address(let record):
             payload["reachable"] = true
@@ -109,8 +115,14 @@ enum ChatsAddressCommand {
                 return ChatsCLIExit.conflict
             }
         }
+        let sessions = context.view.entries.map(\.session)
+        let limit = entry.session.blockingUsageLimit(in: sessions)
         if options.json {
-            CLIIO.out(ChatsOutput.encodeJSON(ChatsAddressLogic.json(entry: entry, outcome: outcome)))
+            CLIIO.out(ChatsOutput.encodeJSON(ChatsAddressLogic.json(entry: entry, outcome: outcome, usageLimit: limit)))
+        } else if let limit, case .address = outcome {
+            let until = limit.resetsAt.map { " bis \(ChatsUsageLimitFormat.clock($0))" } ?? ""
+            CLIIO.err("⚠︎ \(entry.session.title) steht am Nutzungslimit\(until): Eine Nachricht kommt an, der Chat "
+                + "arbeitet aber nicht. `whisperm8 chats enqueue` stellt nach dem Limit zu.")
         }
         switch outcome {
         case .address(let record):

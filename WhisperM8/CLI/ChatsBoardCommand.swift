@@ -365,6 +365,10 @@ enum ChatsBoardCommand {
             transitions = ChatsBoardReadModel.lastTransitions(journal)
         }
 
+        // Postfach des Board-Besitzers (WM8-71): was über die Warteschlange an
+        // ihn wartet und wie lange schon.
+        let queue = AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL())
+
         func rows(for owner: UUID) -> (JarvisBoard?, [ChatsBoardRow]) {
             guard let board = file.board(owner: owner) else { return (nil, []) }
             return (board, ChatsBoardReadModel.rows(board: board, file: file, sessions: sessions,
@@ -380,8 +384,10 @@ enum ChatsBoardCommand {
                 CLIIO.out(ChatsOutput.encodeJSON(ChatsBoardReadModel.allJSON(boards: boards, cursor: cursor)))
             } else {
                 let (board, boardRows) = rows(for: owners[0])
-                CLIIO.out(ChatsOutput.encodeJSON(
-                    ChatsBoardReadModel.readJSON(owner: owners[0], board: board, rows: boardRows, cursor: cursor)))
+                var payload = ChatsBoardReadModel.readJSON(owner: owners[0], board: board, rows: boardRows, cursor: cursor)
+                let inbox = AgentPromptQueueLogic.inbox(for: owners[0], in: queue)
+                payload["inbox"] = ["open": inbox.open, "oldestAt": inbox.oldest.map(ChatsOutput.iso) ?? NSNull()]
+                CLIIO.out(ChatsOutput.encodeJSON(payload))
             }
         } else {
             if !enabled { CLIIO.err("Hinweis: \(JarvisBoardSettings.disabledMessage)") }
@@ -389,6 +395,10 @@ enum ChatsBoardCommand {
             for owner in owners {
                 let (board, boardRows) = rows(for: owner)
                 ChatsBoardReadModel.printBoard(owner: owner, board: board, rows: boardRows, now: context.now)
+                let inbox = AgentPromptQueueLogic.inbox(for: owner, in: queue)
+                if let line = AgentPromptQueueLogic.inboxLine(open: inbox.open, oldest: inbox.oldest, now: context.now) {
+                    CLIIO.out("  Postfach: \(line) (`chats queue @self`)")
+                }
             }
         }
         return ChatsCLIExit.ok

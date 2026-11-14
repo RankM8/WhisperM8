@@ -703,7 +703,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     private func pastePrompt(_ text: String, submit: Bool) {
         guard isRunning else { return }
         // Bereinigt: ein eingebettetes ESC[201~ beendete sonst den Paste-Block (LR-CLI-001).
-        terminal.send(txt: TerminalPasteSanitizer.bracketedPastePayload(text))
+        // Klammern nur, wo das Programm sie angefordert hat (WM8-47).
+        terminal.send(txt: TerminalPasteSanitizer.payload(
+            text, profile: command.keyboardProfile,
+            bracketedPasteMode: terminal.getTerminal().bracketedPasteMode))
         guard submit else {
             composerDraft.recordTextInserted()
             return

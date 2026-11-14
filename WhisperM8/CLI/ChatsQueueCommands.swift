@@ -212,7 +212,8 @@ enum ChatsQueueCommand {
             let entry = context.view.entries.first { $0.session.id == sessionID }
             let name = entry.map { "\($0.projectName)/\($0.session.title)" } ?? ChatsOutput.shortID(sessionID)
             let open = AgentPromptQueueLogic.openPrompts(for: sessionID, in: prompts)
-            CLIIO.out("── \(name)  (\(open.count) offen)")
+            let oldest = open.map(\.enqueuedAt).min().map { ", älteste seit " + ChatsOutput.relative(from: $0, to: context.now) } ?? ""
+            CLIIO.out("── \(name)  (\(open.count) offen\(oldest))")
             for prompt in prompts.sorted(by: AgentPromptQueueLogic.isOrderedBefore) {
                 let position = open.firstIndex { $0.id == prompt.id }.map { $0 + 1 }
                 CLIIO.out("   " + ChatsQueueSupport.line(for: prompt, position: position, now: context.now))

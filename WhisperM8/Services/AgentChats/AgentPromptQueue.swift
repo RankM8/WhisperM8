@@ -146,6 +146,30 @@ enum AgentPromptQueueLogic {
         return counts
     }
 
+    /// Wartende Meldungen eines Chats und die älteste davon (WM8-71): Der
+    /// Supervisor soll sehen, wie lange etwas schon liegt.
+    static func inbox(for sessionID: UUID, in all: [QueuedPrompt]) -> (open: Int, oldest: Date?) {
+        let open = all.filter { $0.sessionID == sessionID && $0.isOpen }
+        return (open.count, open.map(\.enqueuedAt).min())
+    }
+
+    /// Älteste wartende Meldung je Session.
+    static func oldestOpen(in all: [QueuedPrompt]) -> [UUID: Date] {
+        var oldest: [UUID: Date] = [:]
+        for prompt in all where prompt.isOpen {
+            oldest[prompt.sessionID] = min(oldest[prompt.sessionID] ?? prompt.enqueuedAt, prompt.enqueuedAt)
+        }
+        return oldest
+    }
+
+    /// „2 Meldungen warten, älteste seit 12 min“; `nil` ohne wartende.
+    static func inboxLine(open: Int, oldest: Date?, now: Date) -> String? {
+        guard open > 0 else { return nil }
+        let noun = open == 1 ? "1 Meldung wartet" : "\(open) Meldungen warten"
+        guard let oldest else { return noun }
+        return noun + (open == 1 ? ", seit " : ", älteste seit ") + ChatsOutput.relative(from: oldest, to: now)
+    }
+
     /// Anzahl klärungsbedürftiger Aufträge je Session.
     static func reviewCounts(in all: [QueuedPrompt]) -> [UUID: Int] {
         var counts: [UUID: Int] = [:]

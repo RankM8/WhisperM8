@@ -40,6 +40,26 @@ enum TerminalPasteSanitizer {
         pasteStart + sanitize(text) + pasteEnd
     }
 
+    /// Bereinigt wie getippt, ohne Einfüge-Klammern; ein Zeilenumbruch wird
+    /// zum Enter (WM8-47).
+    static func typedPayload(_ text: String) -> String {
+        sanitize(text).replacingOccurrences(of: "\n", with: "\r")
+    }
+
+    /// Einfüge-Klammern nur, wenn das Programm sie angefordert hat (WM8-47):
+    /// Ein `read` oder eine REPL im Terminal-Tab bekam sonst `ESC[200~` mit in
+    /// die Zeile. Claude und Codex bekommen sie immer: Sie schalten den Modus
+    /// selbst ein, und in ihrer Startphase fiele ein mehrzeiliger Auftrag
+    /// sonst in einzelne Zeilen auseinander.
+    static func payload(_ text: String, profile: TerminalKeyboardProfile, bracketedPasteMode: Bool) -> String {
+        switch profile {
+        case .claudeCodeChat, .codexChat, .claudeAgentsView:
+            return bracketedPastePayload(text)
+        case .plainShell:
+            return bracketedPasteMode ? bracketedPastePayload(text) : typedPayload(text)
+        }
+    }
+
     /// ESC + `[` → CSI bis zum Endbyte (0x40–0x7E); ESC + anderes → nur dieses
     /// eine Folgezeichen (z. B. `ESC 7`) entfällt mit.
     private static func skipEscapeSequence(_ iterator: inout String.UnicodeScalarView.Iterator) {

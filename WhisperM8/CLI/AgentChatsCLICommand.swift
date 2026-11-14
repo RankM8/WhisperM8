@@ -903,9 +903,12 @@ enum ChatsCLIHelp {
                                bleibt, und schlägt die übrigen zum Archivieren vor
 
     HANDELN (App muss laufen — sonst Exit 5)
-      whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
-                      [--queue-if-busy] [--wait-started[=Sekunden]]
-                               --queue-if-busy: beschäftigter Chat → vorgemerkt statt Fehler.
+      whisperm8 chats send <ref> [--] "<prompt>" [--answer] [--no-queue] [--if-status S,S] [--no-submit]
+                      [--force] [--json] [--wait-started[=Sekunden]]
+                               Ruht der Chat nicht (arbeitet, Rückfrage offen, startet,
+                               Entwurf im Feld, Limit), wird vorgemerkt statt abgesagt;
+                               --no-queue sagt wie früher ab (Exit 4).
+                               --answer: auch in eine offene Rückfrage (sonst nie).
                                --wait-started (Standard 20 s, sonst =N): wartet, bis der Chat arbeitet;
                                meldet gestartet, vorgemerkt oder nicht angekommen mit Grund
                                (am Limit, wartet auf Antwort, gestoppt; Exit 0/4/124).

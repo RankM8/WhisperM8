@@ -16,7 +16,10 @@ extension AgentControlRequestHandler {
             return .failure(requestID: request.requestID, code: .invalid, message: "prompt fehlt/leer")
         }
         let submit = request.params["submit"]?.boolValue ?? true
-        let ifStatus = request.params["ifStatus"]?.arrayValue?.compactMap { $0.stringValue } ?? ["awaitingInput", "idle"]
+        // Standard nur „ruht“: In eine offene Rückfrage geht ein Prompt nur auf
+        // ausdrücklichen Wunsch (`--answer`), sonst stünde er als Antwort des
+        // Users im Dialog (WM8-71/85).
+        let ifStatus = request.params["ifStatus"]?.arrayValue?.compactMap { $0.stringValue } ?? ["idle"]
 
         // Idempotenz — atomar reservieren VOR der Ausführung. Ein bekanntes
         // Duplikat pastet nie erneut; ein noch LAUFENDES Original meldet
@@ -90,7 +93,7 @@ extension AgentControlRequestHandler {
                 // Selbst-Send-Schutz).
                 let force = request.params["force"]?.boolValue ?? false
                 if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
-                    return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
+                    return .failure(.conflict, Self.statusConflictMessage(runtime, allowed: ifStatus))
                 }
                 if PromptDeliveryGate.sendBlockedByDraft(
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
@@ -172,5 +175,17 @@ extension AgentControlRequestHandler {
         .failure(requestID: requestID, code: .conflict, message: PromptSubmitCheck.stuckMessage,
                  detail: .object(["textInField": .bool(true), "resend": .bool(false),
                                   "reason": .string("inInputField")]))
+    }
+}
+
+// MARK: - Status-Konflikt (WM8-85)
+
+extension AgentControlRequestHandler {
+    static func statusConflictMessage(_ runtime: AgentSessionRuntimeStatus, allowed: [String]) -> String {
+        if runtime == .awaitingInput, !allowed.contains(runtime.rawValue) {
+            return "Ziel wartet auf eine Antwort (Rückfrage an den User). send beantwortet sie nicht von sich aus. "
+                + "Vorgemerkt kommt der Prompt nach der Antwort; bewusst antworten: `chats send <ref> --answer …`."
+        }
+        return "Ziel ist \(runtime.rawValue) (erlaubt: \(allowed.joined(separator: ",")))"
     }
 }

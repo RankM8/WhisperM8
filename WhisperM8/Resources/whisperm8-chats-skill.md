@@ -57,7 +57,11 @@ whisperm8 chats board remove <ref> | clear | activate | deactivate
 
 Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln unten beachten.**
 ```bash
-whisperm8 chats send <ref> -- "<prompt>"  [--if-status S,S] [--no-submit] [--force]
+whisperm8 chats send <ref> -- "<prompt>"  [--answer] [--no-queue] [--if-status S,S] [--no-submit] [--force]
+                                                     # ruht der Chat nicht (arbeitet, Rückfrage, startet,
+                                                     # Entwurf, Limit): vorgemerkt statt Absage („vorgemerkt
+                                                     # als Nr. N“, Exit 0); --no-queue = Absage wie früher.
+                                                     # In eine offene Rückfrage NUR mit --answer
 whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
 whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
 whisperm8 chats dequeue <ref> --all | --id <UUID>    # offene Aufträge stornieren
@@ -309,8 +313,11 @@ unterbrochen.
    der User es in diesem konkreten Fall verlangt hat.
    **Freigaben eines anderen Chats bestätigt man nicht per `send`, sie gehen an
    den User.** `send` lehnt eine offene Freigabe mit `approvalPending` (Exit 4)
-   ab, auch mit `--force`; eine offene Frage (AskUserQuestion) darfst du wie
-   bisher beantworten.
+   ab, auch mit `--force`. Eine offene Frage (AskUserQuestion) beantwortet
+   `send` nicht mehr von sich aus (der Text stünde sonst als Antwort des Users
+   im Dialog, WM8-71): ohne Schalter wird der Prompt vorgemerkt und kommt nach
+   der Antwort. Nur wenn der User dich ausdrücklich eine Frage eines Chats
+   beantworten lässt: `send <ref> --answer -- "…"`.
 4. **Ein-Hop-Regel.** Beginnt ein Prompt, den du bekommst, mit
    `[via whisperm8 chats …]`, kommt er von einem anderen Agenten. Beantworte
    ihn inhaltlich in deinem eigenen Chat — sende ihn aber NIE eigenständig per
@@ -327,8 +334,9 @@ unterbrochen.
    Multi-Select (Vorher→Nachher-Liste, Archives markiert), nicht 15 Einzelfragen.
 7. **Berichte kompakt:** Lagebild ≤ 5 Zeilen, Namen als `projekt/titel`, nie
    UUIDs; „seit"-Angaben menschlich („seit 4 min").
-8. **Fehler sauber erklären:** Exit 4 → Konflikt benennen (z. B. „arbeitet
-   gerade") + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
+8. **Fehler sauber erklären:** `send` meldet „vorgemerkt als Nr. N“, wenn der
+   Chat nicht ruht — das ist kein Fehler, der Auftrag kommt beim nächsten
+   Turn-Ende. Exit 4 → Konflikt benennen + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
    weiter. Sonderfall **„vermutlich nicht abgeschickter Entwurf"**: Der User
    hat im Ziel-Chat etwas getippt, das noch nicht abgeschickt ist — `send`
    hängt nie daran an. Ausweg `enqueue` (Zustellung, sobald der Chat fertig
