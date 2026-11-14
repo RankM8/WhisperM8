@@ -1584,7 +1584,7 @@ struct AgentSessionStore {
 
     /// Boolescher Änderungsvertrag für fachlich präzise Mutatoren: `false`
     /// beendet den Store-Pfad vor Vollnormalisierung und Deep-Equatable.
-    private func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
+    func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
         try PerfBudgets.storeMutate.withInterval {
             try workspaceStore.mutateIfChanged(mutate)
         }
