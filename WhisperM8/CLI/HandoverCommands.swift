@@ -154,8 +154,9 @@ extension HandoverKeeperCommand {
 /// `whisperm8 app handover-status [--json]` — Stand des Aufbewahrers dieser
 /// Instanz (Phase, Frist, Chats mit PID und Ende-Status). Ohne Tokens.
 ///
-/// `whisperm8 app handover [--json]` — Neustart, Chats laufen weiter: Die App
-/// gibt ihre Chats an den Aufbewahrer ab und beendet sich selbst. Exit-Codes:
+/// `whisperm8 app handover [--json]` — Die App gibt ihre Chats an den
+/// Aufbewahrer ab und beendet sich selbst. Neu starten muss sie der Aufrufer
+/// (`make dev`); allein aufgerufen ist das kein Neustart (WM8-98). Exit-Codes:
 /// 0 abgegeben (App endet gleich), 2 keine Übergabe (heutiger Weg, App läuft
 /// weiter; Grund auf stderr), 4 Abgabe gescheitert (alle Chats laufen weiter
 /// in der App), 5 App nicht erreichbar.
@@ -354,10 +355,14 @@ enum AppCLICommand {
         return "Keine Übergabe: \(reason ?? "ohne Grund")"
     }
 
-    /// `make dev` bei ausgeschaltetem Schalter: still bleiben.
+    /// `make dev` bei ausgeschaltetem Schalter: statt des Grundes ein ruhiger
+    /// Satz (`disabledLine`), keine Leerzeile (WM8-98).
     static func reportsClassic(reason: String?, silentWhenDisabled: Bool) -> Bool {
         !(silentWhenDisabled && reason == "featureDisabled")
     }
+
+    static let disabledLine = "Neustart wie bisher: Die Chats enden und werden danach fortgesetzt "
+        + "(„Neustart ohne Chatverlust“ ist aus, einschalten unter Einstellungen > Labs)."
 
     static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool,
                          silentWhenDisabled: Bool = false) -> Int32 {
@@ -370,9 +375,8 @@ enum AppCLICommand {
             }
             return HandoverExit.handedOver
         case "classic":
-            if reportsClassic(reason: reason, silentWhenDisabled: silentWhenDisabled) {
-                CLIIO.err(classicLine(reason: reason))
-            }
+            CLIIO.err(reportsClassic(reason: reason, silentWhenDisabled: silentWhenDisabled)
+                      ? classicLine(reason: reason) : disabledLine)
             return HandoverExit.classic
         default:
             CLIIO.err("Übergabe gescheitert: \(reason ?? "ohne Grund")")

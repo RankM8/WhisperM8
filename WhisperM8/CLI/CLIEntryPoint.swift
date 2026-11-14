@@ -219,7 +219,7 @@ enum CLIHelp {
       whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
       whisperm8 tickets <befehl>                  (Tickets aus Linear und ihre Chats, siehe `whisperm8 tickets --help`)
       whisperm8 app handover-status [--json]      (Stand des Aufbewahrers beim Neustart ohne Chatverlust)
-      whisperm8 app handover [--json]             (Neustart, Chats laufen weiter: Chats abgeben, App beendet sich)
+      whisperm8 app handover [--json]             (Chats an den Aufbewahrer abgeben, App beendet sich; startet sie nicht neu, das macht make dev)
       whisperm8 --help | --version
 
     TRANSCRIBE

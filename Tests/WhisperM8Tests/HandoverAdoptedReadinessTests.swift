@@ -241,4 +241,16 @@ final class HandoverAdoptedReadinessTests: XCTestCase {
         manifest.workingSince = nil
         XCTAssertEqual(HandoverTakeService.handedOverStatus(manifest), .idle)
     }
+
+    // MARK: Wortlaut (Vic, WM8-97)
+
+    func testSendMessageNamesTheRestartForAnAdoptedChat() {
+        let decision = ChatsSendReadinessGuard.Decision.notReady(sinceSec: nil)
+        let adopted = ChatsSendReadinessGuard.message(for: decision, adopted: true) ?? ""
+        XCTAssertTrue(adopted.contains("übernommen"))
+        XCTAssertTrue(adopted.contains("enqueue"))
+        XCTAssertFalse(adopted.contains("startet noch"))
+        XCTAssertTrue(ChatsSendReadinessGuard.message(for: decision)?.contains("startet noch") ?? false)
+    }
 }
+

@@ -32,8 +32,7 @@ swift test                                    # volle Suite
 swift test --filter AgentSessionStoreTests    # eine Klasse
 ```
 
-Details zu `make dev` (kein WMO, `-incremental`, kein Debug+O wegen SwiftTerm-`abort()`, rsync statt Neukopie
-wegen TCC, Signier-Zertifikat): [DEVELOPMENT](docs/DEVELOPMENT.md).
+Details zu `make dev`: [DEVELOPMENT](docs/DEVELOPMENT.md).
 
 **WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall): führe NIEMALS `make dev`,
 `make kill`, `make run`, `make install` oder `make clean-install` aus und nie `swift run` ohne Argument. Diese
@@ -66,8 +65,7 @@ Schlüssel; für String-Parameter (`.help`, NSAlert, Rückgabewerte) `String(loc
 log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 ```
 
-- Hot-Paths haben `os_signpost`-Intervalle mit Budgets (`PerfBudgets`); Überschreitungen loggen
-  `perf_budget_exceeded`, ein hängender Main Thread `main_thread_blocked_ongoing`.
+- Hot-Paths haben `os_signpost`-Budgets (`PerfBudgets`, Log `perf_budget_exceeded`).
 - **Nie pro Byte/Zeichen/Zeile messen** — dort `PerformanceCounters`. Neue Signposts an häufigen Stellen nur
   in der Stufe `.detail`.
 - Alles, was App oder Build langsam macht, mit Kosten melden. Messläufe gegen Budgets mit `make dev-release`.
@@ -157,6 +155,8 @@ Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/st
   der unbeobachtete Neustart landete sonst in Claudes Trust-Dialog mit Vorauswahl „No, exit“. Die CLI
   (`chats move-account --stop-and-resume`) hält dann ohne `--force` auch einen ruhenden Chat nicht an.
 - Der GPT-Proxy wird zur Laufzeit nie neu gestartet (laufende GPT-Chats); Waisen ersetzt nur der Start-Guard.
+- Übergabe beim Neustart: Was die App je Chat nur im Speicher hält, gehört ins Manifest (`HandoverManifestFactory`,
+  Felder nur optional ergänzen), sonst geht es verloren. Übernommene Chats gelten erst mit echtem Signal als bereit.
 - Tab-Logik (Auswahl, Reorder, Switcher-Umfang) bleibt pur und getestet; Drag/Drop/Menüs sind manuelle QA.
 - Status-Punkte in Sidebar, Tab und Kopf folgen derselben Logik (`AgentStatusIndicator`); Grün heißt nur „arbeitet“.
 
@@ -183,8 +183,8 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs „Neustart ohne Chatverlust“, im Bau, noch nicht einschaltbar; wirkt ab dem nächsten App-Start; Plan
-[neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
+(Labs-Schalter „Neustart ohne Chatverlust“: gebaut, Pflichttest Teil a grün am 14.11.2026, ab Werk aus, wirkt ab
+dem nächsten App-Start; [Plan](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 

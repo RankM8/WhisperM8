@@ -93,8 +93,14 @@ enum ChatsSendReadinessGuard {
     /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
     /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
     /// und höchstens einmal liefert.
-    static func message(for decision: Decision) -> String? {
+    static func message(for decision: Decision, adopted: Bool = false) -> String? {
         guard case .notReady(let since) = decision else { return nil }
+        if adopted {
+            // WM8-97: nach einem Neustart übernommen, Status noch ohne Beleg.
+            return "Chat wurde beim Neustart übernommen und hat sich noch nicht gemeldet — ein Prompt könnte "
+                + "in laufende Arbeit oder eine offene Frage geraten. Nutze `chats enqueue` (stellt zu, sobald der "
+                + "Chat bereit ist) oder warte ein paar Sekunden."
+        }
         let age = since.map { " (seit \($0) s)" } ?? ""
         return "Chat startet noch\(age) — ein Prompt würde jetzt in einer noch nicht "
             + "bereiten TUI landen und verloren gehen oder doppelt ankommen. "
