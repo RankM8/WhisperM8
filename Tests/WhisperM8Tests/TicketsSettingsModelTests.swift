@@ -355,6 +355,103 @@ final class TicketsSettingsModelTests: XCTestCase {
         XCTAssertTrue(model.mappings.isEmpty)
     }
 
+    // MARK: Team, das es in Linear nicht mehr gibt (WM8-94)
+
+    func testATeamLinearNoLongerKnowsIsMarkedAndCanBeRemoved() async {
+        let world = twoWorkspaces()
+        var config = world.config
+        config.set(workspace: "dealsupply", forTeam: "PRB")   // ohne Ordner, in Linear gelöscht
+        config.set(workspace: "dealsupply", forTeam: "ALT")
+        config.set(team: "ALT", forProject: "/Users/g/repos/alt")   // mit Ordner, in Linear umbenannt
+        config.set(workspace: "dealsupply", forTeam: "DS")   // ohne Ordner, gibt es noch
+        world.config = config
+        world.teams["dealsupply"] = .success(["DS", "NEU"])
+        let model = model(world)
+        await model.load()
+        XCTAssertEqual(model.staleTeams, [.init(team: "PRB", workspace: "dealsupply")], "nur das Team ohne Ordner, das fehlt")
+        XCTAssertEqual(model.mappings.map(\.teamMissing), [true, false], "ALT fehlt, WM8 gibt es")
+        XCTAssertTrue(model.hasMissingTeams)
+        XCTAssertEqual(model.workspaces.first { $0.name == "dealsupply" }?.teams, ["DS", "NEU"], "als Team des Workspaces steht nur, was Linear nennt")
+
+        await model.removeTeam("PRB")
+        XCTAssertNil(world.config.workspacesByTeam["PRB"])
+        XCTAssertEqual(world.config.workspacesByTeam["ALT"], "dealsupply", "andere Einträge bleiben")
+        XCTAssertEqual(world.config.teamsByProjectPath.count, 2)
+        XCTAssertTrue(model.staleTeams.isEmpty)
+        XCTAssertTrue(world.ranOnMain.isEmpty, "\(world.ranOnMain)")
+
+        // Der letzte Ordner eines fehlenden Teams nimmt das Team mit: ein Klick, und der Ordner ist wieder frei.
+        await model.removeMapping(path: "/Users/g/repos/alt")
+        XCTAssertEqual(world.config.workspacesByTeam, ["WM8": "whisperm8", "DS": "dealsupply"])
+        XCTAssertEqual(world.config.teamsByProjectPath, ["/Users/g/repos/whisperm8": "WM8"])
+        XCTAssertFalse(model.hasMissingTeams)
+    }
+
+    func testRemovingOneOfTwoFoldersKeepsAMissingTeam() async {
+        let world = twoWorkspaces()
+        var config = world.config
+        config.set(workspace: "dealsupply", forTeam: "ALT")
+        config.set(team: "ALT", forProject: "/Users/g/repos/alt")
+        config.set(team: "ALT", forProject: "/Users/g/repos/alt2")
+        world.config = config
+        world.teams["dealsupply"] = .success(["DS"])
+        let model = model(world)
+        await model.load()
+        await model.removeMapping(path: "/Users/g/repos/alt")
+        XCTAssertEqual(world.config.workspacesByTeam["ALT"], "dealsupply", "am Team hängt noch ein Ordner")
+        XCTAssertEqual(world.config.team(forDirectory: "/Users/g/repos/alt2"), "ALT")
+        XCTAssertEqual(model.mappings.filter(\.teamMissing).map(\.path), ["/Users/g/repos/alt2"])
+    }
+
+    func testATeamIsOnlyCalledMissingWhenTheTeamListIsCertain() async {
+        let world = twoWorkspaces()
+        var config = world.config
+        config.set(workspace: "dealsupply", forTeam: "PRB")
+        world.config = config
+
+        world.teams["dealsupply"] = .failure(.network("-1009"))
+        let model = model(world)
+        await model.load()
+        XCTAssertTrue(model.staleTeams.isEmpty, "ohne Antwort von Linear gilt kein Team als verschwunden")
+
+        world.keys["dealsupply"] = nil
+        await model.load()
+        XCTAssertTrue(model.staleTeams.isEmpty, "ohne Key ebenso")
+
+        typealias Workspace = TicketsSettingsModel.Workspace
+        let full = Workspace(name: "gross", hasKey: true, teams: (0..<LinearTicketSource.teamListLimit).map { "T\($0)" })
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PRB", in: full), "eine abgeschnittene Liste beweist nichts")
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PRB", in: nil))
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "prb", in: Workspace(name: "a", hasKey: true, teams: ["PRB"])))
+        XCTAssertTrue(TicketsSettingsModel.isMissing(team: "PRB", in: Workspace(name: "a", hasKey: true, teams: [])))
+    }
+
+    func testRemoveTeamLeavesATeamThatGotAFolderMeanwhile() async {
+        let world = twoWorkspaces()
+        var config = world.config
+        config.set(workspace: "dealsupply", forTeam: "PRB")
+        world.config = config
+        world.teams["dealsupply"] = .success(["DS"])
+        let model = model(world)
+        await model.load()
+        // Die Kommandozeile schreibt dieselbe Datei: Inzwischen hängt ein Ordner an dem Team.
+        config.set(team: "PRB", forProject: "/Users/g/repos/probe")
+        world.config = config
+        await model.removeTeam("PRB")
+        XCTAssertEqual(world.config.workspacesByTeam["PRB"], "dealsupply")
+        XCTAssertEqual(world.config.team(forDirectory: "/Users/g/repos/probe"), "PRB")
+        XCTAssertEqual(model.mappings.first { $0.team == "PRB" }?.teamMissing, true, "danach steht es als Zuordnung da")
+    }
+
+    func testRemovingATeamIsNotWrittenOnTopOfAnUnreadableFile() async {
+        let world = twoWorkspaces()
+        world.unreadable = true
+        let model = model(world)
+        await model.removeTeam("WM8")
+        XCTAssertFalse(world.calls.contains("saveConfig"))
+        XCTAssertNotNil(model.mappingProblem)
+    }
+
     // MARK: Kleinkram
 
     func testShortPathAndFolderName() {

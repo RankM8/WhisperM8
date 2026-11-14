@@ -95,7 +95,16 @@ final class TicketsSettingsModel {
         var team: String
         /// `nil`, wenn das Team keinem Workspace zugeordnet ist.
         var workspace: String?
+        /// Der Zugang sieht das Team in seinem Workspace nicht (mehr): gelöscht, umbenannt oder ohne Zugriff.
+        var teamMissing = false
         var id: String { path }
+    }
+
+    /// Ein Team der Einrichtung ohne Ordner, das sein Workspace nicht (mehr) kennt.
+    struct StaleTeam: Identifiable, Equatable {
+        var team: String
+        var workspace: String
+        var id: String { team }
     }
 
     struct TeamChoice: Identifiable, Hashable {
@@ -111,6 +120,7 @@ final class TicketsSettingsModel {
 
     private(set) var workspaces: [Workspace]
     private(set) var mappings: [Mapping]
+    private(set) var staleTeams: [StaleTeam]
     private(set) var projects: [TicketProjectChoice]
     private(set) var isSavingKey = false
     private(set) var keyNotice: Notice?
@@ -122,16 +132,31 @@ final class TicketsSettingsModel {
     @ObservationIgnored private var loadGeneration = 0
 
     init(dependencies: TicketsSettingsDependencies, workspaces: [Workspace] = [], mappings: [Mapping] = [],
-         projects: [TicketProjectChoice] = []) {
+         staleTeams: [StaleTeam] = [], projects: [TicketProjectChoice] = []) {
         self.dependencies = dependencies
         self.workspaces = workspaces
         self.mappings = mappings
+        self.staleTeams = staleTeams
         self.projects = projects
     }
 
     /// Teams aller Workspaces mit Zugang, für die Auswahl beim Zuordnen.
     var teamChoices: [TeamChoice] {
         workspaces.flatMap { workspace in workspace.teams.map { TeamChoice(team: $0, workspace: workspace.name) } }
+    }
+
+    /// Steht etwas in der Einrichtung, das sein Workspace nicht (mehr) kennt?
+    var hasMissingTeams: Bool {
+        !staleTeams.isEmpty || mappings.contains(where: \.teamMissing)
+    }
+
+    /// Fehlt das Team in seinem Workspace? Ein Ja gibt es nur, wenn dessen
+    /// Team-Liste sicher vorliegt: mit Key, ohne Störung und nicht an der Grenze
+    /// der Abfrage abgeschnitten. Im Zweifel gilt ein Team als vorhanden.
+    nonisolated static func isMissing(team: String, in workspace: Workspace?) -> Bool {
+        guard let workspace, workspace.hasKey, workspace.problem == nil,
+              workspace.teams.count < LinearTicketSource.teamListLimit else { return false }
+        return !workspace.teams.contains { $0.caseInsensitiveCompare(team) == .orderedSame }
     }
 
     /// Projekte der App, die noch keinem Team zugeordnet sind.
@@ -167,9 +192,20 @@ final class TicketsSettingsModel {
         }
         guard isCurrent() else { return }
         workspaces = loaded
+        let byName = Dictionary(loaded.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
         mappings = config.teamsByProjectPath
-            .map { Mapping(path: $0.key, team: $0.value, workspace: config.workspace(forTeam: $0.value)) }
+            .map { path, team in
+                let workspace = config.workspace(forTeam: team)
+                return Mapping(path: path, team: team, workspace: workspace,
+                               teamMissing: Self.isMissing(team: team, in: workspace.flatMap { byName[$0] }))
+            }
             .sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
+        // Teams mit Ordner stehen oben als Zuordnung; hier nur die ohne.
+        let mapped = Set(config.teamsByProjectPath.values.map { $0.uppercased() })
+        staleTeams = config.workspacesByTeam
+            .filter { !mapped.contains($0.key.uppercased()) && Self.isMissing(team: $0.key, in: byName[$0.value]) }
+            .map { StaleTeam(team: $0.key, workspace: $0.value) }
+            .sorted { $0.team < $1.team }
     }
 
     /// Der Schalter ist aus: Ein laufendes Laden fragt nicht weiter.
@@ -258,8 +294,27 @@ final class TicketsSettingsModel {
         }
     }
 
+    /// Löst einen Ordner von seinem Team. Hing er an einem Team, das sein
+    /// Workspace nicht mehr kennt, geht mit dem letzten Ordner auch das Team
+    /// aus der Einrichtung; sonst bliebe es als eigene Zeile stehen, und der
+    /// Ordner ließe sich erst nach einem zweiten Klick neu zuordnen.
     func removeMapping(path: String) async {
-        let outcome = await change { $0.removeProject(path) }
+        let goneTeam = mappings.first { $0.path == path && $0.teamMissing }?.team
+        let outcome = await change { config in
+            config.removeProject(path)
+            if let goneTeam, config.projectPaths(forTeam: goneTeam).isEmpty { config.removeTeam(goneTeam) }
+        }
+        mappingProblem = outcome == .saved ? nil : String(localized: "Couldn't save the ticket settings.")
+        await load()
+    }
+
+    /// Nimmt ein Team ohne Ordner aus der Einrichtung, das sein Workspace nicht
+    /// mehr kennt. Hängt im Augenblick des Schreibens doch ein Ordner daran
+    /// (die Kommandozeile schreibt dieselbe Datei), bleibt alles, wie es ist.
+    func removeTeam(_ team: String) async {
+        let outcome = await change { config in
+            if config.projectPaths(forTeam: team).isEmpty { config.removeTeam(team) }
+        }
         mappingProblem = outcome == .saved ? nil : String(localized: "Couldn't save the ticket settings.")
         await load()
     }

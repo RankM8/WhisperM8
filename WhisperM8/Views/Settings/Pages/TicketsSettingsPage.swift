@@ -148,6 +148,14 @@ struct TicketsSettingsPage: View {
                     Task { await model.removeMapping(path: mapping.path) }
                 }
             }
+            ForEach(model.staleTeams) { stale in
+                TicketsStaleTeamRow(team: stale) {
+                    Task { await model.removeTeam(stale.team) }
+                }
+            }
+            if model.hasMissingTeams {
+                SettingsHelpText("A team marked as not found was deleted or renamed in Linear, or this key can no longer see it. Remove it here; for a renamed team, link the folder to the new team afterwards.")
+            }
 
             if model.teamChoices.isEmpty {
                 SettingsHelpText("No teams yet. They appear here once a key is saved and working.")
@@ -268,7 +276,7 @@ private struct TicketsMappingRow: View {
             HStack(spacing: 10) {
                 Text(verbatim: target)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(mapping.workspace == nil ? AppTheme.statusAwaiting : AppTheme.textSecondary)
+                    .foregroundStyle(mapping.workspace == nil || mapping.teamMissing ? AppTheme.statusAwaiting : AppTheme.textSecondary)
                 Button("Remove", action: remove)
                     .buttonStyle(SettingsButtonStyle.standard)
             }
@@ -279,7 +287,31 @@ private struct TicketsMappingRow: View {
         guard let workspace = mapping.workspace else {
             return String(localized: "\(mapping.team) · no workspace")
         }
+        if mapping.teamMissing {
+            return String(localized: "\(mapping.team) · not found in \(workspace)")
+        }
         return "\(mapping.team) · \(workspace)"
+    }
+}
+
+/// Ein Team ohne Ordner, das sein Workspace nicht mehr kennt. Solche Einträge
+/// bleiben sonst unsichtbar in der Einrichtung stehen und stören nur den
+/// Prüfbericht.
+private struct TicketsStaleTeamRow: View {
+    let team: TicketsSettingsModel.StaleTeam
+    let remove: () -> Void
+
+    var body: some View {
+        // Kürzel und Workspace als Titel, wie bei der Zuordnung: kein Katalog-Schlüssel.
+        SettingsRow(title: [team.team, team.workspace].joined(separator: " · ")) {
+            HStack(spacing: 10) {
+                Text("Not found in Linear")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(AppTheme.statusAwaiting)
+                Button("Remove", action: remove)
+                    .buttonStyle(SettingsButtonStyle.standard)
+            }
+        }
     }
 }
 
