@@ -103,6 +103,8 @@ extension RecordingCoordinator {
             return String(localized: "The agent is waiting for your answer, so the dictation wasn't added to the chat. Your text is on the clipboard.")
         case .chatStarting:
             return String(localized: "The chat is still starting, so the dictation wasn't added. Your text is on the clipboard.")
+        case .chatUsageLimited:
+            return String(localized: "The chat's account has reached its usage limit, so the dictation wasn't added. Your text is on the clipboard.")
         case .chatNotRunning:
             return String(localized: "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.")
         case .writeFailed:

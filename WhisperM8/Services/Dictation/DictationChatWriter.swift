@@ -29,6 +29,10 @@ final class LiveDictationChatWriter: DictationChatWriting {
         ) {
             return .starting
         }
+        if AgentWorkspaceUIModel.shared.workspace.sessions.first(where: { $0.id == sessionID })?
+            .activeUsageLimit() != nil {
+            return .usageLimited
+        }
         return .ready
     }
 

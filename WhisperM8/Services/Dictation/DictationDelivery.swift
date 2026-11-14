@@ -24,6 +24,9 @@ enum DictationChatState: Equatable {
     case awaitingInput
     /// Die TUI fährt noch hoch.
     case starting
+    /// Konto am Nutzungslimit (WM8-69): Text würde verbraucht, ohne dass der
+    /// Chat arbeitet, und bräche Claudes automatisches Weitermachen ab.
+    case usageLimited
     /// Kein laufendes Terminal.
     case notRunning
 }
@@ -32,6 +35,7 @@ enum DictationChatState: Equatable {
 enum DictationClipboardReason: Equatable {
     case decisionPending
     case chatStarting
+    case chatUsageLimited
     case chatNotRunning
     case writeFailed
 }
@@ -71,6 +75,8 @@ enum DictationDeliveryRouter {
                 return .clipboardOnly(.decisionPending)
             case .starting:
                 return .clipboardOnly(.chatStarting)
+            case .usageLimited:
+                return .clipboardOnly(.chatUsageLimited)
             case .notRunning:
                 return .clipboardOnly(.chatNotRunning)
             }

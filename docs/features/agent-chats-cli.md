@@ -705,8 +705,9 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
 - Fertig-Ton, Fertig-Meldung und Zustellung beim Turn-Ende warten auf einen
   frischen Blick in den Verlauf; steht dort das Limit, entfallen sie (die
   Registry meldet am Limit ein gewöhnliches Turn-Ende).
-- Noch nicht abgedeckt: Diktat und Controller schreiben weiter in einen Chat am
-  Limit.
+- Ein Diktat in einen Chat am Limit landet in der Zwischenablage, mit eigener
+  Meldung. Der Controller schreibt bewusst weiter: Seine Eingaben sind
+  gezielte Tasten im sichtbaren Chat, etwa im Menü `/rate-limit-options`.
 - Codex- und GPT-Chats: noch nicht erkannt (kein belegter Limit-Fall im
   Bestand; Codex führt `rate_limits` in `token_count`, ohne echten Treffer).
 - Der Kontowechsel behandelt einen Chat am Limit noch wie bisher (Folgepaket:

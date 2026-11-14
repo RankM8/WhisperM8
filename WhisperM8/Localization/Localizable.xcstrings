@@ -17794,6 +17794,16 @@
         }
       }
     },
+    "The chat's account has reached its usage limit, so the dictation wasn't added. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Konto des Chats ist am Nutzungslimit, deshalb wurde das Diktat nicht eingefügt. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.": {
       "localizations": {
         "de": {
