@@ -174,7 +174,7 @@ Text später, wird der Eintrag beim Zusammenführen wieder ein Diktat.
    Schlüsselblöcke, JWTs, GitHub-, Slack-, AWS-, Google- und Stripe-Schlüssel,
    `sk-…` (OpenAI, Anthropic), Linear (`lin_api_…`, `lin_oauth_…`, `lin_wh_…`),
    GitLab, npm, PyPI, Hugging Face, Groq, DigitalOcean, Shopify, Supabase,
-   SendGrid, Mailgun, Postman, Doppler, Airtable, Telegram-Bots, Tailscale,
+   SendGrid, Mailgun (nur freistehend `key-…`), Postman, Doppler, Airtable, Telegram-Bots, Tailscale,
    age, Google-OAuth (Client-Secret, `ya29.…`, Refresh-Token), Webhook-Adressen
    von Slack und Discord (der geheime Teil hinter dem Dienst), `Bearer` und
    `Basic`, Passwörter in URLs,

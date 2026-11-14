@@ -175,8 +175,16 @@ final class ClipboardSecretMaskerTests: XCTestCase {
         npm_config_cache=/tmp/x
         key-value store und key-abc
         sgd.step() und SG.short.value
+        cache-key-d41d8cd98f00b204e9800998ecf8427e
+        sb_secret_key_for_the_supabase_project
+        dp.st.session_state.some_long_attribute_name.another_attribute
         """
         XCTAssertEqual(masked(text), text)
+    }
+
+    /// GitLab: Die Prüfsumme gehört zum Token, eine Dateiendung nicht.
+    func testGitLabTokenKeepsAFileExtension() {
+        XCTAssertEqual(masked("glpat-" + fill("Ab1_", 20) + ".json"), "[REDACTED:gitlab-token].json")
     }
 
     // MARK: Falsch-Positive vermeiden

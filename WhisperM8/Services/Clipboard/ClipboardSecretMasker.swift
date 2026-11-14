@@ -45,20 +45,27 @@ enum ClipboardSecretMasker {
         // Linear: persönliche Schlüssel, OAuth-Tokens und Webhook-Geheimnisse.
         rule("linear-key", #"\blin_(?:api|oauth|wh)_[A-Za-z0-9]{32,}"#),
         // GitLab: persönliche, Deploy-, Runner-, Trigger- und Feed-Tokens. Neuere Tokens
-        // tragen hinter einem Punkt noch eine Prüfsumme; die gehört mit dazu.
-        rule("gitlab-token", #"\bgl(?:pat|dt|rt|ptt|ft|cbt|soat|imt|agent)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9_.-]*[A-Za-z0-9])?"#),
+        // tragen dahinter noch eine Prüfsumme (`.01.` plus sieben bis zwölf Zeichen); die
+        // gehört mit dazu, eine Dateiendung wie `.json` nicht.
+        rule("gitlab-token", #"\bgl(?:pat|dt|rt|ptt|ft|cbt|soat|imt|agent)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9]{2}\.[A-Za-z0-9]{7,12}(?![A-Za-z0-9]))?"#),
         rule("npm-token", #"\bnpm_[A-Za-z0-9]{36}(?![A-Za-z0-9])"#),
         rule("pypi-token", #"\bpypi-AgE[A-Za-z0-9_-]{50,}"#),
         rule("huggingface-token", #"\bhf_[A-Za-z0-9]{30,}(?![A-Za-z0-9])"#, validate: hasUpperAndLower),
         // Reine Hex-Schlüssel mit festem Präfix: die grobe Regel lässt Hex absichtlich stehen.
         rule("digitalocean-token", #"\bdo[opr]_v1_[a-f0-9]{64}(?![A-Za-z0-9])"#),
         rule("shopify-token", #"\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}(?![A-Za-z0-9])"#),
-        rule("supabase-key", #"\b(?:sbp_[a-f0-9]{40}(?![A-Za-z0-9])|sb_secret_[A-Za-z0-9_-]{20,})"#),
-        rule("mailgun-key", #"\bkey-[a-f0-9]{32}(?![A-Za-z0-9])"#),
+        rule("supabase-key", #"\bsbp_[a-f0-9]{40}(?![A-Za-z0-9])"#),
+        // Neue Supabase-Schlüssel: Der Rest muss zufällig aussehen, sonst wäre
+        // `sb_secret_key_for_the_project` ein Treffer.
+        rule("supabase-key", #"\bsb_secret_[A-Za-z0-9_-]{20,}"#, validate: { looksLikeRandomToken(String($0.dropFirst(10))) }),
+        // Nur freistehend: `cache-key-<md5>` ist eine Prüfsumme, kein Schlüssel.
+        rule("mailgun-key", #"(?<![A-Za-z0-9_-])key-[a-f0-9]{32}(?![A-Za-z0-9])"#),
         rule("postman-key", #"\bPMAK-[a-f0-9]{24}-[a-f0-9]{34}(?![A-Za-z0-9])"#),
         // Schlüssel mit Punkten: die grobe Regel setzt nach einem Punkt nicht an.
         rule("sendgrid-key", #"\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"#),
-        rule("doppler-token", #"\bdp\.(?:st|ct|sa|scim|audit|pt)\.[A-Za-z0-9_.-]{40,}"#),
+        // Nach dem optionalen Umgebungs-Teil (`dp.st.prd.`) mindestens 40 Zeichen ohne Punkt;
+        // `dp.st.session_state.attribut…` ist Code.
+        rule("doppler-token", #"\bdp\.(?:st|ct|sa|scim|audit|pt)\.(?:[a-z0-9_-]{1,32}\.)?[A-Za-z0-9]{40,}"#),
         rule("airtable-token", #"\bpat[A-Za-z0-9]{14}\.[a-f0-9]{64}(?![A-Za-z0-9])"#),
         // Google OAuth: Client-Secret, Access- und Refresh-Token.
         rule("google-oauth", #"\bGOCSPX-[A-Za-z0-9_-]{28}(?![A-Za-z0-9_-])|\bya29\.[A-Za-z0-9_-]{30,}|\b1//0[A-Za-z0-9_-]{30,}"#),
