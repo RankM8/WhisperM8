@@ -95,9 +95,7 @@ Doku-Einstieg: [docs/features/agent-chats/](docs/features/agent-chats/README.md)
 [claude-konten.md](docs/features/agent-chats/claude-konten.md), [gpt-konten.md](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board.md](docs/features/jarvis-board.md);
 Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history.md](docs/features/clipboard-history.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
-Notch-Statusanzeige: [notch.md](docs/features/notch.md).
-Statistik (Zeit, Token, Gegenwert, Limits): [statistics.md](docs/features/statistics.md).
-Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md). Tickets: [tickets.md](docs/features/tickets.md).
+Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md).
 
 ## Invarianten (nicht brechen)
 
