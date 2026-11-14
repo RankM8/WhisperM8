@@ -9,7 +9,7 @@ final class SourceSizeGuardTests: XCTestCase {
 
     /// Endstand nach Launch-Readiness W7 (19.10.2026). Obergrenze = heutige Länge.
     static let exceptions: [String: Int] = [
-        "WhisperM8/Views/AgentChatsView.swift": 3_720,
+        "WhisperM8/Views/AgentChatsView.swift": 3_560,
         "WhisperM8/Services/AgentChats/AgentControlRequestHandler.swift": 1_596,
         "WhisperM8/Services/AgentChats/AgentSessionStore.swift": 1_634,
     ]
