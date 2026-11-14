@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { agesChange, isBefore, nextGenerationStart, sameBoard, withStatus } from './register'
+import { fitNames, isBefore, nextGenerationStart, progressOf, sameBoard, titleParts, waitingHead, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -100,36 +100,86 @@ const SURFACES = ['terminal', 'desktop'] as const
 declare const setTimeout: (fn: () => void, ms: number) => unknown
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 
-describe('Band', () => {
-  test('zeigt wartende Chats zuerst, breit mit Wörtern, im Slot knapp', async ($, on) => {
+// WM8-88: Vorlage aus dem Ticket. Oben, wer auf den User wartet (Rufname,
+// Ticket, ganzer Satz mit Umbruch), darunter je eine Sammelzeile.
+const KASTEN = {
+  ...BOARD,
+  entries: [
+    entry({ ref: 'k1', sessionID: 'A0000000-0000-0000-0000-000000000001', title: 'WM8-65 Kai · Umzug DealSupply', light: 'needsYou', needs: 'Richard und Xeno nach Linear einladen und anmelden lassen, dann den Import freigeben.', updatedAt: minutesAgo(20) }),
+    entry({ ref: 'd1', sessionID: 'A0000000-0000-0000-0000-000000000002', title: 'WM8-61 Dex · Arbeitskopie betreten', light: 'needsYou', needs: 'Einmal in der Test-Instanz anmelden.', updatedAt: minutesAgo(10) }),
+    entry({ ref: 'g1', sessionID: 'A0000000-0000-0000-0000-000000000003', title: 'WM8-12 Gus · Sammel-Branch', light: 'running', progress: { done: 4, total: 7 } }),
+    entry({ ref: 'n1', sessionID: 'A0000000-0000-0000-0000-000000000004', title: 'Noa · Ohne Ticket', light: 'running' }),
+    entry({ ref: 'v1', sessionID: 'A0000000-0000-0000-0000-000000000005', title: 'WM8-12 Vic · Neustart: Gesamt-Review', light: 'parked' }),
+    entry({ ref: 'f1', sessionID: 'A0000000-0000-0000-0000-000000000006', title: 'Fin · Prüfer', light: 'done' }),
+  ],
+}
+
+const SENTENCE = 'Richard und Xeno nach Linear einladen und anmelden lassen, dann den Import freigeben.'
+
+/** Der ganze gerenderte Text, Zeilen und Abstände geglättet. */
+const flat = async (ui: { find: (q: { text: RegExp }) => Promise<unknown> }, words: string[]) => {
+  for (const word of words) if ((await ui.find({ text: new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })) === undefined) return word
+  return null
+}
+
+describe('Kasten (WM8-88)', () => {
+  test('wartende Chats mit Rufname, Ticket und ganzem Satz; die anderen in Sammelzeilen', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    for (const surface of SURFACES) {
-      const wide = await $.ui.mount({ ...band(179), surface })
-      expect(await wide.find({ text: /1 wartet/ })).toBeDefined()
-      expect(await wide.find({ text: /Opener-Schluss A oder B/ })).toBeDefined()
-      expect(await wide.find({ text: '4 min' })).toBeDefined()
-      expect(await wide.find({ text: /fertig · Ergebnis prüfen/ })).toBeDefined()
-      // Bedien-Hinweis statt Knopf: „z“ griffe nur nach ctrl+x tab.
-      expect(await wide.find({ text: 'Ziffer = Tab öffnen' })).toBeDefined()
-      expect(await wide.find({ key: 'fold' })).toBeUndefined()
-      await wide.unmount()
-
-      // Der Kopf kürzt nach Platz, nicht nach fester Stufe: erst „· Board“ weg …
-      const mid = await $.ui.mount({ ...band(55), surface })
-      expect(await mid.find({ text: /Jarvis · Board/ })).toBeUndefined()
-      expect(await mid.find({ text: /1 läuft/ })).toBeDefined()
-      expect(await mid.find({ text: '18m' })).toBeDefined()
-      await mid.unmount()
-
-      // … dann die Wörter außer „wartet“.
-      const slot = await $.ui.mount({ ...band(45), surface })
-      expect(await slot.find({ text: /1 wartet/ })).toBeDefined()
-      expect(await slot.find({ text: /\d läuft/ })).toBeUndefined()
-      await slot.unmount()
+    for (const cols of [50, 70, 120]) {
+      for (const surface of SURFACES) {
+        const ui = await $.ui.mount({ ...band(cols, 30), surface })
+        expect(await ui.find({ text: /2 warten auf dich/ })).toBeDefined()
+        expect(await ui.find({ text: 'Kai' })).toBeDefined()
+        expect(await ui.find({ text: /WM8-65/ })).toBeDefined()
+        // Der Satz bricht um statt abgeschnitten zu werden: jedes Wort steht da.
+        expect(await flat(ui, SENTENCE.split(' '))).toBe(null)
+        expect(await ui.find({ text: /…/ })).toBeUndefined()
+        expect(await ui.find({ text: /Gus 4\/7 · Noa/ })).toBeDefined()
+        expect(await ui.find({ text: /Vic · Fin/ })).toBeDefined()
+        expect(await ui.find({ text: 'läuft' })).toBeDefined()
+        expect(await ui.find({ text: 'ruht' })).toBeDefined()
+        await ui.unmount()
+      }
     }
+  })
+
+  test('keine Kennung, kein Alter, kein Bedien-Hinweis, keine Ziffer zum Springen', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on, { board: KASTEN })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
+    expect(await ui.find({ text: /\bk1\b|\bd1\b/ })).toBeUndefined()
+    expect(await ui.find({ text: /\d+ min|Ziffer/ })).toBeUndefined()
+    expect(await ui.find({ key: 'open-A0000000-0000-0000-0000-000000000001' })).toBeUndefined()
+    await ui.unmount()
+    expect(calls.argv.some(a => a.includes('open'))).toBe(false)
+  })
+
+  test('ohne wartende Chats nur die zwei Sammelzeilen', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    world(on, { board: { ...KASTEN, entries: KASTEN.entries.filter(e => e.light !== 'needsYou') } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const ui = await $.ui.mount({ ...band(70, 30), surface: 'terminal' })
+    expect(await ui.find({ text: /warten auf dich|wartet auf dich/ })).toBeUndefined()
+    expect(await ui.find({ text: /Jarvis/ })).toBeUndefined()
+    expect(await ui.find({ text: 'läuft' })).toBeDefined()
+    expect(await ui.find({ text: 'ruht' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('ein leeres Board zeichnet nichts', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    world(on, { board: { ...BOARD, entries: [] } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    expect(await ui.find({ text: 'engine' })).toBeDefined()
+    await ui.unmount()
   })
 
   test('ohne WhisperM8-Session und bei inaktivem Board zeichnet die Engine', async ($, on) => {
@@ -151,23 +201,23 @@ describe('Band', () => {
     await ui.unmount()
   })
 
-  test('/board zu klappt auf die Summenzeile ein, /board auf wieder auf', async ($, on) => {
+  test('/board zu klappt auf eine Zeile ein, /board auf wieder auf', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    await settle()
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
     await $.command.run({ command: 'board', args: 'zu' })
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeUndefined()
-    expect(await ui.find({ text: /1 wartet/ })).toBeDefined()
-    expect(await ui.find({ text: '/board auf' })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeUndefined()
+    expect(await ui.find({ text: /2 warten auf dich · 2 läuft · 2 ruht/ })).toBeDefined()
     await $.command.run({ command: 'board', args: 'auf' })
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeDefined()
     await ui.unmount()
   })
 
   test('/board ohne Argument klappt um und öffnet kein Panel', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     const opened: string[] = []
     on('ui.open', (_$, e) => {
       opened.push(e.id)
@@ -175,32 +225,50 @@ describe('Band', () => {
     })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
     expect(((await $.command.run({ command: 'board', args: '' } as never)) as { text: string }).text).toBe('Board eingeklappt.')
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeUndefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeUndefined()
     expect(((await $.command.run({ command: 'board', args: '' } as never)) as { text: string }).text).toBe('Board ausgeklappt.')
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeDefined()
     expect(opened).toEqual([])
     await ui.unmount()
   })
 
-  test('der Name ist der Knopf: er öffnet den Tab des Chats, ohne Turn', async ($, on) => {
+  test('wenig Platz: Wartende, die nicht passen, zählt der Kopf', async ($, on) => {
     mock.clock(on, { now: NOW })
-    const calls = world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...band(120), surface })
-      // Oberste Zeile = wartender Chat (a3f2c1d0), Hotkey „1“.
-      await ui.press({ key: 'open-A3F2C1D0-0000-0000-0000-000000000001' })
-      await ui.unmount()
-    }
-    expect(calls.argv.filter(a => a.includes('open'))).toEqual([
-      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
-      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
-    ])
-    expect(calls.toasts).toContain('Geöffnet: Outreach Copy-Review')
-    expect(calls.prompts).toEqual([])
+    const ui = await $.ui.mount({ ...band(70, 7), surface: 'terminal' })
+    expect(await ui.find({ text: /\+1 nicht gezeigt/ })).toBeDefined()
+    expect(await ui.find({ text: 'Kai' })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
+describe('Titel und Sammelzeile (WM8-88, rein)', () => {
+  test('titleParts liest Ticket, Rufname und Thema', () => {
+    expect(titleParts('WM8-65 Kai · Umzug DealSupply')).toEqual({ name: 'Kai', ticket: 'WM8-65', topic: 'Umzug DealSupply' })
+    expect(titleParts('Vic · Neustart: Gesamt-Review')).toEqual({ name: 'Vic', ticket: null, topic: 'Neustart: Gesamt-Review' })
+    expect(titleParts('Outreach Copy-Review')).toEqual({ name: 'Outreach Copy-Review', ticket: null, topic: '' })
+    expect(titleParts('DS-12 Kai')).toEqual({ name: 'Kai', ticket: 'DS-12', topic: '' })
+  })
+
+  test('fitNames kürzt mit +n statt umzubrechen', () => {
+    expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 40)).toBe('Gus 4/7 · Jon 2/7 · Noa')
+    expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 14)).toBe('Gus 4/7 +2')
+    expect(fitNames(['Gus'], 2)).toBe('+1')
+  })
+
+  test('progressOf nur mit gültiger Quelle', () => {
+    expect(progressOf(entry({ progress: { done: 4, total: 7 } }) as never)).toBe('4/7')
+    expect(progressOf(entry({}) as never)).toBe('')
+    expect(progressOf(entry({ progress: { done: 1, total: 0 } }) as never)).toBe('')
+  })
+
+  test('waitingHead in Ein- und Mehrzahl', () => {
+    expect(waitingHead(1)).toBe('1 wartet auf dich')
+    expect(waitingHead(2)).toBe('2 warten auf dich')
   })
 })
 
@@ -230,24 +298,22 @@ describe('Steuerung', () => {
 })
 
 describe('Arbeitspaket, Blockade, Meilensteine', () => {
-  test('das Band zeigt work, fällt auf next zurück und nennt eine Blockade', async ($, on) => {
+  test('der Satz eines Wartenden ist das Anliegen, sonst work, sonst next', async ($, on) => {
     mock.clock(on, { now: NOW })
     world(on, {
       board: {
         ...BOARD,
         entries: [
-          entry({ work: 'Baut die letzte Variante (L22)', next: 'Baut die letzte Variante (L22)' }),
-          entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Alt-CLI', next: 'Nur next gesetzt' }),
-          entry({ ref: 'e45d0000', sessionID: 'CE45D000-0000-0000-0000-000000000003', title: 'Blockiert', work: 'Deploy', blocker: 'Wartet auf Staging' }),
+          entry({ light: 'needsYou', needs: '', work: 'Baut die letzte Variante (L22)', next: 'Baut die letzte Variante (L22)' }),
+          entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Alt-CLI', light: 'needsYou', needs: '', next: 'Nur next gesetzt' }),
         ],
       },
     })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    const ui = await $.ui.mount({ ...band(179), surface: 'terminal' })
+    const ui = await $.ui.mount({ ...band(179, 30), surface: 'terminal' })
     expect(await ui.find({ text: /Baut die letzte Variante \(L22\)/ })).toBeDefined()
     expect(await ui.find({ text: /Nur next gesetzt/ })).toBeDefined()
-    expect(await ui.find({ text: /hängt · Wartet auf Staging/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -366,9 +432,8 @@ describe('session.start', () => {
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   })
 
-  test('wiederholtes session.start legt genau einen 30-s-Takt an', async ($, on) => {
+  test('kein Takt mehr: der Kasten zeigt kein Alter (WM8-88)', async ($, on) => {
     let intervals = 0
-    // Registrierungen von clock.every mitzählen (mock.clock hängt den Handler ein).
     const counting = ((name: string, ...rest: unknown[]) => {
       if (name === 'clock.every') {
         const handler = rest[rest.length - 1] as (...args: unknown[]) => unknown
@@ -384,7 +449,7 @@ describe('session.start', () => {
     for (let i = 0; i < 3; i++) {
       await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     }
-    expect(intervals).toBe(1)
+    expect(intervals).toBe(0)
   })
 })
 
@@ -460,14 +525,6 @@ describe('Neuzeichnen (WM8-87)', () => {
     expect(sameBoard(view(), view({ cursor: '1:99' }))).toBe(true)
     expect(sameBoard(view(), view({ entries: BOARD.entries.slice(1) }))).toBe(false)
     expect(sameBoard(null, view())).toBe(false)
-  })
-
-  test('agesChange nur, wenn eine sichtbare Alters-Angabe wechselt', () => {
-    const entries = [entry({ updatedAt: minutesAgo(4) })] as never
-    expect(agesChange(entries, NOW, NOW + 20_000)).toBe(false)
-    expect(agesChange(entries, NOW, NOW + 60_000)).toBe(true)
-    const old = [entry({ updatedAt: minutesAgo(180) })] as never
-    expect(agesChange(old, NOW, NOW + 10 * 60_000)).toBe(false)
   })
 
   test('withStatus setzt Status und seit wann, nur beim gemeinten Chat', () => {

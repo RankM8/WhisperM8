@@ -33,6 +33,8 @@ export type BoardEntry = {
   status: string
   statusSince: string | null
   otherOwners: string[]
+  /** Fortschritt aus den Kästchen am Ticket (4 von 7). Fehlt, solange die Quelle ihn nicht liefert. */
+  progress?: { done: number; total: number }
 }
 
 export type BoardView = {
@@ -63,7 +65,7 @@ declare module 'claude-code' {
       board: BoardView | null
       /** Band auf eine Zeile eingeklappt. */
       folded: boolean
-      /** Uhr fürs Alter der Einträge, tickt im 30-s-Raster. */
+      /** Früher die Uhr fürs Alter der Einträge; seit WM8-88 ungenutzt, der Schlüssel bleibt. */
       now: number
       /** Schon geweckte Zustände je Chat (`<sessionID>:<zustand>`), gegen Doppel-Wecken. */
       woken: string[]

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { BoardEntry, BoardLight, BoardView } from '../types'
+import type { BoardEntry, BoardView } from '../types'
 import { registerTasks, startTasks } from './tasks'
 
 // Jarvis-Board: Übersicht der Chats, die Jarvis aktiv betreut, als Band über
@@ -19,7 +19,6 @@ import { registerTasks, startTasks } from './tasks'
 
 const board = atom({ plugin: 'whisperm8', key: 'board' } as const, null as BoardView | null)
 const folded = atom({ plugin: 'whisperm8', key: 'folded' } as const, false)
-const now = atom({ plugin: 'whisperm8', key: 'now' } as const, 0)
 const woken = atom({ plugin: 'whisperm8', key: 'woken' } as const, [] as string[])
 const callout = atom({ plugin: 'whisperm8', key: 'callout' } as const, false)
 
@@ -54,8 +53,6 @@ let latestCursor: string | null = null
 let lastRefreshAt = 0
 /** Statuswechsel lesen Titel, Projekt und Mitbesitzer höchstens so oft nach. */
 const SLOW_REFRESH_MS = 5 * MIN
-/** Der 30-s-Takt der Band-Uhr läuft einmal je Mod-Instanz — session.start feuert bei Start, Resume, /clear und Compact erneut. */
-let tickerStarted = false
 let toolDeferred: boolean | null = null
 let speakToolDeferred: boolean | null = null
 let clipboardToolDeferred: boolean | null = null
@@ -63,10 +60,6 @@ let wakeQueue: string[] = []
 let wakeTimerArmed = false
 let lastWakeAt = 0
 
-const ORDER: Record<BoardLight, number> = { needsYou: 0, done: 1, running: 2, parked: 3 }
-const COLOR: Record<BoardLight, string> = { needsYou: 'error', running: 'warning', done: 'success', parked: 'inactive' }
-const GLYPH: Record<BoardLight, string> = { needsYou: '●', running: '●', done: '●', parked: '○' }
-const LABEL: Record<BoardLight, string> = { needsYou: 'wartet', running: 'läuft', done: 'fertig', parked: 'geparkt' }
 
 // MARK: CLI
 
@@ -129,13 +122,9 @@ const refresh = async ($: EngineInterface) => {
   if (sessionID !== null && !sameID(next.owner, sessionID)) sessionID = next.owner
   latestCursor = next.cursor
   lastRefreshAt = await $.clock.now()
-  // Nur schreiben, was sich sichtbar geändert hat: jedes Schreiben zeichnet
-  // das Band neu (WM8-87). Die Uhr zieht nur mit, wenn das Board neu ist.
-  if (!sameBoard(await read($, board), next)) {
-    const at = await $.clock.now()
-    await update($, now, () => at)
-    await update($, board, () => next)
-  }
+  // Nur schreiben, was sich geändert hat: jedes Schreiben zeichnet den
+  // Kasten neu (WM8-87).
+  if (!sameBoard(await read($, board), next)) await update($, board, () => next)
   // Bewusst keine Statuszeile: Claude Code setzt „⚠“ davor, sie sah nach
   // einer Warnung aus und wiederholte nur die Zahlen aus dem Band.
   // Scheitert die Tool-Anmeldung, laufen Band und Wecken trotzdem.
@@ -182,53 +171,11 @@ export const isBefore = (at: string | undefined, since: string | null | undefine
   return !Number.isNaN(a) && !Number.isNaN(b) && a < b
 }
 
-/** Ändert sich zwischen `before` und `after` eine Alters-Angabe im Band? */
-export const agesChange = (entries: readonly BoardEntry[], before: number, after: number) =>
-  entries.some(e => age(e.updatedAt, before, true) !== age(e.updatedAt, after, true))
-
 /** Statuswechsel aus `chats watch` direkt ins Board, ohne neuen Prozess. */
 export const withStatus = (view: BoardView, sessionID: string, status: string, since: string | null) => ({
   ...view,
   entries: view.entries.map(e => (sameID(e.sessionID, sessionID) ? { ...e, status, statusSince: since ?? e.statusSince } : e)),
 })
-
-const counts = (entries: readonly BoardEntry[]) => {
-  const c: Record<BoardLight, number> = { needsYou: 0, running: 0, done: 0, parked: 0 }
-  for (const entry of entries) c[entry.light] = (c[entry.light] ?? 0) + 1
-  return c
-}
-
-/**
- * Kopfzeile so ausführlich, wie sie in `room` Spalten passt: erst wird der
- * Bedien-Hinweis rechts kürzer, dann fällt „· Board“ weg, dann der Hinweis,
- * zuletzt die Wörter außer „wartet“, das ist die Zahl, die zählt.
- * Feste Breitenstufen reichten nicht: Bei 67 Spalten brach der Kopf um.
- */
-const fitHeader = (c: Record<BoardLight, number>, room: number, title: string, withBoard: boolean, hints: string[]) => {
-  const parts = (words: boolean) =>
-    (['needsYou', 'running', 'done', 'parked'] as const)
-      .filter(l => c[l] > 0)
-      .map(l => ({ light: l, text: `${GLYPH[l]} ${c[l]}${words || l === 'needsYou' ? ` ${LABEL[l]}` : ''}  ` }))
-  const fits = (head: string, words: boolean, hint: string) =>
-    head.length + 2 + parts(words).reduce((n, p) => n + p.text.length, 0) + hint.length <= room
-  const heads = withBoard ? [`${title} · Board`, title] : [title]
-  for (const head of heads) {
-    for (const hint of hints) if (fits(head, true, hint)) return { head, parts: parts(true), hint }
-  }
-  for (const [head, words] of heads.map(h => [h, true] as const).concat([[title, false]])) {
-    if (fits(head, words, '')) return { head, parts: parts(words), hint: '' }
-  }
-  return { head: title, parts: parts(false), hint: '' }
-}
-
-/**
- * Bedien-Hinweise statt Knöpfen „z: zu“ / „a: auf“: Buchstaben-Hotkeys
- * greifen nur nach ctrl+x tab, und Klicks meldet Claude Code nur im
- * Vollbild-Terminal; App-Sessions laufen im Main-Screen. Eine Ziffer im
- * leeren Prompt geht dagegen überall.
- */
-const OPEN_HINTS = ['Ziffer = Tab öffnen', 'Ziffer: Tab']
-const FOLDED_HINTS = ['/board auf', '/board']
 
 
 /** Aktiv: Schema ab Turn 1 in der Liste. Sonst nur der Name (ToolSearch). */
@@ -431,21 +378,11 @@ const flushWake = async ($: EngineInterface) => {
 
 // MARK: Anzeige
 
-const age = (iso: string, at: number, short: boolean) => {
-  const since = Date.parse(iso)
-  const m = Number.isNaN(since) ? 0 : Math.max(0, Math.floor((at - since) / MIN))
-  if (m < 1) return 'jetzt'
-  if (m < 60) return short ? `${m}m` : `${m} min`
-  const h = Math.floor(m / 60)
-  if (h < 24) return short ? `${h}h` : `${h} h`
-  return short ? `${Math.floor(h / 24)}d` : `${Math.floor(h / 24)} d`
-}
-
 /** Arbeitspaket; CLIs von vor dem Feld liefern es nur unter `next`. */
 const workOf = (e: BoardEntry) => e.work || e.next
 
 /** Beim Warten das Anliegen, sonst Blockade oder Arbeitspaket (Rückfall: Auftrag). */
-const say = (e: BoardEntry) => {
+export const say = (e: BoardEntry) => {
   const work = workOf(e) || e.mission
   if (e.light === 'needsYou') return e.needs || work
   if (e.light === 'done') return work ? `fertig · ${work}` : 'fertig'
@@ -453,23 +390,79 @@ const say = (e: BoardEntry) => {
   return work
 }
 
-const sorted = (entries: readonly BoardEntry[]) =>
-  [...entries].sort((a, b) => ORDER[a.light] - ORDER[b.light] || Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+/** Rufname, Ticket und Thema aus dem Chat-Titel („WM8-65 Kai · Umzug DealSupply“). */
+export type TitleParts = { name: string; ticket: string | null; topic: string }
+
+const TICKET = /^([A-Z][A-Z0-9]*-\d+)\s+/
+
+/**
+ * Titel der Form „<Ticket> <Rufname> · <Thema>“, Ticket optional. Ohne
+ * Trennpunkt ist der ganze Titel der Name (gekürzt), ohne Thema.
+ */
+export const titleParts = (title: string): TitleParts => {
+  let rest = String(title ?? '').trim()
+  let ticket: string | null = null
+  const match = TICKET.exec(rest)
+  if (match) {
+    ticket = match[1]!
+    rest = rest.slice(match[0].length)
+  }
+  const dot = rest.indexOf(' · ')
+  if (dot < 0) return { name: clip(rest || title, 24), ticket, topic: '' }
+  return { name: rest.slice(0, dot).trim(), ticket, topic: rest.slice(dot + 3).trim() }
+}
+
+/** Fortschritt „4/7“, sobald die Quelle ihn liefert; bis dahin nichts. */
+export const progressOf = (e: BoardEntry) => {
+  const p = e.progress
+  if (!p || !Number.isFinite(p.done) || !Number.isFinite(p.total) || p.total <= 0) return ''
+  return `${Math.max(0, Math.floor(p.done))}/${Math.floor(p.total)}`
+}
+
+/**
+ * Namen hintereinander („Gus 4/7 · Jon · Noa“), so viele wie in `room`
+ * Spalten passen; der Rest als „+n“. Eine Zeile, damit der Kasten niedrig
+ * bleibt.
+ */
+export const fitNames = (names: readonly string[], room: number) => {
+  let line = ''
+  for (let i = 0; i < names.length; i++) {
+    const next = line === '' ? names[i]! : `${line} · ${names[i]}`
+    const rest = names.length - i - 1
+    const tail = rest > 0 ? ` +${rest}` : ''
+    if (next.length + tail.length > room) {
+      const left = names.length - i
+      return line === '' ? `+${left}` : `${line} +${left}`
+    }
+    line = next
+  }
+  return line
+}
+
+/** Wer wartet (Ampel needsYou), wer läuft, wer ruht (fertig oder geparkt). */
+export const groups = (entries: readonly BoardEntry[]) => {
+  const byAge = [...entries].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+  return {
+    waiting: byAge.filter(e => e.light === 'needsYou'),
+    running: byAge.filter(e => e.light === 'running'),
+    resting: byAge.filter(e => e.light === 'done' || e.light === 'parked'),
+  }
+}
+
+/** Name in einer Sammelzeile: ⚑ bei Rückfrage im Chat, dazu der Fortschritt. */
+const shortName = (e: BoardEntry) => {
+  const flag = e.status === 'awaitingInput' ? '⚑ ' : ''
+  const progress = progressOf(e)
+  return `${flag}${titleParts(e.title).name}${progress ? ` ${progress}` : ''}`
+}
+
+/** Kopf: „Jarvis · 1 wartet auf dich“ bzw. „2 warten auf dich“. */
+export const waitingHead = (count: number) => (count === 1 ? '1 wartet auf dich' : `${count} warten auf dich`)
 
 // Steuerzeichen (C0, DEL, C1) und Anführungszeichen raus, auf eine Zeile, gekürzt.
 const asData = (text: string) => clip(String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/[„“"]/g, "'").trim(), 120)
 
 const clip = (text: string, width: number) => (text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text)
-
-/**
- * Holt den Tab des Chats nach vorn, direkt per CLI und ohne Turn von Jarvis:
- * Der User hat ausdrücklich gedrückt. (Jarvis selbst nutzt im Aktiv-Workspace
- * nie `chats open`, das reißt die Workspace-Ansicht weg.)
- */
-const openChat = async ($: EngineInterface, entry: BoardEntry) => {
-  const ran = await cli($, ['chats', 'open', entry.ref])
-  $.ui.toast(ran.ok ? `Geöffnet: ${entry.title}` : `${entry.title}: ${ran.message || 'Öffnen fehlgeschlagen'}`)
-}
 
 // MARK: Voice-Callouts
 
@@ -625,18 +618,6 @@ const clipboardArgs = (input: ClipboardInput): { args: string[] } | { error: str
   }
 }
 
-/**
- * 30-s-Takt der Band-Uhr: stellt `now` nur, wenn sich eine sichtbare
- * Alters-Angabe ändert. Eingeklappt oder ohne Band zeichnet er nichts neu.
- */
-const tick = async ($: EngineInterface) => {
-  const view = await read($, board)
-  if (view === null || !view.isActive || view.entries.length === 0) return
-  if (await read($, folded)) return
-  const at = await $.clock.now()
-  if (agesChange(view.entries, await read($, now), at)) await update($, now, () => at)
-}
-
 // MARK: Hooks
 
 export const register: Register = (on, options) => {
@@ -675,10 +656,6 @@ export const register: Register = (on, options) => {
     // CLI-Modus), der den Chatstart sonst bremst — das Band erscheint, sobald
     // die Antwort da ist (Atom-Update).
     void refresh($).catch(() => undefined)
-    if (!tickerStarted) {
-      tickerStarted = true
-      $.clock.every(30_000, () => void tick($).catch(() => undefined))
-    }
     return started
   })
 
@@ -786,11 +763,6 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     if (arg === '' || arg === 'zu' || arg === 'auf') {
       const fold = arg === '' ? !(await read($, folded)) : arg === 'zu'
-      // Eingeklappt läuft die Uhr nicht mit; beim Aufklappen frisch stellen.
-      if (!fold) {
-        const at = await $.clock.now()
-        await update($, now, () => at)
-      }
       await update($, folded, () => fold)
       return { text: fold ? 'Board eingeklappt.' : 'Board ausgeklappt.' }
     }
@@ -803,123 +775,105 @@ export const register: Register = (on, options) => {
     return { text: 'Unbekannt. /board klappt das Band ein und aus, dazu gibt es an, aus, zu und auf.' }
   })
 
+  // WM8-88: oben, was den User braucht (Rufname, Ticket, ganzer Satz mit
+  // Umbruch), darunter je eine Sammelzeile für laufende und ruhende Chats.
+  // Keine Ziffern zum Springen, keine Kennung, kein Alter: niedrig und
+  // selten geändert, weil der Hauptbildschirm den Bereich bei jeder Änderung
+  // neu zeichnet.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const view = await read($, board)
-    if (view === null || !view.isActive) return next(e)
+    if (view === null || !view.isActive || view.entries.length === 0) return next(e)
     const isFolded = await read($, folded)
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text } = $.ui.resolve(e)
     const cols = e.props.bodyColumns
-    const list = sorted(view.entries)
-    const c = counts(list)
-    const wide = cols >= 90
-    const narrow = cols < 64
-    // Platz für Titel, Zahlen und Hinweis: eine Spalte Luft, offen
-    // zusätzlich ohne Rahmen und Innenabstand.
-    const header = isFolded
-      ? fitHeader(c, cols - 1, '▸ Jarvis', false, FOLDED_HINTS)
-      : fitHeader(c, cols - 5, 'Jarvis', true, OPEN_HINTS)
-    const hint = header.hint ? <Text dimColor>{header.hint}</Text> : null
-    const summary = header.parts.map(p => (
-      <Text color={COLOR[p.light]} bold={p.light === 'needsYou'}>
-        {p.text}
-      </Text>
-    ))
-
-    if (list.length === 0) {
-      return (
-        <Box flexDirection="row" width={cols}>
-          <Text color="claude" bold>
-            Jarvis{'  '}
-          </Text>
-          <Text dimColor>Board aktiv, noch keine Chats</Text>
-        </Box>
-      )
-    }
+    const { waiting, running, resting } = groups(view.entries)
 
     if (isFolded) {
+      const parts = [
+        waiting.length > 0 ? waitingHead(waiting.length) : '',
+        running.length > 0 ? `${running.length} läuft` : '',
+        resting.length > 0 ? `${resting.length} ruht` : '',
+      ].filter(Boolean)
       return (
         <Box flexDirection="row" width={cols}>
           <Text color="claude" bold>
-            {header.head}
-            {'  '}
+            ▸ Jarvis
           </Text>
-          <Box flexDirection="row" flexGrow={1}>
-            {summary}
-          </Box>
-          {hint}
+          <Text color={waiting.length > 0 ? 'error' : undefined} dimColor={waiting.length === 0} wrap="truncate-end">
+            {' · '}
+            {parts.join(' · ')}
+          </Text>
         </Box>
       )
     }
 
-    // Die Uhr erst hier lesen: eingeklappt hängt das Band nicht an ihrem Takt.
-    const t = await read($, now)
-    // Rahmen + Kopf = 3 Zeilen; der Rest gehört den Chats.
-    const room = Math.max(1, e.props.maxRows - 3)
-    const shown = list.length > room ? list.slice(0, room - 1) : list
-    const hidden = list.length - shown.length
-    const nameWidth = wide ? 22 : narrow ? 15 : 18
-    const ageWidth = wide ? 8 : 4
-    const border = c.needsYou > 0 ? 'error' : c.done > 0 ? 'success' : 'inactive'
+    const LABEL_WIDTH = 7
+    const room = Math.max(10, cols - LABEL_WIDTH)
+    const summary = (label: string, entries: readonly BoardEntry[]) =>
+      entries.length === 0 ? null : (
+        <Box key={label} flexDirection="row" width={cols}>
+          <Box width={LABEL_WIDTH} flexShrink={0}>
+            <Text dimColor>{label}</Text>
+          </Box>
+          <Text dimColor wrap="truncate-end">
+            {fitNames(entries.map(shortName), room)}
+          </Text>
+        </Box>
+      )
+
+    // Höhe begrenzen: Kopf, Sammelzeilen, je Wartendem Kopfzeile plus
+    // umbrochener Satz und Abstand. Was nicht passt, zählt der Kopf mit.
+    const textWidth = Math.max(10, cols - 2)
+    const fixed = (waiting.length > 0 ? 2 : 0) + (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
+    let budget = Math.max(0, e.props.maxRows - fixed)
+    const shown: BoardEntry[] = []
+    for (const entry of waiting) {
+      const need = 2 + Math.ceil(Math.max(1, say(entry).length) / textWidth)
+      if (need > budget && shown.length > 0) break
+      shown.push(entry)
+      budget -= need
+    }
+    const hidden = waiting.length - shown.length
 
     return (
-      <Box flexDirection="column" borderStyle="round" borderColor={border} paddingX={1} width={cols}>
-        <Box flexDirection="row">
-          <Text color="claude" bold>
-            {header.head}
-            {'  '}
-          </Text>
-          <Box flexDirection="row" flexGrow={1}>
-            {summary}
+      <Box flexDirection="column" width={cols}>
+        {waiting.length > 0 && (
+          <Box flexDirection="row">
+            <Text color="claude" bold>
+              Jarvis
+            </Text>
+            <Text color="error" bold>
+              {' · '}
+              {waitingHead(waiting.length)}
+            </Text>
+            {hidden > 0 && <Text dimColor>{`  (+${hidden} nicht gezeigt)`}</Text>}
           </Box>
-          {hint}
-        </Box>
-        {shown.map((entry, index) => (
-          <Box key={entry.sessionID} flexDirection="row" columnGap={1}>
-            <Box width={1} flexShrink={0}>
-              <Text color={COLOR[entry.light]}>{GLYPH[entry.light]}</Text>
-            </Box>
-            {/* Der Name ist der Knopf: „1“ im leeren Prompt (oder ctrl+x tab
-                und „1“; ein Klick nur im Vollbild-Terminal) öffnet den Tab. */}
-            <Box width={nameWidth + 3} flexShrink={0}>
-              {index < 9 ? (
-                <Button
-                  key={`open-${entry.sessionID}`}
-                  label={clip(entry.title, nameWidth)}
-                  hotkey={String(index + 1)}
-                  plain
-                  dimColor={entry.light === 'parked'}
-                  onPress={() => openChat($, entry)}
-                />
-              ) : (
-                <Text dimColor={entry.light === 'parked'} wrap="truncate-end">
-                  {'   '}
-                  {entry.title}
-                </Text>
-              )}
-            </Box>
-            {wide && (
-              <Box width={8} flexShrink={0}>
-                <Text dimColor>{entry.ref}</Text>
+        )}
+        {shown.map(entry => {
+          const t = titleParts(entry.title)
+          return (
+            <Box key={entry.sessionID} flexDirection="column" marginTop={1}>
+              <Box flexDirection="row">
+                <Text color="error">● </Text>
+                <Text bold>{t.name}</Text>
+                {t.ticket !== null && <Text dimColor>{` · ${t.ticket}`}</Text>}
+                {t.topic !== '' && (
+                  <Text dimColor wrap="truncate-end">
+                    {'  '}
+                    {t.topic}
+                  </Text>
+                )}
               </Box>
-            )}
-            <Box flexGrow={1} flexShrink={1}>
-              <Text
-                color={entry.light === 'needsYou' ? 'error' : undefined}
-                dimColor={entry.light !== 'needsYou'}
-                italic={entry.light === 'parked'}
-                wrap="truncate-end"
-              >
-                {entry.status === 'awaitingInput' && entry.light !== 'needsYou' ? '⚑ ' : ''}
-                {say(entry)}
-              </Text>
+              <Box paddingLeft={2} width={cols}>
+                <Text wrap="wrap">{say(entry)}</Text>
+              </Box>
             </Box>
-            <Box width={ageWidth} flexShrink={0} justifyContent="flex-end">
-              <Text dimColor>{age(entry.updatedAt, t, !wide)}</Text>
-            </Box>
-          </Box>
-        ))}
-        {hidden > 0 && <Text dimColor>+{hidden} weitere</Text>}
+          )
+        })}
+        {waiting.length > 0 && (running.length > 0 || resting.length > 0) && <Box height={1} />}
+        {summary('läuft', running)}
+        {summary('ruht', resting)}
       </Box>
     )
   })
