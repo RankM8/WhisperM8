@@ -416,6 +416,17 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   dort, etwa weil der Chat noch startet, mit „· ⌘V fügt ein“), Einträge des Menüs, die
   etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in Claudes
   Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- **Kein Enter in eine gerade aufgehende Freigabe (WM8-75, 14.11.2026):** Text mit Senden (Diktat, Kreuz
+  während der Aufnahme, `chats send`, Warteschlange) geht als Einfüge-Block raus, das Enter 80 ms später
+  (`AgentTerminalController.pastePrompt`). Direkt davor prüft `DelayedEnterGuard` neu: Kam die
+  Rückfrage erst nach dem Einfügen, oder steht bei Claude unten statt des Eingabefelds ein Dialog
+  (`ControllerScreenSnapshot.dialogVisible`, nur wenn der Chat arbeitet), bleibt das Enter aus. Der Text
+  bleibt als Entwurf stehen, die Pille sagt „Nicht gesendet: Der Chat fragt nach einer Entscheidung“.
+  Nachgestellt an Claude Code 2.1.325: Einfügen plus Enter 80 ms später bestätigte eine offene
+  Bash-Freigabe. War die Rückfrage schon beim Einfügen offen (`chats send` beantwortet bewusst), bleibt
+  das Enter wie bisher. Kosten: im ruhenden Chat keine, im arbeitenden ein Lesen der untersten 16 Zeilen
+  (gemessen rund 5 ms im Debug-Build). Codex-Freigaben erkennt das nicht (keine Rückfragen, Feld-Erkennung
+  nur für Claude; WM8-67).
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
   Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
   Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt

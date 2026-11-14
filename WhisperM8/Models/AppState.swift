@@ -103,6 +103,11 @@ final class AppState {
 
     private init() {
         self.recordingCoordinator = RecordingCoordinator(appState: self)
+        // WM8-75: zurückgehaltenes Enter nach einem Einfüge-Block sichtbar machen.
+        AgentTerminalController.onDelayedEnterWithheld = { [weak self] _ in
+            self?.recordingCoordinator.overlayController.showQuickActionHint(
+                AgentTerminalController.delayedEnterWithheldHint, duration: 4)
+        }
     }
 
     /// `target`: Ziel des Diktats; der Hotkey liefert wie bisher ins vordere Programm.
