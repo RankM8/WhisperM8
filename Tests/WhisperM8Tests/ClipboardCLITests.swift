@@ -142,6 +142,26 @@ final class ClipboardCLITests: XCTestCase {
         XCTAssertEqual(probe.stdout, "(keine Einträge)")
     }
 
+    /// WM8-68: Ein kopierter Linear-Schlüssel ist in Liste, Suche und `get` maskiert,
+    /// und die Suche nach seinem Anfang findet ihn nicht.
+    func testLinearKeyIsMaskedInListSearchAndGet() throws {
+        let key = "lin_api_" + String(repeating: "aB3", count: 14).prefix(40)
+        let env = environment(entries: [entry("lin00001", key, ago: 5)])
+        let outputs = [
+            ClipboardCLIRunner.execute(.list(limit: 5, json: false), environment: env),
+            ClipboardCLIRunner.execute(.list(limit: 5, json: true), environment: env),
+            ClipboardCLIRunner.execute(.get(ref: "1", json: false), environment: env),
+            ClipboardCLIRunner.execute(.get(ref: "1", json: true), environment: env),
+            ClipboardCLIRunner.execute(.search(query: "linear-key", limit: 5, json: true), environment: env),
+        ]
+        for output in outputs {
+            XCTAssertFalse(output.stdout.contains("lin_api_"), output.stdout)
+            XCTAssertTrue(output.stdout.contains("[REDACTED:linear-key]"), output.stdout)
+        }
+        let probe = ClipboardCLIRunner.execute(.search(query: "lin_api_aB3", limit: 5, json: false), environment: env)
+        XCTAssertEqual(probe.stdout, "(keine Einträge)")
+    }
+
     func testMaskingCanBeSwitchedOff() {
         let secret = entry("sec00001", "sk-abcdefghijklmnopqrstuvwxyz0123", ago: 5)
         var settings = ClipboardSettings(enabled: true)

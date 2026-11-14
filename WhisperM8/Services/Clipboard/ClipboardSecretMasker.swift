@@ -39,6 +39,43 @@ enum ClipboardSecretMasker {
         rule("stripe-key", #"\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"#),
         // OpenAI (sk-…, sk-proj-…), Anthropic (sk-ant-…) und ähnliche.
         rule("api-key", #"\bsk-[A-Za-z0-9_-]{20,}"#),
+        // Groq (gsk_…). Die grobe Regel am Ende fängt ihn meist auch, aber nur, wenn
+        // Groß-, Kleinbuchstabe und Ziffer zufällig alle vorkommen.
+        rule("api-key", #"\bgsk_[A-Za-z0-9]{40,}"#),
+        // Linear: persönliche Schlüssel, OAuth-Tokens und Webhook-Geheimnisse.
+        rule("linear-key", #"\blin_(?:api|oauth|wh)_[A-Za-z0-9]{32,}"#),
+        // GitLab: persönliche, Deploy-, Runner-, Trigger- und Feed-Tokens. Neuere Tokens
+        // tragen dahinter noch eine Prüfsumme (`.01.` plus sieben bis zwölf Zeichen); die
+        // gehört mit dazu, eine Dateiendung wie `.json` nicht.
+        rule("gitlab-token", #"\bgl(?:pat|dt|rt|ptt|ft|cbt|soat|imt|agent)-[A-Za-z0-9_-]{20,}(?:\.[A-Za-z0-9]{2}\.[A-Za-z0-9]{7,12}(?![A-Za-z0-9]))?"#),
+        rule("npm-token", #"\bnpm_[A-Za-z0-9]{36}(?![A-Za-z0-9])"#),
+        rule("pypi-token", #"\bpypi-AgE[A-Za-z0-9_-]{50,}"#),
+        rule("huggingface-token", #"\bhf_[A-Za-z0-9]{30,}(?![A-Za-z0-9])"#, validate: hasUpperAndLower),
+        // Reine Hex-Schlüssel mit festem Präfix: die grobe Regel lässt Hex absichtlich stehen.
+        rule("digitalocean-token", #"\bdo[opr]_v1_[a-f0-9]{64}(?![A-Za-z0-9])"#),
+        rule("shopify-token", #"\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}(?![A-Za-z0-9])"#),
+        rule("supabase-key", #"\bsbp_[a-f0-9]{40}(?![A-Za-z0-9])"#),
+        // Neue Supabase-Schlüssel: Der Rest muss zufällig aussehen, sonst wäre
+        // `sb_secret_key_for_the_project` ein Treffer.
+        rule("supabase-key", #"\bsb_secret_[A-Za-z0-9_-]{20,}"#, validate: { looksLikeRandomToken(String($0.dropFirst(10))) }),
+        // Nur freistehend: `cache-key-<md5>` ist eine Prüfsumme, kein Schlüssel.
+        rule("mailgun-key", #"(?<![A-Za-z0-9_-])key-[a-f0-9]{32}(?![A-Za-z0-9])"#),
+        rule("postman-key", #"\bPMAK-[a-f0-9]{24}-[a-f0-9]{34}(?![A-Za-z0-9])"#),
+        // Schlüssel mit Punkten: die grobe Regel setzt nach einem Punkt nicht an.
+        rule("sendgrid-key", #"\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"#),
+        // Nach dem optionalen Umgebungs-Teil (`dp.st.prd.`) mindestens 40 Zeichen ohne Punkt;
+        // `dp.st.session_state.attribut…` ist Code.
+        rule("doppler-token", #"\bdp\.(?:st|ct|sa|scim|audit|pt)\.(?:[a-z0-9_-]{1,32}\.)?[A-Za-z0-9]{40,}"#),
+        rule("airtable-token", #"\bpat[A-Za-z0-9]{14}\.[a-f0-9]{64}(?![A-Za-z0-9])"#),
+        // Google OAuth: Client-Secret, Access- und Refresh-Token.
+        rule("google-oauth", #"\bGOCSPX-[A-Za-z0-9_-]{28}(?![A-Za-z0-9_-])|\bya29\.[A-Za-z0-9_-]{30,}|\b1//0[A-Za-z0-9_-]{30,}"#),
+        rule("telegram-token", #"\b[0-9]{8,10}:AA[A-Za-z0-9_-]{33}(?![A-Za-z0-9_-])"#),
+        rule("tailscale-key", #"\btskey-[a-z]+-[A-Za-z0-9]{6,}-[A-Za-z0-9]{20,}"#),
+        rule("age-key", #"\bAGE-SECRET-KEY-1[0-9A-Z]{58}(?![0-9A-Z])"#),
+        // Webhook-Adressen: wer sie kennt, kann in den Kanal schreiben. Maskiert wird
+        // nur der geheime Teil, der Dienst bleibt lesbar.
+        rule("webhook-url", #"\bhttps://hooks\.slack\.com/(?:services|workflows|triggers)/([A-Za-z0-9/_-]{20,})"#, group: 1),
+        rule("webhook-url", #"\bhttps://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/([0-9]+/[A-Za-z0-9_-]{20,})"#, group: 1),
         rule("bearer", #"\b[Bb]earer\s+([A-Za-z0-9._~+/=-]{16,})"#, group: 1),
         rule("basic-auth", #"\b[Bb]asic\s+([A-Za-z0-9+/]{12,}={0,2})(?![A-Za-z0-9+/=])"#, group: 1, validate: looksLikeBase64),
         // Passwort in einer URL: scheme://user:passwort@host
@@ -82,6 +119,12 @@ enum ClipboardSecretMasker {
         if value.hasPrefix("<") || value.hasPrefix("${") || value.hasPrefix("$(") || value.hasPrefix("{{") { return true }
         if Set(lower).count <= 2 { return true }
         return false
+    }
+
+    /// Hugging-Face-Tokens mischen Groß- und Kleinbuchstaben; Bezeichner wie
+    /// `hf_downloadmodelfromhubwithretries…` nicht.
+    static func hasUpperAndLower(_ value: String) -> Bool {
+        value.contains(where: \.isUppercase) && value.contains(where: \.isLowercase)
     }
 
     static func looksLikeRandomToken(_ value: String) -> Bool {
