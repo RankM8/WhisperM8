@@ -23,26 +23,16 @@ final class AppInstanceTests: XCTestCase {
         XCTAssertEqual(AppInstance.defaultsDomain, "com.whisperm8.app")
     }
 
-    /// WM8-63: Die Chats der Test-Instanz bekommen ein eigenes Login-Fach im
-    /// Schlüsselbund; HOME allein trennt Claudes Login nicht.
-    func testTestChatsGetTheirOwnClaudeKeychainFolder() {
+    /// WM8-63: Das Test-Home trennt die Chats auch vom echten Claude-Login
+    /// (kein Login-Schlüsselbund erreichbar); eine Schlüsselbund-Variable
+    /// brauchen sie nicht.
+    func testTestChatsGetOnlyTheTestHome() {
         let root = URL(fileURLWithPath: "/Users/x/.whisperm8-test-instance", isDirectory: true)
-        let overrides = AppInstance.childEnvironmentOverrides(testRoot: root)
-        XCTAssertEqual(overrides["HOME"], "/Users/x/.whisperm8-test-instance/home")
-        XCTAssertEqual(overrides[AppInstance.claudeSecureStorageKey], "/Users/x/.whisperm8-test-instance/home/.claude")
-        XCTAssertEqual(overrides[AppInstance.rootEnvironmentKey], "/Users/x/.whisperm8-test-instance")
-        XCTAssertNil(overrides["CLAUDE_CONFIG_DIR"], "Claudes Konfigurationsordner bleibt $HOME/.claude")
+        XCTAssertEqual(AppInstance.childEnvironmentOverrides(testRoot: root), [
+            "HOME": "/Users/x/.whisperm8-test-instance/home",
+            AppInstance.rootEnvironmentKey: "/Users/x/.whisperm8-test-instance",
+        ])
         XCTAssertTrue(AppInstance.childEnvironmentOverrides(testRoot: nil).isEmpty, "Normalbetrieb unverändert")
-    }
-
-    /// Review WM8-63: Claude zieht CLAUDE_SECURESTORAGE_CONFIG_DIR vor; ein
-    /// Profil der Test-Instanz braucht deshalb beide mit demselben Wert.
-    func testProfileLaunchesCarryTheirOwnKeychainFolderInTheTestInstance() {
-        let root = URL(fileURLWithPath: "/Users/x/.whisperm8-test-instance", isDirectory: true)
-        XCTAssertEqual(AppInstance.claudeConfigEnvironment("/p/ai", testRoot: nil), ["CLAUDE_CONFIG_DIR": "/p/ai"],
-                       "Normalbetrieb unverändert")
-        XCTAssertEqual(AppInstance.claudeConfigEnvironment("/p/ai", testRoot: root),
-                       ["CLAUDE_CONFIG_DIR": "/p/ai", AppInstance.claudeSecureStorageKey: "/p/ai"])
     }
 
     func testStableHashIsDeterministic() {

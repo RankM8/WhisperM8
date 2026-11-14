@@ -179,8 +179,7 @@ struct ClaudeMCPSync {
         for addition in plan.additions {
             var environment: [String: String] = [:]
             if addition.profile != ClaudeAccountProfiles.mainProfileName {
-                environment.merge(AppInstance.claudeConfigEnvironment(
-                    profiles.configDir(forProfile: addition.profile).path)) { _, new in new }
+                environment["CLAUDE_CONFIG_DIR"] = profiles.configDir(forProfile: addition.profile).path
             }
             do {
                 let result = try await processRunner.run(

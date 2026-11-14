@@ -226,8 +226,7 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(envDict["HOME"], "/Users/test")
     }
 
-    /// WM8-63: Auch Claudes Schlüsselbund-Ordner wird nie geerbt; nur die
-    /// Test-Instanz setzt ihn bewusst (AppInstance.childEnvironmentOverrides).
+    /// WM8-63: Auch Claudes Schlüsselbund-Ordner wird nie geerbt.
     func testStripsInheritedClaudeSecureStorageDir() {
         let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
         let envDict = env.processEnvironment(base: [

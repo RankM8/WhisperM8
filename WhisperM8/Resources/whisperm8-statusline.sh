@@ -181,11 +181,7 @@ if [ "$cache_age" -ge "$usage_cache_ttl" ] && [ "$in_cooldown" = false ] && ! [ 
         # Keychain-Service je Profil: main = Standardname, Zusatzprofile =
         # Suffix sha256(<config-dir>)[0:8] (verifiziert, claude v2.1.207).
         # Hinterlegte .keychain-service-Datei gewinnt, sonst wird berechnet.
-        # CLAUDE_SECURESTORAGE_CONFIG_DIR gewinnt wie in Claude Code selbst
-        # (Test-Instanz: eigenes Login-Fach, WM8-63).
-        if [ -n "${CLAUDE_SECURESTORAGE_CONFIG_DIR:-}" ]; then
-            keychain_service="Claude Code-credentials-$(printf '%s' "$CLAUDE_SECURESTORAGE_CONFIG_DIR" | shasum -a 256 | cut -c1-8)"
-        elif [ -z "$CLAUDE_CONFIG_DIR" ]; then
+        if [ -z "$CLAUDE_CONFIG_DIR" ]; then
             keychain_service="Claude Code-credentials"
         elif [ -f "$cfg_dir/.keychain-service" ]; then
             keychain_service=$(cat "$cfg_dir/.keychain-service")

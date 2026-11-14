@@ -124,7 +124,7 @@ struct ClaudeAccountLimitPinger {
                 // für dasselbe Konto (Befund 11.10.2026).
                 environmentOverrides: name == ClaudeAccountProfiles.mainProfileName
                     ? [:]
-                    : AppInstance.claudeConfigEnvironment(configDir.path),
+                    : ["CLAUDE_CONFIG_DIR": configDir.path],
                 timeout: timeout
             )
         } catch {

@@ -261,7 +261,7 @@ struct ClaudeAccountProfiles {
             Logger.agentStore.warning("claude_profile_missing name=\(name, privacy: .public) — launch faellt auf main zurueck")
             return [:]
         }
-        return AppInstance.claudeConfigEnvironment(dir.path)
+        return ["CLAUDE_CONFIG_DIR": dir.path]
     }
 
     // MARK: - Transcript-Roots
@@ -357,10 +357,10 @@ struct ClaudeAccountProfiles {
         return Self.keychainService(forConfigDirPath: configDir(forProfile: name).path)
     }
 
-    /// `main` der Test-Instanz liegt unter einem eigenen Dienst, denn ihre
-    /// Chats bekommen `CLAUDE_SECURESTORAGE_CONFIG_DIR` (`AppInstance`). So
-    /// lesen und schreiben auch die App-Wege (Ablauf, Kontingent, Erneuerung,
-    /// „Zum Hauptkonto machen“) in der Test-Instanz nie den echten Login.
+    /// `main` der Test-Instanz bekommt einen eigenen Dienstnamen. Die Test-App
+    /// selbst läuft mit dem echten `HOME` und erreicht den Login-Schlüsselbund;
+    /// mit dem blanken Namen läsen und schrieben Ablauf-Anzeige, Kontingent,
+    /// Erneuerung und „Zum Hauptkonto machen“ dort den echten Login (WM8-63).
     static func mainKeychainService(testRoot: URL?) -> String {
         guard let testRoot else { return "Claude Code-credentials" }
         return keychainService(forConfigDirPath: AppInstance.testClaudeConfigDirectory(testRoot: testRoot).path)

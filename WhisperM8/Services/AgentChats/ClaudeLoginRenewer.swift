@@ -123,7 +123,7 @@ struct ClaudeLoginRenewer {
         let result = await processRunner.run(
             executable: claude,
             arguments: ["auth", "login", "--claudeai", "--email", expected.email],
-            environmentOverrides: AppInstance.claudeConfigEnvironment(stagingDir.path),
+            environmentOverrides: ["CLAUDE_CONFIG_DIR": stagingDir.path],
             workingDirectory: stagingDir.path,
             timeout: timeout,
             control: control,
