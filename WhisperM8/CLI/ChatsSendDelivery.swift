@@ -25,6 +25,11 @@ enum ChatsSendOutcome: Equatable {
         case timeout(seconds: TimeInterval, status: String?)
         /// Die App war während des Wartens nicht mehr erreichbar.
         case appUnreachable
+        /// Im Ziel ist eine Freigabe offen; `send` bestätigt keine (WM8-75).
+        case approvalPending
+        /// Text eingefügt, Enter zurückgehalten, weil eine Freigabe aufging
+        /// (WM8-75). Steht im Eingabefeld — nicht neu senden, nicht vormerken.
+        case enterWithheld
     }
 
     var keyword: String {
@@ -74,6 +79,11 @@ enum ChatsSendOutcome: Equatable {
             return "nach \(Int(seconds)) s noch nicht gestartet (Status: \(status ?? "unbekannt"))."
         case .appUnreachable:
             return "die App ist nicht mehr erreichbar, Start nicht bestätigt."
+        case .approvalPending:
+            return "im Chat ist eine Freigabe offen; send bestätigt keine Freigaben. Nicht zugestellt."
+        case .enterWithheld:
+            return "Text steht im Eingabefeld, das Enter wurde zurückgehalten, weil eine Freigabe aufging. "
+                + "Nicht neu senden und nicht vormerken; die Freigabe geht an den User."
         }
     }
 
@@ -86,6 +96,8 @@ enum ChatsSendOutcome: Equatable {
         case .errored: return "errored"
         case .timeout: return "timeout"
         case .appUnreachable: return "appUnreachable"
+        case .approvalPending: return "approvalPending"
+        case .enterWithheld: return "enterWithheld"
         }
     }
 }

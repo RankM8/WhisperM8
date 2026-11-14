@@ -186,11 +186,18 @@ enum ChatsSendCommand {
                 // statt mit einem Fehler zu enden, der einen zweiten Befehl verlangt.
                 // Nicht bei einem bewusst gesetzten --if-status: dessen Konflikt
                 // soll nicht über die Warteschlange umgangen werden (Review).
-                if queueIfBusy, let error = response.error,
-                   let code = ChatsControlErrorCode(rawValue: error.code), code.alternative == "enqueue",
-                   code == .notReady || ifStatus == nil {
+                let code = response.error.flatMap { ChatsControlErrorCode(rawValue: $0.code) }
+                // Zurückgehaltenes Enter (WM8-75): Der Text steht schon im
+                // Eingabefeld — nie vormerken, sonst käme er doppelt.
+                let withheld = response.error?.detail?["resend"]?.boolValue == false
+                if queueIfBusy, !withheld, let error = response.error, let code, code.alternative == "enqueue",
+                   code == .notReady || code == .approvalPending || ifStatus == nil {
                     return enqueue(targetID: targetID, ref: ref, prompt: prompt, json: json,
                                    waitSeconds: waitSeconds, busyReason: error.message)
+                }
+                if code == .approvalPending, queueIfBusy || waitSeconds != nil {
+                    return finish(.notStarted(withheld ? .enterWithheld : .approvalPending),
+                                  title: title, prompt: prompt, json: json, server: response)
                 }
                 return ChatsLiveSupport.mapError(response)
             }

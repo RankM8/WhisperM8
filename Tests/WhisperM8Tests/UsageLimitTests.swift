@@ -280,6 +280,17 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertTrue(outcome.line(title: "Dex", characters: 10).hasPrefix("✗ nicht angekommen: Dex — Konto am Nutzungslimit bis"))
     }
 
+    func testApprovalOutcomesFollowTheWM875Rules() {
+        // Zurückgehaltenes Enter: nie „gestartet“, nie vormerken, Exit 4.
+        let withheld = ChatsSendOutcome.notStarted(.enterWithheld)
+        XCTAssertEqual(withheld.exitCode, ChatsCLIExit.conflict)
+        XCTAssertEqual(withheld.reasonCode, "enterWithheld")
+        XCTAssertTrue(withheld.line(title: "Fin", characters: 3).contains("Nicht neu senden und nicht vormerken"))
+        let pending = ChatsSendOutcome.notStarted(.approvalPending)
+        XCTAssertEqual(pending.exitCode, ChatsCLIExit.conflict)
+        XCTAssertTrue(pending.line(title: "Fin", characters: 3).contains("send bestätigt keine Freigaben"))
+    }
+
     func testOutcomeTextsAndExitCodes() {
         XCTAssertEqual(ChatsSendOutcome.started(waited: 2).line(title: "Fin", characters: 5), "✓ gestartet: Fin arbeitet (nach 2 s)")
         XCTAssertEqual(ChatsSendOutcome.queued(position: 2, status: "working").line(title: "Fin", characters: 5),

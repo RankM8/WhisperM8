@@ -689,7 +689,11 @@ ein wachsender Verlauf: Codex schreibt beim Antworten minutenlang nichts.
 `--json` trägt dieselben Felder (`outcome`, `reason`, `waitedSeconds`,
 `position`, `usageLimitResetsAt`; `ok` folgt dem Ergebnis). `--force` bleibt,
 wie es ist; ein gesetztes `--if-status` wird nicht über die Warteschlange
-umgangen. Slash-Befehle (`/login`, `/model`, `/rate-limit-options`) gehen auch
+umgangen. Mit den Regeln aus WM8-75: Bei offener Freigabe meldet
+`send --wait-started` „nicht angekommen“ mit Grund `approvalPending`,
+`--queue-if-busy` merkt vor. Ein zurückgehaltenes Enter (`enterWithheld`, der
+Text steht im Eingabefeld) ist nie „gestartet“ und wird nie vorgemerkt, sonst
+käme der Text doppelt. Slash-Befehle (`/login`, `/model`, `/rate-limit-options`) gehen auch
 am Limit durch: sie sind der Ausweg.
 
 ### Chat am Nutzungslimit (WM8-69)
