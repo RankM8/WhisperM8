@@ -174,9 +174,9 @@ diese Zuordnung samt der Tabelle der Bereiche. Workspace und Key bleiben. Der Be
 deshalb auch ohne Netz und ohne Zugang.
 
 Ein Ordner ohne eigenes Team ist nicht in jedem Fall „ohne Team“, und das gilt genauso, wenn die Einstellungen
-eine Zuordnung entfernen: Liegt er in einem anderen Projektordner, erbt er dessen Team. Bleibt nur ein Team mit
-Ordner übrig, gehen Befehle ohne `--team` überall an dieses. Und die Sperre gegen das Schreiben in einen fremden
-Workspace hängt am Projekt: Für einen Ordner ohne Projekt gilt sie nicht.
+eine Zuordnung entfernen: Liegt er in einem anderen Projektordner, erbt er dessen Team. Sonst hat er keines;
+was dann gilt, steht unter „Mehrere Workspaces“ (Ordner ohne Team). Die Sperre gegen das Schreiben in einen
+fremden Workspace hängt am Projekt: Für einen Ordner ohne Projekt gilt sie nicht.
 
 ### In der App: Einstellungen › Tickets
 
@@ -213,12 +213,29 @@ Key, eigenen Teams und eigener Rechnung.
   Workspaces. Bei `board`, `list` und `new` kommt das Team aus dem Projekt des aktuellen Ordners oder `--team`.
 - **Nie geraten:** Gibt es nur einen Workspace, liegt jedes Team dort. Bei mehreren muss das Team zugeordnet
   sein (`tickets setup --team <Kürzel>`); sonst bricht der Befehl ab, bevor er Linear fragt.
+- **Ordner ohne Team:** Ein Ordner gehört zu einem Team, wenn er selbst oder ein Ordner über ihm zugeordnet
+  ist. Aus jedem anderen Ordner gilt für Befehle ohne Ticket-Nummer und ohne `--team`:
+
+  | | ein Workspace | mehrere Workspaces |
+  |---|---|---|
+  | `board`, `list` (lesen) | zeigen das einzige Team mit Ordner, wenn es genau eines gibt; sonst Abbruch mit Hinweis auf `--team` | Abbruch mit Hinweis auf `--team` |
+  | `new` (schreiben) | Abbruch, nichts wird angelegt | Abbruch, nichts wird angelegt |
+
+  Schreiben rät das Team nie. Früher ging `tickets new` aus jedem Ordner an das Team, das als einziges einen
+  Ordner hatte, und für einen Ordner ohne Projekt hält auch die Schreibsperre nichts auf. Die Absage (Exit 1)
+  nennt den Ordner, die eingerichteten Teams und beide Wege: `--team <Kürzel>` oder den Ordner zuordnen
+  (`tickets setup --team <Kürzel> --project <Ordner>`). Ruft ein Chat, dessen Projekt zugeordnet ist, nennt sie
+  sein Team als Vorschlag, nimmt es aber nicht von selbst. Lesen geht mit `--team` oder einer Ticket-Nummer
+  weiter aus jedem Ordner. Befehle mit Ticket-Nummer (`comment`, `status`, `done` …) nennen ihr Team selbst;
+  für sie ändert sich nichts.
 - **Schreibsperre über die Projektgrenze:** Ein Chat schreibt nur in den Workspace seines Projekts, egal in
   welchem Ordner seine Shell steht (`/tmp`, Home, eine Arbeitskopie neben dem Projekt). Ruft kein Chat oder ist
   dessen Projekt keinem Workspace zugeordnet, zählt der Ordner. Ein Chat der einen Firma kann die Tickets der
   anderen lesen, aber nicht ändern, und er hängt sich nicht an deren Tickets. Der Befehl endet mit Exit 4, bevor
   die fremde Quelle gefragt wird. Verlangt der Nutzer es ausdrücklich, hebt `--other-workspace` die Sperre für
-  diesen einen Aufruf auf. Ein Mensch im Terminal außerhalb jedes zugeordneten Ordners hat keine Grenze.
+  diesen einen Aufruf auf. Ein Mensch im Terminal außerhalb jedes zugeordneten Ordners hat keine Grenze,
+  solange er Team oder Ticket-Nummer nennt; dasselbe gilt für einen Chat, dessen Projekt keinem Team zugeordnet
+  ist und dessen Shell in einem Ordner ohne Team steht.
 - **Ein Kürzel, ein Workspace:** `tickets.json` kennt je Team-Kürzel genau einen Workspace. Gibt es dasselbe
   Kürzel in zwei Workspaces, ist nur das zugeordnete Team erreichbar; `doctor` nennt das Kürzel. `setup` hängt
   ein schon zugeordnetes Kürzel nicht still um, sondern nur mit `--reassign`: Sonst schriebe jeder Ordner dieses

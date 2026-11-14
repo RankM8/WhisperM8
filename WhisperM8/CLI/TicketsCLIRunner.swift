@@ -348,7 +348,7 @@ enum TicketsCLIRunner {
             return "\(key): Kommentar angelegt."
 
         case .new(let options):
-            let team = try resolveTeam(options.team, env)
+            let team = try resolveTeam(options.team, env, forWrite: true)
             let source = try access.source(forTeam: team)
             let assignee = try await options.assignee.asyncMap { try await source.person(matching: $0).id }
             let created = try await source.create(TicketDraft(
@@ -409,13 +409,39 @@ enum TicketsCLIRunner {
         return (model, snapshot, reachable, source)
     }
 
-    static func resolveTeam(_ explicit: String?, _ env: TicketsCLIEnvironment) throws -> String {
+    /// Team eines Befehls ohne Ticket-Nummer (`board`, `list`, `new`): `--team`,
+    /// sonst das Projekt des aktuellen Ordners (auch eines Ordners darunter).
+    ///
+    /// Aus einem Ordner ohne Projekt rät nur das Lesen, und nur solange es eine
+    /// einzige Firma gibt: dann zeigt es das einzige Team mit Ordner. Ein
+    /// Schreibbefehl rät nie. Sonst landete ein `tickets new` aus irgendeinem
+    /// Ordner still bei dem Team, das zufällig als einziges einen Ordner hat,
+    /// und für einen Ordner ohne Projekt hält ihn auch die Schreibsperre nicht auf.
+    static func resolveTeam(_ explicit: String?, _ env: TicketsCLIEnvironment, forWrite: Bool = false) throws -> String {
         if let explicit { return explicit.uppercased() }
         let config = env.config()
-        if let team = config.team(forDirectory: env.currentDirectory()) ?? config.onlyTeam { return team }
+        let directory = TicketConfig.normalized(env.currentDirectory())
+        if let team = config.team(forDirectory: directory) { return team }
+        if !forWrite, let team = config.teamForReadingAnywhere { return team }
+        let known = config.knownTeams
+        let teams = known.isEmpty ? "" : " Eingerichtet: \(known.joined(separator: ", "))."
+        let assign = "Oder den Ordner einmal zuordnen: whisperm8 tickets setup --team <Kürzel> --project \(directory)"
+        guard forWrite else {
+            throw Failure(exitCode: TicketsCLIExit.usage, message: """
+            Team unklar: \(directory) ist keinem Team zugeordnet.\(teams)
+            Das Team nennen: --team <Kürzel>
+            \(assign)
+            """)
+        }
+        // Ist der Aufrufer ein Chat, steht sein Projekt als Vorschlag da; genommen wird es nicht von selbst.
+        let chat = env.callerChatID().flatMap { id in env.chats().chats.first { $0.id == id } }
+        let hint = chat.flatMap { chat in
+            config.team(forDirectory: chat.projectPath).map { " Dein Chat gehört zum Projekt \(chat.projectName), Team \($0)." }
+        } ?? ""
         throw Failure(exitCode: TicketsCLIExit.usage, message: """
-        Team unklar: Dieser Ordner ist keinem Team zugeordnet.
-        Entweder --team <Kürzel> angeben oder einmal zuordnen: whisperm8 tickets setup --project <Ordner> --team <Kürzel>
+        Nichts angelegt: \(directory) ist keinem Team zugeordnet, und ein Schreibbefehl rät das Team nicht.\(teams)\(hint)
+        Das Team nennen: --team <Kürzel>
+        \(assign)
         """)
     }
 
@@ -654,18 +680,22 @@ enum TicketsCLIRunner {
 
     /// Was für einen Ordner gilt, dessen Team aus der Einrichtung ging. „Ohne
     /// Team“ stimmt nicht immer: Liegt er in einem anderen Projektordner, erbt
-    /// er dessen Team, und gibt es nur noch ein Team mit Ordner, gehen Befehle
-    /// ohne `--team` an dieses. Die Sperre gegen das Schreiben in einen fremden
-    /// Workspace hängt am Projekt des Ordners und fällt mit ihm weg.
+    /// er dessen Team. Gibt es nur eine Firma und nur noch ein Team mit Ordner,
+    /// zeigen lesende Befehle ohne `--team` dieses. Die Sperre gegen das
+    /// Schreiben in einen fremden Workspace hängt am Projekt des Ordners und
+    /// fällt mit ihm weg.
     static func foldersFate(_ folder: String, in config: TicketConfig) -> String {
         if let inherited = config.team(forDirectory: folder), let parent = config.projectPath(forDirectory: folder) {
             return "\(folder) gehört dann über \(parent) zum Team \(inherited)."
         }
-        let lock = "Die Sperre gegen das Schreiben in einen fremden Workspace gilt dort nicht mehr."
-        if let only = config.onlyTeam {
-            return "\(folder) hat kein eigenes Team mehr; Befehle ohne --team gehen dort an \(only), das einzige Team mit Ordner. \(lock)"
+        // Schreiben ohne --team bricht dort ab. Mit Ticket-Nummer oder --team geht es weiter,
+        // und die Sperre über die Projektgrenze greift für einen Ordner ohne Projekt nicht.
+        let writing = "Anlegen ohne --team bricht dort ab; mit Ticket-Nummer oder --team gilt die Sperre "
+            + "gegen das Schreiben in einen fremden Workspace dort nicht mehr."
+        if let only = config.teamForReadingAnywhere {
+            return "\(folder) hat kein eigenes Team mehr; board und list ohne --team zeigen dort \(only), das einzige Team mit Ordner. \(writing)"
         }
-        return "\(folder) hat kein Team mehr. \(lock)"
+        return "\(folder) hat kein Team mehr. \(writing)"
     }
 
     // MARK: Abschluss
