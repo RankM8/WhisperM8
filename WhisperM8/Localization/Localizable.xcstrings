@@ -321,6 +321,16 @@
         }
       }
     },
+    "%@ · not found in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · in %2$@ nicht gefunden"
+          }
+        }
+      }
+    },
     "%@ · then %@ %@": {
       "localizations": {
         "de": {
@@ -1207,6 +1217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eine Leiste am unteren Rand des Agent-Chats-Fensters zeigt, was jede Taste gerade tut."
+          }
+        }
+      }
+    },
+    "A team marked as not found was deleted or renamed in Linear, or this key can no longer see it. Remove it here; for a renamed team, link the folder to the new team afterwards.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Team mit dem Vermerk „nicht gefunden“ wurde in Linear gelöscht oder umbenannt, oder dieser Key sieht es nicht mehr. Entferne es hier; bei einem umbenannten Team ordne den Ordner danach dem neuen Team zu."
           }
         }
       }
@@ -11667,6 +11687,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht verbunden"
+          }
+        }
+      }
+    },
+    "Not found in Linear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Linear nicht gefunden"
           }
         }
       }
