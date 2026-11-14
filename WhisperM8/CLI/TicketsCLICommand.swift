@@ -345,7 +345,9 @@ enum TicketsCLICommand {
     LESEN
       whisperm8 tickets board [--team T] [--all] [--json]
                 Tickets nach Status mit Chat und dessen Zustand; dazu laufende
-                Chats ohne offenes Ticket und die Supervisor-Chats.
+                Chats ohne offenes Ticket und die Supervisor-Chats. Ohne --team
+                gilt das Team des Ordners; aus einem Ordner ohne Team nur bei
+                einem einzigen Workspace das einzige Team mit Ordner.
       whisperm8 tickets list [--mine | --unassigned | --person NAME]
                              [--no-agent | --with-agent] [--project VORHABEN]
                              [--status STATUS] [--team T] [--json]
@@ -398,6 +400,9 @@ enum TicketsCLICommand {
       whisperm8 tickets new <Titel> [--description TEXT] [--project VORHABEN]
                             [--status S] [--priority high] [--labels a,b]
                             [--assignee me|NAME] [--team T]
+                Ohne --team gilt das Team des Ordners (auch eines Ordners
+                darunter). Aus einem Ordner ohne Team wird nichts angelegt:
+                --team nennen oder den Ordner mit setup zuordnen.
       whisperm8 tickets assign <Ticket> <me | none | NAME>
       whisperm8 tickets label <Ticket> [--add a,b] [--remove c]
 

@@ -60,10 +60,18 @@ struct TicketConfig: Codable, Equatable {
             .max { $0.count < $1.count }
     }
 
-    /// Gibt es nur ein Team, gilt es überall.
+    /// Das einzige Team mit Projektordner, falls es genau eines gibt.
     var onlyTeam: String? {
         let teams = Set(teamsByProjectPath.values)
         return teams.count == 1 ? teams.first : nil
+    }
+
+    /// Team für lesende Befehle aus einem Ordner ohne Projekt: das einzige Team
+    /// mit Ordner, aber nur solange höchstens ein Workspace eingerichtet ist.
+    /// Bei mehreren Firmen wird nicht geraten, in welche jemand gerade sieht.
+    /// Schreibende Befehle nehmen diesen Rückfall nie.
+    var teamForReadingAnywhere: String? {
+        knownWorkspaces.count <= 1 ? onlyTeam : nil
     }
 
     func projectPaths(forTeam team: String) -> [String] {

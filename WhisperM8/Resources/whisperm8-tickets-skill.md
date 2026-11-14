@@ -118,6 +118,10 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
 - Der Zustand der Chats (arbeitet, ruht, wartet auf dich) kommt aus der laufenden App. Ohne App gehen alle
   Befehle, das Board zeigt dann „Zustand unbekannt“ und keine Chats ohne Ticket.
 - Das Team ergibt sich aus dem Projekt des aktuellen Ordners (auch in Arbeitsordnern darunter), sonst `--team ABC`.
+  Steht deine Shell in einem Ordner ohne Team (`/tmp`, Scratchpad, Home), legt `tickets new` ohne `--team` nichts
+  an und sagt, wie es geht: Es landet nie von selbst bei dem Team, das zufällig als einziges einen Ordner hat.
+  Nenn dann das Team deines eigenen Projekts mit `--team`; rate keines. `board` und `list` brauchen dort ebenfalls
+  `--team`, außer es gibt nur einen Workspace und nur ein Team mit Ordner.
 - **Mehrere Workspaces** (mehrere Firmen): Das Team steckt in der Ticket-Nummer, der Workspace folgt aus dem Team.
   Du schreibst nur in den Workspace deines Projekts, egal in welchem Ordner du gerade stehst; Tickets eines
   anderen Workspaces kannst du lesen (`show`, `list --team`), aber nicht ändern und dich nicht daran hängen. Die
