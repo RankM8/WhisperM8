@@ -225,14 +225,13 @@ enum TicketsCLIArguments: Equatable {
             let withProjects = flag("--with-projects")
             if let removed = try value("--remove-team") {
                 // Entfernen steht für sich: Zusammen mit einer Zuordnung wäre unklar, was zuerst gilt.
-                if let option = rest.first(where: { $0.hasPrefix("--") }) {
+                if let option = rest.first(where: { $0.hasPrefix("--") }), !used.contains(option) {
                     throw ParseError.usage("--remove-team geht nicht zusammen mit \(option) (dazu passt nur --with-projects)")
                 }
                 _ = try positional(0, "tickets setup --remove-team T [--with-projects]")
-                guard !removed.trimmingCharacters(in: .whitespaces).isEmpty, !removed.hasPrefix("-") else {
-                    throw ParseError.usage("--remove-team braucht ein Team-Kürzel")
-                }
-                return .removeTeam(team: removed.uppercased(), withProjects: withProjects)
+                let team = removed.trimmingCharacters(in: .whitespaces).uppercased()
+                guard !team.isEmpty, !team.hasPrefix("-") else { throw ParseError.usage("--remove-team braucht ein Team-Kürzel") }
+                return .removeTeam(team: team, withProjects: withProjects)
             }
             guard !withProjects else { throw ParseError.usage("--with-projects braucht --remove-team") }
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
@@ -416,8 +415,9 @@ enum TicketsCLICommand {
       whisperm8 tickets setup --remove-team T [--with-projects]
                 Nimmt ein Team wieder aus der Einrichtung, etwa wenn es in
                 Linear gelöscht oder umbenannt wurde. Hängt noch ein Ordner
-                an ihm, bricht der Befehl ab und nennt ihn; --with-projects
-                löst auch diese Zuordnung. Linear wird nicht gefragt.
+                an ihm, bricht der Befehl ab und nennt die Folgen;
+                --with-projects löst auch diese Zuordnung. Linear wird
+                nicht gefragt.
       whisperm8 tickets setup                          zeigt die Einrichtung
       whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App,
                 dazu die Ordnung: Tickets ohne Projekt, ohne „Fertig, wenn“,

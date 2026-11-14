@@ -154,7 +154,7 @@ struct TicketsSettingsPage: View {
                 }
             }
             if model.hasMissingTeams {
-                SettingsHelpText("A team marked as not found was deleted, renamed or moved in Linear. Remove it here; for a renamed team, link the folder to the new team.")
+                SettingsHelpText("A team marked as not found was deleted or renamed in Linear, or this key can no longer see it. Remove it here; for a renamed team, link the folder to the new team afterwards.")
             }
 
             if model.teamChoices.isEmpty {

@@ -95,7 +95,7 @@ final class TicketsSettingsModel {
         var team: String
         /// `nil`, wenn das Team keinem Workspace zugeordnet ist.
         var workspace: String?
-        /// Der Workspace kennt das Team nicht (mehr): gelöscht, umbenannt oder verlegt.
+        /// Der Zugang sieht das Team in seinem Workspace nicht (mehr): gelöscht, umbenannt oder ohne Zugriff.
         var teamMissing = false
         var id: String { path }
     }
@@ -294,8 +294,16 @@ final class TicketsSettingsModel {
         }
     }
 
+    /// Löst einen Ordner von seinem Team. Hing er an einem Team, das sein
+    /// Workspace nicht mehr kennt, geht mit dem letzten Ordner auch das Team
+    /// aus der Einrichtung; sonst bliebe es als eigene Zeile stehen, und der
+    /// Ordner ließe sich erst nach einem zweiten Klick neu zuordnen.
     func removeMapping(path: String) async {
-        let outcome = await change { $0.removeProject(path) }
+        let goneTeam = mappings.first { $0.path == path && $0.teamMissing }?.team
+        let outcome = await change { config in
+            config.removeProject(path)
+            if let goneTeam, config.projectPaths(forTeam: goneTeam).isEmpty { config.removeTeam(goneTeam) }
+        }
         mappingProblem = outcome == .saved ? nil : String(localized: "Couldn't save the ticket settings.")
         await load()
     }

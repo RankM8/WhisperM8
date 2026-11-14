@@ -1221,12 +1221,12 @@
         }
       }
     },
-    "A team marked as not found was deleted, renamed or moved in Linear. Remove it here; for a renamed team, link the folder to the new team.": {
+    "A team marked as not found was deleted or renamed in Linear, or this key can no longer see it. Remove it here; for a renamed team, link the folder to the new team afterwards.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ein Team mit dem Vermerk „nicht gefunden“ wurde in Linear gelöscht, umbenannt oder verlegt. Entferne es hier; bei einem umbenannten Team ordne den Ordner dem neuen Team zu."
+            "value": "Ein Team mit dem Vermerk „nicht gefunden“ wurde in Linear gelöscht oder umbenannt, oder dieser Key sieht es nicht mehr. Entferne es hier; bei einem umbenannten Team ordne den Ordner danach dem neuen Team zu."
           }
         }
       }
