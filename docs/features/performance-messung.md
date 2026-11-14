@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-05
+updated: 2026-11-14
 description: Performance-Messung in WhisperM8 — Signposts, Budgets, Messstufen, Stall-Monitor und Watchdog, Messskripte.
 ---
 
@@ -50,6 +50,14 @@ also Hintergrundzeit, keine Main-Thread-Zeit. Das erste Einlesen der Historie
 (Backfill) wird nicht gemessen, es ist gewollt gedrosselt (`.background`,
 Pause zwischen Dateien, wartet bei Diktat, Stromsparmodus und Hitze). Läufe,
 die wegen eines Diktats gewartet haben, werden verworfen statt bewertet.
+
+## Ticket-Ansicht
+
+Kategorie des Stores, Stufe `.detail`, nur solange die Ticket-Ansicht sichtbar ist: `tickets.fetch` (3 s) ist
+ein Abruf bei Linear, also Netz-Latenz und keine Main-Thread-Zeit; er läuft alle 120 Sekunden. `tickets.chats`
+(4 ms) liest je neuem Abzug die Liste der Chats auf dem Main Thread, `tickets.build` (30 ms) gleicht Abzug und
+Chats abseits des Main Threads ab. Alle drei sind Startwerte ohne Messung an Realdaten. Fehlt `tickets.fetch` im
+Log, obwohl das Board offen ist, ist das Fenster verdeckt oder der Schalter aus.
 
 ## Raster: Aufbau und Fokuswechsel
 
