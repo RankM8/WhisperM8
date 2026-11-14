@@ -20164,6 +20164,46 @@
         }
       }
     },
+    "Works in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet in %@"
+          }
+        }
+      }
+    },
+    "Works in the folder %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet im Ordner %@"
+          }
+        }
+      }
+    },
+    "Works in the main folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet im Hauptordner"
+          }
+        }
+      }
+    },
+    "Works in the worktree %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet in der Arbeitskopie %@"
+          }
+        }
+      }
+    },
     "Workspace": {
       "localizations": {
         "de": {
@@ -20580,6 +20620,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hintergrund-Agent"
+          }
+        }
+      }
+    },
+    "branch %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch %@"
           }
         }
       }
@@ -21070,6 +21120,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "main"
+          }
+        }
+      }
+    },
+    "main folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hauptordner"
           }
         }
       }

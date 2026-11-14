@@ -245,6 +245,9 @@ final class AgentSessionStatusCoordinator {
         watcher.processIDProvider = { [weak self] sessionID in
             self?.terminalProcessID(sessionID)
         }
+        watcher.onWorkingLocation = { [weak self] sessionID, location in
+            self?.handleWorkingLocation(sessionID: sessionID, location: location)
+        }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)
@@ -1330,6 +1333,23 @@ final class AgentSessionStatusCoordinator {
 
     /// Persistiert `lastTurnAt` und stößt den Auto-Namer an — vormals
     /// `AgentChatsView.handleTurnFinished`.
+    /// Ordner oder Branch eines Chats hat sich geändert (WM8-60): einordnen
+    /// (Hauptordner, Arbeitskopie, anderer Ordner) und am Chat merken. Der
+    /// Store schreibt nur bei einer echten Änderung.
+    func handleWorkingLocation(sessionID: UUID, location: AgentWorkingLocation) {
+        let workspace = store.loadWorkspace()
+        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+              let project = workspace.projects.first(where: { $0.id == session.projectID }) else { return }
+        let copy = AgentWorkingCopyClassifier.classify(
+            cwd: location.cwd, projectPath: project.path, branch: location.branch)
+        guard copy != session.workingCopy else { return }
+        do {
+            try store.setWorkingCopy(copy, for: sessionID)
+        } catch {
+            Logger.debug("Failed to record working copy: \(error.localizedDescription)")
+        }
+    }
+
     private func performTurnFinishedBookkeeping(sessionID: UUID) {
         let workspace = store.loadWorkspace()
         guard let session = workspace.sessions.first(where: { $0.id == sessionID }),

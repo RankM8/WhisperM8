@@ -195,6 +195,27 @@ Bekannte Grenzen:
   melden; die PTY-Ausgabe als Arbeitssignal nutzen; ein echtes Freigabe-Signal
   über Codex-Hooks oder die OSC-9-Meldungen der TUI.
 
+Aus demselben Tail-Read leitet der Watcher ab, wo ein Chat arbeitet (WM8-60,
+`AgentWorkingLocationExtractor`): Claude schreibt `cwd` und `gitBranch` in jede
+Nachrichtenzeile, Codex `cwd` je Turn in den `turn_context` und den Branch nur
+in `session_meta.git` am Dateianfang. Fehlt er im Tail, liest `GitHeadReader`
+`.git/HEAD` des Ordners (bei einer Arbeitskopie über die `gitdir:`-Datei),
+ohne `git`-Subprozess. Der Koordinator ordnet den Ordner ein
+(`AgentWorkingCopyClassifier`: Hauptordner samt Unterordnern, Arbeitskopie
+unter `.claude/worktrees/<name>`, anderer Ordner) und speichert ihn als
+`AgentChatSession.workingCopy`, nur bei einer Änderung und ohne den
+Aktivitäts-Bump von `updateSession`, damit sich die Sortierung nicht
+verschiebt. Kachelkopf und Kopfzeile zeigen ihn als Marke
+(`AgentWorkingCopyBadge`), Tab und Seitenleiste ein kleines Zeichen, wenn der
+Chat nicht im Hauptordner arbeitet (`AgentWorkingCopyMarker`); die
+Seitenleiste liest dafür den Workspace, nicht den Activity-Store. Der
+Projekt-Branch `AgentProject.lastBranch` ist der Branch des Projektordners und
+bleibt nur der Ersatz, solange ein Chat noch keinen Ort hat. Kosten je Chat:
+der Parse einer Zeile im ohnehin gelesenen Tail, bei Codex zwei bis drei
+kleine Dateien je Tail-Read, ein Workspace-Save nur bei Ordner- oder
+Branchwechsel. Der Indexer verwirft Sitzungen mit Arbeitskopie-Pfad als cwd
+weiterhin (`isClaudeWorktreePath`).
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu

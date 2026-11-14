@@ -909,6 +909,7 @@ extension AgentChatsView {
                     .help(project.name)
             }
             accountBadge(for: session)
+            if let copy = session.workingCopy { AgentWorkingCopyBadge(copy: copy, maxWidth: 260) }
             if Self.showsNoteCards {
                 JarvisNoteChevron(sessionID: session.id, windowID: windowID,
                                   taskSource: Self.noteTaskSource(session, project: project),

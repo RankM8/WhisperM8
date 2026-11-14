@@ -130,6 +130,7 @@ enum ChatsOutput {
             // dem Ablageort (Resume-Selbstheilung), der Stempel wird nachgezogen.
             dict["accountStamp"] = stamped
         }
+        dict["workingCopy"] = session.workingCopy.map(workingCopyJSON) ?? NSNull()
         if let attention {
             dict["attention"] = ["category": attention.category.rawValue, "rank": attention.rank]
         }
@@ -137,6 +138,43 @@ enum ChatsOutput {
             dict["lastAssistantLine"] = line
         }
         return dict
+    }
+
+    /// Wo der Chat zuletzt gearbeitet hat (WM8-60): `kind` mainFolder |
+    /// worktree | otherFolder, dazu Ordner, Name der Arbeitskopie und Branch.
+    static func workingCopyJSON(_ copy: AgentWorkingCopy) -> [String: Any] {
+        [
+            "kind": copy.kind.rawValue,
+            "path": copy.path,
+            "name": copy.name ?? NSNull(),
+            "branch": copy.branch ?? NSNull(),
+        ]
+    }
+
+    /// Für `chats show`: Ort ausgeschrieben, Ordner in Klammern.
+    static func workingCopyLine(_ copy: AgentWorkingCopy) -> String {
+        let place: String
+        switch copy.kind {
+        case .mainFolder: place = "Hauptordner"
+        case .worktree: place = "Arbeitskopie \(copy.name ?? "?")"
+        case .otherFolder: place = "anderer Ordner \(copy.name ?? "?")"
+        }
+        let branch = copy.branch.map { " · Branch \($0)" } ?? ""
+        return "\(place)\(branch)  (\(copy.path))"
+    }
+
+    /// Knapp für Tabellen: `main@<branch>`, `wt:<name>@<branch>`,
+    /// `dir:<name>`; `-` wenn unbekannt.
+    static func workingCopyShort(_ copy: AgentWorkingCopy?) -> String {
+        guard let copy else { return "-" }
+        let place: String
+        switch copy.kind {
+        case .mainFolder: place = "main"
+        case .worktree: place = "wt:" + (copy.name ?? "?")
+        case .otherFolder: place = "dir:" + (copy.name ?? "?")
+        }
+        guard let branch = copy.branch else { return place }
+        return place + "@" + branch
     }
 
     /// Claude-Konto eines Chats, wie es die CLI zeigt.
@@ -249,16 +287,20 @@ enum ChatsOutput {
             CLIIO.out("Keine Sessions im Scope. (--all zeigt archivierte und ältere.)")
             return
         }
-        CLIIO.out(pad("REF", 10) + pad("PROJEKT/TITEL", 42) + pad("STATUS", 15) + pad("SEIT", 8) + "  FLAGS")
+        CLIIO.out(pad("REF", 10) + pad("PROJEKT/TITEL", 42) + pad("STATUS", 15) + pad("SEIT", 8)
+                  + pad("ORT", 28) + "FLAGS")
         for item in items {
             let session = item.entry.session
             let name = truncate("\(item.entry.projectName)/\(session.title)", 40)
             let status = item.runtime.status?.rawValue ?? "unknown"
             let since = item.runtime.since.map { relative(from: $0, to: now) } ?? "–"
-            CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8) + "  "
+            let place = truncate(workingCopyShort(session.workingCopy), 26)
+            CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8)
+                      + pad(place, 28)
                       + flags(session.id, selfID: selfID, openTabIDs: openTabIDs, pinnedIDs: pinnedIDs))
         }
-        CLIIO.err("\(items.count) Sessions · ⊙=offener Tab 📌=gepinnt (du)=diese Session")
+        CLIIO.err("\(items.count) Sessions · ORT: main=Hauptordner wt:=Arbeitskopie dir:=anderer Ordner, @Branch"
+                  + " · ⊙=offener Tab 📌=gepinnt (du)=diese Session")
     }
 
     /// Flag-Kürzel pro Zeile: offener Tab, gepinnt, Selbst-Markierung.
@@ -327,6 +369,7 @@ enum ChatsOutput {
         CLIIO.out("── IDENTITÄT " + String(repeating: "─", count: 40))
         CLIIO.out("Titel        \(session.title)\(titleMarks)")
         CLIIO.out("Projekt      \(entry.projectName)  (\(entry.projectPath))")
+        if let copy = session.workingCopy { CLIIO.out("Ort          \(workingCopyLine(copy))") }
         CLIIO.out("Ref          \(shortID(session.id))  ·  \(session.id.uuidString)")
         CLIIO.out("Provider     \(session.provider.rawValue) · \(session.effectiveKind.displayName) · Modell \(modelDisplay(session: session, transcriptModel: transcriptModel).text)")
         if let group = session.groupName { CLIIO.out("Gruppe       \(group)") }

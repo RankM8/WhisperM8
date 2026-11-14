@@ -3146,7 +3146,9 @@ struct AgentChatsView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
-                if let branch = project.lastBranch, !branch.isEmpty {
+                if let copy = selectedSession?.workingCopy {
+                    AgentWorkingCopyBadge(copy: copy)
+                } else if let branch = project.lastBranch, !branch.isEmpty {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 9))
                         .foregroundStyle(AgentTheme.textTertiary)
