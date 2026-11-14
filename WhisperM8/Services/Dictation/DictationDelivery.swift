@@ -22,6 +22,9 @@ enum DictationChatState: Equatable {
     case ready
     /// Der Agent wartet auf eine Antwort oder Freigabe.
     case awaitingInput
+    /// Claudes Frage-Dialog mit freiem Textfeld ist offen, doppelt erkannt
+    /// (`ClaudeQuestionTextGate`): Text darf als Einfüge-Block hinein.
+    case questionAcceptsText
     /// Die TUI fährt noch hoch.
     case starting
     /// Konto am Nutzungslimit (WM8-69): Text würde verbraucht, ohne dass der
@@ -44,6 +47,8 @@ enum DictationDeliveryDecision: Equatable {
     /// Der bisherige Weg (Zwischenablage, optional Auto-Paste).
     case frontApp
     case writeToChat(sessionID: UUID, submit: Bool)
+    /// In Claudes offene Frage, ins freie Textfeld, nie mit Enter.
+    case writeToQuestion(sessionID: UUID)
     case clipboardOnly(DictationClipboardReason)
     /// Nichts zu liefern (leerer Text an einen Chat).
     case nothing
@@ -69,9 +74,14 @@ enum DictationDeliveryRouter {
             switch chatState(sessionID) {
             case .ready:
                 return .writeToChat(sessionID: sessionID, submit: delivery.submit)
+            case .questionAcceptsText:
+                // Nur das Textfeld einer erkannten Frage; das Senden übernimmt
+                // immer der Nutzer (bei Mehrfachauswahl nähme Enter den Haken
+                // wieder weg).
+                return .writeToQuestion(sessionID: sessionID)
             case .awaitingInput:
-                // In eine offene Rückfrage des Agenten läuft nie Text: Er
-                // könnte dort als Antwort gelten.
+                // Freigabe, Plan oder nicht sicher erkannt: Nie Text hinein,
+                // er könnte dort als Antwort gelten.
                 return .clipboardOnly(.decisionPending)
             case .starting:
                 return .clipboardOnly(.chatStarting)

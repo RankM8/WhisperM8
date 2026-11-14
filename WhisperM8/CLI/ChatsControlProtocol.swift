@@ -119,6 +119,11 @@ enum ChatsControlErrorCode: String, Codable {
     /// (Start-Race nach `resume`). Eigener Code statt `conflict`, weil der
     /// Ausweg ein anderer ist: warten oder `enqueue`, nicht `--force`.
     case notReady
+    /// → Exit 4: Im Ziel ist eine Freigabe (oder ein anderer Dialog statt des
+    /// Eingabefelds) offen. `send` bestätigt nie eine Freigabe — die geht an
+    /// den User (WM8-75). Auch, wenn das Enter zurückgehalten wurde, weil sie
+    /// erst nach dem Einfügen aufging.
+    case approvalPending
     case invalid           // → Exit 1 (kaputte Parameter)
     case unsupported       // → Exit 1
     case internalError     // → Exit 4
@@ -126,7 +131,7 @@ enum ChatsControlErrorCode: String, Codable {
     var exitCode: Int32 {
         switch self {
         case .notFound: return ChatsCLIExit.notFound
-        case .conflict, .selfSend, .noPty, .notReady, .internalError: return ChatsCLIExit.conflict
+        case .conflict, .selfSend, .noPty, .notReady, .approvalPending, .internalError: return ChatsCLIExit.conflict
         case .invalid, .unsupported: return ChatsCLIExit.usage
         }
     }
@@ -135,7 +140,7 @@ enum ChatsControlErrorCode: String, Codable {
     /// Entscheidung zwischen „erneut versuchen" und „anders lösen".
     var isRetryable: Bool {
         switch self {
-        case .notReady, .conflict: return true
+        case .notReady, .conflict, .approvalPending: return true
         case .notFound, .selfSend, .noPty, .invalid, .unsupported, .internalError: return false
         }
     }
@@ -143,7 +148,7 @@ enum ChatsControlErrorCode: String, Codable {
     /// Sicherer Alternativweg, falls es einen gibt.
     var alternative: String? {
         switch self {
-        case .notReady, .conflict: return "enqueue"
+        case .notReady, .conflict, .approvalPending: return "enqueue"
         case .noPty: return "resume"
         default: return nil
         }

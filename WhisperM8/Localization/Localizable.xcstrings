@@ -11191,6 +11191,16 @@
         }
       }
     },
+    "Not sent: the chat is asking for a decision": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesendet: Der Chat fragt nach einer Entscheidung"
+          }
+        }
+      }
+    },
     "Not signed in": {
       "localizations": {
         "de": {
@@ -11540,6 +11550,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bei Rückfragen (Freigabe, Frage, Plan-Bestätigung)"
+          }
+        }
+      }
+    },
+    "On the clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Zwischenablage"
+          }
+        }
+      }
+    },
+    "On the clipboard · ⌘V to paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Zwischenablage · ⌘V fügt ein"
           }
         }
       }

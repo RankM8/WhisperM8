@@ -43,6 +43,9 @@ extension RecordingCoordinator {
             appState.lastError = body
             deliveryErrors.append(body)
             dictationNoticePoster(String(localized: "Text not inserted"), body)
+            // Die Mitteilung allein sieht man leicht nicht (Fokus, Mitteilungen
+            // aus): Die Pille sagt es kurz selbst, ohne Bewegung (WM8-66).
+            overlayController.showQuickActionHint(Self.clipboardOnlyPillHint(for: reason), duration: Self.clipboardOnlyPillSeconds)
         }
 
         switch decision {
@@ -53,6 +56,16 @@ extension RecordingCoordinator {
         case .nothing:
             overlayController.hide()
             Logger.paste.info("Dictation for agent chat was empty, nothing delivered")
+        case .writeToQuestion(let sessionID):
+            copyAndRecord()
+            overlayController.hide()
+            if chatWriter.writeToQuestion(finalText, to: sessionID) {
+                Logger.paste.info("Dictation written into the open question of an agent chat")
+            } else {
+                // Die Frage war beim Schreiben nicht mehr sicher erkannt.
+                Logger.paste.warning("Dictation for an open question kept on clipboard")
+                noteClipboardOnly(.decisionPending)
+            }
         case .writeToChat(let sessionID, let submit):
             copyAndRecord()
             overlayController.hide()
@@ -64,7 +77,6 @@ extension RecordingCoordinator {
             }
         case .clipboardOnly(let reason):
             copyAndRecord()
-            overlayController.hide()
             Logger.paste.info("Dictation for agent chat kept on clipboard reason=\(String(describing: reason), privacy: .public)")
             noteClipboardOnly(reason)
         }
@@ -95,6 +107,18 @@ extension RecordingCoordinator {
         try? FileManager.default.removeItem(at: audioURL)
         visualContextCaptureService.cleanup(contextBundle)
     }
+
+    /// Kurzer Hinweis in der Pille, wenn ein Diktat nur in der Zwischenablage
+    /// liegt. Bei offener Rückfrage ohne ⌘V: In einer Freigabe bewirkt es nichts.
+    static func clipboardOnlyPillHint(for reason: DictationClipboardReason) -> String {
+        switch reason {
+        // Am Limit kein ⌘V-Tipp: auch eingefügter Text würde verbraucht.
+        case .decisionPending, .chatUsageLimited: return String(localized: "On the clipboard")
+        case .chatStarting, .chatNotRunning, .writeFailed: return String(localized: "On the clipboard · ⌘V to paste")
+        }
+    }
+
+    static let clipboardOnlyPillSeconds: TimeInterval = 4
 
     /// Ein Satz je Grund: warum nicht eingefügt wurde und wo der Text liegt.
     static func clipboardOnlyMessage(for reason: DictationClipboardReason) -> String {
