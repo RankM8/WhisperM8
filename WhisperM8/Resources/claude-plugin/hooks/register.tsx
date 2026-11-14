@@ -198,7 +198,7 @@ const syncTool = async ($: EngineInterface, active: boolean) => {
           type: 'string',
           description: 'Arbeitspaket: woran der Chat arbeitet, ein Ergebnis für die nächsten 30 min bis wenige Stunden — kein Einzelschritt',
         },
-        needs: { type: 'string', description: 'Eingriff: Frage oder Entscheidung an den User (bei needsYou), sonst leer' },
+        needs: { type: 'string', description: 'Eingriff: Frage oder Entscheidung an den User (bei needsYou), sonst leer. In wenigen Wörtern: Der Kasten zeigt davon eine Zeile, etwa 30 bis 50 Zeichen' },
         blocker: { type: 'string', description: 'Was den Chat aufhält, ohne dass der User gefragt ist; leer = keine' },
         text: { type: 'string', description: 'Meilenstein (milestone): Commit, Tests grün, Entscheidung gefallen, übergeben' },
       },
@@ -397,7 +397,9 @@ export type TitleParts = { name: string; ticket: string | null; topic: string }
  * Bekannte Ticket-Schlüssel (Linear WM8, DealSupply und Akquise). Nur diese
  * gelten als Ticket, sonst läse „GPT-5 Router · Fix“ sich als Ticket GPT-5.
  */
-const TICKET = /^((?:WM8|DS|DEAL|DEA|AKQ|PRB|LISTM8)-\d+)\s+/
+const TICKET = /^((?:WM8|DS|DEAL|DEA|AKQ|PRB|FBT|LISTM8)-\d+)\s+/
+/** Dieselben Schlüssel als letztes Wort eines Bereichs („Produkt AKQ“). */
+const TEAM_AT_END = /(?:^|\s)(WM8|DS|DEAL|DEA|AKQ|PRB|FBT|LISTM8)$/
 const NAME_WIDTH = 24
 
 /**
@@ -423,188 +425,213 @@ export const titleParts = (title: string, fallback = '?'): TitleParts => {
 export const clean = (text: string) =>
   String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim()
 
-/** Zeilen, die `text` bei Wortumbruch in `width` Spalten braucht (mindestens 1). */
-export const wrapRows = (text: string, width: number) => wrapLines(text, width).length
-
-/** Wortumbruch wie im Terminal; überlange Wörter werden hart geteilt. */
-const wrapLines = (text: string, width: number): string[] => {
-  const w = Math.max(1, width)
-  const lines: string[] = []
-  let line = ''
-  for (const word of clean(text).split(' ')) {
-    let rest = word
-    while (rest.length > w) {
-      if (line !== '') {
-        lines.push(line)
-        line = ''
-      }
-      lines.push(rest.slice(0, w))
-      rest = rest.slice(w)
-    }
-    if (rest === '') continue
-    if (line === '') line = rest
-    else if (line.length + 1 + rest.length <= w) line = `${line} ${rest}`
-    else {
-      lines.push(line)
-      line = rest
-    }
-  }
-  if (line !== '' || lines.length === 0) lines.push(line)
-  return lines
+/**
+ * Bereich eines Chats ohne Ticket vorn im Titel, aus dem Thema: Beginnt es
+ * mit einem Ticket, gilt das Ticket. Sonst der Teil vor dem Doppelpunkt
+ * („Neustart: Gesamt-Review“ → „Neustart“); endet er auf ein bekanntes
+ * Team-Kürzel, gilt das Kürzel („Produkt DS“ → „DS“). Ein Thema ohne
+ * Doppelpunkt ist nur als einzelnes Wort ein Bereich, sonst ein Satz, der
+ * die Spalte für alle breit zöge.
+ */
+export const areaOf = (topic: string) => {
+  const ticket = TICKET.exec(`${topic} `)
+  if (ticket) return ticket[1]!
+  const colon = topic.indexOf(':')
+  const area = (colon < 0 ? topic : topic.slice(0, colon)).trim()
+  const key = TEAM_AT_END.exec(area)
+  if (key) return key[1]!
+  return colon < 0 && /\s/.test(area) ? '' : area
 }
 
-/** `text` auf höchstens `rows` umbrochene Zeilen gekürzt, mit „…“ am Ende. */
-export const clipToRows = (text: string, width: number, rows: number) => {
-  const lines = wrapLines(text, width)
-  if (lines.length <= rows) return clean(text)
-  const kept = lines.slice(0, Math.max(1, rows))
-  const last = kept[kept.length - 1]!
-  kept[kept.length - 1] = last.length >= width ? `${last.slice(0, Math.max(0, width - 1))}…` : `${last}…`
-  return kept.join(' ')
-}
+/** Ein Wartender als eine Zeile: Rufname, Ticket oder Bereich, Anliegen; schon auf die Spalten gekürzt. */
+export type WaitingLine = { sessionID: string; name: string; tag: string; text: string }
 
-/** Ein Wartender im Kasten: Eintrag und der Satz, wie er gezeigt wird ('' = ohne Satzzeile). */
-export type WaitingRow = { entry: BoardEntry; sentence: string }
+/** Spalten der Wartenden: so breit wie der längste gezeigte Wert, höchstens die Obergrenze. */
+export type WaitingColumns = { nameWidth: number; tagWidth: number; textWidth: number; lines: WaitingLine[] }
+
+/** So viele Spalten braucht das Anliegen mindestens, damit Ticket oder Bereich daneben stehen. */
+const MIN_TEXT_WIDTH = 8
 
 /**
- * Welche Wartenden in `maxRows` Zeilen passen. Je Wartendem `perEntry`
- * Zeilen (Abstand und Kopfzeile) plus der umbrochene Satz. `fixed` = Zeilen
- * außerhalb (Kopf, Abstand, Sammelzeilen). Der erste Wartende steht immer
- * da, sein Satz wird notfalls gekürzt oder weggelassen; wer danach nicht
- * mehr passt, zählt in `hidden`.
+ * Die Wartenden als Zeilen für `width` Spalten. Jede Zeile ist
+ * `● <Name>  <Ticket|Bereich>  <Anliegen>` und nie länger als `width`:
+ * Was nicht passt, endet auf „…“, umbrochen wird nichts. Fehlt allen das
+ * Ticket und der Bereich, entfällt die Spalte; ebenso, wenn neben ihr kaum
+ * Platz für das Anliegen bliebe.
  */
-export const layoutWaiting = (
-  waiting: readonly BoardEntry[], cols: number, maxRows: number, fixed: number, perEntry = 2,
-) => {
-  const textWidth = Math.max(10, cols - 2)
-  let budget = Math.max(0, maxRows - fixed)
-  const rows: WaitingRow[] = []
-  for (const entry of waiting) {
-    const sentence = clean(say(entry))
-    const need = perEntry + wrapRows(sentence, textWidth)
-    if (need <= budget) {
-      rows.push({ entry, sentence })
-      budget -= need
-      continue
-    }
-    if (rows.length === 0 && budget >= perEntry) {
-      const room = budget - perEntry
-      rows.push({ entry, sentence: room >= 1 ? clipToRows(sentence, textWidth, room) : '' })
-      budget = 0
-    }
-    break
-  }
-  return { rows, hidden: waiting.length - rows.length, textWidth }
+export const waitingLines = (waiting: readonly BoardEntry[], width: number): WaitingColumns => {
+  const narrow = width < 60
+  const parts = waiting.map(entry => {
+    const t = titleParts(entry.title, entry.ref)
+    return { sessionID: entry.sessionID, name: t.name, tag: t.ticket ?? areaOf(t.topic), text: clean(say(entry)) }
+  })
+  const widest = (values: string[], cap: number) => Math.min(cap, values.reduce((n, v) => Math.max(n, v.length), 0))
+  // „● “ und der Name stehen immer da; danach je zwei Leerzeichen vor Ticket und Anliegen.
+  const nameWidth = Math.max(1, Math.min(widest(parts.map(x => x.name), narrow ? 8 : 12), width - 4))
+  const afterName = width - 2 - nameWidth - 2
+  const wanted = widest(parts.map(x => x.tag), narrow ? 7 : 10)
+  const tagWidth = wanted > 0 && afterName - wanted - 2 >= MIN_TEXT_WIDTH ? wanted : 0
+  const textWidth = Math.max(0, afterName - (tagWidth > 0 ? tagWidth + 2 : 0))
+  const lines = parts.map(x => ({
+    sessionID: x.sessionID, name: clip(x.name, nameWidth), tag: tagWidth > 0 ? clip(x.tag, tagWidth) : '',
+    // Unter zwei Spalten bliebe vom Anliegen nur das „…“.
+    text: textWidth >= 2 ? clip(x.text, textWidth) : '',
+  }))
+  return { nameWidth, tagWidth, textWidth, lines }
 }
 
-/** Aufbau des Kastens für eine Höhe: was gezeigt wird und was wegfällt. */
+/** Eine Zeile als reiner Text, so wie sie im Kasten steht (für Tests und Belege). */
+export const waitingText = (line: WaitingLine, columns: WaitingColumns) =>
+  [
+    `● ${line.name.padEnd(columns.nameWidth)}`,
+    ...(columns.tagWidth > 0 ? [line.tag.padEnd(columns.tagWidth)] : []),
+    line.text,
+  ].join('  ').trimEnd()
+
+/** Wer wartet (Ampel needsYou), wer läuft, wer fertig ist und wer ruht. */
+export const groups = (entries: readonly BoardEntry[]) => {
+  const byAge = [...entries].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+  return {
+    waiting: byAge.filter(e => e.light === 'needsYou'),
+    running: byAge.filter(e => e.light === 'running'),
+    done: byAge.filter(e => e.light === 'done'),
+    // Alles Übrige ruht; auch künftige Ampelwerte (alte Mod mit neuer CLI).
+    resting: byAge.filter(e => e.light !== 'needsYou' && e.light !== 'running' && e.light !== 'done'),
+  }
+}
+
+/** Rufname in der Sammelzeile; ⚑ davor, wenn der Chat selbst auf eine Antwort wartet. */
+export const shortName = (e: BoardEntry) => `${e.status === 'awaitingInput' ? '⚑ ' : ''}${titleParts(e.title, e.ref).name}`
+
+/**
+ * Alle Chats, die den User nicht brauchen, in EINER Zeile:
+ * „läuft Ole · fertig Vic · ruht Kai, Fin, Mia“. Passt sie nicht in `room`
+ * Spalten, verliert die Gruppe mit den meisten gezeigten Namen den letzten
+ * (bei Gleichstand die hintere), der Rest steht als „+n“; zuletzt wird
+ * gekürzt. Leere Gruppen fehlen, ohne Chats ist die Zeile leer.
+ */
+export const summaryLine = (
+  running: readonly BoardEntry[], done: readonly BoardEntry[], resting: readonly BoardEntry[], room: number,
+) => {
+  // Wer selbst auf eine Antwort wartet, steht in seiner Gruppe vorn und fällt so zuletzt in „+n“.
+  const names = (entries: readonly BoardEntry[]) =>
+    [...entries.filter(e => e.status === 'awaitingInput'), ...entries.filter(e => e.status !== 'awaitingInput')].map(shortName)
+  const all = [
+    { label: 'läuft', names: names(running) },
+    { label: 'fertig', names: names(done) },
+    { label: 'ruht', names: names(resting) },
+  ].filter(g => g.names.length > 0)
+  const shown = all.map(g => g.names.length)
+  const text = () =>
+    all.map((g, i) => {
+      const rest = g.names.length - shown[i]!
+      return `${g.label} ${g.names.slice(0, shown[i]).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
+    }).join(' · ')
+  while (text().length > room) {
+    let pick = -1
+    for (let i = 0; i < all.length; i++) if (shown[i]! > 1 && (pick < 0 || shown[i]! >= shown[pick]!)) pick = i
+    if (pick < 0) break
+    shown[pick] = shown[pick]! - 1
+  }
+  return clip(text(), Math.max(1, room))
+}
+
+/** Rahmen und Innenabstand links und rechts: so viel schmaler als der Kasten ist sein Inhalt. */
+export const FRAME_COLUMNS = 4
+/** Schmaler als so hat der Kasten keinen Rahmen: Er nähme dem Inhalt zu viel. */
+const FRAME_MIN_COLUMNS = 24
+/** Anfang des Kopfs („Jarvis · 3 warten auf dich“); der Rest steht im Plan. */
+export const HEAD_NAME = 'Jarvis'
+export const HEAD_JOIN = ' · '
+/**
+ * Der Kopf steht in der oberen Rahmenlinie: „╭─ Jarvis · … ─╮“. Davor zwei
+ * Zeichen Rahmen, um ihn je ein Leerzeichen, dahinter mindestens „─╮“.
+ */
+export const HEAD_LEFT = 2
+const HEAD_FRAME_COLUMNS = HEAD_LEFT + 2 + 2
+
+/** Aufbau des Kastens für eine Breite und Höhe: was gezeigt wird und was wegfällt. */
 export type BoxPlan = {
-  rows: WaitingRow[]
+  /** Runder Rahmen; fehlt, wenn er Wartende oder die Sammelzeile verdrängte, und in sehr schmalen Kacheln. */
+  frame: boolean
+  /** Rahmenfarbe als Gesamtampel. */
+  border: 'error' | 'success' | 'inactive'
+  /** Breite des Inhalts (im Rahmen ohne Rahmen und Innenabstand). */
+  width: number
+  /** Kopf nach „Jarvis · “ („3 warten auf dich …“); '' = ohne Kopf. Mit Rahmen steht er in der Rahmenlinie. */
+  head: string
+  columns: WaitingColumns
+  /** Wartende, die nicht mehr passen; der Kopf zählt sie. */
   hidden: number
-  textWidth: number
-  /** Leerzeilen zwischen den Blöcken. */
-  gaps: boolean
-  /** Sammelzeilen „läuft“ und „ruht“; sonst stehen ihre Zahlen im Kopf. */
-  summaries: boolean
-  /** Zahlen der Sammelzeilen im Kopf, wenn diese wegfallen. */
-  headCounts: string[]
-  /** Kopfzeile „Jarvis · …“. */
-  head: boolean
+  /** Sammelzeile; '' = keine. */
+  summary: string
+}
+
+/** Zahlen der Gruppen, die niemanden brauchen: „1 läuft“, „1 fertig“, „3 ruhen“. */
+export const restCounts = (running: number, done: number, resting: number) =>
+  [
+    running > 0 ? countWord(running, 'läuft', 'laufen') : '',
+    done > 0 ? `${done} fertig` : '',
+    resting > 0 ? countWord(resting, 'ruht', 'ruhen') : '',
+  ].filter(Boolean)
+
+/** Teile des Kopfs mit „ · “ verbunden; passt es nicht in `room`, fallen von hinten ganze Teile weg, erst zuletzt wird gekürzt. */
+const fitHead = (parts: string[], room: number) => {
+  const kept = [...parts]
+  while (kept.length > 1 && kept.join(HEAD_JOIN).length > room) kept.pop()
+  return clip(kept.join(HEAD_JOIN), Math.max(1, room))
 }
 
 /**
  * Der Kasten bleibt in jeder Höhe innerhalb von `maxRows` (Vic, WM8-88): Der
- * Hauptbildschirm hinterlässt sonst Reste. Reicht der Platz nicht, fallen
- * erst die Abstände weg, dann die Sammelzeilen (ihre Zahlen wandern in den
- * Kopf), dann die Sätze; zuletzt steht nur der Kopf.
+ * Hauptbildschirm hinterlässt sonst Reste. Voll braucht er zwei Zeilen Rahmen
+ * (der Kopf steht in der oberen Rahmenlinie), je Wartendem eine Zeile und die
+ * Sammelzeile. Reicht der Platz nicht, fällt zuerst der Rahmen weg (der Kopf
+ * wird dann eine eigene Zeile), danach die Sammelzeile (ihre Zahlen stehen
+ * dann im Kopf), zuletzt von hinten die Wartenden (der Kopf zählt sie): Was
+ * den User braucht, weicht nie dem Schmuck. Ohne Wartende steht nur die
+ * Sammelzeile da, ab drei Zeilen im Rahmen.
  */
-export const layoutBox = (
-  waiting: readonly BoardEntry[], running: readonly BoardEntry[], resting: readonly BoardEntry[],
-  cols: number, maxRows: number,
-): BoxPlan => {
-  const k = (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
-  const counts = [
-    running.length > 0 ? countWord(running.length, 'läuft', 'laufen') : '',
-    resting.length > 0 ? countWord(resting.length, 'ruht', 'ruhen') : '',
-  ].filter(Boolean)
-  const textWidth = Math.max(10, cols - 2)
-  const none = { rows: [], hidden: waiting.length, textWidth, gaps: false, summaries: false, headCounts: counts }
-  if (maxRows < 1) return { ...none, head: false }
-  if (waiting.length === 0) {
-    // Nur die Sammelzeilen; reicht eine Zeile nicht für beide, eine Kopfzeile mit den Zahlen.
-    return k <= maxRows ? { ...none, summaries: true, headCounts: [], head: false } : { ...none, head: true }
-  }
-  // Reihenfolge des Weglassens: erst die Abstände, dann die Sammelzeilen.
-  const steps: Array<[boolean, boolean]> = k > 0 ? [[true, true], [false, true], [false, false]] : [[true, false], [false, false]]
-  for (const [gaps, summaries] of steps) {
-    const fixed = 1 + (summaries ? (gaps ? 1 : 0) + k : 0)
-    const perEntry = (gaps ? 1 : 0) + 1
-    if (fixed + perEntry + 1 > maxRows) continue
-    const laid = layoutWaiting(waiting, cols, maxRows, fixed, perEntry)
-    return { ...laid, gaps, summaries, headCounts: summaries ? [] : counts, head: true }
-  }
-  // Sehr wenig Platz: Kopf und so viele Namen wie passen, ohne Sätze.
-  const rows = waiting.slice(0, maxRows - 1).map(entry => ({ entry, sentence: '' }))
-  return { ...none, rows, hidden: waiting.length - rows.length, head: true }
-}
-
-/** Zeilen, die ein Plan belegt (für Tests und die Höhenprüfung). */
-export const planRows = (plan: BoxPlan, summaryCount: number) =>
-  (plan.head ? 1 : 0) +
-  plan.rows.reduce((n, r) => n + (plan.gaps ? 1 : 0) + 1 + (r.sentence === '' ? 0 : wrapRows(r.sentence, plan.textWidth)), 0) +
-  (plan.summaries ? (plan.head && plan.gaps && summaryCount > 0 ? 1 : 0) + summaryCount : 0)
-
-/** Fortschritt „4/7“, sobald die Quelle ihn liefert; bis dahin nichts. */
-export const progressOf = (e: BoardEntry) => {
-  const p = e.progress
-  if (!p || !Number.isFinite(p.done) || !Number.isFinite(p.total) || p.total <= 0) return ''
-  return `${Math.max(0, Math.floor(p.done))}/${Math.floor(p.total)}`
-}
-
-/**
- * Namen hintereinander („Gus 4/7 · Jon · Noa“), so viele wie in `room`
- * Spalten passen; der Rest als „+n“. Eine Zeile, damit der Kasten niedrig
- * bleibt.
- */
-export const fitNames = (names: readonly string[], room: number) => {
-  let line = ''
-  for (let i = 0; i < names.length; i++) {
-    const next = line === '' ? names[i]! : `${line} · ${names[i]}`
-    const rest = names.length - i - 1
-    const tail = rest > 0 ? ` +${rest}` : ''
-    if (next.length + tail.length > room) {
-      const left = names.length - i
-      // Schon der erste Name passt nicht: gekürzt statt verschwunden.
-      if (line === '') {
-        const more = rest > 0 ? ` +${rest}` : ''
-        return `${clip(names[i]!, Math.max(1, room - more.length))}${more}`
-      }
-      return `${line} +${left}`
+export const layoutBox = (entries: readonly BoardEntry[], cols: number, maxRows: number): BoxPlan | null => {
+  const { waiting, running, done, resting } = groups(entries)
+  const others = running.length + done.length + resting.length
+  if (maxRows < 1 || waiting.length + others === 0) return null
+  const border = waiting.length > 0 ? 'error' : done.length > 0 ? 'success' : 'inactive'
+  const frame = cols >= FRAME_MIN_COLUMNS && maxRows >= 2 + waiting.length + (others > 0 ? 1 : 0)
+  const width = Math.max(1, frame ? cols - FRAME_COLUMNS : cols)
+  if (frame) {
+    return {
+      frame, border, width,
+      head: waiting.length > 0 ? fitHead([waitingHead(waiting.length)], cols - HEAD_FRAME_COLUMNS - HEAD_NAME.length - HEAD_JOIN.length) : '',
+      columns: waitingLines(waiting, width), hidden: 0, summary: summaryLine(running, done, resting, width),
     }
-    line = next
   }
-  return line
-}
-
-/** Wer wartet (Ampel needsYou), wer läuft, wer ruht (fertig oder geparkt). */
-export const groups = (entries: readonly BoardEntry[]) => {
-  const byAge = [...entries].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
-  const rest = byAge.filter(e => e.light !== 'needsYou' && e.light !== 'running')
+  if (waiting.length === 0) {
+    return { frame, border, width, head: '', columns: waitingLines([], width), hidden: 0, summary: summaryLine(running, done, resting, width) }
+  }
+  // Ohne Rahmen: Kopf als eigene Zeile, darunter die Wartenden, darunter die Sammelzeile.
+  const room = maxRows - 1
+  const withSummary = others > 0 && waiting.length + 1 <= room
+  const shown = waiting.slice(0, Math.max(0, withSummary ? room - 1 : room))
+  const hidden = waiting.length - shown.length
+  // Wer nicht gezeigt wird, steht vor den Zahlen: Wird der Kopf zu lang, fallen diese zuerst weg.
+  const head = fitHead(
+    [
+      `${waitingHead(waiting.length)}${hidden > 0 ? ` (+${hidden} nicht gezeigt)` : ''}`,
+      ...(withSummary ? [] : restCounts(running.length, done.length, resting.length)),
+    ],
+    width - HEAD_NAME.length - HEAD_JOIN.length,
+  )
   return {
-    waiting: byAge.filter(e => e.light === 'needsYou'),
-    running: byAge.filter(e => e.light === 'running'),
-    // Alles, was weder wartet noch läuft, ruht; auch künftige Ampelwerte
-    // (alte Mod mit neuer CLI). Fertige zuerst: sie warten auf Abnahme.
-    resting: [...rest.filter(e => e.light === 'done'), ...rest.filter(e => e.light !== 'done')],
+    frame, border, width, head, columns: waitingLines(shown, width), hidden,
+    summary: withSummary ? summaryLine(running, done, resting, width) : '',
   }
 }
 
-/** Name in einer Sammelzeile: ⚑ bei Rückfrage im Chat, ✓ bei fertig (Abnahme offen), dazu der Fortschritt. */
-export const shortName = (e: BoardEntry) => {
-  const flag = e.status === 'awaitingInput' ? '⚑ ' : e.light === 'done' ? '✓ ' : ''
-  const progress = progressOf(e)
-  return `${flag}${titleParts(e.title, e.ref).name}${progress ? ` ${progress}` : ''}`
-}
+/** Zeilen, die ein Plan belegt (für Tests und die Höhenprüfung). Im Rahmen kostet der Kopf keine. */
+export const planRows = (plan: BoxPlan | null) =>
+  plan === null ? 0
+    : (plan.frame ? 2 : 0) + (plan.head === '' || plan.frame ? 0 : 1) + plan.columns.lines.length + (plan.summary === '' ? 0 : 1)
 
 /** „1 läuft“ / „2 laufen“, „1 ruht“ / „2 ruhen“ für die eingeklappte Zeile. */
 export const countWord = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
@@ -615,7 +642,16 @@ export const waitingHead = (count: number) => (count === 1 ? '1 wartet auf dich'
 // Steuerzeichen (C0, DEL, C1) und Anführungszeichen raus, auf eine Zeile, gekürzt.
 const asData = (text: string) => clip(String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/[„“"]/g, "'").trim(), 120)
 
-const clip = (text: string, width: number) => (text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text)
+/** Auf `width` Zeichen gekürzt, mit „…“ am Ende. Schneidet nach Codepoints: Ein Emoji wird nie halbiert. */
+const clip = (text: string, width: number) => {
+  if (text.length <= width) return text
+  let kept = ''
+  for (const char of text) {
+    if (kept.length + char.length > width - 1) break
+    kept += char
+  }
+  return `${kept}…`
+}
 
 // MARK: Voice-Callouts
 
@@ -928,11 +964,13 @@ export const register: Register = (on, options) => {
     return { text: 'Unbekannt. /board klappt das Band ein und aus, dazu gibt es an, aus, zu und auf.' }
   })
 
-  // WM8-88: oben, was den User braucht (Rufname, Ticket, ganzer Satz mit
-  // Umbruch), darunter je eine Sammelzeile für laufende und ruhende Chats.
-  // Keine Ziffern zum Springen, keine Kennung, kein Alter: niedrig und
-  // selten geändert, weil der Hauptbildschirm den Bereich bei jeder Änderung
-  // neu zeichnet.
+  // WM8-99: runder Rahmen mit der Gesamtampel als Farbe, der Kopf steht in
+  // der oberen Rahmenlinie. Jeder Chat, der den User braucht, steht in genau
+  // einer Zeile (Rufname, Ticket oder Bereich, Anliegen; zu Langes endet auf
+  // „…“), alle anderen zusammen in einer Sammelzeile. Keine Ziffern zum
+  // Springen, kein Alter, kein Bedien-Hinweis (WM8-88): niedrig und selten
+  // geändert, weil der Hauptbildschirm den Bereich bei jeder Änderung neu
+  // zeichnet.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const view = await read($, board)
@@ -940,13 +978,12 @@ export const register: Register = (on, options) => {
     const isFolded = await read($, folded)
     const { Box, Text } = $.ui.resolve(e)
     const cols = e.props.bodyColumns
-    const { waiting, running, resting } = groups(view.entries)
 
     if (isFolded) {
+      const { waiting, running, done, resting } = groups(view.entries)
       const parts = [
         waiting.length > 0 ? waitingHead(waiting.length) : '',
-        running.length > 0 ? countWord(running.length, 'läuft', 'laufen') : '',
-        resting.length > 0 ? countWord(resting.length, 'ruht', 'ruhen') : '',
+        ...restCounts(running.length, done.length, resting.length),
       ].filter(Boolean)
       return (
         <Box flexDirection="row" width={cols}>
@@ -961,64 +998,75 @@ export const register: Register = (on, options) => {
       )
     }
 
-    const LABEL_WIDTH = 7
-    const room = Math.max(10, cols - LABEL_WIDTH)
-    const summary = (label: string, entries: readonly BoardEntry[]) =>
-      entries.length === 0 ? null : (
-        <Box key={label} flexDirection="row" width={cols}>
-          <Box width={LABEL_WIDTH} flexShrink={0}>
-            <Text dimColor>{label}</Text>
-          </Box>
-          <Text dimColor wrap="truncate-end">
-            {fitNames(entries.map(shortName), room)}
+    const plan = layoutBox(view.entries, cols, e.props.maxRows)
+    if (plan === null) return next(e)
+    const { nameWidth, tagWidth } = plan.columns
+    const lines = plan.columns.lines.map(line => (
+      <Box key={line.sessionID} flexDirection="row">
+        <Box width={2} flexShrink={0}>
+          <Text color="error">●</Text>
+        </Box>
+        <Box width={nameWidth + 2} flexShrink={0}>
+          <Text bold wrap="truncate-end">
+            {line.name}
           </Text>
         </Box>
-      )
-
-    const plan = layoutBox(waiting, running, resting, cols, e.props.maxRows)
-    if (!plan.head && !plan.summaries) return next(e)
-    const headParts = [waiting.length > 0 ? waitingHead(waiting.length) : '', ...plan.headCounts].filter(Boolean)
-
-    return (
-      <Box flexDirection="column" width={cols}>
-        {plan.head && (
-          <Box flexDirection="row" width={cols}>
-            <Text color="claude" bold>
-              Jarvis
-            </Text>
-            <Text color={waiting.length > 0 ? 'error' : undefined} bold={waiting.length > 0} dimColor={waiting.length === 0} wrap="truncate-end">
-              {' · '}
-              {headParts.join(' · ')}
-              {plan.hidden > 0 ? `  (+${plan.hidden} nicht gezeigt)` : ''}
+        {tagWidth > 0 && (
+          <Box width={tagWidth + 2} flexShrink={0}>
+            <Text dimColor wrap="truncate-end">
+              {line.tag}
             </Text>
           </Box>
         )}
-        {plan.rows.map(({ entry, sentence }) => {
-          const t = titleParts(entry.title, entry.ref)
-          return (
-            <Box key={entry.sessionID} flexDirection="column" marginTop={plan.gaps ? 1 : 0}>
-              <Box flexDirection="row" width={cols}>
-                <Text color="error">● </Text>
-                <Text bold>{t.name}</Text>
-                {t.ticket !== null && <Text dimColor>{` · ${t.ticket}`}</Text>}
-                {t.topic !== '' && (
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {t.topic}
-                  </Text>
-                )}
+        <Box flexGrow={1} flexShrink={1}>
+          <Text wrap="truncate-end">{line.text}</Text>
+        </Box>
+      </Box>
+    ))
+    const summary = plan.summary !== '' && (
+      <Text dimColor wrap="truncate-end">
+        {plan.summary}
+      </Text>
+    )
+
+    if (!plan.frame) {
+      // Sehr wenig Höhe oder Breite: derselbe Inhalt ohne Rahmen, der Kopf als eigene Zeile.
+      return (
+        <Box flexDirection="column" width={cols}>
+          {plan.head !== '' && (
+            <Box flexDirection="row">
+              <Box flexShrink={0}>
+                <Text color="claude" bold>
+                  {HEAD_NAME}
+                </Text>
               </Box>
-              {sentence !== '' && (
-                <Box paddingLeft={2} width={cols}>
-                  <Text wrap="wrap">{sentence}</Text>
-                </Box>
-              )}
+              <Text color="error" bold wrap="truncate-end">
+                {HEAD_JOIN}
+                {plan.head}
+              </Text>
             </Box>
-          )
-        })}
-        {plan.summaries && plan.head && plan.gaps && <Box height={1} />}
-        {plan.summaries && summary('läuft', running)}
-        {plan.summaries && summary('ruht', resting)}
+          )}
+          {lines}
+          {summary}
+        </Box>
+      )
+    }
+    // Die Box kennt keinen Titel im Rahmen. Der Kopf liegt deshalb als absolut
+    // gesetzte Box über der oberen Rahmenlinie (an der laufenden CLI geprüft:
+    // als Kind der gerahmten Box übermalt ihn der Rahmen, als Geschwister
+    // danach nicht). Er ist im Plan so gekürzt, dass rechts „─╮“ stehen bleibt.
+    return (
+      <Box flexDirection="column" width={cols}>
+        <Box flexDirection="column" borderStyle="round" borderColor={plan.border} paddingX={1} width={cols}>
+          {lines}
+          {summary}
+        </Box>
+        {plan.head !== '' && (
+          <Box position="absolute" top={0} left={HEAD_LEFT} flexDirection="row">
+            <Text color="claude" bold>{` ${HEAD_NAME}`}</Text>
+            <Text color="error" bold>{`${HEAD_JOIN}${plan.head} `}</Text>
+          </Box>
+        )}
       </Box>
     )
   })

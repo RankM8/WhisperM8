@@ -1,6 +1,6 @@
 # Plugin `whisperm8` und Jarvis-Board
 
-Stand: 14.11.2026 (Kasten nach WM8-88). Plan, Prototyp-Messwerte und Entscheidungen:
+Stand: 14.11.2026 (Kasten nach WM8-99). Plan, Prototyp-Messwerte und Entscheidungen:
 `docs/plans/whisperm8-plugin.md`.
 
 ## Was es ist
@@ -12,55 +12,73 @@ Stand: 14.11.2026 (Kasten nach WM8-88). Plan, Prototyp-Messwerte und Entscheidun
   `whisperm8:callout`) und der Mod „Jarvis-Board“ samt Voice-Callouts
   (`docs/features/speech-callouts.md`) und Task-Zähler (§ Task-Anzeige). Jede Claude-Session, die die App startet, lädt es, in jedem
   Profil und ohne `claude plugin install`.
-- **Jarvis-Board:** Ein Kasten über dem Prompt der Jarvis-Session. Oben
-  stehen die Chats, die auf den User warten, darunter alle anderen in zwei
-  Sammelzeilen. Jarvis pflegt die Liste, die App hält sie, die Mod zeigt sie
-  an und weckt Jarvis, wenn ein Board-Chat auf den User wartet oder fertig ist.
+- **Jarvis-Board:** Ein Kasten über dem Prompt der Jarvis-Session. Jeder
+  Chat, der auf den User wartet, hat darin eine Zeile, alle anderen stehen
+  zusammen in einer Sammelzeile. Jarvis pflegt die Liste, die App hält sie,
+  die Mod zeigt sie an und weckt Jarvis, wenn ein Board-Chat auf den User
+  wartet oder fertig ist.
 
 ```
-Jarvis · 2 warten auf dich
-
-● Kai · WM8-65  Umzug DealSupply
-  Richard und Xeno nach Linear einladen und
-  anmelden lassen, dann den Import freigeben.
-
-● Dex · WM8-61  Arbeitskopie betreten
-  Einmal in der Test-Instanz anmelden.
-
-läuft  Gus 4/7 · Jon 2/7 · Ole 0/8 · Noa
-ruht   Vic · Mia · Fin
+╭─ Jarvis · 3 warten auf dich ─────────────────────────────────────────╮
+│ ● Ida  AKQ     Frage: Wie läuft das Aufräumen?                       │
+│ ● Nia  DS      Ja zu den Projekten in Linear                         │
+│ ● Jon  WM8-81  Drei Handgriffe am Ticket-Board                       │
+│ läuft Ole · fertig Vic · ruht Kai, Fin, Mia                          │
+╰──────────────────────────────────────────────────────────────────────╯
 ```
 
-Seit WM8-88 (14.11.2026) gilt:
+Seit WM8-99 (14.11.2026) gilt für das Aussehen:
 
-- **Wartende Chats** (Ampel `needsYou`) stehen mit Rufname, Ticket und Thema da.
-  Rufname, Ticket und Thema kommen aus dem Chat-Titel („WM8-65 Kai · Umzug
-  DealSupply“). Ohne Ticket steht nur der Rufname, ohne „·“ der ganze Titel.
-  Darunter folgt das Anliegen als ganzer Satz, der umbricht statt
-  abgeschnitten zu werden.
-- **Alle anderen** stehen in zwei Sammelzeilen, „läuft“ (Ampel `running`) und
-  „ruht“ (`done` und `parked`, fertige vorn mit ✓). Passen nicht alle Namen
-  in die Zeile, steht der Rest als „+n“. Ein ⚑ vor dem Namen heißt, dass der
-  Chat selbst auf eine Antwort wartet. Als Ticket gelten nur die bekannten
-  Schlüssel (WM8, DS, DEAL, DEA, AKQ, PRB, LISTM8).
-- **Fortschritt** („4/7“) erscheint, sobald `chats board --json` das Feld
-  `progress` liefert (aus den Kästchen am Ticket, eigenes Ticket). Bis dahin
-  fehlt er.
-- **Ohne wartende Chats** stehen nur die Sammelzeilen. Ein leeres Board
-  zeichnet nichts.
+- **Rahmen:** rund, seine Farbe ist die Gesamtampel. Rot, sobald ein Chat
+  wartet; grün, wenn keiner wartet und einer fertig ist; sonst grau. Der Kopf
+  („Jarvis · 3 warten auf dich“) steht in der oberen Rahmenlinie und kostet
+  keine Zeile.
+- **Wartende Chats** (Ampel `needsYou`) haben je genau eine Zeile: Punkt,
+  Rufname, Ticket oder Bereich, Anliegen. Rufname und Ticket kommen aus dem
+  Chat-Titel („WM8-81 Jon · Ticket-Board“). Ohne Ticket steht der Bereich da,
+  der Teil des Themas vor dem Doppelpunkt („Vic · Neustart: Gesamt-Review“ →
+  „Neustart“); endet er auf ein Team-Kürzel, gilt das Kürzel („Produkt AKQ“ →
+  „AKQ“). Ein Thema ohne Doppelpunkt ist nur als einzelnes Wort ein Bereich
+  („Kai · Umzug“ → „Umzug“), ein Satz nicht; die Spalte bleibt dann leer.
+  Ohne „·“ ist der ganze Titel der Name. Die Spalten sind so breit wie ihr
+  längster Wert, höchstens 12 und 10 Zeichen (ist der Kasten schmaler als 64
+  Spalten, 8 und 7). Was nicht passt, endet auf „…“; umbrochen wird nichts.
+- **Alle anderen** stehen in einer einzigen Sammelzeile, nur mit Rufnamen:
+  „läuft“ (Ampel `running`), „fertig“ (`done`, Abnahme offen) und „ruht“
+  (`parked`). Leere Gruppen fehlen. Passt die Zeile nicht, gibt die Gruppe
+  mit den meisten Namen hinten welche ab; der Rest steht als „+n“. Ein ⚑ vor
+  einem Namen heißt, dass der Chat selbst gerade auf eine Antwort wartet
+  (Status `awaitingInput`), auf dem Board aber nicht als wartend steht. Solche
+  Namen stehen in ihrer Gruppe vorn und fallen zuletzt in „+n“.
+- **Ohne wartende Chats** steht nur die Sammelzeile im Rahmen, ohne Kopf.
+  Ein leeres Board zeichnet nichts.
 - **Wenig Platz:** Der Kasten bleibt in jeder Höhe innerhalb der Zeilen, die
   Claude Code ihm gibt (`maxRows`), sonst hinterlässt der Hauptbildschirm
-  Reste. Voll braucht er ab 7 Zeilen (Kopf, Abstand, Name, Satz, Abstand,
-  läuft, ruht). Darunter fallen erst die Abstände weg, dann die Sammelzeilen
-  (ihre Zahlen stehen dann im Kopf), dann die Sätze; zuletzt bleibt nur der
-  Kopf. Wartende, die nicht mehr passen, zählt der Kopf („+1 nicht gezeigt“).
+  Reste. Voll braucht er zwei Zeilen Rahmen, je Wartendem eine Zeile und die
+  Sammelzeile. Reicht das nicht, weicht zuerst der Rahmen (der Kopf wird dann
+  eine eigene Zeile), danach die Sammelzeile (ihre Zahlen stehen dann im
+  Kopf), zuletzt von hinten die Wartenden (der Kopf zählt sie: „+1 nicht
+  gezeigt“). Wer den User braucht, weicht nie dem Schmuck. Ohne Wartende hat
+  die Sammelzeile ab drei Zeilen ihren Rahmen. Ist der Kasten schmaler als 24
+  Spalten, hat er nie einen.
 - **Unbekannte Ampel:** Ein Eintrag mit einem Ampelwert, den die Mod nicht
   kennt (neuere CLI), steht unter „ruht“ statt zu verschwinden.
+- **Als Ticket** gelten nur die bekannten Schlüssel (WM8, DS, DEAL, DEA, AKQ,
+  PRB, FBT, LISTM8).
 
-Ziffern zum Springen, Kurz-Kennung, Alter und der Bedien-Hinweis im Kopf sind
-weggefallen. Der Kasten bleibt so niedrig und ändert sich selten; der
-Hauptbildschirm zeichnet den Bereich über dem Prompt bei jeder Änderung neu,
-hohe Kästen hinterlassen dort Reste.
+Was von WM8-88 bleibt: Der Kasten zeigt einzeln nur, was den User braucht.
+Ziffern zum Springen, Kurz-Kennung, Alter und Bedien-Hinweis gibt es nicht,
+auch keinen Takt, der nach der Uhr neu zeichnet. Der Kasten bleibt so niedrig
+und ändert sich selten; der Hauptbildschirm zeichnet den Bereich über dem
+Prompt bei jeder Änderung neu, hohe Kästen hinterlassen dort Reste. Den
+Fortschritt („4/7“) aus `progress` zeigt der Kasten seit WM8-99 nicht mehr,
+die Sammelzeile nennt nur Rufnamen. Zwischen WM8-88 und WM8-99 (wenige
+Stunden am 14.11.2026) hatte der Kasten keinen Rahmen und zeigte das Anliegen
+als umbrochenen Satz in einer zweiten Zeile.
+
+**Für Supervisoren:** Das Anliegen (`needs`) in wenigen Wörtern schreiben. Ist
+der Kasten 50 Spalten breit, bleiben dafür etwa 30 Zeichen, bei 72 Spalten
+etwa 50.
 
 ## Bedienung
 
@@ -68,14 +86,14 @@ hohe Kästen hinterlassen dort Reste.
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
-| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 laufen · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
+| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 laufen · 1 fertig · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis und Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (User muss entscheiden), `done` (Abnahme offen),
 `running`, `parked` (bewusst angehalten). Innerhalb einer Gruppe steht der
-älteste Eintrag zuerst. Bis WM8-88 gab es einen Rahmen mit Gesamtampel und
-Ziffern-Knöpfe zum Öffnen der Tabs; eine Ziffer im leeren Prompt fängt die Mod
-nicht mehr ab.
+älteste Eintrag zuerst. Bis WM8-88 gab es Ziffern-Knöpfe zum Öffnen der Tabs;
+eine Ziffer im leeren Prompt fängt die Mod nicht mehr ab. Eingeklappt steht
+eine Zeile ohne Rahmen mit den Zahlen der Gruppen.
 
 ## Wie es funktioniert
 
@@ -132,14 +150,28 @@ mehreren Boards stehen (`otherOwners`).
   Einstellung ein Prompt `[Board] <Name> (<ref>): …` an Jarvis. Gebündelt
   über 5 s, höchstens ein Prompt je Minute, einmal je Chat und Zustand, bis
   der Chat wieder arbeitet. Geparkte Chats wecken nicht.
-- **Anzeige (seit WM8-88):** Aufbau oben unter „Was es ist“. Die Höhe ist
-  hart begrenzt (`maxRows`): Der erste Wartende steht immer da, sein Satz
-  wird notfalls gekürzt; weitere, die nicht passen, zählt der Kopf. Der Satz
-  bricht nach Wörtern um, Steuerzeichen und Zeilenumbrüche aus dem Board
-  fallen vorher weg. In den Sammelzeilen markiert ✓ fertige Chats (Abnahme
-  offen, sie stehen in „ruht“ vorn), ⚑ Chats, die selbst auf eine Antwort
-  warten. Die Blockade eines laufenden Chats zeigt der Kasten nicht mehr; sie
-  steht in der Notiz-Karte. Keine Statuszeile: Claude Code setzt „⚠“ vor jede
+- **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
+  steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus
+  (`waitingLines` für die Spalten, `summaryLine` für die Sammelzeile); der
+  `ui.render`-Hook setzt das Ergebnis nur noch in Box und Text um. Den Rahmen
+  zieht die Box (`borderStyle="round"`, ein Zeichen Innenabstand), der Inhalt
+  ist deshalb vier Spalten schmaler als der Kasten. Jede Zeile ist schon
+  vorher auf diese Breite gekürzt, nach Codepoints, damit kein Emoji halbiert
+  wird; Steuerzeichen und Zeilenumbrüche aus dem Board fallen vorher weg.
+  Breite Zeichen (Emoji, CJK) kürzt zusätzlich das Terminal selbst
+  (`wrap="truncate-end"`), der Rahmen bleibt dabei gerade.
+- **Kopf in der Rahmenlinie:** Die Box der Mod-Schnittstelle kennt keinen
+  Titel im Rahmen. Der Kopf ist deshalb eine eigene Box mit
+  `position="absolute"` (`top={0}`, `left={2}`), die als Geschwister NACH der
+  gerahmten Box steht und so über deren obere Linie malt, ohne etwas zu
+  verschieben. Als Kind der gerahmten Box (mit `top={-1}`) übermalt ihn der
+  Rahmen; beides ist an der laufenden CLI ausprobiert (2.1.325, 14.11.2026).
+  Ein zu langer Kopf überschriebe die rechte Ecke; der Plan kürzt ihn so, dass
+  rechts „─╮“ stehen bleibt. Ändert eine spätere Claude-Code-Version das
+  Übermalen, fehlt schlimmstenfalls der Kopf in der Linie; die Zeilen darunter
+  hängen nicht daran.
+- **Nicht im Kasten:** Die Blockade eines laufenden Chats steht in der
+  Notiz-Karte. Keine Statuszeile: Claude Code setzt „⚠“ vor jede
   Plugin-Statuszeile, sie sah nach einer Warnung aus und wiederholte nur den
   Kasten.
 - **Kein Detail-Panel mehr (seit 23.10.2026):** Früher hat `/board` ein Pane
@@ -272,6 +304,15 @@ swift test --filter "WhisperM8ClaudePluginTests|JarvisBoard|ChatsBoard|JarvisNot
 make snapshots ONLY=jarvis-notiz   # Karte hell + dunkel ansehen
 make snapshots ONLY=notiz-tasks    # Karte mit Tasks (allein und unter einer Notiz)
 ```
+
+**Wie eine geänderte Mod ankommt:** `make skills` genügt, ohne Build und ohne
+Neustart der App. Es legt das Plugin als neuen Stand ab und stellt den Symlink
+um. Sehen tun es Chats, die danach starten oder fortgesetzt werden; ein
+laufender Chat behält seinen Stand, Jarvis' Chat muss also einmal beendet und
+fortgesetzt werden. Dauerhaft ist die Änderung erst, wenn auch die App sie
+enthält (`make dev` aus einem Stand mit der Änderung): Beim Start legt die App
+das Plugin aus ihrem eigenen Paket ab und stellt den Symlink darauf. Eine
+ältere App holt so den alten Stand zurück.
 
 ## Kill-Switches
 
