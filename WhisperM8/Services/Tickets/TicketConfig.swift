@@ -114,6 +114,20 @@ struct TicketConfig: Codable, Equatable {
         areasFileByProjectPath[Self.normalized(directory)] = nil
     }
 
+    /// Kennt die Einrichtung das Team, über einen Ordner oder über seinen Workspace?
+    func knows(team: String) -> Bool {
+        knownTeams.contains { $0.caseInsensitiveCompare(team) == .orderedSame }
+    }
+
+    /// Nimmt ein Team aus der Einrichtung: seinen Workspace-Eintrag und jeden
+    /// Ordner, der an ihm hängt, samt dessen Tabelle der Bereiche. Workspace
+    /// und Zugang bleiben. Gedacht für ein Team, das es im Ticket-Werkzeug
+    /// nicht mehr gibt (gelöscht oder umbenannt).
+    mutating func removeTeam(_ team: String) {
+        for path in projectPaths(forTeam: team) { removeProject(path) }
+        workspacesByTeam = workspacesByTeam.filter { $0.key.caseInsensitiveCompare(team) != .orderedSame }
+    }
+
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert
     /// in eine Befehlszeile von `security -i`, also nur harmlose Zeichen.
     static func isWorkspaceName(_ name: String) -> Bool {

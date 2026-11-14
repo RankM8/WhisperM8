@@ -211,8 +211,12 @@ struct LinearTicketSource: TicketSource {
         return assetURL
     }
 
+    /// So viele Teams liefert `teams()` höchstens. Wer daraus „dieses Team gibt
+    /// es nicht“ liest, darf das nur unterhalb dieser Grenze.
+    static let teamListLimit = 100
+
     func teams() async throws -> [String] {
-        let data = try await client.run("{ teams(first: 100) { nodes { key } } }")
+        let data = try await client.run("{ teams(first: \(Self.teamListLimit)) { nodes { key } } }")
         return Self.nodes(data["teams"]).compactMap { ($0["key"] as? String)?.uppercased() }.sorted()
     }
 

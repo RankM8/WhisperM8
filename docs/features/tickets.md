@@ -152,6 +152,23 @@ Hinweise („ACHTE“), der Bericht bleibt grün:
 Liegt ein Key schon im Schlüsselbund (von einem anderen Werkzeug abgelegt), übernimmt ihn
 `whisperm8 tickets setup --workspace <Kürzel>` nach einer Prüfung bei Linear.
 
+### Ein Team wieder herausnehmen
+
+Wird ein Team in Linear gelöscht oder bekommt es ein neues Kürzel, steht das alte weiter in der Einrichtung, und
+`tickets doctor` meldet es als Fehler. Der Bericht nennt dann gleich den passenden Befehl:
+
+| Lage | Was `doctor` vorschlägt |
+|---|---|
+| Team gelöscht, kein Ordner hängt daran | `whisperm8 tickets setup --remove-team <Kürzel>` |
+| Team gelöscht oder umbenannt, ein Ordner hängt daran | erst den Ordner dem neuen Kürzel geben (`setup --team <Kürzel> --project <Ordner>`), dann `--remove-team`; oder beides lösen mit `--remove-team <Kürzel> --with-projects` |
+| Team liegt in einem anderen eingerichteten Workspace | `whisperm8 tickets setup --team <Kürzel> --workspace <anderer> --reassign` |
+
+`--remove-team` nimmt den Workspace-Eintrag des Teams aus `tickets.json`. Hängt noch ein Ordner an dem Team,
+bricht der Befehl ab und nennt ihn, denn Chats in diesem Ordner hätten danach kein Team mehr; mit
+`--with-projects` löst er auch diese Zuordnung samt der Tabelle der Bereiche. Workspace und Key bleiben. Der
+Befehl fragt Linear nicht und geht deshalb auch ohne Netz und ohne Zugang. Ob ein Kürzel umbenannt oder
+gelöscht wurde, kann die Kommandozeile nicht unterscheiden: Sie merkt sich nur das Kürzel.
+
 ### In der App: Einstellungen › Tickets
 
 Die Seite steht in der Gruppe „Labs“ und richtet nach denselben Regeln ein wie `tickets setup`. Anders als die
@@ -167,6 +184,11 @@ Kommandozeile kann sie einen Key und eine Zuordnung auch entfernen:
 - **Projekte und Teams:** Projektordner → Team, wählbar aus den Projekten der App oder per Ordner-Auswahl. Ein
   Kürzel, das schon zu einem anderen Workspace gehört, hängt die Seite nicht um; dafür gibt es
   `tickets setup --reassign`.
+- **Team nicht gefunden:** Kennt der Workspace ein Team der Einrichtung nicht mehr, steht an seiner Zuordnung
+  „in <Workspace> nicht gefunden“ statt des Workspaces. Ein solches Team ohne Ordner bekommt eine eigene Zeile
+  mit „Remove“; das entspricht `tickets setup --remove-team`. Als Teams eines Workspaces führt die Seite ohnehin
+  nur, was Linear gerade nennt. Den Vermerk gibt es nur, wenn die Team-Liste sicher vorliegt: mit Key, ohne
+  Störung und mit weniger als 100 Teams (mehr holt die Abfrage nicht).
 
 `tickets.json` hat damit zwei Schreiber, Kommandozeile und Einstellungen. Beide lesen vor jeder Änderung neu
 und schreiben atomar; wer zuletzt schreibt, gewinnt. Die Seite ändert nichts an einer Datei, die sich nicht

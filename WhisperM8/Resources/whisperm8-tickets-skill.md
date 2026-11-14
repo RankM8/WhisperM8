@@ -133,6 +133,9 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
 - Einrichtung (einmalig, macht der Nutzer oder der Supervisor mit ihm): `pbpaste | whisperm8 tickets setup --key-stdin`
   (je Workspace ein Key, der Workspace ergibt sich aus dem Key) und `whisperm8 tickets setup --team ABC --project <Ordner>`.
   Den Key nie ausgeben, nie in eine Datei, nie in den Chat.
+- Meldet `doctor` ein Team, das es in Linear nicht mehr gibt (gelöscht oder umbenannt), nennt die Zeile den Befehl
+  dazu: `whisperm8 tickets setup --remove-team ABC` nimmt es aus der Einrichtung. Hängt noch ein Ordner daran,
+  bricht der Befehl ab und nennt ihn; das entscheidet der Nutzer, nicht du (`--with-projects` löst den Ordner mit).
 - Was die CLI nicht kann (Zyklen, Vorhaben anlegen, Dokumente, Meilensteine, Releases): der Linear-MCP. Bei mehreren
   Workspaces hat jeder seinen eigenen Server; vor dem Schreiben prüfen, welcher zum Projekt gehört.
 - Die Verknüpfung ist ein Anhang am Ticket (`whisperm8://chat/<ID>`). Nicht von Hand ändern und nicht über den

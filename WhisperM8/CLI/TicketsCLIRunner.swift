@@ -382,6 +382,9 @@ enum TicketsCLIRunner {
             return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, workspace: workspace,
                                    reassign: reassign, areas: areas, env)
 
+        case .removeTeam(let team, let withProjects):
+            return try removeTeam(team, withProjects: withProjects, env)
+
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
             return TicketsCLIFormatter.doctor(await doctor(env), json: json)
@@ -614,6 +617,39 @@ enum TicketsCLIRunner {
         return lines.joined(separator: "\n")
     }
 
+    /// Nimmt ein Team aus der Einrichtung. Linear wird nicht gefragt: Der Befehl
+    /// ist gerade für ein Team da, das es dort nicht mehr gibt, und er soll auch
+    /// ohne Netz und ohne Zugang gehen. Ein Ordner, der noch an dem Team hängt,
+    /// wird nur auf ausdrücklichen Wunsch mit gelöst.
+    private static func removeTeam(_ team: String, withProjects: Bool, _ env: TicketsCLIEnvironment) throws -> String {
+        var config = env.config()
+        guard config.knows(team: team) else {
+            let known = config.knownTeams
+            throw Failure(exitCode: TicketsCLIExit.notFound,
+                          message: "Team \(team) steht nicht in der Einrichtung. Nichts geändert."
+                              + (known.isEmpty ? "" : " Dort stehen: \(known.joined(separator: ", "))"))
+        }
+        let folders = config.projectPaths(forTeam: team)
+        if !folders.isEmpty, !withProjects {
+            let one = folders.count == 1
+            throw Failure(exitCode: TicketsCLIExit.conflict, message: """
+            An Team \(team) \(one ? "hängt noch ein Ordner" : "hängen noch \(folders.count) Ordner"): \(folders.joined(separator: ", "))
+            Nichts geändert. Chats in \(one ? "diesem Ordner" : "diesen Ordnern") hätten danach kein Team mehr.
+            Samt Ordner-Zuordnung entfernen: whisperm8 tickets setup --remove-team \(team) --with-projects
+            Oder den Ordner erst einem anderen Team geben: whisperm8 tickets setup --team <Kürzel> --project <Ordner>
+            """)
+        }
+        let workspace = config.workspacesByTeam.first { $0.key.caseInsensitiveCompare(team) == .orderedSame }?.value
+        config.removeTeam(team)
+        try env.saveConfig(config)
+        var lines = ["Team \(team) ist aus der Einrichtung genommen" + (workspace.map { " (lag im Workspace „\($0)“)." } ?? ".")]
+        for folder in folders { lines.append("Ordner ohne Team: \(folder)") }
+        if !folders.isEmpty {
+            lines.append("Neu zuordnen: whisperm8 tickets setup --team <Kürzel> --project <Ordner>")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: Abschluss
 
     /// Die Zusammenfassung beim Abgeben. Sie ist Pflicht, damit am Ticket steht,
@@ -733,6 +769,23 @@ enum TicketsCLIRunner {
         var detail: String
     }
 
+    /// Was bei einem Team zu tun ist, das die Einrichtung kennt, sein Workspace
+    /// aber nicht mehr. Liegt es in einem anderen eingerichteten Workspace, wird
+    /// umgehängt; sonst ist es gelöscht oder umbenannt und kommt aus der Einrichtung.
+    static func missingTeamAdvice(_ team: String, workspace: String, elsewhere: [String], folders: [String]) -> String {
+        if let other = elsewhere.first {
+            return "gibt es im Workspace „\(workspace)“ nicht, aber in „\(other)“. "
+                + "Umhängen: whisperm8 tickets setup --team \(team) --workspace \(other) --reassign"
+        }
+        let gone = "gibt es in Linear nicht mehr (Workspace „\(workspace)“): gelöscht oder umbenannt. "
+        guard !folders.isEmpty else {
+            return gone + "Aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team \(team)"
+        }
+        return gone + "Daran \(folders.count == 1 ? "hängt" : "hängen") noch \(folders.joined(separator: ", ")). "
+            + "Aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team \(team) --with-projects"
+            + "; bei neuem Kürzel vorher: whisperm8 tickets setup --team <Kürzel> --project <Ordner>"
+    }
+
     static func doctor(_ env: TicketsCLIEnvironment) async -> [Check] {
         var checks: [Check] = []
         let config = env.config()
@@ -756,7 +809,8 @@ enum TicketsCLIRunner {
                     continue
                 }
                 usable.insert(workspace)
-                teamsByWorkspace[workspace] = (try? await env.source(workspace).teams()) ?? []
+                // Ohne Antwort kein Eintrag: Eine leere Liste hieße, der Workspace habe keine Teams.
+                if let teams = try? await env.source(workspace).teams() { teamsByWorkspace[workspace] = teams }
                 checks.append(Check(name: "Linear-Zugang", ok: true,
                                     detail: "\(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "")"))
             } catch {
@@ -797,6 +851,12 @@ enum TicketsCLIRunner {
                 }
                 checks += hygiene(team: team, tickets: snapshot.tickets, now: env.now())
                 checks += await areas(team: team, workspace: workspace, config: config, env)
+            } catch TicketSourceError.notFound {
+                // Das Board fragt nur nach dem Team: Es ist dort gelöscht, umbenannt oder liegt woanders.
+                let elsewhere = teamsByWorkspace.filter { $0.key != workspace && $0.value.contains(team) }.keys.sorted()
+                checks.append(Check(name: "Team \(team)", ok: false,
+                                    detail: missingTeamAdvice(team, workspace: workspace, elsewhere: elsewhere,
+                                                              folders: config.projectPaths(forTeam: team))))
             } catch {
                 checks.append(Check(name: "Team \(team)", ok: false, detail: (error as? TicketSourceError)?.message ?? "\(error)"))
             }

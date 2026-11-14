@@ -21,6 +21,8 @@ enum TicketsCLIArguments: Equatable {
     case assign(key: String, person: String)
     case label(key: String, add: [String], remove: [String])
     case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?, reassign: Bool, areas: String?)
+    /// `setup --remove-team`: nimmt ein Team wieder aus der Einrichtung.
+    case removeTeam(team: String, withProjects: Bool)
     case doctor(json: Bool)
 
     enum ParseError: Error, Equatable {
@@ -40,7 +42,7 @@ enum TicketsCLIArguments: Equatable {
     /// Schreibende Befehle: Mit `--json` kommt ihre Meldung als Objekt.
     var isWrite: Bool {
         switch self {
-        case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup, .decide: return true
+        case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup, .removeTeam, .decide: return true
         // Ohne Verweise zeigt `check` nur die Kästchen.
         case .check(_, let references, _, _): return !references.isEmpty
         case .help, .board, .list, .show, .mine, .doctor: return false
@@ -53,7 +55,7 @@ enum TicketsCLIArguments: Equatable {
              .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _), .decide(let key, _),
              .check(let key, _, _, _):
             return key
-        case .help, .board, .list, .mine, .new, .setup, .doctor:
+        case .help, .board, .list, .mine, .new, .setup, .removeTeam, .doctor:
             return nil
         }
     }
@@ -220,6 +222,19 @@ enum TicketsCLIArguments: Equatable {
             guard !add.isEmpty || !remove.isEmpty else { throw ParseError.usage("--add und/oder --remove angeben") }
             return .label(key: try key(try positional(1, "tickets label <Ticket> --add a,b --remove c")[0]), add: add, remove: remove)
         case "setup":
+            let withProjects = flag("--with-projects")
+            if let removed = try value("--remove-team") {
+                // Entfernen steht für sich: Zusammen mit einer Zuordnung wäre unklar, was zuerst gilt.
+                if let option = rest.first(where: { $0.hasPrefix("--") }) {
+                    throw ParseError.usage("--remove-team geht nicht zusammen mit \(option) (dazu passt nur --with-projects)")
+                }
+                _ = try positional(0, "tickets setup --remove-team T [--with-projects]")
+                guard !removed.trimmingCharacters(in: .whitespaces).isEmpty, !removed.hasPrefix("-") else {
+                    throw ParseError.usage("--remove-team braucht ein Team-Kürzel")
+                }
+                return .removeTeam(team: removed.uppercased(), withProjects: withProjects)
+            }
+            guard !withProjects else { throw ParseError.usage("--with-projects braucht --remove-team") }
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
             let workspace = try value("--workspace"), reassign = flag("--reassign"), areas = try value("--areas")
             guard project == nil || team != nil else { throw ParseError.usage("--project braucht --team") }
@@ -398,6 +413,11 @@ enum TicketsCLICommand {
       whisperm8 tickets setup --team T --project ORDNER --areas DATEI
                 Nennt die Datei im Projekt (relativ), in der die Tabelle
                 Bereich, Ordner, Projekt steht; doctor prüft sie.
+      whisperm8 tickets setup --remove-team T [--with-projects]
+                Nimmt ein Team wieder aus der Einrichtung, etwa wenn es in
+                Linear gelöscht oder umbenannt wurde. Hängt noch ein Ordner
+                an ihm, bricht der Befehl ab und nennt ihn; --with-projects
+                löst auch diese Zuordnung. Linear wird nicht gefragt.
       whisperm8 tickets setup                          zeigt die Einrichtung
       whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App,
                 dazu die Ordnung: Tickets ohne Projekt, ohne „Fertig, wenn“,

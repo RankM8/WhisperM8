@@ -14,9 +14,10 @@ extension UISnapshotGallery {
         ]
         /// Abhängigkeiten, die genau den gezeigten Zustand zurückgeben: Der
         /// Lauf von `load()` beim Erscheinen ändert das Bild nicht.
-        func page(workspaces: [Model.Workspace], mappings: [Model.Mapping]) -> AnyView {
+        func page(workspaces: [Model.Workspace], mappings: [Model.Mapping], staleTeams: [Model.StaleTeam] = []) -> AnyView {
             var config = TicketConfig()
             for workspace in workspaces { config.add(workspace: workspace.name) }
+            for stale in staleTeams { config.set(workspace: stale.workspace, forTeam: stale.team) }
             for mapping in mappings {
                 if let workspace = mapping.workspace { config.set(workspace: workspace, forTeam: mapping.team) }
                 config.set(team: mapping.team, forProject: mapping.path)
@@ -29,7 +30,8 @@ extension UISnapshotGallery {
                 account: { _ in .failure(.unauthorized) },
                 teams: { name in teams[name]?.problem == nil ? .success(teams[name]?.teams ?? []) : .failure(.unauthorized) },
                 projects: { projects }, chooseFolder: { nil })
-            let model = Model(dependencies: dependencies, workspaces: workspaces, mappings: mappings, projects: projects)
+            let model = Model(dependencies: dependencies, workspaces: workspaces, mappings: mappings, staleTeams: staleTeams,
+                              projects: projects)
             return AnyView(TicketsSettingsPage(dependencies: dependencies, model: model))
         }
         let size = CGSize(width: 760, height: 900)
@@ -62,6 +64,20 @@ extension UISnapshotGallery {
                         Model.Mapping(path: home + "/repos/ListM8", team: "DS", workspace: "dealsupply"),
                         Model.Mapping(path: home + "/repos/alt", team: "ALT", workspace: nil),
                     ])
+            },
+            // Ein Team wurde in Linear gelöscht oder umbenannt: einmal mit Ordner, einmal ohne.
+            Fixture(name: "tickets-einstellungen-team-fehlt", size: CGSize(width: 760, height: 1040), storage: on) {
+                page(
+                    workspaces: [
+                        Model.Workspace(name: "dealsupply", hasKey: true, teams: ["DEA", "DS"]),
+                        Model.Workspace(name: "whisperm8", hasKey: true, teams: ["WM8"]),
+                    ],
+                    mappings: [
+                        Model.Mapping(path: home + "/repos/ListM8", team: "DS", workspace: "dealsupply"),
+                        Model.Mapping(path: home + "/repos/probe", team: "ALT", workspace: "dealsupply", teamMissing: true),
+                        Model.Mapping(path: home + "/repos/whisperm8", team: "WM8", workspace: "whisperm8"),
+                    ],
+                    staleTeams: [Model.StaleTeam(team: "PRB", workspace: "dealsupply")])
             },
         ]
     }
