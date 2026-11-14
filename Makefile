@@ -367,6 +367,7 @@ _bundle:
 	@cp "WhisperM8/Resources/whisperm8-agent-skill-ref-claude-workflows.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-chats-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-clipboard-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
+	@cp "WhisperM8/Resources/whisperm8-tickets-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@cp "WhisperM8/Resources/whisperm8-gpt-coworker-skill.md" "$(APP_BUNDLE)/Contents/Resources/"
 	@# String-Katalog (E1: Englisch Basis, Deutsch) → <sprache>.lproj/Localizable.strings
 	@# direkt in Contents/Resources, wo SwiftUI `Text("…")` und `String(localized:)` suchen.
