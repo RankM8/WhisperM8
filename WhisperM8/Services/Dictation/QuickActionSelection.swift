@@ -264,6 +264,9 @@ struct QuickActionReplacer {
     /// So lange wird bei `afterConfirmation` auf die geänderte Markierung gewartet.
     var confirmTimeout: Duration = .seconds(2)
     var confirmStep: Duration = .milliseconds(100)
+    /// Uhr für Wartezeit und Frist. Tests geben eine eigene, damit ein
+    /// ausgelasteter Rechner die Zahl der Prüfungen nicht verändert.
+    var clock: any Clock<Duration> = ContinuousClock()
     /// Aktuell markierter Text der App (`nil` = nicht lesbar).
     var currentSelection: @MainActor (NSRunningApplication?) async -> String? = { app in
         guard let app else { return nil }
@@ -293,7 +296,7 @@ struct QuickActionReplacer {
         case .afterConfirmation(let original):
             mayRestore = await waitForChangedSelection(in: app, original: original)
         case .ifResultSaved(let saved):
-            try? await Task.sleep(for: restoreDelay)
+            try? await clock.sleep(for: restoreDelay)
             mayRestore = saved
         }
         guard mayRestore else {
@@ -317,12 +320,23 @@ struct QuickActionReplacer {
     /// `true`, sobald die Markierung nicht mehr der ursprüngliche Text ist:
     /// Die App hat Cmd+V verarbeitet und die Zwischenablage gelesen.
     private func waitForChangedSelection(in app: NSRunningApplication?, original: String) async -> Bool {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: confirmTimeout)
-        repeat {
-            try? await Task.sleep(for: confirmStep)
+        await clock.poll(every: confirmStep, for: confirmTimeout) {
             if let current = await currentSelection(app), current != original { return true }
-        } while clock.now < deadline
+            return false
+        }
+    }
+}
+
+extension Clock where Duration == Swift.Duration {
+    /// Wartet `step` und prüft dann, bis `check` zutrifft oder `timeout`
+    /// auf dieser Uhr um ist. Die letzte Prüfung läuft auch noch, wenn die
+    /// Frist während des Wartens abläuft.
+    func poll(every step: Duration, for timeout: Duration, until check: () async -> Bool) async -> Bool {
+        let deadline = now.advanced(by: timeout)
+        repeat {
+            try? await sleep(for: step)
+            if await check() { return true }
+        } while now < deadline
         return false
     }
 }
