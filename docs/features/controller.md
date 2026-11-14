@@ -439,7 +439,20 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   ([agent-chats-cli.md](agent-chats-cli.md)). Grenzen: Prüfen und Enter sind nicht atomar
   gegenüber Claudes Neuzeichnen — ein Restfenster von wenigen Millisekunden bleibt; hochgescrollt ist der
   Bildschirm nicht ablesbar, dann zählt nur der Status. Kosten: ein Lesen der untersten 16 Zeilen je Senden (gemessen rund 5 ms im
-  Debug-Build). Codex-Freigaben erkennt das nicht (keine Rückfragen, Feld-Erkennung nur für Claude; WM8-67).
+  Debug-Build).
+- **Codex-Freigaben (WM8-67, 14.11.2026):** Codex meldet Freigaben der App nicht, sein Status bleibt
+  „arbeitet“. Nachgestellt an einem Wegwerf-Codex (CLI 0.169.0, eigenes `CODEX_HOME`, Schein-Modell, Befehl
+  außerhalb der Sandbox): Ein Einfüge-Block im offenen Freigabe-Dialog wird ignoriert, das Enter danach
+  wählt „1. Yes, proceed“ — der Befehl lief, obwohl „nein“ eingefügt war. Deshalb liest die App bei Codex
+  den Bildschirm (`ControllerScreenSnapshot.codexApproval`, `isCodexApproval`): unten die Hinweiszeile
+  „Press enter to confirm or esc to cancel“ mit einer nummerierten Option darüber, oder die festen
+  Optionen „Yes, proceed (y)“ bzw. „No, and tell Codex what to do differently“. Steht sie da, geht ein
+  Diktat in den Chat nur in die Zwischenablage (wie bei Claudes Freigabe), das verzögerte Enter bleibt
+  aus, und `chats send` lehnt mit `approvalPending` ab. Andere Auswahl-Dialoge von Codex mit derselben
+  Hinweiszeile sperren genauso. Grenzen: Gemessen ist nur die Befehls-Freigabe; Datei-Änderungen,
+  Netzwerk und MCP-Freigaben sind nur über dieselbe Hinweiszeile abgedeckt (mit dem Schein-Modell nicht
+  auslösbar). Hochgescrollt ist der Bildschirm nicht ablesbar — dann greift die Sperre nicht. Kosten:
+  ein Lesen der untersten 16 Zeilen je Diktat in einen Codex-Chat.
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
   Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
   Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt
@@ -519,7 +532,7 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   Öffnet Enter in einer Liste eine weitere (Untermenü in `/config`, `/mcp`, `/agents`), ist der
   Merker trotzdem weg — dann den Befehl erneut über das Menü öffnen oder die Tastatur nehmen.
 - Codex meldet keine Rückfragen (keine Hooks); seine Freigaben erscheinen, während der Status
-  „arbeitet“ zeigt. Erst mit dem Steuerkreuz wählen, dann bestätigt Kreuz — ohne Pfeil bleibt Kreuz bei
+  „arbeitet“ zeigt (Diktat und `chats send` erkennen sie am Bildschirm, siehe oben). Erst mit dem Steuerkreuz wählen, dann bestätigt Kreuz — ohne Pfeil bleibt Kreuz bei
   „arbeitet“ ohne Wirkung.
 - „Weiter“ aus dem Menü wird nicht an einen vorhandenen Entwurf gehängt.
 - Eingaben aus dem Menü („Weiter“, „Modus wechseln“, Befehle) gehen an den Chat, für den das Menü

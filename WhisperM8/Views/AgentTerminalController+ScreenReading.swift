@@ -21,7 +21,15 @@ extension AgentTerminalController {
         PerformanceCounters.shared.count(.controllerScreenRead)
         let capture = terminal.controllerBottomLines()
         return ControllerScreenReading.read(
-            lines: capture.lines, cursor: capture.cursor, detectViews: profile == .claudeCodeChat)
+            lines: capture.lines, cursor: capture.cursor, detectViews: profile == .claudeCodeChat,
+            detectCodexApproval: profile == .codexChat)
+    }
+
+    /// Steht unten ein Freigabe-Dialog von Codex (WM8-67)? Nur Codex, nur ganz
+    /// unten ablesbar; hochgescrollt `false` (dann zählt nur der Status).
+    func codexApprovalOnScreen() -> Bool {
+        guard command.keyboardProfile == .codexChat else { return false }
+        return controllerScreenSnapshot()?.codexApproval ?? false
     }
 }
 

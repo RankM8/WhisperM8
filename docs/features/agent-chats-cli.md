@@ -389,8 +389,9 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   (`queue_delivered … clearedInput=true`).
 - **Freigabe offen: `approvalPending` (WM8-75, Verhaltensänderung 14.11.2026):**
   `send` bestätigt nie eine Freigabe. Wartet das Ziel auf eine Freigabe oder
-  Plan-Freigabe, ist die Art unklar, oder steht bei Claude unten statt des
-  Eingabefelds ein Dialog, lehnt `send` VOR dem Einfügen mit `approvalPending`
+  Plan-Freigabe, ist die Art unklar, steht bei Claude unten statt des
+  Eingabefelds ein Dialog oder bei Codex sein Freigabe-Dialog (WM8-67, am
+  Bildschirm erkannt, weil Codex nichts meldet), lehnt `send` VOR dem Einfügen mit `approvalPending`
   (Exit 4, `isRetryable`, Ausweg `enqueue`) ab — auch mit `--force`. Vorher
   wurde der Text dort ignoriert und das Enter wählte die Vorauswahl „Yes“, auch
   wenn „nein“ geschickt wurde. Eine offene Frage (AskUserQuestion) beantwortet

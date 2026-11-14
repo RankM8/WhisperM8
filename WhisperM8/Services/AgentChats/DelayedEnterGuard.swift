@@ -28,6 +28,9 @@ enum DelayedEnterGuard {
         screen: ControllerScreenSnapshot?,
         textLooksLikeOption: Bool = false
     ) -> Bool {
+        // Codex meldet Freigaben nicht; steht unten seine Freigabe, wählte das
+        // Enter „1. Yes, proceed“ (gemessen an Codex CLI 0.169.0, WM8-67).
+        if screen?.codexApproval == true { return false }
         if statusAtPaste == .awaitingInput {
             // Nur eine sicher erkannte Frage, und der Bildschirm zeigt keine Freigabe.
             return questionAtPaste && !showsApproval(screen, textLooksLikeOption: textLooksLikeOption)
@@ -56,8 +59,9 @@ enum DelayedEnterGuard {
     }
 
     /// Bei Claude steht unten statt des Eingabefelds ein Dialog, der keine
-    /// erkannte Frage ist.
+    /// erkannte Frage ist; bei Codex steht seine Freigabe unten.
     static func showsApproval(_ screen: ControllerScreenSnapshot?, textLooksLikeOption: Bool) -> Bool {
+        if screen?.codexApproval == true { return true }
         guard let screen, screen.promptField == nil, !screen.questionDialog else { return false }
         return screen.dialogVisible && !textLooksLikeOption
     }

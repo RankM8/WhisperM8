@@ -87,6 +87,10 @@ struct ControllerScreenSnapshot: Equatable, Sendable {
     /// Kein Eingabefeld, dafür ein Dialog mit nummerierten Optionen oder einer
     /// Freigabe-Frage in den untersten Zeilen (`dialogBelow`) — nur Claude (WM8-75).
     var dialogVisible = false
+    /// Unten steht ein Freigabe-Dialog von Codex (`isCodexApproval`) — nur
+    /// Codex (WM8-67). Codex meldet Freigaben der App nicht, der Bildschirm ist
+    /// die einzige Quelle.
+    var codexApproval = false
 }
 
 enum ControllerScreenReading {
@@ -103,7 +107,10 @@ enum ControllerScreenReading {
     ///   - lines: die unteren Zeilen des lebendigen Bildschirms, oben zuerst.
     ///   - cursor: Cursor in diesen Zeilen (Zeile, Spalte), sofern bekannt.
     ///   - detectViews: nur bei Claude (Codex hat diese Ansichten nicht).
-    static func read(lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, detectViews: Bool) -> ControllerScreenSnapshot {
+    ///   - detectCodexApproval: nur bei Codex.
+    static func read(
+        lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, detectViews: Bool, detectCodexApproval: Bool = false
+    ) -> ControllerScreenSnapshot {
         // Steht unter dem vermeintlichen Feld ein Dialog, ist es kein
         // Eingabefeld (etwa eine Trennlinie aus Tool-Ausgabe über einer Zeile
         // mit „>“ und darunter die obere Linie eines Freigabe-Dialogs). Kreuz
@@ -134,7 +141,45 @@ enum ControllerScreenReading {
                 snapshot.dialogVisible = dialogBelow(Array(bottom.suffix(dialogLineCount)))
             }
         }
+        if detectCodexApproval {
+            snapshot.codexApproval = isCodexApproval(lines.map(\.full))
+        }
         return snapshot
+    }
+
+    // MARK: - Codex-Freigabe (WM8-67)
+
+    /// Freigabe-Dialog von Codex, gemessen an Codex CLI 0.169.0 (Befehl außerhalb
+    /// der Sandbox): „Would you like to run the following command?“, darunter
+    /// „› 1. Yes, proceed (y)“, „2. Yes, and don't ask again …“, „3. No, and
+    /// tell Codex what to do differently (esc)“ und ganz unten „Press enter to
+    /// confirm or esc to cancel“ (teils abgeblendet, teils fett — deshalb der
+    /// volle Text). Erkannt wird an der Hinweiszeile mit einer nummerierten
+    /// Option darüber, oder an den festen Optionen allein (falls die Hinweiszeile
+    /// umbricht oder fehlt). Dieselbe Hinweiszeile in anderen Auswahl-Dialogen
+    /// von Codex sperrt auch — dort gehört ein Diktat ebenso wenig hin.
+    static func isCodexApproval(_ lines: [String]) -> Bool {
+        let nonEmpty = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !nonEmpty.isEmpty else { return false }
+        func normalized(_ items: [String]) -> String {
+            items.map { $0.lowercased() }.joined(separator: " ")
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        }
+        let options = nonEmpty.filter(isCodexOptionLine)
+        let hint = normalized(Array(nonEmpty.suffix(hintLineCount)))
+        if !options.isEmpty, hint.contains("press enter to confirm"), hint.contains("esc to cancel") {
+            return true
+        }
+        let optionText = normalized(options)
+        return codexApprovalOptions.contains { optionText.contains($0) }
+    }
+
+    /// Feste Optionen der Codex-Freigaben (Codex CLI 0.169.0).
+    static let codexApprovalOptions = ["yes, proceed (y)", "no, and tell codex what to do differently"]
+
+    /// Nummerierte Option bei Codex: „› 1. Yes, proceed (y)“ oder „  2. …“.
+    static func isCodexOptionLine(_ line: String) -> Bool {
+        line.range(of: #"^\s*(?:[›>❯]\s*)?\d+\.\s"#, options: .regularExpression) != nil
     }
 
     /// ← im Claude-Feld: eine Ansicht fängt es ab; sichtbar leeres Feld

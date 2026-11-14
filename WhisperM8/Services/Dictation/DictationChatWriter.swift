@@ -25,6 +25,12 @@ final class LiveDictationChatWriter: DictationChatWriting {
         if statusCoordinator.statusStore.status(for: sessionID) == .awaitingInput {
             return controller.questionAcceptsText() ? .questionAcceptsText : .awaitingInput
         }
+        // Codex meldet Freigaben nicht: Der Status bleibt „arbeitet“, unten
+        // steht der Dialog. Ein Diktat mit Senden wählte dort „1. Yes, proceed“,
+        // gleich was gesagt wurde (WM8-67). Hochgescrollt nicht ablesbar.
+        if controller.codexApprovalOnScreen() {
+            return .awaitingInput
+        }
         // Dieselbe Bereitschaftsprüfung wie `chats send`: Eine TUI, die noch
         // hochfährt, verschluckt den Paste oder liefert ihn später doppelt.
         if case .notReady = ChatsSendReadinessGuard.decide(
