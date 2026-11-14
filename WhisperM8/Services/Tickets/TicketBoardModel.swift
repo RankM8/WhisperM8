@@ -10,8 +10,29 @@ struct TicketAgent: Equatable {
 }
 
 struct TicketBoardEntry: Equatable, Identifiable {
-    var ticket: Ticket
+    var ticket: Ticket {
+        didSet { derive() }
+    }
     var agents: [TicketAgent]
+    /// Fortschritt der Kästchen und Rufnamen der abgebenden Chats, einmal
+    /// gerechnet: Karten lesen sie bei jedem Zeichnen.
+    private(set) var criteria: TicketChecklistProgress?
+    private(set) var handedOverBy: [String] = []
+
+    init(ticket: Ticket, agents: [TicketAgent]) {
+        self.ticket = ticket
+        self.agents = agents
+        derive()
+    }
+
+    private mutating func derive() {
+        criteria = ticket.criteria
+        handedOverBy = ticket.links.filter { !$0.isActive }.map { link in
+            // Derselbe Rufname wie bei laufenden Chats, hier aus dem Titel der Verknüpfung.
+            TicketChat(id: link.chatID, title: link.title.replacingOccurrences(of: "Chat: ", with: ""),
+                       projectName: "", projectPath: "", state: nil, isRunning: false).shortName
+        }
+    }
 
     var id: String { ticket.id }
     var hasAgent: Bool { !agents.isEmpty }
@@ -23,14 +44,6 @@ struct TicketBoardEntry: Equatable, Identifiable {
         agents.isEmpty && ticket.status.kind == .started && ticket.links.contains { !$0.isActive }
     }
 
-    /// Chats, die das Ticket abgegeben haben (Kurzname aus dem Titel der Verknüpfung).
-    var handedOverBy: [String] {
-        ticket.links.filter { !$0.isActive }.map { link in
-            // Derselbe Rufname wie bei laufenden Chats, hier aus dem Titel der Verknüpfung.
-            TicketChat(id: link.chatID, title: link.title.replacingOccurrences(of: "Chat: ", with: ""),
-                       projectName: "", projectPath: "", state: nil, isRunning: false).shortName
-        }
-    }
 }
 
 /// Laufender Chat, an dem kein offenes Ticket hängt.
@@ -47,6 +60,34 @@ struct TicketBoardModel: Equatable {
     var looseChats: [TicketLooseChat]
     /// Supervisor-Chats betreuen andere Chats und brauchen kein Ticket.
     var supervisors: [TicketChat]
+
+    /// Dasselbe Modell ohne den Zustand der Chats. Die Ansicht führt den
+    /// Zustand getrennt: Ein Statuswechsel soll das Modell nicht „ändern“ und
+    /// damit alles neu rechnen und zeichnen lassen.
+    var withoutChatStates: TicketBoardModel {
+        func plain(_ chat: TicketChat) -> TicketChat {
+            var copy = chat
+            copy.state = nil
+            return copy
+        }
+        var copy = self
+        copy.entries = entries.map { entry in
+            var entry = entry
+            entry.agents = entry.agents.map { TicketAgent(link: $0.link, chat: $0.chat.map(plain)) }
+            return entry
+        }
+        copy.looseChats = looseChats.map { TicketLooseChat(chat: plain($0.chat), earlier: $0.earlier) }
+        copy.supervisors = supervisors.map(plain)
+        return copy
+    }
+
+    /// Zustand je Chat, so wie der Abzug ihn kennt.
+    var chatStates: [UUID: TicketChatState] {
+        var states: [UUID: TicketChatState] = [:]
+        let chats = entries.flatMap { $0.agents.compactMap(\.chat) } + looseChats.map(\.chat) + supervisors
+        for chat in chats { if let state = chat.state { states[chat.id] = state } }
+        return states
+    }
 }
 
 enum TicketBoardBuilder {
@@ -194,6 +235,12 @@ struct TicketFilterCounts: Equatable {
         var byPerson: [TicketPerson: Int] = [:]
         for entry in forPeople {
             if let person = entry.ticket.assignee { byPerson[person, default: 0] += 1 }
+        }
+        // Die gewählte Person bleibt als Knopf stehen, auch mit null Treffern.
+        // Sonst wäre der aktive Filter unsichtbar und das Board ohne Erklärung leer.
+        if case .person(let id) = filter.person, !byPerson.keys.contains(where: { $0.id == id }),
+           let chosen = entries.lazy.compactMap(\.ticket.assignee).first(where: { $0.id == id }) {
+            byPerson[chosen] = 0
         }
         var without = agentBase
         without.agent = .withoutAgent

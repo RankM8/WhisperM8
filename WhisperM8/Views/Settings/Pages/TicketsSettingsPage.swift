@@ -27,7 +27,7 @@ struct TicketsSettingsPage: View {
             title: "Tickets",
             subtitle: "Experimental: tickets from Linear and the chats working on them."
         ) {
-            SettingsLabsNotice("Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, nothing is read from Linear or the Keychain.")
+            SettingsLabsNotice("Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, the app reads nothing from Linear or the Keychain. The whisperm8 tickets command works either way.")
 
             SettingsSection("Ticket view") {
                 SettingsToggleRow(
@@ -232,8 +232,10 @@ private struct TicketsWorkspaceRow: View {
             detail: detail
         ) {
             if workspace.hasKey {
+                // Neutral: Auf einer Seite, auf der alles in Ordnung ist, soll das
+                // Entfernen nicht das Auffälligste sein. Die Rückfrage kommt ohnehin.
                 Button("Remove Key…", action: remove)
-                    .buttonStyle(SettingsButtonStyle.destructive)
+                    .buttonStyle(SettingsButtonStyle.standard)
             }
         }
     }

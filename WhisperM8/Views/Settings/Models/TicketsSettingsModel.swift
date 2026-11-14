@@ -151,11 +151,11 @@ final class TicketsSettingsModel {
 
         let deps = dependencies
         projects = deps.projects()
-        let config = await Self.offMain { deps.loadConfig() }
+        let config = await TicketBlockingWork.run { deps.loadConfig() }
         var loaded: [Workspace] = []
         for name in config.knownWorkspaces {
             guard isCurrent() else { return }
-            var workspace = Workspace(name: name, hasKey: await Self.offMain { deps.hasKey(name) })
+            var workspace = Workspace(name: name, hasKey: await TicketBlockingWork.run { deps.hasKey(name) })
             if workspace.hasKey {
                 guard isCurrent() else { return }
                 switch await Self.offMain({ await deps.teams(name) }) {
@@ -205,11 +205,11 @@ final class TicketsSettingsModel {
             keyNotice = .failed(String(localized: "Linear did not name a workspace for this key."))
             return false
         }
-        guard await Self.offMain({ deps.storeKey(workspace, key) }) else {
+        guard await TicketBlockingWork.run({ deps.storeKey(workspace, key) }) else {
             keyNotice = .failed(String(localized: "Couldn't save the key to the macOS Keychain. Unlock your Keychain and try again."))
             return false
         }
-        guard await change({ $0.add(workspace: workspace) }) else {
+        guard await change({ $0.add(workspace: workspace) }) == .saved else {
             keyNotice = .failed(String(localized: "Couldn't save the ticket settings."))
             return false
         }
@@ -224,7 +224,7 @@ final class TicketsSettingsModel {
     /// festen Workspace still dem einzigen verbliebenen zu.
     func removeKey(workspace: String) async {
         let deps = dependencies
-        let removed = await Self.offMain { deps.deleteKey(workspace) }
+        let removed = await TicketBlockingWork.run { deps.deleteKey(workspace) }
         keyNotice = removed ? nil
             : .failed(String(localized: "Couldn't remove the key from the macOS Keychain. Unlock your Keychain and try again."))
         await load()
@@ -235,45 +235,62 @@ final class TicketsSettingsModel {
     /// schriebe jeder Ordner dieses Teams in den anderen Workspace.
     @discardableResult
     func assign(projectPath: String, to choice: TeamChoice) async -> Bool {
-        let deps = dependencies
-        // Der Stand der Datei zählt, nicht der zuletzt angezeigte.
-        let current = await Self.offMain { deps.loadConfig().workspacesByTeam[choice.team.uppercased()] }
-        if let current, current != choice.workspace {
+        // Prüfen und Schreiben in einem Zug: Der Stand der Datei im Augenblick des
+        // Schreibens zählt, nicht der zuletzt angezeigte.
+        let outcome = await change { config in
+            if let current = config.workspacesByTeam[choice.team.uppercased()], current != choice.workspace {
+                throw TeamTaken(workspace: current)
+            }
+            config.set(workspace: choice.workspace, forTeam: choice.team)
+            config.set(team: choice.team, forProject: projectPath)
+        }
+        switch outcome {
+        case .saved:
+            mappingProblem = nil
+            await load()
+            return true
+        case .refused(let current):
             mappingProblem = String(localized: "Team \(choice.team) is already linked to the workspace \(current). To move it, run: whisperm8 tickets setup --team \(choice.team) --workspace \(choice.workspace) --reassign")
             return false
-        }
-        guard await change({
-            $0.set(workspace: choice.workspace, forTeam: choice.team)
-            $0.set(team: choice.team, forProject: projectPath)
-        }) else {
+        case .failed:
             mappingProblem = String(localized: "Couldn't save the ticket settings.")
             return false
         }
-        mappingProblem = nil
-        await load()
-        return true
     }
 
     func removeMapping(path: String) async {
-        _ = await change { $0.removeProject(path) }
-        mappingProblem = nil
+        let outcome = await change { $0.removeProject(path) }
+        mappingProblem = outcome == .saved ? nil : String(localized: "Couldn't save the ticket settings.")
         await load()
     }
 
-    /// Lesen, ändern, schreiben in einem Zug, abseits des Main Threads und
-    /// nacheinander. Die Kommandozeile schreibt dieselbe Datei; deshalb nie aus
-    /// einem alten Stand, und nie auf einer Datei, die sich nicht lesen ließ.
-    private func change(_ mutate: @escaping @Sendable (inout TicketConfig) -> Void) async -> Bool {
+    private struct TeamTaken: Error {
+        var workspace: String
+    }
+
+    private enum ChangeOutcome: Equatable {
+        case saved
+        /// Die Änderung selbst hat abgelehnt: Das Kürzel gehört schon zu diesem Workspace.
+        case refused(String)
+        case failed
+    }
+
+    /// Lesen, prüfen, ändern, schreiben in einem Zug, abseits des Main Threads
+    /// und nacheinander. Die Kommandozeile schreibt dieselbe Datei; deshalb nie
+    /// aus einem alten Stand, und nie auf einer Datei, die sich nicht lesen ließ.
+    private func change(_ mutate: @escaping @Sendable (inout TicketConfig) throws -> Void) async -> ChangeOutcome {
         let deps = dependencies
         return await withCheckedContinuation { continuation in
             TicketConfigStore.changeQueue.async {
                 do {
                     var config = try deps.loadConfigForChange()
-                    mutate(&config)
+                    try mutate(&config)
                     try deps.saveConfig(config)
-                    continuation.resume(returning: true)
+                    continuation.resume(returning: .saved)
+                } catch let taken as TeamTaken {
+                    continuation.resume(returning: .refused(taken.workspace))
                 } catch {
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: .failed)
                 }
             }
         }

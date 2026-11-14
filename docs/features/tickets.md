@@ -22,7 +22,9 @@ Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../pl
   Schlüsselbund.
 - **Abseits des Main Threads:** Der Key wird über einen blockierenden Kindprozess gelesen. In der App läuft das
   nie auf dem Main Thread; `TicketsSettingsModelTests` prüft das für jeden Schlüsselbund-, Datei- und
-  Netzzugriff der Einstellungen.
+  Netzzugriff der Einstellungen. Der Kindprozess läuft auf einer eigenen Dispatch-Queue
+  (`TicketBlockingWork`), nicht auf dem Thread-Pool von Swift Concurrency: Ein offener Dialog des
+  Schlüsselbunds belegte sonst den gemeinsamen Pool.
 - **Frist:** Der Aufruf von `security` wartet höchstens 60 Sekunden auf den Kindprozess (etwa bei einem Dialog
   des Schlüsselbunds) und beendet ihn danach. Für die Oberfläche sieht das aus wie „kein Key“. macOS kann eine
   Pipe nicht in einem Zug mit close-on-exec anlegen; erbt ein gleichzeitig startender Chat ihre Enden, greift
@@ -238,6 +240,13 @@ Services/Tickets/TicketRecordText.swift      fester Aufbau für Entscheidung und
 Services/Tickets/TicketHygiene.swift         Ordnung der Tickets, Tabelle der Bereiche, Bild-Typen
 Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die Ansicht
 Views/Tickets/TicketErrorText.swift          Fehler als übersetzter Satz für die Oberfläche
+Views/Tickets/TicketBoardPresentation.swift  fertig gerechneter Inhalt, Zustand der Ansicht (Filter, Auswahl), Live-Zustand der Chats
+Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Board/Backlog, Filter
+Views/Tickets/TicketCardView.swift           Karte und Spalten
+Views/Tickets/TicketBacklogListView.swift    Liste nach Projekt, Leiste „Chats ohne Ticket“
+Views/Tickets/TicketDetailPanel.swift        Detail rechts
+Views/Tickets/TicketDescriptionBlocks.swift  Beschreibung leicht gesetzt (Überschriften, Kästchen, Listen)
+Views/Tickets/TicketBoardText.swift          Texte und kleine Bausteine (Status-Punkt, Priorität, Person)
 Views/Settings/Models/TicketsSettingsModel.swift   Zustand und Regeln der Einstellungsseite
 Views/Settings/Pages/TicketsSettingsPage.swift     Einstellungen › Tickets
 CLI/TicketsCLICommand.swift                  Argumente, Hilfe, Umgebung
@@ -269,6 +278,51 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,
   `assign`, `label`, `decide` und `check` (mit Verweis) aus. `done --image` lädt zusätzlich eine Bilddatei zu
   Linear hoch; der Key geht dabei nicht an den Speicher-Dienst.
+
+## Die Ansicht in der App
+
+Stand 14.11.2026: Die Ansicht ist gebaut und in Bildern geprüft (`make snapshots ONLY=tickets-b`, Beispiele in
+[`../design/ticket-board/`](../design/ticket-board/)); der Einstieg im Agent-Chats-Fenster fehlt noch. Sie liest
+nur.
+
+- **Board:** drei Spalten nach Art des Status (in Arbeit, als Nächstes, Backlog). In „In Arbeit“ stehen die
+  Tickets nach Status in der Reihenfolge des Teams, darin nach Priorität. Jede Karte zeigt Nummer, Priorität,
+  Fortschritt der Kästchen, Person, Titel, Projekt und Meilenstein, Status und Labels, und unten den Chat mit
+  Status-Punkt und Zustand. Sitzt keiner daran, steht dort „Kein Agent“, bei einem abgegebenen Ticket „Abgegeben
+  von …“.
+- **Backlog:** dieselben Tickets als Liste, nach Projekt gruppiert.
+- **Filter:** Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je Person) lassen sich kombinieren,
+  dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
+- **Detail:** Eckdaten, der Chat mit „arbeitet seit …“, „Zum Chat“ und „In Linear öffnen“, darunter die
+  Beschreibung, leicht gesetzt (Überschriften, Kästchen, Listen mit ihren Nummern). Escape schließt es.
+- **Leiste:** laufende Chats ohne offenes Ticket, mit dem Ticket, an dem sie zuletzt saßen. Supervisor-Chats
+  stehen getrennt daneben und zählen nicht als Lücke.
+- **Schmales Fenster:** Die Spalten werden nicht schmaler als 260 pt, darunter scrollt das Board waagrecht.
+  Unter 940 pt Breite liegt das Detail über dem Inhalt statt daneben; die Liste lässt dann Status und
+  Fortschritt weg.
+- **Labels auf der Karte:** höchstens zwei, zuerst alles, was etwas über den Stand sagt; die Art des Tickets
+  (Linears Bug, Feature, Improvement) zuletzt und zurückhaltend. Der Status steht nur auf der Karte, wenn er
+  mehr sagt als die Spalte.
+- **Begriffe:** Englisch stehen Linears Wörter (Project, Milestone). Die deutsche Übersetzung sagt „Bereich“
+  und „Vorhaben“, so wie dieses Projekt Linear ordnet.
+
+So bleibt die Ansicht ruhig und billig:
+
+- Gerechnet wird im `TicketBoardViewModel`, wenn sich der Abzug, ein Filter oder die Auswahl ändert, nie beim
+  Zeichnen. Die Ansichten bekommen fertige Werte.
+- Den Live-Zustand der Chats lesen nur die Status-Punkte und der Text daneben (`TicketChatStatusSource`). Ein
+  Statuswechsel baut weder Karten noch Board neu auf. Der Punkt ist der gemeinsame der App
+  (`AgentStatusIndicator`), Grün heißt nur „arbeitet“.
+- Kein Zähler läuft mit: Im Kopf steht die Uhrzeit des letzten Abrufs. Scheitert ein Abruf, bleibt der letzte
+  Stand stehen, und eine Zeile sagt, von wann er ist.
+- Nichts ist nur beim Überfahren sichtbar, und es gibt kein Kontextmenü.
+- Fortschritt der Kästchen und Rufnamen der abgebenden Chats rechnet der Eintrag einmal aus, nicht die Karte
+  bei jedem Zeichnen. Der Zustand der Chats gehört nicht zum Vergleich des Modells: Ein neuer Abzug, in dem
+  sich nur Zustände geändert haben, rechnet nichts neu.
+
+Tickets stammen auch von anderen Leuten. In der Beschreibung bleibt ein Link nur anklickbar, wenn er mit
+`http` oder `https` ins Web führt; `file:`, `smb:` und Schemata fremder Apps werden zu Text. Mehr als 400
+Zeilen werden nicht gesetzt, der Rest steht in Linear.
 
 ## Grenzen
 
