@@ -225,6 +225,11 @@ extension AgentChatsView {
             guard !multiSelection.isEmpty else { return false }
             multiSelection = []
             return true
+        case .makeKeyWindow:
+            guard let hostWindow else { return false }
+            if hostWindow.isMiniaturized { hostWindow.deminiaturize(nil) }
+            hostWindow.makeKeyAndOrderFront(nil)
+            return true
         }
     }
 

@@ -49,6 +49,14 @@ Loslassen von Kreis im Chat als Escape an. Durch gehen nur L1 + R1 (Pause) und R
 pausiert der Controller ohnehin und weckt nicht. Spiele im Browser erkennt die Pause nicht: Dort
 holt jeder Stick WhisperM8 nach vorn, bis man mit L1 + R1 pausiert oder den Schalter ausschaltet.
 
+Nach vorn kommt das zuletzt aktive Agent-Chats-Fenster (`ControllerWakeFocus`, WM8-92): Es wird nach der
+Aktivierung ausdrücklich zum Schlüsselfenster. Vorher holte macOS beim Aktivieren das zuletzt aktive
+Fenster der App nach vorn — lag dort ein offenes Einstellungsfenster, sah der Controller „anderes
+Fenster“, schickte Brücken-Tasten dorthin, und jede Taste piepte bis zu einem Mausklick. Gibt es das
+Fenster nicht mehr, oder wird die App binnen 2 s nicht aktiv (Aktivierung verweigert), öffnet der Weg wie
+bisher das Primärfenster. Das Log `controller_wake_focus` nennt das Key-Fenster vorher und nachher (Klasse
+und Kennung), damit ein Feldtest die Ursache belegen kann.
+
 Notbremse: `defaults write com.whisperm8.app controllerFeatureEnabled -bool NO` — kein Zugriff auf
 das GameController-Framework, der Schalter wirkt nicht. Für das rohe HID der Xbox-Controller (Paddles,
 Xbox-Knopf) gibt es eine eigene: `controllerPaddleHIDEnabled -bool NO`.
