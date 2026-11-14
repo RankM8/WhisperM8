@@ -393,23 +393,106 @@ export const say = (e: BoardEntry) => {
 /** Rufname, Ticket und Thema aus dem Chat-Titel („WM8-65 Kai · Umzug DealSupply“). */
 export type TitleParts = { name: string; ticket: string | null; topic: string }
 
-const TICKET = /^([A-Z][A-Z0-9]*-\d+)\s+/
+/**
+ * Bekannte Ticket-Schlüssel (Linear WM8, DealSupply und Akquise). Nur diese
+ * gelten als Ticket, sonst läse „GPT-5 Router · Fix“ sich als Ticket GPT-5.
+ */
+const TICKET = /^((?:WM8|DS|DEAL|DEA|AKQ|PRB|LISTM8)-\d+)\s+/
+const NAME_WIDTH = 24
 
 /**
  * Titel der Form „<Ticket> <Rufname> · <Thema>“, Ticket optional. Ohne
- * Trennpunkt ist der ganze Titel der Name (gekürzt), ohne Thema.
+ * Trennpunkt ist der ganze Titel der Name, ohne Thema. Namen sind gekürzt;
+ * ein leerer Name fällt auf `fallback` (die Kurz-Kennung) zurück.
  */
-export const titleParts = (title: string): TitleParts => {
-  let rest = String(title ?? '').trim()
+export const titleParts = (title: string, fallback = '?'): TitleParts => {
+  let rest = clean(title)
   let ticket: string | null = null
   const match = TICKET.exec(rest)
   if (match) {
     ticket = match[1]!
-    rest = rest.slice(match[0].length)
+    rest = rest.slice(match[0].length).trim()
   }
-  const dot = rest.indexOf(' · ')
-  if (dot < 0) return { name: clip(rest || title, 24), ticket, topic: '' }
-  return { name: rest.slice(0, dot).trim(), ticket, topic: rest.slice(dot + 3).trim() }
+  const split = /^(.*?)\s*·\s+(.*)$/.exec(rest)
+  const name = (split ? split[1]! : rest).trim()
+  const topic = split ? split[2]!.trim() : ''
+  return { name: clip(name || fallback, NAME_WIDTH), ticket, topic }
+}
+
+/** Steuerzeichen (C0, DEL, C1) zu Leerzeichen, Weißraum zusammengezogen, eine Zeile. */
+export const clean = (text: string) =>
+  String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** Zeilen, die `text` bei Wortumbruch in `width` Spalten braucht (mindestens 1). */
+export const wrapRows = (text: string, width: number) => wrapLines(text, width).length
+
+/** Wortumbruch wie im Terminal; überlange Wörter werden hart geteilt. */
+const wrapLines = (text: string, width: number): string[] => {
+  const w = Math.max(1, width)
+  const lines: string[] = []
+  let line = ''
+  for (const word of clean(text).split(' ')) {
+    let rest = word
+    while (rest.length > w) {
+      if (line !== '') {
+        lines.push(line)
+        line = ''
+      }
+      lines.push(rest.slice(0, w))
+      rest = rest.slice(w)
+    }
+    if (rest === '') continue
+    if (line === '') line = rest
+    else if (line.length + 1 + rest.length <= w) line = `${line} ${rest}`
+    else {
+      lines.push(line)
+      line = rest
+    }
+  }
+  if (line !== '' || lines.length === 0) lines.push(line)
+  return lines
+}
+
+/** `text` auf höchstens `rows` umbrochene Zeilen gekürzt, mit „…“ am Ende. */
+export const clipToRows = (text: string, width: number, rows: number) => {
+  const lines = wrapLines(text, width)
+  if (lines.length <= rows) return clean(text)
+  const kept = lines.slice(0, Math.max(1, rows))
+  const last = kept[kept.length - 1]!
+  kept[kept.length - 1] = last.length >= width ? `${last.slice(0, Math.max(0, width - 1))}…` : `${last}…`
+  return kept.join(' ')
+}
+
+/** Ein Wartender im Kasten: Eintrag und der Satz, wie er gezeigt wird. */
+export type WaitingRow = { entry: BoardEntry; sentence: string }
+
+/**
+ * Welche Wartenden in `maxRows` Zeilen passen. Je Wartendem: Abstand,
+ * Kopfzeile und der umbrochene Satz. `fixed` = Zeilen außerhalb (Kopf,
+ * Abstand, Sammelzeilen). Der erste Wartende steht immer da, sein Satz wird
+ * notfalls gekürzt; wer danach nicht mehr passt, zählt in `hidden`.
+ */
+export const layoutWaiting = (waiting: readonly BoardEntry[], cols: number, maxRows: number, fixed: number) => {
+  const textWidth = Math.max(10, cols - 2)
+  let budget = Math.max(0, maxRows - fixed)
+  const rows: WaitingRow[] = []
+  for (const entry of waiting) {
+    const sentence = clean(say(entry))
+    const need = 2 + wrapRows(sentence, textWidth)
+    if (need <= budget) {
+      rows.push({ entry, sentence })
+      budget -= need
+      continue
+    }
+    if (rows.length === 0) {
+      // Der Erste immer, notfalls mit gekürztem Satz.
+      const room = Math.max(1, budget - 2)
+      rows.push({ entry, sentence: clipToRows(sentence, textWidth, room) })
+      budget = 0
+    }
+    break
+  }
+  return { rows, hidden: waiting.length - rows.length, textWidth }
 }
 
 /** Fortschritt „4/7“, sobald die Quelle ihn liefert; bis dahin nichts. */
@@ -432,7 +515,12 @@ export const fitNames = (names: readonly string[], room: number) => {
     const tail = rest > 0 ? ` +${rest}` : ''
     if (next.length + tail.length > room) {
       const left = names.length - i
-      return line === '' ? `+${left}` : `${line} +${left}`
+      // Schon der erste Name passt nicht: gekürzt statt verschwunden.
+      if (line === '') {
+        const more = rest > 0 ? ` +${rest}` : ''
+        return `${clip(names[i]!, Math.max(1, room - more.length))}${more}`
+      }
+      return `${line} +${left}`
     }
     line = next
   }
@@ -445,16 +533,20 @@ export const groups = (entries: readonly BoardEntry[]) => {
   return {
     waiting: byAge.filter(e => e.light === 'needsYou'),
     running: byAge.filter(e => e.light === 'running'),
-    resting: byAge.filter(e => e.light === 'done' || e.light === 'parked'),
+    // Fertige zuerst: sie warten auf Abnahme, Geparkte nicht.
+    resting: [...byAge.filter(e => e.light === 'done'), ...byAge.filter(e => e.light === 'parked')],
   }
 }
 
-/** Name in einer Sammelzeile: ⚑ bei Rückfrage im Chat, dazu der Fortschritt. */
-const shortName = (e: BoardEntry) => {
-  const flag = e.status === 'awaitingInput' ? '⚑ ' : ''
+/** Name in einer Sammelzeile: ⚑ bei Rückfrage im Chat, ✓ bei fertig (Abnahme offen), dazu der Fortschritt. */
+export const shortName = (e: BoardEntry) => {
+  const flag = e.status === 'awaitingInput' ? '⚑ ' : e.light === 'done' ? '✓ ' : ''
   const progress = progressOf(e)
-  return `${flag}${titleParts(e.title).name}${progress ? ` ${progress}` : ''}`
+  return `${flag}${titleParts(e.title, e.ref).name}${progress ? ` ${progress}` : ''}`
 }
+
+/** „1 läuft“ / „2 laufen“, „1 ruht“ / „2 ruhen“ für die eingeklappte Zeile. */
+export const countWord = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
 /** Kopf: „Jarvis · 1 wartet auf dich“ bzw. „2 warten auf dich“. */
 export const waitingHead = (count: number) => (count === 1 ? '1 wartet auf dich' : `${count} warten auf dich`)
@@ -792,8 +884,8 @@ export const register: Register = (on, options) => {
     if (isFolded) {
       const parts = [
         waiting.length > 0 ? waitingHead(waiting.length) : '',
-        running.length > 0 ? `${running.length} läuft` : '',
-        resting.length > 0 ? `${resting.length} ruht` : '',
+        running.length > 0 ? countWord(running.length, 'läuft', 'laufen') : '',
+        resting.length > 0 ? countWord(resting.length, 'ruht', 'ruhen') : '',
       ].filter(Boolean)
       return (
         <Box flexDirection="row" width={cols}>
@@ -822,19 +914,11 @@ export const register: Register = (on, options) => {
         </Box>
       )
 
-    // Höhe begrenzen: Kopf, Sammelzeilen, je Wartendem Kopfzeile plus
-    // umbrochener Satz und Abstand. Was nicht passt, zählt der Kopf mit.
-    const textWidth = Math.max(10, cols - 2)
-    const fixed = (waiting.length > 0 ? 2 : 0) + (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
-    let budget = Math.max(0, e.props.maxRows - fixed)
-    const shown: BoardEntry[] = []
-    for (const entry of waiting) {
-      const need = 2 + Math.ceil(Math.max(1, say(entry).length) / textWidth)
-      if (need > budget && shown.length > 0) break
-      shown.push(entry)
-      budget -= need
-    }
-    const hidden = waiting.length - shown.length
+    // Höhe begrenzen: Kopf, Abstand vor den Sammelzeilen, Sammelzeilen; der
+    // Rest gehört den Wartenden. Was nicht passt, zählt der Kopf mit.
+    const summaries = (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
+    const fixed = waiting.length > 0 ? 1 + (summaries > 0 ? 1 + summaries : 0) : summaries
+    const { rows: shown, hidden } = layoutWaiting(waiting, cols, e.props.maxRows, fixed)
 
     return (
       <Box flexDirection="column" width={cols}>
@@ -850,8 +934,8 @@ export const register: Register = (on, options) => {
             {hidden > 0 && <Text dimColor>{`  (+${hidden} nicht gezeigt)`}</Text>}
           </Box>
         )}
-        {shown.map(entry => {
-          const t = titleParts(entry.title)
+        {shown.map(({ entry, sentence }) => {
+          const t = titleParts(entry.title, entry.ref)
           return (
             <Box key={entry.sessionID} flexDirection="column" marginTop={1}>
               <Box flexDirection="row">
@@ -866,7 +950,7 @@ export const register: Register = (on, options) => {
                 )}
               </Box>
               <Box paddingLeft={2} width={cols}>
-                <Text wrap="wrap">{say(entry)}</Text>
+                <Text wrap="wrap">{sentence}</Text>
               </Box>
             </Box>
           )

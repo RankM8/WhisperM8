@@ -39,9 +39,10 @@ Seit WM8-88 (14.11.2026) gilt:
   Darunter folgt das Anliegen als ganzer Satz, der umbricht statt
   abgeschnitten zu werden.
 - **Alle anderen** stehen in zwei Sammelzeilen, „läuft“ (Ampel `running`) und
-  „ruht“ (`done` und `parked`). Passen nicht alle Namen in die Zeile, steht
-  der Rest als „+n“. Ein ⚑ vor dem Namen heißt, dass der Chat selbst auf eine
-  Antwort wartet.
+  „ruht“ (`done` und `parked`, fertige vorn mit ✓). Passen nicht alle Namen
+  in die Zeile, steht der Rest als „+n“. Ein ⚑ vor dem Namen heißt, dass der
+  Chat selbst auf eine Antwort wartet. Als Ticket gelten nur die bekannten
+  Schlüssel (WM8, DS, DEAL, DEA, AKQ, PRB, LISTM8).
 - **Fortschritt** („4/7“) erscheint, sobald `chats board --json` das Feld
   `progress` liefert (aus den Kästchen am Ticket, eigenes Ticket). Bis dahin
   fehlt er.
@@ -125,13 +126,16 @@ mehreren Boards stehen (`otherOwners`).
   Einstellung ein Prompt `[Board] <Name> (<ref>): …` an Jarvis. Gebündelt
   über 5 s, höchstens ein Prompt je Minute, einmal je Chat und Zustand, bis
   der Chat wieder arbeitet. Geparkte Chats wecken nicht.
-- **Anzeige:** Band nach den gemessenen Breiten: ab 90 Spalten mit Ref und
-  breiter Altersangabe, darunter knapper. Der Kopf kürzt nach Platz: erst
-  wird der Hinweis rechts kürzer, dann fällt „· Board“ weg, dann der
-  Hinweis, zuletzt jedes Wort außer „wartet“ (live geprüft bei 50, 58, 72
-  und 120 Spalten; feste Stufen ließen ihn bei 72 umbrechen). Keine
-  Statuszeile: Claude Code setzt „⚠“ vor jede Plugin-Statuszeile, sie sah
-  nach einer Warnung aus und wiederholte nur das Band.
+- **Anzeige (seit WM8-88):** Aufbau oben unter „Was es ist“. Die Höhe ist
+  hart begrenzt (`maxRows`): Der erste Wartende steht immer da, sein Satz
+  wird notfalls gekürzt; weitere, die nicht passen, zählt der Kopf. Der Satz
+  bricht nach Wörtern um, Steuerzeichen und Zeilenumbrüche aus dem Board
+  fallen vorher weg. In den Sammelzeilen markiert ✓ fertige Chats (Abnahme
+  offen, sie stehen in „ruht“ vorn), ⚑ Chats, die selbst auf eine Antwort
+  warten. Die Blockade eines laufenden Chats zeigt der Kasten nicht mehr; sie
+  steht in der Notiz-Karte. Keine Statuszeile: Claude Code setzt „⚠“ vor jede
+  Plugin-Statuszeile, sie sah nach einer Warnung aus und wiederholte nur den
+  Kasten.
 - **Kein Detail-Panel mehr (seit 23.10.2026):** Früher hat `/board` ein Pane
   mit Ziel, Meilensteinen und Knöpfen geöffnet. In App-Sessions zeigt Claude so
   ein Pane aber nicht daneben, sondern als zweiten Kasten über dem Band. Alle

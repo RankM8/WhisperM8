@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { fitNames, isBefore, nextGenerationStart, progressOf, sameBoard, titleParts, waitingHead, withStatus } from './register'
+import { clean, clipToRows, countWord, fitNames, isBefore, layoutWaiting, nextGenerationStart, progressOf, sameBoard, shortName, titleParts, waitingHead, withStatus, wrapRows } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -136,9 +136,8 @@ describe('Kasten (WM8-88)', () => {
         expect(await ui.find({ text: /WM8-65/ })).toBeDefined()
         // Der Satz bricht um statt abgeschnitten zu werden: jedes Wort steht da.
         expect(await flat(ui, SENTENCE.split(' '))).toBe(null)
-        expect(await ui.find({ text: /…/ })).toBeUndefined()
         expect(await ui.find({ text: /Gus 4\/7 · Noa/ })).toBeDefined()
-        expect(await ui.find({ text: /Vic · Fin/ })).toBeDefined()
+        expect(await ui.find({ text: /✓ Fin · Vic/ })).toBeDefined()
         expect(await ui.find({ text: 'läuft' })).toBeDefined()
         expect(await ui.find({ text: 'ruht' })).toBeDefined()
         await ui.unmount()
@@ -174,9 +173,11 @@ describe('Kasten (WM8-88)', () => {
 
   test('ein leeres Board zeichnet nichts', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on, { board: { ...BOARD, entries: [] } })
+    const calls = world(on, { board: { ...BOARD, entries: [] } })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
+    // Gelesen wurde (sonst prüfte der Test nichts), gezeichnet nicht.
+    expect(calls.argv.some(a => a.includes('board') && a.length <= 4)).toBe(true)
     const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
     expect(await ui.find({ text: 'engine' })).toBeDefined()
     await ui.unmount()
@@ -209,7 +210,7 @@ describe('Kasten (WM8-88)', () => {
     const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
     await $.command.run({ command: 'board', args: 'zu' })
     expect(await ui.find({ text: /Richard und Xeno/ })).toBeUndefined()
-    expect(await ui.find({ text: /2 warten auf dich · 2 läuft · 2 ruht/ })).toBeDefined()
+    expect(await ui.find({ text: /2 warten auf dich · 2 laufen · 2 ruhen/ })).toBeDefined()
     await $.command.run({ command: 'board', args: 'auf' })
     expect(await ui.find({ text: /Richard und Xeno/ })).toBeDefined()
     await ui.unmount()
@@ -252,12 +253,32 @@ describe('Titel und Sammelzeile (WM8-88, rein)', () => {
     expect(titleParts('Vic · Neustart: Gesamt-Review')).toEqual({ name: 'Vic', ticket: null, topic: 'Neustart: Gesamt-Review' })
     expect(titleParts('Outreach Copy-Review')).toEqual({ name: 'Outreach Copy-Review', ticket: null, topic: '' })
     expect(titleParts('DS-12 Kai')).toEqual({ name: 'Kai', ticket: 'DS-12', topic: '' })
+    // Nur bekannte Schlüssel sind Tickets.
+    expect(titleParts('GPT-5 Router · Fix')).toEqual({ name: 'GPT-5 Router', ticket: null, topic: 'Fix' })
+    expect(titleParts('UTF-8 Umstellung · X').ticket).toBe(null)
+    // Leerer Name fällt auf die Kennung zurück, lange Namen werden gekürzt.
+    expect(titleParts('', 'a3f2c1d0').name).toBe('a3f2c1d0')
+    expect(titleParts('WM8-1  · Thema', 'a3f2').name).toBe('a3f2')
+    expect(titleParts('Ein sehr langer Name ohne jeden Punkt dazwischen').name.length).toBeLessThanOrEqual(24)
+  })
+
+  test('shortName markiert fertige mit ✓ und wartende Chats mit ⚑', () => {
+    expect(shortName(entry({ title: 'Fin · Prüfer', light: 'done', status: 'idle' }) as never)).toBe('✓ Fin')
+    expect(shortName(entry({ title: 'Noa · X', light: 'running', status: 'awaitingInput' }) as never)).toBe('⚑ Noa')
+    expect(shortName(entry({ title: 'WM8-12 Gus · X', light: 'running', status: 'working', progress: { done: 4, total: 7 } }) as never)).toBe('Gus 4/7')
+  })
+
+  test('countWord in Ein- und Mehrzahl', () => {
+    expect(countWord(1, 'läuft', 'laufen')).toBe('1 läuft')
+    expect(countWord(2, 'ruht', 'ruhen')).toBe('2 ruhen')
   })
 
   test('fitNames kürzt mit +n statt umzubrechen', () => {
     expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 40)).toBe('Gus 4/7 · Jon 2/7 · Noa')
     expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 14)).toBe('Gus 4/7 +2')
-    expect(fitNames(['Gus'], 2)).toBe('+1')
+    // Ein zu langer erster Name wird gekürzt, nicht unterschlagen.
+    expect(fitNames(['Ein-sehr-langer-Rufname'], 10)).toBe('Ein-sehr-…')
+    expect(fitNames(['Ein-sehr-langer-Rufname', 'Noa'], 12)).toBe('Ein-sehr… +1')
   })
 
   test('progressOf nur mit gültiger Quelle', () => {
@@ -586,5 +607,48 @@ describe('Ansetzen nach Ende oder Lücke (WM8-87)', () => {
     expect(isBefore('2026-10-08T15:00:00Z', '2026-10-08T15:00:00Z')).toBe(false)
     expect(isBefore(undefined, '2026-10-08T15:00:00Z')).toBe(false)
     expect(isBefore('2026-10-08T14:00:00Z', null)).toBe(false)
+  })
+})
+
+// Review WM8-88: Die Höhe ist hart begrenzt, der Satz bricht nach Wörtern um.
+describe('Höhe und Umbruch (WM8-88, rein)', () => {
+  const waiting = (needs: string, n = 1) =>
+    Array.from({ length: n }, (_, i) =>
+      entry({ ref: `w${i}`, sessionID: `A0000000-0000-0000-0000-00000000010${i}`, title: `WM8-${i} Kai${i} · Thema`, light: 'needsYou', needs })) as never[]
+
+  test('wrapRows zählt nach Wörtern, clean zieht Steuerzeichen und Zeilenumbrüche zusammen', () => {
+    expect(wrapRows('eins zwei drei', 9)).toBe(2)
+    expect(wrapRows('', 20)).toBe(1)
+    expect(wrapRows('abcdefghijkl', 5)).toBe(3)
+    expect(clean('Zeile 1\nZeile 2\u001b[2J  Ende')).toBe('Zeile 1 Zeile 2 [2J Ende')
+  })
+
+  test('clipToRows kürzt auf die erlaubten Zeilen mit …', () => {
+    const long = 'wort '.repeat(40).trim()
+    const clipped = clipToRows(long, 20, 2)
+    expect(wrapRows(clipped, 20)).toBeLessThanOrEqual(2)
+    expect(clipped.endsWith('…')).toBe(true)
+    expect(clipToRows('kurz', 20, 2)).toBe('kurz')
+  })
+
+  test('der Kasten bleibt bei jeder Breite und Höhe innerhalb von maxRows', () => {
+    const longNeeds = 'Bitte prüfen und freigeben, '.repeat(15).trim()
+    for (const cols of [50, 70, 120]) {
+      for (const maxRows of [7, 12, 30]) {
+        for (const count of [1, 3]) {
+          const fixed = 1 + 1 + 2 // Kopf, Abstand, zwei Sammelzeilen
+          const { rows, textWidth } = layoutWaiting(waiting(longNeeds, count), cols, maxRows, fixed)
+          const used = fixed + rows.reduce((n, r) => n + 2 + wrapRows(r.sentence, textWidth), 0)
+          expect(rows.length).toBeGreaterThanOrEqual(1)
+          expect(used).toBeLessThanOrEqual(Math.max(maxRows, fixed + 3))
+        }
+      }
+    }
+  })
+
+  test('mit Platz bleibt der Satz ganz', () => {
+    const { rows, hidden } = layoutWaiting(waiting(SENTENCE, 2), 50, 30, 4)
+    expect(hidden).toBe(0)
+    expect(rows[0]!.sentence).toBe(SENTENCE)
   })
 })
