@@ -74,6 +74,17 @@ final class AgentPromptQueueDelivery {
             store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist", retry: true)
             return
         }
+        // Freigabe oder Dialog statt des Eingabefelds (Status hinkt hinterher):
+        // nie zustellen, der Auftrag bleibt vorgemerkt (WM8-75). Das Rennen
+        // „Freigabe geht in den 80 ms bis zum Enter auf“ gibt es hier nicht —
+        // die Queue stellt nur an einen ruhenden Chat zu.
+        if DelayedEnterGuard.approvalPending(
+            status: coordinator.statusStore.status(for: sessionID),
+            lifecycle: coordinator.lifecycleState(for: sessionID),
+            screen: controller.controllerScreenSnapshot()) {
+            store.markFailed(id: reserved.id, error: "Freigabe oder Dialog offen — wartet, bis der Chat fertig ist", retry: true)
+            return
+        }
 
         let marked = AgentControlRequestHandler.deliveredPrompt(
             reserved.prompt, actor: "Warteschlange · \(reserved.enqueuedBy)",

@@ -208,10 +208,19 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     return .failure(.notReady,
                                     ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
                 }
+                // Freigabe offen (oder ein anderer Dialog statt des Felds): `send`
+                // bestätigt nie eine Freigabe — der Text würde ignoriert, das
+                // Enter wählte „Yes“ (WM8-75). Auch mit --force nicht.
+                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+                if DelayedEnterGuard.approvalPending(
+                    status: runtime,
+                    lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID),
+                    screen: controller.controllerScreenSnapshot()) {
+                    return .failure(.approvalPending, Self.approvalPendingMessage)
+                }
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).
                 let force = request.params["force"]?.boolValue ?? false
-                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
                 if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
                     return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
                 }
@@ -239,6 +248,15 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                             detail: sendConflictDetail(targetID: targetID))
         case .success(let session):
             completeIdempotency(request.requestID)
+            // Das Enter kommt 80 ms nach dem Einfügen (nach einem Leeren 230 ms)
+            // und kann zurückgehalten werden, wenn genau dann eine Freigabe
+            // aufgeht. Kurz warten und dann ehrlich antworten statt „delivered“.
+            if submit, await Self.enterWasWithheld(targetID: targetID, clearedInput: clearedInput) {
+                await audit(request.actor, method: "send", target: await sessionLabel(targetID),
+                            outcome: "withheld", prompt: prompt)
+                return .failure(requestID: request.requestID, code: .approvalPending,
+                                message: Self.enterWithheldMessage)
+            }
             let targetLabel = await sessionLabel(targetID)
             await audit(request.actor, method: "send", target: targetLabel, outcome: "ok", prompt: prompt)
             return .success(requestID: request.requestID, result: .object([
@@ -248,6 +266,22 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "requestID": request.requestID,
                 "clearedInput": clearedInput,
             ]))
+        }
+    }
+
+    static let approvalPendingMessage =
+        "Im Ziel ist eine Freigabe oder ein Dialog offen — send bestätigt keine Freigaben, sie gehen an den User. Später erneut oder `enqueue`."
+    static let enterWithheldMessage =
+        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Sie geht an den User; der Text steht ggf. noch im Feld."
+
+    /// Wartet, bis das verzögerte Enter entschieden ist, und meldet, ob es
+    /// zurückgehalten wurde.
+    private static func enterWasWithheld(targetID: UUID, clearedInput: Bool) async -> Bool {
+        let started = Date()
+        let wait: UInt64 = clearedInput ? 330_000_000 : 180_000_000
+        try? await Task.sleep(nanoseconds: wait)
+        return await MainActor.run {
+            (AgentTerminalController.lastWithheldEnterAt[targetID] ?? .distantPast) >= started
         }
     }
 

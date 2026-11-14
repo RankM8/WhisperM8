@@ -367,14 +367,21 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   bräche Ctrl+C den Dialog ab), auch bei `send --no-submit`. Die Antwort von
   `send` trägt dann `clearedInput: true`, die Queue loggt es
   (`queue_delivered … clearedInput=true`).
-- **Enter zurückgehalten (WM8-75):** Geht zwischen dem Einfügen und dem Enter
-  (80 ms) eine Rückfrage auf oder steht bei Claude statt des Eingabefelds ein
-  Dialog, geht kein Enter raus (`DelayedEnterGuard`, Details in
-  [controller.md](controller.md), Schutzregeln). `send` hat da schon
-  geantwortet: Es meldet trotzdem `delivered`, und die Queue markiert den
-  Auftrag als zugestellt. Erkennbar nur im Log (`delayed_enter_withheld`) und
-  an der Pille. War die Rückfrage schon beim Absenden offen, geht das Enter wie
-  bisher raus.
+- **Freigabe offen: `approvalPending` (WM8-75, Verhaltensänderung 14.11.2026):**
+  `send` bestätigt nie eine Freigabe. Wartet das Ziel auf eine Freigabe oder
+  Plan-Freigabe, ist die Art unklar, oder steht bei Claude unten statt des
+  Eingabefelds ein Dialog, lehnt `send` VOR dem Einfügen mit `approvalPending`
+  (Exit 4, `isRetryable`, Ausweg `enqueue`) ab — auch mit `--force`. Vorher
+  wurde der Text dort ignoriert und das Enter wählte die Vorauswahl „Yes“, auch
+  wenn „nein“ geschickt wurde. Eine offene Frage (AskUserQuestion) beantwortet
+  `send` wie bisher. Geht die Freigabe erst zwischen Einfügen und Enter (80 ms)
+  auf, hält `DelayedEnterGuard` das Enter zurück; `send` wartet darauf kurz
+  (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
+  `delivered` (Audit `withheld`); der Text steht ggf. noch im Feld. Die
+  Warteschlange stellt dann nicht zu und lässt den Auftrag vorgemerkt. Einen
+  gewollten Weg, eine Freigabe per CLI zu bestätigen (Tasten an einen Chat),
+  gibt es noch nicht (WM8-64). Details: [controller.md](controller.md),
+  Schutzregeln.
 
 Als Abbruch zählt (Claude-Chats, nicht in Dialogen): ESC oder Ctrl+C,
 während der Chat `working` ist, **und** innerhalb von 5 s nach einem

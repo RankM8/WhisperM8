@@ -825,9 +825,10 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         composerDraft.recordSubmitted(programmaticAt: Date())
         // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
         // Return kommt. Davor neu prüfen: keine Freigabe aufgegangen (WM8-75).
-        let statusAtPaste = statusForDelayedEnter
+        let (statusAtPaste, questionAtPaste) = (statusForDelayedEnter, questionOpenForDelayedEnter)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self, self.isRunning, self.delayedEnterAllowed(statusAtPaste: statusAtPaste, text: text) else { return }
+            guard let self, self.isRunning,
+                  self.delayedEnterAllowed(statusAtPaste: statusAtPaste, questionAtPaste: questionAtPaste, text: text) else { return }
             self.terminal.send([0x0D])
         }
     }

@@ -16,12 +16,50 @@ final class DelayedEnterGuardTests: XCTestCase {
         XCTAssertFalse(DelayedEnterGuard.allowsEnter(statusAtPaste: .idle, statusNow: .awaitingInput, screen: nil))
     }
 
-    /// `chats send` beantwortet eine schon offene Frage bewusst: wie bisher.
+    /// `chats send` beantwortet eine schon offene FRAGE bewusst: wie bisher.
     func testAlreadyOpenQuestionAtPasteKeepsEnter() {
-        XCTAssertTrue(DelayedEnterGuard.allowsEnter(statusAtPaste: .awaitingInput, statusNow: .awaitingInput, screen: nil))
         XCTAssertTrue(DelayedEnterGuard.allowsEnter(
-            statusAtPaste: .awaitingInput, statusNow: .awaitingInput,
+            statusAtPaste: .awaitingInput, questionAtPaste: true, statusNow: .awaitingInput, screen: nil))
+        XCTAssertTrue(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: .awaitingInput, questionAtPaste: true, statusNow: .awaitingInput,
+            screen: ControllerScreenSnapshot(questionDialog: true, dialogVisible: true)))
+    }
+
+    /// Eine schon offene Freigabe bestätigt das Enter nie (Entscheidung
+    /// 14.11.2026) — auch nicht, wenn der Status eine Frage meint, der
+    /// Bildschirm aber eine Freigabe zeigt. Unklar heißt: kein Enter.
+    func testAlreadyOpenApprovalAtPasteNeverGetsEnter() {
+        XCTAssertFalse(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: .awaitingInput, questionAtPaste: false, statusNow: .awaitingInput, screen: nil))
+        XCTAssertFalse(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: .awaitingInput, questionAtPaste: true, statusNow: .awaitingInput,
             screen: ControllerScreenSnapshot(dialogVisible: true)))
+    }
+
+    // MARK: chats send vor dem Einfügen
+
+    func testApprovalPendingBlocksSendIntoApprovalsAndUnknownKinds() {
+        let screenApproval = ControllerScreenSnapshot(dialogVisible: true)
+        let screenQuestion = ControllerScreenSnapshot(questionDialog: true, dialogVisible: true)
+        // Freigabe, Plan, unbekannte Art: blockiert.
+        XCTAssertTrue(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: .awaitingInput(.permission), screen: nil))
+        XCTAssertTrue(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: .awaitingInput(.planApproval), screen: nil))
+        XCTAssertTrue(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: nil, screen: nil))
+        // Frage: frei, außer der Bildschirm zeigt eine Freigabe.
+        XCTAssertFalse(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: .awaitingInput(.question), screen: nil))
+        XCTAssertFalse(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: .awaitingInput(.question), screen: screenQuestion))
+        XCTAssertTrue(DelayedEnterGuard.approvalPending(status: .awaitingInput, lifecycle: .awaitingInput(.question), screen: screenApproval))
+        // Status hinkt hinterher, der Bildschirm zeigt schon eine Freigabe.
+        XCTAssertTrue(DelayedEnterGuard.approvalPending(status: .working, lifecycle: .working, screen: screenApproval))
+        XCTAssertFalse(DelayedEnterGuard.approvalPending(status: .idle, lifecycle: .ready, screen: nil))
+    }
+
+    func testApprovalPendingErrorExitsNonZeroAndPointsToEnqueue() {
+        let code = ChatsControlErrorCode.approvalPending
+        XCTAssertNotEqual(code.exitCode, 0)
+        XCTAssertEqual(code.exitCode, ChatsControlErrorCode.conflict.exitCode)
+        XCTAssertEqual(code.alternative, "enqueue")
+        XCTAssertEqual(code.rawValue, "approvalPending")
     }
 
     /// Hinkt der Status hinterher, entscheidet der Bildschirm.
