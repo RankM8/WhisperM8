@@ -109,6 +109,11 @@ final class AgentSessionRuntimeWatcher {
     /// (`CodexProcessLiveness`).
     var processIDProvider: (UUID) -> Int32? = { _ in nil }
 
+    /// Meldet einen GEÄNDERTEN Ort (Hauptordner/Arbeitskopie, Branch;
+    /// WM8-60) — aus demselben Tail-Read wie die Statusentscheidung. Ein
+    /// Sprung in einen Unterordner ändert den Ort nicht und meldet nichts.
+    var onWorkingCopy: ((UUID, AgentWorkingCopy) -> Void)?
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
@@ -410,6 +415,8 @@ final class AgentSessionRuntimeWatcher {
             let activityChanged = current.cachedActivity != snapshot.activity
             current.cachedActivity = snapshot.activity
             current.cachedQueuedOwnPrompts = snapshot.queuedOwnPrompts
+            let copyChanged = snapshot.workingCopy != nil && current.cachedWorkingCopy != snapshot.workingCopy
+            if let copy = snapshot.workingCopy { current.cachedWorkingCopy = copy }
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
             }
@@ -418,6 +425,10 @@ final class AgentSessionRuntimeWatcher {
             if activityChanged {
                 self.watched[sessionID] = current
                 self.onActivity?(sessionID, snapshot.activity)
+            }
+            if copyChanged, let copy = snapshot.workingCopy {
+                self.watched[sessionID] = current
+                self.onWorkingCopy?(sessionID, copy)
             }
 
             guard let decision = snapshot.decision else {
@@ -496,7 +507,8 @@ final class AgentSessionRuntimeWatcher {
                 lastEvent: entry.cachedLastEvent,
                 // Stat-first: Datei unverändert → Stand-Zeile auch.
                 activity: entry.cachedActivity,
-                queuedOwnPrompts: entry.cachedQueuedOwnPrompts
+                queuedOwnPrompts: entry.cachedQueuedOwnPrompts,
+                workingCopy: entry.cachedWorkingCopy
             )
         }
 
@@ -523,8 +535,38 @@ final class AgentSessionRuntimeWatcher {
             lastEvent: lastEvent,
             activity: activity,
             // Nur Zeilen mit dem Marker werden geparst (Runde 5, R1).
-            queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0
+            queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0,
+            workingCopy: workingCopy(in: tail, entry: entry)
         )
+    }
+
+    /// Ort des Chats aus dem Tail, schon eingeordnet (`entry.cwd` ist der
+    /// Projektordner). Den Branch liest `.git/HEAD` des Ordners (wenige
+    /// kleine Dateien, ohne Subprozess): Claudes `gitBranch` hinkt nach
+    /// einem Ordnerwechsel minutenlang hinterher, Codex nennt ihn im Tail
+    /// meist gar nicht. Fehlt die Zeile im Tail, bleibt der letzte Stand.
+    nonisolated static func workingCopy(
+        in tail: String, entry: WatchedSession,
+        gitLocation: (String) -> GitLocation? = { GitHeadReader.location(at: $0) },
+        resolve: (String) -> String = AgentSessionRuntimeWatcher.realPath
+    ) -> AgentWorkingCopy? {
+        guard let location = AgentWorkingLocationExtractor.location(in: tail, provider: entry.provider) else {
+            return entry.cachedWorkingCopy
+        }
+        // Beide Pfade auflösen: Liegt das Projekt hinter einem Symlink, nennt
+        // Claude den echten Pfad, und ohne Auflösung wäre jeder Chat des
+        // Projekts „außerhalb“ (Vic, WM8-60).
+        let cwd = resolve(location.cwd)
+        return AgentWorkingCopyClassifier.classify(
+            cwd: cwd, projectPath: resolve(entry.cwd),
+            git: gitLocation(cwd), transcriptBranch: location.branch)
+    }
+
+    /// `realpath(3)`; fehlt der Ordner (gelöschte Arbeitskopie), der Eingabepfad.
+    nonisolated static func realPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     /// Extractor-Aufruf mit Kostenzähler. Die Uhr wird nur bei
@@ -588,6 +630,8 @@ struct WatchedSession {
     var cachedActivity: AgentSessionActivity? = nil
     /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`).
     var cachedQueuedOwnPrompts: Int = 0
+    /// Zuletzt erkannter Ort (WM8-60).
+    var cachedWorkingCopy: AgentWorkingCopy? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -606,4 +650,6 @@ struct AgentSessionRuntimePollSnapshot {
     var activity: AgentSessionActivity?
     /// Eigene Prompts in Claudes Warteschlange; im Stat-first-Pfad gecacht.
     var queuedOwnPrompts: Int = 0
+    /// Ort des Chats (WM8-60); im Stat-first-Pfad gecacht.
+    var workingCopy: AgentWorkingCopy? = nil
 }

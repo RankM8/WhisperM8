@@ -61,12 +61,33 @@ enum AppInstance {
     /// zeigt `HOME` auf das Test-Home, damit `claude`/`codex` deren Konfiguration
     /// dort anlegen, und die Wurzel wird weitergereicht, damit `whisperm8` in einem
     /// Test-Chat die Test-Instanz anspricht.
+    ///
+    /// Das fremde `HOME` trennt auch Claudes Login: Die Suchliste des
+    /// Schlüsselbunds hängt am `HOME`, mit dem Test-Home findet `security` den
+    /// Login-Schlüsselbund nicht. Claude legt einen Login dort deshalb im
+    /// Klartext unter `<wurzel>/home/.claude/.credentials.json` ab und erreicht
+    /// den echten Eintrag nie (gemessen 14.11.2026, Claude Code 2.1.325, WM8-63).
     static var childEnvironmentOverrides: [String: String] {
+        childEnvironmentOverrides(testRoot: testRoot)
+    }
+
+    static func childEnvironmentOverrides(testRoot: URL?) -> [String: String] {
         guard let testRoot else { return [:] }
         return [
-            "HOME": home.path,
+            "HOME": testHome(testRoot: testRoot).path,
             rootEnvironmentKey: testRoot.path,
         ]
+    }
+
+    static func testHome(testRoot: URL) -> URL {
+        testRoot.appendingPathComponent("home", isDirectory: true)
+    }
+
+    /// `$HOME/.claude` der Test-Instanz. Daraus rechnet die App den
+    /// Schlüsselbund-Dienst, den sie dort für `main` nimmt
+    /// (`ClaudeAccountProfiles.mainKeychainService`).
+    static func testClaudeConfigDirectory(testRoot: URL) -> URL {
+        testHome(testRoot: testRoot).appendingPathComponent(".claude", isDirectory: true)
     }
 
     static func resolveTestRoot(_ environment: [String: String]) -> URL? {

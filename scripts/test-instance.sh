@@ -113,24 +113,70 @@ cmd_cli() {
     env -u WHISPERM8_SESSION_ID -u WHISPERM8_SESSION_TOKEN WHISPERM8_INSTANCE_ROOT="$ROOT" "$BIN" "$@"
 }
 
+# Schlüsselbund-Dienst, den die Test-App für `main` nimmt (WM8-63,
+# `ClaudeAccountProfiles.mainKeychainService`): Claude Code-credentials-
+# <sha256(<wurzel>/home/.claude)[:8]>. Die Test-App läuft mit dem echten HOME
+# und erreicht den Login-Schlüsselbund; mit diesem Namen fasst sie den echten
+# Eintrag nie an. Gleiche Normalisierung wie die App (`standardizedFileURL`):
+# Leerzeichen am Rand weg, ./.. und Schrägstrich am Ende weg, `//` am Anfang zu
+# `/`, bei vorhandenem Pfad `/private/…` ohne `/private`.
+claude_login_service() {
+    local dir
+    dir=$(/usr/bin/python3 -I -c '
+import os, sys
+p = os.path.normpath(sys.argv[1].strip())
+if p.startswith("//"):
+    p = "/" + p.lstrip("/")
+if p.startswith("/private/") and os.path.exists(p):
+    p = p[len("/private"):]
+print(os.path.join(p, "home", ".claude"))' "$ROOT")
+    printf 'Claude Code-credentials-%s' "$(printf '%s' "$dir" | shasum -a 256 | cut -c1-8)"
+}
+
+claude_login_account() {
+    local account="${USER:-$(id -un)}"
+    case "$account" in *[!a-zA-Z0-9._-]*|"") account="claude-code-user" ;; esac
+    printf '%s' "$account"
+}
+
 cmd_status() {
     echo "Bundle:  $APP"
     echo "Wurzel:  $ROOT"
     echo "PID:     $(pids | tr '\n' ' ')"
-    cat "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null | sed 's/^/Socket:  /' || true
+    { cat "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null; echo; } \
+        | sed '/^$/d; s/^/Socket:  /' || true
+    # Die Chats der Test-Instanz erreichen mit dem Test-Home keinen
+    # Login-Schlüsselbund; Claude legt ihren Login im Klartext hier ab. Nur
+    # nachsehen, ob die Datei da ist, nie lesen.
+    local credentials="$ROOT/home/.claude/.credentials.json" login="nein"
+    [[ -e "$credentials" ]] && login="ja ($credentials)"
+    echo "Claude:  angemeldet: $login"
+    echo "         Dienst der Test-App für main: \"$(claude_login_service)\""
 }
+
+# Für Tests: der Dienst der Test-App für main, wie das Skript ihn rechnet.
+cmd_login_service() { claude_login_service; echo; }
 
 cmd_reset() {
     cmd_stop
     rm -rf "$ROOT"
     defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
     while security delete-generic-password -s "$BUNDLE_ID" >/dev/null 2>&1; do :; done
+    # Den Klartext-Login der Chats löscht `rm -rf "$ROOT"` mit. Dazu der
+    # Dienst, den die Test-App für main nimmt: genau der berechnete, nie per
+    # Muster und nie der blanke Name des echten Hauptkontos.
+    local service
+    service=$(claude_login_service)
+    if [[ "$service" =~ ^Claude\ Code-credentials-[0-9a-f]{8}$ ]]; then
+        while security delete-generic-password -s "$service" -a "$(claude_login_account)" >/dev/null 2>&1; do :; done
+    fi
     echo "zurückgesetzt"
 }
 
 case "${1:-}" in
     build) cmd_build ;;
     start) cmd_start ;;
+    login-service) cmd_login_service ;;
     stop) cmd_stop ;;
     restart) cmd_stop; cmd_start ;;
     cli) shift; cmd_cli "$@" ;;

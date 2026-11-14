@@ -294,6 +294,8 @@ struct ChatTabButton: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
 
+                AgentWorkingCopyMarker(copy: session.workingCopy)
+
                 trailingIndicator
                     .frame(width: 18, alignment: .trailing)
             }

@@ -315,6 +315,9 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// aktiven Profil gestempelt und session-stabil: der Router ordnet jeden
     /// Request ueber den beim Spawn eingefrorenen Header diesem Konto zu.
     var gptProfileName: String?
+    /// Wo der Chat zuletzt gearbeitet hat (Hauptordner oder Arbeitskopie,
+    /// Branch), abgeleitet aus dem Verlaufsende. `nil` = noch unbekannt.
+    var workingCopy: AgentWorkingCopy?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -351,6 +354,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case claudeProfileName
         case claudeBackendModel
         case gptProfileName
+        case workingCopy
     }
 
     init(
@@ -463,6 +467,9 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         claudeProfileName = try container.decodeIfPresent(String.self, forKey: .claudeProfileName)
         claudeBackendModel = try container.decodeIfPresent(String.self, forKey: .claudeBackendModel)
         gptProfileName = try container.decodeIfPresent(String.self, forKey: .gptProfileName)
+        // Lenient: eine neuere App-Version mit unbekannter Art darf den
+        // Workspace-Decode nicht scheitern lassen.
+        workingCopy = (try? container.decodeIfPresent(AgentWorkingCopy.self, forKey: .workingCopy)) ?? nil
     }
 
     var isManuallyCreated: Bool { createdManually == true }

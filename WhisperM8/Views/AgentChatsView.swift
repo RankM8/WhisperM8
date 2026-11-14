@@ -3146,7 +3146,9 @@ struct AgentChatsView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
-                if let branch = project.lastBranch, !branch.isEmpty {
+                if let copy = selectedSession?.workingCopy {
+                    AgentWorkingCopyBadge(copy: copy)
+                } else if let branch = project.lastBranch, !branch.isEmpty {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 9))
                         .foregroundStyle(AgentTheme.textTertiary)
@@ -3158,12 +3160,12 @@ struct AgentChatsView: View {
                 Text("·")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
-                Text(project.path)
+                Text(selectedSession?.workingCopy?.path ?? project.path)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(project.path)
+                    .help(selectedSession?.workingCopy?.path ?? project.path)
                 if let selectedSession {
                     accountBadge(for: selectedSession)
                 }
