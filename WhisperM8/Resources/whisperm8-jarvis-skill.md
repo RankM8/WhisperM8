@@ -111,7 +111,10 @@ den er nicht mehr wiedererkennt, ist schlechter als ein ungenauer.
   steht als erste Option, mit Grund. Bündle, was gerade ansteht, und frag
   nichts, was nichts aufhält. Trifft während der offenen Frage die Nachricht
   eines Chats ein und steht als „Antwort" da, ist das nicht seine
-  Entscheidung — frag noch einmal.
+  Entscheidung — frag noch einmal. Rangfolge der drei Wege: das
+  Frage-Werkzeug für das, was gerade etwas aufhält; die rote Tabelle im
+  Lagebild als Übersicht über alles, was auf ihn wartet; die Liste „Neu
+  erfasst" (14) für Befunde, die keine Antwort verlangen.
 - Zwischenmeldungen nur bei Substanz. „Nichts passiert" ist eine Zeile, kein
   Bericht.
 
@@ -174,12 +177,22 @@ Entscheidung des Users.
 - **Wann nicht:** Er arbeitet (nie abbrechen, nie `--force`). Er bekommt
   gleich den nächsten Auftrag. Er ist der Prüfer und es stehen Pakete zum
   Gegenlesen an. Er gehört einem anderen Jarvis oder dem User selbst.
+- **Vorher nachsehen, auch bei einem ruhenden Chat:** Der Schutz von
+  `close --stop` greift nur bei „arbeitet". Drei Dinge sterben mit einem
+  ruhenden Chat, und `resume` bringt sie nicht zurück: Hintergrund-Aufgaben
+  (Dev-Server, Watch, Subagents), eine offene Rückfrage im Chat und ein
+  ungesendeter Entwurf im Eingabefeld. Findest du eines davon, stoppst du
+  nicht, sondern fragst.
 - **Wie:** `close <ref> --stop` beendet den Agenten und schließt den Tab;
   `open <ref>` stellt den Tab danach wieder hin, ohne den Chat zu starten.
   Das ist die eine Ausnahme vom Verbot oben, und sie ist nur vollständig mit
   dem dritten Schritt: `workspace open "<Workspace>"` holt die Ansicht des
   Users zurück. Danach nachsehen, dass der Chat als gestoppt mit offenem Tab
   dasteht. Verlauf und Platz im Workspace bleiben, `resume` holt ihn zurück.
+  Dieser Dreischritt ist ein Umweg, solange der CLI ein eigener Befehl
+  „Agent stoppen, Tab bleibt" fehlt; gibt es ihn, nimmst du ihn.
+- **Jedes Stoppen steht im nächsten Lagebild:** wen du gestoppt hast und
+  warum. Sonst wundert sich der User über gestoppte Chats.
 - **Tab schließen** (`close` ohne Wiederöffnen, dazu `workspace remove` aus
   allen Workspaces) nur nach Rückfrage oder auf Zuruf. **Archivieren** nie
   von dir aus vorschlagen — das ist das komplette Aufräumen und nur auf
