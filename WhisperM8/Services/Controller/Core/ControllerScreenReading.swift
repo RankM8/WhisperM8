@@ -84,6 +84,9 @@ struct ControllerScreenSnapshot: Equatable, Sendable {
     /// Unten steht Claudes Frage-Dialog (AskUserQuestion) mit Auswahl und
     /// freiem Textfeld, keine Freigabe (`isQuestionDialog`).
     var questionDialog = false
+    /// Kein Eingabefeld, dafür ein Dialog mit nummerierten Optionen oder einer
+    /// Freigabe-Frage in den untersten Zeilen (`dialogBelow`) — nur Claude (WM8-75).
+    var dialogVisible = false
 }
 
 enum ControllerScreenReading {
@@ -93,6 +96,8 @@ enum ControllerScreenReading {
     /// Hinweiszeilen (Dialoge stehen ganz unten, ein Hinweis bricht höchstens
     /// einmal um).
     static let hintLineCount = 2
+    /// So viele unterste nicht leere Zeilen prüft `dialogVisible`.
+    static let dialogLineCount = 8
 
     /// - Parameters:
     ///   - lines: die unteren Zeilen des lebendigen Bildschirms, oben zuerst.
@@ -121,6 +126,13 @@ enum ControllerScreenReading {
                 .map(\.dim)
             snapshot.openView = openView(dimHintLines: hintLines, hasPromptBox: box != nil)
             snapshot.questionDialog = box == nil && isQuestionDialog(lines.map(\.full))
+            // Nur bei Claude: Codex' Eingabefeld kennt `promptBox` nicht, dort
+            // hielte jede nummerierte Liste in der Ausgabe das Enter zurück.
+            // Gesucht in den untersten Zeilen, wo Dialoge stehen.
+            if box == nil {
+                let bottom = lines.map(\.full).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                snapshot.dialogVisible = dialogBelow(Array(bottom.suffix(dialogLineCount)))
+            }
         }
         return snapshot
     }

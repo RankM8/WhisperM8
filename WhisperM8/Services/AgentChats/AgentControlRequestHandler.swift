@@ -180,6 +180,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
         let markerActor = await auditActorLabel(request.actor)
 
+        let sentAt = Date()
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
         let (outcome, clearedInput) = await MainActor.run { () -> (SendOutcome, Bool) in
             var clearedInput = false
@@ -208,10 +209,11 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     return .failure(.notReady,
                                     ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
                 }
+                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+                if Self.approvalPending(targetID, controller) { return .failure(.approvalPending, Self.approvalPendingMessage) } // WM8-75, auch mit --force
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).
                 let force = request.params["force"]?.boolValue ?? false
-                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
                 if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
                     return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
                 }
@@ -236,8 +238,14 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             await audit(request.actor, method: "send", target: nil, outcome: code.rawValue,
                         prompt: prompt)
             return .failure(requestID: request.requestID, code: code, message: message,
-                            detail: sendConflictDetail(targetID: targetID))
+                            detail: nil)
         case .success(let session):
+            // Zurückgehaltenes Enter (WM8-75) nie als Erfolg, Idempotenz erst danach.
+            if submit, await AgentTerminalController.enterWasWithheld(sessionID: targetID, clearedInput: clearedInput, since: sentAt) {
+                releaseIdempotency(request.requestID)
+                await audit(request.actor, method: "send", target: await sessionLabel(targetID), outcome: "withheld", prompt: prompt)
+                return Self.enterWithheldResponse(requestID: request.requestID)
+            }
             completeIdempotency(request.requestID)
             let targetLabel = await sessionLabel(targetID)
             await audit(request.actor, method: "send", target: targetLabel, outcome: "ok", prompt: prompt)
@@ -249,11 +257,6 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "clearedInput": clearedInput,
             ]))
         }
-    }
-
-    private func sendConflictDetail(targetID: UUID) -> ChatsControlJSON? {
-        // best-effort — kann nil sein
-        nil
     }
 
     // MARK: session.interrupt

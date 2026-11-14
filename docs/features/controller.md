@@ -416,6 +416,22 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   dort, etwa weil der Chat noch startet, mit „· ⌘V fügt ein“), Einträge des Menüs, die
   etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in Claudes
   Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- **Kein Enter in eine gerade aufgehende Freigabe (WM8-75, 14.11.2026):** Text mit Senden (Diktat, Kreuz
+  während der Aufnahme, `chats send`, Warteschlange) geht als Einfüge-Block raus, das Enter 80 ms später
+  (`AgentTerminalController.pastePrompt`). Direkt davor prüft `DelayedEnterGuard` neu: Kam die
+  Rückfrage erst nach dem Einfügen, oder steht bei Claude unten statt des Eingabefelds ein Dialog
+  (`ControllerScreenSnapshot.dialogVisible`, unterste 8 Zeilen), bleibt das Enter aus, und die Pille sagt
+  „Nicht gesendet: Der Chat fragt nach einer Entscheidung“ (nicht während einer Aufnahme). Der Text steht
+  dann meist noch im Feld; war der Dialog beim Einfügen schon gezeichnet, hat Claude ihn ignoriert — ein
+  Diktat liegt dann nur in der Zwischenablage. Beginnt der eigene Text wie eine Auswahlzeile („1. …“),
+  zählt eine solche Zeile nicht als Dialog. Nachgestellt an Claude Code 2.1.325: Einfügen plus Enter
+  80 ms später bestätigte eine offene Bash-Freigabe. War beim Einfügen schon eine FRAGE offen (`chats send`
+  beantwortet bewusst), bleibt das Enter wie bisher; eine schon offene Freigabe oder Plan-Freigabe
+  bekommt nie ein Enter, und `chats send` lehnt sie vorher mit `approvalPending` ab
+  ([agent-chats-cli.md](agent-chats-cli.md)). Grenzen: Prüfen und Enter sind nicht atomar
+  gegenüber Claudes Neuzeichnen — ein Restfenster von wenigen Millisekunden bleibt; hochgescrollt ist der
+  Bildschirm nicht ablesbar, dann zählt nur der Status. Kosten: ein Lesen der untersten 16 Zeilen je Senden (gemessen rund 5 ms im
+  Debug-Build). Codex-Freigaben erkennt das nicht (keine Rückfragen, Feld-Erkennung nur für Claude; WM8-67).
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
   Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
   Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt
