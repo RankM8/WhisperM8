@@ -87,18 +87,43 @@ struct AgentStatusIndicator: View {
     /// Tab-Leiste: dieselben Farben und Bedeutungen, aber 5 pt und ohne Puls —
     /// eine Reihe pulsierender Tabs wäre unruhig.
     var compact = false
+    /// Konto am Nutzungslimit (WM8-69): eigene Form (Sanduhr) statt des
+    /// ruhenden Punkts. „Arbeitet“ gewinnt — Grün bleibt exklusiv.
+    var usageLimit: AgentUsageLimit? = nil
 
     private var core: CGFloat { compact ? 5 : 7 }
 
-    var body: some View {
-        Group {
-            if compact {
-                compactBody
-            } else {
-                fullBody
-            }
+    private var showsLimit: Bool {
+        guard let usageLimit, Self.limitOverlays(status) else { return false }
+        return usageLimit.isActive()
+    }
+
+    /// Die Sanduhr ersetzt nur „ruht“ bzw. keinen Status. „Arbeitet“, eine
+    /// Rückfrage und ein Fehler bleiben sichtbar (Review M5).
+    static func limitOverlays(_ status: AgentSessionRuntimeStatus?) -> Bool {
+        switch status {
+        case .idle, .stopped, nil: return true
+        case .working, .awaitingInput, .errored: return false
         }
-        .modifier(StatusAccessibilityModifier(status: status))
+    }
+
+    var body: some View {
+        if showsLimit, let usageLimit {
+            UsageLimitMark(size: compact ? 9 : 10)
+                .frame(width: core, height: core)
+                .help(AgentUsageLimitText.help(usageLimit))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(AgentUsageLimitText.label(usageLimit))
+        } else {
+            Group {
+                if compact {
+                    compactBody
+                } else {
+                    fullBody
+                }
+            }
+            .modifier(StatusAccessibilityModifier(status: status))
+        }
     }
 
     @ViewBuilder
@@ -155,6 +180,80 @@ private struct StatusAccessibilityModifier: ViewModifier {
         } else {
             content.accessibilityHidden(true)
         }
+    }
+}
+
+/// Sanduhr für „Konto am Nutzungslimit“ (WM8-69): Amber wie „braucht dich“,
+/// aber eigene Form, damit sie nicht mit der Raute verwechselt wird.
+struct UsageLimitMark: View {
+    var size: CGFloat = 10
+
+    var body: some View {
+        Image(systemName: "hourglass")
+            .font(.system(size: size, weight: .bold))
+            .foregroundStyle(AgentTheme.statusAwaiting)
+    }
+}
+
+/// Texte zum Limit: sichtbar „Limit until 04:20“, dazu Tooltip und VoiceOver.
+enum AgentUsageLimitText {
+    static func clock(_ date: Date, now: Date = Date()) -> String {
+        Calendar.current.isDate(date, inSameDayAs: now)
+            ? timeFormatter.string(from: date) : dayTimeFormatter.string(from: date)
+    }
+
+    /// Einmal gebaut statt je Render (Review).
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter
+    }()
+    private static let dayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("dMMM jj:mm")
+        return formatter
+    }()
+
+    /// Kurz und immer sichtbar: „Continues at 04:20“, wenn Claude von selbst
+    /// weitermacht, sonst „Limit until 04:20“ bzw. „Usage limit“.
+    static func short(_ limit: AgentUsageLimit, now: Date = Date()) -> String {
+        guard let resetsAt = limit.resetsAt else { return String(localized: "Usage limit") }
+        if limit.autoContinues == true { return String(localized: "Continues at \(clock(resetsAt, now: now))") }
+        return String(localized: "Limit until \(clock(resetsAt, now: now))")
+    }
+
+    static func label(_ limit: AgentUsageLimit, now: Date = Date()) -> String {
+        guard let resetsAt = limit.resetsAt else { return String(localized: "Account usage limit reached") }
+        return String(localized: "Account usage limit reached until \(clock(resetsAt, now: now))")
+    }
+
+    static func help(_ limit: AgentUsageLimit, now: Date = Date()) -> String {
+        if limit.autoContinues == true {
+            return label(limit, now: now) + " — "
+                + String(localized: "Claude continues on its own then. A message now would cancel that; queued messages follow afterwards.")
+        }
+        return label(limit, now: now) + " — " + String(localized: "Messages are queued, not used up. Switch the account to continue now.")
+    }
+}
+
+/// Sanduhr plus „Limit until …“ — für Seitenleiste und Kachelkopf.
+struct AgentUsageLimitLabel: View {
+    let limit: AgentUsageLimit
+
+    var body: some View {
+        HStack(spacing: 3) {
+            UsageLimitMark(size: 9)
+            Text(AgentUsageLimitText.short(limit))
+                .font(.system(size: 11, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .fixedSize()
+                .foregroundStyle(AgentTheme.statusAwaiting)
+        }
+        .help(AgentUsageLimitText.help(limit))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(AgentUsageLimitText.label(limit))
     }
 }
 

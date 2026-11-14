@@ -112,7 +112,8 @@ extension RecordingCoordinator {
     /// liegt. Bei offener Rückfrage ohne ⌘V: In einer Freigabe bewirkt es nichts.
     static func clipboardOnlyPillHint(for reason: DictationClipboardReason) -> String {
         switch reason {
-        case .decisionPending: return String(localized: "On the clipboard")
+        // Am Limit kein ⌘V-Tipp: auch eingefügter Text würde verbraucht.
+        case .decisionPending, .chatUsageLimited: return String(localized: "On the clipboard")
         case .chatStarting, .chatNotRunning, .writeFailed: return String(localized: "On the clipboard · ⌘V to paste")
         }
     }
@@ -126,6 +127,8 @@ extension RecordingCoordinator {
             return String(localized: "The agent is waiting for your answer, so the dictation wasn't added to the chat. Your text is on the clipboard.")
         case .chatStarting:
             return String(localized: "The chat is still starting, so the dictation wasn't added. Your text is on the clipboard.")
+        case .chatUsageLimited:
+            return String(localized: "The chat's account has reached its usage limit, so the dictation wasn't added. Your text is on the clipboard.")
         case .chatNotRunning:
             return String(localized: "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.")
         case .writeFailed:

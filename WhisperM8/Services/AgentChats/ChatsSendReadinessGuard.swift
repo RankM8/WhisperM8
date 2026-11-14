@@ -42,6 +42,51 @@ enum ChatsSendReadinessGuard {
         return .notReady(sinceSec: since)
     }
 
+    /// Meldung, wenn der Chat am Nutzungslimit steht (WM8-69); `nil` sonst.
+    /// Die Warteschlange stellt erst nach dem Limit zu. Slash-Befehle
+    /// (`/login`, `/model`, `/rate-limit-options`) lässt der Sende-Pfad durch:
+    /// sie sind der Ausweg aus dem Limit.
+    static func usageLimitMessage(_ limit: AgentUsageLimit?, now: Date = Date()) -> String? {
+        guard let limit, limit.isActive(at: now) else { return nil }
+        let until = limit.resetsAt.map { " bis \(ChatsUsageLimitFormat.clock($0, now: now))" } ?? ""
+        if limit.autoContinues == true {
+            return "Konto am Nutzungslimit\(until); Claude macht dann von selbst weiter. Ein Prompt jetzt würde "
+                + "verbraucht und das automatische Weitermachen abbrechen. Nutze `chats enqueue` (stellt nach dem "
+                + "fortgesetzten Turn zu) oder wechsle das Konto."
+        }
+        return "Konto am Nutzungslimit\(until) — der Prompt würde verbraucht, ohne dass der Chat arbeitet. "
+            + "Nutze `chats enqueue` (stellt nach dem Limit zu) oder wechsle das Konto."
+    }
+
+    /// Hinweis bei einem Limit an einem anderen Chat desselben Kontos, das
+    /// nicht sperren darf (Guthaben für ein Modell, unbekannte Art, ohne Ende).
+    static func creditsWarning(_ limit: AgentUsageLimit) -> String {
+        if limit.kind == "model_requires_usage_credits" {
+            return "Achtung: Ein anderer Chat dieses Kontos hat das Guthaben-Limit für sein Modell erreicht. "
+                + "Nutzt dieser Chat dasselbe Modell, arbeitet er nicht und der Prompt ist verbraucht."
+        }
+        return "Achtung: Ein anderer Chat dieses Kontos steht am Nutzungslimit (\(limit.kind)). "
+            + "Gilt es auch hier, arbeitet dieser Chat nicht und der Prompt ist verbraucht."
+    }
+
+    /// Eintrag für `sessions.live` (aus dem Request-Handler ausgelagert).
+    /// `usageLimitResetsAt` nur bei aktivem Limit (WM8-69).
+    static func liveEntry(session: AgentChatSession, isRunning: Bool,
+                          runtime: AgentSessionRuntimeStatus?, now: Date = Date()) -> [String: Any] {
+        var entry: [String: Any] = [
+            "sessionID": session.id.uuidString,
+            "runtimeStatus": runtime?.rawValue ?? "unknown",
+            "isAttachedPTY": isRunning,
+            "canSend": isRunning,
+            "canInterrupt": isRunning && runtime == .working,
+        ]
+        if let limit = session.activeUsageLimit(at: now) {
+            entry["usageLimit"] = limit.kind
+            if let resetsAt = limit.resetsAt { entry["usageLimitResetsAt"] = ChatsOutput.iso(resetsAt) }
+        }
+        return entry
+    }
+
     /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
     /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
     /// und höchstens einmal liefert.

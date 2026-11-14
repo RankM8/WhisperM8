@@ -3088,7 +3088,7 @@ struct AgentChatsView: View {
             SessionLiveStatusDot(
                 sessionID: selectedSession.id,
                 isProcessRunning: terminalRegistry.controller(for: selectedSession.id)?.isRunning == true,
-                statusStore: runtimeStatusStore
+                statusStore: runtimeStatusStore, usageLimit: selectedSession.activeUsageLimit()
             )
         } else {
             Circle()

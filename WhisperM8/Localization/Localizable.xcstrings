@@ -1311,6 +1311,26 @@
         }
       }
     },
+    "Account usage limit reached": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto am Nutzungslimit"
+          }
+        }
+      }
+    },
+    "Account usage limit reached until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto am Nutzungslimit bis %@"
+          }
+        }
+      }
+    },
     "Account · 5 h · week": {
       "localizations": {
         "de": {
@@ -3921,6 +3941,16 @@
         }
       }
     },
+    "Claude continues on its own then. A message now would cancel that; queued messages follow afterwards.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude macht dann von selbst weiter. Eine Nachricht jetzt würde das abbrechen; vorgemerkte Nachrichten folgen danach."
+          }
+        }
+      }
+    },
     "Claude logins need renewal": {
       "localizations": {
         "de": {
@@ -4857,6 +4887,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job dauerhaft als interaktiven Codex-Chat fortsetzen (exklusiv — `agent send` ist danach deaktiviert)"
+          }
+        }
+      }
+    },
+    "Continues at %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft um %@ weiter"
           }
         }
       }
@@ -8891,6 +8931,16 @@
         }
       }
     },
+    "Limit until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limit bis %@"
+          }
+        }
+      }
+    },
     "Limits": {
       "localizations": {
         "de": {
@@ -9837,6 +9887,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Menü: Eingaben in den Chat, Aktionen am Chat, Steuerung"
+          }
+        }
+      }
+    },
+    "Messages are queued, not used up. Switch the account to continue now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten werden vorgemerkt, nicht verbraucht. Konto wechseln, um sofort weiterzumachen."
           }
         }
       }
@@ -18214,6 +18274,16 @@
         }
       }
     },
+    "The chat's account has reached its usage limit, so the dictation wasn't added. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Konto des Chats ist am Nutzungslimit, deshalb wurde das Diktat nicht eingefügt. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The conversation history moves along completely. Checkpoints and file history (rewind) stay in the previous account.": {
       "localizations": {
         "de": {
@@ -19720,6 +19790,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutzungsprofil"
+          }
+        }
+      }
+    },
+    "Usage limit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzungslimit"
           }
         }
       }

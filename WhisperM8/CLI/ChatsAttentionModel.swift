@@ -65,7 +65,12 @@ enum AttentionModelBuilder {
         runtime: ChatsRuntimeInfo,
         now: Date
     ) -> (ChatsAttentionCategory, Int) {
-        classify(
+        // Am Nutzungslimit (WM8-69): ruht, braucht aber eine Entscheidung
+        // (warten oder Konto wechseln) — wie ein Fehler, nicht wie „idle“.
+        if entry.session.activeUsageLimit(at: now) != nil {
+            return (.needsYou, 2)
+        }
+        return classify(
             status: runtime.status,
             lastTurnAt: entry.session.lastTurnAt,
             since: runtime.since,
