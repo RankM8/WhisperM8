@@ -209,16 +209,8 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                     return .failure(.notReady,
                                     ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
                 }
-                // Freigabe offen (oder ein anderer Dialog statt des Felds): `send`
-                // bestätigt nie eine Freigabe — der Text würde ignoriert, das
-                // Enter wählte „Yes“ (WM8-75). Auch mit --force nicht.
                 let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
-                if DelayedEnterGuard.approvalPending(
-                    status: runtime,
-                    lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID),
-                    screen: controller.controllerScreenSnapshot()) {
-                    return .failure(.approvalPending, Self.approvalPendingMessage)
-                }
+                if Self.approvalPending(targetID, controller) { return .failure(.approvalPending, Self.approvalPendingMessage) } // WM8-75, auch mit --force
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).
                 let force = request.params["force"]?.boolValue ?? false
@@ -246,22 +238,13 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             await audit(request.actor, method: "send", target: nil, outcome: code.rawValue,
                         prompt: prompt)
             return .failure(requestID: request.requestID, code: code, message: message,
-                            detail: sendConflictDetail(targetID: targetID))
+                            detail: nil)
         case .success(let session):
-            // Das Enter kommt 80 ms nach dem Einfügen (nach einem Leeren 230 ms)
-            // und kann zurückgehalten werden, wenn genau dann eine Freigabe
-            // aufgeht. Kurz warten und dann ehrlich antworten statt „delivered“.
-            // Die Idempotenz erst danach abschließen: Ein Wiederholen mit
-            // derselben requestID darf ein zurückgehaltenes Enter nie als
-            // „duplicate“-Erfolg melden (während des Wartens: „läuft noch“).
-            if submit, await AgentTerminalController.enterWasWithheld(
-                sessionID: targetID, clearedInput: clearedInput, since: sentAt) {
+            // Zurückgehaltenes Enter (WM8-75) nie als Erfolg, Idempotenz erst danach.
+            if submit, await AgentTerminalController.enterWasWithheld(sessionID: targetID, clearedInput: clearedInput, since: sentAt) {
                 releaseIdempotency(request.requestID)
-                await audit(request.actor, method: "send", target: await sessionLabel(targetID),
-                            outcome: "withheld", prompt: prompt)
-                return .failure(requestID: request.requestID, code: .approvalPending,
-                                message: Self.enterWithheldMessage,
-                                detail: .object(["textInField": .bool(true), "resend": .bool(false)]))
+                await audit(request.actor, method: "send", target: await sessionLabel(targetID), outcome: "withheld", prompt: prompt)
+                return Self.enterWithheldResponse(requestID: request.requestID)
             }
             completeIdempotency(request.requestID)
             let targetLabel = await sessionLabel(targetID)
@@ -274,16 +257,6 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 "clearedInput": clearedInput,
             ]))
         }
-    }
-
-    static let approvalPendingMessage =
-        "Im Ziel ist eine Freigabe oder ein Dialog offen — send bestätigt keine Freigaben, sie gehen an den User. Später erneut oder `enqueue`."
-    static let enterWithheldMessage =
-        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Der Text steht im Eingabefeld — nicht neu senden (auch nicht per enqueue); die Freigabe geht an den User."
-
-    private func sendConflictDetail(targetID: UUID) -> ChatsControlJSON? {
-        // best-effort — kann nil sein
-        nil
     }
 
     // MARK: session.interrupt
