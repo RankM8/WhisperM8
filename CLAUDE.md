@@ -104,7 +104,7 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 **Prozesse und Umgebung**
 - GUI-Apps haben einen minimalen `PATH`. Subprozesse nie mit dem rohen `ProcessInfo`-Environment starten,
   immer `LoginShellEnvironment.shared.processEnvironment()` + `AgentCommandBuilder.commandPath(_:)`.
-- `LoginShellEnvironment` strippt geerbte `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CUSTOM_HEADERS`, `CCP_CONFIG_DIR`.
+- `LoginShellEnvironment` strippt geerbte `CLAUDE_CONFIG_DIR`, `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `ANTHROPIC_CUSTOM_HEADERS`, `CCP_CONFIG_DIR`.
 - Neue Dateideskriptoren (Locks, Sockets, Watcher) close-on-exec — SwiftTerm `forkpty`+`execve` schließt nichts.
 - An Pipes nur `write(contentsOf:)` (throwing), nie `FileHandle.write(_:)` (NSException bei EPIPE). SIGPIPE
   wird per leerem `sigaction`-Handler abgefangen, nie per `SIG_IGN` (würde an jede Chat-Shell vererbt).

@@ -23,6 +23,18 @@ final class AppInstanceTests: XCTestCase {
         XCTAssertEqual(AppInstance.defaultsDomain, "com.whisperm8.app")
     }
 
+    /// WM8-63: Das Test-Home trennt die Chats auch vom echten Claude-Login
+    /// (kein Login-Schlüsselbund erreichbar); eine Schlüsselbund-Variable
+    /// brauchen sie nicht.
+    func testTestChatsGetOnlyTheTestHome() {
+        let root = URL(fileURLWithPath: "/Users/x/.whisperm8-test-instance", isDirectory: true)
+        XCTAssertEqual(AppInstance.childEnvironmentOverrides(testRoot: root), [
+            "HOME": "/Users/x/.whisperm8-test-instance/home",
+            AppInstance.rootEnvironmentKey: "/Users/x/.whisperm8-test-instance",
+        ])
+        XCTAssertTrue(AppInstance.childEnvironmentOverrides(testRoot: nil).isEmpty, "Normalbetrieb unverändert")
+    }
+
     func testStableHashIsDeterministic() {
         XCTAssertEqual(AppInstance.stableHash("/Users/x/.whisperm8-test-instance"),
                        AppInstance.stableHash("/Users/x/.whisperm8-test-instance"))

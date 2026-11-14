@@ -353,8 +353,17 @@ struct ClaudeAccountProfiles {
     /// `sha256(<config-dir-pfad>)` an — empirisch verifiziert (v2.1.207,
     /// 2026-07-12) gegen zwei unabhaengige Profile.
     func keychainService(forProfile name: String) -> String {
-        guard name != Self.mainProfileName else { return "Claude Code-credentials" }
+        guard name != Self.mainProfileName else { return Self.mainKeychainService(testRoot: AppInstance.testRoot) }
         return Self.keychainService(forConfigDirPath: configDir(forProfile: name).path)
+    }
+
+    /// `main` der Test-Instanz bekommt einen eigenen Dienstnamen. Die Test-App
+    /// selbst läuft mit dem echten `HOME` und erreicht den Login-Schlüsselbund;
+    /// mit dem blanken Namen läsen und schrieben Ablauf-Anzeige, Kontingent,
+    /// Erneuerung und „Zum Hauptkonto machen“ dort den echten Login (WM8-63).
+    static func mainKeychainService(testRoot: URL?) -> String {
+        guard let testRoot else { return "Claude Code-credentials" }
+        return keychainService(forConfigDirPath: AppInstance.testClaudeConfigDirectory(testRoot: testRoot).path)
     }
 
     /// Service-Name für ein beliebiges `CLAUDE_CONFIG_DIR`. Claude hasht den
@@ -435,6 +444,11 @@ struct ClaudeAccountProfiles {
 
     /// Fuer Tests injizierbarer Runner fuer `/usr/bin/security`-Aufrufe.
     /// Rueckgabe: (exitCode, stdout).
+    ///
+    /// Läuft bewusst mit dem Environment der App, nicht über
+    /// `LoginShellEnvironment.processEnvironment()`: In der Test-Instanz setzt
+    /// das `HOME` auf das Test-Home, `security` fände dann keinen
+    /// Login-Schlüsselbund (WM8-63, Doku claude-konten.md).
     var securityRunner: ([String]) -> (Int32, String) = { arguments in
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
@@ -460,6 +474,10 @@ struct ClaudeAccountProfiles {
     /// Ersteller bleiben dieselben wie beim bisherigen CLI-Aufruf (Claude liest
     /// den Eintrag weiter per `security find-generic-password`).
     /// Rückgabe: Exit-Code (0 = geschrieben).
+    ///
+    /// Wie `securityRunner` bewusst mit dem Environment der App: Mit dem
+    /// Test-Home aus `LoginShellEnvironment` gäbe es keinen
+    /// Standard-Schlüsselbund, und macOS zeigte beim Schreiben einen Dialog.
     var keychainWriter: (_ service: String, _ account: String, _ secret: String) -> Int32 = { service, account, secret in
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")

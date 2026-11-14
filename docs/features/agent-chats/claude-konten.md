@@ -82,6 +82,16 @@ jetzt auch die Erneuerung. Den Namen des Keychain-Eintrags
 bildet Claude aus dem unveränderten Wert von `CLAUDE_CONFIG_DIR` (sha256, erste acht Hex-Zeichen), auch mit Leerzeichen
 und Umlauten im Pfad (nachgemessen an 2.1.322 über die `security`-Aufrufe der CLI).
 
+## Schlüsselbund und Test-Instanz
+
+Die beiden `security`-Aufrufe der App (`securityRunner` und `keychainWriter` in `ClaudeAccountProfiles`) laufen bewusst mit
+dem Environment der App, nicht über `LoginShellEnvironment.processEnvironment()`. Die CLAUDE.md-Regel „nie mit rohem
+Environment“ gilt für sie nicht: In der Test-Instanz setzt `LoginShellEnvironment` `HOME` auf das Test-Home, und mit
+diesem HOME findet `security` keinen Login-Schlüsselbund. Lesen schlüge still fehl, beim Schreiben erschiene ein
+macOS-Dialog. Damit die Test-App dabei nie den echten Login trifft, nimmt sie für `main` einen eigenen Dienstnamen
+(`mainKeychainService`, WM8-63). Ein Login aus einem Test-Chat landet dagegen in einer Datei im Test-Home, das beschreibt
+[ui-testing.md](../ui-testing.md) unter „Stufe 3: Isolierte Test-Instanz“.
+
 ## Betriebswissen aus CLAUDE.md
 
 *Am 19.10.2026 wörtlich aus der Projekt-CLAUDE.md übernommen (LR-DOK-008); dort stehen nur noch die Arbeitsregeln. Beim nächsten Überarbeiten dieser Seite in den Fließtext einarbeiten.*
