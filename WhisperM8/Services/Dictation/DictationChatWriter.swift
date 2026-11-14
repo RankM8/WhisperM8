@@ -34,7 +34,8 @@ final class LiveDictationChatWriter: DictationChatWriting {
         // Dieselbe Bereitschaftsprüfung wie `chats send`: Eine TUI, die noch
         // hochfährt, verschluckt den Paste oder liefert ihn später doppelt.
         if case .notReady = ChatsSendReadinessGuard.decide(
-            lifecycle: statusCoordinator.lifecycleState(for: sessionID)
+            lifecycle: statusCoordinator.lifecycleState(for: sessionID),
+            inputPending: statusCoordinator.startupInputPending(sessionID)
         ) {
             return .starting
         }

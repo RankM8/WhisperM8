@@ -815,6 +815,14 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
     }
 
+    /// Nur das Enter für einen Text, der schon im Eingabefeld steht
+    /// (`chats submit`, WM8-100). Prüfungen macht der Aufrufer.
+    func submitComposer() {
+        guard isRunning else { return }
+        terminal.send([0x0D])
+        composerDraft.recordSubmitted(programmaticAt: Date())
+    }
+
     /// Sendet ein einzelnes Ctrl+C — leert in Claude Code den NICHT-leeren
     /// Composer (`chats interrupt --clear-input`: die CLI legt nach einem
     /// ESC-Abbruch den Prompt des abgebrochenen Turns dorthin zurück). Bei

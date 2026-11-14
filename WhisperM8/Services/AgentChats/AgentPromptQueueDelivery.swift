@@ -38,6 +38,13 @@ final class AgentPromptQueueDelivery {
     /// einem MainActor-Durchlauf ohne `await` dazwischen (gleiche
     /// TOCTOU-Freiheit wie die Send-Pipeline).
     func deliverNow(for sessionID: UUID) {
+        // Fehlt nach dem Start das Eingabefeld, gar nicht erst reservieren:
+        // sonst schriebe jeder Versuch die Queue-Datei zweimal (Vic zu WM8-100).
+        if AgentSessionStatusCoordinator.shared.startupInputPending(sessionID),
+           !store.openPrompts(for: sessionID).isEmpty {
+            retryAfterStartup(sessionID)
+            return
+        }
         guard let reserved = store.reserveNext(for: sessionID) else { return }
 
         let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -63,10 +70,17 @@ final class AgentPromptQueueDelivery {
         // Status erneut prüfen: zwischen Turn-Ende und Settle-Delay kann der
         // Chat schon wieder arbeiten (z. B. weil jemand direkt getippt hat).
         let coordinator = AgentSessionStatusCoordinator.shared
+        let runtime = coordinator.statusStore.status(for: sessionID)
+        let profile = controller.command.keyboardProfile
+        let inputPending = coordinator.startupInputPending(sessionID)
         switch PromptDeliveryGate.forQueue(
-            runtime: coordinator.statusStore.status(for: sessionID),
+            runtime: runtime,
             lifecycle: coordinator.lifecycleState(for: sessionID),
-            mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput
+            mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput,
+            inputPending: inputPending,
+            visibleDraft: PromptSubmitCheck.visibleDraft(
+                field: controller.controllerScreenSnapshot()?.promptField, profile: profile,
+                clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit)
         ) {
         case .deliver:
             break
@@ -75,6 +89,11 @@ final class AgentPromptQueueDelivery {
             return
         case .notReady:
             store.markFailed(id: reserved.id, error: "Chat startet noch — Zustellung, sobald er bereit ist", retry: true)
+            // Gilt der Chat schon als bereit, fehlt aber das Eingabefeld, stößt
+            // kein Zustandswechsel mehr an: selbst nachsehen (WM8-100). Endet
+            // spätestens mit dem Startfenster. (Meist greift schon die Prüfung
+            // vor dem Reservieren oben.)
+            if inputPending { retryAfterStartup(sessionID) }
             return
         case .draftPending:
             store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist", retry: true)
@@ -98,6 +117,7 @@ final class AgentPromptQueueDelivery {
         // Ein Entwurf des Users hält die Zustellung oben an (`draftPending`,
         // bleibt in der Queue); ein vermuteter alter Rückleger wird geräumt.
         let sentAt = Date()
+        let verify = PromptSubmitCheck.applies(submit: true, profile: profile, statusAtSend: runtime)
         let clearedInput = controller.sendPrompt(marked, submit: true)
         let title = session.title
         // Erst verbuchen, wenn das verzögerte Enter raus ist (WM8-75): Hält die
@@ -110,10 +130,29 @@ final class AgentPromptQueueDelivery {
                     "queue_withheld session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
                 return
             }
+            // Steht der Text nach dem Enter noch im Feld, ist er nicht zugestellt —
+            // und wird auch nicht noch einmal eingefügt (WM8-100).
+            if verify, await AgentControlRequestHandler.submitVerdict(sessionID) == .stuckInField {
+                store.markFailed(id: reserved.id, error: Self.stuckError, retry: false)
+                Logger.agentStore.notice(
+                    "queue_stuck_in_field session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
+                return
+            }
             store.markDelivered(id: reserved.id)
             ChatsAuditLog.shared.append(Self.deliveryAuditEntry(for: reserved, target: title, at: Date()))
             Logger.agentStore.notice(
                 "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
+        }
+    }
+
+    static let stuckError = "Steht im Eingabefeld, nicht abgeschickt — `chats submit` schickt ihn ab"
+
+    /// Neuer Versuch eine Sekunde später, solange das Eingabefeld nach dem
+    /// Start fehlt.
+    private func retryAfterStartup(_ sessionID: UUID) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(AgentSessionStatusCoordinator.startupInputPollSeconds * 1_000_000_000))
+            self.deliverNow(for: sessionID)
         }
     }
 

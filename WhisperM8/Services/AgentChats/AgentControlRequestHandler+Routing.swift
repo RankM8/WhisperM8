@@ -16,6 +16,7 @@ extension AgentControlRequestHandler {
         case gptRouter
         case handover
         case order
+        case submit
 
         var methods: Set<String> {
             switch self {
@@ -26,6 +27,7 @@ extension AgentControlRequestHandler {
             case .gptRouter: return [AgentControlRequestHandler.gptRouterStartProfileMethod]
             case .handover: return [AgentControlRequestHandler.appHandoverMethod]
             case .order: return [AgentControlRequestHandler.sessionOrderMethod, AgentControlRequestHandler.tabOrderMethod]
+            case .submit: return [AgentControlRequestHandler.sessionSubmitMethod]
             }
         }
     }
@@ -46,6 +48,7 @@ extension AgentControlRequestHandler {
         case .handover: return await appHandover(request)
         case .order:
             return request.method == Self.tabOrderMethod ? await tabOrder(request) : await sessionOrder(request)
+        case .submit: return await sessionSubmit(request)
         }
     }
 }

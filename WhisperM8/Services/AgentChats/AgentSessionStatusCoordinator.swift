@@ -117,6 +117,12 @@ final class AgentSessionStatusCoordinator {
     /// Arbeit oder einen Dialog ginge; ein arbeitender Chat meldet sich über
     /// Registry, Hooks oder Verlauf ohnehin viel früher.
     var adoptedUnconfirmedGraceSeconds: TimeInterval = 120
+    /// Start eines Claude-Chats, bis sein Eingabefeld zu sehen ist oder ein
+    /// Turn beginnt (WM8-100, `+StartupInput`).
+    var startupInputSince: [UUID: Date] = [:]
+    /// Steht das Eingabefeld am Bildschirm? `nil` = nicht ablesbar (kein
+    /// Claude-Chat, Ansicht hochgescrollt). Tests ersetzen die Ablesung.
+    var startupInputVisible: (UUID) -> Bool? = AgentSessionStatusCoordinator.liveStartupInputVisible
     /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
     /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
     /// verifiziert werden.
@@ -410,6 +416,7 @@ final class AgentSessionStatusCoordinator {
     func sessionLaunched(sessionID: UUID) {
         hookLiveSessions.remove(sessionID)
         resetRegistryState(sessionID)
+        startupInputSince[sessionID] = now()
         apply(.processLaunched, to: sessionID)
 
         // Terminals haben weder Transcript noch Hooks: kein Watch, kein
@@ -482,6 +489,7 @@ final class AgentSessionStatusCoordinator {
         hookLiveSessions.remove(sessionID)
         resetRegistryState(sessionID)
         terminatedAt[sessionID] = now()
+        startupInputSince[sessionID] = nil
         apply(.processTerminated(exitCode: exitCode), to: sessionID)
         watcher.markTerminated(sessionID: sessionID)
         hookBridge.stopTracking(localSessionID: sessionID)
@@ -1103,7 +1111,7 @@ final class AgentSessionStatusCoordinator {
 
     // MARK: - State-Machine-Anbindung
 
-    private func apply(_ signal: AgentSessionSignal, to sessionID: UUID) {
+    func apply(_ signal: AgentSessionSignal, to sessionID: UUID) {
         let oldState = states[sessionID] ?? .created
         let transition = AgentSessionStateMachine.reduce(state: oldState, signal: signal)
         states[sessionID] = transition.state
@@ -1133,6 +1141,7 @@ final class AgentSessionStatusCoordinator {
         // zu LR-CLI-002).
         if case .working = transition.state, oldState.runtimeStatus != .working {
             AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
+            startupInputSince[sessionID] = nil
         }
         // Chat ist nach dem Start bereit: ein während `launching`
         // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).
@@ -1314,7 +1323,7 @@ final class AgentSessionStatusCoordinator {
 
     // MARK: - Launch-Grace (stumme Hooks)
 
-    private func scheduleLaunchGrace(sessionID: UUID, seconds: TimeInterval? = nil) {
+    func scheduleLaunchGrace(sessionID: UUID, seconds: TimeInterval? = nil) {
         cancelLaunchGrace(sessionID: sessionID)
         let seconds = seconds ?? launchGraceSeconds
         launchGraceTasks[sessionID] = Task { [weak self] in
@@ -1322,8 +1331,8 @@ final class AgentSessionStatusCoordinator {
             guard !Task.isCancelled else { return }
             // Reducer neutralisiert das Signal, falls längst nicht mehr
             // `launching` — kein Zustands-Check nötig.
-            self?.apply(.launchGraceExpired, to: sessionID)
             self?.launchGraceTasks[sessionID] = nil
+            self?.launchGraceFired(sessionID: sessionID)
         }
     }
 

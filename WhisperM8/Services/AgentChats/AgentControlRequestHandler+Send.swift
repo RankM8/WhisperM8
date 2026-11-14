@@ -39,9 +39,10 @@ extension AgentControlRequestHandler {
 
         let sentAt = Date()
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
-        let (outcome, clearedInput, usageWarning) = await MainActor.run { () -> (SendOutcome, Bool, String?) in
+        let (outcome, clearedInput, usageWarning, verify) = await MainActor.run { () -> (SendOutcome, Bool, String?, Bool) in
             var clearedInput = false
             var usageWarning: String?
+            var verify = false
             let outcome: SendOutcome = {
                 let registry = AgentTerminalRegistry.shared
                 let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -61,12 +62,16 @@ extension AgentControlRequestHandler {
                 // `sendPrompt` schreibt blind — der Paste ginge verloren oder käme
                 // beim Retry doppelt an. Kein --force-Bypass: hier gibt es nichts
                 // zu erzwingen, nur einen sicheren Weg (`enqueue`).
+                // WM8-100: Auch „bereit“ heißt im Startfenster erst etwas, wenn
+                // Claudes Eingabefeld am Bildschirm steht.
+                let coordinator = AgentSessionStatusCoordinator.shared
+                let inputPending = coordinator.startupInputPending(targetID)
                 let readiness = ChatsSendReadinessGuard.decide(
-                    lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
+                    lifecycle: coordinator.lifecycleState(for: targetID), inputPending: inputPending)
                 if case .notReady = readiness {
-                    let adopted = AgentSessionStatusCoordinator.shared.adoptedSessions.contains(targetID)
-                    return .failure(.notReady,
-                                    ChatsSendReadinessGuard.message(for: readiness, adopted: adopted) ?? "Chat startet noch")
+                    let adopted = coordinator.adoptedSessions.contains(targetID)
+                    return .failure(.notReady, ChatsSendReadinessGuard.message(
+                        for: readiness, adopted: adopted, inputPending: inputPending) ?? "Chat startet noch")
                 }
                 // Am Nutzungslimit würde der Prompt verbraucht, ohne dass der Chat
                 // arbeitet (WM8-69). Kein --force-Bypass, sicherer Weg: `enqueue`.
@@ -91,12 +96,21 @@ extension AgentControlRequestHandler {
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
                     return .failure(.conflict, PromptDeliveryGate.draftMessage)
                 }
+                // WM8-100: Was am Bildschirm im Feld steht, zählt auch, wenn die
+                // Schätzung es für abgeschickt hält (liegengebliebener Auftrag).
+                let profile = controller.command.keyboardProfile
+                if !force, runtime == .idle, PromptSubmitCheck.visibleDraft(
+                    field: controller.controllerScreenSnapshot()?.promptField, profile: profile,
+                    clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) {
+                    return .failure(.conflict, PromptSubmitCheck.visibleDraftMessage)
+                }
+                verify = PromptSubmitCheck.applies(submit: submit, profile: profile, statusAtSend: runtime)
                 // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop) — nur bei Agent-Chats, nie in eine Shell.
                 let marked = Self.deliveredPrompt(prompt, actor: markerActor, toShell: controller.command.keyboardProfile == .plainShell)
                 clearedInput = controller.sendPrompt(marked, submit: submit)
                 return .success(session)
             }()
-            return (outcome, clearedInput, usageWarning)
+            return (outcome, clearedInput, usageWarning, verify)
         }
 
         switch outcome {
@@ -116,8 +130,16 @@ extension AgentControlRequestHandler {
                 await audit(request.actor, method: "send", target: await sessionLabel(targetID), outcome: "withheld", prompt: prompt)
                 return Self.enterWithheldResponse(requestID: request.requestID)
             }
+            // Erst „zugestellt“, wenn der Text raus ist (WM8-100). Steht er noch
+            // im Feld, bleibt die Anfrage verbraucht: ein Wiederholen fügte ihn
+            // ein zweites Mal ein.
+            let verdict = verify ? await Self.submitVerdict(targetID) : nil
             completeIdempotency(request.requestID)
             let targetLabel = await sessionLabel(targetID)
+            if verdict == .stuckInField {
+                await audit(request.actor, method: "send", target: targetLabel, outcome: "inInputField", prompt: prompt)
+                return Self.stuckInFieldResponse(requestID: request.requestID)
+            }
             await audit(request.actor, method: "send", target: targetLabel, outcome: "ok", prompt: prompt)
             return .success(requestID: request.requestID, result: .object([
                 "ack": "delivered",
@@ -125,8 +147,30 @@ extension AgentControlRequestHandler {
                 "promptChars": prompt.count,
                 "requestID": request.requestID,
                 "clearedInput": clearedInput,
+                "submitCheck": verdict.map { ChatsControlJSON.string($0.rawValue) } ?? ChatsControlJSON.null,
                 "warning": usageWarning.map { ChatsControlJSON.string($0) } ?? ChatsControlJSON.null,
             ]))
         }
+    }
+}
+
+// MARK: - Nachsehen nach dem Enter (WM8-100)
+
+extension AgentControlRequestHandler {
+    /// Liest Status und Eingabefeld, bis klar ist, ob der Text raus ist.
+    static func submitVerdict(_ sessionID: UUID) async -> PromptSubmitCheck.Verdict {
+        await PromptSubmitCheck.waitForVerdict(probe: {
+            let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID)
+            let field = AgentTerminalRegistry.shared.controller(for: sessionID)?.controllerScreenSnapshot()?.promptField
+            return (status, field)
+        })
+    }
+
+    /// Text steht im Feld: kein „delivered“, nie neu senden oder vormerken
+    /// (`resend: false` wertet die CLI wie beim zurückgehaltenen Enter aus).
+    static func stuckInFieldResponse(requestID: String) -> ChatsControlResponse {
+        .failure(requestID: requestID, code: .conflict, message: PromptSubmitCheck.stuckMessage,
+                 detail: .object(["textInField": .bool(true), "resend": .bool(false),
+                                  "reason": .string("inInputField")]))
     }
 }

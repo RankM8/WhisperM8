@@ -66,6 +66,8 @@ enum AgentChatsCLICommand {
             return ChatsQueueCommand.cancel(rest)
         case "interrupt":
             return ChatsInterruptCommand.run(rest)
+        case "submit":
+            return ChatsSubmitCommand.run(rest)
         case "open":
             return ChatsOpenCommand.run(rest)
         case "close":
@@ -960,6 +962,10 @@ enum ChatsCLIHelp {
                                Composer (die CLI legt den abgebrochenen Prompt
                                sonst dorthin zurück) — löscht auch einen
                                etwaigen User-Entwurf, deshalb opt-in.
+      whisperm8 chats submit <ref> [--json]
+                               Schickt den Text ab, der im Eingabefeld eines
+                               ruhenden Claude-Chats steht (liegengebliebener
+                               Auftrag), ohne neuen Text. Nie in eine Freigabe.
       whisperm8 chats open <ref> [--json]
       whisperm8 chats close <ref> [<ref>…] [--json]      NUR den UI-Tab schließen — Session,
                                                          PTY, Pin und Transcript bleiben
@@ -983,7 +989,9 @@ enum ChatsCLIHelp {
                            Tabs anderer Projekte behalten ihre Folge.
       whisperm8 chats move <ref> --window <primary|id>   Tab in anderes (bestehendes) Fenster
       whisperm8 chats window list [--json]               Fenster-Inventar (IDs für move)
-      whisperm8 chats resume <ref> [--json]              geschlossenen Chat wieder hochfahren
+      whisperm8 chats resume <ref> [--prompt "…" | -- "…"] [--json]
+                               geschlossenen Chat wieder hochfahren; mit Auftrag
+                               geht er raus, sobald das Eingabefeld steht
       whisperm8 chats new --project <pfad|name> [--provider claude|codex|terminal] [--title T] [--prompt "…"] [--command "…"]
                           [--account <profil>] [--json]
                                Claude-Konto: ohne --account das in WhisperM8 unter

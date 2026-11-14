@@ -32,11 +32,15 @@ enum ChatsSendReadinessGuard {
     ///   kennt die Session nicht (extern gestartet) — dann greift wie bisher
     ///   nur der Runtime-Status, wir blockieren nicht zusätzlich.
     /// - Parameter launchedAt: Startzeitpunkt, für die Meldung.
+    /// - Parameter inputPending: im Startfenster ist Claudes Eingabefeld noch
+    ///   nicht zu sehen, obwohl der Chat schon als bereit gilt (WM8-100).
     static func decide(
         lifecycle: AgentSessionLifecycleState?,
         launchedAt: Date? = nil,
+        inputPending: Bool = false,
         now: Date = Date()
     ) -> Decision {
+        if inputPending { return .notReady(sinceSec: nil) }
         guard case .launching = lifecycle else { return .allowed }
         let since = launchedAt.map { Int(max(0, now.timeIntervalSince($0))) }
         return .notReady(sinceSec: since)
@@ -93,8 +97,14 @@ enum ChatsSendReadinessGuard {
     /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
     /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
     /// und höchstens einmal liefert.
-    static func message(for decision: Decision, adopted: Bool = false) -> String? {
+    static func message(for decision: Decision, adopted: Bool = false, inputPending: Bool = false) -> String? {
         guard case .notReady(let since) = decision else { return nil }
+        if inputPending {
+            // WM8-100: Claude lädt nach dem Start noch, das Eingabefeld fehlt.
+            return "Chat lädt noch, sein Eingabefeld ist noch nicht zu sehen. Ein Prompt landete jetzt im Feld, "
+                + "ohne abgeschickt zu werden. Nutze `chats enqueue` (stellt zu, sobald das Feld da ist) "
+                + "oder versuch es in ein paar Sekunden noch einmal."
+        }
         if adopted {
             // WM8-97: nach einem Neustart übernommen, Status noch ohne Beleg.
             return "Chat wurde beim Neustart übernommen und hat sich noch nicht gemeldet — ein Prompt könnte "
