@@ -1,6 +1,6 @@
 # Chats sprechen miteinander: nativer Weg statt Tippen ins Terminal
 
-**Stand:** 2026-11-14 · **Status:** Untersuchung und Messung fertig, Entscheidung offen · **Ticket:** WM8-79
+**Stand:** 2026-11-14 · **Status:** Giuliano hat am 14.11. um 04:52 Weg B gewählt; Bau als WM8-85 · **Ticket:** WM8-79
 **Gemessen an:** Claude Code 2.1.325, Konten `ai` und `ai2`, Wegwerf-Sitzungen außerhalb der App
 **Vorgänger:** [`claude-status-aus-registry.md`](claude-status-aus-registry.md) (Oktober: `chats address` gebaut)
 **Prüfskript:** `scripts/claude-peer-messaging-check.sh` (bei jeder neuen Claude-Code-Version fahren)
@@ -24,8 +24,9 @@ Der Bau ist klein, fasst keine fremden Daten an und baut auf Gemessenem auf.
 ## 1. Messung
 
 Gemessen mit `tmux` in einem festen Wegwerf-Ordner, leere Umgebung (`env -i`), `--model sonnet`, Hooks per
-`--settings` aus dem Wegwerf-Ordner mitgeschnitten. Nichts unter `~/.claude*` geändert. Am Ende alle Sitzungen
-beendet, kein Prozess übrig.
+`--settings` aus dem Wegwerf-Ordner mitgeschnitten. Keine Einstellungen, Mods oder Plugins unter `~/.claude*`
+geändert. Am Ende alle Sitzungen beendet, kein Prozess übrig. Was Claude bei jedem Lauf trotzdem in die
+Konto-Ordner schreibt, steht unten unter „Spuren in den Konto-Ordnern“.
 
 | Fall | Ergebnis | Beleg |
 |---|---|---|
@@ -34,13 +35,15 @@ beendet, kein Prozess übrig.
 | Zustellen über Konten | **Ja**, hin und zurück | `SendMessage({to: "uds:/tmp/cc-socks/<pid>.sock"})` von `ai` nach `ai2`, Antwort an die `from`-Adresse kam zurück |
 | Empfänger ruht | Nachricht startet sofort einen Turn | b antwortete binnen 3 s |
 | Empfänger arbeitet | Nachricht kommt **zwischen zwei Tool-Calls** an, der Turn läuft weiter | b mitten in einem 40-s-Befehl: Vorschauzeile sofort sichtbar, an Claude gegeben direkt nach dem Befehl |
+| **Auftrag** an ruhenden Empfänger | **ausgeführt wie ein getippter**, ohne Rückfrage beim User, Fertigmeldung zurück | j (`ai`, Bypass) → t (`ai2`, Bypass): „Datei anlegen, committen, fertig mit Hash melden“; Commit `Auftrag idle` angelegt, Meldung mit Hash kam bei j an |
+| **Auftrag** an arbeitenden Empfänger | im selben Turn mit erledigt, die eigene Aufgabe lief zu Ende | t mitten in einem 30-s-Befehl: Auftrag kam nach dem Befehl an, t legte Commit `Auftrag busy2` an, meldete fertig und gab dann seine eigene Antwort; beides in einer Schlussmeldung |
 | Offene Rückfrage (AskUserQuestion) | **Dialog bleibt unberührt**, Nachricht kommt nach der Antwort | Antwort „Rot“ blieb, PING „Blau“ kam danach als eigene Nachricht |
 | Offene Freigabe (Bash) | ebenso: Dialog bleibt, Nachricht danach | `rm` blieb stehen, bis abgelehnt wurde |
 | Bypass ↔ Bypass, über Konten | zugestellt | e (`ai2`, Bypass) → d (`ai`, Bypass) |
 | Nicht-Bypass → Bypass (und umgekehrt) | **gehalten**, Dialog „Held message“ mit Vorauswahl **Deny** | gilt in beide Richtungen, auch für Antworten; die Registry meldet dabei `waiting` / `permission prompt` |
-| Einfügen + Enter in den Halte-Dialog | **lehnt die Nachricht ab**, der eingefügte Text ist weg | genau das, was `chats send` täte |
+| Einfügen + Enter in den Halte-Dialog | **lehnt die Nachricht ab**, der eingefügte Text ist weg | so hätte `chats send` vor WM8-75 gewirkt; seit WM8-75 sagt `send` ab, wenn statt des Eingabefelds ein Dialog steht (ob es den Halte-Dialog erkennt, ist nicht gemessen) |
 | `crossSessionInbound: "accept"` per `--settings` | Halten entfällt für diesen Empfänger | d nahm die Nachricht von a an |
-| Empfänger am Limit (simuliert, lokaler Fake-Server mit 429) | Nachricht kommt an, der Turn scheitert; Hook `StopFailure` mit `error: "rate_limit"`; Claude zeigt „Continuing automatically at 7:23am“ | Absender bekam nur „in that session's inbox, not yet read“ |
+| Empfänger am Limit (**nur simuliert**, lokaler Fake-Server mit 429) | Nachricht kommt an, der Turn scheitert; Hook `StopFailure` mit `error: "rate_limit"`; Claude zeigt „Continuing automatically at 7:23am“ | Absender bekam nur „in that session's inbox, not yet read“ |
 | Codex-Chat | nicht erreichbar, hat kein Postfach | `chats address` antwortet dort mit „nicht nativ erreichbar“ |
 
 **Hook `UserPromptSubmit` feuert bei jeder nativen Nachricht**, auch mitten im Turn. Der Prompt ist erkennbar
@@ -52,8 +55,23 @@ PING-1 von a
 </cross-session-message>
 ```
 
-`from` ist die geprüfte Adresse (Claude prüft die PID des Absenders), `from-name` schreibt der Absender selbst
-und ist nicht vertrauenswürdig. `from-mode` ist `prompting` oder `bypass`.
+`from` ist die Adresse des Absenders, `from-name` schreibt der Absender selbst und ist nicht vertrauenswürdig.
+`from-mode` ist `prompting` oder `bypass`. Dass Claude den absendenden Prozess prüft, ist nur teilweise belegt:
+Der Halte-Dialog zeigt `from uds:/tmp/cc-socks/4923.sock [verified pid 4923] (peer claims name: a)`, im Code
+heißt das Feld `verifiedPeerPid`. Wie die Prüfung abläuft, ist nicht belegt (Annahme: über den Socket).
+
+**Wie die App das heute wertet:** `UserPromptSubmit` wird zu „User hat gesendet“
+(`AgentSessionStateMachine.swift:107`) und setzt den Chat auf „arbeitet“ (`:180`, `:215`). Bei einer nativen
+Nachricht stimmt das, Claude arbeitet ja. Für WM8-85: Alles, was an `UserPromptSubmit` die Annahme „der User
+war da“ knüpft (etwa „wartet auf dich“ quittieren), muss eine Nachricht mit `<cross-session-message` davon
+ausnehmen. Mitten im Turn ändert sich am Status nichts, der Chat arbeitet schon.
+
+**Ein Auftrag wirkt wie ein getippter.** Gemessen mit einem echten kleinen Auftrag (Datei anlegen, committen,
+Fertigmeldung), je einmal an einen ruhenden und einen arbeitenden Empfänger: Beide Male ausgeführt, ohne beim
+User nachzufragen, mit Rückmeldung an die Absenderadresse. Ein bloßes „PING“ dagegen behandelt Claude als
+Hinweis und tut nichts. Beim arbeitenden Empfänger mischt sich der Auftrag in den laufenden Turn: Claude
+erledigt ihn zwischendurch und fasst am Ende beides zusammen. Für große Aufträge an einen beschäftigten Chat
+bleibt deshalb „erst nach dem Turn“ (`enqueue`) sinnvoll, für Rückfragen und Meldungen nicht.
 
 **Was der Empfänger sieht:** Claude weiß, dass die Nachricht von einer anderen Sitzung kommt und nicht vom User.
 Eine Nachricht ohne klaren Auftrag („PING“) behandelt Claude als Hinweis und tut nichts. Aufträge müssen also
@@ -71,13 +89,52 @@ gehaltene Nachrichten. Seit 2.1.323 dürfen Sitzungen sich etwa 100.000 statt 20
 schicken.
 
 **Nicht gemessen:** das Hauptkonto (ohne `CLAUDE_CONFIG_DIR`; gleicher Socket-Ordner, also gleiches Verhalten
-zu erwarten), ein echtes Limit (nur simuliert), `notify_when_idle` (im Oktober über Konten bestätigt).
+zu erwarten), `notify_when_idle` (im Oktober über Konten bestätigt).
+
+**Ungeklärt: echtes Abo-Limit.** Gemessen ist nur ein nachgebautes 429. Ob ein echtes Limit ebenso `StopFailure`
+mit `rate_limit` liefert und ob Claude nach dem Zurücksetzen wirklich von selbst weitermacht, ist offen. Die
+Limit-Meldung in WM8-85 hängt daran und braucht vor dem Bau einen Beleg an einem Konto, das tatsächlich am
+Limit ist.
+
+**Nebenbei:** Claude Code blockiert `sleep` im Vordergrund inzwischen ganz („Blocked: standalone sleep 30“).
+Wer einen arbeitenden Empfänger nachstellen will, braucht einen anderen Warte-Befehl (das Skript nimmt
+`python3 -c "import time; time.sleep(30)"`, nur genau diesen Befehl erlaubt).
+
+### Spuren in den Konto-Ordnern
+
+Claude schreibt bei jedem Lauf in den Ordner des Kontos, auch in einer Wegwerf-Sitzung. Nach allen Messungen
+vom 14.11. liegen für den Wegwerf-Ordner (`$TMPDIR/wm8-peer-messaging-check`):
+
+| Konto | Verläufe (`projects/…`) | Zeilen in `history.jsonl` | Sonst |
+|---|---|---|---|
+| `ai` | 11 (6,8 MB) | 32 | Projekt-Eintrag mit Ordner-Freigabe in `.claude.json`, 2 Dateien in `file-history`, 1 in `paste-cache` |
+| `ai2` | 6 (3,5 MB) | 9 | Projekt-Eintrag mit Ordner-Freigabe in `.claude.json` |
+
+Die App sammelt die Verläufe ein und zeigt sie als Projekt „wm8-peer-messaging-check“. Aufräumen je Konto mit
+Claudes eigenem Befehl, erst trocken, dann echt:
+
+```bash
+P="$(cd "$TMPDIR/wm8-peer-messaging-check" && pwd -P)"
+CLAUDE_CONFIG_DIR=~/.claude-profiles/ai  claude purge --dry-run "$P"   # zeigt Verläufe, Eintrag, history-Zeilen
+CLAUDE_CONFIG_DIR=~/.claude-profiles/ai  claude purge --yes "$P"
+CLAUDE_CONFIG_DIR=~/.claude-profiles/ai2 claude purge --yes "$P"
+```
+
+`shell-snapshots/` und alte `.claude.json`-Sicherungen in `backups/` lässt `purge` stehen (die Sicherungen rotieren
+von selbst). Danach fragt der nächste Lauf wieder nach der Ordner-Freigabe; das Skript bestätigt sie selbst.
+Aufgeräumt ist noch nicht, das entscheidet Giuliano.
 
 **Wichtig für die App:** Alle WhisperM8-Chats laufen mit `--dangerously-skip-permissions` (Einstellung
 `claudeExtraArguments`), sind also eine Rechte-Klasse. Untereinander wird darum ohne Halten zugestellt. Gehalten
 wird nur, wenn ein Chat in einem anderen Modus läuft oder eine Sitzung außerhalb der App schreibt.
 
 ## 2. Durchsicht der CLI
+
+**Stand der Durchsicht: vor WM8-75** (Basis `a6f43be9`). WM8-75 ist seit `77ea9796` in main: `send` bestätigt
+keine Freigabe mehr und sagt auch ab, wenn statt des Eingabefelds ein Dialog steht (`approvalPending`); ein
+zwischen Einfügen und Enter aufgehender Dialog hält das Enter zurück. Eine offene Frage (AskUserQuestion)
+beantwortet `send` weiter, F1 gilt also für Rückfragen fort. Zeilennummern unten beziehen sich auf den Stand vor
+WM8-75 und können in main abweichen.
 
 Weg heute: `chats send` → Socket der App → Statusprüfung → Marker-Zeile → Text als Einfüge-Block
 (`ESC[200~ … ESC[201~`) ins Terminal → 80 ms später Enter. `enqueue` legt den Auftrag in
@@ -87,7 +144,7 @@ Weg heute: `chats send` → Socket der App → Statusprüfung → Marker-Zeile �
 
 | # | Was | Fundstelle | Wirkung |
 |---|---|---|---|
-| F1 | `send` lässt „wartet auf Antwort“ standardmäßig zu (`ifStatus` = `awaitingInput, idle`) | `AgentControlRequestHandler.swift:162` | Text landet im Feld „Type something“ der Rückfrage, das Enter schickt ihn als Antwort ab. Das ist der Vorfall aus WM8-71 (fünfmal diese Nacht). Bei einem Halte-Dialog lehnt das Enter die Nachricht ab |
+| F1 | `send` lässt „wartet auf Antwort“ standardmäßig zu (`ifStatus` = `awaitingInput, idle`) | `AgentControlRequestHandler.swift:162` | Text landet im Feld „Type something“ der Rückfrage, das Enter schickt ihn als Antwort ab. Das ist der Vorfall aus WM8-71 (fünfmal diese Nacht). Bei einem Halte-Dialog lehnte das Enter die Nachricht ab; seit WM8-75 sagt `send` dort ab, sofern es den Dialog erkennt |
 | F2 | Einfüge-Klammern immer, auch in Shell-Tabs | `AgentTerminalView.swift:820` | `^[[200~` erscheint als Text, das Enter führt aus (WM8-47). Die Controller-Bedienung prüft das schon (`ControllerActionDispatcher+Round5.swift:36`) |
 | F3 | Unbekannter Status lässt alles durch | `AgentControlRequestHandler.swift:215` (`let runtime`), `:1091` | Shell-Tabs und Chats ohne erste Statusmeldung haben keinen Schutz |
 | F4 | Warteschlange stellt nur am Turn-Ende zu, ohne Nachversuch | `AgentPromptQueueDelivery.swift:67-75`, Auslöser nur `AgentSessionStatusCoordinator.swift:1028/1068` | Bei einem fast immer arbeitenden Chat (Jarvis) verliert sie jedes Rennen; nach ESC-Abbruch oder weggeklickter Rückfrage hängt sie, bis der nächste Turn endet. Pro Turn-Ende geht nur ein Auftrag raus |
@@ -133,7 +190,7 @@ mögliche Fehlerquelle. **Fremde Daten:** keine.
 ### B — nativ als Standard, die CLI als Rückfall (empfohlen)
 
 - **Skills umstellen** (`whisperm8-chats-skill.md`, `whisperm8-jarvis-skill.md`): Für einen laufenden
-  Claude-Chat in jedem Konto ist `chats address` + `SendMessage` der Normalfall, auch für Aufträge. `chats send`
+  Claude-Chat in jedem Konto ist `chats address` + `SendMessage` der Normalfall, auch für Aufträge (gemessen: ausgeführt wie getippt). Ein großer Auftrag an einen arbeitenden Chat geht weiter per `enqueue`, damit er sich nicht in dessen laufende Arbeit mischt. `chats send`
   / `enqueue` nur noch für Codex-Chats, gestoppte Chats, Terminal-Tabs und wenn eine Nachricht gehalten wurde.
   Heute sagt der Skill das Gegenteil („Arbeitsauftrag → `chats send`“, Jarvis: „Ein arbeitender Chat bekommt
   `enqueue`“).
@@ -142,7 +199,7 @@ mögliche Fehlerquelle. **Fremde Daten:** keine.
 - **Sichtbarkeit:** Die Hook-Brücke erkennt `<cross-session-message …>` in `UserPromptSubmit` und schreibt
   einen Eintrag ins Audit (Absender, Empfänger, Zeit), damit Giuliano nachvollziehen kann, wer wem was gesagt hat.
 - **Limit:** `StopFailure` in die Hook-Settings aufnehmen. Scheitert ein Turn mit `rate_limit` direkt nach
-  einer nativen Nachricht, meldet die App das dem Absender (Board, Statuszeile oder `chats send` an ihn).
+  einer nativen Nachricht, meldet die App das dem Absender (Board, Statuszeile oder `chats send` an ihn). Vorher an einem echten Limit belegen, gemessen ist nur ein nachgebautes.
 - **Rechte-Klasse:** Alle App-Chats laufen heute im Bypass und erreichen sich ohne Halten. `crossSessionInbound`
   bleibt auf dem Standard. „accept“ würde auch Nachrichten von Sitzungen ohne Bypass durchlassen; das ist genau
   der Rechte-Umweg, den Claude mit dem Halten verhindert.
@@ -185,7 +242,9 @@ zuverlässig befolgen. Dann zuerst `$.session.send` über Konten an einer Test-I
 
 ## Prüfskript
 
-`scripts/claude-peer-messaging-check.sh [konto-a] [konto-b]` (Standard `ai ai2`) misst die vier Grundlagen:
-Sichtbarkeit je Konto, Zustellung über Konten, `UserPromptSubmit` mit Hülle, unberührte Rückfrage. Lauf am
-14.11.2026 mit 2.1.325: alle acht Punkte OK. Hilfsfunktionen für Einzelmessungen:
+`scripts/claude-peer-messaging-check.sh [konto-a] [konto-b]` (Standard `ai ai2`) misst sechs Grundlagen:
+Sichtbarkeit je Konto, Zustellung über Konten, `UserPromptSubmit` mit Hülle, Zustellung mitten im Turn,
+unberührte Rückfrage, unberührte Freigabe. Es bricht ab, wenn ein Konto-Ordner fehlt (sonst legte Claude ein
+leeres Konto an), und erlaubt den Test-Sitzungen nur `SendMessage`, `ListAgents` und den einen Warte-Befehl.
+Lauf am 14.11.2026 mit 2.1.325: alle zwölf Punkte OK. Hilfsfunktionen für Einzelmessungen:
 `scripts/claude-peer-messaging-lib.sh`; Fake-Server für den Limit-Fall: `scripts/claude-peer-fake-limit-server.py`.
