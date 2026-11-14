@@ -119,12 +119,14 @@ extension ControllerBindingResolver {
         }
     }
 
-    /// Einfügen (L1 + Kreuz): Claude und Codex außer bei offener Rückfrage;
+    /// Einfügen (L1 + Kreuz): Claude und Codex außer bei offener Rückfrage —
+    /// es sei denn, es ist Claudes Frage-Dialog mit freiem Textfeld (WM8-66);
     /// in Shells nur an der Eingabezeile (nicht in nano, vim und Co.), nur
     /// Text und nur mit eingeschaltetem Bracketed Paste — das prüft der
     /// Ausführer (Review Runde 5, Befund 6).
     static func pasteAllowed(_ state: ControllerChatState) -> Bool {
-        guard state.acceptsKeys, state.status != .awaitingInput else { return false }
+        guard state.acceptsKeys else { return false }
+        if state.status == .awaitingInput { return state.questionAcceptsText && state.profile == .claude }
         switch state.profile {
         case .claude, .codex: return true
         case .shell: return state.shellAtPrompt

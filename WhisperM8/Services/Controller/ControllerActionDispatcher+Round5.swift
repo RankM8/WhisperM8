@@ -8,12 +8,25 @@ extension ControllerActionDispatcher {
     /// Chat. Text kommt wie ein Diktat als ein Block ins Feld (ohne Senden,
     /// auch in Shells); ein Bild wird in die Zwischenablage gelegt und mit
     /// Ctrl+V eingefügt (Claude, Codex). Geht der Chat bis dahin aus der
-    /// Auswahl, wird nichts eingefügt.
+    /// Auswahl, wird nichts eingefügt. In Claudes offene Frage (WM8-66) geht
+    /// nur Text, ins freie Textfeld und ohne Enter; in jede andere Rückfrage
+    /// nichts.
     func pasteNewest() {
         guard let sessionID = selectedSessionID, let terminal = terminals.state(of: sessionID),
-              terminal.isRunning, terminal.status != .awaitingInput,
+              terminal.isRunning, terminal.status != .awaitingInput || terminal.questionAcceptsText,
               let clip = clipboard.newest() else {
             return playHaptic(.rejected)
+        }
+        if terminal.status == .awaitingInput {
+            guard case .text = clip.kind else { return playHaptic(.rejected) }
+            clipboard.loadText(clip.id) { [weak self] text in
+                guard let self, let text, !text.isEmpty, self.selectedSessionID == sessionID,
+                      self.terminals.sendQuestionText(text, to: sessionID) else {
+                    self?.playHaptic(.rejected)
+                    return
+                }
+            }
+            return
         }
         let isAgentChat = terminal.profile == .claude || terminal.profile == .codex
         switch clip.kind {

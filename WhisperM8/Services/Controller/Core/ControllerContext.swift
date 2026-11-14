@@ -74,6 +74,9 @@ struct ControllerChatState: Equatable, Sendable {
     /// Im Feld steht laut Entwurfs-Tracker nur ein alter Prompt: mit ↑ vom
     /// Controller zurückgeholt oder nach einem Abbruch zurückgelegt.
     var onlyRecalledPrompt: Bool = false
+    /// Claudes Frage-Dialog mit freiem Textfeld ist offen (WM8-66): Einfügen
+    /// geht trotz offener Rückfrage.
+    var questionAcceptsText: Bool = false
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

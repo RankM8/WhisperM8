@@ -20,6 +20,7 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         case .plainShell: profile = .shell
         case .claudeAgentsView: profile = .other
         }
+        let screen = controller.controllerScreenSnapshot()
         return ControllerTerminalState(
             isRunning: controller.isRunning,
             profile: profile,
@@ -33,10 +34,11 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             lastArmingArrowAt: controller.controllerMarks.lastArmingArrowAt,
             choiceListOpen: controller.controllerChoiceListOpen(status: coordinator.statusStore.status(for: sessionID)),
             shellAtPrompt: profile == .shell && !controller.terminal.getTerminal().isCurrentBufferAlternate,
-            screen: controller.controllerScreenSnapshot(),
+            screen: screen,
             queuedOwnPrompts: profile == .claude ? coordinator.queuedOwnPrompts(sessionID: sessionID) : 0,
             onlyRecalledPrompt: controller.composerDraft.holdsOnlyRecalledPrompt,
-            bracketedPaste: controller.terminal.getTerminal().bracketedPasteMode
+            bracketedPaste: controller.terminal.getTerminal().bracketedPasteMode,
+            questionAcceptsText: profile == .claude && controller.questionAcceptsText(screen: screen)
         )
     }
 
@@ -57,6 +59,10 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller.sendPrompt(text, submit: submit)
         controller.noteControllerDraftInput(submitted: submit)
         return true
+    }
+
+    func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool {
+        controller(for: sessionID)?.sendQuestionText(text) ?? false
     }
 
     func noteChoiceListOpened(in sessionID: UUID) {

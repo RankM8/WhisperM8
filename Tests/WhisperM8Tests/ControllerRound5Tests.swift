@@ -462,6 +462,57 @@ final class ControllerRound5DispatcherTests: XCTestCase {
         XCTAssertEqual(haptics, [.rejected])
     }
 
+    /// WM8-66: In Claudes erkannte Frage geht der Text als Block ins freie
+    /// Textfeld, über den eigenen Weg ohne Enter.
+    func testPasteTextIntoRecognizedQuestion() {
+        setTerminal(.awaitingInput)
+        terminals.states[chat]?.questionAcceptsText = true
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "t", kind: .text, preview: "lila") },
+            loadText: { _, completion in completion("Lila bitte") })
+        perform(.pasteNewest)
+        XCTAssertEqual(terminals.questionTexts, ["Lila bitte"])
+        XCTAssertTrue(terminals.texts.isEmpty, "nicht der Weg ins Eingabefeld")
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter, keine Taste")
+        XCTAssertTrue(haptics.isEmpty)
+    }
+
+    func testPasteIntoOtherOpenQuestionIsRejected() {
+        setTerminal(.awaitingInput)
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "t", kind: .text, preview: "ja") },
+            loadText: { _, completion in completion("ja") })
+        perform(.pasteNewest)
+        XCTAssertTrue(terminals.questionTexts.isEmpty)
+        XCTAssertTrue(terminals.texts.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    func testPasteImageIntoQuestionIsRejected() {
+        setTerminal(.awaitingInput)
+        terminals.states[chat]?.questionAcceptsText = true
+        var written = false
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "i", kind: .image, preview: "") },
+            copyImage: { _, completion in written = true; completion(true) })
+        perform(.pasteNewest)
+        XCTAssertFalse(written)
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    /// Ist die Frage beim Schreiben nicht mehr sicher erkannt, geht nichts rein.
+    func testPasteIntoQuestionThatClosedMeanwhileIsRejected() {
+        setTerminal(.awaitingInput)
+        terminals.states[chat]?.questionAcceptsText = true
+        terminals.questionTextSucceeds = false
+        dispatcher.clipboard = ControllerClipboardAccess(
+            newest: { ControllerClipPreview(id: "t", kind: .text, preview: "x") },
+            loadText: { _, completion in completion("x") })
+        perform(.pasteNewest)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
     func testPasteNothingIsRejected() {
         perform(.pasteNewest)
         XCTAssertEqual(haptics, [.rejected])
