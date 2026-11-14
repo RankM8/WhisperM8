@@ -391,7 +391,7 @@ struct ChatTabButton: View {
                   : String(localized: "Close tab"))
         } else {
             // Dieselbe Status-Sprache wie die Sidebar (grün nur bei „arbeitet").
-            AgentStatusIndicator(status: resolvedStatus, compact: true)
+            AgentStatusIndicator(status: resolvedStatus, compact: true, usageLimit: session.usageLimit)
         }
     }
 
@@ -574,13 +574,15 @@ struct SessionLiveStatusDot: View {
     let sessionID: UUID
     let isProcessRunning: Bool
     let statusStore: AgentSessionRuntimeStatusStore
+    /// Konto am Nutzungslimit (WM8-69) — aus dem Workspace, kein I/O.
+    var usageLimit: AgentUsageLimit? = nil
 
     @State private var liveStatus: AgentSessionRuntimeStatus?
 
     var body: some View {
         Group {
             if let status = SessionHeaderStatus.resolve(live: liveStatus, isProcessRunning: isProcessRunning) {
-                AgentStatusIndicator(status: status)
+                AgentStatusIndicator(status: status, usageLimit: usageLimit)
             } else {
                 // Kein Prozess: ruhiger Platzhalter, damit der Titel nicht springt.
                 Circle()

@@ -45,6 +45,33 @@ enum ChatsSendReadinessGuard {
     /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
     /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
     /// und höchstens einmal liefert.
+    /// Meldung, wenn der Chat am Nutzungslimit steht (WM8-69); `nil` sonst.
+    /// Die Warteschlange stellt erst nach dem Limit zu.
+    static func usageLimitMessage(_ limit: AgentUsageLimit?, now: Date = Date()) -> String? {
+        guard let limit, limit.isActive(at: now) else { return nil }
+        let until = limit.resetsAt.map { " bis \(ChatsUsageLimitFormat.clock($0, now: now))" } ?? ""
+        return "Konto am Nutzungslimit\(until) — der Prompt würde verbraucht, ohne dass der Chat arbeitet. "
+            + "Nutze `chats enqueue` (stellt nach dem Limit zu) oder wechsle das Konto."
+    }
+
+    /// Eintrag für `sessions.live` (aus dem Request-Handler ausgelagert).
+    /// `usageLimitResetsAt` nur bei aktivem Limit (WM8-69).
+    static func liveEntry(session: AgentChatSession, isRunning: Bool,
+                          runtime: AgentSessionRuntimeStatus?, now: Date = Date()) -> [String: Any] {
+        var entry: [String: Any] = [
+            "sessionID": session.id.uuidString,
+            "runtimeStatus": runtime?.rawValue ?? "unknown",
+            "isAttachedPTY": isRunning,
+            "canSend": isRunning,
+            "canInterrupt": isRunning && runtime == .working,
+        ]
+        if let limit = session.usageLimit, limit.isActive(at: now) {
+            entry["usageLimit"] = limit.kind
+            if let resetsAt = limit.resetsAt { entry["usageLimitResetsAt"] = ChatsOutput.iso(resetsAt) }
+        }
+        return entry
+    }
+
     static func message(for decision: Decision) -> String? {
         guard case .notReady(let since) = decision else { return nil }
         let age = since.map { " (seit \($0) s)" } ?? ""

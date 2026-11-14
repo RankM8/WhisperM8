@@ -902,6 +902,12 @@ enum ChatsCLIHelp {
 
     HANDELN (App muss laufen — sonst Exit 5)
       whisperm8 chats send <ref> [--] "<prompt>" [--if-status S,S] [--no-submit] [--force] [--json]
+                      [--queue-if-busy] [--wait-started [Sekunden]]
+                               --queue-if-busy: beschäftigter Chat → vorgemerkt statt Fehler.
+                               --wait-started (Standard 20 s): wartet, bis der Chat arbeitet;
+                               meldet gestartet, vorgemerkt oder nicht angekommen mit Grund
+                               (am Limit, wartet auf Antwort, gestoppt; Exit 0/4/124).
+                               Am Nutzungslimit lehnt send ab (notReady), enqueue stellt danach zu.
     FÜR AGENTEN (maschinenlesbarer Vertrag — Textausgabe ist nur Diagnose)
       whisperm8 chats snapshot [--include idle] [--limit N] [--json]
                                Kompaktes Lagebild über ALLE Sessions

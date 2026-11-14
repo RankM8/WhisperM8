@@ -942,17 +942,22 @@ struct SessionListButton: View {
                 .frame(width: 7, height: 7)
                 .help("New subagent result — not viewed yet")
         } else {
-            switch resolvedStatus {
-            case .working, .awaitingInput, .idle, .errored:
-                AgentStatusIndicator(status: resolvedStatus)
-            case .stopped, .none:
-                // Kein Live-Status → „zuletzt aktiv" statt Indikator.
-                Text(SidebarRelativeTime.short(session.lastActivityAt))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(AgentTheme.textTertiary)
+            if resolvedStatus != .working, let limit = session.usageLimit, limit.isActive() {
+                // Am Nutzungslimit (WM8-69): Sanduhr und Uhrzeit sichtbar.
+                AgentUsageLimitLabel(limit: limit)
+            } else {
+                switch resolvedStatus {
+                case .working, .awaitingInput, .idle, .errored:
+                    AgentStatusIndicator(status: resolvedStatus)
+                case .stopped, .none:
+                    // Kein Live-Status → „zuletzt aktiv" statt Indikator.
+                    Text(SidebarRelativeTime.short(session.lastActivityAt))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
             }
         }
     }
@@ -1149,17 +1154,22 @@ struct PinnedSessionRow: View {
         } else if isMissingTranscript {
             MissingTranscriptBadge(session: session)
         } else {
-            switch resolvedStatus {
-            case .working, .awaitingInput, .idle, .errored:
-                AgentStatusIndicator(status: resolvedStatus)
-            case .stopped, .none:
-                // Kein Live-Status → „zuletzt aktiv" statt Indikator.
-                Text(SidebarRelativeTime.short(session.lastActivityAt))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .font(.system(size: 11))
-                    .monospacedDigit()
-                    .foregroundStyle(AgentTheme.textTertiary)
+            if resolvedStatus != .working, let limit = session.usageLimit, limit.isActive() {
+                // Am Nutzungslimit (WM8-69): Sanduhr und Uhrzeit sichtbar.
+                AgentUsageLimitLabel(limit: limit)
+            } else {
+                switch resolvedStatus {
+                case .working, .awaitingInput, .idle, .errored:
+                    AgentStatusIndicator(status: resolvedStatus)
+                case .stopped, .none:
+                    // Kein Live-Status → „zuletzt aktiv" statt Indikator.
+                    Text(SidebarRelativeTime.short(session.lastActivityAt))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .font(.system(size: 11))
+                        .monospacedDigit()
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
             }
         }
     }

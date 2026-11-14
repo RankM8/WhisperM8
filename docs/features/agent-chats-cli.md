@@ -649,6 +649,43 @@ die PTY; ein Erfolg belegt nur den Schreibvorgang, nicht die Verarbeitung.
 Wer Zustellung braucht, nutzt `enqueue` (höchstens einmal, bei bestätigtem
 Turn-Ende). `snapshot` bietet in `launching` konsequent kein `send` als Aktion an.
 
+### Vormerken und Start bestätigen (WM8-70)
+
+`send --queue-if-busy` legt einen Auftrag an einen beschäftigten Chat (Status
+`working`, Entwurf im Eingabefeld, Start läuft noch) in die Warteschlange,
+statt mit Exit 4 zu enden; ist der Chat inzwischen frei, wird direkt
+zugestellt. `send --wait-started [Sekunden]` (Standard 20, höchstens 600)
+fragt nach dem Zustellen alle 0,5 s den Status der App ab und meldet eines von
+drei Ergebnissen: `started` (der Chat arbeitet, Exit 0), `queued` (vorgemerkt,
+Exit 0) oder `notStarted` mit Grund: `usageLimit` (Konto am Nutzungslimit, mit
+Uhrzeit), `awaitingInput` (wartet weiter auf eine Antwort), `stopped`,
+`errored` (Exit 4) oder `timeout` (Exit 124). Maßgeblich ist der Status, nicht
+ein wachsender Verlauf: Codex schreibt beim Antworten minutenlang nichts.
+`--json` trägt dieselben Felder (`outcome`, `reason`, `waitedSeconds`,
+`position`, `usageLimitResetsAt`). `--force` bleibt, wie es ist.
+
+### Chat am Nutzungslimit (WM8-69)
+
+Claude schreibt die Limit-Antwort als eigene Zeile in den Verlauf
+(`isApiErrorMessage`, `error: rate_limit`, `apiError` `usage_limit_reached` oder
+`model_requires_usage_credits`, Ende als Unix-Zeit in `quotaLimits.resetsAt`
+bzw. `apiErrorParams.rate_limit_info.resetsAt`). Solange sie die letzte Antwort
+ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
+
+- `list` zeigt im Status „limit bis 04:20“, `show` eine Zeile `Limit`, `--json`
+  unter `runtime.usageLimit` (`kind`, `resetsAt`); `board` führt den Chat unter
+  „BRAUCHT DICH“.
+- `send` lehnt mit `notReady` ab (Exit 4): der Prompt würde sonst verbraucht,
+  ohne dass der Chat arbeitet. Kein `--force`-Bypass. `enqueue` merkt vor; die
+  Warteschlange stellt erst nach dem Ende zu, auch wenn Claude danach nicht
+  von selbst weitermacht.
+- `new` warnt auf stderr, wenn ein anderer Chat desselben Kontos gerade am
+  Limit steht.
+- Codex- und GPT-Chats: noch nicht erkannt (kein belegter Limit-Fall im
+  Bestand; Codex führt `rate_limits` in `token_count`, ohne echten Treffer).
+- Der Kontowechsel behandelt einen Chat am Limit noch wie bisher (Folgepaket:
+  sofort umziehen, Hilfsdienste nicht als laufende Arbeit zählen).
+
 ### Anomalien und Kompatibilität
 
 Anomalien (`wm8.anomaly/1`) werden **nie** in einen Gesamtstatus eingerechnet;

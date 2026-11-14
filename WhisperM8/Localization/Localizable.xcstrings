@@ -1271,6 +1271,26 @@
         }
       }
     },
+    "Account usage limit reached": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto am Nutzungslimit"
+          }
+        }
+      }
+    },
+    "Account usage limit reached until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto am Nutzungslimit bis %@"
+          }
+        }
+      }
+    },
     "Account · 5 h · week": {
       "localizations": {
         "de": {
@@ -8721,6 +8741,16 @@
         }
       }
     },
+    "Limit until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limit bis %@"
+          }
+        }
+      }
+    },
     "Limits": {
       "localizations": {
         "de": {
@@ -9567,6 +9597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Menü: Eingaben in den Chat, Aktionen am Chat, Steuerung"
+          }
+        }
+      }
+    },
+    "Messages are queued, not used up. Switch the account to continue now.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten werden vorgemerkt, nicht verbraucht. Konto wechseln, um sofort weiterzumachen."
           }
         }
       }
@@ -19210,6 +19250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutzungsprofil"
+          }
+        }
+      }
+    },
+    "Usage limit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzungslimit"
           }
         }
       }

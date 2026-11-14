@@ -135,13 +135,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 let isRunning = controller?.isRunning ?? false
                 let runtime = statusStore.status(for: session.id)
                 if onlyActive, !isRunning, runtime == nil { return nil }
-                return [
-                    "sessionID": session.id.uuidString,
-                    "runtimeStatus": runtime?.rawValue ?? "unknown",
-                    "isAttachedPTY": isRunning,
-                    "canSend": isRunning,
-                    "canInterrupt": isRunning && runtime == .working,
-                ]
+                return ChatsSendReadinessGuard.liveEntry(session: session, isRunning: isRunning, runtime: runtime)
             }
         }
         return .success(requestID: request.requestID,
@@ -207,6 +201,11 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 if case .notReady = readiness {
                     return .failure(.notReady,
                                     ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
+                }
+                // Am Nutzungslimit würde der Prompt verbraucht, ohne dass der Chat
+                // arbeitet (WM8-69). Kein --force-Bypass, sicherer Weg: `enqueue`.
+                if let message = ChatsSendReadinessGuard.usageLimitMessage(session.usageLimit) {
+                    return .failure(.notReady, message)
                 }
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).

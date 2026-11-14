@@ -248,6 +248,9 @@ final class AgentSessionStatusCoordinator {
         watcher.onWorkingCopy = { [weak self] sessionID, copy in
             self?.handleWorkingCopy(sessionID: sessionID, copy: copy)
         }
+        watcher.onUsageLimit = { [weak self] sessionID, limit in
+            self?.handleUsageLimit(sessionID: sessionID, limit: limit)
+        }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)
@@ -1338,6 +1341,42 @@ final class AgentSessionStatusCoordinator {
             try store.setWorkingCopy(copy, for: sessionID)
         } catch {
             Logger.debug("Failed to record working copy: \(error.localizedDescription)")
+        }
+    }
+
+    /// Nutzungslimit eines Chats erkannt oder vorbei (WM8-69): am Chat merken.
+    func handleUsageLimit(sessionID: UUID, limit: AgentUsageLimit?) {
+        if let limit {
+            Logger.claudeBinding.notice(
+                "usage_limit_detected sessionID=\(sessionID.uuidString, privacy: .public) kind=\(limit.kind, privacy: .public) resetsAt=\(limit.resetsAt?.timeIntervalSince1970 ?? 0, privacy: .public)")
+        }
+        do {
+            try store.setUsageLimit(limit, for: sessionID)
+        } catch {
+            Logger.debug("Failed to record usage limit: \(error.localizedDescription)")
+        }
+        if limit == nil {
+            // Limit vorbei (der Verlauf geht weiter): Wartendes zustellen.
+            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
+        } else if let resetsAt = limit?.resetsAt {
+            scheduleDeliveryAfterUsageLimit(sessionID: sessionID, resetsAt: resetsAt)
+        }
+    }
+
+    /// Nach dem Ende des Limits Vorgemerktes zustellen — auch wenn Claude
+    /// nicht von selbst weitermacht („Automatic continue cancelled“) und
+    /// deshalb kein Turn-Ende kommt.
+    private func scheduleDeliveryAfterUsageLimit(sessionID: UUID, resetsAt: Date) {
+        let delay = max(0, resetsAt.timeIntervalSinceNow) + 5
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self,
+                  let session = self.store.loadWorkspace().sessions.first(where: { $0.id == sessionID }),
+                  session.usageLimit?.resetsAt == resetsAt else { return }
+            // Limit vorbei: Anzeige aufheben (der Verlauf ändert sich dabei
+            // nicht, der Watcher meldet es deshalb nicht selbst).
+            try? self.store.setUsageLimit(nil, for: sessionID)
+            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         }
     }
 

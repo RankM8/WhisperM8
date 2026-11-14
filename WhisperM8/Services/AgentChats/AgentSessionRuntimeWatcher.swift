@@ -114,6 +114,10 @@ final class AgentSessionRuntimeWatcher {
     /// Sprung in einen Unterordner ändert den Ort nicht und meldet nichts.
     var onWorkingCopy: ((UUID, AgentWorkingCopy) -> Void)?
 
+    /// Meldet, wenn ein Chat an das Nutzungslimit stößt oder davon weg ist
+    /// (`nil`) — WM8-69. Aus demselben Tail-Read, nur bei Änderung.
+    var onUsageLimit: ((UUID, AgentUsageLimit?) -> Void)?
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
@@ -417,6 +421,8 @@ final class AgentSessionRuntimeWatcher {
             current.cachedQueuedOwnPrompts = snapshot.queuedOwnPrompts
             let copyChanged = snapshot.workingCopy != nil && current.cachedWorkingCopy != snapshot.workingCopy
             if let copy = snapshot.workingCopy { current.cachedWorkingCopy = copy }
+            let limitChanged = snapshot.stat != nil && current.cachedUsageLimit != snapshot.usageLimit
+            current.cachedUsageLimit = snapshot.stat != nil ? snapshot.usageLimit : current.cachedUsageLimit
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
             }
@@ -429,6 +435,10 @@ final class AgentSessionRuntimeWatcher {
             if copyChanged, let copy = snapshot.workingCopy {
                 self.watched[sessionID] = current
                 self.onWorkingCopy?(sessionID, copy)
+            }
+            if limitChanged {
+                self.watched[sessionID] = current
+                self.onUsageLimit?(sessionID, snapshot.usageLimit)
             }
 
             guard let decision = snapshot.decision else {
@@ -508,7 +518,8 @@ final class AgentSessionRuntimeWatcher {
                 // Stat-first: Datei unverändert → Stand-Zeile auch.
                 activity: entry.cachedActivity,
                 queuedOwnPrompts: entry.cachedQueuedOwnPrompts,
-                workingCopy: entry.cachedWorkingCopy
+                workingCopy: entry.cachedWorkingCopy,
+                usageLimit: entry.cachedUsageLimit
             )
         }
 
@@ -536,7 +547,10 @@ final class AgentSessionRuntimeWatcher {
             activity: activity,
             // Nur Zeilen mit dem Marker werden geparst (Runde 5, R1).
             queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0,
-            workingCopy: workingCopy(in: tail, entry: entry)
+            workingCopy: workingCopy(in: tail, entry: entry),
+            // Liegt die Limit-Zeile außerhalb des Tails (kein Ereignis), bleibt
+            // der letzte Stand; ein neueres Ereignis hebt das Limit auf.
+            usageLimit: lastEvent == nil ? entry.cachedUsageLimit : AgentUsageLimit(event: lastEvent)
         )
     }
 
@@ -632,6 +646,8 @@ struct WatchedSession {
     var cachedQueuedOwnPrompts: Int = 0
     /// Zuletzt erkannter Ort (WM8-60).
     var cachedWorkingCopy: AgentWorkingCopy? = nil
+    /// Limit laut letztem Tail-Read (WM8-69).
+    var cachedUsageLimit: AgentUsageLimit? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -652,4 +668,6 @@ struct AgentSessionRuntimePollSnapshot {
     var queuedOwnPrompts: Int = 0
     /// Ort des Chats (WM8-60); im Stat-first-Pfad gecacht.
     var workingCopy: AgentWorkingCopy? = nil
+    /// Nutzungslimit (WM8-69); im Stat-first-Pfad gecacht.
+    var usageLimit: AgentUsageLimit? = nil
 }
