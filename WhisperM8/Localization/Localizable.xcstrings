@@ -81,6 +81,16 @@
         }
       }
     },
+    "%@ Showing the state from %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Gezeigt wird der Stand von %@."
+          }
+        }
+      }
+    },
     "%@ ago": {
       "localizations": {
         "de": {
@@ -721,6 +731,16 @@
         }
       }
     },
+    "%lld of %lld done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld von %lld erledigt"
+          }
+        }
+      }
+    },
     "%lld of %lld moved": {
       "localizations": {
         "de": {
@@ -781,6 +801,16 @@
         }
       }
     },
+    "%lld tickets · %lld with agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tickets · %lld mit Agent"
+          }
+        }
+      }
+    },
     "%lld unread": {
       "localizations": {
         "de": {
@@ -797,6 +827,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wartet auf dich: %lld"
+          }
+        }
+      }
+    },
+    "%lld with agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mit Agent"
           }
         }
       }
@@ -967,6 +1007,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 fehlender Eintrag, hinzugefügt mit Claudes eigenem „claude mcp add-json -s user“. Entfernt nie etwas; Server mit OAuth-Anmeldung brauchen einmalig einen /mcp-Login pro Konto."
+          }
+        }
+      }
+    },
+    "1 ticket · %lld with agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Ticket · %lld mit Agent"
           }
         }
       }
@@ -1721,6 +1771,16 @@
         }
       }
     },
+    "Agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent"
+          }
+        }
+      }
+    },
     "Agent %@.": {
       "localizations": {
         "de": {
@@ -1957,6 +2017,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alle Berechtigungen erteilt!"
+          }
+        }
+      }
+    },
+    "All projects": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Bereiche"
           }
         }
       }
@@ -2411,6 +2481,16 @@
         }
       }
     },
+    "Assignee": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugewiesen"
+          }
+        }
+      }
+    },
     "Assumed microphone state": {
       "localizations": {
         "de": {
@@ -2821,6 +2901,16 @@
         }
       }
     },
+    "Backlog": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Backlog"
+          }
+        }
+      }
+    },
     "Balanced agentic coding model for everyday work.": {
       "localizations": {
         "de": {
@@ -2951,6 +3041,16 @@
         }
       }
     },
+    "Blocked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blockiert"
+          }
+        }
+      }
+    },
     "Blocked — quota exhausted": {
       "localizations": {
         "de": {
@@ -2977,6 +3077,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blau"
+          }
+        }
+      }
+    },
+    "Board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board"
+          }
+        }
+      }
+    },
+    "Board or backlog": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board oder Backlog"
           }
         }
       }
@@ -6151,6 +6271,16 @@
         }
       }
     },
+    "Done when": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig, wenn"
+          }
+        }
+      }
+    },
     "Drag the pill anywhere on a display without a notch; each display remembers its own spot. Double-click the pill to put it back at the top center. At the notch the pill stays put.": {
       "localizations": {
         "de": {
@@ -6247,6 +6377,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "FEHLER"
+          }
+        }
+      }
+    },
+    "Earlier: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Früher: %@"
           }
         }
       }
@@ -7351,6 +7491,16 @@
         }
       }
     },
+    "Go to chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Chat"
+          }
+        }
+      }
+    },
     "Goes through permissions, transcription provider, and the agent CLIs again.": {
       "localizations": {
         "de": {
@@ -7447,6 +7597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geführte Einrichtung"
+          }
+        }
+      }
+    },
+    "Handed over by %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgegeben von %@"
           }
         }
       }
@@ -8217,6 +8377,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
+          }
+        }
+      }
+    },
+    "In progress": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Arbeit"
           }
         }
       }
@@ -9087,6 +9257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Linear ist nicht erreichbar. Prüfe die Verbindung."
+          }
+        }
+      }
+    },
+    "Linear project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereich"
           }
         }
       }
@@ -9971,6 +10151,16 @@
         }
       }
     },
+    "Milestone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorhaben"
+          }
+        }
+      }
+    },
     "Minimal": {
       "localizations": {
         "de": {
@@ -10851,6 +11041,16 @@
         }
       }
     },
+    "No Linear project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Bereich"
+          }
+        }
+      }
+    },
     "No Matches": {
       "localizations": {
         "de": {
@@ -10927,6 +11127,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine aktiven Chats in diesem Projekt"
+          }
+        }
+      }
+    },
+    "No agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Agent"
           }
         }
       }
@@ -11181,6 +11391,16 @@
         }
       }
     },
+    "No priority": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Priorität"
+          }
+        }
+      }
+    },
     "No project": {
       "localizations": {
         "de": {
@@ -11301,6 +11521,16 @@
         }
       }
     },
+    "No tickets for this filter.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Tickets für diesen Filter."
+          }
+        }
+      }
+    },
     "No tokens in this period.": {
       "localizations": {
         "de": {
@@ -11357,6 +11587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Workspaces oder Projekte"
+          }
+        }
+      }
+    },
+    "Nobody": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niemand"
           }
         }
       }
@@ -11481,6 +11721,16 @@
         }
       }
     },
+    "Not loaded yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht geladen"
+          }
+        }
+      }
+    },
     "Not logged in": {
       "localizations": {
         "de": {
@@ -11547,6 +11797,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht zurückgenommen — läuft gerade (%lld)"
+          }
+        }
+      }
+    },
+    "Not scheduled yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch nicht eingeplant"
           }
         }
       }
@@ -12174,6 +12434,16 @@
         }
       }
     },
+    "Open in Linear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Linear öffnen"
+          }
+        }
+      }
+    },
     "Open in PhpStorm": {
       "localizations": {
         "de": {
@@ -12400,6 +12670,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sonstige"
+          }
+        }
+      }
+    },
+    "Other Mac or deleted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderer Rechner oder gelöscht"
           }
         }
       }
@@ -12874,6 +13154,16 @@
         }
       }
     },
+    "Person": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Person"
+          }
+        }
+      }
+    },
     "PhpStorm could not be opened.": {
       "localizations": {
         "de": {
@@ -13260,6 +13550,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preis: %@"
+          }
+        }
+      }
+    },
+    "Priority": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Priorität"
           }
         }
       }
@@ -13784,12 +14084,12 @@
         }
       }
     },
-    "Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, nothing is read from Linear or the Keychain.": {
+    "Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, the app reads nothing from Linear or the Keychain. The whisperm8 tickets command works either way.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Liest Tickets aus Linear und zeigt, welcher Chat an welchem Ticket arbeitet. WhisperM8 ändert von hier aus nie ein Ticket. Ab Werk aus; solange es aus ist, wird nichts aus Linear oder dem Schlüsselbund gelesen."
+            "value": "Liest Tickets aus Linear und zeigt, welcher Chat an welchem Ticket arbeitet. WhisperM8 ändert von hier aus nie ein Ticket. Ab Werk aus; solange es aus ist, liest die App nichts aus Linear oder dem Schlüsselbund. Der Befehl whisperm8 tickets geht unabhängig davon."
           }
         }
       }
@@ -15180,6 +15480,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laufende Chats arbeiten weiter, während WhisperM8 neu startet."
+          }
+        }
+      }
+    },
+    "Running chats without a ticket (%lld)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Chats ohne Ticket (%lld)"
           }
         }
       }
@@ -17444,6 +17754,16 @@
         }
       }
     },
+    "Supervisor": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supervisor"
+          }
+        }
+      }
+    },
     "Supervisor launch failed: %@": {
       "localizations": {
         "de": {
@@ -18914,6 +19234,16 @@
         }
       }
     },
+    "The text continues in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Text geht in Linear weiter."
+          }
+        }
+      }
+    },
     "The three words must differ from each other.": {
       "localizations": {
         "de": {
@@ -19684,6 +20014,16 @@
         }
       }
     },
+    "Unassigned": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht zugewiesen"
+          }
+        }
+      }
+    },
     "Unclear whether it counts toward the ChatGPT account's usage limits.": {
       "localizations": {
         "de": {
@@ -19804,6 +20144,16 @@
         }
       }
     },
+    "Up next": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Nächstes"
+          }
+        }
+      }
+    },
     "Up to date: v%@ (latest release: v%@).": {
       "localizations": {
         "de": {
@@ -19840,6 +20190,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutzung aktualisieren"
+          }
+        }
+      }
+    },
+    "Updated %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisiert %@"
           }
         }
       }
@@ -19890,6 +20250,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paddle oben rechts (%@)"
+          }
+        }
+      }
+    },
+    "Urgent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dringend"
           }
         }
       }
@@ -20794,12 +21164,32 @@
         }
       }
     },
+    "With agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Agent"
+          }
+        }
+      }
+    },
     "Without Microphone access, recording cannot start. Without Accessibility access, WhisperM8 can still transcribe and copy to clipboard, but auto-paste and selected text capture will be blocked by macOS. Screen Recording is optional and only needed for screenshot or screen clip context.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ohne Mikrofonzugriff kann keine Aufnahme starten. Ohne Bedienungshilfen kann WhisperM8 weiter transkribieren und in die Zwischenablage kopieren, aber Auto-Einfügen und die Erfassung markierten Texts blockiert macOS. Die Bildschirmaufnahme ist optional und nur für Screenshot- oder Clip-Kontext nötig."
+          }
+        }
+      }
+    },
+    "Without agent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Agent"
           }
         }
       }
@@ -21764,6 +22154,16 @@
         }
       }
     },
+    "last on %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zuletzt an %@"
+          }
+        }
+      }
+    },
     "latest": {
       "localizations": {
         "de": {
@@ -21910,6 +22310,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "stumm"
+          }
+        }
+      }
+    },
+    "never linked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "noch nie verknüpft"
           }
         }
       }
@@ -22470,6 +22880,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "wartet"
+          }
+        }
+      }
+    },
+    "waiting for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet auf dich"
           }
         }
       }

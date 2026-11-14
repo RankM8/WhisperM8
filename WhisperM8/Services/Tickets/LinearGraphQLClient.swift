@@ -9,7 +9,9 @@ import Foundation
 struct LinearGraphQLClient {
     static let endpoint = URL(string: "https://api.linear.app/graphql")!
 
-    var apiKey: () -> String?
+    /// Asynchron, weil der Schlüsselbund ein blockierender Kindprozess ist und
+    /// abseits des Thread-Pools von Swift Concurrency gelesen wird.
+    var apiKey: () async -> String?
     /// Liefert Antwortdaten und HTTP-Status.
     var transport: (URLRequest) async throws -> (Data, Int)
     /// Linear hat den Key abgelehnt: gemerkten Key verwerfen, damit ein
@@ -19,7 +21,13 @@ struct LinearGraphQLClient {
     /// Zugang eines Workspaces: Jeder hat seinen eigenen Key.
     static func live(workspace: String) -> LinearGraphQLClient {
         LinearGraphQLClient(
-            apiKey: { TicketCredentialCache.shared.value(for: workspace) { TicketCredentialStore.live.read(workspace) } },
+            apiKey: {
+                // Der Normalfall kostet keinen Wechsel der Queue: Der Key ist gemerkt.
+                if let known = TicketCredentialCache.shared.peek(workspace) { return known }
+                return await TicketBlockingWork.run {
+                    TicketCredentialCache.shared.value(for: workspace) { TicketCredentialStore.live.read(workspace) }
+                }
+            },
             transport: liveTransport,
             keyRejected: { TicketCredentialCache.shared.invalidate(workspace) }
         )
@@ -37,7 +45,7 @@ struct LinearGraphQLClient {
 
     /// Führt die Anfrage aus und liefert das Feld `data`.
     func run(_ query: String, variables: [String: Any] = [:]) async throws -> [String: Any] {
-        guard let key = apiKey(), !key.isEmpty else { throw TicketSourceError.notConfigured }
+        guard let key = await apiKey(), !key.isEmpty else { throw TicketSourceError.notConfigured }
         var request = URLRequest(url: Self.endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 20
@@ -116,6 +124,13 @@ final class TicketCredentialCache: @unchecked Sendable {
         return fresh
     }
 
+    /// Der gemerkte Key, ohne zu lesen.
+    func peek(_ workspace: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return cached[workspace]
+    }
+
     func invalidate(_ workspace: String) {
         lock.lock()
         cached[workspace] = nil
@@ -178,6 +193,20 @@ struct TicketCredentialStore {
     /// dort die Zeile sprengen würden, kommen in Linear-Keys nicht vor.
     static func isStorable(_ key: String) -> Bool {
         !key.isEmpty && key.count <= 512 && key.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") }
+    }
+}
+
+/// Blockierende Arbeit (der Kindprozess `security`, bis zu seiner Frist) läuft
+/// auf einer eigenen Dispatch-Queue. Auf einem Thread von Swift Concurrency
+/// belegte ein offener Dialog des Schlüsselbunds den gemeinsamen Pool, und mit
+/// dem regelmäßigen Abruf der Ticket-Ansicht stünde irgendwann alles.
+enum TicketBlockingWork {
+    private static let queue = DispatchQueue(label: "com.whisperm8.tickets.blocking", qos: .userInitiated, attributes: .concurrent)
+
+    static func run<T>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: work()) }
+        }
     }
 }
 
