@@ -265,6 +265,20 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertNil(after["usageLimit"])
     }
 
+    func testLiveEntryCarriesStartAndPID() {
+        // Neustart-Vorhaben: `runtime.pid` und „Terminal-Tab läuft (PID …)“
+        // hängen an diesen Feldern; die PID nur, solange der Prozess läuft.
+        let session = AgentChatSession(provider: .claude, projectID: UUID(), title: "t")
+        let running = ChatsSendReadinessGuard.liveEntry(session: session, isRunning: true, runtime: .idle,
+                                                        hasStarted: true, pid: 4711)
+        XCTAssertEqual(running["hasStarted"] as? Bool, true)
+        XCTAssertEqual(running["pid"] as? Int, 4711)
+        let ended = ChatsSendReadinessGuard.liveEntry(session: session, isRunning: false, runtime: nil,
+                                                      hasStarted: true, pid: nil)
+        XCTAssertEqual(ended["hasStarted"] as? Bool, true)
+        XCTAssertTrue(ended["pid"] is NSNull)
+    }
+
     // MARK: - chats send --wait-started (WM8-70)
 
     func testStartDecider() {

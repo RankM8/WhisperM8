@@ -18,6 +18,9 @@ struct TicketConfig: Codable, Equatable {
     var workspacesByTeam: [String: String] = [:]
     /// Workspaces, für die ein Zugang hinterlegt wurde.
     var workspaces: [String] = []
+    /// Projektordner → Datei mit der Tabelle Bereich, Ordner, Projekt (relativ
+    /// zum Projektordner). `tickets doctor` prüft sie gegen das Ticket-Werkzeug.
+    var areasFileByProjectPath: [String: String] = [:]
 
     init() {}
 
@@ -28,6 +31,7 @@ struct TicketConfig: Codable, Equatable {
         teamsByProjectPath = try container.decodeIfPresent([String: String].self, forKey: .teamsByProjectPath) ?? [:]
         workspacesByTeam = try container.decodeIfPresent([String: String].self, forKey: .workspacesByTeam) ?? [:]
         workspaces = try container.decodeIfPresent([String].self, forKey: .workspaces) ?? []
+        areasFileByProjectPath = try container.decodeIfPresent([String: String].self, forKey: .areasFileByProjectPath) ?? [:]
     }
 
     /// Team für ein Verzeichnis: das Projekt mit dem längsten passenden Pfad,
@@ -107,6 +111,7 @@ struct TicketConfig: Codable, Equatable {
 
     mutating func removeProject(_ directory: String) {
         teamsByProjectPath[Self.normalized(directory)] = nil
+        areasFileByProjectPath[Self.normalized(directory)] = nil
     }
 
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert

@@ -307,25 +307,29 @@ enum ChatsBoardCommand {
     // MARK: Lesen
 
     /// Ob `read` den Workspace braucht (LR-PJ-003): Die Mod ruft `board --json`
-    /// in jedem Chat beim Start — ohne Board-Eintrag und mit direkt
-    /// auflösbarem Owner (`@self`/UUID/`--all`) wäre das Laden der
-    /// mehrere MB großen Workspace-Datei reine Verschwendung.
-    static func needsWorkspace(options: ChatsBoardReadOptions, file: JarvisBoardFile) -> Bool {
-        // Statuszeilen der Board-Einträge brauchen die Session-Einträge.
-        if file.boards.contains(where: { !$0.entries.isEmpty }) { return true }
-        if options.all { return false }
+    /// in jedem Chat beim Start und nach jeder Board-Änderung. Gebraucht wird
+    /// der mehrere MB große Workspace nur für die Statuszeilen der GEZEIGTEN
+    /// Boards (WM8-87: vorher reichte ein Eintrag auf irgendeinem Board) und
+    /// zum Auflösen eines Kurz-Refs.
+    static func needsWorkspace(options: ChatsBoardReadOptions, file: JarvisBoardFile, callerSessionID: UUID?) -> Bool {
+        func hasEntries(_ owner: UUID?) -> Bool {
+            owner.flatMap { file.board(owner: $0) }.map { !$0.entries.isEmpty } ?? false
+        }
+        if options.all { return file.boards.contains(where: { !$0.entries.isEmpty }) }
         let owner = options.owner.trimmingCharacters(in: .whitespacesAndNewlines)
         // `@self` und Voll-UUID löst `resolveOwner` ohne Workspace auf.
-        return !(owner == "@self" || UUID(uuidString: owner) != nil)
+        if owner == "@self" { return hasEntries(callerSessionID) }
+        if let uuid = UUID(uuidString: owner) { return hasEntries(uuid) }
+        return true
     }
 
     private static func read(_ options: ChatsBoardReadOptions) async -> Int32 {
         let enabled = JarvisBoardSettings.isEnabled()
         let file = visibleFile(enabled: enabled) { JarvisBoardStore.load() }
-        let context = needsWorkspace(options: options, file: file)
-            ? ChatsCommandContext.load()
-            : ChatsCommandContext.loadWithoutWorkspace()
-        let cursor = ChatsStatusJournal.currentCursor()
+        var context = ChatsCommandContext.loadWithoutWorkspace()
+        if needsWorkspace(options: options, file: file, callerSessionID: context.caller.sessionID) {
+            context.view = ChatsWorkspaceReader().load()
+        }
 
         let owners: [UUID]
         if options.all {
@@ -348,8 +352,18 @@ enum ChatsBoardCommand {
                 runtime[id] = ChatsLiveMerge.merge(estimate: estimate, live: live?[id])
             }
         }
-        let transitions = boardSessionIDs.isEmpty ? [:]
-            : ChatsBoardReadModel.lastTransitions(ChatsStatusJournal.readAll(fileURL: ChatsStatusJournal.defaultFileURL()))
+        // Das Journal (bis 2 MB) ganz lesen nur für Statuszeilen; für den
+        // Cursor genügt sein Ende. Und höchstens einmal (WM8-87).
+        let cursor: String?
+        let transitions: [UUID: ChatsStatusJournalEntry]
+        if boardSessionIDs.isEmpty {
+            cursor = ChatsStatusJournal.currentCursor()
+            transitions = [:]
+        } else {
+            let journal = ChatsStatusJournal.readAll(fileURL: ChatsStatusJournal.defaultFileURL())
+            cursor = ChatsStatusJournal.currentCursor(entries: journal)
+            transitions = ChatsBoardReadModel.lastTransitions(journal)
+        }
 
         func rows(for owner: UUID) -> (JarvisBoard?, [ChatsBoardRow]) {
             guard let board = file.board(owner: owner) else { return (nil, []) }

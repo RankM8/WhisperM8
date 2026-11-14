@@ -15,7 +15,7 @@ struct LinearTicketSource: TicketSource {
     /// Verschachtelte Listen tragen eigene Grenzen, sonst rechnet Linear je
     /// Liste mit 50 Einträgen und die Abfrage wird zu teuer.
     static let ticketFields = """
-    id identifier title description priority url
+    id identifier title description priority url updatedAt
     state { id name type position }
     project { name }
     projectMilestone { name }
@@ -140,6 +140,58 @@ struct LinearTicketSource: TicketSource {
             workspaceKey: key.lowercased(),
             isAdmin: viewer["admin"] as? Bool ?? false
         )
+    }
+
+    /// Laufende und geplante Vorhaben-Container des Teams (in Linear: Projekte).
+    func projects(team: String) async throws -> [String] {
+        let data = try await client.run("""
+        query($team: String!) {
+          teams(first: 1, filter: { key: { eq: $team } }) { nodes { projects(first: 100) { nodes { name state } } } }
+        }
+        """, variables: ["team": team])
+        guard let node = Self.nodes(data["teams"]).first else { throw TicketSourceError.notFound("Team \(team)") }
+        return Self.nodes(node["projects"])
+            .filter { !["completed", "canceled"].contains($0["state"] as? String ?? "") }
+            .compactMap { $0["name"] as? String }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    /// Lädt ein Bild hoch und liefert seine Adresse für einen Kommentar. Zwei
+    /// Schritte: Linear nennt eine Adresse zum Hochladen samt Kopfzeilen, dann
+    /// geht die Datei dorthin.
+    func uploadImage(_ data: Data, fileName: String, contentType: String) async throws -> String {
+        let answer = try await client.run("""
+        mutation($type: String!, $name: String!, $size: Int!) {
+          fileUpload(contentType: $type, filename: $name, size: $size) {
+            success uploadFile { uploadUrl assetUrl headers { key value } }
+          }
+        }
+        """, variables: ["type": contentType, "name": fileName, "size": data.count])
+        guard let upload = answer["fileUpload"] as? [String: Any], upload["success"] as? Bool != false,
+              let file = upload["uploadFile"] as? [String: Any],
+              let uploadURL = (file["uploadUrl"] as? String).flatMap(URL.init(string:)), uploadURL.scheme == "https",
+              let assetURL = file["assetUrl"] as? String else {
+            throw TicketSourceError.invalidResponse("fileUpload")
+        }
+        var request = URLRequest(url: uploadURL)
+        request.httpMethod = "PUT"
+        request.timeoutInterval = 60
+        request.httpBody = data
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("public, max-age=31536000", forHTTPHeaderField: "Cache-Control")
+        for header in (file["headers"] as? [[String: Any]]) ?? [] {
+            if let key = header["key"] as? String, let value = header["value"] as? String {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+        let status: Int
+        do {
+            (_, status) = try await client.transport(request)
+        } catch {
+            throw TicketSourceError.network("Hochladen")
+        }
+        guard (200..<300).contains(status) else { throw TicketSourceError.rejected("Hochladen abgelehnt (HTTP \(status))") }
+        return assetURL
     }
 
     func teams() async throws -> [String] {
@@ -326,6 +378,21 @@ struct LinearTicketSource: TicketSource {
             labels: nodes(node["labels"]).compactMap { $0["name"] as? String },
             links: nodes(node["attachments"]).compactMap(link),
             isBlocked: blocked,
-            url: node["url"] as? String)
+            url: node["url"] as? String,
+            updatedAt: (node["updatedAt"] as? String).flatMap(date))
     }
+
+    /// Linear schreibt Zeiten mit Millisekunden (`2026-11-14T03:57:12.345Z`).
+    static func date(_ raw: String) -> Date? {
+        fractionalDates.date(from: raw) ?? plainDates.date(from: raw)
+    }
+
+    /// Je Abruf hunderte Tickets: die Formatierer nur einmal bauen.
+    private static let fractionalDates: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let plainDates = ISO8601DateFormatter()
 }

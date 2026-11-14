@@ -1,6 +1,8 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { agesChange, isBefore, nextGenerationStart, sameBoard, withStatus } from './register'
+
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
 
@@ -43,11 +45,11 @@ const band = (bodyColumns: number, maxRows = 12) => ({
   props: { hasSurvey: false, isWorking: false, maxRows, bodyColumns, scroll: { offset: 0, bodyRows: maxRows }, view: {} },
 })
 
-type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number }
+type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number; spawns: number; spawnArgv: string[][] }
 
 /** Engine unter der Mod: Session, CLI (`whisperm8 …`) und watch-Strom gespielt. */
-const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string | null; hangBoard?: boolean; boardOkReads?: number } = {}): Calls => {
-  const calls: Calls = { argv: [], prompts: [], toasts: [], sounds: 0 }
+const world = (on: On, opts: { board?: unknown; watch?: unknown[]; watchEvery?: unknown[]; sid?: string | null; hangBoard?: boolean; boardOkReads?: number } = {}): Calls => {
+  const calls: Calls = { argv: [], prompts: [], toasts: [], sounds: 0, spawns: 0, spawnArgv: [] }
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['engine'] }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('skill.prompt', (_$, e) => ({ text: e.text }))
@@ -64,8 +66,12 @@ const world = (on: On, opts: { board?: unknown; watch?: unknown[]; sid?: string 
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   const lines = (opts.watch ?? []).map(ev => `${JSON.stringify(ev)}\n`)
-  on('process.spawn', async function* () {
-    for (const text of lines) yield { stream: 'stdout' as const, text }
+  on('process.spawn', async function* (_$, e) {
+    calls.spawns += 1
+    calls.spawnArgv.push([...((e as { argv?: string[] }).argv ?? [])])
+    // watchEvery: jeder Strom liefert dieselben Zeilen (etwa started + gap).
+    const every = (opts.watchEvery ?? []).map(ev => `${JSON.stringify(ev)}\n`)
+    for (const text of lines.length > 0 ? lines : every) yield { stream: 'stdout' as const, text }
     lines.length = 0
     return { value: { code: 0, signal: null } } as never
   })
@@ -379,5 +385,149 @@ describe('session.start', () => {
       await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     }
     expect(intervals).toBe(1)
+  })
+})
+
+// WM8-87: Ein Journal mit einem Rest der alten Generation ließ `chats watch`
+// sofort mit „gap“ enden. Die Mod setzte ihre Wartezeit schon beim „started“
+// zurück und las je Runde zweimal: alle zwei Sekunden ein neuer Prozess.
+describe('Prozesse (WM8-87)', () => {
+  const boardReads = (calls: Calls) => calls.argv.filter(a => a.includes('board') && a.length <= 4).length
+
+  test('ein sofort endender Strom mit Lücke startet mit wachsender Wartezeit neu, ein Lesen je Runde', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watchEvery: [{ event: 'started', cursor: '1:10' }, { event: 'gap', action: 'snapshot' }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    for (let i = 0; i < 120; i++) {
+      await clock.advance(1_000)
+      await clock.settle()
+    }
+    // Wartezeit 2, 4, 8, 16, 32, 60 s: in zwei Minuten höchstens sieben
+    // Ströme (vorher rund 60, je Strom zwei Lesungen).
+    expect(calls.spawns).toBeLessThanOrEqual(7)
+    expect(calls.spawns).toBeGreaterThanOrEqual(5)
+    // Start-Lesen plus eines je beendetem Strom.
+    expect(boardReads(calls)).toBeLessThanOrEqual(calls.spawns + 1)
+  })
+
+  test('ein echtes Ereignis setzt die Wartezeit zurück', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const change = { kind: 'conversation', sessionID: 'B7C1E000-0000-0000-0000-000000000002', from: 'idle', to: 'working', schema: 'wm8.changes/1' }
+    const calls = world(on, { watchEvery: [{ event: 'started', cursor: '1:10' }, change] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    for (let i = 0; i < 20; i++) {
+      await clock.advance(1_000)
+      await clock.settle()
+    }
+    // Jeder Strom bringt ein Ereignis: Wartezeit bleibt bei 2 s.
+    expect(calls.spawns).toBeGreaterThanOrEqual(8)
+  })
+
+  test('ein Statuswechsel eines Board-Chats kommt ohne neuen Prozess in die Anzeige', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const waits = { kind: 'conversation', sessionID: 'CE45D000-0000-0000-0000-000000000003', from: 'working', to: 'awaitingInput', at: minutesAgo(0), schema: 'wm8.changes/1' }
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, waits] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    const before = boardReads(calls)
+    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    // ⚑ = Chat wartet, Ampel aber noch „läuft“ (die setzt Jarvis).
+    expect(await ui.find({ text: /⚑/ })).toBeDefined()
+    await ui.unmount()
+    expect(boardReads(calls)).toBe(before)
+  })
+
+  test('der Statuswechsel eines fremden Chats ändert nichts und liest nicht', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const other = { kind: 'conversation', sessionID: 'DDDDDDDD-0000-0000-0000-000000000009', from: 'working', to: 'awaitingInput', schema: 'wm8.changes/1' }
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, other] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    const before = boardReads(calls)
+    await clock.advance(1_000)
+    await clock.settle()
+    expect(boardReads(calls)).toBe(before)
+    expect(calls.prompts).toEqual([])
+  })
+})
+
+describe('Neuzeichnen (WM8-87)', () => {
+  const view = (over: Record<string, unknown> = {}) => ({ ...BOARD, ...over }) as never
+
+  test('sameBoard übersieht den Cursor, nicht aber Einträge', () => {
+    expect(sameBoard(view(), view({ cursor: '1:99' }))).toBe(true)
+    expect(sameBoard(view(), view({ entries: BOARD.entries.slice(1) }))).toBe(false)
+    expect(sameBoard(null, view())).toBe(false)
+  })
+
+  test('agesChange nur, wenn eine sichtbare Alters-Angabe wechselt', () => {
+    const entries = [entry({ updatedAt: minutesAgo(4) })] as never
+    expect(agesChange(entries, NOW, NOW + 20_000)).toBe(false)
+    expect(agesChange(entries, NOW, NOW + 60_000)).toBe(true)
+    const old = [entry({ updatedAt: minutesAgo(180) })] as never
+    expect(agesChange(old, NOW, NOW + 10 * 60_000)).toBe(false)
+  })
+
+  test('withStatus setzt Status und seit wann, nur beim gemeinten Chat', () => {
+    const next = withStatus(BOARD as never, 'ce45d000-0000-0000-0000-000000000003', 'awaitingInput', '2026-10-08T15:00:00Z')
+    const changed = next.entries.find(e => e.ref === 'e45d0000')
+    expect(changed?.status).toBe('awaitingInput')
+    expect(changed?.statusSince).toBe('2026-10-08T15:00:00Z')
+    expect(next.entries.filter(e => e.status === 'awaitingInput').length).toBe(1)
+  })
+})
+
+// Review WM8-87: kein Weck-Grund darf in der Wartezeit verloren gehen, und
+// nachgelieferte ältere Ereignisse dürfen weder anzeigen noch wecken.
+describe('Ansetzen nach Ende oder Lücke (WM8-87)', () => {
+  const cursorOf = (argv: string[]) => argv[argv.indexOf('--cursor') + 1]
+
+  test('der nächste Strom setzt nach dem zuletzt gelieferten Ereignis an', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const change = { kind: 'conversation', sessionID: 'B7C1E000-0000-0000-0000-000000000002', from: 'idle', to: 'working', cursor: '1:11', schema: 'wm8.changes/1' }
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, change] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(3_000)
+    await clock.settle()
+    expect(calls.spawnArgv.length).toBeGreaterThanOrEqual(2)
+    expect(cursorOf(calls.spawnArgv[1]!)).toBe('1:11')
+  })
+
+  test('nach einer Lücke mit neuer Generation ab deren Anfang', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { board: { ...BOARD, cursor: '2:50' }, watch: [{ event: 'started', cursor: '1:10' }, { event: 'gap', action: 'snapshot' }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(3_000)
+    await clock.settle()
+    expect(cursorOf(calls.spawnArgv[1]!)).toBe('2:0')
+  })
+
+  test('ein Ereignis älter als der gelesene Stand weckt nicht', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const stale = { kind: 'conversation', sessionID: 'CE45D000-0000-0000-0000-000000000003', from: 'working', to: 'awaitingInput', at: minutesAgo(30), schema: 'wm8.changes/1' }
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, stale] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    expect(await ui.find({ text: /⚑/ })).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('nextGenerationStart und isBefore', () => {
+    expect(nextGenerationStart('1:11', '2:50')).toBe('2:0')
+    expect(nextGenerationStart('1:11', '1:50')).toBe('1:50')
+    expect(nextGenerationStart(null, '2:50')).toBe('2:0')
+    expect(nextGenerationStart('1:11', null)).toBe(null)
+    expect(isBefore('2026-10-08T14:00:00Z', '2026-10-08T15:00:00Z')).toBe(true)
+    expect(isBefore('2026-10-08T15:00:00Z', '2026-10-08T15:00:00Z')).toBe(false)
+    expect(isBefore(undefined, '2026-10-08T15:00:00Z')).toBe(false)
+    expect(isBefore('2026-10-08T14:00:00Z', null)).toBe(false)
   })
 })

@@ -28,6 +28,11 @@ protocol TicketSource {
     func account() async throws -> TicketAccount
     /// Kürzel aller Teams, die der Zugang sieht.
     func teams() async throws -> [String]
+    /// Namen der laufenden und geplanten Projekte eines Teams.
+    func projects(team: String) async throws -> [String]
+    /// Lädt ein Bild hoch und liefert die Adresse, unter der es in einem
+    /// Kommentar eingebunden wird.
+    func uploadImage(_ data: Data, fileName: String, contentType: String) async throws -> String
 }
 
 struct TicketContext: Equatable {

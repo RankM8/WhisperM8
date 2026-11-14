@@ -73,8 +73,13 @@ struct Ticket: Equatable, Identifiable {
     /// Wartet auf ein anderes, noch offenes Ticket.
     var isBlocked: Bool
     var url: String?
+    /// Letzte Änderung am Ticket, so wie das Werkzeug sie führt.
+    var updatedAt: Date?
 
     var activeLinks: [TicketChatLink] { links.filter(\.isActive) }
+
+    /// Fortschritt der Kästchen unter „Fertig, wenn“; `nil` ohne Kästchen.
+    var criteria: TicketChecklistProgress? { TicketChecklist.progress(in: description) }
 }
 
 /// Unveränderlicher Abzug eines Teams: Grundlage für Board, Liste und CLI.

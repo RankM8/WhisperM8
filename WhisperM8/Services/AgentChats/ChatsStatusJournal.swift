@@ -40,6 +40,11 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     var owner: UUID? = nil
     /// Board: Ampel nach `set` bzw. vor `remove`.
     var light: String? = nil
+    /// Wer die Zeile geschrieben hat: `app` in der App, sonst `nil` (Tests,
+    /// Zeilen von vor WM8-87). Ältere `swift test`-Läufe schrieben mit eigener
+    /// Nummernfolge in dieselbe Generation; stehen markierte Zeilen in der
+    /// Datei, zählen nur sie (`ChatsStatusJournal.usable`).
+    var writer: String? = nil
 
     static let boardKind = "board"
 
@@ -54,15 +59,32 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
 /// Replay, sondern liefert genau so viel Historie, wie eine Nachanalyse
 /// braucht.
 final class ChatsStatusJournal: @unchecked Sendable {
-    static let shared = ChatsStatusJournal()
+    static let shared = ChatsStatusJournal(
+        fileURL: sharedFileURL(), writer: AppInstance.isAppBundleProcess ? appWriter : nil)
+
+    static let appWriter = "app"
+
+    /// Schreibziel von `shared`: das echte Journal nur in der App (WM8-87).
+    /// Unter `swift test` schrieb der Status-Koordinator sonst ins Journal
+    /// des Users: 14.11.2026 stammten 6.658 von 7.556 Zeilen von
+    /// Test-Sitzungen, mit eigener Nummernfolge (Sprünge) und einer Rotation
+    /// alle paar Stunden. Die CLI liest weiter `defaultFileURL()`.
+    static func sharedFileURL(isAppProcess: Bool = AppInstance.isAppBundleProcess) -> URL {
+        guard !isAppProcess else { return defaultFileURL() }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-tests", isDirectory: true)
+            .appendingPathComponent("chats-status-journal.jsonl")
+    }
 
     private let lock = NSLock()
     private let fileURL: URL
     private let maxBytes: Int
+    private let writer: String?
 
-    init(fileURL: URL? = nil, maxBytes: Int = 2 * 1_048_576) {
+    init(fileURL: URL? = nil, maxBytes: Int = 2 * 1_048_576, writer: String? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
         self.maxBytes = maxBytes
+        self.writer = writer
     }
 
     static func defaultFileURL() -> URL {
@@ -78,8 +100,7 @@ final class ChatsStatusJournal: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         writeLocked(ChatsStatusJournalEntry(
-            at: at, seq: nextSequence(), journalId: resolvedJournalId(),
-            sessionID: sessionID, from: from, to: to, signal: signal, source: source))
+            at: at, sessionID: sessionID, from: from, to: to, signal: signal, source: source))
     }
 
     /// Schreibt eine Board-Änderung. Läuft bewusst NICHT durch den
@@ -90,19 +111,33 @@ final class ChatsStatusJournal: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         writeLocked(ChatsStatusJournalEntry(
-            at: at, seq: nextSequence(), journalId: resolvedJournalId(),
-            sessionID: sessionID, from: nil, to: nil, signal: "board.\(op)", source: Self.boardSource,
+            at: at, sessionID: sessionID, from: nil, to: nil, signal: "board.\(op)", source: Self.boardSource,
             kind: ChatsStatusJournalEntry.boardKind, op: op, owner: owner, light: light))
     }
 
     static let boardSource = "board"
 
-    /// Aufrufer hält `lock`.
-    private func writeLocked(_ entry: ChatsStatusJournalEntry) {
+    /// Aufrufer hält `lock`. Nummer und Generation stempelt erst diese
+    /// Funktion, NACH der Rotation (WM8-87): Vorher bekam der Eintrag, der
+    /// die Rotation auslöste, noch Nummer und Generation der alten Datei und
+    /// stand dann als erste Zeile in der neuen. `changes()` hielt ihn für den
+    /// ältesten Eintrag, jeder Cursor galt als Lücke, `chats watch` endete
+    /// sofort, und die Board-Mod startete im 2-s-Takt neu.
+    private func writeLocked(_ unstamped: ChatsStatusJournalEntry) {
+        // Größe vorab mit einer großzügigen Nummer schätzen; die echte steht
+        // erst nach der Rotation fest.
+        var probe = unstamped
+        probe.seq = Int(Int32.max)
+        probe.journalId = "00000000"
+        guard let estimate = try? Self.encoder.encode(probe) else { return }
+        rotateIfNeeded(incomingBytes: estimate.count + 1)
+        var entry = unstamped
+        entry.seq = nextSequence()
+        entry.journalId = resolvedJournalId()
+        entry.writer = writer
         guard let data = try? Self.encoder.encode(entry) else { return }
         var line = data
         line.append(0x0A)
-        rotateIfNeeded(incomingBytes: line.count)
         if let handle = try? FileHandle(forWritingTo: fileURL) {
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()
@@ -185,9 +220,53 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// schlimmer als keiner: Er sähe gültig aus und würde bei jedem `since`
     /// dieselben Alt-Einträge nachliefern.
     static func currentCursor(fileURL: URL? = nil) -> String? {
-        let entries = readAll(fileURL: fileURL ?? defaultFileURL())
-        guard let last = entries.last, !last.journalId.isEmpty else { return nil }
+        let url = fileURL ?? defaultFileURL()
+        // Für den Cursor genügt die letzte Zeile: nur das Ende lesen statt
+        // bis zu 2 MB (läuft bei jedem `chats board --json`, WM8-87).
+        let tail = readTail(fileURL: url)
+        // Nur verlässlich, wenn das Ende eine Zeile der App enthält; sonst
+        // könnten markierte Zeilen weiter oben stehen (ein Testlauf schrieb
+        // zuletzt viel).
+        if tail.contains(where: { $0.writer != nil }) { return currentCursor(entries: tail) }
+        let all = readAll(fileURL: url)
+        if all.isEmpty { return currentCursor(entries: tail) }
+        return currentCursor(entries: all)
+    }
+
+    /// Die vollständigen Zeilen in den letzten `bytes` Bytes der Datei, in
+    /// Dateireihenfolge. Leer, wenn die Datei fehlt oder dort keine Zeile
+    /// lesbar ist (der Aufrufer liest dann alles).
+    static func readTail(fileURL: URL, bytes: Int = 16_384) -> [ChatsStatusJournalEntry] {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return [] }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return [] }
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil,
+              var data = try? handle.readToEnd() else { return [] }
+        // Mitten in einer Zeile begonnen: bis zum ersten Zeilenende verwerfen.
+        if start > 0 {
+            guard let newline = data.firstIndex(of: 0x0A) else { return [] }
+            data = data[data.index(after: newline)...]
+        }
+        return data.split(separator: 0x0A).compactMap { line in
+            try? decoder.decode(ChatsStatusJournalEntry.self, from: Data(line))
+        }
+    }
+
+    /// Wie `currentCursor(fileURL:)`, auf bereits gelesenen Einträgen (wer das
+    /// Journal ohnehin liest, liest es so nur einmal).
+    static func currentCursor(entries: [ChatsStatusJournalEntry]) -> String? {
+        guard let last = usable(entries).last, !last.journalId.isEmpty else { return nil }
         return cursor(journalId: last.journalId, seq: last.seq)
+    }
+
+    /// Die Zeilen, die für Cursor zählen: Stehen Zeilen der App in der Datei,
+    /// nur diese (fremde Schreiber vergeben eigene Nummern in derselben
+    /// Generation). Ohne markierte Zeilen (Journale von vor WM8-87, Tests)
+    /// alle.
+    static func usable(_ entries: [ChatsStatusJournalEntry]) -> [ChatsStatusJournalEntry] {
+        guard entries.contains(where: { $0.writer != nil }) else { return entries }
+        return entries.filter { $0.writer != nil }
     }
 
     /// Alle Einträge nach einem Cursor. `gap == true` heißt: Der Cursor ist
@@ -200,10 +279,23 @@ final class ChatsStatusJournal: @unchecked Sendable {
         limit: Int = 64,
         fileURL: URL? = nil
     ) -> (entries: [ChatsStatusJournalEntry], gap: Bool, hasMore: Bool, cursor: String?) {
+        changes(since: rawCursor, limit: limit, entries: readAll(fileURL: fileURL ?? defaultFileURL()))
+    }
+
+    /// Wie `changes(since:limit:fileURL:)`, auf bereits gelesenen Einträgen.
+    static func changes(
+        since rawCursor: String?,
+        limit: Int = 64,
+        entries: [ChatsStatusJournalEntry]
+    ) -> (entries: [ChatsStatusJournalEntry], gap: Bool, hasMore: Bool, cursor: String?) {
         // Einträge ohne Generation stammen aus einer Vorversion und sind für
-        // Cursor-Abfragen unbrauchbar — sie tragen keine Ordnung.
-        let all = readAll(fileURL: fileURL ?? defaultFileURL()).filter { !$0.journalId.isEmpty }
-        let currentId = all.last?.journalId
+        // Cursor-Abfragen unbrauchbar — sie tragen keine Ordnung. Zählen darf
+        // nur die aktuelle Generation (die der letzten Zeile): Ein Rest der
+        // alten am Dateianfang (Journale vor WM8-87) machte sonst jeden
+        // Cursor zur Lücke.
+        let usable = usable(entries)
+        let currentId = usable.last(where: { !$0.journalId.isEmpty })?.journalId
+        let all = usable.filter { $0.journalId == currentId && currentId != nil }
         let latest = all.last.map { cursor(journalId: $0.journalId, seq: $0.seq) }
 
         guard let rawCursor, let parsed = parseCursor(rawCursor) else {
@@ -215,7 +307,7 @@ final class ChatsStatusJournal: @unchecked Sendable {
         }
         // Liegt der Cursor VOR dem ältesten vorhandenen Eintrag, wurde
         // dazwischen rotiert oder beschnitten.
-        if let oldest = all.first, parsed.seq < oldest.seq - 1 {
+        if let oldest = all.map(\.seq).min(), parsed.seq < oldest - 1 {
             return ([], true, false, latest)
         }
         let newer = all.filter { $0.seq > parsed.seq }
@@ -238,6 +330,7 @@ final class ChatsStatusJournal: @unchecked Sendable {
     private var cachedJournalId: String?
 
     private func nextSequence() -> Int {
+        adoptOrStartGeneration()
         if let cachedSeq {
             self.cachedSeq = cachedSeq + 1
             return cachedSeq + 1
@@ -245,6 +338,18 @@ final class ChatsStatusJournal: @unchecked Sendable {
         let last = Self.readAll(fileURL: fileURL).last?.seq ?? 0
         cachedSeq = last + 1
         return last + 1
+    }
+
+    /// Erster Schreibvorgang eines markierten Schreibers (der App): Stammt die
+    /// letzte Zeile nicht von ihm, beginnt eine neue Generation. Sonst hinge
+    /// die App an Nummern, die ein Testlauf vergeben hat, und Cursor sprängen
+    /// (WM8-87). Kostet Lesern genau eine saubere Lücke.
+    private func adoptOrStartGeneration() {
+        guard cachedSeq == nil, cachedJournalId == nil, let writer else { return }
+        let last = Self.readAll(fileURL: fileURL).last
+        guard let last, last.writer != writer || last.journalId.isEmpty else { return }
+        cachedJournalId = UUID().uuidString.prefix(8).lowercased()
+        cachedSeq = 0
     }
 
     private func resolvedJournalId() -> String {
