@@ -2721,6 +2721,16 @@
         }
       }
     },
+    "Back to chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zu den Chats"
+          }
+        }
+      }
+    },
     "Back to password managers and the Keychain.": {
       "localizations": {
         "de": {
@@ -3817,6 +3827,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Übergeordneten Ordner wählen"
+          }
+        }
+      }
+    },
+    "Choose a project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt wählen"
           }
         }
       }
@@ -7021,6 +7041,16 @@
         }
       }
     },
+    "Fetching the board from Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Board wird bei Linear abgerufen."
+          }
+        }
+      }
+    },
     "File not found": {
       "localizations": {
         "de": {
@@ -9291,6 +9321,16 @@
         }
       }
     },
+    "Link the folder of %@ to a team in Settings › Tickets.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordne den Ordner von %@ in Einstellungen › Tickets einem Team zu."
+          }
+        }
+      }
+    },
     "List": {
       "localizations": {
         "de": {
@@ -9467,6 +9507,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Statistik wird geladen…"
+          }
+        }
+      }
+    },
+    "Loading tickets…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets werden geladen …"
           }
         }
       }
@@ -10991,6 +11041,16 @@
         }
       }
     },
+    "No Linear key for this workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Linear-Schlüssel für diesen Workspace"
+          }
+        }
+      }
+    },
     "No Linear key saved for this workspace.": {
       "localizations": {
         "de": {
@@ -12270,6 +12330,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Systemeinstellungen öffnen"
+          }
+        }
+      }
+    },
+    "Open Ticket Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket-Einstellungen öffnen"
           }
         }
       }
@@ -15544,6 +15614,16 @@
         }
       }
     },
+    "Save a key for linear.app/%@ in Settings › Tickets.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinterlege in Einstellungen › Tickets einen Schlüssel für linear.app/%@."
+          }
+        }
+      }
+    },
     "Saved": {
       "localizations": {
         "de": {
@@ -16570,6 +16650,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notiz dieser Kachel zeigen"
+          }
+        }
+      }
+    },
+    "Show tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets anzeigen"
           }
         }
       }
@@ -18374,16 +18464,6 @@
         }
       }
     },
-    "The Tickets view itself arrives with a later update. Access and projects set up here already work for the whisperm8 tickets command.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Ansicht „Tickets“ selbst kommt mit einem späteren Update. Zugang und Projekte, die du hier einrichtest, gelten schon jetzt für den Befehl whisperm8 tickets."
-          }
-        }
-      }
-    },
     "The account of this profile changed during the login. Nothing was changed.": {
       "localizations": {
         "de": {
@@ -19324,6 +19404,16 @@
         }
       }
     },
+    "This project is not linked to a team": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Projekt gehört zu keinem Team"
+          }
+        }
+      }
+    },
     "This quits the Codex process (PID %@) in the other terminal window, whatever it is working on right now. If it has moved on to another conversation there, that work is interrupted too.": {
       "localizations": {
         "de": {
@@ -19420,6 +19510,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tickets"
+          }
+        }
+      }
+    },
+    "Tickets are shown per project. Select a chat or a project in the sidebar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets werden je Projekt gezeigt. Wähle in der Seitenleiste einen Chat oder ein Projekt."
+          }
+        }
+      }
+    },
+    "Tickets are turned off": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets sind ausgeschaltet"
+          }
+        }
+      }
+    },
+    "Tickets could not be loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Tickets ließen sich nicht laden"
+          }
+        }
+      }
+    },
+    "Tickets · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets · %@"
           }
         }
       }
@@ -19664,6 +19794,16 @@
         }
       }
     },
+    "Try Again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        }
+      }
+    },
     "Try a Mode Without Recording": {
       "localizations": {
         "de": {
@@ -19740,6 +19880,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Statistik einschalten?"
+          }
+        }
+      }
+    },
+    "Turn on “Show tickets in Agent Chats” in Settings › Tickets. Until then WhisperM8 reads nothing from Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte in Einstellungen › Tickets „Tickets in Agent Chats anzeigen“ ein. Bis dahin liest WhisperM8 nichts aus Linear."
           }
         }
       }
@@ -20810,6 +20960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ist ein anderes Programm vorne, holt ein Stick oder eine Taste das Agent-Chats-Fenster nach vorn. Diese erste Eingabe bewirkt sonst nichts. %@ wirkt weiter im anderen Programm. Braucht den Schalter darüber."
+          }
+        }
+      }
+    },
+    "While the switch is on, a ticket button sits in the title band of the Agent Chats window, next to the sidebar button. It switches between chats and tickets.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solange der Schalter an ist, steht in der Titelzone des Agent-Chats-Fensters ein Ticket-Knopf, neben dem Knopf für die Seitenleiste. Er wechselt zwischen Chats und Tickets."
           }
         }
       }

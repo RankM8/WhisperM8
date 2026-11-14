@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import Observation
 
@@ -79,10 +80,12 @@ final class TicketBoardViewModel {
     }
 
     private(set) var presentation: TicketBoardPresentation = .empty
-    /// Das gewählte Ticket und seine zerlegte Beschreibung. Gerechnet beim
-    /// Wählen und bei einem neuen Abzug, nicht beim Zeichnen.
-    private(set) var selected: TicketBoardEntry?
-    private(set) var selectedDescription: [TicketDescriptionBlock] = []
+    /// Alles, was das Detail zum gewählten Ticket zeigt. Gerechnet beim Wählen
+    /// und bei einem neuen Abzug, nicht beim Zeichnen.
+    private(set) var detail: TicketDetailContent?
+
+    var selected: TicketBoardEntry? { detail?.entry }
+    var selectedDescription: [TicketDescriptionBlock] { detail?.description ?? [] }
     @ObservationIgnored private var model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
     /// Wie oft der Inhalt neu gerechnet wurde (für Tests).
     @ObservationIgnored private(set) var rebuilds = 0
@@ -135,32 +138,71 @@ final class TicketBoardViewModel {
     }
 
     private func refreshSelection() {
-        let entry = presentation.entry(key: selectedKey)
-        // Die Beschreibung nur neu zerlegen, wenn sich ihr Text geändert hat.
-        if entry?.ticket.description != selected?.ticket.description {
-            selectedDescription = entry.map { TicketDescriptionBlocks.make($0.ticket.description) } ?? []
+        guard let entry = presentation.entry(key: selectedKey) else {
+            if detail != nil { detail = nil }
+            return
         }
-        if entry != selected { selected = entry }
+        guard entry != detail?.entry else { return }
+        // Die Beschreibung nur neu zerlegen, wenn sich ihr Text geändert hat.
+        let description = entry.ticket.description == detail?.entry.ticket.description
+            ? detail?.description ?? [] : TicketDescriptionBlocks.make(entry.ticket.description)
+        detail = TicketDetailContent.make(entry, description: description)
+    }
+}
+
+// MARK: - Inhalt des Details
+
+/// Was das Detail zeigt, fertig abgeleitet: die Zeilen der Chats mit ihrer
+/// Zeitangabe, der Chat für „Zum Chat“ und die geprüfte Adresse.
+struct TicketDetailContent: Equatable {
+    struct AgentLine: Equatable, Identifiable {
+        var id: String
+        /// Eintrag mit genau diesem Chat, für die gemeinsame Zeile.
+        var entry: TicketBoardEntry
+        var since: Date?
+    }
+
+    var entry: TicketBoardEntry
+    var description: [TicketDescriptionBlock]
+    var agents: [AgentLine]
+    /// Der erste Chat, der auf diesem Rechner läuft.
+    var localChatID: UUID?
+    /// Adresse im Ticket-Werkzeug; nur `https`.
+    var url: URL?
+
+    static func make(_ entry: TicketBoardEntry, description: [TicketDescriptionBlock]) -> TicketDetailContent {
+        let url = entry.ticket.url.flatMap(URL.init(string:)).flatMap { $0.scheme?.lowercased() == "https" && $0.host != nil ? $0 : nil }
+        return TicketDetailContent(
+            entry: entry, description: description,
+            agents: entry.agents.map { AgentLine(id: $0.link.id, entry: TicketBoardEntry(ticket: entry.ticket, agents: [$0]), since: $0.link.since) },
+            localChatID: entry.agents.lazy.compactMap(\.chat).first?.id,
+            url: url)
     }
 }
 
 // MARK: - Live-Zustand der Chats
 
-/// Zustand der Chats für die Status-Punkte. Nur die Punkte lesen hier; ein
-/// Statuswechsel baut deshalb weder Karten noch Board neu auf.
-@MainActor
-@Observable
-final class TicketChatStatusSource {
-    private(set) var states: [UUID: TicketChatState]
+/// Woher die Status-Punkte den Zustand eines Chats bekommen. Jeder Punkt hört
+/// nur auf seinen Chat: Ein Statuswechsel zeichnet genau einen Punkt neu,
+/// keine Karte und kein Board. In der App ist das der Laufzeit-Speicher der
+/// Chats (`AgentSessionRuntimeStatusStore`), nicht der Aktivitäts-Speicher der
+/// Seitenleiste.
+struct TicketChatStatusSource {
+    /// Zustand jetzt, für das erste Zeichnen.
+    var current: @MainActor (UUID) -> AgentSessionRuntimeStatus?
+    /// Änderungen dieses einen Chats.
+    var changes: @MainActor (UUID) -> AnyPublisher<AgentSessionRuntimeStatus?, Never>
 
-    init(states: [UUID: TicketChatState] = [:]) {
-        self.states = states
-    }
+    @MainActor static let live = TicketChatStatusSource(
+        current: { AgentSessionStatusCoordinator.shared.statusStore.status(for: $0) },
+        changes: { AgentSessionStatusCoordinator.shared.statusStore.statusPublisher(for: $0) }
+    )
 
-    /// Schreibt nur bei echter Änderung: Jedes Schreiben lässt alle sichtbaren
-    /// Punkte neu zeichnen.
-    func set(_ fresh: [UUID: TicketChatState]) {
-        if fresh != states { states = fresh }
+    /// Feste Zustände für Snapshots und Tests.
+    static func fixed(_ states: [UUID: TicketChatState]) -> TicketChatStatusSource {
+        TicketChatStatusSource(
+            current: { states[$0]?.runtimeStatus },
+            changes: { _ in Empty().eraseToAnyPublisher() })
     }
 }
 

@@ -14,6 +14,11 @@ enum TicketBoardText {
         }
     }
 
+    /// „seit 14. Nov., 04:21“ für die Zeile unter dem Chat.
+    static func since(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .shortened)
+    }
+
     static func priority(_ priority: Int) -> String {
         switch priority {
         case 1: return String(localized: "Urgent")
@@ -91,11 +96,19 @@ enum TicketBoardText {
 struct TicketChatStatusDot: View {
     let chatID: UUID
     let source: TicketChatStatusSource
+    @State private var status: AgentSessionRuntimeStatus?
+
+    init(chatID: UUID, source: TicketChatStatusSource) {
+        self.chatID = chatID
+        self.source = source
+        _status = State(initialValue: source.current(chatID))
+    }
 
     var body: some View {
         // Kompakt wie in den Tabs: Eine Wand pulsierender Punkte wäre unruhig.
-        AgentStatusIndicator(status: source.states[chatID]?.runtimeStatus, compact: true)
+        AgentStatusIndicator(status: status, compact: true)
             .frame(width: 10, height: 10)
+            .onReceive(source.changes(chatID)) { status = $0 }
     }
 }
 
@@ -103,11 +116,19 @@ struct TicketChatStatusDot: View {
 struct TicketChatStateLabel: View {
     let chatID: UUID
     let source: TicketChatStatusSource
+    @State private var status: AgentSessionRuntimeStatus?
+
+    init(chatID: UUID, source: TicketChatStatusSource) {
+        self.chatID = chatID
+        self.source = source
+        _status = State(initialValue: source.current(chatID))
+    }
 
     var body: some View {
-        Text(verbatim: TicketBoardText.state(source.states[chatID]))
+        Text(verbatim: TicketBoardText.state(TicketChatState(status)))
             .font(.system(size: 11))
             .foregroundStyle(AgentTheme.textSecondary)
+            .onReceive(source.changes(chatID)) { status = $0 }
     }
 }
 

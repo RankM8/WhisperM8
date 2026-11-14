@@ -53,6 +53,10 @@ struct TicketChatLink: Equatable, Identifiable {
     var subtitle: String
     /// Wer die Verknüpfung angelegt hat (bei mehreren Installationen: wessen Chat).
     var creatorName: String?
+    /// Seit wann der Chat am Ticket sitzt bzw. wann er aufgehört hat (aus den
+    /// Metadaten des Anhangs). Die Oberfläche formatiert selbst; der Untertitel
+    /// ist Text für Linear.
+    var since: Date?
 }
 
 struct Ticket: Equatable, Identifiable {
