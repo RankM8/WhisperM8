@@ -353,8 +353,17 @@ struct ClaudeAccountProfiles {
     /// `sha256(<config-dir-pfad>)` an — empirisch verifiziert (v2.1.207,
     /// 2026-07-12) gegen zwei unabhaengige Profile.
     func keychainService(forProfile name: String) -> String {
-        guard name != Self.mainProfileName else { return "Claude Code-credentials" }
+        guard name != Self.mainProfileName else { return Self.mainKeychainService(testRoot: AppInstance.testRoot) }
         return Self.keychainService(forConfigDirPath: configDir(forProfile: name).path)
+    }
+
+    /// `main` der Test-Instanz liegt unter einem eigenen Dienst, denn ihre
+    /// Chats bekommen `CLAUDE_SECURESTORAGE_CONFIG_DIR` (`AppInstance`). So
+    /// lesen und schreiben auch die App-Wege (Ablauf, Kontingent, Erneuerung,
+    /// „Zum Hauptkonto machen“) in der Test-Instanz nie den echten Login.
+    static func mainKeychainService(testRoot: URL?) -> String {
+        guard let testRoot else { return "Claude Code-credentials" }
+        return keychainService(forConfigDirPath: AppInstance.testClaudeConfigDirectory(testRoot: testRoot).path)
     }
 
     /// Service-Name für ein beliebiges `CLAUDE_CONFIG_DIR`. Claude hasht den

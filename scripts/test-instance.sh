@@ -113,11 +113,42 @@ cmd_cli() {
     env -u WHISPERM8_SESSION_ID -u WHISPERM8_SESSION_TOKEN WHISPERM8_INSTANCE_ROOT="$ROOT" "$BIN" "$@"
 }
 
+# Login-Fach der Test-Instanz im Schlüsselbund (WM8-63): Die App gibt ihren
+# Chats CLAUDE_SECURESTORAGE_CONFIG_DIR=<wurzel>/home/.claude mit, Claude hängt
+# dann -<sha256(pfad)[:8]> an den Dienstnamen. Gleiche Normalisierung wie die
+# App (standardizedFileURL: ohne Schrägstrich am Ende und ohne ./..).
+claude_login_service() {
+    local dir
+    dir=$(/usr/bin/python3 -I -c 'import os, sys; print(os.path.normpath(sys.argv[1]))' "$ROOT/home/.claude")
+    printf 'Claude Code-credentials-%s' "$(printf '%s' "$dir" | shasum -a 256 | cut -c1-8)"
+}
+
+claude_login_account() {
+    local account="${USER:-$(id -un)}"
+    case "$account" in *[!a-zA-Z0-9._-]*|"") account="claude-code-user" ;; esac
+    printf '%s' "$account"
+}
+
 cmd_status() {
     echo "Bundle:  $APP"
     echo "Wurzel:  $ROOT"
     echo "PID:     $(pids | tr '\n' ' ')"
-    cat "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null | sed 's/^/Socket:  /' || true
+    { cat "$ROOT/home/Library/Application Support/WhisperM8/control/socket-path" 2>/dev/null; echo; } \
+        | sed '/^$/d; s/^/Socket:  /' || true
+    local service login="nein"
+    service=$(claude_login_service)
+    security find-generic-password -s "$service" -a "$(claude_login_account)" >/dev/null 2>&1 && login="ja"
+    echo "Claude:  eigenes Login-Fach \"$service\", angemeldet: $login"
+    # Kennt das installierte Claude die Trennvariable nicht mehr, landete ein
+    # Login wieder im Eintrag des echten Hauptkontos.
+    local binary
+    binary=$(/usr/bin/python3 -I -c 'import os, shutil, sys; p = shutil.which("claude", path=sys.argv[1]); print(os.path.realpath(p) if p else "")' \
+        "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH")
+    if [[ -n "$binary" ]] && LC_ALL=C grep -q -a 'CLAUDE_SECURESTORAGE_CONFIG_DIR' "$binary"; then
+        echo "         Claude kennt CLAUDE_SECURESTORAGE_CONFIG_DIR: ja"
+    else
+        echo "         ACHTUNG: Claude (${binary:-nicht gefunden}) kennt CLAUDE_SECURESTORAGE_CONFIG_DIR nicht; in der Test-Instanz NICHT anmelden"
+    fi
 }
 
 cmd_reset() {
@@ -125,6 +156,13 @@ cmd_reset() {
     rm -rf "$ROOT"
     defaults delete "$BUNDLE_ID" >/dev/null 2>&1 || true
     while security delete-generic-password -s "$BUNDLE_ID" >/dev/null 2>&1; do :; done
+    # Claude-Login der Test-Instanz: genau der berechnete Dienst, nie per Muster
+    # und nie der blanke Name des echten Hauptkontos.
+    local service
+    service=$(claude_login_service)
+    if [[ "$service" =~ ^Claude\ Code-credentials-[0-9a-f]{8}$ ]]; then
+        while security delete-generic-password -s "$service" -a "$(claude_login_account)" >/dev/null 2>&1; do :; done
+    fi
     echo "zurückgesetzt"
 }
 

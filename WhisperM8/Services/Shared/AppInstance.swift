@@ -61,12 +61,37 @@ enum AppInstance {
     /// zeigt `HOME` auf das Test-Home, damit `claude`/`codex` deren Konfiguration
     /// dort anlegen, und die Wurzel wird weitergereicht, damit `whisperm8` in einem
     /// Test-Chat die Test-Instanz anspricht.
+    ///
+    /// Dazu `CLAUDE_SECURESTORAGE_CONFIG_DIR`: Claude legt seinen Login im
+    /// Schlüsselbund unter `Claude Code-credentials` ab und hängt nur dann
+    /// `-<sha256(ordner)[:8]>` an, wenn `CLAUDE_CONFIG_DIR` oder diese Variable
+    /// gesetzt ist (Claude Code 2.1.325, `N3()`). Ein anderes `HOME` allein
+    /// trennt nichts: Ein Login in der Test-Instanz landete sonst im Eintrag
+    /// des echten Hauptkontos (Befund 14.11.2026, WM8-63). Die Variable trennt
+    /// nur den Schlüsselbund; Claudes Konfigurationsordner bleibt `$HOME/.claude`.
     static var childEnvironmentOverrides: [String: String] {
+        childEnvironmentOverrides(testRoot: testRoot)
+    }
+
+    static let claudeSecureStorageKey = "CLAUDE_SECURESTORAGE_CONFIG_DIR"
+
+    static func childEnvironmentOverrides(testRoot: URL?) -> [String: String] {
         guard let testRoot else { return [:] }
         return [
-            "HOME": home.path,
+            "HOME": testHome(testRoot: testRoot).path,
             rootEnvironmentKey: testRoot.path,
+            claudeSecureStorageKey: testClaudeConfigDirectory(testRoot: testRoot).path,
         ]
+    }
+
+    static func testHome(testRoot: URL) -> URL {
+        testRoot.appendingPathComponent("home", isDirectory: true)
+    }
+
+    /// `$HOME/.claude` der Test-Instanz; daraus rechnet Claude den Dienstnamen
+    /// ihres Logins (`Claude Code-credentials-<sha256(pfad)[:8]>`).
+    static func testClaudeConfigDirectory(testRoot: URL) -> URL {
+        testHome(testRoot: testRoot).appendingPathComponent(".claude", isDirectory: true)
     }
 
     static func resolveTestRoot(_ environment: [String: String]) -> URL? {

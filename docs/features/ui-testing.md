@@ -162,9 +162,9 @@ scripts/test-instance.sh stop | reset | status | log
 |---|---|
 | Bundle-ID / Defaults | `com.whisperm8.app.test` (frische Domain, Debug-Kanal an, GPT-Ports 28765/28766) |
 | Home (`~/.claude`, `~/.codex`, Profile, Logs, Application Support) | `<wurzel>/home` — `AppInstance.home`/`.applicationSupport` |
-| Kindprozesse (Chats) | `HOME=<wurzel>/home` → `claude`/`codex` starten wie beim ersten Mal, ohne Login |
+| Kindprozesse (Chats) | `HOME=<wurzel>/home` → `claude`/`codex` starten wie beim ersten Mal, ohne Login; dazu `CLAUDE_SECURESTORAGE_CONFIG_DIR=<wurzel>/home/.claude` (eigenes Login-Fach, siehe unten) |
 | Control-Socket | unter dem Test-Home, Rückfall `/private/tmp/whisperm8-<uid>-test-<hash>/` |
-| Keychain | Dienst `com.whisperm8.app.test` (kein Zugriffsdialog auf Produktiv-Schlüssel) |
+| Keychain | Dienst `com.whisperm8.app.test` (kein Zugriffsdialog auf Produktiv-Schlüssel); Claude-Login unter `Claude Code-credentials-<sha256(<wurzel>/home/.claude)[:8]>` |
 | Hotkeys, Dock, Fokus | keine globalen Hotkeys, kein Dock-Icon, nie aktiv (`AppActivation`), Fenster hinter dem Schreibtisch (`TestInstanceWindowParking`) |
 | Proxy-Waisensuche, Distributed Notification | aus bzw. mit eigenem Namen |
 
@@ -174,7 +174,34 @@ sichtbar machen: `WHISPERM8_TEST_VISIBLE=1 scripts/test-instance.sh start`.
 
 **Grenzen:** Mikrofon und Bedienungshilfen hat das Test-Bundle nicht (eigener
 TCC-Eintrag) — Diktat nur über `debug dictate <audio>`. Claude im Test-Home ist
-nicht angemeldet; echte Modell-Turns gehen dort nicht.
+zunächst nicht angemeldet; echte Modell-Turns gehen erst nach einer eigenen
+Anmeldung (unten).
+
+**Eigene Claude-Anmeldung (seit 14.11.2026, WM8-63):** Claude legt seinen Login
+im Schlüsselbund unter `Claude Code-credentials` ab. Ein Suffix
+`-<sha256(ordner)[:8]>` hängt es nur an, wenn `CLAUDE_CONFIG_DIR` oder
+`CLAUDE_SECURESTORAGE_CONFIG_DIR` gesetzt ist (Claude Code 2.1.325). Ein anderes
+`HOME` allein trennt nichts: Ein Login in der Test-Instanz landete sonst im
+Eintrag des echten Hauptkontos. Deshalb setzt `AppInstance.childEnvironmentOverrides`
+für die Chats der Test-Instanz `CLAUDE_SECURESTORAGE_CONFIG_DIR=<wurzel>/home/.claude`.
+Diese Variable trennt nur den Schlüsselbund, Claudes Konfigurationsordner bleibt
+`$HOME/.claude`. Auch die App rechnet in der Test-Instanz für `main` diesen Dienst
+(`ClaudeAccountProfiles.mainKeychainService`), damit Ablauf-Anzeige, Kontingent,
+Login-Erneuerung und „Zum Hauptkonto machen“ dort nie den echten Login lesen oder
+schreiben. `LoginShellEnvironment` entfernt eine geerbte Variable wie
+`CLAUDE_CONFIG_DIR`.
+
+- `scripts/test-instance.sh status` nennt das Login-Fach und ob dort ein Login liegt.
+- `reset` löscht genau diesen berechneten Eintrag (Konto `$USER`), nie per Muster
+  und nie den blanken Namen.
+- `restart`, `stop` und `start` lassen das Test-Home und den Login stehen.
+- Anmelden: Test-Instanz sichtbar starten (`WHISPERM8_TEST_VISIBLE=1 … start`), in
+  einem Test-Chat `/login`. Der Browser kennt nur eine claude.ai-Sitzung, der Login
+  gehört also dem dort aktiven Konto. Ein frischer Login ist keine Kopie; die
+  Regel „verschieben, nie kopieren“ ist nicht berührt.
+- Kennt eine künftige Claude-Version die Variable nicht mehr, fiele der Login
+  wieder auf den blanken Namen. `status` prüft deshalb das installierte Claude auf
+  die Variable und warnt sonst ausdrücklich: dann nicht anmelden.
 
 ### Übergang der vereinten Pille prüfen (`debug pill`)
 

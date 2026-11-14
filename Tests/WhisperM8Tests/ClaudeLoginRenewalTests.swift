@@ -878,3 +878,24 @@ final class ClaudeLoginRenewalSessionTests: XCTestCase {
         XCTAssertEqual(single.map(\.isSelected), [false, true])
     }
 }
+
+
+/// WM8-63: `main` der Test-Instanz hat ein eigenes Login-Fach; im Normalbetrieb
+/// bleibt der blanke Name des Hauptkontos.
+final class TestInstanceKeychainServiceTests: XCTestCase {
+    func testMainServiceIsUnchangedOutsideTheTestInstance() {
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: nil), "Claude Code-credentials")
+        XCTAssertEqual(ClaudeAccountProfiles().keychainService(forProfile: ClaudeAccountProfiles.mainProfileName),
+                       "Claude Code-credentials", "swift test läuft als Produktiv-Instanz")
+    }
+
+    /// Gleicher Wert wie `claude auth status` mit CLAUDE_SECURESTORAGE_CONFIG_DIR
+    /// und wie `scripts/test-instance.sh status` (nachgerechnet 14.11.2026).
+    func testMainServiceOfTheTestInstanceFollowsItsClaudeFolder() {
+        let root = URL(fileURLWithPath: "/Users/giulianocosta/.whisperm8-test-instance", isDirectory: true)
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: root), "Claude Code-credentials-38a46618")
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: root),
+                       ClaudeAccountProfiles.keychainService(forConfigDirPath: AppInstance.childEnvironmentOverrides(
+                           testRoot: root)[AppInstance.claudeSecureStorageKey]!))
+    }
+}

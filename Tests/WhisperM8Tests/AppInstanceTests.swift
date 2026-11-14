@@ -23,6 +23,18 @@ final class AppInstanceTests: XCTestCase {
         XCTAssertEqual(AppInstance.defaultsDomain, "com.whisperm8.app")
     }
 
+    /// WM8-63: Die Chats der Test-Instanz bekommen ein eigenes Login-Fach im
+    /// Schlüsselbund; HOME allein trennt Claudes Login nicht.
+    func testTestChatsGetTheirOwnClaudeKeychainFolder() {
+        let root = URL(fileURLWithPath: "/Users/x/.whisperm8-test-instance", isDirectory: true)
+        let overrides = AppInstance.childEnvironmentOverrides(testRoot: root)
+        XCTAssertEqual(overrides["HOME"], "/Users/x/.whisperm8-test-instance/home")
+        XCTAssertEqual(overrides[AppInstance.claudeSecureStorageKey], "/Users/x/.whisperm8-test-instance/home/.claude")
+        XCTAssertEqual(overrides[AppInstance.rootEnvironmentKey], "/Users/x/.whisperm8-test-instance")
+        XCTAssertNil(overrides["CLAUDE_CONFIG_DIR"], "Claudes Konfigurationsordner bleibt $HOME/.claude")
+        XCTAssertTrue(AppInstance.childEnvironmentOverrides(testRoot: nil).isEmpty, "Normalbetrieb unverändert")
+    }
+
     func testStableHashIsDeterministic() {
         XCTAssertEqual(AppInstance.stableHash("/Users/x/.whisperm8-test-instance"),
                        AppInstance.stableHash("/Users/x/.whisperm8-test-instance"))
