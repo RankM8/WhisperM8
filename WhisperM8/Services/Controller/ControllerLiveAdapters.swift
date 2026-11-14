@@ -186,7 +186,7 @@ final class LiveControllerEnvironment: ControllerAppEnvironment {
     }
 
     func bringAgentChatsToFront() {
-        WindowRequestCenter.shared.request(.agentChats)
+        ControllerWakeFocus.live.bringToFront()
     }
 
     func postBridgeKey(_ key: ControllerBridgeKey) {
