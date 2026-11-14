@@ -796,7 +796,9 @@ enum TicketsCLIRunner {
     /// meist ein fremdes Team gleichen Namens. Umhängen ließe jeden Ordner des
     /// Teams dorthin schreiben; deshalb stehen beide Wege da, mit der Folge.
     static func missingTeamAdvice(_ team: String, workspace: String, elsewhere: [String], folders: [String]) -> String {
-        let remove = "whisperm8 tickets setup --remove-team \(team)" + (folders.isEmpty ? "" : " --with-projects")
+        // Ohne --with-projects, auch wenn ein Ordner am Team hängt: Wer die Zeile kopiert, sieht
+        // so erst den Abbruch mit den Folgen für den Ordner und entscheidet dann.
+        let remove = "whisperm8 tickets setup --remove-team \(team)" + (folders.isEmpty ? "" : " (nennt erst die Folgen für den Ordner)")
         let attached = folders.joined(separator: ", ")
         if let other = elsewhere.first {
             let effect = folders.isEmpty ? "" : " (dann \(folders.count == 1 ? "schreibt" : "schreiben") auch \(attached) nach „\(other)“)"

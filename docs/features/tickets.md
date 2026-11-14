@@ -160,7 +160,7 @@ Wird ein Team in Linear gelöscht oder bekommt es ein neues Kürzel, steht das a
 | Lage | Was `doctor` vorschlägt |
 |---|---|
 | Team nicht mehr zu sehen, kein Ordner hängt daran | `whisperm8 tickets setup --remove-team <Kürzel>` |
-| Team nicht mehr zu sehen, ein Ordner hängt daran | erst den Ordner dem neuen Kürzel geben (`setup --team <Kürzel> --project <Ordner>`), dann `--remove-team`; oder beides lösen mit `--remove-team <Kürzel> --with-projects` |
+| Team nicht mehr zu sehen, ein Ordner hängt daran | erst den Ordner dem neuen Kürzel geben (`setup --team <Kürzel> --project <Ordner>`), dann `--remove-team <Kürzel>`. Der Bericht nennt `--with-projects` absichtlich nicht: `--remove-team` allein bricht ab und zeigt erst die Folgen für den Ordner |
 | das Kürzel gibt es in einem anderen eingerichteten Workspace | beide Wege: umhängen mit `setup --team <Kürzel> --workspace <anderer> --reassign`, wenn es dasselbe Team ist, sonst `--remove-team`. Hängt ein Ordner daran, steht dabei, dass er nach dem Umhängen in den anderen Workspace schreibt |
 
 „Nicht mehr zu sehen“ heißt: Der Key des Workspaces findet das Kürzel nicht. Das Team wurde gelöscht oder

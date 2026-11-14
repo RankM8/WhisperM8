@@ -1131,7 +1131,8 @@ final class TicketsCLITests: XCTestCase {
         XCTAssertEqual(broken.exitCode, TicketsCLIExit.unavailable)
         let line = try XCTUnwrap(broken.stdout.split(separator: "\n").first { $0.contains("Team PRB") })
         XCTAssertTrue(line.contains("Daran hängt noch /Users/g/repos/probe"), String(line))
-        XCTAssertTrue(line.contains("whisperm8 tickets setup --remove-team PRB --with-projects"), String(line))
+        XCTAssertTrue(line.contains("whisperm8 tickets setup --remove-team PRB (nennt erst die Folgen für den Ordner)"), String(line))
+        XCTAssertFalse(line.contains("--with-projects"), "wer die Zeile kopiert, sieht erst den Abbruch mit den Folgen: \(line)")
         XCTAssertTrue(line.contains("bei neuem Kürzel vorher: whisperm8 tickets setup --team <Kürzel> --project <Ordner>"), String(line))
 
         // Der Ordner bekommt das neue Kürzel, danach geht das alte ohne --with-projects.
@@ -1172,9 +1173,14 @@ final class TicketsCLITests: XCTestCase {
         let broken = try await run(["doctor"], world)
         let line = try XCTUnwrap(broken.stdout.components(separatedBy: "\n").first { $0.hasPrefix("FEHLER Team PRB") })
         XCTAssertTrue(line.contains("--reassign (dann schreibt auch /Users/g/repos/probe nach „whisperm8“)"), line)
-        XCTAssertTrue(line.contains("Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PRB --with-projects"), line)
+        XCTAssertTrue(line.contains("Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PRB (nennt erst"), line)
+        XCTAssertFalse(line.contains("--with-projects"), line)
 
-        // Der zweite Weg löst den Ordner, statt ihn in die andere Firma schreiben zu lassen.
+        // Der genannte Befehl bricht erst ab und nennt die Folgen; --with-projects löst dann den Ordner,
+        // statt ihn in die andere Firma schreiben zu lassen.
+        let refused = try await run(["setup", "--remove-team", "PRB"], world)
+        XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(refused.stderr.contains("/Users/g/repos/probe hat kein Team mehr."), refused.stderr)
         let removed = try await run(["setup", "--remove-team", "PRB", "--with-projects"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         XCTAssertNil(world.config.workspace(forDirectory: "/Users/g/repos/probe"))
