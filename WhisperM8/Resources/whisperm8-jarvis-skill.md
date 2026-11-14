@@ -204,6 +204,11 @@ statt der Regel „nur was den User jetzt braucht":
   letzten Slot.
 - Die Zahl der Slots je Workspace legt der User fest. Passt ein Chat nicht
   mehr hinein, sagst du es, statt still einen dritten Workspace anzulegen.
+- **Ein wartender Workspace, in dem nur noch gestoppte Chats liegen, wird
+  gelöscht** (`workspace delete`; außer dir läuft dort niemand mehr). Die
+  Chats und ihre Tabs bleiben, und der Workspace ist in einem Befehl wieder
+  angelegt, sobald ein laufender Chat warten muss. Den aktiven Workspace
+  löschst du nicht von dir aus.
 - Nach dem Umbau `workspace open` auf den aktiven, damit der User dort
   landet, wo gearbeitet wird.
 
