@@ -31,12 +31,18 @@ Hilfe: `whisperm8 tickets --help`.
 - **Abgeben heißt zusammenfassen.** `done` verlangt `--built`: ein, zwei Sätze, was gebaut wurde, so dass es
   jemand ohne den Chat-Verlauf versteht. Dazu nach Bedarf `--commit`, `--not` (was bewusst nicht dazugehört),
   `--test` je Schritt für den Handtest (mehrfach; sie stehen dann als Kästchen am Ticket) und `--image bild.png`.
+  Ein hochgeladenes Bild sieht jeder im Workspace: keine Bildschirmfotos mit Schlüsseln, Kundendaten oder
+  fremden Chats.
   Der Abschluss steht als Kommentar am Ticket. Arbeit ohne Bau (Analyse, Entscheidung): `--no-summary`.
-- **Entscheidungen** hält `decide` fest, in festem Aufbau: Frage, Möglichkeiten (mindestens zwei), Gewählt, wer,
-  wann. Nur, was der Nutzer wirklich entschieden hat, und in seinen Worten; eine eigene Empfehlung ist keine
-  Entscheidung. Hat jemand anderes entschieden als der, dem der Zugang gehört: `--by "Name"`.
+- **Entscheidungen** hält `decide` fest, in festem Aufbau: Frage, Möglichkeiten (mindestens zwei), Gewählt, wer
+  entschieden hat, wer sie festgehalten hat, wann. Festgehalten wird nur, was der Nutzer wirklich entschieden
+  hat, mit seinen Möglichkeiten und in seinen Worten; eine eigene Empfehlung ist keine Entscheidung. `--by` ist
+  aus einem Chat Pflicht: der Name dessen, der entschieden hat. War es deine eigene Entscheidung (etwa eine
+  technische Wahl im Rahmen des Auftrags), steht dort dein Rufname, nicht der des Nutzers. Dein Rufname steht
+  ohnehin als „Festgehalten von“ dabei.
 - **Kästchen** hakst du ab, sobald ein Punkt wirklich erledigt und geprüft ist, nicht „so gut wie“. Der Befehl
-  ändert nur die genannten Kästchen.
+  ändert nur die genannten Kästchen und arbeitet nur auf der Beschreibung: Die Handtest-Kästchen im
+  Abschluss-Kommentar erreicht er nicht, die hakt ab, wer testet.
 - Text-Argumente nehmen Text, `-` für stdin oder `@datei`. Beginnt der Text selbst mit `-` oder `@`, gehört er
   hinter `--`: `whisperm8 tickets comment ABC-12 -- "@alle bitte prüfen"`. Tickets sind Markdown.
 - **Was du schreibst, geht an das Ticket-System und ist für alle dort lesbar.** Keine Schlüssel, Tokens oder

@@ -254,15 +254,24 @@ enum TicketsCLIRunner {
         case .decide(let key, let options):
             let source = try access.source(forKey: key)
             let context = try await source.ticket(key: key)
+            // Wer festhält, steht immer dabei, getrennt von dem, der entschieden hat.
+            let recorder = env.callerChatID().flatMap { id in env.chats().chats.first { $0.id == id } }
             let by: String
             if let named = options.by?.trimmingCharacters(in: .whitespaces), !named.isEmpty {
                 by = named
+            } else if recorder != nil {
+                // Ein Chat schreibt nicht ungefragt im Namen dessen, dem der Zugang gehört.
+                throw Failure(exitCode: TicketsCLIExit.usage, message: """
+                Aus einem Chat braucht `decide` --by: wer entschieden hat. Der Name wird nicht aus dem Zugang geraten.
+                Hat der Nutzer entschieden: --by "<sein Name>". War es deine eigene Entscheidung: dein Rufname.
+                """)
             } else {
                 by = try await source.person(matching: "me").name
             }
             let body = TicketRecordText.decision(
                 TicketRecordText.Decision(question: options.question, options: options.options.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
-                                          chosen: options.chosen, by: by, note: options.note),
+                                          chosen: options.chosen, by: by, recordedBy: recorder?.shortName ?? "im Terminal",
+                                          note: options.note),
                 at: env.now())
             guard body.utf8.count <= TicketsText.maxBytes else {
                 throw Failure(exitCode: TicketsCLIExit.usage, message: "Text zu lang (mehr als \(TicketsText.maxBytes / 1024) KB). Nichts gesendet.")
@@ -568,11 +577,11 @@ enum TicketsCLIRunner {
                 lines.append("\(TicketConfig.normalized(path)) gehört zum Team \(team) im Workspace „\(target)“.")
                 if let areas {
                     let root = TicketConfig.normalized(path)
-                    let file = (root as NSString).appendingPathComponent(areas)
-                    guard let text = env.readFile(file), TicketAreasTable.parse(text) != nil else {
-                        throw Failure(exitCode: TicketsCLIExit.notFound, message: """
-                        In \(areas) steht keine Tabelle mit den Spalten Bereich, Ordner und Projekt. Nichts geändert.
-                        """)
+                    switch areasTable(in: (root as NSString).appendingPathComponent(areas), env) {
+                    case .success:
+                        break
+                    case .failure(let problem):
+                        throw Failure(exitCode: TicketsCLIExit.notFound, message: "\(areas): \(problem.text) Nichts geändert.")
                     }
                     config.areasFileByProjectPath[root] = areas
                     lines.append("Tabelle der Bereiche: \(areas)")
@@ -657,6 +666,23 @@ enum TicketsCLIRunner {
         }
     }
 
+    private struct AreasProblem: Error {
+        var text: String
+    }
+
+    /// Liest die Tabelle der Bereiche aus einer Doku-Datei. Die Datei darf groß
+    /// sein (Feature-Doku); gelesen wird bis zu einem Megabyte.
+    private static func areasTable(in path: String, _ env: TicketsCLIEnvironment) -> Result<[TicketArea], AreasProblem> {
+        guard env.fileExists(path) else { return .failure(AreasProblem(text: "Die Datei gibt es nicht.")) }
+        guard let data = env.readData(path, 1_048_576), let text = String(data: data, encoding: .utf8) else {
+            return .failure(AreasProblem(text: "Die Datei ist nicht lesbar oder größer als 1 MB."))
+        }
+        guard let areas = TicketAreasTable.parse(text) else {
+            return .failure(AreasProblem(text: "Darin steht keine Tabelle mit den Spalten Bereich, Ordner und Projekt."))
+        }
+        return .success(areas)
+    }
+
     /// Prüft die Tabelle Bereich, Ordner, Projekt aus der Doku des Projekts
     /// gegen das Ticket-Werkzeug und das Dateisystem.
     private static func areas(team: String, workspace: String, config: TicketConfig, _ env: TicketsCLIEnvironment) async -> [Check] {
@@ -664,9 +690,12 @@ enum TicketsCLIRunner {
         for root in config.projectPaths(forTeam: team) {
             guard let file = config.areasFileByProjectPath[root] else { continue }
             let name = "Bereiche \(team)"
-            guard let text = env.readFile((root as NSString).appendingPathComponent(file)),
-                  let areas = TicketAreasTable.parse(text) else {
-                checks.append(Check(name: name, ok: true, warning: true, detail: "Tabelle in \(file) nicht lesbar"))
+            let areas: [TicketArea]
+            switch areasTable(in: (root as NSString).appendingPathComponent(file), env) {
+            case .success(let found):
+                areas = found
+            case .failure(let problem):
+                checks.append(Check(name: name, ok: true, warning: true, detail: "\(file): \(problem.text)"))
                 continue
             }
             let projects: [String]

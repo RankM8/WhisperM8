@@ -99,18 +99,26 @@ Was sonst nur in einem Chat-Verlauf stünde, steht in festem Aufbau am Ticket. B
 gelesen und enthält keine Rohdaten aus dem Chat.
 
 - **Entscheidung** (`tickets decide`): ein Kommentar mit Überschrift „Entscheidung“ samt Datum und Uhrzeit,
-  dann Frage, Möglichkeiten, Gewählt und wer entschieden hat (ohne `--by` die Person, der der Zugang gehört).
-  Nur für Entscheidungen, die gefallen sind; mindestens zwei Möglichkeiten.
+  dann Frage, Möglichkeiten, Gewählt, „Entschieden von“ und „Festgehalten von“. Festgehalten wird nur, was der
+  Nutzer wirklich entschieden hat, mit seinen Möglichkeiten; mindestens zwei Möglichkeiten. Chats dürfen
+  festhalten (oft fällt eine Entscheidung direkt in einem Chat), aber aus einem Chat ist `--by` Pflicht und wird
+  nicht aus dem Zugang geraten; im Terminal steht ohne `--by` die Person, der der Zugang gehört. „Festgehalten
+  von“ nennt immer den Rufnamen des Chats oder „im Terminal“. Eigene Entscheidungen eines Chats tragen dessen
+  Namen unter „Entschieden von“. Sterne in den Feldern werden entschärft, damit kein Text wie ein zweites Feld
+  aussieht.
 - **Abschluss** (`tickets done`): Pflicht beim Abgeben. Ein Kommentar „Abschluss“ mit Zeit und Rufname des
   Chats: was gebaut wurde (`--built`), Commit, was bewusst nicht dazugehört (`--not`), Schritte für den Handtest
   als Kästchen (`--test`, mehrfach), auf Wunsch ein Bild (`--image`, nur png, jpg, gif, webp bis 5 MB; geprüft
-  wird auch der Anfang der Datei, nicht nur die Endung). Der Kommentar wird zuerst geschrieben; scheitert er,
+  wird auch der Anfang der Datei, nicht nur die Endung). Das Bild sieht jeder im Workspace. Der Kommentar wird zuerst geschrieben; scheitert er,
   ist am Ticket nichts umgestellt. Scheitert danach Verknüpfung oder Status, sagt die Meldung, dass der
   Abschluss schon steht und der Rest mit `--no-summary` nachgeholt wird. Für Arbeit ohne Bau (Analyse,
   Entscheidung) gibt es `--no-summary`; wer nach dem Merge auf einen „erledigt“-Status setzt, braucht keine.
 - **Kästchen** (`tickets check`): die Punkte unter „Fertig, wenn“ (auch „Done when“, „Acceptance criteria“).
   Abgehakt wird per Nummer oder mit einem Stück Text, das auf genau ein Kästchen passt; alle anderen Zeilen der
-  Beschreibung bleiben, wie sie sind. Hat ein Ticket keinen solchen Abschnitt, zählen alle Kästchen.
+  Beschreibung bleiben, wie sie sind. Hat ein Ticket keinen solchen Abschnitt, zählen alle Kästchen. Der Befehl
+  arbeitet nur auf der Beschreibung, nicht auf Kommentaren (die Handtest-Kästchen im Abschluss hakt ab, wer
+  testet). Codeblöcke mit ``` oder ~~~ zählen nicht mit; ein nur mit vier Leerzeichen eingerückter Block gilt
+  nicht als Code.
 - **Fortschritt:** Jedes Ticket trägt „erledigt von gesamt“ (`show`, `board`, in `--json` unter `criteria`).
   Die Ansicht in der App zeigt ihn später auf der Karte.
 

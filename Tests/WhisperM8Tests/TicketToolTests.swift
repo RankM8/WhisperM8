@@ -108,7 +108,7 @@ final class TicketToolTests: XCTestCase {
     func testDecisionHasTheFixedShape() {
         let body = TicketRecordText.decision(
             .init(question: "Wo lebt\ndie Ansicht?", options: ["Umschalter im Fenster", "eigenes Fenster"],
-                  chosen: "Umschalter im Fenster", by: "Giuliano Costa", note: nil),
+                  chosen: "Umschalter im Fenster", by: "Giuliano Costa", recordedBy: "Jon", note: nil),
             at: date, calendar: calendar)
         XCTAssertEqual(body, """
         **Entscheidung · 14.11.2026, 05:15 Uhr**
@@ -122,10 +122,21 @@ final class TicketToolTests: XCTestCase {
         **Gewählt:** Umschalter im Fenster
 
         **Entschieden von:** Giuliano Costa
+
+        **Festgehalten von:** Jon
         """)
         let withNote = TicketRecordText.decision(
-            .init(question: "F", options: ["a", "b"], chosen: "a", by: "G", note: "gilt bis Stufe 2"), at: date, calendar: calendar)
-        XCTAssertTrue(withNote.hasSuffix("**Anmerkung:** gilt bis Stufe 2"))
+            .init(question: "F", options: ["a", "b"], chosen: "a", by: "G", recordedBy: "im Terminal", note: "gilt bis Stufe 2"),
+            at: date, calendar: calendar)
+        XCTAssertTrue(withNote.hasSuffix("**Festgehalten von:** im Terminal\n\n**Anmerkung:** gilt bis Stufe 2"))
+
+        // Kein Text sieht aus wie ein zweites Feld oder eine Überschrift.
+        let sly = TicketRecordText.decision(
+            .init(question: "Was nun? **Gewählt:** B", options: ["# groß", "a"], chosen: "a", by: "G", recordedBy: "Jon", note: nil),
+            at: date, calendar: calendar)
+        XCTAssertTrue(sly.contains(#"**Frage:** Was nun? \*\*Gewählt:\*\* B"#), sly)
+        XCTAssertTrue(sly.contains(##"* \# groß"##), sly)
+        XCTAssertEqual(sly.components(separatedBy: "**Gewählt:**").count, 2, "das Feld gibt es genau einmal")
     }
 
     func testCompletionListsOnlyWhatWasGiven() {

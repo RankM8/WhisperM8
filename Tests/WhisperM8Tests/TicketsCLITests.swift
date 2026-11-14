@@ -471,19 +471,29 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81)) }
         world.source.onPerson = { _ in self.giuliano }
-        let output = try await run(["decide", "WM8-81", "--question", "Wo lebt die Ansicht?", "--option", "Umschalter",
-                                    "--option", "eigenes Fenster", "--chosen", "Umschalter"], world)
+        let decision = ["decide", "WM8-81", "--question", "Wo lebt die Ansicht?", "--option", "Umschalter",
+                        "--option", "eigenes Fenster", "--chosen", "Umschalter"]
+
+        // Aus einem Chat: Wer entschieden hat, wird genannt, nicht aus dem Zugang geraten.
+        let guessed = try await run(decision, world)
+        XCTAssertEqual(guessed.exitCode, TicketsCLIExit.usage)
+        XCTAssertTrue(guessed.stderr.contains("--by"), guessed.stderr)
+        XCTAssertTrue(writes(world).isEmpty, "kein Chat schreibt ungefragt im Namen dessen, dem der Zugang gehört")
+
+        let output = try await run(decision + ["--by", "Giuliano Costa"], world)
         XCTAssertEqual(output.exitCode, 0, output.stderr)
         let comment = try XCTUnwrap(writes(world).first)
         XCTAssertTrue(comment.hasPrefix("comment id-81 **Entscheidung · "))
         XCTAssertTrue(comment.contains("**Frage:** Wo lebt die Ansicht?"))
         XCTAssertTrue(comment.contains("**Möglichkeiten:**\n* Umschalter\n* eigenes Fenster"))
         XCTAssertTrue(comment.contains("**Gewählt:** Umschalter"))
-        XCTAssertTrue(comment.hasSuffix("**Entschieden von:** Giuliano Costa"), "ohne --by die Person, der der Zugang gehört")
+        XCTAssertTrue(comment.hasSuffix("**Entschieden von:** Giuliano Costa\n\n**Festgehalten von:** 6 Jon"), comment)
 
-        let named = try await run(["decide", "WM8-81", "--question", "F", "--option", "a", "--option", "b", "--chosen", "a",
-                                   "--by", "Richard"], world)
-        XCTAssertTrue(named.stdout.contains("Richard"))
+        // Im Terminal: ohne --by die Person, der der Zugang gehört.
+        world.caller = nil
+        let terminal = try await run(decision, world)
+        XCTAssertEqual(terminal.exitCode, 0, terminal.stderr)
+        XCTAssertTrue(writes(world).last?.hasSuffix("**Entschieden von:** Giuliano Costa\n\n**Festgehalten von:** im Terminal") ?? false)
         for bad in [["decide", "WM8-81", "--question", "F", "--option", "a", "--chosen", "a"],
                     ["decide", "WM8-81", "--option", "a", "--option", "b", "--chosen", "a"],
                     ["decide", "WM8-81", "--question", "F", "--option", "a", "--option", "b"]] {
@@ -589,16 +599,21 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
         let table = "| Bereich | Ordner | Linear-Projekt |\n|---|---|---|\n| Diktat | `docs/features/dictation` | Diktat |\n| Tickets | `docs/features/tickets.md` | Tickets |"
-        world.files[project + "/docs/features/tickets.md"] = table
-        world.files[project + "/docs/ohne.md"] = "keine Tabelle"
-        world.existing = [project + "/docs/features/dictation"]
+        // Die Datei darf größer sein als die Grenze für Text, der an ein Ticket geht.
+        world.data[project + "/docs/features/tickets.md"] = Data((String(repeating: "Zeile davor.\n", count: 8_000) + table).utf8)
+        world.data[project + "/docs/ohne.md"] = Data("keine Tabelle".utf8)
+        world.existing = [project + "/docs/features/dictation", project + "/docs/ohne.md"]
+        let absent = try await run(["setup", "--team", "WM8", "--project", project, "--areas", "docs/fehlt.md"], world)
+        XCTAssertTrue(absent.stderr.contains("Die Datei gibt es nicht"), absent.stderr)
         world.source.onProjects = { _ in ["Diktat", "Tickets", "Controller"] }
 
         let wrong = try await run(["setup", "--team", "WM8", "--project", project, "--areas", "docs/ohne.md"], world)
         XCTAssertEqual(wrong.exitCode, TicketsCLIExit.notFound)
+        XCTAssertTrue(wrong.stderr.contains("keine Tabelle"), wrong.stderr)
         XCTAssertTrue(world.config.areasFileByProjectPath.isEmpty)
         XCTAssertThrowsError(try TicketsCLIArguments.parse(["setup", "--areas", "x.md"]), "braucht --project und --team")
 
+        world.existing.insert(project + "/docs/features/tickets.md")
         let set = try await run(["setup", "--team", "WM8", "--project", project, "--areas", "docs/features/tickets.md"], world)
         XCTAssertEqual(set.exitCode, 0, set.stderr)
         XCTAssertEqual(world.config.areasFileByProjectPath, [project: "docs/features/tickets.md"])
@@ -606,10 +621,12 @@ final class TicketsCLITests: XCTestCase {
         let report = try await run(["doctor"], world)
         XCTAssertEqual(report.exitCode, 0)
         XCTAssertTrue(report.stdout.contains("ACHTE  Bereiche WM8   Projekt „Controller“ steht nicht in der Tabelle"), report.stdout)
-        XCTAssertTrue(report.stdout.contains("Doku fehlt: docs/features/tickets.md (Tickets)"))
-        XCTAssertFalse(report.stdout.contains("Doku fehlt: docs/features/dictation"))
+        XCTAssertFalse(report.stdout.contains("Doku fehlt"), report.stdout)
 
-        world.existing.insert(project + "/docs/features/tickets.md")
+        world.existing.remove(project + "/docs/features/dictation")
+        let missing = try await run(["doctor"], world)
+        XCTAssertTrue(missing.stdout.contains("Doku fehlt: docs/features/dictation (Diktat)"), missing.stdout)
+        world.existing.insert(project + "/docs/features/dictation")
         world.source.onProjects = { _ in ["Diktat", "Tickets"] }
         let clean = try await run(["doctor"], world)
         XCTAssertTrue(clean.stdout.contains("ok     Bereiche WM8   2 Bereiche stimmen mit docs/features/tickets.md überein"), clean.stdout)

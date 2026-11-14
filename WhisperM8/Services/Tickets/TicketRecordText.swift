@@ -13,6 +13,10 @@ enum TicketRecordText {
         var chosen: String
         /// Wer entschieden hat.
         var by: String
+        /// Wer die Entscheidung ans Ticket geschrieben hat: der Rufname des
+        /// Chats oder „im Terminal“. Getrennt von `by`, damit nachlesbar bleibt,
+        /// ob jemand in fremdem Namen festgehalten hat.
+        var recordedBy: String
         var note: String?
     }
 
@@ -36,10 +40,11 @@ enum TicketRecordText {
     }
 
     static func decision(_ decision: Decision, at date: Date, calendar: Calendar = stampCalendar) -> String {
-        var lines = ["**Entscheidung · \(stamp(date, calendar))**", "", "**Frage:** \(flat(decision.question))", "", "**Möglichkeiten:**"]
-        lines += decision.options.map { "* \(flat($0))" }
-        lines += ["", "**Gewählt:** \(flat(decision.chosen))", "", "**Entschieden von:** \(flat(decision.by))"]
-        if let note = decision.note.map(flat), !note.isEmpty { lines += ["", "**Anmerkung:** \(note)"] }
+        var lines = ["**Entscheidung · \(stamp(date, calendar))**", "", "**Frage:** \(field(decision.question))", "", "**Möglichkeiten:**"]
+        lines += decision.options.map { "* \(field($0))" }
+        lines += ["", "**Gewählt:** \(field(decision.chosen))", "", "**Entschieden von:** \(field(decision.by))",
+                  "", "**Festgehalten von:** \(field(decision.recordedBy))"]
+        if let note = decision.note.map(field), !note.isEmpty { lines += ["", "**Anmerkung:** \(note)"] }
         return lines.joined(separator: "\n")
     }
 
@@ -59,6 +64,15 @@ enum TicketRecordText {
     static func stamp(_ date: Date, _ calendar: Calendar) -> String {
         let c = calendar.dateComponents([.day, .month, .year, .hour, .minute], from: date)
         return String(format: "%02d.%02d.%04d, %02d:%02d Uhr", c.day ?? 0, c.month ?? 0, c.year ?? 0, c.hour ?? 0, c.minute ?? 0)
+    }
+
+    /// Feld einer Entscheidung: eine Zeile, und ohne wirksame Sterne oder
+    /// Überschrift. Sonst sähe ein Text wie „**Gewählt:** X“ in der Frage aus
+    /// wie ein zweites Feld.
+    private static func field(_ text: String) -> String {
+        var line = flat(text).replacingOccurrences(of: "*", with: "\\*")
+        if line.hasPrefix("#") { line = "\\" + line }
+        return line
     }
 
     /// Ein Feld ist eine Zeile: Umbrüche würden den festen Aufbau sprengen.

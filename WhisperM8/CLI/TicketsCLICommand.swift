@@ -371,8 +371,10 @@ enum TicketsCLICommand {
       whisperm8 tickets decide <Ticket> --question FRAGE --option A --option B…
                                --chosen WAHL [--by NAME] [--note TEXT]
                 Hält eine Entscheidung in festem Aufbau als Kommentar fest:
-                Frage, Möglichkeiten, Gewählt, wer, wann. Nur für
-                Entscheidungen, die wirklich gefallen sind.
+                Frage, Möglichkeiten, Gewählt, wer entschieden hat, wer sie
+                festgehalten hat, wann. Nur für Entscheidungen, die wirklich
+                gefallen sind. Aus einem Chat ist --by Pflicht; im Terminal
+                steht ohne --by die Person, der der Zugang gehört.
       whisperm8 tickets check <Ticket>                 zeigt die Kästchen unter „Fertig, wenn“
       whisperm8 tickets check <Ticket> <Nr | Text>… [--uncheck]
                 Hakt einzelne Kästchen ab (oder öffnet sie wieder). Ein
