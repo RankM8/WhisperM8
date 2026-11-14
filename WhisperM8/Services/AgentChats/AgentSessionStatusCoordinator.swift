@@ -612,6 +612,12 @@ final class AgentSessionStatusCoordinator {
             apply(.turnAborted, to: sessionID)
         } else if !hookLiveSessions.contains(sessionID) {
             switch decision.status {
+            case .idle where waitsForRegistryEvidence(sessionID):
+                // WM8-97: Der Verlauf hält eine offene Frage, eine Freigabe
+                // oder ein langes stilles Tool für „ruht“; das gäbe einen
+                // übernommenen Chat zu früh frei. Bis die Registry ihn kennt,
+                // zählt vom Verlauf nur Aktivität.
+                break
             case .idle:
                 apply(.transcriptIdle(turnFinished: decision.turnFinished), to: sessionID)
             case .working, .awaitingInput:
@@ -1228,6 +1234,17 @@ final class AgentSessionStatusCoordinator {
         Logger.agentStore.notice(
             "session_notification_posted kind=\(kind.logLabel, privacy: .public) session=\(sessionID.uuidString, privacy: .public)")
         notificationPoster.post(notification)
+    }
+
+    /// Übernommener Claude-Chat im Startzustand, dessen Status die Registry
+    /// liefern wird (WM8-97). Hintergrund-Chats und Codex melden sich dort
+    /// nicht; für sie bleibt der Verlauf der Beleg.
+    func waitsForRegistryEvidence(_ sessionID: UUID) -> Bool {
+        guard adoptedSessions.contains(sessionID), case .launching = states[sessionID],
+              isRegistryStatusEnabled(),
+              let session = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })
+        else { return false }
+        return session.provider == .claude && !session.isBackgroundChat && !session.isTerminal
     }
 
     private func isBackgroundSession(_ sessionID: UUID) -> Bool {

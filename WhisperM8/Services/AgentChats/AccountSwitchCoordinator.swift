@@ -314,7 +314,14 @@ extension AccountSwitchCoordinator.Dependencies {
                 }
             },
             waitForExit: { pid in await ProcessExitWaiter.waitForExit(pid: pid) },
-            status: { AgentSessionStatusCoordinator.shared.statusStore.status(for: $0) },
+            status: { id in
+                // Startzustand heißt „noch ohne Beleg“ (übernommener Chat nach
+                // dem Neustart, WM8-97): nicht als ruhend werten, sonst hielte
+                // ein vorgemerkter Wechsel einen arbeitenden Chat an.
+                let coordinator = AgentSessionStatusCoordinator.shared
+                if case .launching = coordinator.lifecycleState(for: id) { return nil }
+                return coordinator.statusStore.status(for: id)
+            },
             mayHaveUnsentInput: {
                 AgentTerminalRegistry.shared.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
             },

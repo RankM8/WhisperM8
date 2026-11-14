@@ -149,17 +149,28 @@ final class HandoverAdoptedReadinessTests: XCTestCase {
 
     // MARK: Notfrist ohne Signal
 
+    /// Wartet bis zu 5 s darauf, dass `condition` wahr wird (statt fester
+    /// Schlafzeit: die volle Suite läuft auf Akku deutlich langsamer).
+    private func eventually(_ condition: () -> Bool) async throws -> Bool {
+        for _ in 0..<100 {
+            if condition() { return true }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return condition()
+    }
+
     func testRestedAtHandoverFallsBackAfterTheUsualGrace() async throws {
         let f = try makeFixture(launchGrace: 0.05)
         f.coordinator.adoptedUnconfirmedGraceSeconds = 999
         f.coordinator.sessionAdopted(sessionID: f.sessionID, handedOverStatus: .idle)
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .ready, "ohne Signal nach der Startfrist bereit")
+        let released = try await eventually { f.coordinator.lifecycleState(for: f.sessionID) == .ready }
+        XCTAssertTrue(released, "ohne Signal nach der Startfrist bereit")
         XCTAssertEqual(f.deliveries.ids, [f.sessionID])
     }
 
-    func testWorkingOrUnknownAtHandoverWaitsForTheLongGrace() async throws {
+    func testWorkingOrUnknownAtHandoverUsesTheLongGrace() async throws {
         for status in [AgentSessionRuntimeStatus.working, .awaitingInput, nil] {
+            // Kurze Startfrist, lange Notfrist: die kurze gibt nicht frei …
             let f = try makeFixture(launchGrace: 0.05)
             f.coordinator.adoptedUnconfirmedGraceSeconds = 999
             f.coordinator.sessionAdopted(sessionID: f.sessionID, handedOverStatus: status)
@@ -167,7 +178,54 @@ final class HandoverAdoptedReadinessTests: XCTestCase {
             XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .launching,
                            "\(status?.rawValue ?? "unbekannt"): die kurze Startfrist gibt nicht frei")
             XCTAssertTrue(f.deliveries.ids.isEmpty)
+
+            // … umgekehrt gibt die lange Notfrist frei, auch ganz ohne Signal.
+            let g = try makeFixture(launchGrace: 999)
+            g.coordinator.adoptedUnconfirmedGraceSeconds = 0.05
+            g.coordinator.sessionAdopted(sessionID: g.sessionID, handedOverStatus: status)
+            let released = try await eventually { g.coordinator.lifecycleState(for: g.sessionID) == .ready }
+            XCTAssertTrue(released, "\(status?.rawValue ?? "unbekannt"): die Notfrist gibt am Ende frei")
         }
+    }
+
+    // MARK: Verlauf als Beleg (Review)
+
+    private func transcript(_ status: AgentSessionRuntimeStatus) -> AgentTranscriptStatusDecider.Decision {
+        AgentTranscriptStatusDecider.Decision(status: status, turnFinished: false)
+    }
+
+    /// Der Verlauf hält eine offene Frage oder ein langes stilles Tool für
+    /// „ruht“: Das gibt einen übernommenen Claude-Chat nicht frei, solange die
+    /// Registry ihn noch nicht kennt.
+    func testTranscriptIdleDoesNotReleaseAnAdoptedClaudeChat() throws {
+        let f = try makeFixture()
+        f.coordinator.sessionAdopted(sessionID: f.sessionID)
+        f.coordinator.handleTranscriptDecision(sessionID: f.sessionID, decision: transcript(.idle))
+        XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .launching)
+        XCTAssertEqual(queueDecision(f), .notReady)
+        XCTAssertTrue(f.deliveries.ids.isEmpty)
+
+        // Aktivität aus dem Verlauf zählt: der Chat arbeitet.
+        f.coordinator.handleTranscriptDecision(sessionID: f.sessionID, decision: transcript(.working))
+        XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .working)
+        XCTAssertTrue(f.deliveries.ids.isEmpty)
+    }
+
+    /// Ohne Registry-Status (Schalter aus) bleibt der Verlauf der Beleg.
+    func testTranscriptIdleReleasesWhenRegistryStatusIsOff() throws {
+        let f = try makeFixture()
+        f.coordinator.isRegistryStatusEnabled = { false }
+        f.coordinator.sessionAdopted(sessionID: f.sessionID)
+        f.coordinator.handleTranscriptDecision(sessionID: f.sessionID, decision: transcript(.idle))
+        XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .ready)
+        XCTAssertEqual(f.deliveries.ids, [f.sessionID])
+    }
+
+    func testManifestWritesUnknownForAChatStillWithoutEvidence() {
+        XCTAssertNil(HandoverManifestFactory.handedOverRuntimeStatus(lifecycle: .launching, runtime: .idle))
+        XCTAssertEqual(HandoverManifestFactory.handedOverRuntimeStatus(lifecycle: .ready, runtime: .idle), "idle")
+        XCTAssertEqual(HandoverManifestFactory.handedOverRuntimeStatus(lifecycle: .working, runtime: .working), "working")
+        XCTAssertNil(HandoverManifestFactory.handedOverRuntimeStatus(lifecycle: nil, runtime: nil))
     }
 
     // MARK: Manifest

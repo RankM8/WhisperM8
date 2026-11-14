@@ -172,6 +172,17 @@ final class HandoverRestartService {
 
 @MainActor
 enum HandoverManifestFactory {
+    /// Status für das Manifest (WM8-97). Der Startzustand zeigt „ruht“ an,
+    /// ist aber noch ohne Beleg (etwa ein übernommener Chat, der bei einem
+    /// zweiten Neustart noch nichts gemeldet hat): dann `nil` = unbekannt,
+    /// damit die nächste App die lange Notfrist nimmt.
+    static func handedOverRuntimeStatus(
+        lifecycle: AgentSessionLifecycleState?, runtime: AgentSessionRuntimeStatus?
+    ) -> String? {
+        if case .launching = lifecycle { return nil }
+        return runtime?.rawValue
+    }
+
     static func manifest(
         for controller: AgentTerminalController,
         session: AgentChatSession,
@@ -195,11 +206,13 @@ enum HandoverManifestFactory {
         manifest.hasComposerDraft = controller.composerDraft.fieldMayHaveText
         // „Arbeitet seit“ (Review Paket 4, Befund 7): Arbeitet der Chat, zählt
         // die neue App ab der Abgabe weiter; bis dahin zählt die alte App.
-        let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id)
+        let coordinator = AgentSessionStatusCoordinator.shared
+        let runtime = coordinator.statusStore.status(for: session.id)
         if runtime == .working {
             manifest.workingSince = handoverTime.timeIntervalSince1970
         }
-        manifest.runtimeStatus = runtime?.rawValue
+        manifest.runtimeStatus = Self.handedOverRuntimeStatus(
+            lifecycle: coordinator.lifecycleState(for: session.id), runtime: runtime)
         if let pending = AccountSwitchCoordinator.shared.pending[session.id] {
             manifest.pendingAccountSwitch = try? HandoverJSONValue(encoding: HandoverPendingAccountSwitch(pending))
         }
