@@ -262,6 +262,13 @@ final class TicketBoardControllers {
         byWindow[windowID] = fresh
         return fresh
     }
+
+    /// Das Fenster gibt es nicht mehr: Takt beenden, Controller freigeben.
+    func forget(_ windowID: UUID) {
+        byWindow.removeValue(forKey: windowID)?.hide()
+    }
+
+    func hasController(for windowID: UUID) -> Bool { byWindow[windowID] != nil }
 }
 
 // MARK: - Ansicht

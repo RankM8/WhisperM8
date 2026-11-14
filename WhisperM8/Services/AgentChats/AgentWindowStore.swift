@@ -1203,6 +1203,7 @@ final class AgentWindowStore {
               window(for: windowID).openTabIDs.isEmpty,
               state.windows.contains(where: { $0.id == windowID }) else { return false }
         mutate { $0.removeWindowIfEmpty(windowID) }
+        forgetTickets(of: windowID)
         return true
     }
 
@@ -1233,7 +1234,7 @@ final class AgentWindowStore {
               state.windows.contains(where: { $0.id == windowID }) else { return false }
         mutate { $0.removeWindow(windowID) }
         multiSelectionByWindow[windowID] = nil
-        ticketsModeWindowIDs.remove(windowID)
+        forgetTickets(of: windowID)
         return true
     }
 

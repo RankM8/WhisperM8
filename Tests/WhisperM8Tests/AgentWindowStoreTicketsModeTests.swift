@@ -158,6 +158,22 @@ final class AgentWindowStoreTicketsModeTests: XCTestCase {
         XCTAssertTrue(hidden.isSidebarVisible)
     }
 
+    func testClosingAWindowReleasesItsTicketState() {
+        let store = makeStore()
+        let chat = UUID()
+        store.openTab(chat, in: store.primaryWindowID)
+        store.openTab(UUID(), in: store.primaryWindowID)
+        let second = store.detachToNewWindow(chat, from: store.primaryWindowID)
+        XCTAssertNotEqual(second, store.primaryWindowID)
+        store.setTicketsMode(true, in: second)
+        _ = TicketBoardControllers.shared.controller(for: second)
+        XCTAssertTrue(TicketBoardControllers.shared.hasController(for: second))
+
+        XCTAssertTrue(store.removeWindow(second))
+        XCTAssertFalse(store.isTicketsMode(in: second))
+        XCTAssertFalse(TicketBoardControllers.shared.hasController(for: second), "Controller und letzter Abzug sind frei")
+    }
+
     func testTicketsModeIsNotPersisted() {
         let files = (tempURL("ws"), tempURL("ui"))
         let store = AgentWindowStore(persistence: AgentSessionStore(fileURL: files.0, uiStateFileURL: files.1))

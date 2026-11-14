@@ -37,6 +37,13 @@ extension AgentWindowStore {
         setTicketsMode(false, in: windowID)
     }
 
+    /// Das Fenster ist geschlossen: Modus und Controller der Ticket-Ansicht
+    /// (samt letztem Abzug) werden freigegeben.
+    func forgetTickets(of windowID: UUID) {
+        ticketsModeWindowIDs.remove(windowID)
+        TicketBoardControllers.shared.forget(windowID)
+    }
+
     /// Führt eine Navigation aus, ohne dass ein Fenster die Tickets verlässt.
     func keepingTicketsMode<T>(_ navigation: () throws -> T) rethrows -> T {
         ticketsModeHoldDepth += 1
