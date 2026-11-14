@@ -425,13 +425,16 @@ nächste echte Turn-Ende. Leert ein Ctrl+C nur ein volles Eingabefeld und
 endet der Turn zufällig binnen 10 s, wartet die Queue ebenfalls (sichere
 Richtung).
 
-Warum eine Schätzung und kein Lesen des Eingabefelds: Die Claude-TUI zeichnet
-das Feld mit Ink, versteckt den echten Cursor, zeigt im leeren Feld einen
-Platzhaltertext, und Rahmen, Prompt-Zeichen und Lage wechseln mit Version,
-Theme, Mods und Fensterbreite (Codex zeichnet ganz anders). Ein Parser des
-SwiftTerm-Puffers wäre ein stiller Fehlerpfad. Tastendrücke und eigene
+Warum vor allem eine Schätzung: Die Claude-TUI zeichnet das Feld mit Ink,
+versteckt den echten Cursor, zeigt im leeren Feld einen Platzhaltertext, und
+Rahmen, Prompt-Zeichen und Lage wechseln mit Version, Theme, Mods und
+Fensterbreite (Codex zeichnet ganz anders). Tastendrücke und eigene
 Zustellungen sieht die App dagegen vollständig; die Schätzung irrt in die
 sichere Richtung (Fehlalarm = Wartezeit oder ein Ctrl+C in ein leeres Feld).
+Seit WM8-100 liest die App bei Claude-Chats zusätzlich das Feld am Bildschirm
+ab (`ControllerScreenReading`, derselbe Leser wie für den Controller und
+WM8-75), aber nur als zweite Sicherung: Ist das Feld nicht abzulesen (Ansicht
+hochgescrollt), gilt allein die Schätzung.
 
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
@@ -691,6 +694,53 @@ Timing verloren oder kam beim Retry doppelt an. `sendPrompt` schreibt blind in
 die PTY; ein Erfolg belegt nur den Schreibvorgang, nicht die Verarbeitung.
 Wer Zustellung braucht, nutzt `enqueue` (höchstens einmal, bei bestätigtem
 Turn-Ende). `snapshot` bietet in `launching` konsequent kein `send` als Aktion an.
+
+### Nach `resume`: erst zustellen, wenn das Eingabefeld steht (WM8-100)
+
+Gemessen am 14.11.2026 (Claude Code 2.1.325) an einem fortgesetzten Chat mit
+einer einzigen Antwort: Prozess nach 3,5 s, Freigabe durch die Startfrist nach
+9,1 s, Eingabefeld erst nach 13,3 s, Claudes Registry meldete „idle“ rund eine
+Sekunde danach. Was in der Lücke eingefügt wurde, stand danach im Feld; das
+Enter war verloren, `send` meldete trotzdem `delivered`, ein zweites `send`
+hängte den Auftrag ein zweites Mal an. Dasselbe passierte, wenn die
+Warteschlange nach dem Start zustellte. Deshalb:
+
+- **Startbereitschaft:** Ein Claude-Chat bleibt nach dem Start in `launching`,
+  bis sein Eingabefeld am Bildschirm zu sehen ist oder Registry, Hook oder
+  Verlauf ihn als bereit melden. Die feste Frist von 6 s sieht danach jede
+  Sekunde nach; nach 2 Minuten gibt sie den Chat wie früher frei (Notfrist).
+  Ist das Feld nicht abzulesen, gilt die alte Frist. Codex-Chats, Terminals und
+  übernommene Chats (Neustart mit Übergabe, WM8-97) sind nicht betroffen.
+- **Startfenster:** Bis zum ersten Turn, höchstens 2 Minuten nach dem Start,
+  prüfen `send`, die Warteschlange und das Diktat zusätzlich, ob das Feld
+  steht. Fehlt es bei einem ruhenden Chat, lehnt `send` mit `notReady` ab
+  („Chat lädt noch …“, Ausweg `enqueue`); die Warteschlange sieht jede Sekunde
+  wieder nach. Eine offene Rückfrage hat kein Eingabefeld und bleibt
+  beantwortbar.
+- **Ehrliches `delivered`:** Nach dem Enter sieht die App bei einem ruhenden
+  Claude-Chat bis zu 4 s nach: Beginnt ein Turn oder ist das Feld leer, ist der
+  Text raus (`result.submitCheck`: `started`, `submitted`). Steht er danach
+  noch im Feld, antwortet `send` mit `conflict` (Exit 4, `detail.reason:
+  inInputField`, `detail.resend: false`) und nennt `chats submit`. Nicht
+  ablesbar heißt `submitCheck: unknown` und wie früher `delivered`. Die
+  Warteschlange verbucht einen solchen Auftrag als gescheitert
+  (`queue_stuck_in_field`) und fügt ihn nie noch einmal ein; `enqueue` an einen
+  freien Chat meldet das mit Exit 4.
+- **Kein stilles Verdoppeln:** Zeigt das Feld eines ruhenden Claude-Chats schon
+  Text, lehnen `send` (ohne `--force`) und die Warteschlange ab, auch wenn die
+  Schätzung ihn für abgeschickt hält. Ein vermuteter Rückleger nach einem
+  Abbruch wird wie bisher vorher geleert.
+- **`chats submit <ref>`** schickt den Text ab, der im Feld eines ruhenden
+  Claude-Chats steht, ohne neuen Text: nur das Enter, nie in eine Freigabe,
+  danach dasselbe Nachsehen. Leeres Feld, kein Feld oder nicht ablesbar: Exit 4,
+  nichts gesendet.
+- **`chats resume <ref> --prompt "…"`** (oder `-- "…"`) merkt den Auftrag nach
+  dem Start vor; er geht raus, sobald das Feld steht.
+
+Kosten: Jedes `send` mit Enter an einen ruhenden Claude-Chat antwortet mit
+dem Nachsehen meist 0,8 bis 1 s später als vorher (ein leeres Feld zählt erst
+ab 0,8 s), im Fehlerfall nach 4 s. Abgelesen werden 16 Zeilen am unteren Rand,
+je Zustellung einmal und im Startfenster höchstens einmal je Sekunde.
 
 ### Vormerken und Start bestätigen (WM8-70)
 

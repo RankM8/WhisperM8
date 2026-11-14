@@ -114,6 +114,13 @@ enum ChatsQueueCommand {
         case .failed(let code): return code
         case .ok(let response):
             guard response.ok else { return ChatsLiveSupport.mapError(response) }
+            // Sofort zugestellt, aber im Eingabefeld stehengeblieben (WM8-100):
+            // kein Erfolg, und nie noch einmal vormerken.
+            if response.result?["stuckInField"]?.boolValue == true {
+                if json { CLIIO.out(ChatsOutput.encodeJSON(ChatsLiveSupport.jsonObject(from: response))) }
+                CLIIO.err("✗ " + PromptSubmitCheck.stuckMessage)
+                return ChatsCLIExit.conflict
+            }
             ChatsLiveSupport.printResult(response, json: json) { result in
                 let queued = result["queued"]?.intValue ?? 0
                 if result["deliveredImmediately"]?.boolValue == true {

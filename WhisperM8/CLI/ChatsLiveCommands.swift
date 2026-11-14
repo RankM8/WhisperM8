@@ -644,38 +644,6 @@ enum ChatsWindowCommand {
     }
 }
 
-// MARK: - resume
-
-enum ChatsResumeCommand {
-    static func run(_ arguments: [String]) -> Int32 {
-        var ref: String?
-        var json = false
-        for arg in arguments {
-            switch arg {
-            case "--json": json = true
-            default:
-                if arg.hasPrefix("-") { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
-                if ref == nil { ref = arg } else { CLIIO.err("Zu viele Argumente."); return ChatsCLIExit.usage }
-            }
-        }
-        guard let ref else { CLIIO.err("Usage: whisperm8 chats resume <ref>"); return ChatsCLIExit.usage }
-        let targetID: UUID
-        switch ChatsLiveSupport.resolveTarget(ref: ref) {
-        case .resolved(let id, _): targetID = id
-        case .failed(let code): return code
-        }
-        switch ChatsLiveSupport.perform(method: "session.resume", params: ["targetSessionID": targetID.uuidString]) {
-        case .failed(let code): return code
-        case .ok(let response):
-            guard response.ok else { return ChatsLiveSupport.mapError(response) }
-            ChatsLiveSupport.printResult(response, json: json) { result in
-                "✓ \(result["target"]?["title"]?.stringValue ?? ref) wird wiederaufgenommen (Resume)"
-            }
-            return ChatsCLIExit.ok
-        }
-    }
-}
-
 // MARK: - new
 
 /// Reines Argument-Parsing fuer `chats new` — getrennt vom Kommando, damit

@@ -67,6 +67,9 @@ whisperm8 chats interrupt <ref> [--force] [--clear-input]
                                                      # ein zugestellter Auftrag ZURÜCKGEZOGEN wird (die
                                                      # CLI legt den Prompt sonst dorthin zurück); löscht
                                                      # auch User-Entwürfe, deshalb opt-in
+whisperm8 chats submit <ref>                         # Text, der im Eingabefeld eines ruhenden Claude-Chats
+                                                     # liegengeblieben ist, abschicken (nur Enter, kein neuer
+                                                     # Text). Statt noch einmal zu senden — das verdoppelte ihn
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
 whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
@@ -81,7 +84,9 @@ whisperm8 chats order <ref>… [--last <ref>]… [--dry-run]  # Folge der Chats 
 whisperm8 chats order --tabs <ref>… [--last <ref>]…    # dasselbe für die Tabs eines Fensters (Projekt-Tabs als Block)
 whisperm8 chats move <ref> --window <primary|id>     # Tab in anderes bestehendes Fenster (window list zeigt IDs)
 whisperm8 chats window list                          # Fenster-Inventar (+ showsGrid, activeWorkspace)
-whisperm8 chats resume <ref>                         # geschlossenen Chat wieder hochfahren
+whisperm8 chats resume <ref> [--prompt "…"]          # geschlossenen Chat wieder hochfahren; mit --prompt
+                                                     # (oder -- "…") geht der Auftrag raus, sobald Claudes
+                                                     # Eingabefeld steht. Statt `resume` + sofort `send`
 whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"] [--account <profil>]
                                                      # ohne --account: das in den WhisperM8-Einstellungen
                                                      # (Konten) aktive Claude-Konto; --account main = Hauptkonto.
@@ -342,7 +347,14 @@ unterbrochen.
    angeordnet" oder „ich habe X nach vorn geholt" — **nie** „du siehst X".
    Vor jeder Aussage über Ansichten: `workspace list --json` bzw.
    `window list --json` lesen, nicht aus Tabs oder Status ableiten.
-10. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
+10. **Nach `resume` nicht sofort senden.** Den Auftrag gleich mitgeben
+   (`resume <ref> --prompt "…"`) oder `enqueue`. `send` direkt nach dem Start
+   lehnt ab („Chat lädt noch“, Exit 4), bis das Eingabefeld steht. Meldet
+   `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
+   **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
+   Meldet `send` „Im Eingabefeld steht schon Text“, ebenso erst nachsehen
+   (`tail`), dann `submit` oder dem User melden.
+11. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
    Queue nicht abfließt, zuerst `show <ref>` und `tail <ref> --turns 1` prüfen.
    Zeigt der Chat `working`, obwohl kein neuer Turn begonnen hat und das
    Transcript nicht wächst (`show` → Größe/Revision bleibt gleich), ist der

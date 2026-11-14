@@ -17,14 +17,19 @@ enum PromptDeliveryGate {
         case busy(String)
     }
 
+    /// - Parameter inputPending: im Startfenster fehlt Claudes Eingabefeld
+    ///   noch (WM8-100); `visibleDraft`: am Bildschirm steht Text im Feld.
     static func forQueue(
         runtime: AgentSessionRuntimeStatus?,
         lifecycle: AgentSessionLifecycleState?,
-        mayHaveUnsentInput: Bool
+        mayHaveUnsentInput: Bool,
+        inputPending: Bool = false,
+        visibleDraft: Bool = false
     ) -> Decision {
         if case .launching = lifecycle { return .notReady }
+        if inputPending { return .notReady }
         if let runtime, runtime != .idle { return .busy(runtime.rawValue) }
-        if mayHaveUnsentInput { return .draftPending }
+        if mayHaveUnsentInput || visibleDraft { return .draftPending }
         return .deliver
     }
 
