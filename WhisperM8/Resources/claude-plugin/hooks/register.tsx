@@ -44,6 +44,12 @@ let watchStream: { return?: (value?: undefined) => unknown } | null = null
 let watchRunning = false
 let sessionEnded = false
 let refreshPending = false
+/**
+ * Jüngster Cursor aus `chats board --json`. Steht bewusst nicht im Atom
+ * `board`: Er ändert sich mit jedem Statuswechsel irgendeines Chats, und jede
+ * Änderung am Atom zeichnet das Band neu (WM8-87).
+ */
+let latestCursor: string | null = null
 /** Der 30-s-Takt der Band-Uhr läuft einmal je Mod-Instanz — session.start feuert bei Start, Resume, /clear und Compact erneut. */
 let tickerStarted = false
 let toolDeferred: boolean | null = null
@@ -117,9 +123,14 @@ const refresh = async ($: EngineInterface) => {
   // erbt die Umgebung des Chats, der den Daemon gestartet hat. Ihr Besitzer
   // gilt, nicht WHISPERM8_SESSION_ID (Befund 11.11.2026).
   if (sessionID !== null && !sameID(next.owner, sessionID)) sessionID = next.owner
-  await update($, board, () => next)
-  const at = await $.clock.now()
-  await update($, now, () => at)
+  latestCursor = next.cursor
+  // Nur schreiben, was sich sichtbar geändert hat: jedes Schreiben zeichnet
+  // das Band neu (WM8-87). Die Uhr zieht nur mit, wenn das Board neu ist.
+  if (!sameBoard(await read($, board), next)) {
+    const at = await $.clock.now()
+    await update($, now, () => at)
+    await update($, board, () => next)
+  }
   // Bewusst keine Statuszeile: Claude Code setzt „⚠“ davor, sie sah nach
   // einer Warnung aus und wiederholte nur die Zahlen aus dem Band.
   // Scheitert die Tool-Anmeldung, laufen Band und Wecken trotzdem.
@@ -140,6 +151,20 @@ const scheduleRefresh = ($: EngineInterface) => {
     void refresh($).catch(() => undefined)
   })
 }
+
+/** Gleiches Board ohne den Cursor (der zählt nur für `chats watch`). */
+export const sameBoard = (a: BoardView | null, b: BoardView | null) =>
+  a !== null && b !== null && JSON.stringify({ ...a, cursor: null }) === JSON.stringify({ ...b, cursor: null })
+
+/** Ändert sich zwischen `before` und `after` eine Alters-Angabe im Band? */
+export const agesChange = (entries: readonly BoardEntry[], before: number, after: number) =>
+  entries.some(e => age(e.updatedAt, before, true) !== age(e.updatedAt, after, true))
+
+/** Statuswechsel aus `chats watch` direkt ins Board, ohne neuen Prozess. */
+export const withStatus = (view: BoardView, sessionID: string, status: string, since: string | null) => ({
+  ...view,
+  entries: view.entries.map(e => (sameID(e.sessionID, sessionID) ? { ...e, status, statusSince: since ?? e.statusSince } : e)),
+})
 
 const counts = (entries: readonly BoardEntry[]) => {
   const c: Record<BoardLight, number> = { needsYou: 0, running: 0, done: 0, parked: 0 }
@@ -215,6 +240,7 @@ const syncTool = async ($: EngineInterface, active: boolean) => {
 
 type WatchEvent = {
   event?: string
+  at?: string
   gap?: boolean
   kind?: string
   owner?: string
@@ -243,7 +269,7 @@ const startWatch = ($: EngineInterface) => {
   void (async () => {
     let delay = 2_000
     while (generation === watchGeneration && !sessionEnded) {
-      const cursor = (await read($, board))?.cursor ?? null
+      const cursor = latestCursor ?? (await read($, board))?.cursor ?? null
       const argv = [binary, 'chats', 'watch', '--interval', '2']
       if (cursor !== null) argv.push('--cursor', cursor)
       const iterator = $.process.spawn({ argv })[Symbol.asyncIterator]()
@@ -261,8 +287,12 @@ const startWatch = ($: EngineInterface) => {
           for (const line of lines) {
             if (line.trim() === '') continue
             try {
-              await handleEvent($, JSON.parse(line) as WatchEvent)
-              delay = 2_000
+              const ev = JSON.parse(line) as WatchEvent
+              await handleEvent($, ev)
+              // Nur ein echtes Ereignis setzt die Wartezeit zurück, nicht
+              // „started“ oder „gap“: Sonst startet ein sofort endender
+              // Strom alle zwei Sekunden neu (WM8-87).
+              if (ev.event === undefined && ev.gap !== true) delay = 2_000
             } catch {
               // Eine kaputte Zeile beendet den Strom nicht.
             }
@@ -275,7 +305,8 @@ const startWatch = ($: EngineInterface) => {
       watchStream = null
       await sleep($, delay)
       delay = Math.min(delay * 2, 60_000)
-      // Frischer Stand samt Cursor, bevor der nächste Strom ansetzt.
+      // Frischer Stand samt Cursor, bevor der nächste Strom ansetzt. Das ist
+      // das einzige Lesen je Runde; eine Lücke liest nicht zusätzlich.
       await refresh($).catch(() => undefined)
     }
   })()
@@ -286,19 +317,22 @@ const startWatch = ($: EngineInterface) => {
 }
 
 const handleEvent = async ($: EngineInterface, ev: WatchEvent) => {
-  if (ev.gap === true || ev.event === 'gap') {
-    scheduleRefresh($)
-    return
-  }
-  if (ev.event !== undefined) return
+  // Nach einer Lücke endet `chats watch`; die Schleife liest dann einmal neu.
+  if (ev.gap === true || ev.event !== undefined) return
   if (ev.kind === 'board') {
+    // Nur eine Änderung am eigenen Board liest das Board ganz neu.
     if (sameID(ev.owner, sessionID ?? undefined)) scheduleRefresh($)
     return
   }
   const view = await read($, board)
   const entry = view?.entries.find(e => sameID(e.sessionID, ev.sessionID))
-  if (entry === undefined) return
-  scheduleRefresh($)
+  if (view === null || entry === undefined || ev.sessionID === undefined) return
+  // Statuswechsel eines Board-Chats: direkt in die Anzeige, ohne Prozess.
+  if (typeof ev.to === 'string' && ev.to !== entry.status) {
+    const to = ev.to
+    const sid = ev.sessionID
+    await update($, board, current => (current === null ? current : withStatus(current, sid, to, ev.at ?? null)))
+  }
   await considerWake($, entry, ev)
 }
 
@@ -545,6 +579,18 @@ const clipboardArgs = (input: ClipboardInput): { args: string[] } | { error: str
   }
 }
 
+/**
+ * 30-s-Takt der Band-Uhr: stellt `now` nur, wenn sich eine sichtbare
+ * Alters-Angabe ändert. Eingeklappt oder ohne Band zeichnet er nichts neu.
+ */
+const tick = async ($: EngineInterface) => {
+  const view = await read($, board)
+  if (view === null || !view.isActive || view.entries.length === 0) return
+  if (await read($, folded)) return
+  const at = await $.clock.now()
+  if (agesChange(view.entries, await read($, now), at)) await update($, now, () => at)
+}
+
 // MARK: Hooks
 
 export const register: Register = (on, options) => {
@@ -585,7 +631,7 @@ export const register: Register = (on, options) => {
     void refresh($).catch(() => undefined)
     if (!tickerStarted) {
       tickerStarted = true
-      $.clock.every(30_000, () => void $.clock.now().then(at => update($, now, () => at)).catch(() => undefined))
+      $.clock.every(30_000, () => void tick($).catch(() => undefined))
     }
     return started
   })
@@ -694,6 +740,11 @@ export const register: Register = (on, options) => {
     const arg = e.args.trim()
     if (arg === '' || arg === 'zu' || arg === 'auf') {
       const fold = arg === '' ? !(await read($, folded)) : arg === 'zu'
+      // Eingeklappt läuft die Uhr nicht mit; beim Aufklappen frisch stellen.
+      if (!fold) {
+        const at = await $.clock.now()
+        await update($, now, () => at)
+      }
       await update($, folded, () => fold)
       return { text: fold ? 'Board eingeklappt.' : 'Board ausgeklappt.' }
     }
@@ -710,7 +761,6 @@ export const register: Register = (on, options) => {
     if (e.props.hasSurvey) return next(e)
     const view = await read($, board)
     if (view === null || !view.isActive) return next(e)
-    const t = await read($, now)
     const isFolded = await read($, folded)
     const { Box, Text, Button } = $.ui.resolve(e)
     const cols = e.props.bodyColumns
@@ -756,6 +806,8 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // Die Uhr erst hier lesen: eingeklappt hängt das Band nicht an ihrem Takt.
+    const t = await read($, now)
     // Rahmen + Kopf = 3 Zeilen; der Rest gehört den Chats.
     const room = Math.max(1, e.props.maxRows - 3)
     const shown = list.length > room ? list.slice(0, room - 1) : list
