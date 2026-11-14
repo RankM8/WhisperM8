@@ -104,10 +104,15 @@ final class AppState {
     private init() {
         self.recordingCoordinator = RecordingCoordinator(appState: self)
         // WM8-75: zurückgehaltenes Enter nach einem Einfüge-Block sichtbar machen.
-        // Nie während einer Aufnahme: Der Hinweis ersetzte sonst die Aufnahme-Pille.
+        // Nie über einer sichtbaren Aufnahme- oder Arbeits-Pille. Am
+        // Diktat-Status lässt sich das nicht festmachen: Beim Diktat mit Senden
+        // ist `isTranscribing` 80 ms nach dem Schreiben noch gesetzt (die
+        // Zustellung läuft bis zum Laufbericht), die Pille aber schon zu.
         AgentTerminalController.onDelayedEnterWithheld = { [weak self] _ in
-            guard let self, self.recordingPhase == .idle, !self.isStartingRecording else { return }
-            self.recordingCoordinator.overlayController.showQuickActionHint(
+            guard let self, !self.isRecording, !self.isStartingRecording else { return }
+            let overlay = self.recordingCoordinator.overlayController
+            guard !overlay.isPresented || overlay.isQuickActionHint else { return }
+            overlay.showQuickActionHint(
                 AgentTerminalController.delayedEnterWithheldHint, duration: 4)
         }
     }

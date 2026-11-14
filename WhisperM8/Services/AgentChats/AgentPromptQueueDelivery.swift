@@ -91,13 +91,24 @@ final class AgentPromptQueueDelivery {
             toShell: controller.command.keyboardProfile == .plainShell)
         // Ein Entwurf des Users hält die Zustellung oben an (`draftPending`,
         // bleibt in der Queue); ein vermuteter alter Rückleger wird geräumt.
+        let sentAt = Date()
         let clearedInput = controller.sendPrompt(marked, submit: true)
-        store.markDelivered(id: reserved.id)
-
-        ChatsAuditLog.shared.append(Self.deliveryAuditEntry(for: reserved, target: session.title, at: Date()))
-
-        Logger.agentStore.notice(
-            "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
+        let title = session.title
+        // Erst verbuchen, wenn das verzögerte Enter raus ist (WM8-75): Hält die
+        // Prüfung es zurück, bleibt der Auftrag vorgemerkt statt „zugestellt“.
+        Task { @MainActor [store] in
+            if await AgentTerminalController.enterWasWithheld(
+                sessionID: sessionID, clearedInput: clearedInput, since: sentAt) {
+                store.markFailed(id: reserved.id, error: "Enter zurückgehalten: Freigabe ging auf — Text steht im Feld", retry: true)
+                Logger.agentStore.notice(
+                    "queue_withheld session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
+                return
+            }
+            store.markDelivered(id: reserved.id)
+            ChatsAuditLog.shared.append(Self.deliveryAuditEntry(for: reserved, target: title, at: Date()))
+            Logger.agentStore.notice(
+                "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
+        }
     }
 
     /// Audit-Eintrag der Zustellung: Absender und Verifikation stammen aus dem

@@ -377,8 +377,16 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   `send` wie bisher. Geht die Freigabe erst zwischen Einfügen und Enter (80 ms)
   auf, hält `DelayedEnterGuard` das Enter zurück; `send` wartet darauf kurz
   (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
-  `delivered` (Audit `withheld`); der Text steht ggf. noch im Feld. Die
-  Warteschlange stellt dann nicht zu und lässt den Auftrag vorgemerkt. Einen
+  `delivered` (Audit `withheld`, `detail.textInField: true`,
+  `detail.resend: false`): Der Text steht im Eingabefeld — nicht neu senden,
+  auch nicht per `enqueue`. Die Idempotenz wird erst danach abgeschlossen; ein
+  Wiederholen mit derselben requestID bekommt nie „duplicate“ als Erfolg. Die
+  Warteschlange verbucht einen Auftrag erst nach dem Enter als zugestellt;
+  zurückgehalten bleibt er vorgemerkt (`queue_withheld`), und eine offene
+  Freigabe stellt sie gar nicht erst zu. **Bekannte Wirkung:** Jedes `send` mit
+  Enter antwortet 180 ms (nach einem Leeren 330 ms) später als bisher; eine
+  Freigabe lässt sich per `send` nicht mehr bestätigen; eine Rückfrage, deren
+  Art nicht sicher erkennbar ist, lehnt `send` ab. Einen
   gewollten Weg, eine Freigabe per CLI zu bestätigen (Tasten an einen Chat),
   gibt es noch nicht (WM8-64). Details: [controller.md](controller.md),
   Schutzregeln.

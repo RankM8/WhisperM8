@@ -180,6 +180,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
         let markerActor = await auditActorLabel(request.actor)
 
+        let sentAt = Date()
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
         let (outcome, clearedInput) = await MainActor.run { () -> (SendOutcome, Bool) in
             var clearedInput = false
@@ -247,16 +248,22 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             return .failure(requestID: request.requestID, code: code, message: message,
                             detail: sendConflictDetail(targetID: targetID))
         case .success(let session):
-            completeIdempotency(request.requestID)
             // Das Enter kommt 80 ms nach dem Einfügen (nach einem Leeren 230 ms)
             // und kann zurückgehalten werden, wenn genau dann eine Freigabe
             // aufgeht. Kurz warten und dann ehrlich antworten statt „delivered“.
-            if submit, await Self.enterWasWithheld(targetID: targetID, clearedInput: clearedInput) {
+            // Die Idempotenz erst danach abschließen: Ein Wiederholen mit
+            // derselben requestID darf ein zurückgehaltenes Enter nie als
+            // „duplicate“-Erfolg melden (während des Wartens: „läuft noch“).
+            if submit, await AgentTerminalController.enterWasWithheld(
+                sessionID: targetID, clearedInput: clearedInput, since: sentAt) {
+                releaseIdempotency(request.requestID)
                 await audit(request.actor, method: "send", target: await sessionLabel(targetID),
                             outcome: "withheld", prompt: prompt)
                 return .failure(requestID: request.requestID, code: .approvalPending,
-                                message: Self.enterWithheldMessage)
+                                message: Self.enterWithheldMessage,
+                                detail: .object(["textInField": .bool(true), "resend": .bool(false)]))
             }
+            completeIdempotency(request.requestID)
             let targetLabel = await sessionLabel(targetID)
             await audit(request.actor, method: "send", target: targetLabel, outcome: "ok", prompt: prompt)
             return .success(requestID: request.requestID, result: .object([
@@ -272,18 +279,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     static let approvalPendingMessage =
         "Im Ziel ist eine Freigabe oder ein Dialog offen — send bestätigt keine Freigaben, sie gehen an den User. Später erneut oder `enqueue`."
     static let enterWithheldMessage =
-        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Sie geht an den User; der Text steht ggf. noch im Feld."
-
-    /// Wartet, bis das verzögerte Enter entschieden ist, und meldet, ob es
-    /// zurückgehalten wurde.
-    private static func enterWasWithheld(targetID: UUID, clearedInput: Bool) async -> Bool {
-        let started = Date()
-        let wait: UInt64 = clearedInput ? 330_000_000 : 180_000_000
-        try? await Task.sleep(nanoseconds: wait)
-        return await MainActor.run {
-            (AgentTerminalController.lastWithheldEnterAt[targetID] ?? .distantPast) >= started
-        }
-    }
+        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Der Text steht im Eingabefeld — nicht neu senden (auch nicht per enqueue); die Freigabe geht an den User."
 
     private func sendConflictDetail(targetID: UUID) -> ChatsControlJSON? {
         // best-effort — kann nil sein

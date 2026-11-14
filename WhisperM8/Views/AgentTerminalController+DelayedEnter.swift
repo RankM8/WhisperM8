@@ -12,6 +12,15 @@ extension AgentTerminalController {
     /// das kurz nach dem Einfügen ab, um nicht still „delivered“ zu melden.
     @MainActor static var lastWithheldEnterAt: [UUID: Date] = [:]
 
+    /// Wartet, bis das verzögerte Enter entschieden ist (80 ms, nach einem
+    /// Leeren 230 ms, plus Luft), und meldet, ob es zurückgehalten wurde.
+    /// Für `chats send` und die Warteschlange: kein stilles „zugestellt“.
+    static func enterWasWithheld(sessionID: UUID, clearedInput: Bool, since started: Date) async -> Bool {
+        let wait: UInt64 = clearedInput ? 330_000_000 : 180_000_000
+        try? await Task.sleep(nanoseconds: wait)
+        return await MainActor.run { (lastWithheldEnterAt[sessionID] ?? .distantPast) >= started }
+    }
+
     /// Beim Einfügen eine sicher erkannte Frage offen (`chats send` darf sie
     /// mit Enter beantworten)?
     var questionOpenForDelayedEnter: Bool {
