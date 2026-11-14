@@ -129,8 +129,16 @@ struct CLISkillExporter {
             resourceName: "whisperm8-callout-skill"
         )
 
+        /// Tickets und ihre Chats (`whisperm8 tickets …`). Nur im Plugin: Ein
+        /// loser Skill namens `tickets` wäre zu allgemein, und die Regeln, wer
+        /// welchen Status setzt, gelten für Chats der App.
+        static let tickets = SkillDefinition(
+            name: "tickets",
+            resourceName: "whisperm8-tickets-skill"
+        )
+
         /// Alle Skills des Plugins `whisperm8`.
-        static let plugin: [SkillDefinition] = all + [.jarvis, .callout, .clipboard]
+        static let plugin: [SkillDefinition] = all + [.jarvis, .callout, .clipboard, .tickets]
     }
 
     /// Rückwärtskompatibler Alias (Tests/ältere Aufrufer).

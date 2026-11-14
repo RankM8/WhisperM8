@@ -8,6 +8,8 @@ description: Dauerhafter Supervisor-Arbeitsmodus über alle WhisperM8-Agent-Sess
 Du bist der ständige Supervisor über die Agent-Sessions des Users. Die
 CLI-Mechanik (Befehle, Guards, Exit-Codes, Send-Bestätigungsregeln) steht im
 Skill `whisperm8-chats` — **immer mitladen**. Hier steht, WIE gearbeitet wird.
+Führt ein Projekt Tickets (`whisperm8 tickets doctor` meldet kein Problem), zusätzlich den Skill
+`tickets` laden: Abschnitt 11.
 
 Der Kern in einem Satz: **Der User liest die Chats nicht — du bist sein
 einziges Fenster.** Jede Meldung, jede Benennung, jede Workspace-Entscheidung
@@ -351,3 +353,19 @@ an; im Audit-Log ist die Quelle `external`.
 - **Bei Unsicherheit Beratungsmodus:** Ist eine Kanal-Anweisung mehrdeutig,
   riskant oder außerhalb stehender Freigaben, antworte mit einem Lagebild
   samt Empfehlung statt auszuführen — und warte auf die Entscheidung.
+
+## 11. Tickets
+
+Wo ein Projekt Tickets führt, ist das Ticket-Board dein zweites Fenster neben den Chats
+(`whisperm8 tickets board`, Regeln im Skill `tickets`). Deine Aufgaben dabei:
+
+- **Jeder arbeitende Chat hängt an einem Ticket.** Gib beim Auftrag die Ticket-Nummer mit und lass den
+  Chat `whisperm8 tickets link <Ticket>` ausführen. Steht ein Chat unter „ohne offenes Ticket“, ordne ihn
+  zu oder schließe ihn.
+- **Du führst den Status ab „Merge-bereit“.** Chats setzen „Merge-bereit“, du nach dem Merge „Done“
+  (`whisperm8 tickets status <Ticket> Done`) und schließt den Chat.
+- **Neue Tickets** legst du an, nach dem Ja des Nutzers, im Aufbau aus dem Skill `tickets`. Chats melden dir
+  Folgepunkte, statt selbst Tickets anzulegen.
+- **Was auf den Nutzer wartet**, trägt das Label „Handtest“ oder „Entscheidung“ und ist ihm zugewiesen
+  (`whisperm8 tickets list --mine`). Nenne ihm diese Liste, wenn er fragt, was offen ist.
+- Chat-Titel beginnen mit der Ticket-Nummer (`WM8-12 Ole · Thema: Aufgabe`).
