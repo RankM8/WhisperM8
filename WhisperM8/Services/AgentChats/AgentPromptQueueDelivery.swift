@@ -38,6 +38,13 @@ final class AgentPromptQueueDelivery {
     /// einem MainActor-Durchlauf ohne `await` dazwischen (gleiche
     /// TOCTOU-Freiheit wie die Send-Pipeline).
     func deliverNow(for sessionID: UUID) {
+        // Fehlt nach dem Start das Eingabefeld, gar nicht erst reservieren:
+        // sonst schriebe jeder Versuch die Queue-Datei zweimal (Vic zu WM8-100).
+        if AgentSessionStatusCoordinator.shared.startupInputPending(sessionID),
+           !store.openPrompts(for: sessionID).isEmpty {
+            retryAfterStartup(sessionID)
+            return
+        }
         guard let reserved = store.reserveNext(for: sessionID) else { return }
 
         let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -84,7 +91,8 @@ final class AgentPromptQueueDelivery {
             store.markFailed(id: reserved.id, error: "Chat startet noch — Zustellung, sobald er bereit ist", retry: true)
             // Gilt der Chat schon als bereit, fehlt aber das Eingabefeld, stößt
             // kein Zustandswechsel mehr an: selbst nachsehen (WM8-100). Endet
-            // spätestens mit dem Startfenster.
+            // spätestens mit dem Startfenster. (Meist greift schon die Prüfung
+            // vor dem Reservieren oben.)
             if inputPending { retryAfterStartup(sessionID) }
             return
         case .draftPending:

@@ -1,3 +1,4 @@
+import SwiftTerm
 import XCTest
 @testable import WhisperM8
 
@@ -250,7 +251,8 @@ final class SendAfterResumeTests: XCTestCase {
         typealias H = AgentControlRequestHandler
         func check(_ profile: TerminalKeyboardProfile = .claudeCodeChat, status: AgentSessionRuntimeStatus? = .idle,
                    approval: Bool = false, field: ControllerPromptField?, readable: Bool = true) -> H.SubmitDecision {
-            H.submitCheck(profile: profile, status: status, approvalPending: approval, field: field, screenReadable: readable)
+            H.submitCheck(profile: profile, status: status, approvalPending: approval, userDraft: false,
+                          field: field, screenReadable: readable)
         }
         XCTAssertEqual(check(field: text), .allowed)
         XCTAssertEqual(check(field: empty), .refused(.conflict, "Im Eingabefeld steht nichts — es gibt nichts abzuschicken."))
@@ -259,6 +261,61 @@ final class SendAfterResumeTests: XCTestCase {
         if case .refused(let code, _) = check(status: .working, field: text) { XCTAssertEqual(code, .conflict) } else { XCTFail() }
         if case .refused(let code, _) = check(field: nil) { XCTAssertEqual(code, .notReady) } else { XCTFail() }
         if case .refused(let code, _) = check(field: text, readable: false) { XCTAssertEqual(code, .conflict) } else { XCTFail() }
+    }
+
+    /// Vic: Tippt der User in einem ruhenden Chat, darf submit seinen halben
+    /// Satz nicht abschicken. Ein liegengebliebener Auftrag zählt beim Tracker
+    /// als abgeschickt und bleibt erlaubt.
+    func testSubmitNeverSendsADraftOfTheUser() {
+        let decision = AgentControlRequestHandler.submitCheck(
+            profile: .claudeCodeChat, status: .idle, approvalPending: false, userDraft: true,
+            field: text, screenReadable: true)
+        guard case .refused(let code, let message) = decision else { return XCTFail("muss ablehnen") }
+        XCTAssertEqual(code, .conflict)
+        XCTAssertTrue(message.contains("Entwurf des Users"), message)
+
+        var tracker = TerminalComposerDraftTracker()
+        tracker.recordTextInserted()
+        XCTAssertTrue(tracker.mayHaveUnsentInput, "eingefügt ohne Enter: Entwurf")
+        tracker.recordSubmitted(programmaticAt: Date())
+        XCTAssertFalse(tracker.mayHaveUnsentInput, "liegengebliebener Auftrag gilt als abgeschickt")
+    }
+
+    // MARK: Vorschlag im leeren Feld (Platzhalter)
+
+    private final class Sink: TerminalDelegate {
+        func send(source: Terminal, data: ArraySlice<UInt8>) {}
+    }
+
+    /// Bildschirm durch ein echtes Terminal mit ANSI-Folgen, wie Claude ihn zeichnet.
+    private func screen(_ text: String) -> ControllerScreenSnapshot {
+        let terminal = Terminal(delegate: Sink(), options: TerminalOptions(cols: 100, rows: 12))
+        terminal.feed(text: text.replacingOccurrences(of: "\n", with: "\r\n"))
+        let capture = ControllerScreenCapture.bottomLines(of: terminal)
+        return ControllerScreenReading.read(lines: capture.lines, cursor: capture.cursor, detectViews: true)
+    }
+
+    /// Claude schlägt im leeren Feld einen nächsten Prompt vor (am 14.11.
+    /// zweimal beobachtet, etwa „Variante A für WM8-71, bau weiter“). Weder
+    /// submit noch die Prüfung auf einen Entwurf dürfen ihn für Text halten —
+    /// abgeblendet oder nicht, solange der Cursor am Anfang steht.
+    func testClaudesSuggestionInTheEmptyFieldIsNotText() {
+        let rule = String(repeating: "─", count: 80)
+        let (dim, reset, save, restore) = ("\u{1b}[2m", "\u{1b}[0m", "\u{1b}[s", "\u{1b}[u")
+        let suggestion = "Variante A für WM8-71, bau weiter"
+        for drawn in ["\(dim)❯ \(reset)\(save)\(dim)\(suggestion)\(reset)",   // abgeblendet
+                      "\(dim)❯ \(reset)\(save)\(suggestion)"] {                // nicht abgeblendet
+            let field = screen("\(rule)\n\(drawn)\n\(rule)\(restore)").promptField
+            XCTAssertNotNil(field, drawn)
+            XCTAssertEqual(field?.hasText, false, drawn)
+            XCTAssertFalse(PromptSubmitCheck.visibleDraft(field: field, profile: .claudeCodeChat, clearsBeforeSubmit: false))
+            guard case .refused = AgentControlRequestHandler.submitCheck(
+                profile: .claudeCodeChat, status: .idle, approvalPending: false, userDraft: false,
+                field: field, screenReadable: true) else { return XCTFail("Vorschlag darf nicht abgeschickt werden") }
+        }
+        // Gegenprobe: echter Text mit dem Cursor dahinter.
+        let typed = screen("\(rule)\n\(dim)❯ \(reset)\(suggestion)\(save)\n\(rule)\(restore)").promptField
+        XCTAssertEqual(typed?.hasText, true)
     }
 
     // MARK: chats resume mit Auftrag

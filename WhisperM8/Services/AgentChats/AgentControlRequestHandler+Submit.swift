@@ -31,6 +31,7 @@ extension AgentControlRequestHandler {
             let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
             switch Self.submitCheck(profile: controller.command.keyboardProfile, status: status,
                                     approvalPending: Self.approvalPending(targetID, controller),
+                                    userDraft: controller.composerDraft.mayHaveUnsentInput,
                                     field: screen?.promptField, screenReadable: screen != nil) {
             case .allowed:
                 controller.submitComposer()
@@ -66,14 +67,20 @@ extension AgentControlRequestHandler {
     }
 
     /// Pur: Darf das Enter raus? Nur bei einem ruhenden Claude-Chat, dessen
-    /// Eingabefeld sichtbar Text zeigt; nie in eine Freigabe (WM8-75).
+    /// Eingabefeld sichtbar Text zeigt; nie in eine Freigabe (WM8-75) und nie
+    /// für einen Entwurf des Users (Vic zu WM8-100): Den meldet der Tracker,
+    /// ein liegengebliebener Auftrag gilt dort als abgeschickt.
     static func submitCheck(profile: TerminalKeyboardProfile, status: AgentSessionRuntimeStatus?,
-                            approvalPending: Bool, field: ControllerPromptField?,
+                            approvalPending: Bool, userDraft: Bool, field: ControllerPromptField?,
                             screenReadable: Bool) -> SubmitDecision {
         guard profile == .claudeCodeChat else {
             return .refused(.unsupported, "`chats submit` gibt es nur für Claude-Chats")
         }
         if approvalPending { return .refused(.approvalPending, approvalPendingMessage) }
+        if userDraft {
+            return .refused(.conflict, "Im Eingabefeld steht vermutlich ein Entwurf des Users (getippt, nicht "
+                + "abgeschickt). submit schickt nur liegengebliebene Aufträge ab, nie Text des Users. Nichts abgeschickt.")
+        }
         if let status, status != .idle {
             return .refused(.conflict, "Ziel ist \(status.rawValue) — abschicken geht nur, wenn der Chat ruht")
         }
