@@ -55,7 +55,7 @@ Farben 1:1 aus `AppTheme.swift` (alle Tokens, hell und dunkel). Maße aus `Agent
 `AgentChatsView+Workspaces.swift` (Workspace-Kopf und -Zeile 28, Slot-Marke S1–S4),
 `AgentChatChromeViews.swift` (Tab 28 hoch, 100–190 breit, Ecken 7, Fußkurven 7, Gruppen-Chip 19 hoch)
 und `AgentStatusIndicator.swift`. Zustände: arbeitet, wartet auf dich, bereit, Fehler, gestoppt (Zeit),
-am Limit (Sanduhr, Branch `feat/WM8-69-chat-am-limit`), gepinnt, Workspaces, Projekte, Arbeitskopie-Marke,
+am Limit (nur als Zustand gezeigt, kein Code aus dem Branch `feat/WM8-69-chat-am-limit`, der noch nicht in main ist), gepinnt, Workspaces, Projekte, Arbeitskopie-Marke aus WM8-60 (in main: Zeile und Tab nur Symbol und nur bei Arbeitskopie oder anderem Branch, Chat-Kopf immer grau „Hauptordner“ oder lila mit Branch),
 Subagent-Chip, 4, 18 und 32 offene Tabs.
 
 ### Abweichungen zum Bildschirmfoto
