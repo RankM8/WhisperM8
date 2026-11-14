@@ -220,6 +220,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Tickets/TicketDetailPanel.swift",
         "WhisperM8/Views/Tickets/TicketDescriptionBlocks.swift",
         "WhisperM8/Views/Tickets/TicketBoardPresentation.swift",
+        "WhisperM8/Views/Tickets/TicketBoardScreen.swift",
         "WhisperM8/Views/AgentChatChromeViews.swift",
         "WhisperM8/Views/AgentChatsSidebarViews.swift",
         "WhisperM8/Views/AgentChatsView.swift",

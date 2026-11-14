@@ -7,17 +7,35 @@ struct TicketBoardActions {
     var openChat: (UUID) -> Void
     /// Adresse des Tickets im Ticket-Werkzeug; nur `https`.
     var openURL: (URL) -> Void
+    /// Zur Seite „Tickets“ der Einstellungen.
+    var openSettings: () -> Void = {}
 
     static let none = TicketBoardActions(refresh: {}, openChat: { _ in }, openURL: { _ in })
 }
 
-/// Stand des letzten Abrufs, für die Zeile im Kopf.
-struct TicketBoardLoadState: Equatable {
+/// Stand des letzten Abrufs. Nur die Zeile im Kopf und die Störungs-Zeile
+/// lesen hier: Ein Abruf, der alle 30 Sekunden beginnt und endet, wertet
+/// deshalb weder Board noch Karten neu aus.
+@MainActor
+@Observable
+final class TicketBoardLoad {
     var fetchedAt: Date?
     var isLoading = false
     /// Fertig übersetzter Satz, wenn der letzte Abruf scheiterte. Der letzte
     /// Stand bleibt stehen.
     var problem: String?
+
+    init(fetchedAt: Date? = nil, isLoading: Bool = false, problem: String? = nil) {
+        self.fetchedAt = fetchedAt
+        self.isLoading = isLoading
+        self.problem = problem
+    }
+
+    func reset() {
+        fetchedAt = nil
+        isLoading = false
+        problem = nil
+    }
 }
 
 /// Die Ticket-Ansicht eines Projekts: Kopf mit Umschalter Board/Backlog,
@@ -26,7 +44,7 @@ struct TicketBoardLoadState: Equatable {
 struct TicketBoardView: View {
     let title: String
     @Bindable var model: TicketBoardViewModel
-    let load: TicketBoardLoadState
+    let load: TicketBoardLoad
     let source: TicketChatStatusSource
     let actions: TicketBoardActions
 
@@ -35,9 +53,7 @@ struct TicketBoardView: View {
         VStack(alignment: .leading, spacing: 10) {
             TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
             TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
-            if let problem = load.problem {
-                TicketBoardProblemLine(problem: problem, fetchedAt: load.fetchedAt)
-            }
+            TicketBoardProblemLine(load: load)
             GeometryReader { proxy in
                 // Breit: Detail neben dem Inhalt. Schmal: Detail liegt darüber,
                 // sonst bliebe für Spalten oder Liste nichts übrig.
@@ -97,7 +113,7 @@ struct TicketBoardView: View {
 private struct TicketBoardHeader: View {
     let title: String
     @Binding var mode: TicketBoardViewModel.Mode
-    let load: TicketBoardLoadState
+    let load: TicketBoardLoad
     let refresh: () -> Void
 
     var body: some View {
@@ -119,23 +135,32 @@ private struct TicketBoardHeader: View {
             Spacer(minLength: 8)
 
             TicketBoardSyncLabel(load: load)
-            Button(action: refresh) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 24, height: 22)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(AgentTheme.textSecondary)
-            .disabled(load.isLoading)
-            .help(Text("Refresh"))
-            .accessibilityLabel(Text("Refresh"))
+            TicketBoardRefreshButton(load: load, refresh: refresh)
         }
+    }
+}
+
+private struct TicketBoardRefreshButton: View {
+    let load: TicketBoardLoad
+    let refresh: () -> Void
+
+    var body: some View {
+        Button(action: refresh) {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 24, height: 22)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(AgentTheme.textSecondary)
+        .disabled(load.isLoading)
+        .help(Text("Refresh"))
+        .accessibilityLabel(Text("Refresh"))
     }
 }
 
 /// „Aktualisiert 05:41“: eine feste Uhrzeit, kein Zähler, der mitläuft.
 private struct TicketBoardSyncLabel: View {
-    let load: TicketBoardLoadState
+    let load: TicketBoardLoad
 
     var body: some View {
         Group {
@@ -153,25 +178,26 @@ private struct TicketBoardSyncLabel: View {
 }
 
 private struct TicketBoardProblemLine: View {
-    let problem: String
-    let fetchedAt: Date?
+    let load: TicketBoardLoad
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 11, weight: .medium))
-            if let fetchedAt {
-                Text("\(problem) Showing the state from \(TicketBoardText.time(fetchedAt)).")
-            } else {
-                Text(verbatim: problem)
+        if let problem = load.problem {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11, weight: .medium))
+                if let fetchedAt = load.fetchedAt {
+                    Text("\(problem) Showing the state from \(TicketBoardText.time(fetchedAt)).")
+                } else {
+                    Text(verbatim: problem)
+                }
             }
+            .font(.system(size: 11.5))
+            .foregroundStyle(AgentTheme.statusAwaiting)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AgentTheme.statusAwaiting.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .font(.system(size: 11.5))
-        .foregroundStyle(AgentTheme.statusAwaiting)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AgentTheme.statusAwaiting.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

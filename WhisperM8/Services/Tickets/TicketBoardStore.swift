@@ -25,6 +25,10 @@ final class TicketBoardStore {
     /// Für welches Team gerade ein Abruf läuft. Je Team, nicht ein Schalter:
     /// Nach einem Teamwechsel darf das neue Team sofort laden.
     @ObservationIgnored private var loadingTeam: String?
+    /// Beginn und Ende jedes Abrufs. Die Ansicht gleicht hier ab, statt den
+    /// Speicher in ihrer Wurzel zu beobachten: So zeichnet ein Abruf nur die
+    /// Zeile im Kopf neu.
+    @ObservationIgnored var onChange: (@MainActor () -> Void)?
 
     init(
         source: TicketSource,
@@ -71,15 +75,18 @@ final class TicketBoardStore {
         guard let team, loadingTeam != team else { return }
         loadingTeam = team
         isLoading = true
+        onChange?()
         defer {
             // Hat inzwischen ein anderes Team übernommen, gehört der Schalter ihm.
             if loadingTeam == team {
                 loadingTeam = nil
                 isLoading = false
             }
+            onChange?()
         }
         do {
-            let fresh = try await source.board(team: team)
+            let source = source
+            let fresh = try await PerfBudgets.ticketsFetch.withInterval { try await source.board(team: team) }
             // Zwischendurch das Team gewechselt: Antwort gehört nicht mehr hierher.
             guard self.team == team else { return }
             snapshot = fresh
