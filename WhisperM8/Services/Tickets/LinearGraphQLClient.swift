@@ -40,7 +40,11 @@ struct LinearGraphQLClient {
 
     static let liveTransport: (URLRequest) async throws -> (Data, Int) = { request in
         let (data, response) = try await URLSession.shared.data(for: request)
-        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+        let http = response as? HTTPURLResponse
+        if let http, request.url == endpoint {
+            LinearCostMeter.shared.record { http.value(forHTTPHeaderField: $0) }
+        }
+        return (data, http?.statusCode ?? 0)
     }
 
     /// Führt die Anfrage aus und liefert das Feld `data`.
@@ -98,8 +102,8 @@ struct LinearGraphQLClient {
 // MARK: - Zugang im Schlüsselbund
 
 /// Merkt sich die Keys für die Dauer des Prozesses, je Workspace einen. Ohne
-/// das startete jeder GraphQL-Aufruf einen `security`-Prozess, in der App alle
-/// 30 Sekunden.
+/// das startete jeder GraphQL-Aufruf einen `security`-Prozess, in der App bei
+/// jedem Abruf im Takt.
 final class TicketCredentialCache: @unchecked Sendable {
     static let shared = TicketCredentialCache()
 

@@ -85,9 +85,31 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertEqual(viewModel.rebuilds, builds, "der Zustand der Chats zählt für den Inhalt nicht")
         XCTAssertEqual(changed.chatStates[jon], .needsYou, "er geht getrennt an die Status-Punkte")
 
-        let source = TicketChatStatusSource()
-        source.set(changed.chatStates)
-        XCTAssertEqual(source.states[ole], .working)
+        let source = TicketChatStatusSource.fixed(changed.chatStates)
+        XCTAssertEqual(source.current(ole), .working)
+        XCTAssertNil(source.current(UUID()), "ein Chat, den die Quelle nicht kennt, hat keinen Zustand")
+    }
+
+    func testDetailContentIsDerivedOnce() {
+        var first = TicketFixtures.link(jon)
+        first.since = Date(timeIntervalSince1970: 1_794_626_460)
+        var ticket = TicketFixtures.ticket(1, status: "In Progress", links: [first, TicketFixtures.link(ole)])
+        ticket.url = "https://linear.app/x/issue/WM8-1"
+        let entry = TicketBoardEntry(ticket: ticket, agents: [
+            TicketAgent(link: first, chat: nil),   // läuft auf einem anderen Rechner
+            TicketAgent(link: TicketFixtures.link(ole), chat: chat(ole, "Ole · Terminal", .idle)),
+        ])
+        let content = TicketDetailContent.make(entry, description: [])
+        XCTAssertEqual(content.localChatID, ole, "„Zum Chat“ nimmt den ersten Chat auf diesem Rechner")
+        XCTAssertEqual(content.agents.map(\.since), [first.since, nil])
+        XCTAssertEqual(content.agents.map { $0.entry.agents.count }, [1, 1])
+        XCTAssertEqual(content.url?.absoluteString, "https://linear.app/x/issue/WM8-1")
+
+        for bad in ["http://linear.app/x", "file:///Applications/Calculator.app", "whisperm8://chat/1", "kein link"] {
+            ticket.url = bad
+            XCTAssertNil(TicketDetailContent.make(TicketBoardEntry(ticket: ticket, agents: []), description: []).url,
+                         "„In Linear öffnen“ nur mit https: \(bad)")
+        }
     }
 
     func testChosenPersonStaysVisibleWithZeroHits() {

@@ -144,6 +144,11 @@ tools you would run in Terminal, with their own sign-in, models and commands.
   you turn on *Advanced agent features* in Settings → Agent Chats.
 - **Workspaces:** place several chats of a project side by side in a grid and switch between them with
   `Ctrl+Tab`.
+- **Tickets (Labs):** with *Show tickets in Agent Chats* turned on in Settings → Tickets, a ticket button
+  appears next to the sidebar button. It switches the window between your chats and the tickets of the
+  selected project: a board and a backlog from Linear, with the chat that works on each ticket and its
+  live status. The view only reads; WhisperM8 never changes a ticket from here. Selecting a chat, a tab
+  or a workspace brings the chats back.
 
 ### Status
 
@@ -237,6 +242,7 @@ pages sit behind *Show Agent Chats settings*.
 | **GPT-Backend** | *Labs:* GPT models inside Claude Code via a local proxy, ChatGPT accounts |
 | **Codex Voice Agent** | *Labs:* mute and unmute a Codex voice session with a spoken code word |
 | **Jarvis & Callouts** | *Labs:* supervisor board, notes on grid tiles, spoken callouts |
+| **Tickets** | *Labs:* show Linear tickets in Agent Chats, Linear key per workspace, which project folder belongs to which team |
 
 Labs features are experimental and off by default.
 
@@ -309,6 +315,11 @@ Sign-in problems are shown inside the chat itself — follow the CLI's instructi
   requests it.
 - **Agent Chats** run the Claude Code and Codex tools on your Mac; what they send is governed by those
   tools and your accounts. Automatic chat summaries are off by default.
+- **Tickets (Labs, off by default):** while the ticket view is turned on, WhisperM8 connects to
+  `api.linear.app` with your personal Linear key and reads the tickets of the teams you linked: every
+  two minutes while the view is visible, never while it is hidden or turned off. The key is stored in the
+  macOS Keychain. The app does not write to Linear. The `whisperm8 tickets` command, which chats use,
+  does: it attaches the chat's title to its ticket, visible to everyone in that Linear workspace.
 - **Settings** are stored in macOS user defaults (`com.whisperm8.app`).
 
 ---

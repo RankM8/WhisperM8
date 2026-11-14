@@ -172,7 +172,12 @@ final class WindowRequestCenter: ObservableObject {
     /// Bringt den Chat `sessionID` in den Vordergrund: Ziel ist das Fenster,
     /// das ihn bereits als Tab zeigt, sonst das Primärfenster (Tab wird dort
     /// geöffnet + selektiert). Einstieg für den Notification-Klick.
-    func requestSessionFocus(sessionID: UUID, activate: Bool = true) {
+    ///
+    /// `fromControlChannel`: Die Anfrage kommt von `whisperm8 chats …`, nicht
+    /// vom Nutzer am Fenster. Zeigt das Zielfenster gerade Tickets, bleibt es
+    /// dabei, außer der Chat muss erst starten (`shouldLaunchOnOpen`): Er
+    /// startet nur, wenn seine Ansicht im Fenster steht.
+    func requestSessionFocus(sessionID: UUID, activate: Bool = true, fromControlChannel: Bool = false) {
         let windowStore = AgentWindowStore.shared
         // Stale-Guard (Review-Finding): eine veraltete Notification auf eine
         // inzwischen archivierte/gelöschte Session darf den UI-State nicht
@@ -193,7 +198,11 @@ final class WindowRequestCenter: ObservableObject {
         // Über die zentrale Klickregel: im sichtbaren Grid wird die Pane
         // fokussiert, sonst öffnet die Einzelansicht (nie an der Grid-
         // Invariante vorbei einen Nicht-Slot selektieren).
-        windowStore.navigateToSession(sessionID, in: targetWindowID)
+        if fromControlChannel, session.shouldLaunchOnOpen != true {
+            windowStore.keepingTicketsMode { windowStore.navigateToSession(sessionID, in: targetWindowID) }
+        } else {
+            windowStore.navigateToSession(sessionID, in: targetWindowID)
+        }
         // Sidebar-Reveal: Selektion allein macht die Row nicht sichtbar —
         // Projekt-Gruppe aufklappen und bei Subagent-Kindern die Parent-
         // Gruppe explizit öffnen (die implizite Offenhaltung über die

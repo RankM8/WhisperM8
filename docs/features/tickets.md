@@ -1,5 +1,5 @@
 ---
-status: aktiv (Kern, Kommandozeile, Skill und Einstellungen; die Ansicht in der App ist im Bau)
+status: aktiv (Kern, Kommandozeile, Skill, Einstellungen und die lesende Ansicht in der App, Stufe 1)
 updated: 2026-11-14
 ---
 
@@ -8,9 +8,10 @@ updated: 2026-11-14
 WhisperM8 verbindet die Tickets im Ticket-Werkzeug mit den Chats der App. Ein Chat hängt sich an sein
 Ticket; daraus ergibt sich, wer woran sitzt, welche Chats laufen und welche Tickets niemanden haben.
 
-Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin und
-die Seite „Tickets“ in den Einstellungen (Labs). Die sichtbare Ansicht (Board und Backlog im
-Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
+Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin, die
+Seite „Tickets“ in den Einstellungen (Labs) und die Ansicht im Agent-Chats-Fenster (Board und Backlog, nur
+lesend, Stufe 1). Knöpfe, die Tickets ändern (Stufe 2), gibt es nicht. Plan:
+[`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
 [`../design/ticket-board.html`](../design/ticket-board.html).
 
 ## Wer mit dem Ticket-System spricht
@@ -281,9 +282,92 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 ## Die Ansicht in der App
 
-Stand 14.11.2026: Die Ansicht ist gebaut und in Bildern geprüft (`make snapshots ONLY=tickets-b`, Beispiele in
-[`../design/ticket-board/`](../design/ticket-board/)); der Einstieg im Agent-Chats-Fenster fehlt noch. Sie liest
-nur.
+Die Ansicht liest nur. Bilder: `make snapshots ONLY=tickets` (Board, Backlog, Detail, Leerzustände), Beispiele
+in [`../design/ticket-board/`](../design/ticket-board/).
+
+### Einstieg
+
+- **Knopf in der Titelzone:** Ist der Schalter „Show tickets in Agent Chats“ an, steht neben dem Knopf für die
+  Seitenleiste ein Ticket-Knopf. Er schaltet den Bereich unter der Tab-Leiste zwischen Chats und Tickets um;
+  Seitenleiste und Tabs bleiben stehen. Ist der Schalter aus, gibt es den Knopf nicht.
+- **Welches Projekt:** das im Fenster gewählte. Ein Klick auf ein Projekt in der Seitenleiste wechselt das
+  Board; Filter und Auswahl gehören zum Projekt und werden dabei verworfen.
+- **Zurück zu den Chats:** derselbe Knopf, ⌘W, oder alles, womit der Nutzer einen Chat oder Workspace wählt
+  (Klick in Seitenleiste oder Tab-Leiste, ⌘1 bis ⌘9, Ctrl+Tab, Controller, „Zum Chat“ am Ticket, ein Workspace,
+  eine Mitteilung). Rückt die Auswahl nur nach, weil ein Tab geschlossen oder ein Chat archiviert wurde, bleiben
+  die Tickets stehen.
+- **Steuerkanal:** Wählt `whisperm8 chats focus`, `chats open` oder `workspace open` einen Chat, bleiben die
+  Tickets ebenfalls stehen; die Auswahl wechselt dahinter. Ausnahme: ein Chat, der erst starten muss
+  (`chats start`, `chats resume`), siehe Grenzen.
+- **Was hinter den Tickets nicht gilt:** Der gewählte Chat ist kein Ziel für das Diktat, ein Subagent-Ergebnis
+  gilt nicht als gelesen, und das Projekt des Boards folgt einer Auswahl aus dem Steuerkanal nicht. Beim
+  Verlassen der Tickets wird beides für den gewählten Chat nachgeholt: Das Projekt folgt ihm, sein Ergebnis gilt
+  als gelesen.
+  Fertig-Ton, Mitteilung, Ansage und Notch melden einen verdeckten Chat wie jeden anderen; sie prüfen nirgends,
+  ob ein Chat gerade zu sehen ist.
+- **Je Fenster, nicht gespeichert:** Jedes Fenster schaltet für sich. Nach einem Neustart zeigt jedes Fenster
+  wieder Chats. Wer zwischen Chats und Tickets wechselt, sieht beim Zurückkommen sofort den letzten Stand; der
+  frische Abruf läuft dahinter.
+- **Controller und Tastatur:** Solange Tickets den Chat verdecken, meldet das Fenster dem Controller keinen
+  gewählten Chat. Bestätigen, Abbrechen und Diktat per Controller treffen ihn dann nicht. ⌃⌘Pfeil wechselt den
+  Fokus im verdeckten Raster nicht.
+- **Fenster schließen:** gibt Modus und Stand der Ticket-Ansicht dieses Fensters frei.
+
+### Abruf
+
+- Abgerufen wird beim Zeigen sofort, danach alle 120 Sekunden, dazu der Knopf im Kopf. Ist das Fenster verdeckt,
+  minimiert oder geschlossen, zeigt es Chats, oder ist der Schalter aus, gibt es keinen Abruf.
+- Meldet Linear „Rate limited“, ruht der Takt 15 Minuten (`TicketBoardStore.rateLimitPause`), auch über
+  Verdecken und Zeigen hinweg. Der Knopf fragt trotzdem, einmal je Druck.
+- Wird das Fenster wieder aktiv, liest die Ansicht Zuordnung und Schlüssel neu. Wer in den Einstellungen etwas
+  einrichtet und zurückkommt, sieht das Board ohne weiteren Klick.
+- Ändert sich etwas an den Chats der App (neuer Chat, neuer Titel, Chat beendet), gleicht die Ansicht nach
+  zwei Sekunden Ruhe neu ab, ohne Linear zu fragen. Eine neue Verknüpfung (`tickets link`) liegt bei Linear und
+  steht deshalb erst nach dem nächsten Abruf auf der Karte, spätestens nach 120 Sekunden oder mit dem Knopf.
+  Der Zustand eines Chats folgt sofort.
+- Signposts in der Stufe `.detail`: `tickets.fetch` (ein Abruf bei Linear), `tickets.chats` (Liste der Chats
+  lesen, Main Thread), `tickets.build` (Abgleich abseits des Main Threads).
+
+### Was ein Abruf bei Linear kostet
+
+Linear zählt je Key und Stunde 2.500 Anfragen und 3.000.000 „Complexity“-Punkte. Derselbe Key trägt die Ansicht
+und jeden `tickets`-Befehl aller Chats: Ist das Budget weg, steht beides. Gemessen am 14.11.2026 über die
+Kopfzeilen der Antworten (`X-Complexity`, `X-RateLimit-Requests-Remaining`, `X-RateLimit-Complexity-Remaining`):
+
+| Team | offene Tickets | Anfragen je Abruf | Punkte vorher | Punkte jetzt |
+|---|---|---|---|---|
+| WM8 | 74 | 2 | 230 | 140 |
+| DEA | 4 | 2 | 230 | 140 |
+| PRB | 108 | 3 | 310 | 175 |
+
+„Vorher“ holte je Ticket 20 Labels, 20 Anhänge und 20 Beziehungen. Jetzt holt das Board 8 Labels, 8 Anhänge
+(nur die Verknüpfungen mit Chats) und 6 Beziehungen (`LinearTicketSource.boardFields`); das einzelne Ticket
+bleibt bei den vollen Listen. Die Punkte hängen an der Abfrage, nicht an der Zahl der Tickets; je weitere
+100 offene Tickets kommt eine Anfrage dazu.
+
+Ein sichtbares Fenster mit dem Board von WM8 braucht damit je Stunde 60 Anfragen (2,4 % des Budgets) und
+4.200 Punkte (0,14 %). Beim alten Takt von 30 Sekunden wären es 240 Anfragen gewesen (9,6 %). Knapp sind also
+die Anfragen, nicht die Punkte. Der Takt von 120 Sekunden ist ein Startwert.
+
+Die Zahlen lassen sich jederzeit nachmessen: `whisperm8 tickets doctor` nennt je Team die Kosten eines Abrufs
+und den Rest des Budgets („Budget WM8“). Jede Anfrage schreibt außerdem `linear_cost complexity=…
+remaining_complexity=… remaining_requests=…` ins Debug-Log; der Schlüssel steht nicht darin.
+
+### Was die Ansicht statt des Boards zeigt
+
+| Zustand | Text | Knopf |
+|---|---|---|
+| kein Projekt gewählt | „Choose a project“ | keiner |
+| Ordner gehört zu keinem Team | „This project is not linked to a team“ | zu den Ticket-Einstellungen |
+| kein Schlüssel für den Workspace | „No Linear key for this workspace“ | zu den Ticket-Einstellungen |
+| erster Abruf läuft | „Loading tickets…“ | keiner |
+| erster Abruf gescheitert | „Tickets could not be loaded“ mit dem Grund | „Try Again“ |
+| Schalter ging aus, während die Ansicht offen war | das Fenster kehrt zu den Chats zurück | |
+
+Scheitert ein späterer Abruf, bleibt das Board stehen, und eine Zeile nennt den Grund und die Uhrzeit des
+gezeigten Stands.
+
+### Inhalt
 
 - **Board:** drei Spalten nach Art des Status (in Arbeit, als Nächstes, Backlog). In „In Arbeit“ stehen die
   Tickets nach Status in der Reihenfolge des Teams, darin nach Priorität. Jede Karte zeigt Nummer, Priorität,
@@ -339,14 +423,36 @@ Zeilen werden nicht gesetzt, der Rest steht in Linear.
 - **Text an Tickets:** höchstens 64 KB je Text, aus Argument, stdin oder `@datei`. Was gesendet wird, liegt
   danach bei Linear. `@datei` liest jede lesbare Datei; den Inhalt prüft die Kommandozeile nicht.
 - Ein Board lädt bis zu 500 offene Tickets (fünf Seiten zu 100).
-- Linear erlaubt 2.500 Abfragen je Stunde und Person. Ein `board` braucht zwei Abfragen.
+- Linear erlaubt 2.500 Abfragen je Stunde und Person. Ein `board` braucht zwei Abfragen, je weitere 100 offene
+  Tickets eine mehr (Messung oben unter „Was ein Abruf bei Linear kostet“).
 - Zyklen, Vorhaben, Meilensteine, Dokumente und Releases deckt die Kommandozeile nicht ab; dafür gibt es den
   Linear-MCP.
 - Chats, die in WhisperM8 auf einem anderen Rechner laufen, erscheinen am Ticket ohne Zustand
   („anderer Rechner oder gelöscht“).
+- **Ein Chat, den die CLI startet oder fortsetzt, holt das Fenster aus den Tickets.** Ein Chat startet erst,
+  wenn seine Ansicht im Fenster steht (`shouldLaunchOnOpen` im `AgentSessionDetailView`); bliebe das Fenster
+  bei den Tickets, liefe er nicht an. Wer als Supervisor Chats startet, während jemand das Board liest,
+  unterbricht ihn dabei. Wer das Board in Ruhe lesen will, öffnet es in einem zweiten Fenster: Neue und
+  fortgesetzte Chats landen im Hauptfenster (oder in dem Fenster, das ihren Tab schon zeigt). Den Start von der
+  Ansicht zu lösen, ist nicht Teil von Stufe 1.
+- **Zwei Fenster mit Tickets rufen doppelt ab.** Jedes Fenster hat seinen eigenen Takt, auch für dasselbe Team.
+- **Das Board zeigt je Ticket höchstens acht Verknüpfungen mit Chats,** die zuletzt geänderten zuerst; bei mehr
+  fehlen die ältesten, nie die aktive. „Blockiert“ rechnet es aus höchstens sechs Beziehungen. `tickets show`
+  liest die vollen Listen.
+- **Die Auswahl-Abfrage beim Wiederverbinden eines Chats** kann über den Tickets erscheinen, wenn der Tab
+  dahinter gewählt ist.
+- **Kein Tastenkürzel für den Umschalter,** und der Umschalter für Chats mit Ctrl+Tab ist über den Tickets
+  nicht zu sehen (er wechselt trotzdem).
+- **„Zum Chat“ liest die Workspace-Datei auf dem Main Thread.** Das ist der vorhandene Weg der App
+  (`WindowRequestCenter.requestSessionFocus`), nicht neu, aber hier ein weiterer Aufrufer.
 
 ## Tests
 
 `TicketBoardModelTests`, `LinearTicketSourceTests`, `TicketBoardStoreTests`, `TicketConfigTests`, `TicketToolTests`,
 `TicketsCLITests`: pure Typen, Quelle gegen feste Antworten, Speicher mit eingespeister Wartefunktion,
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.
+
+Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail),
+`TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
+Antworten) und `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
+den Controller). Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.

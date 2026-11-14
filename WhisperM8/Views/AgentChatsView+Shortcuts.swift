@@ -76,7 +76,8 @@ extension AgentChatsView {
     /// `.function`/`.numericPad`-Flags, daher Contains-Prüfung statt
     /// Gleichheit (Muster `TabNavShortcut`).
     private func handleGridFocusShortcut(_ event: NSEvent) -> NSEvent? {
-        guard let hostWindow, event.window === hostWindow, isGridActive else { return event }
+        // Hinter den Tickets ist das Raster nicht zu sehen: kein Fokuswechsel ins Blaue.
+        guard let hostWindow, event.window === hostWindow, isGridActive, !isTicketsModeActive else { return event }
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers.contains(.control), modifiers.contains(.command),
               !modifiers.contains(.option), !modifiers.contains(.shift) else { return event }
@@ -111,6 +112,11 @@ extension AgentChatsView {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers == .command,
               event.charactersIgnoringModifiers == "w" else { return event }
+        // Tickets verdecken den gewählten Tab: ⌘W schließt dann die Tickets.
+        if isTicketsModeActive {
+            windowStore.setTicketsMode(false, in: windowID)
+            return nil
+        }
         guard let session = selectedSession else { return event }
         closeTabByUser(session)
         return nil

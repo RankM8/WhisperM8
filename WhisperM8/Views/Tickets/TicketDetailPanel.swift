@@ -3,14 +3,14 @@ import SwiftUI
 /// Detail zum gewählten Ticket: Eckdaten, der Chat daran, der Text, dazu
 /// „Zum Chat“ und „In Linear öffnen“. Stufe 1 ändert nichts.
 struct TicketDetailPanel: View {
-    let entry: TicketBoardEntry
-    /// Beschreibung, schon zerlegt.
-    let description: [TicketDescriptionBlock]
+    /// Fertig abgeleitet; im Body wird nichts gerechnet.
+    let content: TicketDetailContent
     let source: TicketChatStatusSource
     let actions: TicketBoardActions
     let close: () -> Void
 
-    private var ticket: Ticket { entry.ticket }
+    private var entry: TicketBoardEntry { content.entry }
+    private var ticket: Ticket { content.entry.ticket }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -69,12 +69,11 @@ struct TicketDetailPanel: View {
                         if entry.agents.isEmpty {
                             TicketAgentRow(entry: entry, source: source)
                         }
-                        ForEach(entry.agents, id: \.link.id) { agent in
+                        ForEach(content.agents) { line in
                             VStack(alignment: .leading, spacing: 2) {
-                                TicketAgentRow(entry: TicketBoardEntry(ticket: ticket, agents: [agent]), source: source)
-                                // „arbeitet seit …“, so wie es am Ticket steht.
-                                if let since = agent.link.subtitle.components(separatedBy: " · ").first, !since.isEmpty {
-                                    Text(verbatim: since)
+                                TicketAgentRow(entry: line.entry, source: source)
+                                if let since = line.since {
+                                    Text("since \(TicketBoardText.since(since))")
                                         .font(.system(size: 11))
                                         .foregroundStyle(AgentTheme.textSecondary)
                                 }
@@ -89,20 +88,19 @@ struct TicketDetailPanel: View {
                     }
 
                     HStack(spacing: 8) {
-                        // Der erste Chat, der auf diesem Rechner läuft.
-                        if let chat = entry.agents.lazy.compactMap(\.chat).first {
-                            Button("Go to chat") { actions.openChat(chat.id) }
+                        if let chatID = content.localChatID {
+                            Button("Go to chat") { actions.openChat(chatID) }
                                 .buttonStyle(SettingsButtonStyle.primary)
                         }
-                        if let url = ticket.url.flatMap(URL.init(string:)), TicketDescriptionBlocks.isSafe(url) {
+                        if let url = content.url {
                             Button("Open in Linear") { actions.openURL(url) }
                                 .buttonStyle(SettingsButtonStyle.standard)
                         }
                     }
 
-                    if !description.isEmpty {
+                    if !content.description.isEmpty {
                         Rectangle().fill(AgentTheme.border).frame(height: 1)
-                        TicketDescriptionView(blocks: description)
+                        TicketDescriptionView(blocks: content.description)
                     }
                 }
                 .padding(14)

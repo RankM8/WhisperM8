@@ -57,6 +57,16 @@ enum TicketChatLinkFormat {
         ]
     }
 
+    /// Liest `since` aus den Metadaten. Die App schreibt mit Zeitzone; das
+    /// Übergangs-Skript schrieb Ortszeit ohne Zone (`2026-11-14T00:51:00`).
+    static func date(_ raw: String) -> Date? {
+        if let date = ISO8601DateFormatter().date(from: raw) { return date }
+        let local = DateFormatter()
+        local.locale = Locale(identifier: "en_US_POSIX")
+        local.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return local.date(from: raw)
+    }
+
     /// `14.11. 00:51`, bewusst ohne Jahr und ohne Sprachabhängigkeit.
     static func stamp(_ date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.day, .month, .hour, .minute], from: date)

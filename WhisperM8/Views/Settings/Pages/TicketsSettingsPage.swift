@@ -37,8 +37,7 @@ struct TicketsSettingsPage: View {
                 )
             }
 
-            // Bis die Ansicht da ist: sagen, was der Schalter heute schon tut.
-            SettingsHelpText("The Tickets view itself arrives with a later update. Access and projects set up here already work for the whisperm8 tickets command.")
+            SettingsHelpText("While the switch is on, a ticket button sits in the title band of the Agent Chats window, next to the sidebar button. It switches between chats and tickets.")
 
             if enabled {
                 accessSection

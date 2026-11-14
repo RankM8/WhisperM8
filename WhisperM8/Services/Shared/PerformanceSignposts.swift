@@ -248,6 +248,17 @@ enum PerfBudgets {
     )
     static let sidebarModelBuild = PerformanceBudget(name: "sidebar.modelBuild", budget: 0.0167, signposter: PerfSignposts.sidebar)
 
+    /// Ein Abruf der Ticket-Ansicht bei Linear (zwei Abfragen, bis zu fünf
+    /// Seiten). Netz-Latenz, keine Main-Thread-Kosten; läuft alle 30 Sekunden,
+    /// solange die Ansicht sichtbar ist. Startwert, gegen Realdaten nachziehen.
+    static let ticketsFetch = PerformanceBudget(name: "tickets.fetch", budget: 3.0, signposter: PerfSignposts.store, tier: .detail)
+    /// Liste der Chats für den Abgleich lesen: einmal je neuem Abzug, auf dem
+    /// Main Thread, über alle Sitzungen des Workspace.
+    static let ticketsChats = PerformanceBudget(name: "tickets.chats", budget: 0.004, signposter: PerfSignposts.store, tier: .detail)
+    /// Abgleich des Abzugs mit den Chats der App (wer sitzt woran), abseits des
+    /// Main Threads. Startwert für bis zu 500 Tickets.
+    static let ticketsBuild = PerformanceBudget(name: "tickets.build", budget: 0.030, signposter: PerfSignposts.store, tier: .detail)
+
     /// Die Arbeit, die JEDER abgeschlossene Scan auf dem Main Thread nach sich
     /// zieht: Workspace neu laden, Projekt-Icons erkennen, Auto-Benennung
     /// anstossen — pro offenem Fenster.

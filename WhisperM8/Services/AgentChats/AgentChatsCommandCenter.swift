@@ -145,6 +145,18 @@ struct AgentChatsWindowSnapshot: Equatable {
     /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
     /// und ist womöglich selbst Key geworden.
     var ownsKeyOverlay: Bool { isNewChatPickerOpen || isConfirmationOpen }
+
+    /// Derselbe Zustand, wenn eine andere Ansicht die Chats verdeckt (Tickets):
+    /// kein gewählter Chat, kein Raster. Befehle, die auf „den Chat vor mir“
+    /// wirken (Enter, Escape, Diktat), finden dann kein Ziel; die Liste links
+    /// bleibt bedienbar.
+    func withChatsHidden() -> AgentChatsWindowSnapshot {
+        var copy = self
+        copy.selectedSessionID = nil
+        copy.isGridActive = false
+        copy.canReturnToWorkspace = false
+        return copy
+    }
 }
 
 /// Eine Zeile der Liste links, so wie die Navigation sie braucht.

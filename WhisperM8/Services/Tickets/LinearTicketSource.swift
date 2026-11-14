@@ -25,6 +25,23 @@ struct LinearTicketSource: TicketSource {
     inverseRelations(first: 20) { nodes { type issue { state { type } } } }
     """
 
+    /// Felder für das Board, das im Takt geholt wird: kleinere Listen als beim
+    /// einzelnen Ticket. Von den Anhängen zählen nur die Verknüpfungen mit
+    /// Chats (`$prefix`), die Karte zeigt höchstens zwei Labels, und für
+    /// „blockiert“ reicht eine Handvoll Beziehungen. Die Anhänge kommen in
+    /// fester Reihenfolge, zuletzt geänderte zuerst: Hat ein Ticket mehr als
+    /// acht Verknüpfungen, fehlen die ältesten, nie die aktive.
+    static let boardFields = """
+    id identifier title description priority url updatedAt
+    state { id name type position }
+    project { name }
+    projectMilestone { name }
+    assignee { id name }
+    labels(first: 8) { nodes { name } }
+    attachments(first: 8, orderBy: updatedAt, filter: { url: { startsWith: $prefix } }) { nodes { id title subtitle url metadata creator { name } } }
+    inverseRelations(first: 6) { nodes { type issue { state { type } } } }
+    """
+
     static let closedTypes = ["completed", "canceled", "duplicate"]
 
     func board(team: String) async throws -> TicketBoardSnapshot {
@@ -34,7 +51,7 @@ struct LinearTicketSource: TicketSource {
           closed: issues(first: 100, orderBy: updatedAt, filter: {
             team: { key: { eq: $team } }, state: { type: { in: $closed } },
             attachments: { some: { url: { startsWith: $prefix } } }
-          }) { nodes { \(Self.ticketFields) } }
+          }) { nodes { \(Self.boardFields) } }
         }
         """, variables: ["team": team, "closed": Self.closedTypes, "prefix": TicketChatLinkFormat.urlPrefix])
         guard let teamNode = Self.nodes(head["teams"]).first else {
@@ -44,13 +61,13 @@ struct LinearTicketSource: TicketSource {
 
         var cursor: String?
         for _ in 0..<maxPages {
-            var variables: [String: Any] = ["team": team, "closed": Self.closedTypes]
+            var variables: [String: Any] = ["team": team, "closed": Self.closedTypes, "prefix": TicketChatLinkFormat.urlPrefix]
             if let cursor { variables["after"] = cursor }
             let page = try await client.run("""
-            query($team: String!, $closed: [String!]!, $after: String) {
+            query($team: String!, $closed: [String!]!, $prefix: String!, $after: String) {
               issues(first: 100, after: $after, filter: {
                 team: { key: { eq: $team } }, state: { type: { nin: $closed } }
-              }) { nodes { \(Self.ticketFields) } pageInfo { hasNextPage endCursor } }
+              }) { nodes { \(Self.boardFields) } pageInfo { hasNextPage endCursor } }
             }
             """, variables: variables)
             let issues = page["issues"] as? [String: Any] ?? [:]
@@ -350,12 +367,14 @@ struct LinearTicketSource: TicketSource {
         guard let id = node["id"] as? String, let url = node["url"] as? String,
               let chatID = TicketChatLinkFormat.chatID(fromURL: url) else { return nil }
         // Fremde Anhänge mit unserer Adresse zählen nicht: Die Marke muss stimmen.
-        guard (node["metadata"] as? [String: Any])?["source"] as? String == TicketChatLinkFormat.source else { return nil }
+        let metadata = node["metadata"] as? [String: Any] ?? [:]
+        guard metadata["source"] as? String == TicketChatLinkFormat.source else { return nil }
         let subtitle = node["subtitle"] as? String ?? ""
         return TicketChatLink(
             id: id, chatID: chatID, isActive: TicketChatLinkFormat.isActive(subtitle: subtitle),
             title: node["title"] as? String ?? "", subtitle: subtitle,
-            creatorName: (node["creator"] as? [String: Any])?["name"] as? String)
+            creatorName: (node["creator"] as? [String: Any])?["name"] as? String,
+            since: (metadata["since"] as? String).flatMap(TicketChatLinkFormat.date))
     }
 
     static func ticket(_ node: [String: Any]) -> Ticket? {

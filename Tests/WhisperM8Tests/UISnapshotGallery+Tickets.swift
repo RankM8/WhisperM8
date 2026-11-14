@@ -91,7 +91,8 @@ extension UISnapshotGallery {
         ]
         func link(_ n: Int, active: Bool = true) -> TicketChatLink {
             TicketChatLink(id: "att-\(n)", chatID: id(n), isActive: active, title: "Chat: " + (chats.first { $0.id == id(n) }?.title ?? "Kai · Umzug"),
-                           subtitle: active ? "arbeitet seit 14.11. 04:21 · WhisperM8" : "beendet am 14.11. 05:35 · WhisperM8", creatorName: me.name)
+                           subtitle: active ? "arbeitet seit 14.11. 04:21 · WhisperM8" : "beendet am 14.11. 05:35 · WhisperM8", creatorName: me.name,
+                           since: Date(timeIntervalSince1970: 1_794_626_460))
         }
         let criteria = "**Stand 14.11.2026:** Paket A ist in main.\n\n## Ziel\n\nIn WhisperM8 gibt es je Projekt eine Ansicht „Tickets“: Board und Backlog aus Linear, je Ticket der zuständige Chat mit seinem Live-Zustand.\n\n## Fertig, wenn\n\n- [x] die Ansicht hinter einem Schalter in den Labs-Einstellungen liegt\n- [ ] Board mit drei Spalten und Backlog-Liste stehen\n- [ ] jede Karte den verknüpften Chat mit Status-Punkt zeigt\n- [ ] das Detail „Zum Chat“ und „In Linear öffnen“ anbietet\n\n## Hinweise\n\nPlan: docs/plans/ticket-board.md"
         func ticket(_ n: Int, _ status: String, _ title: String, priority: Int = 3, person: TicketPerson? = nil, area: String? = "Tickets",
@@ -122,12 +123,11 @@ extension UISnapshotGallery {
         ]
         let snapshot = TicketBoardSnapshot(team: "WM8", statuses: statuses, tickets: tickets, fetchedAt: Date(timeIntervalSince1970: 1_794_630_000))
         let board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project)
-        let source = TicketChatStatusSource(states: Dictionary(uniqueKeysWithValues: chats.compactMap { chat in chat.state.map { (chat.id, $0) } }))
-        let loaded = TicketBoardLoadState(fetchedAt: snapshot.fetchedAt)
-
-        func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, load: TicketBoardLoadState = loaded) -> AnyView {
+        let source = TicketChatStatusSource.fixed(Dictionary(uniqueKeysWithValues: chats.compactMap { chat in chat.state.map { (chat.id, $0) } }))
+        func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, problem: String? = nil) -> AnyView {
             let model = TicketBoardViewModel(model: board)
             configure(model)
+            let load = TicketBoardLoad(fetchedAt: snapshot.fetchedAt, problem: problem)
             return AnyView(TicketBoardView(title: "Tickets · whisperm8", model: model, load: load, source: source, actions: .none))
         }
         let size = CGSize(width: 1340, height: 860)
@@ -141,8 +141,27 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-board-schmal-detail", size: CGSize(width: 760, height: 640)) { view { $0.selectedKey = "WM8-81" } },
             Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .backlog } },
             Fixture(name: "tickets-board-stoerung", size: size) {
-                view(load: TicketBoardLoadState(fetchedAt: snapshot.fetchedAt, problem: TicketSourceError.network("-1009").userText))
+                view(problem: TicketSourceError.network("-1009").userText)
             },
+        ] + ticketEmptyStateFixtures()
+    }
+
+    /// Was die Ansicht zeigt, solange es kein Board gibt.
+    @MainActor
+    private static func ticketEmptyStateFixtures() -> [Fixture] {
+        let size = CGSize(width: 900, height: 520)
+        func state(_ name: String, _ kind: TicketBoardEmptyState.Kind) -> Fixture {
+            Fixture(name: "tickets-leer-\(name)", size: size) {
+                AnyView(TicketBoardEmptyState(kind: kind, actions: .none).background(AgentTheme.background))
+            }
+        }
+        return [
+            state("aus", .disabled),
+            state("kein-projekt", .noProject),
+            state("keine-zuordnung", .notMapped(project: "whisperm8")),
+            state("kein-schluessel", .noKey(workspace: "whisperm8")),
+            state("nicht-erreichbar", .unreachable(TicketSourceError.network("-1009").userText)),
+            state("laedt", .loading),
         ]
     }
 }

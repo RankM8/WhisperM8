@@ -216,7 +216,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                   session.status != .archived else {
                 return .failure(.notFound, "Session nicht gefunden oder archiviert")
             }
-            WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
+            WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID, fromControlChannel: true)
             AppActivation.activate()
             return .success(session)
         }
@@ -1042,7 +1042,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             let targetWindowID = ownerWindowID ?? store.primaryWindowID
 
             let outcome: String
-            switch store.activateGridWorkspace(entity.id, in: targetWindowID) {
+            switch store.keepingTicketsMode({ store.activateGridWorkspace(entity.id, in: targetWindowID) }) {
             case .activated:
                 outcome = "activated"
             case .alreadyActiveHere:
@@ -1174,7 +1174,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
             // Fortsetzen holt die App nicht nach vorn (LR-CLI-004).
             WindowRequestCenter.shared.requestSessionFocus(
                 sessionID: targetID,
-                activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: false))
+                activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: false), fromControlChannel: true)
             return .success(session)
         }
         switch outcome {
@@ -1341,10 +1341,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 // Fortsetzen holt die App nicht nach vorn (LR-CLI-004).
                 WindowRequestCenter.shared.requestSessionFocus(
                     sessionID: targetID,
-                    activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: wantsOpen))
+                    activate: ControlActivationPolicy.shouldActivate(method: request.method, wantsOpen: wantsOpen), fromControlChannel: true)
                 resumed = true
             } else if wantsOpen {
-                WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID)
+                WindowRequestCenter.shared.requestSessionFocus(sessionID: targetID, fromControlChannel: true)
                 AppActivation.activate()
                 opened = true
             }
