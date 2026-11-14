@@ -1,6 +1,6 @@
 # Plugin `whisperm8` und Jarvis-Board
 
-Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
+Stand: 14.11.2026 (Kasten nach WM8-88). Plan, Prototyp-Messwerte und Entscheidungen:
 `docs/plans/whisperm8-plugin.md`.
 
 ## Was es ist
@@ -12,20 +12,48 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
   `whisperm8:callout`) und der Mod „Jarvis-Board“ samt Voice-Callouts
   (`docs/features/speech-callouts.md`) und Task-Zähler (§ Task-Anzeige). Jede Claude-Session, die die App startet, lädt es, in jedem
   Profil und ohne `claude plugin install`.
-- **Jarvis-Board:** Ein Band über dem Prompt der Jarvis-Session. Es zeigt die
-  Chats, die Jarvis aktiv betreut, mit Ampel, Anliegen oder nächstem Schritt
-  und Alter. Jarvis pflegt die Liste, die App hält sie, die Mod zeigt sie an
-  und weckt Jarvis, wenn ein Board-Chat auf den User wartet oder fertig ist.
+- **Jarvis-Board:** Ein Kasten über dem Prompt der Jarvis-Session. Oben
+  stehen die Chats, die auf den User warten, darunter alle anderen in zwei
+  Sammelzeilen. Jarvis pflegt die Liste, die App hält sie, die Mod zeigt sie
+  an und weckt Jarvis, wenn ein Board-Chat auf den User wartet oder fertig ist.
 
 ```
-╭──────────────────────────────────────────────────────────────────────────────────╮
-│ Jarvis · Board  ● 2 wartet  ● 2 läuft  ● 1 fertig           Ziffer = Tab öffnen │
-│ ● 1: Akquise Import     Freigabe: 500 Leads importieren                      12m │
-│ ● 2: Outreach Copy-Rev… Entscheidung: Opener-Schluss A oder B                 4m │
-│ ● 3: Tab-Switcher Revi… fertig · Ergebnis prüfen                              2m │
-│ ● 4: ListM8 Lead-Run    Qualifizierung 40/150                                18m │
-╰──────────────────────────────────────────────────────────────────────────────────╯
+Jarvis · 2 warten auf dich
+
+● Kai · WM8-65  Umzug DealSupply
+  Richard und Xeno nach Linear einladen und
+  anmelden lassen, dann den Import freigeben.
+
+● Dex · WM8-61  Arbeitskopie betreten
+  Einmal in der Test-Instanz anmelden.
+
+läuft  Gus 4/7 · Jon 2/7 · Ole 0/8 · Noa
+ruht   Vic · Mia · Fin
 ```
+
+Seit WM8-88 (14.11.2026) gilt:
+
+- **Wartende Chats** (Ampel `needsYou`) stehen mit Rufname, Ticket und Thema da.
+  Rufname, Ticket und Thema kommen aus dem Chat-Titel („WM8-65 Kai · Umzug
+  DealSupply“). Ohne Ticket steht nur der Rufname, ohne „·“ der ganze Titel.
+  Darunter folgt das Anliegen als ganzer Satz, der umbricht statt
+  abgeschnitten zu werden.
+- **Alle anderen** stehen in zwei Sammelzeilen, „läuft“ (Ampel `running`) und
+  „ruht“ (`done` und `parked`). Passen nicht alle Namen in die Zeile, steht
+  der Rest als „+n“. Ein ⚑ vor dem Namen heißt, dass der Chat selbst auf eine
+  Antwort wartet.
+- **Fortschritt** („4/7“) erscheint, sobald `chats board --json` das Feld
+  `progress` liefert (aus den Kästchen am Ticket, eigenes Ticket). Bis dahin
+  fehlt er.
+- **Ohne wartende Chats** stehen nur die Sammelzeilen. Ein leeres Board
+  zeichnet nichts.
+- **Wenig Platz:** Wartende, die nicht mehr passen, zählt der Kopf („+1 nicht
+  gezeigt“).
+
+Ziffern zum Springen, Kurz-Kennung, Alter und der Bedien-Hinweis im Kopf sind
+weggefallen. Der Kasten bleibt so niedrig und ändert sich selten; der
+Hauptbildschirm zeichnet den Bereich über dem Prompt bei jeder Änderung neu,
+hohe Kästen hinterlassen dort Reste.
 
 ## Bedienung
 
@@ -33,20 +61,14 @@ Stand: 08.10.2026. Plan, Prototyp-Messwerte und Entscheidungen:
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
-| User | `/board` klappt das Band ein und aus, `/board zu` / `auf` gezielt, `/board an` / `aus` |
-| User: Tab öffnen | Im Band ist der Name jeder Zeile ein Knopf (`1:` bis `9:`): die Ziffer im **leeren** Prompt (ohne Enter) öffnet den Tab des Chats (`chats open`, direkt aus der Mod, kein Turn von Jarvis). |
-
-**Kein Klick in der App:** Claude Code meldet Mausklicks nur im
-Vollbild-Terminal. App-Sessions laufen im Main-Screen, dort landet ein Klick
-beim Terminal der App (Textauswahl). Deshalb trägt der Kopf rechts einen
-Bedien-Hinweis statt Knöpfen: Buchstaben-Hotkeys wie früher „z: zu“ greifen
-nur nach `ctrl+x tab`, eine Ziffer im leeren Prompt dagegen immer.
+| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 läuft · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis und Prompt an Jarvis), `toast`, `aus` |
 
-Ampeln: `needsYou` (rot, User muss entscheiden), `done` (grün, Abnahme
-offen), `running` (gelb), `parked` (grau, bewusst angehalten). Der Rahmen
-trägt die Gesamtampel. Reihenfolge: wartet, fertig, läuft, geparkt;
-innerhalb einer Ampel steht der älteste Eintrag oben.
+Ampeln: `needsYou` (User muss entscheiden), `done` (Abnahme offen),
+`running`, `parked` (bewusst angehalten). Innerhalb einer Gruppe steht der
+älteste Eintrag zuerst. Bis WM8-88 gab es einen Rahmen mit Gesamtampel und
+Ziffern-Knöpfe zum Öffnen der Tabs; eine Ziffer im leeren Prompt fängt die Mod
+nicht mehr ab.
 
 ## Wie es funktioniert
 
