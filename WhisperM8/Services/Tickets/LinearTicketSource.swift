@@ -350,12 +350,14 @@ struct LinearTicketSource: TicketSource {
         guard let id = node["id"] as? String, let url = node["url"] as? String,
               let chatID = TicketChatLinkFormat.chatID(fromURL: url) else { return nil }
         // Fremde Anhänge mit unserer Adresse zählen nicht: Die Marke muss stimmen.
-        guard (node["metadata"] as? [String: Any])?["source"] as? String == TicketChatLinkFormat.source else { return nil }
+        let metadata = node["metadata"] as? [String: Any] ?? [:]
+        guard metadata["source"] as? String == TicketChatLinkFormat.source else { return nil }
         let subtitle = node["subtitle"] as? String ?? ""
         return TicketChatLink(
             id: id, chatID: chatID, isActive: TicketChatLinkFormat.isActive(subtitle: subtitle),
             title: node["title"] as? String ?? "", subtitle: subtitle,
-            creatorName: (node["creator"] as? [String: Any])?["name"] as? String)
+            creatorName: (node["creator"] as? [String: Any])?["name"] as? String,
+            since: (metadata["since"] as? String).flatMap(TicketChatLinkFormat.date))
     }
 
     static func ticket(_ node: [String: Any]) -> Ticket? {

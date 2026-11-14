@@ -366,6 +366,16 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(waiting), 5)
     }
 
+    func testLinkSinceIsReadFromMetadata() {
+        XCTAssertEqual(TicketChatLinkFormat.date("2026-11-14T03:57:12Z")?.timeIntervalSince1970, 1_794_628_632)
+        XCTAssertNotNil(TicketChatLinkFormat.date("2026-11-14T00:51:00"), "das Übergangs-Skript schrieb Ortszeit ohne Zone")
+        XCTAssertNil(TicketChatLinkFormat.date("14.11. 00:51"))
+        let chat = TicketChat(id: chatID, title: "Jon · Board", projectName: "whisperm8", projectPath: "/x", state: nil, isRunning: true)
+        let written = TicketChatLinkFormat.metadata(for: chat, active: true, at: Date(timeIntervalSince1970: 1_794_628_632))
+        XCTAssertEqual((written["since"] as? String).flatMap(TicketChatLinkFormat.date)?.timeIntervalSince1970, 1_794_628_632,
+                       "was die App schreibt, liest sie auch wieder")
+    }
+
     func testBlockingWorkRunsOnItsOwnQueue() async {
         let label = await TicketBlockingWork.run { String(cString: __dispatch_queue_get_label(nil)) }
         XCTAssertEqual(label, "com.whisperm8.tickets.blocking", "nicht auf dem Thread-Pool von Swift Concurrency")

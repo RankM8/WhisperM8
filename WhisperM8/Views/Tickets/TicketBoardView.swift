@@ -45,13 +45,13 @@ struct TicketBoardView: View {
                 HStack(alignment: .top, spacing: 12) {
                     content(presentation)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    if sideBySide, let selected = model.selected {
-                        detail(selected).frame(width: Self.detailWidth)
+                    if sideBySide, let content = model.detail {
+                        detail(content).frame(width: Self.detailWidth)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
-                    if !sideBySide, let selected = model.selected {
-                        detail(selected)
+                    if !sideBySide, let content = model.detail {
+                        detail(content)
                             .frame(width: min(Self.detailWidth, max(240, proxy.size.width - 32)))
                             .shadow(color: .black.opacity(0.18), radius: 14, x: -2, y: 2)
                     }
@@ -85,8 +85,8 @@ struct TicketBoardView: View {
         }
     }
 
-    private func detail(_ selected: TicketBoardEntry) -> some View {
-        TicketDetailPanel(entry: selected, description: model.selectedDescription, source: source, actions: actions) {
+    private func detail(_ content: TicketDetailContent) -> some View {
+        TicketDetailPanel(content: content, source: source, actions: actions) {
             model.selectedKey = nil
         }
     }
