@@ -207,8 +207,13 @@ nums = [n for n, _ in rows]
 if nums != list(range(1, len(nums) + 1)):
     print(f"FEHLER Nummern nicht lückenlos: {nums[-5:]}"); sys.exit(0)
 hits = [n for n, text in rows if text == probe]
+# chats send klammert die Eingabe (bracketed paste), auch wenn das Programm
+# das nie angefordert hat; ein einfaches `read` bekommt die Klammern mit.
+bracketed = [n for n, text in rows if text == "\x1b[200~" + probe + "\x1b[201~"]
 if len(hits) == 1: print(f"OK als Nummer {hits[0]}")
 elif hits: print(f"FEHLER {len(hits)}-mal angekommen")
+elif len(bracketed) == 1: print(f"FEHLER mit Einfüge-Klammern angekommen (ESC[200~…ESC[201~, als Nummer {bracketed[0]}), obwohl das Programm kein Bracketed Paste angefordert hat")
+elif bracketed: print(f"FEHLER {len(bracketed)}-mal mit Einfüge-Klammern angekommen")
 else: print("FEHLER nicht angekommen")
 PYEOF
 }
@@ -435,6 +440,8 @@ prepare_instance() {
     : > "$ECHO_FILE"
     cat > "$SOAK/counter.sh" <<'SH'
 # Ersatz-Chat: nummerierte Zeilen mit Zeitstempel, alle 0,2 s.
+# Kennung des Chats festhalten: `ps -E` liest die Umgebung von /bin/sh nicht.
+printf '%s\n' "${WHISPERM8_SESSION_ID:-}" > "$1.ident"
 i=0
 while :; do
     i=$((i + 1))
@@ -446,6 +453,7 @@ done
 SH
     cat > "$SOAK/echo.sh" <<'SH'
 # Ersatz-Chat: wartet auf Eingabe und gibt sie nummeriert zurück.
+printf '%s\n' "${WHISPERM8_SESSION_ID:-}" > "$1.ident"
 i=0
 while IFS= read -r line; do
     i=$((i + 1))
@@ -635,6 +643,28 @@ restart_instance() { # runde
 # Aus dem Chat heraus: `chats list` plus ein harmloser mutierender Aufruf
 # (Pin setzen und wieder entfernen). Nur der mutierende Aufruf prüft das
 # Control-Token; `chats list` liest notfalls von der Platte.
+# Terminal-Tabs laufen unter /bin/sh; dessen Umgebung liest `ps -E` nicht
+# (Apple-Systemprogramm). Der Befehl schreibt seine Kennung deshalb beim Start
+# selbst in `<log>.ident`; geprüft wird, dass sie zum Chat passt. Den
+# mutierenden Aufruf mit dem Token deckt check_chat_identity bei den
+# Agent-Chats ab.
+check_terminal_identity() { # runde name
+    local file ident
+    case "$2" in
+        counter) file="$COUNTER_FILE.ident" ;;
+        echo) file="$ECHO_FILE.ident" ;;
+        *) record "$1" "token:$2" FEHLT "Terminal-Tab ohne Kennungsdatei"; return 0 ;;
+    esac
+    ident=$(head -1 "$file" 2>/dev/null || true)
+    if [[ -z "$ident" ]]; then
+        record "$1" "token:$2" FEHLER "keine WHISPERM8_SESSION_ID im Befehl des Terminal-Tabs"
+    elif [[ "$(printf '%s' "$ident" | tr 'a-f' 'A-F')" == "$(chat_ref "$2" | tr 'a-f' 'A-F')" ]]; then
+        record "$1" "token:$2" OK "Kennung im Befehl des Terminal-Tabs"
+    else
+        record "$1" "token:$2" FEHLER "fremde Kennung im Terminal-Tab: $ident"
+    fi
+}
+
 check_chat_identity() { # runde name pid
     local ident ref
     ident=$(chat_identity "$3")
@@ -694,7 +724,9 @@ check_round() { # runde vorher-datei
             fi
         fi
 
-        if [[ -n "$pid_now" ]]; then
+        if [[ "$(chat_provider "$name")" == terminal ]]; then
+            check_terminal_identity "$round" "$name"
+        elif [[ -n "$pid_now" ]]; then
             check_chat_identity "$round" "$name" "$pid_now"
         elif [[ -z "$pid_before" ]]; then
             record "$round" "token:$name" FEHLT "ohne PID keine Chat-Identität"
@@ -927,6 +959,8 @@ cmd_self_test() {
     expect "FEHLER Nummern" "$(check_echo_file "$dir/e2" soak-probe-1)" "Echo mit Lücke"
     printf '1 soak-probe-1\n2 soak-probe-1\n' > "$dir/e3"
     expect_exact "FEHLER 2-mal angekommen" "$(check_echo_file "$dir/e3" soak-probe-1)" "Echo doppelt"
+    printf '1 \033[200~soak-probe-1\033[201~\n' > "$dir/e4"
+    expect "FEHLER mit Einfüge-Klammern" "$(check_echo_file "$dir/e4" soak-probe-1)" "Echo mit Einfüge-Klammern erkannt"
 
     mkdir -p "$dir/sessions"
     echo "{\"pid\": $$, \"sessionId\": \"s1\"}" > "$dir/sessions/$$.json"
