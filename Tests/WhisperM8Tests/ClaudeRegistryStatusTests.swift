@@ -53,6 +53,9 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "input needed", detail: nil), .question)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt", detail: .reply("ok")), .permission)
         XCTAssertEqual(C.registryAwaitingKind(waitingFor: nil, detail: nil), .permission)
+        // WM8-66: Ein altes Frage-Detail im Tail macht eine neue Freigabe nie zur Frage.
+        XCTAssertEqual(C.registryAwaitingKind(waitingFor: "permission prompt", detail: .question("Rot?")), .permission)
+        XCTAssertEqual(C.registryAwaitingKind(waitingFor: nil, detail: .question("Rot?")), .question)
     }
 
     // MARK: Coordinator

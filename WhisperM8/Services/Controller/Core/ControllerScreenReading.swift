@@ -81,6 +81,9 @@ struct ControllerPromptField: Equatable, Sendable {
 struct ControllerScreenSnapshot: Equatable, Sendable {
     var openView: ControllerOpenView?
     var promptField: ControllerPromptField?
+    /// Unten steht Claudes Frage-Dialog (AskUserQuestion) mit Auswahl und
+    /// freiem Textfeld, keine Freigabe (`isQuestionDialog`).
+    var questionDialog = false
 }
 
 enum ControllerScreenReading {
@@ -117,6 +120,7 @@ enum ControllerScreenReading {
                 .suffix(box == nil ? hintLineCount : lineCount)
                 .map(\.dim)
             snapshot.openView = openView(dimHintLines: hintLines, hasPromptBox: box != nil)
+            snapshot.questionDialog = box == nil && isQuestionDialog(lines.map(\.full))
         }
         return snapshot
     }
@@ -170,6 +174,41 @@ enum ControllerScreenReading {
     /// cancel“), und Dialoge zeigen ihre Hinweiszeile nicht immer (Claude Code
     /// 2.1.323). Gesucht im ganzen Text: Ein Treffer macht nur vorsichtiger.
     static let dialogQuestions = ["do you want to proceed", "would you like to proceed"]
+
+    /// Claudes Frage-Dialog (AskUserQuestion), gemessen an Claude Code 2.1.325:
+    /// nummerierte Optionen, darunter die Hinweiszeile „Enter to select ·
+    /// ↑/↓ to navigate · Esc to cancel“ (bei mehreren Fragen „Tab/Arrow keys
+    /// to navigate“). Eine Freigabe hat „Do you want to proceed?“ und eine
+    /// andere Hinweiszeile („Esc to cancel · Tab to amend“). Ohne Hinweiszeile
+    /// gilt es nicht als Frage — dann bleibt das Diktat in der Zwischenablage.
+    static func isQuestionDialog(_ lines: [String]) -> Bool {
+        let nonEmpty = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard nonEmpty.contains(where: isOptionLine) else { return false }
+        // Positiver Anker: die feste Option „Chat about this“ oder die
+        // Kopfzeile mit Kästchen (☐ ☒ ✔) — beides gibt es nur im Frage-Dialog.
+        let anchored = nonEmpty.contains { line in
+            (isOptionLine(line) && line.lowercased().contains("chat about this"))
+                || line.contains("☐") || line.contains("☒")
+        }
+        guard anchored else { return false }
+        func normalized(_ items: [String]) -> String {
+            items.map { $0.lowercased() }.joined(separator: " ")
+                .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        }
+        let all = normalized(nonEmpty)
+        guard !dialogQuestions.contains(where: { all.contains($0) }),
+              !approvalMarkers.contains(where: { all.contains($0) }) else { return false }
+        let hint = normalized(Array(nonEmpty.suffix(hintLineCount)))
+        let selects = hint.contains("enter to select") || hint.contains("enter select")
+        let navigates = hint.contains("to navigate") || hint.contains(" navigate")
+        return selects && navigates
+    }
+
+    /// Wörter, die nur in Freigaben stehen (Bearbeiten, Schreiben, Abrufen,
+    /// MCP, Plan): Steht eines davon unten, ist es nie die Frage.
+    static let approvalMarkers = [
+        "do you want to", "tab to amend", "don't ask again", "allow all", "shift+tab", "yes, and",
+    ]
 
     static func dialogBelow(_ lines: [String]) -> Bool {
         if lines.contains(where: isOptionLine) { return true }
