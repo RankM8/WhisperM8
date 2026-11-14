@@ -163,7 +163,32 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// schlimmer als keiner: Er sähe gültig aus und würde bei jedem `since`
     /// dieselben Alt-Einträge nachliefern.
     static func currentCursor(fileURL: URL? = nil) -> String? {
-        currentCursor(entries: readAll(fileURL: fileURL ?? defaultFileURL()))
+        let url = fileURL ?? defaultFileURL()
+        // Für den Cursor genügt die letzte Zeile: nur das Ende lesen statt
+        // bis zu 2 MB (läuft bei jedem `chats board --json`, WM8-87).
+        let tail = readTail(fileURL: url)
+        if !tail.isEmpty { return currentCursor(entries: tail) }
+        return currentCursor(entries: readAll(fileURL: url))
+    }
+
+    /// Die vollständigen Zeilen in den letzten `bytes` Bytes der Datei, in
+    /// Dateireihenfolge. Leer, wenn die Datei fehlt oder dort keine Zeile
+    /// lesbar ist (der Aufrufer liest dann alles).
+    static func readTail(fileURL: URL, bytes: Int = 16_384) -> [ChatsStatusJournalEntry] {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return [] }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd() else { return [] }
+        let start = size > UInt64(bytes) ? size - UInt64(bytes) : 0
+        guard (try? handle.seek(toOffset: start)) != nil,
+              var data = try? handle.readToEnd() else { return [] }
+        // Mitten in einer Zeile begonnen: bis zum ersten Zeilenende verwerfen.
+        if start > 0 {
+            guard let newline = data.firstIndex(of: 0x0A) else { return [] }
+            data = data[data.index(after: newline)...]
+        }
+        return data.split(separator: 0x0A).compactMap { line in
+            try? decoder.decode(ChatsStatusJournalEntry.self, from: Data(line))
+        }
     }
 
     /// Wie `currentCursor(fileURL:)`, auf bereits gelesenen Einträgen (wer das

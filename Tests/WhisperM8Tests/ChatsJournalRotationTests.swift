@@ -162,4 +162,29 @@ final class ChatsJournalRotationTests: XCTestCase {
         ChatsStatusJournal(fileURL: url).append(sessionID: session, from: "a", to: "b", signal: "s", source: "hook")
         XCTAssertNotEqual(ChatsChangesCommand.JournalStamp(fileURL: url), before)
     }
+
+    // MARK: Cursor aus dem Dateiende
+
+    func testCursorFromTheTailMatchesAFullReadOnALargeJournal() {
+        let journal = ChatsStatusJournal(fileURL: url)
+        for index in 0..<300 {
+            journal.append(sessionID: session, from: "a\(index)", to: "b\(index)", signal: "s", source: "hook")
+        }
+        let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int) ?? 0
+        XCTAssertGreaterThan(size, 16_384, "der Test braucht eine Datei größer als das gelesene Ende")
+        let tail = ChatsStatusJournal.readTail(fileURL: url)
+        XCTAssertFalse(tail.isEmpty)
+        XCTAssertLessThan(tail.count, 300, "nur das Ende, nicht die ganze Datei")
+        XCTAssertEqual(tail.last?.seq, 300)
+        let full = ChatsStatusJournal.readAll(fileURL: url)
+        XCTAssertEqual(ChatsStatusJournal.currentCursor(fileURL: url),
+                       ChatsStatusJournal.currentCursor(entries: full))
+    }
+
+    func testCursorIsNilWithoutFileAndForALegacyLastLine() throws {
+        XCTAssertNil(ChatsStatusJournal.currentCursor(fileURL: url))
+        let legacy = #"{"at":"2026-07-26T10:00:00Z","sessionID":"\#(session.uuidString)","signal":"x","source":"hook","to":"idle"}"#
+        try (legacy + "\n").write(to: url, atomically: true, encoding: .utf8)
+        XCTAssertNil(ChatsStatusJournal.currentCursor(fileURL: url))
+    }
 }
