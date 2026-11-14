@@ -192,7 +192,13 @@ Anmeldung (unten).
   Login-Schlüsselbund. Für `main` nimmt sie deshalb einen eigenen Dienstnamen
   (`ClaudeAccountProfiles.mainKeychainService`). So fassen Ablauf-Anzeige,
   Kontingent, Login-Erneuerung und „Zum Hauptkonto machen“ in der Test-Instanz den
-  echten Eintrag nie an. Einen Login in `.credentials.json` sieht sie damit nicht.
+  echten Eintrag nie an.
+- **Grenze:** Die Konto-Funktionen der App sehen einen in der Test-Instanz gemachten
+  Login nicht. Claude schreibt ihn mit dem Test-Home in `.credentials.json`, die App
+  sucht mit dem echten `HOME` im Schlüsselbund. Ablauf-Anzeige, Kontingent,
+  Login-Erneuerung und „Zum Hauptkonto machen“ lassen sich dort nicht durchspielen.
+  Die Chats lesen die Datei selbst (laut Code von Claude Code 2.1.325, mit einem
+  echten Login noch nicht geprüft).
 - `scripts/test-instance.sh status` zeigt, ob die Datei da ist (ohne sie zu
   lesen), und nennt den Dienst der Test-App. `reset` löscht genau diesen
   berechneten Dienst (Konto `$USER`), nie per Muster und nie den blanken Namen.

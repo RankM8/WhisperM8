@@ -444,6 +444,11 @@ struct ClaudeAccountProfiles {
 
     /// Fuer Tests injizierbarer Runner fuer `/usr/bin/security`-Aufrufe.
     /// Rueckgabe: (exitCode, stdout).
+    ///
+    /// Läuft bewusst mit dem Environment der App, nicht über
+    /// `LoginShellEnvironment.processEnvironment()`: In der Test-Instanz setzt
+    /// das `HOME` auf das Test-Home, `security` fände dann keinen
+    /// Login-Schlüsselbund (WM8-63, Doku claude-konten.md).
     var securityRunner: ([String]) -> (Int32, String) = { arguments in
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
@@ -469,6 +474,10 @@ struct ClaudeAccountProfiles {
     /// Ersteller bleiben dieselben wie beim bisherigen CLI-Aufruf (Claude liest
     /// den Eintrag weiter per `security find-generic-password`).
     /// Rückgabe: Exit-Code (0 = geschrieben).
+    ///
+    /// Wie `securityRunner` bewusst mit dem Environment der App: Mit dem
+    /// Test-Home aus `LoginShellEnvironment` gäbe es keinen
+    /// Standard-Schlüsselbund, und macOS zeigte beim Schreiben einen Dialog.
     var keychainWriter: (_ service: String, _ account: String, _ secret: String) -> Int32 = { service, account, secret in
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
