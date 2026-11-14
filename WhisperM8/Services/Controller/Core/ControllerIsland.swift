@@ -327,8 +327,9 @@ struct ControllerWritingSlots: Equatable, Sendable {
             canMoveWord = allowed
             canMoveLine = allowed && (ControllerBindingResolver.lineMoveAllowed(.up, state: state)
                 || ControllerBindingResolver.lineMoveAllowed(.down, state: state))
+            // In eine Rückfrage (erkannte Frage, WM8-66) und in Shells nur Text.
             canPaste = clip != nil && ControllerBindingResolver.pasteAllowed(state)
-                && (clip?.kind == .text || state.profile != .shell)
+                && (clip?.kind == .text || (state.profile != .shell && state.status != .awaitingInput))
             canEscape = ControllerBindingResolver.escapeOnceAllowed(state)
             canUndo = ControllerBindingResolver.undoAllowed(state)
         }

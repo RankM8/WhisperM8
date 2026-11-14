@@ -45,7 +45,7 @@ extension RecordingCoordinator {
             dictationNoticePoster(String(localized: "Text not inserted"), body)
             // Die Mitteilung allein sieht man leicht nicht (Fokus, Mitteilungen
             // aus): Die Pille sagt es kurz selbst, ohne Bewegung (WM8-66).
-            overlayController.showQuickActionHint(Self.clipboardOnlyPillHint, duration: Self.clipboardOnlyPillSeconds)
+            overlayController.showQuickActionHint(Self.clipboardOnlyPillHint(for: reason), duration: Self.clipboardOnlyPillSeconds)
         }
 
         switch decision {
@@ -108,9 +108,13 @@ extension RecordingCoordinator {
         visualContextCaptureService.cleanup(contextBundle)
     }
 
-    /// Kurzer Hinweis in der Pille, wenn ein Diktat nur in der Zwischenablage liegt.
-    static var clipboardOnlyPillHint: String {
-        String(localized: "On the clipboard · ⌘V to paste")
+    /// Kurzer Hinweis in der Pille, wenn ein Diktat nur in der Zwischenablage
+    /// liegt. Bei offener Rückfrage ohne ⌘V: In einer Freigabe bewirkt es nichts.
+    static func clipboardOnlyPillHint(for reason: DictationClipboardReason) -> String {
+        switch reason {
+        case .decisionPending: return String(localized: "On the clipboard")
+        case .chatStarting, .chatNotRunning, .writeFailed: return String(localized: "On the clipboard · ⌘V to paste")
+        }
     }
 
     static let clipboardOnlyPillSeconds: TimeInterval = 4

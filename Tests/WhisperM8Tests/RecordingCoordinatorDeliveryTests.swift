@@ -375,7 +375,10 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
         let (coordinator, _) = try await deliverToChat("Antwort")
 
         XCTAssertTrue(coordinator.overlayController.isQuickActionHint)
-        XCTAssertEqual(coordinator.overlayController.quickActionLabel, RecordingCoordinator.clipboardOnlyPillHint)
+        XCTAssertEqual(coordinator.overlayController.quickActionLabel,
+                       RecordingCoordinator.clipboardOnlyPillHint(for: .decisionPending))
+        XCTAssertNotEqual(RecordingCoordinator.clipboardOnlyPillHint(for: .decisionPending),
+                          RecordingCoordinator.clipboardOnlyPillHint(for: .chatStarting))
     }
 
     func testStartingChatKeepsTextOnClipboardWithNotice() async throws {

@@ -184,17 +184,31 @@ enum ControllerScreenReading {
     static func isQuestionDialog(_ lines: [String]) -> Bool {
         let nonEmpty = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard nonEmpty.contains(where: isOptionLine) else { return false }
+        // Positiver Anker: die feste Option „Chat about this“ oder die
+        // Kopfzeile mit Kästchen (☐ ☒ ✔) — beides gibt es nur im Frage-Dialog.
+        let anchored = nonEmpty.contains { line in
+            (isOptionLine(line) && line.lowercased().contains("chat about this"))
+                || line.contains("☐") || line.contains("☒")
+        }
+        guard anchored else { return false }
         func normalized(_ items: [String]) -> String {
             items.map { $0.lowercased() }.joined(separator: " ")
                 .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         }
         let all = normalized(nonEmpty)
-        guard !dialogQuestions.contains(where: { all.contains($0) }) else { return false }
+        guard !dialogQuestions.contains(where: { all.contains($0) }),
+              !approvalMarkers.contains(where: { all.contains($0) }) else { return false }
         let hint = normalized(Array(nonEmpty.suffix(hintLineCount)))
         let selects = hint.contains("enter to select") || hint.contains("enter select")
         let navigates = hint.contains("to navigate") || hint.contains(" navigate")
         return selects && navigates
     }
+
+    /// Wörter, die nur in Freigaben stehen (Bearbeiten, Schreiben, Abrufen,
+    /// MCP, Plan): Steht eines davon unten, ist es nie die Frage.
+    static let approvalMarkers = [
+        "do you want to", "tab to amend", "don't ask again", "allow all", "shift+tab", "yes, and",
+    ]
 
     static func dialogBelow(_ lines: [String]) -> Bool {
         if lines.contains(where: isOptionLine) { return true }

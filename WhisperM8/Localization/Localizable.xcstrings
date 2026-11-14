@@ -11484,6 +11484,16 @@
         }
       }
     },
+    "On the clipboard": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Zwischenablage"
+          }
+        }
+      }
+    },
     "On the clipboard · ⌘V to paste": {
       "localizations": {
         "de": {

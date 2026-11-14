@@ -56,6 +56,33 @@ final class ClaudeQuestionTextTests: XCTestCase {
             Self.permission + ["Enter to select · ↑/↓ to navigate · Esc to cancel"]))
     }
 
+    /// Freigaben anderer Werkzeuge (Bearbeiten, Abrufen, Plan) — nachgebaut,
+    /// nicht gemessen; auch mit einer Hinweiszeile wie bei der Frage gelten sie nie.
+    func testOtherApprovalsAreNeverAQuestion() {
+        let footer = "Enter to select · ↑/↓ to navigate · Esc to cancel"
+        let edit = [
+            " Edit file", " Do you want to make this edit to Foo.swift?",
+            " ❯ 1. Yes", "   2. Yes, allow all edits during this session (shift+tab)", "   3. No", footer,
+        ]
+        let fetch = [
+            " Fetch", " Do you want to allow Claude to fetch this content?",
+            " ❯ 1. Yes", "   2. Yes, and don't ask again for example.com", "   3. No", footer,
+        ]
+        let plan = [
+            " Ready to code?", " Would you like to proceed?",
+            " ❯ 1. Yes, and auto-accept edits", "   2. Yes, and manually approve edits", "   3. No, keep planning", footer,
+        ]
+        for screen in [edit, fetch, plan] {
+            XCTAssertFalse(ControllerScreenReading.isQuestionDialog(screen), screen[1])
+        }
+    }
+
+    /// Ohne festen Anker („Chat about this“ oder Kästchen-Kopf) keine Frage.
+    func testWithoutAnchorItIsNoQuestion() {
+        let unanchored = Self.singleQuestion.filter { !$0.contains("Chat about this") && !$0.contains("☐") }
+        XCTAssertFalse(ControllerScreenReading.isQuestionDialog(unanchored))
+    }
+
     func testWithoutHintLineOrOptionsItIsNoQuestion() {
         XCTAssertFalse(ControllerScreenReading.isQuestionDialog(Array(Self.singleQuestion.dropLast())))
         XCTAssertFalse(ControllerScreenReading.isQuestionDialog([

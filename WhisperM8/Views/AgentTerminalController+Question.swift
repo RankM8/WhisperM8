@@ -23,7 +23,9 @@ extension AgentTerminalController {
     /// vor dem Schreiben noch einmal; `false`, wenn nichts geschrieben wurde.
     @discardableResult
     func sendQuestionText(_ text: String) -> Bool {
-        guard isRunning, questionAcceptsText() else { return false }
+        // Ohne Bracketed Paste kämen die Zeichen einzeln an — eine „1“ wäre
+        // dann eine Auswahl.
+        guard isRunning, terminal.getTerminal().bracketedPasteMode, questionAcceptsText() else { return false }
         terminal.send(txt: TerminalPasteSanitizer.bracketedPastePayload(text))
         return true
     }

@@ -688,7 +688,12 @@ final class AgentSessionStatusCoordinator {
     ) -> AwaitingInputKind {
         switch detail {
         case .question:
-            return .question
+            // Das Tail-Detail bleibt nach einer beantworteten Frage stehen
+            // (Tool-Ergebnisse werden übersprungen), bis die nächste
+            // Assistant-Zeile gelesen ist. Meldet Claude selbst schon eine
+            // Freigabe, gilt die (WM8-66; gemessen an 2.1.325: Frage =
+            // `input needed`, Freigabe = `permission prompt`).
+            return waitingFor == "permission prompt" ? .permission : .question
         case .tool(let name, _):
             // `input needed` heißt Frage/Elicitation — das letzte Tool im Tail
             // kann längst abgeschlossen sein (LR-AK-036).

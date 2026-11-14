@@ -412,21 +412,33 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
 ## Schutzregeln
 
 - In eine offene Rückfrage läuft kein Text: Ein Diktat bleibt in der Zwischenablage (Hinweis als
-  Mitteilung und kurz in der Pille, „In der Zwischenablage · ⌘V fügt ein“), Einträge des Menüs, die
+  Mitteilung und kurz in der Pille: „In der Zwischenablage“; liegt der Text aus einem anderen Grund nur
+  dort, etwa weil der Chat noch startet, mit „· ⌘V fügt ein“), Einträge des Menüs, die
   etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in Claudes
   Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
-  Diktat und L1 + Kreuz als ein Einfüge-Block ins Feld „Type something“, nie mit Enter — bestätigen tut
-  der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt erkannt
-  (`ClaudeQuestionTextGate`): Der Chat wartet auf eine Frage, das jüngste Werkzeug im Transcript ist
-  AskUserQuestion (die Warte-Art allein reicht nicht: Claudes Registry meldet „input needed“ auch, wenn
-  ein MCP-Werkzeug wartet), und unten steht der Dialog mit „Enter to select · … to navigate“ ohne „Do
-  you want to proceed?“ (`ControllerScreenReading.isQuestionDialog`). Direkt vor dem Schreiben wird noch
-  einmal geprüft. Gemessen an Claude Code 2.1.325: Ein Einfüge-Block springt dort ins Textfeld, Ziffern
-  darin wählen nichts aus, mehrzeiliger Text bleibt im Feld; in einer Freigabe wird er ignoriert, eine
-  einzeln getippte „1“ gäbe sie dagegen frei — deshalb nie einzelne Tasten. Steht schon Text im Feld,
-  hängt der neue ohne Leerzeichen an. Ist der Bildschirm nicht ablesbar (hochgescrollt) oder fehlt die
-  Hinweiszeile, bleibt es bei der Zwischenablage. Codex meldet keine Rückfragen (WM8-67).
+  Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
+  Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt
+  erkannt (`ClaudeQuestionTextGate`):
+  - **Werkzeug:** Der Chat wartet auf eine Frage, und das jüngste Werkzeug im Transcript ist
+    AskUserQuestion. Im Registry-Betrieb zählt dazu Claudes eigene Meldung: gemessen an 2.1.325 meldet
+    eine Frage `input needed`, eine Freigabe `permission prompt`; ein stehen gebliebenes Frage-Detail
+    im Transcript macht eine Freigabe nie zur Frage (`registryAwaitingKind`). Die Warte-Art allein reicht
+    nicht: `input needed` kommt auch, wenn ein MCP-Werkzeug wartet.
+  - **Bildschirm:** Unten stehen nummerierte Optionen, ein fester Anker (die Option „Chat about this“
+    oder die Kopfzeile mit Kästchen ☐/☒) und die Hinweiszeile „Enter to select · … to navigate“. Kein
+    Wort aus Freigaben („Do you want to …“, „Tab to amend“, „don't ask again“, „allow all“,
+    „shift+tab“, „Yes, and“) darf dort stehen (`ControllerScreenReading.isQuestionDialog`). Folge: Eine
+    Frage, die selbst „Do you want to …“ enthält, gilt nicht als Frage — der Text bleibt dann in der
+    Zwischenablage.
+
+  Direkt vor dem Schreiben wird noch einmal geprüft, und nur mit eingeschaltetem Bracketed Paste
+  (sonst kämen die Zeichen einzeln an). Gemessen an Claude Code 2.1.325: Ein Einfüge-Block springt dort
+  ins Textfeld, Ziffern darin wählen nichts aus, mehrzeiliger Text bleibt im Feld; in einer Freigabe
+  wird er ignoriert, eine einzeln getippte „1“ gäbe sie dagegen frei — deshalb nie einzelne Tasten.
+  Steht schon Text im Feld, hängt der neue ohne Leerzeichen an. Ist der Bildschirm nicht ablesbar
+  (hochgescrollt) oder fehlt die Hinweiszeile, bleibt es bei der Zwischenablage. Codex meldet keine
+  Rückfragen (WM8-67).
 - **Ansichten am Bildschirm (Runde 5):** Bei einer Controller-Eingabe in einen Claude-Chat liest
   `controllerScreenSnapshot` die unteren 16 Zeilen des Terminals, nur wenn die Ansicht ganz unten steht
   (Zähler `controller.screen.read`), in drei Fassungen (`ControllerScreenCapture`): voller Text für
