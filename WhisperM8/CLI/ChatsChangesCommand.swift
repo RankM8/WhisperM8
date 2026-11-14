@@ -126,11 +126,25 @@ enum ChatsChangesCommand {
             index += 1
         }
 
+        return runWatch(cursor: cursor, intervalSeconds: intervalSeconds, maxSeconds: maxSeconds)
+    }
+
+    /// Kern von `watch`, mit Journal-Pfad, Ausgabe und Schlaf von außen
+    /// (Tests schreiben nie ins echte Journal).
+    static func runWatch(
+        cursor: String?,
+        intervalSeconds: Double,
+        maxSeconds: Double,
+        fileURL: URL = ChatsStatusJournal.defaultFileURL(),
+        out: (String) -> Void = { CLIIO.out($0) },
+        sleep: (Double) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        clock: () -> Date = Date.init
+    ) -> Int32 {
         // Ohne Cursor ab jetzt beginnen — und das kenntlich machen, damit
         // niemand die erste leere Phase als „nichts passiert" liest.
-        var position = cursor ?? ChatsStatusJournal.currentCursor()
-        let startedAt = Date()
-        CLIIO.out(ChatsOutput.encodeJSON([
+        var position = cursor ?? ChatsStatusJournal.currentCursor(fileURL: fileURL)
+        let startedAt = clock()
+        out(ChatsOutput.encodeJSON([
             "schema": schema,
             "event": "started",
             "startedAt": ChatsOutput.iso(startedAt),
@@ -138,28 +152,52 @@ enum ChatsChangesCommand {
             "resumed": cursor != nil,
         ]))
 
+        // Das Journal ist bis zu 2 MB groß: nur neu lesen, wenn sich die Datei
+        // geändert hat (Größe oder Änderungszeit). Eine Rotation ersetzt die
+        // Datei und ändert damit beides.
+        var lastStamp: JournalStamp?
+        var pendingMore = false
         while true {
-            let result = ChatsStatusJournal.changes(since: position, limit: 128)
-            if result.gap {
-                CLIIO.out(ChatsOutput.encodeJSON([
-                    "schema": schema, "event": "gap", "action": "snapshot",
-                ]))
-                return ChatsCLIExit.conflict
+            let stamp = JournalStamp(fileURL: fileURL)
+            if stamp == nil || stamp != lastStamp || pendingMore {
+                let result = ChatsStatusJournal.changes(since: position, limit: 128, fileURL: fileURL)
+                if result.gap {
+                    out(ChatsOutput.encodeJSON([
+                        "schema": schema, "event": "gap", "action": "snapshot",
+                    ]))
+                    return ChatsCLIExit.conflict
+                }
+                for entry in result.entries {
+                    var line = changeJSON(entry)
+                    line["schema"] = schema
+                    line["cursor"] = ChatsStatusJournal.cursor(journalId: entry.journalId, seq: entry.seq)
+                    out(ChatsOutput.encodeJSON(line))
+                }
+                if let next = result.cursor { position = next }
+                lastStamp = stamp
+                pendingMore = result.hasMore
             }
-            for entry in result.entries {
-                var line = changeJSON(entry)
-                line["schema"] = schema
-                line["cursor"] = ChatsStatusJournal.cursor(journalId: entry.journalId, seq: entry.seq)
-                CLIIO.out(ChatsOutput.encodeJSON(line))
-            }
-            if let next = result.cursor { position = next }
-            if maxSeconds > 0, Date().timeIntervalSince(startedAt) >= maxSeconds {
-                CLIIO.out(ChatsOutput.encodeJSON([
+            if maxSeconds > 0, clock().timeIntervalSince(startedAt) >= maxSeconds {
+                out(ChatsOutput.encodeJSON([
                     "schema": schema, "event": "timeout", "cursor": position ?? NSNull(),
                 ]))
                 return ChatsCLIExit.ok
             }
-            Thread.sleep(forTimeInterval: intervalSeconds)
+            if !pendingMore { sleep(intervalSeconds) }
+        }
+    }
+
+    /// Größe und Änderungszeit des Journals; `nil`, wenn es fehlt.
+    struct JournalStamp: Equatable {
+        var size: Int
+        var modified: Date
+
+        init?(fileURL: URL) {
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+                  let size = attributes[.size] as? Int,
+                  let modified = attributes[.modificationDate] as? Date else { return nil }
+            self.size = size
+            self.modified = modified
         }
     }
 
