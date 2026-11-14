@@ -235,6 +235,19 @@ final class TicketConfigTests: XCTestCase {
         XCTAssertTrue(config.knownWorkspaces.isEmpty, "der Workspace wird einmal nachgetragen, nicht erfunden")
     }
 
+    func testLoadForChangeRefusesAnUnreadableFile() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("tickets-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = TicketConfigStore(fileURL: directory.appendingPathComponent("tickets.json"))
+        XCTAssertEqual(try store.loadForChange(), TicketConfig(), "keine Datei: leer anfangen")
+        var config = TicketConfig()
+        config.set(team: "WM8", forProject: "/Users/g/repos/whisperm8")
+        try store.save(config)
+        XCTAssertEqual(try store.loadForChange(), config)
+        try Data("kaputt".utf8).write(to: store.fileURL)
+        XCTAssertThrowsError(try store.loadForChange(), "eine unlesbare Datei wird nicht überschrieben")
+    }
+
     func testStoreRoundTripAndMissingFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("tickets-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }

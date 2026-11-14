@@ -12,6 +12,10 @@ struct ChatsLiveStatus {
     var pid: Int32? = nil
     /// Der Prozess lief schon einmal (auch wenn er inzwischen beendet ist).
     var hasStarted = false
+    /// Konto am Nutzungslimit bis (WM8-69); `nil` = kein Limit bekannt.
+    var usageLimitUntil: Date? = nil
+    /// Am Limit, auch ohne bekanntes Ende (Review M4).
+    var usageLimited: Bool = false
 
     /// Kein PTY, kein bekannter Status — so stand jede ruhende Session in der
     /// vollen Liste.
@@ -61,7 +65,9 @@ enum ChatsLiveMerge {
                 canSend: session["canSend"]?.boolValue ?? false,
                 canInterrupt: session["canInterrupt"]?.boolValue ?? false,
                 pid: session["pid"]?.intValue.map { Int32($0) },
-                hasStarted: session["hasStarted"]?.boolValue ?? false
+                hasStarted: session["hasStarted"]?.boolValue ?? false,
+                usageLimitUntil: session["usageLimitResetsAt"]?.stringValue.flatMap(ChatsOutput.parseISO),
+                usageLimited: session["usageLimit"]?.stringValue != nil
             )
         }
         return ChatsLiveSnapshot(

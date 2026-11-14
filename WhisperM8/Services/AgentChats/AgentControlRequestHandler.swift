@@ -119,11 +119,10 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: sessions.live
 
-    /// Autoritative Runtime-Daten für die Lese-Befehle: die App kennt
-    /// PTY-Existenz und den hook-getrackten Status, die der CLI-Schätzer nicht
-    /// sieht.
-    /// `onlyActive` (neue CLI): nur Sessions mit PTY oder bekanntem Status —
-    /// die übrigen sind getrennt und ohne Status, die CLI ergänzt sie selbst.
+    /// Autoritative Runtime-Daten für die Lese-Befehle: die App kennt PTY-Existenz
+    /// und den hook-getrackten Status, die der CLI-Schätzer nicht sieht.
+    /// `onlyActive` (neue CLI): nur Sessions mit PTY, bekanntem Status oder schon
+    /// gestartetem Prozess; die übrigen ergänzt die CLI selbst.
     private func sessionsLive(_ request: ChatsControlRequest) async -> ChatsControlResponse {
         let onlyActive = request.params["onlyActive"]?.boolValue ?? false
         let live = await MainActor.run { () -> [[String: Any]] in
@@ -135,125 +134,12 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 let isRunning = controller?.isRunning ?? false
                 let runtime = statusStore.status(for: session.id)
                 if onlyActive, !isRunning, runtime == nil, controller?.hasStarted != true { return nil }
-                return [
-                    "sessionID": session.id.uuidString,
-                    "runtimeStatus": runtime?.rawValue ?? "unknown",
-                    "isAttachedPTY": isRunning, "hasStarted": controller?.hasStarted == true,
-                    "canSend": isRunning,
-                    "canInterrupt": isRunning && runtime == .working, "pid": Self.livePID(isRunning ? controller?.processID : nil),
-                ]
+                return ChatsSendReadinessGuard.liveEntry(session: session, isRunning: isRunning, runtime: runtime,
+                    hasStarted: controller?.hasStarted == true, pid: isRunning ? controller?.processID : nil)
             }
         }
         return .success(requestID: request.requestID,
                         result: .object(["sessions": live, "omittedDetached": onlyActive]))
-    }
-
-    // MARK: session.send
-
-    private func sessionSend(_ request: ChatsControlRequest) async -> ChatsControlResponse {
-        guard let targetString = request.params["targetSessionID"]?.stringValue,
-              let targetID = UUID(uuidString: targetString) else {
-            return .failure(requestID: request.requestID, code: .invalid, message: "targetSessionID fehlt/ungültig")
-        }
-        guard let prompt = request.params["prompt"]?.stringValue, !prompt.isEmpty else {
-            return .failure(requestID: request.requestID, code: .invalid, message: "prompt fehlt/leer")
-        }
-        let submit = request.params["submit"]?.boolValue ?? true
-        let ifStatus = request.params["ifStatus"]?.arrayValue?.compactMap { $0.stringValue } ?? ["awaitingInput", "idle"]
-
-        // Idempotenz — atomar reservieren VOR der Ausführung. Ein bekanntes
-        // Duplikat pastet nie erneut; ein noch LAUFENDES Original meldet
-        // „inFlight" (Ausgang offen) statt eines falschen Erfolgs.
-        switch reserveIdempotency(request.requestID) {
-        case .fresh:
-            break
-        case .completedEarlier(let date):
-            return .success(requestID: request.requestID, result: .object([
-                "ack": "duplicate", "target": ["id": targetString],
-                "at": ISO8601DateFormatter().string(from: date),
-            ]))
-        case .stillInFlight:
-            return .failure(requestID: request.requestID, code: .conflict,
-                            message: "Anfrage mit dieser requestID läuft noch — Ausgang per `chats audit` prüfen")
-        }
-
-        let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
-        let markerActor = await auditActorLabel(request.actor)
-
-        // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
-        let (outcome, clearedInput) = await MainActor.run { () -> (SendOutcome, Bool) in
-            var clearedInput = false
-            let outcome: SendOutcome = {
-                let registry = AgentTerminalRegistry.shared
-                let workspace = AgentWorkspaceUIModel.shared.workspace
-                guard let session = workspace.sessions.first(where: { $0.id == targetID }),
-                      session.status != .archived else {
-                    return .failure(.notFound, "Session nicht gefunden oder archiviert")
-                }
-                // Selbst-Send-Schutz — nie, auch nicht mit force.
-                if let actorID, actorID == targetID {
-                    return .failure(.selfSend, "An sich selbst senden ist nicht erlaubt (Endlosschleife)")
-                }
-                guard let controller = registry.controller(for: targetID), controller.isRunning else {
-                    return .failure(.noPty, "Keine laufende PTY — Tab mit `chats open` starten")
-                }
-                // Start-Race: Ein frisch resumter Chat meldet `idle` (launching
-                // bildet bewusst darauf ab), ist aber noch nicht aufnahmebereit.
-                // `sendPrompt` schreibt blind — der Paste ginge verloren oder käme
-                // beim Retry doppelt an. Kein --force-Bypass: hier gibt es nichts
-                // zu erzwingen, nur einen sicheren Weg (`enqueue`).
-                let readiness = ChatsSendReadinessGuard.decide(
-                    lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
-                if case .notReady = readiness {
-                    return .failure(.notReady,
-                                    ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
-                }
-                // Status-Guard (--if-status). --force überstimmt ihn (nie den
-                // Selbst-Send-Schutz).
-                let force = request.params["force"]?.boolValue ?? false
-                let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
-                if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
-                    return .failure(.conflict, "Ziel ist \(runtime.rawValue) (erlaubt: \(ifStatus.joined(separator: ",")))")
-                }
-                if PromptDeliveryGate.sendBlockedByDraft(
-                    mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
-                    return .failure(.conflict, PromptDeliveryGate.draftMessage)
-                }
-                // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop) — nur bei Agent-Chats, nie in eine Shell.
-                let marked = Self.deliveredPrompt(prompt, actor: markerActor, toShell: controller.command.keyboardProfile == .plainShell)
-                clearedInput = controller.sendPrompt(marked, submit: submit)
-                return .success(session)
-            }()
-            return (outcome, clearedInput)
-        }
-
-        switch outcome {
-        case .failure(let code, let message):
-            // Kein Paste passiert → Reservierung freigeben, damit ein Retry
-            // nach behobenem Konflikt (z. B. Ziel wird idle) nicht als Duplikat
-            // abgewiesen wird.
-            releaseIdempotency(request.requestID)
-            await audit(request.actor, method: "send", target: nil, outcome: code.rawValue,
-                        prompt: prompt)
-            return .failure(requestID: request.requestID, code: code, message: message,
-                            detail: sendConflictDetail(targetID: targetID))
-        case .success(let session):
-            completeIdempotency(request.requestID)
-            let targetLabel = await sessionLabel(targetID)
-            await audit(request.actor, method: "send", target: targetLabel, outcome: "ok", prompt: prompt)
-            return .success(requestID: request.requestID, result: .object([
-                "ack": "delivered",
-                "target": ["id": session.id.uuidString, "title": session.title],
-                "promptChars": prompt.count,
-                "requestID": request.requestID,
-                "clearedInput": clearedInput,
-            ]))
-        }
-    }
-
-    private func sendConflictDetail(targetID: UUID) -> ChatsControlJSON? {
-        // best-effort — kann nil sein
-        nil
     }
 
     // MARK: session.interrupt
@@ -1610,7 +1496,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     }
 
     /// Reserviert die requestID atomar unter einem Lock.
-    private func reserveIdempotency(_ requestID: String) -> IdempotencyReservation {
+    func reserveIdempotency(_ requestID: String) -> IdempotencyReservation {
         idempotencyLock.lock()
         defer { idempotencyLock.unlock() }
         pruneIdempotency()
@@ -1624,7 +1510,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
         return .fresh
     }
 
-    private func completeIdempotency(_ requestID: String) {
+    func completeIdempotency(_ requestID: String) {
         idempotencyLock.lock()
         recentRequests[requestID] = .completed(Date())
         idempotencyLock.unlock()
@@ -1633,7 +1519,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
     /// Gibt eine Reservierung frei, wenn die Ausführung NICHT zum Paste führte
     /// (Guard-Fehler) — sonst würde ein legitimer Retry nach behobenem Konflikt
     /// fälschlich als Duplikat abgewiesen.
-    private func releaseIdempotency(_ requestID: String) {
+    func releaseIdempotency(_ requestID: String) {
         idempotencyLock.lock()
         if case .inFlight = recentRequests[requestID] {
             recentRequests.removeValue(forKey: requestID)
@@ -1661,7 +1547,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: - Audit + Marker
 
-    private func auditActorLabel(_ actor: ChatsControlActor) async -> String {
+    func auditActorLabel(_ actor: ChatsControlActor) async -> String {
         guard let idString = actor.sessionID, let id = UUID(uuidString: idString) else {
             return "extern"
         }
@@ -1697,7 +1583,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
 
     // MARK: - Outcome-Typen
 
-    private enum SendOutcome {
+    enum SendOutcome {
         case success(AgentChatSession)
         case failure(ChatsControlErrorCode, String)
     }

@@ -228,7 +228,7 @@ enum ChatsStatusProbe {
             switch lastEvent {
             case .userMessage(let ts), .assistantMessageOngoing(let ts),
                  .assistantMessageStopped(let ts, _), .toolResult(let ts),
-                 .turnInterrupted(let ts), .toolCallPending(let ts, _):
+                 .turnInterrupted(let ts), .toolCallPending(let ts, _), .usageLimit(let ts, _, _):
                 return ts ?? stat.mtime
             default:
                 return stat.mtime

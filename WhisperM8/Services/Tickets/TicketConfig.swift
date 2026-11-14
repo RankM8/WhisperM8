@@ -105,6 +105,10 @@ struct TicketConfig: Codable, Equatable {
         workspacesByTeam[team.uppercased()] = workspace.lowercased()
     }
 
+    mutating func removeProject(_ directory: String) {
+        teamsByProjectPath[Self.normalized(directory)] = nil
+    }
+
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert
     /// in eine Befehlszeile von `security -i`, also nur harmlose Zeichen.
     static func isWorkspaceName(_ name: String) -> Bool {
@@ -135,6 +139,21 @@ struct TicketConfigStore {
     func load() -> TicketConfig {
         guard let data = try? Data(contentsOf: fileURL),
               let config = try? JSONDecoder().decode(TicketConfig.self, from: data) else { return TicketConfig() }
+        return config
+    }
+
+    struct Unreadable: Error {}
+
+    /// Änderungen aus der App nacheinander: lesen, ändern, schreiben.
+    static let changeQueue = DispatchQueue(label: "com.whisperm8.tickets.config")
+
+    /// Für Änderungen: Eine vorhandene, aber unlesbare Datei ist ein Fehler.
+    /// `load()` gäbe dafür eine leere Zuordnung zurück, und das nächste
+    /// Speichern überschriebe alles, was in der Datei stand.
+    func loadForChange() throws -> TicketConfig {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return TicketConfig() }
+        guard let data = try? Data(contentsOf: fileURL),
+              let config = try? JSONDecoder().decode(TicketConfig.self, from: data) else { throw Unreadable() }
         return config
     }
 

@@ -537,6 +537,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.restartKeepsChatsEnabled) }
     }
 
+    /// Labs „Tickets“: Ansicht mit Board und Backlog aus dem Ticket-System im
+    /// Chats-Fenster, ab Werk aus. Nur an liest die App dort; geschrieben wird
+    /// ausschließlich über `whisperm8 tickets`. Schalter in Einstellungen › Tickets.
+    /// `defaults write com.whisperm8.app ticketBoardEnabled -bool YES`
+    var isTicketBoardEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.ticketBoardEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.ticketBoardEnabled) }
+    }
+
     /// MCP-Server beim App-Start über alle Claude-Konten angleichen (nur
     /// ergänzen, per `claude mcp add-json -s user`). Default aus — für neue
     /// Nutzer soll nichts ungefragt in ihre Konten geschrieben werden.
@@ -1168,6 +1177,7 @@ enum PreferenceKeys {
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
     static let restartKeepsChatsEnabled = "restartKeepsChatsEnabled"
+    static let ticketBoardEnabled = "ticketBoardEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let claudeLoginExpiryWarningEnabled = "claudeLoginExpiryWarningEnabled"

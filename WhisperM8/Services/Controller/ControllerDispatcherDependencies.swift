@@ -44,6 +44,9 @@ struct ControllerTerminalState: Equatable {
     var onlyRecalledPrompt: Bool = false
     /// Die TUI hat Bracketed Paste eingeschaltet (Einfügen in Shells).
     var bracketedPaste: Bool = false
+    /// Claudes Frage-Dialog mit freiem Textfeld ist offen, doppelt erkannt
+    /// (`ClaudeQuestionTextGate`): L1 + Kreuz darf Text hinein (WM8-66).
+    var questionAcceptsText: Bool = false
 }
 
 /// Zugriff auf den Zwischenablage-Verlauf für L1 + Kreuz (Runde 5). Closures
@@ -79,6 +82,9 @@ protocol ControllerTerminalControlling: AnyObject {
     @discardableResult func clearInput(in sessionID: UUID) -> Bool
     /// Text als ein Block ins Eingabefeld, wahlweise mit Senden.
     @discardableResult func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool
+    /// Text als ein Block in Claudes offene Frage, ohne Enter; prüft die Frage
+    /// direkt vorher noch einmal (WM8-66).
+    @discardableResult func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool
     /// Der eben gesendete Menü-Befehl öffnet eine Auswahlliste der CLI.
     func noteChoiceListOpened(in sessionID: UUID)
 }

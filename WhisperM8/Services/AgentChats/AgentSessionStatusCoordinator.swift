@@ -51,7 +51,7 @@ final class AgentSessionStatusCoordinator {
     let autoNamer: AgentSessionAutoNamer
 
     let store: AgentSessionStore
-    private let watcher: AgentSessionRuntimeWatcher
+    let watcher: AgentSessionRuntimeWatcher
     private let notificationPoster: AgentUserNotificationPosting
     private let playSound: (String) -> Void
     private let loadPreferences: () -> AgentStatusPreferences
@@ -105,6 +105,13 @@ final class AgentSessionStatusCoordinator {
     /// Transcript-Wachstum ist kein Arbeiten (ESC-Interrupt ohne Stop-Hook,
     /// Vorfall/QA 2026-08-17).
     private var lastHookEventAt: [UUID: Date] = [:]
+    /// Ein Timer je Chat am Nutzungslimit (WM8-69, Review H1).
+    var usageLimitTimers: [UUID: Task<Void, Never>] = [:]
+    /// Wartet vor Ton, Meldung und Zustellung beim Turn-Ende auf einen
+    /// frischen Poll (Review H2). Tests ersetzen das durch „sofort“.
+    var freshTranscriptBeforeTurnEnd: ((UUID, @escaping () -> Void) -> Void)?
+    /// Stößt die Warteschlange eines Chats an (Tests: Spy).
+    var deliverQueued: (UUID) -> Void = { AgentPromptQueueDelivery.shared.deliverNext(for: $0) }
     /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
     /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
     /// verifiziert werden.
@@ -275,6 +282,11 @@ final class AgentSessionStatusCoordinator {
         watcher.onWorkingCopy = { [weak self] sessionID, copy in
             self?.handleWorkingCopy(sessionID: sessionID, copy: copy)
         }
+        watcher.onUsageLimit = { [weak self] sessionID, limit in
+            self?.handleUsageLimit(sessionID: sessionID, limit: limit)
+        }
+        // Gespeicherte Limits nach einem Neustart ausdrücklich zu Ende planen.
+        Task { @MainActor [weak self] in self?.scheduleStoredUsageLimitEnds() }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)
@@ -757,7 +769,12 @@ final class AgentSessionStatusCoordinator {
     ) -> AwaitingInputKind {
         switch detail {
         case .question:
-            return .question
+            // Das Tail-Detail bleibt nach einer beantworteten Frage stehen
+            // (Tool-Ergebnisse werden übersprungen), bis die nächste
+            // Assistant-Zeile gelesen ist. Meldet Claude selbst schon eine
+            // Freigabe, gilt die (WM8-66; gemessen an 2.1.325: Frage =
+            // `input needed`, Freigabe = `permission prompt`).
+            return waitingFor == "permission prompt" ? .permission : .question
         case .tool(let name, _):
             // `input needed` heißt Frage/Elicitation — das letzte Tool im Tail
             // kann längst abgeschlossen sein (LR-AK-036).
@@ -1119,17 +1136,26 @@ final class AgentSessionStatusCoordinator {
         let preferences = loadPreferences()
         switch effect {
         case .turnCompleted:
-            if preferences.stopSoundEnabled {
-                playSound(preferences.stopSoundName)
+            afterFreshTranscript(sessionID) { [weak self] in
+                guard let self else { return }
+                // Am Nutzungslimit ist nichts fertig: kein Ton, keine Meldung,
+                // keine Zustellung (WM8-69).
+                if self.store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.activeUsageLimit() != nil {
+                    Logger.claudeBinding.notice("turn_end_at_usage_limit sessionID=\(sessionID.uuidString, privacy: .public)")
+                    return
+                }
+                if preferences.stopSoundEnabled {
+                    self.playSound(preferences.stopSoundName)
+                }
+                if preferences.stopNotificationEnabled {
+                    self.postNotification(kind: .turnCompleted, sessionID: sessionID)
+                }
+                // Turn-Ende ist der einzige sichere Zustellzeitpunkt für
+                // vorgemerkte Folgeaufträge. Bewusst NICHT bei `inputRequested`:
+                // dort wartet der Chat auf die Antwort zu einer konkreten Frage —
+                // ein Folgeauftrag würde als diese Antwort gelesen.
+                AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
             }
-            if preferences.stopNotificationEnabled {
-                postNotification(kind: .turnCompleted, sessionID: sessionID)
-            }
-            // Turn-Ende ist der einzige sichere Zustellzeitpunkt für
-            // vorgemerkte Folgeaufträge. Bewusst NICHT bei `inputRequested`:
-            // dort wartet der Chat auf die Antwort zu einer konkreten Frage —
-            // ein Folgeauftrag würde als diese Antwort gelesen.
-            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
                 if registryLiveSessions.contains(sessionID), registryAwaitingNotificationDelay > 0 {
@@ -1211,7 +1237,8 @@ final class AgentSessionStatusCoordinator {
             provider: session.provider,
             externalSessionID: session.externalSessionID,
             cwd: project.path,
-            priorTurnFinishedAt: session.lastTurnAt
+            priorTurnFinishedAt: session.lastTurnAt,
+            usageLimit: session.usageLimit
         )
     }
 
