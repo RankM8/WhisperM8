@@ -438,6 +438,7 @@ prepare_instance() {
     [[ -d "$PROJECT/.git" ]] || git -C "$PROJECT" init -q
     : > "$COUNTER_FILE"
     : > "$ECHO_FILE"
+    rm -f "$COUNTER_FILE.ident" "$ECHO_FILE.ident"   # Kennung eines früheren Laufs
     cat > "$SOAK/counter.sh" <<'SH'
 # Ersatz-Chat: nummerierte Zeilen mit Zeitstempel, alle 0,2 s.
 # Kennung des Chats festhalten: `ps -E` liest die Umgebung von /bin/sh nicht.
