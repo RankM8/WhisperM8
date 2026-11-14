@@ -19,6 +19,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case clipboard
     case statistics
     case controller
+    case tickets
 
     var id: String { rawValue }
 
@@ -64,6 +65,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Statistics")
         case .controller:
             return String(localized: "Controller")
+        case .tickets:
+            return String(localized: "Tickets")
         }
     }
 
@@ -105,6 +108,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "chart.bar.xaxis"
         case .controller:
             return "gamecontroller"
+        case .tickets:
+            return "ticket"
         }
     }
 
@@ -146,6 +151,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Active time, tokens, API value, limits, chats and dictations — calculated locally.")
         case .controller:
             return String(localized: "Use WhisperM8 with a gamepad.")
+        case .tickets:
+            return String(localized: "Experimental: tickets from Linear and the chats working on them.")
         }
     }
 }
@@ -351,6 +358,8 @@ struct SettingsView: View {
             StatisticsSettingsPage()
         case .controller:
             ControllerSettingsPage()
+        case .tickets:
+            TicketsSettingsPage()
         }
     }
 

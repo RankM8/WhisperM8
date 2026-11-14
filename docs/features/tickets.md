@@ -1,5 +1,5 @@
 ---
-status: aktiv (Kern, Kommandozeile und Skill; die Ansicht in der App fehlt noch)
+status: aktiv (Kern, Kommandozeile, Skill und Einstellungen; die Ansicht in der App ist im Bau)
 updated: 2026-11-14
 ---
 
@@ -8,9 +8,20 @@ updated: 2026-11-14
 WhisperM8 verbindet die Tickets im Ticket-Werkzeug mit den Chats der App. Ein Chat hängt sich an sein
 Ticket; daraus ergibt sich, wer woran sitzt, welche Chats laufen und welche Tickets niemanden haben.
 
-Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets` und den Skill `tickets` im
-Plugin. Die sichtbare Ansicht (Board und Backlog im Agent-Chats-Fenster) ist geplant:
-[`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf [`../design/ticket-board.html`](../design/ticket-board.html).
+Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin und
+die Seite „Tickets“ in den Einstellungen (Labs). Die sichtbare Ansicht (Board und Backlog im
+Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
+[`../design/ticket-board.html`](../design/ticket-board.html).
+
+## Wer mit dem Ticket-System spricht
+
+- **Die Kommandozeile** liest und schreibt. Jeder Schreibzugriff auf Linear kommt aus einem `tickets`-Befehl.
+- **Die App** liest nur, und nur bei eingeschaltetem Labs-Schalter `ticketBoardEnabled` (ab Werk aus): für die
+  Ticket-Ansicht das Board eines Teams und ein Ticket, für die Einrichtung das Konto und die Teams eines Keys.
+  Sie ändert in Linear nichts. Schalter aus heißt: keine Verbindung zu `api.linear.app`, kein Griff in den
+  Schlüsselbund.
+- **Abseits des Main Threads:** Der Key wird über einen blockierenden Kindprozess gelesen. In der App läuft das
+  nie auf dem Main Thread; `TicketsSettingsModelTests` prüft das für jede Abhängigkeit der Einstellungen.
 
 ## Bedienung
 
@@ -67,6 +78,23 @@ WhisperM8 selbst gilt, steht hier:
 Liegt ein Key schon im Schlüsselbund (von einem anderen Werkzeug abgelegt), übernimmt ihn
 `whisperm8 tickets setup --workspace <Kürzel>` nach einer Prüfung bei Linear.
 
+### In der App: Einstellungen › Tickets
+
+Die Seite steht in der Gruppe „Labs“ und tut dasselbe wie `tickets setup`, nach denselben Regeln:
+
+- **Schalter „Show tickets in Agent Chats“** (`ticketBoardEnabled`). Solange er aus ist, zeigt die Seite nur
+  ihn und liest nichts.
+- **Zugang:** je Workspace eine Zeile mit Zustand (verbunden, kein Key, geht nicht) und den Teams, die der Key
+  sieht. Ein neuer Key wird bei Linear geprüft und unter dem Workspace abgelegt, den Linear zu ihm nennt.
+  „Remove Key…“ löscht den Schlüsselbund-Eintrag; die Zuordnungen der Teams bleiben, der Workspace steht danach
+  als „kein Key“ da.
+- **Projekte und Teams:** Projektordner → Team, wählbar aus den Projekten der App oder per Ordner-Auswahl. Ein
+  Kürzel, das schon zu einem anderen Workspace gehört, hängt die Seite nicht um; dafür gibt es
+  `tickets setup --reassign`.
+
+`tickets.json` hat damit zwei Schreiber, Kommandozeile und Einstellungen. Beide lesen vor jeder Änderung neu
+und schreiben atomar; wer zuletzt schreibt, gewinnt.
+
 ## Mehrere Workspaces
 
 Wer für mehr als eine Firma arbeitet, hat mehr als einen Workspace. Jeder ist ein eigener Mandant mit eigenem
@@ -92,7 +120,7 @@ Key, eigenen Teams und eigener Rechnung.
   Workspaces in der `.claude/settings.json` des Projekts.
 - **Test-Instanz:** Sie hat einen eigenen Schlüsselbund-Dienst (`whisperm8-linear-api-key.test`) und eine eigene
   `tickets.json`. Ohne dort eingerichteten Key spricht sie mit keinem Ticket-System; den echten Key liest,
-  überschreibt und löscht sie nicht.
+  überschreibt und löscht sie nicht. Wer dort einen echten Key einträgt, liest das echte Linear.
 
 ### Warum der Key über `/usr/bin/security` läuft
 
@@ -131,7 +159,10 @@ Services/Tickets/TicketSource.swift          Grenze zum Ticket-Werkzeug, Fehler,
 Services/Tickets/LinearGraphQLClient.swift   ein Aufruf, Fehlerübersetzung; Key im Schlüsselbund
 Services/Tickets/LinearTicketSource.swift    die einzige Stelle, die Linear kennt
 Services/Tickets/TicketConfig.swift          Projektordner ↔ Team ↔ Workspace (tickets.json)
-Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die spätere Ansicht
+Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die Ansicht
+Views/Tickets/TicketErrorText.swift          Fehler als übersetzter Satz für die Oberfläche
+Views/Settings/Models/TicketsSettingsModel.swift   Zustand und Regeln der Einstellungsseite
+Views/Settings/Pages/TicketsSettingsPage.swift     Einstellungen › Tickets
 CLI/TicketsCLICommand.swift                  Argumente, Hilfe, Umgebung
 CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 ```
@@ -155,8 +186,8 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
   Liste der Workspaces; nichts Geheimes). Geschrieben von `whisperm8 tickets setup`.
 - Schlüsselbund: Dienst `whisperm8-linear-api-key` (Test-Instanz: `…-key.test`), je Workspace ein Eintrag mit
   dem Kürzel als Konto.
-- Netz: `https://api.linear.app/graphql`, nur wenn ein `tickets`-Befehl läuft. Die App selbst baut bisher keine
-  Verbindung auf; das kommt mit der Ansicht und ihrem Schalter.
+- Netz: `https://api.linear.app/graphql`, wenn ein `tickets`-Befehl läuft oder wenn in der App der
+  Labs-Schalter an ist (Einstellungen › Tickets, später die Ansicht).
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,
   `assign` und `label` aus.
 
@@ -168,7 +199,10 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
   setzen jeden Status ohne Rückfrage, und „verworfen“ prüft die Kommandozeile gar nicht. Die Regeln halten die
   Chats ein; das Werkzeug erinnert sie daran.
 - **Die Verknüpfung ist für alle im Workspace sichtbar:** Am Ticket steht ein Anhang „Chat: <Titel des Chats>“
-  mit Projektname und Zeit. In einem Workspace mit Kollegen lesen alle den Chat-Titel mit.
+  mit Projektname und Zeit. In einem Workspace mit Kollegen lesen alle den Chat-Titel mit. Entschieden am
+  14.11.2026: Der Anhang bleibt in jedem Workspace an, es gibt keinen Schalter dafür.
+- **Linears eigene Agent-Sitzungen nutzt WhisperM8 nicht.** Die Filter „Agent“ und „Agent Session“ in Linear
+  kennen deshalb keinen unserer Chats; „Mit Agent“ und „Ohne Agent“ sind eigene Ansichten auf den Anhang.
 - **Text an Tickets:** höchstens 64 KB je Text, aus Argument, stdin oder `@datei`. Was gesendet wird, liegt
   danach bei Linear. `@datei` liest jede lesbare Datei; den Inhalt prüft die Kommandozeile nicht.
 - Ein Board lädt bis zu 500 offene Tickets (fünf Seiten zu 100).

@@ -121,6 +121,16 @@
         }
       }
     },
+    "%@ does not exist in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gibt es in Linear nicht."
+          }
+        }
+      }
+    },
     "%@ extra arguments": {
       "localizations": {
         "de": {
@@ -287,6 +297,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · %@ insgesamt"
+          }
+        }
+      }
+    },
+    "%@ · no workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · kein Workspace"
           }
         }
       }
@@ -1041,6 +1061,16 @@
         }
       }
     },
+    "A chat only changes tickets in the workspace of its own project. Reading works everywhere.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat ändert Tickets nur im Workspace seines eigenen Projekts. Lesen geht überall."
+          }
+        }
+      }
+    },
     "A connected gamepad drives Agent Chats and dictation: move through the list, open chats, answer questions and dictate.": {
       "localizations": {
         "de": {
@@ -1172,6 +1202,16 @@
       }
     },
     "API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Key"
+          }
+        }
+      }
+    },
+    "API key": {
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1607,6 +1647,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 Servereintrag hinzugefügt."
+          }
+        }
+      }
+    },
+    "Adds a Tickets view to the Agent Chats window: board and backlog of the project's team, with the chat working on each ticket.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergänzt im Agent-Chats-Fenster eine Ansicht „Tickets“: Board und Backlog des Teams, zu dem das Projekt gehört, mit dem Chat, der am jeweiligen Ticket arbeitet."
           }
         }
       }
@@ -3461,6 +3511,16 @@
         }
       }
     },
+    "Chats in this folder, and in worktrees below it, belong to the team.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats in diesem Ordner und in Arbeitsordnern darunter gehören zum Team."
+          }
+        }
+      }
+    },
     "Chats on “%@” then continue through the main account, and the profile disappears. The main account’s proxy restarts briefly for this.": {
       "localizations": {
         "de": {
@@ -3511,6 +3571,16 @@
         }
       }
     },
+    "Check and save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfen und speichern"
+          }
+        }
+      }
+    },
     "Check for update": {
       "localizations": {
         "de": {
@@ -3527,6 +3597,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch nach Updates suchen"
+          }
+        }
+      }
+    },
+    "Check with Linear and Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei Linear prüfen und speichern"
           }
         }
       }
@@ -3581,6 +3661,16 @@
         }
       }
     },
+    "Choose Folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner wählen…"
+          }
+        }
+      }
+    },
     "Choose Parent Folder": {
       "localizations": {
         "de": {
@@ -3611,12 +3701,32 @@
         }
       }
     },
+    "Choose project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt wählen"
+          }
+        }
+      }
+    },
     "Choose project icon": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Projekt-Icon wählen"
+          }
+        }
+      }
+    },
+    "Choose team": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Team wählen"
           }
         }
       }
@@ -5071,6 +5181,16 @@
         }
       }
     },
+    "Couldn't save the ticket settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Ticket-Einstellungen ließen sich nicht speichern."
+          }
+        }
+      }
+    },
     "Count": {
       "localizations": {
         "de": {
@@ -5137,6 +5257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lege Markdown-Files unter ~/.claude/agents/ an oder im Projekt unter .claude/agents/."
+          }
+        }
+      }
+    },
+    "Create a personal API key in Linear under Settings › Security & access. WhisperM8 checks it with Linear and keeps it in the macOS Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lege in Linear unter Settings › Security & access einen persönlichen API-Key an. WhisperM8 prüft ihn bei Linear und legt ihn im macOS-Schlüsselbund ab."
           }
         }
       }
@@ -6501,6 +6631,16 @@
         }
       }
     },
+    "Experimental: tickets from Linear and the chats working on them.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimentell: Tickets aus Linear und die Chats, die daran arbeiten."
+          }
+        }
+      }
+    },
     "Export": {
       "localizations": {
         "de": {
@@ -6827,6 +6967,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Folge-Turn, die Sitzung behält ihren Kontext (codex exec resume)"
+          }
+        }
+      }
+    },
+    "For a project that has no chats in WhisperM8 yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für ein Projekt, das in WhisperM8 noch keine Chats hat."
           }
         }
       }
@@ -8411,6 +8561,16 @@
         }
       }
     },
+    "Key saved for %@, signed in as %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key für %@ gespeichert, angemeldet als %@."
+          }
+        }
+      }
+    },
     "Keyboard Cleaning": {
       "localizations": {
         "de": {
@@ -8777,6 +8937,106 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zeile hoch / runter"
+          }
+        }
+      }
+    },
+    "Linear API key...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear-API-Key..."
+          }
+        }
+      }
+    },
+    "Linear access": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugang zu Linear"
+          }
+        }
+      }
+    },
+    "Linear declined the request: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear lehnt die Anfrage ab: %@"
+          }
+        }
+      }
+    },
+    "Linear did not name a workspace for this key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear nennt zu diesem Key keinen Workspace."
+          }
+        }
+      }
+    },
+    "Linear is not reachable. Check the connection.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear ist nicht erreichbar. Prüfe die Verbindung."
+          }
+        }
+      }
+    },
+    "Linear rejected the key. It may have been deleted in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear lehnt den Key ab. Vielleicht wurde er in Linear gelöscht."
+          }
+        }
+      }
+    },
+    "Linear sent an answer WhisperM8 could not read.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear hat etwas geantwortet, das WhisperM8 nicht lesen konnte."
+          }
+        }
+      }
+    },
+    "Linear's request limit is reached. Try again later.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Abfrage-Limit von Linear ist erreicht. Später erneut versuchen."
+          }
+        }
+      }
+    },
+    "Link": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuordnen"
+          }
+        }
+      }
+    },
+    "Link a project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekt zuordnen"
           }
         }
       }
@@ -10471,6 +10731,16 @@
         }
       }
     },
+    "No Linear key saved for this workspace.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für diesen Workspace ist kein Linear-Key gespeichert."
+          }
+        }
+      }
+    },
     "No Matches": {
       "localizations": {
         "de": {
@@ -10711,6 +10981,16 @@
         }
       }
     },
+    "No key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Key"
+          }
+        }
+      }
+    },
     "No login token — sign in again in the account settings": {
       "localizations": {
         "de": {
@@ -10877,6 +11157,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Supervisor-PID — Zustand inkonsistent."
+          }
+        }
+      }
+    },
+    "No teams visible with this key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit diesem Key ist kein Team sichtbar."
           }
         }
       }
@@ -11167,6 +11457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht gewechselt — %1$@ (%2$lld)"
+          }
+        }
+      }
+    },
+    "Not working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geht nicht"
           }
         }
       }
@@ -11510,6 +11810,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alles zur KI-Pipeline an einem Ort: Konto, Standards, Modi, Vorlagen, Tests."
+          }
+        }
+      }
+    },
+    "One key per workspace. The workspace is taken from the key itself.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Key je Workspace. Zu welchem Workspace er gehört, ergibt sich aus dem Key."
           }
         }
       }
@@ -11944,6 +12254,16 @@
         }
       }
     },
+    "Other folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderer Ordner"
+          }
+        }
+      }
+    },
     "Our most capable model for complex, demanding work.": {
       "localizations": {
         "de": {
@@ -12140,6 +12460,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einfügen"
+          }
+        }
+      }
+    },
+    "Paste a key of this workspace below to restore access.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füge unten einen Key dieses Workspaces ein, dann geht der Zugang wieder."
           }
         }
       }
@@ -12934,6 +13264,16 @@
         }
       }
     },
+    "Projects and teams": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projekte und Teams"
+          }
+        }
+      }
+    },
     "Projects by value": {
       "localizations": {
         "de": {
@@ -13290,6 +13630,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Liest die aktuelle Auswahl (braucht die Bedienungshilfen-Berechtigung), damit Modi wie „Antworten“ verstehen, worauf du dich beziehst."
+          }
+        }
+      }
+    },
+    "Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, nothing is read from Linear or the Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liest Tickets aus Linear und zeigt, welcher Chat an welchem Ticket arbeitet. WhisperM8 ändert von hier aus nie ein Ticket. Ab Werk aus; solange es aus ist, wird nichts aus Linear oder dem Schlüsselbund gelesen."
           }
         }
       }
@@ -13760,6 +14110,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abo entfernen"
+          }
+        }
+      }
+    },
+    "Remove the Linear key?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear-Key entfernen?"
           }
         }
       }
@@ -14784,6 +15144,16 @@
         }
       }
     },
+    "Save a key first. Its teams then appear here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichere zuerst einen Key. Danach erscheinen hier seine Teams."
+          }
+        }
+      }
+    },
     "Saved": {
       "localizations": {
         "de": {
@@ -15714,6 +16084,16 @@
         }
       }
     },
+    "Show or hide the key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key ein- oder ausblenden"
+          }
+        }
+      }
+    },
     "Show pinned chats": {
       "localizations": {
         "de": {
@@ -15800,6 +16180,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notiz dieser Kachel zeigen"
+          }
+        }
+      }
+    },
+    "Show tickets in Agent Chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets in Agent Chats anzeigen"
           }
         }
       }
@@ -17214,6 +17604,36 @@
         }
       }
     },
+    "Team": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Team"
+          }
+        }
+      }
+    },
+    "Team %@ is already linked to the workspace %@. To move it, run `whisperm8 tickets setup --team %@ --workspace %@ --reassign`.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Team %@ gehört schon zum Workspace %@. Zum Umhängen: `whisperm8 tickets setup --team %@ --workspace %@ --reassign`."
+          }
+        }
+      }
+    },
+    "Teams: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teams: %@"
+          }
+        }
+      }
+    },
     "Template": {
       "localizations": {
         "de": {
@@ -17440,6 +17860,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text wird nur in die Zwischenablage kopiert"
+          }
+        }
+      }
+    },
+    "That does not look like a Linear API key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das sieht nicht nach einem Linear-API-Key aus."
           }
         }
       }
@@ -18544,6 +18974,26 @@
         }
       }
     },
+    "Ticket view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket-Ansicht"
+          }
+        }
+      }
+    },
+    "Tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets"
+          }
+        }
+      }
+    },
     "Time": {
       "localizations": {
         "de": {
@@ -18910,6 +19360,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tab-Gruppen einschalten"
+          }
+        }
+      }
+    },
+    "Turn the switch on to set up access and projects.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schalte den Schalter ein, um Zugang und Projekte einzurichten."
           }
         }
       }
@@ -19900,6 +20360,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "WhisperM8-Statuszeile"
+          }
+        }
+      }
+    },
+    "WhisperM8 and `whisperm8 tickets` lose access to the workspace %@. Projects stay linked to their teams.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WhisperM8 und `whisperm8 tickets` verlieren den Zugang zum Workspace %@. Die Projekte bleiben ihren Teams zugeordnet."
           }
         }
       }

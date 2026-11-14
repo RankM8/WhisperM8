@@ -105,6 +105,17 @@ struct TicketConfig: Codable, Equatable {
         workspacesByTeam[team.uppercased()] = workspace.lowercased()
     }
 
+    /// Nimmt den Workspace aus der Liste der eingerichteten. Zuordnungen seiner
+    /// Teams bleiben stehen: Kommt der Zugang wieder, gilt alles wie zuvor, und
+    /// bis dahin zeigt die Einrichtung ihn als „ohne Key“.
+    mutating func remove(workspace: String) {
+        workspaces.removeAll { $0 == workspace.lowercased() }
+    }
+
+    mutating func removeProject(_ directory: String) {
+        teamsByProjectPath[Self.normalized(directory)] = nil
+    }
+
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert
     /// in eine Befehlszeile von `security -i`, also nur harmlose Zeichen.
     static func isWorkspaceName(_ name: String) -> Bool {
