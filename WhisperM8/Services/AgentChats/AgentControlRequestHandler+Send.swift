@@ -39,8 +39,9 @@ extension AgentControlRequestHandler {
 
         let sentAt = Date()
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
-        let (outcome, clearedInput) = await MainActor.run { () -> (SendOutcome, Bool) in
+        let (outcome, clearedInput, usageWarning) = await MainActor.run { () -> (SendOutcome, Bool, String?) in
             var clearedInput = false
+            var usageWarning: String?
             let outcome: SendOutcome = {
                 let registry = AgentTerminalRegistry.shared
                 let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -68,9 +69,15 @@ extension AgentControlRequestHandler {
                 }
                 // Am Nutzungslimit würde der Prompt verbraucht, ohne dass der Chat
                 // arbeitet (WM8-69). Kein --force-Bypass, sicherer Weg: `enqueue`.
-                if !prompt.hasPrefix("/"), let message = ChatsSendReadinessGuard.usageLimitMessage(session.activeUsageLimit()) {
+                // Auch ein Chat, der ruhte, als sein Konto ans Limit kam, hat keine
+                // eigene Limit-Zeile: die kontoweite Sicht hält ihn ebenso auf.
+                if !AgentUsageLimit.isSlashCommand(prompt),
+                   let message = ChatsSendReadinessGuard.usageLimitMessage(
+                       session.blockingUsageLimit(in: workspace.sessions)) {
                     return .failure(.notReady, message)
                 }
+                usageWarning = AgentUsageLimit.isSlashCommand(prompt) ? nil
+                    : session.usageLimitWarning(in: workspace.sessions).map(ChatsSendReadinessGuard.creditsWarning)
                 let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
                 if Self.approvalPending(targetID, controller) { return .failure(.approvalPending, Self.approvalPendingMessage) } // WM8-75, auch mit --force
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
@@ -88,7 +95,7 @@ extension AgentControlRequestHandler {
                 clearedInput = controller.sendPrompt(marked, submit: submit)
                 return .success(session)
             }()
-            return (outcome, clearedInput)
+            return (outcome, clearedInput, usageWarning)
         }
 
         switch outcome {
@@ -117,6 +124,7 @@ extension AgentControlRequestHandler {
                 "promptChars": prompt.count,
                 "requestID": request.requestID,
                 "clearedInput": clearedInput,
+                "warning": usageWarning.map { ChatsControlJSON.string($0) } ?? ChatsControlJSON.null,
             ]))
         }
     }

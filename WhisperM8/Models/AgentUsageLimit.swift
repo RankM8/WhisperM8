@@ -22,6 +22,10 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
     /// `"main"`). Der Koordinator stempelt es beim ersten Erkennen; nach einem
     /// Kontowechsel gilt das Limit für den Chat nicht mehr (Review H3).
     var account: String? = nil
+    /// Sperrt das Limit das ganze Konto (5 Stunden, Woche)? Das Guthaben-Limit
+    /// für ein Modell (`kind` = `model_requires_usage_credits`) nicht: ein
+    /// anderes Modell kann weiterlaufen.
+    var isAccountWide: Bool { kind != "model_requires_usage_credits" }
 
     /// Gilt das Limit noch? Ohne bekanntes Ende: ja, bis der Verlauf
     /// weitergeht.
@@ -63,6 +67,25 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
 
     static func accountKey(_ profileName: String?) -> String { profileName ?? "main" }
 
+    /// Pur: das jüngste noch laufende Limit eines Kontos, gesehen an irgendeinem
+    /// seiner Chats (Konto-Stempel). So erfährt auch ein Chat, der ruhte, als
+    /// sein Konto ans Limit kam, davon (Vorfall 14.11.2026, Dex).
+    static func onAccount(_ account: String, in sessions: [AgentChatSession], now: Date = Date()) -> AgentUsageLimit? {
+        sessions.compactMap(\.usageLimit)
+            .filter { $0.account == account && $0.isActive(at: now) }
+            .max { ($0.resetsAt ?? .distantFuture) < ($1.resetsAt ?? .distantFuture) }
+    }
+
+    /// Ist der Prompt ein Slash-Befehl (`/login`, `/model opus`,
+    /// `/rate-limit-options`)? Ein Pfad wie `/Users/…` ist keiner (Review C).
+    static func isSlashCommand(_ prompt: String) -> Bool {
+        let first = prompt.drop(while: \.isWhitespace).prefix { !$0.isWhitespace }
+        guard first.count > 1, first.first == "/" else { return false }
+        let word = first.dropFirst()
+        guard let lead = word.first, lead.isLetter else { return false }
+        return word.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == ":" }
+    }
+
     static let autoContinueArmedMarker = "continuing automatically at"
     static let autoContinueCancelledMarker = "Automatic continue cancelled"
 
@@ -94,5 +117,26 @@ extension AgentChatSession {
         guard let limit = usageLimit, limit.isActive(at: now) else { return nil }
         if let account = limit.account, account != AgentUsageLimit.accountKey(claudeProfileName) { return nil }
         return limit
+    }
+
+    /// Was einen Prompt an diesen Chat jetzt aufhält: das eigene Limit, sonst
+    /// ein kontoweites Limit, gesehen an einem anderen Chat desselben Kontos
+    /// (5 Stunden, Woche). Das Guthaben-Limit eines anderen Chats gilt nur für
+    /// dessen Modell und hält hier nicht auf (siehe `usageLimitWarning`).
+    func blockingUsageLimit(in sessions: [AgentChatSession], now: Date = Date()) -> AgentUsageLimit? {
+        if let own = activeUsageLimit(at: now) { return own }
+        guard provider == .claude,
+              let shared = AgentUsageLimit.onAccount(AgentUsageLimit.accountKey(claudeProfileName), in: sessions, now: now),
+              shared.isAccountWide else { return nil }
+        return shared
+    }
+
+    /// Ein Guthaben-Limit an einem anderen Chat desselben Kontos: nur warnen,
+    /// es gilt vielleicht nicht für das Modell dieses Chats.
+    func usageLimitWarning(in sessions: [AgentChatSession], now: Date = Date()) -> AgentUsageLimit? {
+        guard provider == .claude, activeUsageLimit(at: now) == nil,
+              let shared = AgentUsageLimit.onAccount(AgentUsageLimit.accountKey(claudeProfileName), in: sessions, now: now),
+              !shared.isAccountWide else { return nil }
+        return shared
     }
 }

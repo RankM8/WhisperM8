@@ -56,7 +56,7 @@ final class AgentPromptQueueDelivery {
         }
         // Am Nutzungslimit würde der Auftrag verbraucht (WM8-69): liegen
         // lassen; nach dem Limit stößt der Koordinator die Zustellung an.
-        if let message = ChatsSendReadinessGuard.usageLimitMessage(session.activeUsageLimit()) {
+        if let message = ChatsSendReadinessGuard.usageLimitMessage(session.blockingUsageLimit(in: workspace.sessions)) {
             store.markFailed(id: reserved.id, error: message, retry: true)
             return
         }

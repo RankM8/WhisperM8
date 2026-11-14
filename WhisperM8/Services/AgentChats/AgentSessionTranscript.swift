@@ -167,7 +167,10 @@ enum AgentTranscriptParser {
         let quota = obj["quotaLimits"] as? [String: Any]
         let info = (obj["apiErrorParams"] as? [String: Any])?["rate_limit_info"] as? [String: Any]
         let resets = (quota?["resetsAt"] as? NSNumber) ?? (info?["resetsAt"] as? NSNumber)
-        let kind = (quota?["rateLimitType"] as? String) ?? (info?["rateLimitType"] as? String) ?? apiError
+        // Guthaben-Limit (nur ein Modell) bekommt seine Fehlerart als `kind`:
+        // sonst wäre es von einem Wochenlimit des Kontos nicht zu unterscheiden.
+        let kind = apiError == "model_requires_usage_credits" ? apiError
+            : (quota?["rateLimitType"] as? String) ?? (info?["rateLimitType"] as? String) ?? apiError
         return .usageLimit(timestamp: timestamp,
                            resetsAt: resets.map { Date(timeIntervalSince1970: $0.doubleValue) },
                            kind: kind)

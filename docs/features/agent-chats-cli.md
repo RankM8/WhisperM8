@@ -708,7 +708,14 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
   unter `runtime.usageLimit` (`kind`, `resetsAt`); `board` führt den Chat unter
   „BRAUCHT DICH“.
 - `send` lehnt mit `notReady` ab (Exit 4): der Prompt würde sonst verbraucht,
-  ohne dass der Chat arbeitet. Kein `--force`-Bypass. `enqueue` merkt vor; die
+  ohne dass der Chat arbeitet. Kein `--force`-Bypass. Das gilt auch für einen
+  Chat ohne eigene Limit-Zeile, wenn ein anderer Chat desselben Kontos am
+  5-Stunden- oder Wochenlimit steht (das Konto ist gesperrt; Vorfall 14.11.:
+  ein ruhender Chat verbrauchte die erste Nachricht). Ein Guthaben-Limit
+  (`model_requires_usage_credits`) gilt nur für ein Modell: dort gibt `send`
+  nur eine Warnung aus (stderr, JSON `result.warning`). Durch geht nur ein
+  Slash-Befehl am Anfang (`/login`, `/model …`, `/rate-limit-options`), kein
+  Pfad wie `/Users/…`. `enqueue` merkt vor; die
   Warteschlange stellt erst nach dem Ende zu, auch wenn Claude danach nicht
   von selbst weitermacht.
 - `new` warnt auf stderr, wenn ein anderer Chat desselben Kontos gerade am
@@ -735,6 +742,10 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
 - Ein Diktat in einen Chat am Limit landet in der Zwischenablage, mit eigener
   Meldung. Der Controller schreibt bewusst weiter: Seine Eingaben sind
   gezielte Tasten im sichtbaren Chat, etwa im Menü `/rate-limit-options`.
+- Bekannte Grenzen: Der ganze Weg ist an einem echten Limit in der App noch
+  nicht gesehen. Der frische Poll vor Ton und Zustellung wartet höchstens 2 s;
+  kommt Claudes Limit-Zeile später, gibt es doch Ton und Zustellung. Der
+  Fertig-Ton kann dadurch bis zu 2 s später kommen.
 - Codex- und GPT-Chats: noch nicht erkannt (kein belegter Limit-Fall im
   Bestand; Codex führt `rate_limits` in `token_count`, ohne echten Treffer).
 - Der Kontowechsel behandelt einen Chat am Limit noch wie bisher (Folgepaket:

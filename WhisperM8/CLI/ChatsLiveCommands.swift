@@ -201,6 +201,7 @@ enum ChatsSendCommand {
                 }
                 return ChatsLiveSupport.mapError(response)
             }
+            if !json, let warning = response.result?["warning"]?.stringValue { CLIIO.err("⚠︎ \(warning)") }
             guard let waitSeconds else {
                 if queueIfBusy { return finish(.delivered, title: title, prompt: prompt, json: json, server: response) }
                 ChatsLiveSupport.printResult(response, json: json) { result in

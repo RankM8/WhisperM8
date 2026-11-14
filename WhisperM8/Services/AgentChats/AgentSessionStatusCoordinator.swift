@@ -50,8 +50,8 @@ final class AgentSessionStatusCoordinator {
     let hookBridge: ClaudeHookBridge
     let autoNamer: AgentSessionAutoNamer
 
-    private let store: AgentSessionStore
-    private let watcher: AgentSessionRuntimeWatcher
+    let store: AgentSessionStore
+    let watcher: AgentSessionRuntimeWatcher
     private let notificationPoster: AgentUserNotificationPosting
     private let playSound: (String) -> Void
     private let loadPreferences: () -> AgentStatusPreferences
@@ -106,7 +106,10 @@ final class AgentSessionStatusCoordinator {
     /// Vorfall/QA 2026-08-17).
     private var lastHookEventAt: [UUID: Date] = [:]
     /// Ein Timer je Chat am Nutzungslimit (WM8-69, Review H1).
-    private var usageLimitTimers: [UUID: Task<Void, Never>] = [:]
+    var usageLimitTimers: [UUID: Task<Void, Never>] = [:]
+    /// Wartet vor Ton, Meldung und Zustellung beim Turn-Ende auf einen
+    /// frischen Poll (Review H2). Tests ersetzen das durch „sofort“.
+    var freshTranscriptBeforeTurnEnd: ((UUID, @escaping () -> Void) -> Void)?
     /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
     /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
     /// verifiziert werden.
@@ -253,6 +256,8 @@ final class AgentSessionStatusCoordinator {
         watcher.onUsageLimit = { [weak self] sessionID, limit in
             self?.handleUsageLimit(sessionID: sessionID, limit: limit)
         }
+        // Gespeicherte Limits nach einem Neustart ausdrücklich zu Ende planen.
+        Task { @MainActor [weak self] in self?.scheduleStoredUsageLimitEnds() }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)
@@ -1358,77 +1363,6 @@ final class AgentSessionStatusCoordinator {
             try store.setWorkingCopy(copy, for: sessionID)
         } catch {
             Logger.debug("Failed to record working copy: \(error.localizedDescription)")
-        }
-    }
-
-    /// Nutzungslimit eines Chats erkannt oder vorbei (WM8-69): am Chat merken.
-    func handleUsageLimit(sessionID: UUID, limit: AgentUsageLimit?) {
-        let stored = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })
-        var stamped = limit
-        if let limit {
-            // Konto beim ersten Erkennen stempeln. Meldet der Watcher dieselbe
-            // Zeile erneut (Neustart, Resume nach Kontowechsel), bleibt der alte
-            // Stempel: dann gilt das Limit für den Chat nicht mehr (Review H3).
-            let previous = stored?.usageLimit
-            let sameLine = previous.map { $0.since == limit.since && $0.resetsAt == limit.resetsAt && $0.kind == limit.kind } ?? false
-            stamped?.account = sameLine ? previous?.account : AgentUsageLimit.accountKey(stored?.claudeProfileName)
-            if !sameLine {
-                Logger.claudeBinding.notice(
-                    "usage_limit_detected sessionID=\(sessionID.uuidString, privacy: .public) kind=\(limit.kind, privacy: .public) resetsAt=\(limit.resetsAt?.timeIntervalSince1970 ?? 0, privacy: .public) autoContinues=\(String(describing: limit.autoContinues), privacy: .public)")
-            }
-        }
-        do {
-            try store.setUsageLimit(stamped, for: sessionID)
-        } catch {
-            Logger.debug("Failed to record usage limit: \(error.localizedDescription)")
-        }
-        scheduleUsageLimitEnd(sessionID: sessionID)
-    }
-
-    /// Ein Timer je Chat (Review H1): hebt das Limit nach dem Ende auf und
-    /// stellt Vorgemerktes zu — auch wenn Claude nicht von selbst weitermacht
-    /// und deshalb kein Turn-Ende kommt. Macht Claude von selbst weiter, gilt
-    /// das zuerst: ein Auftrag zum Ende brächte das Weitermachen ab. Belegt kam
-    /// Claudes Fortsetzung 1–10 min nach dem Ende, deshalb dann 20 min Vorlauf.
-    /// Beim Aufwachen wird der gespeicherte Stand neu gelesen; die Uhr läuft
-    /// im Ruhezustand weiter (`.continuous`, Review M1).
-    private func scheduleUsageLimitEnd(sessionID: UUID) {
-        usageLimitTimers[sessionID]?.cancel()
-        usageLimitTimers[sessionID] = nil
-        guard let resetsAt = store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.usageLimit?.resetsAt
-        else { return }
-        usageLimitTimers[sessionID] = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self,
-                      let current = self.store.loadWorkspace().sessions.first(where: { $0.id == sessionID })?.usageLimit,
-                      current.resetsAt == resetsAt else { return }
-                let grace: TimeInterval = current.autoContinues == true ? 20 * 60 : 5
-                let wait = resetsAt.addingTimeInterval(grace).timeIntervalSinceNow
-                if wait <= 0 { break }
-                try? await Task.sleep(for: .seconds(wait), clock: .continuous)
-            }
-            guard !Task.isCancelled, let self else { return }
-            self.usageLimitTimers[sessionID] = nil
-            // Anzeige aufheben (der Verlauf ändert sich dabei nicht).
-            try? self.store.setUsageLimit(nil, for: sessionID)
-            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
-        }
-    }
-
-    /// Erst einen frischen Poll des Verlaufs abwarten (höchstens 2 s): Am
-    /// Limit meldet Claudes Registry ein gewöhnliches Turn-Ende, bevor der
-    /// Watcher die Limit-Zeile gelesen hat (Review H2).
-    private func afterFreshTranscript(_ sessionID: UUID, _ action: @escaping () -> Void) {
-        var done = false
-        let run = {
-            guard !done else { return }
-            done = true
-            action()
-        }
-        watcher.refresh(sessionID: sessionID, completion: run)
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
-            run()
         }
     }
 

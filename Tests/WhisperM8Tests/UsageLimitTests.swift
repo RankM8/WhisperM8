@@ -30,7 +30,7 @@ final class UsageLimitTests: XCTestCase {
             return XCTFail("Guthaben-Limit nicht erkannt")
         }
         XCTAssertEqual(resetsAt, Date(timeIntervalSince1970: 1_794_434_400))
-        XCTAssertEqual(kind, "seven_day_overage_included")
+        XCTAssertEqual(kind, "model_requires_usage_credits", "Guthaben-Limit bleibt als solches erkennbar")
     }
 
     func testServerAndLoginErrorsAreNoLimit() {
@@ -90,6 +90,47 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertNil(AgentUsageLimit.after(event: .assistantMessageOngoing(timestamp: nil), tail: "", cached: cached))
         XCTAssertNil(AgentUsageLimit.after(event: .turnInterrupted(timestamp: nil), tail: "", cached: cached))
         XCTAssertEqual(AgentUsageLimit.after(event: nil, tail: "", cached: cached), cached)
+    }
+
+    func testAccountWideLimitBlocksARestingChatOfTheSameAccount() {
+        // Vorfall 14.11.2026 (Dex): Der Chat ruhte, als sein Konto ans Limit
+        // kam, und hatte keine eigene Limit-Zeile.
+        let now = resets.addingTimeInterval(-60)
+        var limited = AgentChatSession(provider: .claude, projectID: UUID(), title: "a")
+        limited.claudeProfileName = "RankM8"
+        limited.usageLimit = AgentUsageLimit(resetsAt: resets, kind: "five_hour", since: nil, account: "RankM8")
+        var resting = AgentChatSession(provider: .claude, projectID: UUID(), title: "b")
+        resting.claudeProfileName = "RankM8"
+        var other = AgentChatSession(provider: .claude, projectID: UUID(), title: "c")
+        other.claudeProfileName = "PowerUser2"
+        let all = [limited, resting, other]
+        XCTAssertEqual(resting.blockingUsageLimit(in: all, now: now)?.kind, "five_hour")
+        XCTAssertNil(other.blockingUsageLimit(in: all, now: now), "anderes Konto")
+        XCTAssertNil(resting.blockingUsageLimit(in: all, now: resets.addingTimeInterval(1)), "abgelaufen")
+        XCTAssertNil(resting.usageLimitWarning(in: all, now: now))
+    }
+
+    func testCreditsLimitOfAnotherChatOnlyWarns() {
+        let now = resets.addingTimeInterval(-60)
+        var limited = AgentChatSession(provider: .claude, projectID: UUID(), title: "a")
+        limited.usageLimit = AgentUsageLimit(resetsAt: resets, kind: "model_requires_usage_credits", since: nil,
+                                             account: "main")
+        let resting = AgentChatSession(provider: .claude, projectID: UUID(), title: "b")
+        XCTAssertNil(resting.blockingUsageLimit(in: [limited, resting], now: now),
+                     "Guthaben gilt nur für ein Modell: nicht sperren")
+        XCTAssertNotNil(resting.usageLimitWarning(in: [limited, resting], now: now))
+        XCTAssertFalse(limited.usageLimit!.isAccountWide)
+        // Der Chat mit dem Guthaben-Limit selbst bleibt gesperrt.
+        XCTAssertNotNil(limited.blockingUsageLimit(in: [limited, resting], now: now))
+    }
+
+    func testOnlyRealSlashCommandsPassTheLimit() {
+        for command in ["/login", "/model opus", "/rate-limit-options", "  /usage-credits", "/mcp:list"] {
+            XCTAssertTrue(AgentUsageLimit.isSlashCommand(command), command)
+        }
+        for text in ["/Users/demo/datei.txt ansehen", "/", "/ alles", "/2fa", "bitte /login", "//kommentar"] {
+            XCTAssertFalse(AgentUsageLimit.isSlashCommand(text), text)
+        }
     }
 
     func testLimitBelongsToItsAccount() {
