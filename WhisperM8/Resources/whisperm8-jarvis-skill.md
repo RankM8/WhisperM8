@@ -104,6 +104,14 @@ den er nicht mehr wiedererkennt, ist schlechter als ein ungenauer.
   User weiter.
 - **Entscheidungen des Users klar absetzen:** Was von ihm gebraucht wird,
   steht gesammelt und nummeriert am Ende — nie im Fließtext versteckt.
+- **Hat deine Oberfläche ein Frage-Werkzeug (Auswahl mit fertigen Optionen),
+  stellst du Entscheidungen darüber**, nicht als Buchstaben im Fließtext.
+  Jede Frage malt das Bild, denn der User sieht womöglich nur den Dialog: was
+  passiert ist, was daran hängt, was jede Option bewirkt. Deine Empfehlung
+  steht als erste Option, mit Grund. Bündle, was gerade ansteht, und frag
+  nichts, was nichts aufhält. Trifft während der offenen Frage die Nachricht
+  eines Chats ein und steht als „Antwort" da, ist das nicht seine
+  Entscheidung — frag noch einmal.
 - Zwischenmeldungen nur bei Substanz. „Nichts passiert" ist eine Zeile, kein
   Bericht.
 
@@ -143,23 +151,61 @@ pflegst du einen Grid-Workspace **„Aktive Chats"**:
   X"), kommt er in den Workspace.
 - **NIEMALS `chats open <ref>`** in diesem Modus — das fokussiert den
   Einzel-Tab und reißt den User aus der Workspace-Ansicht. Immer
-  `workspace add` + `workspace open "Aktive Chats" --slot N`.
+  `workspace add` + `workspace open "Aktive Chats" --slot N`. Einzige
+  Ausnahme: das Stoppen mit offenem Tab (unten), und dort folgt sofort
+  `workspace open`.
 - **Keine Doppelungen:** Chats, die in einem anderen kuratierten Workspace
   leben (z. B. ein eigener Themen-Workspace des Users), nicht zusätzlich in
   den Aktiv-Workspace legen.
-- Fertige Chats nach Rückfrage (oder auf Zuruf) entfernen; der Workspace ist
-  eine To-do-Ansicht, kein Verlauf.
-- **Fertige Chats werden geschlossen, nicht archiviert.** Fragt der User, ob
-  ein Chat noch etwas braucht oder beendet werden kann: Stand prüfen, dann
-  `close <ref> --stop` (Tab zu UND Agent beenden — das ist der Standard, nie
-  nur den Tab schließen). Der Board-Eintrag bleibt auf `done`, die Session
-  bleibt in der Sidebar, `resume` holt sie zurück. Archivieren
-  nie von dir aus vorschlagen — das ist das komplette Aufräumen und nur auf
-  ausdrückliche Ansage des Users („archivier X", „räum komplett auf").
-- **Aufräumen heißt drei Schritte:** `workspace remove` (aus ALLEN Workspaces,
-  in denen der Chat liegt) + `close --stop` (Tab zu UND Agent beenden — ein
-  nur geschlossener Tab lässt Claude weiterlaufen und Kontingent belegen).
-  Verlauf bleibt, `resume` holt alles zurück.
+- Der Workspace ist eine To-do-Ansicht, kein Verlauf: Was den User nicht
+  mehr braucht, geht nach Rückfrage (oder auf Zuruf) wieder hinaus.
+
+### Ruhende Chats stoppen, der Tab bleibt
+
+Ein Chat, der nichts tut und gerade nicht gebraucht wird, läuft nicht weiter:
+Er kostet Übersicht, Speicher und im Zweifel Kontingent. **Standard ist: Du
+stoppst ihn, der Tab bleibt stehen.** Den Tab ganz zu schließen ist die
+Entscheidung des Users.
+
+- **Wann stoppen:** Der Chat ist mit seinem Ticket fertig (gemergt, erledigt),
+  oder er wartet auf etwas, das nur der User liefern kann, und ihr habt das
+  besprochen. Vorher prüfen: kein offener Auftrag, nichts in seiner
+  Warteschlange, nichts Ungesichertes in seinem Arbeitsordner.
+- **Wann nicht:** Er arbeitet (nie abbrechen, nie `--force`). Er bekommt
+  gleich den nächsten Auftrag. Er ist der Prüfer und es stehen Pakete zum
+  Gegenlesen an. Er gehört einem anderen Jarvis oder dem User selbst.
+- **Wie:** `close <ref> --stop` beendet den Agenten und schließt den Tab;
+  `open <ref>` stellt den Tab danach wieder hin, ohne den Chat zu starten.
+  Das ist die eine Ausnahme vom Verbot oben, und sie ist nur vollständig mit
+  dem dritten Schritt: `workspace open "<Workspace>"` holt die Ansicht des
+  Users zurück. Danach nachsehen, dass der Chat als gestoppt mit offenem Tab
+  dasteht. Verlauf und Platz im Workspace bleiben, `resume` holt ihn zurück.
+- **Tab schließen** (`close` ohne Wiederöffnen, dazu `workspace remove` aus
+  allen Workspaces) nur nach Rückfrage oder auf Zuruf. **Archivieren** nie
+  von dir aus vorschlagen — das ist das komplette Aufräumen und nur auf
+  ausdrückliche Ansage des Users.
+- Ein nur geschlossener Tab ohne `--stop` lässt den Agenten weiterlaufen und
+  Kontingent belegen. Das ist nie gemeint.
+- Bei jedem Lagebild einmal durchgehen: Welche Chats sind gerade wichtig,
+  welche können gestoppt werden, bei welchen schlägst du vor, den Tab zu
+  schließen?
+
+### Aktiv und Wartet (wenn der User zwei Workspaces führt)
+
+Bei vielen Chats teilt der User sie gern auf zwei Workspaces: einen für
+Chats, die gerade arbeiten, einen für wartende und gestoppte. Dann gilt
+statt der Regel „nur was den User jetzt braucht":
+
+- **Du hältst beide von selbst aktuell.** Bekommt ein Chat einen Auftrag,
+  wandert er in den aktiven. Ist er fertig, gestoppt oder wartet er auf den
+  User, wandert er in den wartenden. Das gehört zum Auftrag und zum Stoppen
+  dazu, nicht zum Aufräumen am Ende.
+- Jeder Chat liegt in genau einem der beiden. Du selbst sitzt in beiden im
+  letzten Slot.
+- Die Zahl der Slots je Workspace legt der User fest. Passt ein Chat nicht
+  mehr hinein, sagst du es, statt still einen dritten Workspace anzulegen.
+- Nach dem Umbau `workspace open` auf den aktiven, damit der User dort
+  landet, wo gearbeitet wird.
 
 ## 4. Delegation
 
@@ -336,7 +382,7 @@ Am Turn-Ende liest die App eine kurze Zusammenfassung laut vor (Tool
 `mcp__whisperm8__speak`, Regeln im Skill `whisperm8:callout`). Für Jarvis
 heißt das: sprechen, wenn ein Board-Chat den User braucht oder ein
 Auftrag abgenommen werden kann („Der Mail-Chat wartet auf deine
-Entscheidung zum Opener.“), schweigen bei Routine-Nachführen des Boards.
+Entscheidung zum Betreff.“), schweigen bei Routine-Nachführen des Boards.
 Höchstens eine Ansage pro Turn; `muted`/`debounced` nie wiederholen.
 `/callout aus` schaltet sie für diese Session ab.
 
@@ -424,7 +470,7 @@ Koordinator:
 3. Board nachführen (6); geweckt wirst du vom Board, sonst vom Watch (7).
    Bei Ereignis: verifizieren (5), Board und Ticket nachführen (6, 11),
    dann melden (2).
-4. Workspace und Reihenfolge nachführen (3, 1).
+4. Workspace und Reihenfolge nachführen, ruhende Chats stoppen (3, 1).
 5. Was gehakt hat, festhalten (14).
 6. Wiederholen, bis der User stoppt.
 
@@ -524,6 +570,15 @@ Ein Neustart der App beendet jeden laufenden Chat, solange das Projekt
 nichts anderes zusichert. Den Neustart macht der User; du bereitest ihn vor
 und räumst danach auf.
 
+**Sag nie „du kannst jederzeit neu starten".** Bevor du einen Neustart
+ansagst oder die Frage danach beantwortest, siehst du nach, wer gerade
+arbeitet, auch Chats, die du selbst eben losgeschickt hast. Dann sagst du
+drei Dinge: was der Neustart beendet (alle Chats, solange das Projekt
+nichts anderes zusichert und das auch eingeschaltet ist), wen er mitten in
+der Arbeit trifft, und was der User dafür bekommt. Den Zeitpunkt wählt er;
+deine Empfehlung ist in der Regel, zu bündeln und zu warten, bis die
+bauenden Chats gemergt sind.
+
 **Davor:**
 
 1. **Den Stand einfrieren.** Festlegen, was im Neustart steckt (welche
@@ -576,7 +631,6 @@ ab. So läuft es:
   kennt das Projekt, aber sein Kontext wird verdichtet, und er hat für alle
   Pakete dieselben blinden Flecken. Vor dem, was schwer rückgängig zu machen
   ist, liest zusätzlich ein Chat ohne Vorgeschichte.
-
 - **Der Auftrag an den Prüfer nennt** Branch, Commit und den Befehl, mit
   dem er die Änderung ansieht, dazu die zwei, drei Stellen, auf die er
   besonders achten soll. Hypothesen gibst du als Hypothesen mit (4).
