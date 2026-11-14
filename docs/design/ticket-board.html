@@ -1,0 +1,323 @@
+<!doctype html>
+<!--
+  Entwurf zur Ansicht „Tickets“ in Agent Chats (Plan: docs/plans/ticket-board.md, Ticket WM8-37).
+  Klick-Vorlage, kein App-Code. Farben, Abstände und Schrift folgen docs/design/agent-chats-v3.html.
+  Die Tickets sind ein Abzug aus Linear vom 14.11.2026 (Team WM8), der Zustand der Chats stammt aus
+  `whisperm8 chats list` zum selben Zeitpunkt. „Beispiel mit Team“ blendet erfundene Zuordnungen für
+  Richard und Xeno ein, um Personen-Filter und Chats auf anderen Rechnern zu zeigen.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Entwurf: Tickets in WhisperM8</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* Farben, Abstände und Schrift stammen aus docs/design/agent-chats-v3.html, damit der Entwurf zur App passt. */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --fs-caption: 11px; --fs-meta: 12px; --fs-body: 13px; --fs-title: 15px; --fs-display: 20px;
+  --sp-1: 2px; --sp-2: 4px; --sp-3: 8px; --sp-4: 12px; --sp-5: 16px; --sp-6: 24px;
+  --r-s: 4px; --r-m: 6px; --r-l: 10px;
+  --bg-content: oklch(99.1% 0.002 275); --bg-chrome: oklch(95.6% 0.005 275); --bg-raised: oklch(100% 0 0);
+  --bg-field: oklch(91.8% 0.006 275 / 0.7); --bg-hover: oklch(40% 0.02 275 / 0.06); --bg-press: oklch(40% 0.02 275 / 0.10);
+  --bg-selected: oklch(55% 0.12 278 / 0.12); --line: oklch(30% 0.02 275 / 0.10); --line-strong: oklch(30% 0.02 275 / 0.17);
+  --text: oklch(23% 0.012 275); --text-2: oklch(46% 0.012 275); --text-3: oklch(60% 0.010 275);
+  --accent: oklch(55.5% 0.150 278); --accent-text: oklch(46% 0.150 278); --accent-tint: oklch(55.5% 0.150 278 / 0.12);
+  --ok: oklch(62% 0.140 155); --warn: oklch(73% 0.150 72); --warn-text: oklch(50% 0.110 65); --warn-tint: oklch(73% 0.150 72 / 0.16);
+  --err: oklch(58% 0.190 27); --err-tint: oklch(58% 0.190 27 / 0.10);
+  --shadow-card: 0 0 0 0.5px oklch(30% 0.02 275 / 0.14), 0 1px 2px oklch(25% 0.03 275 / 0.06);
+  --shadow-panel: 0 0 0 0.5px oklch(30% 0.02 275 / 0.18), -12px 0 36px oklch(25% 0.03 275 / 0.12);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --dark: 1; } }
+:root[data-theme="dark"], :root.sysdark:not([data-theme="light"]) {
+  --bg-content: oklch(17.6% 0.006 275); --bg-chrome: oklch(21% 0.008 275); --bg-raised: oklch(25% 0.009 275);
+  --bg-field: oklch(100% 0 0 / 0.06); --bg-hover: oklch(100% 0 0 / 0.05); --bg-press: oklch(100% 0 0 / 0.09);
+  --bg-selected: oklch(68% 0.13 278 / 0.20); --line: oklch(100% 0 0 / 0.08); --line-strong: oklch(100% 0 0 / 0.14);
+  --text: oklch(94% 0.006 275); --text-2: oklch(73% 0.010 275); --text-3: oklch(56% 0.010 275);
+  --accent: oklch(67% 0.140 278); --accent-text: oklch(78% 0.110 278); --accent-tint: oklch(67% 0.140 278 / 0.18);
+  --ok: oklch(70% 0.150 155); --warn: oklch(78% 0.140 75); --warn-text: oklch(82% 0.110 80); --warn-tint: oklch(78% 0.140 75 / 0.16);
+  --err: oklch(68% 0.170 27); --err-tint: oklch(68% 0.170 27 / 0.14);
+  --shadow-card: 0 0 0 0.5px oklch(100% 0 0 / 0.10), 0 1px 2px oklch(0% 0 0 / 0.3);
+  --shadow-panel: 0 0 0 0.5px oklch(100% 0 0 / 0.12), -12px 0 36px oklch(0% 0 0 / 0.4);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { font: 400 var(--fs-body)/1.4 var(--font-ui); color: var(--text); background: var(--bg-content); -webkit-font-smoothing: antialiased; display: flex; overflow: hidden; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: var(--r-m); }
+
+/* Seitenleiste (verkürzt, wie in der App) */
+.side { width: 232px; flex: none; background: var(--bg-chrome); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 44px var(--sp-3) var(--sp-3); gap: var(--sp-1); }
+.side h3 { font-size: var(--fs-caption); font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; margin: var(--sp-4) var(--sp-3) var(--sp-2); }
+.side .row { display: flex; align-items: center; gap: var(--sp-3); height: 28px; padding: 0 var(--sp-3); border-radius: var(--r-m); color: var(--text-2); font-size: var(--fs-body); width: 100%; text-align: left; }
+.side .row:hover { background: var(--bg-hover); }
+.side .row[aria-current="true"] { background: var(--bg-selected); color: var(--text); font-weight: 600; }
+.side .row .n { margin-left: auto; font-size: var(--fs-caption); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.side .row span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side .note { margin-top: auto; font-size: var(--fs-caption); color: var(--text-3); padding: var(--sp-3); line-height: 1.45; }
+
+/* Status-Punkt: Grün heißt nur „arbeitet“ */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-3); }
+.dot.arbeitet { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ok) 22%, transparent); }
+.dot.wartet { background: var(--warn); }
+.dot.ruht { background: var(--text-3); }
+.dot.gestoppt, .dot.leer { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+.dot.leer { box-shadow: inset 0 0 0 1.5px var(--err); }
+
+main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.bar { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-4) var(--sp-5) var(--sp-3); }
+.bar h1 { font-size: var(--fs-title); font-weight: 600; margin: 0; }
+.bar .sync { font-size: var(--fs-caption); color: var(--text-3); display: flex; align-items: center; gap: var(--sp-2); }
+.seg { display: inline-flex; background: var(--bg-field); border-radius: var(--r-m); padding: 2px; }
+.seg button { height: 24px; padding: 0 var(--sp-4); border-radius: var(--r-s); font-size: var(--fs-meta); color: var(--text-2); }
+.seg button[aria-pressed="true"] { background: var(--bg-raised); color: var(--text); font-weight: 600; box-shadow: var(--shadow-card); }
+.spacer { flex: 1; }
+.ghost { height: 26px; padding: 0 var(--sp-3); border-radius: var(--r-m); font-size: var(--fs-meta); color: var(--text-2); border: 1px solid var(--line-strong); }
+.ghost:hover { background: var(--bg-hover); }
+.filters { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5) var(--sp-4); flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.chip { height: 24px; padding: 0 var(--sp-3); border-radius: 12px; font-size: var(--fs-meta); color: var(--text-2); background: var(--bg-field); display: inline-flex; align-items: center; gap: var(--sp-2); }
+.chip b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.chip[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent-text); font-weight: 600; }
+.chip[aria-pressed="true"] b { color: var(--accent-text); }
+select { font: inherit; font-size: var(--fs-meta); color: var(--text-2); background: var(--bg-field); border: 0; border-radius: var(--r-m); height: 24px; padding: 0 var(--sp-3); }
+
+/* Board */
+.board { flex: 1; min-height: 0; display: flex; gap: var(--sp-4); padding: var(--sp-4) var(--sp-5); overflow-x: auto; }
+.col { width: 320px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--bg-chrome); border-radius: var(--r-l); }
+.col header { display: flex; align-items: baseline; gap: var(--sp-3); padding: var(--sp-4) var(--sp-4) var(--sp-3); }
+.col header h2 { font-size: var(--fs-body); font-weight: 600; margin: 0; }
+.col header .cnt { font-size: var(--fs-meta); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.col header .ag { margin-left: auto; font-size: var(--fs-caption); color: var(--text-3); }
+.col .cards { overflow-y: auto; padding: 0 var(--sp-3) var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-3); }
+.card { background: var(--bg-raised); border-radius: var(--r-l); box-shadow: var(--shadow-card); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); text-align: left; width: 100%; cursor: pointer; }
+.card:hover { box-shadow: var(--shadow-card), 0 0 0 1.5px var(--line-strong); }
+.card[aria-selected="true"] { box-shadow: 0 0 0 2px var(--accent); }
+.card .top { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-caption); color: var(--text-3); }
+.card .key { font-family: var(--font-mono); letter-spacing: -0.01em; }
+.card .title { font-size: var(--fs-body); font-weight: 600; line-height: 1.35; color: var(--text); }
+.card .proj { font-size: var(--fs-caption); color: var(--text-2); }
+.tag { height: 18px; padding: 0 6px; border-radius: 9px; font-size: var(--fs-caption); font-weight: 600; display: inline-flex; align-items: center; }
+.tag.Handtest { background: var(--warn-tint); color: var(--warn-text); }
+.tag.Entscheidung { background: var(--accent-tint); color: var(--accent-text); }
+.tag.blocked { background: var(--err-tint); color: var(--err); }
+.prio { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 10px; }
+.prio i { width: 3px; background: var(--text-3); opacity: 0.35; border-radius: 1px; }
+.prio i:nth-child(1) { height: 4px; } .prio i:nth-child(2) { height: 7px; } .prio i:nth-child(3) { height: 10px; }
+.prio.p2 i, .prio.p1 i { opacity: 1; background: var(--warn-text); } .prio.p3 i:nth-child(-n+2) { opacity: 1; } .prio.p4 i:nth-child(1) { opacity: 1; }
+.agent { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); font-size: var(--fs-meta); min-height: 34px; }
+.agent .who { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent .st { color: var(--text-2); white-space: nowrap; }
+.agent .none { color: var(--err); font-weight: 600; }
+.agent .act { margin-left: auto; height: 22px; padding: 0 var(--sp-3); border-radius: var(--r-m); font-size: var(--fs-caption); font-weight: 600; white-space: nowrap; }
+.agent .act.primary { background: var(--accent); color: white; }
+.agent .act.plain { color: var(--accent-text); background: var(--accent-tint); }
+.av { width: 20px; height: 20px; border-radius: 50%; flex: none; display: inline-grid; place-items: center; font-size: 9.5px; font-weight: 700; color: white; letter-spacing: 0.02em; }
+.av.none { background: transparent; color: var(--text-3); box-shadow: inset 0 0 0 1.5px var(--line-strong); border: 0; font-weight: 600; }
+.card .top .av { margin-left: auto; }
+.fl { font-size: var(--fs-caption); font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.sep { width: 1px; height: 18px; background: var(--line-strong); margin: 0 var(--sp-2); }
+.remote { height: 18px; padding: 0 6px; border-radius: 9px; font-size: var(--fs-caption); font-weight: 600; background: var(--bg-field); color: var(--text-2); margin-left: auto; white-space: nowrap; }
+.demo-note { margin: var(--sp-3) var(--sp-5) 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-m); background: var(--warn-tint); color: var(--warn-text); font-size: var(--fs-meta); }
+.me { margin-left: auto; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--bg-field); color: var(--text-2); font-size: var(--fs-caption); font-weight: 600; }
+
+/* Chats ohne Ticket */
+.loose { border-top: 1px solid var(--line); padding: var(--sp-3) var(--sp-5); display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; flex: none; }
+.loose .lab { font-size: var(--fs-meta); font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.pill { display: inline-flex; align-items: center; gap: var(--sp-3); height: 28px; padding: 0 var(--sp-2) 0 var(--sp-4); border-radius: 14px; background: var(--bg-chrome); font-size: var(--fs-meta); white-space: nowrap; }
+.pill button { height: 20px; padding: 0 var(--sp-3); border-radius: 10px; font-size: var(--fs-caption); font-weight: 600; color: var(--accent-text); background: var(--accent-tint); }
+
+/* Backlog-Liste */
+.list { flex: 1; overflow-y: auto; padding: var(--sp-3) var(--sp-5) var(--sp-6); }
+.list h2 { font-size: var(--fs-meta); font-weight: 600; color: var(--text-2); margin: var(--sp-5) 0 var(--sp-2); display: flex; gap: var(--sp-3); align-items: baseline; }
+.list h2 span { color: var(--text-3); font-weight: 400; }
+.lrow { display: grid; grid-template-columns: 64px 1fr 100px 26px 120px 230px; align-items: center; gap: var(--sp-4); height: 34px; padding: 0 var(--sp-3); border-radius: var(--r-m); width: 100%; text-align: left; border-bottom: 1px solid var(--line); }
+.lrow:hover { background: var(--bg-hover); }
+.lrow[aria-selected="true"] { background: var(--bg-selected); }
+.lrow .key { font-family: var(--font-mono); font-size: var(--fs-caption); color: var(--text-3); }
+.lrow .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow .state { font-size: var(--fs-caption); color: var(--text-2); }
+.lrow .ag { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-meta); overflow: hidden; white-space: nowrap; }
+
+/* Detail */
+.detail { width: 0; flex: none; overflow: hidden; background: var(--bg-raised); transition: width 180ms cubic-bezier(0.25, 1, 0.5, 1); }
+.detail.open { width: 400px; box-shadow: var(--shadow-panel); }
+.detail .in { width: 400px; height: 100%; overflow-y: auto; padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-4); }
+.detail .head { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-meta); color: var(--text-3); }
+.detail h2 { font-size: var(--fs-title); font-weight: 600; margin: 0; line-height: 1.3; }
+.detail dl { display: grid; grid-template-columns: 96px 1fr; gap: var(--sp-3) var(--sp-4); margin: 0; font-size: var(--fs-meta); }
+.detail dt { color: var(--text-3); } .detail dd { margin: 0; }
+.detail .box { border: 1px solid var(--line-strong); border-radius: var(--r-l); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }
+.detail .box .line { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-body); }
+.detail .box .btns { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+.btn { height: 28px; padding: 0 var(--sp-4); border-radius: var(--r-m); font-size: var(--fs-meta); font-weight: 600; background: var(--bg-field); }
+.btn.primary { background: var(--accent); color: white; }
+.detail .md { font-size: var(--fs-body); color: var(--text-2); line-height: 1.5; }
+.detail .md h4 { font-size: var(--fs-meta); color: var(--text); margin: var(--sp-4) 0 var(--sp-2); }
+.detail .md p { margin: 0 0 var(--sp-3); } .detail .md ul { margin: 0 0 var(--sp-3); padding-left: 18px; }
+.detail .md code { font-family: var(--font-mono); font-size: var(--fs-caption); background: var(--bg-field); padding: 1px 4px; border-radius: 3px; }
+.toast { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); background: var(--text); color: var(--bg-content); padding: var(--sp-3) var(--sp-5); border-radius: var(--r-l); font-size: var(--fs-meta); opacity: 0; pointer-events: none; transition: opacity 180ms; }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<nav class="side" aria-label="Seitenleiste">
+  <button class="row" aria-current="false"><span class="t">Chats</span><span class="n" id="n-chats"></span></button>
+  <button class="row" aria-current="true"><span class="t">Tickets</span><span class="n" id="n-tickets"></span></button>
+  <h3>Projekte</h3>
+  <button class="row"><span class="dot arbeitet"></span><span class="t">whisperm8</span><span class="n" id="n-proj"></span></button>
+  <button class="row"><span class="dot ruht"></span><span class="t">ListM8</span><span class="n">–</span></button>
+  <button class="row"><span class="dot ruht"></span><span class="t">akquise-ai</span><span class="n">–</span></button>
+  <p class="note">Entwurf, kein App-Code. Die Tickets sind echt (Linear, Stand <span id="stamp"></span>), der Zustand der Chats ebenfalls. Klicks ändern nichts in Linear.</p>
+</nav>
+
+<main>
+  <div class="bar">
+    <h1>Tickets · whisperm8</h1>
+    <div class="seg" role="group" aria-label="Ansicht">
+      <button data-view="board" aria-pressed="true">Board</button>
+      <button data-view="list" aria-pressed="false">Backlog</button>
+    </div>
+    <span class="sync"><span class="dot arbeitet" style="width:6px;height:6px;box-shadow:none"></span>Linear · vor 12 s aktualisiert</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="demo" aria-pressed="false">Beispiel mit Team</button>
+    <button class="ghost" id="theme">Hell / Dunkel</button>
+    <button class="ghost" id="in-linear">In Linear öffnen ↗</button>
+  </div>
+  <div class="filters">
+    <span class="fl">Agent</span>
+    <button class="chip" data-f="alle" aria-pressed="true">Alle <b></b></button>
+    <button class="chip" data-f="mit" aria-pressed="false"><span class="dot arbeitet" style="box-shadow:none"></span>Mit Agent <b></b></button>
+    <button class="chip" data-f="ohne" aria-pressed="false"><span class="dot leer"></span>Ohne Agent <b></b></button>
+    <span class="sep"></span>
+    <span class="fl">Person</span>
+    <span id="people" style="display:contents"></span>
+    <span class="spacer"></span>
+    <label style="font-size:var(--fs-meta);color:var(--text-3)">Vorhaben <select id="proj"></select></label>
+  </div>
+  <div class="demo-note" id="demo-note" hidden>Beispieldaten: Richard und Xeno sind hier nur zur Anschauung zugeordnet, samt Chats auf ihren Rechnern. In Linear ist bisher nur Giuliano.</div>
+  <div class="board" id="board"></div>
+  <div class="list" id="list" hidden></div>
+  <div class="loose" id="loose"></div>
+</main>
+
+<aside class="detail" id="detail" aria-label="Ticket"><div class="in" id="detail-in"></div></aside>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const DATA = {"stamp": "14.11.2026 00:58", "issues": [{"key": "WM8-44", "title": "Raster: Aufbau der Kacheln und Seitenleiste beim Fokuswechsel messen", "description": "**Stand 14.11.2026:** offener Rest aus den Befunden nach 2.25. Braucht einen Messlauf mit dem ausgelieferten Build.", "priority": 4, "state": "Backlog", "type": "backlog", "project": null, "milestone": null, "assignee": null, "labels": ["Improvement"], "agent": null, "blocked": false}, {"key": "WM8-43", "title": "Skripte absichern: pkill, Signier-Prüfung, Lücken in der Pipeline", "description": "**Stand 14.11.2026:** offene Befunde aus der Analyse des Ordners `scripts/`.", "priority": 4, "state": "Backlog", "type": "backlog", "project": null, "milestone": null, "assignee": null, "labels": ["Improvement"], "agent": null, "blocked": false}, {"key": "WM8-42", "title": "Hooks Stufe 1", "description": "**Stand 14.11.2026:** Stufe 0 ist in `main`. Für Stufe 1 den Zustand „busy nach /clear“ beachten.", "priority": 4, "state": "Backlog", "type": "backlog", "project": null, "milestone": null, "assignee": null, "labels": ["Improvement"], "agent": null, "blocked": false}, {"key": "WM8-41", "title": "Stilles Diktat für Schnellaktionen", "description": "**Stand 14.11.2026:** offener Rest aus „Schnellaktionen ohne Diktat“.", "priority": 4, "state": "Backlog", "type": "backlog", "project": null, "milestone": null, "assignee": null, "labels": ["Feature"], "agent": null, "blocked": false}, {"key": "WM8-40", "title": "imap-email-Server reparieren", "description": "**Stand 14.11.2026:** gesperrt, weil im Ordner des Servers die Abhängigkeiten fehlen. Chats melden ihn sonst bei jedem Start als nicht verbunden.", "priority": 4, "state": "Backlog", "type": "backlog", "project": null, "milestone": null, "assignee": null, "labels": ["Bug"], "agent": null, "blocked": false}, {"key": "WM8-39", "title": "Alte Arbeitsordner und Branches aufräumen", "description": "**Stand 14.11.2026:** 26 Arbeitsordner und 28 Branches, die nicht in `main` sind. Am 13.11. war die Platte voll.\n\n## Fertig, wenn\n\ngemergte Arbeitsordner samt Build-Ordner entfernt sind und für jeden übrigen Branch klar ist, wem er gehört.", "priority": 4, "state": "Todo", "type": "unstarted", "project": null, "milestone": null, "assignee": null, "labels": ["Improvement"], "agent": null, "blocked": false}, {"key": "WM8-38", "title": "Offene Feldtests sammeln und abhaken", "description": "**Stand 14.11.2026:** offen.\n\nMehrere ausgelieferte Änderungen sind im Alltag noch nicht bestätigt:\n\n- [ ] AirPods: Lautstärke nach dem Diktat\n- [ ] Wach-Knopf beim Zuklappen des Rechners\n- [ ] Terminal bleibt nicht mehr stehen, bis man klickt\n- [ ] GPT-Router als eigener Dienst\n- [ ] Diktat-Nacharbeit über das GPT-Backend", "priority": 3, "state": "Todo", "type": "unstarted", "project": null, "milestone": null, "assignee": "Giuliano Costa", "labels": ["Handtest"], "agent": null, "blocked": false}, {"key": "WM8-37", "title": "Tickets an Chats zuweisen", "description": "**Stand 14.11.2026:** gewünscht.\n\n## Vorgabe\n\nZuweisung zunächst nur lokal, eine sichtbare Marke im Ticket-Werkzeug zuschaltbar, mehrere Projekte und Boards.", "priority": 4, "state": "In Progress", "type": "started", "project": "Lücken zum Wettbewerb schließen", "milestone": null, "assignee": null, "labels": [], "agent": {"name": "6 Jon", "state": "arbeitet", "since": "arbeitet seit 14.11. 00:55"}, "blocked": false}, {"key": "WM8-36", "title": "Chats auf anderen Rechnern", "description": "**Stand 14.11.2026:** gewünscht, empfohlen als Chat über SSH. Noch kein Plan.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Lücken zum Wettbewerb schließen", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-35", "title": "Status aus dem Terminalstrom von Claude Code nutzen", "description": "**Stand 14.11.2026:** Idee aus der Analyse.\n\n## Warum\n\nClaude Code meldet seinen Status inzwischen selbst im Terminalstrom. WhisperM8 liest ihn heute aus der Registry.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Lücken zum Wettbewerb schließen", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-34", "title": "Punkte 4 und 8 der Auswahl entscheiden", "description": "**Stand 14.11.2026:** wartet auf die Entscheidung.\n\nGrundlage: `docs/plans/wettbewerb-orca-t3code/kernfeatures.md`.", "priority": 4, "state": "Todo", "type": "unstarted", "project": "Lücken zum Wettbewerb schließen", "milestone": null, "assignee": "Giuliano Costa", "labels": ["Entscheidung"], "agent": null, "blocked": false}, {"key": "WM8-33", "title": "Anmerkungen aus dem Browser an einen wählbaren Chat senden", "description": "**Stand 14.11.2026:** Wunsch, noch nicht geplant.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Browser-Bereich", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-32", "title": "Plan für die Playwright-Live-Ansicht schreiben", "description": "**Stand 14.11.2026:** offen.\n\n## Fertig, wenn\n\nein Plan mit Schritten und Risiken vorliegt, über den entschieden werden kann.", "priority": 3, "state": "Backlog", "type": "backlog", "project": "Browser-Bereich", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-31", "title": "GPT als Standard im Onboarding", "description": "**Stand 14.11.2026:** pausiert seit 05.11. (`feat/settings-gpt-default-onboarding`), weiter erst nach direkter Freigabe.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Einstellungen neu ordnen", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-30", "title": "Variante für die neue Ordnung wählen (A, B oder C)", "description": "**Stand 14.11.2026:** wartet auf die Entscheidung.\n\n## Hinweise\n\nEmpfohlen ist B. „GPT in Claude Code“ gehört zum Kern und nie nach Labs.", "priority": 3, "state": "Todo", "type": "unstarted", "project": "Einstellungen neu ordnen", "milestone": null, "assignee": "Giuliano Costa", "labels": ["Entscheidung"], "agent": null, "blocked": false}, {"key": "WM8-29", "title": "Befehle in einem eigenen Terminal-Tab starten", "description": "**Stand 14.11.2026:** in Arbeit (`feat/cli-terminal-tab`).\n\nBeschreibung und Abnahme bitte vom zuständigen Chat ergänzen lassen; hier steht nur der Stand laut Branch.", "priority": 3, "state": "In Progress", "type": "started", "project": "Chats-CLI", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-28", "title": "chats order --tabs: Review-Befunde einarbeiten und mergen", "description": "**Stand 14.11.2026:** in Arbeit (`feat/chats-cli-tab-reihenfolge`).\n\n## Fertig, wenn\n\ndie Befunde behoben sind, die Suite grün läuft und der Branch in `main` ist.", "priority": 3, "state": "In Progress", "type": "started", "project": "Chats-CLI", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-27", "title": "Weitere MCP-Server an den Wächter hängen", "description": "**Stand 14.11.2026:** zurückgestellt.\n\n## Ziel\n\nAuch Figma, Fireflies und andere Server, die regelmäßig abgemeldet sind, zentral halten.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-26", "title": "Liste „Verbindungen“ auf der Konten-Seite: Plan schreiben", "description": "**Stand 14.11.2026:** Idee, noch kein Plan.\n\n## Ziel\n\nDer Wächter wandert in die App: eine Liste der Verbindungen mit Status, Ablauf und „Neu anmelden“.\n\n## Fertig, wenn\n\nein Plan vorliegt, über den entschieden werden kann. Gebaut wird erst nach Freigabe, auf eigenem Branch.", "priority": 3, "state": "Backlog", "type": "backlog", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": null, "labels": ["Entscheidung"], "agent": null, "blocked": false}, {"key": "WM8-25", "title": "Alte Atlassian-Einträge in ListM8 und akquise-ai entfernen", "description": "**Stand 14.11.2026:** offen.\n\n## Ziel\n\nIn beiden Repos stehen `atlassian` und `Atlassian-Rovo-MCP` noch in der `.mcp.json`, in ListM8 liegt außerdem eine alte Kopie des Jira-Skills.\n\n## Fertig, wenn\n\nbeides über je einen kleinen Branch entfernt ist.", "priority": 4, "state": "Todo", "type": "unstarted", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-24", "title": "Server des alten Slack-Plugins prüfen und abschalten", "description": "**Stand 14.11.2026:** offen.\n\n## Warum\n\nDas alte Plugin bringt einen eigenen Slack-Server mit Browser-Anmeldung mit. Er ist durch die fünf neuen Server ersetzt und zeigt sonst weiter „authenticate“.\n\n## Fertig, wenn\n\nnur noch die fünf `slack-…`-Server erscheinen. Die Skills des Plugins dürfen bleiben.", "priority": 4, "state": "Todo", "type": "unstarted", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-23", "title": "Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden", "description": "**Stand 14.11.2026:** Test läuft.\n\n## Ziel\n\nEntscheiden, ob DealSupply und Akquise von Jira nach Linear umziehen.\n\n## Prüffragen\n\n* Ist die Übersicht spürbar besser?\n* Arbeitet Claude damit glatter als mit Jira?\n* Wollen Richard und Xeno es?\n\n## Hinweise\n\nFür den Umzug wäre der Basic-Plan nötig (Gratis endet bei 250 Tickets und 2 Teams, Bestand 655 Tickets). Der Import ist vorbereitet.", "priority": 3, "state": "In Progress", "type": "started", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": "Giuliano Costa", "labels": ["Entscheidung"], "agent": {"name": "6 Jon", "state": "arbeitet", "since": "arbeitet seit 14.11. 00:51"}, "blocked": false}, {"key": "WM8-22", "title": "Wächter beobachten: halten Slack und Linear über die 12-Stunden-Grenze?", "description": "**Stand 14.11.2026:** läuft.\n\n## Ziel\n\nBelegen, dass die Anmeldungen sich von selbst erneuern und lang laufende Chats den neuen Schlüssel holen.\n\n## Fertig, wenn\n\nder Prüfbefehl nach zwei Tagen noch grün ist und das Log Erneuerungen ohne Ablehnung zeigt.", "priority": 3, "state": "In Progress", "type": "started", "project": "Zugänge für Claude: Jira, Slack, Linear", "milestone": null, "assignee": null, "labels": [], "agent": {"name": "6 Jon", "state": "arbeitet", "since": "arbeitet seit 14.11. 00:51"}, "blocked": false}, {"key": "WM8-21", "title": "Release 2.26.0 bauen und ausliefern", "description": "**Stand 14.11.2026:** gesperrt bis zum Handtest.\n\n## Fertig, wenn\n\nTag gesetzt, Pipeline grün, DMG gebaut und der Brew-Cask aktualisiert ist.", "priority": 2, "state": "Backlog", "type": "backlog", "project": "Release 2.26", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": true}, {"key": "WM8-20", "title": "make dev und Handtest der Änderungen seit 2.25.0", "description": "**Stand 14.11.2026:** offen.\n\n## Ziel\n\nAlles, was seit 2.25.0 in `main` gelandet ist, einmal an der laufenden App prüfen.\n\n## Fertig, wenn\n\nkeine Auffälligkeit offen ist, die einer Auslieferung im Weg steht.", "priority": 2, "state": "Todo", "type": "unstarted", "project": "Release 2.26", "milestone": null, "assignee": "Giuliano Costa", "labels": ["Handtest"], "agent": null, "blocked": false}, {"key": "WM8-19", "title": "Tasten frei umbelegen", "description": "**Stand 14.11.2026:** zurückgestellt.\n\n## Ziel\n\nIn den Controller-Einstellungen lassen sich Tasten selbst belegen. Bisher gibt es nur Grundschalter und die Erklärung der Tasten.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Controller-Steuerung", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-18", "title": "Tisch-Diktat", "description": "**Stand 14.11.2026:** zurückgestellt, Umfang noch zu klären.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Controller-Steuerung", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-17", "title": "Vibration, wenn ein Limit knapp wird", "description": "**Stand 14.11.2026:** zurückgestellt.\n\n## Ziel\n\nDer Controller meldet spürbar, wenn das Kontingent eines Kontos zur Neige geht.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Controller-Steuerung", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-16", "title": "Insel auch für die Tastatur: Entwurf fertigstellen", "description": "**Stand 14.11.2026:** Entwurf in Arbeit (`design/insel-tastatur`).\n\n## Ziel\n\nChats und Workspaces auch mit der Tastatur über die Insel wechseln. Erst Entwurf und Plan (was hängt heute an Ctrl+Tab), neue Anzeige zunächst neben dem alten Umschalter.\n\n## Fertig, wenn\n\nder Entwurf abgenommen ist. Gebaut wird erst nach Freigabe.", "priority": 3, "state": "In Progress", "type": "started", "project": "Controller-Steuerung", "milestone": null, "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-15", "title": "Handtests nach make dev: Runde 5, Insel und Xbox", "description": "**Stand 14.11.2026:** wartet auf den Test.\n\n## Ziel\n\nDie zuletzt gemergten Controller-Änderungen an der laufenden App durchgehen.\n\n## Fertig, wenn\n\ndie Handtest-Liste aus dem Plan abgehakt ist und Abweichungen als eigene Tickets erfasst sind.", "priority": 3, "state": "Todo", "type": "unstarted", "project": "Controller-Steuerung", "milestone": null, "assignee": "Giuliano Costa", "labels": ["Handtest"], "agent": null, "blocked": false}, {"key": "WM8-14", "title": "Apple-Entwicklerkonto buchen, Übergabe-Geheimnis zurück in den Schlüsselbund", "description": "**Stand 14.11.2026:** offen, kein Zeitdruck.\n\n## Warum\n\nOhne Entwicklerkonto gilt jeder neue Build für den Schlüsselbund als fremde App. Deshalb liegt das Geheimnis der Übergabe vorerst in einer geschützten Datei.\n\n## Fertig, wenn\n\ndas Konto gebucht ist (99 USD im Jahr) und die Ablage auf den Schlüsselbund umgestellt wurde.", "priority": 4, "state": "Backlog", "type": "backlog", "project": "Neustart ohne Chatverlust", "milestone": "In main", "assignee": "Giuliano Costa", "labels": ["Entscheidung"], "agent": null, "blocked": false}, {"key": "WM8-13", "title": "Sammel-Branch nach main mergen", "description": "**Stand 14.11.2026:** gesperrt, bis erster Lauf, Mehrfach-Test und Gesamt-Review durch sind.\n\n## Fertig, wenn\n\n`neustart/integration` in `main` ist, die volle Testsuite grün läuft und der Schalter weiter ab Werk aus ist.", "priority": 2, "state": "Backlog", "type": "backlog", "project": "Neustart ohne Chatverlust", "milestone": "In main", "assignee": null, "labels": [], "agent": null, "blocked": true}, {"key": "WM8-12", "title": "Gesamt-Review Teil 2 vor dem Einschalten", "description": "**Stand 14.11.2026:** offen, folgt auf den ersten echten Lauf.\n\n## Ziel\n\nUnabhängige Durchsicht des gesamten Sammel-Branches, bevor der Schalter für den Alltag freigegeben wird.\n\n## Fertig, wenn\n\nalle Befunde bewertet und die wichtigen behoben sind.", "priority": 2, "state": "Todo", "type": "unstarted", "project": "Neustart ohne Chatverlust", "milestone": "Einschalten in Labs", "assignee": null, "labels": [], "agent": {"name": "5 Vic", "state": "ruht", "since": "arbeitet seit 14.11. 00:51"}, "blocked": false}, {"key": "WM8-11", "title": "Labs-Seite für den Schalter einhängen", "description": "**Stand 14.11.2026:** offen.\n\n## Ziel\n\nDer Schalter „Neustart ohne Chatverlust“ ist in den Einstellungen unter Labs bedienbar, mit deutscher und englischer Beschriftung.\n\n## Fertig, wenn\n\nder Schalter ohne `defaults write` ein- und ausgeschaltet werden kann und ab dem nächsten App-Start wirkt.", "priority": 3, "state": "Todo", "type": "unstarted", "project": "Neustart ohne Chatverlust", "milestone": "Einschalten in Labs", "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-10", "title": "Abnahme: Dauerlauf mit absichtlichen Fehlern", "description": "**Stand 14.11.2026:** in Arbeit (`feat/handover-soak-faults`).\n\n## Ziel\n\nDie Übergabe viele Male hintereinander laufen lassen und dabei Fehler einstreuen (Aufbewahrer weg, Geheimnis fehlt, Chat beendet sich mittendrin).\n\n## Fertig, wenn\n\njeder eingestreute Fehler sauber im Rückfall endet und kein Chat hängen bleibt.", "priority": 2, "state": "In Progress", "type": "started", "project": "Neustart ohne Chatverlust", "milestone": "Einschalten in Labs", "assignee": null, "labels": [], "agent": {"name": "3 Dex", "state": "gerade fertig", "since": "arbeitet seit 14.11. 00:51"}, "blocked": false}, {"key": "WM8-9", "title": "Handtest-Anleitung Phase 2 fertigstellen", "description": "**Stand 14.11.2026:** in Arbeit (`docs/handtest-phase2`, `docs/handtest-phase2-nachtrag`).\n\n## Ziel\n\nDie Anleitung für den zweiten Testabschnitt mit den Korrekturen aus dem Review zusammenführen.\n\n## Fertig, wenn\n\ndie Anleitung im Sammel-Branch liegt und ohne Rückfragen befolgt werden kann.", "priority": 3, "state": "In Progress", "type": "started", "project": "Neustart ohne Chatverlust", "milestone": "Erster echter Lauf", "assignee": null, "labels": [], "agent": null, "blocked": false}, {"key": "WM8-8", "title": "Mehrfaches make dev hintereinander als Pflichttest", "description": "**Stand 14.11.2026:** offen.\n\n## Warum\n\nIm Vorversuch scheiterte die zweite Übergabe. Die Ursache ist behoben, der Beleg an der echten App fehlt.\n\n## Fertig, wenn\n\nmindestens drei Neustarts in Folge alle Chats behalten.", "priority": 2, "state": "Todo", "type": "unstarted", "project": "Neustart ohne Chatverlust", "milestone": "Erster echter Lauf", "assignee": "Giuliano Costa", "labels": ["Handtest"], "agent": null, "blocked": false}, {"key": "WM8-7", "title": "Erster echter Lauf nach der Handtest-Anleitung", "description": "**Stand 14.11.2026:** bereit, wartet auf den Test.\n\n## Ziel\n\nDie Übergabe einmal mit echten Chats durchspielen, Schritt für Schritt nach `docs/plans/neustart-ohne-chatverlust-handtest.md` (10 Schritte).\n\n## Fertig, wenn\n\n* alle Test-Chats nach `make dev` am selben Platz weiterarbeiten\n* kein Chat eine Antwort verliert\n* Auffälligkeiten als eigene Tickets erfasst sind\n\n## Hinweise\n\n`make dev` aus dem Ordner des Sammel-Branches, Schalter zunächst aus, dann an.", "priority": 2, "state": "Todo", "type": "unstarted", "project": "Neustart ohne Chatverlust", "milestone": "Erster echter Lauf", "assignee": "Giuliano Costa", "labels": ["Handtest"], "agent": null, "blocked": false}], "loose": [{"name": "Jarvis: Supervisor WhisperM8", "topic": "", "state": "gerade fertig"}, {"name": "4 Gus", "topic": "Neustart: Paket 3 Router-Dienst", "state": "ruht"}, {"name": "2 Ole", "topic": "Neustart: Paket 0 und 1 (SwiftTerm)", "state": "ruht"}, {"name": "1 Fin", "topic": "PS5-Controller: Feedback nach 2.25", "state": "ruht"}, {"name": "7 Doc", "topic": "Claude Doktor: Hooks und Konten prüfen", "state": "ruht"}], "chatsRunning": 8};
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const S = { view: "board", f: "alle", person: "", proj: "", sel: null, demo: false };
+const ORIGINAL = JSON.stringify(DATA.issues);
+const ME = "Giuliano Costa";
+const initials = n => n.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+const hue = n => [...n].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360;
+const av = n => n ? `<span class="av" style="background:oklch(58% 0.13 ${hue(n)})" title="Zugewiesen: ${esc(n)}">${initials(n)}</span>` : `<span class="av none" title="Niemand zugewiesen">–</span>`;
+function applyDemo(on) {
+  DATA.issues = JSON.parse(ORIGINAL);
+  if (!on) return;
+  const give = { "Controller-Steuerung": "Xeno Suter", "Chats-CLI": "Xeno Suter", "Release 2.26": "Richard Strittmatter", "Browser-Bereich": "Richard Strittmatter" };
+  DATA.issues.forEach(i => { if (give[i.project] && !i.assignee) i.assignee = give[i.project]; });
+  const far = { "WM8-28": ["2 Kai", "arbeitet", "Xeno"], "WM8-16": ["5 Mia", "ruht", "Xeno"], "WM8-20": ["1 Tom", "wartet auf Richard", "Richard"] };
+  DATA.issues.forEach(i => { const f = far[i.key]; if (f) { i.agent = { name: f[0], state: f[1], remote: f[2], since: "arbeitet seit heute 09:12" }; if (i.type === "unstarted") { i.type = "started"; i.state = "In Progress"; } } });
+}
+const DOT = { "arbeitet": "arbeitet", "wartet auf dich": "wartet", "wartet auf Richard": "wartet", "ruht": "ruht", "gestoppt": "gestoppt", "gerade fertig": "ruht", "startet": "arbeitet" };
+const COLS = [["started", "In Arbeit"], ["unstarted", "Als Nächstes"], ["backlog", "Backlog"]];
+const PRIO = { 1: "Dringend", 2: "Hoch", 3: "Mittel", 4: "Niedrig", 0: "Keine" };
+
+if (matchMedia("(prefers-color-scheme: dark)").matches) document.documentElement.classList.add("sysdark");
+$("#theme").onclick = () => { const r = document.documentElement; const dark = getComputedStyle(r).colorScheme.includes("dark"); r.dataset.theme = dark ? "light" : "dark"; };
+$("#in-linear").onclick = () => toast("Öffnet das Team in Linear im Browser");
+$("#stamp").textContent = DATA.stamp; $("#n-tickets").textContent = DATA.issues.length; $("#n-chats").textContent = DATA.chatsRunning; $("#n-proj").textContent = DATA.chatsRunning;
+
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 2200); }
+function match(i) {
+  if (S.proj && (i.project || "Ohne Vorhaben") !== S.proj) return false;
+  if (S.person === "__none" && i.assignee) return false;
+  if (S.person && S.person !== "__none" && i.assignee !== S.person) return false;
+  if (S.f === "mit") return !!i.agent; if (S.f === "ohne") return !i.agent && i.type !== "backlog";
+  return true;
+}
+function agentRow(i, compact) {
+  if (i.agent && i.agent.remote) return `<span class="dot ${DOT[i.agent.state] || "ruht"}"></span><span class="who">${esc(i.agent.name)}</span><span class="st">${esc(i.agent.state)}</span><span class="remote" title="Dieser Chat läuft in WhisperM8 auf einem anderen Rechner">bei ${esc(i.agent.remote)}</span>`;
+  if (i.agent) return `<span class="dot ${DOT[i.agent.state] || "ruht"}"></span><span class="who">${esc(i.agent.name)}</span><span class="st">${esc(i.agent.state)}</span>${compact ? "" : `<button class="act plain" data-go="${esc(i.key)}">Zum Chat</button>`}`;
+  if (i.type === "backlog") return `<span class="dot gestoppt"></span><span class="st">noch nicht eingeplant</span>${compact ? "" : `<button class="act plain" data-start="${esc(i.key)}">Chat starten</button>`}`;
+  return `<span class="dot leer"></span><span class="none">Kein Agent</span>${compact ? "" : `<button class="act primary" data-start="${esc(i.key)}">Chat starten</button>`}`;
+}
+function tags(i) { return (i.labels || []).filter(l => l === "Handtest" || l === "Entscheidung").map(l => `<span class="tag ${l}">${l}</span>`).join("") + (i.blocked ? `<span class="tag blocked">blockiert</span>` : ""); }
+function card(i) {
+  return `<div class="card" role="button" tabindex="0" data-key="${esc(i.key)}" aria-selected="${S.sel === i.key}">
+    <div class="top"><span class="key">${esc(i.key)}</span><span class="prio p${i.priority}" title="Priorität ${PRIO[i.priority]}"><i></i><i></i><i></i></span>${tags(i)}${av(i.assignee)}</div>
+    <div class="title">${esc(i.title)}</div>
+    <div class="proj">${esc(i.project || "Ohne Vorhaben")}${i.milestone ? " · " + esc(i.milestone) : ""}</div>
+    <div class="agent">${agentRow(i)}</div></div>`;
+}
+function render() {
+  const all = DATA.issues, vis = all.filter(match);
+  const base = all.filter(i => !S.proj || (i.project || "Ohne Vorhaben") === S.proj);
+  const n = { alle: base.length, mit: base.filter(i => i.agent).length, ohne: base.filter(i => !i.agent && i.type !== "backlog").length };
+  document.querySelectorAll(".chip[data-f]").forEach(c => { c.setAttribute("aria-pressed", c.dataset.f === S.f); $("b", c).textContent = n[c.dataset.f]; });
+  const people = [...new Set(base.map(i => i.assignee).filter(Boolean))].sort((a, b) => (b === ME) - (a === ME) || a.localeCompare(b));
+  const pc = (val, label, count, extra = "") => `<button class="chip" data-p="${esc(val)}" aria-pressed="${S.person === val}">${extra}${label} <b>${count}</b></button>`;
+  $("#people").innerHTML = pc("", "Alle", base.length) + pc("__none", "Nicht zugewiesen", base.filter(i => !i.assignee).length, av(null)) +
+    people.map(p => pc(p, esc(p.split(" ")[0]) + (p === ME ? " (ich)" : ""), base.filter(i => i.assignee === p).length, av(p))).join("");
+  $("#demo").setAttribute("aria-pressed", S.demo); $("#demo").style.background = S.demo ? "var(--accent-tint)" : ""; $("#demo-note").hidden = !S.demo;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.view === S.view));
+  $("#board").hidden = S.view !== "board"; $("#list").hidden = S.view !== "list";
+  $("#board").innerHTML = COLS.map(([type, name]) => {
+    const rows = vis.filter(i => i.type === type).sort((a, b) => (a.priority || 9) - (b.priority || 9) || (b.agent ? 1 : 0) - (a.agent ? 1 : 0));
+    return `<section class="col"><header><h2>${name}</h2><span class="cnt">${rows.length}</span><span class="ag">${rows.filter(i => i.agent).length} mit Agent</span></header><div class="cards">${rows.map(card).join("") || `<p style="color:var(--text-3);font-size:var(--fs-meta);padding:var(--sp-4)">Nichts für diesen Filter.</p>`}</div></section>`;
+  }).join("");
+  const groups = {}; vis.forEach(i => (groups[i.project || "Ohne Vorhaben"] ||= []).push(i));
+  $("#list").innerHTML = Object.entries(groups).map(([p, rows]) => `<h2>${esc(p)} <span>${rows.length} Tickets · ${rows.filter(i => i.agent).length} mit Agent</span></h2>` +
+    rows.sort((a, b) => (a.priority || 9) - (b.priority || 9)).map(i => `<div class="lrow" role="button" tabindex="0" data-key="${esc(i.key)}" aria-selected="${S.sel === i.key}"><span class="key">${esc(i.key)}</span><span class="title">${esc(i.title)}</span><span class="state">${esc(i.state)}</span><span class="prio p${i.priority}"><i></i><i></i><i></i></span><span class="ag">${av(i.assignee)}<span style="color:var(--text-2);font-size:var(--fs-caption)">${i.assignee ? esc(i.assignee.split(" ")[0]) : "niemand"}</span></span><span class="ag">${agentRow(i, true)}</span></div>`).join("")).join("");
+  $("#loose").innerHTML = `<span class="lab">Laufende Chats ohne Ticket (${DATA.loose.length})</span>` + DATA.loose.map(c => `<span class="pill"><span class="dot ${DOT[c.state] || "ruht"}"></span><b style="font-weight:600">${esc(c.name)}</b>${c.topic ? " · " + esc(c.topic) : ""}<button data-assign="${esc(c.name)}">Ticket zuweisen</button></span>`).join("");
+  detail();
+}
+function md(t) {
+  let out = "", ul = false;
+  for (const raw of (t || "").split("\n")) {
+    const l = esc(raw).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`(.+?)`/g, "<code>$1</code>");
+    const item = /^\s*[-*] (\[.\] )?/.test(raw);
+    if (!item && ul) { out += "</ul>"; ul = false; }
+    if (/^## /.test(raw)) out += `<h4>${l.slice(3)}</h4>`;
+    else if (item) { if (!ul) { out += "<ul>"; ul = true; } out += `<li>${l.replace(/^\s*[-*] (\[.\] )?/, "")}</li>`; }
+    else if (raw.trim()) out += `<p>${l}</p>`;
+  }
+  return out + (ul ? "</ul>" : "");
+}
+function detail() {
+  const i = DATA.issues.find(x => x.key === S.sel), el = $("#detail");
+  el.classList.toggle("open", !!i); if (!i) return;
+  $("#detail-in").innerHTML = `<div class="head"><span class="key" style="font-family:var(--font-mono)">${esc(i.key)}</span>${tags(i)}<span class="spacer"></span><button class="ghost" data-close>Schließen</button></div>
+    <h2>${esc(i.title)}</h2>
+    <dl><dt>Status</dt><dd>${esc(i.state)}</dd><dt>Vorhaben</dt><dd>${esc(i.project || "–")}${i.milestone ? " · " + esc(i.milestone) : ""}</dd><dt>Priorität</dt><dd>${PRIO[i.priority]}</dd><dt>Zugewiesen</dt><dd style="display:flex;align-items:center;gap:6px">${av(i.assignee)}${i.assignee ? esc(i.assignee) : "niemand"}</dd></dl>
+    <div class="box"><div class="line">${agentRow(i, true)}</div>${i.agent ? `<div style="font-size:var(--fs-caption);color:var(--text-3)">${esc(i.agent.since)}${i.agent.last ? " · zuletzt: „" + esc(i.agent.last) + "“" : ""}</div>` : ""}
+      <div class="btns">${i.agent && i.agent.remote ? `<span style="font-size:var(--fs-meta);color:var(--text-2)">Läuft in WhisperM8 bei ${esc(i.agent.remote)}. Von hier aus nur sichtbar, nicht steuerbar.</span>` : i.agent ? `<button class="btn primary" data-go="${esc(i.key)}">Zum Chat</button><button class="btn" data-unlink="${esc(i.key)}">Verknüpfung lösen</button>` : `<button class="btn primary" data-start="${esc(i.key)}">Neuen Chat starten</button><button class="btn" data-pick="${esc(i.key)}">Laufenden Chat zuweisen</button>`}<button class="btn" data-open>In Linear öffnen ↗</button></div></div>
+    <div class="md">${md(i.description)}</div>`;
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("button, [data-key]"); if (!t) return;
+  if (t.dataset.view) { S.view = t.dataset.view; return render(); }
+  if (t.dataset.f) { S.f = t.dataset.f; return render(); }
+  if ("p" in t.dataset) { S.person = t.dataset.p; return render(); }
+  if (t.id === "demo") { S.demo = !S.demo; S.person = ""; applyDemo(S.demo); return render(); }
+  if (t.dataset.start) { const i = DATA.issues.find(x => x.key === t.dataset.start); i.agent = { name: "Neuer Chat", state: "startet", since: "gerade gestartet" }; if (i.type !== "started") { i.type = "started"; i.state = "In Progress"; } toast(`Startet einen Chat im Projekt whisperm8 mit dem Text von ${i.key} und setzt das Ticket auf „In Arbeit“`); return render(); }
+  if (t.dataset.go) return toast("Springt zum Chat im Fenster Agent Chats");
+  if (t.dataset.unlink) { DATA.issues.find(x => x.key === t.dataset.unlink).agent = null; toast("Verknüpfung gelöst, das Ticket bleibt, wie es ist"); return render(); }
+  if (t.dataset.pick || t.dataset.assign) return toast("Öffnet die Auswahl: laufender Chat ↔ Ticket");
+  if ("open" in t.dataset) return toast("Öffnet das Ticket in Linear im Browser");
+  if ("close" in t.dataset) { S.sel = null; return render(); }
+  if (t.dataset.key) { S.sel = S.sel === t.dataset.key ? null : t.dataset.key; return render(); }
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") { S.sel = null; render(); } if (e.key === "Enter" && e.target.dataset?.key) e.target.click(); });
+const sel = $("#proj"); sel.innerHTML = `<option value="">Alle</option>` + [...new Set(DATA.issues.map(i => i.project || "Ohne Vorhaben"))].map(p => `<option>${esc(p)}</option>`).join("");
+sel.onchange = () => { S.proj = sel.value; render(); };
+render();
+</script>
+</body>
+</html>
