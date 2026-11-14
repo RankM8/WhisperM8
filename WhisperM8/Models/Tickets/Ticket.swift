@@ -140,8 +140,11 @@ struct TicketChat: Equatable, Identifiable {
     /// Läuft als Prozess in der App (Terminal hängt).
     var isRunning: Bool
 
-    /// Kurzname vor dem ersten „ · “ („6 Jon“), so wie die Chats benannt werden.
+    /// Rufname: der Teil vor dem ersten „ · “, ohne vorangestellte Ticket-Nummer.
+    /// „WM8-16 Fin · Insel: Entwurf“ → „Fin“, „Ole · Terminal-Tab“ → „Ole“.
     var shortName: String {
-        title.components(separatedBy: " · ").first ?? title
+        let head = title.components(separatedBy: " · ").first ?? title
+        let name = head.replacingOccurrences(of: #"^[A-Z][A-Z0-9]*-[0-9]+\s+"#, with: "", options: .regularExpression)
+        return name.isEmpty ? head : name
     }
 }

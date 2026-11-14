@@ -10,9 +10,9 @@ enum TicketsCLIArguments: Equatable {
     case show(key: String, json: Bool)
     case mine(chat: String?, json: Bool)
     case link(key: String, chat: String?, keepStatus: Bool)
-    case done(key: String, chat: String?, status: String?, note: TicketsText?)
+    case done(key: String, chat: String?, status: String?, note: TicketsText?, force: Bool)
     case unlink(key: String, chat: String?)
-    case status(key: String, name: String)
+    case status(key: String, name: String, force: Bool)
     case note(key: String, text: TicketsText)
     case comment(key: String, text: TicketsText)
     case new(TicketsNewOptions)
@@ -40,7 +40,7 @@ enum TicketsCLIArguments: Equatable {
 
     var ticketKey: String? {
         switch self {
-        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _), .unlink(let key, _), .status(let key, _),
+        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
              .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _):
             return key
         case .help, .board, .list, .mine, .new, .setup, .doctor:
@@ -94,7 +94,7 @@ enum TicketsCLIArguments: Equatable {
         func key(_ raw: String) throws -> String {
             let upper = raw.uppercased()
             guard upper.range(of: #"^[A-Z][A-Z0-9]*-[0-9]+$"#, options: .regularExpression) != nil else {
-                throw ParseError.usage("„\(raw)“ ist keine Ticket-Nummer (erwartet z. B. WM8-12)")
+                throw ParseError.usage("„\(raw)“ ist keine Ticket-Nummer (erwartet z. B. ABC-12)")
             }
             return upper
         }
@@ -130,14 +130,16 @@ enum TicketsCLIArguments: Equatable {
             return .link(key: try key(try positional(1, "tickets link <Ticket> [--chat REF] [--no-status]")[0]), chat: chat, keepStatus: keep)
         case "done":
             let chat = try value("--chat"), status = try value("--status"), note = try value("--note").map(TicketsText.init)
+            let force = flag("--force")
             return .done(key: try key(try positional(1, "tickets done <Ticket> [--status S] [--note TEXT]")[0]),
-                         chat: chat, status: status, note: note)
+                         chat: chat, status: status, note: note, force: force)
         case "unlink":
             let chat = try value("--chat")
             return .unlink(key: try key(try positional(1, "tickets unlink <Ticket> [--chat REF]")[0]), chat: chat)
         case "status":
+            let force = flag("--force")
             let parts = try positional(2, "tickets status <Ticket> <Status>")
-            return .status(key: try key(parts[0]), name: parts[1])
+            return .status(key: try key(parts[0]), name: parts[1], force: force)
         case "note":
             let parts = try positional(2, "tickets note <Ticket> <Text | - | @Datei>")
             return .note(key: try key(parts[0]), text: text(parts, at: 1))
@@ -265,11 +267,15 @@ enum TicketsCLICommand {
 
     STATUS UND TEXT
       whisperm8 tickets status <Ticket> <Status>       z. B. "Merge-bereit", "Done"
+                Auf einen „erledigt“-Status setzt der Supervisor (Chat, dessen
+                Titel mit „Jarvis“ beginnt) oder ein Mensch im Terminal. Andere
+                Chats bekommen eine Absage; verlangt der Nutzer es ausdrücklich
+                von diesem Chat, geht es mit --force.
       whisperm8 tickets note <Ticket> <Text>           ersetzt die Zeile „**Stand …:**“
       whisperm8 tickets comment <Ticket> <Text>
                 Text: direkt, `-` für stdin oder `@datei`. Markdown. Beginnt der
                 Text selbst mit `-` oder `@`, gehört er hinter `--`:
-                tickets comment WM8-12 -- "@Giuliano bitte prüfen"
+                tickets comment ABC-12 -- "@Giuliano bitte prüfen"
 
     ANLEGEN UND ZUORDNEN
       whisperm8 tickets new <Titel> [--description TEXT] [--project VORHABEN]

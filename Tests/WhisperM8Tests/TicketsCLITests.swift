@@ -99,15 +99,16 @@ final class TicketsCLITests: XCTestCase {
         XCTAssertEqual(try TicketsCLIArguments.parse(["link", "WM8-12", "--no-status", "--chat", "840b"]),
                        .link(key: "WM8-12", chat: "840b", keepStatus: true))
         XCTAssertEqual(try TicketsCLIArguments.parse(["done", "WM8-12", "--status", "Merge-bereit", "--note", "Branch steht."]),
-                       .done(key: "WM8-12", chat: nil, status: "Merge-bereit", note: .literal("Branch steht.")))
+                       .done(key: "WM8-12", chat: nil, status: "Merge-bereit", note: .literal("Branch steht."), force: false))
         XCTAssertEqual(try TicketsCLIArguments.parse(["comment", "WM8-12", "-"]), .comment(key: "WM8-12", text: .stdin), "- heißt stdin, ist keine Option")
         XCTAssertEqual(try TicketsCLIArguments.parse(["note", "WM8-12", "@stand.md"]), .note(key: "WM8-12", text: .file("stand.md")))
         XCTAssertEqual(try TicketsCLIArguments.parse(["comment", "WM8-12", "--", "@Giuliano bitte prüfen"]),
                        .comment(key: "WM8-12", text: .literal("@Giuliano bitte prüfen")), "nach -- ist alles wörtlicher Text")
         XCTAssertEqual(try TicketsCLIArguments.parse(["comment", "WM8-12", "--", "--force war nötig"]),
                        .comment(key: "WM8-12", text: .literal("--force war nötig")))
-        XCTAssertEqual(try TicketsCLIArguments.parse(["status", "WM8-12", "Done", "--json"]), .status(key: "WM8-12", name: "Done"),
+        XCTAssertEqual(try TicketsCLIArguments.parse(["status", "WM8-12", "Done", "--json"]), .status(key: "WM8-12", name: "Done", force: false),
                        "--json geht bei jedem Befehl")
+        XCTAssertEqual(try TicketsCLIArguments.parse(["status", "WM8-12", "Done", "--force"]), .status(key: "WM8-12", name: "Done", force: true))
         XCTAssertTrue(TicketsCLIArguments.wantsJSON(["status", "WM8-12", "Done", "--json"]))
         XCTAssertFalse(TicketsCLIArguments.wantsJSON(["comment", "WM8-12", "--", "--json"]), "hinter -- ist es Text")
         XCTAssertEqual(try TicketsCLIArguments.parse(["label", "WM8-12", "--add", "Handtest, Bug", "--remove", "Feature"]),
@@ -218,10 +219,51 @@ final class TicketsCLITests: XCTestCase {
 
     func testDoneWithoutLinkOnlySetsStatus() async throws {
         let world = makeWorld()
+        world.caller = jarvis
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
-        let output = try await run(["done", "WM8-12", "--status", "Done"], world)
+        let output = try await run(["done", "WM8-12", "--status", "Done", "--chat", "7493"], world)
         XCTAssertEqual(writes(world), ["setStatus id-12 s4"], "keine Verknüpfung anlegen, nur um sie zu beenden")
         XCTAssertTrue(output.stdout.contains("war nicht (mehr) verknüpft"), "nichts behaupten, was nicht passiert ist")
+    }
+
+    func testOnlyTheSupervisorCompletesATicket() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
+
+        // Arbeitender Chat: Absage, bevor irgendetwas geschrieben ist.
+        let viaDone = try await run(["done", "WM8-12", "--status", "Done"], world)
+        XCTAssertEqual(viaDone.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(viaDone.stderr.contains("setzt der Supervisor"), viaDone.stderr)
+        let viaStatus = try await run(["status", "WM8-12", "Done"], world)
+        XCTAssertEqual(viaStatus.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(writes(world).isEmpty)
+
+        // Abgeben darf er.
+        _ = try await run(["done", "WM8-12", "--status", "Merge-bereit"], world)
+        XCTAssertEqual(writes(world), ["saveLink id-12 6 Jon beendet", "setStatus id-12 s3"])
+
+        // Der Supervisor, ein Mensch im Terminal und ein ausdrückliches --force dürfen.
+        for caller in [jarvis, nil] as [UUID?] {
+            let other = makeWorld()
+            other.caller = caller
+            other.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
+            let output = try await run(["status", "WM8-12", "Done"], other)
+            XCTAssertEqual(output.exitCode, 0, "\(String(describing: caller))")
+            XCTAssertEqual(writes(other), ["setStatus id-12 s4"])
+        }
+        let forced = makeWorld()
+        forced.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
+        let output = try await run(["status", "WM8-12", "Done", "--force"], forced)
+        XCTAssertEqual(output.exitCode, 0)
+    }
+
+    func testShortNameDropsTheTicketNumber() {
+        func name(_ title: String) -> String { chat(UUID(), title, state: .idle).shortName }
+        XCTAssertEqual(name("WM8-16 Fin · Insel: Tastatur-Entwurf"), "Fin")
+        XCTAssertEqual(name("Ole · Terminal-Tab: fertig"), "Ole")
+        XCTAssertEqual(name("6 Jon · Linear"), "6 Jon", "eine laufende Nummer ist kein Ticket-Kürzel")
+        XCTAssertEqual(name("Jarvis: Supervisor WhisperM8"), "Jarvis: Supervisor WhisperM8")
+        XCTAssertEqual(name("WM8-16 · nur Nummer"), "WM8-16", "bliebe sonst nichts übrig, steht die Nummer da")
     }
 
     func testSecondDoneKeepsTheEndTime() async throws {
@@ -243,6 +285,7 @@ final class TicketsCLITests: XCTestCase {
 
     func testWriteCommandsAnswerInJSON() async throws {
         let world = makeWorld()
+        world.caller = nil
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
         world.source.onCreate = { draft in TicketFixtures.ticket(70, title: draft.title) }
         let arguments = try TicketsCLIArguments.parse(["status", "WM8-12", "Done", "--json"])
@@ -268,6 +311,7 @@ final class TicketsCLITests: XCTestCase {
 
     func testStatusNoOpAndChange() async throws {
         let world = makeWorld()
+        world.caller = jarvis
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
         let same = try await run(["status", "WM8-12", "Merge-bereit"], world)
         XCTAssertTrue(same.stdout.contains("steht schon auf"))

@@ -30,6 +30,28 @@ Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit `{"ok": true
 `doctor` schreibt seinen Bericht immer nach stdout. Wer welchen Status setzt und wie Chats und Supervisor damit arbeiten, steht im
 Skill `tickets` (`WhisperM8/Resources/whisperm8-tickets-skill.md`) und im Jarvis-Skill, Abschnitt 11.
 
+## So arbeitet dieses Projekt
+
+Die Skills der App nennen kein Team und keine Labels, weil sie mit der App ausgeliefert werden. Was für
+WhisperM8 selbst gilt, steht hier:
+
+| | |
+|---|---|
+| Werkzeug | Linear, Workspace „WhisperM8“ (`linear.app/whisperm8`) |
+| Team | `WM8`, zugeordnet dem Projektordner des Repos |
+| Status | Backlog · Todo · In Progress · Merge-bereit · Done · Canceled |
+| Labels | `Handtest` und `Entscheidung` (wartet auf den Nutzer), `Selbst erfasst` (vom Supervisor von sich aus angelegt, nicht beauftragt), dazu `Bug`, `Feature`, `Improvement` |
+| Vorhaben | je größerem Thema ein Projekt in Linear, bei Bedarf mit Meilensteinen |
+| Chat-Titel | `WM8-16 Fin · Insel: Tastatur-Entwurf`; ohne offenes Ticket `Ole · Terminal-Tab: …` |
+
+- **Eine Regel für „fertig“:** Der arbeitende Chat hängt sich an sein Ticket, gibt es als „Merge-bereit“ ab
+  (`tickets done <Ticket> --status "Merge-bereit" --note "…"`) und meldet das dem Supervisor. Auf „Done“ setzt
+  nur der Supervisor, nach Prüfung und Merge. Die Kommandozeile sagt einem anderen Chat dabei ab.
+- **Neue Tickets** legt der Supervisor an, nach dem Ja des Nutzers; was er von sich aus erfasst, trägt
+  `Selbst erfasst`.
+- **Ansichten in Linear:** „Wartet auf mich“, „Handtests“, „Entscheidungen“, „Gerade in Arbeit“, „Als Nächstes“,
+  „Blockiert“, „Mit Agent“, „Ohne Agent“, „Laufende Vorhaben“.
+
 ## Einrichtung
 
 1. **Zugang:** `pbpaste | whisperm8 tickets setup --key-stdin` prüft den kopierten Linear-Key bei Linear und

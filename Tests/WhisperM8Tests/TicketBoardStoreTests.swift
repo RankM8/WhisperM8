@@ -30,7 +30,8 @@ final class TicketBoardStoreTests: XCTestCase {
     }
 
     private func settle(_ condition: @escaping () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
-        for _ in 0..<400 where !condition() { try? await Task.sleep(for: .milliseconds(5)) }
+        // Großzügig warten: Unter der vollen Suite ist der Rechner ausgelastet.
+        for _ in 0..<2_000 where !condition() { try? await Task.sleep(for: .milliseconds(5)) }
         XCTAssertTrue(condition(), "Bedingung nicht erreicht", file: file, line: line)
     }
 

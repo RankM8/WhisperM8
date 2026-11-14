@@ -25,8 +25,10 @@ struct TicketBoardEntry: Equatable, Identifiable {
 
     /// Chats, die das Ticket abgegeben haben (Kurzname aus dem Titel der Verknüpfung).
     var handedOverBy: [String] {
-        ticket.links.filter { !$0.isActive }.map {
-            $0.title.replacingOccurrences(of: "Chat: ", with: "").components(separatedBy: " · ").first ?? $0.title
+        ticket.links.filter { !$0.isActive }.map { link in
+            // Derselbe Rufname wie bei laufenden Chats, hier aus dem Titel der Verknüpfung.
+            TicketChat(id: link.chatID, title: link.title.replacingOccurrences(of: "Chat: ", with: ""),
+                       projectName: "", projectPath: "", state: nil, isRunning: false).shortName
         }
     }
 }

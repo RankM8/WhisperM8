@@ -104,12 +104,13 @@ enum TicketsCLIRunner {
             }
             return lines.joined(separator: "\n")
 
-        case .done(let key, let chatRef, let status, let note):
+        case .done(let key, let chatRef, let status, let note, let force):
             let chat = try callerChat(chatRef, env)
             let context = try await env.source.ticket(key: key)
             // Erst alles prüfen, dann schreiben: Ein falscher Statusname oder ein
             // leerer Text soll nichts halb ändern.
             let target = try status.map { try resolveStatus($0, in: context) }
+            if let target { try guardCompletion(target, key: key, force: force, env) }
             let noteText = try note.map { try text($0, env) }
             // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
             let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
@@ -135,9 +136,10 @@ enum TicketsCLIRunner {
             for link in mine { try await env.source.removeLink(id: link.id) }
             return mine.isEmpty ? "\(key): „\(chat.shortName)“ war nicht verknüpft." : "\(key): Verknüpfung mit „\(chat.shortName)“ entfernt."
 
-        case .status(let key, let name):
+        case .status(let key, let name, let force):
             let context = try await env.source.ticket(key: key)
             let target = try resolveStatus(name, in: context)
+            try guardCompletion(target, key: key, force: force, env)
             if target.id == context.ticket.status.id { return "\(key) steht schon auf \(target.name)." }
             try await env.source.setStatus(ticketID: context.ticket.id, statusID: target.id)
             return "\(key): \(context.ticket.status.name) → \(target.name)"
@@ -215,7 +217,7 @@ enum TicketsCLIRunner {
         if let team = config.team(forDirectory: env.currentDirectory()) ?? config.onlyTeam { return team }
         throw Failure(exitCode: TicketsCLIExit.usage, message: """
         Team unklar: Dieser Ordner ist keinem Team zugeordnet.
-        Entweder --team WM8 angeben oder einmal zuordnen: whisperm8 tickets setup --project <Ordner> --team WM8
+        Entweder --team <Kürzel> angeben oder einmal zuordnen: whisperm8 tickets setup --project <Ordner> --team <Kürzel>
         """)
     }
 
@@ -224,6 +226,21 @@ enum TicketsCLIRunner {
         throw Failure(exitCode: TicketsCLIExit.notFound,
                       message: "Status „\(name)“ gibt es im Team \(context.team) nicht. Möglich: "
                         + context.statuses.map(\.name).joined(separator: ", "))
+    }
+
+    /// Eine Regel für „fertig“: Der arbeitende Chat gibt ab, auf „erledigt“ setzt
+    /// der Supervisor nach Prüfung und Merge. Die Kommandozeile hält das ein,
+    /// wenn der Aufrufer ein Chat ist, der kein Supervisor ist. Ein Mensch im
+    /// Terminal und der Supervisor (auch mit `--chat` für andere) dürfen.
+    private static func guardCompletion(_ target: TicketStatus, key: String, force: Bool, _ env: TicketsCLIEnvironment) throws {
+        guard target.kind == .completed, !force, let id = env.callerChatID() else { return }
+        let (chats, _) = env.chats()
+        guard let caller = chats.first(where: { $0.id == id }), !TicketBoardBuilder.isSupervisor(caller) else { return }
+        throw Failure(exitCode: TicketsCLIExit.conflict, message: """
+        Auf „\(target.name)“ setzt der Supervisor nach Prüfung und Merge. Als Chat das Ticket abgeben \
+        (whisperm8 tickets done \(key) --status <Status vor „\(target.name)“>) und dem Supervisor melden.
+        Nur wenn der Nutzer es ausdrücklich von dir verlangt: --force
+        """)
     }
 
     /// Der Chat, in dem der Befehl läuft, oder der mit `--chat` genannte.
@@ -294,7 +311,7 @@ enum TicketsCLIRunner {
             let config = env.config()
             lines.append("Linear-Key: " + (env.credential.read() == nil ? "fehlt (whisperm8 tickets setup --key-stdin)" : "hinterlegt"))
             if config.teamsByProjectPath.isEmpty {
-                lines.append("Zuordnung: keine (whisperm8 tickets setup --project <Ordner> --team WM8)")
+                lines.append("Zuordnung: keine (whisperm8 tickets setup --project <Ordner> --team <Kürzel>)")
             }
             for (path, team) in config.teamsByProjectPath.sorted(by: { $0.key < $1.key }) {
                 lines.append("Zuordnung: \(path) → \(team)")
@@ -325,7 +342,7 @@ enum TicketsCLIRunner {
         let config = env.config()
         if config.teamsByProjectPath.isEmpty {
             checks.append(Check(name: "Zuordnung", ok: false,
-                                detail: "kein Projekt zugeordnet. whisperm8 tickets setup --project <Ordner> --team WM8"))
+                                detail: "kein Projekt zugeordnet. whisperm8 tickets setup --project <Ordner> --team <Kürzel>"))
         }
         for team in Set(config.teamsByProjectPath.values).sorted() {
             do {

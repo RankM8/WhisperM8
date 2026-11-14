@@ -367,6 +367,7 @@ Wo ein Projekt Tickets führt, ist das Ticket-Board dein zweites Fenster neben d
   (`whisperm8 tickets status <Ticket> Done`) und schließt den Chat.
 - **Neue Tickets** legst du an, nach dem Ja des Nutzers, im Aufbau aus dem Skill `tickets`. Chats melden dir
   Folgepunkte, statt selbst Tickets anzulegen.
-- **Was auf den Nutzer wartet**, trägt das Label „Handtest“ oder „Entscheidung“ und ist ihm zugewiesen
+- **Was auf den Nutzer wartet**, ist ihm zugewiesen und trägt das Label, das das Projekt dafür führt
   (`whisperm8 tickets list --mine`). Nenne ihm diese Liste, wenn er fragt, was offen ist.
-- Chat-Titel beginnen mit der Ticket-Nummer (`WM8-12 Ole · Thema: Aufgabe`).
+- Chat-Titel beginnen mit der Ticket-Nummer (`ABC-12 Ole · Thema: Aufgabe`); ohne offenes Ticket nur der Rufname.
+- Team, Status-Namen und Labels des Projekts stehen in dessen Doku, nicht in diesem Skill.
