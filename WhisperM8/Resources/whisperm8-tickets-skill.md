@@ -19,13 +19,30 @@ Hilfe: `whisperm8 tickets --help`.
 | Arbeit beginnt | `whisperm8 tickets link ABC-12` |
 | Etwas wartet auf den Nutzer | `whisperm8 tickets assign ABC-12 me` und das Label, das das Projekt dafür führt: `whisperm8 tickets label ABC-12 --add <Label>` |
 | Zwischenstand, der zählt | `whisperm8 tickets note ABC-12 "Branch steht, Review läuft."` |
-| Gebaut und geprüft, Branch wartet auf den Merge | `whisperm8 tickets done ABC-12 --status "Merge-bereit" --note "Branch feat/x, Commit abc1234, Suite grün."` |
+| Ein Punkt unter „Fertig, wenn“ ist erledigt | `whisperm8 tickets check ABC-12 2` (Nummer oder ein Stück des Textes; ohne Verweis zeigt der Befehl die Kästchen) |
+| Der Nutzer hat etwas entschieden | `whisperm8 tickets decide ABC-12 --question "…" --option "A" --option "B" --chosen "A"` |
+| Gebaut und geprüft, Branch wartet auf den Merge | `whisperm8 tickets done ABC-12 --built "was gebaut wurde" --commit abc1234 --not "was nicht dazugehört" --test "Schritt für den Handtest" --status "Merge-bereit"` |
 | Woran hänge ich | `whisperm8 tickets mine` |
 | Falsch verknüpft | `whisperm8 tickets unlink ABC-12` |
 
 - `link` setzt ein Ticket, das noch nicht in Arbeit ist, auf „In Progress“. Mit `--no-status` bleibt der Status.
 - `note` ersetzt die erste Zeile des Tickets (`**Stand TT.MM.JJJJ:** …`). Das ist der Ort für den Stand, nicht
   eine Kette von Kommentaren. `comment` ist für Dinge, die als Verlauf stehen bleiben sollen.
+- **Abgeben heißt zusammenfassen.** `done` verlangt `--built`: ein, zwei Sätze, was gebaut wurde, so dass es
+  jemand ohne den Chat-Verlauf versteht. Dazu nach Bedarf `--commit`, `--not` (was bewusst nicht dazugehört),
+  `--test` je Schritt für den Handtest (mehrfach; sie stehen dann als Kästchen am Ticket) und `--image bild.png`.
+  Ein hochgeladenes Bild sieht jeder im Workspace: keine Bildschirmfotos mit Schlüsseln, Kundendaten oder
+  fremden Chats.
+  Der Abschluss steht als Kommentar am Ticket. Arbeit ohne Bau (Analyse, Entscheidung): `--no-summary`.
+- **Entscheidungen** hält `decide` fest, in festem Aufbau: Frage, Möglichkeiten (mindestens zwei), Gewählt, wer
+  entschieden hat, wer sie festgehalten hat, wann. Festgehalten wird nur, was der Nutzer wirklich entschieden
+  hat, mit seinen Möglichkeiten und in seinen Worten; eine eigene Empfehlung ist keine Entscheidung. `--by` ist
+  aus einem Chat Pflicht: der Name dessen, der entschieden hat. War es deine eigene Entscheidung (etwa eine
+  technische Wahl im Rahmen des Auftrags), steht dort dein Rufname, nicht der des Nutzers. Dein Rufname steht
+  ohnehin als „Festgehalten von“ dabei.
+- **Kästchen** hakst du ab, sobald ein Punkt wirklich erledigt und geprüft ist, nicht „so gut wie“. Der Befehl
+  ändert nur die genannten Kästchen und arbeitet nur auf der Beschreibung: Die Handtest-Kästchen im
+  Abschluss-Kommentar erreicht er nicht, die hakt ab, wer testet.
 - Text-Argumente nehmen Text, `-` für stdin oder `@datei`. Beginnt der Text selbst mit `-` oder `@`, gehört er
   hinter `--`: `whisperm8 tickets comment ABC-12 -- "@alle bitte prüfen"`. Tickets sind Markdown.
 - **Was du schreibst, geht an das Ticket-System und ist für alle dort lesbar.** Keine Schlüssel, Tokens oder
@@ -38,8 +55,8 @@ Hilfe: `whisperm8 tickets --help`.
 | Ereignis | Wer | Status |
 |---|---|---|
 | Chat beginnt | der Chat, über `link` | In Progress (automatisch) |
-| Chat ist fertig, Branch steht | der Chat, über `done --status` | Merge-bereit |
-| Branch ist in `main` | der Supervisor | Done |
+| Chat ist fertig, Branch steht | der Chat, über `done --built … --status` | Merge-bereit |
+| Branch ist in `main` | der Supervisor | Done, oder ein Zwischenstatus, wenn das Projekt einen für „gemergt, noch nicht ausgeliefert“ führt |
 | Arbeit ohne Merge erledigt (Analyse, Entscheidung) | der Supervisor | Done |
 | Ticket überholt | der Supervisor, nach Ja des Nutzers | Canceled |
 
@@ -64,7 +81,8 @@ whisperm8 tickets list --status "Merge-bereit"
 
 - **Board lesen:** Unter „Laufende Chats ohne offenes Ticket“ steht je Chat, woran er zuletzt saß:
   - „zuletzt an ABC-12 (Merge-bereit)“: Er hat abgegeben und wartet auf deinen Merge. Offen lassen, bis gemergt ist.
-  - „zuletzt an ABC-29 (Done)“: Die Arbeit ist erledigt. Chat schließen.
+  - „zuletzt an ABC-29 (Done)“: Die Arbeit ist erledigt. Chat schließen. Dasselbe gilt für einen Status nach dem
+    Merge („wartet aufs Ausliefern“): Der Chat hat nichts mehr zu tun.
   - „noch nie verknüpft“: Er arbeitet ohne Ticket. Ticket anlegen und verknüpfen, oder schließen.
   Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt und brauchen kein Ticket.
 - **Abgegebene Tickets:** Ein Ticket, das ein Chat mit `done` abgegeben hat und das noch in Arbeit steht (etwa
@@ -86,7 +104,8 @@ whisperm8 tickets list --status "Merge-bereit"
 Wer will was und warum. Nicht, wie es gebaut wird.
 
 ## Fertig, wenn
-- prüfbare Punkte
+- [ ] ein prüfbarer Punkt je Kästchen
+- [ ] so geschrieben, dass man „ja“ oder „nein“ sagen kann
 
 ## Hinweise
 Branch, Plan-Datei, Abhängigkeiten.
@@ -107,7 +126,9 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
   Die Absage fängt Versehen ab; dieselbe Regel gilt auch dort, wo kein Werkzeug sie prüft (MCP, Browser).
 - Die Verknüpfung steht am Ticket als Anhang mit dem Titel deines Chats. Jeder im Workspace sieht ihn. Ein
   Chat-Titel enthält deshalb nichts, was dort nicht stehen soll.
-- `whisperm8 tickets doctor` prüft Zugang, Zuordnung und App. Exit-Codes: 0 ok, 1 Aufruf falsch, 3 nicht
+- `whisperm8 tickets doctor` prüft Zugang, Zuordnung und App, und nennt als Hinweise („ACHTE“), was Ordnung
+  braucht: Tickets ohne Projekt, eingeplant ohne „Fertig, wenn“, in Arbeit ohne Chat, seit Wochen unberührt, und
+  Abweichungen zwischen der Tabelle der Bereiche in der Doku des Projekts und dem Ticket-Werkzeug. Exit-Codes: 0 ok, 1 Aufruf falsch, 3 nicht
   gefunden, 4 mehrdeutig, 5 Linear nicht eingerichtet, nicht erreichbar oder lehnt ab.
 - Einrichtung (einmalig, macht der Nutzer oder der Supervisor mit ihm): `pbpaste | whisperm8 tickets setup --key-stdin`
   (je Workspace ein Key, der Workspace ergibt sich aus dem Key) und `whisperm8 tickets setup --team ABC --project <Ordner>`.
