@@ -1,5 +1,5 @@
 ---
-status: Kern, Kommandozeile und Skill gebaut (14.11.2026, Schritte 1 bis 3 und 3a/3b); Ansicht (Schritte 4 bis 8) nicht freigegeben
+status: Stufe 1 gebaut (14.11.2026, Schritte 1 bis 8); Stufe 2 (Knöpfe, die Tickets ändern) nicht freigegeben; Handtest offen
 stand: 2026-11-14
 feature: Ansicht „Tickets“ in Agent Chats — Board und Backlog aus dem Ticket-Werkzeug, je Ticket der zuständige Chat mit Live-Zustand
 branch: feat/WM8-37-ticket-board
@@ -83,7 +83,7 @@ pflegen). Dafür führt „In Linear öffnen“ dorthin.
 |---|---|---|
 | E1 | Wo lebt die Ansicht? | Als umschaltbare Ansicht im Agent-Chats-Fenster, so wie der Entwurf sie zeigt und wie der Archiv-Modus heute umschaltet. Der gesamte Code liegt in neuen Dateien. Ausweichweg, falls die Größen-Grenze von `AgentChatsView.swift` (3.720 Zeilen, nur schrumpfend) den Einstieg nicht zulässt: eigenes Fenster über `WindowRequestCenter`. |
 | E2 | Wie meldet sich die App bei Linear an? | **Entschieden und gebaut:** API-Key im Schlüsselbund, gelesen und geschrieben über `/usr/bin/security` (`TicketCredentialStore`), eingerichtet mit `whisperm8 tickets setup --key-stdin`. Für die Ansicht kommt ein Feld in den Einstellungen dazu; gelesen wird abseits des Main Threads. Eine Anmeldung per Login kommt, wenn die Funktion für andere Nutzer gedacht ist. |
-| E3 | Wie oft wird aktualisiert? | Alle 30 Sekunden, nur solange die Ansicht sichtbar ist, dazu ein Knopf „Jetzt aktualisieren“. Verdecktes Fenster oder andere Ansicht: kein Abruf. |
+| E3 | Wie oft wird aktualisiert? | Alle 120 Sekunden (zuerst 30; geändert am 14.11.2026 wegen Linears Stundenbudget, endgültiger Takt nach der Messung in der Feature-Doku), nur solange die Ansicht sichtbar ist, dazu ein Knopf „Jetzt aktualisieren“. Verdecktes Fenster oder andere Ansicht: kein Abruf. |
 | E4 | Welches Projekt gehört zu welchem Team? | **Gebaut:** `tickets.json` (Projektordner → Team-Kürzel), geschrieben von `whisperm8 tickets setup --project … --team …`. Für die Ansicht kommt die Pflege in den Einstellungen dazu; ohne Zuordnung zeigt die Ansicht einen Leerzustand mit dem Weg dorthin. |
 | E5 | Spalten: echte Status oder Gruppen? | Drei Gruppen nach Art des Status, der echte Statusname steht auf der Karte. DealSupply hätte sonst sieben Spalten. |
 | E6 | Wann bauen? | Kern, Quelle und Speicher (Schritte 1 bis 3) sind vom Werkzeug unabhängig und können sofort entstehen. Die Oberfläche (ab Schritt 4) erst nach E1. Fällt am 28.11. die Entscheidung gegen Linear, bleibt alles bis auf die eine Quelle brauchbar. |
@@ -183,7 +183,9 @@ ist das Risiko „fremde App nach jedem Build“ aus der Tabelle unten erledigt.
 
 ## Leistung
 
-- Ein Abruf je 30 Sekunden sind 120 je Stunde bei einem offenen Board, weit unter dem Limit von 2.500.
+- Ein Abruf kostet mindestens zwei Anfragen. Beim Takt von 120 Sekunden sind das 60 Anfragen je Stunde und
+  offenem Board, 2,4 % des Budgets von 2.500, das sich die Ansicht mit allen `tickets`-Befehlen teilt. Messung:
+  `docs/features/tickets.md`, „Was ein Abruf bei Linear kostet“.
 - Signposts `tickets.fetch` und `tickets.build` in der Stufe `.detail`, Budgets in `PerfBudgets` nach der ersten
   Messung mit `make dev-release`.
 - Spalten als `LazyVStack`. Erwartete Größe: 40 bis 300 offene Tickets je Team. Erledigte Tickets werden nicht
@@ -205,16 +207,50 @@ ist das Risiko „fremde App nach jedem Build“ aus der Tabelle unten erledigt.
 
 - **Suite:** pure Typen und Speicher wie oben, Quelle gegen Fixtures, kein Netz in Tests. Abhängigkeiten über
   Closures und kleine Protokolle, Helfer in `AgentTestSupport.swift`.
-- **Snapshots:** `make snapshots ONLY=tickets` für Board, Backlog, Detail und die vier Leerzustände, hell und dunkel.
-- **Handtest nach `make dev`:**
-  1. Schalter an, Key eintragen, Projekt `whisperm8` dem Team `WM8` zuordnen: Board erscheint.
-  2. `ticket link` in einem Chat: Karte zeigt den Chat spätestens nach 30 Sekunden, der Punkt folgt dem Zustand
-     sofort.
-  3. Filter „Ohne Agent“ und „Nicht zugewiesen“ einzeln und kombiniert, Zählungen stimmen mit Linear.
-  4. „Zum Chat“ öffnet den richtigen Tab, „In Linear öffnen“ das richtige Ticket.
-  5. Netz aus: der letzte Stand bleibt stehen, das Alter ist sichtbar; Netz an: Abruf läuft wieder.
-  6. Ansicht verdeckt: im Log kein `tickets.fetch` mehr.
-  7. Schalter aus: kein Einstieg sichtbar, keine Verbindung zu Linear.
+- **Snapshots:** `make snapshots ONLY=tickets` für Board, Backlog, Detail und die Leerzustände, hell und dunkel.
+- **Bewusst anders als im Entwurf, bitte beim Handtest beurteilen:** Der Umschalter ist ein Ticket-Knopf in der
+  Titelzone neben dem Knopf für die Seitenleiste, nicht zwei Zeilen oben in der Seitenleiste (so bleibt er bei
+  verborgener Seitenleiste erreichbar). Es gibt kein Tastenkürzel. Der Modus wird nicht gespeichert: Nach einem
+  Neustart zeigt jedes Fenster Chats.
+- **Handtest nach `make dev`** (Einstellungen › Tickets, dann das Agent-Chats-Fenster):
+  1. Schalter aus: In der Titelzone steht kein Ticket-Knopf.
+  2. Schalter an: Der Ticket-Knopf steht neben dem Knopf für die Seitenleiste, auch bei verborgener
+     Seitenleiste. Ein Klick zeigt das Board des gewählten Projekts, ein zweiter wieder die Chats.
+  3. Projekt `whisperm8`: Board mit drei Spalten; Backlog über den Umschalter im Kopf. Die Zahlen an den Filtern
+     „Ohne Agent“ und „Nicht zugewiesen“ stimmen einzeln und kombiniert mit Linear.
+  4. Ein Projekt ohne Zuordnung wählen: „This project is not linked to a team“ mit Knopf zu den Einstellungen.
+     Dort zuordnen und zum Fenster zurück: Das Board erscheint ohne weiteren Klick.
+  5. `whisperm8 tickets link <Ticket>` in einem Chat: Die Karte zeigt den Chat nach dem nächsten Abruf,
+     spätestens nach 120 Sekunden oder sofort mit dem Knopf im Kopf. Der Punkt folgt dem Zustand des Chats
+     sofort (Chat arbeiten lassen, Chat wartet auf Freigabe). Einen neuen Chat starten oder umbenennen: Die
+     Leiste „Chats ohne Ticket“ zeigt das nach etwa zwei Sekunden, ohne Abruf.
+  6. Karte anklicken: Detail rechts, in einem schmalen Fenster über dem Inhalt; Escape schließt es. „Zum Chat“
+     öffnet den richtigen Tab und verlässt die Tickets, „In Linear öffnen“ das richtige Ticket im Browser.
+  7. Aus den Tickets heraus: Klick auf einen Chat in der Seitenleiste, auf einen Tab, auf einen Workspace, ⌘W.
+     Jedes Mal stehen wieder die Chats da; ⌘W schließt dabei keinen Tab.
+  8. Zurück zu den Tickets: Der letzte Stand steht sofort da, die Uhrzeit im Kopf springt kurz danach weiter.
+  9. Netz aus: Das Board bleibt stehen, eine Zeile nennt den Grund und die Uhrzeit des Stands. Netz an: Nach
+     spätestens 120 Sekunden oder mit dem Knopf im Kopf ist die Zeile weg.
+  10. Fenster minimieren oder ganz verdecken, fünf Minuten warten: Im Log gibt es kein `tickets.fetch` mehr
+      (`defaults write com.whisperm8.app agentPerfDetailEnabled -bool YES`, dann
+      `log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug`).
+  11. Mit Controller: Ein Chat wartet auf eine Freigabe, Tickets sind offen. Kreuz bestätigt die Freigabe nicht.
+  12. Schalter aus, während die Tickets offen sind: Das Fenster zeigt wieder Chats, der Knopf ist weg.
+  13. Tab-Leiste, weil sie für den Einstieg in eine eigene Datei gezogen ist (kein Verhalten geändert): einen Tab
+      an eine andere Stelle ziehen, eine Workspace-Gruppe ein- und ausklappen, Rechtsklick auf einen Tab öffnet
+      das gewohnte Menü.
+  14. Nach dem Zurückschalten aus den Tickets, einmal in der Einzelansicht und einmal im Raster: Der Inhalt des
+      Terminals steht da, die Rollposition stimmt, die Größe passt zum Fenster (kein abgeschnittener oder zu
+      schmaler Text), und Tippen kommt im Chat an.
+  15. Steuerkanal, während die Tickets offen sind: `whisperm8 chats focus <laufender Chat>` und
+      `whisperm8 workspace open <Name>` lassen die Tickets stehen; das Projekt des Boards wechselt nicht.
+      `whisperm8 chats start …` oder `chats resume …` zeigt den Chat (bekannte Grenze, er startet sonst nicht).
+      Steht das Board in einem zweiten Fenster, bleibt es dabei stehen. Nach `chats focus` auf einen Chat aus
+      einem anderen Projekt und dem Zurückschalten zeigt das Fenster diesen Chat, und „Neuer Chat“ zielt auf
+      dessen Projekt.
+  16. Diktat, während die Tickets offen sind: Der Text geht nicht in den verdeckten Chat. ⌃⌘Pfeil bei einem
+      Workspace hinter den Tickets: Nach dem Zurückschalten ist dieselbe Kachel fokussiert wie vorher.
+  17. Budget: `whisperm8 tickets doctor` zeigt je Team eine Zeile „Budget …“ mit Anfragen, Punkten und Rest.
 
 ## Offen
 
