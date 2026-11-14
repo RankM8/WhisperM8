@@ -786,10 +786,15 @@ enum TicketsCLIRunner {
             // Ohne Zugang steht der Fehler schon oben.
             guard usable.contains(workspace) else { continue }
             do {
+                let costBefore = LinearCostMeter.shared.snapshot
                 let snapshot = try await env.source(workspace).board(team: team)
                 let open = snapshot.tickets.filter { !$0.status.kind.isClosed }
                 checks.append(Check(name: "Team \(team)", ok: true,
                                     detail: "\(open.count) offene Tickets, \(open.filter { !$0.activeLinks.isEmpty }.count) mit Agent (\(workspace))"))
+                // Was ein Abruf des Boards kostet: Die Ansicht in der App holt ihn im Takt.
+                if let cost = LinearCostMeter.describe(from: costBefore, to: LinearCostMeter.shared.snapshot) {
+                    checks.append(Check(name: "Budget \(team)", ok: true, detail: cost))
+                }
                 checks += hygiene(team: team, tickets: snapshot.tickets, now: env.now())
                 checks += await areas(team: team, workspace: workspace, config: config, env)
             } catch {

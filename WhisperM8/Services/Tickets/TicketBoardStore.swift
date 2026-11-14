@@ -18,9 +18,21 @@ final class TicketBoardStore {
     private(set) var isLoading = false
     private(set) var team: String?
 
+    /// Takt, solange die Ansicht sichtbar ist. Jeder Abruf kostet mindestens
+    /// zwei Anfragen aus dem Stundenbudget des Keys (2.500), und derselbe Key
+    /// trägt jeden `tickets`-Befehl aller Chats. Startwert nach der Messung
+    /// vom 14.11.2026 (2 Anfragen, 140 Punkte je Abruf); siehe Feature-Doku.
+    static let defaultInterval: Duration = .seconds(120)
+    /// So lange ruht der Takt, nachdem Linear „Rate limited“ gemeldet hat.
+    static let rateLimitPause: TimeInterval = 15 * 60
+
     @ObservationIgnored private let source: TicketSource
     @ObservationIgnored private let interval: Duration
     @ObservationIgnored private let sleep: (Duration) async throws -> Void
+    @ObservationIgnored private let now: () -> Date
+    /// Bis dahin fragt der Takt nicht: Das Budget des Keys ist erschöpft, und
+    /// weiterzufragen nähme es auch den Chats. Der Knopf fragt trotzdem.
+    @ObservationIgnored private(set) var pausedUntil: Date?
     @ObservationIgnored private var loop: Task<Void, Never>?
     /// Für welches Team gerade ein Abruf läuft. Je Team, nicht ein Schalter:
     /// Nach einem Teamwechsel darf das neue Team sofort laden.
@@ -36,12 +48,14 @@ final class TicketBoardStore {
 
     init(
         source: TicketSource,
-        interval: Duration = .seconds(30),
-        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        interval: Duration = TicketBoardStore.defaultInterval,
+        sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        now: @escaping () -> Date = Date.init
     ) {
         self.source = source
         self.interval = interval
         self.sleep = sleep
+        self.now = now
     }
 
     /// Die Ansicht ist sichtbar: sofort laden, danach im Takt. Derselbe Aufruf
@@ -53,6 +67,7 @@ final class TicketBoardStore {
             snapshot = nil
             lastError = nil
         }
+        // `pausedUntil` bleibt: Das Budget gehört dem Key, nicht dem Team.
         self.team = team
         // Takt und Wartefunktion vorab kopieren: Während des Wartens soll die
         // Schleife den Speicher nicht am Leben halten.
@@ -60,7 +75,7 @@ final class TicketBoardStore {
         let sleep = sleep
         loop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
+                await self?.refresh(byTimer: true)
                 if self == nil { return }
                 do { try await sleep(interval) } catch { return }
             }
@@ -75,8 +90,11 @@ final class TicketBoardStore {
     }
 
     /// Ein Abruf sofort. Läuft für dieses Team schon einer, wird kein zweiter gestartet.
-    func refresh() async {
+    /// `byTimer`: Der Takt (und das Sichtbarwerden) fragt; während der Pause
+    /// nach „Rate limited“ entfällt das. Der Knopf im Kopf fragt immer.
+    func refresh(byTimer: Bool = false) async {
         guard let team else { return }
+        if byTimer, let pausedUntil, now() < pausedUntil { return }
         guard loadingTeam != team else {
             refreshWanted = true
             return
@@ -95,7 +113,7 @@ final class TicketBoardStore {
             onChange?()
             if wasCancelled, refreshWanted, self.team == team, loop != nil {
                 // Eigene Task: Diese hier ist abgebrochen.
-                Task { [weak self] in await self?.refresh() }
+                Task { [weak self] in await self?.refresh(byTimer: true) }
             }
         }
         do {
@@ -105,10 +123,12 @@ final class TicketBoardStore {
             guard self.team == team else { return }
             snapshot = fresh
             lastError = nil
+            pausedUntil = nil
         } catch is CancellationError {
             // Ansicht geschlossen: kein Fehler, der letzte Stand bleibt.
             wasCancelled = true
         } catch let error as TicketSourceError {
+            if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }
             guard self.team == team else { return }
             lastError = error
         } catch {

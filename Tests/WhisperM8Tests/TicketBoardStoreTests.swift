@@ -199,6 +199,75 @@ final class TicketBoardStoreTests: XCTestCase {
         var count: Int { lock.lock(); defer { lock.unlock() }; return value }
     }
 
+    // MARK: Budget bei Linear
+
+    func testDefaultIntervalSparesTheHourlyBudget() {
+        // Jeder Abruf kostet mindestens zwei von 2.500 Anfragen je Stunde und Key.
+        XCTAssertEqual(TicketBoardStore.defaultInterval, .seconds(120))
+    }
+
+    func testRateLimitPausesTheTimerButNotTheButton() async {
+        let source = TicketSourceStub()
+        let gate = Gate()
+        let clock = Clock()
+        let attempts = Attempts()
+        source.onBoard = { _ in
+            _ = attempts.next()
+            throw TicketSourceError.rateLimited
+        }
+        let store = TicketBoardStore(source: source, interval: .seconds(120), sleep: gate.sleep, now: { clock.now })
+        store.activate(team: "WM8")
+        await settle { store.lastError == .rateLimited && gate.count == 1 }
+        XCTAssertEqual(attempts.count, 1)
+        XCTAssertEqual(store.pausedUntil, clock.now.addingTimeInterval(TicketBoardStore.rateLimitPause))
+
+        // Der Takt läuft weiter, fragt aber nicht.
+        for round in 2...4 {
+            gate.release()
+            await settle { gate.count == round }
+        }
+        XCTAssertEqual(attempts.count, 1, "während der Pause keine Anfrage")
+
+        // Verdecken und wieder zeigen fragt ebenfalls nicht.
+        store.deactivate()
+        store.activate(team: "WM8")
+        await settle { gate.count == 5 }
+        XCTAssertEqual(attempts.count, 1)
+
+        // Der Knopf fragt trotzdem: einmal, auf Wunsch des Nutzers.
+        await store.refresh()
+        XCTAssertEqual(attempts.count, 2)
+
+        // Nach der Pause fragt der Takt wieder.
+        clock.advance(TicketBoardStore.rateLimitPause * 2 + 1)
+        gate.release()
+        await settle { attempts.count == 3 }
+    }
+
+    func testSuccessEndsThePause() async {
+        let source = TicketSourceStub()
+        let gate = Gate()
+        let attempts = Attempts()
+        source.onBoard = { _ in
+            if attempts.next() == 1 { throw TicketSourceError.rateLimited }
+            return TicketFixtures.snapshot([TicketFixtures.ticket(1)], at: 5)
+        }
+        let store = TicketBoardStore(source: source, interval: .seconds(120), sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { store.pausedUntil != nil }
+        await store.refresh()
+        XCTAssertNil(store.pausedUntil)
+        XCTAssertNil(store.lastError)
+        XCTAssertNotNil(store.snapshot)
+    }
+
+    private final class Clock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = Date(timeIntervalSince1970: 1_000)
+        var now: Date { lock.lock(); defer { lock.unlock() }; return value }
+        func advance(_ seconds: TimeInterval) { lock.lock(); value.addTimeInterval(seconds); lock.unlock() }
+    }
+
     func testRefreshWithoutTeamDoesNothing() async {
         let source = TicketSourceStub()
         let store = TicketBoardStore(source: source)

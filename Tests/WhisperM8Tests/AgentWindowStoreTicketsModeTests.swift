@@ -97,6 +97,33 @@ final class AgentWindowStoreTicketsModeTests: XCTestCase {
         XCTAssertFalse(store.isTicketsMode(in: window))
     }
 
+    func testControlChannelNavigationKeepsTickets() {
+        let store = makeStore()
+        let window = store.primaryWindowID
+        let chats = [UUID(), UUID()]
+        let workspace = store.createGridWorkspace(name: "Zwei", slots: chats)
+        store.setTicketsMode(true, in: window)
+
+        // `whisperm8 chats focus` und `workspace open`: Die Auswahl wechselt, die Tickets bleiben.
+        store.keepingTicketsMode { store.navigateToSession(chats[0], in: window) }
+        XCTAssertEqual(store.selectedSession(in: window), chats[0])
+        XCTAssertTrue(store.isTicketsMode(in: window))
+        _ = store.keepingTicketsMode { store.activateGridWorkspace(workspace, in: window) }
+        XCTAssertTrue(store.isTicketsMode(in: window))
+
+        // Danach gilt wieder die normale Regel.
+        store.navigateToSession(chats[1], in: window)
+        XCTAssertFalse(store.isTicketsMode(in: window))
+    }
+
+    func testUserToggleWorksWhileControlChannelHolds() {
+        let store = makeStore()
+        let window = store.primaryWindowID
+        store.setTicketsMode(true, in: window)
+        store.keepingTicketsMode { store.setTicketsMode(false, in: window) }
+        XCTAssertFalse(store.isTicketsMode(in: window), "der Knopf schaltet immer")
+    }
+
     func testSelectionThatOnlyMovesUpKeepsTickets() {
         let store = makeStore()
         let window = store.primaryWindowID

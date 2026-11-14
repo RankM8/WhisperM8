@@ -73,6 +73,8 @@ final class AgentWindowStore {
     /// Fenster, die statt der Chats die Ticket-Ansicht zeigen. Flüchtig.
     /// Geschrieben nur von `AgentWindowStore+Tickets`.
     var ticketsModeWindowIDs: Set<UUID> = []
+    /// Über null, solange eine Auswahl aus dem Steuerkanal läuft (`keepingTicketsMode`).
+    @ObservationIgnored var ticketsModeHoldDepth = 0
 
     /// Offene Tabs ALLER Fenster zum App-Start — Snapshot BEVOR Restore/
     /// User-Interaktion den State verändern. Basis des Summary-Start-Abgleichs
@@ -136,7 +138,7 @@ final class AgentWindowStore {
     /// selektiert ihn. Die globale Eindeutigkeit (Session nur in EINEM Fenster)
     /// stellt `AgentUIState` ueber `upsertWindow` her.
     func openTab(_ sessionID: UUID, in windowID: UUID, select: Bool = true) {
-        if select { setTicketsMode(false, in: windowID) }
+        if select { leaveTicketsForNavigation(in: windowID) }
         updateWindow(windowID) { window in
             if !window.openTabIDs.contains(sessionID) {
                 window.openTabIDs.append(sessionID)
@@ -153,7 +155,7 @@ final class AgentWindowStore {
     /// (`nil` deselektiert). Bridge fuer die bisherigen `selectedSessionID = …`
     /// Aufrufstellen, die teils auch erst einen Chat oeffnen.
     func setSelectedSession(_ sessionID: UUID?, in windowID: UUID) {
-        if sessionID != nil { setTicketsMode(false, in: windowID) }
+        if sessionID != nil { leaveTicketsForNavigation(in: windowID) }
         updateWindow(windowID) { window in
             guard let sessionID else { window.selectedSessionID = nil; return }
             if !window.openTabIDs.contains(sessionID) { window.openTabIDs.append(sessionID) }
@@ -886,7 +888,7 @@ final class AgentWindowStore {
         if let owner = self.windowID(owningGridWorkspace: workspaceID), owner != windowID {
             return .alreadyActive(ownerWindowID: owner)
         }
-        setTicketsMode(false, in: windowID)
+        leaveTicketsForNavigation(in: windowID)
 
         // Fremd-gehostete Slots ermitteln (werden NICHT materialisiert).
         var foreignHosted = Set<UUID>()
@@ -935,7 +937,7 @@ final class AgentWindowStore {
     /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt
     /// wieder her), Slots bleiben unverändert.
     func showSingleSession(_ sessionID: UUID, in windowID: UUID) {
-        setTicketsMode(false, in: windowID)
+        leaveTicketsForNavigation(in: windowID)
         updateWindow(windowID) { window in
             if !window.openTabIDs.contains(sessionID) {
                 window.openTabIDs.append(sessionID)
@@ -957,7 +959,7 @@ final class AgentWindowStore {
     /// Switcher bietet solche Slots ohnehin nicht an).
     func showSingleSessionFollowingGridFocus(_ sessionID: UUID, in windowID: UUID) {
         if let host = self.windowID(containingTab: sessionID), host != windowID { return }
-        setTicketsMode(false, in: windowID)
+        leaveTicketsForNavigation(in: windowID)
         let isWorkspaceMember = activeGridWorkspace(in: windowID)?.slotIndex(of: sessionID) != nil
         updateWindow(windowID) { window in
             if !window.openTabIDs.contains(sessionID) {
@@ -980,7 +982,7 @@ final class AgentWindowStore {
     /// verwenden (Review-Finding: das konnte im sichtbaren Grid einen
     /// Nicht-Slot selektieren).
     func navigateToSession(_ sessionID: UUID, in windowID: UUID) {
-        setTicketsMode(false, in: windowID)
+        leaveTicketsForNavigation(in: windowID)
         if let entity = activeGridWorkspace(in: windowID),
            window(for: windowID).showsGrid,
            entity.slotIndex(of: sessionID) != nil {

@@ -19,6 +19,12 @@ struct TicketBoardEnvironment {
     var makeStore: @MainActor (_ workspace: String) -> TicketBoardStore
     /// Chats dieser Installation, ohne Zustand (den liefern die Status-Punkte).
     var chats: @MainActor () -> [TicketChat]
+    /// Meldet sich einmal, sobald sich an den Chats etwas geändert haben
+    /// kann. Danach meldet sich die Ansicht neu an.
+    var whenChatsChange: @MainActor (_ notify: @escaping @MainActor () -> Void) -> Void = { _ in }
+    /// Ruhezeit, bevor eine Änderung an den Chats abgeglichen wird: Der
+    /// Workspace ändert sich in Schüben.
+    var chatsSettle: @Sendable () async -> Void = { try? await Task.sleep(for: .seconds(2)) }
 
     @MainActor static let live = TicketBoardEnvironment(
         resolve: { projectPath in
@@ -44,6 +50,13 @@ struct TicketBoardEnvironment {
                     id: session.id, title: session.title, projectName: project.name,
                     projectPath: project.path, state: nil,
                     isRunning: AgentTerminalRegistry.shared.controller(for: session.id)?.isRunning == true)
+            }
+        },
+        whenChatsChange: { notify in
+            withObservationTracking {
+                _ = AgentWorkspaceUIModel.shared.workspace
+            } onChange: {
+                Task { @MainActor in notify() }
             }
         }
     )
@@ -89,6 +102,10 @@ final class TicketBoardController {
     @ObservationIgnored private var buildSequence = 0
     /// Steht im `viewModel` schon ein Abgleich dieses Projekts?
     @ObservationIgnored private var hasModel = false
+    /// Mit welchen Chats zuletzt abgeglichen wurde.
+    @ObservationIgnored private var builtWith: [TicketChat]?
+    @ObservationIgnored private var watchesChats = false
+    @ObservationIgnored private var chatsTask: Task<Void, Never>?
     @ObservationIgnored private var isVisible = false
 
     init(environment: TicketBoardEnvironment) {
@@ -137,6 +154,7 @@ final class TicketBoardController {
             }
             store.activate(team: team)
             storeChanged(store)
+            watchChats()
         }
     }
 
@@ -146,6 +164,7 @@ final class TicketBoardController {
         generation += 1
         isVisible = false
         active?.store.deactivate()
+        chatsTask?.cancel()
     }
 
     func refresh() {
@@ -157,6 +176,7 @@ final class TicketBoardController {
         active?.store.deactivate()
         active = nil
         builtFor = nil
+        builtWith = nil
         buildSequence += 1
         hasModel = false
         viewModel.reset()
@@ -174,12 +194,16 @@ final class TicketBoardController {
         }
         if load.fetchedAt != snapshot.fetchedAt { load.fetchedAt = snapshot.fetchedAt }
         if hasModel, phase != .ready { phase = .ready }
-        guard builtFor != snapshot.fetchedAt else { return }
-        builtFor = snapshot.fetchedAt
-        // Die Liste der Chats wird mit jedem Abzug neu gelesen (alle 30 Sekunden);
-        // ihren Zustand liefern die Status-Punkte selbst, ohne Abgleich.
+        match(snapshot, projectPath: active.projectPath)
+    }
+
+    /// Gleicht den Abzug mit den Chats ab, wenn einer von beiden neu ist. Den
+    /// Zustand der Chats liefern die Status-Punkte selbst, ohne Abgleich.
+    private func match(_ snapshot: TicketBoardSnapshot, projectPath: String) {
         let chats = PerfBudgets.ticketsChats.withInterval { environment.chats() }
-        let projectPath = active.projectPath
+        guard builtFor != snapshot.fetchedAt || builtWith != chats else { return }
+        builtFor = snapshot.fetchedAt
+        builtWith = chats
         buildSequence += 1
         let sequence = buildSequence
         Task { [weak self] in
@@ -193,6 +217,33 @@ final class TicketBoardController {
             self.viewModel.update(model)
             self.hasModel = true
             if self.phase != .ready { self.phase = .ready }
+        }
+    }
+
+    /// Ein neuer Chat, ein neuer Titel, ein beendeter Chat: Die Karten sollen
+    /// das zeigen, ohne auf den nächsten Abruf bei Linear zu warten.
+    private func watchChats() {
+        guard !watchesChats else { return }
+        watchesChats = true
+        environment.whenChatsChange { [weak self] in
+            guard let self else { return }
+            self.watchesChats = false
+            self.chatsMayHaveChanged()
+        }
+    }
+
+    private func chatsMayHaveChanged() {
+        // Verdeckt: nichts tun. Beim nächsten Zeigen meldet `show` neu an und gleicht ab.
+        guard isVisible else { return }
+        chatsTask?.cancel()
+        let settle = environment.chatsSettle
+        chatsTask = Task { [weak self] in
+            await settle()
+            guard let self, !Task.isCancelled, self.isVisible else { return }
+            // Erst wieder anmelden, dann lesen: Was dazwischen geschieht, geht nicht verloren.
+            self.watchChats()
+            guard let active = self.active, let snapshot = active.store.snapshot else { return }
+            self.match(snapshot, projectPath: active.projectPath)
         }
     }
 }

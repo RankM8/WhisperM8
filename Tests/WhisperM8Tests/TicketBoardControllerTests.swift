@@ -17,6 +17,19 @@ final class TicketBoardControllerTests: XCTestCase {
         private var ticks: [CheckedContinuation<Void, Error>] = []
         let source = TicketSourceStub()
         var chats: [TicketChat] = []
+        /// Angemeldete Beobachter der Chat-Liste; `chatsChanged()` ruft sie einmal.
+        private var chatObservers: [@MainActor () -> Void] = []
+        private var _chatSubscriptions = 0
+        var chatSubscriptions: Int { lock.lock(); defer { lock.unlock() }; return _chatSubscriptions }
+
+        @MainActor func chatsChanged() {
+            lock.lock(); let pending = chatObservers; chatObservers = []; lock.unlock()
+            pending.forEach { $0() }
+        }
+
+        private func subscribe(_ notify: @escaping @MainActor () -> Void) {
+            lock.lock(); chatObservers.append(notify); _chatSubscriptions += 1; lock.unlock()
+        }
         /// Hält die Auflösung der Zuordnung an, bis `releaseResolve()` kommt.
         private var holdResolve = false
         private var heldResolves: [CheckedContinuation<Void, Never>] = []
@@ -94,7 +107,9 @@ final class TicketBoardControllerTests: XCTestCase {
                     lock.lock(); _madeStores.append(workspace); lock.unlock()
                     return TicketBoardStore(source: source, interval: .seconds(30), sleep: { [self] in try await sleep($0) })
                 },
-                chats: { [self] in chats }
+                chats: { [self] in chats },
+                whenChatsChange: { [self] notify in subscribe(notify) },
+                chatsSettle: {}
             )
         }
     }
@@ -253,6 +268,48 @@ final class TicketBoardControllerTests: XCTestCase {
         await settle { controller.phase == .ready }
         controller.viewModel.selectedKey = "WM8-7"
         XCTAssertEqual(controller.viewModel.detail?.localChatID, chatID)
+    }
+
+    func testChangedChatsAreMatchedWithoutAFetch() async {
+        let chatID = UUID()
+        let world = readyWorld(tickets: [TicketFixtures.ticket(7, status: "In Progress", links: [TicketFixtures.link(chatID)])])
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        controller.viewModel.selectedKey = "WM8-7"
+        XCTAssertNil(controller.viewModel.detail?.localChatID, "der Chat ist auf diesem Rechner noch unbekannt")
+        XCTAssertEqual(world.chatSubscriptions, 1)
+
+        // Der Chat taucht im Workspace auf.
+        world.chats = [TicketChat(id: chatID, title: "WM8-7 Jon", projectName: "whisperm8", projectPath: projectA, state: nil, isRunning: true)]
+        world.chatsChanged()
+        await settle { controller.viewModel.detail?.localChatID == chatID }
+        XCTAssertEqual(boards(world), 1, "kein neuer Abruf bei Linear")
+        XCTAssertEqual(world.chatSubscriptions, 2, "danach wieder angemeldet")
+
+        // Eine Änderung ohne Folgen für die Chats rechnet nichts neu.
+        let rebuilds = controller.viewModel.rebuilds
+        world.chatsChanged()
+        await settle { world.chatSubscriptions == 3 }
+        XCTAssertEqual(controller.viewModel.rebuilds, rebuilds)
+    }
+
+    func testChatChangesWhileHiddenArePickedUpOnShow() async {
+        let chatID = UUID()
+        let world = readyWorld(tickets: [TicketFixtures.ticket(7, status: "In Progress", links: [TicketFixtures.link(chatID)])])
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        controller.viewModel.selectedKey = "WM8-7"
+        controller.hide()
+
+        world.chats = [TicketChat(id: chatID, title: "WM8-7 Jon", projectName: "whisperm8", projectPath: projectA, state: nil, isRunning: true)]
+        world.chatsChanged()
+        try? await Task.sleep(for: .milliseconds(30))
+        XCTAssertNil(controller.viewModel.detail?.localChatID, "verdeckt wird nicht abgeglichen")
+
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.viewModel.detail?.localChatID == chatID }
     }
 
     // MARK: Projektwechsel

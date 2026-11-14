@@ -1070,17 +1070,18 @@ struct AgentChatsView: View {
             // Kontext-Projekt folgt der Selektion — Tabs sind global, das
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
             // (Persistenz erledigt der Store automatisch bei jeder Mutation.)
-            if let sessionID = newValue,
+            if let sessionID = newValue, !isTicketsModeActive,
                let session = workspace.sessions.first(where: { $0.id == sessionID }) {
                 selectedProjectID = session.projectID
             }
             // Subagent-Ergebnis gilt mit der Selektion als gelesen (No-op
             // für alles, was nicht als unread markiert ist).
-            if let sessionID = newValue {
+            if let sessionID = newValue, !isTicketsModeActive {
                 windowStore.clearSubagentUnread(sessionID)
             }
             updateActiveBackgroundTrackerIfNeeded()
         }
+        .onChange(of: isTicketsModeActive) { _, _ in syncActiveAgentChat() }
         .onChange(of: selectedProjectID) { _, _ in
             syncActiveAgentChat()
         }
@@ -1317,7 +1318,9 @@ struct AgentChatsView: View {
         // key ist (Review-Finding: Hintergrund-Mutationen kaperten sonst
         // das Ziel).
         if let route = windowStore.dictationWindowID, route != windowID { return }
-        guard let project = selectedProject,
+        // Hinter den Tickets ist kein Chat „vor mir“: kein Diktat-Ziel.
+        guard !isTicketsModeActive,
+              let project = selectedProject,
               let session = selectedSession,
               session.status != .archived
         else {

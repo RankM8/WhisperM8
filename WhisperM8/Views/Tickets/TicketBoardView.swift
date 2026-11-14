@@ -14,7 +14,7 @@ struct TicketBoardActions {
 }
 
 /// Stand des letzten Abrufs. Nur die Zeile im Kopf und die Störungs-Zeile
-/// lesen hier: Ein Abruf, der alle 30 Sekunden beginnt und endet, wertet
+/// lesen hier: Ein Abruf, der im Takt beginnt und endet, wertet
 /// deshalb weder Board noch Karten neu aus.
 @MainActor
 @Observable

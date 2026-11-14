@@ -25,6 +25,21 @@ struct LinearTicketSource: TicketSource {
     inverseRelations(first: 20) { nodes { type issue { state { type } } } }
     """
 
+    /// Felder für das Board, das im Takt geholt wird: kleinere Listen als beim
+    /// einzelnen Ticket. Von den Anhängen zählen nur die Verknüpfungen mit
+    /// Chats (`$prefix`), die Karte zeigt höchstens zwei Labels, und für
+    /// „blockiert“ reicht eine Handvoll Beziehungen.
+    static let boardFields = """
+    id identifier title description priority url updatedAt
+    state { id name type position }
+    project { name }
+    projectMilestone { name }
+    assignee { id name }
+    labels(first: 8) { nodes { name } }
+    attachments(first: 8, filter: { url: { startsWith: $prefix } }) { nodes { id title subtitle url metadata creator { name } } }
+    inverseRelations(first: 6) { nodes { type issue { state { type } } } }
+    """
+
     static let closedTypes = ["completed", "canceled", "duplicate"]
 
     func board(team: String) async throws -> TicketBoardSnapshot {
@@ -34,7 +49,7 @@ struct LinearTicketSource: TicketSource {
           closed: issues(first: 100, orderBy: updatedAt, filter: {
             team: { key: { eq: $team } }, state: { type: { in: $closed } },
             attachments: { some: { url: { startsWith: $prefix } } }
-          }) { nodes { \(Self.ticketFields) } }
+          }) { nodes { \(Self.boardFields) } }
         }
         """, variables: ["team": team, "closed": Self.closedTypes, "prefix": TicketChatLinkFormat.urlPrefix])
         guard let teamNode = Self.nodes(head["teams"]).first else {
@@ -44,13 +59,13 @@ struct LinearTicketSource: TicketSource {
 
         var cursor: String?
         for _ in 0..<maxPages {
-            var variables: [String: Any] = ["team": team, "closed": Self.closedTypes]
+            var variables: [String: Any] = ["team": team, "closed": Self.closedTypes, "prefix": TicketChatLinkFormat.urlPrefix]
             if let cursor { variables["after"] = cursor }
             let page = try await client.run("""
-            query($team: String!, $closed: [String!]!, $after: String) {
+            query($team: String!, $closed: [String!]!, $prefix: String!, $after: String) {
               issues(first: 100, after: $after, filter: {
                 team: { key: { eq: $team } }, state: { type: { nin: $closed } }
-              }) { nodes { \(Self.ticketFields) } pageInfo { hasNextPage endCursor } }
+              }) { nodes { \(Self.boardFields) } pageInfo { hasNextPage endCursor } }
             }
             """, variables: variables)
             let issues = page["issues"] as? [String: Any] ?? [:]
