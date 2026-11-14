@@ -19,8 +19,7 @@ Stand: 14.11.2026 (Kasten nach WM8-99). Plan, Prototyp-Messwerte und Entscheidun
   wartet oder fertig ist.
 
 ```
-╭──────────────────────────────────────────────────────────────────────╮
-│ Jarvis · 3 warten auf dich                                           │
+╭─ Jarvis · 3 warten auf dich ─────────────────────────────────────────╮
 │ ● Ida  AKQ     Frage: Wie läuft das Aufräumen?                       │
 │ ● Nia  DS      Ja zu den Projekten in Linear                         │
 │ ● Jon  WM8-81  Drei Handgriffe am Ticket-Board                       │
@@ -32,32 +31,36 @@ Seit WM8-99 (14.11.2026) gilt für das Aussehen:
 
 - **Rahmen:** rund, seine Farbe ist die Gesamtampel. Rot, sobald ein Chat
   wartet; grün, wenn keiner wartet und einer fertig ist; sonst grau. Der Kopf
-  („Jarvis · 3 warten auf dich“) ist die erste Zeile im Rahmen. In der
-  Rahmenlinie selbst kann er nicht stehen: Die Box der Mod-Schnittstelle
-  kennt keinen Titel im Rahmen, und ein von Hand gezeichneter Rahmen verrutscht
-  bei breiten Zeichen und außerhalb des Terminals.
+  („Jarvis · 3 warten auf dich“) steht in der oberen Rahmenlinie und kostet
+  keine Zeile.
 - **Wartende Chats** (Ampel `needsYou`) haben je genau eine Zeile: Punkt,
   Rufname, Ticket oder Bereich, Anliegen. Rufname und Ticket kommen aus dem
   Chat-Titel („WM8-81 Jon · Ticket-Board“). Ohne Ticket steht der Bereich da,
   der Teil des Themas vor dem Doppelpunkt („Vic · Neustart: Gesamt-Review“ →
   „Neustart“); endet er auf ein Team-Kürzel, gilt das Kürzel („Produkt AKQ“ →
-  „AKQ“). Ohne „·“ ist der ganze Titel der Name. Die Spalten sind so breit
-  wie ihr längster Wert, höchstens 12 und 10 Zeichen (unter 60 Spalten 8 und
-  7). Was nicht passt, endet auf „…“; umbrochen wird nichts.
+  „AKQ“). Ein Thema ohne Doppelpunkt ist nur als einzelnes Wort ein Bereich
+  („Kai · Umzug“ → „Umzug“), ein Satz nicht; die Spalte bleibt dann leer.
+  Ohne „·“ ist der ganze Titel der Name. Die Spalten sind so breit wie ihr
+  längster Wert, höchstens 12 und 10 Zeichen (ist der Kasten schmaler als 64
+  Spalten, 8 und 7). Was nicht passt, endet auf „…“; umbrochen wird nichts.
 - **Alle anderen** stehen in einer einzigen Sammelzeile, nur mit Rufnamen:
   „läuft“ (Ampel `running`), „fertig“ (`done`, Abnahme offen) und „ruht“
   (`parked`). Leere Gruppen fehlen. Passt die Zeile nicht, gibt die Gruppe
   mit den meisten Namen hinten welche ab; der Rest steht als „+n“. Ein ⚑ vor
-  einem Namen heißt, dass der Chat selbst auf eine Antwort wartet, Jarvis ihn
-  aber noch nicht als wartend eingetragen hat.
+  einem Namen heißt, dass der Chat selbst gerade auf eine Antwort wartet
+  (Status `awaitingInput`), auf dem Board aber nicht als wartend steht. Solche
+  Namen stehen in ihrer Gruppe vorn und fallen zuletzt in „+n“.
 - **Ohne wartende Chats** steht nur die Sammelzeile im Rahmen, ohne Kopf.
   Ein leeres Board zeichnet nichts.
 - **Wenig Platz:** Der Kasten bleibt in jeder Höhe innerhalb der Zeilen, die
   Claude Code ihm gibt (`maxRows`), sonst hinterlässt der Hauptbildschirm
-  Reste. Voll braucht er zwei Zeilen Rahmen, den Kopf, je Wartendem eine
-  Zeile und die Sammelzeile. Reicht das nicht, fällt erst die Sammelzeile weg
-  (ihre Zahlen stehen dann im Kopf), dann von hinten die Wartenden (der Kopf
-  zählt sie: „+1 nicht gezeigt“), unter vier Zeilen der Rahmen.
+  Reste. Voll braucht er zwei Zeilen Rahmen, je Wartendem eine Zeile und die
+  Sammelzeile. Reicht das nicht, weicht zuerst der Rahmen (der Kopf wird dann
+  eine eigene Zeile), danach die Sammelzeile (ihre Zahlen stehen dann im
+  Kopf), zuletzt von hinten die Wartenden (der Kopf zählt sie: „+1 nicht
+  gezeigt“). Wer den User braucht, weicht nie dem Schmuck. Ohne Wartende hat
+  die Sammelzeile ab drei Zeilen ihren Rahmen. Ist der Kasten schmaler als 24
+  Spalten, hat er nie einen.
 - **Unbekannte Ampel:** Ein Eintrag mit einem Ampelwert, den die Mod nicht
   kennt (neuere CLI), steht unter „ruht“ statt zu verschwinden.
 - **Als Ticket** gelten nur die bekannten Schlüssel (WM8, DS, DEAL, DEA, AKQ,
@@ -73,8 +76,8 @@ die Sammelzeile nennt nur Rufnamen. Zwischen WM8-88 und WM8-99 (wenige
 Stunden am 14.11.2026) hatte der Kasten keinen Rahmen und zeigte das Anliegen
 als umbrochenen Satz in einer zweiten Zeile.
 
-**Für Supervisoren:** Das Anliegen (`needs`) in wenigen Wörtern schreiben. In
-einer Kachel mit 50 Spalten bleiben dafür etwa 30 Zeichen, bei 72 Spalten
+**Für Supervisoren:** Das Anliegen (`needs`) in wenigen Wörtern schreiben. Ist
+der Kasten 50 Spalten breit, bleiben dafür etwa 30 Zeichen, bei 72 Spalten
 etwa 50.
 
 ## Bedienung
@@ -83,14 +86,14 @@ etwa 50.
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
-| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 laufen · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
+| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 laufen · 1 fertig · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis und Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (User muss entscheiden), `done` (Abnahme offen),
 `running`, `parked` (bewusst angehalten). Innerhalb einer Gruppe steht der
 älteste Eintrag zuerst. Bis WM8-88 gab es Ziffern-Knöpfe zum Öffnen der Tabs;
 eine Ziffer im leeren Prompt fängt die Mod nicht mehr ab. Eingeklappt steht
-eine Zeile ohne Rahmen, fertige Chats zählen dort zu „ruht“.
+eine Zeile ohne Rahmen mit den Zahlen der Gruppen.
 
 ## Wie es funktioniert
 
@@ -153,11 +156,24 @@ mehreren Boards stehen (`otherOwners`).
   `ui.render`-Hook setzt das Ergebnis nur noch in Box und Text um. Den Rahmen
   zieht die Box (`borderStyle="round"`, ein Zeichen Innenabstand), der Inhalt
   ist deshalb vier Spalten schmaler als der Kasten. Jede Zeile ist schon
-  vorher auf diese Breite gekürzt; Steuerzeichen und Zeilenumbrüche aus dem
-  Board fallen vorher weg. Die Blockade eines laufenden Chats zeigt der
-  Kasten nicht; sie steht in der Notiz-Karte. Keine Statuszeile: Claude Code
-  setzt „⚠“ vor jede Plugin-Statuszeile, sie sah nach einer Warnung aus und
-  wiederholte nur den Kasten.
+  vorher auf diese Breite gekürzt, nach Codepoints, damit kein Emoji halbiert
+  wird; Steuerzeichen und Zeilenumbrüche aus dem Board fallen vorher weg.
+  Breite Zeichen (Emoji, CJK) kürzt zusätzlich das Terminal selbst
+  (`wrap="truncate-end"`), der Rahmen bleibt dabei gerade.
+- **Kopf in der Rahmenlinie:** Die Box der Mod-Schnittstelle kennt keinen
+  Titel im Rahmen. Der Kopf ist deshalb eine eigene Box mit
+  `position="absolute"` (`top={0}`, `left={2}`), die als Geschwister NACH der
+  gerahmten Box steht und so über deren obere Linie malt, ohne etwas zu
+  verschieben. Als Kind der gerahmten Box (mit `top={-1}`) übermalt ihn der
+  Rahmen; beides ist an der laufenden CLI ausprobiert (2.1.325, 14.11.2026).
+  Ein zu langer Kopf überschriebe die rechte Ecke; der Plan kürzt ihn so, dass
+  rechts „─╮“ stehen bleibt. Ändert eine spätere Claude-Code-Version das
+  Übermalen, fehlt schlimmstenfalls der Kopf in der Linie; die Zeilen darunter
+  hängen nicht daran.
+- **Nicht im Kasten:** Die Blockade eines laufenden Chats steht in der
+  Notiz-Karte. Keine Statuszeile: Claude Code setzt „⚠“ vor jede
+  Plugin-Statuszeile, sie sah nach einer Warnung aus und wiederholte nur den
+  Kasten.
 - **Kein Detail-Panel mehr (seit 23.10.2026):** Früher hat `/board` ein Pane
   mit Ziel, Meilensteinen und Knöpfen geöffnet. In App-Sessions zeigt Claude so
   ein Pane aber nicht daneben, sondern als zweiten Kasten über dem Band. Alle
