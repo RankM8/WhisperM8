@@ -463,37 +463,96 @@ export const clipToRows = (text: string, width: number, rows: number) => {
   return kept.join(' ')
 }
 
-/** Ein Wartender im Kasten: Eintrag und der Satz, wie er gezeigt wird. */
+/** Ein Wartender im Kasten: Eintrag und der Satz, wie er gezeigt wird ('' = ohne Satzzeile). */
 export type WaitingRow = { entry: BoardEntry; sentence: string }
 
 /**
- * Welche Wartenden in `maxRows` Zeilen passen. Je Wartendem: Abstand,
- * Kopfzeile und der umbrochene Satz. `fixed` = Zeilen außerhalb (Kopf,
- * Abstand, Sammelzeilen). Der erste Wartende steht immer da, sein Satz wird
- * notfalls gekürzt; wer danach nicht mehr passt, zählt in `hidden`.
+ * Welche Wartenden in `maxRows` Zeilen passen. Je Wartendem `perEntry`
+ * Zeilen (Abstand und Kopfzeile) plus der umbrochene Satz. `fixed` = Zeilen
+ * außerhalb (Kopf, Abstand, Sammelzeilen). Der erste Wartende steht immer
+ * da, sein Satz wird notfalls gekürzt oder weggelassen; wer danach nicht
+ * mehr passt, zählt in `hidden`.
  */
-export const layoutWaiting = (waiting: readonly BoardEntry[], cols: number, maxRows: number, fixed: number) => {
+export const layoutWaiting = (
+  waiting: readonly BoardEntry[], cols: number, maxRows: number, fixed: number, perEntry = 2,
+) => {
   const textWidth = Math.max(10, cols - 2)
   let budget = Math.max(0, maxRows - fixed)
   const rows: WaitingRow[] = []
   for (const entry of waiting) {
     const sentence = clean(say(entry))
-    const need = 2 + wrapRows(sentence, textWidth)
+    const need = perEntry + wrapRows(sentence, textWidth)
     if (need <= budget) {
       rows.push({ entry, sentence })
       budget -= need
       continue
     }
-    if (rows.length === 0) {
-      // Der Erste immer, notfalls mit gekürztem Satz.
-      const room = Math.max(1, budget - 2)
-      rows.push({ entry, sentence: clipToRows(sentence, textWidth, room) })
+    if (rows.length === 0 && budget >= perEntry) {
+      const room = budget - perEntry
+      rows.push({ entry, sentence: room >= 1 ? clipToRows(sentence, textWidth, room) : '' })
       budget = 0
     }
     break
   }
   return { rows, hidden: waiting.length - rows.length, textWidth }
 }
+
+/** Aufbau des Kastens für eine Höhe: was gezeigt wird und was wegfällt. */
+export type BoxPlan = {
+  rows: WaitingRow[]
+  hidden: number
+  textWidth: number
+  /** Leerzeilen zwischen den Blöcken. */
+  gaps: boolean
+  /** Sammelzeilen „läuft“ und „ruht“; sonst stehen ihre Zahlen im Kopf. */
+  summaries: boolean
+  /** Zahlen der Sammelzeilen im Kopf, wenn diese wegfallen. */
+  headCounts: string[]
+  /** Kopfzeile „Jarvis · …“. */
+  head: boolean
+}
+
+/**
+ * Der Kasten bleibt in jeder Höhe innerhalb von `maxRows` (Vic, WM8-88): Der
+ * Hauptbildschirm hinterlässt sonst Reste. Reicht der Platz nicht, fallen
+ * erst die Abstände weg, dann die Sammelzeilen (ihre Zahlen wandern in den
+ * Kopf), dann die Sätze; zuletzt steht nur der Kopf.
+ */
+export const layoutBox = (
+  waiting: readonly BoardEntry[], running: readonly BoardEntry[], resting: readonly BoardEntry[],
+  cols: number, maxRows: number,
+): BoxPlan => {
+  const k = (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
+  const counts = [
+    running.length > 0 ? countWord(running.length, 'läuft', 'laufen') : '',
+    resting.length > 0 ? countWord(resting.length, 'ruht', 'ruhen') : '',
+  ].filter(Boolean)
+  const textWidth = Math.max(10, cols - 2)
+  const none = { rows: [], hidden: waiting.length, textWidth, gaps: false, summaries: false, headCounts: counts }
+  if (maxRows < 1) return { ...none, head: false }
+  if (waiting.length === 0) {
+    // Nur die Sammelzeilen; reicht eine Zeile nicht für beide, eine Kopfzeile mit den Zahlen.
+    return k <= maxRows ? { ...none, summaries: true, headCounts: [], head: false } : { ...none, head: true }
+  }
+  // Reihenfolge des Weglassens: erst die Abstände, dann die Sammelzeilen.
+  const steps: Array<[boolean, boolean]> = k > 0 ? [[true, true], [false, true], [false, false]] : [[true, false], [false, false]]
+  for (const [gaps, summaries] of steps) {
+    const fixed = 1 + (summaries ? (gaps ? 1 : 0) + k : 0)
+    const perEntry = (gaps ? 1 : 0) + 1
+    if (fixed + perEntry + 1 > maxRows) continue
+    const laid = layoutWaiting(waiting, cols, maxRows, fixed, perEntry)
+    return { ...laid, gaps, summaries, headCounts: summaries ? [] : counts, head: true }
+  }
+  // Sehr wenig Platz: Kopf und so viele Namen wie passen, ohne Sätze.
+  const rows = waiting.slice(0, maxRows - 1).map(entry => ({ entry, sentence: '' }))
+  return { ...none, rows, hidden: waiting.length - rows.length, head: true }
+}
+
+/** Zeilen, die ein Plan belegt (für Tests und die Höhenprüfung). */
+export const planRows = (plan: BoxPlan, summaryCount: number) =>
+  (plan.head ? 1 : 0) +
+  plan.rows.reduce((n, r) => n + (plan.gaps ? 1 : 0) + 1 + (r.sentence === '' ? 0 : wrapRows(r.sentence, plan.textWidth)), 0) +
+  (plan.summaries ? (plan.head && plan.gaps && summaryCount > 0 ? 1 : 0) + summaryCount : 0)
 
 /** Fortschritt „4/7“, sobald die Quelle ihn liefert; bis dahin nichts. */
 export const progressOf = (e: BoardEntry) => {
@@ -530,11 +589,13 @@ export const fitNames = (names: readonly string[], room: number) => {
 /** Wer wartet (Ampel needsYou), wer läuft, wer ruht (fertig oder geparkt). */
 export const groups = (entries: readonly BoardEntry[]) => {
   const byAge = [...entries].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))
+  const rest = byAge.filter(e => e.light !== 'needsYou' && e.light !== 'running')
   return {
     waiting: byAge.filter(e => e.light === 'needsYou'),
     running: byAge.filter(e => e.light === 'running'),
-    // Fertige zuerst: sie warten auf Abnahme, Geparkte nicht.
-    resting: [...byAge.filter(e => e.light === 'done'), ...byAge.filter(e => e.light === 'parked')],
+    // Alles, was weder wartet noch läuft, ruht; auch künftige Ampelwerte
+    // (alte Mod mit neuer CLI). Fertige zuerst: sie warten auf Abnahme.
+    resting: [...rest.filter(e => e.light === 'done'), ...rest.filter(e => e.light !== 'done')],
   }
 }
 
@@ -875,7 +936,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const view = await read($, board)
-    if (view === null || !view.isActive || view.entries.length === 0) return next(e)
+    if (view === null || !view.isActive || view.entries.length === 0 || e.props.maxRows < 1) return next(e)
     const isFolded = await read($, folded)
     const { Box, Text } = $.ui.resolve(e)
     const cols = e.props.bodyColumns
@@ -914,31 +975,29 @@ export const register: Register = (on, options) => {
         </Box>
       )
 
-    // Höhe begrenzen: Kopf, Abstand vor den Sammelzeilen, Sammelzeilen; der
-    // Rest gehört den Wartenden. Was nicht passt, zählt der Kopf mit.
-    const summaries = (running.length > 0 ? 1 : 0) + (resting.length > 0 ? 1 : 0)
-    const fixed = waiting.length > 0 ? 1 + (summaries > 0 ? 1 + summaries : 0) : summaries
-    const { rows: shown, hidden } = layoutWaiting(waiting, cols, e.props.maxRows, fixed)
+    const plan = layoutBox(waiting, running, resting, cols, e.props.maxRows)
+    if (!plan.head && !plan.summaries) return next(e)
+    const headParts = [waiting.length > 0 ? waitingHead(waiting.length) : '', ...plan.headCounts].filter(Boolean)
 
     return (
       <Box flexDirection="column" width={cols}>
-        {waiting.length > 0 && (
-          <Box flexDirection="row">
+        {plan.head && (
+          <Box flexDirection="row" width={cols}>
             <Text color="claude" bold>
               Jarvis
             </Text>
-            <Text color="error" bold>
+            <Text color={waiting.length > 0 ? 'error' : undefined} bold={waiting.length > 0} dimColor={waiting.length === 0} wrap="truncate-end">
               {' · '}
-              {waitingHead(waiting.length)}
+              {headParts.join(' · ')}
+              {plan.hidden > 0 ? `  (+${plan.hidden} nicht gezeigt)` : ''}
             </Text>
-            {hidden > 0 && <Text dimColor>{`  (+${hidden} nicht gezeigt)`}</Text>}
           </Box>
         )}
-        {shown.map(({ entry, sentence }) => {
+        {plan.rows.map(({ entry, sentence }) => {
           const t = titleParts(entry.title, entry.ref)
           return (
-            <Box key={entry.sessionID} flexDirection="column" marginTop={1}>
-              <Box flexDirection="row">
+            <Box key={entry.sessionID} flexDirection="column" marginTop={plan.gaps ? 1 : 0}>
+              <Box flexDirection="row" width={cols}>
                 <Text color="error">● </Text>
                 <Text bold>{t.name}</Text>
                 {t.ticket !== null && <Text dimColor>{` · ${t.ticket}`}</Text>}
@@ -949,15 +1008,17 @@ export const register: Register = (on, options) => {
                   </Text>
                 )}
               </Box>
-              <Box paddingLeft={2} width={cols}>
-                <Text wrap="wrap">{sentence}</Text>
-              </Box>
+              {sentence !== '' && (
+                <Box paddingLeft={2} width={cols}>
+                  <Text wrap="wrap">{sentence}</Text>
+                </Box>
+              )}
             </Box>
           )
         })}
-        {waiting.length > 0 && (running.length > 0 || resting.length > 0) && <Box height={1} />}
-        {summary('läuft', running)}
-        {summary('ruht', resting)}
+        {plan.summaries && plan.head && plan.gaps && <Box height={1} />}
+        {plan.summaries && summary('läuft', running)}
+        {plan.summaries && summary('ruht', resting)}
       </Box>
     )
   })

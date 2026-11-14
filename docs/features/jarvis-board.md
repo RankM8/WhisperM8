@@ -48,8 +48,14 @@ Seit WM8-88 (14.11.2026) gilt:
   fehlt er.
 - **Ohne wartende Chats** stehen nur die Sammelzeilen. Ein leeres Board
   zeichnet nichts.
-- **Wenig Platz:** Wartende, die nicht mehr passen, zählt der Kopf („+1 nicht
-  gezeigt“).
+- **Wenig Platz:** Der Kasten bleibt in jeder Höhe innerhalb der Zeilen, die
+  Claude Code ihm gibt (`maxRows`), sonst hinterlässt der Hauptbildschirm
+  Reste. Voll braucht er ab 7 Zeilen (Kopf, Abstand, Name, Satz, Abstand,
+  läuft, ruht). Darunter fallen erst die Abstände weg, dann die Sammelzeilen
+  (ihre Zahlen stehen dann im Kopf), dann die Sätze; zuletzt bleibt nur der
+  Kopf. Wartende, die nicht mehr passen, zählt der Kopf („+1 nicht gezeigt“).
+- **Unbekannte Ampel:** Ein Eintrag mit einem Ampelwert, den die Mod nicht
+  kennt (neuere CLI), steht unter „ruht“ statt zu verschwinden.
 
 Ziffern zum Springen, Kurz-Kennung, Alter und der Bedien-Hinweis im Kopf sind
 weggefallen. Der Kasten bleibt so niedrig und ändert sich selten; der
@@ -62,7 +68,7 @@ hohe Kästen hinterlassen dort Reste.
 |---|---|
 | Jarvis (automatisch) | Laden des Skills `whisperm8:jarvis` schaltet das Board der Session ein (`skill.prompt`-Hook, hängt nicht am Modell). |
 | Jarvis (Modell) | Tool `mcp__whisperm8__board` (`set`, `milestone`, `remove`, `clear`, `activate`, `deactivate`, `read`) oder `whisperm8 chats board …`; Lesehilfe `whisperm8 chats show <ref> --recap` |
-| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 läuft · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
+| User | `/board` klappt den Kasten auf eine Zeile ein und wieder auf („▸ Jarvis · 2 warten auf dich · 2 laufen · 1 ruht“), `/board zu` / `auf` gezielt, `/board an` / `aus` |
 | Einstellung | `/config` → Plugin `whisperm8` → „Jarvis wecken“: `turn` (Standard: Hinweis und Prompt an Jarvis), `toast`, `aus` |
 
 Ampeln: `needsYou` (User muss entscheiden), `done` (Abnahme offen),

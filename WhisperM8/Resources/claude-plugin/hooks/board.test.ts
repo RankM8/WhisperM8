@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { clean, clipToRows, countWord, fitNames, isBefore, layoutWaiting, nextGenerationStart, progressOf, sameBoard, shortName, titleParts, waitingHead, withStatus, wrapRows } from './register'
+import { clean, clipToRows, countWord, fitNames, groups, isBefore, layoutBox, layoutWaiting, nextGenerationStart, planRows, progressOf, sameBoard, shortName, titleParts, waitingHead, withStatus, wrapRows } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -285,6 +285,12 @@ describe('Titel und Sammelzeile (WM8-88, rein)', () => {
     expect(progressOf(entry({ progress: { done: 4, total: 7 } }) as never)).toBe('4/7')
     expect(progressOf(entry({}) as never)).toBe('')
     expect(progressOf(entry({ progress: { done: 1, total: 0 } }) as never)).toBe('')
+  })
+
+  test('unbekannte Ampel (künftige CLI) landet in „ruht“ statt zu verschwinden (Vic)', () => {
+    const g = groups([entry({ light: 'running' }), entry({ light: 'reviewing', sessionID: 'D0000000-0000-0000-0000-000000000001' }), entry({ light: 'done', sessionID: 'D0000000-0000-0000-0000-000000000002' })] as never)
+    expect(g.running.length).toBe(1)
+    expect(g.resting.map(e => e.light)).toEqual(['done', 'reviewing'])
   })
 
   test('waitingHead in Ein- und Mehrzahl', () => {
@@ -631,19 +637,42 @@ describe('Höhe und Umbruch (WM8-88, rein)', () => {
     expect(clipToRows('kurz', 20, 2)).toBe('kurz')
   })
 
-  test('der Kasten bleibt bei jeder Breite und Höhe innerhalb von maxRows', () => {
+  test('der Kasten bleibt bei jeder Breite und JEDER Höhe innerhalb von maxRows (Vic)', () => {
     const longNeeds = 'Bitte prüfen und freigeben, '.repeat(15).trim()
+    const others = (light: string, n: number) =>
+      Array.from({ length: n }, (_, i) => entry({ ref: `${light}${i}`, sessionID: `B0000000-0000-0000-0000-0000000${light.length}0${i}`, title: `X${i} · Y`, light })) as never[]
     for (const cols of [50, 70, 120]) {
-      for (const maxRows of [7, 12, 30]) {
-        for (const count of [1, 3]) {
-          const fixed = 1 + 1 + 2 // Kopf, Abstand, zwei Sammelzeilen
-          const { rows, textWidth } = layoutWaiting(waiting(longNeeds, count), cols, maxRows, fixed)
-          const used = fixed + rows.reduce((n, r) => n + 2 + wrapRows(r.sentence, textWidth), 0)
-          expect(rows.length).toBeGreaterThanOrEqual(1)
-          expect(used).toBeLessThanOrEqual(Math.max(maxRows, fixed + 3))
+      for (let maxRows = 0; maxRows <= 30; maxRows++) {
+        for (const count of [0, 1, 3]) {
+          for (const [nRun, nRest] of [[0, 0], [2, 0], [2, 3]] as const) {
+            if (count === 0 && nRun === 0 && nRest === 0) continue
+            const running = others('running', nRun)
+            const resting = others('parked', nRest)
+            const plan = layoutBox(waiting(longNeeds, count), running, resting, cols, maxRows)
+            const k = (nRun > 0 ? 1 : 0) + (nRest > 0 ? 1 : 0)
+            expect(planRows(plan, k)).toBeLessThanOrEqual(maxRows)
+            if (count > 0 && maxRows >= 1) expect(plan.head).toBe(true)
+          }
         }
       }
     }
+  })
+
+  test('bei wenig Höhe fallen erst die Abstände, dann die Sammelzeilen weg', () => {
+    const running = [entry({ light: 'running', title: 'Gus · X' })] as never[]
+    const resting = [entry({ light: 'parked', title: 'Vic · Y', sessionID: 'C0000000-0000-0000-0000-000000000001' })] as never[]
+    const one = waiting('Kurzer Satz.', 1)
+    // Voll: Kopf, Abstand, Name, Satz, Abstand, läuft, ruht = 7.
+    expect(layoutBox(one, running, resting, 70, 7)).toMatchObject({ gaps: true, summaries: true })
+    // 5: ohne Abstände (Kopf, Name, Satz, läuft, ruht).
+    expect(layoutBox(one, running, resting, 70, 5)).toMatchObject({ gaps: false, summaries: true })
+    // 3: Sammelzeilen in den Kopf.
+    const three = layoutBox(one, running, resting, 70, 3)
+    expect(three).toMatchObject({ gaps: false, summaries: false, headCounts: ['1 läuft', '1 ruht'] })
+    expect(three.rows[0]!.sentence).toBe('Kurzer Satz.')
+    // 2: Kopf und Name, ohne Satz; 1: nur der Kopf.
+    expect(layoutBox(one, running, resting, 70, 2).rows[0]!.sentence).toBe('')
+    expect(layoutBox(one, running, resting, 70, 1).rows).toEqual([])
   })
 
   test('mit Platz bleibt der Satz ganz', () => {
