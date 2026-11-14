@@ -3,9 +3,13 @@ import Foundation
 /// Ticket-Ansicht je Fenster: Chats oder Tickets. Flüchtig, nur für diesen
 /// App-Start; nach einem Neustart zeigt jedes Fenster wieder seine Chats.
 ///
-/// Der Zustand liegt im Store, nicht in der View: Jede Navigation zu einem
-/// Chat (Seitenleiste, Tab, Tastatur, Controller, CLI, „Zum Chat“ am Ticket)
-/// läuft über `navigateToSession` und führt so von selbst zu den Chats zurück.
+/// Der Zustand liegt im Store, nicht in der View: Alles, was einen Chat oder
+/// einen Workspace zeigen soll, führt von selbst zu den Chats zurück
+/// (`navigateToSession`, `showSingleSession…`, `openTab(select:)`,
+/// `setSelectedSession`, `activateGridWorkspace`). Das gilt auch für einen
+/// Chat, den die CLI im Hintergrund startet oder fortsetzt: Er startet erst,
+/// wenn seine Ansicht im Fenster steht. Eine Auswahl, die nur nachrückt (Tab
+/// geschlossen, Chat archiviert), lässt die Tickets stehen.
 extension AgentWindowStore {
     func isTicketsMode(in windowID: UUID) -> Bool {
         ticketsModeWindowIDs.contains(windowID)

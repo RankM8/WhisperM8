@@ -252,6 +252,9 @@ enum PerfBudgets {
     /// Seiten). Netz-Latenz, keine Main-Thread-Kosten; läuft alle 30 Sekunden,
     /// solange die Ansicht sichtbar ist. Startwert, gegen Realdaten nachziehen.
     static let ticketsFetch = PerformanceBudget(name: "tickets.fetch", budget: 3.0, signposter: PerfSignposts.store, tier: .detail)
+    /// Liste der Chats für den Abgleich lesen: einmal je neuem Abzug, auf dem
+    /// Main Thread, über alle Sitzungen des Workspace.
+    static let ticketsChats = PerformanceBudget(name: "tickets.chats", budget: 0.004, signposter: PerfSignposts.store, tier: .detail)
     /// Abgleich des Abzugs mit den Chats der App (wer sitzt woran), abseits des
     /// Main Threads. Startwert für bis zu 500 Tickets.
     static let ticketsBuild = PerformanceBudget(name: "tickets.build", budget: 0.030, signposter: PerfSignposts.store, tier: .detail)

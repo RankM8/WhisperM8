@@ -167,6 +167,38 @@ final class TicketBoardStoreTests: XCTestCase {
         store.deactivate()
     }
 
+    /// Kurz verdeckt und wieder gezeigt, während der erste Abruf noch lief:
+    /// Der wird abgebrochen, und der neue Takt darf nicht 30 Sekunden warten.
+    func testFetchCancelledWhileShownAgainIsRepeatedAtOnce() async {
+        let source = TicketSourceStub()
+        let gate = Gate()
+        let attempts = Attempts()
+        source.onBoard = { _ in
+            if attempts.next() == 1 {
+                // Hängt, bis die Task abgebrochen wird (wie eine Anfrage im Netz).
+                try await Task.sleep(for: .seconds(60))
+            }
+            return TicketFixtures.snapshot([TicketFixtures.ticket(1)], at: 5)
+        }
+        let store = TicketBoardStore(source: source, interval: .seconds(30), sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { attempts.count == 1 }
+
+        store.deactivate()
+        store.activate(team: "WM8")
+        await settle { store.snapshot != nil }
+        XCTAssertEqual(attempts.count, 2)
+        XCTAssertNil(store.lastError)
+        XCTAssertFalse(store.isLoading)
+    }
+
+    private final class Attempts: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func next() -> Int { lock.lock(); defer { lock.unlock() }; value += 1; return value }
+        var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
     func testRefreshWithoutTeamDoesNothing() async {
         let source = TicketSourceStub()
         let store = TicketBoardStore(source: source)

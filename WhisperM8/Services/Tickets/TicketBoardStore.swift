@@ -25,6 +25,10 @@ final class TicketBoardStore {
     /// Für welches Team gerade ein Abruf läuft. Je Team, nicht ein Schalter:
     /// Nach einem Teamwechsel darf das neue Team sofort laden.
     @ObservationIgnored private var loadingTeam: String?
+    /// Jemand wollte abrufen, während ein Abruf lief. Endet der mit einem
+    /// Abbruch (Ansicht kurz verdeckt), wird sofort nachgeholt; sonst stünde
+    /// die wieder gezeigte Ansicht bis zum nächsten Takt ohne Stand da.
+    @ObservationIgnored private var refreshWanted = false
     /// Beginn und Ende jedes Abrufs. Die Ansicht gleicht hier ab, statt den
     /// Speicher in ihrer Wurzel zu beobachten: So zeichnet ein Abruf nur die
     /// Zeile im Kopf neu.
@@ -72,10 +76,16 @@ final class TicketBoardStore {
 
     /// Ein Abruf sofort. Läuft für dieses Team schon einer, wird kein zweiter gestartet.
     func refresh() async {
-        guard let team, loadingTeam != team else { return }
+        guard let team else { return }
+        guard loadingTeam != team else {
+            refreshWanted = true
+            return
+        }
         loadingTeam = team
+        refreshWanted = false
         isLoading = true
         onChange?()
+        var wasCancelled = false
         defer {
             // Hat inzwischen ein anderes Team übernommen, gehört der Schalter ihm.
             if loadingTeam == team {
@@ -83,6 +93,10 @@ final class TicketBoardStore {
                 isLoading = false
             }
             onChange?()
+            if wasCancelled, refreshWanted, self.team == team, loop != nil {
+                // Eigene Task: Diese hier ist abgebrochen.
+                Task { [weak self] in await self?.refresh() }
+            }
         }
         do {
             let source = source
@@ -93,6 +107,7 @@ final class TicketBoardStore {
             lastError = nil
         } catch is CancellationError {
             // Ansicht geschlossen: kein Fehler, der letzte Stand bleibt.
+            wasCancelled = true
         } catch let error as TicketSourceError {
             guard self.team == team else { return }
             lastError = error

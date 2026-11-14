@@ -61,6 +61,76 @@ final class AgentWindowStoreTicketsModeTests: XCTestCase {
         XCTAssertTrue(store.isTicketsMode(in: window))
     }
 
+    func testEverythingThatShowsAChatReturnsToChats() {
+        let store = makeStore()
+        let window = store.primaryWindowID
+        let actions: [(String, (UUID) -> Void)] = [
+            ("openTab", { store.openTab($0, in: window) }),
+            ("setSelectedSession", { store.setSelectedSession($0, in: window) }),
+            ("showSingleSession", { store.showSingleSession($0, in: window) }),
+            ("showSingleSessionFollowingGridFocus", { store.showSingleSessionFollowingGridFocus($0, in: window) }),
+        ]
+        for (name, action) in actions {
+            store.setTicketsMode(true, in: window)
+            action(UUID())
+            XCTAssertFalse(store.isTicketsMode(in: window), name)
+        }
+    }
+
+    func testOpeningAWorkspaceReturnsToChats() {
+        let store = makeStore()
+        let window = store.primaryWindowID
+        let chats = [UUID(), UUID()]
+        let workspace = store.createGridWorkspace(name: "Zwei", slots: chats)
+        store.navigateToSession(chats[0], in: window)
+        store.setTicketsMode(true, in: window)
+
+        // Der gewählte Chat liegt im Workspace: Die Auswahl bleibt gleich,
+        // trotzdem muss der Workspace erscheinen.
+        XCTAssertEqual(store.activateGridWorkspace(workspace, in: window), .activated)
+        XCTAssertFalse(store.isTicketsMode(in: window))
+
+        store.showSingleSession(chats[0], in: window)
+        store.setTicketsMode(true, in: window)
+        _ = store.returnToActiveGrid(in: window)
+        XCTAssertTrue(store.window(for: window).showsGrid)
+        XCTAssertFalse(store.isTicketsMode(in: window))
+    }
+
+    func testSelectionThatOnlyMovesUpKeepsTickets() {
+        let store = makeStore()
+        let window = store.primaryWindowID
+        let first = UUID(), second = UUID()
+        store.openTab(first, in: window)
+        store.openTab(second, in: window)
+        store.setTicketsMode(true, in: window)
+
+        // Tab im Hintergrund geöffnet, gewählter Tab geschlossen: Die Auswahl
+        // rückt nach, niemand wollte einen Chat sehen.
+        store.openTab(UUID(), in: window, select: false)
+        store.closeTab(second, in: window)
+        XCTAssertEqual(store.selectedSession(in: window), first)
+        XCTAssertTrue(store.isTicketsMode(in: window))
+
+        store.setSelectedSession(nil, in: window)
+        XCTAssertTrue(store.isTicketsMode(in: window))
+    }
+
+    func testControllerSnapshotHidesTheChatBehindTickets() {
+        let chat = UUID()
+        let snapshot = AgentChatsWindowSnapshot(
+            windowID: UUID(), isKeyWindow: true, selectedSessionID: chat, isGridActive: true,
+            canReturnToWorkspace: true, isSwitcherOpen: false, hasSheet: false, isSidebarVisible: true,
+            hasMultiSelection: false, isArchiveMode: false)
+        let hidden = snapshot.withChatsHidden()
+        // Kein Chat „vor mir“: Enter, Escape und Diktat finden kein Ziel.
+        XCTAssertNil(hidden.selectedSessionID)
+        XCTAssertFalse(hidden.isGridActive)
+        XCTAssertFalse(hidden.canReturnToWorkspace)
+        XCTAssertEqual(hidden.windowID, snapshot.windowID)
+        XCTAssertTrue(hidden.isSidebarVisible)
+    }
+
     func testTicketsModeIsNotPersisted() {
         let files = (tempURL("ws"), tempURL("ui"))
         let store = AgentWindowStore(persistence: AgentSessionStore(fileURL: files.0, uiStateFileURL: files.1))

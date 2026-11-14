@@ -53,11 +53,21 @@ final class TicketBoardControllerTests: XCTestCase {
             return resolutions[path] ?? .notMapped
         }
 
-        /// Nächster Abruf im Takt.
-        func tick() {
+        /// Nächster Abruf im Takt. Wartet, bis ein Takt wirklich schläft:
+        /// Sonst ginge der Weckruf verloren, wenn er zu früh kommt.
+        func tick(file: StaticString = #filePath, line: UInt = #line) async {
+            for _ in 0..<2_000 where !hasSleeper { try? await Task.sleep(for: .milliseconds(5)) }
+            XCTAssertTrue(hasSleeper, "kein Takt wartet", file: file, line: line)
+            wake()
+        }
+
+        /// Weckt, was gerade wartet; ohne Takt passiert nichts.
+        func wake() {
             lock.lock(); let pending = ticks; ticks = []; lock.unlock()
             pending.forEach { $0.resume() }
         }
+
+        var hasSleeper: Bool { lock.lock(); defer { lock.unlock() }; return !ticks.isEmpty }
 
         private func sleep(_: Duration) async throws {
             try await withTaskCancellationHandler {
@@ -167,7 +177,7 @@ final class TicketBoardControllerTests: XCTestCase {
         XCTAssertEqual(controller.load.fetchedAt, Date(timeIntervalSince1970: 100))
         XCTAssertFalse(controller.load.isLoading)
 
-        world.tick()
+        await world.tick()
         await settle { self.boards(world) == 2 }
         await settle { !controller.load.isLoading }
         XCTAssertEqual(controller.phase, .ready)
@@ -180,7 +190,7 @@ final class TicketBoardControllerTests: XCTestCase {
         await settle { controller.phase == .ready }
 
         controller.hide()
-        world.tick()
+        world.wake()
         controller.refresh()
         try? await Task.sleep(for: .milliseconds(60))
         XCTAssertEqual(boards(world), 1, "verdeckt: weder Takt noch Knopf rufen ab")
@@ -201,7 +211,7 @@ final class TicketBoardControllerTests: XCTestCase {
         let rebuilds = controller.viewModel.rebuilds
 
         // Der Abzug trägt denselben Zeitpunkt: kein neuer Abgleich, kein neues Rechnen.
-        world.tick()
+        await world.tick()
         await settle { self.boards(world) == 2 }
         await settle { !controller.load.isLoading }
         try? await Task.sleep(for: .milliseconds(40))
@@ -220,7 +230,7 @@ final class TicketBoardControllerTests: XCTestCase {
         await settle { controller.phase == .ready }
 
         fail = true
-        world.tick()
+        await world.tick()
         await settle { controller.load.problem != nil }
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertEqual(controller.load.problem, TicketSourceError.network("-1009").userText)
@@ -228,7 +238,7 @@ final class TicketBoardControllerTests: XCTestCase {
         XCTAssertEqual(controller.viewModel.presentation.visibleCount, 1)
 
         fail = false
-        world.tick()
+        await world.tick()
         await settle { controller.load.problem == nil }
     }
 
@@ -282,9 +292,56 @@ final class TicketBoardControllerTests: XCTestCase {
 
         // Der Takt des alten Projekts ruft nicht mehr ab.
         let before = world.source.calls.filter { $0 == "board WM8" }.count
-        world.tick()
+        await world.tick()
         await settle { world.source.calls.filter { $0 == "board DS" }.count == 2 }
         XCTAssertEqual(world.source.calls.filter { $0 == "board WM8" }.count, before)
+    }
+
+    func testTwoProjectsOfOneTeamShareTheFetchButNotTheBoard() async {
+        let chatA = UUID(), chatB = UUID()
+        let world = readyWorld(tickets: [
+            TicketFixtures.ticket(1, status: "In Progress", links: [TicketFixtures.link(chatA)]),
+            TicketFixtures.ticket(2, status: "In Progress", links: [TicketFixtures.link(chatB)]),
+        ])
+        world.set(projectB, .ready(team: "WM8", workspace: "whisperm8", projectPath: projectB))
+        world.chats = [
+            TicketChat(id: chatA, title: "A", projectName: "whisperm8", projectPath: projectA, state: nil, isRunning: true),
+            TicketChat(id: chatB, title: "B", projectName: "ListM8", projectPath: projectB, state: nil, isRunning: true),
+            TicketChat(id: UUID(), title: "Lose in B", projectName: "ListM8", projectPath: projectB, state: nil, isRunning: true),
+        ]
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        XCTAssertEqual(controller.viewModel.presentation.looseChats.map(\.chat.title), [])
+        controller.viewModel.selectedKey = "WM8-1"
+
+        await controller.show(projectPath: projectB, projectName: "ListM8")
+        await settle { controller.phase == .ready && controller.viewModel.presentation.looseChats.count == 1 }
+        // Derselbe Speicher, aber der Abgleich gilt dem neuen Ordner, und die Auswahl ist weg.
+        XCTAssertEqual(world.madeStores, ["whisperm8"])
+        XCTAssertEqual(controller.viewModel.presentation.looseChats.map(\.chat.title), ["Lose in B"])
+        XCTAssertNil(controller.viewModel.selectedKey)
+        XCTAssertEqual(controller.viewModel.presentation.visibleCount, 2)
+    }
+
+    func testComingBackShowsTheLastBoardAtOnce() async {
+        let world = readyWorld()
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        controller.viewModel.selectedKey = "WM8-1"
+        controller.hide()
+
+        // Zurück aus den Chats: Board, Auswahl und Uhrzeit stehen sofort da.
+        world.holdResolves()
+        let show = Task { await controller.show(projectPath: projectA, projectName: "whisperm8") }
+        await settle { world.resolved.count == 2 }
+        XCTAssertEqual(controller.phase, .ready)
+        XCTAssertEqual(controller.viewModel.selectedKey, "WM8-1")
+        XCTAssertEqual(controller.viewModel.presentation.visibleCount, 2)
+        world.releaseResolves()
+        await show.value
+        await settle { self.boards(world) == 2 }
     }
 
     func testOvertakenResolutionChangesNothing() async {
@@ -344,7 +401,7 @@ final class TicketBoardControllerTests: XCTestCase {
         await controller.show(projectPath: projectA, projectName: "whisperm8")
         XCTAssertEqual(controller.phase, .noKey(workspace: "whisperm8"))
         XCTAssertEqual(controller.viewModel.presentation.visibleCount, 0)
-        world.tick()
+        world.wake()
         try? await Task.sleep(for: .milliseconds(40))
         XCTAssertEqual(boards(world), 1, "ohne Schlüssel kein Abruf mehr")
     }

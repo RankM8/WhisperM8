@@ -9,17 +9,17 @@ extension AgentChatsView {
     }
 
     /// Tickets des Projekts, das in diesem Fenster gewählt ist.
+    ///
+    /// `.equatable()`: Das Fenster wertet seinen Body bei jedem Statuswechsel
+    /// aus. Ohne den Vergleich zöge das die Ticket-Ansicht samt Karten mit.
     var ticketsWorkspace: some View {
         TicketBoardScreen(
             projectPath: selectedProject?.path,
             projectName: selectedProject?.name ?? "",
-            onDisabled: { windowStore.setTicketsMode(false, in: windowID) }
+            controller: TicketBoardControllers.shared.controller(for: windowID),
+            onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) }
         )
-        // Auch eine Auswahl, die nicht über `navigateToSession` kam (neuer
-        // Chat, wiederhergestellter Tab), soll den Chat zeigen.
-        .onChange(of: selectedSessionID) { _, selected in
-            if selected != nil { windowStore.setTicketsMode(false, in: windowID) }
-        }
+        .equatable()
     }
 }
 

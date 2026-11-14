@@ -34,12 +34,15 @@ struct TicketBoardEnvironment {
         makeStore: { workspace in TicketBoardStore(source: LinearTicketSource(client: .live(workspace: workspace))) },
         chats: {
             let workspace = AgentWorkspaceUIModel.shared.workspace
-            let projects = Dictionary(workspace.projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            // Name und Pfad je Projekt einmal, nicht je Sitzung.
+            let projects = Dictionary(
+                workspace.projects.map { ($0.id, (name: $0.name, path: TicketConfig.normalized($0.path))) },
+                uniquingKeysWith: { first, _ in first })
             return workspace.sessions.compactMap { session in
                 guard session.status != .archived, let project = projects[session.projectID] else { return nil }
                 return TicketChat(
                     id: session.id, title: session.title, projectName: project.name,
-                    projectPath: TicketConfig.normalized(project.path), state: nil,
+                    projectPath: project.path, state: nil,
                     isRunning: AgentTerminalRegistry.shared.controller(for: session.id)?.isRunning == true)
             }
         }
@@ -175,7 +178,7 @@ final class TicketBoardController {
         builtFor = snapshot.fetchedAt
         // Die Liste der Chats wird mit jedem Abzug neu gelesen (alle 30 Sekunden);
         // ihren Zustand liefern die Status-Punkte selbst, ohne Abgleich.
-        let chats = environment.chats()
+        let chats = PerfBudgets.ticketsChats.withInterval { environment.chats() }
         let projectPath = active.projectPath
         buildSequence += 1
         let sequence = buildSequence
@@ -194,20 +197,34 @@ final class TicketBoardController {
     }
 }
 
+/// Ein Controller je Fenster, außerhalb der View: Wer zwischen Chats und
+/// Tickets wechselt, sieht beim Zurückkommen sofort den letzten Stand statt
+/// „Loading“, und der frische Abruf läuft dahinter.
+@MainActor
+final class TicketBoardControllers {
+    static let shared = TicketBoardControllers()
+    private var byWindow: [UUID: TicketBoardController] = [:]
+
+    func controller(for windowID: UUID) -> TicketBoardController {
+        if let known = byWindow[windowID] { return known }
+        let fresh = TicketBoardController(environment: .live)
+        byWindow[windowID] = fresh
+        return fresh
+    }
+}
+
 // MARK: - Ansicht
 
 /// Die Ticket-Ansicht samt ihren Leerzuständen, so wie sie im Agent-Chats-
 /// Fenster steht. Ruft nur ab, solange sie sichtbar und der Schalter an ist.
-struct TicketBoardScreen: View {
+struct TicketBoardScreen: View, Equatable {
     /// Projekt, dessen Tickets gezeigt werden; `nil` ohne gewähltes Projekt.
     let projectPath: String?
     let projectName: String
+    let controller: TicketBoardController
     /// Der Schalter ging aus, während die Ansicht offen war: Das Fenster
     /// kehrt zu den Chats zurück.
     var onDisabled: (() -> Void)?
-    /// Entsteht erst beim Erscheinen: Das Fenster baut diese Ansicht bei jeder
-    /// Neuauswertung neu zusammen, und dabei soll nichts angelegt werden.
-    @State private var controller: TicketBoardController?
     @State private var windowVisible = true
     /// Zählt, wie oft das Fenster aktiv wurde: Danach wird die Zuordnung neu
     /// gelesen, etwa nach dem Einrichten in den Einstellungen.
@@ -215,15 +232,19 @@ struct TicketBoardScreen: View {
     @AppStorage(PreferenceKeys.ticketBoardEnabled) private var enabled = false
 
     /// Ohne Angaben gelten die Wege der App; Tests und Bilder setzen eigene ein.
-    var environment: TicketBoardEnvironment?
     var source: TicketChatStatusSource?
     var actions: TicketBoardActions?
+
+    /// Die Closures zählen nicht: Sie tun für dasselbe Fenster immer dasselbe.
+    nonisolated static func == (lhs: TicketBoardScreen, rhs: TicketBoardScreen) -> Bool {
+        lhs.projectPath == rhs.projectPath && lhs.projectName == rhs.projectName && lhs.controller === rhs.controller
+    }
 
     var body: some View {
         Group {
             if !enabled {
                 TicketBoardEmptyState(kind: .disabled, actions: screenActions)
-            } else if let controller {
+            } else {
                 switch controller.phase {
                 case .ready:
                     TicketBoardView(title: String(localized: "Tickets · \(controller.title)"), model: controller.viewModel,
@@ -239,8 +260,6 @@ struct TicketBoardScreen: View {
                 case .unreachable(let problem):
                     TicketBoardEmptyState(kind: .unreachable(problem), actions: screenActions)
                 }
-            } else {
-                TicketBoardEmptyState(kind: .loading, actions: screenActions)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -249,15 +268,13 @@ struct TicketBoardScreen: View {
         // Ein Schlüssel für alles, was den Abruf an- oder abschaltet.
         .task(id: Activation(enabled: enabled, visible: windowVisible, project: projectPath, activations: windowActivations)) {
             if enabled, windowVisible {
-                let controller = controller ?? TicketBoardController(environment: environment ?? .live)
-                if self.controller == nil { self.controller = controller }
                 await controller.show(projectPath: projectPath, projectName: projectName)
             } else {
-                controller?.hide()
+                controller.hide()
                 if !enabled { onDisabled?() }
             }
         }
-        .onDisappear { controller?.hide() }
+        .onDisappear { controller.hide() }
     }
 
     private struct Activation: Equatable {
@@ -269,7 +286,7 @@ struct TicketBoardScreen: View {
 
     private var screenActions: TicketBoardActions {
         var actions = actions ?? .live
-        actions.refresh = { [controller] in controller?.refresh() }
+        actions.refresh = { [controller] in controller.refresh() }
         return actions
     }
 }
@@ -414,7 +431,9 @@ private struct TicketBoardWindowVisibility: NSViewRepresentable {
             ) { [weak self] _ in
                 MainActor.assumeIsolated { self?.onActivate?() }
             })
-            report()
+            // Nicht jetzt: Die Ansicht wird gerade eingehängt, und dabei darf
+            // sie ihren Zustand nicht ändern.
+            DispatchQueue.main.async { [weak self] in self?.report() }
         }
 
         private func report() {

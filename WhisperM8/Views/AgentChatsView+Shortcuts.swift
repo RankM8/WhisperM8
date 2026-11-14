@@ -111,6 +111,11 @@ extension AgentChatsView {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         guard modifiers == .command,
               event.charactersIgnoringModifiers == "w" else { return event }
+        // Tickets verdecken den gewählten Tab: ⌘W schließt dann die Tickets.
+        if isTicketsModeActive {
+            windowStore.setTicketsMode(false, in: windowID)
+            return nil
+        }
         guard let session = selectedSession else { return event }
         closeTabByUser(session)
         return nil

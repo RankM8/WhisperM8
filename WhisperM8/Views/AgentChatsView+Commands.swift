@@ -34,7 +34,7 @@ extension AgentChatsView {
     /// Zustand dieses Fensters für den Befehls-Katalog. Nur im Ereignis-Pfad
     /// aufrufen, nie aus einem Body.
     func commandSnapshot() -> AgentChatsWindowSnapshot {
-        AgentChatsWindowSnapshot(
+        let snapshot = AgentChatsWindowSnapshot(
             windowID: windowID,
             isKeyWindow: hostWindow?.isKeyWindow == true,
             selectedSessionID: selectedSession?.id,
@@ -52,6 +52,9 @@ extension AgentChatsView {
                 as? NSNumber)?.uint32Value,
             backTarget: controllerBackTarget()
         )
+        // Tickets verdecken den Chat: Bestätigen, Abbrechen und Diktat dürfen
+        // ihn dann nicht ungesehen treffen.
+        return isTicketsModeActive ? snapshot.withChatsHidden() : snapshot
     }
 
     // MARK: - Zurück (L2 getippt)
