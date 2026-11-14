@@ -11441,6 +11441,16 @@
         }
       }
     },
+    "Not sent: the chat is asking for a decision": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gesendet: Der Chat fragt nach einer Entscheidung"
+          }
+        }
+      }
+    },
     "Not signed in": {
       "localizations": {
         "de": {

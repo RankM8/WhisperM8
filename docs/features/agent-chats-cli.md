@@ -367,6 +367,29 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   bräche Ctrl+C den Dialog ab), auch bei `send --no-submit`. Die Antwort von
   `send` trägt dann `clearedInput: true`, die Queue loggt es
   (`queue_delivered … clearedInput=true`).
+- **Freigabe offen: `approvalPending` (WM8-75, Verhaltensänderung 14.11.2026):**
+  `send` bestätigt nie eine Freigabe. Wartet das Ziel auf eine Freigabe oder
+  Plan-Freigabe, ist die Art unklar, oder steht bei Claude unten statt des
+  Eingabefelds ein Dialog, lehnt `send` VOR dem Einfügen mit `approvalPending`
+  (Exit 4, `isRetryable`, Ausweg `enqueue`) ab — auch mit `--force`. Vorher
+  wurde der Text dort ignoriert und das Enter wählte die Vorauswahl „Yes“, auch
+  wenn „nein“ geschickt wurde. Eine offene Frage (AskUserQuestion) beantwortet
+  `send` wie bisher. Geht die Freigabe erst zwischen Einfügen und Enter (80 ms)
+  auf, hält `DelayedEnterGuard` das Enter zurück; `send` wartet darauf kurz
+  (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
+  `delivered` (Audit `withheld`, `detail.textInField: true`,
+  `detail.resend: false`): Der Text steht im Eingabefeld — nicht neu senden,
+  auch nicht per `enqueue`. Die Idempotenz wird erst danach abgeschlossen; ein
+  Wiederholen mit derselben requestID bekommt nie „duplicate“ als Erfolg. Die
+  Warteschlange verbucht einen Auftrag erst nach dem Enter als zugestellt;
+  zurückgehalten bleibt er vorgemerkt (`queue_withheld`), und eine offene
+  Freigabe stellt sie gar nicht erst zu. **Bekannte Wirkung:** Jedes `send` mit
+  Enter antwortet 180 ms (nach einem Leeren 330 ms) später als bisher; eine
+  Freigabe lässt sich per `send` nicht mehr bestätigen; eine Rückfrage, deren
+  Art nicht sicher erkennbar ist, lehnt `send` ab. Einen
+  gewollten Weg, eine Freigabe per CLI zu bestätigen (Tasten an einen Chat),
+  gibt es noch nicht (WM8-64). Details: [controller.md](controller.md),
+  Schutzregeln.
 
 Als Abbruch zählt (Claude-Chats, nicht in Dialogen): ESC oder Ctrl+C,
 während der Chat `working` ist, **und** innerhalb von 5 s nach einem
