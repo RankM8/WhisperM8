@@ -28,7 +28,9 @@ struct LinearTicketSource: TicketSource {
     /// Felder für das Board, das im Takt geholt wird: kleinere Listen als beim
     /// einzelnen Ticket. Von den Anhängen zählen nur die Verknüpfungen mit
     /// Chats (`$prefix`), die Karte zeigt höchstens zwei Labels, und für
-    /// „blockiert“ reicht eine Handvoll Beziehungen.
+    /// „blockiert“ reicht eine Handvoll Beziehungen. Die Anhänge kommen in
+    /// fester Reihenfolge, zuletzt geänderte zuerst: Hat ein Ticket mehr als
+    /// acht Verknüpfungen, fehlen die ältesten, nie die aktive.
     static let boardFields = """
     id identifier title description priority url updatedAt
     state { id name type position }
@@ -36,7 +38,7 @@ struct LinearTicketSource: TicketSource {
     projectMilestone { name }
     assignee { id name }
     labels(first: 8) { nodes { name } }
-    attachments(first: 8, filter: { url: { startsWith: $prefix } }) { nodes { id title subtitle url metadata creator { name } } }
+    attachments(first: 8, orderBy: updatedAt, filter: { url: { startsWith: $prefix } }) { nodes { id title subtitle url metadata creator { name } } }
     inverseRelations(first: 6) { nodes { type issue { state { type } } } }
     """
 

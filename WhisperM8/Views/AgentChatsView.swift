@@ -1081,7 +1081,7 @@ struct AgentChatsView: View {
             }
             updateActiveBackgroundTrackerIfNeeded()
         }
-        .onChange(of: isTicketsModeActive) { _, _ in syncActiveAgentChat() }
+        .onChange(of: isTicketsModeActive) { _, active in ticketsModeChanged(active) }
         .onChange(of: selectedProjectID) { _, _ in
             syncActiveAgentChat()
         }
@@ -1309,7 +1309,7 @@ struct AgentChatsView: View {
 
     /// Spiegelt die aktuelle Selection (Session + Projekt) in `AppState.activeAgentChat`.
     /// Wird beim Recording-Start vom Coordinator gelesen und ins Context-Bundle übernommen.
-    private func syncActiveAgentChat() {
+    func syncActiveAgentChat() {
         // Key-Window-Routing: Das globale Dictation-Ziel besitzt das ZULETZT
         // key gewesene Agent-Fenster (`dictationWindowID` — bleibt beim
         // App-Wechsel gesetzt: der User diktiert oft per globalem Hotkey aus

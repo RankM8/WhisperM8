@@ -8,6 +8,20 @@ extension AgentChatsView {
         windowStore.isTicketsMode(in: windowID)
     }
 
+    /// Der Modus hat gewechselt. Beim Verlassen wird nachgeholt, was eine
+    /// Auswahl hinter den Tickets ausgelassen hat (der Steuerkanal kann dort
+    /// einen Chat aus einem anderen Projekt wählen): Das Projekt folgt dem
+    /// gewählten Chat, und sein Subagent-Ergebnis gilt als gelesen.
+    func ticketsModeChanged(_ active: Bool) {
+        syncActiveAgentChat()
+        guard !active, let sessionID = selectedSessionID else { return }
+        if let session = workspace.sessions.first(where: { $0.id == sessionID }),
+           selectedProjectID != session.projectID {
+            selectedProjectID = session.projectID
+        }
+        windowStore.clearSubagentUnread(sessionID)
+    }
+
     /// Tickets des Projekts, das in diesem Fenster gewählt ist.
     ///
     /// `.equatable()`: Das Fenster wertet seinen Body bei jedem Statuswechsel
