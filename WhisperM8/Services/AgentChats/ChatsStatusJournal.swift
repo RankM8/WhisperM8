@@ -54,7 +54,19 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
 /// Replay, sondern liefert genau so viel Historie, wie eine Nachanalyse
 /// braucht.
 final class ChatsStatusJournal: @unchecked Sendable {
-    static let shared = ChatsStatusJournal()
+    static let shared = ChatsStatusJournal(fileURL: sharedFileURL())
+
+    /// Schreibziel von `shared`: das echte Journal nur in der App (WM8-87).
+    /// Unter `swift test` schrieb der Status-Koordinator sonst ins Journal
+    /// des Users: 14.11.2026 stammten 6.658 von 7.556 Zeilen von
+    /// Test-Sitzungen, mit eigener Nummernfolge (Sprünge) und einer Rotation
+    /// alle paar Stunden. Die CLI liest weiter `defaultFileURL()`.
+    static func sharedFileURL(isAppProcess: Bool = AppInstance.isAppBundleProcess) -> URL {
+        guard !isAppProcess else { return defaultFileURL() }
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-tests-\(getpid())", isDirectory: true)
+            .appendingPathComponent("chats-status-journal.jsonl")
+    }
 
     private let lock = NSLock()
     private let fileURL: URL

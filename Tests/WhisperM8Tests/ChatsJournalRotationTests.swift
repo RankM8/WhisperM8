@@ -187,4 +187,15 @@ final class ChatsJournalRotationTests: XCTestCase {
         try (legacy + "\n").write(to: url, atomically: true, encoding: .utf8)
         XCTAssertNil(ChatsStatusJournal.currentCursor(fileURL: url))
     }
+
+    // MARK: Testläufe schreiben nie ins echte Journal
+
+    func testSharedJournalOutsideTheAppWritesIntoATemporaryFolder() {
+        let real = ChatsStatusJournal.defaultFileURL()
+        XCTAssertEqual(ChatsStatusJournal.sharedFileURL(isAppProcess: true), real)
+        let test = ChatsStatusJournal.sharedFileURL(isAppProcess: false)
+        XCTAssertNotEqual(test, real)
+        XCTAssertTrue(test.path.hasPrefix(FileManager.default.temporaryDirectory.path))
+        XCTAssertEqual(ChatsStatusJournal.sharedFileURL(), test, "swift test ist kein App-Prozess")
+    }
 }
