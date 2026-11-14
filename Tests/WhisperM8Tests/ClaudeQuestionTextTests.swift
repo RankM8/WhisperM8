@@ -77,6 +77,15 @@ final class ClaudeQuestionTextTests: XCTestCase {
         }
     }
 
+    /// Bewusste Grenze: Eine Frage, die selbst „Do you want to …“ enthält, gilt
+    /// wegen der Freigabe-Wörter nicht als Frage — der Text bleibt sicher in der
+    /// Zwischenablage (docs/features/controller.md, Schutzregeln).
+    func testQuestionWithApprovalWordingStaysOnTheClipboard() {
+        var screen = Self.singleQuestion
+        screen[2] = "Do you want to merge now?"
+        XCTAssertFalse(ControllerScreenReading.isQuestionDialog(screen))
+    }
+
     /// Ohne festen Anker („Chat about this“ oder Kästchen-Kopf) keine Frage.
     func testWithoutAnchorItIsNoQuestion() {
         let unanchored = Self.singleQuestion.filter { !$0.contains("Chat about this") && !$0.contains("☐") }

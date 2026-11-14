@@ -428,9 +428,11 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   - **Bildschirm:** Unten stehen nummerierte Optionen, ein fester Anker (die Option „Chat about this“
     oder die Kopfzeile mit Kästchen ☐/☒) und die Hinweiszeile „Enter to select · … to navigate“. Kein
     Wort aus Freigaben („Do you want to …“, „Tab to amend“, „don't ask again“, „allow all“,
-    „shift+tab“, „Yes, and“) darf dort stehen (`ControllerScreenReading.isQuestionDialog`). Folge: Eine
-    Frage, die selbst „Do you want to …“ enthält, gilt nicht als Frage — der Text bleibt dann in der
-    Zwischenablage.
+    „shift+tab“, „Yes, and“) darf dort stehen (`ControllerScreenReading.isQuestionDialog`). Bewusste
+    Grenze: Eine Frage, die selbst „Do you want to …“ (oder ein anderes dieser Wörter) enthält, gilt
+    nicht als Frage — der Text bleibt dann in der Zwischenablage. Bei englischen Fragen kommt das
+    öfter vor; sicherer, als die Suche auf Teile des Dialogs zu beschränken, deren Lage nicht gemessen
+    ist.
 
   Direkt vor dem Schreiben wird noch einmal geprüft, und nur mit eingeschaltetem Bracketed Paste
   (sonst kämen die Zeichen einzeln an). Gemessen an Claude Code 2.1.325: Ein Einfüge-Block springt dort
@@ -439,6 +441,13 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   Steht schon Text im Feld, hängt der neue ohne Leerzeichen an. Ist der Bildschirm nicht ablesbar
   (hochgescrollt) oder fehlt die Hinweiszeile, bleibt es bei der Zwischenablage. Codex meldet keine
   Rückfragen (WM8-67).
+
+  **Grenzen der Messung:** Dass Ziffern im Einfüge-Block in der Frage nichts auswählen, gilt für
+  Claude Code 2.1.325; nichts im Code merkt, wenn eine spätere Version das ändert (dann könnte ein
+  Diktat wie „2 Minuten“ eine Option wählen). Dass eine Freigabe den Einfüge-Block ignoriert, ist nur für
+  eine Bash-Freigabe gemessen; Bearbeiten, MCP und Plan sind nur über die Erkennung abgedeckt. Bei jeder
+  neuen Claude-Code-Version einmal `scripts/claude-question-paste-check.sh` fahren (Wegwerf-Sitzungen
+  in tmux außerhalb der App, zwei kurze Anfragen).
 - **Ansichten am Bildschirm (Runde 5):** Bei einer Controller-Eingabe in einen Claude-Chat liest
   `controllerScreenSnapshot` die unteren 16 Zeilen des Terminals, nur wenn die Ansicht ganz unten steht
   (Zähler `controller.screen.read`), in drei Fassungen (`ControllerScreenCapture`): voller Text für
