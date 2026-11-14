@@ -5,7 +5,7 @@ import SwiftUI
 extension UISnapshotGallery {
     @MainActor
     static func restartSettingsFixtures() -> [Fixture] {
-        let size = CGSize(width: 760, height: 420)
+        let size = CGSize(width: 760, height: 460)
         return [
             Fixture(name: "neustart-einstellungen-aus", size: size,
                     storage: [PreferenceKeys.restartKeepsChatsEnabled: false]) {

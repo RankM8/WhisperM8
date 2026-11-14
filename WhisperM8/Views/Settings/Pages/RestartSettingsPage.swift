@@ -18,7 +18,7 @@ struct RestartSettingsPage: View {
             SettingsSection("Chats during a restart") {
                 SettingsToggleRow(
                     title: "Keep chats running across a restart",
-                    subtitle: "On a restart through make dev, running chats and terminal tabs are handed to a small helper process and taken back by the new app. If anything goes wrong, the chats are resumed as before. Quitting with Cmd+Q still ends all chats. The GPT router then runs as its own service; the change takes effect at the next app start.",
+                    subtitle: "On a restart through make dev, running chats and terminal tabs are handed to a small helper process and taken back by the new app. If anything goes wrong, the chats are resumed as before. Quitting with Cmd+Q still ends all chats. The GPT router then runs as its own service; the change takes effect at the next app start. So far this only works when WhisperM8 is rebuilt with make dev; an update through Homebrew still ends the chats.",
                     isOn: $enabled
                 )
             }
