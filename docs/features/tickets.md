@@ -46,7 +46,8 @@ WhisperM8 selbst gilt, steht hier:
 
 - **Eine Regel für „fertig“:** Der arbeitende Chat hängt sich an sein Ticket, gibt es als „Merge-bereit“ ab
   (`tickets done <Ticket> --status "Merge-bereit" --note "…"`) und meldet das dem Supervisor. Auf „Done“ setzt
-  nur der Supervisor, nach Prüfung und Merge. Die Kommandozeile sagt einem anderen Chat dabei ab.
+  nur der Supervisor, nach Prüfung und Merge. Die Kommandozeile erinnert einen anderen Chat mit einer Absage
+  daran (siehe „Grenzen“).
 - **Neue Tickets** legt der Supervisor an, nach dem Ja des Nutzers; was er von sich aus erfasst, trägt
   `Selbst erfasst`.
 - **Ansichten in Linear:** „Wartet auf mich“, „Handtests“, „Entscheidungen“, „Gerade in Arbeit“, „Als Nächstes“,
@@ -75,15 +76,23 @@ Key, eigenen Teams und eigener Rechnung.
   Workspaces. Bei `board`, `list` und `new` kommt das Team aus dem Projekt des aktuellen Ordners oder `--team`.
 - **Nie geraten:** Gibt es nur einen Workspace, liegt jedes Team dort. Bei mehreren muss das Team zugeordnet
   sein (`tickets setup --team <Kürzel>`); sonst bricht der Befehl ab, bevor er Linear fragt.
-- **Schreibsperre über die Projektgrenze:** Aus einem Projektordner wird nur in den Workspace dieses Projekts
-  geschrieben. Ein Chat der einen Firma kann die Tickets der anderen lesen, aber nicht ändern, und er hängt
-  sich nicht an deren Tickets. Der Befehl endet mit Exit 4, bevor die fremde Quelle gefragt wird. Verlangt der
-  Nutzer es ausdrücklich, hebt `--other-workspace` die Sperre für diesen einen Aufruf auf. Außerhalb jedes
-  zugeordneten Ordners (Mensch im Terminal) gibt es keine Grenze.
+- **Schreibsperre über die Projektgrenze:** Ein Chat schreibt nur in den Workspace seines Projekts, egal in
+  welchem Ordner seine Shell steht (`/tmp`, Home, eine Arbeitskopie neben dem Projekt). Ruft kein Chat oder ist
+  dessen Projekt keinem Workspace zugeordnet, zählt der Ordner. Ein Chat der einen Firma kann die Tickets der
+  anderen lesen, aber nicht ändern, und er hängt sich nicht an deren Tickets. Der Befehl endet mit Exit 4, bevor
+  die fremde Quelle gefragt wird. Verlangt der Nutzer es ausdrücklich, hebt `--other-workspace` die Sperre für
+  diesen einen Aufruf auf. Ein Mensch im Terminal außerhalb jedes zugeordneten Ordners hat keine Grenze.
+- **Ein Kürzel, ein Workspace:** `tickets.json` kennt je Team-Kürzel genau einen Workspace. Gibt es dasselbe
+  Kürzel in zwei Workspaces, ist nur das zugeordnete Team erreichbar; `doctor` nennt das Kürzel. `setup` hängt
+  ein schon zugeordnetes Kürzel nicht still um, sondern nur mit `--reassign`: Sonst schriebe jeder Ordner dieses
+  Teams in den anderen Workspace, ohne dass die Sperre es merkt.
 - **`mine`** fragt alle eingerichteten Workspaces: Ein Chat kann an Tickets mehrerer gehangen haben.
 - **`doctor`** prüft jeden Zugang einzeln und meldet einen Key, der unter dem falschen Workspace liegt.
 - Der Linear-MCP kennt diese Sperre nicht. Wer ihn je Projekt begrenzen will, sperrt den Server des anderen
   Workspaces in der `.claude/settings.json` des Projekts.
+- **Test-Instanz:** Sie hat einen eigenen Schlüsselbund-Dienst (`whisperm8-linear-api-key.test`) und eine eigene
+  `tickets.json`. Ohne dort eingerichteten Key spricht sie mit keinem Ticket-System; den echten Key liest,
+  überschreibt und löscht sie nicht.
 
 ### Warum der Key über `/usr/bin/security` läuft
 
@@ -144,7 +153,8 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 - Eigene Datei: `~/Library/Application Support/WhisperM8/tickets.json` (Projektordner → Team, Team → Workspace,
   Liste der Workspaces; nichts Geheimes). Geschrieben von `whisperm8 tickets setup`.
-- Schlüsselbund: Dienst `whisperm8-linear-api-key`, je Workspace ein Eintrag mit dem Kürzel als Konto.
+- Schlüsselbund: Dienst `whisperm8-linear-api-key` (Test-Instanz: `…-key.test`), je Workspace ein Eintrag mit
+  dem Kürzel als Konto.
 - Netz: `https://api.linear.app/graphql`, nur wenn ein `tickets`-Befehl läuft. Die App selbst baut bisher keine
   Verbindung auf; das kommt mit der Ansicht und ihrem Schalter.
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,
@@ -152,6 +162,15 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 ## Grenzen
 
+- **Die Absagen schützen vor Versehen, sie sind keine Sicherheitsgrenze.** Wer die Chat-Kennung aus der
+  Umgebung nimmt, gilt als Mensch im Terminal. Supervisor ist, wessen Chat-Titel mit „Jarvis“ beginnt; wer
+  seinen Supervisor anders nennt, hat für die Kommandozeile keinen. Der Linear-MCP und die Oberfläche von Linear
+  setzen jeden Status ohne Rückfrage, und „verworfen“ prüft die Kommandozeile gar nicht. Die Regeln halten die
+  Chats ein; das Werkzeug erinnert sie daran.
+- **Die Verknüpfung ist für alle im Workspace sichtbar:** Am Ticket steht ein Anhang „Chat: <Titel des Chats>“
+  mit Projektname und Zeit. In einem Workspace mit Kollegen lesen alle den Chat-Titel mit.
+- **Text an Tickets:** höchstens 64 KB je Text, aus Argument, stdin oder `@datei`. Was gesendet wird, liegt
+  danach bei Linear. `@datei` liest jede lesbare Datei; den Inhalt prüft die Kommandozeile nicht.
 - Ein Board lädt bis zu 500 offene Tickets (fünf Seiten zu 100).
 - Linear erlaubt 2.500 Abfragen je Stunde und Person. Ein `board` braucht zwei Abfragen.
 - Zyklen, Vorhaben, Meilensteine, Dokumente und Releases deckt die Kommandozeile nicht ab; dafür gibt es den

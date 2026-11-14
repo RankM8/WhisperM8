@@ -126,8 +126,17 @@ final class TicketCredentialCache: @unchecked Sendable {
 /// Je Workspace ein Eintrag: derselbe Dienst, das Konto ist das Kürzel des
 /// Workspaces. So kann ein Aufruf für die eine Firma nie mit dem Key der
 /// anderen laufen.
+///
+/// Die Test-Instanz hat einen eigenen Dienstnamen. `security` läuft hier mit
+/// dem echten Home (sonst fände es den Login-Schlüsselbund nicht); ohne
+/// eigenen Namen läse, überschriebe und löschte ein Befehl der Test-Instanz
+/// den echten Key und schriebe ins echte Ticket-System.
 struct TicketCredentialStore {
-    static let service = "whisperm8-linear-api-key"
+    static var service: String { service(isTestInstance: AppInstance.isTestInstance) }
+
+    static func service(isTestInstance: Bool) -> String {
+        isTestInstance ? "whisperm8-linear-api-key.test" : "whisperm8-linear-api-key"
+    }
 
     var read: (_ workspace: String) -> String?
     /// `false`, wenn der Eintrag danach nicht lesbar ist.

@@ -27,7 +27,10 @@ Hilfe: `whisperm8 tickets --help`.
 - `note` ersetzt die erste Zeile des Tickets (`**Stand TT.MM.JJJJ:** …`). Das ist der Ort für den Stand, nicht
   eine Kette von Kommentaren. `comment` ist für Dinge, die als Verlauf stehen bleiben sollen.
 - Text-Argumente nehmen Text, `-` für stdin oder `@datei`. Beginnt der Text selbst mit `-` oder `@`, gehört er
-  hinter `--`: `whisperm8 tickets comment ABC-12 -- "@Giuliano bitte prüfen"`. Tickets sind Markdown.
+  hinter `--`: `whisperm8 tickets comment ABC-12 -- "@alle bitte prüfen"`. Tickets sind Markdown.
+- **Was du schreibst, geht an das Ticket-System und ist für alle dort lesbar.** Keine Schlüssel, Tokens oder
+  Passwörter, keine Kundeninhalte, keine rohen Logs oder Chat-Verläufe. Bei `@datei` vorher wissen, was in der
+  Datei steht. Mehr als 64 KB nimmt die Kommandozeile nicht an.
 - Gibt es zu einer Arbeit kein Ticket: dem Supervisor melden. Chats legen keine Tickets an.
 
 ## Wer welchen Status setzt
@@ -40,8 +43,10 @@ Hilfe: `whisperm8 tickets --help`.
 | Arbeit ohne Merge erledigt (Analyse, Entscheidung) | der Supervisor | Done |
 | Ticket überholt | der Supervisor, nach Ja des Nutzers | Canceled |
 
-„Fertig gebaut“ ist nicht „erledigt“. Ein Chat setzt nie selbst auf einen „erledigt“-Status; die Kommandozeile
-sagt ihm dann ab. `--force` nur, wenn der Nutzer es ausdrücklich von diesem Chat verlangt.
+„Fertig gebaut“ ist nicht „erledigt“. Ein Chat setzt nie selbst auf einen „erledigt“-Status. Die Kommandozeile
+erinnert mit einer Absage daran; eine Sperre ist das nicht, die Regel hältst du ein. `--force` nur, wenn der
+Nutzer es ausdrücklich von diesem Chat verlangt. Dasselbe gilt für „verworfen“: nur der Supervisor, nach dem Ja
+des Nutzers.
 
 Welches Team, welche Status-Namen und welche Labels gelten, steht in der Doku des Projekts, nicht hier. Die
 Namen in dieser Datei („Merge-bereit“, „Done“, `ABC-12`) sind Beispiele; `whisperm8 tickets show <Ticket> --json`
@@ -95,10 +100,13 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
   Befehle, das Board zeigt dann „Zustand unbekannt“ und keine Chats ohne Ticket.
 - Das Team ergibt sich aus dem Projekt des aktuellen Ordners (auch in Arbeitsordnern darunter), sonst `--team ABC`.
 - **Mehrere Workspaces** (mehrere Firmen): Das Team steckt in der Ticket-Nummer, der Workspace folgt aus dem Team.
-  Aus einem Projektordner schreibst du nur in den Workspace dieses Projekts; Tickets eines anderen Workspaces
-  kannst du lesen (`show`, `list --team`), aber nicht ändern und dich nicht daran hängen. Die Kommandozeile sagt
-  dann ab (Exit 4). `--other-workspace` nur, wenn der Nutzer das Schreiben nach drüben ausdrücklich verlangt.
-  Gehört eine Arbeit ins andere Projekt: dem Supervisor melden, nicht selbst umhängen.
+  Du schreibst nur in den Workspace deines Projekts, egal in welchem Ordner du gerade stehst; Tickets eines
+  anderen Workspaces kannst du lesen (`show`, `list --team`), aber nicht ändern und dich nicht daran hängen. Die
+  Kommandozeile sagt dann ab (Exit 4). `--other-workspace` nur, wenn der Nutzer das Schreiben nach drüben
+  ausdrücklich verlangt. Gehört eine Arbeit ins andere Projekt: dem Supervisor melden, nicht selbst umhängen.
+  Die Absage fängt Versehen ab; dieselbe Regel gilt auch dort, wo kein Werkzeug sie prüft (MCP, Browser).
+- Die Verknüpfung steht am Ticket als Anhang mit dem Titel deines Chats. Jeder im Workspace sieht ihn. Ein
+  Chat-Titel enthält deshalb nichts, was dort nicht stehen soll.
 - `whisperm8 tickets doctor` prüft Zugang, Zuordnung und App. Exit-Codes: 0 ok, 1 Aufruf falsch, 3 nicht
   gefunden, 4 mehrdeutig, 5 Linear nicht eingerichtet, nicht erreichbar oder lehnt ab.
 - Einrichtung (einmalig, macht der Nutzer oder der Supervisor mit ihm): `pbpaste | whisperm8 tickets setup --key-stdin`

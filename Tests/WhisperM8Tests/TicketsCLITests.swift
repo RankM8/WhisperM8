@@ -8,6 +8,8 @@ final class TicketsCLITests: XCTestCase {
     private let dex = UUID(uuidString: "840BFE4C-0000-4000-8000-000000000001")!
     private let ole = UUID(uuidString: "B0096DCA-0000-4000-8000-000000000002")!
     private let jarvis = UUID(uuidString: "A37D241B-0000-4000-8000-000000000003")!
+    /// Chat des zweiten Projekts (Workspace `dealsupply`).
+    private let kai = UUID(uuidString: "FA6FAE20-0000-4000-8000-000000000004")!
     private let giuliano = TicketPerson(id: "u1", name: "Giuliano Costa")
     private let project = "/Users/g/repos/whisperm8"
     private let otherProject = "/Users/g/repos/ListM8"
@@ -94,6 +96,8 @@ final class TicketsCLITests: XCTestCase {
             TicketAccount(userName: "Giuliano Costa", workspace: "DealSupply (linear.app/dealsupply)", workspaceKey: "dealsupply", isAdmin: true)
         }
         world.other.onTeams = { ["DEA", "DS", "PRB"] }
+        world.chats.append(TicketChat(id: kai, title: "Kai · Umzug", projectName: "ListM8", projectPath: otherProject,
+                                      state: .idle, isRunning: true))
         world.other.onTicket = { key in
             var ticket = TicketFixtures.ticket(5, status: "Todo", title: "Import prüfen")
             ticket.key = key
@@ -160,7 +164,7 @@ final class TicketsCLITests: XCTestCase {
     func testParseErrors() {
         let cases: [[String]] = [
             ["show"], ["show", "abc"], ["show", "WM8-1", "extra"], ["board", "--falsch"], ["list", "--mine", "--unassigned"],
-            ["label", "WM8-1"], ["new", "Titel", "--priority", "sofort"], ["setup", "--project", "/x"], ["link", "WM8-1", "--chat"], ["setup", "--workspace"],
+            ["label", "WM8-1"], ["new", "Titel", "--priority", "sofort"], ["setup", "--project", "/x"], ["link", "WM8-1", "--chat"], ["setup", "--workspace"], ["setup", "--reassign"],
             ["gibtsnicht"], ["new", "  "],
         ]
         for arguments in cases {
@@ -594,19 +598,50 @@ final class TicketsCLITests: XCTestCase {
 
         // Umgekehrt genauso: aus dem anderen Projekt nicht ins WM8-Team.
         world.directory = otherProject
+        world.caller = kai
         let back = try await run(["comment", "WM8-12", "Text"], world)
         XCTAssertEqual(back.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(world.source.calls.isEmpty)
     }
 
+    func testTheChatsProjectCountsNotTheFolderOfItsShell() async throws {
+        let world = twoWorkspaceWorld()
+        // Chat des WhisperM8-Projekts, Shell irgendwo: außerhalb jedes Projekts oder im Ordner des anderen.
+        for directory in ["/tmp", "/Users/g", otherProject, "/Users/g/repos/whisperm8-kopie"] {
+            world.directory = directory
+            let output = try await run(["comment", "DS-5", "Text"], world)
+            XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict, directory)
+            XCTAssertTrue(output.stderr.contains("dieser Chat (Projekt whisperm8) gehört zu „whisperm8“"), output.stderr)
+        }
+        XCTAssertTrue(world.other.calls.isEmpty)
+
+        // Sein eigenes Team erreicht er von überall.
+        world.directory = otherProject
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
+        let own = try await run(["comment", "WM8-12", "Text"], world)
+        XCTAssertEqual(own.exitCode, 0, own.stderr)
+
+        // Ein Chat, dessen Projekt keinem Workspace zugeordnet ist: Der Ordner entscheidet.
+        let loose = UUID()
+        world.chats.append(TicketChat(id: loose, title: "Ida · Sonstiges", projectName: "anderes", projectPath: "/Users/g/repos/anderes",
+                                      state: .idle, isRunning: true))
+        world.caller = loose
+        world.directory = project
+        let fallback = try await run(["comment", "DS-5", "Text"], world)
+        XCTAssertEqual(fallback.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(fallback.stderr.contains("dieser Ordner gehört zu „whisperm8“"), fallback.stderr)
+    }
+
     func testWritingInTheOwnWorkspaceAndWithExplicitFlag() async throws {
         let world = twoWorkspaceWorld()
         world.directory = otherProject
+        world.caller = kai
         let own = try await run(["comment", "DS-5", "Text"], world)
         XCTAssertEqual(own.exitCode, 0, own.stderr)
         XCTAssertEqual(writes(world, world.other), ["comment id-5 Text"])
 
         world.directory = project
+        world.caller = jon
         let forced = try await run(["comment", "DS-5", "Text", "--other-workspace"], world)
         XCTAssertEqual(forced.exitCode, 0, forced.stderr)
         XCTAssertEqual(writes(world, world.other).count, 2, "nur mit dem ausdrücklichen Schalter")
@@ -624,6 +659,7 @@ final class TicketsCLITests: XCTestCase {
         let world = twoWorkspaceWorld()
         // Aus dem Terminal, ohne Projektgrenze für den Aufrufer: Der Chat selbst gehört zu WhisperM8.
         world.directory = "/Users/g"
+        world.caller = nil
         let output = try await run(["link", "DS-5", "--chat", "840b"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(output.stderr.contains("Dex") && output.stderr.contains("„dealsupply“"), output.stderr)
@@ -697,6 +733,60 @@ final class TicketsCLITests: XCTestCase {
         let notThere = try await run(["setup", "--team", "DS", "--workspace", "whisperm8"], world)
         XCTAssertEqual(notThere.exitCode, TicketsCLIExit.notFound, "ein Team wird nur einem Workspace zugeordnet, in dem es das Team gibt")
         XCTAssertEqual(world.config.workspacesByTeam["DS"], "dealsupply")
+    }
+
+    func testSetupDoesNotSilentlyMoveATeamToAnotherWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        world.other.onTeams = { ["DS", "WM8"] }   // dasselbe Kürzel gibt es auch drüben
+        let saved = world.savedConfigs.count
+        let refused = try await run(["setup", "--team", "WM8", "--workspace", "dealsupply"], world)
+        XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(refused.stderr.contains("schon dem Workspace „whisperm8“ zugeordnet") && refused.stderr.contains("--reassign"), refused.stderr)
+        XCTAssertEqual(world.config.workspacesByTeam["WM8"], "whisperm8", "die Zuordnung bleibt, sonst schriebe das Projekt nach drüben")
+        XCTAssertEqual(world.savedConfigs.count, saved, "nichts gespeichert")
+
+        // Dieselbe Zuordnung noch einmal ist kein Umhängen.
+        let same = try await run(["setup", "--team", "WM8", "--workspace", "whisperm8"], world)
+        XCTAssertEqual(same.exitCode, 0, same.stderr)
+
+        let moved = try await run(["setup", "--team", "WM8", "--workspace", "dealsupply", "--reassign"], world)
+        XCTAssertEqual(moved.exitCode, 0, moved.stderr)
+        XCTAssertEqual(world.config.workspacesByTeam["WM8"], "dealsupply")
+        XCTAssertThrowsError(try TicketsCLIArguments.parse(["setup", "--reassign"]))
+    }
+
+    func testDoctorNamesATeamKeyThatExistsInTwoWorkspaces() async throws {
+        let world = twoWorkspaceWorld()
+        world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
+        world.other.onBoard = { _ in TicketFixtures.snapshot([]) }
+        world.other.onTeams = { ["DS", "WM8"] }
+        let output = try await run(["doctor"], world)
+        XCTAssertEqual(output.exitCode, 0, "ein Hinweis, kein Fehler: \(output.stdout)")
+        XCTAssertTrue(output.stdout.contains("ACHTE  Kürzel WM8     gibt es in dealsupply und whisperm8; erreichbar ist nur „whisperm8“"), output.stdout)
+        XCTAssertFalse(output.stdout.contains("Kürzel DS"))
+        let json = try await run(["doctor", "--json"], world)
+        let checks = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.stdout.utf8)) as? [[String: Any]])
+        XCTAssertEqual(checks.first { $0["name"] as? String == "Kürzel WM8" }?["warning"] as? Bool, true)
+    }
+
+    func testTextThatIsTooLongIsNotSent() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
+        world.files["gross.log"] = String(repeating: "a", count: TicketsText.maxBytes + 1)
+        world.files["passt.md"] = String(repeating: "ä", count: TicketsText.maxBytes / 2)
+        for command in [["comment", "WM8-12", "@gross.log"], ["note", "WM8-12", "@gross.log"], ["done", "WM8-12", "--note", "@gross.log"],
+                        ["new", "Titel", "--description", "@gross.log"]] {
+            let output = try await run(command, world)
+            XCTAssertEqual(output.exitCode, TicketsCLIExit.usage, "\(command)")
+            XCTAssertTrue(output.stderr.contains("Text zu lang"), output.stderr)
+        }
+        world.stdin = String(repeating: "b", count: TicketsText.maxBytes + 1)
+        let piped = try await run(["comment", "WM8-12", "-"], world)
+        XCTAssertEqual(piped.exitCode, TicketsCLIExit.usage)
+        XCTAssertTrue(writes(world).isEmpty, "nichts geht an das Ticket-System: \(writes(world))")
+
+        let fits = try await run(["comment", "WM8-12", "@passt.md"], world)
+        XCTAssertEqual(fits.exitCode, 0, "gezählt werden Bytes, genau an der Grenze geht es: \(fits.stderr)")
     }
 
     func testSetupAdoptsAKeyThatIsAlreadyInTheKeychain() async throws {

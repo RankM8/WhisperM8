@@ -422,8 +422,8 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
   („merge-bereit"), schreibt den Stand dazu und meldet dir das. **Auf
   „erledigt" setzt nur du**, nach deiner Prüfung (5) und dem Merge; kein
   Chat erklärt seine eigene Arbeit für abgeschlossen. Das Ticket-Werkzeug
-  der App hält das ein: Einem Chat, der selbst auf „erledigt" setzen will,
-  sagt es ab.
+  der App erinnert daran mit einer Absage; eine Sperre ist das nicht, die
+  Regel halten die Chats ein.
 - **Mehrere Ticket-Bereiche** (mehrere Firmen oder Mandanten): Jedes Projekt
   schreibt nur in seinen eigenen, lesen darf es überall. Gehört eine Arbeit
   ins andere Projekt, geht sie an den Chat oder Supervisor dort; ein Ticket

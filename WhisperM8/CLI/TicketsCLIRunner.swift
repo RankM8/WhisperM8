@@ -41,14 +41,26 @@ enum TicketsCLIRunner {
                 Einmal zuordnen: whisperm8 tickets setup --team \(team)
                 """)
             }
-            if isWrite, !allowOther, let home = config.workspace(forDirectory: env.currentDirectory()), home != target {
+            if isWrite, !allowOther, let home = home(config), home.workspace != target {
                 throw Failure(exitCode: TicketsCLIExit.conflict, message: """
-                Team \(team) liegt im Workspace „\(target)“, dieser Ordner gehört zu „\(home)“. Aus einem Projekt wird \
+                Team \(team) liegt im Workspace „\(target)“, \(home.who) gehört zu „\(home.workspace)“. Aus einem Projekt wird \
                 nicht in den Workspace eines anderen geschrieben; lesen geht.
                 Nur wenn der Nutzer es ausdrücklich verlangt: --other-workspace
                 """)
             }
             return target
+        }
+
+        /// Wohin der Aufrufer gehört. Ist er ein Chat, zählt das Projekt des
+        /// Chats, egal in welchem Ordner seine Shell gerade steht (/tmp, Home,
+        /// eine Arbeitskopie neben dem Projekt). Der Ordner zählt nur, wenn
+        /// kein Chat ruft oder dessen Projekt keinem Workspace zugeordnet ist.
+        private func home(_ config: TicketConfig) -> (workspace: String, who: String)? {
+            if let id = env.callerChatID(), let chat = env.chats().chats.first(where: { $0.id == id }),
+               let workspace = config.workspace(forDirectory: chat.projectPath) {
+                return (workspace, "dieser Chat (Projekt \(chat.projectName))")
+            }
+            return config.workspace(forDirectory: env.currentDirectory()).map { ($0, "dieser Ordner") }
         }
 
         func source(forTeam team: String) throws -> TicketSource {
@@ -269,8 +281,9 @@ enum TicketsCLIRunner {
             if !remove.isEmpty { parts.append("−" + remove.joined(separator: ", ")) }
             return "\(key): Labels \(parts.joined(separator: " "))"
 
-        case .setup(let keyFromStdin, let project, let team, let workspace):
-            return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, workspace: workspace, env)
+        case .setup(let keyFromStdin, let project, let team, let workspace, let reassign):
+            return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, workspace: workspace,
+                                   reassign: reassign, env)
 
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
@@ -360,6 +373,12 @@ enum TicketsCLIRunner {
             }
             value = content
         }
+        // Der Text geht an einen fremden Dienst. Eine Grenze fängt die versehentlich
+        // genannte große Datei (Log, Export, Verlauf) ab, bevor sie dort landet.
+        guard value.utf8.count <= TicketsText.maxBytes else {
+            throw Failure(exitCode: TicketsCLIExit.usage,
+                          message: "Text zu lang (mehr als \(TicketsText.maxBytes / 1024) KB). Nichts gesendet.")
+        }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw Failure(exitCode: TicketsCLIExit.usage, message: "Leerer Text.") }
         return trimmed
@@ -368,7 +387,7 @@ enum TicketsCLIRunner {
     // MARK: Einrichten und prüfen
 
     private static func setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?,
-                              _ env: TicketsCLIEnvironment) async throws -> String {
+                              reassign: Bool, _ env: TicketsCLIEnvironment) async throws -> String {
         var lines: [String] = []
         var config = env.config()
         var changed = false
@@ -444,6 +463,15 @@ enum TicketsCLIRunner {
                                   message: "Team \(team) gibt es in \(hits.joined(separator: " und ")). Mit --workspace sagen, welches gemeint ist.")
                 }
             }
+            // Ein Kürzel kennt genau einen Workspace. Stilles Umhängen ließe jeden Ordner
+            // dieses Teams in den anderen Workspace schreiben, ohne dass die Sperre es merkt.
+            if let current = config.workspacesByTeam[team], current != target, !reassign {
+                throw Failure(exitCode: TicketsCLIExit.conflict, message: """
+                Team \(team) ist schon dem Workspace „\(current)“ zugeordnet. Nichts geändert.
+                Die Kommandozeile kennt je Kürzel einen Workspace; gibt es \(team) in beiden, ist nur einer erreichbar.
+                Wirklich umhängen: --reassign
+                """)
+            }
             config.set(workspace: target, forTeam: team)
             if let project {
                 let path = (project as NSString).isAbsolutePath ? project
@@ -489,6 +517,8 @@ enum TicketsCLIRunner {
     struct Check: Equatable {
         var name: String
         var ok: Bool
+        /// Kein Fehler, aber etwas, das der Nutzer wissen muss.
+        var warning = false
         var detail: String
     }
 
@@ -499,6 +529,7 @@ enum TicketsCLIRunner {
             return [Check(name: "Linear-Key", ok: false, detail: "fehlt. Einrichten: whisperm8 tickets setup --key-stdin")]
         }
         var usable = Set<String>()
+        var teamsByWorkspace: [String: [String]] = [:]
         for workspace in config.knownWorkspaces {
             guard env.credential.read(workspace) != nil else {
                 checks.append(Check(name: "Linear-Key", ok: false,
@@ -514,6 +545,7 @@ enum TicketsCLIRunner {
                     continue
                 }
                 usable.insert(workspace)
+                teamsByWorkspace[workspace] = (try? await env.source(workspace).teams()) ?? []
                 checks.append(Check(name: "Linear-Zugang", ok: true,
                                     detail: "\(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "")"))
             } catch {
@@ -524,6 +556,15 @@ enum TicketsCLIRunner {
         if config.teamsByProjectPath.isEmpty {
             checks.append(Check(name: "Zuordnung", ok: false,
                                 detail: "kein Projekt zugeordnet. whisperm8 tickets setup --project <Ordner> --team <Kürzel>"))
+        }
+        // Dasselbe Kürzel in zwei Workspaces: Die Nummer ABC-12 ist dann nicht eindeutig,
+        // und erreichbar ist nur das Team im zugeordneten Workspace.
+        for team in Set(teamsByWorkspace.values.joined()).sorted() {
+            let holders = teamsByWorkspace.filter { $0.value.contains(team) }.keys.sorted()
+            guard holders.count > 1 else { continue }
+            let reach = config.workspacesByTeam[team].map { "erreichbar ist nur „\($0)“" } ?? "keinem zugeordnet, also nicht erreichbar"
+            checks.append(Check(name: "Kürzel \(team)", ok: true, warning: true,
+                                detail: "gibt es in \(holders.joined(separator: " und ")); \(reach)"))
         }
         for team in config.knownTeams {
             guard let workspace = config.workspace(forTeam: team) else {
@@ -759,8 +800,13 @@ enum TicketsCLIFormatter {
     }
 
     static func doctor(_ checks: [TicketsCLIRunner.Check], json: Bool) -> String {
-        if json { return jsonString(checks.map { ["name": $0.name, "ok": $0.ok, "detail": $0.detail] as [String: Any] }) }
-        return checks.map { "\($0.ok ? "ok    " : "FEHLER") \(pad($0.name, 14)) \($0.detail)" }.joined(separator: "\n")
+        if json {
+            return jsonString(checks.map { ["name": $0.name, "ok": $0.ok, "warning": $0.warning, "detail": $0.detail] as [String: Any] })
+        }
+        return checks.map { check in
+            let mark = !check.ok ? "FEHLER" : check.warning ? "ACHTE " : "ok    "
+            return "\(mark) \(pad(check.name, 14)) \(check.detail)"
+        }.joined(separator: "\n")
     }
 
     static func priorityName(_ priority: Int) -> String {

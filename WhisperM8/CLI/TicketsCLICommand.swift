@@ -18,7 +18,7 @@ enum TicketsCLIArguments: Equatable {
     case new(TicketsNewOptions)
     case assign(key: String, person: String)
     case label(key: String, add: [String], remove: [String])
-    case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?)
+    case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?, reassign: Bool)
     case doctor(json: Bool)
 
     enum ParseError: Error, Equatable {
@@ -178,10 +178,11 @@ enum TicketsCLIArguments: Equatable {
             return .label(key: try key(try positional(1, "tickets label <Ticket> --add a,b --remove c")[0]), add: add, remove: remove)
         case "setup":
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
-            let workspace = try value("--workspace")
+            let workspace = try value("--workspace"), reassign = flag("--reassign")
             guard project == nil || team != nil else { throw ParseError.usage("--project braucht --team") }
-            _ = try positional(0, "tickets setup [--key-stdin] [--team T [--project ORDNER]] [--workspace W]")
-            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased(), workspace: workspace)
+            guard !reassign || team != nil else { throw ParseError.usage("--reassign braucht --team") }
+            _ = try positional(0, "tickets setup [--key-stdin] [--team T [--project ORDNER]] [--workspace W] [--reassign]")
+            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased(), workspace: workspace, reassign: reassign)
         case "doctor":
             _ = try positional(0, "tickets doctor [--json]")
             return .doctor(json: json)
@@ -193,6 +194,9 @@ enum TicketsCLIArguments: Equatable {
 
 /// Text für `note`, `comment`, `--note` und `--description`.
 enum TicketsText: Equatable {
+    /// Obergrenze für Text aus Argument, stdin oder Datei.
+    static let maxBytes = 64 * 1024
+
     case literal(String)
     case stdin
     case file(String)
@@ -282,7 +286,9 @@ enum TicketsCLICommand {
       whisperm8 tickets comment <Ticket> <Text>
                 Text: direkt, `-` für stdin oder `@datei`. Markdown. Beginnt der
                 Text selbst mit `-` oder `@`, gehört er hinter `--`:
-                tickets comment ABC-12 -- "@Giuliano bitte prüfen"
+                tickets comment ABC-12 -- "@alle bitte prüfen"
+                Höchstens 64 KB. Der Text geht an das Ticket-System: keine
+                Schlüssel, keine Kundeninhalte, keine rohen Logs.
 
     ANLEGEN UND ZUORDNEN
       whisperm8 tickets new <Titel> [--description TEXT] [--project VORHABEN]
@@ -297,16 +303,18 @@ enum TicketsCLICommand {
       whisperm8 tickets setup --team T [--project ORDNER] [--workspace W]
                 Ordnet das Team seinem Workspace zu und, mit --project, den
                 Ordner dem Team. Ohne --workspace wird nachgesehen, wo es das
-                Team gibt.
+                Team gibt. Ein schon zugeordnetes Kürzel wird nur mit
+                --reassign einem anderen Workspace zugeordnet.
       whisperm8 tickets setup                          zeigt die Einrichtung
       whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App
 
     MEHRERE WORKSPACES
       Das Team steckt in der Ticket-Nummer (ABC-12), der Workspace folgt aus
-      dem Team. Aus einem Projektordner wird nur in den Workspace dieses
-      Projekts geschrieben; Tickets anderer Workspaces lassen sich lesen.
-      Verlangt der Nutzer ausdrücklich das Schreiben nach drüben:
-      --other-workspace
+      dem Team. Ein Chat schreibt nur in den Workspace seines Projekts, egal
+      in welchem Ordner seine Shell steht; ohne Chat zählt der Ordner.
+      Tickets anderer Workspaces lassen sich lesen. Verlangt der Nutzer
+      ausdrücklich das Schreiben nach drüben: --other-workspace
+      Die Sperre schützt vor Versehen; eine Sicherheitsgrenze ist sie nicht.
 
     Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit
     {"ok": true, "key": …, "message": …}. Fehler stehen auf stderr, der
@@ -380,7 +388,15 @@ struct TicketsCLIEnvironment {
             },
             currentDirectory: { FileManager.default.currentDirectoryPath },
             readStdin: { String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self) },
-            readFile: { try? String(contentsOfFile: ($0 as NSString).expandingTildeInPath, encoding: .utf8) },
+            readFile: { path in
+                // Nie mehr lesen, als gesendet werden darf: Eine versehentlich genannte
+                // große Datei wird abgelehnt, statt ganz im Speicher zu landen.
+                guard let handle = FileHandle(forReadingAtPath: (path as NSString).expandingTildeInPath) else { return nil }
+                defer { try? handle.close() }
+                guard let data = try? handle.read(upToCount: TicketsText.maxBytes + 1) else { return nil }
+                // Über der Grenze genügt die Länge; ein mitten im Zeichen abgeschnittenes Ende zählt nicht als unlesbar.
+                return data.count > TicketsText.maxBytes ? String(decoding: data, as: UTF8.self) : String(data: data, encoding: .utf8)
+            },
             now: Date.init
         )
     }

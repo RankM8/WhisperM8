@@ -270,6 +270,12 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_b")
     }
 
+    func testTestInstanceHasItsOwnKeychainService() {
+        XCTAssertEqual(TicketCredentialStore.service(isTestInstance: false), "whisperm8-linear-api-key")
+        XCTAssertNotEqual(TicketCredentialStore.service(isTestInstance: true), TicketCredentialStore.service(isTestInstance: false),
+                          "die Test-Instanz darf den echten Key weder lesen noch überschreiben")
+    }
+
     func testCredentialCacheKeepsWorkspacesApart() {
         let cache = TicketCredentialCache()
         XCTAssertEqual(cache.value(for: "whisperm8") { "lin_api_a" }, "lin_api_a")
