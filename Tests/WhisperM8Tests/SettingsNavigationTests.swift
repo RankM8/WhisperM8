@@ -55,6 +55,15 @@ final class SettingsNavigationTests: XCTestCase {
         XCTAssertEqual(SettingsNavigation.launchClass(of: .jarvis), .labs)
     }
 
+    /// WM8-11: „Neustart ohne Chatverlust“ steht unter Labs, nur mit Agent Chats.
+    func testRestartPageLivesInLabsWithTheAgentPages() {
+        XCTAssertEqual(SettingsNavigation.launchClass(of: .restart), .labs)
+        XCTAssertTrue(SettingsNavigation.agentPages.contains(.restart))
+        let labs = SettingsNavigation.pageGroups(for: .full, revealAgentPages: false).last
+        XCTAssertEqual(labs?.title, "Labs")
+        XCTAssertTrue(labs?.pages.contains(.restart) ?? false)
+    }
+
     func testLabsGroupIsClearlyLabelled() {
         let groups = SettingsNavigation.pageGroups(for: .full, revealAgentPages: false)
         XCTAssertEqual(groups.last?.launchClass, .labs)

@@ -6891,6 +6891,16 @@
         }
       }
     },
+    "Experimental: running chats keep working while WhisperM8 restarts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimentell: Laufende Chats arbeiten weiter, während WhisperM8 neu startet."
+          }
+        }
+      }
+    },
     "Experimental: tickets from Linear and the chats working on them.": {
       "localizations": {
         "de": {
@@ -10847,6 +10857,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neues Kontoprofil"
+          }
+        }
+      }
+    },
+    "New and experimental. Off by default. A change takes effect at the next start of WhisperM8.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu und experimentell. Ab Werk aus. Eine Änderung wirkt ab dem nächsten Start von WhisperM8."
           }
         }
       }
@@ -17600,16 +17620,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bleibt · Slot %lld"
-          }
-        }
-      }
-    },
-    "Still being built and tested. Try it only with chats you could afford to lose. Off by default.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Noch im Bau und im Test. Nur mit Chats ausprobieren, deren Verlust nicht schlimm wäre. Ab Werk aus."
           }
         }
       }

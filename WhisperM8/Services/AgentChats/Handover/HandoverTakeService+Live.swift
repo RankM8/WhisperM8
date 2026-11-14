@@ -44,8 +44,9 @@ extension HandoverTakeService {
             $0.status = .running
             $0.shouldLaunchOnOpen = false
         }
-        // Nicht `sessionLaunched` (Review Ende-Meldung): das setzte „startet
-        // gerade“ samt Startfrist für einen Prozess, der längst läuft.
+        // Nicht `sessionLaunched`: Der Prozess läuft längst. `sessionAdopted`
+        // hält den Chat ohne Startphase im Startzustand, bis er sich meldet,
+        // mit einer Notfrist nach dem Status bei der Abgabe (WM8-97).
         coordinator.sessionAdopted(sessionID: id, handedOverStatus: Self.handedOverStatus(manifest))
         coordinator.restorePendingBinding(
             .init(pendingExternalID: manifest.pendingExternalSessionID,

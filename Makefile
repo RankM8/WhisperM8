@@ -104,9 +104,13 @@ dev: _guard_chat _build_dev
 _dev_finish:
 	@$(MAKE) _handover
 	@$(MAKE) kill
-	@$(MAKE) _install_bundle
+	@$(MAKE) _install_bundle || { echo "❌ Installieren gescheitert. $(HANDOVER_HINT)"; exit 1; }
 	@echo "✅ Installed: $(INSTALLED_APP)"
-	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)"
+	@env -u CLAUDE_CONFIG_DIR -u CLAUDECODE open "$(INSTALLED_APP)" || { echo "❌ Start gescheitert. $(HANDOVER_HINT)"; exit 1; }
+
+# WM8-98: Scheitert nach einer Abgabe Installieren oder Start, warten die Chats
+# beim Aufbewahrer (bis zu seiner Frist) auf die nächste App.
+HANDOVER_HINT = Wurden Chats übergeben, warten sie bis zu 10 min beim Aufbewahrer: App von Hand starten (open '$(INSTALLED_APP)'), sie holt sie zurück.
 
 # Voller Release-Build (WMO) im gemeinsamen .build — wie ausgeliefert, für Messläufe.
 dev-release: _guard_chat install
@@ -273,7 +277,7 @@ _handover:
 			if [ $$i -lt 15 ] && { { [ $$code -eq 5 ] && [ "$$young" = ja ]; } || { [ $$code -eq 4 ] && echo "$$out" | grep -q busy; }; }; then sleep 1; i=$$((i+1)); continue; fi; \
 			break; \
 		done; \
-		echo "$$out"; \
+		[ -n "$$out" ] && echo "$$out"; \
 		if [ $$code -eq 0 ]; then \
 			i=0; while [ -n "$$($(GUI_PIDS))" ] && [ $$i -lt 100 ]; do sleep 0.1; i=$$((i+1)); done; \
 		fi; \

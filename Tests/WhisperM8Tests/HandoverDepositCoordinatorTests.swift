@@ -389,6 +389,13 @@ final class HandoverRestartCLITests: XCTestCase {
         XCTAssertTrue(body.hasPrefix("\t@$(MAKE) _handover\n\t@$(MAKE) kill"), "Übergabe vor kill: \(body)")
         XCTAssertTrue(makefile.contains("app handover --from-make-dev"), "make dev weist sich aus (Befund 5)")
         XCTAssertTrue(makefile.contains("[ \"$$young\" = ja ]"), "ohne Socket nur warten, wenn die App gerade startet (Befund 6)")
+        // WM8-98: Scheitern nach der Abgabe meldet einen Satz, keine Leerzeile.
+        XCTAssertTrue(makefile.contains("Installieren gescheitert. $(HANDOVER_HINT)"))
+        XCTAssertTrue(makefile.contains("Start gescheitert. $(HANDOVER_HINT)"))
+        XCTAssertTrue(makefile.contains("[ -n \"$$out\" ] && echo \"$$out\""))
+        XCTAssertTrue(AppCLICommand.disabledLine.contains("Labs"), "Satz statt Leerzeile bei ausgeschaltetem Schalter")
+        XCTAssertFalse(AppCLICommand.disabledLine.contains("fortgesetzt"),
+                       "ohne Schalter merkt die App nichts zum Fortsetzen vor")
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("--keep-chats"))
         XCTAssertTrue(script.contains("--wait-take"))

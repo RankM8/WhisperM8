@@ -64,8 +64,9 @@ extension AgentControlRequestHandler {
                 let readiness = ChatsSendReadinessGuard.decide(
                     lifecycle: AgentSessionStatusCoordinator.shared.lifecycleState(for: targetID))
                 if case .notReady = readiness {
+                    let adopted = AgentSessionStatusCoordinator.shared.adoptedSessions.contains(targetID)
                     return .failure(.notReady,
-                                    ChatsSendReadinessGuard.message(for: readiness) ?? "Chat startet noch")
+                                    ChatsSendReadinessGuard.message(for: readiness, adopted: adopted) ?? "Chat startet noch")
                 }
                 // Am Nutzungslimit würde der Prompt verbraucht, ohne dass der Chat
                 // arbeitet (WM8-69). Kein --force-Bypass, sicherer Weg: `enqueue`.

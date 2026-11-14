@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Labs-Seite „Neustart ohne Chatverlust“ (Plan docs/plans/neustart-ohne-chatverlust.md).
-/// **Noch nicht eingehängt** (Entscheidung 13.11.2026): Sie kommt in die
-/// Labs-Gruppe (`SettingsPage`, `SettingsNavigation`), sobald das Feature
-/// einschaltbar ist; bis dahin steht der Schlüssel in `PreferenceBedienweg`.
+/// Labs-Seite „Neustart ohne Chatverlust“ (Plan docs/plans/neustart-ohne-chatverlust.md),
+/// eingehängt in die Labs-Gruppe nach dem grünen Pflichttest (WM8-11). Ab Werk aus.
 /// Ein Schalter: Beim Neustart über `make dev` gibt die App laufende Chats an
 /// einen Aufbewahrer ab und holt sie danach zurück; der GPT-Router läuft dafür
 /// als eigener Dienst. Derselbe Schlüssel wie aus Paket 3, kein zweiter.
@@ -15,7 +13,7 @@ struct RestartSettingsPage: View {
             title: "Restart without losing chats",
             subtitle: "Running chats keep working while WhisperM8 restarts."
         ) {
-            SettingsLabsNotice("Still being built and tested. Try it only with chats you could afford to lose. Off by default.")
+            SettingsLabsNotice("New and experimental. Off by default. A change takes effect at the next start of WhisperM8.")
 
             SettingsSection("Chats during a restart") {
                 SettingsToggleRow(
