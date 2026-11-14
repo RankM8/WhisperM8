@@ -208,8 +208,16 @@ schreiben. `LoginShellEnvironment` entfernt eine geerbte Variable wie
   Änderung läuft, kennt die Variable nicht. Vor der ersten Anmeldung einmal
   prüfen, dass keiner läuft (`ps -E -ww -axo pid=,command= | grep whisperm8-test-instance | grep claude`).
 - Kennt eine künftige Claude-Version die Variable nicht mehr, fiele der Login
-  wieder auf den blanken Namen. `status` prüft deshalb das installierte Claude auf
-  die Variable und warnt sonst ausdrücklich: dann nicht anmelden.
+  still auf den blanken Namen. Deshalb hält `start` (und damit `restart`) hart an,
+  wenn eine Verhaltensprobe scheitert (Vic): `claude auth status` mit der Variable
+  auf einen frischen, leeren Ordner muss „nicht angemeldet“ melden; meldet es
+  „angemeldet“, liest Claude das blanke Fach des echten Hauptkontos. Geprüft wird
+  das Programm, das die App startet (Suche über die Login-Shell); das Ergebnis
+  steht je Programm in `<wurzel>/.claude-keychain-probe`. Bewusst übersteuern,
+  ohne Anmeldung: `WHISPERM8_TEST_SKIP_LOGIN_CHECK=1 … start`. `status` zeigt
+  das Ergebnis mit an.
+- `test-instance.sh login-service` nennt den Dienstnamen, wie das Skript ihn
+  rechnet; ein Test legt Skript und App für mehrere Wurzeln auf denselben Wert fest.
 
 ### Übergang der vereinten Pille prüfen (`debug pill`)
 

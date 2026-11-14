@@ -82,6 +82,7 @@ cmd_start() {
         echo "läuft bereits (PID $(pids | tr '\n' ' ')) — ggf. aus einem anderen Worktree; erst stoppen" >&2
         return 1
     fi
+    require_claude_keychain_isolation
     mkdir -p "$ROOT/home"
     seed_defaults
     local env_args=(--env "WHISPERM8_INSTANCE_ROOT=$ROOT")
@@ -139,6 +140,59 @@ claude_login_account() {
     printf '%s' "$account"
 }
 
+# Das claude, das die App startet: Sie sucht es über die Login-Shell
+# (LoginShellEnvironment, `zsh -l -c`), nicht über den PATH dieses Skripts.
+claude_for_app() {
+    local found
+    found=$(/bin/zsh -l -c 'command -v claude' </dev/null 2>/dev/null | tail -1)
+    [[ -n "$found" && -x "$found" ]] && /usr/bin/python3 -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$found"
+}
+
+# Verhaltensprobe (Vic, WM8-63): `claude auth status` mit der Trennvariable auf
+# einen frischen, leeren Ordner muss „nicht angemeldet“ melden. Ignoriert ein
+# künftiges Claude die Variable, läse es das blanke Fach des echten
+# Hauptkontos und meldete „angemeldet“; ein Login in der Test-Instanz landete
+# dann still dort. Ergebnis je Claude-Programm zwischengespeichert.
+# Ausgabe: ok | ignoriert | unklar: <grund>
+claude_keychain_probe() {
+    local claude cache probe out
+    claude=$(claude_for_app)
+    [[ -n "$claude" ]] || { echo "unklar: claude nicht gefunden"; return 0; }
+    cache="$ROOT/.claude-keychain-probe"
+    if [[ -f "$cache" ]] && [[ "$(head -1 "$cache")" == "$claude" ]]; then
+        sed -n 2p "$cache"
+        return 0
+    fi
+    probe=$(mktemp -d "${TMPDIR:-/tmp}/wm8-claude-probe.XXXXXX")
+    out=$(env -i HOME="$probe" USER="$(claude_login_account)" PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+        CLAUDE_SECURESTORAGE_CONFIG_DIR="$probe/.claude" "$claude" auth status 2>/dev/null </dev/null || true)
+    rm -rf "$probe"
+    local verdict
+    case "$out" in
+        *'"loggedIn": false'*) verdict="ok" ;;
+        *'"loggedIn": true'*) verdict="ignoriert" ;;
+        *) verdict="unklar: keine Antwort von claude auth status" ;;
+    esac
+    mkdir -p "$ROOT"
+    printf '%s\n%s\n' "$claude" "$verdict" > "$cache"
+    echo "$verdict"
+}
+
+# Harter Halt vor jedem Start, damit niemand sich ins echte Fach anmeldet.
+# Bewusst übersteuern: WHISPERM8_TEST_SKIP_LOGIN_CHECK=1 (dann nicht anmelden).
+require_claude_keychain_isolation() {
+    [[ "${WHISPERM8_TEST_SKIP_LOGIN_CHECK:-}" == 1 ]] && return 0
+    local verdict
+    verdict=$(claude_keychain_probe)
+    [[ "$verdict" == ok ]] && return 0
+    {
+        echo "HALT: Das installierte Claude trennt den Login der Test-Instanz nicht vom echten Hauptkonto ($verdict)."
+        echo "Ein Login in der Test-Instanz landete im Schlüsselbund-Eintrag des echten Hauptkontos."
+        echo "Ohne Anmeldung trotzdem starten: WHISPERM8_TEST_SKIP_LOGIN_CHECK=1 $0 start"
+    } >&2
+    exit 3
+}
+
 cmd_status() {
     echo "Bundle:  $APP"
     echo "Wurzel:  $ROOT"
@@ -149,17 +203,17 @@ cmd_status() {
     service=$(claude_login_service)
     security find-generic-password -s "$service" -a "$(claude_login_account)" >/dev/null 2>&1 && login="ja"
     echo "Claude:  eigenes Login-Fach \"$service\", angemeldet: $login"
-    # Kennt das installierte Claude die Trennvariable nicht mehr, landete ein
-    # Login wieder im Eintrag des echten Hauptkontos.
-    local binary
-    binary=$(/usr/bin/python3 -I -c 'import os, shutil, sys; p = shutil.which("claude", path=sys.argv[1]); print(os.path.realpath(p) if p else "")' \
-        "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH")
-    if [[ -n "$binary" ]] && LC_ALL=C grep -q -a 'CLAUDE_SECURESTORAGE_CONFIG_DIR' "$binary"; then
-        echo "         Claude kennt CLAUDE_SECURESTORAGE_CONFIG_DIR: ja"
+    local verdict
+    verdict=$(claude_keychain_probe)
+    if [[ "$verdict" == ok ]]; then
+        echo "         Trennung vom echten Hauptkonto: geprüft ($(claude_for_app))"
     else
-        echo "         ACHTUNG: Claude (${binary:-nicht gefunden}) kennt CLAUDE_SECURESTORAGE_CONFIG_DIR nicht; in der Test-Instanz NICHT anmelden"
+        echo "         ACHTUNG: Trennung nicht gesichert ($verdict); in der Test-Instanz NICHT anmelden"
     fi
 }
+
+# Für Tests: Dienstname des Login-Fachs, wie das Skript ihn rechnet.
+cmd_login_service() { claude_login_service; echo; }
 
 cmd_reset() {
     cmd_stop
@@ -179,6 +233,7 @@ cmd_reset() {
 case "${1:-}" in
     build) cmd_build ;;
     start) cmd_start ;;
+    login-service) cmd_login_service ;;
     stop) cmd_stop ;;
     restart) cmd_stop; cmd_start ;;
     cli) shift; cmd_cli "$@" ;;

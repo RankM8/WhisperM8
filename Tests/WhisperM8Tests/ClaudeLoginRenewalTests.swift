@@ -899,3 +899,36 @@ final class TestInstanceKeychainServiceTests: XCTestCase {
                            testRoot: root)[AppInstance.claudeSecureStorageKey]!))
     }
 }
+
+/// Vic, WM8-63: Skript (`test-instance.sh login-service`, Python-Normalisierung)
+/// und App (`standardizedFileURL`) müssen für dieselbe Wurzel denselben
+/// Dienstnamen rechnen, sonst verfehlt `reset` den Test-Eintrag.
+final class TestInstanceScriptKeychainServiceTests: XCTestCase {
+    private static var script: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("scripts/test-instance.sh")
+    }
+
+    private func scriptService(root: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [Self.script.path, "login-service"]
+        process.environment = ProcessInfo.processInfo.environment.merging(["WHISPERM8_TEST_ROOT": root]) { $1 }
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func testScriptAndAppComputeTheSameService() throws {
+        for root in ["/Users/x/.whisperm8-test-instance", "/Users/x/.whisperm8-test-instance/", "/Users/x/./a/../.whisperm8-test-instance"] {
+            let appRoot = try XCTUnwrap(AppInstance.resolveTestRoot([AppInstance.rootEnvironmentKey: root]))
+            XCTAssertEqual(try scriptService(root: root), ClaudeAccountProfiles.mainKeychainService(testRoot: appRoot), root)
+        }
+        XCTAssertEqual(try scriptService(root: "/Users/giulianocosta/.whisperm8-test-instance"),
+                       "Claude Code-credentials-38a46618")
+    }
+}
