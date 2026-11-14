@@ -424,7 +424,7 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
     }
 
     func testEveryClipboardReasonHasItsOwnMessage() {
-        let reasons: [DictationClipboardReason] = [.decisionPending, .chatStarting, .chatNotRunning, .writeFailed]
+        let reasons: [DictationClipboardReason] = [.decisionPending, .chatStarting, .chatUsageLimited, .chatNotRunning, .writeFailed]
         let messages = Set(reasons.map(RecordingCoordinator.clipboardOnlyMessage(for:)))
         XCTAssertEqual(messages.count, reasons.count)
     }

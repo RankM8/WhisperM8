@@ -114,12 +114,19 @@ final class AgentSessionRuntimeWatcher {
     /// Sprung in einen Unterordner ändert den Ort nicht und meldet nichts.
     var onWorkingCopy: ((UUID, AgentWorkingCopy) -> Void)?
 
+    /// Meldet, wenn ein Chat an das Nutzungslimit stößt oder davon weg ist
+    /// (`nil`) — WM8-69. Aus demselben Tail-Read, nur bei Änderung.
+    var onUsageLimit: ((UUID, AgentUsageLimit?) -> Void)?
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
     /// wird die Session nach Abschluss SOFORT erneut gepollt — Events dürfen
     /// nicht verworfen werden (das alte Set-Verhalten hätte sie gedroppt).
     private var pendingRepoll: Set<UUID> = []
+    /// Wer auf einen frischen Poll wartet (`refresh`), mit Zeitpunkt der
+    /// Anfrage: nur ein Poll, der danach begann, erfüllt ihn.
+    private var refreshWaiters: [UUID: [(requestedAt: Date, done: () -> Void)]] = [:]
     /// Coalescing für geplante Event-Polls (ein Task pro Burst).
     private var scheduledEventPolls: Set<UUID> = []
     private var eventSources: [UUID: FileEventSource] = [:]
@@ -162,16 +169,23 @@ final class AgentSessionRuntimeWatcher {
         provider: AgentProvider,
         externalSessionID: String?,
         cwd: String,
-        priorTurnFinishedAt: Date?
+        priorTurnFinishedAt: Date?,
+        usageLimit: AgentUsageLimit? = nil
     ) {
-        var entry = watched[sessionID] ?? WatchedSession(
-            id: sessionID,
-            provider: provider,
-            cwd: cwd,
-            externalSessionID: externalSessionID,
-            transcriptURL: nil,
-            lastTurnFinishedAt: priorTurnFinishedAt
-        )
+        var entry = watched[sessionID] ?? {
+            var fresh = WatchedSession(
+                id: sessionID,
+                provider: provider,
+                cwd: cwd,
+                externalSessionID: externalSessionID,
+                transcriptURL: nil,
+                lastTurnFinishedAt: priorTurnFinishedAt
+            )
+            // Gespeichertes Limit vorbelegen: steht es nicht mehr im Verlauf,
+            // meldet der erste Poll das Ende (sonst bliebe es stehen; Review M3).
+            fresh.cachedUsageLimit = usageLimit
+            return fresh
+        }()
         entry.provider = provider
         entry.cwd = cwd
         // Umbindung (/clear, /resume): neue ID → altes Transcript samt Caches
@@ -345,6 +359,26 @@ final class AgentSessionRuntimeWatcher {
         }
     }
 
+    /// Frischer Poll, danach `completion` (MainActor). Läuft gerade einer,
+    /// folgt ein weiterer; ohne Beobachtung sofort.
+    func refresh(sessionID: UUID, completion: @escaping () -> Void) {
+        guard watched[sessionID] != nil else { completion(); return }
+        refreshWaiters[sessionID, default: []].append((Date(), completion))
+        if pollingSessionIDs.contains(sessionID) {
+            pendingRepoll.insert(sessionID)
+        } else {
+            pollOne(sessionID: sessionID)
+        }
+    }
+
+    private func finishRefreshWaiters(sessionID: UUID, pollStartedAt: Date) {
+        guard let waiters = refreshWaiters[sessionID] else { return }
+        let due = waiters.filter { $0.requestedAt <= pollStartedAt }
+        let rest = waiters.filter { $0.requestedAt > pollStartedAt }
+        refreshWaiters[sessionID] = rest.isEmpty ? nil : rest
+        due.forEach { $0.done() }
+    }
+
     private func pollOne(sessionID: UUID) {
         guard var entry = watched[sessionID],
               !pollingSessionIDs.contains(sessionID) else { return }
@@ -368,6 +402,7 @@ final class AgentSessionRuntimeWatcher {
         // MainActor), nicht die Arbeit. Die Arbeit misst `sidebarStatusPoll`
         // unten im Hintergrund-Task — Begründung an beiden Budgets.
         let latencyToken = PerfBudgets.sidebarStatusPollLatency.begin()
+        let pollStartedAt = Date()
         let snapshotEntry = entry
         let snapshotGeneration = entry.generation
         let statProvider = self.statProvider
@@ -396,6 +431,7 @@ final class AgentSessionRuntimeWatcher {
             guard let self else { return }
             self.pollingSessionIDs.remove(sessionID)
             defer {
+                self.finishRefreshWaiters(sessionID: sessionID, pollStartedAt: pollStartedAt)
                 // Trailing-Edge: kam während des Polls ein vnode-Event,
                 // sofort nachfassen.
                 if self.pendingRepoll.remove(sessionID) != nil {
@@ -417,6 +453,8 @@ final class AgentSessionRuntimeWatcher {
             current.cachedQueuedOwnPrompts = snapshot.queuedOwnPrompts
             let copyChanged = snapshot.workingCopy != nil && current.cachedWorkingCopy != snapshot.workingCopy
             if let copy = snapshot.workingCopy { current.cachedWorkingCopy = copy }
+            let limitChanged = snapshot.stat != nil && current.cachedUsageLimit != snapshot.usageLimit
+            current.cachedUsageLimit = snapshot.stat != nil ? snapshot.usageLimit : current.cachedUsageLimit
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
             }
@@ -429,6 +467,10 @@ final class AgentSessionRuntimeWatcher {
             if copyChanged, let copy = snapshot.workingCopy {
                 self.watched[sessionID] = current
                 self.onWorkingCopy?(sessionID, copy)
+            }
+            if limitChanged {
+                self.watched[sessionID] = current
+                self.onUsageLimit?(sessionID, snapshot.usageLimit)
             }
 
             guard let decision = snapshot.decision else {
@@ -508,7 +550,8 @@ final class AgentSessionRuntimeWatcher {
                 // Stat-first: Datei unverändert → Stand-Zeile auch.
                 activity: entry.cachedActivity,
                 queuedOwnPrompts: entry.cachedQueuedOwnPrompts,
-                workingCopy: entry.cachedWorkingCopy
+                workingCopy: entry.cachedWorkingCopy,
+                usageLimit: entry.cachedUsageLimit
             )
         }
 
@@ -536,7 +579,10 @@ final class AgentSessionRuntimeWatcher {
             activity: activity,
             // Nur Zeilen mit dem Marker werden geparst (Runde 5, R1).
             queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0,
-            workingCopy: workingCopy(in: tail, entry: entry)
+            workingCopy: workingCopy(in: tail, entry: entry),
+            // Liegt die Limit-Zeile außerhalb des Tails (kein Ereignis), bleibt
+            // der letzte Stand; ein neueres Ereignis hebt das Limit auf.
+            usageLimit: AgentUsageLimit.after(event: lastEvent, tail: tail, cached: entry.cachedUsageLimit)
         )
     }
 
@@ -632,6 +678,8 @@ struct WatchedSession {
     var cachedQueuedOwnPrompts: Int = 0
     /// Zuletzt erkannter Ort (WM8-60).
     var cachedWorkingCopy: AgentWorkingCopy? = nil
+    /// Limit laut letztem Tail-Read (WM8-69).
+    var cachedUsageLimit: AgentUsageLimit? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -652,4 +700,6 @@ struct AgentSessionRuntimePollSnapshot {
     var queuedOwnPrompts: Int = 0
     /// Ort des Chats (WM8-60); im Stat-first-Pfad gecacht.
     var workingCopy: AgentWorkingCopy? = nil
+    /// Nutzungslimit (WM8-69); im Stat-first-Pfad gecacht.
+    var usageLimit: AgentUsageLimit? = nil
 }

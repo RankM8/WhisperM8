@@ -254,6 +254,22 @@ hinter einem Symlink das Zeichen „außerhalb“.
   zurück, bleibt bis zum nächsten Turn der gespeicherte Ort stehen.
 - `chats list` wird durch die Spalte `ORT` rund 28 Zeichen breiter.
 
+Nutzungslimit (WM8-69): Claudes Limit-Antwort ist eine eigene Verlaufszeile
+(`isApiErrorMessage`, `error: rate_limit`, `apiError` `usage_limit_reached`
+oder `model_requires_usage_credits`, Ende als Unix-Zeit). Der Parser macht
+daraus `.usageLimit`; der Decider meldet `idle` ohne `turnFinished` (keine
+Fertig-Meldung, kein Auto-Naming). Aus demselben Tail-Read meldet der Watcher
+das Limit über `onUsageLimit`, nur bei Änderung; der Koordinator speichert es
+als `AgentChatSession.usageLimit` (ohne Aktivitäts-Bump) und hebt es zum
+Ende wieder auf. Der Laufzeitstatus bleibt dabei `idle` — ein eigener
+Status-Fall hätte rund 35 Verzweigungen berührt. Angezeigt wird es als
+Überlagerung: `AgentStatusIndicator(usageLimit:)` zeigt eine Sanduhr statt des
+ruhenden Punkts (Grün bleibt „arbeitet“ und gewinnt), Seitenleiste und
+Kachelkopf zusätzlich „Limit until 04:20“ (`AgentUsageLimitLabel`). Senden und
+Warteschlange prüfen es (`ChatsSendReadinessGuard.usageLimitMessage`): Ein
+Prompt an einen Chat am Limit wird abgelehnt bzw. bleibt vorgemerkt, statt
+verbraucht zu werden; zum Ende stößt der Koordinator die Zustellung an.
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu

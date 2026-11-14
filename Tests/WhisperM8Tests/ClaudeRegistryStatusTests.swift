@@ -120,6 +120,8 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         coordinator.registryAwaitingNotificationDelay = 0
         coordinator.claudeVersionProvider = { ClaudeCLIVersion(components: [2, 1, 303]) }
         coordinator.hasRunningTerminal = { _ in true }
+        // Turn-Ende ohne Warten auf einen Poll (der Watcher liest hier kein Verlauf).
+        coordinator.freshTranscriptBeforeTurnEnd = { _, done in done() }
         return Fixture(coordinator: coordinator, store: store, sessionID: session.id,
                        poster: poster, soundBox: sounds, registryEnabled: flag)
     }
@@ -140,6 +142,59 @@ final class ClaudeRegistryStatusTests: XCTestCase {
     private func hook(_ name: ClaudeHookEvent.EventName, tool: String? = nil) -> ClaudeHookEvent {
         ClaudeHookEvent(hookEventName: name, sessionID: "ext-1", transcriptPath: nil, cwd: nil,
                         reason: nil, toolName: tool, rawJSON: "{}")
+    }
+
+    func testRegistryTurnEndAtUsageLimitHasNoSoundOrNotification() throws {
+        // WM8-69, Review H2: Am Limit meldet die Registry ein gewöhnliches
+        // Turn-Ende; Ton und Meldung entfallen, wenn der Verlauf das Limit zeigt.
+        let f = try makeFixture()
+        f.coordinator.sessionLaunched(sessionID: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle"))
+        f.coordinator.handleRegistryRecord(record("busy"))
+        try f.store.setUsageLimit(AgentUsageLimit(resetsAt: Date().addingTimeInterval(3600), kind: "five_hour",
+                                                  since: nil), for: f.sessionID)
+        f.coordinator.handleRegistryRecord(record("idle"))
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle)
+        XCTAssertEqual(f.sounds, [])
+        XCTAssertTrue(f.poster.posted.isEmpty)
+    }
+
+    func testLimitEndingViaTheTranscriptDeliversToSiblingChats() throws {
+        // Vic, Auflage 2: Macht Claude im Chat mit der Limit-Zeile von selbst
+        // weiter, endet das Limit über den Verlauf; die anderen Chats des Kontos,
+        // die es mit aufgehalten hat, bekommen ihr Vorgemerktes.
+        let f = try makeFixture()
+        let sibling = try f.store.createSession(provider: .claude, projectPath: tempDir.path, title: "Geschwister",
+                                                initialPrompt: nil)
+        for id in [f.sessionID, sibling.id] {
+            try f.store.updateSession(id: id) { $0.claudeProfileName = "RankM8" }
+        }
+        var delivered: [UUID] = []
+        f.coordinator.deliverQueued = { delivered.append($0) }
+        try f.store.setUsageLimit(AgentUsageLimit(resetsAt: Date().addingTimeInterval(3600), kind: "five_hour",
+                                                  since: nil, account: "RankM8"), for: f.sessionID)
+        f.coordinator.handleUsageLimit(sessionID: f.sessionID, limit: nil)
+        XCTAssertEqual(delivered, [sibling.id])
+        XCTAssertNil(f.store.loadWorkspace().sessions.first(where: { $0.id == f.sessionID })?.usageLimit)
+    }
+
+    func testStoredExpiredUsageLimitEndsAfterRestart() throws {
+        // Jarvis B: Nach einem Neustart wird der Timer ausdrücklich geplant;
+        // ein schon abgelaufenes Limit endet sofort.
+        let f = try makeFixture()
+        try f.store.setUsageLimit(AgentUsageLimit(resetsAt: Date().addingTimeInterval(-3600), kind: "five_hour",
+                                                  since: nil), for: f.sessionID)
+        f.coordinator.scheduleStoredUsageLimitEnds()
+        let cleared = expectation(description: "Limit aufgehoben")
+        Task { @MainActor in
+            for _ in 0..<50 {
+                if f.store.loadWorkspace().sessions.first(where: { $0.id == f.sessionID })?.usageLimit == nil {
+                    cleared.fulfill(); return
+                }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        wait(for: [cleared], timeout: 3)
     }
 
     func testRegistryDrivesStatusAndTurnEndEffects() throws {

@@ -12,6 +12,11 @@ enum AgentTranscriptEvent: Equatable {
     /// Assistant-Message ohne `stop_reason` → Tool-Use offen oder Streaming.
     case assistantMessageOngoing(timestamp: Date?)
     case toolResult(timestamp: Date?)
+    /// Claude: Das Konto ist am Nutzungslimit (5 Stunden, Woche, Guthaben).
+    /// Claude schreibt dafür eine eigene Antwortzeile (`isApiErrorMessage`,
+    /// `error: rate_limit`) mit dem Ende als Unix-Zeit. Der Chat ruht, hat
+    /// aber keinen Turn beendet und arbeitet bis dahin nicht (WM8-69).
+    case usageLimit(timestamp: Date?, resetsAt: Date?, kind: String)
     /// Nur Codex: Tool-Aufruf ohne Ergebnis. Codex führt das Tool gerade aus
     /// ODER wartet auf die Freigabe des Nutzers — im Rollout ist beides gleich
     /// (Freigabe-Anfragen schreibt Codex nicht mit). `kind` sagt, was der
@@ -132,6 +137,7 @@ enum AgentTranscriptParser {
             }
             return .userMessage(timestamp: timestamp)
         case "assistant":
+            if let limit = usageLimit(obj, timestamp: timestamp) { return limit }
             let message = obj["message"] as? [String: Any]
             if let stopReason = message?["stop_reason"] as? String, !stopReason.isEmpty {
                 return .assistantMessageStopped(timestamp: timestamp, stopReason: stopReason)
@@ -144,6 +150,30 @@ enum AgentTranscriptParser {
             // Rückwärts-Scan übersprungen statt den Status zu bestimmen.
             return .meta
         }
+    }
+
+    /// Fehlerarten, die ein Nutzungslimit sind (belegt in den Verläufen vom
+    /// 1.–14.11.2026): `usage_limit_reached` (5 Stunden, Woche) und
+    /// `model_requires_usage_credits` (Guthaben für ein Modell aufgebraucht).
+    /// Server-, Verbindungs- und Login-Fehler sind KEIN Limit.
+    static let usageLimitAPIErrors: Set<String> = ["usage_limit_reached", "model_requires_usage_credits"]
+
+    /// Pur: die Limit-Zeile von Claude erkennen. Ende aus `quotaLimits`, sonst
+    /// aus `apiErrorParams.rate_limit_info` (Guthaben-Fall).
+    static func usageLimit(_ obj: [String: Any], timestamp: Date?) -> AgentTranscriptEvent? {
+        guard obj["isApiErrorMessage"] as? Bool == true,
+              obj["error"] as? String == "rate_limit",
+              let apiError = obj["apiError"] as? String, usageLimitAPIErrors.contains(apiError) else { return nil }
+        let quota = obj["quotaLimits"] as? [String: Any]
+        let info = (obj["apiErrorParams"] as? [String: Any])?["rate_limit_info"] as? [String: Any]
+        let resets = (quota?["resetsAt"] as? NSNumber) ?? (info?["resetsAt"] as? NSNumber)
+        // Guthaben-Limit (nur ein Modell) bekommt seine Fehlerart als `kind`:
+        // sonst wäre es von einem Wochenlimit des Kontos nicht zu unterscheiden.
+        let kind = apiError == "model_requires_usage_credits" ? apiError
+            : (quota?["rateLimitType"] as? String) ?? (info?["rateLimitType"] as? String) ?? apiError
+        return .usageLimit(timestamp: timestamp,
+                           resetsAt: resets.map { Date(timeIntervalSince1970: $0.doubleValue) },
+                           kind: kind)
     }
 
     // MARK: - Codex
@@ -448,6 +478,12 @@ enum AgentTranscriptStatusDecider {
             // ESC-Abbruch: Chat idlet am Prompt. Kein `turnFinished` — ein
             // Abbruch soll weder Auto-Naming noch Fertig-Notification auslösen.
             return Decision(status: .idle, turnFinished: false, turnAborted: true)
+
+        case .usageLimit:
+            // Am Limit ruht der Chat, aber nichts ist fertig: keine
+            // Fertig-Meldung, kein Auto-Naming. Den Limit-Zustand selbst trägt
+            // `AgentChatSession.usageLimit` (WM8-69).
+            return Decision(status: .idle, turnFinished: false)
 
         case .sessionMeta, .meta, .other:
             // `.meta` erreicht diesen Pfad nur, wenn ein Aufrufer das Event

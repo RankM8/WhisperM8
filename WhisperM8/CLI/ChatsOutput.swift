@@ -89,6 +89,11 @@ enum ChatsOutput {
             "source": runtime.source,
         ]
         if let since = runtime.since { runtimeDict["since"] = iso(since) }
+        // Eigener Zustand „am Limit bis …“ (WM8-69), neben dem Status: der
+        // Chat ruht, nimmt aber nichts an. Nur ergänzt, nichts umbenannt.
+        if let limit = session.activeUsageLimit() {
+            runtimeDict["usageLimit"] = usageLimitJSON(limit)
+        }
         if let revision = runtime.revision { runtimeDict["revision"] = revision }
 
         var transcriptDict: [String: Any] = ["availability": runtime.availability.rawValue]
@@ -138,6 +143,38 @@ enum ChatsOutput {
             dict["lastAssistantLine"] = line
         }
         return dict
+    }
+
+    /// Status für Tabelle und Board: am Limit „limit bis 04:20“ statt des
+    /// ruhenden Status (WM8-69).
+    static func statusText(_ status: AgentSessionRuntimeStatus?, session: AgentChatSession, now: Date) -> String {
+        if let limit = session.activeUsageLimit(at: now) {
+            let until = limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? ""
+            return "limit" + until + (limit.autoContinues == true ? ", dann weiter" : "")
+        }
+        return status?.rawValue ?? "unknown"
+    }
+
+    /// `kind` (five_hour, seven_day, model_requires_usage_credits), `resetsAt`.
+    static func usageLimitJSON(_ limit: AgentUsageLimit) -> [String: Any] {
+        ["kind": limit.kind, "resetsAt": limit.resetsAt.map(iso) ?? NSNull(),
+         "autoContinues": limit.autoContinues.map { $0 as Any } ?? NSNull()]
+    }
+
+    /// Für `chats show`: welches Limit, bis wann.
+    static func usageLimitLine(_ limit: AgentUsageLimit, now: Date) -> String {
+        let kind: String
+        switch limit.kind {
+        case "five_hour": kind = "5-Stunden-Limit"
+        case "seven_day": kind = "Wochenlimit"
+        default: kind = "Guthaben-Limit (\(limit.kind))"
+        }
+        let until = limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? ""
+        if limit.autoContinues == true {
+            return "Konto am \(kind)\(until), läuft dann von selbst weiter — Nachrichten werden vorgemerkt, "
+                + "eine Nachricht jetzt würde das Weitermachen abbrechen"
+        }
+        return "Konto am \(kind)\(until) — Nachrichten werden vorgemerkt, nicht verbraucht"
     }
 
     /// Wo der Chat zuletzt gearbeitet hat (WM8-60): `kind` main | worktree |
@@ -315,7 +352,7 @@ enum ChatsOutput {
         for item in items {
             let session = item.entry.session
             let name = truncate("\(item.entry.projectName)/\(session.title)", 40)
-            let status = item.runtime.status?.rawValue ?? "unknown"
+            let status = statusText(item.runtime.status, session: session, now: now)
             let since = item.runtime.since.map { relative(from: $0, to: now) } ?? "–"
             let place = truncateMiddle(workingCopyShort(session.workingCopy), 26)
             CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8)
@@ -358,7 +395,7 @@ enum ChatsOutput {
                 let session = item.entry.session
                 let symbol = statusSymbol(item.runtime.status)
                 let name = truncate("\(item.entry.projectName)/\(session.title)", 34)
-                let status = item.runtime.status?.rawValue ?? "unknown"
+                let status = statusText(item.runtime.status, session: session, now: now)
                 let since = item.runtime.since.map { "seit \(relative(from: $0, to: now))" } ?? ""
                 var marks = ""
                 if openTabIDs.contains(session.id) { marks += " ⊙" }
@@ -403,6 +440,9 @@ enum ChatsOutput {
         CLIIO.out("")
         CLIIO.out("── LAUFZEIT " + String(repeating: "─", count: 41))
         CLIIO.out("Status       \(session.status.rawValue) / runtime: \(runtime.status?.rawValue ?? "unknown") (\(runtime.source))")
+        if let limit = session.activeUsageLimit(at: now) {
+            CLIIO.out("Limit        \(usageLimitLine(limit, now: now))")
+        }
         if let since = runtime.since { CLIIO.out("Seit         \(relative(from: since, to: now)) (\(iso(since)))") }
         CLIIO.out("Aktivität    \(relative(from: session.lastActivityAt, to: now)) (\(iso(session.lastActivityAt)))")
         if let lastTurn = session.lastTurnAt { CLIIO.out("Letzter Turn \(relative(from: lastTurn, to: now))") }
@@ -434,6 +474,14 @@ enum ChatsOutput {
 
     static func iso(_ date: Date) -> String {
         isoFormatter.string(from: date)
+    }
+
+    /// Gegenstück zu `iso`, mit und ohne Sekundenbruchteile.
+    static func parseISO(_ text: String) -> Date? {
+        if let date = isoFormatter.date(from: text) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: text)
     }
 
     static func relative(from date: Date, to now: Date) -> String {

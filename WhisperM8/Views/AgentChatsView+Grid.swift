@@ -911,6 +911,7 @@ extension AgentChatsView {
             }
             // Konto und Ort gleichrangig vor dem Spacer (WM8-60).
             accountBadge(for: session).layoutPriority(0.5)
+            if let limit = session.activeUsageLimit() { AgentUsageLimitLabel(limit: limit).layoutPriority(0.6) }
             if let copy = session.workingCopy { AgentWorkingCopyBadge(copy: copy) }
             if Self.showsNoteCards {
                 JarvisNoteChevron(sessionID: session.id, windowID: windowID,

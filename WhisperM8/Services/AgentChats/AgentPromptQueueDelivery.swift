@@ -54,6 +54,12 @@ final class AgentPromptQueueDelivery {
             store.markFailed(id: reserved.id, error: "Keine laufende PTY — wartet auf Start", retry: true)
             return
         }
+        // Am Nutzungslimit würde der Auftrag verbraucht (WM8-69): liegen
+        // lassen; nach dem Limit stößt der Koordinator die Zustellung an.
+        if let message = ChatsSendReadinessGuard.usageLimitMessage(session.blockingUsageLimit(in: workspace.sessions)) {
+            store.markFailed(id: reserved.id, error: message, retry: true)
+            return
+        }
         // Status erneut prüfen: zwischen Turn-Ende und Settle-Delay kann der
         // Chat schon wieder arbeiten (z. B. weil jemand direkt getippt hat).
         let coordinator = AgentSessionStatusCoordinator.shared

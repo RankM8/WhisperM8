@@ -318,6 +318,9 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// Wo der Chat zuletzt gearbeitet hat (Hauptordner oder Arbeitskopie,
     /// Branch), abgeleitet aus dem Verlaufsende. `nil` = noch unbekannt.
     var workingCopy: AgentWorkingCopy?
+    /// Konto am Nutzungslimit (WM8-69), solange die Limit-Zeile die letzte
+    /// Antwort im Verlauf ist. `nil` = kein Limit.
+    var usageLimit: AgentUsageLimit?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -355,6 +358,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case claudeBackendModel
         case gptProfileName
         case workingCopy
+        case usageLimit
     }
 
     init(
@@ -470,6 +474,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         // Lenient: eine neuere App-Version mit unbekannter Art darf den
         // Workspace-Decode nicht scheitern lassen.
         workingCopy = (try? container.decodeIfPresent(AgentWorkingCopy.self, forKey: .workingCopy)) ?? nil
+        usageLimit = (try? container.decodeIfPresent(AgentUsageLimit.self, forKey: .usageLimit)) ?? nil
     }
 
     var isManuallyCreated: Bool { createdManually == true }

@@ -63,6 +63,8 @@ final class DictationDeliveryRouterTests: XCTestCase {
 
     func testStartingChatKeepsTextOnClipboard() {
         XCTAssertEqual(decide(chat(), state: .starting), .clipboardOnly(.chatStarting))
+        // Am Nutzungslimit (WM8-69): nie in den Chat, auch nicht mit Senden.
+        XCTAssertEqual(decide(chat(submit: true), state: .usageLimited), .clipboardOnly(.chatUsageLimited))
     }
 
     func testStoppedChatKeepsTextOnClipboard() {

@@ -12,4 +12,15 @@ extension AgentSessionStore {
             return true
         }
     }
+
+    /// Merkt sich das Nutzungslimit eines Chats (WM8-69); `nil` hebt es auf.
+    /// Nur bei Änderung, ohne Aktivitäts-Bump.
+    func setUsageLimit(_ limit: AgentUsageLimit?, for id: UUID) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == id }),
+                  workspace.sessions[index].usageLimit != limit else { return false }
+            workspace.sessions[index].usageLimit = limit
+            return true
+        }
+    }
 }
