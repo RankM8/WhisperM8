@@ -24,6 +24,12 @@ final class ControllerTerminalSpy: ControllerTerminalControlling {
         texts.append((text, submit))
         return true
     }
+    private(set) var questionTexts: [String] = []
+    var questionTextSucceeds = true
+    func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool {
+        questionTexts.append(text)
+        return questionTextSucceeds
+    }
     private(set) var choiceListsOpened: [UUID] = []
     func noteChoiceListOpened(in sessionID: UUID) { choiceListsOpened.append(sessionID) }
 }

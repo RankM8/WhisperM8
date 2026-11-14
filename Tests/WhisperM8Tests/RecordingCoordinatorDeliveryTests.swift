@@ -37,6 +37,13 @@ private final class ChatWriterSpy: DictationChatWriting {
         writes.append(Write(text: text, sessionID: sessionID, submit: submit))
         return writeSucceeds
     }
+
+    var questionWriteSucceeds = true
+    private(set) var questionWrites: [String] = []
+    func writeToQuestion(_ text: String, to sessionID: UUID) -> Bool {
+        questionWrites.append(text)
+        return questionWriteSucceeds
+    }
 }
 
 private final class AudioStopSpy: AudioRecordingStopping {

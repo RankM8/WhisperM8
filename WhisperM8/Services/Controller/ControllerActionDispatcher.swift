@@ -176,7 +176,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             backTarget: window.backTarget,
             openView: terminal.screen?.openView,
             promptField: terminal.screen?.promptField,
-            onlyRecalledPrompt: terminal.onlyRecalledPrompt
+            onlyRecalledPrompt: terminal.onlyRecalledPrompt,
+            questionAcceptsText: terminal.questionAcceptsText
         )
     }
 

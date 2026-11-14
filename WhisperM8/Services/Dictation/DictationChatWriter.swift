@@ -7,6 +7,9 @@ protocol DictationChatWriting: AnyObject {
     func state(of sessionID: UUID) -> DictationChatState
     /// `false`, wenn nichts geschrieben wurde (kein laufendes Terminal).
     func write(_ text: String, to sessionID: UUID, submit: Bool) -> Bool
+    /// In Claudes offene Frage, ohne Enter. `false`, wenn die Frage inzwischen
+    /// nicht mehr als solche erkannt wird.
+    func writeToQuestion(_ text: String, to sessionID: UUID) -> Bool
 }
 
 /// Echte Fassung über die Terminal-Registry. Fasst die Singletons erst beim
@@ -20,7 +23,7 @@ final class LiveDictationChatWriter: DictationChatWriting {
         }
         let statusCoordinator = AgentSessionStatusCoordinator.shared
         if statusCoordinator.statusStore.status(for: sessionID) == .awaitingInput {
-            return .awaitingInput
+            return controller.questionAcceptsText() ? .questionAcceptsText : .awaitingInput
         }
         // Dieselbe Bereitschaftsprüfung wie `chats send`: Eine TUI, die noch
         // hochfährt, verschluckt den Paste oder liefert ihn später doppelt.
@@ -43,5 +46,9 @@ final class LiveDictationChatWriter: DictationChatWriting {
         controller.sendPrompt(text, submit: submit)
         controller.noteControllerDraftInput(submitted: submit)
         return true
+    }
+
+    func writeToQuestion(_ text: String, to sessionID: UUID) -> Bool {
+        AgentTerminalRegistry.shared.controller(for: sessionID)?.sendQuestionText(text) ?? false
     }
 }
