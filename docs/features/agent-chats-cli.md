@@ -654,15 +654,20 @@ Turn-Ende). `snapshot` bietet in `launching` konsequent kein `send` als Aktion a
 `send --queue-if-busy` legt einen Auftrag an einen beschäftigten Chat (Status
 `working`, Entwurf im Eingabefeld, Start läuft noch) in die Warteschlange,
 statt mit Exit 4 zu enden; ist der Chat inzwischen frei, wird direkt
-zugestellt. `send --wait-started [Sekunden]` (Standard 20, höchstens 600)
-fragt nach dem Zustellen alle 0,5 s den Status der App ab und meldet eines von
-drei Ergebnissen: `started` (der Chat arbeitet, Exit 0), `queued` (vorgemerkt,
+zugestellt. `send --wait-started` (Standard 20 s, `--wait-started=N` für eine
+andere Frist, höchstens 600) fragt nach dem Zustellen alle 0,5 s den Status der
+App ab und achtet nach „arbeitet“ noch 3 s auf eine Limit-Zeile (trifft die
+Nachricht auf ein unbekanntes Limit, steht der Chat kurz auf „arbeitet“). Es
+meldet eines von drei Ergebnissen: `started` (der Chat arbeitet, Exit 0), `queued` (vorgemerkt,
 Exit 0) oder `notStarted` mit Grund: `usageLimit` (Konto am Nutzungslimit, mit
 Uhrzeit), `awaitingInput` (wartet weiter auf eine Antwort), `stopped`,
 `errored` (Exit 4) oder `timeout` (Exit 124). Maßgeblich ist der Status, nicht
 ein wachsender Verlauf: Codex schreibt beim Antworten minutenlang nichts.
 `--json` trägt dieselben Felder (`outcome`, `reason`, `waitedSeconds`,
-`position`, `usageLimitResetsAt`). `--force` bleibt, wie es ist.
+`position`, `usageLimitResetsAt`; `ok` folgt dem Ergebnis). `--force` bleibt,
+wie es ist; ein gesetztes `--if-status` wird nicht über die Warteschlange
+umgangen. Slash-Befehle (`/login`, `/model`, `/rate-limit-options`) gehen auch
+am Limit durch: sie sind der Ausweg.
 
 ### Chat am Nutzungslimit (WM8-69)
 
@@ -684,14 +689,24 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
 - Weitermachen zum Ende (belegt in den Verläufen vom 11.–14.11.2026): Claude
   bietet nach der Limit-Zeile „continuing automatically at …“ an und schreibt
   zum Ende selbst „Your claude.ai usage limit has reset. Continue the task …“
-  (einmal belegt, rund 10 min nach dem Ende). Jede neue Nachricht an den Chat
-  erzeugt aber eine weitere Limit-Zeile und bricht das ab („Automatic continue
-  cancelled“). `usageLimit.autoContinues` sagt, was zuletzt galt; Anzeige und
+  (belegt rund 1 und 10 min nach dem Ende). Eine neue Nachricht an den Chat
+  erzeugt eine weitere Limit-Zeile und bricht das meist ab („Automatic continue
+  cancelled“); manchmal bietet Claude es danach erneut an („Usage limit
+  reached again · continuing automatically at …“), es zählt die jüngste
+  Aussage. `usageLimit.autoContinues` sagt, was zuletzt galt; Anzeige und
   Meldungen lauten dann „läuft um … weiter“. Die Warteschlange stellt in dem
   Fall erst nach dem fortgesetzten Turn zu (spätestens 20 min nach dem Ende),
   sonst 5 s nach dem Ende.
-- Der Zustand endet von selbst: mit der Endzeit oder sobald ein neuer Turn im
-  Verlauf beginnt.
+- Der Zustand endet von selbst: mit der Endzeit oder sobald Claude wieder
+  antwortet. Zeilen vom Typ `user` (Teammate-Nachrichten, Task-Meldungen) beenden
+  ihn nicht, Claude antwortet darauf sofort mit der nächsten Limit-Zeile.
+- Das Limit gilt für das Konto, an dem es entstand: nach `move-account` sperrt
+  es den Chat nicht mehr.
+- Fertig-Ton, Fertig-Meldung und Zustellung beim Turn-Ende warten auf einen
+  frischen Blick in den Verlauf; steht dort das Limit, entfallen sie (die
+  Registry meldet am Limit ein gewöhnliches Turn-Ende).
+- Noch nicht abgedeckt: Diktat und Controller schreiben weiter in einen Chat am
+  Limit.
 - Codex- und GPT-Chats: noch nicht erkannt (kein belegter Limit-Fall im
   Bestand; Codex führt `rate_limits` in `token_count`, ohne echten Treffer).
 - Der Kontowechsel behandelt einen Chat am Limit noch wie bisher (Folgepaket:

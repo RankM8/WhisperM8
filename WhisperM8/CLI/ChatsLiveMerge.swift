@@ -10,6 +10,8 @@ struct ChatsLiveStatus {
     var canInterrupt: Bool
     /// Konto am Nutzungslimit bis (WM8-69); `nil` = kein Limit bekannt.
     var usageLimitUntil: Date? = nil
+    /// Am Limit, auch ohne bekanntes Ende (Review M4).
+    var usageLimited: Bool = false
 
     /// Kein PTY, kein bekannter Status — so stand jede ruhende Session in der
     /// vollen Liste.
@@ -58,7 +60,8 @@ enum ChatsLiveMerge {
                 isAttachedPTY: session["isAttachedPTY"]?.boolValue ?? false,
                 canSend: session["canSend"]?.boolValue ?? false,
                 canInterrupt: session["canInterrupt"]?.boolValue ?? false,
-                usageLimitUntil: session["usageLimitResetsAt"]?.stringValue.flatMap(ChatsOutput.parseISO)
+                usageLimitUntil: session["usageLimitResetsAt"]?.stringValue.flatMap(ChatsOutput.parseISO),
+                usageLimited: session["usageLimit"]?.stringValue != nil
             )
         }
         return ChatsLiveSnapshot(

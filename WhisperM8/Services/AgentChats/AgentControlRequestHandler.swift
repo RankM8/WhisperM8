@@ -204,7 +204,7 @@ final class AgentControlRequestHandler: AgentControlRequestHandling, @unchecked 
                 }
                 // Am Nutzungslimit würde der Prompt verbraucht, ohne dass der Chat
                 // arbeitet (WM8-69). Kein --force-Bypass, sicherer Weg: `enqueue`.
-                if let message = ChatsSendReadinessGuard.usageLimitMessage(session.usageLimit) {
+                if !prompt.hasPrefix("/"), let message = ChatsSendReadinessGuard.usageLimitMessage(session.activeUsageLimit()) {
                     return .failure(.notReady, message)
                 }
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den

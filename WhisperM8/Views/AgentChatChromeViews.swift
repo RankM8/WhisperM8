@@ -391,7 +391,7 @@ struct ChatTabButton: View {
                   : String(localized: "Close tab"))
         } else {
             // Dieselbe Status-Sprache wie die Sidebar (grün nur bei „arbeitet").
-            AgentStatusIndicator(status: resolvedStatus, compact: true, usageLimit: session.usageLimit)
+            AgentStatusIndicator(status: resolvedStatus, compact: true, usageLimit: session.activeUsageLimit())
         }
     }
 

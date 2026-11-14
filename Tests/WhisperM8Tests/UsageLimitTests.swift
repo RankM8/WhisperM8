@@ -77,6 +77,34 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertNil(AgentUsageLimit.autoContinueState(inTail: [armed, fiveHourLine].joined(separator: "\n")))
     }
 
+    func testAgainLineArmsAutoContinueAgain() {
+        let again = #"{"type":"system","subtype":"informational","content":"Usage limit reached again · continuing automatically at 4:20am"}"#
+        XCTAssertEqual(AgentUsageLimit.autoContinueState(inTail: [fiveHourLine, armed, cancelled, fiveHourLine, again].joined(separator: "\n")), true)
+    }
+
+    func testOnlyAnAnswerEndsTheLimitNotAUserLine() {
+        let cached = AgentUsageLimit(resetsAt: resets, kind: "five_hour", since: nil)
+        XCTAssertEqual(AgentUsageLimit.after(event: .userMessage(timestamp: nil), tail: "", cached: cached), cached,
+                       "Teammate-Nachricht oder Task-Meldung beendet das Limit nicht")
+        XCTAssertEqual(AgentUsageLimit.after(event: .toolResult(timestamp: nil), tail: "", cached: cached), cached)
+        XCTAssertNil(AgentUsageLimit.after(event: .assistantMessageOngoing(timestamp: nil), tail: "", cached: cached))
+        XCTAssertNil(AgentUsageLimit.after(event: .turnInterrupted(timestamp: nil), tail: "", cached: cached))
+        XCTAssertEqual(AgentUsageLimit.after(event: nil, tail: "", cached: cached), cached)
+    }
+
+    func testLimitBelongsToItsAccount() {
+        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "t")
+        session.claudeProfileName = "PowerUser2"
+        session.usageLimit = AgentUsageLimit(resetsAt: resets, kind: "five_hour", since: nil, account: "PowerUser2")
+        let now = resets.addingTimeInterval(-60)
+        XCTAssertNotNil(session.activeUsageLimit(at: now))
+        session.claudeProfileName = nil // nach move-account ins Hauptkonto
+        XCTAssertNil(session.activeUsageLimit(at: now), "nach dem Kontowechsel sperrt das alte Limit nicht")
+        session.usageLimit?.account = nil
+        XCTAssertNotNil(session.activeUsageLimit(at: now), "ohne Stempel gilt es weiter")
+        XCTAssertNil(session.activeUsageLimit(at: resets.addingTimeInterval(1)))
+    }
+
     func testOwnCaseOrgMonthlySpendLimitIsAFiveHourLimit() {
         // Eigener Verlauf 14.11.2026 02:39: „org's monthly spend limit“, gesperrt
         // ist der Mehrverbrauch, das Ende nennt das 5-Stunden-Limit.
@@ -102,7 +130,7 @@ final class UsageLimitTests: XCTestCase {
 
     // MARK: - Watcher und Store
 
-    func testWatcherCarriesTheLimitAndClearsItWithANewTurn() {
+    func testWatcherCarriesTheLimitAndClearsItWithAnAnswer() {
         let url = URL(fileURLWithPath: "/tmp/wm8-69.jsonl")
         var entry = WatchedSession(id: UUID(), provider: .claude, cwd: "/a", externalSessionID: "x",
                                    transcriptURL: url, lastTurnFinishedAt: nil)
@@ -121,7 +149,11 @@ final class UsageLimitTests: XCTestCase {
             for: entry, now: Date(), statProvider: { _ in limited.stat }, tailProvider: { _, _ in nil },
             urlResolver: { _ in url })
         XCTAssertEqual(cached.usageLimit, limited.usageLimit)
-        XCTAssertNil(poll([fiveHourLine, userLine].joined(separator: "\n"), size: 20).usageLimit)
+        // Eine User-Zeile beendet das Limit nicht (Claude antwortet sofort mit
+        // der nächsten Limit-Zeile), erst eine echte Antwort.
+        XCTAssertEqual(poll([fiveHourLine, userLine].joined(separator: "\n"), size: 20).usageLimit, limited.usageLimit)
+        let answer = #"{"type":"assistant","timestamp":"2026-11-14T03:31:00.000Z","message":{"stop_reason":"end_turn","content":[{"type":"text","text":"weiter"}]}}"#
+        XCTAssertNil(poll([fiveHourLine, userLine, answer].joined(separator: "\n"), size: 30).usageLimit)
     }
 
     func testStoreKeepsActivityTimeAndDecodingIsLenient() throws {
@@ -188,6 +220,28 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertEqual(step(.errored), .stop(.errored))
         // Ein abgelaufenes Limit hält nicht auf.
         XCTAssertEqual(step(.working, limit: now.addingTimeInterval(-1)), .started)
+        // Limit ohne bekanntes Ende (Review M4).
+        XCTAssertEqual(ChatsSendStartDecider.evaluate(status: .idle, limitUntil: nil, now: now, deadline: deadline,
+                                                      waitedSeconds: 1, limited: true), .stop(.usageLimit(until: nil)))
+    }
+
+    func testWaiterCatchesALimitThatFollowsAShortWorkingPhase() {
+        let id = UUID()
+        var answers: [ChatsLiveStatus] = [
+            ChatsLiveStatus(runtimeStatus: .working, isAttachedPTY: true, canSend: true, canInterrupt: true),
+            ChatsLiveStatus(runtimeStatus: .working, isAttachedPTY: true, canSend: true, canInterrupt: true),
+            ChatsLiveStatus(runtimeStatus: .idle, isAttachedPTY: true, canSend: true, canInterrupt: false,
+                            usageLimitUntil: nil, usageLimited: true),
+        ]
+        var clock = Date()
+        let outcome = ChatsSendStartWaiter.wait(
+            targetID: id, seconds: 20,
+            fetch: {
+                let next = answers.count > 1 ? answers.removeFirst() : answers[0]
+                return ChatsLiveSnapshot(entries: [id: next], omittedAreDetached: true)
+            },
+            sleep: { clock = clock.addingTimeInterval($0) }, now: { clock })
+        XCTAssertEqual(outcome, .notStarted(.usageLimit(until: nil)))
     }
 
     func testWaiterPollsTheAppUntilTheChatWorks() {

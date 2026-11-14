@@ -105,9 +105,12 @@ enum ChatsSendStartDecider {
         limitUntil: Date?,
         now: Date,
         deadline: Date,
-        waitedSeconds: TimeInterval
+        waitedSeconds: TimeInterval,
+        limited: Bool = false
     ) -> Step {
-        if let limitUntil, limitUntil > now { return .stop(.usageLimit(until: limitUntil)) }
+        if limited || (limitUntil.map { $0 > now } ?? false) {
+            return .stop(.usageLimit(until: limitUntil.flatMap { $0 > now ? $0 : nil }))
+        }
         switch status {
         case .working: return .started
         case .stopped: return .stop(.stopped)
@@ -134,6 +137,10 @@ enum ChatsUsageLimitFormat {
 /// Wartet nach dem Zustellen auf den Start (`--wait-started`).
 enum ChatsSendStartWaiter {
     static let pollInterval: TimeInterval = 0.5
+    /// Nach „arbeitet“ noch so lange auf eine Limit-Zeile achten: Trifft die
+    /// Nachricht auf ein noch unbekanntes Limit, steht der Chat 1–2 s auf
+    /// „arbeitet“, bevor Claude die Limit-Zeile schreibt (Review M4).
+    static let confirmSeconds: TimeInterval = 3
 
     static func wait(
         targetID: UUID,
@@ -144,18 +151,32 @@ enum ChatsSendStartWaiter {
     ) -> ChatsSendOutcome {
         let start = now()
         let deadline = start.addingTimeInterval(seconds)
+        var startedAt: Date?
         while true {
-            guard let snapshot = fetch() else { return .notStarted(.appUnreachable) }
+            guard let snapshot = fetch() else {
+                if let startedAt { return .started(waited: startedAt.timeIntervalSince(start)) }
+                return .notStarted(.appUnreachable)
+            }
             let live = snapshot[targetID]
             let current = now()
             switch ChatsSendStartDecider.evaluate(
                 status: live?.runtimeStatus, limitUntil: live?.usageLimitUntil,
-                now: current, deadline: deadline, waitedSeconds: current.timeIntervalSince(start)
+                now: current, deadline: deadline, waitedSeconds: current.timeIntervalSince(start),
+                limited: live?.usageLimited ?? false
             ) {
-            case .started: return .started(waited: current.timeIntervalSince(start))
-            case .stop(let reason): return .notStarted(reason)
-            case .keepWaiting: sleep(pollInterval)
+            case .stop(.usageLimit(let until)):
+                return .notStarted(.usageLimit(until: until))
+            case .stop(let reason) where startedAt == nil:
+                return .notStarted(reason)
+            case .started where startedAt == nil:
+                startedAt = current
+            default:
+                break
             }
+            if let startedAt, current.timeIntervalSince(startedAt) >= confirmSeconds {
+                return .started(waited: startedAt.timeIntervalSince(start))
+            }
+            sleep(pollInterval)
         }
     }
 }
@@ -170,8 +191,7 @@ enum ChatsAccountUsageLimit {
         return sessions
             .filter { $0.provider == .claude }
             .filter { (AccountMovePlanner.normalize($0.claudeProfileName) ?? ClaudeAccountProfiles.mainProfileName) == target }
-            .compactMap { $0.usageLimit }
-            .filter { $0.isActive(at: now) }
+            .compactMap { $0.activeUsageLimit(at: now) }
             .max { ($0.resetsAt ?? .distantFuture) < ($1.resetsAt ?? .distantFuture) }
     }
 

@@ -18,6 +18,10 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
     /// selbst „Your claude.ai usage limit has reset. Continue the task …“.
     /// `nil` = unbekannt.
     var autoContinues: Bool? = nil
+    /// Konto, an dem das Limit hing (`claudeProfileName`, `nil` = main als
+    /// `"main"`). Der Koordinator stempelt es beim ersten Erkennen; nach einem
+    /// Kontowechsel gilt das Limit für den Chat nicht mehr (Review H3).
+    var account: String? = nil
 
     /// Gilt das Limit noch? Ohne bekanntes Ende: ja, bis der Verlauf
     /// weitergeht.
@@ -26,11 +30,12 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
         return resetsAt > now
     }
 
-    init(resetsAt: Date?, kind: String, since: Date?, autoContinues: Bool? = nil) {
+    init(resetsAt: Date?, kind: String, since: Date?, autoContinues: Bool? = nil, account: String? = nil) {
         self.resetsAt = resetsAt
         self.kind = kind
         self.since = since
         self.autoContinues = autoContinues
+        self.account = account
     }
 
     /// Wie `init?(event:)`, dazu aus den System-Zeilen nach der Limit-Zeile,
@@ -39,6 +44,24 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
         self.init(event: event)
         autoContinues = Self.autoContinueState(inTail: tail)
     }
+
+    /// Pur: das Limit nach einem Tail-Read. Nur eine Antwort von Claude
+    /// (ohne Fehler), ein Abbruch oder ein offener Aufruf beendet es. Zeilen
+    /// vom Typ `user` (Teammate-Nachrichten, Task-Meldungen, eine Nachricht an
+    /// den Chat) nicht: Claude antwortet darauf gleich mit der nächsten
+    /// Limit-Zeile, das Limit würde sonst flattern (Review M2).
+    static func after(event: AgentTranscriptEvent?, tail: String, cached: AgentUsageLimit?) -> AgentUsageLimit? {
+        guard let event else { return cached }
+        if let fresh = AgentUsageLimit(event: event, tail: tail) { return fresh }
+        switch event {
+        case .userMessage, .toolResult, .sessionMeta, .meta, .other:
+            return cached
+        case .assistantMessageStopped, .assistantMessageOngoing, .turnInterrupted, .toolCallPending, .usageLimit:
+            return nil
+        }
+    }
+
+    static func accountKey(_ profileName: String?) -> String { profileName ?? "main" }
 
     static let autoContinueArmedMarker = "continuing automatically at"
     static let autoContinueCancelledMarker = "Automatic continue cancelled"
@@ -61,5 +84,15 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
     init?(event: AgentTranscriptEvent?) {
         guard case .usageLimit(let timestamp, let resetsAt, let kind) = event else { return nil }
         self.init(resetsAt: resetsAt, kind: kind, since: timestamp)
+    }
+}
+
+extension AgentChatSession {
+    /// Das Limit, das für diesen Chat jetzt gilt: noch nicht abgelaufen und
+    /// am aktuellen Konto (nach einem Kontowechsel nicht mehr).
+    func activeUsageLimit(at now: Date = Date()) -> AgentUsageLimit? {
+        guard let limit = usageLimit, limit.isActive(at: now) else { return nil }
+        if let account = limit.account, account != AgentUsageLimit.accountKey(claudeProfileName) { return nil }
+        return limit
     }
 }

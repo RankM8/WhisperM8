@@ -94,8 +94,17 @@ struct AgentStatusIndicator: View {
     private var core: CGFloat { compact ? 5 : 7 }
 
     private var showsLimit: Bool {
-        guard let usageLimit, status != .working else { return false }
+        guard let usageLimit, Self.limitOverlays(status) else { return false }
         return usageLimit.isActive()
+    }
+
+    /// Die Sanduhr ersetzt nur „ruht“ bzw. keinen Status. „Arbeitet“, eine
+    /// Rückfrage und ein Fehler bleiben sichtbar (Review M5).
+    static func limitOverlays(_ status: AgentSessionRuntimeStatus?) -> Bool {
+        switch status {
+        case .idle, .stopped, nil: return true
+        case .working, .awaitingInput, .errored: return false
+        }
     }
 
     var body: some View {
@@ -189,15 +198,22 @@ struct UsageLimitMark: View {
 /// Texte zum Limit: sichtbar „Limit until 04:20“, dazu Tooltip und VoiceOver.
 enum AgentUsageLimitText {
     static func clock(_ date: Date, now: Date = Date()) -> String {
-        let formatter = DateFormatter()
-        if Calendar.current.isDate(date, inSameDayAs: now) {
-            formatter.timeStyle = .short
-            formatter.dateStyle = .none
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("dMMM jj:mm")
-        }
-        return formatter.string(from: date)
+        Calendar.current.isDate(date, inSameDayAs: now)
+            ? timeFormatter.string(from: date) : dayTimeFormatter.string(from: date)
     }
+
+    /// Einmal gebaut statt je Render (Review).
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        formatter.dateStyle = .none
+        return formatter
+    }()
+    private static let dayTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("dMMM jj:mm")
+        return formatter
+    }()
 
     /// Kurz und immer sichtbar: „Continues at 04:20“, wenn Claude von selbst
     /// weitermacht, sonst „Limit until 04:20“ bzw. „Usage limit“.

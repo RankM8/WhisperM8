@@ -67,7 +67,7 @@ enum AttentionModelBuilder {
     ) -> (ChatsAttentionCategory, Int) {
         // Am Nutzungslimit (WM8-69): ruht, braucht aber eine Entscheidung
         // (warten oder Konto wechseln) — wie ein Fehler, nicht wie „idle“.
-        if let limit = entry.session.usageLimit, limit.isActive(at: now) {
+        if entry.session.activeUsageLimit(at: now) != nil {
             return (.needsYou, 2)
         }
         return classify(

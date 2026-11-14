@@ -942,7 +942,7 @@ struct SessionListButton: View {
                 .frame(width: 7, height: 7)
                 .help("New subagent result — not viewed yet")
         } else {
-            if resolvedStatus != .working, let limit = session.usageLimit, limit.isActive() {
+            if AgentStatusIndicator.limitOverlays(resolvedStatus), let limit = session.activeUsageLimit() {
                 // Am Nutzungslimit (WM8-69): Sanduhr und Uhrzeit sichtbar.
                 AgentUsageLimitLabel(limit: limit)
             } else {
@@ -1154,7 +1154,7 @@ struct PinnedSessionRow: View {
         } else if isMissingTranscript {
             MissingTranscriptBadge(session: session)
         } else {
-            if resolvedStatus != .working, let limit = session.usageLimit, limit.isActive() {
+            if AgentStatusIndicator.limitOverlays(resolvedStatus), let limit = session.activeUsageLimit() {
                 // Am Nutzungslimit (WM8-69): Sanduhr und Uhrzeit sichtbar.
                 AgentUsageLimitLabel(limit: limit)
             } else {

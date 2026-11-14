@@ -138,12 +138,13 @@ enum ChatsSendCommand {
             case "--queue-if-busy": queueIfBusy = true
             case "--wait-started":
                 waitSeconds = defaultWaitSeconds
-                // Optionale Zahl direkt dahinter (sonst gehört das nächste
-                // Wort schon zur Ref oder zum Prompt).
-                if index + 1 < arguments.count, let value = TimeInterval(arguments[index + 1]), value > 0 {
-                    waitSeconds = min(value, 600)
-                    index += 1
+            case let flag where flag.hasPrefix("--wait-started="):
+                // Nur `=N`: eine freie Zahl dahinter wäre von einer Ref oder
+                // einer Antwort wie „2“ nicht zu unterscheiden (Review).
+                guard let value = TimeInterval(flag.dropFirst("--wait-started=".count)), value > 0 else {
+                    CLIIO.err("--wait-started=N erwartet Sekunden > 0."); return ChatsCLIExit.usage
                 }
+                waitSeconds = min(value, 600)
             default:
                 if arg.hasPrefix("-"), !promptsOnly { CLIIO.err("Unbekannte Option: \(arg)"); return ChatsCLIExit.usage }
                 positionals.append(arg)
@@ -152,7 +153,7 @@ enum ChatsSendCommand {
         }
         guard positionals.count >= 2 else {
             CLIIO.err("Usage: whisperm8 chats send <ref> [--] \"<prompt>\" [--if-status S,S] [--no-submit] [--force]"
-                      + " [--queue-if-busy] [--wait-started [Sekunden]]")
+                      + " [--queue-if-busy] [--wait-started[=Sekunden]]")
             return ChatsCLIExit.usage
         }
         if noSubmit, waitSeconds != nil {
@@ -183,8 +184,11 @@ enum ChatsSendCommand {
             guard response.ok else {
                 // Beschäftigt (oder Entwurf im Eingabefeld): auf Wunsch vormerken
                 // statt mit einem Fehler zu enden, der einen zweiten Befehl verlangt.
+                // Nicht bei einem bewusst gesetzten --if-status: dessen Konflikt
+                // soll nicht über die Warteschlange umgangen werden (Review).
                 if queueIfBusy, let error = response.error,
-                   ChatsControlErrorCode(rawValue: error.code)?.alternative == "enqueue" {
+                   let code = ChatsControlErrorCode(rawValue: error.code), code.alternative == "enqueue",
+                   code == .notReady || ifStatus == nil {
                     return enqueue(targetID: targetID, ref: ref, prompt: prompt, json: json,
                                    waitSeconds: waitSeconds, busyReason: error.message)
                 }
@@ -232,6 +236,7 @@ enum ChatsSendCommand {
                                server: ChatsControlResponse) -> Int32 {
         if json {
             var payload = ChatsLiveSupport.jsonObject(from: server)
+            payload["ok"] = outcome.exitCode == ChatsCLIExit.ok
             payload["outcome"] = outcome.keyword
             if let reason = outcome.reasonCode { payload["reason"] = reason }
             switch outcome {

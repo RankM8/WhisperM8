@@ -897,8 +897,7 @@ extension AgentChatsView {
             SessionLiveStatusDot(
                 sessionID: session.id,
                 isProcessRunning: isProcessRunning,
-                statusStore: runtimeStatusStore,
-                usageLimit: session.usageLimit
+                statusStore: runtimeStatusStore
             )
             Text(session.title)
                 .font(.system(size: 12, weight: isFocused ? .semibold : .regular))
@@ -912,7 +911,7 @@ extension AgentChatsView {
             }
             // Konto und Ort gleichrangig vor dem Spacer (WM8-60).
             accountBadge(for: session).layoutPriority(0.5)
-            if let limit = session.usageLimit, limit.isActive() { AgentUsageLimitLabel(limit: limit).layoutPriority(0.6) }
+            if let limit = session.activeUsageLimit() { AgentUsageLimitLabel(limit: limit).layoutPriority(0.6) }
             if let copy = session.workingCopy { AgentWorkingCopyBadge(copy: copy) }
             if Self.showsNoteCards {
                 JarvisNoteChevron(sessionID: session.id, windowID: windowID,

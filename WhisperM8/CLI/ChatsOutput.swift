@@ -91,7 +91,7 @@ enum ChatsOutput {
         if let since = runtime.since { runtimeDict["since"] = iso(since) }
         // Eigener Zustand „am Limit bis …“ (WM8-69), neben dem Status: der
         // Chat ruht, nimmt aber nichts an. Nur ergänzt, nichts umbenannt.
-        if let limit = session.usageLimit, limit.isActive() {
+        if let limit = session.activeUsageLimit() {
             runtimeDict["usageLimit"] = usageLimitJSON(limit)
         }
         if let revision = runtime.revision { runtimeDict["revision"] = revision }
@@ -148,7 +148,7 @@ enum ChatsOutput {
     /// Status für Tabelle und Board: am Limit „limit bis 04:20“ statt des
     /// ruhenden Status (WM8-69).
     static func statusText(_ status: AgentSessionRuntimeStatus?, session: AgentChatSession, now: Date) -> String {
-        if let limit = session.usageLimit, limit.isActive(at: now) {
+        if let limit = session.activeUsageLimit(at: now) {
             let until = limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? ""
             return "limit" + until + (limit.autoContinues == true ? ", dann weiter" : "")
         }
@@ -440,7 +440,7 @@ enum ChatsOutput {
         CLIIO.out("")
         CLIIO.out("── LAUFZEIT " + String(repeating: "─", count: 41))
         CLIIO.out("Status       \(session.status.rawValue) / runtime: \(runtime.status?.rawValue ?? "unknown") (\(runtime.source))")
-        if let limit = session.usageLimit, limit.isActive(at: now) {
+        if let limit = session.activeUsageLimit(at: now) {
             CLIIO.out("Limit        \(usageLimitLine(limit, now: now))")
         }
         if let since = runtime.since { CLIIO.out("Seit         \(relative(from: since, to: now)) (\(iso(since)))") }

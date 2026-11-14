@@ -42,11 +42,10 @@ enum ChatsSendReadinessGuard {
         return .notReady(sinceSec: since)
     }
 
-    /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
-    /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
-    /// und höchstens einmal liefert.
     /// Meldung, wenn der Chat am Nutzungslimit steht (WM8-69); `nil` sonst.
-    /// Die Warteschlange stellt erst nach dem Limit zu.
+    /// Die Warteschlange stellt erst nach dem Limit zu. Slash-Befehle
+    /// (`/login`, `/model`, `/rate-limit-options`) lässt der Sende-Pfad durch:
+    /// sie sind der Ausweg aus dem Limit.
     static func usageLimitMessage(_ limit: AgentUsageLimit?, now: Date = Date()) -> String? {
         guard let limit, limit.isActive(at: now) else { return nil }
         let until = limit.resetsAt.map { " bis \(ChatsUsageLimitFormat.clock($0, now: now))" } ?? ""
@@ -70,13 +69,16 @@ enum ChatsSendReadinessGuard {
             "canSend": isRunning,
             "canInterrupt": isRunning && runtime == .working,
         ]
-        if let limit = session.usageLimit, limit.isActive(at: now) {
+        if let limit = session.activeUsageLimit(at: now) {
             entry["usageLimit"] = limit.kind
             if let resetsAt = limit.resetsAt { entry["usageLimitResetsAt"] = ChatsOutput.iso(resetsAt) }
         }
         return entry
     }
 
+    /// Fehlermeldung mit dem sicheren Ausweg. `enqueue` ist hier die richtige
+    /// Antwort, weil die Warteschlange erst bei bestätigtem Turn-Ende zustellt
+    /// und höchstens einmal liefert.
     static func message(for decision: Decision) -> String? {
         guard case .notReady(let since) = decision else { return nil }
         let age = since.map { " (seit \($0) s)" } ?? ""
