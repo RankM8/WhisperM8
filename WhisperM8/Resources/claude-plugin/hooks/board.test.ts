@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { agesChange, isBefore, nextGenerationStart, sameBoard, withStatus } from './register'
+import { clean, clipToRows, countWord, fitNames, groups, isBefore, layoutBox, layoutWaiting, nextGenerationStart, planRows, progressOf, sameBoard, shortName, titleParts, waitingHead, withStatus, wrapRows } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -100,36 +100,87 @@ const SURFACES = ['terminal', 'desktop'] as const
 declare const setTimeout: (fn: () => void, ms: number) => unknown
 const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 
-describe('Band', () => {
-  test('zeigt wartende Chats zuerst, breit mit Wörtern, im Slot knapp', async ($, on) => {
+// WM8-88: Vorlage aus dem Ticket. Oben, wer auf den User wartet (Rufname,
+// Ticket, ganzer Satz mit Umbruch), darunter je eine Sammelzeile.
+const KASTEN = {
+  ...BOARD,
+  entries: [
+    entry({ ref: 'k1', sessionID: 'A0000000-0000-0000-0000-000000000001', title: 'WM8-65 Kai · Umzug DealSupply', light: 'needsYou', needs: 'Richard und Xeno nach Linear einladen und anmelden lassen, dann den Import freigeben.', updatedAt: minutesAgo(20) }),
+    entry({ ref: 'd1', sessionID: 'A0000000-0000-0000-0000-000000000002', title: 'WM8-61 Dex · Arbeitskopie betreten', light: 'needsYou', needs: 'Einmal in der Test-Instanz anmelden.', updatedAt: minutesAgo(10) }),
+    entry({ ref: 'g1', sessionID: 'A0000000-0000-0000-0000-000000000003', title: 'WM8-12 Gus · Sammel-Branch', light: 'running', progress: { done: 4, total: 7 } }),
+    entry({ ref: 'n1', sessionID: 'A0000000-0000-0000-0000-000000000004', title: 'Noa · Ohne Ticket', light: 'running' }),
+    entry({ ref: 'v1', sessionID: 'A0000000-0000-0000-0000-000000000005', title: 'WM8-12 Vic · Neustart: Gesamt-Review', light: 'parked' }),
+    entry({ ref: 'f1', sessionID: 'A0000000-0000-0000-0000-000000000006', title: 'Fin · Prüfer', light: 'done' }),
+  ],
+}
+
+const SENTENCE = 'Richard und Xeno nach Linear einladen und anmelden lassen, dann den Import freigeben.'
+
+/** Der ganze gerenderte Text, Zeilen und Abstände geglättet. */
+const flat = async (ui: { find: (q: { text: RegExp }) => Promise<unknown> }, words: string[]) => {
+  for (const word of words) if ((await ui.find({ text: new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })) === undefined) return word
+  return null
+}
+
+describe('Kasten (WM8-88)', () => {
+  test('wartende Chats mit Rufname, Ticket und ganzem Satz; die anderen in Sammelzeilen', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    for (const surface of SURFACES) {
-      const wide = await $.ui.mount({ ...band(179), surface })
-      expect(await wide.find({ text: /1 wartet/ })).toBeDefined()
-      expect(await wide.find({ text: /Opener-Schluss A oder B/ })).toBeDefined()
-      expect(await wide.find({ text: '4 min' })).toBeDefined()
-      expect(await wide.find({ text: /fertig · Ergebnis prüfen/ })).toBeDefined()
-      // Bedien-Hinweis statt Knopf: „z“ griffe nur nach ctrl+x tab.
-      expect(await wide.find({ text: 'Ziffer = Tab öffnen' })).toBeDefined()
-      expect(await wide.find({ key: 'fold' })).toBeUndefined()
-      await wide.unmount()
-
-      // Der Kopf kürzt nach Platz, nicht nach fester Stufe: erst „· Board“ weg …
-      const mid = await $.ui.mount({ ...band(55), surface })
-      expect(await mid.find({ text: /Jarvis · Board/ })).toBeUndefined()
-      expect(await mid.find({ text: /1 läuft/ })).toBeDefined()
-      expect(await mid.find({ text: '18m' })).toBeDefined()
-      await mid.unmount()
-
-      // … dann die Wörter außer „wartet“.
-      const slot = await $.ui.mount({ ...band(45), surface })
-      expect(await slot.find({ text: /1 wartet/ })).toBeDefined()
-      expect(await slot.find({ text: /\d läuft/ })).toBeUndefined()
-      await slot.unmount()
+    for (const cols of [50, 70, 120]) {
+      for (const surface of SURFACES) {
+        const ui = await $.ui.mount({ ...band(cols, 30), surface })
+        expect(await ui.find({ text: /2 warten auf dich/ })).toBeDefined()
+        expect(await ui.find({ text: 'Kai' })).toBeDefined()
+        expect(await ui.find({ text: /WM8-65/ })).toBeDefined()
+        // Der Satz bricht um statt abgeschnitten zu werden: jedes Wort steht da.
+        expect(await flat(ui, SENTENCE.split(' '))).toBe(null)
+        expect(await ui.find({ text: /Gus 4\/7 · Noa/ })).toBeDefined()
+        expect(await ui.find({ text: /✓ Fin · Vic/ })).toBeDefined()
+        expect(await ui.find({ text: 'läuft' })).toBeDefined()
+        expect(await ui.find({ text: 'ruht' })).toBeDefined()
+        await ui.unmount()
+      }
     }
+  })
+
+  test('keine Kennung, kein Alter, kein Bedien-Hinweis, keine Ziffer zum Springen', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on, { board: KASTEN })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
+    expect(await ui.find({ text: /\bk1\b|\bd1\b/ })).toBeUndefined()
+    expect(await ui.find({ text: /\d+ min|Ziffer/ })).toBeUndefined()
+    expect(await ui.find({ key: 'open-A0000000-0000-0000-0000-000000000001' })).toBeUndefined()
+    await ui.unmount()
+    expect(calls.argv.some(a => a.includes('open'))).toBe(false)
+  })
+
+  test('ohne wartende Chats nur die zwei Sammelzeilen', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    world(on, { board: { ...KASTEN, entries: KASTEN.entries.filter(e => e.light !== 'needsYou') } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    const ui = await $.ui.mount({ ...band(70, 30), surface: 'terminal' })
+    expect(await ui.find({ text: /warten auf dich|wartet auf dich/ })).toBeUndefined()
+    expect(await ui.find({ text: /Jarvis/ })).toBeUndefined()
+    expect(await ui.find({ text: 'läuft' })).toBeDefined()
+    expect(await ui.find({ text: 'ruht' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('ein leeres Board zeichnet nichts', async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const calls = world(on, { board: { ...BOARD, entries: [] } })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await settle()
+    // Gelesen wurde (sonst prüfte der Test nichts), gezeichnet nicht.
+    expect(calls.argv.some(a => a.includes('board') && a.length <= 4)).toBe(true)
+    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    expect(await ui.find({ text: 'engine' })).toBeDefined()
+    await ui.unmount()
   })
 
   test('ohne WhisperM8-Session und bei inaktivem Board zeichnet die Engine', async ($, on) => {
@@ -151,23 +202,23 @@ describe('Band', () => {
     await ui.unmount()
   })
 
-  test('/board zu klappt auf die Summenzeile ein, /board auf wieder auf', async ($, on) => {
+  test('/board zu klappt auf eine Zeile ein, /board auf wieder auf', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    await settle()
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
     await $.command.run({ command: 'board', args: 'zu' })
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeUndefined()
-    expect(await ui.find({ text: /1 wartet/ })).toBeDefined()
-    expect(await ui.find({ text: '/board auf' })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeUndefined()
+    expect(await ui.find({ text: /2 warten auf dich · 2 laufen · 2 ruhen/ })).toBeDefined()
     await $.command.run({ command: 'board', args: 'auf' })
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeDefined()
     await ui.unmount()
   })
 
   test('/board ohne Argument klappt um und öffnet kein Panel', async ($, on) => {
     mock.clock(on, { now: NOW })
-    world(on)
+    world(on, { board: KASTEN })
     const opened: string[] = []
     on('ui.open', (_$, e) => {
       opened.push(e.id)
@@ -175,32 +226,76 @@ describe('Band', () => {
     })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    const ui = await $.ui.mount({ ...band(120), surface: 'terminal' })
+    const ui = await $.ui.mount({ ...band(120, 30), surface: 'terminal' })
     expect(((await $.command.run({ command: 'board', args: '' } as never)) as { text: string }).text).toBe('Board eingeklappt.')
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeUndefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeUndefined()
     expect(((await $.command.run({ command: 'board', args: '' } as never)) as { text: string }).text).toBe('Board ausgeklappt.')
-    expect(await ui.find({ text: /Opener-Schluss/ })).toBeDefined()
+    expect(await ui.find({ text: /Richard und Xeno/ })).toBeDefined()
     expect(opened).toEqual([])
     await ui.unmount()
   })
 
-  test('der Name ist der Knopf: er öffnet den Tab des Chats, ohne Turn', async ($, on) => {
+  test('wenig Platz: Wartende, die nicht passen, zählt der Kopf', async ($, on) => {
     mock.clock(on, { now: NOW })
-    const calls = world(on)
+    world(on, { board: KASTEN })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ ...band(120), surface })
-      // Oberste Zeile = wartender Chat (a3f2c1d0), Hotkey „1“.
-      await ui.press({ key: 'open-A3F2C1D0-0000-0000-0000-000000000001' })
-      await ui.unmount()
-    }
-    expect(calls.argv.filter(a => a.includes('open'))).toEqual([
-      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
-      ['whisperm8', 'chats', 'open', 'a3f2c1d0'],
-    ])
-    expect(calls.toasts).toContain('Geöffnet: Outreach Copy-Review')
-    expect(calls.prompts).toEqual([])
+    const ui = await $.ui.mount({ ...band(70, 7), surface: 'terminal' })
+    expect(await ui.find({ text: /\+1 nicht gezeigt/ })).toBeDefined()
+    expect(await ui.find({ text: 'Kai' })).toBeDefined()
+    await ui.unmount()
+  })
+})
+
+describe('Titel und Sammelzeile (WM8-88, rein)', () => {
+  test('titleParts liest Ticket, Rufname und Thema', () => {
+    expect(titleParts('WM8-65 Kai · Umzug DealSupply')).toEqual({ name: 'Kai', ticket: 'WM8-65', topic: 'Umzug DealSupply' })
+    expect(titleParts('Vic · Neustart: Gesamt-Review')).toEqual({ name: 'Vic', ticket: null, topic: 'Neustart: Gesamt-Review' })
+    expect(titleParts('Outreach Copy-Review')).toEqual({ name: 'Outreach Copy-Review', ticket: null, topic: '' })
+    expect(titleParts('DS-12 Kai')).toEqual({ name: 'Kai', ticket: 'DS-12', topic: '' })
+    // Nur bekannte Schlüssel sind Tickets.
+    expect(titleParts('GPT-5 Router · Fix')).toEqual({ name: 'GPT-5 Router', ticket: null, topic: 'Fix' })
+    expect(titleParts('UTF-8 Umstellung · X').ticket).toBe(null)
+    // Leerer Name fällt auf die Kennung zurück, lange Namen werden gekürzt.
+    expect(titleParts('', 'a3f2c1d0').name).toBe('a3f2c1d0')
+    expect(titleParts('WM8-1  · Thema', 'a3f2').name).toBe('a3f2')
+    expect(titleParts('Ein sehr langer Name ohne jeden Punkt dazwischen').name.length).toBeLessThanOrEqual(24)
+  })
+
+  test('shortName markiert fertige mit ✓ und wartende Chats mit ⚑', () => {
+    expect(shortName(entry({ title: 'Fin · Prüfer', light: 'done', status: 'idle' }) as never)).toBe('✓ Fin')
+    expect(shortName(entry({ title: 'Noa · X', light: 'running', status: 'awaitingInput' }) as never)).toBe('⚑ Noa')
+    expect(shortName(entry({ title: 'WM8-12 Gus · X', light: 'running', status: 'working', progress: { done: 4, total: 7 } }) as never)).toBe('Gus 4/7')
+  })
+
+  test('countWord in Ein- und Mehrzahl', () => {
+    expect(countWord(1, 'läuft', 'laufen')).toBe('1 läuft')
+    expect(countWord(2, 'ruht', 'ruhen')).toBe('2 ruhen')
+  })
+
+  test('fitNames kürzt mit +n statt umzubrechen', () => {
+    expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 40)).toBe('Gus 4/7 · Jon 2/7 · Noa')
+    expect(fitNames(['Gus 4/7', 'Jon 2/7', 'Noa'], 14)).toBe('Gus 4/7 +2')
+    // Ein zu langer erster Name wird gekürzt, nicht unterschlagen.
+    expect(fitNames(['Ein-sehr-langer-Rufname'], 10)).toBe('Ein-sehr-…')
+    expect(fitNames(['Ein-sehr-langer-Rufname', 'Noa'], 12)).toBe('Ein-sehr… +1')
+  })
+
+  test('progressOf nur mit gültiger Quelle', () => {
+    expect(progressOf(entry({ progress: { done: 4, total: 7 } }) as never)).toBe('4/7')
+    expect(progressOf(entry({}) as never)).toBe('')
+    expect(progressOf(entry({ progress: { done: 1, total: 0 } }) as never)).toBe('')
+  })
+
+  test('unbekannte Ampel (künftige CLI) landet in „ruht“ statt zu verschwinden (Vic)', () => {
+    const g = groups([entry({ light: 'running' }), entry({ light: 'reviewing', sessionID: 'D0000000-0000-0000-0000-000000000001' }), entry({ light: 'done', sessionID: 'D0000000-0000-0000-0000-000000000002' })] as never)
+    expect(g.running.length).toBe(1)
+    expect(g.resting.map(e => e.light)).toEqual(['done', 'reviewing'])
+  })
+
+  test('waitingHead in Ein- und Mehrzahl', () => {
+    expect(waitingHead(1)).toBe('1 wartet auf dich')
+    expect(waitingHead(2)).toBe('2 warten auf dich')
   })
 })
 
@@ -230,24 +325,22 @@ describe('Steuerung', () => {
 })
 
 describe('Arbeitspaket, Blockade, Meilensteine', () => {
-  test('das Band zeigt work, fällt auf next zurück und nennt eine Blockade', async ($, on) => {
+  test('der Satz eines Wartenden ist das Anliegen, sonst work, sonst next', async ($, on) => {
     mock.clock(on, { now: NOW })
     world(on, {
       board: {
         ...BOARD,
         entries: [
-          entry({ work: 'Baut die letzte Variante (L22)', next: 'Baut die letzte Variante (L22)' }),
-          entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Alt-CLI', next: 'Nur next gesetzt' }),
-          entry({ ref: 'e45d0000', sessionID: 'CE45D000-0000-0000-0000-000000000003', title: 'Blockiert', work: 'Deploy', blocker: 'Wartet auf Staging' }),
+          entry({ light: 'needsYou', needs: '', work: 'Baut die letzte Variante (L22)', next: 'Baut die letzte Variante (L22)' }),
+          entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Alt-CLI', light: 'needsYou', needs: '', next: 'Nur next gesetzt' }),
         ],
       },
     })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await settle()
-    const ui = await $.ui.mount({ ...band(179), surface: 'terminal' })
+    const ui = await $.ui.mount({ ...band(179, 30), surface: 'terminal' })
     expect(await ui.find({ text: /Baut die letzte Variante \(L22\)/ })).toBeDefined()
     expect(await ui.find({ text: /Nur next gesetzt/ })).toBeDefined()
-    expect(await ui.find({ text: /hängt · Wartet auf Staging/ })).toBeDefined()
     await ui.unmount()
   })
 
@@ -366,9 +459,8 @@ describe('session.start', () => {
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   })
 
-  test('wiederholtes session.start legt genau einen 30-s-Takt an', async ($, on) => {
+  test('kein Takt mehr: der Kasten zeigt kein Alter (WM8-88)', async ($, on) => {
     let intervals = 0
-    // Registrierungen von clock.every mitzählen (mock.clock hängt den Handler ein).
     const counting = ((name: string, ...rest: unknown[]) => {
       if (name === 'clock.every') {
         const handler = rest[rest.length - 1] as (...args: unknown[]) => unknown
@@ -384,7 +476,7 @@ describe('session.start', () => {
     for (let i = 0; i < 3; i++) {
       await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     }
-    expect(intervals).toBe(1)
+    expect(intervals).toBe(0)
   })
 })
 
@@ -462,14 +554,6 @@ describe('Neuzeichnen (WM8-87)', () => {
     expect(sameBoard(null, view())).toBe(false)
   })
 
-  test('agesChange nur, wenn eine sichtbare Alters-Angabe wechselt', () => {
-    const entries = [entry({ updatedAt: minutesAgo(4) })] as never
-    expect(agesChange(entries, NOW, NOW + 20_000)).toBe(false)
-    expect(agesChange(entries, NOW, NOW + 60_000)).toBe(true)
-    const old = [entry({ updatedAt: minutesAgo(180) })] as never
-    expect(agesChange(old, NOW, NOW + 10 * 60_000)).toBe(false)
-  })
-
   test('withStatus setzt Status und seit wann, nur beim gemeinten Chat', () => {
     const next = withStatus(BOARD as never, 'ce45d000-0000-0000-0000-000000000003', 'awaitingInput', '2026-10-08T15:00:00Z')
     const changed = next.entries.find(e => e.ref === 'e45d0000')
@@ -529,5 +613,71 @@ describe('Ansetzen nach Ende oder Lücke (WM8-87)', () => {
     expect(isBefore('2026-10-08T15:00:00Z', '2026-10-08T15:00:00Z')).toBe(false)
     expect(isBefore(undefined, '2026-10-08T15:00:00Z')).toBe(false)
     expect(isBefore('2026-10-08T14:00:00Z', null)).toBe(false)
+  })
+})
+
+// Review WM8-88: Die Höhe ist hart begrenzt, der Satz bricht nach Wörtern um.
+describe('Höhe und Umbruch (WM8-88, rein)', () => {
+  const waiting = (needs: string, n = 1) =>
+    Array.from({ length: n }, (_, i) =>
+      entry({ ref: `w${i}`, sessionID: `A0000000-0000-0000-0000-00000000010${i}`, title: `WM8-${i} Kai${i} · Thema`, light: 'needsYou', needs })) as never[]
+
+  test('wrapRows zählt nach Wörtern, clean zieht Steuerzeichen und Zeilenumbrüche zusammen', () => {
+    expect(wrapRows('eins zwei drei', 9)).toBe(2)
+    expect(wrapRows('', 20)).toBe(1)
+    expect(wrapRows('abcdefghijkl', 5)).toBe(3)
+    expect(clean('Zeile 1\nZeile 2\u001b[2J  Ende')).toBe('Zeile 1 Zeile 2 [2J Ende')
+  })
+
+  test('clipToRows kürzt auf die erlaubten Zeilen mit …', () => {
+    const long = 'wort '.repeat(40).trim()
+    const clipped = clipToRows(long, 20, 2)
+    expect(wrapRows(clipped, 20)).toBeLessThanOrEqual(2)
+    expect(clipped.endsWith('…')).toBe(true)
+    expect(clipToRows('kurz', 20, 2)).toBe('kurz')
+  })
+
+  test('der Kasten bleibt bei jeder Breite und JEDER Höhe innerhalb von maxRows (Vic)', () => {
+    const longNeeds = 'Bitte prüfen und freigeben, '.repeat(15).trim()
+    const others = (light: string, n: number) =>
+      Array.from({ length: n }, (_, i) => entry({ ref: `${light}${i}`, sessionID: `B0000000-0000-0000-0000-0000000${light.length}0${i}`, title: `X${i} · Y`, light })) as never[]
+    for (const cols of [50, 70, 120]) {
+      for (let maxRows = 0; maxRows <= 30; maxRows++) {
+        for (const count of [0, 1, 3]) {
+          for (const [nRun, nRest] of [[0, 0], [2, 0], [2, 3]] as const) {
+            if (count === 0 && nRun === 0 && nRest === 0) continue
+            const running = others('running', nRun)
+            const resting = others('parked', nRest)
+            const plan = layoutBox(waiting(longNeeds, count), running, resting, cols, maxRows)
+            const k = (nRun > 0 ? 1 : 0) + (nRest > 0 ? 1 : 0)
+            expect(planRows(plan, k)).toBeLessThanOrEqual(maxRows)
+            if (count > 0 && maxRows >= 1) expect(plan.head).toBe(true)
+          }
+        }
+      }
+    }
+  })
+
+  test('bei wenig Höhe fallen erst die Abstände, dann die Sammelzeilen weg', () => {
+    const running = [entry({ light: 'running', title: 'Gus · X' })] as never[]
+    const resting = [entry({ light: 'parked', title: 'Vic · Y', sessionID: 'C0000000-0000-0000-0000-000000000001' })] as never[]
+    const one = waiting('Kurzer Satz.', 1)
+    // Voll: Kopf, Abstand, Name, Satz, Abstand, läuft, ruht = 7.
+    expect(layoutBox(one, running, resting, 70, 7)).toMatchObject({ gaps: true, summaries: true })
+    // 5: ohne Abstände (Kopf, Name, Satz, läuft, ruht).
+    expect(layoutBox(one, running, resting, 70, 5)).toMatchObject({ gaps: false, summaries: true })
+    // 3: Sammelzeilen in den Kopf.
+    const three = layoutBox(one, running, resting, 70, 3)
+    expect(three).toMatchObject({ gaps: false, summaries: false, headCounts: ['1 läuft', '1 ruht'] })
+    expect(three.rows[0]!.sentence).toBe('Kurzer Satz.')
+    // 2: Kopf und Name, ohne Satz; 1: nur der Kopf.
+    expect(layoutBox(one, running, resting, 70, 2).rows[0]!.sentence).toBe('')
+    expect(layoutBox(one, running, resting, 70, 1).rows).toEqual([])
+  })
+
+  test('mit Platz bleibt der Satz ganz', () => {
+    const { rows, hidden } = layoutWaiting(waiting(SENTENCE, 2), 50, 30, 4)
+    expect(hidden).toBe(0)
+    expect(rows[0]!.sentence).toBe(SENTENCE)
   })
 })
