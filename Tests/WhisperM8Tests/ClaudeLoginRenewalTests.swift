@@ -878,3 +878,56 @@ final class ClaudeLoginRenewalSessionTests: XCTestCase {
         XCTAssertEqual(single.map(\.isSelected), [false, true])
     }
 }
+
+/// WM8-63: Die Test-App nimmt für `main` einen eigenen Dienstnamen; im
+/// Normalbetrieb bleibt der blanke Name des Hauptkontos.
+final class TestInstanceKeychainServiceTests: XCTestCase {
+    func testMainServiceIsUnchangedOutsideTheTestInstance() {
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: nil), "Claude Code-credentials")
+        XCTAssertEqual(ClaudeAccountProfiles().keychainService(forProfile: ClaudeAccountProfiles.mainProfileName),
+                       "Claude Code-credentials", "swift test läuft als Produktiv-Instanz")
+    }
+
+    /// Gleicher Wert wie `scripts/test-instance.sh login-service`
+    /// (nachgerechnet 14.11.2026); nie der blanke Name des echten Logins.
+    func testMainServiceOfTheTestInstanceIsItsOwn() {
+        let root = URL(fileURLWithPath: "/Users/giulianocosta/.whisperm8-test-instance", isDirectory: true)
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: root), "Claude Code-credentials-38a46618")
+        XCTAssertEqual(ClaudeAccountProfiles.mainKeychainService(testRoot: root),
+                       ClaudeAccountProfiles.keychainService(
+                           forConfigDirPath: AppInstance.testClaudeConfigDirectory(testRoot: root).path))
+    }
+}
+
+/// Vic, WM8-63: Skript (`test-instance.sh login-service`, Python-Normalisierung)
+/// und App (`standardizedFileURL`) müssen für dieselbe Wurzel denselben
+/// Dienstnamen rechnen, sonst verfehlt `reset` den Test-Eintrag.
+final class TestInstanceScriptKeychainServiceTests: XCTestCase {
+    private static var script: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("scripts/test-instance.sh")
+    }
+
+    private func scriptService(root: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [Self.script.path, "login-service"]
+        process.environment = ProcessInfo.processInfo.environment.merging(["WHISPERM8_TEST_ROOT": root]) { $1 }
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func testScriptAndAppComputeTheSameService() throws {
+        for root in ["/Users/x/.whisperm8-test-instance", "/Users/x/.whisperm8-test-instance/", "/Users/x/./a/../.whisperm8-test-instance"] {
+            let appRoot = try XCTUnwrap(AppInstance.resolveTestRoot([AppInstance.rootEnvironmentKey: root]))
+            XCTAssertEqual(try scriptService(root: root), ClaudeAccountProfiles.mainKeychainService(testRoot: appRoot), root)
+        }
+        XCTAssertEqual(try scriptService(root: "/Users/giulianocosta/.whisperm8-test-instance"),
+                       "Claude Code-credentials-38a46618")
+    }
+}

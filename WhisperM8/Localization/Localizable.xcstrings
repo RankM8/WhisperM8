@@ -9321,6 +9321,16 @@
         }
       }
     },
+    "Main folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hauptordner"
+          }
+        }
+      }
+    },
     "Make Default": {
       "localizations": {
         "de": {
@@ -20164,6 +20174,36 @@
         }
       }
     },
+    "Works in the main folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet im Hauptordner"
+          }
+        }
+      }
+    },
+    "Works in the worktree %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet in der Arbeitskopie %@"
+          }
+        }
+      }
+    },
+    "Works outside the project in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet außerhalb des Projekts in %@"
+          }
+        }
+      }
+    },
     "Workspace": {
       "localizations": {
         "de": {
@@ -20580,6 +20620,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hintergrund-Agent"
+          }
+        }
+      }
+    },
+    "branch %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch %@"
           }
         }
       }

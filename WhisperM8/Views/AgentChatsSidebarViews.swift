@@ -850,6 +850,8 @@ struct SessionListButton: View {
                         .animation(.easeInOut(duration: 0.3), value: session.title)
                         .help(session.title)
 
+                    AgentWorkingCopyMarker(copy: session.workingCopy)
+
                     if session.isBackgroundChat {
                         kindPill("BG", color: .indigo)
                             .help("Background agent — runs independently of this window")
@@ -1078,6 +1080,8 @@ struct PinnedSessionRow: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(isMissingTranscript ? MissingTranscriptBadge.hint(for: session) : session.title)
+
+                AgentWorkingCopyMarker(copy: session.workingCopy)
 
                 if childCount > 0 {
                     SubagentChildrenChip(

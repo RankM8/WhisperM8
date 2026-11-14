@@ -123,6 +123,20 @@ Weicht der gespeicherte Stempel davon ab, steht er zusätzlich unter
 `show` zeigt dasselbe als Zeile `Konto`. Das rohe Stempelfeld bleibt unter
 `detail.claudeProfileName` (`null` = main).
 
+### Arbeitsordner eines Chats ablesen
+
+`list --json` und `show --json` führen je Chat das Feld `workingCopy`: wo der
+Chat zuletzt gearbeitet hat, mit `kind` (`main` = Hauptordner des Projekts,
+`worktree` = Arbeitskopie, `other` = Ordner außerhalb des Projekts), `name`
+(Name der Arbeitskopie bzw. des Ordners, im Hauptordner `null`), `path`,
+`branch`, `defaultBranch` (aus `origin/HEAD`) und `isDefaultBranch`. Ohne
+bisherige Beobachtung ist das ganze Feld `null`. `chats list` zeigt es knapp
+in der Spalte `ORT`: `main` (Hauptordner auf dem Standard-Branch),
+`main@<branch>` (Hauptordner auf einem anderen Branch), `wt:<name>@<branch>`,
+`other:<name>`; nennt der Name den Branch schon, steht er nur einmal da.
+`show` zeigt eine Zeile `Ort`. Die App leitet den Wert aus dem Verlaufsende
+ab, nicht aus dem Startordner; ruhende Chats behalten den letzten Stand.
+
 ### Bestehende Chats umziehen
 
 In der App über das Kontextmenü eines Chats bzw. einer Auswahl: **„Zu Account
