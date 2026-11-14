@@ -136,8 +136,9 @@ sollte künftig auf diese Datei zeigen.
 
 ## 5. Entscheidung
 
-Offen für Giuliano: welche Seitenleisten-Variante, welche Tab-Variante, welcher Kleinkram. Der Bau ist ein
-eigenes Ticket nach der Wahl. Vor dem Bau: Tab-Leiste aus `AgentChatsView.swift` herausziehen
+**Giuliano hat am 14.11.2026 gewählt:** Seitenleiste **A · Sortiert**, Tabs **1 · Schrumpfen** und alle vier
+Kleinkram-Punkte (Zähler im Umschalter, „+“ am Projekt sichtbar, ein Tab-Menü, ruhigere Zeilen inklusive
+größerem Workspace-Plus). Der Bau ist ein eigenes Ticket. Vor dem Bau: Tab-Leiste aus `AgentChatsView.swift` herausziehen
 (Größengrenze), dann Variante bauen, dann Fixture „seitenleiste-tableiste“ ergänzen.
 
 ## 6. Weitere Schwächen (nicht Teil dieses Tickets, nicht gebaut)
