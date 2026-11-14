@@ -159,6 +159,25 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertTrue(f.poster.posted.isEmpty)
     }
 
+    func testLimitEndingViaTheTranscriptDeliversToSiblingChats() throws {
+        // Vic, Auflage 2: Macht Claude im Chat mit der Limit-Zeile von selbst
+        // weiter, endet das Limit über den Verlauf; die anderen Chats des Kontos,
+        // die es mit aufgehalten hat, bekommen ihr Vorgemerktes.
+        let f = try makeFixture()
+        let sibling = try f.store.createSession(provider: .claude, projectPath: tempDir.path, title: "Geschwister",
+                                                initialPrompt: nil)
+        for id in [f.sessionID, sibling.id] {
+            try f.store.updateSession(id: id) { $0.claudeProfileName = "RankM8" }
+        }
+        var delivered: [UUID] = []
+        f.coordinator.deliverQueued = { delivered.append($0) }
+        try f.store.setUsageLimit(AgentUsageLimit(resetsAt: Date().addingTimeInterval(3600), kind: "five_hour",
+                                                  since: nil, account: "RankM8"), for: f.sessionID)
+        f.coordinator.handleUsageLimit(sessionID: f.sessionID, limit: nil)
+        XCTAssertEqual(delivered, [sibling.id])
+        XCTAssertNil(f.store.loadWorkspace().sessions.first(where: { $0.id == f.sessionID })?.usageLimit)
+    }
+
     func testStoredExpiredUsageLimitEndsAfterRestart() throws {
         // Jarvis B: Nach einem Neustart wird der Timer ausdrücklich geplant;
         // ein schon abgelaufenes Limit endet sofort.

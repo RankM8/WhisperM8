@@ -22,10 +22,15 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
     /// `"main"`). Der Koordinator stempelt es beim ersten Erkennen; nach einem
     /// Kontowechsel gilt das Limit für den Chat nicht mehr (Review H3).
     var account: String? = nil
-    /// Sperrt das Limit das ganze Konto (5 Stunden, Woche)? Das Guthaben-Limit
-    /// für ein Modell (`kind` = `model_requires_usage_credits`) nicht: ein
-    /// anderes Modell kann weiterlaufen.
-    var isAccountWide: Bool { kind != "model_requires_usage_credits" }
+    /// Limit-Arten, die belegt das ganze Konto sperren (5 Stunden, Woche).
+    static let accountWideKinds: Set<String> = ["five_hour", "seven_day"]
+
+    /// Darf das Limit eines Chats auch die anderen Chats seines Kontos sperren?
+    /// Nur eine belegte kontoweite Art MIT bekanntem Ende (Vic): Ohne Ende
+    /// hinge die Sperre an einem Verlauf, der vielleicht nie weitergeht, und
+    /// eine unbekannte oder modellbezogene Art (Guthaben) sperrt nicht das
+    /// ganze Konto. Alles andere wird an den anderen Chats nur eine Warnung.
+    var blocksAccount: Bool { resetsAt != nil && Self.accountWideKinds.contains(kind) }
 
     /// Gilt das Limit noch? Ohne bekanntes Ende: ja, bis der Verlauf
     /// weitergeht.
@@ -121,22 +126,22 @@ extension AgentChatSession {
 
     /// Was einen Prompt an diesen Chat jetzt aufhält: das eigene Limit, sonst
     /// ein kontoweites Limit, gesehen an einem anderen Chat desselben Kontos
-    /// (5 Stunden, Woche). Das Guthaben-Limit eines anderen Chats gilt nur für
-    /// dessen Modell und hält hier nicht auf (siehe `usageLimitWarning`).
+    /// (5 Stunden, Woche, mit bekanntem Ende; `blocksAccount`). Alles andere
+    /// hält hier nicht auf, sondern warnt nur (siehe `usageLimitWarning`).
     func blockingUsageLimit(in sessions: [AgentChatSession], now: Date = Date()) -> AgentUsageLimit? {
         if let own = activeUsageLimit(at: now) { return own }
         guard provider == .claude,
               let shared = AgentUsageLimit.onAccount(AgentUsageLimit.accountKey(claudeProfileName), in: sessions, now: now),
-              shared.isAccountWide else { return nil }
+              shared.blocksAccount else { return nil }
         return shared
     }
 
-    /// Ein Guthaben-Limit an einem anderen Chat desselben Kontos: nur warnen,
-    /// es gilt vielleicht nicht für das Modell dieses Chats.
+    /// Ein Limit an einem anderen Chat desselben Kontos, das nicht sperren
+    /// darf (Guthaben, unbekannte Art, ohne Ende): nur warnen.
     func usageLimitWarning(in sessions: [AgentChatSession], now: Date = Date()) -> AgentUsageLimit? {
         guard provider == .claude, activeUsageLimit(at: now) == nil,
               let shared = AgentUsageLimit.onAccount(AgentUsageLimit.accountKey(claudeProfileName), in: sessions, now: now),
-              !shared.isAccountWide else { return nil }
+              !shared.blocksAccount else { return nil }
         return shared
     }
 }

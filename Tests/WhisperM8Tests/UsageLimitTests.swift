@@ -119,9 +119,31 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertNil(resting.blockingUsageLimit(in: [limited, resting], now: now),
                      "Guthaben gilt nur für ein Modell: nicht sperren")
         XCTAssertNotNil(resting.usageLimitWarning(in: [limited, resting], now: now))
-        XCTAssertFalse(limited.usageLimit!.isAccountWide)
+        XCTAssertFalse(limited.usageLimit!.blocksAccount)
         // Der Chat mit dem Guthaben-Limit selbst bleibt gesperrt.
         XCTAssertNotNil(limited.blockingUsageLimit(in: [limited, resting], now: now))
+    }
+
+    func testOnlyKnownAccountWideKindsWithAnEndBlockOtherChats() {
+        // Vic: Ohne Ende hinge die Sperre an einem Verlauf, der vielleicht nie
+        // weitergeht; eine unbekannte Art sperrt nicht das ganze Konto.
+        let now = resets.addingTimeInterval(-60)
+        func sibling(_ limit: AgentUsageLimit) -> (AgentChatSession, [AgentChatSession]) {
+            var limited = AgentChatSession(provider: .claude, projectID: UUID(), title: "a")
+            limited.usageLimit = limit
+            let resting = AgentChatSession(provider: .claude, projectID: UUID(), title: "b")
+            return (resting, [limited, resting])
+        }
+        for kind in ["five_hour", "seven_day"] {
+            let (resting, all) = sibling(AgentUsageLimit(resetsAt: resets, kind: kind, since: nil, account: "main"))
+            XCTAssertNotNil(resting.blockingUsageLimit(in: all, now: now), kind)
+        }
+        let noEnd = sibling(AgentUsageLimit(resetsAt: nil, kind: "five_hour", since: nil, account: "main"))
+        XCTAssertNil(noEnd.0.blockingUsageLimit(in: noEnd.1, now: now), "ohne Ende keine kontoweite Sperre")
+        XCTAssertNotNil(noEnd.0.usageLimitWarning(in: noEnd.1, now: now), "aber eine Warnung")
+        let unknown = sibling(AgentUsageLimit(resetsAt: resets, kind: "seven_day_opus", since: nil, account: "main"))
+        XCTAssertNil(unknown.0.blockingUsageLimit(in: unknown.1, now: now), "unbekannte Art sperrt nicht")
+        XCTAssertTrue(ChatsSendReadinessGuard.creditsWarning(unknown.1[0].usageLimit!).contains("seven_day_opus"))
     }
 
     func testOnlyRealSlashCommandsPassTheLimit() {

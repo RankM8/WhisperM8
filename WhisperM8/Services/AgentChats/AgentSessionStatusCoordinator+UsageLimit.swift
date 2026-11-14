@@ -28,6 +28,21 @@ extension AgentSessionStatusCoordinator {
             Logger.debug("Failed to record usage limit: \(error.localizedDescription)")
         }
         scheduleUsageLimitEnd(sessionID: sessionID)
+        // Ende über den Verlauf (Claude macht von selbst weiter, der Normalfall):
+        // Vorgemerktes bei den anderen Chats des Kontos anstoßen, die das
+        // kontoweite Limit mit aufgehalten hat (Vic). Den Chat selbst bedient
+        // sein Turn-Ende.
+        if limit == nil, let previous = stored?.usageLimit, previous.blocksAccount, let account = previous.account {
+            deliverQueuedToSiblings(of: sessionID, account: account, in: store.loadWorkspace().sessions)
+        }
+    }
+
+    /// Stößt die Warteschlange der anderen Claude-Chats eines Kontos an.
+    func deliverQueuedToSiblings(of sessionID: UUID, account: String, in sessions: [AgentChatSession]) {
+        for other in sessions where other.id != sessionID && other.provider == .claude
+            && AgentUsageLimit.accountKey(other.claudeProfileName) == account {
+            deliverQueued(other.id)
+        }
     }
 
     /// Ein Timer je Chat (Review H1): hebt das Limit nach dem Ende auf und
@@ -65,12 +80,9 @@ extension AgentSessionStatusCoordinator {
         let sessions = store.loadWorkspace().sessions
         let account = sessions.first(where: { $0.id == sessionID })?.usageLimit?.account
         try? store.setUsageLimit(nil, for: sessionID)
-        AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
+        deliverQueued(sessionID)
         guard let account else { return }
-        for other in sessions where other.id != sessionID && other.provider == .claude
-            && AgentUsageLimit.accountKey(other.claudeProfileName) == account {
-            AgentPromptQueueDelivery.shared.deliverNext(for: other.id)
-        }
+        deliverQueuedToSiblings(of: sessionID, account: account, in: sessions)
     }
 
     /// Beim App-Start: für jeden gespeicherten Limit-Zustand den Timer planen

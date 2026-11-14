@@ -110,6 +110,8 @@ final class AgentSessionStatusCoordinator {
     /// Wartet vor Ton, Meldung und Zustellung beim Turn-Ende auf einen
     /// frischen Poll (Review H2). Tests ersetzen das durch „sofort“.
     var freshTranscriptBeforeTurnEnd: ((UUID, @escaping () -> Void) -> Void)?
+    /// Stößt die Warteschlange eines Chats an (Tests: Spy).
+    var deliverQueued: (UUID) -> Void = { AgentPromptQueueDelivery.shared.deliverNext(for: $0) }
     /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
     /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
     /// verifiziert werden.

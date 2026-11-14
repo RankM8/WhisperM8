@@ -58,11 +58,15 @@ enum ChatsSendReadinessGuard {
             + "Nutze `chats enqueue` (stellt nach dem Limit zu) oder wechsle das Konto."
     }
 
-    /// Hinweis bei einem Guthaben-Limit an einem anderen Chat desselben
-    /// Kontos: gilt nur für ein Modell, deshalb nur Warnung (Jarvis, Vic).
+    /// Hinweis bei einem Limit an einem anderen Chat desselben Kontos, das
+    /// nicht sperren darf (Guthaben für ein Modell, unbekannte Art, ohne Ende).
     static func creditsWarning(_ limit: AgentUsageLimit) -> String {
-        "Achtung: Ein anderer Chat dieses Kontos hat das Guthaben-Limit für sein Modell erreicht. "
-            + "Nutzt dieser Chat dasselbe Modell, arbeitet er nicht und der Prompt ist verbraucht."
+        if limit.kind == "model_requires_usage_credits" {
+            return "Achtung: Ein anderer Chat dieses Kontos hat das Guthaben-Limit für sein Modell erreicht. "
+                + "Nutzt dieser Chat dasselbe Modell, arbeitet er nicht und der Prompt ist verbraucht."
+        }
+        return "Achtung: Ein anderer Chat dieses Kontos steht am Nutzungslimit (\(limit.kind)). "
+            + "Gilt es auch hier, arbeitet dieser Chat nicht und der Prompt ist verbraucht."
     }
 
     /// Eintrag für `sessions.live` (aus dem Request-Handler ausgelagert).

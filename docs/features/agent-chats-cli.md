@@ -710,14 +710,18 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
 - `send` lehnt mit `notReady` ab (Exit 4): der Prompt würde sonst verbraucht,
   ohne dass der Chat arbeitet. Kein `--force`-Bypass. Das gilt auch für einen
   Chat ohne eigene Limit-Zeile, wenn ein anderer Chat desselben Kontos am
-  5-Stunden- oder Wochenlimit steht (das Konto ist gesperrt; Vorfall 14.11.:
-  ein ruhender Chat verbrauchte die erste Nachricht). Ein Guthaben-Limit
-  (`model_requires_usage_credits`) gilt nur für ein Modell: dort gibt `send`
-  nur eine Warnung aus (stderr, JSON `result.warning`). Durch geht nur ein
+  5-Stunden- oder Wochenlimit (`five_hour`, `seven_day`) mit bekanntem Ende
+  steht (das Konto ist gesperrt; Vorfall 14.11.: ein ruhender Chat verbrauchte
+  die erste Nachricht). Jede andere Art – Guthaben-Limit
+  (`model_requires_usage_credits`, gilt nur für ein Modell), unbekannte Arten
+  oder ein Limit ohne Ende – sperrt nur den eigenen Chat; bei den anderen
+  Chats des Kontos gibt `send` nur eine Warnung aus (stderr, JSON
+  `result.warning`). Durch geht nur ein
   Slash-Befehl am Anfang (`/login`, `/model …`, `/rate-limit-options`), kein
   Pfad wie `/Users/…`. `enqueue` merkt vor; die
   Warteschlange stellt erst nach dem Ende zu, auch wenn Claude danach nicht
-  von selbst weitermacht.
+  von selbst weitermacht. Endet das Limit über den Verlauf (Claude antwortet
+  wieder), bekommen auch die anderen Chats des Kontos ihr Vorgemerktes.
 - `new` warnt auf stderr, wenn ein anderer Chat desselben Kontos gerade am
   Limit steht.
 - Weitermachen zum Ende (belegt in den Verläufen vom 11.–14.11.2026): Claude
