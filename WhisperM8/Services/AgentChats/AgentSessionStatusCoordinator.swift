@@ -272,6 +272,9 @@ final class AgentSessionStatusCoordinator {
         watcher.processIDProvider = { [weak self] sessionID in
             self?.terminalProcessID(sessionID)
         }
+        watcher.onWorkingCopy = { [weak self] sessionID, copy in
+            self?.handleWorkingCopy(sessionID: sessionID, copy: copy)
+        }
     }
 
     // MARK: - Lifecycle-API (von den Views gerufen)
@@ -1210,6 +1213,16 @@ final class AgentSessionStatusCoordinator {
             cwd: project.path,
             priorTurnFinishedAt: session.lastTurnAt
         )
+    }
+
+    /// Ort eines Chats hat sich geändert (WM8-60): am Chat merken. Der
+    /// Watcher hat schon eingeordnet; der Store schreibt nur bei Änderung.
+    func handleWorkingCopy(sessionID: UUID, copy: AgentWorkingCopy) {
+        do {
+            try store.setWorkingCopy(copy, for: sessionID)
+        } catch {
+            Logger.debug("Failed to record working copy: \(error.localizedDescription)")
+        }
     }
 
     /// Persistiert `lastTurnAt` und stößt den Auto-Namer an — vormals

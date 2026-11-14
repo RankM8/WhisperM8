@@ -131,6 +131,7 @@ enum ChatsOutput {
             // dem Ablageort (Resume-Selbstheilung), der Stempel wird nachgezogen.
             dict["accountStamp"] = stamped
         }
+        dict["workingCopy"] = session.workingCopy.map(workingCopyJSON) ?? NSNull()
         if let attention {
             dict["attention"] = ["category": attention.category.rawValue, "rank": attention.rank]
         }
@@ -138,6 +139,66 @@ enum ChatsOutput {
             dict["lastAssistantLine"] = line
         }
         return dict
+    }
+
+    /// Wo der Chat zuletzt gearbeitet hat (WM8-60): `kind` main | worktree |
+    /// other (Hauptordner, Arbeitskopie, Ordner außerhalb des Projekts), dazu
+    /// Name, Pfad, Branch und ob das der Standard-Branch ist.
+    static func workingCopyJSON(_ copy: AgentWorkingCopy) -> [String: Any] {
+        [
+            "kind": workingCopyKind(copy.kind),
+            "name": copy.name ?? NSNull(),
+            "path": copy.path,
+            "branch": copy.branch ?? NSNull(),
+            "defaultBranch": copy.defaultBranch ?? NSNull(),
+            "isDefaultBranch": copy.branch == nil ? NSNull() : copy.isOnDefaultBranch as Any,
+        ]
+    }
+
+    static func workingCopyKind(_ kind: AgentWorkingCopy.Kind) -> String {
+        switch kind {
+        case .mainFolder: return "main"
+        case .worktree: return "worktree"
+        case .otherFolder: return "other"
+        }
+    }
+
+    /// Knapp für Tabellen: `main` (Hauptordner, Standard-Branch),
+    /// `main@<branch>` (Hauptordner, anderer Branch), `wt:<name>@<branch>`,
+    /// `other:<name>`; `-` wenn unbekannt. Ein Branch, den der Name schon
+    /// nennt, steht nur einmal da.
+    static func workingCopyShort(_ copy: AgentWorkingCopy?) -> String {
+        guard let copy else { return "-" }
+        switch copy.kind {
+        case .mainFolder:
+            guard let branch = copy.branch, !copy.isOnDefaultBranch else { return "main" }
+            return "main@" + branch
+        case .worktree, .otherFolder:
+            let place = (copy.kind == .worktree ? "wt:" : "other:") + (copy.name ?? "?")
+            guard let branch = copy.branch, !copy.nameRepeatsBranch else { return place }
+            return place + "@" + branch
+        }
+    }
+
+    /// Kürzt in der Mitte, damit Anfang (Ort) und Ende (Branch) lesbar bleiben.
+    static func truncateMiddle(_ text: String, _ length: Int) -> String {
+        guard text.count > length, length > 1 else { return text }
+        let head = (length - 1) / 2
+        let tail = length - 1 - head
+        return String(text.prefix(head)) + "…" + String(text.suffix(tail))
+    }
+
+    /// Für `chats show`: Ort ausgeschrieben, Ordner in Klammern.
+    static func workingCopyLine(_ copy: AgentWorkingCopy) -> String {
+        let place: String
+        switch copy.kind {
+        case .mainFolder: place = "Hauptordner"
+        case .worktree: place = "Arbeitskopie \(copy.name ?? "?")"
+        case .otherFolder: place = "Ordner außerhalb des Projekts: \(copy.name ?? "?")"
+        }
+        var branch = copy.branch.map { " · Branch \($0)" } ?? ""
+        if copy.branch != nil, !copy.isOnDefaultBranch, copy.kind == .mainFolder { branch += " (nicht der Standard-Branch)" }
+        return "\(place)\(branch)  (\(copy.path))"
     }
 
     /// Claude-Konto eines Chats, wie es die CLI zeigt.
@@ -250,16 +311,20 @@ enum ChatsOutput {
             CLIIO.out("Keine Sessions im Scope. (--all zeigt archivierte und ältere.)")
             return
         }
-        CLIIO.out(pad("REF", 10) + pad("PROJEKT/TITEL", 42) + pad("STATUS", 15) + pad("SEIT", 8) + "  FLAGS")
+        CLIIO.out(pad("REF", 10) + pad("PROJEKT/TITEL", 42) + pad("STATUS", 15) + pad("SEIT", 8)
+                  + pad("ORT", 28) + "FLAGS")
         for item in items {
             let session = item.entry.session
             let name = truncate("\(item.entry.projectName)/\(session.title)", 40)
             let status = item.runtime.status?.rawValue ?? "unknown"
             let since = item.runtime.since.map { relative(from: $0, to: now) } ?? "–"
-            CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8) + "  "
+            let place = truncateMiddle(workingCopyShort(session.workingCopy), 26)
+            CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8)
+                      + pad(place, 28)
                       + flags(session.id, selfID: selfID, openTabIDs: openTabIDs, pinnedIDs: pinnedIDs))
         }
-        CLIIO.err("\(items.count) Sessions · ⊙=offener Tab 📌=gepinnt (du)=diese Session")
+        CLIIO.err("\(items.count) Sessions · ORT: main=Hauptordner wt:=Arbeitskopie other:=außerhalb des Projekts, @Branch"
+                  + " · ⊙=offener Tab 📌=gepinnt (du)=diese Session")
     }
 
     /// Flag-Kürzel pro Zeile: offener Tab, gepinnt, Selbst-Markierung.
@@ -328,6 +393,7 @@ enum ChatsOutput {
         CLIIO.out("── IDENTITÄT " + String(repeating: "─", count: 40))
         CLIIO.out("Titel        \(session.title)\(titleMarks)")
         CLIIO.out("Projekt      \(entry.projectName)  (\(entry.projectPath))")
+        if let copy = session.workingCopy { CLIIO.out("Ort          \(workingCopyLine(copy))") }
         CLIIO.out("Ref          \(shortID(session.id))  ·  \(session.id.uuidString)")
         CLIIO.out("Provider     \(session.provider.rawValue) · \(session.effectiveKind.displayName) · Modell \(modelDisplay(session: session, transcriptModel: transcriptModel).text)")
         if let group = session.groupName { CLIIO.out("Gruppe       \(group)") }

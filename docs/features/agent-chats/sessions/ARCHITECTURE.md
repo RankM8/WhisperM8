@@ -195,6 +195,65 @@ Bekannte Grenzen:
   melden; die PTY-Ausgabe als Arbeitssignal nutzen; ein echtes Freigabe-Signal
   über Codex-Hooks oder die OSC-9-Meldungen der TUI.
 
+Aus demselben Tail-Read leitet der Watcher ab, wo ein Chat arbeitet (WM8-60):
+`AgentWorkingLocationExtractor` liest den letzten `cwd` (Claude: jede
+Nachrichtenzeile, Codex: `turn_context` bzw. `session_meta`), `GitHeadReader`
+liest für diesen Ordner Repo-Wurzel, Git-Verzeichnis und Branch aus
+`.git/HEAD` (bei Arbeitskopien über die `gitdir:`-Datei, ohne
+`git`-Subprozess; bei gelöschtem Ordner nichts). Der Branch kommt bewusst aus
+HEAD: Claudes `gitBranch` hinkt nach einem Ordnerwechsel minutenlang
+hinterher (Review: 867 Zeilen Arbeitskopie mit `gitBranch=main`) und dient nur
+als Rückfall ohne Repo. `AgentWorkingCopyClassifier` ordnet ein: Arbeitskopie
+unter `<Projekt>/.claude/worktrees/<name>`, Arbeitskopie desselben Repos
+anderswo (Git-Verzeichnis unter `<Projekt>/.git/worktrees/`, etwa die
+ListM8-Dev-Slots), Hauptordner samt Unterordnern, sonst anderer Ordner (auch
+Arbeitskopien fremder Projekte). Gespeichert wird die Wurzel des Orts, nicht
+der rohe `cwd`: Sprünge zwischen Unterordnern (bis zu 620 je Chat in fünf
+Tagen) ändern nichts und schreiben nichts. Nur ein geänderter Ort geht über
+`onWorkingCopy` an den Koordinator und landet als
+`AgentChatSession.workingCopy` im Workspace, ohne den Aktivitäts-Bump von
+`updateSession`. Anzeige: Marke im Kachelkopf neben dem Konto und in der
+Kopfzeile der Einzelansicht (dort mit dem Pfad des Orts), per `ViewThatFits`
+von „Ort · Branch“ bis zum bloßen Symbol. Im Hauptordner auf dem
+Standard-Branch (`origin/HEAD`, sonst `main`/`master`) steht nur der graue
+Chip „Main folder“ ohne Branch, damit „main“ als Branch nicht neben dem Konto
+„main“ steht; auf einem anderen Branch wird der Chip farbig und zeigt den
+Branch, bei Platzmangel den Branch statt des Worts. Nennt der Name einer
+Arbeitskopie den Branch schon, steht er nur einmal da. Kleines Zeichen in Tab
+und Seitenleiste nur außerhalb des Hauptordners oder auf einem
+Nicht-Standard-Branch (`AgentWorkingCopyMarker`). Lila
+wie der Branch-Tag, weil Grün „arbeitet“ und der Akzent „ausgewählt“ heißt. Die
+Seitenleiste liest den Workspace, nie den Activity-Store. Kosten je Chat und
+Tail-Read: der Parse der letzten Zeile mit `cwd` (0,1–0,5 ms bei großen
+Tool-Ergebnissen) und wenige `stat` plus ein, zwei kleine Lesezugriffe für
+HEAD; ein Workspace-Save nur bei echtem Ortswechsel. Der Indexer verwirft
+Sitzungen mit Arbeitskopie-Pfad als cwd weiterhin (`isClaudeWorktreePath`).
+
+Fremde Repos: Was in `.git` steht, bestimmt das Repo, und das kann fremd sein.
+`GitHeadReader.readSmallFile` liest deshalb nur reguläre Dateien bis 4 KB
+(keine Pipe, keine Riesendatei), und Branch- wie Ordnernamen werden auf
+druckbare Zeichen und höchstens 255 Zeichen begrenzt
+(`AgentWorkingCopyClassifier.displayName`), bevor sie in Workspace, Kachelkopf
+oder per CLI ins Terminal gehen. Projekt und `cwd` werden vor dem Vergleich
+aufgelöst (`realpath`); zusätzlich gilt als Hauptordner, wessen
+Git-Verzeichnis `<Projekt>/.git` ist. Sonst trüge jeder Chat eines Projekts
+hinter einem Symlink das Zeichen „außerhalb“.
+
+**Bekannte Grenzen der Ortsanzeige:**
+
+- **Die Marke zeigt den Ordner der Shell, nicht wohin geschrieben wird.** Ein
+  Chat, der aus dem Hauptordner heraus per absolutem Pfad oder `git -C` in
+  einer Arbeitskopie arbeitet, steht als „Hauptordner“ da. Das ist die
+  wichtigste Grenze: Die Anzeige beweist nicht, dass ein Chat den Hauptordner
+  in Ruhe lässt.
+- Der Branch stimmt nur zum Zeitpunkt des letzten Schreibens des Verlaufs;
+  wechselt ein anderer Chat oder der Nutzer danach den Branch im selben
+  Ordner, zeigt die Marke den alten Stand bis zum nächsten Schreiben.
+- Ein `cwd` in einem Git-Submodul zeigt den Branch des Submoduls.
+- Liegt die letzte `turn_context`-Zeile eines Codex-Chats weiter als 64 KB
+  zurück, bleibt bis zum nächsten Turn der gespeicherte Ort stehen.
+- `chats list` wird durch die Spalte `ORT` rund 28 Zeichen breiter.
+
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`
 direkt: `spawning` und `running` zu `working`, `done` zu `idle`, `failed` zu

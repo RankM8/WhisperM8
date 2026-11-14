@@ -226,6 +226,15 @@ final class LoginShellEnvironmentTests: XCTestCase {
         XCTAssertEqual(envDict["HOME"], "/Users/test")
     }
 
+    /// WM8-63: Auch Claudes Schlüsselbund-Ordner wird nie geerbt.
+    func testStripsInheritedClaudeSecureStorageDir() {
+        let env = LoginShellEnvironment(pathLoader: { "/usr/bin" })
+        let envDict = env.processEnvironment(base: [
+            "CLAUDE_SECURESTORAGE_CONFIG_DIR": "/Users/test/.whisperm8-test-instance/home/.claude",
+        ])
+        XCTAssertNil(envDict["CLAUDE_SECURESTORAGE_CONFIG_DIR"])
+    }
+
     func testStripsInheritedGPTAccountRoutingVariables() {
         // Dieselbe Regel fuer die GPT-Konto-Profile: `make dev` aus einer auf
         // `ai` gestempelten Shell darf nicht alle main-Sessions auf ai ziehen,

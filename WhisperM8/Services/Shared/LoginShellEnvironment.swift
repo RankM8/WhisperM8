@@ -220,6 +220,10 @@ final class LoginShellEnvironment: @unchecked Sendable {
         // über die expliziten per-Launch-Overrides (`ClaudeAccountProfiles.
         // environmentOverrides`), nie über geerbtes Env.
         env.removeValue(forKey: "CLAUDE_CONFIG_DIR")
+        // Gleiche Regel für Claudes Schlüsselbund-Ordner: Claude zieht ihn
+        // `CLAUDE_CONFIG_DIR` vor, geerbt landete jeder Chat im Login eines
+        // fremden Ordners (WM8-63).
+        env.removeValue(forKey: "CLAUDE_SECURESTORAGE_CONFIG_DIR")
 
         // Dieselbe Regel fuer die GPT-Konto-Profile: `ANTHROPIC_CUSTOM_HEADERS`
         // traegt den Konto-Header einer Session, `CCP_CONFIG_DIR` den Store des

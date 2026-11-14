@@ -165,7 +165,7 @@ scripts/test-instance.sh stop | reset | status | log
 | Home (`~/.claude`, `~/.codex`, Profile, Logs, Application Support) | `<wurzel>/home` — `AppInstance.home`/`.applicationSupport` |
 | Kindprozesse (Chats) | `HOME=<wurzel>/home` → `claude`/`codex` starten wie beim ersten Mal, ohne Login |
 | Control-Socket | unter dem Test-Home, Rückfall `/private/tmp/whisperm8-<uid>-test-<hash>/` |
-| Keychain | Dienst `com.whisperm8.app.test` (kein Zugriffsdialog auf Produktiv-Schlüssel) |
+| Keychain | Dienst `com.whisperm8.app.test` (kein Zugriffsdialog auf Produktiv-Schlüssel); für `main` liest und schreibt die Test-App `Claude Code-credentials-<sha256(<wurzel>/home/.claude)[:8]>` (siehe unten) |
 | Hotkeys, Dock, Fokus | keine globalen Hotkeys, kein Dock-Icon, nie aktiv (`AppActivation`), Fenster hinter dem Schreibtisch (`TestInstanceWindowParking`) |
 | Proxy-Waisensuche, Distributed Notification | aus bzw. mit eigenem Namen |
 
@@ -175,7 +175,39 @@ sichtbar machen: `WHISPERM8_TEST_VISIBLE=1 scripts/test-instance.sh start`.
 
 **Grenzen:** Mikrofon und Bedienungshilfen hat das Test-Bundle nicht (eigener
 TCC-Eintrag) — Diktat nur über `debug dictate <audio>`. Claude im Test-Home ist
-nicht angemeldet; echte Modell-Turns gehen dort nicht.
+zunächst nicht angemeldet; echte Modell-Turns gehen erst nach einer eigenen
+Anmeldung (unten).
+
+**Claude-Login und Schlüsselbund (WM8-63, gemessen 14.11.2026 mit Claude Code 2.1.325):**
+
+- Die Chats der Test-Instanz erreichen den echten Login nicht. Die Suchliste des
+  Schlüsselbunds hängt am `HOME`; mit dem Test-Home sieht `security` nur den
+  System-Schlüsselbund, eine Suche nach `Claude Code-credentials` endet mit Exit 44.
+- Ein `/login` in einem Test-Chat landet deshalb im Klartext in
+  `<wurzel>/home/.claude/.credentials.json` (Rechte 0600, Claude warnt „Storing
+  credentials in plaintext“). `reset` löscht die Datei mit der Wurzel.
+- Beim Versuch, in den Schlüsselbund zu schreiben, kann macOS einen Dialog zeigen
+  (kein Standard-Schlüsselbund). Dort „Abbrechen“ wählen, nie „Zurücksetzen“ und
+  keinen neuen Schlüsselbund anlegen.
+- Die Test-App selbst läuft mit dem echten `HOME` und erreicht den
+  Login-Schlüsselbund. Für `main` nimmt sie deshalb einen eigenen Dienstnamen
+  (`ClaudeAccountProfiles.mainKeychainService`). So fassen Ablauf-Anzeige,
+  Kontingent, Login-Erneuerung und „Zum Hauptkonto machen“ in der Test-Instanz den
+  echten Eintrag nie an.
+- **Grenze:** Die Konto-Funktionen der App sehen einen in der Test-Instanz gemachten
+  Login nicht. Claude schreibt ihn mit dem Test-Home in `.credentials.json`, die App
+  sucht mit dem echten `HOME` im Schlüsselbund. Ablauf-Anzeige, Kontingent,
+  Login-Erneuerung und „Zum Hauptkonto machen“ lassen sich dort nicht durchspielen.
+  Die Chats lesen die Datei selbst (laut Code von Claude Code 2.1.325, mit einem
+  echten Login noch nicht geprüft).
+- `scripts/test-instance.sh status` zeigt, ob die Datei da ist (ohne sie zu
+  lesen), und nennt den Dienst der Test-App. `reset` löscht genau diesen
+  berechneten Dienst (Konto `$USER`), nie per Muster und nie den blanken Namen.
+  `test-instance.sh login-service` gibt den Namen aus; ein Test legt Skript und
+  App für mehrere Wurzeln auf denselben Wert fest.
+- `LoginShellEnvironment` entfernt ein geerbtes `CLAUDE_SECURESTORAGE_CONFIG_DIR`
+  wie `CLAUDE_CONFIG_DIR`: Claude zieht die Variable vor, geerbt landete jeder
+  Chat im Login eines fremden Ordners.
 
 ### Übergang der vereinten Pille prüfen (`debug pill`)
 
