@@ -361,7 +361,9 @@ enum AppCLICommand {
         !(silentWhenDisabled && reason == "featureDisabled")
     }
 
-    static let disabledLine = "Neustart wie bisher: Die Chats enden und werden danach fortgesetzt "
+    /// Ohne Schalter merkt die App die Chats nicht zum Fortsetzen vor
+    /// (`HandoverRestartService`, `featureDisabled`): sie enden mit der App.
+    static let disabledLine = "Neustart wie bisher: Laufende Chats enden mit der App "
         + "(„Neustart ohne Chatverlust“ ist aus, einschalten unter Einstellungen > Labs)."
 
     static func exitCode(outcome: String, reason: String?, result: ChatsControlJSON, quiet: Bool,

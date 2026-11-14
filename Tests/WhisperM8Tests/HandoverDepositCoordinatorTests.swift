@@ -394,6 +394,8 @@ final class HandoverRestartCLITests: XCTestCase {
         XCTAssertTrue(makefile.contains("Start gescheitert. $(HANDOVER_HINT)"))
         XCTAssertTrue(makefile.contains("[ -n \"$$out\" ] && echo \"$$out\""))
         XCTAssertTrue(AppCLICommand.disabledLine.contains("Labs"), "Satz statt Leerzeile bei ausgeschaltetem Schalter")
+        XCTAssertFalse(AppCLICommand.disabledLine.contains("fortgesetzt"),
+                       "ohne Schalter merkt die App nichts zum Fortsetzen vor")
         let script = try String(contentsOf: repo.appendingPathComponent("scripts/test-instance.sh"), encoding: .utf8)
         XCTAssertTrue(script.contains("--keep-chats"))
         XCTAssertTrue(script.contains("--wait-take"))

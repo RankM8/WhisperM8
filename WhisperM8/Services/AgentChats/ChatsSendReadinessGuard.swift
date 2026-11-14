@@ -99,7 +99,7 @@ enum ChatsSendReadinessGuard {
             // WM8-97: nach einem Neustart übernommen, Status noch ohne Beleg.
             return "Chat wurde beim Neustart übernommen und hat sich noch nicht gemeldet — ein Prompt könnte "
                 + "in laufende Arbeit oder eine offene Frage geraten. Nutze `chats enqueue` (stellt zu, sobald der "
-                + "Chat bereit ist) oder warte ein paar Sekunden."
+                + "Chat bereit ist) oder warte, bis er sich meldet (höchstens zwei Minuten)."
         }
         let age = since.map { " (seit \($0) s)" } ?? ""
         return "Chat startet noch\(age) — ein Prompt würde jetzt in einer noch nicht "

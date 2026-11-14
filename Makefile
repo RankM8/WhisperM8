@@ -110,7 +110,7 @@ _dev_finish:
 
 # WM8-98: Scheitert nach einer Abgabe Installieren oder Start, warten die Chats
 # beim Aufbewahrer (bis zu seiner Frist) auf die nächste App.
-HANDOVER_HINT = Wurden Chats übergeben, warten sie bis zu 10 min beim Aufbewahrer: App von Hand starten (open "$(INSTALLED_APP)"), sie holt sie zurück.
+HANDOVER_HINT = Wurden Chats übergeben, warten sie bis zu 10 min beim Aufbewahrer: App von Hand starten (open '$(INSTALLED_APP)'), sie holt sie zurück.
 
 # Voller Release-Build (WMO) im gemeinsamen .build — wie ausgeliefert, für Messläufe.
 dev-release: _guard_chat install
