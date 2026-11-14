@@ -33,7 +33,7 @@ swift test --filter AgentSessionStoreTests    # eine Klasse
 ```
 
 Details zu `make dev` (kein WMO, `-incremental`, kein Debug+O wegen SwiftTerm-`abort()`, rsync statt Neukopie
-wegen TCC, Signier-Zertifikat): [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+wegen TCC, Signier-Zertifikat): [DEVELOPMENT](docs/DEVELOPMENT.md).
 
 **WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall): führe NIEMALS `make dev`,
 `make kill`, `make run`, `make install` oder `make clean-install` aus und nie `swift run` ohne Argument. Diese
@@ -58,7 +58,7 @@ brechen `dev`, `dev-release`, `install`, `run` und `clean-install` ab; `FORCE=1`
 Englisch ist Basis, Deutsch wird vollständig übersetzt: neue UI-Texte englisch schreiben und die deutsche
 Übersetzung in `WhisperM8/Localization/Localizable.xcstrings` eintragen. `Text("…")` mit Literal wird automatisch
 Schlüssel; für String-Parameter (`.help`, NSAlert, Rückgabewerte) `String(localized:)`. Keine Ternär-Literale in
-`Text(cond ? "a" : "b")`. Fachnamen und CLI-Befehle bleiben unübersetzt. Regeln: [docs/features/lokalisierung.md](docs/features/lokalisierung.md).
+`Text(cond ? "a" : "b")`. Fachnamen und CLI-Befehle bleiben unübersetzt. Regeln: [lokalisierung](docs/features/lokalisierung.md).
 
 ## Debugging und Performance
 
@@ -71,7 +71,7 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 - **Nie pro Byte/Zeichen/Zeile messen** — dort `PerformanceCounters`. Neue Signposts an häufigen Stellen nur
   in der Stufe `.detail`.
 - Alles, was App oder Build langsam macht, mit Kosten melden. Messläufe gegen Budgets mit `make dev-release`.
-- Doku: [docs/features/performance-messung.md](docs/features/performance-messung.md).
+- Doku: [Messung](docs/features/performance-messung.md).
 
 ## Architektur
 
@@ -94,7 +94,7 @@ Doku: [dictation](docs/features/dictation/).
 Doku-Einstieg: [agent-chats](docs/features/agent-chats/README.md); Konten:
 [claude-konten](docs/features/agent-chats/claude-konten.md), [gpt-konten](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board](docs/features/jarvis-board.md);
-Ansagen: [speech-callouts](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
+Ansagen: [Doku](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [Doku](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
 Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md).
 
 ## Invarianten (nicht brechen)
@@ -116,7 +116,8 @@ Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/st
 - Mutations-Closures des `AgentWorkspaceStore` laufen unter dem prozessweiten Lock: keine Subprozesse, kein
   blockierendes I/O (Git-Lookups vorher). UI nie über `loadWorkspace()` „auffrischen“.
 - Die App ist einziger Schreiber von Workspace und Board; die CLI liest von Disk und handelt über den Socket.
-  Mit dem Ticket-System spricht nur `whisperm8 tickets`, nie die App.
+  Das Ticket-System liest die App nur bei `ticketBoardEnabled` (Ansicht und Einrichtung), abseits des Main
+  Threads; geschrieben wird nur über `whisperm8 tickets`.
 - Fremde Daten unter `~/.claude*` und `~/.codex/` sind extern und werden nur gelesen — **Ausnahmen, alle
   absichtlich:** Theme-Schlüssel in `settings.json` (`ClaudeThemeWriter`, bei Theme-Wechsel);
   `agents/gpt.md` je Konto bei aktivem GPT-Backend (`ClaudeGPTAgentDefinition`); Statuszeile
@@ -137,7 +138,7 @@ Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/st
 - Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.
 - `pmset -a disablesleep 1` setzt nur der `StayAwakeController`, und nie ohne laufende Wache, die beim Tod
   der App zurücksetzt. Einziger Write außerhalb der eigenen Daten ist `/etc/sudoers.d/whisperm8-sleep`
-  (nutzerausgelöst, mit Admin-Dialog): [ui/README.md](docs/features/agent-chats/ui/README.md).
+  (nutzerausgelöst, mit Admin-Dialog): [ui](docs/features/agent-chats/ui/README.md).
 
 **Agent Chats**
 - Status für Claude-Chats kommt aus Claudes Registry (`<config-dir>/sessions/<pid>.json`); Hooks binden nur die
@@ -180,7 +181,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
 `clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
-Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
 (Labs „Neustart ohne Chatverlust“, im Bau; bisher nur GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem
 nächsten App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
@@ -190,4 +191,4 @@ nächsten App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohn
 - **KeyboardShortcuts** (exact 1.16.1), **Defaults**, **LaunchAtLogin-Modern**
 - **SwiftTerm** — eigener Fork, gepinnt auf v1.15.0 + Selection-Patches (Begründung in `Package.swift`). Der
   Metal-Renderer bleibt Opt-in, bis eine Messung einen Gewinn zeigt
-  ([terminal.md](docs/features/agent-chats/ui/terminal.md)).
+  ([terminal](docs/features/agent-chats/ui/terminal.md)).

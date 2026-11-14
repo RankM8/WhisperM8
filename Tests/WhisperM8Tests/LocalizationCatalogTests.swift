@@ -30,6 +30,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/SidebarStayAwakeButton.swift",
         "WhisperM8/Windows/KeyboardLockPanel.swift",
         "WhisperM8/Services/Dictation/QuickActionRunner.swift",
+        "WhisperM8/Views/Tickets/TicketErrorText.swift",
     ] + settingsFiles
 
     /// Alle Einstellungsdateien (W6 · LR-ONB-011/LR-AU-030) außer der Entwickler-Vorschau
@@ -66,6 +67,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Models/StatisticsFormatting.swift",
         "WhisperM8/Views/Settings/Models/StatisticsPageData.swift",
         "WhisperM8/Views/Settings/Models/TemplateEditorModel.swift",
+        "WhisperM8/Views/Settings/Models/TicketsSettingsModel.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputAccountTab.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputModesTab.swift",
         "WhisperM8/Views/Settings/Pages/AIOutputQuickActionSection.swift",
@@ -101,6 +103,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/Settings/Pages/StatisticsSettingsPage+Models.swift",
         "WhisperM8/Views/Settings/Pages/StatisticsSettingsPage+Overview.swift",
         "WhisperM8/Views/Settings/Pages/StatisticsShareSheet.swift",
+        "WhisperM8/Views/Settings/Pages/TicketsSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/TranscriptionSettingsPage.swift",
         "WhisperM8/Views/Settings/Pages/VoiceGateSettingsPage.swift",
         "WhisperM8/Views/SettingsView.swift",

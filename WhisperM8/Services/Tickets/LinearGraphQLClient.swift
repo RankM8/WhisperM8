@@ -100,11 +100,19 @@ final class TicketCredentialCache: @unchecked Sendable {
 
     func value(for workspace: String, _ read: () -> String?) -> String? {
         lock.lock()
-        defer { lock.unlock() }
-        if let known = cached[workspace] { return known }
-        // Ein fehlender Key wird nicht gemerkt: Er kann gleich eingerichtet werden.
+        let known = cached[workspace]
+        lock.unlock()
+        if let known { return known }
+        // Gelesen wird ohne die Sperre: Der Kindprozess kann auf einen Dialog
+        // warten, und das darf die anderen Workspaces nicht aufhalten. Zwei
+        // gleichzeitige Leser lesen dann beide, mit demselben Ergebnis.
         let fresh = read()
-        cached[workspace] = fresh
+        // Ein fehlender Key wird nicht gemerkt: Er kann gleich eingerichtet werden.
+        if let fresh {
+            lock.lock()
+            cached[workspace] = fresh
+            lock.unlock()
+        }
         return fresh
     }
 
@@ -175,12 +183,28 @@ struct TicketCredentialStore {
 
 /// Minimaler Aufruf von `/usr/bin/security`. Absoluter Pfad und eigene, knappe
 /// Umgebung: Es wird nichts aus der Umgebung des Aufrufers vererbt.
+///
+/// Blockiert bis zum Ende des Kindprozesses, höchstens `timeout` lang. Nie auf
+/// dem Main Thread aufrufen.
+///
+/// Nur für Befehle mit kurzer Ausgabe: Gelesen wird erst nach dem Ende des
+/// Kindprozesses. Was nicht in den Puffer der Pipe passt (mindestens 16 KiB),
+/// ließe das Kind bis zur Frist warten und ginge verloren. Die Aufrufe hier
+/// liefern eine Zeile.
 enum SecurityTool {
     struct Result { var exitCode: Int32; var stdout: String }
 
-    static func run(_ arguments: [String], stdin: String? = nil) -> Result {
+    /// Der Kindprozess lief länger als erlaubt und wurde beendet.
+    static let timedOut: Int32 = -2
+
+    /// Die Frist ist großzügig: `security` kann auf einen Dialog des
+    /// Schlüsselbunds warten (entsperren, Zugriff erlauben).
+    /// `executable` und `beforeStart` sind für Tests.
+    static func run(_ arguments: [String], stdin: String? = nil, timeout: TimeInterval = 60,
+                    executable: String = "/usr/bin/security",
+                    beforeStart: ((_ output: Pipe, _ input: Pipe) -> Void)? = nil) -> Result {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         process.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
         let output = Pipe()
@@ -190,11 +214,20 @@ enum SecurityTool {
         // Die Enden in diesem Prozess dürfen nicht an gleichzeitig startende
         // Chats vererbt werden (SwiftTerm schließt beim Start nichts). Das Kind
         // bekommt seine Kopien trotzdem, sie werden auf 0 und 1 dupliziert.
+        //
+        // macOS kann eine Pipe nicht in einem Zug mit close-on-exec anlegen.
+        // Zwischen `Pipe()` und `fcntl` bleibt ein Fenster von Mikrosekunden,
+        // in dem ein startender Chat die Enden erbt. Deshalb hängt unten nichts
+        // am Ende der Pipe: Gewartet wird auf den Prozess, mit Frist.
         for handle in [output.fileHandleForReading, output.fileHandleForWriting,
                        input.fileHandleForReading, input.fileHandleForWriting] {
             _ = fcntl(handle.fileDescriptor, F_SETFD, FD_CLOEXEC)
         }
         process.standardInput = stdin == nil ? FileHandle.nullDevice : input
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        // Tests stellen hier einen fremden Halter der Pipe-Enden nach.
+        beforeStart?(output, input)
         do {
             try process.run()
         } catch {
@@ -204,8 +237,28 @@ enum SecurityTool {
             try? input.fileHandleForWriting.write(contentsOf: Data(stdin.utf8))
             try? input.fileHandleForWriting.close()
         }
-        let data = (try? output.fileHandleForReading.readToEnd()) ?? Data()
-        process.waitUntilExit()
+        // Hält ein fremder Prozess das Schreib-Ende der Eingabe, sieht das Kind
+        // nie deren Ende und liefe ewig. Nach der Frist wird es beendet.
+        guard exited.wait(timeout: .now() + timeout) == .success else {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) != .success {
+                kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + 2)
+            }
+            return Result(exitCode: timedOut, stdout: "")
+        }
+        // Erst nach dem Ende lesen und nicht auf das Ende der Pipe warten: Hält
+        // ein fremder Prozess das Schreib-Ende der Ausgabe, käme es nie. Die
+        // Ausgabe ist eine Zeile und liegt vollständig im Puffer der Pipe.
+        let descriptor = output.fileHandleForReading.fileDescriptor
+        _ = fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFL) | O_NONBLOCK)
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let count = read(descriptor, &buffer, buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
         return Result(exitCode: process.terminationStatus, stdout: String(decoding: data, as: UTF8.self))
     }
 }
