@@ -24,8 +24,8 @@ extension UISnapshotGallery {
             let withKey = Set(workspaces.filter(\.hasKey).map(\.name))
             let teams = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.name, $0) })
             let dependencies = TicketsSettingsDependencies(
-                loadConfig: { config }, saveConfig: { _ in },
-                hasKey: { withKey.contains($0) }, storeKey: { _, _ in false }, deleteKey: { _ in },
+                loadConfig: { config }, loadConfigForChange: { config }, saveConfig: { _ in },
+                hasKey: { withKey.contains($0) }, storeKey: { _, _ in false }, deleteKey: { _ in false },
                 account: { _ in .failure(.unauthorized) },
                 teams: { name in teams[name]?.problem == nil ? .success(teams[name]?.teams ?? []) : .failure(.unauthorized) },
                 projects: { projects }, chooseFolder: { nil })

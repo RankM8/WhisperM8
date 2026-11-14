@@ -21,7 +21,12 @@ Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../pl
   Sie ändert in Linear nichts. Schalter aus heißt: keine Verbindung zu `api.linear.app`, kein Griff in den
   Schlüsselbund.
 - **Abseits des Main Threads:** Der Key wird über einen blockierenden Kindprozess gelesen. In der App läuft das
-  nie auf dem Main Thread; `TicketsSettingsModelTests` prüft das für jede Abhängigkeit der Einstellungen.
+  nie auf dem Main Thread; `TicketsSettingsModelTests` prüft das für jeden Schlüsselbund-, Datei- und
+  Netzzugriff der Einstellungen.
+- **Frist:** Der Aufruf von `security` wartet höchstens 60 Sekunden auf den Kindprozess (etwa bei einem Dialog
+  des Schlüsselbunds) und beendet ihn danach. Für die Oberfläche sieht das aus wie „kein Key“. macOS kann eine
+  Pipe nicht in einem Zug mit close-on-exec anlegen; erbt ein gleichzeitig startender Chat ihre Enden, greift
+  dieselbe Frist, statt dass der Aufruf hängt.
 
 ## Bedienung
 
@@ -80,20 +85,23 @@ Liegt ein Key schon im Schlüsselbund (von einem anderen Werkzeug abgelegt), üb
 
 ### In der App: Einstellungen › Tickets
 
-Die Seite steht in der Gruppe „Labs“ und tut dasselbe wie `tickets setup`, nach denselben Regeln:
+Die Seite steht in der Gruppe „Labs“ und richtet nach denselben Regeln ein wie `tickets setup`. Anders als die
+Kommandozeile kann sie einen Key und eine Zuordnung auch entfernen:
 
 - **Schalter „Show tickets in Agent Chats“** (`ticketBoardEnabled`). Solange er aus ist, zeigt die Seite nur
   ihn und liest nichts.
 - **Zugang:** je Workspace eine Zeile mit Zustand (verbunden, kein Key, geht nicht) und den Teams, die der Key
   sieht. Ein neuer Key wird bei Linear geprüft und unter dem Workspace abgelegt, den Linear zu ihm nennt.
-  „Remove Key…“ löscht den Schlüsselbund-Eintrag; die Zuordnungen der Teams bleiben, der Workspace steht danach
-  als „kein Key“ da.
+  „Remove Key…“ löscht nur den Schlüsselbund-Eintrag. Der Workspace bleibt eingerichtet und steht danach als
+  „kein Key“ da, die Zuordnungen bleiben. Aus der Einrichtung nimmt die Seite ihn nicht: Ein Team ohne festen
+  Workspace fiele sonst still dem einzigen verbliebenen zu.
 - **Projekte und Teams:** Projektordner → Team, wählbar aus den Projekten der App oder per Ordner-Auswahl. Ein
   Kürzel, das schon zu einem anderen Workspace gehört, hängt die Seite nicht um; dafür gibt es
   `tickets setup --reassign`.
 
 `tickets.json` hat damit zwei Schreiber, Kommandozeile und Einstellungen. Beide lesen vor jeder Änderung neu
-und schreiben atomar; wer zuletzt schreibt, gewinnt.
+und schreiben atomar; wer zuletzt schreibt, gewinnt. Die Seite ändert nichts an einer Datei, die sich nicht
+lesen lässt (die Kommandozeile finge in dem Fall leer an).
 
 ## Mehrere Workspaces
 

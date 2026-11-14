@@ -318,6 +318,12 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertEqual(cache.value(for: "dealsupply") { "lin_api_b" }, "lin_api_b", "der Key des einen gilt nie für den anderen")
         cache.invalidate("dealsupply")
         XCTAssertEqual(cache.value(for: "whisperm8") { "falsch" }, "lin_api_a", "nur der abgelehnte Key wird verworfen")
+        // Ein langsamer Leser (Dialog des Schlüsselbunds) hält die anderen Workspaces nicht auf.
+        let slow = DispatchSemaphore(value: 0), entered = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async { _ = cache.value(for: "langsam") { entered.signal(); slow.wait(); return "lin_api_x" } }
+        entered.wait()
+        XCTAssertEqual(cache.value(for: "whisperm8") { "falsch" }, "lin_api_a")
+        slow.signal()
         XCTAssertEqual(cache.value(for: "dealsupply") { "lin_api_c" }, "lin_api_c")
     }
 

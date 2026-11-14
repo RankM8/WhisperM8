@@ -71,7 +71,7 @@ log stream --predicate 'subsystem == "com.whisperm8.app"' --level debug
 - **Nie pro Byte/Zeichen/Zeile messen** — dort `PerformanceCounters`. Neue Signposts an häufigen Stellen nur
   in der Stufe `.detail`.
 - Alles, was App oder Build langsam macht, mit Kosten melden. Messläufe gegen Budgets mit `make dev-release`.
-- Doku: [performance-messung](docs/features/performance-messung.md).
+- Doku: [Messung](docs/features/performance-messung.md).
 
 ## Architektur
 
@@ -94,7 +94,7 @@ Doku: [dictation](docs/features/dictation/).
 Doku-Einstieg: [agent-chats](docs/features/agent-chats/README.md); Konten:
 [claude-konten](docs/features/agent-chats/claude-konten.md), [gpt-konten](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board](docs/features/jarvis-board.md);
-Ansagen: [speech-callouts](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
+Ansagen: [Doku](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [Doku](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
 Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md).
 
 ## Invarianten (nicht brechen)
@@ -116,8 +116,8 @@ Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/st
 - Mutations-Closures des `AgentWorkspaceStore` laufen unter dem prozessweiten Lock: keine Subprozesse, kein
   blockierendes I/O (Git-Lookups vorher). UI nie über `loadWorkspace()` „auffrischen“.
 - Die App ist einziger Schreiber von Workspace und Board; die CLI liest von Disk und handelt über den Socket.
-  Das Ticket-System liest die App nur für die Ticket-Ansicht (`ticketBoardEnabled`), abseits des Main Threads;
-  geschrieben wird nur über `whisperm8 tickets`.
+  Das Ticket-System liest die App nur bei `ticketBoardEnabled` (Ansicht und Einrichtung), abseits des Main
+  Threads; geschrieben wird nur über `whisperm8 tickets`.
 - Fremde Daten unter `~/.claude*` und `~/.codex/` sind extern und werden nur gelesen — **Ausnahmen, alle
   absichtlich:** Theme-Schlüssel in `settings.json` (`ClaudeThemeWriter`, bei Theme-Wechsel);
   `agents/gpt.md` je Konto bei aktivem GPT-Backend (`ClaudeGPTAgentDefinition`); Statuszeile
@@ -181,10 +181,10 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
 `clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
-Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`,
-`mcpAutoSyncEnabled`, `ticketBoardEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
+`mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
 (Labs „Neustart ohne Chatverlust“, im Bau; bisher nur GPT-Router als eigener Dienst `gpt-router`, wirkt ab dem
-nächsten App-Start; Plan [Plan](docs/plans/neustart-ohne-chatverlust.md)).
+nächsten App-Start; Plan [neustart-ohne-chatverlust.md](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 

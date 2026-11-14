@@ -17,11 +17,15 @@ struct TicketProjectChoice: Identifiable, Hashable {
 /// Schlüsselbund-Dialog darf die App nie einfrieren.
 struct TicketsSettingsDependencies {
     var loadConfig: @Sendable () -> TicketConfig
+    /// Wie `loadConfig`, wirft aber bei einer vorhandenen, unlesbaren Datei:
+    /// Auf ihr wird nichts geändert, sonst wäre ihr Inhalt verloren.
+    var loadConfigForChange: @Sendable () throws -> TicketConfig
     var saveConfig: @Sendable (TicketConfig) throws -> Void
     var hasKey: @Sendable (_ workspace: String) -> Bool
     /// `false`, wenn der Eintrag danach nicht lesbar ist.
     var storeKey: @Sendable (_ workspace: String, _ key: String) -> Bool
-    var deleteKey: @Sendable (_ workspace: String) -> Void
+    /// `false`, wenn der Eintrag danach noch da ist.
+    var deleteKey: @Sendable (_ workspace: String) -> Bool
     /// Fragt Linear, wem ein noch nicht gespeicherter Key gehört.
     var account: @Sendable (_ key: String) async -> Result<TicketAccount, TicketSourceError>
     var teams: @Sendable (_ workspace: String) async -> Result<[String], TicketSourceError>
@@ -33,12 +37,16 @@ struct TicketsSettingsDependencies {
         let store = TicketConfigStore.live
         return TicketsSettingsDependencies(
             loadConfig: { store.load() },
+            loadConfigForChange: { try store.loadForChange() },
             saveConfig: { try store.save($0) },
             hasKey: { workspace in
                 TicketCredentialCache.shared.value(for: workspace) { TicketCredentialStore.live.read(workspace) } != nil
             },
             storeKey: { TicketCredentialStore.live.write($0, $1) },
-            deleteKey: { TicketCredentialStore.live.delete($0) },
+            deleteKey: { workspace in
+                TicketCredentialStore.live.delete(workspace)
+                return TicketCredentialStore.live.read(workspace) == nil
+            },
             account: { key in await result { try await LinearTicketSource(client: .live(key: key)).account() } },
             teams: { workspace in await result { try await LinearTicketSource(client: .live(workspace: workspace)).teams() } },
             projects: {
@@ -67,7 +75,8 @@ struct TicketsSettingsDependencies {
 /// Zuordnung Projektordner → Team. Schreibt dieselbe `tickets.json` und
 /// dieselben Schlüsselbund-Einträge wie `whisperm8 tickets setup`, nach
 /// denselben Regeln: Ein Key liegt unter dem Workspace, den Linear zu ihm
-/// nennt, und ein Team-Kürzel gehört zu genau einem Workspace.
+/// nennt, und ein Team-Kürzel gehört zu genau einem Workspace. Anders als die
+/// Kommandozeile kann die Seite einen Key und eine Zuordnung auch entfernen.
 @MainActor
 @Observable
 final class TicketsSettingsModel {
@@ -103,12 +112,14 @@ final class TicketsSettingsModel {
     private(set) var workspaces: [Workspace]
     private(set) var mappings: [Mapping]
     private(set) var projects: [TicketProjectChoice]
-    private(set) var isLoading = false
     private(set) var isSavingKey = false
     private(set) var keyNotice: Notice?
     private(set) var mappingProblem: String?
 
     @ObservationIgnored private let dependencies: TicketsSettingsDependencies
+    /// Zählt die Ladevorgänge. Nur der jüngste darf sein Ergebnis eintragen,
+    /// und ein überholter fragt nicht weiter.
+    @ObservationIgnored private var loadGeneration = 0
 
     init(dependencies: TicketsSettingsDependencies, workspaces: [Workspace] = [], mappings: [Mapping] = [],
          projects: [TicketProjectChoice] = []) {
@@ -133,15 +144,20 @@ final class TicketsSettingsModel {
     /// aufrufen, wenn der Schalter an ist: Aus heißt, die App fragt weder den
     /// Schlüsselbund noch Linear.
     func load() async {
-        isLoading = true
-        defer { isLoading = false }
+        loadGeneration += 1
+        let generation = loadGeneration
+        /// Überholt (neueres Laden, `stop()`) oder abgebrochen: nicht weiter fragen.
+        func isCurrent() -> Bool { generation == loadGeneration && !Task.isCancelled }
+
         let deps = dependencies
         projects = deps.projects()
         let config = await Self.offMain { deps.loadConfig() }
         var loaded: [Workspace] = []
         for name in config.knownWorkspaces {
+            guard isCurrent() else { return }
             var workspace = Workspace(name: name, hasKey: await Self.offMain { deps.hasKey(name) })
             if workspace.hasKey {
+                guard isCurrent() else { return }
                 switch await Self.offMain({ await deps.teams(name) }) {
                 case .success(let teams): workspace.teams = teams.sorted()
                 case .failure(let error): workspace.problem = error.userText
@@ -149,10 +165,16 @@ final class TicketsSettingsModel {
             }
             loaded.append(workspace)
         }
+        guard isCurrent() else { return }
         workspaces = loaded
         mappings = config.teamsByProjectPath
             .map { Mapping(path: $0.key, team: $0.value, workspace: config.workspace(forTeam: $0.value)) }
             .sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
+    }
+
+    /// Der Schalter ist aus: Ein laufendes Laden fragt nicht weiter.
+    func stop() {
+        loadGeneration += 1
     }
 
     /// Prüft den Key bei Linear und legt ihn unter dem Workspace ab, den
@@ -160,6 +182,8 @@ final class TicketsSettingsModel {
     /// Key steht in keiner Meldung.
     @discardableResult
     func saveKey(_ raw: String) async -> Bool {
+        // Return im Feld und der Knopf können beide auslösen.
+        guard !isSavingKey else { return false }
         let key = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard TicketCredentialStore.isStorable(key) else {
             keyNotice = .failed(String(localized: "That does not look like a Linear API key."))
@@ -194,12 +218,15 @@ final class TicketsSettingsModel {
         return true
     }
 
-    /// Löscht den Key eines Workspaces. Die Zuordnungen seiner Teams bleiben.
+    /// Löscht den Key eines Workspaces aus dem Schlüsselbund. Der Workspace
+    /// bleibt eingerichtet und steht danach als „ohne Key“ da, die Zuordnungen
+    /// bleiben. Nähme die Seite ihn aus der Einrichtung, fiele ein Team ohne
+    /// festen Workspace still dem einzigen verbliebenen zu.
     func removeKey(workspace: String) async {
         let deps = dependencies
-        await Self.offMain { deps.deleteKey(workspace) }
-        _ = await change { $0.remove(workspace: workspace) }
-        keyNotice = nil
+        let removed = await Self.offMain { deps.deleteKey(workspace) }
+        keyNotice = removed ? nil
+            : .failed(String(localized: "Couldn't remove the key from the macOS Keychain. Unlock your Keychain and try again."))
         await load()
     }
 
@@ -209,9 +236,10 @@ final class TicketsSettingsModel {
     @discardableResult
     func assign(projectPath: String, to choice: TeamChoice) async -> Bool {
         let deps = dependencies
+        // Der Stand der Datei zählt, nicht der zuletzt angezeigte.
         let current = await Self.offMain { deps.loadConfig().workspacesByTeam[choice.team.uppercased()] }
         if let current, current != choice.workspace {
-            mappingProblem = String(localized: "Team \(choice.team) is already linked to the workspace \(current). To move it, run `whisperm8 tickets setup --team \(choice.team) --workspace \(choice.workspace) --reassign`.")
+            mappingProblem = String(localized: "Team \(choice.team) is already linked to the workspace \(current). To move it, run: whisperm8 tickets setup --team \(choice.team) --workspace \(choice.workspace) --reassign")
             return false
         }
         guard await change({
@@ -232,18 +260,21 @@ final class TicketsSettingsModel {
         await load()
     }
 
-    /// Lesen, ändern, schreiben in einem Zug abseits des Main Threads. Die
-    /// Kommandozeile schreibt dieselbe Datei; deshalb nie aus einem alten Stand.
+    /// Lesen, ändern, schreiben in einem Zug, abseits des Main Threads und
+    /// nacheinander. Die Kommandozeile schreibt dieselbe Datei; deshalb nie aus
+    /// einem alten Stand, und nie auf einer Datei, die sich nicht lesen ließ.
     private func change(_ mutate: @escaping @Sendable (inout TicketConfig) -> Void) async -> Bool {
         let deps = dependencies
-        return await Self.offMain {
-            var config = deps.loadConfig()
-            mutate(&config)
-            do {
-                try deps.saveConfig(config)
-                return true
-            } catch {
-                return false
+        return await withCheckedContinuation { continuation in
+            TicketConfigStore.changeQueue.async {
+                do {
+                    var config = try deps.loadConfigForChange()
+                    mutate(&config)
+                    try deps.saveConfig(config)
+                    continuation.resume(returning: true)
+                } catch {
+                    continuation.resume(returning: false)
+                }
             }
         }
     }

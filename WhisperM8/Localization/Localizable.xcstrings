@@ -5171,6 +5171,16 @@
         }
       }
     },
+    "Couldn't remove the key from the macOS Keychain. Unlock your Keychain and try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Key konnte nicht aus dem macOS-Schlüsselbund entfernt werden. Entsperre den Schlüsselbund und versuche es erneut."
+          }
+        }
+      }
+    },
     "Couldn't save the key to the macOS Keychain. Unlock your Keychain and try again.": {
       "localizations": {
         "de": {
@@ -9016,7 +9026,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Das Abfrage-Limit von Linear ist erreicht. Später erneut versuchen."
+            "value": "Das Abfrage-Limit von Linear ist erreicht. Versuche es später erneut."
           }
         }
       }
@@ -11476,7 +11486,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Geht nicht"
+            "value": "Gestört"
           }
         }
       }
@@ -17614,12 +17624,12 @@
         }
       }
     },
-    "Team %@ is already linked to the workspace %@. To move it, run `whisperm8 tickets setup --team %@ --workspace %@ --reassign`.": {
+    "Team %@ is already linked to the workspace %@. To move it, run: whisperm8 tickets setup --team %@ --workspace %@ --reassign": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Team %@ gehört schon zum Workspace %@. Zum Umhängen: `whisperm8 tickets setup --team %@ --workspace %@ --reassign`."
+            "value": "Team %@ gehört schon zum Workspace %@. Zum Umhängen: whisperm8 tickets setup --team %@ --workspace %@ --reassign"
           }
         }
       }
@@ -17970,6 +17980,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der GPT-Proxy ist nicht erreichbar: %@"
+          }
+        }
+      }
+    },
+    "The Tickets view itself arrives with a later update. Access and projects set up here already work for the whisperm8 tickets command.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Ansicht „Tickets“ selbst kommt mit einem späteren Update. Zugang und Projekte, die du hier einrichtest, gelten schon jetzt für den Befehl whisperm8 tickets."
           }
         }
       }
@@ -19364,12 +19384,12 @@
         }
       }
     },
-    "Turn the switch on to set up access and projects.": {
+    "Turn the ticket view on above to set up access and projects.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schalte den Schalter ein, um Zugang und Projekte einzurichten."
+            "value": "Schalte die Ticket-Ansicht oben ein, um Zugang und Projekte einzurichten."
           }
         }
       }

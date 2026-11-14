@@ -37,15 +37,27 @@ struct TicketsSettingsPage: View {
                 )
             }
 
+            // Bis die Ansicht da ist: sagen, was der Schalter heute schon tut.
+            SettingsHelpText("The Tickets view itself arrives with a later update. Access and projects set up here already work for the whisperm8 tickets command.")
+
             if enabled {
                 accessSection
                 mappingSection
             } else {
-                SettingsHelpText("Turn the switch on to set up access and projects.")
+                SettingsHelpText("Turn the ticket view on above to set up access and projects.")
             }
         }
         .task(id: enabled) {
-            if enabled { await model.load() }
+            if enabled {
+                await model.load()
+            } else {
+                // Aus heißt: nichts mehr lesen, und kein getippter Key bleibt liegen.
+                model.stop()
+                keyText = ""
+            }
+        }
+        .onChange(of: model.teamChoices) { _, choices in
+            if !choices.contains(where: { $0.id == selectedTeam }) { selectedTeam = "" }
         }
         .confirmationDialog(
             Text("Remove the Linear key?"),
@@ -120,6 +132,7 @@ struct TicketsSettingsPage: View {
     }
 
     private func saveKey() {
+        guard !model.isSavingKey else { return }
         let typed = keyText
         Task {
             // Das Feld erst nach Erfolg leeren: Ein Tippfehler lässt sich so korrigieren.
@@ -210,8 +223,10 @@ private struct TicketsWorkspaceRow: View {
     let remove: () -> Void
 
     var body: some View {
+        // Titel und Untertitel laufen durch den Katalog. Die Adresse statt des
+        // bloßen Kürzels kann dort kein Schlüssel sein.
         SettingsStatusRow(
-            title: workspace.name,
+            title: TicketsSettingsText.address(of: workspace.name),
             subtitle: subtitle,
             tone: tone,
             detail: detail
@@ -246,10 +261,9 @@ private struct TicketsMappingRow: View {
     let remove: () -> Void
 
     var body: some View {
-        SettingsRow(
-            title: TicketsSettingsText.folderName(mapping.path),
-            subtitle: TicketsSettingsText.shortPath(mapping.path)
-        ) {
+        // Der Pfad als Titel: Ein bloßer Ordnername liefe durch den Katalog und
+        // könnte dort ein Schlüssel sein (ein Ordner „Link“ hieße „Zuordnen“).
+        SettingsRow(title: TicketsSettingsText.shortPath(mapping.path)) {
             HStack(spacing: 10) {
                 Text(verbatim: target)
                     .font(.system(size: 12, weight: .medium))
@@ -290,14 +304,16 @@ private struct TicketsKeyRevealIcon: View {
 // MARK: - Helfer
 
 enum TicketsSettingsText {
+    /// Adresse eines Workspaces, so wie Linear sie zeigt.
+    static func address(of workspace: String) -> String {
+        ["linear.app", workspace].joined(separator: "/")
+    }
+
     /// Pfad mit `~` statt des Home-Ordners.
     static func shortPath(_ path: String, home: String = NSHomeDirectory()) -> String {
         path == home || path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
     }
 
-    static func folderName(_ path: String) -> String {
-        (path as NSString).lastPathComponent
-    }
 }
 
 enum TicketsSettingsFolderPicker {
