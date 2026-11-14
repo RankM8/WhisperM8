@@ -11171,6 +11171,16 @@
         }
       }
     },
+    "No teams yet. They appear here once a key is saved and working.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Teams. Sie erscheinen hier, sobald ein Key gespeichert ist und funktioniert."
+          }
+        }
+      }
+    },
     "No template": {
       "localizations": {
         "de": {
@@ -15140,16 +15150,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skill-Datei sichern"
-          }
-        }
-      }
-    },
-    "Save a key first. Its teams then appear here.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speichere zuerst einen Key. Danach erscheinen hier seine Teams."
           }
         }
       }

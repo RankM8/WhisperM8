@@ -138,7 +138,7 @@ struct TicketsSettingsPage: View {
             }
 
             if model.teamChoices.isEmpty {
-                SettingsHelpText("Save a key first. Its teams then appear here.")
+                SettingsHelpText("No teams yet. They appear here once a key is saved and working.")
             } else {
                 SettingsRow(title: "Link a project", subtitle: "Chats in this folder, and in worktrees below it, belong to the team.") {
                     HStack(spacing: 8) {
@@ -185,7 +185,9 @@ struct TicketsSettingsPage: View {
             if let problem = model.mappingProblem {
                 SettingsHelpText(problem, tone: .error)
             }
-            SettingsHelpText("A chat only changes tickets in the workspace of its own project. Reading works everywhere.")
+            if !model.teamChoices.isEmpty {
+                SettingsHelpText("A chat only changes tickets in the workspace of its own project. Reading works everywhere.")
+            }
         }
     }
 

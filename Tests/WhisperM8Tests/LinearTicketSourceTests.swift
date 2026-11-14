@@ -270,6 +270,42 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_b")
     }
 
+    // MARK: Kindprozess
+
+    func testSubprocessOutputAndExitCode() {
+        let ok = SecurityTool.run(["-c", "echo hallo"], executable: "/bin/sh")
+        XCTAssertEqual(ok.exitCode, 0)
+        XCTAssertEqual(ok.stdout, "hallo\n")
+        let failed = SecurityTool.run(["-c", "exit 3"], executable: "/bin/sh")
+        XCTAssertEqual(failed.exitCode, 3)
+        let echoed = SecurityTool.run([], stdin: "über stdin\n", executable: "/bin/cat")
+        XCTAssertEqual(echoed.stdout, "über stdin\n")
+        XCTAssertEqual(SecurityTool.run([], executable: "/gibt/es/nicht").exitCode, -1)
+    }
+
+    /// Erbt ein gleichzeitig startender Chat die Enden der Pipes, darf der
+    /// Aufruf nicht ewig hängen (und mit ihm jeder Abruf der Tickets).
+    func testSubprocessDoesNotHangWhenAnotherProcessHoldsThePipeEnds() {
+        var leaked: [Int32] = []
+        defer { leaked.forEach { close($0) } }
+
+        // Fremder Halter des Schreib-Endes der Ausgabe: Das Ende der Pipe käme nie.
+        let started = Date()
+        let output = SecurityTool.run(["-c", "echo da"], executable: "/bin/sh") { out, _ in
+            leaked.append(dup(out.fileHandleForWriting.fileDescriptor))
+        }
+        XCTAssertEqual(output.stdout, "da\n")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+
+        // Fremder Halter des Schreib-Endes der Eingabe: Das Kind sieht nie deren Ende.
+        let waiting = Date()
+        let input = SecurityTool.run([], stdin: "x", timeout: 0.5, executable: "/bin/cat") { _, input in
+            leaked.append(dup(input.fileHandleForWriting.fileDescriptor))
+        }
+        XCTAssertEqual(input.exitCode, SecurityTool.timedOut, "nach der Frist beendet, statt ewig zu warten")
+        XCTAssertLessThan(Date().timeIntervalSince(waiting), 5)
+    }
+
     func testTestInstanceHasItsOwnKeychainService() {
         XCTAssertEqual(TicketCredentialStore.service(isTestInstance: false), "whisperm8-linear-api-key")
         XCTAssertNotEqual(TicketCredentialStore.service(isTestInstance: true), TicketCredentialStore.service(isTestInstance: false),
