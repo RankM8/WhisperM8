@@ -71,6 +71,68 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertNil(viewModel.selectedKey, "ein zweiter Klick schließt das Detail")
     }
 
+    func testAStatusChangeDoesNotRebuildAnything() {
+        let viewModel = TicketBoardViewModel(model: model())
+        let builds = viewModel.rebuilds
+        // Derselbe Abzug, nur ein Chat arbeitet nicht mehr.
+        let changed = TicketBoardBuilder.build(
+            snapshot: TicketFixtures.snapshot(model().entries.map(\.ticket) + [TicketFixtures.ticket(5, status: "Done", project: "Tickets",
+                                                                                                  links: [TicketFixtures.link(ole, active: false)])]),
+            chats: [chat(jon, "Jon · Board", .needsYou), chat(ole, "Ole · Terminal", .working)], projectPath: project)
+        XCTAssertNotEqual(changed, model(), "mit Zustand sind die Modelle verschieden")
+        viewModel.update(changed)
+        viewModel.update(model())
+        XCTAssertEqual(viewModel.rebuilds, builds, "der Zustand der Chats zählt für den Inhalt nicht")
+        XCTAssertEqual(changed.chatStates[jon], .needsYou, "er geht getrennt an die Status-Punkte")
+
+        let source = TicketChatStatusSource()
+        source.set(changed.chatStates)
+        XCTAssertEqual(source.states[ole], .working)
+    }
+
+    func testChosenPersonStaysVisibleWithZeroHits() {
+        var filter = TicketBoardFilter()
+        filter.person = .person(id: "u1")
+        filter.agent = .withoutAgent
+        // Giuliano hat hier nur ein Ticket mit Agent und eines ohne: Erst mit „Mit Agent“ auf null bringen.
+        var only = TicketBoardFilter()
+        only.person = .person(id: "u1")
+        only.project = "Agent Chats"
+        let presentation = TicketBoardPresentation.make(model: model(), filter: only)
+        XCTAssertEqual(presentation.visibleCount, 0)
+        XCTAssertEqual(presentation.counts.people.map(\.person.id), ["u1"], "der aktive Filter bleibt als Knopf sichtbar")
+        XCTAssertEqual(presentation.counts.people.map(\.count), [0])
+    }
+
+    func testResetAndVanishedPerson() {
+        let viewModel = TicketBoardViewModel(model: model())
+        viewModel.filter.person = .person(id: "u1")
+        viewModel.selectedKey = "WM8-1"
+        viewModel.mode = .backlog
+        // Neuer Abzug ohne Tickets dieser Person: Der Filter blendete sonst alles aus.
+        viewModel.update(TicketBoardModel(entries: model().entries.filter { $0.ticket.assignee == nil }, looseChats: [], supervisors: []))
+        XCTAssertEqual(viewModel.filter.person, .all)
+        viewModel.filter.agent = .withAgent
+        viewModel.reset()
+        XCTAssertEqual(viewModel.filter, TicketBoardFilter())
+        XCTAssertEqual(viewModel.mode, .board)
+        XCTAssertEqual(viewModel.presentation, .empty)
+    }
+
+    func testCardHelpers() {
+        XCTAssertEqual(TicketBoardText.cardLabels(["Feature", "Improvement", "Handtest"]), ["Handtest", "Feature", "Improvement"],
+                       "die Art des Tickets zuletzt, damit ein Hinweis wie Handtest nicht hinter „+1“ verschwindet")
+        XCTAssertTrue(TicketBoardText.repeatsColumn(TicketFixtures.status("In Progress")))
+        XCTAssertFalse(TicketBoardText.repeatsColumn(TicketFixtures.status("Merge-bereit")))
+        let people = [TicketPerson(id: "a", name: "Anna Roth"), TicketPerson(id: "b", name: "Anna Weiss"), TicketPerson(id: "c", name: "Tom Kern")]
+        XCTAssertEqual(TicketBoardText.chipNames(people), ["a": "Anna Roth", "b": "Anna Weiss", "c": "Tom"])
+        let entry = TicketBoardEntry(ticket: TicketFixtures.ticket(1, status: "Merge-bereit", description: "- [x] a\n- [ ] b",
+                                                                 links: [TicketFixtures.link(jon, active: false)]), agents: [])
+        XCTAssertEqual(entry.criteria, TicketChecklistProgress(done: 1, total: 2), "einmal gerechnet, nicht bei jedem Zeichnen")
+        XCTAssertEqual(entry.handedOverBy, ["Chat"])
+        XCTAssertTrue(TicketBoardText.spoken(entry).hasPrefix("WM8-1, Ticket 1, Merge-bereit"))
+    }
+
     func testViewModelDropsWhatNoLongerExists() {
         let viewModel = TicketBoardViewModel(model: model())
         viewModel.selectedKey = "WM8-2"
@@ -119,13 +181,32 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertEqual(String(first.characters), "Stand 14.11.2026: offen.", "Fettschrift wird gesetzt, nicht als Sterne gezeigt")
         XCTAssertEqual(blocks[1], .gap, "mehrere Leerzeilen sind ein Abstand")
         XCTAssertEqual(blocks[2], .heading("Fertig, wenn"))
-        guard case .check(true, let one) = blocks[3], case .check(false, _) = blocks[4], case .bullet = blocks[5] else {
+        guard case .check(true, let one) = blocks[3], case .check(false, _) = blocks[4], case .numbered("1.", _) = blocks[5] else {
             return XCTFail("\(blocks)")
         }
         XCTAssertEqual(String(one.characters), "eins")
         XCTAssertEqual(blocks[6], .code("# kein Titel"), "im Codeblock bleibt die Zeile, wie sie ist")
         XCTAssertEqual(blocks[7], .heading("Agent notes"))
         XCTAssertTrue(TicketDescriptionBlocks.make("").isEmpty)
+        let long = TicketDescriptionBlocks.make(Array(repeating: "Zeile", count: 1_000).joined(separator: "\n"))
+        XCTAssertEqual(long.count, TicketDescriptionBlocks.maxBlocks + 1)
+        XCTAssertEqual(long.last, .truncated, "eine sehr lange Beschreibung wird nicht ganz gesetzt")
+        XCTAssertEqual(TicketDescriptionBlocks.make("## Titel\r\n+++\r\nText"), [.heading("Titel"), .text(AttributedString("Text"))])
+    }
+
+    /// Tickets stammen auch von anderen. Ein Link darf nur ins Web führen.
+    func testOnlyWebLinksStayClickable() {
+        func links(_ markdown: String) -> [URL] {
+            TicketDescriptionBlocks.inline(markdown).runs.compactMap(\.link)
+        }
+        XCTAssertEqual(links("[Ticket](https://linear.app/x/issue/WM8-1)").map(\.absoluteString), ["https://linear.app/x/issue/WM8-1"])
+        for bad in ["[Bericht](file:///Applications/Calculator.app)", "[Freigabe](smb://server/share)", "[Shell](ssh://host)",
+                    "[App](whisperm8://chat/1)", "[x](javascript:alert(1))", "[y](https:kein-host)"] {
+            XCTAssertTrue(links(bad).isEmpty, bad)
+            XCTAssertFalse(String(TicketDescriptionBlocks.inline(bad).characters).isEmpty, "der Text bleibt lesbar")
+        }
+        XCTAssertFalse(TicketDescriptionBlocks.isSafe(URL(string: "file:///etc/passwd")!))
+        XCTAssertTrue(TicketDescriptionBlocks.isSafe(URL(string: "http://example.com")!))
     }
 
     func testTextsAndStateMapping() {

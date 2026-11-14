@@ -22,6 +22,7 @@ struct TicketBoardPresentation: Equatable {
     /// Projekte zur Auswahl, alphabetisch; `""` (ohne Projekt) steht am Ende.
     var projects: [String]
     var looseChats: [TicketLooseChat]
+    var supervisors: [TicketChat]
     var visibleCount: Int
 
     /// Ohne Abzug: drei leere Spalten, keine Gruppen.
@@ -40,6 +41,7 @@ struct TicketBoardPresentation: Equatable {
             counts: TicketFilterCounts.make(entries: open, filter: filter),
             projects: sorted(Array(names)),
             looseChats: model.looseChats,
+            supervisors: model.supervisors,
             visibleCount: visible.count)
     }
 
@@ -82,20 +84,33 @@ final class TicketBoardViewModel {
     private(set) var selected: TicketBoardEntry?
     private(set) var selectedDescription: [TicketDescriptionBlock] = []
     @ObservationIgnored private var model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
+    /// Wie oft der Inhalt neu gerechnet wurde (für Tests).
+    @ObservationIgnored private(set) var rebuilds = 0
 
     init(model: TicketBoardModel? = nil) {
         if let model { update(model) }
     }
 
-    /// Neuer Abzug oder geänderte Chats.
-    func update(_ model: TicketBoardModel) {
+    /// Neuer Abzug oder geänderte Chats. Der Zustand der Chats zählt hier nicht:
+    /// Den führt die `TicketChatStatusSource`, damit ein Statuswechsel nichts
+    /// neu rechnet.
+    func update(_ fresh: TicketBoardModel) {
+        let model = fresh.withoutChatStates
         guard model != self.model else { return }
         self.model = model
-        // Ein gewähltes Projekt, das es nicht mehr gibt, würde alles ausblenden.
+        // Ein Filter auf etwas, das es nicht mehr gibt, würde alles ausblenden.
+        var filter = filter
         if let project = filter.project, !model.entries.contains(where: { ($0.ticket.project ?? "") == project }) {
-            filter.project = nil   // löst den Neuaufbau über `didSet` aus
+            filter.project = nil
         }
-        rebuild()
+        if case .person(let id) = filter.person, !model.entries.contains(where: { $0.ticket.assignee?.id == id }) {
+            filter.person = .all
+        }
+        if filter != self.filter {
+            self.filter = filter   // baut über `didSet` neu
+        } else {
+            rebuild()
+        }
         // Ein Ticket, das der Filter ausblendet, bleibt gewählt; eines, das es nicht mehr gibt, nicht.
         if let key = selectedKey, !model.entries.contains(where: { $0.ticket.key == key }) { selectedKey = nil }
     }
@@ -104,7 +119,16 @@ final class TicketBoardViewModel {
         selectedKey = selectedKey == key ? nil : key
     }
 
+    /// Anderes Projekt oder Team: Filter und Auswahl gehören zum alten.
+    func reset() {
+        selectedKey = nil
+        mode = .board
+        model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
+        if filter != TicketBoardFilter() { filter = TicketBoardFilter() } else { rebuild() }
+    }
+
     private func rebuild() {
+        rebuilds += 1
         let fresh = TicketBoardPresentation.make(model: model, filter: filter)
         if fresh != presentation { presentation = fresh }
         refreshSelection()
@@ -127,10 +151,16 @@ final class TicketBoardViewModel {
 @MainActor
 @Observable
 final class TicketChatStatusSource {
-    var states: [UUID: TicketChatState]
+    private(set) var states: [UUID: TicketChatState]
 
     init(states: [UUID: TicketChatState] = [:]) {
         self.states = states
+    }
+
+    /// Schreibt nur bei echter Änderung: Jedes Schreiben lässt alle sichtbaren
+    /// Punkte neu zeichnen.
+    func set(_ fresh: [UUID: TicketChatState]) {
+        if fresh != states { states = fresh }
     }
 }
 

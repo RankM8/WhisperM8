@@ -366,6 +366,13 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(waiting), 5)
     }
 
+    func testBlockingWorkRunsOnItsOwnQueue() async {
+        let label = await TicketBlockingWork.run { String(cString: __dispatch_queue_get_label(nil)) }
+        XCTAssertEqual(label, "com.whisperm8.tickets.blocking", "nicht auf dem Thread-Pool von Swift Concurrency")
+        let offMain = await TicketBlockingWork.run { !Thread.isMainThread }
+        XCTAssertTrue(offMain)
+    }
+
     func testTestInstanceHasItsOwnKeychainService() {
         XCTAssertEqual(TicketCredentialStore.service(isTestInstance: false), "whisperm8-linear-api-key")
         XCTAssertNotEqual(TicketCredentialStore.service(isTestInstance: true), TicketCredentialStore.service(isTestInstance: false),

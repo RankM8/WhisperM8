@@ -18,7 +18,7 @@ struct TicketCardView: View {
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(AgentTheme.textSecondary)
                     TicketPriorityBars(priority: ticket.priority)
-                    if let criteria = ticket.criteria { TicketCriteriaBadge(progress: criteria) }
+                    if let criteria = entry.criteria { TicketCriteriaBadge(progress: criteria) }
                     Spacer(minLength: 4)
                     TicketAvatar(person: ticket.assignee)
                 }
@@ -47,7 +47,9 @@ struct TicketCardView: View {
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: TicketBoardText.spoken(entry)))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
     }
 }
 
@@ -56,18 +58,28 @@ struct TicketCardTags: View {
     let ticket: Ticket
     /// Mehr Labels machen die Karte unruhig; der Rest steht im Detail.
     var maxLabels = 2
+    /// Auf der Karte fällt der Status weg, wenn er nur die Spalte wiederholt.
+    var hidesColumnStatus = true
 
     var body: some View {
+        let labels = TicketBoardText.cardLabels(ticket.labels)
         HStack(spacing: 4) {
-            TicketTag(text: ticket.status.name)
+            if !(hidesColumnStatus && TicketBoardText.repeatsColumn(ticket.status)) {
+                TicketTag(text: ticket.status.name)
+            }
             if ticket.isBlocked {
                 TicketTag(text: String(localized: "Blocked"), tone: AgentTheme.statusError)
             }
-            ForEach(ticket.labels.prefix(maxLabels), id: \.self) { label in
-                TicketTag(text: label, tone: AgentTheme.accent)
+            ForEach(labels.prefix(maxLabels), id: \.self) { label in
+                // Die Art des Tickets zurückhaltend, alles andere mit Akzent.
+                if TicketBoardText.typeLabels.contains(label.lowercased()) {
+                    TicketTag(text: label)
+                } else {
+                    TicketTag(text: label, tone: AgentTheme.accent)
+                }
             }
-            if ticket.labels.count > maxLabels {
-                Text(verbatim: "+\(ticket.labels.count - maxLabels)")
+            if labels.count > maxLabels {
+                Text(verbatim: "+\(labels.count - maxLabels)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(AgentTheme.textSecondary)
             }
@@ -82,8 +94,23 @@ struct TicketBoardColumnsView: View {
     let source: TicketChatStatusSource
     let select: (String) -> Void
 
+    /// Schmaler wird keine Spalte; darunter scrollt das Board waagrecht.
+    static let minColumnWidth: CGFloat = 260
+    static let spacing: CGFloat = 12
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        GeometryReader { proxy in
+            let count = CGFloat(max(columns.count, 1))
+            let width = max(Self.minColumnWidth, (proxy.size.width - Self.spacing * (count - 1)) / count)
+            ScrollView(.horizontal, showsIndicators: true) {
+                columnStack(width: width)
+                    .frame(height: proxy.size.height)
+            }
+        }
+    }
+
+    private func columnStack(width: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: Self.spacing) {
             ForEach(columns) { column in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
@@ -106,7 +133,7 @@ struct TicketBoardColumnsView: View {
                                 }
                             }
                             if column.entries.isEmpty {
-                                Text("Nothing for this filter.")
+                                Text("No tickets for this filter.")
                                     .font(.system(size: 11))
                                     .foregroundStyle(AgentTheme.textSecondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,9 +144,17 @@ struct TicketBoardColumnsView: View {
                     }
                 }
                 .padding(10)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: width)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .background(TicketBoardStyle.column, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
     }
+}
+
+/// Flächen der Ticket-Ansicht. Im hellen Modus sind Hintergrund und Karten
+/// beide weiß; die Spalten brauchen deshalb einen eigenen Ton.
+enum TicketBoardStyle {
+    static let column = AgentTheme.header
+    static let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 }

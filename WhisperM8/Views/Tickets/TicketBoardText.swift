@@ -48,6 +48,35 @@ enum TicketBoardText {
         return parts.compactMap(\.first).map(String.init).joined().uppercased()
     }
 
+    /// Namen für die Personen-Knöpfe: der Vorname, bei gleichen Vornamen der ganze Name.
+    static func chipNames(_ people: [TicketPerson]) -> [String: String] {
+        func first(_ person: TicketPerson) -> String { person.name.components(separatedBy: " ").first ?? person.name }
+        let counts = Dictionary(grouping: people, by: first).mapValues(\.count)
+        return Dictionary(people.map { ($0.id, counts[first($0), default: 0] > 1 ? $0.name : first($0)) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Labels in der Reihenfolge für die Karte: zuerst, was etwas über den
+    /// Stand sagt, zuletzt die Art des Tickets (Linears Standard-Labels), die
+    /// auf fast jeder Karte stünde.
+    static let typeLabels: Set<String> = ["bug", "feature", "improvement"]
+
+    static func cardLabels(_ labels: [String]) -> [String] {
+        labels.filter { !typeLabels.contains($0.lowercased()) } + labels.filter { typeLabels.contains($0.lowercased()) }
+    }
+
+    /// Der Statusname sagt nichts Neues, wenn er nur die Spalte wiederholt
+    /// (Linears Standard: In Progress, Todo, Backlog, Triage).
+    static func repeatsColumn(_ status: TicketStatus) -> Bool {
+        ["inprogress", "todo", "backlog", "triage"].contains(status.name.lowercased().filter { !$0.isWhitespace })
+    }
+
+    /// Was VoiceOver zu einer Karte sagt: ein Satz statt jedes Einzelteils.
+    static func spoken(_ entry: TicketBoardEntry) -> String {
+        let agent = entry.agents.first?.chat?.shortName ?? String(localized: "No agent")
+        return [entry.ticket.key, entry.ticket.title, entry.ticket.status.name, priority(entry.ticket.priority), agent]
+            .joined(separator: ", ")
+    }
+
     /// Uhrzeit des letzten Abrufs. Fest, kein mitlaufender Zähler.
     static func time(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
@@ -62,11 +91,10 @@ enum TicketBoardText {
 struct TicketChatStatusDot: View {
     let chatID: UUID
     let source: TicketChatStatusSource
-    /// Zustand aus dem Abzug, falls die Quelle den Chat nicht kennt.
-    var fallback: TicketChatState?
 
     var body: some View {
-        AgentStatusIndicator(status: (source.states[chatID] ?? fallback)?.runtimeStatus, compact: true)
+        // Kompakt wie in den Tabs: Eine Wand pulsierender Punkte wäre unruhig.
+        AgentStatusIndicator(status: source.states[chatID]?.runtimeStatus, compact: true)
             .frame(width: 10, height: 10)
     }
 }
@@ -75,10 +103,9 @@ struct TicketChatStatusDot: View {
 struct TicketChatStateLabel: View {
     let chatID: UUID
     let source: TicketChatStatusSource
-    var fallback: TicketChatState?
 
     var body: some View {
-        Text(verbatim: TicketBoardText.state(source.states[chatID] ?? fallback))
+        Text(verbatim: TicketBoardText.state(source.states[chatID]))
             .font(.system(size: 11))
             .foregroundStyle(AgentTheme.textSecondary)
     }
@@ -97,6 +124,7 @@ struct TicketPriorityBars: View {
             }
         }
         .frame(height: 10, alignment: .bottom)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: TicketBoardText.priority(priority)))
         .help(Text(verbatim: TicketBoardText.priority(priority)))
     }
@@ -182,12 +210,12 @@ struct TicketAgentRow: View {
         HStack(spacing: 6) {
             if let agent = entry.agents.first {
                 if let chat = agent.chat {
-                    TicketChatStatusDot(chatID: chat.id, source: source, fallback: chat.state)
+                    TicketChatStatusDot(chatID: chat.id, source: source)
                     Text(verbatim: chat.shortName)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(AgentTheme.textPrimary)
                         .lineLimit(1)
-                    if !compact { TicketChatStateLabel(chatID: chat.id, source: source, fallback: chat.state) }
+                    if !compact { TicketChatStateLabel(chatID: chat.id, source: source) }
                 } else {
                     Circle().strokeBorder(AgentTheme.borderStrong, lineWidth: 1).frame(width: 7, height: 7)
                     Text("Other Mac or deleted")
@@ -214,10 +242,14 @@ struct TicketAgentRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textSecondary)
             } else {
-                Circle().strokeBorder(AgentTheme.statusAwaiting, lineWidth: 1.2).frame(width: 7, height: 7)
+                // Auffällig durch Form und Gewicht, nicht durch eine Statusfarbe:
+                // Gelb heißt in der App „wartet auf dich“, Rot „Fehler“.
+                Circle()
+                    .strokeBorder(AgentTheme.textPrimary, style: StrokeStyle(lineWidth: 1.2, dash: [2, 1.5]))
+                    .frame(width: 9, height: 9)
                 Text("No agent")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AgentTheme.statusAwaiting)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AgentTheme.textPrimary)
             }
         }
     }

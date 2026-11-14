@@ -138,6 +138,8 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-board-person", size: size) { view { $0.filter.person = .person(id: "u1") } },
             Fixture(name: "tickets-backlog", size: size) { view { $0.mode = .backlog } },
             Fixture(name: "tickets-backlog-detail", size: size) { view { $0.mode = .backlog; $0.selectedKey = "WM8-69" } },
+            Fixture(name: "tickets-board-schmal-detail", size: CGSize(width: 760, height: 640)) { view { $0.selectedKey = "WM8-81" } },
+            Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .backlog } },
             Fixture(name: "tickets-board-stoerung", size: size) {
                 view(load: TicketBoardLoadState(fetchedAt: snapshot.fetchedAt, problem: TicketSourceError.network("-1009").userText))
             },

@@ -293,8 +293,16 @@ nur.
 - **Backlog:** dieselben Tickets als Liste, nach Projekt gruppiert.
 - **Filter:** Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je Person) lassen sich kombinieren,
   dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
-- **Detail:** Eckdaten, der Chat, „Zum Chat“ und „In Linear öffnen“, darunter die Beschreibung, leicht gesetzt.
-- **Leiste:** laufende Chats ohne offenes Ticket, mit dem Ticket, an dem sie zuletzt saßen.
+- **Detail:** Eckdaten, der Chat mit „arbeitet seit …“, „Zum Chat“ und „In Linear öffnen“, darunter die
+  Beschreibung, leicht gesetzt (Überschriften, Kästchen, Listen mit ihren Nummern). Escape schließt es.
+- **Leiste:** laufende Chats ohne offenes Ticket, mit dem Ticket, an dem sie zuletzt saßen. Supervisor-Chats
+  stehen getrennt daneben und zählen nicht als Lücke.
+- **Schmales Fenster:** Die Spalten werden nicht schmaler als 260 pt, darunter scrollt das Board waagrecht.
+  Unter 940 pt Breite liegt das Detail über dem Inhalt statt daneben; die Liste lässt dann Status und
+  Fortschritt weg.
+- **Labels auf der Karte:** höchstens zwei, zuerst alles, was etwas über den Stand sagt; die Art des Tickets
+  (Linears Bug, Feature, Improvement) zuletzt und zurückhaltend. Der Status steht nur auf der Karte, wenn er
+  mehr sagt als die Spalte.
 - **Begriffe:** Englisch stehen Linears Wörter (Project, Milestone). Die deutsche Übersetzung sagt „Bereich“
   und „Vorhaben“, so wie dieses Projekt Linear ordnet.
 
@@ -308,6 +316,13 @@ So bleibt die Ansicht ruhig und billig:
 - Kein Zähler läuft mit: Im Kopf steht die Uhrzeit des letzten Abrufs. Scheitert ein Abruf, bleibt der letzte
   Stand stehen, und eine Zeile sagt, von wann er ist.
 - Nichts ist nur beim Überfahren sichtbar, und es gibt kein Kontextmenü.
+- Fortschritt der Kästchen und Rufnamen der abgebenden Chats rechnet der Eintrag einmal aus, nicht die Karte
+  bei jedem Zeichnen. Der Zustand der Chats gehört nicht zum Vergleich des Modells: Ein neuer Abzug, in dem
+  sich nur Zustände geändert haben, rechnet nichts neu.
+
+Tickets stammen auch von anderen Leuten. In der Beschreibung bleibt ein Link nur anklickbar, wenn er mit
+`http` oder `https` ins Web führt; `file:`, `smb:` und Schemata fremder Apps werden zu Text. Mehr als 400
+Zeilen werden nicht gesetzt, der Rest steht in Linear.
 
 ## Grenzen
 

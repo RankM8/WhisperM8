@@ -5,7 +5,8 @@ import SwiftUI
 struct TicketBoardActions {
     var refresh: () -> Void
     var openChat: (UUID) -> Void
-    var openURL: (String) -> Void
+    /// Adresse des Tickets im Ticket-Werkzeug; nur `https`.
+    var openURL: (URL) -> Void
 
     static let none = TicketBoardActions(refresh: {}, openChat: { _ in }, openURL: { _ in })
 }
@@ -37,33 +38,57 @@ struct TicketBoardView: View {
             if let problem = load.problem {
                 TicketBoardProblemLine(problem: problem, fetchedAt: load.fetchedAt)
             }
-            HStack(alignment: .top, spacing: 12) {
-                Group {
-                    switch model.mode {
-                    case .board:
-                        TicketBoardColumnsView(columns: presentation.columns, selectedKey: model.selectedKey, source: source) {
-                            model.toggle($0)
-                        }
-                    case .backlog:
-                        TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
-                            model.toggle($0)
-                        }
+            GeometryReader { proxy in
+                // Breit: Detail neben dem Inhalt. Schmal: Detail liegt darüber,
+                // sonst bliebe für Spalten oder Liste nichts übrig.
+                let sideBySide = proxy.size.width >= Self.sideBySideFrom
+                HStack(alignment: .top, spacing: 12) {
+                    content(presentation)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    if sideBySide, let selected = model.selected {
+                        detail(selected).frame(width: Self.detailWidth)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-                if let selected = model.selected {
-                    TicketDetailPanel(entry: selected, description: model.selectedDescription, source: source, actions: actions) {
-                        model.selectedKey = nil
+                .overlay(alignment: .topTrailing) {
+                    if !sideBySide, let selected = model.selected {
+                        detail(selected)
+                            .frame(width: min(Self.detailWidth, max(240, proxy.size.width - 32)))
+                            .shadow(color: .black.opacity(0.18), radius: 14, x: -2, y: 2)
                     }
-                    .frame(width: 340)
                 }
             }
-            TicketLooseChatsBar(chats: presentation.looseChats, source: source, openChat: actions.openChat)
+            TicketLooseChatsBar(chats: presentation.looseChats, supervisors: presentation.supervisors, source: source,
+                                openChat: actions.openChat)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AgentTheme.background)
+        // Escape schließt das Detail.
+        .onExitCommand { model.selectedKey = nil }
+    }
+
+    static let detailWidth: CGFloat = 340
+    /// Ab dieser Breite steht das Detail neben dem Inhalt.
+    static let sideBySideFrom: CGFloat = 940
+
+    @ViewBuilder
+    private func content(_ presentation: TicketBoardPresentation) -> some View {
+        switch model.mode {
+        case .board:
+            TicketBoardColumnsView(columns: presentation.columns, selectedKey: model.selectedKey, source: source) {
+                model.toggle($0)
+            }
+        case .backlog:
+            TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
+                model.toggle($0)
+            }
+        }
+    }
+
+    private func detail(_ selected: TicketBoardEntry) -> some View {
+        TicketDetailPanel(entry: selected, description: model.selectedDescription, source: source, actions: actions) {
+            model.selectedKey = nil
+        }
     }
 }
 
@@ -160,8 +185,25 @@ private struct TicketBoardFilterBar: View {
     let projects: [String]
 
     var body: some View {
+        let names = TicketBoardText.chipNames(counts.people.map(\.person))
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
+                // Die Auswahl des Projekts zuerst: Sie bleibt sichtbar, auch
+                // wenn viele Personen die Zeile füllen.
+                Picker(selection: $filter.project) {
+                    Text("All projects").tag(String?.none)
+                    ForEach(projects, id: \.self) { project in
+                        Text(verbatim: TicketBoardText.project(project)).tag(String?.some(project))
+                    }
+                } label: {
+                    Text("Linear project")
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+
+                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
+
                 TicketFilterGroupLabel(text: "Agent")
                 TicketFilterChip(isOn: filter.agent == .all, count: counts.all) { filter.agent = .all } label: { Text("All") }
                 TicketFilterChip(isOn: filter.agent == .withAgent, count: counts.withAgent) { filter.agent = .withAgent } label: {
@@ -182,23 +224,9 @@ private struct TicketBoardFilterBar: View {
                     TicketFilterChip(isOn: filter.person == .person(id: entry.person.id), count: entry.count) {
                         filter.person = .person(id: entry.person.id)
                     } label: {
-                        Text(verbatim: entry.person.name.components(separatedBy: " ").first ?? entry.person.name)
+                        Text(verbatim: names[entry.person.id] ?? entry.person.name)
                     }
                 }
-
-                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
-
-                Picker(selection: $filter.project) {
-                    Text("All projects").tag(String?.none)
-                    ForEach(projects, id: \.self) { project in
-                        Text(verbatim: TicketBoardText.project(project)).tag(String?.some(project))
-                    }
-                } label: {
-                    Text("Linear project")
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
             }
         }
     }

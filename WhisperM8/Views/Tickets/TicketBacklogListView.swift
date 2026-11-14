@@ -7,7 +7,16 @@ struct TicketBacklogListView: View {
     let source: TicketChatStatusSource
     let select: (String) -> Void
 
+    /// Darunter fallen Status und Fortschritt aus der Zeile; sie stehen im Detail.
+    static let wideFrom: CGFloat = 640
+
     var body: some View {
+        GeometryReader { proxy in
+            list(isWide: proxy.size.width >= Self.wideFrom)
+        }
+    }
+
+    private func list(isWide: Bool) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: []) {
                 ForEach(groups) { group in
@@ -22,13 +31,13 @@ struct TicketBacklogListView: View {
                     .padding(.horizontal, 10)
 
                     ForEach(group.entries) { entry in
-                        TicketBacklogRow(entry: entry, isSelected: selectedKey == entry.ticket.key, source: source) {
+                        TicketBacklogRow(entry: entry, isSelected: selectedKey == entry.ticket.key, isWide: isWide, source: source) {
                             select(entry.ticket.key)
                         }
                     }
                 }
                 if groups.isEmpty {
-                    Text("Nothing for this filter.")
+                    Text("No tickets for this filter.")
                         .font(.system(size: 11))
                         .foregroundStyle(AgentTheme.textSecondary)
                         .padding(14)
@@ -36,13 +45,14 @@ struct TicketBacklogListView: View {
             }
             .padding(.bottom, 10)
         }
-        .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(TicketBoardStyle.column, in: TicketBoardStyle.shape)
     }
 }
 
 private struct TicketBacklogRow: View {
     let entry: TicketBoardEntry
     let isSelected: Bool
+    let isWide: Bool
     let source: TicketChatStatusSource
     let select: () -> Void
 
@@ -64,15 +74,17 @@ private struct TicketBacklogRow: View {
                 if ticket.isBlocked {
                     TicketTag(text: String(localized: "Blocked"), tone: AgentTheme.statusError)
                 }
-                if let criteria = ticket.criteria { TicketCriteriaBadge(progress: criteria) }
-                Text(verbatim: ticket.status.name)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textSecondary)
-                    .lineLimit(1)
-                    .frame(width: 130, alignment: .leading)
+                if isWide {
+                    if let criteria = entry.criteria { TicketCriteriaBadge(progress: criteria) }
+                    Text(verbatim: ticket.status.name)
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .lineLimit(1)
+                        .frame(width: 130, alignment: .leading)
+                }
                 TicketAvatar(person: ticket.assignee)
                 TicketAgentRow(entry: entry, source: source, compact: true)
-                    .frame(width: 150, alignment: .leading)
+                    .frame(width: isWide ? 150 : 110, alignment: .leading)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -80,7 +92,9 @@ private struct TicketBacklogRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: TicketBoardText.spoken(entry)))
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
     }
 }
 
@@ -105,22 +119,27 @@ private struct TicketGroupCount: View {
 /// Leiste unter dem Board: laufende Chats, an denen kein offenes Ticket hängt.
 struct TicketLooseChatsBar: View {
     let chats: [TicketLooseChat]
+    /// Supervisor-Chats betreuen andere und brauchen kein Ticket; sie stehen
+    /// getrennt und zählen nicht als Lücke.
+    var supervisors: [TicketChat] = []
     let source: TicketChatStatusSource
     let openChat: (UUID) -> Void
 
     var body: some View {
-        if !chats.isEmpty {
+        if !chats.isEmpty || !supervisors.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    Text("Running chats without a ticket (\(chats.count))")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textSecondary)
+                    if !chats.isEmpty {
+                        Text("Running chats without a ticket (\(chats.count))")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                    }
                     ForEach(chats) { loose in
                         Button {
                             openChat(loose.chat.id)
                         } label: {
                             HStack(spacing: 6) {
-                                TicketChatStatusDot(chatID: loose.chat.id, source: source, fallback: loose.chat.state)
+                                TicketChatStatusDot(chatID: loose.chat.id, source: source)
                                 Text(verbatim: loose.chat.shortName)
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(AgentTheme.textPrimary)
@@ -134,11 +153,33 @@ struct TicketLooseChatsBar: View {
                         .buttonStyle(.plain)
                         .help(Text("Go to chat"))
                     }
+                    if !supervisors.isEmpty {
+                        Text("Supervisor")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .padding(.leading, chats.isEmpty ? 0 : 8)
+                        ForEach(supervisors) { chat in
+                            Button {
+                                openChat(chat.id)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    TicketChatStatusDot(chatID: chat.id, source: source)
+                                    Text(verbatim: chat.shortName)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(AgentTheme.textSecondary)
+                                }
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                            }
+                            .buttonStyle(.plain)
+                            .help(Text("Go to chat"))
+                        }
+                    }
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
             }
-            .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(TicketBoardStyle.column, in: TicketBoardStyle.shape)
         }
     }
 }

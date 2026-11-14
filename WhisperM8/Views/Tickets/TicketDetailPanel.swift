@@ -40,7 +40,7 @@ struct TicketDetailPanel: View {
                         .foregroundStyle(AgentTheme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .textSelection(.enabled)
-                    TicketCardTags(ticket: ticket, maxLabels: 6)
+                    TicketCardTags(ticket: ticket, maxLabels: 6, hidesColumnStatus: false)
 
                     VStack(alignment: .leading, spacing: 6) {
                         TicketDetailLine(label: "Linear project") { Text(verbatim: TicketBoardText.project(ticket.project ?? "")) }
@@ -55,7 +55,7 @@ struct TicketDetailPanel: View {
                                 Text("Nobody")
                             }
                         }
-                        if let criteria = ticket.criteria {
+                        if let criteria = entry.criteria {
                             TicketDetailLine(label: "Done when") { Text("\(criteria.done) of \(criteria.total) done") }
                         }
                     }
@@ -66,13 +66,22 @@ struct TicketDetailPanel: View {
                         Text("Chat")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(AgentTheme.textSecondary)
-                        TicketAgentRow(entry: entry, source: source)
-                        ForEach(entry.agents.dropFirst(), id: \.link.id) { agent in
-                            TicketAgentRow(entry: TicketBoardEntry(ticket: ticket, agents: [agent]), source: source)
+                        if entry.agents.isEmpty {
+                            TicketAgentRow(entry: entry, source: source)
                         }
-                        let earlier = ticket.links.filter { !$0.isActive }
-                        if !earlier.isEmpty {
-                            Text("Earlier: \(earlier.map { $0.title.replacingOccurrences(of: "Chat: ", with: "") }.joined(separator: ", "))")
+                        ForEach(entry.agents, id: \.link.id) { agent in
+                            VStack(alignment: .leading, spacing: 2) {
+                                TicketAgentRow(entry: TicketBoardEntry(ticket: ticket, agents: [agent]), source: source)
+                                // „arbeitet seit …“, so wie es am Ticket steht.
+                                if let since = agent.link.subtitle.components(separatedBy: " · ").first, !since.isEmpty {
+                                    Text(verbatim: since)
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(AgentTheme.textSecondary)
+                                }
+                            }
+                        }
+                        if !entry.agents.isEmpty, !entry.handedOverBy.isEmpty {
+                            Text("Earlier: \(entry.handedOverBy.joined(separator: ", "))")
                                 .font(.system(size: 11))
                                 .foregroundStyle(AgentTheme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -80,11 +89,12 @@ struct TicketDetailPanel: View {
                     }
 
                     HStack(spacing: 8) {
-                        if let chat = entry.agents.first?.chat {
+                        // Der erste Chat, der auf diesem Rechner läuft.
+                        if let chat = entry.agents.lazy.compactMap(\.chat).first {
                             Button("Go to chat") { actions.openChat(chat.id) }
                                 .buttonStyle(SettingsButtonStyle.primary)
                         }
-                        if let url = ticket.url {
+                        if let url = ticket.url.flatMap(URL.init(string:)), TicketDescriptionBlocks.isSafe(url) {
                             Button("Open in Linear") { actions.openURL(url) }
                                 .buttonStyle(SettingsButtonStyle.standard)
                         }
@@ -98,9 +108,12 @@ struct TicketDetailPanel: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            // Ein anderes Ticket beginnt oben, nicht an der alten Stelle.
+            .id(entry.id)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(AgentTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(AgentTheme.surface, in: TicketBoardStyle.shape)
+        .overlay { TicketBoardStyle.shape.strokeBorder(AgentTheme.borderStrong, lineWidth: 1) }
     }
 }
 

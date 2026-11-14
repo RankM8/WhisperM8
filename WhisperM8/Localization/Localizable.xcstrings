@@ -11481,6 +11481,16 @@
         }
       }
     },
+    "No tickets for this filter.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Tickets für diesen Filter."
+          }
+        }
+      }
+    },
     "No tokens in this period.": {
       "localizations": {
         "de": {
@@ -11887,16 +11897,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nichts außerhalb der Allow-Liste — gut für streng abgeschottete Läufe."
-          }
-        }
-      }
-    },
-    "Nothing for this filter.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nichts für diesen Filter."
           }
         }
       }
@@ -17634,6 +17634,16 @@
         }
       }
     },
+    "Supervisor": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supervisor"
+          }
+        }
+      }
+    },
     "Supervisor launch failed: %@": {
       "localizations": {
         "de": {
@@ -19100,6 +19110,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Nachbearbeitung wurde abgebrochen."
+          }
+        }
+      }
+    },
+    "The text continues in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Text geht in Linear weiter."
           }
         }
       }
