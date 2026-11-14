@@ -5,7 +5,7 @@ import Foundation
 /// Die einzige Stelle, die Linear kennt. Übersetzt GraphQL-Antworten in die
 /// Modelle des Boards und Aufträge des Boards in Linears Änderungen.
 struct LinearTicketSource: TicketSource {
-    var client: LinearGraphQLClient = .live
+    var client: LinearGraphQLClient
     var now: () -> Date = Date.init
     /// Seiten zu je 100 offenen Tickets; darüber wird abgeschnitten.
     var maxPages = 5
@@ -133,11 +133,18 @@ struct LinearTicketSource: TicketSource {
         guard let viewer = data["viewer"] as? [String: Any], let org = data["organization"] as? [String: Any] else {
             throw TicketSourceError.invalidResponse("viewer")
         }
+        let key = org["urlKey"] as? String ?? ""
         return TicketAccount(
             userName: viewer["name"] as? String ?? "",
-            workspace: "\(org["name"] as? String ?? "") (linear.app/\(org["urlKey"] as? String ?? ""))",
+            workspace: "\(org["name"] as? String ?? "") (linear.app/\(key))",
+            workspaceKey: key.lowercased(),
             isAdmin: viewer["admin"] as? Bool ?? false
         )
+    }
+
+    func teams() async throws -> [String] {
+        let data = try await client.run("{ teams(first: 100) { nodes { key } } }")
+        return Self.nodes(data["teams"]).compactMap { ($0["key"] as? String)?.uppercased() }.sorted()
     }
 
     // MARK: Änderungen

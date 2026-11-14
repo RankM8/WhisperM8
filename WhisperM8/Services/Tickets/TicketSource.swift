@@ -26,6 +26,8 @@ protocol TicketSource {
     /// „me“, eine ID oder ein Namensteil. Mehrere Treffer sind ein Fehler.
     func person(matching query: String) async throws -> TicketPerson
     func account() async throws -> TicketAccount
+    /// Kürzel aller Teams, die der Zugang sieht.
+    func teams() async throws -> [String]
 }
 
 struct TicketContext: Equatable {
@@ -48,7 +50,10 @@ struct TicketContext: Equatable {
 
 struct TicketAccount: Equatable {
     var userName: String
+    /// Zum Anzeigen: Name samt Adresse.
     var workspace: String
+    /// Kürzel des Workspaces; darunter liegt der Zugang.
+    var workspaceKey: String
     var isAdmin: Bool
 }
 

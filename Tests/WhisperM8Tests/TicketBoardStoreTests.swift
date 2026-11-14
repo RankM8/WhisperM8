@@ -197,6 +197,44 @@ final class TicketConfigTests: XCTestCase {
         XCTAssertEqual(config.onlyTeam, "WM8")
     }
 
+    func testWorkspaceOfATeamIsNeverGuessed() {
+        var config = TicketConfig()
+        XCTAssertNil(config.workspace(forTeam: "WM8"), "ohne Workspace keiner")
+        config.add(workspace: "WhisperM8")
+        XCTAssertEqual(config.workspace(forTeam: "wm8"), "whisperm8", "ein Workspace: jedes Team liegt dort")
+        config.set(workspace: "dealsupply", forTeam: "ds")
+        XCTAssertEqual(config.knownWorkspaces, ["dealsupply", "whisperm8"])
+        XCTAssertEqual(config.workspace(forTeam: "DS"), "dealsupply")
+        XCTAssertNil(config.workspace(forTeam: "WM8"), "bei zweien muss das Team zugeordnet sein")
+        config.set(workspace: "whisperm8", forTeam: "WM8")
+        config.set(team: "WM8", forProject: "/Users/g/repos/whisperm8")
+        XCTAssertEqual(config.workspace(forDirectory: "/Users/g/repos/whisperm8/.claude/worktrees/x"), "whisperm8")
+        XCTAssertNil(config.workspace(forDirectory: "/Users/g"))
+        XCTAssertEqual(config.workspace(forDirectory: "/users/g/repos/WhisperM8/Tests"), "whisperm8",
+                       "andere Schreibweise desselben Ordners: die Schreibsperre gilt trotzdem")
+        XCTAssertEqual(config.knownTeams, ["DS", "WM8"])
+        XCTAssertEqual(TicketConfig.team(ofKey: "wm8-12"), "WM8")
+    }
+
+    func testWorkspaceNameIsSafeForTheKeychainCommand() {
+        XCTAssertTrue(TicketConfig.isWorkspaceName("dealsupply"))
+        XCTAssertTrue(TicketConfig.isWorkspaceName("heartbeat-2"))
+        for bad in ["", "Deal", "a b", "a\"b", "a\nb", String(repeating: "a", count: 65)] {
+            XCTAssertFalse(TicketConfig.isWorkspaceName(bad), bad)
+        }
+    }
+
+    func testFileFromBeforeWorkspacesStillLoads() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("tickets-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = TicketConfigStore(fileURL: directory.appendingPathComponent("tickets.json"))
+        try Data(#"{"teamsByProjectPath":{"/Users/g/repos/whisperm8":"WM8"},"version":1}"#.utf8).write(to: store.fileURL)
+        let config = store.load()
+        XCTAssertEqual(config.teamsByProjectPath, ["/Users/g/repos/whisperm8": "WM8"])
+        XCTAssertTrue(config.knownWorkspaces.isEmpty, "der Workspace wird einmal nachgetragen, nicht erfunden")
+    }
+
     func testStoreRoundTripAndMissingFile() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("tickets-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }

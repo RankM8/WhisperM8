@@ -94,10 +94,17 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
 - Der Zustand der Chats (arbeitet, ruht, wartet auf dich) kommt aus der laufenden App. Ohne App gehen alle
   Befehle, das Board zeigt dann „Zustand unbekannt“ und keine Chats ohne Ticket.
 - Das Team ergibt sich aus dem Projekt des aktuellen Ordners (auch in Arbeitsordnern darunter), sonst `--team ABC`.
+- **Mehrere Workspaces** (mehrere Firmen): Das Team steckt in der Ticket-Nummer, der Workspace folgt aus dem Team.
+  Aus einem Projektordner schreibst du nur in den Workspace dieses Projekts; Tickets eines anderen Workspaces
+  kannst du lesen (`show`, `list --team`), aber nicht ändern und dich nicht daran hängen. Die Kommandozeile sagt
+  dann ab (Exit 4). `--other-workspace` nur, wenn der Nutzer das Schreiben nach drüben ausdrücklich verlangt.
+  Gehört eine Arbeit ins andere Projekt: dem Supervisor melden, nicht selbst umhängen.
 - `whisperm8 tickets doctor` prüft Zugang, Zuordnung und App. Exit-Codes: 0 ok, 1 Aufruf falsch, 3 nicht
   gefunden, 4 mehrdeutig, 5 Linear nicht eingerichtet, nicht erreichbar oder lehnt ab.
 - Einrichtung (einmalig, macht der Nutzer oder der Supervisor mit ihm): `pbpaste | whisperm8 tickets setup --key-stdin`
-  und `whisperm8 tickets setup --project <Ordner> --team ABC`. Den Key nie ausgeben, nie in eine Datei, nie in den Chat.
-- Was die CLI nicht kann (Zyklen, Vorhaben anlegen, Dokumente, Meilensteine, Releases): der Linear-MCP, Server `linear`.
+  (je Workspace ein Key, der Workspace ergibt sich aus dem Key) und `whisperm8 tickets setup --team ABC --project <Ordner>`.
+  Den Key nie ausgeben, nie in eine Datei, nie in den Chat.
+- Was die CLI nicht kann (Zyklen, Vorhaben anlegen, Dokumente, Meilensteine, Releases): der Linear-MCP. Bei mehreren
+  Workspaces hat jeder seinen eigenen Server; vor dem Schreiben prüfen, welcher zum Projekt gehört.
 - Die Verknüpfung ist ein Anhang am Ticket (`whisperm8://chat/<ID>`). Nicht von Hand ändern und nicht über den
   MCP anlegen: Board und Ansichten in Linear lesen genau dieses Format.

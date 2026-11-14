@@ -18,7 +18,7 @@ enum TicketsCLIArguments: Equatable {
     case new(TicketsNewOptions)
     case assign(key: String, person: String)
     case label(key: String, add: [String], remove: [String])
-    case setup(keyFromStdin: Bool, project: String?, team: String?)
+    case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?)
     case doctor(json: Bool)
 
     enum ParseError: Error, Equatable {
@@ -28,6 +28,11 @@ enum TicketsCLIArguments: Equatable {
     /// `--json` gilt für jeden Befehl und steht vor einem `--`.
     static func wantsJSON(_ arguments: [String]) -> Bool {
         arguments.prefix { $0 != "--" }.contains("--json")
+    }
+
+    /// `--other-workspace` hebt die Schreibsperre über die Projektgrenze auf.
+    static func allowsOtherWorkspace(_ arguments: [String]) -> Bool {
+        arguments.prefix { $0 != "--" }.contains("--other-workspace")
     }
 
     /// Schreibende Befehle: Mit `--json` kommt ihre Meldung als Objekt.
@@ -74,6 +79,7 @@ enum TicketsCLIArguments: Equatable {
             return found
         }
         let json = flag("--json")
+        _ = flag("--other-workspace")
         func list(_ name: String) throws -> [String] {
             (try value(name) ?? "").split(whereSeparator: { $0 == "," }).map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
@@ -172,9 +178,10 @@ enum TicketsCLIArguments: Equatable {
             return .label(key: try key(try positional(1, "tickets label <Ticket> --add a,b --remove c")[0]), add: add, remove: remove)
         case "setup":
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
-            guard (project == nil) == (team == nil) else { throw ParseError.usage("--project und --team gehören zusammen") }
-            _ = try positional(0, "tickets setup [--key-stdin] [--project ORDNER --team T]")
-            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased())
+            let workspace = try value("--workspace")
+            guard project == nil || team != nil else { throw ParseError.usage("--project braucht --team") }
+            _ = try positional(0, "tickets setup [--key-stdin] [--team T [--project ORDNER]] [--workspace W]")
+            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased(), workspace: workspace)
         case "doctor":
             _ = try positional(0, "tickets doctor [--json]")
             return .doctor(json: json)
@@ -285,10 +292,21 @@ enum TicketsCLICommand {
       whisperm8 tickets label <Ticket> [--add a,b] [--remove c]
 
     EINRICHTEN
-      whisperm8 tickets setup --key-stdin              Linear-Key aus stdin in den Schlüsselbund
-      whisperm8 tickets setup --project ORDNER --team T
+      whisperm8 tickets setup --key-stdin              Linear-Key aus stdin in den Schlüsselbund.
+                Der Workspace ergibt sich aus dem Key; je Workspace ein Key.
+      whisperm8 tickets setup --team T [--project ORDNER] [--workspace W]
+                Ordnet das Team seinem Workspace zu und, mit --project, den
+                Ordner dem Team. Ohne --workspace wird nachgesehen, wo es das
+                Team gibt.
       whisperm8 tickets setup                          zeigt die Einrichtung
-      whisperm8 tickets doctor [--json]                prüft Zugang, Zuordnung und App
+      whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App
+
+    MEHRERE WORKSPACES
+      Das Team steckt in der Ticket-Nummer (ABC-12), der Workspace folgt aus
+      dem Team. Aus einem Projektordner wird nur in den Workspace dieses
+      Projekts geschrieben; Tickets anderer Workspaces lassen sich lesen.
+      Verlangt der Nutzer ausdrücklich das Schreiben nach drüben:
+      --other-workspace
 
     Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit
     {"ok": true, "key": …, "message": …}. Fehler stehen auf stderr, der
@@ -314,7 +332,8 @@ enum TicketsCLICommand {
         } catch {
             return TicketsCLIExit.usage
         }
-        let output = await TicketsCLIRunner.execute(parsed, environment: .live, json: TicketsCLIArguments.wantsJSON(arguments))
+        let output = await TicketsCLIRunner.execute(parsed, environment: .live, json: TicketsCLIArguments.wantsJSON(arguments),
+                                                    otherWorkspace: TicketsCLIArguments.allowsOtherWorkspace(arguments))
         if !output.stdout.isEmpty { CLIIO.out(output.stdout) }
         if !output.stderr.isEmpty { CLIIO.err(output.stderr) }
         return output.exitCode
@@ -326,7 +345,8 @@ enum TicketsCLICommand {
 /// Alles, was der Befehl von außen braucht, als Closures: Tests ersetzen Netz,
 /// Schlüsselbund, App und Dateien.
 struct TicketsCLIEnvironment {
-    var source: TicketSource
+    /// Quelle je Workspace: Jeder hat seinen eigenen Zugang.
+    var source: (_ workspace: String) -> TicketSource
     var config: () -> TicketConfig
     var saveConfig: (TicketConfig) throws -> Void
     var credential: TicketCredentialStore
@@ -343,14 +363,12 @@ struct TicketsCLIEnvironment {
     static var live: TicketsCLIEnvironment {
         let configStore = TicketConfigStore.live
         return TicketsCLIEnvironment(
-            source: LinearTicketSource(),
+            source: { LinearTicketSource(client: .live(workspace: $0)) },
             config: { configStore.load() },
             saveConfig: { try configStore.save($0) },
             credential: .live,
             validateKey: { key in
-                var client = LinearGraphQLClient.live
-                client.apiKey = { key }
-                do { return .success(try await LinearTicketSource(client: client).account()) } catch let error as TicketSourceError {
+                do { return .success(try await LinearTicketSource(client: .live(key: key)).account()) } catch let error as TicketSourceError {
                     return .failure(error)
                 } catch {
                     return .failure(.network("Netzfehler"))

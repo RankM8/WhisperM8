@@ -13,7 +13,10 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     var onLinked: (UUID) async throws -> [Ticket] = { _ in [] }
     var onCreate: (TicketDraft) async throws -> Ticket = { _ in throw TicketSourceError.invalidResponse("create nicht vorbereitet") }
     var onPerson: (String) async throws -> TicketPerson = { query in throw TicketSourceError.notFound("Person „\(query)“") }
-    var onAccount: () async throws -> TicketAccount = { TicketAccount(userName: "Giuliano Costa", workspace: "Test (linear.app/test)", isAdmin: true) }
+    var onAccount: () async throws -> TicketAccount = {
+        TicketAccount(userName: "Giuliano Costa", workspace: "WhisperM8 (linear.app/whisperm8)", workspaceKey: "whisperm8", isAdmin: true)
+    }
+    var onTeams: () async throws -> [String] = { ["WM8"] }
     /// Fehler für alle schreibenden Operationen (`nil` = gelingt).
     var writeError: TicketSourceError?
 
@@ -49,6 +52,7 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     }
     func person(matching query: String) async throws -> TicketPerson { note("person \(query)"); return try await onPerson(query) }
     func account() async throws -> TicketAccount { note("account"); return try await onAccount() }
+    func teams() async throws -> [String] { note("teams"); return try await onTeams() }
 }
 
 enum TicketFixtures {

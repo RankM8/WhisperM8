@@ -15,15 +15,78 @@ enum TicketsCLIRunner {
         var message: String
     }
 
-    static func execute(_ arguments: TicketsCLIArguments, environment env: TicketsCLIEnvironment, json: Bool = false) async -> Output {
+    /// Wählt je Team die Quelle des richtigen Workspaces und hält die
+    /// Projektgrenze ein: Aus einem Projekt wird nicht in den Workspace eines
+    /// anderen geschrieben. Zwei Firmen, zwei Workspaces; ein Chat der einen
+    /// soll die Tickets der anderen lesen, aber nie versehentlich ändern.
+    private final class Access {
+        let env: TicketsCLIEnvironment
+        let isWrite: Bool
+        let allowOther: Bool
+        /// Zuletzt angesprochener Workspace, für Fehlermeldungen zum Zugang.
+        private(set) var used: String?
+
+        init(env: TicketsCLIEnvironment, isWrite: Bool, allowOther: Bool) {
+            self.env = env
+            self.isWrite = isWrite
+            self.allowOther = allowOther
+        }
+
+        func workspace(forTeam team: String) throws -> String {
+            let config = env.config()
+            guard let target = config.workspace(forTeam: team) else {
+                if config.knownWorkspaces.isEmpty { throw TicketSourceError.notConfigured }
+                throw Failure(exitCode: TicketsCLIExit.usage, message: """
+                Team \(team) ist keinem Workspace zugeordnet (eingerichtet: \(config.knownWorkspaces.joined(separator: ", "))).
+                Einmal zuordnen: whisperm8 tickets setup --team \(team)
+                """)
+            }
+            if isWrite, !allowOther, let home = config.workspace(forDirectory: env.currentDirectory()), home != target {
+                throw Failure(exitCode: TicketsCLIExit.conflict, message: """
+                Team \(team) liegt im Workspace „\(target)“, dieser Ordner gehört zu „\(home)“. Aus einem Projekt wird \
+                nicht in den Workspace eines anderen geschrieben; lesen geht.
+                Nur wenn der Nutzer es ausdrücklich verlangt: --other-workspace
+                """)
+            }
+            return target
+        }
+
+        func source(forTeam team: String) throws -> TicketSource {
+            source(in: try workspace(forTeam: team))
+        }
+
+        func source(forKey key: String) throws -> TicketSource {
+            try source(forTeam: TicketConfig.team(ofKey: key))
+        }
+
+        func source(in workspace: String) -> TicketSource {
+            used = workspace
+            return env.source(workspace)
+        }
+
+        /// Ein Chat hängt nur an Tickets des Workspaces, zu dem sein Projekt gehört.
+        func guardChat(_ chat: TicketChat, key: String) throws {
+            let config = env.config()
+            guard !allowOther, let target = config.workspace(forTeam: TicketConfig.team(ofKey: key)),
+                  let home = config.workspace(forDirectory: chat.projectPath), home != target else { return }
+            throw Failure(exitCode: TicketsCLIExit.conflict, message: """
+            Chat „\(chat.shortName)“ gehört zum Projekt \(chat.projectName) (Workspace „\(home)“), \(key) liegt in „\(target)“.
+            Nur wenn der Nutzer es ausdrücklich verlangt: --other-workspace
+            """)
+        }
+    }
+
+    static func execute(_ arguments: TicketsCLIArguments, environment env: TicketsCLIEnvironment, json: Bool = false,
+                        otherWorkspace: Bool = false) async -> Output {
         // Der Prüfbericht geht immer nach stdout; nur der Exit-Code zeigt ein Problem.
         if case .doctor(let asJSON) = arguments {
             let report = await doctor(env)
             return Output(exitCode: report.allSatisfy(\.ok) ? TicketsCLIExit.ok : TicketsCLIExit.unavailable,
                           stdout: TicketsCLIFormatter.doctor(report, json: asJSON))
         }
+        let access = Access(env: env, isWrite: arguments.isWrite, allowOther: otherWorkspace)
         do {
-            let text = try await run(arguments, env)
+            let text = try await run(arguments, env, access)
             guard json, arguments.isWrite else { return Output(exitCode: TicketsCLIExit.ok, stdout: text) }
             var object: [String: Any] = ["ok": true, "message": text]
             // `new` nennt die neue Nummer am Anfang seiner Meldung.
@@ -35,7 +98,12 @@ enum TicketsCLIRunner {
         } catch let failure as Failure {
             return Output(exitCode: failure.exitCode, stderr: failure.message)
         } catch let error as TicketSourceError {
-            return Output(exitCode: exitCode(for: error), stderr: error.message)
+            // Bei mehreren Zugängen zählt, welcher gemeint ist.
+            var message = error.message
+            if let workspace = access.used, error == .notConfigured || error == .unauthorized {
+                message += " Betroffen: Workspace „\(workspace)“."
+            }
+            return Output(exitCode: exitCode(for: error), stderr: message)
         } catch {
             return Output(exitCode: TicketsCLIExit.unavailable, stderr: "Unerwarteter Fehler: \(error)")
         }
@@ -50,22 +118,22 @@ enum TicketsCLIRunner {
         }
     }
 
-    private static func run(_ arguments: TicketsCLIArguments, _ env: TicketsCLIEnvironment) async throws -> String {
+    private static func run(_ arguments: TicketsCLIArguments, _ env: TicketsCLIEnvironment, _ access: Access) async throws -> String {
         switch arguments {
         case .help:
             return TicketsCLICommand.help
 
         case .board(let team, let all, let json):
-            let (model, snapshot, reachable) = try await board(team: team, env)
+            let (model, snapshot, reachable, _) = try await board(team: team, env, access)
             return TicketsCLIFormatter.board(model, snapshot: snapshot, includeBacklog: true, includeClosed: all,
                                              appReachable: reachable, json: json)
 
         case .list(let team, let filter, let json):
-            let (model, _, reachable) = try await board(team: team, env)
+            let (model, _, reachable, source) = try await board(team: team, env, access)
             var boardFilter = TicketBoardFilter(agent: filter.agent, project: filter.project)
             if filter.unassigned { boardFilter.person = .unassigned }
             if let query = filter.person {
-                boardFilter.person = .person(id: try await env.source.person(matching: query).id)
+                boardFilter.person = .person(id: try await source.person(matching: query).id)
             }
             var entries = boardFilter.apply(to: model.entries)
             if let status = filter.status?.lowercased() {
@@ -74,23 +142,31 @@ enum TicketsCLIRunner {
             return TicketsCLIFormatter.list(entries.sorted(by: TicketBoardLayout.order), appReachable: reachable, json: json)
 
         case .show(let key, let json):
-            let context = try await env.source.ticket(key: key)
+            let context = try await access.source(forKey: key).ticket(key: key)
             let (chats, reachable) = env.chats()
             return TicketsCLIFormatter.show(context, chats: chats, appReachable: reachable, json: json)
 
         case .mine(let chatRef, let json):
             let chat = try callerChat(chatRef, env)
-            let tickets = try await env.source.tickets(linkedTo: chat.id)
+            // Ein Chat kann an Tickets mehrerer Workspaces hängen oder gehangen haben.
+            let workspaces = env.config().knownWorkspaces
+            guard !workspaces.isEmpty else { throw TicketSourceError.notConfigured }
+            var tickets: [Ticket] = []
+            for workspace in workspaces {
+                tickets += try await access.source(in: workspace).tickets(linkedTo: chat.id)
+            }
             return TicketsCLIFormatter.mine(tickets, chat: chat, json: json)
 
         case .link(let key, let chatRef, let keepStatus):
             let chat = try callerChat(chatRef, env)
-            let context = try await env.source.ticket(key: key)
-            try await env.source.saveLink(ticketID: context.ticket.id, chat: chat, active: true, at: env.now())
+            let source = try access.source(forKey: key)
+            try access.guardChat(chat, key: key)
+            let context = try await source.ticket(key: key)
+            try await source.saveLink(ticketID: context.ticket.id, chat: chat, active: true, at: env.now())
             var statusName = context.ticket.status.name
             let notStarted: Set<TicketStatusKind> = [.backlog, .unstarted, .triage]
             if !keepStatus, notStarted.contains(context.ticket.status.kind), let started = context.firstStatus(of: .started) {
-                try await env.source.setStatus(ticketID: context.ticket.id, statusID: started.id)
+                try await source.setStatus(ticketID: context.ticket.id, statusID: started.id)
                 statusName = started.name
             }
             var lines = ["\(key) „\(context.ticket.title)“ hängt jetzt an Chat „\(chat.title)“. Status: \(statusName)"]
@@ -106,7 +182,8 @@ enum TicketsCLIRunner {
 
         case .done(let key, let chatRef, let status, let note, let force):
             let chat = try callerChat(chatRef, env)
-            let context = try await env.source.ticket(key: key)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
             // Erst alles prüfen, dann schreiben: Ein falscher Statusname oder ein
             // leerer Text soll nichts halb ändern.
             let target = try status.map { try resolveStatus($0, in: context) }
@@ -115,15 +192,15 @@ enum TicketsCLIRunner {
             // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
             let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
             if wasActive {
-                try await env.source.saveLink(ticketID: context.ticket.id, chat: chat, active: false, at: env.now())
+                try await source.saveLink(ticketID: context.ticket.id, chat: chat, active: false, at: env.now())
             }
             if let noteText {
-                try await env.source.setDescription(
+                try await source.setDescription(
                     ticketID: context.ticket.id,
                     description: TicketStandLine.apply(noteText, to: context.ticket.description, on: env.now()))
             }
             if let target, target.id != context.ticket.status.id {
-                try await env.source.setStatus(ticketID: context.ticket.id, statusID: target.id)
+                try await source.setStatus(ticketID: context.ticket.id, statusID: target.id)
             }
             let linked = wasActive ? "Verknüpfung mit „\(chat.shortName)“ beendet."
                 : "„\(chat.shortName)“ war nicht (mehr) verknüpft."
@@ -131,36 +208,41 @@ enum TicketsCLIRunner {
 
         case .unlink(let key, let chatRef):
             let chat = try callerChat(chatRef, env)
-            let context = try await env.source.ticket(key: key)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
             let mine = context.ticket.links.filter { $0.chatID == chat.id }
-            for link in mine { try await env.source.removeLink(id: link.id) }
+            for link in mine { try await source.removeLink(id: link.id) }
             return mine.isEmpty ? "\(key): „\(chat.shortName)“ war nicht verknüpft." : "\(key): Verknüpfung mit „\(chat.shortName)“ entfernt."
 
         case .status(let key, let name, let force):
-            let context = try await env.source.ticket(key: key)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
             let target = try resolveStatus(name, in: context)
             try guardCompletion(target, key: key, force: force, env)
             if target.id == context.ticket.status.id { return "\(key) steht schon auf \(target.name)." }
-            try await env.source.setStatus(ticketID: context.ticket.id, statusID: target.id)
+            try await source.setStatus(ticketID: context.ticket.id, statusID: target.id)
             return "\(key): \(context.ticket.status.name) → \(target.name)"
 
         case .note(let key, let raw):
-            let context = try await env.source.ticket(key: key)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
             let note = try text(raw, env)
-            try await env.source.setDescription(
+            try await source.setDescription(
                 ticketID: context.ticket.id,
                 description: TicketStandLine.apply(note, to: context.ticket.description, on: env.now()))
             return "\(key): Stand-Zeile aktualisiert."
 
         case .comment(let key, let raw):
-            let context = try await env.source.ticket(key: key)
-            try await env.source.addComment(ticketID: context.ticket.id, body: try text(raw, env))
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
+            try await source.addComment(ticketID: context.ticket.id, body: try text(raw, env))
             return "\(key): Kommentar angelegt."
 
         case .new(let options):
             let team = try resolveTeam(options.team, env)
-            let assignee = try await options.assignee.asyncMap { try await env.source.person(matching: $0).id }
-            let created = try await env.source.create(TicketDraft(
+            let source = try access.source(forTeam: team)
+            let assignee = try await options.assignee.asyncMap { try await source.person(matching: $0).id }
+            let created = try await source.create(TicketDraft(
                 team: team, title: options.title,
                 description: try options.description.map { try text($0, env) } ?? "",
                 project: options.project, statusName: options.status, priority: options.priority,
@@ -168,25 +250,27 @@ enum TicketsCLIRunner {
             return "\(created.key) angelegt: \(created.title)" + (created.url.map { "\n\($0)" } ?? "")
 
         case .assign(let key, let query):
-            let context = try await env.source.ticket(key: key)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
             if query == "none" {
-                try await env.source.assign(ticketID: context.ticket.id, personID: nil)
+                try await source.assign(ticketID: context.ticket.id, personID: nil)
                 return "\(key): niemandem zugewiesen."
             }
-            let person = try await env.source.person(matching: query)
-            try await env.source.assign(ticketID: context.ticket.id, personID: person.id)
+            let person = try await source.person(matching: query)
+            try await source.assign(ticketID: context.ticket.id, personID: person.id)
             return "\(key): \(person.name) zugewiesen."
 
         case .label(let key, let add, let remove):
-            let context = try await env.source.ticket(key: key)
-            try await env.source.changeLabels(ticketID: context.ticket.id, team: context.team, add: add, remove: remove)
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
+            try await source.changeLabels(ticketID: context.ticket.id, team: context.team, add: add, remove: remove)
             var parts: [String] = []
             if !add.isEmpty { parts.append("+" + add.joined(separator: ", ")) }
             if !remove.isEmpty { parts.append("−" + remove.joined(separator: ", ")) }
             return "\(key): Labels \(parts.joined(separator: " "))"
 
-        case .setup(let keyFromStdin, let project, let team):
-            return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, env)
+        case .setup(let keyFromStdin, let project, let team, let workspace):
+            return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, workspace: workspace, env)
 
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
@@ -196,10 +280,11 @@ enum TicketsCLIRunner {
 
     // MARK: Bausteine
 
-    private static func board(team: String?, _ env: TicketsCLIEnvironment) async throws
-        -> (TicketBoardModel, TicketBoardSnapshot, Bool) {
+    private static func board(team: String?, _ env: TicketsCLIEnvironment, _ access: Access) async throws
+        -> (TicketBoardModel, TicketBoardSnapshot, Bool, TicketSource) {
         let resolved = try resolveTeam(team, env)
-        let snapshot = try await env.source.board(team: resolved)
+        let source = try access.source(forTeam: resolved)
+        let snapshot = try await source.board(team: resolved)
         let (chats, reachable) = env.chats()
         let config = env.config()
         // „Ohne Ticket“ meint Chats dieses Projekts, nicht alle Chats des Rechners.
@@ -208,7 +293,7 @@ enum TicketsCLIRunner {
             ? config.projectPath(forDirectory: env.currentDirectory()) ?? config.projectPaths(forTeam: resolved).first
             : config.projectPaths(forTeam: resolved).first
         let model = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath)
-        return (model, snapshot, reachable)
+        return (model, snapshot, reachable, source)
     }
 
     static func resolveTeam(_ explicit: String?, _ env: TicketsCLIEnvironment) throws -> String {
@@ -282,8 +367,16 @@ enum TicketsCLIRunner {
 
     // MARK: Einrichten und prüfen
 
-    private static func setup(keyFromStdin: Bool, project: String?, team: String?, _ env: TicketsCLIEnvironment) async throws -> String {
+    private static func setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?,
+                              _ env: TicketsCLIEnvironment) async throws -> String {
         var lines: [String] = []
+        var config = env.config()
+        var changed = false
+        let wanted = workspace?.lowercased()
+        if let wanted, !TicketConfig.isWorkspaceName(wanted) {
+            throw Failure(exitCode: TicketsCLIExit.usage,
+                          message: "„\(wanted)“ ist kein Workspace-Kürzel (erwartet: der Teil aus linear.app/<Kürzel>).")
+        }
         if keyFromStdin {
             let key = env.readStdin().trimmingCharacters(in: .whitespacesAndNewlines)
             guard TicketCredentialStore.isStorable(key) else {
@@ -293,31 +386,104 @@ enum TicketsCLIRunner {
             case .failure(let error):
                 throw Failure(exitCode: exitCode(for: error), message: "Key nicht gespeichert. " + error.message)
             case .success(let account):
-                guard env.credential.write(key) else {
+                // Der Workspace ergibt sich aus dem Key selbst: Er lässt sich nicht falsch ablegen.
+                guard TicketConfig.isWorkspaceName(account.workspaceKey) else {
+                    throw Failure(exitCode: TicketsCLIExit.unavailable, message: "Key nicht gespeichert. Linear nennt zu diesem Key keinen Workspace.")
+                }
+                if let wanted, wanted != account.workspaceKey {
+                    throw Failure(exitCode: TicketsCLIExit.conflict,
+                                  message: "Key nicht gespeichert. Er gehört zu „\(account.workspaceKey)“, nicht zu „\(wanted)“.")
+                }
+                guard env.credential.write(account.workspaceKey, key) else {
                     throw Failure(exitCode: TicketsCLIExit.unavailable, message: "Der Schlüsselbund-Eintrag ließ sich nicht schreiben.")
                 }
-                lines.append("Key im Schlüsselbund. Gehört zu \(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "").")
+                config.add(workspace: account.workspaceKey)
+                changed = true
+                lines.append("Key für „\(account.workspaceKey)“ im Schlüsselbund. Gehört zu \(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "").")
             }
+        } else if let wanted, !config.knownWorkspaces.contains(wanted) {
+            // Ein Key, der schon im Schlüsselbund liegt (von einem anderen Werkzeug abgelegt), wird übernommen.
+            guard env.credential.read(wanted) != nil else {
+                throw Failure(exitCode: TicketsCLIExit.unavailable,
+                              message: "Für „\(wanted)“ liegt kein Key im Schlüsselbund. Ablegen: pbpaste | whisperm8 tickets setup --key-stdin")
+            }
+            let account = try await named(wanted) { try await env.source(wanted).account() }
+            guard account.workspaceKey == wanted else {
+                throw Failure(exitCode: TicketsCLIExit.conflict,
+                              message: "Der Key unter „\(wanted)“ gehört zu \(account.workspace). Nichts übernommen.")
+            }
+            config.add(workspace: wanted)
+            changed = true
+            lines.append("Workspace „\(wanted)“ übernommen: \(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "").")
         }
-        if let project, let team {
-            var config = env.config()
-            let path = (project as NSString).isAbsolutePath ? project
-                : ((env.currentDirectory() as NSString).appendingPathComponent(project) as NSString).standardizingPath
-            config.set(team: team, forProject: path)
-            try env.saveConfig(config)
-            lines.append("\(TicketConfig.normalized(path)) gehört zum Team \(team).")
+        if let team {
+            let target: String
+            if let wanted {
+                let teams = try await named(wanted) { try await env.source(wanted).teams() }
+                guard teams.contains(team) else {
+                    throw Failure(exitCode: TicketsCLIExit.notFound,
+                                  message: "Team \(team) gibt es im Workspace „\(wanted)“ nicht. Dort: \(teams.joined(separator: ", "))")
+                }
+                target = wanted
+            } else {
+                // Ohne Angabe: nachsehen, in welchem eingerichteten Workspace es das Team gibt.
+                let known = config.knownWorkspaces
+                guard !known.isEmpty else { throw TicketSourceError.notConfigured }
+                var hits: [String] = []
+                for candidate in known where try await named(candidate, { try await env.source(candidate).teams() }).contains(team) {
+                    hits.append(candidate)
+                }
+                switch hits.count {
+                case 1:
+                    target = hits[0]
+                case 0:
+                    throw Failure(exitCode: TicketsCLIExit.notFound,
+                                  message: "Team \(team) gibt es in keinem eingerichteten Workspace (\(known.joined(separator: ", "))).")
+                default:
+                    throw Failure(exitCode: TicketsCLIExit.conflict,
+                                  message: "Team \(team) gibt es in \(hits.joined(separator: " und ")). Mit --workspace sagen, welches gemeint ist.")
+                }
+            }
+            config.set(workspace: target, forTeam: team)
+            if let project {
+                let path = (project as NSString).isAbsolutePath ? project
+                    : ((env.currentDirectory() as NSString).appendingPathComponent(project) as NSString).standardizingPath
+                config.set(team: team, forProject: path)
+                lines.append("\(TicketConfig.normalized(path)) gehört zum Team \(team) im Workspace „\(target)“.")
+            } else {
+                lines.append("Team \(team) liegt im Workspace „\(target)“.")
+            }
+            changed = true
         }
+        if changed { try env.saveConfig(config) }
         if lines.isEmpty {
-            let config = env.config()
-            lines.append("Linear-Key: " + (env.credential.read() == nil ? "fehlt (whisperm8 tickets setup --key-stdin)" : "hinterlegt"))
+            if config.knownWorkspaces.isEmpty {
+                lines.append("Linear-Key: fehlt (whisperm8 tickets setup --key-stdin)")
+            }
+            for name in config.knownWorkspaces {
+                lines.append("Workspace: \(name), Key " + (env.credential.read(name) == nil ? "fehlt (whisperm8 tickets setup --key-stdin)" : "hinterlegt"))
+            }
             if config.teamsByProjectPath.isEmpty {
                 lines.append("Zuordnung: keine (whisperm8 tickets setup --project <Ordner> --team <Kürzel>)")
             }
             for (path, team) in config.teamsByProjectPath.sorted(by: { $0.key < $1.key }) {
-                lines.append("Zuordnung: \(path) → \(team)")
+                lines.append("Zuordnung: \(path) → \(team) (\(config.workspace(forTeam: team) ?? "kein Workspace"))")
+            }
+            let mapped = Set(config.teamsByProjectPath.values)
+            for (team, name) in config.workspacesByTeam.sorted(by: { $0.key < $1.key }) where !mapped.contains(team) {
+                lines.append("Team ohne Projektordner: \(team) (\(name))")
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// Fehler der Quelle mit dem Namen des Workspaces, wenn mehrere im Spiel sind.
+    private static func named<T>(_ workspace: String, _ work: () async throws -> T) async throws -> T {
+        do {
+            return try await work()
+        } catch let error as TicketSourceError {
+            throw Failure(exitCode: exitCode(for: error), message: "Workspace „\(workspace)“: " + error.message)
+        }
     }
 
     struct Check: Equatable {
@@ -328,28 +494,50 @@ enum TicketsCLIRunner {
 
     static func doctor(_ env: TicketsCLIEnvironment) async -> [Check] {
         var checks: [Check] = []
-        guard env.credential.read() != nil else {
+        let config = env.config()
+        guard !config.knownWorkspaces.isEmpty else {
             return [Check(name: "Linear-Key", ok: false, detail: "fehlt. Einrichten: whisperm8 tickets setup --key-stdin")]
         }
-        do {
-            let account = try await env.source.account()
-            checks.append(Check(name: "Linear-Zugang", ok: true,
-                                detail: "\(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "")"))
-        } catch {
-            let message = (error as? TicketSourceError)?.message ?? "\(error)"
-            return [Check(name: "Linear-Zugang", ok: false, detail: message)]
+        var usable = Set<String>()
+        for workspace in config.knownWorkspaces {
+            guard env.credential.read(workspace) != nil else {
+                checks.append(Check(name: "Linear-Key", ok: false,
+                                    detail: "\(workspace): fehlt. Einrichten: whisperm8 tickets setup --key-stdin"))
+                continue
+            }
+            do {
+                let account = try await env.source(workspace).account()
+                // Ein Key, der unter dem falschen Workspace liegt, würde in der falschen Firma schreiben.
+                guard account.workspaceKey == workspace else {
+                    checks.append(Check(name: "Linear-Zugang", ok: false,
+                                        detail: "\(workspace): der hinterlegte Key gehört zu \(account.workspace)"))
+                    continue
+                }
+                usable.insert(workspace)
+                checks.append(Check(name: "Linear-Zugang", ok: true,
+                                    detail: "\(account.workspace) als \(account.userName)\(account.isAdmin ? ", Admin" : "")"))
+            } catch {
+                checks.append(Check(name: "Linear-Zugang", ok: false,
+                                    detail: "\(workspace): " + ((error as? TicketSourceError)?.message ?? "\(error)")))
+            }
         }
-        let config = env.config()
         if config.teamsByProjectPath.isEmpty {
             checks.append(Check(name: "Zuordnung", ok: false,
                                 detail: "kein Projekt zugeordnet. whisperm8 tickets setup --project <Ordner> --team <Kürzel>"))
         }
-        for team in Set(config.teamsByProjectPath.values).sorted() {
+        for team in config.knownTeams {
+            guard let workspace = config.workspace(forTeam: team) else {
+                checks.append(Check(name: "Team \(team)", ok: false,
+                                    detail: "keinem Workspace zugeordnet. whisperm8 tickets setup --team \(team)"))
+                continue
+            }
+            // Ohne Zugang steht der Fehler schon oben.
+            guard usable.contains(workspace) else { continue }
             do {
-                let snapshot = try await env.source.board(team: team)
+                let snapshot = try await env.source(workspace).board(team: team)
                 let open = snapshot.tickets.filter { !$0.status.kind.isClosed }
                 checks.append(Check(name: "Team \(team)", ok: true,
-                                    detail: "\(open.count) offene Tickets, \(open.filter { !$0.activeLinks.isEmpty }.count) mit Agent"))
+                                    detail: "\(open.count) offene Tickets, \(open.filter { !$0.activeLinks.isEmpty }.count) mit Agent (\(workspace))"))
             } catch {
                 checks.append(Check(name: "Team \(team)", ok: false, detail: (error as? TicketSourceError)?.message ?? "\(error)"))
             }

@@ -16,14 +16,24 @@ struct LinearGraphQLClient {
     /// ersetzter Key ohne Neustart gilt.
     var keyRejected: () -> Void = {}
 
-    static let live = LinearGraphQLClient(
-        apiKey: { TicketCredentialCache.shared.value { TicketCredentialStore.live.read() } },
-        transport: { request in
-            let (data, response) = try await URLSession.shared.data(for: request)
-            return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
-        },
-        keyRejected: { TicketCredentialCache.shared.invalidate() }
-    )
+    /// Zugang eines Workspaces: Jeder hat seinen eigenen Key.
+    static func live(workspace: String) -> LinearGraphQLClient {
+        LinearGraphQLClient(
+            apiKey: { TicketCredentialCache.shared.value(for: workspace) { TicketCredentialStore.live.read(workspace) } },
+            transport: liveTransport,
+            keyRejected: { TicketCredentialCache.shared.invalidate(workspace) }
+        )
+    }
+
+    /// Mit einem Key, der noch nicht gespeichert ist (Prüfung bei der Einrichtung).
+    static func live(key: String) -> LinearGraphQLClient {
+        LinearGraphQLClient(apiKey: { key }, transport: liveTransport)
+    }
+
+    static let liveTransport: (URLRequest) async throws -> (Data, Int) = { request in
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
+    }
 
     /// Führt die Anfrage aus und liefert das Feld `data`.
     func run(_ query: String, variables: [String: Any] = [:]) async throws -> [String: Any] {
@@ -79,30 +89,28 @@ struct LinearGraphQLClient {
 
 // MARK: - Zugang im Schlüsselbund
 
-/// Merkt sich den Key für die Dauer des Prozesses. Ohne das startete jeder
-/// GraphQL-Aufruf einen `security`-Prozess, in der App alle 30 Sekunden.
+/// Merkt sich die Keys für die Dauer des Prozesses, je Workspace einen. Ohne
+/// das startete jeder GraphQL-Aufruf einen `security`-Prozess, in der App alle
+/// 30 Sekunden.
 final class TicketCredentialCache: @unchecked Sendable {
     static let shared = TicketCredentialCache()
 
     private let lock = NSLock()
-    private var loaded = false
-    private var cached: String?
+    private var cached: [String: String] = [:]
 
-    func value(_ read: () -> String?) -> String? {
+    func value(for workspace: String, _ read: () -> String?) -> String? {
         lock.lock()
         defer { lock.unlock() }
-        if !loaded {
-            cached = read()
-            // Ein fehlender Key wird nicht gemerkt: Er kann gleich eingerichtet werden.
-            loaded = cached != nil
-        }
-        return cached
+        if let known = cached[workspace] { return known }
+        // Ein fehlender Key wird nicht gemerkt: Er kann gleich eingerichtet werden.
+        let fresh = read()
+        cached[workspace] = fresh
+        return fresh
     }
 
-    func invalidate() {
+    func invalidate(_ workspace: String) {
         lock.lock()
-        loaded = false
-        cached = nil
+        cached[workspace] = nil
         lock.unlock()
     }
 }
@@ -114,33 +122,38 @@ final class TicketCredentialCache: @unchecked Sendable {
 /// Build als fremde App, und der Eintrag wäre nach jedem `make dev` gesperrt.
 /// Einträge, die `security` anlegt, liest `security` ohne Rückfrage, egal aus
 /// welchem Build und aus welchem Claude-Konto.
+///
+/// Je Workspace ein Eintrag: derselbe Dienst, das Konto ist das Kürzel des
+/// Workspaces. So kann ein Aufruf für die eine Firma nie mit dem Key der
+/// anderen laufen.
 struct TicketCredentialStore {
     static let service = "whisperm8-linear-api-key"
-    static let account = "linear"
 
-    var read: () -> String?
+    var read: (_ workspace: String) -> String?
     /// `false`, wenn der Eintrag danach nicht lesbar ist.
-    var write: (String) -> Bool
-    var delete: () -> Void
+    var write: (_ workspace: String, _ key: String) -> Bool
+    var delete: (_ workspace: String) -> Void
 
     static let live = TicketCredentialStore(
-        read: {
-            let result = SecurityTool.run(["find-generic-password", "-a", account, "-s", service, "-w"])
+        read: { workspace in
+            guard TicketConfig.isWorkspaceName(workspace) else { return nil }
+            let result = SecurityTool.run(["find-generic-password", "-a", workspace, "-s", service, "-w"])
             let value = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             return result.exitCode == 0 && !value.isEmpty ? value : nil
         },
-        write: { key in
-            guard isStorable(key) else { return false }
+        write: { workspace, key in
+            guard isStorable(key), TicketConfig.isWorkspaceName(workspace) else { return false }
             // Über stdin, nie als Argument: Argumente stehen in der Prozessliste.
-            let command = "add-generic-password -U -a \"\(account)\" -s \"\(service)\" -l \"WhisperM8 Linear API-Key\" -w \"\(key)\"\n"
+            let command = "add-generic-password -U -a \"\(workspace)\" -s \"\(service)\" -l \"WhisperM8 Linear API-Key \(workspace)\" -w \"\(key)\"\n"
             _ = SecurityTool.run(["-i"], stdin: command)
-            TicketCredentialCache.shared.invalidate()
-            let check = SecurityTool.run(["find-generic-password", "-a", account, "-s", service, "-w"])
+            TicketCredentialCache.shared.invalidate(workspace)
+            let check = SecurityTool.run(["find-generic-password", "-a", workspace, "-s", service, "-w"])
             return check.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == key
         },
-        delete: {
-            _ = SecurityTool.run(["delete-generic-password", "-a", account, "-s", service])
-            TicketCredentialCache.shared.invalidate()
+        delete: { workspace in
+            guard TicketConfig.isWorkspaceName(workspace) else { return }
+            _ = SecurityTool.run(["delete-generic-password", "-a", workspace, "-s", service])
+            TicketCredentialCache.shared.invalidate(workspace)
         }
     )
 

@@ -37,7 +37,7 @@ WhisperM8 selbst gilt, steht hier:
 
 | | |
 |---|---|
-| Werkzeug | Linear, Workspace „WhisperM8“ (`linear.app/whisperm8`) |
+| Werkzeug | Linear, Workspace „WhisperM8“ (`linear.app/whisperm8`, Kürzel `whisperm8`) |
 | Team | `WM8`, zugeordnet dem Projektordner des Repos |
 | Status | Backlog · Todo · In Progress · Merge-bereit · Done · Canceled |
 | Labels | `Handtest` und `Entscheidung` (wartet auf den Nutzer), `Selbst erfasst` (vom Supervisor von sich aus angelegt, nicht beauftragt), dazu `Bug`, `Feature`, `Improvement` |
@@ -55,11 +55,35 @@ WhisperM8 selbst gilt, steht hier:
 ## Einrichtung
 
 1. **Zugang:** `pbpaste | whisperm8 tickets setup --key-stdin` prüft den kopierten Linear-Key bei Linear und
-   legt ihn in den Login-Schlüsselbund (Eintrag `whisperm8-linear-api-key`). Ein abgelehnter Key wird nicht
-   gespeichert.
-2. **Zuordnung:** `whisperm8 tickets setup --project <Ordner> --team WM8` schreibt, welches Projekt zu welchem
-   Team gehört. Arbeitsordner unterhalb des Projekts zählen mit.
+   legt ihn in den Login-Schlüsselbund (Eintrag `whisperm8-linear-api-key`, Konto = Kürzel des Workspaces). Zu
+   welchem Workspace der Key gehört, sagt Linear; er lässt sich nicht unter dem falschen ablegen. Ein
+   abgelehnter Key wird nicht gespeichert.
+2. **Zuordnung:** `whisperm8 tickets setup --team WM8 --project <Ordner>` schreibt, welches Projekt zu welchem
+   Team gehört und in welchem Workspace das Team liegt. Arbeitsordner unterhalb des Projekts zählen mit. Ohne
+   `--workspace` sieht die Kommandozeile nach, in welchem eingerichteten Workspace es das Team gibt.
 3. **Prüfen:** `whisperm8 tickets doctor`.
+
+Liegt ein Key schon im Schlüsselbund (von einem anderen Werkzeug abgelegt), übernimmt ihn
+`whisperm8 tickets setup --workspace <Kürzel>` nach einer Prüfung bei Linear.
+
+## Mehrere Workspaces
+
+Wer für mehr als eine Firma arbeitet, hat mehr als einen Workspace. Jeder ist ein eigener Mandant mit eigenem
+Key, eigenen Teams und eigener Rechnung.
+
+- **Weg der Auflösung:** Ticket-Nummer → Team (`DS-12` → `DS`) → Workspace (`tickets.json`) → Key dieses
+  Workspaces. Bei `board`, `list` und `new` kommt das Team aus dem Projekt des aktuellen Ordners oder `--team`.
+- **Nie geraten:** Gibt es nur einen Workspace, liegt jedes Team dort. Bei mehreren muss das Team zugeordnet
+  sein (`tickets setup --team <Kürzel>`); sonst bricht der Befehl ab, bevor er Linear fragt.
+- **Schreibsperre über die Projektgrenze:** Aus einem Projektordner wird nur in den Workspace dieses Projekts
+  geschrieben. Ein Chat der einen Firma kann die Tickets der anderen lesen, aber nicht ändern, und er hängt
+  sich nicht an deren Tickets. Der Befehl endet mit Exit 4, bevor die fremde Quelle gefragt wird. Verlangt der
+  Nutzer es ausdrücklich, hebt `--other-workspace` die Sperre für diesen einen Aufruf auf. Außerhalb jedes
+  zugeordneten Ordners (Mensch im Terminal) gibt es keine Grenze.
+- **`mine`** fragt alle eingerichteten Workspaces: Ein Chat kann an Tickets mehrerer gehangen haben.
+- **`doctor`** prüft jeden Zugang einzeln und meldet einen Key, der unter dem falschen Workspace liegt.
+- Der Linear-MCP kennt diese Sperre nicht. Wer ihn je Projekt begrenzen will, sperrt den Server des anderen
+  Workspaces in der `.claude/settings.json` des Projekts.
 
 ### Warum der Key über `/usr/bin/security` läuft
 
@@ -97,7 +121,7 @@ Services/Tickets/TicketBoardModel.swift      wer sitzt woran, Chats ohne offenes
 Services/Tickets/TicketSource.swift          Grenze zum Ticket-Werkzeug, Fehler, Stand-Zeile
 Services/Tickets/LinearGraphQLClient.swift   ein Aufruf, Fehlerübersetzung; Key im Schlüsselbund
 Services/Tickets/LinearTicketSource.swift    die einzige Stelle, die Linear kennt
-Services/Tickets/TicketConfig.swift          Projektordner ↔ Team (tickets.json)
+Services/Tickets/TicketConfig.swift          Projektordner ↔ Team ↔ Workspace (tickets.json)
 Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die spätere Ansicht
 CLI/TicketsCLICommand.swift                  Argumente, Hilfe, Umgebung
 CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
@@ -111,14 +135,16 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
   „Jarvis“) stehen getrennt.
 - **Abgegebene Tickets:** in Arbeit, kein Chat sitzt mehr daran, einer hat die Verknüpfung beendet. Sie zeigen
   „abgegeben von …“ und zählen nicht als „ohne Agent“: Sie warten auf den Merge, nicht auf einen Chat.
-- **Key je Prozess einmal gelesen** (`TicketCredentialCache`); lehnt Linear ihn ab, wird er verworfen, damit
-  ein ersetzter Key ohne Neustart gilt.
+- **Key je Prozess und Workspace einmal gelesen** (`TicketCredentialCache`); lehnt Linear ihn ab, wird er
+  verworfen, damit ein ersetzter Key ohne Neustart gilt.
+- **Quelle je Workspace:** Die Kommandozeile bekommt keine fertige Quelle, sondern eine Funktion
+  Workspace → Quelle. `Access` in `TicketsCLIRunner` wählt sie je Team und hält die Schreibsperre ein.
 
 ## Daten und Verbindungen
 
-- Eigene Datei: `~/Library/Application Support/WhisperM8/tickets.json` (Projektordner → Team, nichts Geheimes).
-  Geschrieben von `whisperm8 tickets setup`.
-- Schlüsselbund: Eintrag `whisperm8-linear-api-key`.
+- Eigene Datei: `~/Library/Application Support/WhisperM8/tickets.json` (Projektordner → Team, Team → Workspace,
+  Liste der Workspaces; nichts Geheimes). Geschrieben von `whisperm8 tickets setup`.
+- Schlüsselbund: Dienst `whisperm8-linear-api-key`, je Workspace ein Eintrag mit dem Kürzel als Konto.
 - Netz: `https://api.linear.app/graphql`, nur wenn ein `tickets`-Befehl läuft. Die App selbst baut bisher keine
   Verbindung auf; das kommt mit der Ansicht und ihrem Schalter.
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,

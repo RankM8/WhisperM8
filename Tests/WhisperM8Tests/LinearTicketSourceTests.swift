@@ -258,16 +258,39 @@ final class LinearTicketSourceTests: XCTestCase {
         var reads = 0
         var stored: String? = nil
         let read: () -> String? = { reads += 1; return stored }
-        XCTAssertNil(cache.value(read))
-        XCTAssertNil(cache.value(read))
+        XCTAssertNil(cache.value(for: "whisperm8", read))
+        XCTAssertNil(cache.value(for: "whisperm8", read))
         XCTAssertEqual(reads, 2, "ein fehlender Key wird nicht gemerkt")
         stored = "lin_api_a"
-        XCTAssertEqual(cache.value(read), "lin_api_a")
-        XCTAssertEqual(cache.value(read), "lin_api_a")
+        XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_a")
+        XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_a")
         XCTAssertEqual(reads, 3, "einmal gelesen, dann gemerkt")
         stored = "lin_api_b"
-        cache.invalidate()
-        XCTAssertEqual(cache.value(read), "lin_api_b")
+        cache.invalidate("whisperm8")
+        XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_b")
+    }
+
+    func testCredentialCacheKeepsWorkspacesApart() {
+        let cache = TicketCredentialCache()
+        XCTAssertEqual(cache.value(for: "whisperm8") { "lin_api_a" }, "lin_api_a")
+        XCTAssertEqual(cache.value(for: "dealsupply") { "lin_api_b" }, "lin_api_b", "der Key des einen gilt nie für den anderen")
+        cache.invalidate("dealsupply")
+        XCTAssertEqual(cache.value(for: "whisperm8") { "falsch" }, "lin_api_a", "nur der abgelehnte Key wird verworfen")
+        XCTAssertEqual(cache.value(for: "dealsupply") { "lin_api_c" }, "lin_api_c")
+    }
+
+    func testAccountNamesTheWorkspaceAndTeamsAreListed() async throws {
+        let stub = Stub()
+        stub.replies = [
+            ("organization", 200, #"{"data":{"viewer":{"name":"Giuliano Costa","admin":true},"organization":{"name":"DealSupply","urlKey":"dealsupply"}}}"#),
+            ("teams(first: 100)", 200, #"{"data":{"teams":{"nodes":[{"key":"PRB"},{"key":"DS"},{"key":"dea"}]}}}"#),
+        ]
+        let source = LinearTicketSource(client: stub.client())
+        let account = try await source.account()
+        XCTAssertEqual(account.workspaceKey, "dealsupply")
+        XCTAssertEqual(account.workspace, "DealSupply (linear.app/dealsupply)")
+        let teams = try await source.teams()
+        XCTAssertEqual(teams, ["DEA", "DS", "PRB"])
     }
 
     func testErrorMessagesNeverContainTheKey() {

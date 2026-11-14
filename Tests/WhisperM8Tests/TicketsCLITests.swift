@@ -10,16 +10,23 @@ final class TicketsCLITests: XCTestCase {
     private let jarvis = UUID(uuidString: "A37D241B-0000-4000-8000-000000000003")!
     private let giuliano = TicketPerson(id: "u1", name: "Giuliano Costa")
     private let project = "/Users/g/repos/whisperm8"
+    private let otherProject = "/Users/g/repos/ListM8"
 
     private final class World {
+        /// Quelle des Workspaces `whisperm8`.
         let source = TicketSourceStub()
+        /// Quelle des zweiten Workspaces `dealsupply`.
+        let other = TicketSourceStub()
+        /// Welche Workspaces angesprochen wurden, in Reihenfolge.
+        var asked: [String] = []
         var config = TicketConfig()
         var savedConfigs: [TicketConfig] = []
-        var storedKey: String? = "lin_api_alt"
+        var storedKeys: [String: String] = ["whisperm8": "lin_api_alt"]
+        /// Geschriebene Keys als `workspace=key`.
         var writtenKeys: [String] = []
         var writeSucceeds = true
         var validation: Result<TicketAccount, TicketSourceError> =
-            .success(TicketAccount(userName: "Giuliano Costa", workspace: "Test (linear.app/test)", isAdmin: true))
+            .success(TicketAccount(userName: "Giuliano Costa", workspace: "WhisperM8 (linear.app/whisperm8)", workspaceKey: "whisperm8", isAdmin: true))
         var chats: [TicketChat] = []
         var appReachable = true
         var caller: UUID?
@@ -31,6 +38,7 @@ final class TicketsCLITests: XCTestCase {
     private func makeWorld() -> World {
         let world = World()
         world.config.set(team: "WM8", forProject: project)
+        world.config.set(workspace: "whisperm8", forTeam: "WM8")
         world.caller = jon
         world.chats = [
             chat(jon, "6 Jon · WM8-23 Linear", state: .working),
@@ -47,17 +55,20 @@ final class TicketsCLITests: XCTestCase {
 
     private func environment(_ world: World) -> TicketsCLIEnvironment {
         TicketsCLIEnvironment(
-            source: world.source,
+            source: { workspace in
+                world.asked.append(workspace)
+                return workspace == "dealsupply" ? world.other : world.source
+            },
             config: { world.config },
             saveConfig: { world.config = $0; world.savedConfigs.append($0) },
             credential: TicketCredentialStore(
-                read: { world.storedKey },
-                write: { key in
-                    world.writtenKeys.append(key)
-                    if world.writeSucceeds { world.storedKey = key }
+                read: { world.storedKeys[$0] },
+                write: { workspace, key in
+                    world.writtenKeys.append("\(workspace)=\(key)")
+                    if world.writeSucceeds { world.storedKeys[workspace] = key }
                     return world.writeSucceeds
                 },
-                delete: { world.storedKey = nil }),
+                delete: { world.storedKeys[$0] = nil }),
             validateKey: { _ in world.validation },
             chats: { (world.chats, world.appReachable) },
             callerChatID: { world.caller },
@@ -69,7 +80,26 @@ final class TicketsCLITests: XCTestCase {
     }
 
     private func run(_ arguments: [String], _ world: World) async throws -> TicketsCLIRunner.Output {
-        await TicketsCLIRunner.execute(try TicketsCLIArguments.parse(arguments), environment: environment(world))
+        await TicketsCLIRunner.execute(try TicketsCLIArguments.parse(arguments), environment: environment(world),
+                                       otherWorkspace: TicketsCLIArguments.allowsOtherWorkspace(arguments))
+    }
+
+    /// Zwei Firmen: `whisperm8` mit dem Team WM8, `dealsupply` mit dem Team DS.
+    private func twoWorkspaceWorld() -> World {
+        let world = makeWorld()
+        world.config.set(team: "DS", forProject: otherProject)
+        world.config.set(workspace: "dealsupply", forTeam: "DS")
+        world.storedKeys["dealsupply"] = "lin_api_ds"
+        world.other.onAccount = {
+            TicketAccount(userName: "Giuliano Costa", workspace: "DealSupply (linear.app/dealsupply)", workspaceKey: "dealsupply", isAdmin: true)
+        }
+        world.other.onTeams = { ["DEA", "DS", "PRB"] }
+        world.other.onTicket = { key in
+            var ticket = TicketFixtures.ticket(5, status: "Todo", title: "Import prüfen")
+            ticket.key = key
+            return TicketContext(ticket: ticket, team: "DS", statuses: TicketFixtures.statuses)
+        }
+        return world
     }
 
     private func context(_ ticket: Ticket) -> TicketContext {
@@ -77,8 +107,8 @@ final class TicketsCLITests: XCTestCase {
     }
 
     /// Schreibende Aufrufe, ohne die Lese-Aufrufe davor.
-    private func writes(_ world: World) -> [String] {
-        world.source.calls.filter { !$0.hasPrefix("ticket ") && !$0.hasPrefix("board ") && !$0.hasPrefix("person ") && $0 != "linked" && $0 != "account" }
+    private func writes(_ world: World, _ source: TicketSourceStub? = nil) -> [String] {
+        (source ?? world.source).calls.filter { !$0.hasPrefix("ticket ") && !$0.hasPrefix("board ") && !$0.hasPrefix("person ") && $0 != "linked" && $0 != "account" }
     }
 
     // MARK: Argumente
@@ -130,7 +160,7 @@ final class TicketsCLITests: XCTestCase {
     func testParseErrors() {
         let cases: [[String]] = [
             ["show"], ["show", "abc"], ["show", "WM8-1", "extra"], ["board", "--falsch"], ["list", "--mine", "--unassigned"],
-            ["label", "WM8-1"], ["new", "Titel", "--priority", "sofort"], ["setup", "--project", "/x"], ["link", "WM8-1", "--chat"],
+            ["label", "WM8-1"], ["new", "Titel", "--priority", "sofort"], ["setup", "--project", "/x"], ["link", "WM8-1", "--chat"], ["setup", "--workspace"],
             ["gibtsnicht"], ["new", "  "],
         ]
         for arguments in cases {
@@ -505,15 +535,15 @@ final class TicketsCLITests: XCTestCase {
         world.stdin = "lin_api_neu\n"
         let stored = try await run(["setup", "--key-stdin"], world)
         XCTAssertEqual(stored.exitCode, 0)
-        XCTAssertEqual(world.writtenKeys, ["lin_api_neu"])
+        XCTAssertEqual(world.writtenKeys, ["whisperm8=lin_api_neu"], "abgelegt unter dem Workspace, den Linear zum Key nennt")
         XCTAssertFalse(stored.stdout.contains("lin_api"), "der Key steht nie in der Ausgabe")
 
         world.validation = .failure(.unauthorized)
         world.stdin = "lin_api_falsch"
         let rejected = try await run(["setup", "--key-stdin"], world)
         XCTAssertEqual(rejected.exitCode, TicketsCLIExit.unavailable)
-        XCTAssertEqual(world.writtenKeys, ["lin_api_neu"], "abgelehnter Key wird nicht gespeichert")
-        XCTAssertEqual(world.storedKey, "lin_api_neu")
+        XCTAssertEqual(world.writtenKeys, ["whisperm8=lin_api_neu"], "abgelehnter Key wird nicht gespeichert")
+        XCTAssertEqual(world.storedKeys["whisperm8"], "lin_api_neu")
 
         world.stdin = "kein key mit \"zeichen\""
         let invalid = try await run(["setup", "--key-stdin"], world)
@@ -523,10 +553,203 @@ final class TicketsCLITests: XCTestCase {
     func testSetupProjectMappingResolvesRelativePaths() async throws {
         let world = makeWorld()
         world.config = TicketConfig()
+        world.config.add(workspace: "dealsupply")
+        world.other.onTeams = { ["DS"] }
         world.directory = "/Users/g/repos"
         let output = try await run(["setup", "--project", "ListM8", "--team", "ds"], world)
         XCTAssertEqual(world.savedConfigs.last?.teamsByProjectPath, ["/Users/g/repos/ListM8": "DS"])
-        XCTAssertTrue(output.stdout.contains("/Users/g/repos/ListM8 gehört zum Team DS."))
+        XCTAssertEqual(world.savedConfigs.last?.workspacesByTeam, ["DS": "dealsupply"])
+        XCTAssertTrue(output.stdout.contains("/Users/g/repos/ListM8 gehört zum Team DS im Workspace „dealsupply“."), output.stdout)
+    }
+
+    // MARK: Mehrere Workspaces
+
+    func testTicketNumberPicksTheWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
+        _ = try await run(["show", "WM8-12"], world)
+        _ = try await run(["show", "DS-5"], world)
+        XCTAssertEqual(world.asked, ["whisperm8", "dealsupply"], "jede Nummer geht an den Workspace ihres Teams")
+        XCTAssertEqual(world.source.calls, ["ticket WM8-12"])
+        XCTAssertEqual(world.other.calls, ["ticket DS-5"], "lesen über die Grenze geht")
+    }
+
+    func testNoWritingIntoTheOtherWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        // Der Aufrufer steht im WhisperM8-Projekt (auch in einem Arbeitsordner darunter).
+        world.directory = project + "/.claude/worktrees/ticket-board"
+        let commands: [[String]] = [
+            ["link", "DS-5"], ["done", "DS-5", "--status", "Merge-bereit"], ["unlink", "DS-5"], ["status", "DS-5", "Todo"],
+            ["note", "DS-5", "Stand"], ["comment", "DS-5", "Text"], ["assign", "DS-5", "me"], ["label", "DS-5", "--add", "Bug"],
+            ["new", "Titel", "--team", "DS"],
+        ]
+        for command in commands {
+            let output = try await run(command, world)
+            XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict, "\(command)")
+            XCTAssertTrue(output.stderr.contains("„dealsupply“") && output.stderr.contains("„whisperm8“"), output.stderr)
+            XCTAssertTrue(output.stderr.contains("--other-workspace"))
+        }
+        XCTAssertTrue(world.other.calls.isEmpty, "die fremde Quelle wird nicht einmal gefragt: \(world.other.calls)")
+        XCTAssertTrue(world.asked.isEmpty)
+
+        // Umgekehrt genauso: aus dem anderen Projekt nicht ins WM8-Team.
+        world.directory = otherProject
+        let back = try await run(["comment", "WM8-12", "Text"], world)
+        XCTAssertEqual(back.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(world.source.calls.isEmpty)
+    }
+
+    func testWritingInTheOwnWorkspaceAndWithExplicitFlag() async throws {
+        let world = twoWorkspaceWorld()
+        world.directory = otherProject
+        let own = try await run(["comment", "DS-5", "Text"], world)
+        XCTAssertEqual(own.exitCode, 0, own.stderr)
+        XCTAssertEqual(writes(world, world.other), ["comment id-5 Text"])
+
+        world.directory = project
+        let forced = try await run(["comment", "DS-5", "Text", "--other-workspace"], world)
+        XCTAssertEqual(forced.exitCode, 0, forced.stderr)
+        XCTAssertEqual(writes(world, world.other).count, 2, "nur mit dem ausdrücklichen Schalter")
+        XCTAssertTrue(world.source.calls.isEmpty, "der eigene Workspace bleibt unberührt")
+        XCTAssertFalse(TicketsCLIArguments.allowsOtherWorkspace(["comment", "DS-5", "--", "--other-workspace"]), "hinter -- ist es Text")
+
+        // Außerhalb jedes Projekts (Mensch im Terminal) gibt es keine Grenze.
+        world.directory = "/Users/g"
+        world.caller = nil
+        let outside = try await run(["comment", "DS-5", "Text"], world)
+        XCTAssertEqual(outside.exitCode, 0, outside.stderr)
+    }
+
+    func testChatOfOneProjectDoesNotHangOnTicketsOfTheOther() async throws {
+        let world = twoWorkspaceWorld()
+        // Aus dem Terminal, ohne Projektgrenze für den Aufrufer: Der Chat selbst gehört zu WhisperM8.
+        world.directory = "/Users/g"
+        let output = try await run(["link", "DS-5", "--chat", "840b"], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict)
+        XCTAssertTrue(output.stderr.contains("Dex") && output.stderr.contains("„dealsupply“"), output.stderr)
+        XCTAssertTrue(world.other.calls.isEmpty)
+    }
+
+    func testUnmappedTeamIsNeverGuessed() async throws {
+        let world = twoWorkspaceWorld()
+        let output = try await run(["show", "PRB-1"], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.usage)
+        XCTAssertTrue(output.stderr.contains("tickets setup --team PRB"), output.stderr)
+        XCTAssertTrue(world.asked.isEmpty, "bei zwei Workspaces wird nicht geraten")
+
+        // Mit nur einem Workspace liegt jedes Team dort.
+        let single = makeWorld()
+        single.source.onTicket = { _ in self.context(TicketFixtures.ticket(1)) }
+        let found = try await run(["show", "ABC-1"], single)
+        XCTAssertEqual(found.exitCode, 0, found.stderr)
+        XCTAssertEqual(single.asked, ["whisperm8"])
+    }
+
+    func testMineAsksEveryWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        world.source.onLinked = { _ in [TicketFixtures.ticket(23, links: [TicketFixtures.link(self.jon)])] }
+        world.other.onLinked = { _ in
+            var ticket = TicketFixtures.ticket(5, links: [TicketFixtures.link(self.jon, active: false)])
+            ticket.key = "DS-5"
+            return [ticket]
+        }
+        let output = try await run(["mine"], world)
+        XCTAssertEqual(output.exitCode, 0, output.stderr)
+        XCTAssertTrue(output.stdout.contains("WM8-23") && output.stdout.contains("DS-5"), output.stdout)
+        XCTAssertEqual(Set(world.asked), ["whisperm8", "dealsupply"])
+    }
+
+    func testSetupStoresTheKeyUnderItsOwnWorkspace() async throws {
+        let world = makeWorld()
+        world.validation = .success(TicketAccount(userName: "Giuliano Costa", workspace: "DealSupply (linear.app/dealsupply)",
+                                                  workspaceKey: "dealsupply", isAdmin: true))
+        world.stdin = "lin_api_ds"
+        let wrong = try await run(["setup", "--key-stdin", "--workspace", "whisperm8"], world)
+        XCTAssertEqual(wrong.exitCode, TicketsCLIExit.conflict, "ein Key lässt sich nicht unter dem falschen Workspace ablegen")
+        XCTAssertTrue(world.writtenKeys.isEmpty)
+        XCTAssertEqual(world.storedKeys, ["whisperm8": "lin_api_alt"])
+
+        let stored = try await run(["setup", "--key-stdin"], world)
+        XCTAssertEqual(stored.exitCode, 0, stored.stderr)
+        XCTAssertEqual(world.storedKeys, ["whisperm8": "lin_api_alt", "dealsupply": "lin_api_ds"], "der andere Key bleibt, wie er ist")
+        XCTAssertEqual(world.config.knownWorkspaces, ["dealsupply", "whisperm8"])
+        XCTAssertFalse(stored.stdout.contains("lin_api"))
+    }
+
+    func testSetupFindsTheWorkspaceOfATeam() async throws {
+        let world = twoWorkspaceWorld()
+        let found = try await run(["setup", "--team", "prb"], world)
+        XCTAssertEqual(found.exitCode, 0, found.stderr)
+        XCTAssertEqual(world.config.workspacesByTeam["PRB"], "dealsupply")
+        XCTAssertNil(world.config.teamsByProjectPath.values.first { $0 == "PRB" }, "ohne --project nur das Team")
+
+        let missing = try await run(["setup", "--team", "XYZ"], world)
+        XCTAssertEqual(missing.exitCode, TicketsCLIExit.notFound)
+
+        world.source.onTeams = { ["WM8", "DEA"] }
+        let twice = try await run(["setup", "--team", "DEA"], world)
+        XCTAssertEqual(twice.exitCode, TicketsCLIExit.conflict, "gibt es das Kürzel in beiden, muss der Nutzer wählen")
+        XCTAssertNil(world.config.workspacesByTeam["DEA"])
+        let chosen = try await run(["setup", "--team", "DEA", "--workspace", "dealsupply"], world)
+        XCTAssertEqual(chosen.exitCode, 0, chosen.stderr)
+        XCTAssertEqual(world.config.workspacesByTeam["DEA"], "dealsupply")
+
+        let notThere = try await run(["setup", "--team", "DS", "--workspace", "whisperm8"], world)
+        XCTAssertEqual(notThere.exitCode, TicketsCLIExit.notFound, "ein Team wird nur einem Workspace zugeordnet, in dem es das Team gibt")
+        XCTAssertEqual(world.config.workspacesByTeam["DS"], "dealsupply")
+    }
+
+    func testSetupAdoptsAKeyThatIsAlreadyInTheKeychain() async throws {
+        let world = makeWorld()
+        world.config = TicketConfig()
+        let missing = try await run(["setup", "--workspace", "dealsupply"], world)
+        XCTAssertEqual(missing.exitCode, TicketsCLIExit.unavailable, "ohne Key nichts zu übernehmen")
+
+        let adopted = try await run(["setup", "--team", "WM8", "--project", project, "--workspace", "whisperm8"], world)
+        XCTAssertEqual(adopted.exitCode, 0, adopted.stderr)
+        XCTAssertEqual(world.config.knownWorkspaces, ["whisperm8"])
+        XCTAssertEqual(world.config.workspace(forDirectory: project + "/Tests"), "whisperm8")
+
+        // Liegt unter dem Namen der Key eines anderen Workspaces, wird nichts übernommen.
+        world.storedKeys["dealsupply"] = "lin_api_falsch_abgelegt"
+        let mismatch = try await run(["setup", "--workspace", "dealsupply"], world)
+        XCTAssertEqual(mismatch.exitCode, TicketsCLIExit.conflict, mismatch.stderr)
+        XCTAssertEqual(world.config.knownWorkspaces, ["whisperm8"])
+
+        let invalid = try await run(["setup", "--workspace", "Deal Supply\""], world)
+        XCTAssertEqual(invalid.exitCode, TicketsCLIExit.usage)
+    }
+
+    func testDoctorChecksEveryWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        world.source.onBoard = { _ in TicketFixtures.snapshot([TicketFixtures.ticket(1)]) }
+        world.other.onBoard = { _ in TicketFixtures.snapshot([]) }
+        let healthy = try await run(["doctor"], world)
+        XCTAssertEqual(healthy.exitCode, 0, healthy.stdout)
+        XCTAssertTrue(healthy.stdout.contains("DealSupply (linear.app/dealsupply)") && healthy.stdout.contains("WhisperM8 (linear.app/whisperm8)"))
+        XCTAssertTrue(healthy.stdout.contains("(dealsupply)") && healthy.stdout.contains("(whisperm8)"), healthy.stdout)
+
+        // Ein Key unter dem falschen Namen würde in der falschen Firma schreiben.
+        world.other.onAccount = {
+            TicketAccount(userName: "Giuliano Costa", workspace: "WhisperM8 (linear.app/whisperm8)", workspaceKey: "whisperm8", isAdmin: true)
+        }
+        let swapped = try await run(["doctor"], world)
+        XCTAssertEqual(swapped.exitCode, TicketsCLIExit.unavailable)
+        XCTAssertTrue(swapped.stdout.contains("dealsupply: der hinterlegte Key gehört zu WhisperM8"), swapped.stdout)
+        XCTAssertFalse(swapped.stdout.contains("Team DS"), "ohne brauchbaren Zugang wird das Team nicht abgefragt")
+
+        world.storedKeys["dealsupply"] = nil
+        let noKey = try await run(["doctor"], world)
+        XCTAssertTrue(noKey.stdout.contains("FEHLER Linear-Key     dealsupply: fehlt"), noKey.stdout)
+        XCTAssertTrue(noKey.stdout.contains("ok     Team WM8"), "der andere Workspace läuft weiter")
+    }
+
+    func testAccessErrorsNameTheWorkspace() async throws {
+        let world = twoWorkspaceWorld()
+        world.other.onTicket = { _ in throw TicketSourceError.unauthorized }
+        let output = try await run(["show", "DS-5"], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.unavailable)
+        XCTAssertEqual(output.stderr, TicketSourceError.unauthorized.message + " Betroffen: Workspace „dealsupply“.")
     }
 
     func testDoctor() async throws {
@@ -535,7 +758,7 @@ final class TicketsCLITests: XCTestCase {
         XCTAssertEqual(healthy.exitCode, 0)
         XCTAssertTrue(healthy.stdout.contains("ok     Team WM8       4 offene Tickets, 2 mit Agent"), healthy.stdout)
 
-        world.storedKey = nil
+        world.storedKeys = [:]
         let noKey = try await run(["doctor"], world)
         XCTAssertEqual(noKey.exitCode, TicketsCLIExit.unavailable)
         XCTAssertTrue(noKey.stdout.contains("FEHLER Linear-Key"), "der Bericht steht auf stdout, der Exit-Code zeigt das Problem")
@@ -545,7 +768,7 @@ final class TicketsCLITests: XCTestCase {
         let checks = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(asJSON.stdout.utf8)) as? [[String: Any]])
         XCTAssertEqual(checks.first?["ok"] as? Bool, false, "auch im Fehlerfall lesbares JSON auf stdout")
 
-        world.storedKey = "lin_api_alt"
+        world.storedKeys = ["whisperm8": "lin_api_alt"]
         world.source.onAccount = { throw TicketSourceError.unauthorized }
         let rejected = try await run(["doctor"], world)
         XCTAssertTrue(rejected.stdout.contains("FEHLER Linear-Zugang"))
@@ -562,7 +785,8 @@ final class TicketsCLITests: XCTestCase {
             world.source.onTicket = { _ in throw error }
             let output = try await run(["show", "WM8-9"], world)
             XCTAssertEqual(output.exitCode, code, "\(error)")
-            XCTAssertEqual(output.stderr, error.message)
+            let named = error == .notConfigured || error == .unauthorized
+            XCTAssertEqual(output.stderr, error.message + (named ? " Betroffen: Workspace „whisperm8“." : ""))
             XCTAssertTrue(output.stdout.isEmpty)
         }
     }
