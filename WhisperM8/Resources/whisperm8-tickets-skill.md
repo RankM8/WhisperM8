@@ -9,7 +9,8 @@ description: Tickets aus Linear und die Chats, die daran arbeiten, über die Whi
 Ticket-Werkzeug (Linear) und die Chats in WhisperM8. Ein Chat hängt sich an sein Ticket; danach
 sieht der Nutzer am Board, wer woran sitzt, welche Chats laufen und welche Tickets niemanden haben.
 
-Jeder Befehl kennt `--json`. Hilfe: `whisperm8 tickets --help`.
+Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit `{"ok": true, "key": …, "message": …}`.
+Hilfe: `whisperm8 tickets --help`.
 
 ## Für jeden Chat, der an einem Ticket arbeitet
 
@@ -25,7 +26,8 @@ Jeder Befehl kennt `--json`. Hilfe: `whisperm8 tickets --help`.
 - `link` setzt ein Ticket, das noch nicht in Arbeit ist, auf „In Progress“. Mit `--no-status` bleibt der Status.
 - `note` ersetzt die erste Zeile des Tickets (`**Stand TT.MM.JJJJ:** …`). Das ist der Ort für den Stand, nicht
   eine Kette von Kommentaren. `comment` ist für Dinge, die als Verlauf stehen bleiben sollen.
-- Text-Argumente nehmen Text, `-` für stdin oder `@datei`. Tickets sind Markdown.
+- Text-Argumente nehmen Text, `-` für stdin oder `@datei`. Beginnt der Text selbst mit `-` oder `@`, gehört er
+  hinter `--`: `whisperm8 tickets comment WM8-12 -- "@Giuliano bitte prüfen"`. Tickets sind Markdown.
 - Gibt es zu einer Arbeit kein Ticket: dem Supervisor melden. Chats legen keine Tickets an.
 
 ## Wer welchen Status setzt
@@ -50,9 +52,13 @@ whisperm8 tickets list --mine                 # liegt beim Nutzer
 whisperm8 tickets list --status "Merge-bereit"
 ```
 
-- **Board lesen:** Unter „Laufende Chats ohne offenes Ticket“ steht je Chat „zuletzt an WM8-29 (Done)“ oder
-  „noch nie verknüpft“. Ist die Arbeit beendet: Chat schließen. Arbeitet er an etwas ohne Ticket: Ticket
-  anlegen und verknüpfen. Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt und brauchen kein Ticket.
+- **Board lesen:** Unter „Laufende Chats ohne offenes Ticket“ steht je Chat, woran er zuletzt saß:
+  - „zuletzt an WM8-12 (Merge-bereit)“: Er hat abgegeben und wartet auf deinen Merge. Offen lassen, bis gemergt ist.
+  - „zuletzt an WM8-29 (Done)“: Die Arbeit ist erledigt. Chat schließen.
+  - „noch nie verknüpft“: Er arbeitet ohne Ticket. Ticket anlegen und verknüpfen, oder schließen.
+  Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt und brauchen kein Ticket.
+- **Abgegebene Tickets:** Ein Ticket, das ein Chat mit `done` abgegeben hat und das noch in Arbeit steht (etwa
+  „Merge-bereit“), zeigt „abgegeben von <Chat>“ und zählt nicht zu `--no-agent`. Es wartet auf dich.
 - **Für einen anderen Chat handeln:** `--chat <Anfang der Chat-ID>` bei `link`, `done`, `unlink`, `mine`
   (IDs aus `whisperm8 chats list`).
 - **Nach dem Merge:** `whisperm8 tickets status WM8-12 Done`, dann den Chat schließen.

@@ -26,7 +26,8 @@ Plugin. Die sichtbare Ansicht (Board und Backlog im Agent-Chats-Fenster) ist gep
 | Anlegen und zuordnen | `tickets new`, `tickets assign`, `tickets label` |
 | Einrichten und prüfen | `tickets setup`, `tickets doctor` |
 
-Jeder Befehl kennt `--json`. Wer welchen Status setzt und wie Chats und Supervisor damit arbeiten, steht im
+Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit `{"ok": true, "key": …, "message": …}`,
+`doctor` schreibt seinen Bericht immer nach stdout. Wer welchen Status setzt und wie Chats und Supervisor damit arbeiten, steht im
 Skill `tickets` (`WhisperM8/Resources/whisperm8-tickets-skill.md`) und im Jarvis-Skill, Abschnitt 11.
 
 ## Einrichtung
@@ -83,8 +84,13 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 - **Werkzeug austauschbar:** Oberfläche und Kommandozeile kennen nur `TicketSource` und die Modelle.
 - **Zustand der Chats:** kommt aus der laufenden App (`sessions.live` über den Control-Socket), nie aus
   Linear. Ohne App bleibt er leer.
-- **Chats ohne offenes Ticket:** laufende Chats des Projekts, an denen kein offenes Ticket hängt, mit ihrem
-  letzten erledigten Ticket. Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt.
+- **Chats ohne offenes Ticket:** laufende Chats des Projekts, an denen kein Ticket mehr hängt, mit dem Ticket,
+  an dem sie zuletzt saßen („WM8-12 (Merge-bereit)“ oder „WM8-29 (Done)“). Supervisor-Chats (Titel beginnt mit
+  „Jarvis“) stehen getrennt.
+- **Abgegebene Tickets:** in Arbeit, kein Chat sitzt mehr daran, einer hat die Verknüpfung beendet. Sie zeigen
+  „abgegeben von …“ und zählen nicht als „ohne Agent“: Sie warten auf den Merge, nicht auf einen Chat.
+- **Key je Prozess einmal gelesen** (`TicketCredentialCache`); lehnt Linear ihn ab, wird er verworfen, damit
+  ein ersetzter Key ohne Neustart gilt.
 
 ## Daten und Verbindungen
 

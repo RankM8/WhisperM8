@@ -64,6 +64,20 @@ final class TicketBoardModelTests: XCTestCase {
         XCTAssertNil(model.entries[0].agents[0].chat)
     }
 
+    func testHandedOverTicketKeepsTheTrail() {
+        // Chat hat „Merge-bereit“ gesetzt und seine Verknüpfung beendet.
+        let model = TicketBoardBuilder.build(
+            snapshot: snapshot([
+                ticket(12, .started, links: [link(ole, active: false)], statusName: "Merge-bereit"),
+                ticket(13, .unstarted, links: [link(dex, active: false)], statusName: "Todo"),
+            ]),
+            chats: [chat(ole, "2 Ole"), chat(dex, "3 Dex")], projectPath: project)
+        XCTAssertTrue(model.entries[0].isHandedOver)
+        XCTAssertFalse(model.entries[1].isHandedOver, "noch nicht begonnen und verlassen: das Ticket braucht wieder jemanden")
+        XCTAssertEqual(model.looseChats.first { $0.chat.id == ole }?.earlier, ["WM8-12 (Merge-bereit)"])
+        XCTAssertEqual(TicketBoardFilter(agent: .withoutAgent).apply(to: model.entries).map(\.ticket.key), ["WM8-13"])
+    }
+
     func testClosedTicketLeavesTrailInsteadOfAgent() {
         let model = TicketBoardBuilder.build(
             snapshot: snapshot([

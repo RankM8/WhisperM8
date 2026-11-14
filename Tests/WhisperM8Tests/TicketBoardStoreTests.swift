@@ -134,6 +134,38 @@ final class TicketBoardStoreTests: XCTestCase {
         store.deactivate()
     }
 
+    func testSwitchingTeamWhileLoadingLoadsTheNewTeamAtOnce() async {
+        // Der erste Abruf hängt; das neue Team darf nicht 30 Sekunden auf ihn warten.
+        let source = TicketSourceStub()
+        let slow = Gate()
+        source.onBoard = { team in
+            if team == "WM8" { try? await slow.sleep(.seconds(1)) }
+            return TicketBoardSnapshot(team: team, statuses: [], tickets: [], fetchedAt: Date(timeIntervalSince1970: 0))
+        }
+        let gate = Gate()
+        let store = TicketBoardStore(source: source, sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { slow.count == 1 }
+        store.activate(team: "DS")
+        await settle { store.snapshot?.team == "DS" }
+        slow.release()
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(store.snapshot?.team, "DS", "die späte Antwort des alten Teams wird verworfen")
+        XCTAssertFalse(store.isLoading)
+        store.deactivate()
+    }
+
+    func testCancelledFetchIsNotAnError() async {
+        let source = TicketSourceStub()
+        source.onBoard = { _ in throw CancellationError() }
+        let gate = Gate()
+        let store = TicketBoardStore(source: source, sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { gate.count == 1 }
+        XCTAssertNil(store.lastError, "geschlossene Ansicht: kein „nicht erreichbar“ beim nächsten Öffnen")
+        store.deactivate()
+    }
+
     func testRefreshWithoutTeamDoesNothing() async {
         let source = TicketSourceStub()
         let store = TicketBoardStore(source: source)

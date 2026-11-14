@@ -12,13 +12,17 @@ struct LinearGraphQLClient {
     var apiKey: () -> String?
     /// Liefert Antwortdaten und HTTP-Status.
     var transport: (URLRequest) async throws -> (Data, Int)
+    /// Linear hat den Key abgelehnt: gemerkten Key verwerfen, damit ein
+    /// ersetzter Key ohne Neustart gilt.
+    var keyRejected: () -> Void = {}
 
     static let live = LinearGraphQLClient(
-        apiKey: { TicketCredentialStore.live.read() },
+        apiKey: { TicketCredentialCache.shared.value { TicketCredentialStore.live.read() } },
         transport: { request in
             let (data, response) = try await URLSession.shared.data(for: request)
             return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
+        },
+        keyRejected: { TicketCredentialCache.shared.invalidate() }
     )
 
     /// Führt die Anfrage aus und liefert das Feld `data`.
@@ -39,6 +43,8 @@ struct LinearGraphQLClient {
         } catch let error as TicketSourceError {
             throw error
         } catch {
+            // Abgebrochen (Ansicht geschlossen) ist kein Netzfehler.
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw TicketSourceError.network((error as? URLError)?.code.rawValue.description ?? "Netzfehler")
         }
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -46,7 +52,9 @@ struct LinearGraphQLClient {
             throw TicketSourceError.invalidResponse("HTTP \(status)")
         }
         if let errors = object["errors"] as? [[String: Any]], let first = errors.first {
-            throw Self.error(from: first, status: status)
+            let error = Self.error(from: first, status: status)
+            if error == .unauthorized { keyRejected() }
+            throw error
         }
         guard let payload = object["data"] as? [String: Any] else {
             if status == 401 || status == 403 { throw TicketSourceError.unauthorized }
@@ -70,6 +78,34 @@ struct LinearGraphQLClient {
 }
 
 // MARK: - Zugang im Schlüsselbund
+
+/// Merkt sich den Key für die Dauer des Prozesses. Ohne das startete jeder
+/// GraphQL-Aufruf einen `security`-Prozess, in der App alle 30 Sekunden.
+final class TicketCredentialCache: @unchecked Sendable {
+    static let shared = TicketCredentialCache()
+
+    private let lock = NSLock()
+    private var loaded = false
+    private var cached: String?
+
+    func value(_ read: () -> String?) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        if !loaded {
+            cached = read()
+            // Ein fehlender Key wird nicht gemerkt: Er kann gleich eingerichtet werden.
+            loaded = cached != nil
+        }
+        return cached
+    }
+
+    func invalidate() {
+        lock.lock()
+        loaded = false
+        cached = nil
+        lock.unlock()
+    }
+}
 
 /// Der Linear-Key liegt im Login-Schlüsselbund und wird über `/usr/bin/security`
 /// gelesen und geschrieben, so wie Claude Code es mit seinem Login macht.
@@ -98,11 +134,13 @@ struct TicketCredentialStore {
             // Über stdin, nie als Argument: Argumente stehen in der Prozessliste.
             let command = "add-generic-password -U -a \"\(account)\" -s \"\(service)\" -l \"WhisperM8 Linear API-Key\" -w \"\(key)\"\n"
             _ = SecurityTool.run(["-i"], stdin: command)
+            TicketCredentialCache.shared.invalidate()
             let check = SecurityTool.run(["find-generic-password", "-a", account, "-s", service, "-w"])
             return check.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == key
         },
         delete: {
             _ = SecurityTool.run(["delete-generic-password", "-a", account, "-s", service])
+            TicketCredentialCache.shared.invalidate()
         }
     )
 

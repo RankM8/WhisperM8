@@ -96,8 +96,10 @@ enum TicketSourceError: Error, Equatable {
 enum TicketStandLine {
     static func apply(_ text: String, to description: String, on date: Date, calendar: Calendar = .current) -> String {
         let c = calendar.dateComponents([.day, .month, .year], from: date)
-        let line = String(format: "**Stand %02d.%02d.%04d:** ", c.day ?? 0, c.month ?? 0, c.year ?? 0)
-            + text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Die Stand-Zeile ist eine Zeile: Ein Umbruch ließe beim nächsten Ersetzen einen Rest stehen.
+        let flat = text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
+        let line = String(format: "**Stand %02d.%02d.%04d:** ", c.day ?? 0, c.month ?? 0, c.year ?? 0) + flat
         var lines = description.components(separatedBy: "\n")
         if let first = lines.first, isStandLine(first) {
             lines[0] = line

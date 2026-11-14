@@ -195,6 +195,11 @@ final class LinearTicketSourceTests: XCTestCase {
         await assertThrows(.ambiguous("„xen“ passt auf mehrere Personen: Xenia Muster, Xeno Suter")) {
             _ = try await source.person(matching: "xen")
         }
+        let exact = try await source.person(matching: "xeno suter")
+        XCTAssertEqual(exact.id, "u2", "ein exakter Name gewinnt gegen ähnliche")
+        XCTAssertFalse(stub.requests.last?.query.contains("id: { eq") ?? true, "kein ID-Filter für einen Namen")
+        _ = try? await source.person(matching: "48801964-D507-4366-9864-492723DA01AB")
+        XCTAssertTrue(stub.requests.last?.query.contains("id: { eq: $q }") ?? false, "eine ID wird auch als ID gesucht")
     }
 
     // MARK: Fehler
@@ -227,6 +232,44 @@ final class LinearTicketSourceTests: XCTestCase {
         await assertThrows(.network("-1009")) { _ = try await stub.client().run("{ viewer { id } }") }
     }
 
+    func testCancellationIsNotANetworkError() async {
+        let stub = Stub()
+        stub.failure = URLError(.cancelled)
+        do {
+            _ = try await stub.client().run("{ viewer { id } }")
+            XCTFail("erwartet: Abbruch")
+        } catch {
+            XCTAssertTrue(error is CancellationError, "\(error)")
+        }
+    }
+
+    func testRejectedKeyDropsTheCachedOne() async {
+        let stub = Stub()
+        stub.replies = [("viewer", 401, #"{"errors":[{"message":"x","extensions":{"code":"AUTHENTICATION_ERROR"}}]}"#)]
+        var client = stub.client()
+        var dropped = 0
+        client.keyRejected = { dropped += 1 }
+        _ = try? await client.run("{ viewer { id } }")
+        XCTAssertEqual(dropped, 1)
+    }
+
+    func testCredentialCacheReadsOnceAndForgetsOnInvalidate() {
+        let cache = TicketCredentialCache()
+        var reads = 0
+        var stored: String? = nil
+        let read: () -> String? = { reads += 1; return stored }
+        XCTAssertNil(cache.value(read))
+        XCTAssertNil(cache.value(read))
+        XCTAssertEqual(reads, 2, "ein fehlender Key wird nicht gemerkt")
+        stored = "lin_api_a"
+        XCTAssertEqual(cache.value(read), "lin_api_a")
+        XCTAssertEqual(cache.value(read), "lin_api_a")
+        XCTAssertEqual(reads, 3, "einmal gelesen, dann gemerkt")
+        stored = "lin_api_b"
+        cache.invalidate()
+        XCTAssertEqual(cache.value(read), "lin_api_b")
+    }
+
     func testErrorMessagesNeverContainTheKey() {
         let all: [TicketSourceError] = [.notConfigured, .unauthorized, .rateLimited, .network("x"), .notFound("WM8-1"),
                                         .rejected("y"), .invalidResponse("z"), .ambiguous("a")]
@@ -250,6 +293,9 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertEqual(TicketStandLine.apply("neu", to: "", on: date, calendar: calendar), "**Stand 15.11.2026:** neu")
         XCTAssertEqual(TicketStandLine.apply("neu", to: "*Stand 13.11.2026: alt.*\nRest", on: date, calendar: calendar),
                        "**Stand 15.11.2026:** neu\nRest", "auch die Jira-Schreibweise wird ersetzt")
+        let twice = TicketStandLine.apply("zweiter Stand", to: TicketStandLine.apply("A\n B \n", to: old, on: date, calendar: calendar),
+                                          on: date, calendar: calendar)
+        XCTAssertEqual(twice, "**Stand 15.11.2026:** zweiter Stand\n\n## Ziel\nText", "mehrzeiliger Text hinterlässt keinen Rest")
     }
 
     func testCredentialMustFitTheCommandLine() {

@@ -360,8 +360,9 @@ Wo ein Projekt Tickets führt, ist das Ticket-Board dein zweites Fenster neben d
 (`whisperm8 tickets board`, Regeln im Skill `tickets`). Deine Aufgaben dabei:
 
 - **Jeder arbeitende Chat hängt an einem Ticket.** Gib beim Auftrag die Ticket-Nummer mit und lass den
-  Chat `whisperm8 tickets link <Ticket>` ausführen. Steht ein Chat unter „ohne offenes Ticket“, ordne ihn
-  zu oder schließe ihn.
+  Chat `whisperm8 tickets link <Ticket>` ausführen. Steht ein Chat unter „ohne offenes Ticket“, sagt der
+  Zusatz, was zu tun ist: „zuletzt an … (Merge-bereit)“ wartet auf deinen Merge, „(Done)“ kann zu, „noch nie
+  verknüpft“ braucht ein Ticket oder kann zu.
 - **Du führst den Status ab „Merge-bereit“.** Chats setzen „Merge-bereit“, du nach dem Merge „Done“
   (`whisperm8 tickets status <Ticket> Done`) und schließt den Chat.
 - **Neue Tickets** legst du an, nach dem Ja des Nutzers, im Aufbau aus dem Skill `tickets`. Chats melden dir

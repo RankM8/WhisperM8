@@ -10,11 +10,11 @@ enum TicketsCLIArguments: Equatable {
     case show(key: String, json: Bool)
     case mine(chat: String?, json: Bool)
     case link(key: String, chat: String?, keepStatus: Bool)
-    case done(key: String, chat: String?, status: String?, note: String?)
+    case done(key: String, chat: String?, status: String?, note: TicketsText?)
     case unlink(key: String, chat: String?)
     case status(key: String, name: String)
-    case note(key: String, text: String)
-    case comment(key: String, text: String)
+    case note(key: String, text: TicketsText)
+    case comment(key: String, text: TicketsText)
     case new(TicketsNewOptions)
     case assign(key: String, person: String)
     case label(key: String, add: [String], remove: [String])
@@ -25,13 +25,44 @@ enum TicketsCLIArguments: Equatable {
         case usage(String)
     }
 
+    /// `--json` gilt für jeden Befehl und steht vor einem `--`.
+    static func wantsJSON(_ arguments: [String]) -> Bool {
+        arguments.prefix { $0 != "--" }.contains("--json")
+    }
+
+    /// Schreibende Befehle: Mit `--json` kommt ihre Meldung als Objekt.
+    var isWrite: Bool {
+        switch self {
+        case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup: return true
+        case .help, .board, .list, .show, .mine, .doctor: return false
+        }
+    }
+
+    var ticketKey: String? {
+        switch self {
+        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _), .unlink(let key, _), .status(let key, _),
+             .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _):
+            return key
+        case .help, .board, .list, .mine, .new, .setup, .doctor:
+            return nil
+        }
+    }
+
     static func parse(_ arguments: [String]) throws -> TicketsCLIArguments {
         guard let command = arguments.first else { return .help }
         var rest = Array(arguments.dropFirst())
+        // Alles nach `--` ist wörtlicher Text, auch wenn er mit `-` oder `@` beginnt.
+        var literal: [String] = []
+        if let separator = rest.firstIndex(of: "--") {
+            literal = Array(rest[(separator + 1)...])
+            rest = Array(rest[..<separator])
+        }
+        var used = Set<String>()
 
         func flag(_ name: String) -> Bool {
             guard let index = rest.firstIndex(of: name) else { return false }
             rest.remove(at: index)
+            used.insert(name)
             return true
         }
         func value(_ name: String) throws -> String? {
@@ -39,18 +70,26 @@ enum TicketsCLIArguments: Equatable {
             guard index + 1 < rest.count else { throw ParseError.usage("\(name) braucht einen Wert") }
             let found = rest[index + 1]
             rest.removeSubrange(index...(index + 1))
+            used.insert(name)
             return found
         }
+        let json = flag("--json")
         func list(_ name: String) throws -> [String] {
             (try value(name) ?? "").split(whereSeparator: { $0 == "," }).map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }
         }
-        /// Positions-Argumente; danach darf nichts übrig sein. `-` allein ist
-        /// Text (stdin), keine Option.
+        /// Positions-Argumente (vor und nach `--`); danach darf nichts übrig
+        /// sein. `-` allein ist Text (stdin), keine Option.
         func positional(_ count: Int, _ what: String) throws -> [String] {
-            if let option = rest.first(where: { $0.hasPrefix("--") }) { throw ParseError.usage("Unbekannte Option: \(option)") }
-            guard rest.count == count else { throw ParseError.usage("Erwartet: \(what)") }
-            return rest
+            if let option = rest.first(where: { $0.hasPrefix("--") }) {
+                throw ParseError.usage(used.contains(option) ? "\(option) ist doppelt angegeben" : "Unbekannte Option: \(option)")
+            }
+            guard rest.count + literal.count == count else { throw ParseError.usage("Erwartet: \(what)") }
+            return rest + literal
+        }
+        /// Text an der Position `index`: nach `--` wörtlich, sonst `-` = stdin, `@pfad` = Datei.
+        func text(_ parts: [String], at index: Int) -> TicketsText {
+            index >= rest.count ? .literal(parts[index]) : TicketsText(parts[index])
         }
         func key(_ raw: String) throws -> String {
             let upper = raw.uppercased()
@@ -64,11 +103,10 @@ enum TicketsCLIArguments: Equatable {
         case "help", "--help", "-h":
             return .help
         case "board":
-            let json = flag("--json"), all = flag("--all"), team = try value("--team")
+            let all = flag("--all"), team = try value("--team")
             _ = try positional(0, "tickets board [--team T] [--all] [--json]")
             return .board(team: team?.uppercased(), all: all, json: json)
         case "list", "ls":
-            let json = flag("--json")
             var filter = TicketsListFilter()
             if flag("--mine") { filter.person = "me" }
             if flag("--unassigned") { filter.unassigned = true }
@@ -82,17 +120,16 @@ enum TicketsCLIArguments: Equatable {
             _ = try positional(0, "tickets list [Filter] [--json]")
             return .list(team: team?.uppercased(), filter: filter, json: json)
         case "show":
-            let json = flag("--json")
             return .show(key: try key(try positional(1, "tickets show <Ticket>")[0]), json: json)
         case "mine":
-            let json = flag("--json"), chat = try value("--chat")
+            let chat = try value("--chat")
             _ = try positional(0, "tickets mine [--chat REF] [--json]")
             return .mine(chat: chat, json: json)
         case "link":
             let keep = flag("--no-status"), chat = try value("--chat")
             return .link(key: try key(try positional(1, "tickets link <Ticket> [--chat REF] [--no-status]")[0]), chat: chat, keepStatus: keep)
         case "done":
-            let chat = try value("--chat"), status = try value("--status"), note = try value("--note")
+            let chat = try value("--chat"), status = try value("--status"), note = try value("--note").map(TicketsText.init)
             return .done(key: try key(try positional(1, "tickets done <Ticket> [--status S] [--note TEXT]")[0]),
                          chat: chat, status: status, note: note)
         case "unlink":
@@ -103,14 +140,14 @@ enum TicketsCLIArguments: Equatable {
             return .status(key: try key(parts[0]), name: parts[1])
         case "note":
             let parts = try positional(2, "tickets note <Ticket> <Text | - | @Datei>")
-            return .note(key: try key(parts[0]), text: parts[1])
+            return .note(key: try key(parts[0]), text: text(parts, at: 1))
         case "comment":
             let parts = try positional(2, "tickets comment <Ticket> <Text | - | @Datei>")
-            return .comment(key: try key(parts[0]), text: parts[1])
+            return .comment(key: try key(parts[0]), text: text(parts, at: 1))
         case "new":
             var options = TicketsNewOptions()
             options.team = try value("--team")?.uppercased()
-            options.description = try value("--description")
+            options.description = try value("--description").map(TicketsText.init)
             options.project = try value("--project")
             options.status = try value("--status")
             options.assignee = try value("--assignee")
@@ -137,11 +174,28 @@ enum TicketsCLIArguments: Equatable {
             _ = try positional(0, "tickets setup [--key-stdin] [--project ORDNER --team T]")
             return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased())
         case "doctor":
-            let json = flag("--json")
             _ = try positional(0, "tickets doctor [--json]")
             return .doctor(json: json)
         default:
             throw ParseError.usage("Unbekannter Befehl: \(command)")
+        }
+    }
+}
+
+/// Text für `note`, `comment`, `--note` und `--description`.
+enum TicketsText: Equatable {
+    case literal(String)
+    case stdin
+    case file(String)
+
+    /// `-` = stdin, `@pfad` = Datei, sonst der Text selbst.
+    init(_ raw: String) {
+        if raw == "-" {
+            self = .stdin
+        } else if raw.hasPrefix("@"), raw.count > 1 {
+            self = .file(String(raw.dropFirst()))
+        } else {
+            self = .literal(raw)
         }
     }
 }
@@ -158,7 +212,7 @@ struct TicketsListFilter: Equatable {
 struct TicketsNewOptions: Equatable {
     var team: String?
     var title = ""
-    var description: String?
+    var description: TicketsText?
     var project: String?
     var status: String?
     var priority: Int?
@@ -213,7 +267,9 @@ enum TicketsCLICommand {
       whisperm8 tickets status <Ticket> <Status>       z. B. "Merge-bereit", "Done"
       whisperm8 tickets note <Ticket> <Text>           ersetzt die Zeile „**Stand …:**“
       whisperm8 tickets comment <Ticket> <Text>
-                Text: direkt, `-` für stdin oder `@datei`. Markdown.
+                Text: direkt, `-` für stdin oder `@datei`. Markdown. Beginnt der
+                Text selbst mit `-` oder `@`, gehört er hinter `--`:
+                tickets comment WM8-12 -- "@Giuliano bitte prüfen"
 
     ANLEGEN UND ZUORDNEN
       whisperm8 tickets new <Titel> [--description TEXT] [--project VORHABEN]
@@ -227,6 +283,10 @@ enum TicketsCLICommand {
       whisperm8 tickets setup --project ORDNER --team T
       whisperm8 tickets setup                          zeigt die Einrichtung
       whisperm8 tickets doctor [--json]                prüft Zugang, Zuordnung und App
+
+    Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit
+    {"ok": true, "key": …, "message": …}. Fehler stehen auf stderr, der
+    Exit-Code sagt, welcher Art.
 
     Der Chat ist der, in dem der Befehl läuft; `--chat` nimmt den Anfang einer
     Chat-ID aus `whisperm8 chats list`. Das Team ergibt sich aus dem Projekt
@@ -248,7 +308,7 @@ enum TicketsCLICommand {
         } catch {
             return TicketsCLIExit.usage
         }
-        let output = await TicketsCLIRunner.execute(parsed, environment: .live)
+        let output = await TicketsCLIRunner.execute(parsed, environment: .live, json: TicketsCLIArguments.wantsJSON(arguments))
         if !output.stdout.isEmpty { CLIIO.out(output.stdout) }
         if !output.stderr.isEmpty { CLIIO.err(output.stderr) }
         return output.exitCode

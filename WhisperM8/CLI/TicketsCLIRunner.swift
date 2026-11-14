@@ -15,9 +15,23 @@ enum TicketsCLIRunner {
         var message: String
     }
 
-    static func execute(_ arguments: TicketsCLIArguments, environment env: TicketsCLIEnvironment) async -> Output {
+    static func execute(_ arguments: TicketsCLIArguments, environment env: TicketsCLIEnvironment, json: Bool = false) async -> Output {
+        // Der Prüfbericht geht immer nach stdout; nur der Exit-Code zeigt ein Problem.
+        if case .doctor(let asJSON) = arguments {
+            let report = await doctor(env)
+            return Output(exitCode: report.allSatisfy(\.ok) ? TicketsCLIExit.ok : TicketsCLIExit.unavailable,
+                          stdout: TicketsCLIFormatter.doctor(report, json: asJSON))
+        }
         do {
-            return Output(exitCode: TicketsCLIExit.ok, stdout: try await run(arguments, env))
+            let text = try await run(arguments, env)
+            guard json, arguments.isWrite else { return Output(exitCode: TicketsCLIExit.ok, stdout: text) }
+            var object: [String: Any] = ["ok": true, "message": text]
+            // `new` nennt die neue Nummer am Anfang seiner Meldung.
+            let firstWord = text.split(separator: " ").first.map(String.init) ?? ""
+            if let key = arguments.ticketKey ?? (firstWord.contains("-") ? firstWord : nil) {
+                object["key"] = key
+            }
+            return Output(exitCode: TicketsCLIExit.ok, stdout: TicketsCLIFormatter.jsonString(object))
         } catch let failure as Failure {
             return Output(exitCode: failure.exitCode, stderr: failure.message)
         } catch let error as TicketSourceError {
@@ -93,21 +107,26 @@ enum TicketsCLIRunner {
         case .done(let key, let chatRef, let status, let note):
             let chat = try callerChat(chatRef, env)
             let context = try await env.source.ticket(key: key)
-            // Erst prüfen, dann schreiben: Ein falscher Statusname soll nichts halb ändern.
+            // Erst alles prüfen, dann schreiben: Ein falscher Statusname oder ein
+            // leerer Text soll nichts halb ändern.
             let target = try status.map { try resolveStatus($0, in: context) }
-            if context.ticket.links.contains(where: { $0.chatID == chat.id }) {
+            let noteText = try note.map { try text($0, env) }
+            // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
+            let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
+            if wasActive {
                 try await env.source.saveLink(ticketID: context.ticket.id, chat: chat, active: false, at: env.now())
             }
-            if let note {
-                let text = try text(note, env)
+            if let noteText {
                 try await env.source.setDescription(
                     ticketID: context.ticket.id,
-                    description: TicketStandLine.apply(text, to: context.ticket.description, on: env.now()))
+                    description: TicketStandLine.apply(noteText, to: context.ticket.description, on: env.now()))
             }
             if let target, target.id != context.ticket.status.id {
                 try await env.source.setStatus(ticketID: context.ticket.id, statusID: target.id)
             }
-            return "\(key): Verknüpfung mit „\(chat.shortName)“ beendet. Status: \((target ?? context.ticket.status).name)"
+            let linked = wasActive ? "Verknüpfung mit „\(chat.shortName)“ beendet."
+                : "„\(chat.shortName)“ war nicht (mehr) verknüpft."
+            return "\(key): \(linked) Status: \((target ?? context.ticket.status).name)"
 
         case .unlink(let key, let chatRef):
             let chat = try callerChat(chatRef, env)
@@ -168,10 +187,8 @@ enum TicketsCLIRunner {
             return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, env)
 
         case .doctor(let json):
-            let report = await doctor(env)
-            let text = TicketsCLIFormatter.doctor(report, json: json)
-            if report.contains(where: { !$0.ok }) { throw Failure(exitCode: TicketsCLIExit.unavailable, message: text) }
-            return text
+            // Wird in `execute` behandelt (Bericht immer nach stdout).
+            return TicketsCLIFormatter.doctor(await doctor(env), json: json)
         }
     }
 
@@ -184,8 +201,10 @@ enum TicketsCLIRunner {
         let (chats, reachable) = env.chats()
         let config = env.config()
         // „Ohne Ticket“ meint Chats dieses Projekts, nicht alle Chats des Rechners.
-        let projectPath = config.projectPath(forDirectory: env.currentDirectory())
-            ?? config.projectPaths(forTeam: resolved).first
+        // Wer ausdrücklich ein Team nennt, meint dessen Projekt, nicht den Ordner, in dem er steht.
+        let projectPath = team == nil
+            ? config.projectPath(forDirectory: env.currentDirectory()) ?? config.projectPaths(forTeam: resolved).first
+            : config.projectPaths(forTeam: resolved).first
         let model = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath)
         return (model, snapshot, reachable)
     }
@@ -226,18 +245,18 @@ enum TicketsCLIRunner {
         return chat
     }
 
-    /// Text direkt, `-` aus stdin, `@datei` aus einer Datei.
-    private static func text(_ raw: String, _ env: TicketsCLIEnvironment) throws -> String {
+    private static func text(_ argument: TicketsText, _ env: TicketsCLIEnvironment) throws -> String {
         let value: String
-        if raw == "-" {
+        switch argument {
+        case .literal(let text):
+            value = text
+        case .stdin:
             value = env.readStdin()
-        } else if raw.hasPrefix("@") {
-            guard let content = env.readFile(String(raw.dropFirst())) else {
-                throw Failure(exitCode: TicketsCLIExit.usage, message: "Datei nicht lesbar: \(raw.dropFirst())")
+        case .file(let path):
+            guard let content = env.readFile(path) else {
+                throw Failure(exitCode: TicketsCLIExit.usage, message: "Datei nicht lesbar: \(path)")
             }
             value = content
-        } else {
-            value = raw
         }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw Failure(exitCode: TicketsCLIExit.usage, message: "Leerer Text.") }
@@ -376,6 +395,11 @@ enum TicketsCLIFormatter {
         return chat.state?.cliLabel ?? "Zustand unbekannt"
     }
 
+    static func agentText(_ entry: TicketBoardEntry) -> String {
+        if entry.isHandedOver { return "abgegeben von " + entry.handedOverBy.joined(separator: ", ") }
+        return agentText(entry.agents)
+    }
+
     static func agentText(_ agents: [TicketAgent]) -> String {
         if agents.isEmpty { return "kein Agent" }
         return agents.map { agent in
@@ -398,6 +422,7 @@ enum TicketsCLIFormatter {
 
     static func entryObject(_ entry: TicketBoardEntry) -> [String: Any] {
         var object = ticketObject(entry.ticket)
+        if entry.isHandedOver { object["handedOverBy"] = entry.handedOverBy }
         object["agents"] = entry.agents.map { agent -> [String: Any] in
             var item: [String: Any] = ["chatID": agent.link.chatID.uuidString, "onThisMac": agent.chat != nil, "since": agent.link.subtitle]
             if let chat = agent.chat {
@@ -445,7 +470,7 @@ enum TicketsCLIFormatter {
                 let ticket = entry.ticket
                 var marks = ticket.status.name
                 if ticket.isBlocked { marks += ", blockiert" }
-                lines.append("  \(pad(ticket.key, 8))\(pad(ticket.title, 50)) | \(pad(marks, 24)) | \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) | \(agentText(entry.agents))")
+                lines.append("  \(pad(ticket.key, 8))\(pad(ticket.title, 50)) | \(pad(marks, 24)) | \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) | \(agentText(entry))")
             }
             lines.append("")
         }
@@ -481,7 +506,7 @@ enum TicketsCLIFormatter {
         if entries.isEmpty { return "(keine Tickets für diesen Filter)" }
         return entries.map { entry in
             let ticket = entry.ticket
-            return "\(pad(ticket.key, 8))\(pad(ticket.status.name, 13)) \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) \(pad(ticket.project ?? "–", 22)) \(pad(ticket.title, 54)) | \(agentText(entry.agents))"
+            return "\(pad(ticket.key, 8))\(pad(ticket.status.name, 13)) \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) \(pad(ticket.project ?? "–", 22)) \(pad(ticket.title, 54)) | \(agentText(entry))"
         }.joined(separator: "\n")
     }
 

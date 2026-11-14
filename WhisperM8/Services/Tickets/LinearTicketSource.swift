@@ -102,15 +102,24 @@ struct LinearTicketSource: TicketSource {
             }
             return person
         }
+        // Eine ID nur mitschicken, wenn es eine ist: Linear lehnt andere Werte im ID-Filter ab.
+        let byID = UUID(uuidString: query) == nil ? "" : "{ id: { eq: $q } }, "
         let data = try await client.run("""
         query($q: String!) {
-          users(filter: { or: [{ name: { containsIgnoreCase: $q } }, { displayName: { containsIgnoreCase: $q } }], active: { eq: true } }) {
-            nodes { id name app }
+          users(filter: { or: [\(byID){ name: { containsIgnoreCase: $q } }, { displayName: { containsIgnoreCase: $q } }], active: { eq: true } }) {
+            nodes { id name displayName app }
           }
         }
         """, variables: ["q": query])
-        let people = Self.nodes(data["users"]).filter { $0["app"] as? Bool != true }.compactMap(Self.person)
-        if let exact = people.first(where: { $0.id == query }) { return exact }
+        let nodes = Self.nodes(data["users"]).filter { $0["app"] as? Bool != true }
+        let wanted = query.lowercased()
+        // „Jon“ meint Jon, auch wenn es Jonas gibt: ein exakter Treffer gewinnt.
+        let exact = nodes.filter {
+            ($0["id"] as? String)?.lowercased() == wanted || ($0["name"] as? String)?.lowercased() == wanted
+                || ($0["displayName"] as? String)?.lowercased() == wanted
+        }.compactMap(Self.person)
+        if exact.count == 1 { return exact[0] }
+        let people = nodes.compactMap(Self.person)
         switch people.count {
         case 1: return people[0]
         case 0: throw TicketSourceError.notFound("Person „\(query)“")

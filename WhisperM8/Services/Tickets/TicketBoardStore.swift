@@ -22,6 +22,9 @@ final class TicketBoardStore {
     @ObservationIgnored private let interval: Duration
     @ObservationIgnored private let sleep: (Duration) async throws -> Void
     @ObservationIgnored private var loop: Task<Void, Never>?
+    /// Für welches Team gerade ein Abruf läuft. Je Team, nicht ein Schalter:
+    /// Nach einem Teamwechsel darf das neue Team sofort laden.
+    @ObservationIgnored private var loadingTeam: String?
 
     init(
         source: TicketSource,
@@ -63,17 +66,26 @@ final class TicketBoardStore {
         loop = nil
     }
 
-    /// Ein Abruf sofort. Läuft schon einer, wird kein zweiter gestartet.
+    /// Ein Abruf sofort. Läuft für dieses Team schon einer, wird kein zweiter gestartet.
     func refresh() async {
-        guard let team, !isLoading else { return }
+        guard let team, loadingTeam != team else { return }
+        loadingTeam = team
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            // Hat inzwischen ein anderes Team übernommen, gehört der Schalter ihm.
+            if loadingTeam == team {
+                loadingTeam = nil
+                isLoading = false
+            }
+        }
         do {
             let fresh = try await source.board(team: team)
             // Zwischendurch das Team gewechselt: Antwort gehört nicht mehr hierher.
             guard self.team == team else { return }
             snapshot = fresh
             lastError = nil
+        } catch is CancellationError {
+            // Ansicht geschlossen: kein Fehler, der letzte Stand bleibt.
         } catch let error as TicketSourceError {
             guard self.team == team else { return }
             lastError = error

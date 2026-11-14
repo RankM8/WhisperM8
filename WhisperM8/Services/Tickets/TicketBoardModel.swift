@@ -15,6 +15,20 @@ struct TicketBoardEntry: Equatable, Identifiable {
 
     var id: String { ticket.id }
     var hasAgent: Bool { !agents.isEmpty }
+
+    /// In Arbeit, kein Chat sitzt mehr daran, aber einer hat die Arbeit beendet:
+    /// Das Ticket wartet auf den nächsten Schritt (etwa den Merge), nicht auf
+    /// einen Agent.
+    var isHandedOver: Bool {
+        agents.isEmpty && ticket.status.kind == .started && ticket.links.contains { !$0.isActive }
+    }
+
+    /// Chats, die das Ticket abgegeben haben (Kurzname aus dem Titel der Verknüpfung).
+    var handedOverBy: [String] {
+        ticket.links.filter { !$0.isActive }.map {
+            $0.title.replacingOccurrences(of: "Chat: ", with: "").components(separatedBy: " · ").first ?? $0.title
+        }
+    }
 }
 
 /// Laufender Chat, an dem kein offenes Ticket hängt.
@@ -61,6 +75,11 @@ enum TicketBoardBuilder {
                 linkedChatIDs.insert(link.chatID)
                 return TicketAgent(link: link, chat: chatsByID[link.chatID])
             }
+            // Beendete Verknüpfung an einem offenen Ticket (etwa „Merge-bereit“):
+            // Der Chat hat abgegeben, die Spur gehört trotzdem zu ihm.
+            for link in ticket.links where !link.isActive {
+                earlier[link.chatID, default: []].append("\(ticket.key) (\(ticket.status.name))")
+            }
             entries.append(TicketBoardEntry(ticket: ticket, agents: agents))
         }
 
@@ -95,7 +114,8 @@ enum TicketAgentFilter: String, Equatable, CaseIterable {
     case all
     case withAgent
     /// In Arbeit oder bereit, aber niemand sitzt daran. Backlog zählt nicht:
-    /// dort ist ein fehlender Agent kein Befund.
+    /// dort ist ein fehlender Agent kein Befund. Abgegebene Tickets auch nicht:
+    /// Sie warten auf den Merge, nicht auf einen Chat.
     case withoutAgent
 }
 
@@ -138,7 +158,7 @@ struct TicketBoardFilter: Equatable {
         switch agent {
         case .all: return true
         case .withAgent: return entry.hasAgent
-        case .withoutAgent: return !entry.hasAgent && entry.ticket.status.kind != .backlog
+        case .withoutAgent: return !entry.hasAgent && entry.ticket.status.kind != .backlog && !entry.isHandedOver
         }
     }
 }
