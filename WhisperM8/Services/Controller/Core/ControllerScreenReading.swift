@@ -155,9 +155,14 @@ enum ControllerScreenReading {
     /// tell Codex what to do differently (esc)“ und ganz unten „Press enter to
     /// confirm or esc to cancel“ (teils abgeblendet, teils fett — deshalb der
     /// volle Text). Erkannt wird an der Hinweiszeile mit einer nummerierten
-    /// Option darüber, oder an den festen Optionen allein (falls die Hinweiszeile
-    /// umbricht oder fehlt). Dieselbe Hinweiszeile in anderen Auswahl-Dialogen
-    /// von Codex sperrt auch — dort gehört ein Diktat ebenso wenig hin.
+    /// Option darüber, oder an den festen Optionen (falls die Hinweiszeile
+    /// umbricht oder fehlt). Dann müssen beide zugleich ab der ersten Option
+    /// dastehen (WM8-107): Eine nummerierte Liste in Codex' eigener Antwort, die
+    /// eine davon zitiert, ist keine Freigabe. „(y)“ hängt Codex erst zur
+    /// Laufzeit an, deshalb ohne. Dieselbe Hinweiszeile in anderen
+    /// Auswahl-Dialogen von Codex sperrt auch — dort gehört ein Diktat ebenso
+    /// wenig hin. Ob der Wortlaut noch stimmt, prüft `CodexApprovalWordingTests`
+    /// am installierten Codex.
     static func isCodexApproval(_ lines: [String]) -> Bool {
         let nonEmpty = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !nonEmpty.isEmpty else { return false }
@@ -170,12 +175,14 @@ enum ControllerScreenReading {
         if !options.isEmpty, hint.contains("press enter to confirm"), hint.contains("esc to cancel") {
             return true
         }
-        let optionText = normalized(options)
-        return codexApprovalOptions.contains { optionText.contains($0) }
+        // Ab der ersten Option bis unten: So zählen auch umgebrochene Optionen.
+        guard let first = nonEmpty.firstIndex(where: isCodexOptionLine) else { return false }
+        let dialog = normalized(Array(nonEmpty[first...]))
+        return codexApprovalOptions.allSatisfy { dialog.contains($0) }
     }
 
-    /// Feste Optionen der Codex-Freigaben (Codex CLI 0.169.0).
-    static let codexApprovalOptions = ["yes, proceed (y)", "no, and tell codex what to do differently"]
+    /// Feste Optionen der Codex-Freigaben (Codex CLI 0.169.0), klein geschrieben.
+    static let codexApprovalOptions = ["yes, proceed", "no, and tell codex what to do differently"]
 
     /// Nummerierte Option bei Codex: „› 1. Yes, proceed (y)“ oder „  2. …“.
     static func isCodexOptionLine(_ line: String) -> Bool {

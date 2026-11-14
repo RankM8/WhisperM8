@@ -445,14 +445,22 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   außerhalb der Sandbox): Ein Einfüge-Block im offenen Freigabe-Dialog wird ignoriert, das Enter danach
   wählt „1. Yes, proceed“ — der Befehl lief, obwohl „nein“ eingefügt war. Deshalb liest die App bei Codex
   den Bildschirm (`ControllerScreenSnapshot.codexApproval`, `isCodexApproval`): unten die Hinweiszeile
-  „Press enter to confirm or esc to cancel“ mit einer nummerierten Option darüber, oder die festen
-  Optionen „Yes, proceed (y)“ bzw. „No, and tell Codex what to do differently“. Steht sie da, geht ein
+  „Press enter to confirm or esc to cancel“ mit einer nummerierten Option darüber, oder ab der ersten
+  Option beide festen Optionen zugleich, „Yes, proceed“ und „No, and tell Codex what to do differently“
+  (WM8-107: eine nummerierte Liste in Codex' Antwort, die nur eine davon zitiert, zählt nicht). Steht sie da, geht ein
   Diktat in den Chat nur in die Zwischenablage (wie bei Claudes Freigabe), das verzögerte Enter bleibt
   aus, und `chats send` lehnt mit `approvalPending` ab. Andere Auswahl-Dialoge von Codex mit derselben
   Hinweiszeile sperren genauso. Grenzen: Gemessen ist nur die Befehls-Freigabe; Datei-Änderungen,
   Netzwerk und MCP-Freigaben sind nur über dieselbe Hinweiszeile abgedeckt (mit dem Schein-Modell nicht
-  auslösbar). Hochgescrollt ist der Bildschirm nicht ablesbar — dann greift die Sperre nicht. Kosten:
-  ein Lesen der untersten 16 Zeilen je Diktat in einen Codex-Chat.
+  auslösbar). **Hochgescrollt (WM8-107):** Dann liest die App für Codex die untersten Zeilen des
+  lebendigen Bildschirms statt des Ausschnitts (`ControllerScreenCapture.liveBottomLines`). SwiftTerm hält
+  dessen Grenze intern; gerechnet wird wie SwiftTerms `scrollPosition` (Pufferende minus Bildschirmhöhe),
+  das Pufferende sucht eine kurze Probe über `getScrollInvariantLine`. Hochgescrollt meldet die Ablesung
+  nur die Freigabe, sonst bleibt sie wie bisher `nil` — für alles andere ändert sich nichts.
+  **Wortlaut:** Die Erkennung hängt an Codex 0.169.0. `CodexApprovalWordingTests` sucht die Texte im
+  installierten Codex-Programm und schlägt an, wenn ein Update sie ändert (ohne Codex übersprungen,
+  rund 3,6 s, weil das Programm 280 MB groß ist). Kosten: ein Lesen der untersten 16 Zeilen je Diktat in
+  einen Codex-Chat.
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
   Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
   Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt

@@ -17,7 +17,18 @@ extension AgentTerminalController {
         terminal.flushPendingOutput()
         let swiftTerm = terminal.getTerminal()
         let atBottom = swiftTerm.isCurrentBufferAlternate || !terminal.canScroll || terminal.scrollPosition >= 1
-        guard atBottom else { return nil }
+        guard atBottom else {
+            // Hochgescrollt zeigt `getLine` den Ausschnitt, nicht den lebendigen
+            // Bildschirm. Bei Codex dort trotzdem die Freigabe lesen (WM8-107):
+            // Gerade bei offener Freigabe scrollt man hoch, um zu lesen, was Codex
+            // vorhat. Alles andere bleibt hochgescrollt unbekannt wie bisher;
+            // ohne Freigabe deshalb weiter `nil`.
+            guard profile == .codexChat else { return nil }
+            PerformanceCounters.shared.count(.controllerScreenRead)
+            let live = ControllerScreenCapture.liveBottomLines(of: swiftTerm)
+            guard ControllerScreenReading.isCodexApproval(live.lines.map(\.full)) else { return nil }
+            return ControllerScreenSnapshot(codexApproval: true)
+        }
         PerformanceCounters.shared.count(.controllerScreenRead)
         let capture = terminal.controllerBottomLines()
         return ControllerScreenReading.read(
@@ -49,12 +60,52 @@ extension QuietableTerminalView {
 /// ANSI-Folgen durch einen `Terminal` schicken können.
 enum ControllerScreenCapture {
     static func bottomLines(of terminal: Terminal) -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) {
+        bottomLines(of: terminal) { terminal.getLine(row: $0) }
+    }
+
+    /// Wie `bottomLines`, aber immer vom lebendigen Bildschirm, auch wenn die
+    /// Ansicht hochgescrollt ist (WM8-107). Unten steht genau das, was das
+    /// Programm zuletzt gezeichnet hat; der Cursor zählt ohnehin dort.
+    static func liveBottomLines(of terminal: Terminal) -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) {
+        let top = liveScreenTop(of: terminal)
+        return bottomLines(of: terminal) { terminal.getScrollInvariantLine(row: top + $0) }
+    }
+
+    /// Erste Zeile des lebendigen Bildschirms, gezählt wie
+    /// `getScrollInvariantLine`. SwiftTerm hält die Grenze (`yBase`) intern;
+    /// sie ist das Pufferende minus die Bildschirmhöhe — dieselbe Rechnung wie
+    /// SwiftTerms `scrollPosition` („ganz unten“). Das Pufferende sucht eine
+    /// Probe über die gültigen Zeilen: verdoppeln, dann halbieren, also wenige
+    /// Zugriffe auch bei 10.000 Zeilen Verlauf.
+    static func liveScreenTop(of terminal: Terminal) -> Int {
+        let buffer = terminal.buffer
+        // Bis hierhin gibt es sicher Zeilen: Der Ausschnitt liegt nie unter dem
+        // lebendigen Bildschirm.
+        var valid = buffer.totalLinesTrimmed + buffer.yDisp + terminal.rows
+        var step = 1
+        var invalid = valid
+        while terminal.getScrollInvariantLine(row: invalid) != nil {
+            valid = invalid + 1
+            invalid += step
+            step *= 2
+        }
+        // Alles unter `valid` gibt es, `invalid` nicht.
+        while valid < invalid {
+            let middle = (valid + invalid) / 2
+            if terminal.getScrollInvariantLine(row: middle) != nil { valid = middle + 1 } else { invalid = middle }
+        }
+        return valid - terminal.rows
+    }
+
+    private static func bottomLines(
+        of terminal: Terminal, line lineAt: (Int) -> BufferLine?
+    ) -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) {
         let count = min(ControllerScreenReading.lineCount, terminal.rows)
         let firstRow = terminal.rows - count
         var lines: [ControllerScreenLine] = []
         lines.reserveCapacity(count)
         for row in firstRow..<terminal.rows {
-            guard let line = terminal.getLine(row: row) else {
+            guard let line = lineAt(row) else {
                 lines.append(ControllerScreenLine(full: "", plain: "", dim: ""))
                 continue
             }

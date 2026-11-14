@@ -82,6 +82,78 @@ final class CodexApprovalScreenTests: XCTestCase {
         XCTAssertFalse(screen(quoted).codexApproval)
     }
 
+    /// WM8-107: Eine nummerierte Liste in Codex' eigener Antwort, die eine der
+    /// festen Optionen zitiert, ist keine Freigabe — es braucht beide zugleich.
+    func testNumberedListInCodexAnswerIsNoApproval() {
+        let answer = """
+        • Im Dialog gibt es drei Wege:
+          1. Yes, proceed (y) — der Befehl läuft
+          2. Abbrechen mit esc
+          3. Später entscheiden
+
+        › Ask Codex to do anything
+        """
+        XCTAssertFalse(screen(answer).codexApproval)
+        let otherOnly = """
+        • Antwort:
+          1. No, and tell Codex what to do differently
+          2. Etwas anderes
+        """
+        XCTAssertFalse(screen(otherOnly).codexApproval)
+    }
+
+    /// Umgebrochene Optionen (schmales Fenster) zählen trotzdem.
+    func testWrappedOptionsStillCount() {
+        let narrow = """
+        › 1. Yes, proceed (y)
+          2. No, and tell Codex what to do
+             differently (esc)
+        """
+        XCTAssertTrue(screen(narrow).codexApproval)
+    }
+
+    // MARK: Hochgescrollt (WM8-107)
+
+    private func scrolledTerminal(scrollback: Int, outputLines: Int) -> Terminal {
+        let terminal = Terminal(delegate: sink, options: TerminalOptions(cols: 100, rows: 16, scrollback: scrollback))
+        let output = (1...outputLines).map { "Ausgabe Zeile \($0)" }.joined(separator: "\n")
+        terminal.feed(text: (output + "\n" + approval).replacingOccurrences(of: "\n", with: "\r\n"))
+        // Ganz nach oben gescrollt, wie beim Lesen der Ausgabe.
+        terminal.buffer.yDisp = 0
+        return terminal
+    }
+
+    /// Hochgescrollt zeigt `getLine` den Ausschnitt oben, die Freigabe steht
+    /// trotzdem unten auf dem lebendigen Bildschirm und wird erkannt.
+    func testApprovalIsFoundWhileScrolledUp() {
+        let terminal = scrolledTerminal(scrollback: 500, outputLines: 200)
+        let visible = ControllerScreenCapture.bottomLines(of: terminal).lines.map(\.full)
+        XCTAssertFalse(ControllerScreenReading.isCodexApproval(visible), "Ausschnitt oben zeigt keine Freigabe")
+        let live = ControllerScreenCapture.liveBottomLines(of: terminal).lines.map(\.full)
+        XCTAssertTrue(ControllerScreenReading.isCodexApproval(live))
+        XCTAssertTrue(live.contains { $0.contains("Press enter to confirm") })
+    }
+
+    /// Auch wenn der Verlauf voll ist und oben Zeilen wegfallen (Zählung ab
+    /// `totalLinesTrimmed`).
+    func testApprovalIsFoundWithTrimmedScrollback() {
+        let terminal = scrolledTerminal(scrollback: 40, outputLines: 300)
+        XCTAssertGreaterThan(terminal.buffer.totalLinesTrimmed, 0)
+        let live = ControllerScreenCapture.liveBottomLines(of: terminal).lines.map(\.full)
+        XCTAssertTrue(ControllerScreenReading.isCodexApproval(live))
+    }
+
+    /// Ganz unten liefern beide Wege dieselben Zeilen.
+    func testLiveAndVisibleAgreeAtTheBottom() {
+        let terminal = Terminal(delegate: sink, options: TerminalOptions(cols: 100, rows: 16, scrollback: 500))
+        let output = (1...60).map { "Zeile \($0)" }.joined(separator: "\n")
+        terminal.feed(text: (output + "\n" + approval).replacingOccurrences(of: "\n", with: "\r\n"))
+        let visible = ControllerScreenCapture.bottomLines(of: terminal)
+        let live = ControllerScreenCapture.liveBottomLines(of: terminal)
+        XCTAssertEqual(visible.lines, live.lines)
+        XCTAssertEqual(visible.cursor?.row, live.cursor?.row)
+    }
+
     // MARK: Enter und `chats send`
 
     /// Das verzögerte Enter bleibt aus, auch wenn der Status „arbeitet“ zeigt
