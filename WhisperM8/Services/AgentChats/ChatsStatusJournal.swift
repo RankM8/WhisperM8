@@ -78,8 +78,7 @@ final class ChatsStatusJournal: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         writeLocked(ChatsStatusJournalEntry(
-            at: at, seq: nextSequence(), journalId: resolvedJournalId(),
-            sessionID: sessionID, from: from, to: to, signal: signal, source: source))
+            at: at, sessionID: sessionID, from: from, to: to, signal: signal, source: source))
     }
 
     /// Schreibt eine Board-Änderung. Läuft bewusst NICHT durch den
@@ -90,19 +89,32 @@ final class ChatsStatusJournal: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         writeLocked(ChatsStatusJournalEntry(
-            at: at, seq: nextSequence(), journalId: resolvedJournalId(),
-            sessionID: sessionID, from: nil, to: nil, signal: "board.\(op)", source: Self.boardSource,
+            at: at, sessionID: sessionID, from: nil, to: nil, signal: "board.\(op)", source: Self.boardSource,
             kind: ChatsStatusJournalEntry.boardKind, op: op, owner: owner, light: light))
     }
 
     static let boardSource = "board"
 
-    /// Aufrufer hält `lock`.
-    private func writeLocked(_ entry: ChatsStatusJournalEntry) {
+    /// Aufrufer hält `lock`. Nummer und Generation stempelt erst diese
+    /// Funktion, NACH der Rotation (WM8-87): Vorher bekam der Eintrag, der
+    /// die Rotation auslöste, noch Nummer und Generation der alten Datei und
+    /// stand dann als erste Zeile in der neuen. `changes()` hielt ihn für den
+    /// ältesten Eintrag, jeder Cursor galt als Lücke, `chats watch` endete
+    /// sofort, und die Board-Mod startete im 2-s-Takt neu.
+    private func writeLocked(_ unstamped: ChatsStatusJournalEntry) {
+        // Größe vorab mit einer großzügigen Nummer schätzen; die echte steht
+        // erst nach der Rotation fest.
+        var probe = unstamped
+        probe.seq = Int(Int32.max)
+        probe.journalId = "00000000"
+        guard let estimate = try? Self.encoder.encode(probe) else { return }
+        rotateIfNeeded(incomingBytes: estimate.count + 1)
+        var entry = unstamped
+        entry.seq = nextSequence()
+        entry.journalId = resolvedJournalId()
         guard let data = try? Self.encoder.encode(entry) else { return }
         var line = data
         line.append(0x0A)
-        rotateIfNeeded(incomingBytes: line.count)
         if let handle = try? FileHandle(forWritingTo: fileURL) {
             defer { try? handle.close() }
             _ = try? handle.seekToEnd()
@@ -151,7 +163,12 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// schlimmer als keiner: Er sähe gültig aus und würde bei jedem `since`
     /// dieselben Alt-Einträge nachliefern.
     static func currentCursor(fileURL: URL? = nil) -> String? {
-        let entries = readAll(fileURL: fileURL ?? defaultFileURL())
+        currentCursor(entries: readAll(fileURL: fileURL ?? defaultFileURL()))
+    }
+
+    /// Wie `currentCursor(fileURL:)`, auf bereits gelesenen Einträgen (wer das
+    /// Journal ohnehin liest, liest es so nur einmal).
+    static func currentCursor(entries: [ChatsStatusJournalEntry]) -> String? {
         guard let last = entries.last, !last.journalId.isEmpty else { return nil }
         return cursor(journalId: last.journalId, seq: last.seq)
     }
@@ -166,10 +183,22 @@ final class ChatsStatusJournal: @unchecked Sendable {
         limit: Int = 64,
         fileURL: URL? = nil
     ) -> (entries: [ChatsStatusJournalEntry], gap: Bool, hasMore: Bool, cursor: String?) {
+        changes(since: rawCursor, limit: limit, entries: readAll(fileURL: fileURL ?? defaultFileURL()))
+    }
+
+    /// Wie `changes(since:limit:fileURL:)`, auf bereits gelesenen Einträgen.
+    static func changes(
+        since rawCursor: String?,
+        limit: Int = 64,
+        entries: [ChatsStatusJournalEntry]
+    ) -> (entries: [ChatsStatusJournalEntry], gap: Bool, hasMore: Bool, cursor: String?) {
         // Einträge ohne Generation stammen aus einer Vorversion und sind für
-        // Cursor-Abfragen unbrauchbar — sie tragen keine Ordnung.
-        let all = readAll(fileURL: fileURL ?? defaultFileURL()).filter { !$0.journalId.isEmpty }
-        let currentId = all.last?.journalId
+        // Cursor-Abfragen unbrauchbar — sie tragen keine Ordnung. Zählen darf
+        // nur die aktuelle Generation (die der letzten Zeile): Ein Rest der
+        // alten am Dateianfang (Journale vor WM8-87) machte sonst jeden
+        // Cursor zur Lücke.
+        let currentId = entries.last(where: { !$0.journalId.isEmpty })?.journalId
+        let all = entries.filter { $0.journalId == currentId && currentId != nil }
         let latest = all.last.map { cursor(journalId: $0.journalId, seq: $0.seq) }
 
         guard let rawCursor, let parsed = parseCursor(rawCursor) else {
