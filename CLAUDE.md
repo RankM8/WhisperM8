@@ -47,7 +47,7 @@ brechen `dev`, `dev-release`, `install`, `run` und `clean-install` ab; `FORCE=1`
   `debugControlEnabled`; isolierte Test-Instanz `scripts/test-instance.sh`. Ansichten mit Keychain-/Proxy-/
   Datei-Zugriff bekommen für Snapshots eine Abhängigkeits-Struktur mit `.live`-Default. Nach UI-Änderungen an
   einer Ansicht mit Fixture: rendern und ansehen. Doku:
-  [docs/features/ui-testing.md](docs/features/ui-testing.md).
+  [ui-testing](docs/features/ui-testing.md).
 - **Guards, die die Suite erzwingt:** `SourceSizeGuardTests` (max. 1.500 Zeilen je Datei, Ausnahmeliste nur
   schrumpfend — aufteilen statt Grenze anheben), `LocalizationCatalogTests`, `DocsLintTests`,
   `InfoPlistContractTests`, `AgentStatusPulseGuardTests`, `PreferenceBedienwegGuardTests`, `ChatsFontSizeGuardTests`
@@ -81,23 +81,21 @@ Große Views/Services wachsen über thematische `extension`-Dateien (`AgentChats
 
 **App-Hülle:** Dock-App plus `MenuBarExtra`; Szenen in `WhisperM8App.swift`; das letzte Fenster zu schließen
 beendet die App nicht; `WindowRequestCenter` routet Fenster-Anfragen. Absturzschutz, SIGPIPE, ObjC-Exceptions,
-Cmd+Q-Dialog und Wiederaufnahme nach Absturz: [docs/features/app-shell/ARCHITECTURE.md](docs/features/app-shell/ARCHITECTURE.md).
+Cmd+Q-Dialog und Wiederaufnahme nach Absturz: [app-shell](docs/features/app-shell/ARCHITECTURE.md).
 
 **Diktat:** Hotkey → `AppState`/`RecordingCoordinator` → `AudioRecorder` (M4A 16 kHz mono) → Kontext
 (`SelectedContextService`, Screenshots, Chat-Tail) → `TranscriptionService` (OpenAI/Groq/ChatGPT-Abo) →
 optional `PostProcessingService` (Codex mit `OutputMode`) → Zwischenablage/Auto-Paste oder Agent Chat.
-Doku: [docs/features/dictation/](docs/features/dictation/).
+Doku: [dictation](docs/features/dictation/).
 
 **Agent Chats:** Discovery (`AgentScanCoordinator` → `AgentSessionIndexer`) → Persistenz
 (`AgentWorkspaceStore` hinter `AgentSessionStore`, UI über `AgentWorkspaceUIModel`) → Laufzeitstatus
 (Claudes Registry, Hook-Bridge, `AgentSessionRuntimeWatcher`) → UI (SwiftTerm-PTYs, Tabs, Grid, Verlauf).
-Doku-Einstieg: [docs/features/agent-chats/](docs/features/agent-chats/README.md); Konten:
-[claude-konten.md](docs/features/agent-chats/claude-konten.md), [gpt-konten.md](docs/features/agent-chats/gpt-konten.md);
-CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board.md](docs/features/jarvis-board.md);
-Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history.md](docs/features/clipboard-history.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
-Notch-Statusanzeige: [notch.md](docs/features/notch.md).
-Statistik (Zeit, Token, Gegenwert, Limits): [statistics.md](docs/features/statistics.md).
-Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
+Doku-Einstieg: [agent-chats](docs/features/agent-chats/README.md); Konten:
+[claude-konten](docs/features/agent-chats/claude-konten.md), [gpt-konten](docs/features/agent-chats/gpt-konten.md);
+CLI: [agent-chats-cli](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board](docs/features/jarvis-board.md);
+Ansagen: [speech-callouts](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
+Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md).
 
 ## Invarianten (nicht brechen)
 
@@ -118,6 +116,7 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 - Mutations-Closures des `AgentWorkspaceStore` laufen unter dem prozessweiten Lock: keine Subprozesse, kein
   blockierendes I/O (Git-Lookups vorher). UI nie über `loadWorkspace()` „auffrischen“.
 - Die App ist einziger Schreiber von Workspace und Board; die CLI liest von Disk und handelt über den Socket.
+  Mit dem Ticket-System spricht nur `whisperm8 tickets`, nie die App.
 - Fremde Daten unter `~/.claude*` und `~/.codex/` sind extern und werden nur gelesen — **Ausnahmen, alle
   absichtlich:** Theme-Schlüssel in `settings.json` (`ClaudeThemeWriter`, bei Theme-Wechsel);
   `agents/gpt.md` je Konto bei aktivem GPT-Backend (`ClaudeGPTAgentDefinition`); Statuszeile
@@ -134,7 +133,7 @@ Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
 - Ein Login wird nie direkt im Profil erneuert, immer über den Zwischenordner mit Konto-Abgleich (`ClaudeLoginRenewer`) —
   der Browser kennt nur eine claude.ai-Sitzung, ein falsches Konto überschriebe sonst einen gültigen Login.
 - Eigene Daten: `~/Library/Application Support/WhisperM8/` (`AgentSessions.json` = Workspace, `agent-ui-state.json`,
-  `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, `clipboard-history/` (Index plus Bilder, 0700/0600), `statistics/`, Reports, FailedRecordings).
+  `agent-index-cache.json`, `jarvis-board.json`, `running-sessions.json`, `agent-task-lists.json`, `tickets.json`, `clipboard-history/` (Index plus Bilder, 0700/0600), `statistics/`, Reports, FailedRecordings).
 - Neue Bundle-Ressourcen brauchen `Package.swift` UND den Makefile-Schritt `_bundle`.
 - `pmset -a disablesleep 1` setzt nur der `StayAwakeController`, und nie ohne laufende Wache, die beim Tod
   der App zurücksetzt. Einziger Write außerhalb der eigenen Daten ist `/etc/sudoers.d/whisperm8-sleep`

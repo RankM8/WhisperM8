@@ -476,6 +476,14 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
   Tickets, der Befehl zum Verknüpfen von Chat und Ticket, die Labels für
   „wartet auf den User". Fehlt die Angabe, frag einmal und halte die Antwort
   im Gedächtnis fest. Tickets nie von einem System ins andere übertragen.
+- **Bringt die App das Werkzeug mit** (`whisperm8 tickets`, Skill `tickets`),
+  ist das der Weg: `whisperm8 tickets board` zeigt, welcher Chat an welchem
+  Ticket sitzt, welche Tickets niemanden haben und welche laufenden Chats
+  kein offenes Ticket mehr haben.
+- **Mehrere Ticket-Bereiche** (mehrere Firmen oder Mandanten): Jedes Projekt
+  schreibt nur in seinen eigenen, lesen darf es überall. Gehört eine Arbeit
+  ins andere Projekt, geht sie an den Chat oder Supervisor dort; ein Ticket
+  wird nicht von drüben geändert.
 - **Erst das Ticket, dann der Auftrag.** Bekommt ein Chat neue Arbeit, gibt
   es dafür ein Ticket: vorhandenes suchen, sonst anlegen. Du nennst
   dem Chat das Ticket im Auftrag und passt den Titel an (1). **Der Chat hängt
