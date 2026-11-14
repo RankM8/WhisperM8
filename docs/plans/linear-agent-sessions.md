@@ -1,6 +1,6 @@
 # Linears Agent-Funktion: statt unseres Anhangs, daneben oder nicht
 
-**Stand:** 2026-11-14 · **Status:** Untersuchung fertig, Entscheidung offen · **Ticket:** WM8-84
+**Stand:** 2026-11-14 · **Status:** Giuliano hat am 14.11.2026 Weg A gewählt (jetzt nicht, der Anhang bleibt) · **Ticket:** WM8-84
 **Betrifft:** Ticket-Board Stufe 2 (WM8-81), Chat-Verlauf am Ticket (WM8-83), Workspace DealSupply mit Kollegen
 **Quellen:** Linears Entwickler-Doku (gelesen am 14.11.2026), Linears Schnittstelle (Schema gelesen, drei Aufrufe
 versucht), Test-Ticket WM8-90 im Workspace WhisperM8. Jede Aussage ist als **gemessen** oder **gelesen** markiert.
@@ -96,11 +96,12 @@ eine eigene App.
 Ein Chat, der nach seinem Turn auf den nächsten Auftrag wartet, stünde in Linear als `complete`. Das ist
 richtig, Linear öffnet eine fertige Sitzung beim nächsten Eintrag wieder.
 
-**Wer schriebe:** Die Zustände kennt nur die App (Status-Koordinator, Registry, Hooks). `CLAUDE.md` sagt heute
-„Mit dem Ticket-System spricht nur `whisperm8 tickets`, nie die App“; WM8-81 lockert das ohnehin auf „App liest
-für die Ansicht“. Für Agent-Sitzungen müsste die App schreiben, und zwar bei jedem Statuswechsel. Über die
+**Wer schriebe:** Die Zustände kennt nur die App (Status-Koordinator, Registry, Hooks). `CLAUDE.md` sagt (Stand main
+14.11.2026): „Das Ticket-System liest die App nur bei `ticketBoardEnabled` (Ansicht und Einrichtung) …;
+geschrieben wird nur über `whisperm8 tickets`.“ Für Agent-Sitzungen müsste die App schreiben, und zwar bei jedem
+Statuswechsel. Über die
 Kommandozeile hieße das ein Prozessstart je Wechsel. Beides ist eine neue Regel in `CLAUDE.md`, die bei
-14.933 von 15.000 Zeichen steht.
+der Zeichengrenze von 15.000 steht.
 
 **Wie oft:** Bei 10 bis 15 gleichzeitigen Chats mit je etwa 6 bis 10 Turns pro Stunde sind es je Turn zwei bis
 drei Einträge plus Herzschlag. Das ergibt grob 300 bis 500 Anfragen je Stunde. Das App-Token hat eigene 5.000
