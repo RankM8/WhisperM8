@@ -52,6 +52,7 @@ final class QuickActionReplacerTests: XCTestCase {
             restoreDelay: .milliseconds(20),
             confirmTimeout: .milliseconds(150),
             confirmStep: .milliseconds(10),
+            clock: SteppingClock(),
             currentSelection: currentSelection
         )
         return (replacer, { pastedTexts })
@@ -72,6 +73,10 @@ final class QuickActionReplacerTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Ergebnis", "Verlauf aus: das Ergebnis bleibt greifbar")
     }
 
+    /// Lief auf dem GitHub-Runner mehrfach rot (WM8-103): Mit echter Zeit
+    /// reichten die 150 ms dort nur für zwei Prüfungen. Die Test-Uhr zählt
+    /// jetzt Schritte statt Millisekunden: 15 Prüfungen, egal wie voll der
+    /// Rechner ist.
     func testRestoresOnlyAfterTheSelectionChanged() async {
         var reads = 0
         let (replacer, _) = makeReplacer(currentSelection: { _ in
@@ -86,9 +91,14 @@ final class QuickActionReplacerTests: XCTestCase {
     }
 
     func testUnconfirmedPasteKeepsResult() async {
-        let (replacer, _) = makeReplacer(currentSelection: { _ in "ein fehler" })
+        var reads = 0
+        let (replacer, _) = makeReplacer(currentSelection: { _ in
+            reads += 1
+            return "ein fehler"
+        })
         let result = await replacer.replaceSelection(with: "Ein Fehler.", in: .current, restore: .afterConfirmation(original: "ein fehler"))
         XCTAssertEqual(result, .pastedResultKept, "spät lesende App bekäme sonst die alte Kopie")
+        XCTAssertEqual(reads, 15, "Frist 150 ms in Schritten von 10 ms")
         XCTAssertEqual(pasteboard.string(forType: .string), "Ein Fehler.")
     }
 
@@ -144,6 +154,29 @@ final class QuickActionReplacerTests: XCTestCase {
         let (replacer, _) = makeReplacer()
         let result = await replacer.replaceSelection(with: "Ergebnis", in: nil, restore: .ifResultSaved(true))
         XCTAssertEqual(result, .notPasted)
+    }
+}
+
+/// Uhr ohne echte Zeit: Jedes Warten springt sofort ans Ziel. So hängt die
+/// Zahl der Prüfungen nur an Frist und Schrittweite, nicht an der Last.
+final class SteppingClock: Clock, @unchecked Sendable {
+    struct Instant: InstantProtocol {
+        var offset: Duration
+        func advanced(by duration: Duration) -> Instant { Instant(offset: offset + duration) }
+        func duration(to other: Instant) -> Duration { other.offset - offset }
+        static func < (lhs: Instant, rhs: Instant) -> Bool { lhs.offset < rhs.offset }
+    }
+
+    private let lock = NSLock()
+    private var current = Instant(offset: .zero)
+
+    var now: Instant { lock.withLock { current } }
+    var minimumResolution: Duration { .zero }
+
+    func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+        try Task.checkCancellation()
+        lock.withLock { current = max(current, deadline) }
+        await Task.yield()
     }
 }
 

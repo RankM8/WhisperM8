@@ -278,13 +278,33 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         XCTAssertEqual(CodexChatProcessIndex.parseProcEnvironment([1, 0]), [])
     }
 
+    /// Kopiert ein Systemprogramm und signiert die Kopie ad hoc neu. Ohne
+    /// eigene Signatur bleibt sie ein Apple-Programm am falschen Ort, und
+    /// macOS 26 beendet sie kurz nach dem Start.
+    private static func copySigned(_ source: String, to target: URL) throws {
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: source), to: target)
+        let codesign = Process()
+        codesign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        codesign.arguments = ["--force", "--sign", "-", target.path]
+        codesign.standardError = FileHandle.nullDevice
+        try codesign.run()
+        codesign.waitUntilExit()
+        XCTAssertEqual(codesign.terminationStatus, 0, "codesign für \(target.lastPathComponent)")
+    }
+
     func testProcessIndexFindsAChildWithTheChatIDInItsEnvironment() throws {
         // Echter Scan: ein Prozess namens „codex“ mit Chat-ID in der Umgebung.
+        // Kopien mit eigener Signatur (WM8-103): macOS 26 beendet die bloße
+        // Kopie eines Systemprogramms wie `/bin/sleep` wenige Millisekunden
+        // nach dem Start per SIGKILL. Der Scan traf sie dann tot (Chat fehlt)
+        // oder mitten im Sterben (Argumente nicht lesbar, Index `nil`), und
+        // die CI wurde rot. Ein Symlink hilft nicht: `proc_name` meldet dann
+        // mal „codex“, mal „sleep“.
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("codex-liveness-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let binary = dir.appendingPathComponent("codex")
-        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/sleep"), to: binary)
+        try Self.copySigned("/bin/sleep", to: binary)
         let chat = UUID()
         let process = Process()
         process.executableURL = binary
@@ -293,15 +313,26 @@ final class CodexOpenTurnStatusTests: XCTestCase {
         try process.run()
         defer { process.terminate(); process.waitUntilExit() }
 
-        // Ein Subagent desselben Chats mit geerbter ID zählt nicht.
+        // Ein Subagent desselben Chats mit geerbter ID zählt nicht. Er muss
+        // beim Scan leben, sonst prüft der Test nichts: früher `sleep -a never
+        // exec 30`, das sofort mit Fehler endet. Jetzt eine Shell, die auf
+        // Eingabe wartet; `-c` ist auch bei Codex eine Option mit Wert, der
+        // Unterbefehl bleibt `exec`.
+        let shellDir = dir.appendingPathComponent("subagent", isDirectory: true)
+        try FileManager.default.createDirectory(at: shellDir, withIntermediateDirectories: true)
+        let shell = shellDir.appendingPathComponent("codex")
+        try Self.copySigned("/bin/bash", to: shell)
+        let input = Pipe()
         let child = Process()
-        child.executableURL = binary
-        child.arguments = ["-a", "never", "exec", "30"]
+        child.executableURL = shell
+        child.arguments = ["-c", "read line", "exec"]
         child.environment = ["WHISPERM8_SESSION_ID": chat.uuidString]
+        child.standardInput = input
         try child.run()
-        defer { child.terminate(); child.waitUntilExit() }
+        defer { child.terminate(); child.waitUntilExit(); try? input.fileHandleForWriting.close() }
 
         let index = CodexChatProcessIndex.scan()
+        XCTAssertTrue(process.isRunning && child.isRunning, "beide Prozesse müssen den Scan überleben")
         XCTAssertNotNil(index)
         guard case .running(let since) = CodexProcessLiveness.of(sessionID: chat, index: index) else {
             return XCTFail("Codex-Prozess des Chats nicht gefunden")
