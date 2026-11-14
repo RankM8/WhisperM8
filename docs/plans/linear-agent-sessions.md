@@ -7,14 +7,14 @@ versucht), Test-Ticket WM8-90 im Workspace WhisperM8. Jede Aussage ist als **gem
 
 ## Ergebnis zuerst
 
-1. **Mit unserem Schlüssel geht es nicht.** Linear sperrt alle drei Agent-Befehle für persönliche Schlüssel
+1. **Mit unserem Schlüssel geht es nicht.** Linear sperrt die drei versuchten Agent-Befehle für persönliche Schlüssel
    (gemessen: 403 „Using an unexpected authentication method (apiKey)“). Eine Agent-Sitzung gehört immer einer
    eigenen App mit eigener Identität („WhisperM8“ als App-Nutzer), die ein Admin im Workspace installiert.
-2. **Ohne öffentlich erreichbare Adresse bliebe es halb.** Damit Linear Sitzungen anzeigt und jemand in Linear
+2. **Ohne öffentlich erreichbare Adresse bliebe es halb** (gelesen). Damit Linear Sitzungen anzeigt und jemand in Linear
    einen Chat ansprechen oder ihm ein Ticket übergeben kann, verlangt Linear einen Webhook unter einer
    öffentlichen https-Adresse, der binnen 5 Sekunden antwortet. WhisperM8 läuft auf dem Mac und hat keine. Ob
    Sitzungen ohne Webhook überhaupt in der Oberfläche erscheinen, lässt die Doku offen.
-3. **Der Gewinn ist heute klein.** Die Ansichten „Mit Agent“ und „Ohne Agent“ gibt es schon, auf Basis unseres
+3. **Der Gewinn ist heute klein** (gelesen und abgeleitet). Die Ansichten „Mit Agent“ und „Ohne Agent“ gibt es schon, auf Basis unseres
    Anhangs. Linears Funktion brächte echte Filter und einen Verlauf je Sitzung, aber nur in groben Schritten,
    nicht den Chat-Verlauf, den WM8-83 braucht.
 
@@ -74,7 +74,7 @@ gäbe es im Ticket ohnehin nichts Neues zu sehen.
 Aufwand: etwa 30 Minuten für Giuliano, dazu eine Stunde Skript. Die Installation ist eine dauerhafte Änderung
 am Workspace, bis sie wieder entfernt wird.
 
-## 3. Abbildung auf unsere Chats (gelesen, abgeleitet)
+## 3. Abbildung auf unsere Chats (gelesen, abgeleitet, Zahlen geschätzt)
 
 **Ein Agent, viele Sitzungen.** Linear kennt je installierter App genau einen App-Nutzer. Es gäbe also einen
 Agent „WhisperM8“ je Workspace. Jeder Chat, der an einem Ticket arbeitet, bekäme dort eine Sitzung. Der
