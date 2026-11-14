@@ -345,6 +345,39 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
         assertClipboardOnly(text: "Antwort", reason: .decisionPending)
     }
 
+    /// WM8-66: Erkannte Frage — der Text geht ins freie Textfeld, ohne Enter,
+    /// auch wenn beim Stopp „senden“ gewählt war.
+    func testRecognizedQuestionGetsTextIntoItsField() async throws {
+        chatWriter.chatState = .questionAcceptsText
+        let (coordinator, _) = try await deliverToChat("Lila bitte", submit: true)
+
+        XCTAssertEqual(chatWriter.questionWrites, ["Lila bitte"])
+        XCTAssertTrue(chatWriter.writes.isEmpty, "nicht der Weg ins Eingabefeld, kein Enter")
+        XCTAssertEqual(pasteSpy.clipboardText, "Lila bitte", "auch in der Zwischenablage")
+        assertNoPasteAttempt()
+        XCTAssertTrue(notices.isEmpty)
+        XCTAssertNil(AppState.shared.lastError)
+        XCTAssertFalse(coordinator.overlayController.isQuickActionHint)
+    }
+
+    func testQuestionThatClosedMeanwhileKeepsTextOnClipboard() async throws {
+        chatWriter.chatState = .questionAcceptsText
+        chatWriter.questionWriteSucceeds = false
+        _ = try await deliverToChat("Zu spät")
+
+        XCTAssertEqual(chatWriter.questionWrites, ["Zu spät"])
+        assertClipboardOnly(text: "Zu spät", reason: .decisionPending)
+    }
+
+    /// Liegt der Text nur in der Zwischenablage, sagt es auch die Pille.
+    func testClipboardOnlyShowsHintInThePill() async throws {
+        chatWriter.chatState = .awaitingInput
+        let (coordinator, _) = try await deliverToChat("Antwort")
+
+        XCTAssertTrue(coordinator.overlayController.isQuickActionHint)
+        XCTAssertEqual(coordinator.overlayController.quickActionLabel, RecordingCoordinator.clipboardOnlyPillHint)
+    }
+
     func testStartingChatKeepsTextOnClipboardWithNotice() async throws {
         chatWriter.chatState = .starting
         _ = try await deliverToChat("Noch zu früh")

@@ -169,7 +169,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Dreieck | Zeilenumbruch ohne Senden (Ctrl+J, siehe Schutzregeln) |
 | | Steuerkreuz ◀ ▶ | Wort zurück/vor (Ctrl+←/→ als vollständige CSI-Sequenz), mit Wiederholung — Claude und Codex |
 | | Steuerkreuz ▲ ▼ | Zeile hoch/runter, nur im sichtbar mehrzeiligen Entwurf und nicht aus der ersten (▲) bzw. letzten (▼) Zeile; dort holte Claude den Verlauf. Ist das Feld oder die Cursorzeile nicht ablesbar, „geht nicht“ |
-| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt. Die Dynamic Island zeigt vorher, was es ist |
+| | Kreuz | neuesten Eintrag der Zwischenablage einfügen: Text als ein Block ohne Senden, Bild wie ⌘V (in die Zwischenablage, dann Ctrl+V; nur Claude und Codex). In Shells nur Text, nur an der Eingabezeile und nur mit eingeschaltetem Bracketed Paste. Nicht in einer Rückfrage, auch nicht, wenn sie erscheint, während der Text noch lädt — außer in Claudes erkannter Frage mit freiem Textfeld (siehe Schutzregeln): Dort geht Text ins Feld, ohne Enter, kein Bild. Die Dynamic Island zeigt vorher, was es ist |
 | | Kreis | genau ein Escape, unabhängig vom Status und ohne 1-s-Sperre. Arbeitet der Chat und ist keine Ansicht erkannt, warnt die Dynamic Island: es unterbricht |
 | | L3 | Rückgängig (Ctrl+_), nur Claude; Codex hat im Standard-Editor kein Undo |
 | R1 Schnellbefehle | Kreuz | Claude: immer „Jetzt senden“ (Ctrl+X Ctrl+S, wie Ctrl+Enter), ohne Erkennung des Feldinhalts; schickt den Entwurf sofort ab bzw. die Warteschlange, bei leerem Feld passiert nichts (seit 13.11.2026, vorher konnte eine falsche Erkennung „Weiter“ in einen fertigen Prompt tippen). Codex: mit Text im ruhenden Chat Enter, leeres Feld „Weiter“, arbeitend oder nur mit ↑ zurückgeholter Prompt „geht nicht“. Nie in einer Rückfrage oder offenen Ansicht, in Shells wie bisher |
@@ -411,9 +411,22 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
 
 ## Schutzregeln
 
-- In eine offene Rückfrage läuft nie Text: Ein Diktat bleibt in der Zwischenablage (Hinweis), Einträge
-  des Menüs, die etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in
-  Claudes Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- In eine offene Rückfrage läuft kein Text: Ein Diktat bleibt in der Zwischenablage (Hinweis als
+  Mitteilung und kurz in der Pille, „In der Zwischenablage · ⌘V fügt ein“), Einträge des Menüs, die
+  etwas in den Chat schicken, sind aus — auch „Modus wechseln“, denn Shift+Tab heißt in Claudes
+  Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
+- **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
+  Diktat und L1 + Kreuz als ein Einfüge-Block ins Feld „Type something“, nie mit Enter — bestätigen tut
+  der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt erkannt
+  (`ClaudeQuestionTextGate`): Der Chat wartet auf eine Frage, das jüngste Werkzeug im Transcript ist
+  AskUserQuestion (die Warte-Art allein reicht nicht: Claudes Registry meldet „input needed“ auch, wenn
+  ein MCP-Werkzeug wartet), und unten steht der Dialog mit „Enter to select · … to navigate“ ohne „Do
+  you want to proceed?“ (`ControllerScreenReading.isQuestionDialog`). Direkt vor dem Schreiben wird noch
+  einmal geprüft. Gemessen an Claude Code 2.1.325: Ein Einfüge-Block springt dort ins Textfeld, Ziffern
+  darin wählen nichts aus, mehrzeiliger Text bleibt im Feld; in einer Freigabe wird er ignoriert, eine
+  einzeln getippte „1“ gäbe sie dagegen frei — deshalb nie einzelne Tasten. Steht schon Text im Feld,
+  hängt der neue ohne Leerzeichen an. Ist der Bildschirm nicht ablesbar (hochgescrollt) oder fehlt die
+  Hinweiszeile, bleibt es bei der Zwischenablage. Codex meldet keine Rückfragen (WM8-67).
 - **Ansichten am Bildschirm (Runde 5):** Bei einer Controller-Eingabe in einen Claude-Chat liest
   `controllerScreenSnapshot` die unteren 16 Zeilen des Terminals, nur wenn die Ansicht ganz unten steht
   (Zähler `controller.screen.read`), in drei Fassungen (`ControllerScreenCapture`): voller Text für
