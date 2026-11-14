@@ -53,7 +53,9 @@ Nach vorn kommt das zuletzt aktive Agent-Chats-Fenster (`ControllerWakeFocus`, W
 Aktivierung ausdrücklich zum Schlüsselfenster. Vorher holte macOS beim Aktivieren das zuletzt aktive
 Fenster der App nach vorn — lag dort ein offenes Einstellungsfenster, sah der Controller „anderes
 Fenster“, schickte Brücken-Tasten dorthin, und jede Taste piepte bis zu einem Mausklick. Gibt es das
-Fenster nicht mehr, öffnet der Weg wie bisher das Primärfenster.
+Fenster nicht mehr, oder wird die App binnen 2 s nicht aktiv (Aktivierung verweigert), öffnet der Weg wie
+bisher das Primärfenster. Das Log `controller_wake_focus` nennt das Key-Fenster vorher und nachher (Klasse
+und Kennung), damit ein Feldtest die Ursache belegen kann.
 
 Notbremse: `defaults write com.whisperm8.app controllerFeatureEnabled -bool NO` — kein Zugriff auf
 das GameController-Framework, der Schalter wirkt nicht. Für das rohe HID der Xbox-Controller (Paddles,

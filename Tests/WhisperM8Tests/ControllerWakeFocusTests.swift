@@ -8,6 +8,7 @@ import XCTest
 final class ControllerWakeFocusTests: XCTestCase {
     private var log: [String] = []
     private var pendingWhenActive: [@MainActor () -> Void] = []
+    private var pendingTimeout: [@MainActor () -> Void] = []
 
     private func focus(target: UUID?, makeKeySucceeds: Bool = true) -> ControllerWakeFocus {
         ControllerWakeFocus(
@@ -18,9 +19,10 @@ final class ControllerWakeFocusTests: XCTestCase {
             },
             openPrimary: { [unowned self] in log.append("openPrimary") },
             activate: { [unowned self] in log.append("activate") },
-            whenActive: { [unowned self] block in
+            whenActive: { [unowned self] block, timeout in
                 log.append("whenActive")
                 pendingWhenActive.append(block)
+                pendingTimeout.append(timeout)
             }
         )
     }
@@ -40,6 +42,14 @@ final class ControllerWakeFocusTests: XCTestCase {
         focus(target: UUID(), makeKeySucceeds: false).bringToFront()
         pendingWhenActive.forEach { $0() }
         XCTAssertEqual(log, ["whenActive", "activate", "makeKey target", "openPrimary"])
+    }
+
+    /// Wird die App nicht aktiv (Aktivierung verweigert), greift nach der Frist
+    /// wenigstens der alte Weg.
+    func testRefusedActivationFallsBackToPrimary() {
+        focus(target: UUID()).bringToFront()
+        pendingTimeout.forEach { $0() }
+        XCTAssertEqual(log, ["whenActive", "activate", "openPrimary"])
     }
 
     func testWithoutKnownWindowOpensPrimaryAsBefore() {

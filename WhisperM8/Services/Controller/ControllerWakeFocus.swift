@@ -26,24 +26,37 @@ struct ControllerWakeFocus {
     /// Der bisherige Weg: Primärfenster öffnen und die App aktivieren.
     var openPrimary: () -> Void
     var activate: () -> Void
-    /// Ruft den Block auf, sobald die App aktiv ist (sofort, wenn sie es schon ist).
-    var whenActive: (@escaping @MainActor () -> Void) -> Void
+    /// Ruft `onActive` auf, sobald die App aktiv ist (sofort, wenn sie es schon
+    /// ist), sonst nach Ablauf der Frist `onTimeout`.
+    var whenActive: (_ onActive: @escaping @MainActor () -> Void, _ onTimeout: @escaping @MainActor () -> Void) -> Void
 
     func bringToFront() {
         guard let target = targetWindowID() else {
             openPrimary()
             return
         }
-        whenActive {
+        whenActive({
             if !makeKey(target) { openPrimary() }
-        }
+        }, {
+            // Aktivierung verweigert oder ausgeblieben: wenigstens der alte Weg.
+            openPrimary()
+        })
         activate()
     }
 
     static var live: ControllerWakeFocus {
         ControllerWakeFocus(
             targetWindowID: { AgentWindowStore.shared.dictationWindowID },
-            makeKey: { AgentChatsCommandCenter.shared.perform(.makeKeyWindow, in: $0) },
+            makeKey: { target in
+                // Für den Feldtest: welches Fenster vorher Key war und ob unseres es danach ist.
+                let before = describe(NSApp.keyWindow)
+                let done = AgentChatsCommandCenter.shared.perform(.makeKeyWindow, in: target)
+                DispatchQueue.main.async {
+                    Logger.controller.info(
+                        "controller_wake_focus made=\(done, privacy: .public) before=\(before, privacy: .public) after=\(describe(NSApp.keyWindow), privacy: .public)")
+                }
+                return done
+            },
             openPrimary: { WindowRequestCenter.shared.request(.agentChats) },
             activate: { AppActivation.activate() },
             whenActive: ControllerWakeFocus.runWhenAppActive
@@ -53,8 +66,12 @@ struct ControllerWakeFocus {
     /// Einmal nach `didBecomeActive`, einen Lauf der Ereignisschleife später:
     /// AppKit setzt beim Aktivieren selbst ein Schlüsselfenster, unseres soll
     /// danach kommen. Wird die App binnen 2 s nicht aktiv, verfällt der Wunsch.
-    static func runWhenAppActive(_ block: @escaping @MainActor () -> Void) {
-        if NSApp.isActive {
+    static func runWhenAppActive(
+        _ block: @escaping @MainActor () -> Void,
+        onTimeout: @escaping @MainActor () -> Void
+    ) {
+        // Die Test-Instanz aktiviert sich nie (`AppActivation`): sofort.
+        if NSApp.isActive || AppInstance.isTestInstance {
             block()
             return
         }
@@ -64,13 +81,22 @@ struct ControllerWakeFocus {
         ) { _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { once.fire() } }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MainActor.assumeIsolated { once.cancel() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            MainActor.assumeIsolated { if once.cancel() { onTimeout() } }
+        }
     }
+}
+
+/// Klasse und Kennung eines Fensters für das Log, ohne Titel (der kann Inhalte nennen).
+@MainActor
+private func describe(_ window: NSWindow?) -> String {
+    guard let window else { return "none" }
+    return "\(type(of: window)):\(window.identifier?.rawValue ?? "-")"
 }
 
 /// Einmaliger Aufruf nach der Aktivierung, danach Beobachter weg.
 @MainActor
-private final class WakeOnce: @unchecked Sendable {
+private final class WakeOnce {
     private var block: (@MainActor () -> Void)?
     var token: NSObjectProtocol?
 
@@ -82,9 +108,13 @@ private final class WakeOnce: @unchecked Sendable {
         pending?()
     }
 
-    func cancel() {
+    /// `true`, wenn der Block da noch ausstand (Frist abgelaufen).
+    @discardableResult
+    func cancel() -> Bool {
+        let wasPending = block != nil
         block = nil
         if let token { NotificationCenter.default.removeObserver(token) }
         token = nil
+        return wasPending
     }
 }
