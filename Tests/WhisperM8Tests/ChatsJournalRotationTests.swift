@@ -198,4 +198,66 @@ final class ChatsJournalRotationTests: XCTestCase {
         XCTAssertTrue(test.path.hasPrefix(FileManager.default.temporaryDirectory.path))
         XCTAssertEqual(ChatsStatusJournal.sharedFileURL(), test, "swift test ist kein App-Prozess")
     }
+
+    // MARK: Review: fremde Schreiber in derselben Generation
+
+    /// Ein älterer Testlauf, der wie vor WM8-87 ins Journal schreibt: liest die
+    /// Generation aus der letzten Zeile und zählt eigene Nummern, ohne Markierung.
+    private func appendForeign(generation: String, seqs: [Int]) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        for seq in seqs {
+            let line = #"{"at":"2026-11-14T04:00:00Z","journalId":"\#(generation)","seq":\#(seq),"sessionID":"\#(UUID().uuidString)","signal":"x","source":"hook","to":"idle"}"#
+            try handle.write(contentsOf: Data((line + "\n").utf8))
+        }
+    }
+
+    func testAppStartsAFreshGenerationWhenTheLastLineIsNotItsOwn() throws {
+        try writeResidueFile()
+        let app = ChatsStatusJournal(fileURL: url, writer: ChatsStatusJournal.appWriter)
+        app.append(sessionID: session, from: "idle", to: "working", signal: "s", source: "hook")
+        let last = try XCTUnwrap(ChatsStatusJournal.readAll(fileURL: url).last)
+        XCTAssertNotEqual(last.journalId, "9c695e9d", "fremde letzte Zeile: neue Generation")
+        XCTAssertEqual(last.seq, 1)
+        XCTAssertEqual(last.writer, ChatsStatusJournal.appWriter)
+        XCTAssertEqual(ChatsStatusJournal.currentCursor(fileURL: url), "\(last.journalId):1")
+    }
+
+    func testAppContinuesItsOwnGenerationAfterARestart() {
+        let first = ChatsStatusJournal(fileURL: url, writer: ChatsStatusJournal.appWriter)
+        first.append(sessionID: session, from: "a", to: "b", signal: "s", source: "hook")
+        first.append(sessionID: session, from: "b", to: "c", signal: "s", source: "hook")
+        let restarted = ChatsStatusJournal(fileURL: url, writer: ChatsStatusJournal.appWriter)
+        restarted.append(sessionID: session, from: "c", to: "d", signal: "s", source: "hook")
+        let all = ChatsStatusJournal.readAll(fileURL: url)
+        XCTAssertEqual(all.map(\.seq), [1, 2, 3], "ein normaler Neustart kostet keine Lücke")
+        XCTAssertEqual(Set(all.map(\.journalId)).count, 1)
+    }
+
+    func testForeignLinesInTheAppGenerationNeitherReplayNorHideAppEvents() throws {
+        let app = ChatsStatusJournal(fileURL: url, writer: ChatsStatusJournal.appWriter)
+        for index in 0..<3 {
+            app.append(sessionID: session, from: "a\(index)", to: "b\(index)", signal: "s", source: "hook")
+        }
+        let generation = try XCTUnwrap(ChatsStatusJournal.readAll(fileURL: url).last?.journalId)
+        // Ein alter Testlauf schreibt dazwischen, mit eigenen Nummern.
+        try appendForeign(generation: generation, seqs: [1, 2, 9, 10])
+        app.append(sessionID: session, from: "x", to: "y", signal: "s", source: "hook")
+
+        XCTAssertEqual(ChatsStatusJournal.currentCursor(fileURL: url), "\(generation):4")
+        let result = ChatsStatusJournal.changes(since: "\(generation):2", fileURL: url)
+        XCTAssertFalse(result.gap)
+        XCTAssertEqual(result.entries.map(\.seq), [3, 4], "nur Zeilen der App, keine Wiederholung")
+        XCTAssertTrue(result.entries.allSatisfy { $0.writer == ChatsStatusJournal.appWriter })
+    }
+
+    func testCursorFindsTheAppLineAboveALongForeignTail() throws {
+        let app = ChatsStatusJournal(fileURL: url, writer: ChatsStatusJournal.appWriter)
+        app.append(sessionID: session, from: "a", to: "b", signal: "s", source: "hook")
+        let generation = try XCTUnwrap(ChatsStatusJournal.readAll(fileURL: url).last?.journalId)
+        try appendForeign(generation: generation, seqs: Array(100..<300))
+        XCTAssertEqual(ChatsStatusJournal.currentCursor(fileURL: url), "\(generation):1",
+                       "das Dateiende enthält nur fremde Zeilen: dann alles lesen")
+    }
 }

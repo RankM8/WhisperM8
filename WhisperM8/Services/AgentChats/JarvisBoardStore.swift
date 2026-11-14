@@ -407,7 +407,12 @@ enum JarvisBoardSettings {
 /// über `load(fileURL:)`. Jede echte Änderung erzeugt ein Journal-Ereignis —
 /// `chats since`/`watch` liefern es mit, die Mod braucht keinen zweiten Kanal.
 final class JarvisBoardStore: @unchecked Sendable {
-    static let shared = JarvisBoardStore()
+    /// Außerhalb der App (`swift test`) nie die echte Board-Datei (WM8-87,
+    /// wie `ChatsStatusJournal.shared`).
+    static let shared = JarvisBoardStore(fileURL: AppInstance.isAppBundleProcess ? nil
+        : FileManager.default.temporaryDirectory
+            .appendingPathComponent("whisperm8-tests", isDirectory: true)
+            .appendingPathComponent("jarvis-board.json"))
 
     enum StoreError: LocalizedError {
         case writeFailed(String)

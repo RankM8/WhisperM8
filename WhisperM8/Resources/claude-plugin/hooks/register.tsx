@@ -50,6 +50,10 @@ let refreshPending = false
  * Änderung am Atom zeichnet das Band neu (WM8-87).
  */
 let latestCursor: string | null = null
+/** Zeitpunkt des letzten vollständigen Lesens (für das seltene Nachlesen von Titeln). */
+let lastRefreshAt = 0
+/** Statuswechsel lesen Titel, Projekt und Mitbesitzer höchstens so oft nach. */
+const SLOW_REFRESH_MS = 5 * MIN
 /** Der 30-s-Takt der Band-Uhr läuft einmal je Mod-Instanz — session.start feuert bei Start, Resume, /clear und Compact erneut. */
 let tickerStarted = false
 let toolDeferred: boolean | null = null
@@ -124,6 +128,7 @@ const refresh = async ($: EngineInterface) => {
   // gilt, nicht WHISPERM8_SESSION_ID (Befund 11.11.2026).
   if (sessionID !== null && !sameID(next.owner, sessionID)) sessionID = next.owner
   latestCursor = next.cursor
+  lastRefreshAt = await $.clock.now()
   // Nur schreiben, was sich sichtbar geändert hat: jedes Schreiben zeichnet
   // das Band neu (WM8-87). Die Uhr zieht nur mit, wenn das Board neu ist.
   if (!sameBoard(await read($, board), next)) {
@@ -152,9 +157,30 @@ const scheduleRefresh = ($: EngineInterface) => {
   })
 }
 
+/** Generation eines Cursors `<generation>:<seq>`. */
+const generationOf = (cursor: string | null) => (cursor === null ? null : cursor.slice(0, Math.max(0, cursor.lastIndexOf(':'))))
+
+/**
+ * Ansatz nach einer Lücke: Ist die Generation gewechselt, ab ihrem Anfang
+ * (`<neu>:0`), sonst ab dem frisch gelesenen Stand.
+ */
+export const nextGenerationStart = (previous: string | null, fresh: string | null): string | null => {
+  const gen = generationOf(fresh)
+  if (gen === null || gen === '' || gen === generationOf(previous)) return fresh
+  return `${gen}:0`
+}
+
 /** Gleiches Board ohne den Cursor (der zählt nur für `chats watch`). */
 export const sameBoard = (a: BoardView | null, b: BoardView | null) =>
   a !== null && b !== null && JSON.stringify({ ...a, cursor: null }) === JSON.stringify({ ...b, cursor: null })
+
+/** Liegt `at` vor `since`? Fehlt eines, nein. */
+export const isBefore = (at: string | undefined, since: string | null | undefined) => {
+  if (!at || !since) return false
+  const a = Date.parse(at)
+  const b = Date.parse(since)
+  return !Number.isNaN(a) && !Number.isNaN(b) && a < b
+}
 
 /** Ändert sich zwischen `before` und `after` eine Alters-Angabe im Band? */
 export const agesChange = (entries: readonly BoardEntry[], before: number, after: number) =>
@@ -241,6 +267,7 @@ const syncTool = async ($: EngineInterface, active: boolean) => {
 type WatchEvent = {
   event?: string
   at?: string
+  cursor?: string | null
   gap?: boolean
   kind?: string
   owner?: string
@@ -268,8 +295,11 @@ const startWatch = ($: EngineInterface) => {
   watchRunning = true
   void (async () => {
     let delay = 2_000
+    /** Wo der nächste Strom ansetzt: nach dem zuletzt gelieferten Ereignis. */
+    let resume: string | null = null
+    let sawGap = false
     while (generation === watchGeneration && !sessionEnded) {
-      const cursor = latestCursor ?? (await read($, board))?.cursor ?? null
+      const cursor = resume ?? latestCursor ?? (await read($, board))?.cursor ?? null
       const argv = [binary, 'chats', 'watch', '--interval', '2']
       if (cursor !== null) argv.push('--cursor', cursor)
       const iterator = $.process.spawn({ argv })[Symbol.asyncIterator]()
@@ -288,6 +318,8 @@ const startWatch = ($: EngineInterface) => {
             if (line.trim() === '') continue
             try {
               const ev = JSON.parse(line) as WatchEvent
+              if (ev.gap === true || ev.event === 'gap') sawGap = true
+              else if (typeof ev.cursor === 'string') resume = ev.cursor
               await handleEvent($, ev)
               // Nur ein echtes Ereignis setzt die Wartezeit zurück, nicht
               // „started“ oder „gap“: Sonst startet ein sofort endender
@@ -308,6 +340,14 @@ const startWatch = ($: EngineInterface) => {
       // Frischer Stand samt Cursor, bevor der nächste Strom ansetzt. Das ist
       // das einzige Lesen je Runde; eine Lücke liest nicht zusätzlich.
       await refresh($).catch(() => undefined)
+      // Nach einer Lücke ab dem Anfang der neuen Generation, damit kein
+      // Weck-Grund aus der Wartezeit verloren geht; ältere Ereignisse als der
+      // frisch gelesene Stand fallen in handleEvent weg. Ohne Lücke weiter
+      // ab dem letzten gelieferten Ereignis.
+      if (sawGap) {
+        sawGap = false
+        resume = nextGenerationStart(resume, latestCursor)
+      }
     }
   })()
     .catch(() => undefined)
@@ -327,6 +367,12 @@ const handleEvent = async ($: EngineInterface, ev: WatchEvent) => {
   const view = await read($, board)
   const entry = view?.entries.find(e => sameID(e.sessionID, ev.sessionID))
   if (view === null || entry === undefined || ev.sessionID === undefined) return
+  // Älter als der gelesene Stand (nach einer Lücke nachgeliefert): weder
+  // anzeigen noch wecken.
+  if (isBefore(ev.at, entry.statusSince)) return
+  // Titel, Projekt und Mitbesitzer ändern sich selten; sie liest ein
+  // Statuswechsel höchstens alle fünf Minuten mit nach.
+  if ((await $.clock.now()) - lastRefreshAt > SLOW_REFRESH_MS) scheduleRefresh($)
   // Statuswechsel eines Board-Chats: direkt in die Anzeige, ohne Prozess.
   if (typeof ev.to === 'string' && ev.to !== entry.status) {
     const to = ev.to
