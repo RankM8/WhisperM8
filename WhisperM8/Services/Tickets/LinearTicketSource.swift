@@ -63,16 +63,26 @@ struct LinearTicketSource: TicketSource {
     }
 
     func ticket(key: String) async throws -> TicketContext {
-        let data = try await client.run("""
-        query($id: String!) {
-          issue(id: $id) { \(Self.ticketFields) team { key states(first: 50) { nodes { id name type position } } } }
+        let data: [String: Any]
+        do {
+            data = try await fetchTicket(key)
+        } catch TicketSourceError.notFound {
+            // Linear nennt nur die Art („Issue“); hier zählt die Nummer.
+            throw TicketSourceError.notFound(key)
         }
-        """, variables: ["id": key])
         guard let node = data["issue"] as? [String: Any], let ticket = Self.ticket(node),
               let team = node["team"] as? [String: Any] else {
             throw TicketSourceError.notFound(key)
         }
         return TicketContext(ticket: ticket, team: team["key"] as? String ?? "", statuses: Self.statuses(team["states"]))
+    }
+
+    private func fetchTicket(_ key: String) async throws -> [String: Any] {
+        try await client.run("""
+        query($id: String!) {
+          issue(id: $id) { \(Self.ticketFields) team { key states(first: 50) { nodes { id name type position } } } }
+        }
+        """, variables: ["id": key])
     }
 
     func tickets(linkedTo chatID: UUID) async throws -> [Ticket] {
