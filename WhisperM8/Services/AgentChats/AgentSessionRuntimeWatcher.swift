@@ -109,9 +109,10 @@ final class AgentSessionRuntimeWatcher {
     /// (`CodexProcessLiveness`).
     var processIDProvider: (UUID) -> Int32? = { _ in nil }
 
-    /// Meldet einen GEÄNDERTEN Arbeitsordner oder Branch (WM8-60) — aus
-    /// demselben Tail-Read wie die Statusentscheidung.
-    var onWorkingLocation: ((UUID, AgentWorkingLocation) -> Void)?
+    /// Meldet einen GEÄNDERTEN Ort (Hauptordner/Arbeitskopie, Branch;
+    /// WM8-60) — aus demselben Tail-Read wie die Statusentscheidung. Ein
+    /// Sprung in einen Unterordner ändert den Ort nicht und meldet nichts.
+    var onWorkingCopy: ((UUID, AgentWorkingCopy) -> Void)?
 
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
@@ -414,8 +415,8 @@ final class AgentSessionRuntimeWatcher {
             let activityChanged = current.cachedActivity != snapshot.activity
             current.cachedActivity = snapshot.activity
             current.cachedQueuedOwnPrompts = snapshot.queuedOwnPrompts
-            let locationChanged = snapshot.location != nil && current.cachedLocation != snapshot.location
-            if let location = snapshot.location { current.cachedLocation = location }
+            let copyChanged = snapshot.workingCopy != nil && current.cachedWorkingCopy != snapshot.workingCopy
+            if let copy = snapshot.workingCopy { current.cachedWorkingCopy = copy }
             if snapshot.transcriptURL == nil, current.provider == .codex {
                 current.resolveCooldown = Self.resolveCooldownTicks
             }
@@ -425,9 +426,9 @@ final class AgentSessionRuntimeWatcher {
                 self.watched[sessionID] = current
                 self.onActivity?(sessionID, snapshot.activity)
             }
-            if locationChanged, let location = snapshot.location {
+            if copyChanged, let copy = snapshot.workingCopy {
                 self.watched[sessionID] = current
-                self.onWorkingLocation?(sessionID, location)
+                self.onWorkingCopy?(sessionID, copy)
             }
 
             guard let decision = snapshot.decision else {
@@ -507,7 +508,7 @@ final class AgentSessionRuntimeWatcher {
                 // Stat-first: Datei unverändert → Stand-Zeile auch.
                 activity: entry.cachedActivity,
                 queuedOwnPrompts: entry.cachedQueuedOwnPrompts,
-                location: entry.cachedLocation
+                workingCopy: entry.cachedWorkingCopy
             )
         }
 
@@ -535,24 +536,25 @@ final class AgentSessionRuntimeWatcher {
             activity: activity,
             // Nur Zeilen mit dem Marker werden geparst (Runde 5, R1).
             queuedOwnPrompts: entry.provider == .claude ? ClaudeQueueScan.pendingOwnPrompts(inTail: tail) : 0,
-            location: workingLocation(in: tail, provider: entry.provider, previous: entry.cachedLocation)
+            workingCopy: workingCopy(in: tail, entry: entry)
         )
     }
 
-    /// Ordner und Branch aus dem Tail. Codex nennt den Branch im Tail
-    /// meist nicht: dann `.git/HEAD` des Ordners lesen (zwei, drei kleine
-    /// Dateien, ohne Subprozess). Fehlt die Zeile im Tail, bleibt der
-    /// zuletzt bekannte Stand.
-    nonisolated static func workingLocation(
-        in tail: String, provider: AgentProvider, previous: AgentWorkingLocation?
-    ) -> AgentWorkingLocation? {
-        guard var location = AgentWorkingLocationExtractor.location(in: tail, provider: provider) else {
-            return previous
+    /// Ort des Chats aus dem Tail, schon eingeordnet (`entry.cwd` ist der
+    /// Projektordner). Den Branch liest `.git/HEAD` des Ordners (wenige
+    /// kleine Dateien, ohne Subprozess): Claudes `gitBranch` hinkt nach
+    /// einem Ordnerwechsel minutenlang hinterher, Codex nennt ihn im Tail
+    /// meist gar nicht. Fehlt die Zeile im Tail, bleibt der letzte Stand.
+    nonisolated static func workingCopy(
+        in tail: String, entry: WatchedSession,
+        gitLocation: (String) -> GitLocation? = { GitHeadReader.location(at: $0) }
+    ) -> AgentWorkingCopy? {
+        guard let location = AgentWorkingLocationExtractor.location(in: tail, provider: entry.provider) else {
+            return entry.cachedWorkingCopy
         }
-        if provider == .codex, location.branch == nil {
-            location.branch = GitHeadReader.branch(at: location.cwd)
-        }
-        return location
+        return AgentWorkingCopyClassifier.classify(
+            cwd: location.cwd, projectPath: entry.cwd,
+            git: gitLocation(location.cwd), transcriptBranch: location.branch)
     }
 
     /// Extractor-Aufruf mit Kostenzähler. Die Uhr wird nur bei
@@ -616,8 +618,8 @@ struct WatchedSession {
     var cachedActivity: AgentSessionActivity? = nil
     /// Eigene Prompts in Claudes Warteschlange (`ClaudeQueueScan`).
     var cachedQueuedOwnPrompts: Int = 0
-    /// Zuletzt erkannter Ordner und Branch (WM8-60).
-    var cachedLocation: AgentWorkingLocation? = nil
+    /// Zuletzt erkannter Ort (WM8-60).
+    var cachedWorkingCopy: AgentWorkingCopy? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -636,6 +638,6 @@ struct AgentSessionRuntimePollSnapshot {
     var activity: AgentSessionActivity?
     /// Eigene Prompts in Claudes Warteschlange; im Stat-first-Pfad gecacht.
     var queuedOwnPrompts: Int = 0
-    /// Ordner und Branch (WM8-60); im Stat-first-Pfad gecacht.
-    var location: AgentWorkingLocation? = nil
+    /// Ort des Chats (WM8-60); im Stat-first-Pfad gecacht.
+    var workingCopy: AgentWorkingCopy? = nil
 }

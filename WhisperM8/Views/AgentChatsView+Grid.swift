@@ -904,12 +904,14 @@ extension AgentChatsView {
                 .foregroundStyle(isFocused ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .layoutPriority(1)
             if let project {
                 ProjectAvatar(project: project, size: 13)
                     .help(project.name)
             }
-            accountBadge(for: session)
-            if let copy = session.workingCopy { AgentWorkingCopyBadge(copy: copy, maxWidth: 260) }
+            // Konto und Ort gleichrangig vor dem Spacer (WM8-60).
+            accountBadge(for: session).layoutPriority(0.5)
+            if let copy = session.workingCopy { AgentWorkingCopyBadge(copy: copy) }
             if Self.showsNoteCards {
                 JarvisNoteChevron(sessionID: session.id, windowID: windowID,
                                   taskSource: Self.noteTaskSource(session, project: project),

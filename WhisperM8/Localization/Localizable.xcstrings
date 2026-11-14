@@ -20164,16 +20164,6 @@
         }
       }
     },
-    "Works in %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arbeitet in %@"
-          }
-        }
-      }
-    },
     "Works in the folder %@": {
       "localizations": {
         "de": {

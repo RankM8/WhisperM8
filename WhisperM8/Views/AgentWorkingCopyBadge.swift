@@ -1,61 +1,72 @@
 import SwiftUI
 
-/// Marke „Wo arbeitet der Chat?“: Hauptordner oder Arbeitskopie, dazu der
-/// Branch. Immer sichtbar (kein Hover-only), Schrift 11 pt.
+/// Marke „Wo arbeitet der Chat?“ (WM8-60): ein Chip mit Ort und Branch.
+/// Hauptordner leise grau mit Ordner-Symbol und nur dem Branch (der Name
+/// „Hauptordner“ stünde sonst neben „main“-Konto und „main“-Branch dreifach),
+/// Arbeitskopie farbig mit Kopie-Symbol, Name und Branch. Immer sichtbar
+/// (kein Hover-only), Schrift 11 pt, voller Pfad im Tooltip.
 struct AgentWorkingCopyBadge: View {
-    enum Style {
-        /// Variante A: ein Chip mit Ort und Branch.
-        case chip
-        /// Variante B: Hauptordner nur als leiser Branch-Text, Arbeitskopie
-        /// als farbiger Chip mit Namen, Branch daneben.
-        case split
-    }
-
     let copy: AgentWorkingCopy
-    var style: Style = .chip
-    var maxWidth: CGFloat = 300
 
-    /// Akzent statt Grün: Grün heißt in der App nur „arbeitet“.
-    static let worktreeColor = AgentTheme.accent
-
-    var body: some View {
-        switch style {
-        case .chip: chip
-        case .split: split
-        }
-    }
+    /// Lila wie der Branch-Tag (`BranchTag`): weder Grün (heißt „arbeitet“)
+    /// noch der Akzent (heißt „ausgewählt“).
+    static let elsewhereColor = Color(red: 0.62, green: 0.45, blue: 0.95)
 
     private var isElsewhere: Bool { copy.kind != .mainFolder }
-    private var color: Color { isElsewhere ? Self.worktreeColor : AgentTheme.textTertiary }
-    private var iconName: String {
-        switch copy.kind {
-        case .mainFolder: return "folder"
-        case .worktree: return "square.on.square"
-        case .otherFolder: return "folder.badge.questionmark"
-        }
-    }
+    private var color: Color { isElsewhere ? Self.elsewhereColor : AgentTheme.textTertiary }
+    /// Hauptordner: der Branch (sonst „main folder“); woanders: der Name.
     private var placeText: String {
-        switch copy.kind {
-        case .mainFolder: return String(localized: "main folder")
-        case .worktree, .otherFolder: return copy.name ?? ""
-        }
+        isElsewhere ? (copy.name ?? "") : (copy.branch ?? String(localized: "main folder"))
     }
 
-    private var chip: some View {
+    /// Je nach Platz im Kopf: Ort und Branch, nur der Ort, der Ort gekürzt,
+    /// nur das Symbol. Der Titel davor behält so Vorrang, ohne dass die Marke
+    /// zu unlesbaren Fetzen zusammengedrückt wird.
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            if isElsewhere, copy.branch != nil {
+                chip(place: .full, branch: .full)
+                chip(place: .full, branch: .truncated(110))
+            }
+            chip(place: .full, branch: .hidden)
+            chip(place: .truncated(84), branch: .hidden)
+            chip(place: .hidden, branch: .hidden)
+        }
+        // Kein Breitenrahmen: ViewThatFits meldet nur die Breite der
+        // gewählten Stufe und nimmt der Konto-Marke nichts weg. Vorrang vor
+        // dem Spacer, sonst teilt der HStack den Rest mit ihm und der Branch
+        // fällt trotz Platz weg.
+        .layoutPriority(0.5)
+        .help(copy.path)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilityText(copy))
+    }
+
+    private enum PlaceStyle { case full, truncated(CGFloat), hidden }
+
+    private func chip(place: PlaceStyle, branch: PlaceStyle) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: iconName).font(.system(size: 9, weight: .semibold))
-            Text(placeText)
-                .font(.system(size: 11, weight: .semibold))
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 130, alignment: .leading)
-                .fixedSize(horizontal: placeText.count <= 18, vertical: false)
-            if let branch = copy.branch {
-                Text("·").font(.system(size: 11)).opacity(0.6)
-                Text(branch)
-                    .font(.system(size: 11, design: .monospaced))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+            Image(systemName: Self.iconName(copy.kind)).font(.system(size: 9, weight: .semibold))
+            switch place {
+            case .full:
+                Text(placeText).font(placeFont).lineLimit(1).fixedSize()
+            case .truncated(let width):
+                Text(placeText).font(placeFont).lineLimit(1).truncationMode(.middle).frame(width: width, alignment: .leading)
+            case .hidden:
+                EmptyView()
+            }
+            if let name = copy.branch {
+                switch branch {
+                case .full:
+                    Text("·").font(.system(size: 11)).opacity(0.6)
+                    Text(name).font(.system(size: 11, design: .monospaced)).lineLimit(1).fixedSize()
+                case .truncated(let width):
+                    Text("·").font(.system(size: 11)).opacity(0.6)
+                    Text(name).font(.system(size: 11, design: .monospaced)).lineLimit(1)
+                        .truncationMode(.middle).frame(width: width, alignment: .leading)
+                case .hidden:
+                    EmptyView()
+                }
             }
         }
         .foregroundStyle(color)
@@ -63,49 +74,24 @@ struct AgentWorkingCopyBadge: View {
         .padding(.vertical, 1)
         .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
         .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5))
-        .frame(maxWidth: maxWidth, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .help(copy.path)
-        .accessibilityLabel(accessibilityText)
+        .fixedSize()
     }
 
-    private var split: some View {
-        HStack(spacing: 5) {
-            if isElsewhere {
-                HStack(spacing: 4) {
-                    Image(systemName: iconName).font(.system(size: 9, weight: .semibold))
-                    Text(placeText)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .foregroundStyle(color)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 3))
-                .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.30), lineWidth: 0.5))
-            }
-            if let branch = copy.branch {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.triangle.branch").font(.system(size: 9))
-                    Text(branch)
-                        .font(.system(size: 11, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .foregroundStyle(AgentTheme.textTertiary)
-            } else if !isElsewhere {
-                Text(placeText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textTertiary)
-            }
+    /// Hauptordner zeigt den Branch, also Schreibmaschinenschrift.
+    private var placeFont: Font {
+        isElsewhere || copy.branch == nil
+            ? .system(size: 11, weight: .semibold) : .system(size: 11, design: .monospaced)
+    }
+
+    static func iconName(_ kind: AgentWorkingCopy.Kind) -> String {
+        switch kind {
+        case .mainFolder: return "folder"
+        case .worktree: return "square.on.square"
+        case .otherFolder: return "folder.badge.questionmark"
         }
-        .frame(maxWidth: maxWidth, alignment: .leading)
-        .help(copy.path)
-        .accessibilityLabel(accessibilityText)
     }
 
-    private var accessibilityText: String {
+    static func accessibilityText(_ copy: AgentWorkingCopy) -> String {
         let place: String
         switch copy.kind {
         case .mainFolder: place = String(localized: "Works in the main folder")
@@ -118,17 +104,18 @@ struct AgentWorkingCopyBadge: View {
 }
 
 /// Kleines Zeichen für Tab und Seitenleiste: nur, wenn der Chat NICHT im
-/// Hauptordner arbeitet (sonst wäre jede Zeile voll davon).
+/// Hauptordner arbeitet (sonst wäre jede Zeile voll davon). Name und Branch
+/// stehen sichtbar in Kachelkopf und Kopfzeile.
 struct AgentWorkingCopyMarker: View {
     let copy: AgentWorkingCopy?
 
     var body: some View {
         if let copy, copy.kind != .mainFolder {
-            Image(systemName: copy.kind == .worktree ? "square.on.square" : "folder.badge.questionmark")
+            Image(systemName: AgentWorkingCopyBadge.iconName(copy.kind))
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(AgentWorkingCopyBadge.worktreeColor)
-                .help(copy.name.map { String(localized: "Works in \($0)") } ?? copy.path)
-                .accessibilityLabel(copy.name.map { String(localized: "Works in \($0)") } ?? copy.path)
+                .foregroundStyle(AgentWorkingCopyBadge.elsewhereColor)
+                .help(AgentWorkingCopyBadge.accessibilityText(copy))
+                .accessibilityLabel(AgentWorkingCopyBadge.accessibilityText(copy))
         }
     }
 }

@@ -151,6 +151,14 @@ enum ChatsOutput {
         ]
     }
 
+    /// Kürzt in der Mitte, damit Anfang (Ort) und Ende (Branch) lesbar bleiben.
+    static func truncateMiddle(_ text: String, _ length: Int) -> String {
+        guard text.count > length, length > 1 else { return text }
+        let head = (length - 1) / 2
+        let tail = length - 1 - head
+        return String(text.prefix(head)) + "…" + String(text.suffix(tail))
+    }
+
     /// Für `chats show`: Ort ausgeschrieben, Ordner in Klammern.
     static func workingCopyLine(_ copy: AgentWorkingCopy) -> String {
         let place: String
@@ -294,7 +302,7 @@ enum ChatsOutput {
             let name = truncate("\(item.entry.projectName)/\(session.title)", 40)
             let status = item.runtime.status?.rawValue ?? "unknown"
             let since = item.runtime.since.map { relative(from: $0, to: now) } ?? "–"
-            let place = truncate(workingCopyShort(session.workingCopy), 26)
+            let place = truncateMiddle(workingCopyShort(session.workingCopy), 26)
             CLIIO.out(pad(shortID(session.id), 10) + pad(name, 42) + pad(status, 15) + pad(since, 8)
                       + pad(place, 28)
                       + flags(session.id, selfID: selfID, openTabIDs: openTabIDs, pinnedIDs: pinnedIDs))

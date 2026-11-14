@@ -245,8 +245,8 @@ final class AgentSessionStatusCoordinator {
         watcher.processIDProvider = { [weak self] sessionID in
             self?.terminalProcessID(sessionID)
         }
-        watcher.onWorkingLocation = { [weak self] sessionID, location in
-            self?.handleWorkingLocation(sessionID: sessionID, location: location)
+        watcher.onWorkingCopy = { [weak self] sessionID, copy in
+            self?.handleWorkingCopy(sessionID: sessionID, copy: copy)
         }
     }
 
@@ -1331,18 +1331,9 @@ final class AgentSessionStatusCoordinator {
         }
     }
 
-    /// Persistiert `lastTurnAt` und stößt den Auto-Namer an — vormals
-    /// `AgentChatsView.handleTurnFinished`.
-    /// Ordner oder Branch eines Chats hat sich geändert (WM8-60): einordnen
-    /// (Hauptordner, Arbeitskopie, anderer Ordner) und am Chat merken. Der
-    /// Store schreibt nur bei einer echten Änderung.
-    func handleWorkingLocation(sessionID: UUID, location: AgentWorkingLocation) {
-        let workspace = store.loadWorkspace()
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
-              let project = workspace.projects.first(where: { $0.id == session.projectID }) else { return }
-        let copy = AgentWorkingCopyClassifier.classify(
-            cwd: location.cwd, projectPath: project.path, branch: location.branch)
-        guard copy != session.workingCopy else { return }
+    /// Ort eines Chats hat sich geändert (WM8-60): am Chat merken. Der
+    /// Watcher hat schon eingeordnet; der Store schreibt nur bei Änderung.
+    func handleWorkingCopy(sessionID: UUID, copy: AgentWorkingCopy) {
         do {
             try store.setWorkingCopy(copy, for: sessionID)
         } catch {
@@ -1350,6 +1341,8 @@ final class AgentSessionStatusCoordinator {
         }
     }
 
+    /// Persistiert `lastTurnAt` und stößt den Auto-Namer an — vormals
+    /// `AgentChatsView.handleTurnFinished`.
     private func performTurnFinishedBookkeeping(sessionID: UUID) {
         let workspace = store.loadWorkspace()
         guard let session = workspace.sessions.first(where: { $0.id == sessionID }),

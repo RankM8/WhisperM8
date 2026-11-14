@@ -1,11 +1,11 @@
 import Foundation
 
 /// Wo ein Chat zuletzt gearbeitet hat: im Hauptordner seines Projekts, in
-/// einer eigenen Arbeitskopie (Git-Worktree unter `.claude/worktrees/<name>`)
-/// oder in einem anderen Ordner — samt Branch. Abgeleitet aus dem Ende des
-/// Verlaufs (Claude: `cwd` und `gitBranch` je Zeile, Codex: `cwd` im
-/// `turn_context`), nicht aus dem Startordner: Ein Chat, der im Hauptordner
-/// startet und dann in eine Arbeitskopie wechselt, zeigt die Arbeitskopie.
+/// einer eigenen Arbeitskopie (Git-Worktree) oder in einem anderen Ordner —
+/// samt Branch. Abgeleitet aus dem Ende des Verlaufs (Claude: `cwd` je Zeile,
+/// Codex: `cwd` im `turn_context`), nicht aus dem Startordner: Ein Chat, der
+/// im Hauptordner startet und dann in eine Arbeitskopie wechselt, zeigt die
+/// Arbeitskopie.
 struct AgentWorkingCopy: Codable, Equatable, Hashable {
     enum Kind: String, Codable {
         case mainFolder
@@ -14,12 +14,13 @@ struct AgentWorkingCopy: Codable, Equatable, Hashable {
     }
 
     var kind: Kind
-    /// Der zuletzt genutzte Ordner (`cwd`).
+    /// Wurzel des Orts (Projektordner, Wurzel der Arbeitskopie bzw. des
+    /// Repos), nicht der rohe `cwd`: Ein Sprung in einen Unterordner ändert
+    /// den Ort nicht und schreibt deshalb nichts.
     var path: String
     /// Name der Arbeitskopie bzw. des anderen Ordners; `nil` im Hauptordner.
     var name: String?
-    /// `nil`, wenn der Verlauf keinen Branch nennt (kein Git, Codex ohne
-    /// lesbares HEAD).
+    /// `nil`, wenn unbekannt (kein Git, losgelöster HEAD).
     var branch: String?
 }
 
@@ -27,24 +28,44 @@ enum AgentWorkingCopyClassifier {
     /// Ordner, in dem Claude Code seine Arbeitskopien anlegt.
     static let claudeWorktreeMarker = "/.claude/worktrees/"
 
-    /// Pur: ordnet `cwd` dem Projekt zu. Unterordner des Projekts zählen zum
-    /// Hauptordner, Unterordner einer Arbeitskopie zur Arbeitskopie.
-    static func classify(cwd: String, projectPath: String, branch: String?) -> AgentWorkingCopy {
+    /// Pur: ordnet `cwd` dem Projekt zu.
+    /// - Parameter git: Repo-Wurzel, Git-Verzeichnis und Branch des `cwd`
+    ///   (`GitHeadReader`), `nil` ohne Repo oder bei gelöschtem Ordner.
+    /// - Parameter transcriptBranch: Branch laut Verlauf. Nur Rückfall, wenn
+    ///   kein Repo lesbar ist: Claude schreibt nach einem Ordnerwechsel noch
+    ///   minutenlang den alten Branch (Review WM8-60).
+    static func classify(
+        cwd: String,
+        projectPath: String,
+        git: GitLocation?,
+        transcriptBranch: String? = nil
+    ) -> AgentWorkingCopy {
         let cwd = normalized(cwd)
         let project = normalized(projectPath)
-        let branch = branch.flatMap { $0.isEmpty || $0 == "HEAD" ? nil : $0 }
-        if let range = cwd.range(of: claudeWorktreeMarker) {
-            let rest = cwd[range.upperBound...]
-            let name = rest.split(separator: "/", maxSplits: 1).first.map(String.init)
-            if let name, !name.isEmpty {
-                return AgentWorkingCopy(kind: .worktree, path: cwd, name: name, branch: branch)
-            }
+        let rawBranch = git != nil ? git?.branch : transcriptBranch
+        let branch = rawBranch.flatMap { $0.isEmpty || $0 == "HEAD" ? nil : $0 }
+        let worktreesOfProject = project + claudeWorktreeMarker
+        // 1. Arbeitskopie von Claude Code unter <Projekt>/.claude/worktrees/<name>.
+        if cwd.hasPrefix(worktreesOfProject),
+           let name = cwd.dropFirst(worktreesOfProject.count).split(separator: "/").first.map(String.init),
+           !name.isEmpty {
+            return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: name, branch: branch)
         }
+        // 2. Andere Arbeitskopie desselben Repos (etwa ein Ordner neben dem
+        //    Projekt): ihr Git-Verzeichnis liegt unter <Projekt>/.git/worktrees/.
+        if let git, normalized(git.gitDir).hasPrefix(project + "/.git/worktrees/") {
+            let root = normalized(git.root)
+            return AgentWorkingCopy(kind: .worktree, path: root,
+                                    name: (root as NSString).lastPathComponent, branch: branch)
+        }
+        // 3. Hauptordner samt Unterordnern.
         if cwd == project || cwd.hasPrefix(project + "/") {
-            return AgentWorkingCopy(kind: .mainFolder, path: cwd, name: nil, branch: branch)
+            return AgentWorkingCopy(kind: .mainFolder, path: project, name: nil, branch: branch)
         }
-        return AgentWorkingCopy(kind: .otherFolder, path: cwd,
-                                name: (cwd as NSString).lastPathComponent, branch: branch)
+        // 4. Alles andere, auch Arbeitskopien fremder Projekte.
+        let root = git.map { normalized($0.root) } ?? cwd
+        return AgentWorkingCopy(kind: .otherFolder, path: root,
+                                name: (root as NSString).lastPathComponent, branch: branch)
     }
 
     /// Ohne abschließenden Schrägstrich, `/private/tmp` wie `/tmp`.

@@ -33,27 +33,43 @@ enum AgentWorkingLocationExtractor {
     }
 }
 
-/// Branch eines Ordners aus `.git/HEAD`, ohne `git`-Subprozess. Folgt bei
-/// Arbeitskopien der `gitdir:`-Datei. Zwei bis drei kleine Lesezugriffe.
+/// Repo-Wurzel, Git-Verzeichnis und Branch eines Ordners.
+struct GitLocation: Equatable {
+    /// Ordner, in dem `.git` liegt.
+    var root: String
+    /// Das echte Git-Verzeichnis (bei Arbeitskopien das Ziel von `gitdir:`).
+    var gitDir: String
+    /// `nil` bei losgelöstem HEAD.
+    var branch: String?
+}
+
+/// Liest `.git/HEAD`, ohne `git`-Subprozess. Folgt bei Arbeitskopien der
+/// `gitdir:`-Datei. Wenige `stat` und ein, zwei kleine Lesezugriffe.
 enum GitHeadReader {
-    static func branch(at directory: String, fileManager: FileManager = .default) -> String? {
+    static func location(at directory: String, fileManager: FileManager = .default) -> GitLocation? {
+        // Gelöschter Ordner (Arbeitskopie entfernt): nicht nach oben bis zum
+        // Repo des Hauptordners laufen, sonst stünde dessen Branch da.
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: directory, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return nil
+        }
         var url = URL(fileURLWithPath: directory, isDirectory: true).standardizedFileURL
         for _ in 0..<40 {
             let dotGit = url.appendingPathComponent(".git")
-            var isDirectory: ObjCBool = false
-            if fileManager.fileExists(atPath: dotGit.path, isDirectory: &isDirectory) {
+            var dotGitIsDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: dotGit.path, isDirectory: &dotGitIsDirectory) {
                 let gitDir: URL
-                if isDirectory.boolValue {
+                if dotGitIsDirectory.boolValue {
                     gitDir = dotGit
                 } else {
                     guard let text = try? String(contentsOf: dotGit, encoding: .utf8),
                           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") }) else { return nil }
                     let path = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
-                    gitDir = path.hasPrefix("/") ? URL(fileURLWithPath: path)
-                        : url.appendingPathComponent(path).standardizedFileURL
+                    gitDir = (path.hasPrefix("/") ? URL(fileURLWithPath: path)
+                        : url.appendingPathComponent(path)).standardizedFileURL
                 }
-                guard let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"), encoding: .utf8) else { return nil }
-                return branch(fromHead: head)
+                let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"), encoding: .utf8)
+                return GitLocation(root: url.path, gitDir: gitDir.path, branch: head.flatMap(branch(fromHead:)))
             }
             let parent = url.deletingLastPathComponent()
             if parent.path == url.path { return nil }

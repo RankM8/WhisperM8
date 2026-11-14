@@ -23,7 +23,6 @@ extension UISnapshotGallery {
         let title: String
         let account: String
         let copy: AgentWorkingCopy
-        let style: AgentWorkingCopyBadge.Style
 
         var body: some View {
             HStack(spacing: 8) {
@@ -33,13 +32,15 @@ extension UISnapshotGallery {
                     .foregroundStyle(AgentTheme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .layoutPriority(1)
                 Text(account)
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(AgentTheme.textTertiary.opacity(0.16), in: RoundedRectangle(cornerRadius: 3))
-                AgentWorkingCopyBadge(copy: copy, style: style)
+                    .layoutPriority(0.5)
+                AgentWorkingCopyBadge(copy: copy)
                 Spacer(minLength: 6)
                 Image(systemName: "play.fill")
                     .font(.system(size: 9, weight: .bold))
@@ -92,12 +93,12 @@ extension UISnapshotGallery {
     }
 
     static func workingCopyFixtures() -> [Fixture] {
-        func headers(_ style: AgentWorkingCopyBadge.Style) -> Fixture {
-            Fixture(name: "arbeitsordner-kachelkopf-\(style == .chip ? "a-chip" : "b-geteilt")",
-                    size: CGSize(width: 720, height: 160)) {
+        // Breit (Einzelkachel) und schmal (vier Spalten, ~400 pt je Kachel).
+        func headers(_ name: String, width: CGFloat) -> Fixture {
+            Fixture(name: "arbeitsordner-kachelkopf-\(name)", size: CGSize(width: width, height: 160)) {
                 AnyView(VStack(spacing: 1) {
                     ForEach(Array(workingCopyCases.enumerated()), id: \.offset) { _, item in
-                        HeaderRow(title: item.title, account: item.account, copy: item.copy, style: style)
+                        HeaderRow(title: item.title, account: item.account, copy: item.copy)
                     }
                 }
                 .background(AgentTheme.border)
@@ -107,8 +108,8 @@ extension UISnapshotGallery {
             }
         }
         return [
-            headers(.chip),
-            headers(.split),
+            headers("breit", width: 720),
+            headers("schmal", width: 424),
             Fixture(name: "arbeitsordner-tab-seitenleiste", size: CGSize(width: 820, height: 150)) {
                 AnyView(TabAndSidebar()
                     .padding(12)

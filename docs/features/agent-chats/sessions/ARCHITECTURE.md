@@ -195,26 +195,35 @@ Bekannte Grenzen:
   melden; die PTY-Ausgabe als Arbeitssignal nutzen; ein echtes Freigabe-Signal
   über Codex-Hooks oder die OSC-9-Meldungen der TUI.
 
-Aus demselben Tail-Read leitet der Watcher ab, wo ein Chat arbeitet (WM8-60,
-`AgentWorkingLocationExtractor`): Claude schreibt `cwd` und `gitBranch` in jede
-Nachrichtenzeile, Codex `cwd` je Turn in den `turn_context` und den Branch nur
-in `session_meta.git` am Dateianfang. Fehlt er im Tail, liest `GitHeadReader`
-`.git/HEAD` des Ordners (bei einer Arbeitskopie über die `gitdir:`-Datei),
-ohne `git`-Subprozess. Der Koordinator ordnet den Ordner ein
-(`AgentWorkingCopyClassifier`: Hauptordner samt Unterordnern, Arbeitskopie
-unter `.claude/worktrees/<name>`, anderer Ordner) und speichert ihn als
-`AgentChatSession.workingCopy`, nur bei einer Änderung und ohne den
-Aktivitäts-Bump von `updateSession`, damit sich die Sortierung nicht
-verschiebt. Kachelkopf und Kopfzeile zeigen ihn als Marke
-(`AgentWorkingCopyBadge`), Tab und Seitenleiste ein kleines Zeichen, wenn der
-Chat nicht im Hauptordner arbeitet (`AgentWorkingCopyMarker`); die
-Seitenleiste liest dafür den Workspace, nicht den Activity-Store. Der
-Projekt-Branch `AgentProject.lastBranch` ist der Branch des Projektordners und
-bleibt nur der Ersatz, solange ein Chat noch keinen Ort hat. Kosten je Chat:
-der Parse einer Zeile im ohnehin gelesenen Tail, bei Codex zwei bis drei
-kleine Dateien je Tail-Read, ein Workspace-Save nur bei Ordner- oder
-Branchwechsel. Der Indexer verwirft Sitzungen mit Arbeitskopie-Pfad als cwd
-weiterhin (`isClaudeWorktreePath`).
+Aus demselben Tail-Read leitet der Watcher ab, wo ein Chat arbeitet (WM8-60):
+`AgentWorkingLocationExtractor` liest den letzten `cwd` (Claude: jede
+Nachrichtenzeile, Codex: `turn_context` bzw. `session_meta`), `GitHeadReader`
+liest für diesen Ordner Repo-Wurzel, Git-Verzeichnis und Branch aus
+`.git/HEAD` (bei Arbeitskopien über die `gitdir:`-Datei, ohne
+`git`-Subprozess; bei gelöschtem Ordner nichts). Der Branch kommt bewusst aus
+HEAD: Claudes `gitBranch` hinkt nach einem Ordnerwechsel minutenlang
+hinterher (Review: 867 Zeilen Arbeitskopie mit `gitBranch=main`) und dient nur
+als Rückfall ohne Repo. `AgentWorkingCopyClassifier` ordnet ein: Arbeitskopie
+unter `<Projekt>/.claude/worktrees/<name>`, Arbeitskopie desselben Repos
+anderswo (Git-Verzeichnis unter `<Projekt>/.git/worktrees/`, etwa die
+ListM8-Dev-Slots), Hauptordner samt Unterordnern, sonst anderer Ordner (auch
+Arbeitskopien fremder Projekte). Gespeichert wird die Wurzel des Orts, nicht
+der rohe `cwd`: Sprünge zwischen Unterordnern (bis zu 620 je Chat in fünf
+Tagen) ändern nichts und schreiben nichts. Nur ein geänderter Ort geht über
+`onWorkingCopy` an den Koordinator und landet als
+`AgentChatSession.workingCopy` im Workspace, ohne den Aktivitäts-Bump von
+`updateSession`. Anzeige: Marke im Kachelkopf neben dem Konto und in der
+Kopfzeile der Einzelansicht (dort mit dem Pfad des Orts), per `ViewThatFits`
+von „Ort · Branch“ bis zum bloßen Symbol; kleines Zeichen in Tab und
+Seitenleiste nur außerhalb des Hauptordners (`AgentWorkingCopyMarker`). Lila
+wie der Branch-Tag, weil Grün „arbeitet“ und der Akzent „ausgewählt“ heißt. Die
+Seitenleiste liest den Workspace, nie den Activity-Store. Kosten je Chat und
+Tail-Read: der Parse der letzten Zeile mit `cwd` (0,1–0,5 ms bei großen
+Tool-Ergebnissen) und wenige `stat` plus ein, zwei kleine Lesezugriffe für
+HEAD; ein Workspace-Save nur bei echtem Ortswechsel. Grenzen: Liegt die letzte
+`turn_context`-Zeile eines Codex-Chats weiter als 64 KB zurück, bleibt bis zum
+nächsten Turn der gespeicherte Ort stehen. Der Indexer verwirft Sitzungen mit
+Arbeitskopie-Pfad als cwd weiterhin (`isClaudeWorktreePath`).
 
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`

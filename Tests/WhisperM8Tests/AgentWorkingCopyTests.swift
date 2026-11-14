@@ -10,38 +10,72 @@ final class AgentWorkingCopyTests: XCTestCase {
     // MARK: - Einordnung
 
     func testMainFolderAndItsSubfolders() {
+        var copies = Set<AgentWorkingCopy>()
         for cwd in [project, project + "/", project + "/WhisperM8/Views"] {
-            let copy = AgentWorkingCopyClassifier.classify(cwd: cwd, projectPath: project, branch: "main")
+            let copy = AgentWorkingCopyClassifier.classify(cwd: cwd, projectPath: project, git: nil, transcriptBranch: "main")
             XCTAssertEqual(copy.kind, .mainFolder, cwd)
             XCTAssertNil(copy.name)
             XCTAssertEqual(copy.branch, "main")
+            copies.insert(copy)
         }
+        // Ein Sprung in einen Unterordner ändert den Ort nicht (kein Schreiben).
+        XCTAssertEqual(copies.count, 1)
+        XCTAssertEqual(copies.first?.path, project)
     }
 
     func testClaudeWorktreeAndItsSubfolders() {
         let base = project + "/.claude/worktrees/bindung-fremdes-transcript"
         for cwd in [base, base + "/Tests/WhisperM8Tests"] {
-            let copy = AgentWorkingCopyClassifier.classify(cwd: cwd, projectPath: project, branch: "feat/x")
+            let copy = AgentWorkingCopyClassifier.classify(cwd: cwd, projectPath: project, git: nil, transcriptBranch: "feat/x")
             XCTAssertEqual(copy.kind, .worktree, cwd)
             XCTAssertEqual(copy.name, "bindung-fremdes-transcript")
+            XCTAssertEqual(copy.path, base)
             XCTAssertEqual(copy.branch, "feat/x")
         }
     }
 
     func testOtherFolder() {
-        let copy = AgentWorkingCopyClassifier.classify(cwd: "/tmp/skizze", projectPath: project, branch: nil)
+        let copy = AgentWorkingCopyClassifier.classify(cwd: "/tmp/skizze", projectPath: project, git: nil)
         XCTAssertEqual(copy.kind, .otherFolder)
         XCTAssertEqual(copy.name, "skizze")
         // Ein Nachbarordner mit gleichem Präfix ist kein Unterordner.
         XCTAssertEqual(AgentWorkingCopyClassifier.classify(
-            cwd: project + "-feature", projectPath: project, branch: nil).kind, .otherFolder)
+            cwd: project + "-feature", projectPath: project, git: nil).kind, .otherFolder)
+        // Die Arbeitskopie eines FREMDEN Projekts ist nicht die eigene.
+        XCTAssertEqual(AgentWorkingCopyClassifier.classify(
+            cwd: "/Users/demo/repos/andere/.claude/worktrees/x", projectPath: project, git: nil).kind, .otherFolder)
+    }
+
+    func testSiblingWorktreeOfTheSameRepoIsAWorktree() {
+        // ListM8-Dev-Slot: Ordner neben dem Projekt, .git zeigt auf <Projekt>/.git/worktrees/<n>.
+        let git = GitLocation(root: "/Users/demo/repos/whisperm8-ds190",
+                              gitDir: project + "/.git/worktrees/whisperm8-ds190", branch: "feat/ds")
+        let copy = AgentWorkingCopyClassifier.classify(
+            cwd: "/Users/demo/repos/whisperm8-ds190/api", projectPath: project, git: git)
+        XCTAssertEqual(copy, AgentWorkingCopy(kind: .worktree, path: "/Users/demo/repos/whisperm8-ds190",
+                                              name: "whisperm8-ds190", branch: "feat/ds"))
+    }
+
+    func testHeadBranchWinsOverAStaleTranscriptBranch() {
+        // Review WM8-60: Claude schreibt nach dem Wechsel in die Arbeitskopie
+        // noch minutenlang gitBranch=main.
+        let cwd = project + "/.claude/worktrees/wt"
+        let git = GitLocation(root: cwd, gitDir: project + "/.git/worktrees/wt", branch: "feat/WM8-60")
+        XCTAssertEqual(AgentWorkingCopyClassifier.classify(
+            cwd: cwd, projectPath: project, git: git, transcriptBranch: "main").branch, "feat/WM8-60")
+        // Losgelöster HEAD: kein Branch, auch nicht der alte aus dem Verlauf.
+        let detached = GitLocation(root: cwd, gitDir: project + "/.git/worktrees/wt", branch: nil)
+        XCTAssertNil(AgentWorkingCopyClassifier.classify(
+            cwd: cwd, projectPath: project, git: detached, transcriptBranch: "main").branch)
     }
 
     func testPrivateTmpCountsAsTmpAndDetachedHeadHasNoBranch() {
-        let copy = AgentWorkingCopyClassifier.classify(cwd: "/private/tmp/p/sub", projectPath: "/tmp/p", branch: "HEAD")
+        let copy = AgentWorkingCopyClassifier.classify(cwd: "/private/tmp/p/sub", projectPath: "/tmp/p", git: nil,
+                                                       transcriptBranch: "HEAD")
         XCTAssertEqual(copy.kind, .mainFolder)
         XCTAssertNil(copy.branch)
-        XCTAssertNil(AgentWorkingCopyClassifier.classify(cwd: project, projectPath: project, branch: "").branch)
+        XCTAssertNil(AgentWorkingCopyClassifier.classify(cwd: project, projectPath: project, git: nil,
+                                                         transcriptBranch: "").branch)
     }
 
     // MARK: - Ableitung aus dem Verlauf
@@ -78,10 +112,12 @@ final class AgentWorkingCopyTests: XCTestCase {
         XCTAssertNil(AgentWorkingLocationExtractor.location(in: item, provider: .codex))
     }
 
-    func testWatcherKeepsTheLastKnownLocationWhenTheTailHasNone() {
-        let previous = AgentWorkingLocation(cwd: "/a", branch: "main")
-        XCTAssertEqual(AgentSessionRuntimeWatcher.workingLocation(
-            in: #"{"type":"mode"}"#, provider: .claude, previous: previous), previous)
+    func testWatcherKeepsTheLastKnownPlaceWhenTheTailHasNone() {
+        var entry = WatchedSession(id: UUID(), provider: .claude, cwd: "/a", externalSessionID: "x",
+                                   transcriptURL: nil, lastTurnFinishedAt: nil)
+        entry.cachedWorkingCopy = AgentWorkingCopy(kind: .mainFolder, path: "/a", name: nil, branch: "main")
+        XCTAssertEqual(AgentSessionRuntimeWatcher.workingCopy(
+            in: #"{"type":"mode"}"#, entry: entry, gitLocation: { _ in nil }), entry.cachedWorkingCopy)
     }
 
     func testPollSnapshotCarriesTheLocation() {
@@ -92,14 +128,16 @@ final class AgentWorkingCopyTests: XCTestCase {
         let stat = AgentTranscriptFileStat(mtime: Date(), size: 10)
         let read = AgentSessionRuntimeWatcher.pollSnapshot(
             for: entry, now: Date(), statProvider: { _ in stat }, tailProvider: { _, _ in tail }, urlResolver: { _ in url })
-        XCTAssertEqual(read.location, AgentWorkingLocation(cwd: "/a/.claude/worktrees/w", branch: "feat/z"))
+        // /a existiert nicht → kein Repo lesbar → Branch laut Verlauf.
+        XCTAssertEqual(read.workingCopy, AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/w",
+                                                          name: "w", branch: "feat/z"))
         // Stat-first: unveränderte Datei → gecachter Ort, kein Tail-Read.
         entry.lastStat = stat
-        entry.cachedLocation = read.location
+        entry.cachedWorkingCopy = read.workingCopy
         let cached = AgentSessionRuntimeWatcher.pollSnapshot(
             for: entry, now: Date(), statProvider: { _ in stat },
             tailProvider: { _, _ in XCTFail("kein Tail-Read"); return nil }, urlResolver: { _ in url })
-        XCTAssertEqual(cached.location, read.location)
+        XCTAssertEqual(cached.workingCopy, read.workingCopy)
     }
 
     // MARK: - Branch aus .git/HEAD (Codex)
@@ -118,8 +156,11 @@ final class AgentWorkingCopyTests: XCTestCase {
         try "ref: refs/heads/feat/WM8-60\n".write(to: git.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
         let sub = repo.appendingPathComponent("a/b")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
-        XCTAssertEqual(GitHeadReader.branch(at: repo.path), "feat/WM8-60")
-        XCTAssertEqual(GitHeadReader.branch(at: sub.path), "feat/WM8-60")
+        XCTAssertEqual(GitHeadReader.location(at: repo.path)?.branch, "feat/WM8-60")
+        let fromSub = try XCTUnwrap(GitHeadReader.location(at: sub.path))
+        XCTAssertEqual(fromSub.branch, "feat/WM8-60")
+        XCTAssertEqual(AgentWorkingCopyClassifier.normalized(fromSub.root),
+                       AgentWorkingCopyClassifier.normalized(repo.standardizedFileURL.path))
     }
 
     func testGitHeadOfAWorktreeFollowsTheGitdirFile() throws {
@@ -131,13 +172,32 @@ final class AgentWorkingCopyTests: XCTestCase {
         try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
         try "gitdir: ../main/.git/worktrees/wt\n".write(
             to: worktree.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
-        XCTAssertEqual(GitHeadReader.branch(at: worktree.path), "fix/x")
+        let relative = try XCTUnwrap(GitHeadReader.location(at: worktree.path))
+        XCTAssertEqual(relative.branch, "fix/x")
+        XCTAssertTrue(relative.gitDir.hasSuffix("/main/.git/worktrees/wt"), relative.gitDir)
+        // Absolute gitdir-Angabe.
+        try "gitdir: \(gitDir.path)\n".write(to: worktree.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(GitHeadReader.location(at: worktree.path)?.branch, "fix/x")
+        // Die Einordnung erkennt sie als Arbeitskopie des Projekts „main“.
+        let copy = AgentWorkingCopyClassifier.classify(
+            cwd: worktree.path, projectPath: root.appendingPathComponent("main").path,
+            git: GitHeadReader.location(at: worktree.path))
+        XCTAssertEqual(copy.kind, .worktree)
+        XCTAssertEqual(copy.name, "wt")
     }
 
     func testDetachedHeadAndNoRepository() throws {
         XCTAssertNil(GitHeadReader.branch(fromHead: "3f2a9c0d1e\n"))
         XCTAssertEqual(GitHeadReader.branch(fromHead: "ref: refs/heads/main"), "main")
-        XCTAssertNil(GitHeadReader.branch(at: try tempDir().path))
+        XCTAssertNil(GitHeadReader.location(at: try tempDir().path))
+    }
+
+    func testDeletedFolderDoesNotBorrowTheMainRepository() throws {
+        let repo = try tempDir()
+        try FileManager.default.createDirectory(at: repo.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try "ref: refs/heads/main\n".write(to: repo.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+        // Entfernte Arbeitskopie: der Ordner fehlt, darüber liegt das Repo.
+        XCTAssertNil(GitHeadReader.location(at: repo.appendingPathComponent(".claude/worktrees/weg").path))
     }
 
     // MARK: - Speichern
