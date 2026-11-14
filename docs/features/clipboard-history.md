@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-05
+updated: 2026-11-14
 description: Zwischenablage-Verlauf (Maccy-Ersatz) mit Hotkey-Fenster, Datenschutz-Regeln, CLI und Plugin-Tool für Claude.
 ---
 
@@ -172,12 +172,20 @@ Text später, wird der Eintrag beim Zusammenführen wieder ein Diktat.
    und Tool verweigern mit klarer Meldung. „Mask secrets for agents“ (Standard
    an) ersetzt vor der Ausgabe durch `[REDACTED:<art>]`: private
    Schlüsselblöcke, JWTs, GitHub-, Slack-, AWS-, Google- und Stripe-Schlüssel,
-   `sk-…` (OpenAI, Anthropic), `Bearer` und `Basic`, Passwörter in URLs,
+   `sk-…` (OpenAI, Anthropic), Linear (`lin_api_…`, `lin_oauth_…`, `lin_wh_…`),
+   GitLab, npm, PyPI, Hugging Face, Groq, DigitalOcean, Shopify, Supabase,
+   SendGrid, Mailgun, Postman, Doppler, Airtable, Telegram-Bots, Tailscale,
+   age, Google-OAuth (Client-Secret, `ya29.…`, Refresh-Token), Webhook-Adressen
+   von Slack und Discord (der geheime Teil hinter dem Dienst), `Bearer` und
+   `Basic`, Passwörter in URLs,
    `.env`-Zeilen (`OPENAI_API_KEY=…`, `DB_PASSWORD=…`), Zuweisungen und
    JSON-Felder wie `password=…` oder `"client_secret": "…"` sowie lange
    zufällige Base64-Ketten. Reine Hex-Ketten (Git-Hashes, SHA-256, MD5),
    UUIDs, Platzhalter (`<your-key>`, `${TOKEN}`) und reine Zahlen bleiben
-   stehen. Die Suche der CLI läuft über den maskierten Text, damit niemand ein
+   stehen. Schlüssel mit festem Präfix haben eigene Regeln: Die grobe Regel für
+   lange Ketten greift nur, wenn Groß-, Kleinbuchstabe und Ziffer vorkommen, und
+   setzt nicht hinter einem Punkt an. Linear-Schlüssel fing sie bis WM8-68 nur
+   zufällig. Die Suche der CLI läuft über den maskierten Text, damit niemand ein
    Geheimnis per Suche Zeichen für Zeichen erraten kann; `get` maskiert vor dem
    Zerteilen in Stücke. Die Oberfläche der App zeigt die Originale (das ist die
    eigene Zwischenablage des Users). **Bilder werden nicht maskiert:** `get`

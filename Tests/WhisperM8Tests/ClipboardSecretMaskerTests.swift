@@ -110,6 +110,75 @@ final class ClipboardSecretMaskerTests: XCTestCase {
         XCTAssertEqual(masked("Authorization: Basic dXNlcjpwYXNz"), "Authorization: Basic [REDACTED:basic-auth]")
     }
 
+    // MARK: Formate mit festem Präfix (WM8-68)
+
+    /// Künstlicher Schlüsselrest: wiederholtes Muster, bewusst kein echter Schlüssel.
+    private func fill(_ pattern: String, _ count: Int) -> String {
+        String(String(repeating: pattern, count: count / pattern.count + 1).prefix(count))
+    }
+
+    func testLinearKeysAreMaskedWithTheirOwnLabel() {
+        let key = "lin_api_" + fill("aB3", 40)
+        XCTAssertEqual(masked(key), "[REDACTED:linear-key]")
+        XCTAssertEqual(masked("Linear-Schlüssel: \(key) bitte eintragen"), "Linear-Schlüssel: [REDACTED:linear-key] bitte eintragen")
+        XCTAssertEqual(masked("Authorization: \(key)"), "Authorization: [REDACTED:linear-key]")
+        XCTAssertEqual(masked("lin_oauth_" + fill("x9Y", 64)), "[REDACTED:linear-key]")
+        XCTAssertEqual(masked("lin_wh_" + fill("Q7r", 40)), "[REDACTED:linear-key]")
+        XCTAssertFalse(masked("LINEAR_API_KEY=\(key)").contains(key))
+    }
+
+    func testLinearKeyWithoutDigitsOrUppercaseIsStillMasked() {
+        // Die grobe Regel braucht Groß-, Kleinbuchstabe und Ziffer. Die eigene Regel nicht.
+        XCTAssertEqual(masked("lin_api_" + fill("abc", 40)), "[REDACTED:linear-key]")
+        XCTAssertEqual(masked("lin_api_" + fill("ab1", 40)), "[REDACTED:linear-key]")
+    }
+
+    func testFurtherPrefixedTokens() {
+        let cases: [(String, String)] = [
+            ("glpat-" + fill("Ab1_", 20), "gitlab-token"),
+            ("glpat-" + fill("Ab1", 27) + ".01.0i" + fill("x1", 7), "gitlab-token"),
+            ("npm_" + fill("aB3", 36), "npm-token"),
+            ("pypi-AgEIcHlwaS5vcmc" + fill("aB3_", 60), "pypi-token"),
+            ("hf_" + fill("aBcD", 34), "huggingface-token"),
+            ("dop_v1_" + fill("0a1b2c", 64), "digitalocean-token"),
+            ("shpat_" + fill("0a1b2c", 32), "shopify-token"),
+            ("sbp_" + fill("0a1b2c", 40), "supabase-key"),
+            ("sb_secret_" + fill("aB3_", 31), "supabase-key"),
+            ("key-" + fill("0a1b2c", 32), "mailgun-key"),
+            ("PMAK-" + fill("0a1b", 24) + "-" + fill("2c3d", 34), "postman-key"),
+            ("SG." + fill("aB3", 22) + "." + fill("xY7", 43), "sendgrid-key"),
+            ("dp.st.prd." + fill("aB3", 43), "doppler-token"),
+            ("pat" + fill("aB3", 14) + "." + fill("0a1b2c", 64), "airtable-token"),
+            ("GOCSPX-" + fill("aB3_", 28), "google-oauth"),
+            ("ya29." + fill("aB3_", 60), "google-oauth"),
+            ("1//0" + fill("aB3_", 60), "google-oauth"),
+            ("123456789:AA" + fill("aB3_", 33), "telegram-token"),
+            ("tskey-auth-" + fill("aB3", 11) + "-" + fill("xY7", 30), "tailscale-key"),
+            ("AGE-SECRET-KEY-1" + fill("QZ7", 58), "age-key"),
+            ("gsk_" + fill("aB3", 52), "api-key"),
+        ]
+        for (secret, label) in cases {
+            XCTAssertEqual(masked("vorher \(secret) nachher"), "vorher [REDACTED:\(label)] nachher", label)
+        }
+    }
+
+    func testWebhookURLsKeepTheServiceButHideTheSecret() {
+        let slack = "https://hooks.slack.com/services/T0000/B0000/" + fill("aB3", 24)
+        XCTAssertEqual(masked(slack), "https://hooks.slack.com/services/[REDACTED:webhook-url]")
+        let discord = "https://discord.com/api/webhooks/123456789012345678/" + fill("aB3_", 68)
+        XCTAssertEqual(masked(discord), "https://discord.com/api/webhooks/[REDACTED:webhook-url]")
+    }
+
+    func testPrefixLookalikesStay() {
+        let text = """
+        hf_hub_download und hf_transfer sind Python-Namen
+        npm_config_cache=/tmp/x
+        key-value store und key-abc
+        sgd.step() und SG.short.value
+        """
+        XCTAssertEqual(masked(text), text)
+    }
+
     // MARK: Falsch-Positive vermeiden
 
     func testGitHashesUUIDsAndChecksumsStay() {
