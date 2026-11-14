@@ -62,33 +62,47 @@ enum AgentWorkingCopyClassifier {
         let cwd = normalized(cwd)
         let project = normalized(projectPath)
         let rawBranch = git != nil ? git?.branch : transcriptBranch
-        let branch = rawBranch.flatMap { $0.isEmpty || $0 == "HEAD" ? nil : $0 }
+        let branch = rawBranch.flatMap(displayName).flatMap { $0 == "HEAD" ? nil : $0 }
         let worktreesOfProject = project + claudeWorktreeMarker
         // 1. Arbeitskopie von Claude Code unter <Projekt>/.claude/worktrees/<name>.
         if cwd.hasPrefix(worktreesOfProject),
            let name = cwd.dropFirst(worktreesOfProject.count).split(separator: "/").first.map(String.init),
            !name.isEmpty {
-            return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: name, branch: branch,
-                                    defaultBranch: git?.defaultBranch)
+            return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: displayName(name),
+                                    branch: branch, defaultBranch: git?.defaultBranch.flatMap(displayName))
         }
         // 2. Andere Arbeitskopie desselben Repos (etwa ein Ordner neben dem
         //    Projekt): ihr Git-Verzeichnis liegt unter <Projekt>/.git/worktrees/.
         if let git, normalized(git.gitDir).hasPrefix(project + "/.git/worktrees/") {
             let root = normalized(git.root)
             return AgentWorkingCopy(kind: .worktree, path: root,
-                                    name: (root as NSString).lastPathComponent, branch: branch,
-                                    defaultBranch: git.defaultBranch)
+                                    name: displayName((root as NSString).lastPathComponent), branch: branch,
+                                    defaultBranch: git.defaultBranch.flatMap(displayName))
         }
-        // 3. Hauptordner samt Unterordnern.
-        if cwd == project || cwd.hasPrefix(project + "/") {
+        // 3. Hauptordner samt Unterordnern — auch erkannt am Git-Verzeichnis
+        //    des Projekts, falls ein Pfad trotz Auflösung abweicht.
+        let isProjectRepo = git.map { normalized($0.gitDir) == project + "/.git" } ?? false
+        if cwd == project || cwd.hasPrefix(project + "/") || isProjectRepo {
             return AgentWorkingCopy(kind: .mainFolder, path: project, name: nil, branch: branch,
-                                    defaultBranch: git?.defaultBranch)
+                                    defaultBranch: git?.defaultBranch.flatMap(displayName))
         }
         // 4. Alles andere, auch Arbeitskopien fremder Projekte.
         let root = git.map { normalized($0.root) } ?? cwd
         return AgentWorkingCopy(kind: .otherFolder, path: root,
-                                name: (root as NSString).lastPathComponent, branch: branch,
-                                defaultBranch: git?.defaultBranch)
+                                name: displayName((root as NSString).lastPathComponent), branch: branch,
+                                defaultBranch: git?.defaultBranch.flatMap(displayName))
+    }
+
+    /// Branch- und Ordnernamen kommen aus fremden Dateien und landen im
+    /// Workspace, im Kachelkopf und per CLI im Terminal: nur druckbare
+    /// Zeichen, höchstens 255. Leer → `nil`.
+    static func displayName(_ raw: String) -> String? {
+        let printable = raw.unicodeScalars.filter {
+            !CharacterSet.controlCharacters.contains($0) && !CharacterSet.illegalCharacters.contains($0)
+        }
+        let text = String(String.UnicodeScalarView(printable)).trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return nil }
+        return String(text.prefix(255))
     }
 
     /// Ohne abschließenden Schrägstrich, `/private/tmp` wie `/tmp`.

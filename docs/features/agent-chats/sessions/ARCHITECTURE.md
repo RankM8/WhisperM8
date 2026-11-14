@@ -226,10 +226,33 @@ wie der Branch-Tag, weil Grün „arbeitet“ und der Akzent „ausgewählt“ h
 Seitenleiste liest den Workspace, nie den Activity-Store. Kosten je Chat und
 Tail-Read: der Parse der letzten Zeile mit `cwd` (0,1–0,5 ms bei großen
 Tool-Ergebnissen) und wenige `stat` plus ein, zwei kleine Lesezugriffe für
-HEAD; ein Workspace-Save nur bei echtem Ortswechsel. Grenzen: Liegt die letzte
-`turn_context`-Zeile eines Codex-Chats weiter als 64 KB zurück, bleibt bis zum
-nächsten Turn der gespeicherte Ort stehen. Der Indexer verwirft Sitzungen mit
-Arbeitskopie-Pfad als cwd weiterhin (`isClaudeWorktreePath`).
+HEAD; ein Workspace-Save nur bei echtem Ortswechsel. Der Indexer verwirft
+Sitzungen mit Arbeitskopie-Pfad als cwd weiterhin (`isClaudeWorktreePath`).
+
+Fremde Repos: Was in `.git` steht, bestimmt das Repo, und das kann fremd sein.
+`GitHeadReader.readSmallFile` liest deshalb nur reguläre Dateien bis 4 KB
+(keine Pipe, keine Riesendatei), und Branch- wie Ordnernamen werden auf
+druckbare Zeichen und höchstens 255 Zeichen begrenzt
+(`AgentWorkingCopyClassifier.displayName`), bevor sie in Workspace, Kachelkopf
+oder per CLI ins Terminal gehen. Projekt und `cwd` werden vor dem Vergleich
+aufgelöst (`realpath`); zusätzlich gilt als Hauptordner, wessen
+Git-Verzeichnis `<Projekt>/.git` ist. Sonst trüge jeder Chat eines Projekts
+hinter einem Symlink das Zeichen „außerhalb“.
+
+**Bekannte Grenzen der Ortsanzeige:**
+
+- **Die Marke zeigt den Ordner der Shell, nicht wohin geschrieben wird.** Ein
+  Chat, der aus dem Hauptordner heraus per absolutem Pfad oder `git -C` in
+  einer Arbeitskopie arbeitet, steht als „Hauptordner“ da. Das ist die
+  wichtigste Grenze: Die Anzeige beweist nicht, dass ein Chat den Hauptordner
+  in Ruhe lässt.
+- Der Branch stimmt nur zum Zeitpunkt des letzten Schreibens des Verlaufs;
+  wechselt ein anderer Chat oder der Nutzer danach den Branch im selben
+  Ordner, zeigt die Marke den alten Stand bis zum nächsten Schreiben.
+- Ein `cwd` in einem Git-Submodul zeigt den Branch des Submoduls.
+- Liegt die letzte `turn_context`-Zeile eines Codex-Chats weiter als 64 KB
+  zurück, bleibt bis zum nächsten Turn der gespeicherte Ort stehen.
+- `chats list` wird durch die Spalte `ORT` rund 28 Zeichen breiter.
 
 Subagent-Jobs gehen nicht durch den Runtime-Watcher. Für
 `.subagentJob`-Sessions mappt der Status-Koordinator den `AgentJobState`

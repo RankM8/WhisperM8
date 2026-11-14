@@ -254,6 +254,67 @@ final class AgentWorkingCopyTests: XCTestCase {
         XCTAssertNil(GitHeadReader.defaultBranch(gitDir: try tempDir()))
     }
 
+    // MARK: - Fremde Repos (Vic, WM8-60)
+
+    func testBranchAndNamesAreLimitedToPrintableCharacters() {
+        let escape = "feat/\u{1B}[31mrot\u{07}"
+        XCTAssertEqual(AgentWorkingCopyClassifier.displayName(escape), "feat/[31mrot")
+        XCTAssertEqual(AgentWorkingCopyClassifier.displayName(String(repeating: "x", count: 5000))?.count, 255)
+        XCTAssertNil(AgentWorkingCopyClassifier.displayName("\u{1B}\u{07}  "))
+        let git = GitLocation(root: project, gitDir: project + "/.git", branch: escape,
+                              defaultBranch: "main\u{0}")
+        let copy = AgentWorkingCopyClassifier.classify(cwd: project, projectPath: project, git: git)
+        XCTAssertEqual(copy.branch, "feat/[31mrot")
+        XCTAssertEqual(copy.defaultBranch, "main")
+    }
+
+    func testOnlySmallRegularFilesAreRead() throws {
+        let dir = try tempDir()
+        let small = dir.appendingPathComponent("small")
+        try "ref: refs/heads/main\n".write(to: small, atomically: true, encoding: .utf8)
+        XCTAssertEqual(GitHeadReader.readSmallFile(small), "ref: refs/heads/main\n")
+        let big = dir.appendingPathComponent("big")
+        try Data(count: 5000).write(to: big)
+        XCTAssertNil(GitHeadReader.readSmallFile(big), "zu groß")
+        XCTAssertNil(GitHeadReader.readSmallFile(dir), "Ordner")
+        let fifo = dir.appendingPathComponent("fifo")
+        XCTAssertEqual(mkfifo(fifo.path, 0o600), 0)
+        XCTAssertNil(GitHeadReader.readSmallFile(fifo), "Pipe darf nicht blockieren")
+    }
+
+    func testHeadAsPipeDoesNotHangTheReader() throws {
+        let repo = try tempDir()
+        let git = repo.appendingPathComponent(".git")
+        try FileManager.default.createDirectory(at: git, withIntermediateDirectories: true)
+        XCTAssertEqual(mkfifo(git.appendingPathComponent("HEAD").path, 0o600), 0)
+        let location = try XCTUnwrap(GitHeadReader.location(at: repo.path))
+        XCTAssertNil(location.branch)
+    }
+
+    func testProjectBehindASymlinkIsTheMainFolder() throws {
+        let root = try tempDir()
+        let real = root.appendingPathComponent("echt")
+        try FileManager.default.createDirectory(at: real.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try "ref: refs/heads/main\n".write(to: real.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: real.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        // Projekt über den Symlink angelegt, Claude nennt den echten Pfad.
+        let entry = WatchedSession(id: UUID(), provider: .claude, cwd: link.path, externalSessionID: "x",
+                                   transcriptURL: nil, lastTurnFinishedAt: nil)
+        let tail = #"{"type":"user","cwd":"\#(real.path)/sub","gitBranch":"main"}"#
+        let copy = try XCTUnwrap(AgentSessionRuntimeWatcher.workingCopy(in: tail, entry: entry))
+        XCTAssertEqual(copy.kind, .mainFolder)
+    }
+
+    func testMainFolderIsAlsoRecognizedByTheProjectsGitDirectory() {
+        // Pfade weichen ab (etwa eine Schreibweise, die realpath nicht angleicht),
+        // das Git-Verzeichnis ist aber das des Projekts.
+        let git = GitLocation(root: "/Volumes/x/whisperm8", gitDir: project + "/.git", branch: "main")
+        XCTAssertEqual(AgentWorkingCopyClassifier.classify(
+            cwd: "/Volumes/x/whisperm8/sub", projectPath: project, git: git).kind, .mainFolder)
+    }
+
     // MARK: - Speichern
 
     func testStoreWritesOnlyOnChangeAndKeepsTheActivityTime() throws {

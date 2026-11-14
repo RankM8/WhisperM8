@@ -547,14 +547,26 @@ final class AgentSessionRuntimeWatcher {
     /// meist gar nicht. Fehlt die Zeile im Tail, bleibt der letzte Stand.
     nonisolated static func workingCopy(
         in tail: String, entry: WatchedSession,
-        gitLocation: (String) -> GitLocation? = { GitHeadReader.location(at: $0) }
+        gitLocation: (String) -> GitLocation? = { GitHeadReader.location(at: $0) },
+        resolve: (String) -> String = AgentSessionRuntimeWatcher.realPath
     ) -> AgentWorkingCopy? {
         guard let location = AgentWorkingLocationExtractor.location(in: tail, provider: entry.provider) else {
             return entry.cachedWorkingCopy
         }
+        // Beide Pfade auflösen: Liegt das Projekt hinter einem Symlink, nennt
+        // Claude den echten Pfad, und ohne Auflösung wäre jeder Chat des
+        // Projekts „außerhalb“ (Vic, WM8-60).
+        let cwd = resolve(location.cwd)
         return AgentWorkingCopyClassifier.classify(
-            cwd: location.cwd, projectPath: entry.cwd,
-            git: gitLocation(location.cwd), transcriptBranch: location.branch)
+            cwd: cwd, projectPath: resolve(entry.cwd),
+            git: gitLocation(cwd), transcriptBranch: location.branch)
+    }
+
+    /// `realpath(3)`; fehlt der Ordner (gelöschte Arbeitskopie), der Eingabepfad.
+    nonisolated static func realPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     /// Extractor-Aufruf mit Kostenzähler. Die Uhr wird nur bei

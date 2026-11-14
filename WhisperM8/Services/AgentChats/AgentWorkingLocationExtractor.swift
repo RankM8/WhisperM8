@@ -64,13 +64,13 @@ enum GitHeadReader {
                 if dotGitIsDirectory.boolValue {
                     gitDir = dotGit
                 } else {
-                    guard let text = try? String(contentsOf: dotGit, encoding: .utf8),
+                    guard let text = readSmallFile(dotGit),
                           let line = text.split(separator: "\n").first(where: { $0.hasPrefix("gitdir:") }) else { return nil }
                     let path = line.dropFirst("gitdir:".count).trimmingCharacters(in: .whitespaces)
                     gitDir = (path.hasPrefix("/") ? URL(fileURLWithPath: path)
                         : url.appendingPathComponent(path)).standardizedFileURL
                 }
-                let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"), encoding: .utf8)
+                let head = readSmallFile(gitDir.appendingPathComponent("HEAD"))
                 return GitLocation(root: url.path, gitDir: gitDir.path, branch: head.flatMap(branch(fromHead:)),
                                    defaultBranch: defaultBranch(gitDir: gitDir))
             }
@@ -86,18 +86,31 @@ enum GitHeadReader {
     /// Lesezugriff; fehlt die Datei, `nil`.
     static func defaultBranch(gitDir: URL) -> String? {
         var common = gitDir
-        if let text = try? String(contentsOf: gitDir.appendingPathComponent("commondir"), encoding: .utf8) {
+        if let text = readSmallFile(gitDir.appendingPathComponent("commondir")) {
             let path = text.trimmingCharacters(in: .whitespacesAndNewlines)
             common = (path.hasPrefix("/") ? URL(fileURLWithPath: path) : gitDir.appendingPathComponent(path))
                 .standardizedFileURL
         }
-        guard let text = try? String(contentsOf: common.appendingPathComponent("refs/remotes/origin/HEAD"),
-                                     encoding: .utf8) else { return nil }
+        guard let text = readSmallFile(common.appendingPathComponent("refs/remotes/origin/HEAD")) else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = "ref: refs/remotes/origin/"
         guard trimmed.hasPrefix(prefix) else { return nil }
         let branch = String(trimmed.dropFirst(prefix.count))
         return branch.isEmpty ? nil : branch
+    }
+
+    /// Was in `.git` steht, bestimmt das Repo, und das kann fremd sein
+    /// (geklont, entpackt). Gelesen werden deshalb nur reguläre Dateien bis
+    /// `maxBytes` — eine riesige Datei oder eine Pipe an dieser Stelle darf
+    /// den Poll weder aufblähen noch hängen lassen (Vic, WM8-60).
+    static func readSmallFile(_ url: URL, maxBytes: Int = 4096) -> String? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize, size <= maxBytes,
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: maxBytes) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// Pur: `ref: refs/heads/<branch>` → Branch; losgelöster HEAD → `nil`.
