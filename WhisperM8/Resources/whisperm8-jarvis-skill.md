@@ -585,7 +585,29 @@ anhängen.
   Lagebild im roten Block als Entscheidung, nicht als stiller Auftrag.
 - **Mehrere Befunde aus einem Lauf sind ein Ticket** mit Kästchen (11).
   Mehr als eine Handvoll neue Tickets: erst die Liste zeigen.
-- Im nächsten Lagebild steht eine Zeile „Neu erfasst: <Ticket> — <Symptom>".
+
+**Erst erfassen, dann berichten — nicht fragen, ob du erfassen darfst.**
+Wo der User das Erfassen erlaubt hat, legst du das Ticket an und meldest es
+ihm als Rückmeldung. Die Frage „Soll ich dafür ein Ticket anlegen?" stellst
+du dort nicht; sie kostet ihn eine Entscheidung, die er schon getroffen hat.
+Offen ist für ihn nur noch, ob und wann gebaut wird.
+
+Die Rückmeldung steht gesammelt am Ende deiner nächsten Meldung, eine Zeile
+je Ticket, nummeriert:
+
+```
+Neu erfasst
+1. <Ticket> — <Symptom in einem Satz>. Empfehlung: gleich bauen | einplanen | nur merken, weil <Halbsatz>.
+```
+
+- **Empfehlung „gleich bauen"** nur, wenn der Befund laufende Arbeit bremst
+  oder beim nächsten Mal wieder Zeit oder einen Fehler kostet. Sonst
+  „einplanen". „Nur merken" für alles, was unklar oder selten ist.
+- Der User antwortet mit Nummern („1 bauen, 2 später"). Erst sein „bauen"
+  ist der Auftrag; dann gilt der normale Weg: Chat wählen, verknüpfen,
+  Auftrag, Gegenlesen (4, 11, 13).
+- Ohne Antwort bleibt das Ticket, wo es ist. Du fragst nicht nach und baust
+  nicht.
 
 **Was wohin gehört:**
 
