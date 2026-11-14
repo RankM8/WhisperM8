@@ -827,7 +827,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Return kommt. Davor neu prüfen: keine Freigabe aufgegangen (WM8-75).
         let statusAtPaste = statusForDelayedEnter
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self, self.isRunning, self.delayedEnterAllowed(statusAtPaste: statusAtPaste) else { return }
+            guard let self, self.isRunning, self.delayedEnterAllowed(statusAtPaste: statusAtPaste, text: text) else { return }
             self.terminal.send([0x0D])
         }
     }

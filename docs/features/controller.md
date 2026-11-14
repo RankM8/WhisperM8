@@ -420,13 +420,17 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   während der Aufnahme, `chats send`, Warteschlange) geht als Einfüge-Block raus, das Enter 80 ms später
   (`AgentTerminalController.pastePrompt`). Direkt davor prüft `DelayedEnterGuard` neu: Kam die
   Rückfrage erst nach dem Einfügen, oder steht bei Claude unten statt des Eingabefelds ein Dialog
-  (`ControllerScreenSnapshot.dialogVisible`, nur wenn der Chat arbeitet), bleibt das Enter aus. Der Text
-  bleibt als Entwurf stehen, die Pille sagt „Nicht gesendet: Der Chat fragt nach einer Entscheidung“.
-  Nachgestellt an Claude Code 2.1.325: Einfügen plus Enter 80 ms später bestätigte eine offene
-  Bash-Freigabe. War die Rückfrage schon beim Einfügen offen (`chats send` beantwortet bewusst), bleibt
-  das Enter wie bisher. Kosten: im ruhenden Chat keine, im arbeitenden ein Lesen der untersten 16 Zeilen
-  (gemessen rund 5 ms im Debug-Build). Codex-Freigaben erkennt das nicht (keine Rückfragen, Feld-Erkennung
-  nur für Claude; WM8-67).
+  (`ControllerScreenSnapshot.dialogVisible`, unterste 8 Zeilen), bleibt das Enter aus, und die Pille sagt
+  „Nicht gesendet: Der Chat fragt nach einer Entscheidung“ (nicht während einer Aufnahme). Der Text steht
+  dann meist noch im Feld; war der Dialog beim Einfügen schon gezeichnet, hat Claude ihn ignoriert — ein
+  Diktat liegt dann nur in der Zwischenablage. Beginnt der eigene Text wie eine Auswahlzeile („1. …“),
+  zählt eine solche Zeile nicht als Dialog. Nachgestellt an Claude Code 2.1.325: Einfügen plus Enter
+  80 ms später bestätigte eine offene Bash-Freigabe. War die Rückfrage schon beim Einfügen offen (`chats
+  send` beantwortet bewusst), bleibt das Enter wie bisher. Grenzen: Prüfen und Enter sind nicht atomar
+  gegenüber Claudes Neuzeichnen — ein Restfenster von wenigen Millisekunden bleibt; hochgescrollt ist der
+  Bildschirm nicht ablesbar, dann zählt nur der Status; `chats send` meldet auch bei zurückgehaltenem
+  Enter `delivered`. Kosten: ein Lesen der untersten 16 Zeilen je Senden (gemessen rund 5 ms im
+  Debug-Build). Codex-Freigaben erkennt das nicht (keine Rückfragen, Feld-Erkennung nur für Claude; WM8-67).
 - **Ausnahme Frage mit Textfeld (WM8-66, 14.11.2026):** In Claudes Frage-Dialog (AskUserQuestion) gehen
   Diktat und L1 + Kreuz (nur Text, kein Bild) als ein Einfüge-Block ins Feld „Type something“, nie mit
   Enter — bestätigen tut der Nutzer (bei Mehrfachauswahl nähme Enter den Haken wieder weg). Doppelt

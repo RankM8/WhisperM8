@@ -367,6 +367,14 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   bräche Ctrl+C den Dialog ab), auch bei `send --no-submit`. Die Antwort von
   `send` trägt dann `clearedInput: true`, die Queue loggt es
   (`queue_delivered … clearedInput=true`).
+- **Enter zurückgehalten (WM8-75):** Geht zwischen dem Einfügen und dem Enter
+  (80 ms) eine Rückfrage auf oder steht bei Claude statt des Eingabefelds ein
+  Dialog, geht kein Enter raus (`DelayedEnterGuard`, Details in
+  [controller.md](controller.md), Schutzregeln). `send` hat da schon
+  geantwortet: Es meldet trotzdem `delivered`, und die Queue markiert den
+  Auftrag als zugestellt. Erkennbar nur im Log (`delayed_enter_withheld`) und
+  an der Pille. War die Rückfrage schon beim Absenden offen, geht das Enter wie
+  bisher raus.
 
 Als Abbruch zählt (Claude-Chats, nicht in Dialogen): ESC oder Ctrl+C,
 während der Chat `working` ist, **und** innerhalb von 5 s nach einem

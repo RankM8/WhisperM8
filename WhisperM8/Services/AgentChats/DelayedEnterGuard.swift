@@ -9,17 +9,35 @@ import Foundation
 ///
 /// War die Rückfrage schon beim Einfügen offen, ist das Enter gewollt
 /// (`chats send` beantwortet eine Frage bewusst) und geht wie bisher.
+///
+/// Ein Restfenster bleibt: Prüfen und Senden sind nicht atomar gegenüber
+/// Claudes Neuzeichnen. Geht die Freigabe auf, nachdem wir den Bildschirm
+/// gelesen haben, trifft das Enter sie trotzdem — das Fenster schrumpft von
+/// 80 ms auf wenige Millisekunden, geschlossen ist es nicht.
 enum DelayedEnterGuard {
+    /// - Parameter textLooksLikeOption: Der eigene Text beginnt wie eine
+    ///   Auswahlzeile („1. …“). Dann verwirft die Feld-Erkennung das Feld, und
+    ///   die Zeile sähe wie ein Dialog aus — `dialogVisible` zählt dann nicht.
     static func allowsEnter(
         statusAtPaste: AgentSessionRuntimeStatus?,
         statusNow: AgentSessionRuntimeStatus?,
-        screen: ControllerScreenSnapshot?
+        screen: ControllerScreenSnapshot?,
+        textLooksLikeOption: Bool = false
     ) -> Bool {
         if statusAtPaste == .awaitingInput { return true }
         if statusNow == .awaitingInput { return false }
         // Statt des Eingabefelds steht ein Dialog: Auch wenn der Status noch
-        // hinterherhinkt (Codex meldet Freigaben gar nicht), kein Enter.
-        if let screen, screen.promptField == nil, screen.dialogVisible || screen.questionDialog { return false }
+        // hinterherhinkt, kein Enter.
+        if let screen, screen.promptField == nil {
+            if screen.questionDialog { return false }
+            if screen.dialogVisible, !textLooksLikeOption { return false }
+        }
         return true
+    }
+
+    /// Erste nicht leere Zeile des Texts sieht aus wie „1. …“.
+    static func looksLikeOption(_ text: String) -> Bool {
+        let first = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        return ControllerScreenReading.isOptionLine(first)
     }
 }

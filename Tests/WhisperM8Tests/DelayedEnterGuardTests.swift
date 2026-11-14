@@ -94,8 +94,28 @@ final class DelayedEnterGuardTests: XCTestCase {
         XCTAssertFalse(snapshot.dialogVisible)
     }
 
-    /// Codex: dessen Eingabefeld kennt die Feld-Erkennung nicht — eine
-    /// nummerierte Ausgabe darf dort nie als Dialog gelten.
+    /// Ein eigener Entwurf, der mit „1. “ beginnt, lässt die Feld-Erkennung das
+    /// Feld verwerfen; das ist kein Dialog (Review-Befund 7).
+    func testOwnNumberedDraftIsNoDialog() {
+        XCTAssertTrue(DelayedEnterGuard.looksLikeOption("1. Branch anlegen\n2. Tests"))
+        XCTAssertFalse(DelayedEnterGuard.looksLikeOption("Bitte zuerst den Branch"))
+        let screen = ControllerScreenSnapshot(dialogVisible: true)
+        XCTAssertTrue(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: .working, statusNow: .working, screen: screen, textLooksLikeOption: true))
+        XCTAssertFalse(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: .working, statusNow: .working, screen: ControllerScreenSnapshot(questionDialog: true),
+            textLooksLikeOption: true), "Ein Frage-Dialog mit festem Anker zählt trotzdem")
+    }
+
+    /// Status unbekannt: Der Bildschirm entscheidet.
+    func testUnknownStatusFallsBackToScreen() {
+        XCTAssertFalse(DelayedEnterGuard.allowsEnter(
+            statusAtPaste: nil, statusNow: nil, screen: ControllerScreenSnapshot(dialogVisible: true)))
+        XCTAssertTrue(DelayedEnterGuard.allowsEnter(statusAtPaste: nil, statusNow: nil, screen: nil))
+    }
+
+    /// Codex: dessen Eingabefeld kennt die Feld-Erkennung nicht — `read` setzt
+    /// `dialogVisible` deshalb nur für Claude (`detectViews`).
     func testCodexScreenNeverReportsDialog() {
         let snapshot = screen("""
         • Plan:

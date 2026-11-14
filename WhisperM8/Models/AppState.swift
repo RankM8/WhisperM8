@@ -104,8 +104,10 @@ final class AppState {
     private init() {
         self.recordingCoordinator = RecordingCoordinator(appState: self)
         // WM8-75: zurückgehaltenes Enter nach einem Einfüge-Block sichtbar machen.
+        // Nie während einer Aufnahme: Der Hinweis ersetzte sonst die Aufnahme-Pille.
         AgentTerminalController.onDelayedEnterWithheld = { [weak self] _ in
-            self?.recordingCoordinator.overlayController.showQuickActionHint(
+            guard let self, self.recordingPhase == .idle, !self.isStartingRecording else { return }
+            self.recordingCoordinator.overlayController.showQuickActionHint(
                 AgentTerminalController.delayedEnterWithheldHint, duration: 4)
         }
     }

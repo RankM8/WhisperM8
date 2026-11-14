@@ -18,21 +18,24 @@ extension AgentTerminalController {
     }
 
     /// Direkt vor dem Enter: Status und Bildschirm neu lesen. Hält es das Enter
-    /// zurück, bleibt der Text als Entwurf stehen, und die Pille sagt es.
-    func delayedEnterAllowed(statusAtPaste: AgentSessionRuntimeStatus?) -> Bool {
+    /// zurück, steht der Text meist noch im Feld (hat Claude ihn wegen eines
+    /// schon offenen Dialogs ignoriert, nicht; ein Diktat liegt dann in der
+    /// Zwischenablage), und die Pille sagt es.
+    func delayedEnterAllowed(statusAtPaste: AgentSessionRuntimeStatus?, text: String) -> Bool {
         let statusNow = statusForDelayedEnter
-        // Den Bildschirm nur lesen, wenn es etwas ändern kann: Eine Freigabe
-        // geht nur in einem arbeitenden Chat auf; ein schon beim Einfügen
-        // offener Dialog braucht keine Prüfung. Kosten gemessen: rund 5 ms im
-        // Debug-Build je Lesen (16 Zeilen), im ruhenden Chat 0.
-        let mayHaveOpened = statusAtPaste == .working || statusNow == .working
-        let screen = statusAtPaste != .awaitingInput && mayHaveOpened ? controllerScreenSnapshot() : nil
-        guard !DelayedEnterGuard.allowsEnter(statusAtPaste: statusAtPaste, statusNow: statusNow, screen: screen) else {
+        // Bildschirm immer lesen, außer bei einer schon beim Einfügen offenen
+        // Rückfrage: Auch ein „ruhender“ Status kann hinterherhinken. Nur
+        // Claude (sonst `nil`), nur ganz unten. Kosten gemessen: rund 5 ms im
+        // Debug-Build je Lesen der untersten 16 Zeilen, einmal je Senden.
+        let screen = statusAtPaste == .awaitingInput ? nil : controllerScreenSnapshot()
+        guard !DelayedEnterGuard.allowsEnter(
+            statusAtPaste: statusAtPaste, statusNow: statusNow, screen: screen,
+            textLooksLikeOption: DelayedEnterGuard.looksLikeOption(text)) else {
             return true
         }
         noteComposerTextInserted()
         Logger.agentStore.notice(
-            "delayed_enter_withheld session=\(self.sessionID.uuidString, privacy: .public) status=\(String(describing: statusNow), privacy: .public)")
+            "delayed_enter_withheld session=\(self.sessionID.uuidString, privacy: .public) status=\(statusNow.map { String(describing: $0) } ?? "none", privacy: .public)")
         Self.onDelayedEnterWithheld?(sessionID)
         return false
     }
