@@ -46,6 +46,9 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
     /// auch für externe oder unverifizierte Aufrufer (LR-CLI-011). Alte
     /// Einträge ohne Feld gelten als nicht verifiziert.
     var enqueuedVerified: Bool = false
+    /// Chat, der vorgemerkt hat — nur, wenn er per Token belegt ist. Bleibt
+    /// der Auftrag im Eingabefeld stehen, bekommt er Bescheid (Vic zu WM8-100).
+    var enqueuedBySessionID: UUID? = nil
     var state: State = .pending
     var deliveredAt: Date?
     var lastError: String?
@@ -72,14 +75,16 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         enqueuedAt = try container.decode(Date.self, forKey: .enqueuedAt)
         enqueuedBy = try container.decodeIfPresent(String.self, forKey: .enqueuedBy) ?? "unbekannt"
         enqueuedVerified = try container.decodeIfPresent(Bool.self, forKey: .enqueuedVerified) ?? false
+        enqueuedBySessionID = try container.decodeIfPresent(UUID.self, forKey: .enqueuedBySessionID)
         state = try container.decodeIfPresent(State.self, forKey: .state) ?? .pending
         deliveredAt = try container.decodeIfPresent(Date.self, forKey: .deliveredAt)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
     }
 
     init(id: UUID = UUID(), sequence: Int = 0, sessionID: UUID, prompt: String,
-         enqueuedAt: Date, enqueuedBy: String, enqueuedVerified: Bool = false, state: State = .pending,
-         deliveredAt: Date? = nil, lastError: String? = nil) {
+         enqueuedAt: Date, enqueuedBy: String, enqueuedVerified: Bool = false, enqueuedBySessionID: UUID? = nil,
+         state: State = .pending, deliveredAt: Date? = nil, lastError: String? = nil) {
+        self.enqueuedBySessionID = enqueuedBySessionID
         self.id = id
         self.sequence = sequence
         self.sessionID = sessionID

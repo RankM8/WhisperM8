@@ -49,7 +49,8 @@ final class AgentPromptQueueStore: @unchecked Sendable {
     /// (LR-AK-018) — der Aufrufer darf dann keinen Erfolg melden; der Eintrag
     /// wird wieder zurückgenommen.
     @discardableResult
-    func enqueue(sessionID: UUID, prompt: String, by actor: String, verified: Bool = false, now: Date = Date()) throws -> QueuedPrompt {
+    func enqueue(sessionID: UUID, prompt: String, by actor: String, verified: Bool = false,
+                 bySession: UUID? = nil, now: Date = Date()) throws -> QueuedPrompt {
         lock.lock()
         defer { lock.unlock() }
         loadIfNeeded()
@@ -57,7 +58,8 @@ final class AgentPromptQueueStore: @unchecked Sendable {
         // Quelle ist einfacher zu prüfen und über Sessions hinweg vergleichbar.
         let entry = QueuedPrompt(
             sequence: (prompts.map(\.sequence).max() ?? 0) + 1,
-            sessionID: sessionID, prompt: prompt, enqueuedAt: now, enqueuedBy: actor, enqueuedVerified: verified)
+            sessionID: sessionID, prompt: prompt, enqueuedAt: now, enqueuedBy: actor, enqueuedVerified: verified,
+            enqueuedBySessionID: bySession)
         prompts.append(entry)
         do {
             try persist()

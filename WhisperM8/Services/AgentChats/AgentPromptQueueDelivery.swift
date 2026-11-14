@@ -134,6 +134,7 @@ final class AgentPromptQueueDelivery {
             // und wird auch nicht noch einmal eingefügt (WM8-100).
             if verify, await AgentControlRequestHandler.submitVerdict(sessionID) == .stuckInField {
                 store.markFailed(id: reserved.id, error: Self.stuckError, retry: false)
+                self.notifySenderOfStuck(reserved, targetTitle: title, targetID: sessionID)
                 Logger.agentStore.notice(
                     "queue_stuck_in_field session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
                 return
@@ -146,6 +147,28 @@ final class AgentPromptQueueDelivery {
     }
 
     static let stuckError = "Steht im Eingabefeld, nicht abgeschickt — `chats submit` schickt ihn ab"
+
+    /// Der Absender erfährt es von selbst, nicht erst über `chats queue`
+    /// (Vic zu WM8-100): Hinter einem stehengebliebenen Auftrag staut sich
+    /// sonst alles, ohne dass es jemand merkt. Nur an einen belegten Chat,
+    /// nie an den Empfänger selbst; die Meldung selbst meldet nichts weiter.
+    private func notifySenderOfStuck(_ prompt: QueuedPrompt, targetTitle: String, targetID: UUID) {
+        guard let sender = Self.stuckNoticeRecipient(for: prompt, targetID: targetID) else { return }
+        let notice = Self.stuckNotice(targetTitle: targetTitle, targetID: targetID)
+        guard (try? store.enqueue(sessionID: sender, prompt: notice, by: "WhisperM8", verified: true)) != nil else { return }
+        deliverNext(for: sender)
+    }
+
+    nonisolated static func stuckNoticeRecipient(for prompt: QueuedPrompt, targetID: UUID) -> UUID? {
+        guard let sender = prompt.enqueuedBySessionID, sender != targetID else { return nil }
+        return sender
+    }
+
+    nonisolated static func stuckNotice(targetTitle: String, targetID: UUID) -> String {
+        "Dein vorgemerkter Auftrag an „\(targetTitle)“ steht dort im Eingabefeld und wurde nicht abgeschickt. "
+            + "Nicht noch einmal senden: `whisperm8 chats submit \(ChatsOutput.shortID(targetID))` schickt ihn ab, "
+            + "`whisperm8 chats tail \(ChatsOutput.shortID(targetID))` zeigt den Stand."
+    }
 
     /// Neuer Versuch eine Sekunde später, solange das Eingabefeld nach dem
     /// Start fehlt.

@@ -795,6 +795,11 @@ dafür sicherer.
   wartende Meldung, `chats board` unter dem Board das Postfach des Besitzers
   („2 Meldungen warten, älteste seit 12 min“, JSON `inbox.open`,
   `inbox.oldestAt`), `snapshot` je Chat `queuedOldestSec`.
+- **Stehengebliebener Auftrag meldet sich.** Bleibt ein vorgemerkter Auftrag im
+  Eingabefeld des Ziels stehen (WM8-100), bekommt der Absender eine eigene
+  Meldung mit dem Hinweis auf `chats submit`, sofern er ein per Token belegter
+  Chat war (`enqueuedBySessionID` im Queue-Eintrag). Nie `send … || enqueue …`:
+  Im Fall „steht im Eingabefeld“ käme der Auftrag doppelt; `send` merkt selbst vor.
 - **Limit des Empfängers.** `chats address` nennt ein Nutzungslimit des Ziels
   (JSON `usageLimit`, `usageLimitResetsAt`; ohne `--json` eine Warnung auf
   stderr): Eine native Nachricht käme an, der Chat arbeitete aber nicht.

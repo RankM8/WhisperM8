@@ -76,4 +76,28 @@ final class ChatsCLIFallbackTests: XCTestCase {
         XCTAssertEqual(session.json["queuedOldestSec"] as? Int, 720)
         XCTAssertEqual(session.json["queued"] as? Int, 2)
     }
+
+    // MARK: Stehengebliebener Auftrag (Vic zu WM8-100)
+
+    func testTheSenderHearsAboutAStuckOrder() {
+        let target = UUID(), sender = UUID()
+        var prompt = QueuedPrompt(sessionID: target, prompt: "Auftrag", enqueuedAt: Date(), enqueuedBy: "whisperm8/Jarvis")
+        XCTAssertNil(AgentPromptQueueDelivery.stuckNoticeRecipient(for: prompt, targetID: target), "ohne belegten Absender keine Meldung")
+        prompt.enqueuedBySessionID = target
+        XCTAssertNil(AgentPromptQueueDelivery.stuckNoticeRecipient(for: prompt, targetID: target), "nie an den Empfänger selbst")
+        prompt.enqueuedBySessionID = sender
+        XCTAssertEqual(AgentPromptQueueDelivery.stuckNoticeRecipient(for: prompt, targetID: target), sender)
+        let notice = AgentPromptQueueDelivery.stuckNotice(targetTitle: "Ole", targetID: target)
+        XCTAssertTrue(notice.contains("chats submit"), notice)
+        XCTAssertTrue(notice.contains("Nicht noch einmal senden"), notice)
+    }
+
+    func testOldQueueFilesWithoutSenderStillLoad() throws {
+        let json = #"[{"id":"7C8B1D2E-0000-4000-8000-000000000001","sequence":1,"sessionID":"7C8B1D2E-0000-4000-8000-000000000002","prompt":"x","enqueuedAt":0,"enqueuedBy":"a","state":"pending"}]"#
+        let decoded = try JSONDecoder().decode([QueuedPrompt].self, from: Data(json.utf8))
+        XCTAssertNil(decoded.first?.enqueuedBySessionID)
+        let roundTrip = try JSONDecoder().decode(QueuedPrompt.self, from: JSONEncoder().encode(
+            QueuedPrompt(sessionID: UUID(), prompt: "y", enqueuedAt: Date(), enqueuedBy: "b", enqueuedBySessionID: UUID())))
+        XCTAssertNotNil(roundTrip.enqueuedBySessionID)
+    }
 }

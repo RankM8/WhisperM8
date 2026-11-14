@@ -61,7 +61,8 @@ extension AgentControlRequestHandler {
         } ?? false
         let entry: QueuedPrompt
         do {
-            entry = try store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel, verified: enqueuedVerified)
+            entry = try store.enqueue(sessionID: targetID, prompt: prompt, by: actorLabel, verified: enqueuedVerified,
+                                      bySession: enqueuedVerified ? actorID : nil)
         } catch {
             // Nicht gesichert → kein Erfolg melden (LR-AK-018).
             await audit(request.actor, method: "queue-enqueue", target: await sessionLabel(targetID),

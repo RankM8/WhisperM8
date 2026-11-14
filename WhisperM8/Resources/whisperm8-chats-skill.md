@@ -360,6 +360,10 @@ unterbrochen.
    lehnt ab („Chat lädt noch“, Exit 4), bis das Eingabefeld steht. Meldet
    `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
    **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
+   Deshalb auch nie `send … || enqueue …`: Im Fall „steht im Eingabefeld“
+   (Exit 4) käme der Auftrag doppelt. `send` merkt selbst vor, wenn der Chat
+   nicht ruht. Bleibt ein vorgemerkter Auftrag im Feld stehen, bekommst du
+   als Absender eine Meldung mit dem Hinweis auf `submit`.
    Meldet `send` „Im Eingabefeld steht schon Text“, ebenso erst nachsehen
    (`tail`), dann `submit` oder dem User melden.
 11. **Stau erkennen statt erzwingen.** Nach einem `resume` und immer, wenn eine
