@@ -261,7 +261,7 @@ struct ClaudeAccountProfiles {
             Logger.agentStore.warning("claude_profile_missing name=\(name, privacy: .public) — launch faellt auf main zurueck")
             return [:]
         }
-        return ["CLAUDE_CONFIG_DIR": dir.path]
+        return AppInstance.claudeConfigEnvironment(dir.path)
     }
 
     // MARK: - Transcript-Roots

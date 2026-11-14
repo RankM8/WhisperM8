@@ -199,6 +199,14 @@ schreiben. `LoginShellEnvironment` entfernt eine geerbte Variable wie
   einem Test-Chat `/login`. Der Browser kennt nur eine claude.ai-Sitzung, der Login
   gehört also dem dort aktiven Konto. Ein frischer Login ist keine Kopie; die
   Regel „verschieben, nie kopieren“ ist nicht berührt.
+- Profile, Login-Erneuerung, MCP-Abgleich und Limit-Abfrage setzen in der
+  Test-Instanz beide Variablen auf den Profilordner
+  (`AppInstance.claudeConfigEnvironment`): Claude zieht
+  `CLAUDE_SECURESTORAGE_CONFIG_DIR` vor, ohne den gleichen Wert landete jedes
+  Profil im Login-Fach von main.
+- Ein Claude-Hintergrund-Daemon, der im Test-Home noch aus der Zeit vor dieser
+  Änderung läuft, kennt die Variable nicht. Vor der ersten Anmeldung einmal
+  prüfen, dass keiner läuft (`ps -E -ww -axo pid=,command= | grep whisperm8-test-instance | grep claude`).
 - Kennt eine künftige Claude-Version die Variable nicht mehr, fiele der Login
   wieder auf den blanken Namen. `status` prüft deshalb das installierte Claude auf
   die Variable und warnt sonst ausdrücklich: dann nicht anmelden.

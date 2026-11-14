@@ -116,10 +116,20 @@ cmd_cli() {
 # Login-Fach der Test-Instanz im Schlüsselbund (WM8-63): Die App gibt ihren
 # Chats CLAUDE_SECURESTORAGE_CONFIG_DIR=<wurzel>/home/.claude mit, Claude hängt
 # dann -<sha256(pfad)[:8]> an den Dienstnamen. Gleiche Normalisierung wie die
-# App (standardizedFileURL: ohne Schrägstrich am Ende und ohne ./..).
+# App: Die Wurzel wird wie `standardizedFileURL` normalisiert (Leerzeichen am
+# Rand weg, ./.. und Schrägstrich am Ende weg, `//` am Anfang zu `/`, bei
+# vorhandenem Pfad `/private/…` ohne `/private`). Die Standard-Wurzel unter
+# $HOME ist davon nicht betroffen.
 claude_login_service() {
     local dir
-    dir=$(/usr/bin/python3 -I -c 'import os, sys; print(os.path.normpath(sys.argv[1]))' "$ROOT/home/.claude")
+    dir=$(/usr/bin/python3 -I -c '
+import os, sys
+p = os.path.normpath(sys.argv[1].strip())
+if p.startswith("//"):
+    p = "/" + p.lstrip("/")
+if p.startswith("/private/") and os.path.exists(p):
+    p = p[len("/private"):]
+print(os.path.join(p, "home", ".claude"))' "$ROOT")
     printf 'Claude Code-credentials-%s' "$(printf '%s' "$dir" | shasum -a 256 | cut -c1-8)"
 }
 

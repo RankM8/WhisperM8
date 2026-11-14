@@ -35,6 +35,16 @@ final class AppInstanceTests: XCTestCase {
         XCTAssertTrue(AppInstance.childEnvironmentOverrides(testRoot: nil).isEmpty, "Normalbetrieb unverändert")
     }
 
+    /// Review WM8-63: Claude zieht CLAUDE_SECURESTORAGE_CONFIG_DIR vor; ein
+    /// Profil der Test-Instanz braucht deshalb beide mit demselben Wert.
+    func testProfileLaunchesCarryTheirOwnKeychainFolderInTheTestInstance() {
+        let root = URL(fileURLWithPath: "/Users/x/.whisperm8-test-instance", isDirectory: true)
+        XCTAssertEqual(AppInstance.claudeConfigEnvironment("/p/ai", testRoot: nil), ["CLAUDE_CONFIG_DIR": "/p/ai"],
+                       "Normalbetrieb unverändert")
+        XCTAssertEqual(AppInstance.claudeConfigEnvironment("/p/ai", testRoot: root),
+                       ["CLAUDE_CONFIG_DIR": "/p/ai", AppInstance.claudeSecureStorageKey: "/p/ai"])
+    }
+
     func testStableHashIsDeterministic() {
         XCTAssertEqual(AppInstance.stableHash("/Users/x/.whisperm8-test-instance"),
                        AppInstance.stableHash("/Users/x/.whisperm8-test-instance"))

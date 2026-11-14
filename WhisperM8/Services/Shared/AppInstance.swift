@@ -84,6 +84,17 @@ enum AppInstance {
         ]
     }
 
+    /// Umgebung für einen Claude-Start mit eigenem Konfigurationsordner
+    /// (Profile, Login-Erneuerung, MCP-Abgleich, Limit-Abfrage). In der
+    /// Test-Instanz zusätzlich `CLAUDE_SECURESTORAGE_CONFIG_DIR` mit demselben
+    /// Wert: Claude zieht diese Variable `CLAUDE_CONFIG_DIR` vor; ohne sie
+    /// landete jedes Profil im Login-Fach von main (Review WM8-63). Gleicher
+    /// Wert heißt gleicher Dienstname wie `keychainService(forConfigDirPath:)`.
+    static func claudeConfigEnvironment(_ path: String, testRoot: URL? = AppInstance.testRoot) -> [String: String] {
+        guard testRoot != nil else { return ["CLAUDE_CONFIG_DIR": path] }
+        return ["CLAUDE_CONFIG_DIR": path, claudeSecureStorageKey: path]
+    }
+
     static func testHome(testRoot: URL) -> URL {
         testRoot.appendingPathComponent("home", isDirectory: true)
     }
