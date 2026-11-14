@@ -140,15 +140,43 @@ enum ChatsOutput {
         return dict
     }
 
-    /// Wo der Chat zuletzt gearbeitet hat (WM8-60): `kind` mainFolder |
-    /// worktree | otherFolder, dazu Ordner, Name der Arbeitskopie und Branch.
+    /// Wo der Chat zuletzt gearbeitet hat (WM8-60): `kind` main | worktree |
+    /// other (Hauptordner, Arbeitskopie, Ordner außerhalb des Projekts), dazu
+    /// Name, Pfad, Branch und ob das der Standard-Branch ist.
     static func workingCopyJSON(_ copy: AgentWorkingCopy) -> [String: Any] {
         [
-            "kind": copy.kind.rawValue,
-            "path": copy.path,
+            "kind": workingCopyKind(copy.kind),
             "name": copy.name ?? NSNull(),
+            "path": copy.path,
             "branch": copy.branch ?? NSNull(),
+            "defaultBranch": copy.defaultBranch ?? NSNull(),
+            "isDefaultBranch": copy.branch == nil ? NSNull() : copy.isOnDefaultBranch as Any,
         ]
+    }
+
+    static func workingCopyKind(_ kind: AgentWorkingCopy.Kind) -> String {
+        switch kind {
+        case .mainFolder: return "main"
+        case .worktree: return "worktree"
+        case .otherFolder: return "other"
+        }
+    }
+
+    /// Knapp für Tabellen: `main` (Hauptordner, Standard-Branch),
+    /// `main@<branch>` (Hauptordner, anderer Branch), `wt:<name>@<branch>`,
+    /// `other:<name>`; `-` wenn unbekannt. Ein Branch, den der Name schon
+    /// nennt, steht nur einmal da.
+    static func workingCopyShort(_ copy: AgentWorkingCopy?) -> String {
+        guard let copy else { return "-" }
+        switch copy.kind {
+        case .mainFolder:
+            guard let branch = copy.branch, !copy.isOnDefaultBranch else { return "main" }
+            return "main@" + branch
+        case .worktree, .otherFolder:
+            let place = (copy.kind == .worktree ? "wt:" : "other:") + (copy.name ?? "?")
+            guard let branch = copy.branch, !copy.nameRepeatsBranch else { return place }
+            return place + "@" + branch
+        }
     }
 
     /// Kürzt in der Mitte, damit Anfang (Ort) und Ende (Branch) lesbar bleiben.
@@ -165,24 +193,11 @@ enum ChatsOutput {
         switch copy.kind {
         case .mainFolder: place = "Hauptordner"
         case .worktree: place = "Arbeitskopie \(copy.name ?? "?")"
-        case .otherFolder: place = "anderer Ordner \(copy.name ?? "?")"
+        case .otherFolder: place = "Ordner außerhalb des Projekts: \(copy.name ?? "?")"
         }
-        let branch = copy.branch.map { " · Branch \($0)" } ?? ""
+        var branch = copy.branch.map { " · Branch \($0)" } ?? ""
+        if copy.branch != nil, !copy.isOnDefaultBranch, copy.kind == .mainFolder { branch += " (nicht der Standard-Branch)" }
         return "\(place)\(branch)  (\(copy.path))"
-    }
-
-    /// Knapp für Tabellen: `main@<branch>`, `wt:<name>@<branch>`,
-    /// `dir:<name>`; `-` wenn unbekannt.
-    static func workingCopyShort(_ copy: AgentWorkingCopy?) -> String {
-        guard let copy else { return "-" }
-        let place: String
-        switch copy.kind {
-        case .mainFolder: place = "main"
-        case .worktree: place = "wt:" + (copy.name ?? "?")
-        case .otherFolder: place = "dir:" + (copy.name ?? "?")
-        }
-        guard let branch = copy.branch else { return place }
-        return place + "@" + branch
     }
 
     /// Claude-Konto eines Chats, wie es die CLI zeigt.
@@ -307,7 +322,7 @@ enum ChatsOutput {
                       + pad(place, 28)
                       + flags(session.id, selfID: selfID, openTabIDs: openTabIDs, pinnedIDs: pinnedIDs))
         }
-        CLIIO.err("\(items.count) Sessions · ORT: main=Hauptordner wt:=Arbeitskopie dir:=anderer Ordner, @Branch"
+        CLIIO.err("\(items.count) Sessions · ORT: main=Hauptordner wt:=Arbeitskopie other:=außerhalb des Projekts, @Branch"
                   + " · ⊙=offener Tab 📌=gepinnt (du)=diese Session")
     }
 

@@ -9321,6 +9321,16 @@
         }
       }
     },
+    "Main folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hauptordner"
+          }
+        }
+      }
+    },
     "Make Default": {
       "localizations": {
         "de": {
@@ -20164,16 +20174,6 @@
         }
       }
     },
-    "Works in the folder %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arbeitet im Ordner %@"
-          }
-        }
-      }
-    },
     "Works in the main folder": {
       "localizations": {
         "de": {
@@ -20190,6 +20190,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arbeitet in der Arbeitskopie %@"
+          }
+        }
+      }
+    },
+    "Works outside the project in %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet außerhalb des Projekts in %@"
           }
         }
       }
@@ -21110,16 +21120,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "main"
-          }
-        }
-      }
-    },
-    "main folder": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hauptordner"
           }
         }
       }

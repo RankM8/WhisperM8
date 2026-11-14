@@ -3,12 +3,19 @@ import SwiftUI
 @testable import WhisperM8
 
 /// Fixtures für die Arbeitsordner-Marke (WM8-60): Kachelkopf mit Konto-Marke
-/// und Ort/Branch in zwei Varianten, dazu Tab und Seitenleisten-Zeile mit dem
+/// und Ort/Branch (breit und schmal), dazu Tab und Seitenleisten-Zeile mit dem
 /// kleinen Zeichen.
 extension UISnapshotGallery {
     private static let workingCopyCases: [(title: String, account: String, copy: AgentWorkingCopy)] = [
         ("Jarvis · Supervisor", "main",
-         AgentWorkingCopy(kind: .mainFolder, path: "/Users/demo/repos/whisperm8", name: nil, branch: "main")),
+         AgentWorkingCopy(kind: .mainFolder, path: "/Users/demo/repos/whisperm8", name: nil, branch: "main",
+                          defaultBranch: "main")),
+        ("Fin · Insel: Tastatur", "main",
+         AgentWorkingCopy(kind: .mainFolder, path: "/Users/demo/repos/whisperm8", name: nil,
+                          branch: "feat/insel-tastatur", defaultBranch: "main")),
+        ("Dex · Ticket-Board", "main",
+         AgentWorkingCopy(kind: .worktree, path: "/Users/demo/repos/whisperm8/.claude/worktrees/WM8-37-ticket-board",
+                          name: "WM8-37-ticket-board", branch: "feat/WM8-37-ticket-board", defaultBranch: "main")),
         ("WM8-60 Gus · Arbeitsordner: je Chat anzeigen", "RankM8",
          AgentWorkingCopy(kind: .worktree, path: "/Users/demo/repos/whisperm8/.claude/worktrees/bindung-fremdes-transcript",
                           name: "bindung-fremdes-transcript", branch: "feat/WM8-60-arbeitsordner-anzeige")),
@@ -95,7 +102,7 @@ extension UISnapshotGallery {
     static func workingCopyFixtures() -> [Fixture] {
         // Breit (Einzelkachel) und schmal (vier Spalten, ~400 pt je Kachel).
         func headers(_ name: String, width: CGFloat) -> Fixture {
-            Fixture(name: "arbeitsordner-kachelkopf-\(name)", size: CGSize(width: width, height: 160)) {
+            Fixture(name: "arbeitsordner-kachelkopf-\(name)", size: CGSize(width: width, height: 220)) {
                 AnyView(VStack(spacing: 1) {
                     ForEach(Array(workingCopyCases.enumerated()), id: \.offset) { _, item in
                         HeaderRow(title: item.title, account: item.account, copy: item.copy)
@@ -110,7 +117,7 @@ extension UISnapshotGallery {
         return [
             headers("breit", width: 720),
             headers("schmal", width: 424),
-            Fixture(name: "arbeitsordner-tab-seitenleiste", size: CGSize(width: 820, height: 150)) {
+            Fixture(name: "arbeitsordner-tab-seitenleiste", size: CGSize(width: 820, height: 210)) {
                 AnyView(TabAndSidebar()
                     .padding(12)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

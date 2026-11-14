@@ -22,6 +22,25 @@ struct AgentWorkingCopy: Codable, Equatable, Hashable {
     var name: String?
     /// `nil`, wenn unbekannt (kein Git, losgelöster HEAD).
     var branch: String?
+    /// Standard-Branch des Repos (`origin/HEAD`), `nil` wenn unbekannt.
+    var defaultBranch: String? = nil
+
+    /// Steht der Ort auf dem Standard-Branch? Ohne bekannten Standard
+    /// gelten `main` und `master` als Standard. Ohne Branch: ja (nichts
+    /// Auffälliges zu zeigen).
+    var isOnDefaultBranch: Bool {
+        guard let branch else { return true }
+        if let defaultBranch { return branch == defaultBranch }
+        return branch == "main" || branch == "master"
+    }
+
+    /// Nennt der Name der Arbeitskopie den Branch schon (oder umgekehrt)?
+    /// Dann zeigt die Marke beides nur einmal.
+    var nameRepeatsBranch: Bool {
+        guard let name, let branch else { return false }
+        let flat = branch.replacingOccurrences(of: "/", with: "-")
+        return name == branch || name == flat || name.contains(flat) || (name.count >= 4 && flat.hasSuffix(name))
+    }
 }
 
 enum AgentWorkingCopyClassifier {
@@ -49,23 +68,27 @@ enum AgentWorkingCopyClassifier {
         if cwd.hasPrefix(worktreesOfProject),
            let name = cwd.dropFirst(worktreesOfProject.count).split(separator: "/").first.map(String.init),
            !name.isEmpty {
-            return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: name, branch: branch)
+            return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: name, branch: branch,
+                                    defaultBranch: git?.defaultBranch)
         }
         // 2. Andere Arbeitskopie desselben Repos (etwa ein Ordner neben dem
         //    Projekt): ihr Git-Verzeichnis liegt unter <Projekt>/.git/worktrees/.
         if let git, normalized(git.gitDir).hasPrefix(project + "/.git/worktrees/") {
             let root = normalized(git.root)
             return AgentWorkingCopy(kind: .worktree, path: root,
-                                    name: (root as NSString).lastPathComponent, branch: branch)
+                                    name: (root as NSString).lastPathComponent, branch: branch,
+                                    defaultBranch: git.defaultBranch)
         }
         // 3. Hauptordner samt Unterordnern.
         if cwd == project || cwd.hasPrefix(project + "/") {
-            return AgentWorkingCopy(kind: .mainFolder, path: project, name: nil, branch: branch)
+            return AgentWorkingCopy(kind: .mainFolder, path: project, name: nil, branch: branch,
+                                    defaultBranch: git?.defaultBranch)
         }
         // 4. Alles andere, auch Arbeitskopien fremder Projekte.
         let root = git.map { normalized($0.root) } ?? cwd
         return AgentWorkingCopy(kind: .otherFolder, path: root,
-                                name: (root as NSString).lastPathComponent, branch: branch)
+                                name: (root as NSString).lastPathComponent, branch: branch,
+                                defaultBranch: git?.defaultBranch)
     }
 
     /// Ohne abschließenden Schrägstrich, `/private/tmp` wie `/tmp`.

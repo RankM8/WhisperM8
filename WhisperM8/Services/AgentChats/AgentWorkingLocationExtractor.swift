@@ -41,6 +41,8 @@ struct GitLocation: Equatable {
     var gitDir: String
     /// `nil` bei losgelöstem HEAD.
     var branch: String?
+    /// Standard-Branch des Repos (`origin/HEAD`), `nil` wenn unbekannt.
+    var defaultBranch: String? = nil
 }
 
 /// Liest `.git/HEAD`, ohne `git`-Subprozess. Folgt bei Arbeitskopien der
@@ -69,13 +71,33 @@ enum GitHeadReader {
                         : url.appendingPathComponent(path)).standardizedFileURL
                 }
                 let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"), encoding: .utf8)
-                return GitLocation(root: url.path, gitDir: gitDir.path, branch: head.flatMap(branch(fromHead:)))
+                return GitLocation(root: url.path, gitDir: gitDir.path, branch: head.flatMap(branch(fromHead:)),
+                                   defaultBranch: defaultBranch(gitDir: gitDir))
             }
             let parent = url.deletingLastPathComponent()
             if parent.path == url.path { return nil }
             url = parent
         }
         return nil
+    }
+
+    /// Standard-Branch aus `refs/remotes/origin/HEAD` im gemeinsamen
+    /// Git-Verzeichnis (bei Arbeitskopien über `commondir`). Ein kleiner
+    /// Lesezugriff; fehlt die Datei, `nil`.
+    static func defaultBranch(gitDir: URL) -> String? {
+        var common = gitDir
+        if let text = try? String(contentsOf: gitDir.appendingPathComponent("commondir"), encoding: .utf8) {
+            let path = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            common = (path.hasPrefix("/") ? URL(fileURLWithPath: path) : gitDir.appendingPathComponent(path))
+                .standardizedFileURL
+        }
+        guard let text = try? String(contentsOf: common.appendingPathComponent("refs/remotes/origin/HEAD"),
+                                     encoding: .utf8) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = "ref: refs/remotes/origin/"
+        guard trimmed.hasPrefix(prefix) else { return nil }
+        let branch = String(trimmed.dropFirst(prefix.count))
+        return branch.isEmpty ? nil : branch
     }
 
     /// Pur: `ref: refs/heads/<branch>` → Branch; losgelöster HEAD → `nil`.

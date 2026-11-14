@@ -214,8 +214,14 @@ Tagen) ändern nichts und schreiben nichts. Nur ein geänderter Ort geht über
 `AgentChatSession.workingCopy` im Workspace, ohne den Aktivitäts-Bump von
 `updateSession`. Anzeige: Marke im Kachelkopf neben dem Konto und in der
 Kopfzeile der Einzelansicht (dort mit dem Pfad des Orts), per `ViewThatFits`
-von „Ort · Branch“ bis zum bloßen Symbol; kleines Zeichen in Tab und
-Seitenleiste nur außerhalb des Hauptordners (`AgentWorkingCopyMarker`). Lila
+von „Ort · Branch“ bis zum bloßen Symbol. Im Hauptordner auf dem
+Standard-Branch (`origin/HEAD`, sonst `main`/`master`) steht nur der graue
+Chip „Main folder“ ohne Branch, damit „main“ als Branch nicht neben dem Konto
+„main“ steht; auf einem anderen Branch wird der Chip farbig und zeigt den
+Branch, bei Platzmangel den Branch statt des Worts. Nennt der Name einer
+Arbeitskopie den Branch schon, steht er nur einmal da. Kleines Zeichen in Tab
+und Seitenleiste nur außerhalb des Hauptordners oder auf einem
+Nicht-Standard-Branch (`AgentWorkingCopyMarker`). Lila
 wie der Branch-Tag, weil Grün „arbeitet“ und der Akzent „ausgewählt“ heißt. Die
 Seitenleiste liest den Workspace, nie den Activity-Store. Kosten je Chat und
 Tail-Read: der Parse der letzten Zeile mit `cwd` (0,1–0,5 ms bei großen

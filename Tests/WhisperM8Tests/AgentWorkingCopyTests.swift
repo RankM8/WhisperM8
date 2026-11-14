@@ -200,6 +200,60 @@ final class AgentWorkingCopyTests: XCTestCase {
         XCTAssertNil(GitHeadReader.location(at: repo.appendingPathComponent(".claude/worktrees/weg").path))
     }
 
+    // MARK: - Standard-Branch und doppelte Nennung
+
+    func testDefaultBranchRule() {
+        var copy = AgentWorkingCopy(kind: .mainFolder, path: "/a", name: nil, branch: "main")
+        XCTAssertTrue(copy.isOnDefaultBranch, "ohne bekannten Standard gilt main")
+        copy.branch = "master"
+        XCTAssertTrue(copy.isOnDefaultBranch)
+        copy.branch = "feat/x"
+        XCTAssertFalse(copy.isOnDefaultBranch)
+        copy.defaultBranch = "develop"
+        copy.branch = "main"
+        XCTAssertFalse(copy.isOnDefaultBranch, "bekannter Standard schlägt die Annahme")
+        copy.branch = "develop"
+        XCTAssertTrue(copy.isOnDefaultBranch)
+        copy.branch = nil
+        XCTAssertTrue(copy.isOnDefaultBranch, "ohne Branch nichts Auffälliges")
+    }
+
+    func testNameRepeatsBranch() {
+        func copy(_ name: String, _ branch: String) -> AgentWorkingCopy {
+            AgentWorkingCopy(kind: .worktree, path: "/w/" + name, name: name, branch: branch)
+        }
+        XCTAssertTrue(copy("feat-x", "feat/x").nameRepeatsBranch)
+        XCTAssertTrue(copy("WM8-37-ticket-board", "feat/WM8-37-ticket-board").nameRepeatsBranch)
+        XCTAssertTrue(copy("neustart", "neustart").nameRepeatsBranch)
+        XCTAssertFalse(copy("neustart", "neustart/integration").nameRepeatsBranch)
+        XCTAssertFalse(copy("bindung-fremdes-transcript", "feat/WM8-60-arbeitsordner-anzeige").nameRepeatsBranch)
+        XCTAssertFalse(copy("x", "feat/x").nameRepeatsBranch, "zu kurze Namen nicht als Treffer werten")
+    }
+
+    func testDefaultBranchFromOriginHeadAlsoForWorktrees() throws {
+        let root = try tempDir()
+        let common = root.appendingPathComponent("main/.git")
+        try FileManager.default.createDirectory(at: common.appendingPathComponent("refs/remotes/origin"),
+                                                withIntermediateDirectories: true)
+        try "ref: refs/remotes/origin/develop\n".write(
+            to: common.appendingPathComponent("refs/remotes/origin/HEAD"), atomically: true, encoding: .utf8)
+        try "ref: refs/heads/develop\n".write(to: common.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(GitHeadReader.location(at: root.appendingPathComponent("main").path)?.defaultBranch, "develop")
+
+        let wtGit = common.appendingPathComponent("worktrees/wt")
+        try FileManager.default.createDirectory(at: wtGit, withIntermediateDirectories: true)
+        try "ref: refs/heads/feat/y\n".write(to: wtGit.appendingPathComponent("HEAD"), atomically: true, encoding: .utf8)
+        try "../..\n".write(to: wtGit.appendingPathComponent("commondir"), atomically: true, encoding: .utf8)
+        let worktree = root.appendingPathComponent("wt")
+        try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try "gitdir: \(wtGit.path)\n".write(to: worktree.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+        let location = try XCTUnwrap(GitHeadReader.location(at: worktree.path))
+        XCTAssertEqual(location.branch, "feat/y")
+        XCTAssertEqual(location.defaultBranch, "develop")
+        // Ohne origin/HEAD: nil (die Regel fällt auf main/master zurück).
+        XCTAssertNil(GitHeadReader.defaultBranch(gitDir: try tempDir()))
+    }
+
     // MARK: - Speichern
 
     func testStoreWritesOnlyOnChangeAndKeepsTheActivityTime() throws {
@@ -238,12 +292,25 @@ final class AgentWorkingCopyTests: XCTestCase {
         let tree = AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/w", name: "w", branch: "feat/x")
         let other = AgentWorkingCopy(kind: .otherFolder, path: "/tmp/s", name: "s", branch: nil)
         XCTAssertEqual(ChatsOutput.workingCopyShort(nil), "-")
-        XCTAssertEqual(ChatsOutput.workingCopyShort(main), "main@main")
+        XCTAssertEqual(ChatsOutput.workingCopyShort(main), "main", "Standard-Branch im Hauptordner nicht nennen")
+        var feature = main
+        feature.branch = "feat/insel"
+        XCTAssertEqual(ChatsOutput.workingCopyShort(feature), "main@feat/insel")
+        XCTAssertEqual(ChatsOutput.workingCopyLine(feature),
+                       "Hauptordner · Branch feat/insel (nicht der Standard-Branch)  (/a)")
         XCTAssertEqual(ChatsOutput.workingCopyShort(tree), "wt:w@feat/x")
-        XCTAssertEqual(ChatsOutput.workingCopyShort(other), "dir:s")
+        let repeated = AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/WM8-37-board", name: "WM8-37-board",
+                                        branch: "feat/WM8-37-board")
+        XCTAssertEqual(ChatsOutput.workingCopyShort(repeated), "wt:WM8-37-board")
+        XCTAssertEqual(ChatsOutput.workingCopyShort(other), "other:s")
+        XCTAssertEqual(ChatsOutput.workingCopyLine(other), "Ordner außerhalb des Projekts: s  (/tmp/s)")
         XCTAssertEqual(ChatsOutput.workingCopyLine(tree), "Arbeitskopie w · Branch feat/x  (/a/.claude/worktrees/w)")
         let json = ChatsOutput.workingCopyJSON(other)
-        XCTAssertEqual(json["kind"] as? String, "otherFolder")
+        XCTAssertEqual(json["kind"] as? String, "other")
+        XCTAssertTrue(json["isDefaultBranch"] is NSNull)
+        XCTAssertEqual(ChatsOutput.workingCopyJSON(main)["kind"] as? String, "main")
+        XCTAssertEqual(ChatsOutput.workingCopyJSON(main)["isDefaultBranch"] as? Bool, true)
+        XCTAssertEqual(ChatsOutput.workingCopyJSON(tree)["kind"] as? String, "worktree")
         XCTAssertEqual(json["name"] as? String, "s")
         XCTAssertTrue(json["branch"] is NSNull)
     }
@@ -257,6 +324,6 @@ final class AgentWorkingCopyTests: XCTestCase {
         session.workingCopy = AgentWorkingCopy(kind: .mainFolder, path: "/a", name: nil, branch: "main")
         let withCopy = ChatsSessionEntry(session: session, projectName: "p", projectPath: "/a")
         let dict = ChatsOutput.sessionJSON(entry: withCopy, runtime: runtime, selfID: nil, live: false)["workingCopy"]
-        XCTAssertEqual((dict as? [String: Any])?["kind"] as? String, "mainFolder")
+        XCTAssertEqual((dict as? [String: Any])?["kind"] as? String, "main")
     }
 }
