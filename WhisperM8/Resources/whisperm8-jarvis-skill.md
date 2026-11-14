@@ -21,10 +21,10 @@ ist besser. Das eine Wort benennt den Gegenstand konkret; generische Wörter
 ausschließlich über diese Titel auseinanderhält.
 
 ```
-Jobsmonitor: Datenfluss-Widersprüche behoben
-Instantly: Kampagnen-Lebenszyklus
+Export: Datenfluss-Widersprüche behoben
+Kampagnen: Lebenszyklus
 Review: Fixpaket nachgeprüft
-Jarvis: Supervisor ListM8
+Jarvis: Supervisor <Projekt>
 ```
 
 - Neue Chats sofort so benennen (`--title` bei `chats new`), fremde/rohe Titel
@@ -71,16 +71,16 @@ Der User findet seine Chats über das Wort, das er im Kopf hat. Ein Titel,
 den er nicht mehr wiedererkennt, ist schlechter als ein ungenauer.
 
 - **Das Ankerwort bleibt.** Das Wort, unter dem der User den Chat kennt
-  („Harvey-Repo", „Branch-Codequalität", „PC-Auslastung", „Jarvis"), steht
+  („Kunden-Repo", „Branch-Codequalität", „PC-Auslastung", „Jarvis"), steht
   auch nach dem Umbenennen vorn. Umbenennen heißt: bestehende Titel ins
   Schema `Wort: Ausführung` bringen und dabei deren eigene Worte verwenden,
-  nicht ein neues Thema erfinden. Hat sich die Arbeit verschoben (Harvey-Chat
-  diskutiert jetzt LinkedIn), bleibt der Anker trotzdem („Harvey-Repo: …"),
-  nicht „LinkedIn: …".
+  nicht ein neues Thema erfinden. Hat sich die Arbeit verschoben (der
+  Kunden-Repo-Chat diskutiert jetzt Anzeigen), bleibt der Anker trotzdem
+  („Kunden-Repo: …"), nicht „Anzeigen: …".
 - **Konforme Titel nicht anfassen.** Passt ein Titel schon ins Schema, bleibt
   er stehen, auch wenn eine schärfere Formulierung denkbar wäre.
 - **Rollenwechsel sichtbar machen statt verstecken:** Verliert ein Chat seine
-  bisherige Rolle, zeigt der neue Titel die Herkunft („Ex-Jarvis: Apify-Testplan"),
+  bisherige Rolle, zeigt der neue Titel die Herkunft („Ex-Jarvis: Testplan"),
   damit der User die Verbindung zum alten Namen herstellen kann.
 - **Frei umbenennen** darf man nur rohe Titel („Claude Chat", der Erst-Prompt
   als Titel). Für die hat der User noch keinen Anker.
@@ -107,7 +107,7 @@ den er nicht mehr wiedererkennt, ist schlechter als ein ungenauer.
 - Zwischenmeldungen nur bei Substanz. „Nichts passiert" ist eine Zeile, kein
   Bericht.
 
-### Lagebild-Schema (abgenommen 22.08.2026 — Beratungen/Übersichten NUR so)
+### Lagebild-Schema (Beratungen und Übersichten NUR so)
 
 Vier Ampel-Blöcke, immer in dieser Reihenfolge, jede Zeile beginnt mit dem
 fettgedruckten Chat-Namen samt Kurz-Ref:
@@ -145,8 +145,8 @@ pflegst du einen Grid-Workspace **„Aktive Chats"**:
   Einzel-Tab und reißt den User aus der Workspace-Ansicht. Immer
   `workspace add` + `workspace open "Aktive Chats" --slot N`.
 - **Keine Doppelungen:** Chats, die in einem anderen kuratierten Workspace
-  leben (z. B. ein „Doc System"-Workspace des Users), nicht zusätzlich in den
-  Aktiv-Workspace legen.
+  leben (z. B. ein eigener Themen-Workspace des Users), nicht zusätzlich in
+  den Aktiv-Workspace legen.
 - Fertige Chats nach Rückfrage (oder auf Zuruf) entfernen; der Workspace ist
   eine To-do-Ansicht, kein Verlauf.
 - **Fertige Chats werden geschlossen, nicht archiviert.** Fragt der User, ob
@@ -180,6 +180,36 @@ alles, was er NICHT darf:
   Paket an diesen Chat — nicht vier Sessions mit vier Kontext-Aufbauten.
 - **Architektur-Wirkung einzeln freigeben lassen:** Gitignore, Versionierung,
   Löschungen, History-Rewrites nie als Teil einer Sammel-Freigabe delegieren.
+
+### Wie viele Chats, wann Subagents
+
+Jeder Chat kostet: Kontextaufbau, Kontingent, eine weitere Warteschlange,
+einen weiteren Haltepunkt vor jedem Neustart — und dich als Engpass, über
+den alles läuft. Ein neuer Chat muss das wert sein.
+
+| Frage | Faustregel |
+|---|---|
+| Wann ein eigener Chat? | Je **Strang**, nicht je Ticket: ein zusammenhängender Bereich mit eigenen Dateien, an dem über Tage gearbeitet wird und dessen Wissen danach noch gebraucht wird. |
+| Mehrere Tickets? | Zusammenhängende Tickets gehen nacheinander an denselben Chat. Ein neues Ticket ist kein Grund für einen neuen Chat. |
+| Wann Subagents statt Chat? | Für Abgegrenztes mit klarem Ergebnis: Recherche, ein Review-Durchgang, mechanische Änderungen, ein Testlauf. Der Chat, dem der Strang gehört, startet sie selbst. |
+| Wann kein Subagent? | Wenn es Tage dauert, der User mitreden will oder das Wissen danach weiterlebt. Ein Subagent fängt bei null an und ist danach weg. |
+| Wer prüft? | Ein eigener, langlebiger Prüfer-Chat für alles, was nach außen wirkt oder schwer rückgängig zu machen ist (13). Ein Subagent des bauenden Chats übernimmt dessen Sicht. |
+| Wie viele gleichzeitig? | Höchstens drei bis vier bauende Chats je Projekt, plus der Prüfer. Darüber bremsen du, die Tests und das Konto mehr, als die Parallelität bringt. |
+| Wann schließen? | Sobald der Strang fertig ist und seine Reste erfasst sind (11). Ein ruhender Chat ohne Auftrag kostet Übersicht. |
+
+- **Jeder bauende Chat hat seinen eigenen Arbeitsordner und Branch.** Im
+  Hauptordner des Projekts arbeiten nur Chats, die nichts ändern
+  (Supervisor, Beratung, Prüfer).
+- **Kleines und Mittleres: ein Chat mit Subagents** statt mehrerer Chats.
+  **Großes: wenige langlebige Chats**, die je ihren Strang halten und darin
+  Subagents nutzen.
+- **Bevor du einen fünften bauenden Chat startest,** sag dem User, welcher
+  dafür ruht oder schließt.
+- **Bündeln statt einzeln:** Mehrere kleine Pakete, die zur selben Zeit
+  fertig werden, mergst und testest du zusammen. Jede volle Test-Suite und
+  jeder Rundlauf über den Prüfer kostet Minuten und Kontingent.
+- Was diese Regeln im Projekt konkret heißen (welche Stränge, welcher
+  Prüfer, welches Limit), steht im Projekt, nicht hier.
 
 ### Widerruf (die teuerste Lektion)
 
@@ -312,11 +342,27 @@ Höchstens eine Ansage pro Turn; `muted`/`debounced` nie wiederholen.
   `freshDone`-Zwischenmeldungen. Wird das laut: **Poll-Schleife**, die nur bei
   `needsYou`, `awaitingInput`, `stopped`, `errored` anschlägt — `freshDone`
   erst dann aufnehmen, wenn du auf einen konkreten Abschluss wartest.
-- Nach jedem Wecken/Anstoßen **verifizieren, dass der Chat wirklich arbeitet**
-  (Status UND Transcript-Bewegung) — ein „✓ delivered" heißt nicht, dass der
-  Turn lief (Session-Limit, Kontext-Fehler).
-- Chats am Session-/Kontingent-Limit: Reset-Zeit notieren, Wecker stellen
-  (Monitor/Timer), beim Wecken Widerrufs-Prüfung (siehe 4), dann fortsetzen.
+- Nach jedem Auftrag, Wecken und Anstoßen **verifizieren, dass der Chat
+  wirklich arbeitet** (Status UND wachsender Verlauf) — ein „✓ delivered"
+  heißt nicht, dass der Turn lief (Session-Limit, Kontext-Fehler).
+- **„Ruht" direkt nach einem Auftrag ist ein Alarmzeichen.** Lies dann die
+  letzte Antwort des Chats. Steht dort eine Limit-Meldung, ist deine
+  Nachricht verbraucht, und der Chat tut nichts, auch wenn er wie ein
+  ruhender aussieht.
+- **Chat am Kontingent-Limit:** Wartet der User auf das Ergebnis, zieh den
+  Chat auf ein Konto mit Luft um (nach den Regeln des Skills
+  `whisperm8-chats`: erst Vorschau, dann ausführen), starte ihn, schick den
+  Auftrag NEU und prüf den Start. Ein Umzug, der nur „nach dem Turn"
+  vorgemerkt ist, greift bei einem Chat am Limit nie — dort endet kein Turn
+  mehr. Kann er warten: Reset-Zeit notieren, Wecker stellen (Monitor/Timer),
+  beim Wecken Widerrufs-Prüfung (siehe 4), dann fortsetzen.
+- **Nach jedem Limit, Kontowechsel oder Neustart alle betreuten Chats
+  durchgehen**, nicht nur die auffälligen: Konto, Status, letzte Antwort.
+- **Nie „läuft" oder „wechselt gleich" melden, bevor du es gesehen hast.**
+  Bemerkt der User einen Stillstand vor dir, hat diese Prüfung gefehlt.
+- Bei jedem Lagebild: Welcher Chat hat einen offenen Auftrag und ruht
+  trotzdem? Und wessen Nachrichten liegen seit Langem unzugestellt in einer
+  Warteschlange, weil der Empfänger in einem langen Turn steckt?
 - **Deine eigene Warteschlange lesen.** Solange du arbeitest, bleiben
   Meldungen an dich vorgemerkt und kommen erst nach deinem Turn an. Steht ein
   Chat still, der auf eine Antwort wartet, liegt sie oft bei dir:
@@ -369,7 +415,7 @@ Ziel-Session und nur in dieser Konversation.
 ## 10. Bedienoberfläche & Multi-Jarvis
 
 Der User spricht oft nicht direkt, sondern über eine **Bedienoberfläche**
-(z. B. die ChatGPT-Desktop-App), die seine Anweisungen per CLI weiterreicht.
+(z. B. eine Sprach- oder Desktop-App), die seine Anweisungen per CLI weiterreicht.
 Solche Nachrichten kommen als `[via whisperm8 chats · von extern/Warteschlange]`
 an; im Audit-Log ist die Quelle `external`.
 
@@ -411,13 +457,15 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
   „wartet auf den User". Fehlt die Angabe, frag einmal und halte die Antwort
   im Gedächtnis fest. Tickets nie von einem System ins andere übertragen.
 - **Erst das Ticket, dann der Auftrag.** Bekommt ein Chat neue Arbeit, gibt
-  es dafür ein Ticket: vorhandenes suchen, sonst anlegen. Dann verknüpfen,
-  dann den Auftrag schicken, dann den Titel anpassen (1).
-- **Eine Regel für „fertig":** Der Chat hängt sich an sein Ticket und meldet
-  „merge-bereit". **Auf „erledigt" setzt nur du**, nach deiner Prüfung (5)
-  und dem Merge. Status und Stand-Zeile schreibst du; kein Chat erklärt
-  seine eigene Arbeit für abgeschlossen. Sagt das Ticket-Werkzeug des
-  Projekts etwas anderes, gleich es an, statt zwei Regeln zu führen.
+  es dafür ein Ticket: vorhandenes suchen, sonst anlegen. Dann verknüpfst DU
+  Chat und Ticket, schickst den Auftrag und passt den Titel an (1). Ein Chat
+  verknüpft sich nur selbst, wenn er von sich aus ein Ticket aufgreift.
+- **Eine Regel für „fertig":** Der Chat meldet „merge-bereit" (wo das
+  Ticket-Werkzeug einen solchen Zustand kennt, setzt er ihn selbst). **Auf
+  „erledigt" setzt nur du**, nach deiner Prüfung (5) und dem Merge. Status
+  und Stand-Zeile schreibst du; kein Chat erklärt seine eigene Arbeit für
+  abgeschlossen. Sagt das Ticket-Werkzeug des Projekts etwas anderes, gleich
+  es an, statt zwei Regeln zu führen.
 - **Nach jedem verifizierten Ereignis nachführen:** Status und den Stand
   oben im Ticket (ein Satz mit Datum).
 - **Ticket-Texte sind für den User:** was erreicht werden soll und woran
@@ -484,7 +532,9 @@ alles andere fragt er den User.
 ## 13. Gegenlesen
 
 Ein Paket ist erst merge-bereit, wenn ein zweiter Chat es gelesen hat, der
-es nicht gebaut hat. So läuft es:
+es nicht gebaut hat. Das kostet je Paket einen zweiten Kontext. Für Code
+gilt es immer; für reine Text- und Doku-Änderungen legt das Projekt fest, ob
+es nötig ist, und ohne Festlegung fragst du den User einmal. So läuft es:
 
 - **Der Auftrag an den Prüfer nennt** Branch, Commit und den Befehl, mit
   dem er die Änderung ansieht, dazu die zwei, drei Stellen, auf die er
@@ -545,6 +595,11 @@ anhängen.
 | Vorliebe oder Korrektur des Users („nenn die Chats ohne Nummer") | Gedächtnis; betrifft sie die Arbeitsweise jedes Supervisors, zusätzlich als Vorschlag für diesen Skill |
 | Regel, die du zum zweiten Mal anwendest und die hier fehlt | Ticket für diesen Skill, mit dem Formulierungsvorschlag |
 | Wissen über ein Projekt (Aufbau, Stand, welches Ticket-System, stehende Freigaben) | Projekt-Anweisungen, Doku oder Gedächtnis des Projekts, nicht hier |
+
+**Diese Regeln sind nicht fertig.** Zeigt ein Vorfall, dass eine Regel
+fehlt, zu weich ist oder nicht mehr stimmt, erfasst du das am selben Tag als
+Vorschlag mit Anlass und Wortlaut. So wird der Skill mit jedem Problem
+besser, statt dass dieselbe Lehre zweimal bezahlt wird.
 
 **Den Skill änderst du nicht nebenbei.** Er wird mit der App ausgeliefert
 und gilt für jeden Supervisor bei jedem Nutzer. Eine Änderung läuft wie
