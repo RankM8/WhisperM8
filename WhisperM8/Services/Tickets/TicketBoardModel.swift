@@ -234,8 +234,11 @@ enum TicketBoardLayout {
             if kind == .started {
                 // Stabil: Innerhalb eines Status bleibt die Reihenfolge nach Priorität.
                 rows = rows.enumerated().sorted { lhs, rhs in
-                    let lp = lhs.element.ticket.status.position, rp = rhs.element.ticket.status.position
-                    return lp != rp ? lp < rp : lhs.offset < rhs.offset
+                    let ls = lhs.element.ticket.status, rs = rhs.element.ticket.status
+                    if ls.position != rs.position { return ls.position < rs.position }
+                    // Zwei Status an derselben Stelle bleiben trotzdem je eine Gruppe.
+                    if ls.id != rs.id { return ls.id < rs.id }
+                    return lhs.offset < rhs.offset
                 }.map(\.element)
             }
             return TicketBoardColumn(kind: kind, entries: rows)

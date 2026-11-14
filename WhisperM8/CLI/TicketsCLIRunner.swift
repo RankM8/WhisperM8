@@ -201,8 +201,20 @@ enum TicketsCLIRunner {
             let target = try status.map { try resolveStatus($0, in: context) }
             if let target { try guardCompletion(target, key: key, force: force, env) }
             let noteText = try note.map { try text($0, env) }
-            var completion = try completionRecord(summary, chat: chat, key: key, env)
+            // Wer nach dem Merge auf „erledigt“ setzt, gibt nicht ab: Die Zusammenfassung
+            // hat der bauende Chat geschrieben.
+            let closing = target?.kind == .completed && !summary.hasContent
+            var completion = closing ? nil : try completionRecord(summary, chat: chat, key: key, env)
             let image = try summary.image.map { try imageFile($0, env) }
+            if let record = completion {
+                // Mit einer Platzhalter-Adresse geprüft, bevor irgendetwas hochgeht.
+                var probe = record
+                if image != nil { probe.imageURL = String(repeating: "x", count: 300) }
+                guard TicketRecordText.completion(probe, at: env.now()).utf8.count <= TicketsText.maxBytes else {
+                    throw Failure(exitCode: TicketsCLIExit.usage,
+                                  message: "Abschluss zu lang (mehr als \(TicketsText.maxBytes / 1024) KB). Nichts gesendet.")
+                }
+            }
             // Der Abschluss zuerst: Scheitert er, ist am Ticket noch nichts umgestellt.
             if var record = completion {
                 if let image {
@@ -211,19 +223,29 @@ enum TicketsCLIRunner {
                 completion = record
                 try await source.addComment(ticketID: context.ticket.id, body: TicketRecordText.completion(record, at: env.now()))
             }
-            // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
+            do {
+                // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
+                let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
+                if wasActive {
+                    try await source.saveLink(ticketID: context.ticket.id, chat: chat, active: false, at: env.now())
+                }
+                if let noteText {
+                    try await source.setDescription(
+                        ticketID: context.ticket.id,
+                        description: TicketStandLine.apply(noteText, to: context.ticket.description, on: env.now()))
+                }
+                if let target, target.id != context.ticket.status.id {
+                    try await source.setStatus(ticketID: context.ticket.id, statusID: target.id)
+                }
+            } catch let error as TicketSourceError where completion != nil {
+                // Ein zweiter Versuch mit Zusammenfassung schriebe den Abschluss doppelt.
+                throw Failure(exitCode: exitCode(for: error), message: error.message + """
+
+                Der Abschluss steht schon am Ticket, Verknüpfung oder Status sind noch nicht umgestellt.
+                Nachholen ohne zweiten Abschluss: dieselbe Zeile mit --no-summary statt der Zusammenfassung.
+                """)
+            }
             let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
-            if wasActive {
-                try await source.saveLink(ticketID: context.ticket.id, chat: chat, active: false, at: env.now())
-            }
-            if let noteText {
-                try await source.setDescription(
-                    ticketID: context.ticket.id,
-                    description: TicketStandLine.apply(noteText, to: context.ticket.description, on: env.now()))
-            }
-            if let target, target.id != context.ticket.status.id {
-                try await source.setStatus(ticketID: context.ticket.id, statusID: target.id)
-            }
             let linked = wasActive ? "Verknüpfung mit „\(chat.shortName)“ beendet."
                 : "„\(chat.shortName)“ war nicht (mehr) verknüpft."
             let recorded = completion == nil ? "" : " Abschluss steht am Ticket."
@@ -248,11 +270,17 @@ enum TicketsCLIRunner {
             try await source.addComment(ticketID: context.ticket.id, body: body)
             return "\(key): Entscheidung festgehalten (\(by))."
 
-        case .check(let key, let references, let uncheck):
+        case .check(let key, let references, let uncheck, let json):
             let source = try access.source(forKey: key)
             let context = try await source.ticket(key: key)
             let items = TicketChecklist.items(in: context.ticket.description)
             if references.isEmpty {
+                if json {
+                    return TicketsCLIFormatter.jsonString([
+                        "key": key,
+                        "items": items.map { ["number": $0.number, "done": $0.isDone, "text": $0.text] as [String: Any] },
+                    ] as [String: Any])
+                }
                 guard !items.isEmpty else { return "\(key) hat keine Kästchen." }
                 return items.map { "\(String($0.number).padding(toLength: 3, withPad: " ", startingAt: 0))[\($0.isDone ? "x" : " ")] \($0.text)" }
                     .joined(separator: "\n")
@@ -271,7 +299,9 @@ enum TicketsCLIRunner {
                                 + ". Nummer angeben.")
             }
             let word = uncheck ? "wieder offen" : "abgehakt"
-            guard !result.changed.isEmpty else { return "\(key): schon \(word), nichts geändert." }
+            guard !result.changed.isEmpty else {
+                return "\(key): war schon \(uncheck ? "offen" : "abgehakt"), nichts geändert."
+            }
             try await source.setDescription(ticketID: context.ticket.id, description: result.description)
             let progress = TicketChecklist.progress(in: result.description)
             return "\(key): \(result.changed.count) Kästchen \(word) (\(progress?.done ?? 0) von \(progress?.total ?? 0) erledigt)."
@@ -394,7 +424,7 @@ enum TicketsCLIRunner {
         guard let caller = chats.first(where: { $0.id == id }), !TicketBoardBuilder.isSupervisor(caller) else { return }
         throw Failure(exitCode: TicketsCLIExit.conflict, message: """
         Auf „\(target.name)“ setzt der Supervisor nach Prüfung und Merge. Als Chat das Ticket abgeben \
-        (whisperm8 tickets done \(key) --status <Status vor „\(target.name)“>) und dem Supervisor melden.
+        (whisperm8 tickets done \(key) --built "was gebaut wurde" --status <Status vor „\(target.name)“>) und dem Supervisor melden.
         Nur wenn der Nutzer es ausdrücklich von dir verlangt: --force
         """)
     }
@@ -603,6 +633,9 @@ enum TicketsCLIRunner {
         guard let data = env.readData(path, TicketImage.maxBytes), !data.isEmpty else {
             throw Failure(exitCode: TicketsCLIExit.usage,
                           message: "Bild nicht lesbar oder größer als \(TicketImage.maxBytes / 1024 / 1024) MB: \(path)")
+        }
+        guard TicketImage.looksLike(type, data) else {
+            throw Failure(exitCode: TicketsCLIExit.usage, message: "Die Datei ist kein \(type.replacingOccurrences(of: "image/", with: "").uppercased())-Bild: \(path)")
         }
         return (data, (path as NSString).lastPathComponent, type)
     }

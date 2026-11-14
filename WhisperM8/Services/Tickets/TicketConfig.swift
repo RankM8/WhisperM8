@@ -111,6 +111,7 @@ struct TicketConfig: Codable, Equatable {
 
     mutating func removeProject(_ directory: String) {
         teamsByProjectPath[Self.normalized(directory)] = nil
+        areasFileByProjectPath[Self.normalized(directory)] = nil
     }
 
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert

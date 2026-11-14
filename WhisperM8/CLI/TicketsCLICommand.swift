@@ -12,7 +12,7 @@ enum TicketsCLIArguments: Equatable {
     case link(key: String, chat: String?, keepStatus: Bool)
     case done(key: String, chat: String?, status: String?, note: TicketsText?, force: Bool, summary: TicketsDoneSummary)
     case decide(key: String, TicketsDecideOptions)
-    case check(key: String, references: [String], uncheck: Bool)
+    case check(key: String, references: [String], uncheck: Bool, json: Bool)
     case unlink(key: String, chat: String?)
     case status(key: String, name: String, force: Bool)
     case note(key: String, text: TicketsText)
@@ -42,7 +42,7 @@ enum TicketsCLIArguments: Equatable {
         switch self {
         case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup, .decide: return true
         // Ohne Verweise zeigt `check` nur die Kästchen.
-        case .check(_, let references, _): return !references.isEmpty
+        case .check(_, let references, _, _): return !references.isEmpty
         case .help, .board, .list, .show, .mine, .doctor: return false
         }
     }
@@ -51,7 +51,7 @@ enum TicketsCLIArguments: Equatable {
         switch self {
         case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
              .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _), .decide(let key, _),
-             .check(let key, _, _):
+             .check(let key, _, _, _):
             return key
         case .help, .board, .list, .mine, .new, .setup, .doctor:
             return nil
@@ -181,7 +181,7 @@ enum TicketsCLIArguments: Equatable {
             if let option = rest.first(where: { $0.hasPrefix("--") }) { throw ParseError.usage("Unbekannte Option: \(option)") }
             let parts = rest + literal
             guard let first = parts.first else { throw ParseError.usage("Erwartet: tickets check <Ticket> [Nummer oder Text …]") }
-            return .check(key: try key(first), references: Array(parts.dropFirst()), uncheck: uncheck)
+            return .check(key: try key(first), references: Array(parts.dropFirst()), uncheck: uncheck, json: json)
         case "unlink":
             let chat = try value("--chat")
             return .unlink(key: try key(try positional(1, "tickets unlink <Ticket> [--chat REF]")[0]), chat: chat)
@@ -349,7 +349,8 @@ enum TicketsCLICommand {
                 gebaut wurde, Commit, was nicht dazugehört, Schritte für den
                 Handtest als Kästchen, auf Wunsch ein Bild), beendet die
                 Verknüpfung und setzt auf Wunsch Status und Stand-Zeile.
-                Arbeit ohne Bau (Analyse, Entscheidung): --no-summary
+                Arbeit ohne Bau (Analyse, Entscheidung): --no-summary. Wer nach
+                dem Merge auf „erledigt“ setzt, braucht keine Zusammenfassung.
       whisperm8 tickets unlink <Ticket> [--chat REF]   Falsch verknüpft: entfernen.
 
     STATUS UND TEXT

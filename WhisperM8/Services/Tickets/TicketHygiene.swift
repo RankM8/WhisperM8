@@ -30,7 +30,8 @@ enum TicketHygiene {
         let limit = now.addingTimeInterval(-Double(staleAfterDays) * 86_400)
         let groups: [(TicketHygieneFinding.Kind, [Ticket])] = [
             (.noProject, open.filter { $0.project == nil }),
-            (.noCriteria, planned.filter { !TicketChecklist.hasSection($0.description) }),
+            // Kästchen ohne die Überschrift genügen: `tickets check` arbeitet auch damit.
+            (.noCriteria, planned.filter { !TicketChecklist.hasSection($0.description) && TicketChecklist.items(in: $0.description).isEmpty }),
             // Ein abgegebenes Ticket (beendete Verknüpfung) wartet auf den Merge, nicht auf einen Chat.
             (.startedWithoutChat, open.filter { $0.status.kind == .started && $0.links.isEmpty }),
             (.stale, planned.filter { ($0.updatedAt ?? now) < limit }),
@@ -71,7 +72,7 @@ enum TicketAreasTable {
                 func value(_ column: Int) -> String { column < values.count ? values[column] : "" }
                 let project = plain(value(projectColumn))
                 guard !project.isEmpty else { continue }
-                let paths = value(pathColumn).split(separator: ",").map { plain(String($0)) }
+                let paths = value(pathColumn).split(separator: ",").map { target(String($0)) }
                     .filter { !$0.isEmpty && $0 != "–" && $0 != "-" }
                 areas.append(TicketArea(area: plain(value(areaColumn)), paths: paths, project: project))
             }
@@ -117,6 +118,14 @@ enum TicketAreasTable {
         return !parts.isEmpty && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy { $0 == "-" || $0 == ":" } }
     }
 
+    /// Pfad aus einer Zelle: bei einem Link das Ziel, sonst der Text ohne Backticks.
+    private static func target(_ text: String) -> String {
+        if let match = text.range(of: #"\]\(([^)]*)\)"#, options: .regularExpression) {
+            return String(text[match]).dropFirst(2).dropLast().trimmingCharacters(in: .whitespaces)
+        }
+        return plain(text)
+    }
+
     /// Ohne Backticks und Link-Schreibweise: `[Text](ziel)` → `Text`.
     private static func plain(_ text: String) -> String {
         text.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
@@ -130,6 +139,19 @@ enum TicketAreasTable {
 enum TicketImage {
     /// Größer wird nichts hochgeladen.
     static let maxBytes = 5 * 1024 * 1024
+
+    /// Stimmt der Anfang der Datei zum Medientyp? Die Endung allein sagt nichts:
+    /// Sonst ginge jede Datei als „Bild“ hoch, und niemand sähe es.
+    static func looksLike(_ contentType: String, _ data: Data) -> Bool {
+        let head = [UInt8](data.prefix(12))
+        switch contentType {
+        case "image/png": return head.starts(with: [0x89, 0x50, 0x4E, 0x47])
+        case "image/jpeg": return head.starts(with: [0xFF, 0xD8, 0xFF])
+        case "image/gif": return head.starts(with: Array("GIF8".utf8))
+        case "image/webp": return head.count == 12 && head.starts(with: Array("RIFF".utf8)) && Array(head[8...]) == Array("WEBP".utf8)
+        default: return false
+        }
+    }
 
     /// Medientyp nach Endung; `nil` für alles, was kein übliches Bild ist.
     static func contentType(forPath path: String) -> String? {

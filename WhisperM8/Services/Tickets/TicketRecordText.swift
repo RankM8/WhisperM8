@@ -28,7 +28,14 @@ enum TicketRecordText {
         var imageURL: String?
     }
 
-    static func decision(_ decision: Decision, at date: Date, calendar: Calendar = .current) -> String {
+    /// Gregorianisch in der Zeitzone des Rechners: Der Stempel soll überall gleich aussehen.
+    static var stampCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar
+    }
+
+    static func decision(_ decision: Decision, at date: Date, calendar: Calendar = stampCalendar) -> String {
         var lines = ["**Entscheidung · \(stamp(date, calendar))**", "", "**Frage:** \(flat(decision.question))", "", "**Möglichkeiten:**"]
         lines += decision.options.map { "* \(flat($0))" }
         lines += ["", "**Gewählt:** \(flat(decision.chosen))", "", "**Entschieden von:** \(flat(decision.by))"]
@@ -36,7 +43,7 @@ enum TicketRecordText {
         return lines.joined(separator: "\n")
     }
 
-    static func completion(_ completion: Completion, at date: Date, calendar: Calendar = .current) -> String {
+    static func completion(_ completion: Completion, at date: Date, calendar: Calendar = stampCalendar) -> String {
         var lines = ["**Abschluss · \(stamp(date, calendar)) · \(flat(completion.chat))**", "", "**Gebaut:** \(flat(completion.built))"]
         if let commit = completion.commit.map(flat), !commit.isEmpty { lines += ["", "**Commit:** \(commit)"] }
         if let not = completion.notIncluded.map(flat), !not.isEmpty { lines += ["", "**Nicht Teil davon:** \(not)"] }

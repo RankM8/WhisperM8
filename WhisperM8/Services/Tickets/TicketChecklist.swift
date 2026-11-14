@@ -42,8 +42,9 @@ enum TicketChecklist {
     static func items(in description: String) -> [TicketChecklistItem] {
         let lines = description.components(separatedBy: "\n")
         let range = sectionRange(in: lines) ?? 0..<lines.count
+        let code = codeLines(in: lines)
         var found: [TicketChecklistItem] = []
-        for index in range {
+        for index in range where !code.contains(index) {
             guard let box = box(in: lines[index]) else { continue }
             found.append(TicketChecklistItem(number: found.count + 1, text: box.text, isDone: box.isDone, line: index))
         }
@@ -77,9 +78,17 @@ enum TicketChecklist {
 
     static func resolve(_ reference: String, in items: [TicketChecklistItem]) throws -> TicketChecklistItem {
         let wanted = reference.trimmingCharacters(in: .whitespaces)
-        if let number = Int(wanted) {
-            guard let item = items.first(where: { $0.number == number }) else { throw Failure.notFound(reference) }
+        guard !wanted.isEmpty else { throw Failure.notFound(reference) }
+        // Nur Ziffern sind eine Nummer („+1“ oder „-1“ nicht).
+        if wanted.allSatisfy({ $0.isASCII && $0.isNumber }) {
+            guard let number = Int(wanted), let item = items.first(where: { $0.number == number }) else {
+                throw Failure.notFound(reference)
+            }
             return item
+        }
+        // Der ganze Text eines Kästchens gewinnt gegen Teiltreffer.
+        if let exact = items.first(where: { $0.text.compare(wanted, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }) {
+            return exact
         }
         let hits = items.filter { $0.text.range(of: wanted, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
         switch hits.count {
@@ -94,26 +103,45 @@ enum TicketChecklist {
     /// Zeilen des Abschnitts unter der Überschrift, bis zur nächsten Überschrift
     /// derselben oder einer höheren Ebene.
     private static func sectionRange(in lines: [String]) -> Range<Int>? {
-        for (index, line) in lines.enumerated() {
+        let code = codeLines(in: lines)
+        for (index, line) in lines.enumerated() where !code.contains(index) {
             guard let heading = heading(line), headings.contains(heading.title) else { continue }
-            let end = lines[(index + 1)...].firstIndex { other in
-                if let next = self.heading(other) { return next.level <= heading.level }
-                return false
+            let end = lines.indices.first { other in
+                guard other > index, !code.contains(other), let next = self.heading(lines[other]) else { return false }
+                return next.level <= heading.level
             } ?? lines.count
             return (index + 1)..<end
         }
         return nil
     }
 
+    /// Zeilen in Codeblöcken (``` oder ~~~): Ein `# Kommentar` oder ein
+    /// `- [ ]` darin ist weder Überschrift noch Kästchen.
+    private static func codeLines(in lines: [String]) -> Set<Int> {
+        var inside: Set<Int> = []
+        var fence: String?
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if let open = fence {
+                inside.insert(index)
+                if trimmed.hasPrefix(open) { fence = nil }
+            } else if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                fence = String(trimmed.prefix(3))
+                inside.insert(index)
+            }
+        }
+        return inside
+    }
+
     private static func heading(_ line: String) -> (level: Int, title: String)? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         let level = trimmed.prefix { $0 == "#" }.count
         guard (1...6).contains(level), trimmed.dropFirst(level).first == " " else { return nil }
-        var title = trimmed.dropFirst(level).trimmingCharacters(in: .whitespaces).lowercased()
+        // Linear lässt Fettschrift in Überschriften zu: erst die Sterne weg, dann der Doppelpunkt.
+        var title = trimmed.dropFirst(level).replacingOccurrences(of: "*", with: "")
+            .trimmingCharacters(in: .whitespaces).lowercased()
         if title.hasSuffix(":") { title.removeLast() }
-        // Linear lässt Fettschrift in Überschriften zu.
-        title = title.replacingOccurrences(of: "*", with: "")
-        return (level, title)
+        return (level, title.trimmingCharacters(in: .whitespaces))
     }
 
     /// Erkennt `- [ ] Text`, `* [x] Text` und `+ [X] Text`, auch eingerückt.

@@ -103,9 +103,11 @@ gelesen und enthält keine Rohdaten aus dem Chat.
   Nur für Entscheidungen, die gefallen sind; mindestens zwei Möglichkeiten.
 - **Abschluss** (`tickets done`): Pflicht beim Abgeben. Ein Kommentar „Abschluss“ mit Zeit und Rufname des
   Chats: was gebaut wurde (`--built`), Commit, was bewusst nicht dazugehört (`--not`), Schritte für den Handtest
-  als Kästchen (`--test`, mehrfach), auf Wunsch ein Bild (`--image`, nur png, jpg, gif, webp bis 5 MB). Der
-  Kommentar wird zuerst geschrieben; scheitert er, ist am Ticket nichts umgestellt. Für Arbeit ohne Bau
-  (Analyse, Entscheidung) gibt es `--no-summary`.
+  als Kästchen (`--test`, mehrfach), auf Wunsch ein Bild (`--image`, nur png, jpg, gif, webp bis 5 MB; geprüft
+  wird auch der Anfang der Datei, nicht nur die Endung). Der Kommentar wird zuerst geschrieben; scheitert er,
+  ist am Ticket nichts umgestellt. Scheitert danach Verknüpfung oder Status, sagt die Meldung, dass der
+  Abschluss schon steht und der Rest mit `--no-summary` nachgeholt wird. Für Arbeit ohne Bau (Analyse,
+  Entscheidung) gibt es `--no-summary`; wer nach dem Merge auf einen „erledigt“-Status setzt, braucht keine.
 - **Kästchen** (`tickets check`): die Punkte unter „Fertig, wenn“ (auch „Done when“, „Acceptance criteria“).
   Abgehakt wird per Nummer oder mit einem Stück Text, das auf genau ein Kästchen passt; alle anderen Zeilen der
   Beschreibung bleiben, wie sie sind. Hat ein Ticket keinen solchen Abschnitt, zählen alle Kästchen.
@@ -120,7 +122,7 @@ Hinweise („ACHTE“), der Bericht bleibt grün:
 | Hinweis | Gemeint ist |
 |---|---|
 | ohne Projekt | offenes Ticket, das keinem Bereich zugeordnet ist |
-| ohne „Fertig, wenn“ | eingeplant oder in Arbeit, aber ohne den Abschnitt; im Backlog darf er fehlen |
+| ohne „Fertig, wenn“ | eingeplant oder in Arbeit, aber ohne den Abschnitt und ohne Kästchen; im Backlog darf er fehlen |
 | in Arbeit, nie ein Chat | Status in Arbeit, aber keine Verknüpfung, auch keine beendete |
 | seit über 3 Wochen unberührt | eingeplant oder in Arbeit und in Linear 21 Tage nicht geändert |
 | Bereiche | Projekt fehlt in der Tabelle, steht nur in der Tabelle, hat keine Doku, oder die Doku fehlt |
@@ -254,7 +256,8 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 - Schlüsselbund: Dienst `whisperm8-linear-api-key` (Test-Instanz: `…-key.test`), je Workspace ein Eintrag mit
   dem Kürzel als Konto.
 - Netz: `https://api.linear.app/graphql`, wenn ein `tickets`-Befehl läuft oder wenn in der App der
-  Labs-Schalter an ist (Einstellungen › Tickets, später die Ansicht).
+  Labs-Schalter an ist (Einstellungen › Tickets, später die Ansicht). `done --image` schickt die Bilddatei
+  zusätzlich an die Adresse, die Linear zum Hochladen nennt (https, ohne den Key).
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,
   `assign`, `label`, `decide` und `check` (mit Verweis) aus. `done --image` lädt zusätzlich eine Bilddatei zu
   Linear hoch; der Key geht dabei nicht an den Speicher-Dienst.

@@ -38,6 +38,11 @@ final class TicketToolTests: XCTestCase {
             let text = "\(heading)\n- [ ] eins\n# Weiter\n- [ ] zwei"
             XCTAssertEqual(TicketChecklist.items(in: text).map(\.text), ["eins"], heading)
         }
+        XCTAssertEqual(TicketChecklist.items(in: "## **Fertig, wenn:**\n- [ ] eins\n## Weiter\n- [ ] zwei").map(\.text), ["eins"],
+                       "fett und mit Doppelpunkt")
+        let fenced = "## Fertig, wenn\n- [ ] eins\n```sh\n# alles bauen\n- [ ] kein Kästchen\n```\n- [ ] zwei\n## Hinweise\n- [ ] drei"
+        XCTAssertEqual(TicketChecklist.items(in: fenced).map(\.text), ["eins", "zwei"],
+                       "im Codeblock ist `#` keine Überschrift und `- [ ]` kein Kästchen")
         let nested = "## Fertig, wenn\n- [ ] eins\n### Später\n- [ ] zwei\n## Hinweise\n- [ ] drei"
         XCTAssertEqual(TicketChecklist.items(in: nested).map(\.text), ["eins", "zwei"], "Unterabschnitte gehören dazu")
         let without = "Text\n- [ ] eins\n- [x] zwei"
@@ -82,6 +87,12 @@ final class TicketToolTests: XCTestCase {
         XCTAssertThrowsError(try TicketChecklist.setting(["1"], done: true, in: "ohne Kästchen")) {
             XCTAssertEqual($0 as? TicketChecklist.Failure, .noItems)
         }
+        for odd in ["0", "+1", "-1", "", "  "] {
+            XCTAssertThrowsError(try TicketChecklist.setting([odd], done: true, in: "- [ ] eins\n- [ ] zwei"), "„\(odd)“ ist keine Nummer")
+        }
+        // Der ganze Text eines Kästchens gewinnt gegen ein anderes, das ihn nur enthält.
+        let twins = "- [ ] Board\n- [ ] Board mit Filtern"
+        XCTAssertEqual(try TicketChecklist.setting(["board"], done: true, in: twins).changed.map(\.number), [1])
     }
 
     // MARK: Entscheidung und Abschluss
@@ -164,6 +175,9 @@ final class TicketToolTests: XCTestCase {
             TicketHygieneFinding(kind: .stale, keys: ["WM8-4"]),
         ], "Backlog darf liegen und braucht noch keine Kästchen; Erledigtes zählt nie; ein abgegebenes Ticket wartet nicht auf einen Chat")
         XCTAssertTrue(TicketHygiene.findings(in: [tickets[0]], now: now).isEmpty)
+        // Kästchen ohne die Überschrift genügen, und ein Ticket ohne Zeitangabe gilt nicht als liegengeblieben.
+        let loose = TicketFixtures.ticket(7, status: "Todo", description: "- [ ] ein Punkt")
+        XCTAssertTrue(TicketHygiene.findings(in: [loose], now: now).isEmpty)
     }
 
     // MARK: Tabelle der Bereiche
@@ -188,9 +202,9 @@ final class TicketToolTests: XCTestCase {
         let areas = TicketAreasTable.parse(table)
         XCTAssertEqual(areas, [
             TicketArea(area: "Diktat", paths: ["docs/features/dictation", "docs/features/voice-gate.md"], project: "Diktat"),
-            TicketArea(area: "Tickets", paths: ["tickets.md"], project: "Tickets"),
+            TicketArea(area: "Tickets", paths: ["docs/features/tickets.md"], project: "Tickets"),
             TicketArea(area: "Ohne Doku", paths: [], project: "Werkzeuge"),
-        ], "die erste Tabelle hat keine Spalten Ordner und Projekt und zählt nicht")
+        ], "die erste Tabelle hat keine Spalten Ordner und Projekt und zählt nicht; bei einem Link zählt das Ziel")
         XCTAssertNil(TicketAreasTable.parse("| Zweck | Befehl |\n|---|---|\n| a | b |"))
     }
 
@@ -203,7 +217,7 @@ final class TicketToolTests: XCTestCase {
             "Projekt „Controller“ steht nicht in der Tabelle",
             "Doku fehlt: docs/features/voice-gate.md (Diktat)",
             "„Tickets“ steht in der Tabelle, aber nicht im Ticket-Werkzeug",
-            "Doku fehlt: tickets.md (Tickets)",
+            "Doku fehlt: docs/features/tickets.md (Tickets)",
             "Projekt „Werkzeuge“ hat keinen Doku-Ordner",
         ])
         let fine = TicketAreasTable.findings(areas: [areas[0]], projects: ["Diktat"]) { _ in true }
@@ -229,5 +243,11 @@ final class TicketToolTests: XCTestCase {
         XCTAssertEqual(TicketImage.contentType(forPath: "a.jpeg"), "image/jpeg")
         XCTAssertNil(TicketImage.contentType(forPath: "verlauf.jsonl"))
         XCTAssertNil(TicketImage.contentType(forPath: "ohne-endung"))
+        XCTAssertTrue(TicketImage.looksLike("image/png", Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A])))
+        XCTAssertTrue(TicketImage.looksLike("image/jpeg", Data([0xFF, 0xD8, 0xFF, 0xE0])))
+        XCTAssertTrue(TicketImage.looksLike("image/gif", Data("GIF89a".utf8)))
+        XCTAssertTrue(TicketImage.looksLike("image/webp", Data("RIFF".utf8) + Data([1, 2, 3, 4]) + Data("WEBP".utf8)))
+        XCTAssertFalse(TicketImage.looksLike("image/png", Data("{\"type\":\"user\"}".utf8)), "ein umbenannter Verlauf ist kein Bild")
+        XCTAssertFalse(TicketImage.looksLike("image/png", Data([0xFF, 0xD8, 0xFF])), "Endung und Inhalt müssen zusammenpassen")
     }
 }

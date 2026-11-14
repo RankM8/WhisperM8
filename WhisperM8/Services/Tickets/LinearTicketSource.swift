@@ -167,8 +167,9 @@ struct LinearTicketSource: TicketSource {
           }
         }
         """, variables: ["type": contentType, "name": fileName, "size": data.count])
-        guard let file = (answer["fileUpload"] as? [String: Any])?["uploadFile"] as? [String: Any],
-              let uploadURL = (file["uploadUrl"] as? String).flatMap(URL.init(string:)),
+        guard let upload = answer["fileUpload"] as? [String: Any], upload["success"] as? Bool != false,
+              let file = upload["uploadFile"] as? [String: Any],
+              let uploadURL = (file["uploadUrl"] as? String).flatMap(URL.init(string:)), uploadURL.scheme == "https",
               let assetURL = file["assetUrl"] as? String else {
             throw TicketSourceError.invalidResponse("fileUpload")
         }
@@ -383,10 +384,15 @@ struct LinearTicketSource: TicketSource {
 
     /// Linear schreibt Zeiten mit Millisekunden (`2026-11-14T03:57:12.345Z`).
     static func date(_ raw: String) -> Date? {
+        fractionalDates.date(from: raw) ?? plainDates.date(from: raw)
+    }
+
+    /// Je Abruf hunderte Tickets: die Formatierer nur einmal bauen.
+    private static let fractionalDates: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: raw) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: raw)
-    }
+        return formatter
+    }()
+
+    private static let plainDates = ISO8601DateFormatter()
 }

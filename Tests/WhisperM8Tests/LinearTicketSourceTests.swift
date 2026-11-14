@@ -11,6 +11,7 @@ final class LinearTicketSourceTests: XCTestCase {
         var replies: [(needle: String, status: Int, body: String)] = []
         /// Anfragen, die keine GraphQL-Anfrage sind (Hochladen einer Datei).
         var uploads: [URLRequest] = []
+        var uploadStatus = 200
         var failure: Error?
 
         func client(key: String? = "lin_api_test") -> LinearGraphQLClient {
@@ -18,7 +19,7 @@ final class LinearTicketSourceTests: XCTestCase {
                 if let failure { throw failure }
                 if request.httpMethod == "PUT" {
                     uploads.append(request)
-                    return (Data(), 200)
+                    return (Data(), uploadStatus)
                 }
                 let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
                 let query = body["query"] as? String ?? ""
@@ -305,6 +306,28 @@ final class LinearTicketSourceTests: XCTestCase {
         XCTAssertEqual(put.value(forHTTPHeaderField: "x-goog-meta"), "1")
         XCTAssertEqual(put.value(forHTTPHeaderField: "Content-Type"), "image/png")
         XCTAssertNil(put.value(forHTTPHeaderField: "Authorization"), "der Key geht nie an den Speicher-Dienst")
+    }
+
+    func testImageUploadRefusesOddAnswers() async {
+        let odd = [
+            #"{"data":{"fileUpload":{"success":false,"uploadFile":{"uploadUrl":"https://s.example/p","assetUrl":"https://a.example/b"}}}}"#,
+            #"{"data":{"fileUpload":{"success":true,"uploadFile":{"uploadUrl":"http://s.example/p","assetUrl":"https://a.example/b"}}}}"#,
+            #"{"data":{"fileUpload":{"success":true,"uploadFile":{"assetUrl":"https://a.example/b"}}}}"#,
+        ]
+        for body in odd {
+            let stub = Stub()
+            stub.replies = [("fileUpload", 200, body)]
+            await assertThrows(.invalidResponse("fileUpload")) {
+                _ = try await LinearTicketSource(client: stub.client()).uploadImage(Data([1]), fileName: "b.png", contentType: "image/png")
+            }
+            XCTAssertTrue(stub.uploads.isEmpty, "nichts geht an eine Adresse, die nicht stimmt")
+        }
+        let stub = Stub()
+        stub.uploadStatus = 403
+        stub.replies = [("fileUpload", 200, #"{"data":{"fileUpload":{"success":true,"uploadFile":{"uploadUrl":"https://s.example/p","assetUrl":"https://a.example/b","headers":[]}}}}"#)]
+        await assertThrows(.rejected("Hochladen abgelehnt (HTTP 403)")) {
+            _ = try await LinearTicketSource(client: stub.client()).uploadImage(Data([1]), fileName: "b.png", contentType: "image/png")
+        }
     }
 
     // MARK: Kindprozess

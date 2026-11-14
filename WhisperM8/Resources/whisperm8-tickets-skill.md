@@ -98,7 +98,8 @@ whisperm8 tickets list --status "Merge-bereit"
 Wer will was und warum. Nicht, wie es gebaut wird.
 
 ## Fertig, wenn
-- prüfbare Punkte
+- [ ] ein prüfbarer Punkt je Kästchen
+- [ ] so geschrieben, dass man „ja“ oder „nein“ sagen kann
 
 ## Hinweise
 Branch, Plan-Datei, Abhängigkeiten.

@@ -418,11 +418,13 @@ final class TicketsCLITests: XCTestCase {
     func testDoneUploadsAnImageOnlyIfItIsOne() async throws {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
-        world.data["bild.png"] = Data(repeating: 1, count: 2_000)
-        world.data["gross.png"] = Data(repeating: 1, count: TicketImage.maxBytes + 1)
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        world.data["bild.png"] = png + Data(repeating: 1, count: 1_992)
+        world.data["gross.png"] = png + Data(repeating: 1, count: TicketImage.maxBytes)
         world.data["verlauf.jsonl"] = Data(repeating: 1, count: 10)
+        world.data["getarnt.png"] = Data("kein Bild, nur die Endung".utf8)
 
-        for bad in ["verlauf.jsonl", "gross.png", "fehlt.png"] {
+        for bad in ["verlauf.jsonl", "gross.png", "fehlt.png", "getarnt.png"] {
             let output = try await run(["done", "WM8-12", "--built", "x", "--image", bad], world)
             XCTAssertEqual(output.exitCode, TicketsCLIExit.usage, bad)
         }
@@ -433,6 +435,36 @@ final class TicketsCLITests: XCTestCase {
         let calls = writes(world)
         XCTAssertEqual(calls.first, "upload bild.png image/png 2000")
         XCTAssertTrue(calls[1].contains("![Bild](https://uploads.linear.app/test/bild.png)"), calls[1])
+    }
+
+    func testDoneSaysWhenTheCompletionIsWrittenButTheRestFailed() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
+        world.source.failWritesStartingWith = "saveLink"
+        let output = try await run(["done", "WM8-12", "--built", "x", "--status", "Merge-bereit"], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.unavailable)
+        XCTAssertTrue(output.stderr.contains("Der Abschluss steht schon am Ticket") && output.stderr.contains("--no-summary"), output.stderr)
+        XCTAssertEqual(writes(world).filter { $0.hasPrefix("comment") }.count, 1)
+        XCTAssertFalse(writes(world).contains { $0.hasPrefix("setStatus") }, "nach dem Fehler wird nichts weiter umgestellt")
+    }
+
+    func testClosingAfterTheMergeNeedsNoSummary() async throws {
+        let world = makeWorld()
+        world.caller = jarvis
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit", links: [TicketFixtures.link(self.jon, active: false)])) }
+        let output = try await run(["done", "WM8-12", "--status", "Done", "--chat", "7493"], world)
+        XCTAssertEqual(output.exitCode, 0, output.stderr)
+        XCTAssertEqual(writes(world), ["setStatus id-12 s4"], "kein zweiter Abschluss vom Supervisor")
+    }
+
+    func testCompletionAsAWholeHasASizeLimit() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress")) }
+        let step = String(repeating: "s", count: 20_000)
+        let output = try await run(["done", "WM8-12", "--built", "x", "--test", step, "--test", step, "--test", step, "--test", step], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.usage)
+        XCTAssertTrue(output.stderr.contains("Abschluss zu lang"), output.stderr)
+        XCTAssertTrue(writes(world).isEmpty)
     }
 
     func testDecideWritesTheFixedShape() async throws {
@@ -477,6 +509,11 @@ final class TicketsCLITests: XCTestCase {
 
         let reopened = try await run(["check", "WM8-81", "2", "--uncheck"], world)
         XCTAssertEqual(reopened.stdout, "WM8-81: 1 Kästchen wieder offen (0 von 3 erledigt).")
+
+        let asJSON = await TicketsCLIRunner.execute(try TicketsCLIArguments.parse(["check", "WM8-81", "--json"]),
+                                                    environment: environment(world), json: true)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(asJSON.stdout.utf8)) as? [String: Any])
+        XCTAssertEqual((object["items"] as? [[String: Any]])?.map { $0["done"] as? Bool }, [false, true, false])
     }
 
     func testCheckRefusesWhatItCannotPlace() async throws {
@@ -781,7 +818,9 @@ final class TicketsCLITests: XCTestCase {
         let commands: [[String]] = [
             ["link", "DS-5"], ["done", "DS-5", "--no-summary", "--status", "Merge-bereit"], ["unlink", "DS-5"], ["status", "DS-5", "Todo"],
             ["note", "DS-5", "Stand"], ["comment", "DS-5", "Text"], ["assign", "DS-5", "me"], ["label", "DS-5", "--add", "Bug"],
-            ["new", "Titel", "--team", "DS"],
+            ["new", "Titel", "--team", "DS"], ["check", "DS-5", "1"],
+            ["decide", "DS-5", "--question", "F", "--option", "a", "--option", "b", "--chosen", "a"],
+            ["done", "DS-5", "--built", "x", "--image", "bild.png"],
         ]
         for command in commands {
             let output = try await run(command, world)

@@ -21,6 +21,8 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     var onUpload: (Data, String, String) async throws -> String = { _, name, _ in "https://uploads.linear.app/test/\(name)" }
     /// Fehler für alle schreibenden Operationen (`nil` = gelingt).
     var writeError: TicketSourceError?
+    /// Nur Schreibaufrufe, die so beginnen, scheitern (z. B. `saveLink`).
+    var failWritesStartingWith: String?
 
     /// Alle Aufrufe in Reihenfolge, z. B. `setStatus id-1 s3`.
     var calls: [String] {
@@ -35,6 +37,7 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     private func write(_ entry: String) throws {
         note(entry)
         if let writeError { throw writeError }
+        if let prefix = failWritesStartingWith, entry.hasPrefix(prefix) { throw TicketSourceError.network("-1009") }
     }
 
     func board(team: String) async throws -> TicketBoardSnapshot { note("board \(team)"); return try await onBoard(team) }
