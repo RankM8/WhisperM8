@@ -1,5 +1,5 @@
 ---
-status: Plan mit Empfehlung (14.11.2026), Bau nicht freigegeben; Stufe 0 läuft außerhalb der App
+status: Kern, Kommandozeile und Skill gebaut (14.11.2026, Schritte 1 bis 3 und 3a/3b); Ansicht (Schritte 4 bis 8) nicht freigegeben
 stand: 2026-11-14
 feature: Ansicht „Tickets“ in Agent Chats — Board und Backlog aus dem Ticket-Werkzeug, je Ticket der zuständige Chat mit Live-Zustand
 branch: feat/WM8-37-ticket-board
@@ -16,7 +16,13 @@ abgenommen). Ticket: `WM8-37`, verwandt `WM8-45` (Chats auf anderen Rechnern seh
 ob DealSupply und Akquise nach Linear umziehen).
 
 Dieser Plan sagt, was gebaut wird, wo es in der App andockt, in welchen Schritten und was vorher zu entscheiden
-ist. Gebaut wird erst nach Freigabe.
+ist.
+
+**Stand 14.11.2026:** Freigegeben und gebaut sind der Kern (Schritte 1 bis 3), die Kommandozeile
+`whisperm8 tickets` und der Skill `tickets` im Plugin. Das war eine Erweiterung auf Wunsch des Nutzers: Bedient
+wird das Board vor allem von den Chats und vom Supervisor, deshalb kam die Schreibseite vor der Ansicht.
+Ist-Zustand: [`../features/tickets.md`](../features/tickets.md). Die sichtbare Ansicht (Schritte 4 bis 8) ist
+nicht freigegeben.
 
 ## Ausgangslage
 
@@ -49,12 +55,24 @@ ist. Gebaut wird erst nach Freigabe.
 - Detail zum Ticket mit Text, Person, Chat, „Zum Chat“ und „In Linear öffnen“.
 - Leiste „Laufende Chats ohne Ticket“.
 
-**Stufe 2 (eigener Plan nach Stufe 1):** Chat aus einem Ticket starten, laufenden Chat zuweisen, Verknüpfung
-lösen, Status ändern, Person zuweisen. Das sind Schreibzugriffe auf das Ticket-Werkzeug.
+**Stufe 2 (in der Ansicht, eigener Plan nach Stufe 1):** Chat aus einem Ticket starten, laufenden Chat zuweisen,
+Verknüpfung lösen, Status ändern, Person zuweisen. Die Schreibzugriffe selbst gibt es seit dem 14.11.2026 schon
+in `TicketSource` und in der Kommandozeile; in der Ansicht fehlen nur die Knöpfe.
 
 **Stufe 3 (Idee, `WM8-45`):** Chats sehen, die in WhisperM8 auf anderen Rechnern laufen. Die Anhänge aller
 Mitglieder lassen sich in einer Abfrage lesen; für den Live-Zustand müsste jede Installation ihre Verknüpfung
 bei Zustandswechseln auffrischen.
+
+**Stufe 4 (Idee des Nutzers vom 14.11.2026): nachlesen, wie ein Ticket gebaut wurde.** Die Referenz bleibt
+schon heute stehen: Eine beendete Verknüpfung nennt den Chat, der das Ticket umgesetzt hat, und jedes Mitglied
+sieht sie. Der Inhalt des Chats liegt aber nur auf dem Rechner, auf dem er lief. Zwei Ausbaustufen:
+
+- *Abschluss am Ticket:* `tickets done` hängt eine kurze Zusammenfassung an (Branch, Commits, was entschieden
+  wurde). Geringes Risiko, weil der Chat den Text selbst schreibt.
+- *Bereinigter Verlauf am Ticket:* Der Verlauf wird als Dokument an das Ticket gehängt. Das ist ein Wunsch mit
+  Risiko: Verläufe enthalten Schlüssel, Kundendaten und Inhalte anderer Projekte. Voraussetzungen wären die
+  vorhandene Maskierung (`ClipboardSecretMasker`), eine Vorschau vor dem Hochladen und die ausdrückliche
+  Freigabe je Ticket. Eine Maskierung findet typische Schlüssel, aber nicht alles Vertrauliche.
 
 **Nicht geplant:** ein vollwertiger Ersatz für Linears Oberfläche (Tickets schreiben, Zyklen planen, Projekte
 pflegen). Dafür führt „In Linear öffnen“ dorthin.
@@ -64,9 +82,9 @@ pflegen). Dafür führt „In Linear öffnen“ dorthin.
 | Nr. | Frage | Empfehlung |
 |---|---|---|
 | E1 | Wo lebt die Ansicht? | Als umschaltbare Ansicht im Agent-Chats-Fenster, so wie der Entwurf sie zeigt und wie der Archiv-Modus heute umschaltet. Der gesamte Code liegt in neuen Dateien. Ausweichweg, falls die Größen-Grenze von `AgentChatsView.swift` (3.720 Zeilen, nur schrumpfend) den Einstieg nicht zulässt: eigenes Fenster über `WindowRequestCenter`. |
-| E2 | Wie meldet sich die App bei Linear an? | Zuerst ein API-Key, den der Nutzer in den Einstellungen einträgt; Ablage im Schlüsselbund über `KeychainManager`, gelesen abseits des Main Threads. Eine Anmeldung per Login kommt, wenn die Funktion für andere Nutzer gedacht ist. |
+| E2 | Wie meldet sich die App bei Linear an? | **Entschieden und gebaut:** API-Key im Schlüsselbund, gelesen und geschrieben über `/usr/bin/security` (`TicketCredentialStore`), eingerichtet mit `whisperm8 tickets setup --key-stdin`. Für die Ansicht kommt ein Feld in den Einstellungen dazu; gelesen wird abseits des Main Threads. Eine Anmeldung per Login kommt, wenn die Funktion für andere Nutzer gedacht ist. |
 | E3 | Wie oft wird aktualisiert? | Alle 30 Sekunden, nur solange die Ansicht sichtbar ist, dazu ein Knopf „Jetzt aktualisieren“. Verdecktes Fenster oder andere Ansicht: kein Abruf. |
-| E4 | Welches Projekt gehört zu welchem Team? | Eine Zuordnung je Projekt in den Einstellungen (Projektordner → Team-Kürzel, optional ein Vorhaben). Ohne Zuordnung zeigt die Ansicht einen Leerzustand mit dem Weg dorthin. |
+| E4 | Welches Projekt gehört zu welchem Team? | **Gebaut:** `tickets.json` (Projektordner → Team-Kürzel), geschrieben von `whisperm8 tickets setup --project … --team …`. Für die Ansicht kommt die Pflege in den Einstellungen dazu; ohne Zuordnung zeigt die Ansicht einen Leerzustand mit dem Weg dorthin. |
 | E5 | Spalten: echte Status oder Gruppen? | Drei Gruppen nach Art des Status, der echte Statusname steht auf der Karte. DealSupply hätte sonst sieben Spalten. |
 | E6 | Wann bauen? | Kern, Quelle und Speicher (Schritte 1 bis 3) sind vom Werkzeug unabhängig und können sofort entstehen. Die Oberfläche (ab Schritt 4) erst nach E1. Fällt am 28.11. die Entscheidung gegen Linear, bleibt alles bis auf die eine Quelle brauchbar. |
 
@@ -118,6 +136,16 @@ zweite Quelle, die Verknüpfung läge dort in einem Remote-Link statt in einem A
 ## Schritte
 
 Jeder Schritt ist ein Commit mit grüner Suite. Die Schritte 1 bis 3 ändern nichts Sichtbares.
+
+Gebaut am 14.11.2026: Schritte 1 bis 3, dazu
+- **3a Kommandozeile** `whisperm8 tickets` (`CLI/TicketsCLICommand.swift`, `CLI/TicketsCLIRunner.swift`): lesen,
+  verknüpfen, Status, Stand-Zeile, Kommentar, anlegen, zuweisen, Labels, einrichten, prüfen; alles mit `--json`.
+- **3b Skill** `tickets` im Plugin und Abschnitt 11 im Jarvis-Skill: wer welchen Status setzt.
+
+Abweichungen vom ursprünglichen Plan: Die Quelle kann von Anfang an schreiben. Die Zuordnung Projekt ↔ Team
+liegt in `tickets.json` statt in den Einstellungen der App (kein neuer Einstellungs-Schlüssel, solange es keine
+Oberfläche gibt). Der Key liegt im Schlüsselbund über `/usr/bin/security`, nicht über `KeychainManager`; damit
+ist das Risiko „fremde App nach jedem Build“ aus der Tabelle unten erledigt.
 
 1. **Modelle und pure Logik.** `Ticket`-Typen, `TicketBoardFilter`, `TicketChatResolver`. Tests: Filter in allen
    Kombinationen, Zählungen, Zuordnung von Anhängen (richtiger Chat, fremder Anhang, beendete Verknüpfung, Chat

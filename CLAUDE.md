@@ -97,7 +97,7 @@ CLI: [agent-chats-cli.md](docs/features/agent-chats-cli.md); Board/Plugin: [jarv
 Ansagen: [speech-callouts.md](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [clipboard-history.md](docs/features/clipboard-history.md); Voice Gate: [voice-gate.md](docs/features/voice-gate.md).
 Notch-Statusanzeige: [notch.md](docs/features/notch.md).
 Statistik (Zeit, Token, Gegenwert, Limits): [statistics.md](docs/features/statistics.md).
-Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md).
+Controller-Steuerung (Gamepad): [controller.md](docs/features/controller.md). Tickets: [tickets.md](docs/features/tickets.md).
 
 ## Invarianten (nicht brechen)
 
