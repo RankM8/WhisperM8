@@ -304,6 +304,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         XCTAssertFalse(assigned)
         XCTAssertNotNil(model.mappingProblem)
         await model.removeMapping(path: "/Users/g/repos/whisperm8")
+        XCTAssertNotNil(model.mappingProblem, "auch „Remove“ sagt, dass nichts gespeichert wurde")
         let saved = await model.saveKey("lin_api_neu")
         XCTAssertFalse(saved)
         XCTAssertFalse(world.calls.contains("saveConfig"), "sonst wäre der Inhalt der Datei verloren")
@@ -340,6 +341,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "WM8", workspace: "dealsupply"))
         XCTAssertFalse(assigned)
         XCTAssertEqual(world.config, before, "nichts geändert: sonst schriebe das WhisperM8-Projekt nach drüben")
+        XCTAssertFalse(world.calls.contains("saveConfig"), "geprüft wird in der Schreib-Schlange, vor dem Schreiben")
         XCTAssertNotNil(model.mappingProblem)
         XCTAssertTrue(model.mappingProblem?.contains("--reassign") ?? false)
     }

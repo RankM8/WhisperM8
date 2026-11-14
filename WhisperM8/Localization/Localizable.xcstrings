@@ -13724,12 +13724,12 @@
         }
       }
     },
-    "Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, nothing is read from Linear or the Keychain.": {
+    "Reads tickets from Linear to show which chat works on which ticket. WhisperM8 never changes tickets from here. Off by default; while it is off, the app reads nothing from Linear or the Keychain. The whisperm8 tickets command works either way.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Liest Tickets aus Linear und zeigt, welcher Chat an welchem Ticket arbeitet. WhisperM8 ändert von hier aus nie ein Ticket. Ab Werk aus; solange es aus ist, wird nichts aus Linear oder dem Schlüsselbund gelesen."
+            "value": "Liest Tickets aus Linear und zeigt, welcher Chat an welchem Ticket arbeitet. WhisperM8 ändert von hier aus nie ein Ticket. Ab Werk aus; solange es aus ist, liest die App nichts aus Linear oder dem Schlüsselbund. Der Befehl whisperm8 tickets geht unabhängig davon."
           }
         }
       }

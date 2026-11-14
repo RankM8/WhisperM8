@@ -22,7 +22,9 @@ Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../pl
   Schlüsselbund.
 - **Abseits des Main Threads:** Der Key wird über einen blockierenden Kindprozess gelesen. In der App läuft das
   nie auf dem Main Thread; `TicketsSettingsModelTests` prüft das für jeden Schlüsselbund-, Datei- und
-  Netzzugriff der Einstellungen.
+  Netzzugriff der Einstellungen. Der Kindprozess läuft auf einer eigenen Dispatch-Queue
+  (`TicketBlockingWork`), nicht auf dem Thread-Pool von Swift Concurrency: Ein offener Dialog des
+  Schlüsselbunds belegte sonst den gemeinsamen Pool.
 - **Frist:** Der Aufruf von `security` wartet höchstens 60 Sekunden auf den Kindprozess (etwa bei einem Dialog
   des Schlüsselbunds) und beendet ihn danach. Für die Oberfläche sieht das aus wie „kein Key“. macOS kann eine
   Pipe nicht in einem Zug mit close-on-exec anlegen; erbt ein gleichzeitig startender Chat ihre Enden, greift
